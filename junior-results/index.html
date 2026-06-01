@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>USA Diving Junior Results Audit</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">USA Diving Junior Circuit</p>
+        <h1>Junior Results Audit</h1>
+      </div>
+      <div class="header-summary" id="headerSummary"></div>
+    </header>
+
+    <main>
+      <section class="filter-band" aria-label="Filters">
+        <div class="filter-row">
+          <label>
+            <span>Stage</span>
+            <select id="stageFilter"></select>
+          </label>
+          <label>
+            <span>Regional meet</span>
+            <select id="meetFilter"></select>
+          </label>
+          <label>
+            <span>Event type</span>
+            <select id="eventTypeFilter"></select>
+          </label>
+          <label>
+            <span>Board</span>
+            <select id="boardFilter"></select>
+          </label>
+          <label>
+            <span>Gender</span>
+            <select id="genderFilter"></select>
+          </label>
+          <label>
+            <span>Age group</span>
+            <select id="ageFilter"></select>
+          </label>
+          <label>
+            <span>Zone</span>
+            <select id="zoneFilter"></select>
+          </label>
+          <label>
+            <span>E/W/C</span>
+            <select id="ewcFilter"></select>
+          </label>
+          <label class="search-label">
+            <span>Athlete search</span>
+            <input id="searchInput" type="search" placeholder="Name, ID, team">
+          </label>
+        </div>
+        <div class="flag-row" id="flagControls"></div>
+      </section>
+
+      <section class="kpi-band" id="kpiBand"></section>
+
+      <section class="workbench">
+        <aside class="event-browser">
+          <div class="panel-heading">
+            <h2>Events</h2>
+            <button class="ghost-button" id="clearEventButton" type="button">All rows</button>
+          </div>
+          <div id="eventList" class="event-list"></div>
+        </aside>
+
+        <section class="results-workspace">
+          <div class="context-panel" id="contextPanel"></div>
+          <div class="tabs" role="tablist" aria-label="Analysis views">
+            <button type="button" data-view="results" class="tab-button active">Results</button>
+            <button type="button" data-view="bumps" class="tab-button">Bumps</button>
+            <button type="button" data-view="flags" class="tab-button">Flags</button>
+            <button type="button" data-view="athletes" class="tab-button">Athletes</button>
+            <button type="button" data-view="official" class="tab-button">Official Zone List</button>
+          </div>
+          <div class="table-actions">
+            <div id="rowCount"></div>
+            <div class="action-buttons">
+              <button class="secondary-button" id="copyTsvButton" type="button">Copy TSV</button>
+              <button class="secondary-button" id="downloadCsvButton" type="button">Download CSV</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="tableWrap"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="../data/junior-data.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>

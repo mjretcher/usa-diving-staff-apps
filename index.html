@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>USA Diving Staff Apps</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap');
+    :root { --red: #E31937; --blue: #171F69; --light-blue: #8FC3EA; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Barlow', sans-serif; background: var(--blue); color: #fff; min-height: 100vh; }
+    .site-header { background: var(--blue); border-bottom: 4px solid var(--red); padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1.5rem; }
+    .brand-mark { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 2.5rem; color: var(--red); letter-spacing: -1px; line-height: 1; }
+    .header-divider { width: 3px; height: 3rem; background: rgba(255,255,255,0.2); border-radius: 2px; }
+    .header-text h1 { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 1.6rem; letter-spacing: 0.5px; line-height: 1.1; }
+    .header-text p { font-size: 0.8rem; color: var(--light-blue); margin-top: 0.2rem; letter-spacing: 0.5px; text-transform: uppercase; }
+    main { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+    .intro { margin-bottom: 3rem; }
+    .intro h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 3rem; line-height: 1; }
+    .intro h2 span { color: var(--red); }
+    .intro p { margin-top: 0.75rem; color: var(--light-blue); font-size: 1rem; max-width: 560px; line-height: 1.6; }
+    .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+    .app-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-top: 4px solid var(--red); border-radius: 4px; padding: 1.75rem; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 0.75rem; transition: background 0.15s, border-color 0.15s, transform 0.15s; }
+    .app-card:hover { background: rgba(255,255,255,0.1); border-top-color: var(--light-blue); transform: translateY(-3px); }
+    .app-number { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 3.5rem; color: rgba(255,255,255,0.08); line-height: 1; margin-bottom: -0.5rem; }
+    .app-card h3 { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 1.4rem; line-height: 1.1; }
+    .app-card p { font-size: 0.88rem; color: rgba(255,255,255,0.6); line-height: 1.55; flex: 1; }
+    .app-link-label { display: inline-flex; align-items: center; gap: 0.4rem; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 0.9rem; color: var(--light-blue); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 0.5rem; }
+    .app-link-label::after { content: '→'; font-size: 1rem; }
+    .app-card:hover .app-link-label { color: #fff; }
+    .data-note { margin-top: 3rem; padding: 1rem 1.5rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid var(--red); border-radius: 4px; font-size: 0.82rem; color: rgba(255,255,255,0.5); line-height: 1.6; }
+    .data-note strong { color: rgba(255,255,255,0.75); }
+    footer { border-top: 1px solid rgba(255,255,255,0.08); padding: 1.5rem 2rem; text-align: center; font-size: 0.78rem; color: rgba(255,255,255,0.25); }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand-mark">USA</div>
+    <div class="header-divider"></div>
+    <div class="header-text">
+      <h1>Diving Staff Applications</h1>
+      <p>Internal tools &mdash; High Performance Department</p>
+    </div>
+  </header>
+  <main>
+    <div class="intro">
+      <h2>Staff <span>Toolkit</span></h2>
+      <p>Four internal tools for schedule building, results auditing, criteria simulation, and athlete analytics. Select an app below.</p>
+    </div>
+    <div class="app-grid">
+      <a class="app-card" href="schedule-builder/index.html">
+        <div class="app-number">01</div>
+        <h3>Schedule Builder</h3>
+        <p>Build and manage meet schedules. Set event blocks, warm-up times, and session structures. Outputs print-ready and shareable formats.</p>
+        <span class="app-link-label">Open app</span>
+      </a>
+      <a class="app-card" href="junior-results/index.html">
+        <div class="app-number">02</div>
+        <h3>Junior Results Audit</h3>
+        <p>Browse and audit Junior Circuit results by zone, age group, stage, and event. Includes bumps analysis, official zone qualifiers, and athlete search.</p>
+        <span class="app-link-label">Open app</span>
+      </a>
+      <a class="app-card" href="criteria-simulator/index.html">
+        <div class="app-number">03</div>
+        <h3>Criteria Simulator</h3>
+        <p>Simulate qualification criteria against score and DD thresholds. Scenario manager, optimizer, certification center, and export tools.</p>
+        <span class="app-link-label">Open app</span>
+      </a>
+      <a class="app-card" href="athlete-evaluation/index.html">
+        <div class="app-number">04</div>
+        <h3>Athlete Evaluation</h3>
+        <p>Full high-performance analytics dashboard. Dive-level analysis, heatmaps, synchro pair builder, mixed team candidates, and voluntary evidence workbook. 2021&ndash;2026 data.</p>
+        <span class="app-link-label">Open app</span>
+      </a>
+    </div>
+    <div class="data-note">
+      <strong>Shared data:</strong> Apps 2, 3, and 4 draw from the same competition results dataset (<code>data/</code>). When data files are updated, all apps reflect the change automatically.
+    </div>
+  </main>
+  <footer>USA Diving &mdash; Internal Staff Use Only &mdash; Not for public distribution</footer>
+</body>
+</html>

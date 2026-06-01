@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>USA Diving Criteria Simulator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">USA Diving high performance</p>
+        <h1>Criteria Simulator</h1>
+      </div>
+      <div class="header-tools">
+        <div class="header-summary" aria-label="Dataset summary">
+          <span id="summaryMeets">0 meets</span>
+          <span id="summaryResults">0 results</span>
+          <span id="summaryAthletes">0 athletes</span>
+        </div>
+      </div>
+    </header>
+
+    <nav class="scenario-snapshot" id="scenarioSnapshot" aria-label="Scenario snapshot">
+      <div class="snapshot-main">
+        <div class="snapshot-title">
+          <span class="snapshot-eyebrow">Active scenario</span>
+          <strong id="snapshotScenarioName">Unsaved scenario</strong>
+        </div>
+        <div class="snapshot-metrics" aria-label="Current criteria settings">
+          <span><b>Model</b><em id="snapshotCriteriaPreset">—</em></span>
+          <span><b>Score</b><em id="snapshotScoreThreshold">—</em></span>
+          <span><b>DD</b><em id="snapshotDdThreshold">—</em></span>
+          <span><b>Placement cutoff</b><em id="snapshotTopN">—</em></span>
+          <span><b>Basis</b><em id="snapshotScoreBasis">—</em></span>
+          <span><b>Meets</b><em id="snapshotMeetCount">0</em></span>
+          <span><b>Criteria met</b><em id="snapshotCriteriaMet">0</em></span>
+          <span><b>Bubble</b><em id="snapshotBubble">0</em></span>
+          <span><b>Notes</b><em id="snapshotDataNotes">0</em></span>
+        </div>
+      </div>
+      <div class="snapshot-actions" aria-label="Scenario shortcuts">
+        <button id="snapshotJumpControls" type="button" class="secondary-button">Controls</button>
+        <button id="snapshotJumpOptimizer" type="button" class="secondary-button">Optimizer</button>
+        <button id="snapshotJumpCertification" type="button" class="secondary-button">Certification</button>
+        <button id="snapshotCopySummary" type="button">Copy summary</button>
+        <span id="snapshotCopyStatus" class="copy-status" aria-live="polite"></span>
+      </div>
+    </nav>
+
+    <main class="app-shell">
+      <aside class="control-panel" aria-label="Criteria controls">
+        <section class="scenario-manager staff-visible" aria-label="Scenario manager">
+          <div class="section-title">Scenario Manager</div>
+          <label for="scenarioSelect">Saved scenario</label>
+          <select id="scenarioSelect"></select>
+          <label for="scenarioName">Scenario name</label>
+          <input id="scenarioName" type="text" placeholder="Name this criteria setup" />
+          <div id="scenarioStatus" class="scenario-status">No saved scenario loaded.</div>
+          <div class="scenario-actions">
+            <button id="scenarioCreate" type="button">Create</button>
+            <button id="scenarioSave" type="button">Save</button>
+            <button id="scenarioDuplicate" type="button">Duplicate</button>
+            <button id="scenarioRename" type="button">Rename</button>
+            <button id="scenarioLoad" type="button">Load</button>
+            <button id="scenarioDelete" type="button" class="danger-button">Delete</button>
+            <button id="scenarioExport" type="button">Export JSON</button>
+            <button id="scenarioImport" type="button">Import JSON</button>
+            <button id="scenarioResetPreset" type="button" class="wide-button">Reset to preset defaults</button>
+          </div>
+          <input id="scenarioImportFile" type="file" accept="application/json,.json" hidden />
+        </section>
+
+        <section class="panel-section staff-visible">
+          <label for="criteriaPreset">Criteria model</label>
+          <select id="criteriaPreset">
+            <option value="winterEligibility">Winter Nationals eligibility</option>
+            <option value="winterQualifier">Winter Qualifier advancement</option>
+            <option value="nationalQualifier">USA Nationals qualifier top 12</option>
+            <option value="custom">Custom model</option>
+          </select>
+        </section>
+
+        <section class="panel-grid staff-visible">
+          <div>
+            <label for="genderFilter">Gender</label>
+            <select id="genderFilter"></select>
+          </div>
+          <div>
+            <label for="disciplineFilter">Event</label>
+            <select id="disciplineFilter"></select>
+          </div>
+        </section>
+
+        <section class="panel-grid staff-advanced">
+          <div>
+            <label for="roundFilter">Round</label>
+            <select id="roundFilter">
+              <option value="any">Any selected round</option>
+              <option value="Prelim">Prelim</option>
+              <option value="Semifinal">Semifinal</option>
+              <option value="Final">Final</option>
+              <option value="Head-To-Head">Head-To-Head</option>
+            </select>
+          </div>
+          <div>
+            <label for="scoreMode">Score basis</label>
+            <select id="scoreMode">
+              <option value="ncaaWomen5Category">Use NCAA women's 5-category derived score when available</option>
+              <option value="phaseOrStandalone">Non-cumulative score</option>
+              <option value="posted">Posted score</option>
+              <option value="phasePreferred">Phase score when available</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="panel-section staff-advanced">
+          <label for="athleteScope">Athlete scope</label>
+          <select id="athleteScope">
+            <option value="all">All athletes</option>
+            <option value="usaDomestic">USA / domestic rows</option>
+            <option value="knownUsa">Known USA only</option>
+            <option value="knownInternational">Known non-USA only</option>
+          </select>
+        </section>
+
+        <section class="panel-grid staff-visible">
+          <div>
+            <label for="scoreThreshold">Score threshold</label>
+            <input id="scoreThreshold" type="number" min="0" step="0.05" />
+          </div>
+          <div>
+            <label for="ddThreshold">DD threshold</label>
+            <input id="ddThreshold" type="number" min="0" step="0.01" />
+          </div>
+        </section>
+
+        <section class="panel-grid staff-advanced">
+          <div>
+            <label for="topN">Placement cutoff</label>
+            <input id="topN" type="number" min="0" step="1" />
+          </div>
+          <div>
+            <label for="ruleMode">Rule</label>
+            <select id="ruleMode">
+              <option value="scoreOnly">Score only</option>
+              <option value="topNOnly">Placement only</option>
+              <option value="topNOrScore">Placement OR score</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="panel-section dd-threshold-section staff-visible">
+          <label for="ddMode">DD check</label>
+          <select id="ddMode">
+            <option value="ignore">Ignore DD for this run</option>
+            <option value="knownOnly">Enforce when known</option>
+            <option value="requireKnown">Require known DD</option>
+          </select>
+          <p class="filter-help">DD threshold is applied when DD check is set to enforce or require.</p>
+        </section>
+
+        <section class="panel-section staff-visible">
+          <div class="section-title">Exact meet name</div>
+          <p class="filter-help">Toggle exact meet names on or off for the current scenario.</p>
+          <div class="filter-actions">
+            <button id="exactMeetSelectAll" type="button">Select all</button>
+            <button id="exactMeetClearAll" type="button">Clear all</button>
+          </div>
+          <div id="meetFilters" class="check-list compact-list"></div>
+        </section>
+
+        <section class="panel-section sharing-panel staff-visible">
+          <div class="section-title">Sharing</div>
+          <p class="filter-help">Copy a link that preserves the current scenario settings.</p>
+          <div class="scenario-actions compact-actions">
+            <button id="copyScenarioLink" type="button">Copy scenario link</button>
+            <button id="clearScenarioLink" type="button" class="secondary-button">Clear link scenario</button>
+          </div>
+          <div id="sharingStatus" class="scenario-status"></div>
+        </section>
+
+        <section class="panel-section export-panel staff-visible">
+          <div class="section-title">Staff Review Export</div>
+          <p class="filter-help">Export the active scenario for Excel, staff review, or print-to-PDF.</p>
+          <div class="scenario-actions compact-actions">
+            <button id="exportQualifiedCsv" type="button">Qualified CSV</button>
+            <button id="exportBubbleCsv" type="button">Bubble CSV</button>
+            <button id="exportScenarioCsv" type="button">Scenario CSV</button>
+            <button id="exportDiveSheetCsv" type="button">Selected dive sheet CSV</button>
+            <button id="exportStaffHtml" type="button" class="wide-button">Full Staff Review HTML</button>
+          </div>
+          <div id="exportStatus" class="scenario-status"></div>
+        </section>
+
+        <section class="panel-section staff-advanced-toggle staff-visible">
+          <button id="advancedSettingsToggle" type="button" class="secondary-button wide-button">Show advanced settings</button>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="athlete-search-shell staff-visible" id="athleteSearchShell" aria-label="Athlete search">
+          <div class="athlete-search-header">
+            <div>
+              <p class="eyebrow">Quick find</p>
+              <h2>Athlete Search</h2>
+              <p>Find an athlete by name, team, meet, or event.</p>
+            </div>
+            <div class="athlete-search-controls">
+              <label for="athleteSearchScope">Search</label>
+              <select id="athleteSearchScope">
+                <option value="current">Current scenario</option>
+                <option value="all">All loaded results</option>
+              </select>
+            </div>
+          </div>
+          <div class="athlete-search-bar">
+            <input id="athleteSearchInput" type="search" autocomplete="off" placeholder="Search athlete, team, meet, event..." />
+            <button id="athleteSearchClear" type="button" class="secondary-button">Clear</button>
+          </div>
+          <div id="athleteSearchResults" class="athlete-search-results" aria-live="polite">Type at least 2 characters to search.</div>
+        </section>
+
+        <section class="kpi-grid" aria-label="Scenario summary">
+          <article class="kpi"><span>Qualified athletes</span><strong id="kpiQualified">0</strong></article>
+          <article class="kpi"><span>Bubble athletes</span><strong id="kpiBubble">0</strong></article>
+          <article class="kpi"><span>Included results</span><strong id="kpiRows">0</strong></article>
+          <article class="kpi"><span>DD known</span><strong id="kpiDdKnown">0%</strong></article>
+        </section>
+
+        <section class="notice" id="criteriaNote"></section>
+        <section class="notice detail-note" id="formatNote"></section>
+
+        <section class="validation-panel table-panel staff-visible" aria-label="Data integrity and rules validation">
+          <header>
+            <h2>Data Quality Notes</h2>
+            <p>Context notes for the current scenario.</p>
+          </header>
+          <div id="validationCards" class="validation-cards"></div>
+          <div class="validation-toolbar">
+            <label for="validationFilter">Show</label>
+            <select id="validationFilter">
+              <option value="all">All</option>
+              <option value="Critical">Action needed</option>
+              <option value="Warning">Review notes</option>
+              <option value="Info">Data notes</option>
+            </select>
+            <button id="copyValidationSummary" type="button" class="secondary-button">Copy summary</button>
+            <button id="exportValidationCsv" type="button" class="secondary-button">Export validation CSV</button>
+            <span id="validationStatus" class="copy-status" aria-live="polite"></span>
+          </div>
+          <div class="table-wrap compact-validation-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th><th>Category</th><th>Message</th><th>Affected rows</th><th>Suggested action</th>
+                </tr>
+              </thead>
+              <tbody id="validationRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="optimizer-panel table-panel staff-advanced" aria-label="Criteria optimizer">
+          <header>
+            <div>
+              <h2>Criteria Optimizer</h2>
+              <p>Explore score and DD threshold combinations.</p>
+            </div>
+          </header>
+          <div class="optimizer-controls">
+            <label>Target min<input id="optimizerTargetMin" type="number" min="0" step="1" value="8" /></label>
+            <label>Target max<input id="optimizerTargetMax" type="number" min="0" step="1" value="16" /></label>
+            <label>Score start<input id="optimizerScoreStart" type="number" step="1" /></label>
+            <label>Score end<input id="optimizerScoreEnd" type="number" step="1" /></label>
+            <label>Score step<input id="optimizerScoreStep" type="number" min="0.1" step="0.5" value="5" /></label>
+            <label>DD start<input id="optimizerDdStart" type="number" step="0.1" /></label>
+            <label>DD end<input id="optimizerDdEnd" type="number" step="0.1" /></label>
+            <label>DD step<input id="optimizerDdStep" type="number" min="0.01" step="0.05" value="0.25" /></label>
+            <label>Use DD<select id="optimizerUseDd"><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label>Optimize for
+              <select id="optimizerMethod">
+                <option value="target">Target qualifier count</option>
+                <option value="score">Highest average score</option>
+                <option value="dd">Highest average DD</option>
+                <option value="balanced">Balanced score and DD</option>
+                <option value="risk">Lowest data-risk</option>
+              </select>
+            </label>
+          </div>
+          <div class="optimizer-runbar">
+            <button id="optimizerRun" type="button" class="primary-button">Run optimizer</button>
+            <span class="muted">Optimizer only runs when requested so normal filters stay fast.</span>
+          </div>
+          <div id="optimizerSummary" class="optimizer-summary"></div>
+          <div id="criteriaOptimizerMap" class="optimizer-map optimizer-placeholder"></div>
+          <div id="optimizerPreview" class="optimizer-preview"></div>
+          <div class="optimizer-actions">
+            <button id="optimizerApplyPreview" type="button" class="primary-button" disabled>Apply Previewed Scenario</button>
+            <button id="exportOptimizerCsv" type="button" class="secondary-button">Export optimizer grid CSV</button>
+            <button id="exportOptimizerMemo" type="button" class="secondary-button">Export recommendation memo HTML</button>
+            <span id="optimizerStatus" class="copy-status" aria-live="polite"></span>
+          </div>
+        </section>
+
+        <section class="certification-panel table-panel staff-visible" aria-label="Criteria certification center">
+          <header>
+            <div>
+              <h2>Criteria Certification Center</h2>
+              <p>Criteria-derived certification packet.</p>
+            </div>
+          </header>
+          <div id="certificationSummary" class="certification-summary"></div>
+          <div class="certification-actions">
+            <button id="toggleCertificationDetails" type="button" class="primary-button">Show certification details</button>
+            <button id="exportCertificationCsv" type="button" class="secondary-button">Export Certification CSV</button>
+            <button id="exportCertificationMemo" type="button" class="secondary-button">Export Certification Memo HTML</button>
+            <button id="copyCertificationSummary" type="button" class="secondary-button">Copy Certification Summary</button>
+            <span id="certificationStatus" class="copy-status" aria-live="polite"></span>
+          </div>
+          <div id="criteriaCertificationCenter" class="certification-sections compact-certification"></div>
+        </section>
+
+        <section class="visual-grid staff-advanced">
+          <article class="viz-panel wide frontier-panel">
+            <header><div><h2>Qualification Frontier</h2><p>Score vs. DD map.</p></div></header>
+            <div id="qualificationFrontier" class="chart frontier-chart"></div>
+          </article>
+          <article class="viz-panel heatmap-panel">
+            <header>
+              <div><h2>Event Strength Heatmap</h2><p>Where the current field is strongest by meet and round.</p></div>
+              <label class="inline-control compact-control">
+                <span>Metric</span>
+                <select id="heatmapMetric">
+                  <option value="qualifiedCount">Qualified count</option>
+                  <option value="bubbleCount">Bubble count</option>
+                  <option value="averageScore">Average score</option>
+                  <option value="medianScore">Median score</option>
+                  <option value="averageDd">Average DD</option>
+                  <option value="missingDdCount">Missing DD</option>
+                  <option value="ncaaAdjustedCount">NCAA adjusted</option>
+                </select>
+              </label>
+            </header>
+            <div id="eventStrengthHeatmap" class="heatmap-wrap"></div>
+            <div id="heatmapSelectionNote" class="heatmap-selection-note"></div>
+          </article>
+          <article class="viz-panel">
+            <header><h2>Meet Inclusion</h2><p>Where qualifying results are coming from.</p></header>
+            <div id="sourceImpact" class="chart"></div>
+          </article>
+        </section>
+
+        <section class="table-grid">
+          <article class="table-panel">
+            <header><h2>Qualified Athletes</h2><p id="qualifiedSubtitle">Best qualifying result per athlete.</p></header>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th><th>Team</th><th>Exact Meet</th><th>Round</th><th>Place</th>
+                    <th>Score</th><th>Standard</th><th>Basis</th><th>DD</th><th>DD min</th>
+                    <th>DD status</th><th>Raw 6</th><th>NCAA 5-cat</th><th>Dropped</th>
+                    <th>Repeat</th><th>Adjust</th><th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody id="qualifiedRows"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="table-panel">
+            <header><h2>Bubble Athletes</h2><p>Closest athletes below the selected score threshold.</p></header>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th><th>Team</th><th>Exact Meet</th><th>Round</th><th>Score</th>
+                    <th>Standard</th><th>Gap</th><th>DD</th><th>DD min</th><th>DD status</th>
+                    <th>Raw 6</th><th>NCAA 5-cat</th><th>Dropped</th><th>Repeat</th><th>Adjust</th>
+                  </tr>
+                </thead>
+                <tbody id="bubbleRows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <div id="rulePanelOverlay" class="rule-overlay" aria-hidden="true"></div>
+    <aside id="ruleExplanationPanel" class="rule-panel" aria-hidden="true" aria-labelledby="ruleExplanationTitle">
+      <header>
+        <div>
+          <p class="eyebrow">Athlete audit</p>
+          <h2 id="ruleExplanationTitle">Rule Explanation</h2>
+        </div>
+        <button id="ruleExplanationClose" type="button" class="secondary-button">Close</button>
+      </header>
+      <div id="ruleExplanationBody" class="rule-panel-body">
+        <div class="empty-state">Select an athlete row to inspect the rule result.</div>
+      </div>
+      <footer>
+        <button id="ruleExplanationCopy" type="button">Copy explanation</button>
+        <button id="ruleExplanationCopyProfile" type="button">Copy athlete profile</button>
+        <button id="ruleExplanationCopyDives" type="button">Copy dive sheet</button>
+        <span id="ruleExplanationCopyStatus" class="copy-status" aria-live="polite"></span>
+      </footer>
+    </aside>
+
+    <script src="../data/criteria-data.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
