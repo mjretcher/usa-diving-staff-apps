@@ -1,7 +1,10 @@
 (function () {
   "use strict";
 
+  const STORAGE_KEY = "usa-diving-schedule-builder-standalone-v1";
   const ORIGINAL_STRINGIFY = JSON.stringify.bind(JSON);
+  const ORIGINAL_GET_ITEM = localStorage.getItem.bind(localStorage);
+  const ORIGINAL_SET_ITEM = localStorage.setItem.bind(localStorage);
   const AUTO_FLOW_MARK = Symbol("usaDivingAutoFlowActive");
   const SAFETY_GAP_MINUTES = 5;
 
@@ -32,6 +35,16 @@
     return eventLaneKey(event) === "platform";
   }
 
+  function isCompetitionEvent(event) {
+    const round = String(event?.round || "").toLowerCase();
+    const style = String(event?.style || "").toLowerCase();
+    const level = String(event?.level || "").toLowerCase();
+    if (!["qualifier", "prelim", "semifinal", "final"].includes(round)) return false;
+    if (["custom block", "open practice", "open training", "administrative block"].includes(style)) return false;
+    if (["schedule", "open", "custom"].includes(level)) return false;
+    return true;
+  }
+
   function sessionHasFinals(session) {
     return (session.events || []).some((event) => event.round === "Final");
   }
@@ -57,8 +70,25 @@
     return /full facility day|full transition day|7:00 am-12:00 pm|2:00 pm-4:00 pm|technical meeting|lunch/.test(text);
   }
 
+  function sanitizeCompetitionDurations(schedule) {
+    if (!isScheduleState(schedule)) return;
+    schedule.sessions.forEach((session) => {
+      (session.events || []).forEach((event) => {
+        if (isCompetitionEvent(event) && Number(event.customDurationMinutes || 0) > 0) {
+          event.customDurationMinutes = 0;
+          event.durationSource = "calculatedFromEntriesDivesAndSeconds";
+        }
+      });
+    });
+  }
+
+  function useManualDuration(event) {
+    if (isCompetitionEvent(event)) return false;
+    return Number(event.customDurationMinutes || 0) > 0;
+  }
+
   function calculateEventDuration(event) {
-    if (Number(event.customDurationMinutes || 0) > 0) return Math.max(0, Number(event.customDurationMinutes || 0));
+    if (useManualDuration(event)) return Math.max(0, Number(event.customDurationMinutes || 0));
     const totalDives = Math.max(0, Number(event.numberOfDivers || 0)) * Math.max(0, Number(event.numberOfDives || 0));
     const rawEventMinutes = (totalDives * Math.max(0, Number(event.secondsPerDive || 0))) / 60;
     const splitActive = Boolean(event.manualSplit) && !isPlatformEvent(event);
@@ -183,11 +213,40 @@
     if (!isScheduleState(schedule) || schedule[AUTO_FLOW_MARK]) return;
     schedule[AUTO_FLOW_MARK] = true;
     try {
+      sanitizeCompetitionDurations(schedule);
       (schedule.meet.days || []).forEach((day) => autoFlowDay(schedule, day.id));
     } finally {
       delete schedule[AUTO_FLOW_MARK];
     }
   }
+
+  localStorage.getItem = function usaDivingScheduleGetItem(key) {
+    const value = ORIGINAL_GET_ITEM(key);
+    if (key !== STORAGE_KEY || !value) return value;
+    try {
+      const parsed = JSON.parse(value);
+      if (!isScheduleState(parsed)) return value;
+      autoFlowSchedule(parsed);
+      return ORIGINAL_STRINGIFY(parsed);
+    } catch (error) {
+      return value;
+    }
+  };
+
+  localStorage.setItem = function usaDivingScheduleSetItem(key, value) {
+    if (key === STORAGE_KEY && value) {
+      try {
+        const parsed = JSON.parse(value);
+        if (isScheduleState(parsed)) {
+          autoFlowSchedule(parsed);
+          return ORIGINAL_SET_ITEM(key, ORIGINAL_STRINGIFY(parsed));
+        }
+      } catch (error) {
+        // Fall back to the original value if parsing fails.
+      }
+    }
+    return ORIGINAL_SET_ITEM(key, value);
+  };
 
   JSON.stringify = function usaDivingScheduleStringify(value, replacer, space) {
     if (isScheduleState(value)) autoFlowSchedule(value);
