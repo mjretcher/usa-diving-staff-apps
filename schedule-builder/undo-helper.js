@@ -71,81 +71,74 @@
 
   function updateUndoButton() {
     const button = document.getElementById("scheduleBuilderUndoButton");
-    const note = document.getElementById("scheduleBuilderUndoNote");
-    if (!button || !note) return;
+    if (!button) return;
 
     const action = readUndoAction();
     button.disabled = !action;
-    button.textContent = action ? "Undo last action" : "Undo unavailable";
-    note.textContent = action
-      ? "Use this immediately after an accidental delete, move, or timing edit."
-      : "Make a schedule edit to enable undo.";
+    button.textContent = "Undo";
+    button.title = action
+      ? "Undo the last schedule action"
+      : "Make a schedule edit to enable undo";
+    button.setAttribute("aria-label", button.title);
   }
 
-  function installUndoPanel() {
-    if (document.getElementById("scheduleBuilderUndoPanel")) return;
+  function installUndoButton() {
+    if (document.getElementById("scheduleBuilderUndoButton")) return;
 
     const style = document.createElement("style");
     style.textContent = `
-      #scheduleBuilderUndoPanel {
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 9999;
-        width: min(300px, calc(100vw - 36px));
-        padding: 14px;
-        border-radius: 14px;
-        background: #ffffff;
-        border: 1px solid rgba(23, 31, 105, 0.18);
-        box-shadow: 0 12px 32px rgba(23, 31, 105, 0.18);
-        font-family: inherit;
-      }
-      #scheduleBuilderUndoPanel strong {
-        display: block;
-        color: #171F69;
-        font-size: 0.86rem;
-        margin-bottom: 4px;
-      }
-      #scheduleBuilderUndoPanel p {
-        margin: 0 0 10px;
-        color: #5F6062;
-        font-size: 0.78rem;
-        line-height: 1.35;
-      }
       #scheduleBuilderUndoButton {
-        width: 100%;
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 9999;
         border: 0;
         border-radius: 999px;
-        padding: 10px 12px;
+        padding: 8px 14px;
+        min-width: 68px;
+        min-height: 34px;
         background: #171F69;
         color: #ffffff;
-        font-weight: 700;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 800;
+        line-height: 1;
+        box-shadow: 0 8px 18px rgba(23, 31, 105, 0.24);
         cursor: pointer;
       }
       #scheduleBuilderUndoButton:disabled {
         background: #5F6062;
         cursor: not-allowed;
-        opacity: 0.62;
+        opacity: 0.46;
+        box-shadow: none;
+      }
+      @media (max-width: 720px) {
+        #scheduleBuilderUndoButton {
+          right: 10px;
+          bottom: 10px;
+          padding: 7px 12px;
+          min-width: 58px;
+          min-height: 30px;
+          font-size: 0.74rem;
+        }
       }
     `;
 
-    const panel = document.createElement("div");
-    panel.id = "scheduleBuilderUndoPanel";
-    panel.innerHTML = `
-      <strong>Undo</strong>
-      <p id="scheduleBuilderUndoNote">Make a schedule edit to enable undo.</p>
-      <button id="scheduleBuilderUndoButton" type="button" disabled>Undo unavailable</button>
-    `;
+    const button = document.createElement("button");
+    button.id = "scheduleBuilderUndoButton";
+    button.type = "button";
+    button.disabled = true;
+    button.textContent = "Undo";
 
     document.head.appendChild(style);
-    document.body.appendChild(panel);
-    document.getElementById("scheduleBuilderUndoButton")?.addEventListener("click", undoLastAction);
+    document.body.appendChild(button);
+    button.addEventListener("click", undoLastAction);
     updateUndoButton();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", installUndoPanel);
+    document.addEventListener("DOMContentLoaded", installUndoButton);
   } else {
-    installUndoPanel();
+    installUndoButton();
   }
 })();
