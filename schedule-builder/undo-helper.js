@@ -4,12 +4,48 @@
   const STORAGE_KEY = "usa-diving-schedule-builder-standalone-v1";
   const UNDO_ACTION_KEY = "usa-diving-schedule-builder-last-action-undo-v1";
   const ACTION_IDLE_MS = 700;
+  const SCROLL_SELECTORS = [".single-day-board", ".active-day-panel", "#scheduleBuilderBoard"];
 
   const originalSetItem = localStorage.setItem.bind(localStorage);
   const originalRemoveItem = localStorage.removeItem.bind(localStorage);
 
   let actionOpen = false;
   let actionTimer = null;
+  let lastScrollSnapshot = null;
+
+  function captureScrollPosition() {
+    lastScrollSnapshot = {
+      windowX: window.scrollX,
+      windowY: window.scrollY,
+      panels: SCROLL_SELECTORS.map((selector) => {
+        const element = document.querySelector(selector);
+        return element ? { selector, left: element.scrollLeft, top: element.scrollTop } : null;
+      }).filter(Boolean),
+    };
+  }
+
+  function restoreScrollPosition() {
+    if (!lastScrollSnapshot) return;
+    const snapshot = lastScrollSnapshot;
+    const restore = () => {
+      window.scrollTo(snapshot.windowX, snapshot.windowY);
+      snapshot.panels.forEach((panel) => {
+        const element = document.querySelector(panel.selector);
+        if (!element) return;
+        element.scrollLeft = panel.left;
+        element.scrollTop = panel.top;
+      });
+    };
+    window.requestAnimationFrame(restore);
+    window.setTimeout(restore, 0);
+    window.setTimeout(restore, 80);
+  }
+
+  function installScrollPreserver() {
+    ["pointerdown", "mousedown", "focusin", "input", "change", "click"].forEach((eventName) => {
+      document.addEventListener(eventName, captureScrollPosition, true);
+    });
+  }
 
   function readUndoAction() {
     try {
@@ -50,12 +86,16 @@
 
   localStorage.setItem = function patchedSetItem(key, value) {
     if (key === STORAGE_KEY) rememberStateBeforeAction(value);
-    return originalSetItem(key, value);
+    const result = originalSetItem(key, value);
+    if (key === STORAGE_KEY) restoreScrollPosition();
+    return result;
   };
 
   localStorage.removeItem = function patchedRemoveItem(key) {
     if (key === STORAGE_KEY) rememberStateBeforeAction(null);
-    return originalRemoveItem(key);
+    const result = originalRemoveItem(key);
+    if (key === STORAGE_KEY) restoreScrollPosition();
+    return result;
   };
 
   function undoLastAction() {
@@ -136,9 +176,14 @@
     updateUndoButton();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", installUndoButton);
-  } else {
+  function installHelpers() {
+    installScrollPreserver();
     installUndoButton();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", installHelpers);
+  } else {
+    installHelpers();
   }
 })();
