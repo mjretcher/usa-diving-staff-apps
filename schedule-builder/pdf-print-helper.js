@@ -16,6 +16,42 @@
     }
   }
 
+  function publicNote(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    const generatedPatterns = [
+      /junior nationals assigned (practice|group warm-up):?\s*(west|central|east)?/i,
+      /restored on shifted final junior competition day/i,
+      /restored from proposed junior nationals schedule/i,
+      /revised to \d+ minutes per user request/i,
+      /recovered time moved/i,
+      /working draft/i,
+      /safety shifted/i,
+      /shift required because/i,
+      /starts? 5 minutes after/i,
+      /session moved \d+ minutes earlier/i,
+      /existing final time window retained/i,
+      /final dive count adjusted/i,
+      /optional-only/i,
+      /labeled separately from individual events/i,
+      /modeled from 2025/i,
+      /added in v\d+/i,
+    ];
+
+    const kept = raw
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)
+      .filter((sentence) => !generatedPatterns.some((pattern) => pattern.test(sentence)));
+
+    const cleaned = kept.join(" ").trim();
+    if (!cleaned) return "";
+    if (/^(restricted|note|public note|restriction|pool closed|platform closed|boards restricted|open to|closed to)\b/i.test(cleaned)) return cleaned;
+    if (!generatedPatterns.some((pattern) => pattern.test(raw))) return cleaned;
+    return "";
+  }
+
   function time(minutes) {
     const total = Math.max(0, Math.round(Number(minutes || 0)));
     const hour24 = Math.floor(total / 60) % 24;
@@ -64,7 +100,7 @@
     const end = sessionEnd(session);
     const title = session.title && !/^session$/i.test(session.title) ? session.title : isPractice(session) ? "Open Practice / Training" : `Session ${index + 1}`;
     if (isPractice(session)) {
-      const note = String(session.events?.[0]?.notes || "").trim();
+      const note = publicNote(session.events?.[0]?.notes || "");
       return `<article class="practice"><b>${esc(time(start))}-${esc(time(end))}</b><div><strong>${esc(title)}</strong>${note ? `<p>${esc(note)}</p>` : ""}</div></article>`;
     }
     const warmupEnd = start + Number(session.warmupMinutes || 0) + Number(session.transitionBufferMinutes || 0);
