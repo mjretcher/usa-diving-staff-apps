@@ -82,6 +82,18 @@
     });
   }
 
+  function sanitizeWarmupEventGap(schedule) {
+    if (!isScheduleState(schedule)) return;
+    schedule.sessions.forEach((session) => {
+      if (sessionIsManualBlock(session)) return;
+      if (!(session.events || []).some(isCompetitionEvent)) return;
+      if (Number(session.transitionBufferMinutes || 0) > 0) {
+        session.transitionBufferMinutes = 0;
+        session.transitionBufferSource = "autoClearedNoGapBetweenWarmupAndEvent";
+      }
+    });
+  }
+
   function useManualDuration(event) {
     if (isCompetitionEvent(event)) return false;
     return Number(event.customDurationMinutes || 0) > 0;
@@ -130,7 +142,7 @@
     const warmup = Math.max(0, Number(session.warmupMinutes || 0));
     const transition = Math.max(0, Number(session.transitionBufferMinutes || 0));
     const increment = Math.max(1, Number(session.roundingIncrementMinutes || timingDefaults.roundingIncrementMinutes || 5));
-    const firstEventStart = roundUp(start + warmup + transition, increment);
+    const firstEventStart = roundUp(start + warmup, increment);
     const laneCursors = new Map();
     let competitiveEnd = firstEventStart;
 
@@ -214,6 +226,7 @@
     schedule[AUTO_FLOW_MARK] = true;
     try {
       sanitizeCompetitionDurations(schedule);
+      sanitizeWarmupEventGap(schedule);
       (schedule.meet.days || []).forEach((day) => autoFlowDay(schedule, day.id));
     } finally {
       delete schedule[AUTO_FLOW_MARK];
