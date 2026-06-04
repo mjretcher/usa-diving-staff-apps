@@ -188,31 +188,23 @@
 
     let cursor = sessions[0] ? Number(sessions[0].warmupStartMinutes || 0) : 0;
     let previousWasCompetition = false;
-    let manualCascadeActive = false;
 
-    sessions.forEach((session) => {
+    sessions.forEach((session, index) => {
       const increment = Math.max(1, Number(session.roundingIncrementMinutes || schedule.profile?.timingDefaults?.roundingIncrementMinutes || 5));
       const isManual = sessionIsManualBlock(session);
       const locked = Boolean(session.locked) || isHardFixedBlock(session);
 
-      if (isManual && !locked) {
-        if (previousWasCompetition || manualCascadeActive) {
+      if (index > 0 && !locked) {
+        if (isManual) {
           const gap = previousWasCompetition ? SAFETY_GAP_MINUTES : 0;
           const desiredStart = roundUp(cursor + gap, increment);
           adjustManualBlockStart(schedule, session, desiredStart);
-          manualCascadeActive = true;
+        } else {
+          const introMinutes = sessionHasFinals(session)
+            ? Math.max(0, Number(schedule.profile?.timingDefaults?.introductionsMinutes || 10))
+            : 0;
+          session.warmupStartMinutes = roundUp(cursor + introMinutes, increment);
         }
-      } else if (!isManual && !locked) {
-        const introMinutes = sessionHasFinals(session)
-          ? Math.max(0, Number(schedule.profile?.timingDefaults?.introductionsMinutes || 10))
-          : 0;
-        const earliestStart = roundUp(cursor + introMinutes, increment);
-        if (Number(session.warmupStartMinutes || 0) < earliestStart) {
-          session.warmupStartMinutes = earliestStart;
-        }
-        manualCascadeActive = false;
-      } else if (!isManual) {
-        manualCascadeActive = false;
       }
 
       const timing = calculateSessionTiming(schedule, session);
