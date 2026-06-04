@@ -14,18 +14,16 @@
     return ["Qualifier", "Prelim"].includes(String(event && event.round || ""));
   }
 
-  function baseKey(event) {
-    return [event.level, event.gender, event.apparatus, event.style].map((part) => String(part || "").trim()).join("|");
+  function appKey(event, round) {
+    return [event.level, event.gender, event.apparatus, event.style, round].map((part) => String(part || "").trim()).join(" | ");
+  }
+
+  function compactKey(event, round) {
+    return [event.level, event.gender, event.apparatus, event.style, round].map((part) => String(part || "").trim()).join("|");
   }
 
   function presetKey(event) {
-    const existing = String(event.canonicalKey || "").trim();
-    return existing ? existing.replace(/\|(Qualifier|Prelim|Semifinal|Final)$/i, "") : baseKey(event);
-  }
-
-  function entryKey(event, round) {
-    const existing = String(event.canonicalKey || "").trim();
-    return existing && existing.endsWith("|" + round) ? existing : presetKey(event) + "|" + round;
+    return [event.level, event.gender, event.apparatus, event.style].map((part) => String(part || "").trim()).join(" | ");
   }
 
   function presetFromScheduledEvent(event, allowedRounds) {
@@ -50,12 +48,14 @@
     (schedule.sessions || []).forEach((session) => {
       (session.events || []).forEach((event) => {
         if (!isProjectedEntryRound(event)) return;
-        const key = entryKey(event, event.round);
         const value = Number(event.numberOfDivers);
-        if (!key || !Number.isFinite(value) || value < 0) return;
+        if (!Number.isFinite(value) || value < 0) return;
 
-        if (projected[key] !== value) { projected[key] = value; changed = true; }
-        if (legacy[key] !== value) { legacy[key] = value; changed = true; }
+        const keys = [appKey(event, event.round), compactKey(event, event.round), String(event.canonicalKey || "").trim()].filter(Boolean);
+        keys.forEach((key) => {
+          if (projected[key] !== value) { projected[key] = value; changed = true; }
+          if (legacy[key] !== value) { legacy[key] = value; changed = true; }
+        });
 
         const pKey = presetKey(event);
         if (!scheduledPresets.has(pKey)) scheduledPresets.set(pKey, { event, rounds: new Set() });
