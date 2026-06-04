@@ -56,6 +56,53 @@
           </label>
         </div>
         <div class="flag-row" id="flagControls"></div>
+        <section class="override-panel" aria-label="Manual overrides">
+          <div class="override-header">
+            <div>
+              <h2>Manual Overrides</h2>
+              <p>Foreign, dual-effect, and declared-not-attending changes are saved in this browser and can be undone.</p>
+            </div>
+            <div class="override-actions">
+              <button class="secondary-button" id="undoOverrideButton" type="button">Undo</button>
+              <button class="secondary-button" id="redoOverrideButton" type="button">Redo</button>
+              <button class="secondary-button" id="exportOverridesButton" type="button">Export JSON</button>
+              <button class="secondary-button" id="clearOverridesButton" type="button">Clear</button>
+            </div>
+          </div>
+          <div class="manual-override-form">
+            <label>
+              <span>Athlete ID</span>
+              <input id="overrideAthleteId" type="text" placeholder="DiveMeets ID">
+            </label>
+            <label>
+              <span>Athlete name</span>
+              <input id="overrideAthleteName" type="text" placeholder="Optional">
+            </label>
+            <label>
+              <span>Override</span>
+              <select id="overrideType">
+                <option value="foreign">Foreign athlete</option>
+                <option value="dual">Dual citizen note</option>
+                <option value="dualEffect">Dual affects results</option>
+                <option value="notAttending">Declared not attending</option>
+              </select>
+            </label>
+            <label>
+              <span>State</span>
+              <select id="overrideValue">
+                <option value="true">Turn on</option>
+                <option value="false">Turn off</option>
+              </select>
+            </label>
+            <label class="override-note">
+              <span>Note</span>
+              <input id="overrideNote" type="text" placeholder="Reason or source">
+            </label>
+            <button id="addOverrideButton" type="button">Add override</button>
+          </div>
+          <div class="override-summary" id="overrideSummary"></div>
+          <div class="override-log" id="overrideLog"></div>
+        </section>
       </section>
 
       <section class="kpi-band" id="kpiBand"></section>
@@ -76,6 +123,7 @@
             <button type="button" data-view="bumps" class="tab-button">Bumps</button>
             <button type="button" data-view="flags" class="tab-button">Flags</button>
             <button type="button" data-view="athletes" class="tab-button">Athletes</button>
+            <button type="button" data-view="overrides" class="tab-button">Overrides</button>
             <button type="button" data-view="official" class="tab-button">Official Zone List</button>
           </div>
           <div class="table-actions">
