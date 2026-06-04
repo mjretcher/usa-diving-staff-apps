@@ -10,6 +10,7 @@
   function setOpen(value) {
     sessionStorage.setItem(STORAGE_KEY, value ? "1" : "0");
     document.body.classList.toggle("left-tools-open", Boolean(value));
+    setTimeout(syncButtonLabel, 0);
   }
 
   function installStyles() {
@@ -26,20 +27,32 @@
       }
 
       body.left-tools-open .left-rail {
+        display: block !important;
         position: fixed !important;
         top: 72px !important;
         left: 12px !important;
-        bottom: 12px !important;
+        bottom: 58px !important;
         z-index: 10000 !important;
-        width: min(360px, calc(100vw - 28px)) !important;
-        max-width: min(360px, calc(100vw - 28px)) !important;
-        max-height: calc(100vh - 84px) !important;
-        overflow: auto !important;
+        width: min(380px, calc(100vw - 28px)) !important;
+        max-width: min(380px, calc(100vw - 28px)) !important;
+        height: auto !important;
+        max-height: calc(100vh - 130px) !important;
+        overflow-y: scroll !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior: contain !important;
         background: #fff !important;
         border: 1px solid rgba(23,31,105,.18) !important;
         border-radius: 16px !important;
         box-shadow: 0 18px 48px rgba(23,31,105,.28) !important;
-        padding: 12px !important;
+        padding: 12px 12px 72px !important;
+        scrollbar-width: thin;
+      }
+
+      body.left-tools-open .left-rail::after {
+        content: "";
+        display: block;
+        height: 64px;
       }
 
       body.left-tools-open .app-main {
@@ -96,8 +109,8 @@
       }
 
       .left-rail .catalog-event-grid {
-        max-height: 42vh !important;
-        overflow: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
       }
 
       .left-rail .catalog-event-card,
@@ -105,7 +118,18 @@
       .left-rail .catalog-add-card,
       .left-rail .catalog-toolbox,
       .left-rail .panel {
-        overflow: hidden !important;
+        overflow: visible !important;
+      }
+
+      @media (max-width: 900px) {
+        body.left-tools-open .left-rail {
+          top: 56px !important;
+          bottom: 58px !important;
+          left: 10px !important;
+          width: calc(100vw - 20px) !important;
+          max-width: calc(100vw - 20px) !important;
+          max-height: calc(100vh - 114px) !important;
+        }
       }
     `;
     document.head.appendChild(style);
