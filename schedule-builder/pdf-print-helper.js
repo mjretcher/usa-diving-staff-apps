@@ -4,13 +4,14 @@
   function activeReportElement() {
     const candidates = [
       { id: "timelinePreview", label: "Operations Timeline", size: "landscape" },
-      { id: "posterPreview", label: "Public Schedule", size: "portrait" },
+      { selector: ".public-schedule-preview", label: "Public Schedule", size: "portrait" },
+      { selector: ".poster-preview", label: "Poster / Canva View", size: "portrait" },
       { id: "dailySchedulePreview", label: "Daily Schedule", size: "portrait" },
       { id: "reportsPreview", label: "Report", size: "portrait" },
     ];
 
     for (const item of candidates) {
-      const element = document.getElementById(item.id);
+      const element = item.id ? document.getElementById(item.id) : document.querySelector(item.selector);
       if (!element) continue;
       const box = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
@@ -18,7 +19,7 @@
       return { element, ...item };
     }
 
-    const visibleReport = [...document.querySelectorAll(".timeline-preview, .public-schedule-preview, .daily-schedule-preview")]
+    const visibleReport = [...document.querySelectorAll(".timeline-preview, .public-schedule-preview, .poster-preview, .daily-schedule-preview")]
       .find((element) => {
         const box = element.getBoundingClientRect();
         const style = window.getComputedStyle(element);
@@ -55,8 +56,8 @@
   ${linkedStyles()}
   ${inlineStyles()}
   <style>
-    @page { size: ${pageSize}; margin: 0.25in; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @page { size: ${pageSize}; margin: 0.28in; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box !important; }
     html, body { margin: 0; background: #fff !important; }
     body { color: #171F69; font-family: Arial, sans-serif; }
     .print-toolbar { position: sticky; top: 0; z-index: 99999; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 18px; background: #fff; border-bottom: 1px solid #dbe7f3; box-shadow: 0 6px 18px rgba(23,31,105,.12); }
@@ -64,15 +65,78 @@
     .print-toolbar button { border: 0; border-radius: 999px; padding: 10px 16px; background: #171F69; color: white; font-weight: 800; cursor: pointer; }
     .print-page { padding: 18px; }
     .print-page > * { max-width: none !important; }
+
     @media print {
       .print-toolbar { display: none !important; }
       .print-page { padding: 0 !important; }
       body { background: #fff !important; }
+
       .timeline-preview, .timeline-preview-by-day { width: 100% !important; }
-      .timeline-table { width: 100% !important; page-break-inside: auto; }
-      .timeline-page-table { page-break-after: always; }
-      .timeline-page-table:last-child { page-break-after: auto; }
-      .public-schedule-preview { box-shadow: none !important; }
+      .timeline-table { width: 100% !important; page-break-inside: auto; break-inside: auto; }
+      .timeline-page-table { page-break-after: always; break-after: page; }
+      .timeline-page-table:last-child { page-break-after: auto; break-after: auto; }
+      .timeline-table tr, .timeline-table td, .timeline-table th { page-break-inside: avoid; break-inside: avoid; }
+
+      .public-schedule-preview {
+        box-shadow: none !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      .public-hero-card {
+        page-break-after: avoid;
+        break-after: avoid;
+        margin-bottom: 0.16in !important;
+      }
+      .public-day-grid, .polished-public-grid {
+        display: block !important;
+        column-count: 1 !important;
+        gap: 0 !important;
+      }
+      .public-day-card, .polished-public-day {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 0 0.18in !important;
+        padding: 0.12in !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        box-shadow: none !important;
+        border: 1px solid #dbe7f3 !important;
+      }
+      .public-day-top {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        margin-bottom: 0.08in !important;
+      }
+      .public-session-list {
+        display: block !important;
+      }
+      .public-schedule-item {
+        display: grid !important;
+        grid-template-columns: 1.15in 1fr !important;
+        gap: 0.10in !important;
+        width: 100% !important;
+        margin: 0 0 0.08in !important;
+        padding: 0.08in !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        box-shadow: none !important;
+      }
+      .public-schedule-item * {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .public-time-pill {
+        min-width: 0 !important;
+        width: auto !important;
+        white-space: nowrap !important;
+      }
+      .public-item-body ul {
+        margin-top: 0.04in !important;
+      }
+      .public-schedule-footer {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
     }
   </style>
 </head>
