@@ -44,6 +44,21 @@
     return /^Group\s+[A-D]\b/i.test(String(event?.level || "")) && String(event?.style || "") === "Individual" && isCompetition(event);
   }
 
+  function apparatusKey(event) {
+    const apparatus = String(event?.apparatus || "").toLowerCase();
+    if (apparatus === "1m" || apparatus === "1-meter" || apparatus === "1 meter") return "1m";
+    if (apparatus === "3m" || apparatus === "3-meter" || apparatus === "3 meter") return "3m";
+    if (apparatus === "platform" || apparatus === "10m" || apparatus === "10-meter" || apparatus === "10 meter") return "platform";
+    return apparatus || "other";
+  }
+
+  function apparatusLabel(key) {
+    if (key === "1m") return "1-Meter";
+    if (key === "3m") return "3-Meter";
+    if (key === "platform") return "Platform";
+    return key;
+  }
+
   function eventName(event) {
     const display = String(event?.display || "").trim();
     if (display) return display;
@@ -123,6 +138,26 @@
             });
           }
           seenEvents.set(key, event);
+        });
+
+        const prelimByApparatus = new Map();
+        (session.events || []).filter((event) => isJuniorIndividual(event) && event.round === "Prelim").forEach((event) => {
+          const key = apparatusKey(event);
+          if (!prelimByApparatus.has(key)) prelimByApparatus.set(key, []);
+          prelimByApparatus.get(key).push(event);
+        });
+        prelimByApparatus.forEach((events, key) => {
+          const totalEntries = events.reduce((sum, event) => sum + Math.max(0, Number(event.numberOfDivers || 0)), 0);
+          if (events.length > 1 && totalEntries >= 20) {
+            items.push({
+              severity: "error",
+              label: "Junior board-set conflict",
+              day: dateLabel(day),
+              sessionId: session.id,
+              detail: `${sessionLabel(session, sessionIndex)} has ${events.length} junior ${apparatusLabel(key)} prelim events totaling ${totalEntries} entries. High-entry junior prelims need their own board set; only combine same-apparatus events when the combined entries are under 20.`,
+              action: "Move one same-apparatus prelim to another session",
+            });
+          }
         });
       });
 
