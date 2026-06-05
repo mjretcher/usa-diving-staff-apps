@@ -5,11 +5,17 @@ Safe wrapper for build_zone_data.py.
 This preserves the existing processor while correcting two operational issues:
 1. Empty data/junior-data.js should not make the build fail.
 2. 2026 Zone individual Group A-D 1M, 3M, and Platform events are qualifying events.
+
+It also fails loudly if the source database contains Zone meet headers but no
+processed results for one or more of those zones. That prevents a false-success
+build from silently publishing only Zone B when Zone E/F meet shells are present
+but their result tables have not been scraped into usa_2026.db yet.
 """
 from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -98,8 +104,36 @@ def parse_event_name(name: str) -> dict:
     }
 
 
+_original_process_zones = builder.process_zones
+
+
+def process_zones_with_guard(conn, existing_data, prequalified_set, not_attending_set, zone_ewc_map):
+    zone_meets = builder.get_zone_meets(conn)
+    expected_zones = {
+        builder.extract_zone_letter(m["name"])
+        for m in zone_meets
+        if builder.extract_zone_letter(m["name"])
+    }
+
+    new_events, new_results = _original_process_zones(
+        conn, existing_data, prequalified_set, not_attending_set, zone_ewc_map
+    )
+    result_zones = {r.get("zone") for r in new_results if r.get("zone")}
+    missing = sorted(expected_zones - result_zones)
+
+    if missing:
+        print("", file=sys.stderr)
+        print("ERROR: Zone meet headers were found, but no result rows were processed for: " + ", ".join(missing), file=sys.stderr)
+        print("This usually means usa_2026.db has meet/event shells but the DiveMeets results for those zones have not been scraped into the results table yet.", file=sys.stderr)
+        print("Run the divemeets-scraper workflow for USA 2026 results, then rerun Build Junior Data.", file=sys.stderr)
+        sys.exit(2)
+
+    return new_events, new_results
+
+
 builder.load_js_data = load_js_data
 builder.parse_event_name = parse_event_name
+builder.process_zones = process_zones_with_guard
 
 if __name__ == "__main__":
     builder.main()
