@@ -1,0 +1,60 @@
+/* Readability fixes for the Schedule Builder header/day tabs and synchro event titles. */
+
+.modern-board-header,
+.board-header,
+.day-lane-header,
+.modern-day-header {
+  background: #FFFFFF !important;
+  color: #151B46 !important;
+}
+
+.modern-board-header h2,
+.modern-board-header p,
+.board-header h2,
+.board-header p,
+.day-lane-header h3,
+.day-lane-header span,
+.modern-day-header h3,
+.modern-day-header span,
+.active-day-title h3,
+.active-day-title span {
+  color: #151B46 !important;
+}
+
+.builder-day-tab {
+  background: #FFFFFF !important;
+  border: 1px solid #D7E1EA !important;
+  color: #151B46 !important;
+}
+
+.builder-day-tab strong {
+  color: #D91C35 !important;
+}
+
+.builder-day-tab span,
+.builder-day-tab em {
+  color: #151B46 !important;
+}
+
+.builder-day-tab.active {
+  background: #171F69 !important;
+  border-color: #171F69 !important;
+  box-shadow: 0 8px 18px rgba(23, 31, 105, 0.22) !important;
+}
+
+.builder-day-tab.active strong,
+.builder-day-tab.active span,
+.builder-day-tab.active em {
+  color: #FFFFFF !important;
+}
+
+.event-title-main strong,
+.compact-event-main strong {
+  color: #050A30 !important;
+  font-weight: 900 !important;
+}
+
+.event-title-main span,
+.compact-event-main span {
+  color: #5F6062 !important;
+}
