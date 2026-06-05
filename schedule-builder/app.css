@@ -1,25 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --usd-red: #E31937;
-  --usd-blue: #171F69;
-  --usd-gray: #5F6062;
+  --usd-red: #d91c35;
+  --usd-blue: #171f69;
+  --usd-blue-700: #1e2d8a;
+  --usd-gray: #6b7280;
   --usd-light-blue: #8FC3EA;
   --usd-cyan: #009AC7;
   --usd-white: #FFFFFF;
-  --font-headline: "Gotham XNarrow Bold", "Gotham Black", "Arial Narrow", Arial, sans-serif;
-  --font-subtitle: "Gotham Bold", Arial, sans-serif;
-  --font-body: "Gotham Book", Arial, sans-serif;
+  --font-headline: 'Inter', "Arial Narrow", Arial, sans-serif;
+  --font-subtitle: 'Inter', Arial, sans-serif;
+  --font-body: 'Inter', Arial, sans-serif;
   --font-mono: Consolas, "SFMono-Regular", monospace;
+  --line: #e5e7eb;
+  --line-2: #f3f4f6;
+  --surface: #ffffff;
+  --bg: #f5f7fa;
+  --ink: #0d1117;
+  --ink-2: #374151;
+  --ink-3: #6b7280;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
 }
 
-* {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: color-mix(in srgb, var(--usd-light-blue) 13%, var(--usd-white));
-  color: var(--usd-blue);
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -35,28 +49,30 @@ button {
 
 .app-header {
   align-items: center;
-  background: var(--usd-white);
-  border-bottom: 4px solid var(--usd-cyan);
+  background: var(--usd-blue);
+  border-bottom: 3px solid var(--usd-red);
   display: flex;
   gap: 18px;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 0 20px;
+  height: 56px;
   position: sticky;
   top: 0;
   z-index: 20;
+  box-shadow: 0 1px 0 rgba(0,0,0,.2);
 }
 
 .brand-lockup {
   align-items: center;
   display: flex;
-  gap: 16px;
+  gap: 10px;
   min-width: 0;
 }
 
 .brand-lockup img {
-  height: 48px;
+  height: 32px;
   object-fit: contain;
-  width: 164px;
+  filter: brightness(0) invert(1);
 }
 
 .brand-lockup h1,
@@ -66,12 +82,21 @@ button {
 
 .brand-lockup h1 {
   font-family: var(--font-headline);
-  font-size: 32px;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.15;
+  color: #fff;
 }
 
-.brand-lockup p,
+.brand-lockup p {
+  font-size: 11px;
+  color: rgba(255,255,255,.5);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
 .muted,
 .source-note {
   color: var(--usd-gray);

@@ -4,79 +4,241 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>USA Diving Staff Apps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap');
-    :root { --red: #E31937; --blue: #171F69; --light-blue: #8FC3EA; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Barlow', sans-serif; background: var(--blue); color: #fff; min-height: 100vh; }
-    .site-header { background: var(--blue); border-bottom: 4px solid var(--red); padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1.5rem; }
-    .brand-mark { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 2.5rem; color: var(--red); letter-spacing: -1px; line-height: 1; }
-    .header-divider { width: 3px; height: 3rem; background: rgba(255,255,255,0.2); border-radius: 2px; }
-    .header-text h1 { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 1.6rem; letter-spacing: 0.5px; line-height: 1.1; }
-    .header-text p { font-size: 0.8rem; color: var(--light-blue); margin-top: 0.2rem; letter-spacing: 0.5px; text-transform: uppercase; }
-    main { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 5rem; }
-    .intro { margin-bottom: 3rem; }
-    .intro h2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 3rem; line-height: 1; }
-    .intro h2 span { color: var(--red); }
-    .intro p { margin-top: 0.75rem; color: var(--light-blue); font-size: 1rem; max-width: 560px; line-height: 1.6; }
-    .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
-    .app-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-top: 4px solid var(--red); border-radius: 4px; padding: 1.75rem; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 0.75rem; transition: background 0.15s, border-color 0.15s, transform 0.15s; }
-    .app-card:hover { background: rgba(255,255,255,0.1); border-top-color: var(--light-blue); transform: translateY(-3px); }
-    .app-number { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 3.5rem; color: rgba(255,255,255,0.08); line-height: 1; margin-bottom: -0.5rem; }
-    .app-card h3 { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 1.4rem; line-height: 1.1; }
-    .app-card p { font-size: 0.88rem; color: rgba(255,255,255,0.6); line-height: 1.55; flex: 1; }
-    .app-link-label { display: inline-flex; align-items: center; gap: 0.4rem; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 0.9rem; color: var(--light-blue); letter-spacing: 0.5px; text-transform: uppercase; margin-top: 0.5rem; }
-    .app-link-label::after { content: '→'; font-size: 1rem; }
-    .app-card:hover .app-link-label { color: #fff; }
-    .data-note { margin-top: 3rem; padding: 1rem 1.5rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-left: 4px solid var(--red); border-radius: 4px; font-size: 0.82rem; color: rgba(255,255,255,0.5); line-height: 1.6; }
-    .data-note strong { color: rgba(255,255,255,0.75); }
-    footer { border-top: 1px solid rgba(255,255,255,0.08); padding: 1.5rem 2rem; text-align: center; font-size: 0.78rem; color: rgba(255,255,255,0.25); }
+    :root {
+      --red: #d91c35; --blue: #171f69; --blue-700: #1e2d8a;
+      --ink: #0d1117; --ink-2: #374151; --ink-3: #6b7280;
+      --line: #e5e7eb; --surface: #fff; --bg: #f5f7fa;
+    }
+    body {
+      font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+      background: var(--bg); color: var(--ink);
+      min-height: 100vh; -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .site-header {
+      background: var(--blue); border-bottom: 3px solid var(--red);
+      padding: 0 28px; height: 60px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.2); position: sticky; top: 0; z-index: 10;
+    }
+    .brand-mark {
+      display: flex; flex-direction: column; gap: 2px; width: 6px; flex-shrink: 0;
+    }
+    .brand-mark span { display: block; height: 14px; border-radius: 2px; }
+    .brand-mark span:first-child { background: var(--red); }
+    .brand-mark span:last-child  { background: rgba(255,255,255,.4); }
+    .brand-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: rgba(255,255,255,.45);
+    }
+    .brand-name { font-size: 16px; font-weight: 700; color: #fff; line-height: 1.15; }
+    .header-divider { width: 1px; height: 28px; background: rgba(255,255,255,.15); margin: 0 8px; }
+    .header-sub {
+      font-size: 12px; color: rgba(255,255,255,.55); font-weight: 500;
+    }
+
+    /* Hero */
+    .hero {
+      background: var(--blue); color: #fff;
+      padding: 60px 40px 50px; text-align: center;
+    }
+    .hero-eyebrow {
+      font-size: 11px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: rgba(255,255,255,.45);
+      margin-bottom: 12px;
+    }
+    .hero h1 {
+      font-size: 42px; font-weight: 800; letter-spacing: -.03em;
+      line-height: 1; margin-bottom: 14px;
+    }
+    .hero h1 span { color: var(--red); }
+    .hero p {
+      font-size: 16px; color: rgba(255,255,255,.6); line-height: 1.6;
+      max-width: 520px; margin: 0 auto;
+    }
+
+    /* Grid */
+    main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 60px; }
+
+    .section-label {
+      font-size: 11px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--ink-3);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    }
+    .section-label::after {
+      content: ''; flex: 1; height: 1px; background: var(--line);
+    }
+
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .app-card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 12px; padding: 24px;
+      text-decoration: none; color: var(--ink);
+      display: flex; flex-direction: column; gap: 10px;
+      transition: box-shadow .2s, transform .2s, border-color .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .app-card:hover {
+      box-shadow: 0 8px 24px rgba(0,0,0,.1);
+      transform: translateY(-2px);
+      border-color: var(--blue);
+    }
+
+    .app-card-top {
+      display: flex; align-items: flex-start; justify-content: space-between;
+    }
+    .app-num {
+      font-size: 11px; font-weight: 800; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--ink-3); padding: 4px 8px;
+      background: var(--bg); border-radius: 4px; border: 1px solid var(--line);
+    }
+    .app-icon {
+      width: 38px; height: 38px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .icon-blue   { background: #e8ecf9; }
+    .icon-green  { background: #ecfdf5; }
+    .icon-amber  { background: #fffbeb; }
+    .icon-purple { background: #f5f3ff; }
+
+    .app-card h3 {
+      font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.2;
+    }
+    .app-card p {
+      font-size: 13px; color: var(--ink-3); line-height: 1.6; flex: 1;
+    }
+    .app-tags {
+      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+    }
+    .tag {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 999px; border: 1px solid var(--line);
+      color: var(--ink-3); background: var(--bg);
+    }
+    .app-link {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 700; color: var(--blue);
+      text-decoration: none; margin-top: 6px; padding: 6px 0;
+      border-top: 1px solid var(--line);
+    }
+    .app-link::after { content: '→'; }
+    .app-card:hover .app-link { color: var(--blue-700); }
+
+    /* Data note */
+    .data-note {
+      margin-top: 32px; padding: 14px 18px;
+      background: var(--surface); border: 1px solid var(--line);
+      border-left: 4px solid var(--blue); border-radius: 8px;
+      font-size: 13px; color: var(--ink-3); line-height: 1.6;
+    }
+    .data-note strong { color: var(--ink-2); font-weight: 600; }
+
+    footer {
+      text-align: center; padding: 24px; font-size: 12px; color: var(--ink-3);
+      border-top: 1px solid var(--line);
+    }
   </style>
 </head>
 <body>
   <header class="site-header">
-    <div class="brand-mark">USA</div>
+    <div class="brand-mark"><span></span><span></span></div>
+    <div>
+      <div class="brand-label">USA Diving</div>
+      <div class="brand-name">Staff Applications</div>
+    </div>
     <div class="header-divider"></div>
-    <div class="header-text">
-      <h1>Diving Staff Applications</h1>
-      <p>Internal tools &mdash; High Performance Department</p>
-    </div>
+    <div class="header-sub">High Performance Department &mdash; Internal use only</div>
   </header>
+
+  <div class="hero">
+    <div class="hero-eyebrow">Internal staff toolkit</div>
+    <h1>Staff <span>Apps</span></h1>
+    <p>Four tools for schedule building, results auditing, criteria simulation, and athlete analytics.</p>
+  </div>
+
   <main>
-    <div class="intro">
-      <h2>Staff <span>Toolkit</span></h2>
-      <p>Four internal tools for schedule building, results auditing, criteria simulation, and athlete analytics. Select an app below.</p>
-    </div>
+    <div class="section-label">Applications</div>
     <div class="app-grid">
+
       <a class="app-card" href="schedule-builder/index.html">
-        <div class="app-number">01</div>
+        <div class="app-card-top">
+          <span class="app-num">01</span>
+          <div class="app-icon icon-blue">📅</div>
+        </div>
         <h3>Schedule Builder</h3>
-        <p>Build and manage meet schedules. Set event blocks, warm-up times, and session structures. Outputs print-ready and shareable formats.</p>
-        <span class="app-link-label">Open app</span>
+        <p>Build and manage meet schedules. Set event blocks, warm-up times, and session structures with print-ready and shareable output.</p>
+        <div class="app-tags">
+          <span class="tag">Meet design</span>
+          <span class="tag">PDF export</span>
+          <span class="tag">Auto-flow</span>
+        </div>
+        <span class="app-link">Open app</span>
       </a>
+
       <a class="app-card" href="junior-results/index.html">
-        <div class="app-number">02</div>
-        <h3>Junior Results Audit</h3>
-        <p>Browse and audit Junior Circuit results by zone, age group, stage, and event. Includes bumps analysis, official zone qualifiers, and athlete search.</p>
-        <span class="app-link-label">Open app</span>
+        <div class="app-card-top">
+          <span class="app-num">02</span>
+          <div class="app-icon icon-green">🏆</div>
+        </div>
+        <h3>Junior Circuit</h3>
+        <p>Audit Junior Circuit results across all stages — Regionals, Zones, E/W/C, and Nationals. Tracks qualifiers, bumps, foreign athletes, HPS, and declared not-attending in real time.</p>
+        <div class="app-tags">
+          <span class="tag">Zones</span>
+          <span class="tag">Qualification lists</span>
+          <span class="tag">Override tracking</span>
+        </div>
+        <span class="app-link">Open app</span>
       </a>
+
       <a class="app-card" href="criteria-simulator/index.html">
-        <div class="app-number">03</div>
+        <div class="app-card-top">
+          <span class="app-num">03</span>
+          <div class="app-icon icon-amber">⚖️</div>
+        </div>
         <h3>Criteria Simulator</h3>
-        <p>Simulate qualification criteria against score and DD thresholds. Scenario manager, optimizer, certification center, and export tools.</p>
-        <span class="app-link-label">Open app</span>
+        <p>Simulate qualification criteria against score and DD thresholds. Scenario manager, threshold optimizer, certification center, and staff review exports.</p>
+        <div class="app-tags">
+          <span class="tag">Thresholds</span>
+          <span class="tag">Optimizer</span>
+          <span class="tag">Certification</span>
+        </div>
+        <span class="app-link">Open app</span>
       </a>
+
       <a class="app-card" href="athlete-evaluation/index.html">
-        <div class="app-number">04</div>
+        <div class="app-card-top">
+          <span class="app-num">04</span>
+          <div class="app-icon icon-purple">📊</div>
+        </div>
         <h3>Athlete Evaluation</h3>
-        <p>Full high-performance analytics dashboard. Dive-level analysis, heatmaps, synchro pair builder, mixed team candidates, and voluntary evidence workbook. 2021&ndash;2026 data.</p>
-        <span class="app-link-label">Open app</span>
+        <p>Full high-performance analytics dashboard with dive-level analysis, heatmaps, synchro pair builder, mixed team candidates, and voluntary evidence workbook. 2021–2026 data.</p>
+        <div class="app-tags">
+          <span class="tag">Analytics</span>
+          <span class="tag">Synchro pairs</span>
+          <span class="tag">Mixed team</span>
+        </div>
+        <span class="app-link">Open app</span>
       </a>
+
     </div>
+
     <div class="data-note">
-      <strong>Shared data:</strong> Apps 2, 3, and 4 draw from the same competition results dataset (<code>data/</code>). When data files are updated, all apps reflect the change automatically.
+      <strong>Shared data layer:</strong> Apps 2, 3, and 4 draw from the same competition results dataset in <code>data/</code>. The database is automatically scraped and rebuilt every Wednesday. All apps reflect changes immediately.
     </div>
   </main>
+
   <footer>USA Diving &mdash; Internal Staff Use Only &mdash; Not for public distribution</footer>
 </body>
 </html>
