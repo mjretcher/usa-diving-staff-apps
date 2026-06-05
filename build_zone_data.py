@@ -198,7 +198,7 @@ def get_results_for_event(conn: sqlite3.Connection, event_id: int) -> list[dict]
         JOIN divers d ON r.diver_id = d.diver_id
         WHERE r.event_id = ?
         ORDER BY
-            CAST(r.place AS REAL) ASC NULLS LAST,
+            CAST(NULLIF(r.place, '') AS REAL) ASC NULLS LAST,
             r.score DESC
         """,
         (event_id,),
@@ -494,7 +494,7 @@ def process_zones(
     collected: list[tuple[dict, dict, dict, str, str, list[dict]]] = []
     grouped_for_threshold: dict[tuple[str, str], list[list[dict]]] = defaultdict(list)
 
-    for meet in sorted(zone_meets, key=lambda m: m["name"]):
+    for meet in sorted(zone_meets, key=lambda m: m["meet_name"]):
         zone_letter = extract_zone_letter(meet["meet_name"])
         if zone_letter is None:
             print(f"  SKIP '{meet['meet_name']}' — cannot extract zone letter")
@@ -566,9 +566,11 @@ def process_zones(
         # Build result records
         for r in rows:
             diver_id = str(r["diver_id"])
-            _place_raw = r.get("place")
-            place_num = float(_place_raw) if _place_raw is not None else None
-            place_str = str(int(_place_raw)) if _place_raw is not None and float(_place_raw) == int(float(_place_raw)) else str(_place_raw) if _place_raw is not None else ""
+            place_str = str(r.get("place") or "")
+            try:
+                place_num = float(re.sub(r"[^\d.]", "", place_str)) if place_str else None
+            except ValueError:
+                place_num = None
 
             flags_list = []
             if r.get("hps"):              flags_list.append("HPS")
