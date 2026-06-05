@@ -22,8 +22,8 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4
 
-      - name: Run build_zone_data.py
-        run: python build_zone_data.py --patch-app
+      - name: Run safe junior Zone data builder
+        run: python build_junior_zone_data_fixed.py --patch-app
 
       - name: Commit and push updated data files
         run: |
