@@ -779,3 +779,150 @@ tr.row-decline td             { opacity: .7; }
   .event-panel { max-height: 240px; }
   .results-panel { max-height: none; }
 }
+
+/* ── Interactive KPI cards ────────────────────────────────────── */
+.kpi-card {
+  position: relative;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.kpi-clickable { cursor: pointer; }
+.kpi-clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  border-color: var(--blue-100);
+}
+.kpi-active {
+  border-color: var(--blue-800) !important;
+  background: var(--blue-50) !important;
+  box-shadow: 0 0 0 3px var(--blue-100), 0 4px 12px rgba(0,0,0,.08) !important;
+}
+.kpi-active .kpi-value { color: var(--blue-800) !important; }
+.kpi-sub {
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 2px;
+  font-weight: 500;
+}
+.kpi-active-dot {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--blue-800);
+  box-shadow: 0 0 6px var(--blue-700);
+}
+
+/* ── KPI detail panel ─────────────────────────────────────────── */
+.kpi-detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.kdi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--blue-950);
+  color: rgba(255,255,255,.85);
+}
+
+.kdi-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.kpi-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.kdi-athlete {
+  background: var(--surface);
+  padding: 10px 14px;
+}
+
+.kdi-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.kdi-id {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 400;
+}
+
+.kdi-team {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+
+.kdi-event-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--line-2);
+  border-radius: var(--radius);
+  margin-top: 4px;
+}
+
+.kdi-event {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 120px;
+}
+
+.kdi-place, .kdi-score {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.kdi-score { color: var(--blue-800); font-weight: 600; }
+
+.kdi-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.kdi-nd        { background: var(--slate-bg); color: var(--slate); }
+.kdi-warn      { background: #fff7ed; color: #c2410c; }
+.kdi-qual      { background: var(--green-bg); color: var(--green); }
+.kdi-bump-badge{ background: var(--amber-bg); color: var(--amber); }
+
+.kdi-bump {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-style: italic;
+  width: 100%;
+}
+
+/* ── Compact table rows ───────────────────────────────────────── */
+td { padding: 7px 10px; }
+.athlete-event { margin-top: 1px; }
+
+/* ── Exhibition warning badge ─────────────────────────────────── */
+tr.row-exhibition td:first-child { border-left: 3px solid #f97316; }

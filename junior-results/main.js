@@ -49,6 +49,8 @@ const state = {
   view:      'results',
   overrides: loadOverrides(),
   drawerOpen: false,
+  kpiDrill:  null,
+  kpiDrillFilter: null,
 };
 
 let effectiveResults = [];
@@ -361,6 +363,13 @@ function applyOverrides(row, lookup) {
   if (r.hps)  r.prequalification.push('Junior Nationals: Tier 3 HPS');
   if (r.ymca) r.prequalification.push('E/W/C prelims: YMCA champion');
 
+  // Exhibition in a qualifying event → highly likely foreign athlete
+  // DiveMeets marks foreign divers as "exhibition" before uploading results
+  const isExhibition = r.exhibition === true ||
+    String(r.place || '').toUpperCase() === 'EX' ||
+    String(r.qualified || '').toLowerCase().includes('exhibition');
+  r.exhibitionLikelyForeign = isExhibition && r.qualifyingEvent && !r.hps && !r.ymca;
+
   r.nonDisplacingReason = ndReasons.join(' | ');
   r.nonDisplacing       = ndReasons.length > 0;
   r.countsTowardCutoff  = Boolean(r.qualifyingEvent && !r.nonDisplacing && r.placeNumber != null);
@@ -655,31 +664,161 @@ function renderOverrideDrawer() {
     </div>`).join('');
 }
 
-/* ── KPIs ─────────────────────────────────────────────────────── */
+/* ── KPIs — interactive drill-down cards ──────────────────────── */
 function renderKpis() {
   const rows = filteredRows({ ignoreEvent: true });
   const athletes = new Set(rows.map(r => r.diveMeetsId || r.athlete));
-
   const advancing = rows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
 
   const kpis = [
-    { label:'Rows',          value: rows.length },
-    { label:'Athletes',      value: athletes.size },
-    { label:'Advancing',     value: advancing,                        accent:'green' },
-    { label:'Non-displacing',value: rows.filter(r => r.nonDisplacing).length },
-    { label:'Foreign',       value: rows.filter(r => r.foreignDeclared || r.webpointNonUsEffective).length, accent: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective).length ? 'red' : '' },
-    { label:'Dual',          value: rows.filter(r => r.dualDeclared).length },
-    { label:'HPS',           value: rows.filter(r => r.hps).length },
-    { label:'Not attending', value: rows.filter(r => r.declaredNotAttending).length, accent: rows.filter(r=>r.declaredNotAttending).length ? 'amber' : '' },
-    { label:'Bump-ins',      value: rows.filter(r => r.bumpIn).length },
+    { key:'all',         label:'Rows',           value: rows.length,
+      sub: `${athletes.size} athletes` },
+    { key:'advancing',   label:'Advancing',      value: advancing, accent:'green',
+      sub: state.stage === 'Zones' ? '→ Nationals / E/W/C' : '→ next stage',
+      filter: r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC },
+    { key:'nonDisp',     label:'Non-displacing', value: rows.filter(r=>r.nonDisplacing).length,
+      sub: 'no spot consumed',
+      filter: r => r.nonDisplacing },
+    { key:'foreign',     label:'Foreign',        value: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective||r.exhibitionLikelyForeign).length,
+      accent: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective||r.exhibitionLikelyForeign).length ? 'red' : '',
+      sub: rows.filter(r=>r.exhibitionLikelyForeign&&!r.foreignDeclared).length
+             ? `+${rows.filter(r=>r.exhibitionLikelyForeign&&!r.foreignDeclared).length} exhibition` : 'declared',
+      filter: r => r.foreignDeclared || r.webpointNonUsEffective || r.exhibitionLikelyForeign },
+    { key:'dual',        label:'Dual',           value: rows.filter(r=>r.dualDeclared).length,
+      sub: rows.filter(r=>r.dualOtherCountry).length + ' affect results',
+      filter: r => r.dualDeclared },
+    { key:'hps',         label:'HPS',            value: rows.filter(r=>r.hps).length,
+      sub: 'pre-qualified',
+      filter: r => r.hps },
+    { key:'notAtt',      label:'Not Attending',  value: rows.filter(r=>r.declaredNotAttending).length,
+      accent: rows.filter(r=>r.declaredNotAttending).length ? 'amber' : '',
+      sub: rows.filter(r=>r.openedSpot).length + ' spots opened',
+      filter: r => r.declaredNotAttending },
+    { key:'bumps',       label:'Bump-ins',       value: rows.filter(r=>r.bumpIn).length,
+      sub: 'moved up the list',
+      filter: r => r.bumpIn },
   ];
 
-  $('kpiRow').innerHTML = kpis.map(k =>
-    `<div class="kpi-card ${k.accent ? 'accent-' + k.accent : ''}">
+  const active = state.kpiDrill;
+  $('kpiRow').innerHTML = kpis.map(k => {
+    const isActive = active === k.key;
+    return `<div class="kpi-card ${k.accent ? 'accent-' + k.accent : ''} ${isActive ? 'kpi-active' : ''} ${k.key !== 'all' ? 'kpi-clickable' : ''}"
+      data-kpi="${k.key}" title="${k.key !== 'all' ? 'Click to filter · click again to clear' : ''}">
       <div class="kpi-value">${k.value.toLocaleString()}</div>
       <div class="kpi-label">${esc(k.label)}</div>
-    </div>`
-  ).join('');
+      ${k.sub ? `<div class="kpi-sub">${esc(k.sub)}</div>` : ''}
+      ${isActive ? '<div class="kpi-active-dot"></div>' : ''}
+    </div>`;
+  }).join('');
+
+  $('kpiRow').querySelectorAll('.kpi-clickable').forEach(card => {
+    card.addEventListener('click', () => {
+      const key = card.dataset.kpi;
+      state.kpiDrill = state.kpiDrill === key ? null : key;
+      state.kpiDrillFilter = kpis.find(k => k.key === key)?.filter || null;
+      renderKpis();
+      renderTable();
+      showKpiDetail(key, rows, kpis);
+    });
+  });
+}
+
+function showKpiDetail(key, allRows, kpis) {
+  const kpi = kpis.find(k => k.key === key);
+  if (!kpi || !kpi.filter || state.kpiDrill !== key) {
+    const panel = $('kpiDetailPanel');
+    if (panel) panel.remove();
+    return;
+  }
+
+  const subset = allRows.filter(kpi.filter);
+  const existing = $('kpiDetailPanel');
+  if (existing) existing.remove();
+  if (!subset.length) return;
+
+  // Build grouped detail HTML
+  let html = '';
+
+  if (key === 'foreign') {
+    // Group by athlete, show all their events
+    const byAthlete = new Map();
+    subset.forEach(r => {
+      const k = r.diveMeetsId || r.athlete;
+      if (!byAthlete.has(k)) byAthlete.set(k, { name: r.athlete, id: r.diveMeetsId, team: r.team, rows: [] });
+      byAthlete.get(k).rows.push(r);
+    });
+    const rows = [...byAthlete.values()].sort((a,b) => a.name.localeCompare(b.name));
+    html = `<div class="kpi-detail-grid">
+      ${rows.map(a => `
+        <div class="kdi-athlete">
+          <div class="kdi-name">${esc(a.name)} <span class="kdi-id">${esc(a.id||'')}</span></div>
+          <div class="kdi-team">${esc(a.team||'')}</div>
+          ${a.rows.map(r => `
+            <div class="kdi-event-row">
+              <span class="kdi-event">${esc(r.eventName||'')}</span>
+              <span class="mono kdi-place">#${esc(String(r.place||'?'))}</span>
+              <span class="mono kdi-score">${fmtScore(r.score)}</span>
+              <span class="kdi-badge ${r.exhibitionLikelyForeign && !r.foreignDeclared ? 'kdi-warn' : 'kdi-nd'}">${r.exhibitionLikelyForeign && !r.foreignDeclared ? 'Exhibition (likely foreign)' : 'Non-displacing'}</span>
+              ${r.openedFor?.length ? `<span class="kdi-bump">Opened spot → ${r.openedFor.map(x=>x.athlete).join(', ')}</span>` : ''}
+            </div>`).join('')}
+        </div>`).join('')}
+    </div>`;
+  } else if (key === 'notAtt') {
+    html = `<div class="kpi-detail-grid">
+      ${subset.map(r => `
+        <div class="kdi-athlete">
+          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
+          <div class="kdi-event-row">
+            <span class="kdi-event">${esc(r.eventName||'')}</span>
+            <span class="mono kdi-place">Elig #${esc(String(r.eligibleRank||r.countingRank||'?'))}</span>
+            <span class="mono kdi-score">${fmtScore(r.score)}</span>
+            ${r.openedSpot ? `<span class="kdi-bump">Spot opened</span>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  } else if (key === 'bumps') {
+    html = `<div class="kpi-detail-grid">
+      ${subset.map(r => `
+        <div class="kdi-athlete">
+          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
+          <div class="kdi-event-row">
+            <span class="kdi-event">${esc(r.eventName||'')}</span>
+            <span class="mono kdi-place">Counted #${esc(String(r.countingRank||r.eligibleRank||'?'))}</span>
+            <span class="mono kdi-score">${fmtScore(r.score)}</span>
+            <span class="kdi-badge kdi-bump-badge">Bumped in</span>
+            ${r.bumpedBy?.length ? `<span class="kdi-bump">By: ${r.bumpedBy.map(x=>x.athlete).join(', ')}</span>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  } else {
+    html = `<div class="kpi-detail-grid">
+      ${subset.map(r => `
+        <div class="kdi-athlete">
+          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
+          <div class="kdi-event-row">
+            <span class="kdi-event">${esc(r.eventName||'')}</span>
+            <span class="mono kdi-place">#${esc(String(r.place||r.eligibleRank||'?'))}</span>
+            <span class="mono kdi-score">${fmtScore(r.score)}</span>
+            <span class="kdi-badge kdi-qual">${esc(r.qualificationStatus||'')}</span>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  const panel = document.createElement('div');
+  panel.id = 'kpiDetailPanel';
+  panel.className = 'kpi-detail-panel';
+  panel.innerHTML = `
+    <div class="kdi-header">
+      <span class="kdi-title">${esc(kpi.label)} — ${subset.length} ${subset.length === 1 ? 'row' : 'rows'}</span>
+      <button class="btn-ghost btn-sm" id="kpiDetailClose">✕</button>
+    </div>
+    ${html}`;
+  $('kpiRow').insertAdjacentElement('afterend', panel);
+  $('kpiDetailClose').addEventListener('click', () => {
+    state.kpiDrill = null; state.kpiDrillFilter = null;
+    panel.remove(); renderKpis(); renderTable();
+  });
 }
 
 /* ── Event list ───────────────────────────────────────────────── */
@@ -908,6 +1047,7 @@ function filteredRows(opts = {}) {
   const q = state.search.toLowerCase();
   return effectiveResults.filter(r => {
     if (!stageMatch(r, state.stage) && r.stage !== state.stage) return false;
+    if (!opts.ignoreKpi && state.kpiDrillFilter && !state.kpiDrillFilter(r)) return false;
     if (!ignoreEvent && state.selectedEventId && r.eventId !== state.selectedEventId) return false;
     if (state.meetName      && r.meetName      !== state.meetName)      return false;
     if (state.eventCategory && r.eventCategory !== state.eventCategory) return false;
@@ -1062,21 +1202,28 @@ function overrideDesc(o) {
    CELL RENDERERS
    ════════════════════════════════════════════════════════════════ */
 function athleteCell(r) {
-  return `<span class="athlete-name">${esc(r.athlete)}</span>
-    ${r.diveMeetsId ? `<div class="athlete-id">${esc(r.diveMeetsId)}</div>` : ''}
-    <div class="athlete-event">${esc(r.eventName || '')}</div>`;
+  const showEvent = !state.selectedEventId; // hide event name when one event is selected
+  return `<div style="display:flex;align-items:baseline;gap:6px">
+    <span class="athlete-name">${esc(r.athlete)}</span>
+    ${r.diveMeetsId ? `<span class="athlete-id">${esc(r.diveMeetsId)}</span>` : ''}
+  </div>${showEvent ? `<div class="athlete-event">${esc(r.eventName || '')}</div>` : ''}`;
 }
 
 function rankCell(r) {
-  if ((r.stage === 'Zones' || r.stage === 'EWC') && r.eligibleRank) return `raw ${esc(String(r.eligibleRank))}`;
+  // Zones/EWC: show eligible rank cleanly
+  if ((r.stage === 'Zones' || r.stage === 'EWC') && r.eligibleRank) {
+    return `<span style="color:var(--ink-3);font-size:11px">elig</span> ${esc(String(r.eligibleRank))}`;
+  }
   return esc(String(r.countingRank || ''));
 }
 
 function eligCell(r) {
-  const parts = [];
-  if (r.eligibleRank)         parts.push(`elig ${r.eligibleRank}`);
-  if (r.attendingEligibleRank) parts.push(`att ${r.attendingEligibleRank}`);
-  return parts.join(' / ');
+  if (!r.attendingEligibleRank && !r.eligibleRank) return '';
+  // Show compactly: "att 1" or if they differ "4 → att 3"
+  if (r.attendingEligibleRank && r.eligibleRank && r.attendingEligibleRank !== r.eligibleRank) {
+    return `<span style="color:var(--ink-3)">${r.eligibleRank}</span>→<strong>${r.attendingEligibleRank}</strong>`;
+  }
+  return esc(String(r.attendingEligibleRank || r.eligibleRank || ''));
 }
 
 function statusBadge(r) {
