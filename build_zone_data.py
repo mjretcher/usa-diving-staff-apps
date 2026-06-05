@@ -198,7 +198,7 @@ def get_results_for_event(conn: sqlite3.Connection, event_id: int) -> list[dict]
         JOIN divers d ON r.diver_id = d.diver_id
         WHERE r.event_id = ?
         ORDER BY
-            CAST(NULLIF(r.place, '') AS REAL) ASC NULLS LAST,
+            CAST(r.place AS REAL) ASC NULLS LAST,
             r.score DESC
         """,
         (event_id,),
@@ -487,7 +487,7 @@ def process_zones(
 
     print(f"Found {len(zone_meets)} Zone meet(s):")
     for m in sorted(zone_meets, key=lambda x: x["meet_name"]):
-        print(f"  • {m['name']}")
+        print(f"  • {m['meet_name']}")
 
     # Phase 1: collect enriched rows, grouped by (eventKey, ewc) for threshold calc
     # Each entry: (meet, db_event, parsed_meta, ewc, zone_letter, enriched_rows)
@@ -501,7 +501,7 @@ def process_zones(
             continue
         ewc = zone_ewc_map.get(zone_letter, DEFAULT_ZONE_EWC.get(zone_letter, "East"))
 
-        for db_evt in get_events_for_meet(conn, meet["meet_id"]):
+        for db_evt in get_events_for_meet(conn, int(meet["meet_id"])):
             # Skip prelim/semifinal rounds; only process finals (or single-round events)
             division = (db_evt.get("division") or "").lower()
             if division in ("prelim", "semifinal"):
@@ -566,11 +566,9 @@ def process_zones(
         # Build result records
         for r in rows:
             diver_id = str(r["diver_id"])
-            place_str = str(r.get("place") or "")
-            try:
-                place_num = float(re.sub(r"[^\d.]", "", place_str)) if place_str else None
-            except ValueError:
-                place_num = None
+            _place_raw = r.get("place")
+            place_num = float(_place_raw) if _place_raw is not None else None
+            place_str = str(int(_place_raw)) if _place_raw is not None and float(_place_raw) == int(float(_place_raw)) else str(_place_raw) if _place_raw is not None else ""
 
             flags_list = []
             if r.get("hps"):              flags_list.append("HPS")
