@@ -1,11 +1,13 @@
 name: Build Junior Data
 
 on:
+  push:
+    branches: [main]
   repository_dispatch:
-    types: [scrape-complete]   # triggered by divemeets-scraper when usa_2026.db updates
-  workflow_dispatch:            # manual trigger from Actions tab
+    types: [scrape-complete]
+  workflow_dispatch:
   schedule:
-    - cron: '0 13 * * 3'       # fallback: Wednesdays 1 PM UTC (3 hrs after scraper starts)
+    - cron: '0 13 * * 3'
 
 jobs:
   build:
