@@ -75,7 +75,7 @@ DB_RAW_URL = (
     "/main/data/usa_2026.db"
 )
 
-DEFAULT_JS_PATH = "junior-results/junior-data.js"
+DEFAULT_JS_PATH = "data/junior-data.js"
 DEFAULT_MAIN_JS_PATH = "junior-results/main.js"
 
 # ---------------------------------------------------------------------------
