@@ -497,10 +497,11 @@ button:hover { background: var(--blue-700); border-color: var(--blue-700); }
 /* ── Workspace grid ──────────────────────────────────────────── */
 .workspace {
   display: grid;
-  grid-template-columns: 256px 1fr;
-  gap: 10px;
+  grid-template-columns: 300px 1fr;
+  gap: 12px;
   flex: 1;
   min-height: 0;
+  align-items: start;
 }
 
 /* ── Event panel ─────────────────────────────────────────────── */
@@ -512,7 +513,7 @@ button:hover { background: var(--blue-700); border-color: var(--blue-700); }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 200px);
 }
 
 .panel-head {
@@ -554,7 +555,7 @@ button:hover { background: var(--blue-700); border-color: var(--blue-700); }
 
 .event-item-name {
   display: block; font-size: 12.5px; font-weight: 600; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: normal; overflow: visible; line-height: 1.3;
 }
 .event-item.active .event-item-name { color: var(--blue-800); }
 .event-item-meta  { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
@@ -579,7 +580,8 @@ button:hover { background: var(--blue-700); border-color: var(--blue-700); }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  max-height: calc(100vh - 300px);
+  max-height: calc(100vh - 200px);
+  flex: 1;
 }
 
 /* Context bar */
