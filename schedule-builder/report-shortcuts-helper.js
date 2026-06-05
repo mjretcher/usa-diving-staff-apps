@@ -2,6 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "usa-diving-schedule-builder-standalone-v1";
+  const NativeBlob = window.Blob;
 
   function clean(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
@@ -13,6 +14,10 @@
     } catch (error) {
       return null;
     }
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function apparatusDisplay(value) {
@@ -45,6 +50,26 @@
     const base = baseEventName(event);
     if (/\bSynchro\b/i.test(base)) return base;
     return base.replace(/\s+(1-Meter|3-Meter|Platform|10-Meter)$/i, " Synchro $1");
+  }
+
+  function synchroReplacements() {
+    const state = readState();
+    const events = (state && state.sessions || []).flatMap((session) => session.events || []).filter(isSynchro);
+    const seen = new Map();
+    events.forEach((event) => {
+      const before = baseEventName(event);
+      const after = officialSynchroName(event);
+      if (before && after && before !== after) seen.set(before, after);
+    });
+    return [...seen.entries()].sort((a, b) => b[0].length - a[0].length);
+  }
+
+  function patchOutputText(value) {
+    let out = String(value || "");
+    synchroReplacements().forEach(([before, after]) => {
+      out = out.replace(new RegExp(escapeRegExp(before), "g"), after);
+    });
+    return out;
   }
 
   function sortedSessions(state) {
@@ -90,6 +115,14 @@
         if (node.nodeType === Node.TEXT_NODE) node.nodeValue = clean(node.nodeValue).replace(/\s+(1-Meter|3-Meter|Platform|10-Meter)$/i, " Synchro $1");
       });
     });
+    document.querySelectorAll(".timeline-preview, .public-schedule-preview, .poster-preview").forEach((node) => {
+      synchroReplacements().forEach(([before, after]) => {
+        node.querySelectorAll("*:not(script):not(style):not(input):not(textarea):not(select)").forEach((child) => {
+          if (child.children.length) return;
+          if (child.textContent && child.textContent.includes(before)) child.textContent = child.textContent.split(before).join(after);
+        });
+      });
+    });
   }
 
   function patchReports() {
@@ -126,13 +159,22 @@
   }
 
   function reviewWarnings() {
-    const target = document.querySelector(".schedule-health-panel") || Array.from(document.querySelectorAll("section, .panel")).find((node) => /Schedule Health|warnings/i.test(node.textContent || ""));
+    const target = document.querySelector(".schedule-health-panel") || Array.from(document.querySelectorAll("section, .panel, article, div")).find((node) => /Schedule Health|\d+\s+warnings/i.test(node.textContent || ""));
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function findTopDashboardAnchor() {
+    return Array.from(document.querySelectorAll("section, article, div")).find((node) => /COMMAND CENTER/i.test(node.textContent || "")) || document.querySelector(".app-main") || document.getElementById("app");
+  }
+
+  function markCommandCenter() {
+    const command = Array.from(document.querySelectorAll("section, article, div")).find((node) => /COMMAND CENTER/i.test(node.textContent || ""));
+    if (command) command.classList.add("usad-command-center-card");
   }
 
   function buildShortcutBar() {
     if (document.getElementById("reportShortcutBar")) return;
-    const anchor = document.querySelector(".app-main") || document.getElementById("app");
+    const anchor = findTopDashboardAnchor();
     if (!anchor || !anchor.parentNode) return;
 
     const bar = document.createElement("section");
@@ -152,7 +194,7 @@
       if (button.dataset.export) clickExport(button.dataset.export);
     });
 
-    anchor.parentNode.insertBefore(bar, anchor);
+    anchor.insertAdjacentElement("afterend", bar);
   }
 
   function wireWarningsButton() {
@@ -162,14 +204,46 @@
       node.dataset.warningShortcutBound = "1";
       node.addEventListener("click", (event) => {
         event.preventDefault();
+        event.stopPropagation();
         reviewWarnings();
       }, true);
     });
   }
 
+  function patchWindowOpen() {
+    if (window.__usadPatchedWindowOpen) return;
+    const originalOpen = window.open;
+    window.open = function () {
+      const win = originalOpen.apply(window, arguments);
+      if (win && win.document && win.document.write) {
+        const originalWrite = win.document.write.bind(win.document);
+        win.document.write = function (html) {
+          return originalWrite(patchOutputText(html));
+        };
+      }
+      return win;
+    };
+    window.__usadPatchedWindowOpen = true;
+  }
+
+  function patchBlob() {
+    if (window.__usadPatchedBlob || !NativeBlob) return;
+    function PatchedBlob(parts, options) {
+      const patchedParts = Array.isArray(parts) ? parts.map((part) => typeof part === "string" ? patchOutputText(part) : part) : parts;
+      return new NativeBlob(patchedParts, options);
+    }
+    PatchedBlob.prototype = NativeBlob.prototype;
+    Object.setPrototypeOf(PatchedBlob, NativeBlob);
+    window.Blob = PatchedBlob;
+    window.__usadPatchedBlob = true;
+  }
+
   function run() {
+    markCommandCenter();
     buildShortcutBar();
     wireWarningsButton();
+    patchWindowOpen();
+    patchBlob();
     patchReports();
   }
 
@@ -178,5 +252,6 @@
 
   document.addEventListener("click", () => setTimeout(run, 60), true);
   document.addEventListener("change", () => setTimeout(run, 60), true);
+  window.addEventListener("storage", () => setTimeout(run, 60));
   new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
 })();
