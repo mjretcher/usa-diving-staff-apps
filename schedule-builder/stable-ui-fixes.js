@@ -46,13 +46,6 @@
         color: #5F6062 !important;
       }
 
-      .usad-readable-card button,
-      .command-center-panel button,
-      .command-center-card button,
-      .command-center-hero button {
-        color: #151B46 !important;
-      }
-
       .usad-readable-card button.primary-button,
       .usad-readable-card button.release-button,
       .usad-readable-card button[class*="release"],
@@ -61,13 +54,18 @@
         color: #FFFFFF !important;
       }
 
-      .builder-day-tabs { display: flex !important; flex-wrap: wrap !important; gap: 10px !important; overflow-x: visible !important; overflow-y: visible !important; padding: 12px 14px !important; }
+      .builder-day-tabs {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+        max-height: 180px !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        padding: 12px 14px !important;
+        scrollbar-gutter: stable !important;
+      }
       .builder-day-tab { flex: 1 1 170px !important; max-width: 235px !important; min-width: 150px !important; }
       .builder-day-tab.active strong, .builder-day-tab.active span, .builder-day-tab.active em { color: #FFFFFF !important; }
-
-      .day-jump-control { align-items: center; background: #FFFFFF; border: 1px solid #D7E1EA; border-radius: 12px; display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 14px 0; padding: 10px 12px; }
-      .day-jump-control strong { color: #151B46; font-size: 12px; font-weight: 900; text-transform: uppercase; }
-      .day-jump-control select { appearance: auto; flex: 1 1 260px; min-height: 34px; max-width: 520px; }
 
       .report-shortcut-bar { align-items: center; background: #fff; border: 1px solid #D7E1EA; border-radius: 14px; box-shadow: 0 10px 24px rgba(21,27,70,.10); color: #151B46; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 16px; padding: 10px 12px; }
       .report-shortcut-bar strong { color: #151B46; font-size: 13px; font-weight: 900; text-transform: uppercase; }
@@ -87,41 +85,15 @@
     const bar = document.createElement("section");
     bar.id = "reportShortcutBar";
     bar.className = "report-shortcut-bar";
-    bar.innerHTML = `<strong>Reports</strong><span>Jump to outputs</span><button data-report="Operations Timeline">Operations Timeline</button><button data-report="Public Schedule">Public Schedule</button><button data-report="Poster / Canva View">Poster / Canva</button><button data-report="PDF">PDF</button><button data-report="Excel">Excel</button>`;
+    bar.innerHTML = `<strong>Reports</strong><span>Jump to outputs</span><button type="button" data-report="Operations Timeline">Operations Timeline</button><button type="button" data-report="Public Schedule">Public Schedule</button><button type="button" data-report="Poster / Canva View">Poster / Canva</button><button type="button" data-report="PDF">PDF</button><button type="button" data-report="Excel">Excel</button>`;
+    bar.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-report]");
+      if (!button) return;
+      event.preventDefault();
+      showReport(button.dataset.report || text(button.textContent));
+    });
     main.parentElement.insertBefore(bar, main);
     return true;
-  }
-
-  function addDayJumpControl() {
-    const tabs = document.querySelector(".builder-day-tabs");
-    if (!tabs || document.getElementById("dayJumpControl")) return;
-    const buttons = Array.from(tabs.querySelectorAll("button"));
-    if (buttons.length < 6) return;
-
-    const control = document.createElement("div");
-    control.id = "dayJumpControl";
-    control.className = "day-jump-control";
-
-    const label = document.createElement("strong");
-    label.textContent = "Jump to day";
-
-    const select = document.createElement("select");
-    buttons.forEach((button, index) => {
-      const option = document.createElement("option");
-      option.value = String(index);
-      option.textContent = text(button.textContent) || `Day ${index + 1}`;
-      if (button.classList.contains("active")) option.selected = true;
-      select.appendChild(option);
-    });
-
-    select.addEventListener("change", () => {
-      const button = buttons[Number(select.value)];
-      if (button) button.click();
-    });
-
-    control.appendChild(label);
-    control.appendChild(select);
-    tabs.parentElement.insertBefore(control, tabs);
   }
 
   function findButton(label) {
@@ -143,6 +115,17 @@
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function bindReviewWarnings() {
+    Array.from(document.querySelectorAll("button, a")).forEach((node) => {
+      if (!/review warnings/i.test(text(node.textContent)) || node.dataset.reviewWarningBound) return;
+      node.dataset.reviewWarningBound = "1";
+      node.addEventListener("click", (event) => {
+        event.preventDefault();
+        reviewWarnings();
+      });
+    });
+  }
+
   function markReadableCards() {
     Array.from(document.querySelectorAll("section, article, div, .panel, .board-shell, .preview-shell")).slice(0, 120).forEach((node) => {
       if (/COMMAND CENTER|COLOR TEMPLATE|Review Warnings|CURRENT SCHEDULE|BUILD CHECKLIST/i.test(node.textContent || "")) {
@@ -155,22 +138,8 @@
     installStyles();
     markReadableCards();
     addReportBar();
-    addDayJumpControl();
+    bindReviewWarnings();
   }
-
-  document.addEventListener("click", (event) => {
-    const target = event.target.closest("button, a");
-    if (!target) return;
-    if (/review warnings/i.test(text(target.textContent))) {
-      event.preventDefault();
-      reviewWarnings();
-      return;
-    }
-    const reportButton = event.target.closest("#reportShortcutBar button");
-    if (!reportButton) return;
-    event.preventDefault();
-    showReport(reportButton.dataset.report || text(reportButton.textContent));
-  }, true);
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
@@ -179,6 +148,6 @@
   const timer = window.setInterval(() => {
     attempts += 1;
     init();
-    if ((attempts >= 16 && document.getElementById("reportShortcutBar") && document.getElementById("dayJumpControl")) || attempts >= 28) window.clearInterval(timer);
+    if ((attempts >= 12 && document.getElementById("reportShortcutBar")) || attempts >= 20) window.clearInterval(timer);
   }, 250);
 })();
