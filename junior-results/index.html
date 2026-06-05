@@ -3,139 +3,134 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>USA Diving Junior Results Audit</title>
+    <title>Junior Circuit — USA Diving Staff</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">USA Diving Junior Circuit</p>
-        <h1>Junior Results Audit</h1>
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-brand">
+        <div class="brand-mark">
+          <span class="brand-mark-red"></span>
+          <span class="brand-mark-blue"></span>
+        </div>
+        <div>
+          <div class="brand-label">USA Diving</div>
+          <div class="brand-title">Junior Circuit</div>
+        </div>
       </div>
-      <div class="header-summary" id="headerSummary"></div>
+
+      <nav class="stage-nav" id="stageNav" aria-label="Circuit stages"></nav>
+
+      <div class="topbar-actions">
+        <button class="icon-button" id="overrideToggle" title="Overrides" aria-pressed="false">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Overrides
+          <span class="override-badge" id="overrideBadge" hidden>0</span>
+        </button>
+        <button class="icon-button" id="exportBtn" title="Export">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3 3-3M2 11v1a2 2 0 002 2h8a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Export
+        </button>
+      </div>
     </header>
 
-    <main>
-      <section class="filter-band" aria-label="Filters">
-        <div class="filter-row">
-          <label>
-            <span>Stage</span>
-            <select id="stageFilter"></select>
-          </label>
-          <label>
-            <span>Regional meet</span>
-            <select id="meetFilter"></select>
-          </label>
-          <label>
-            <span>Event type</span>
-            <select id="eventTypeFilter"></select>
-          </label>
-          <label>
-            <span>Board</span>
-            <select id="boardFilter"></select>
-          </label>
-          <label>
-            <span>Gender</span>
-            <select id="genderFilter"></select>
-          </label>
-          <label>
-            <span>Age group</span>
-            <select id="ageFilter"></select>
-          </label>
-          <label>
-            <span>Zone</span>
-            <select id="zoneFilter"></select>
-          </label>
-          <label>
-            <span>E/W/C</span>
-            <select id="ewcFilter"></select>
-          </label>
-          <label class="search-label">
-            <span>Athlete search</span>
-            <input id="searchInput" type="search" placeholder="Name, ID, team">
-          </label>
+    <!-- OVERRIDE DRAWER -->
+    <aside class="override-drawer" id="overrideDrawer" aria-label="Manual overrides" hidden>
+      <div class="drawer-header">
+        <div>
+          <h2>Manual Overrides</h2>
+          <p>Changes are saved in this browser and can be undone.</p>
         </div>
-        <div class="flag-row" id="flagControls"></div>
-        <section class="override-panel" aria-label="Manual overrides">
-          <div class="override-header">
-            <div>
-              <h2>Manual Overrides</h2>
-              <p>Foreign, dual-effect, and declared-not-attending changes are saved in this browser and can be undone.</p>
-            </div>
-            <div class="override-actions">
-              <button class="secondary-button" id="undoOverrideButton" type="button">Undo</button>
-              <button class="secondary-button" id="redoOverrideButton" type="button">Redo</button>
-              <button class="secondary-button" id="exportOverridesButton" type="button">Export JSON</button>
-              <button class="secondary-button" id="clearOverridesButton" type="button">Clear</button>
-            </div>
-          </div>
-          <div class="manual-override-form">
-            <label>
-              <span>Athlete ID</span>
-              <input id="overrideAthleteId" type="text" placeholder="DiveMeets ID">
-            </label>
-            <label>
-              <span>Athlete name</span>
-              <input id="overrideAthleteName" type="text" placeholder="Optional">
-            </label>
-            <label>
-              <span>Override</span>
-              <select id="overrideType">
-                <option value="foreign">Foreign athlete</option>
-                <option value="dual">Dual citizen note</option>
-                <option value="dualEffect">Dual affects results</option>
-                <option value="notAttending">Declared not attending</option>
-              </select>
-            </label>
-            <label>
-              <span>State</span>
-              <select id="overrideValue">
-                <option value="true">Turn on</option>
-                <option value="false">Turn off</option>
-              </select>
-            </label>
-            <label class="override-note">
-              <span>Note</span>
-              <input id="overrideNote" type="text" placeholder="Reason or source">
-            </label>
-            <button id="addOverrideButton" type="button">Add override</button>
-          </div>
-          <div class="override-summary" id="overrideSummary"></div>
-          <div class="override-log" id="overrideLog"></div>
-        </section>
-      </section>
+        <div class="drawer-header-actions">
+          <button class="btn-ghost" id="undoOverrideButton" type="button">Undo</button>
+          <button class="btn-ghost" id="redoOverrideButton" type="button">Redo</button>
+          <button class="btn-ghost" id="exportOverridesButton" type="button">Export JSON</button>
+          <button class="btn-ghost btn-danger" id="clearOverridesButton" type="button">Clear all</button>
+        </div>
+      </div>
+      <div class="drawer-form">
+        <label class="form-field">
+          <span>Athlete ID</span>
+          <input id="overrideAthleteId" type="text" placeholder="DiveMeets ID">
+        </label>
+        <label class="form-field">
+          <span>Name</span>
+          <input id="overrideAthleteName" type="text" placeholder="Optional">
+        </label>
+        <label class="form-field">
+          <span>Override type</span>
+          <select id="overrideType">
+            <option value="foreign">Foreign athlete</option>
+            <option value="dual">Dual citizen</option>
+            <option value="dualEffect">Dual affects results</option>
+            <option value="notAttending">Declared not attending</option>
+          </select>
+        </label>
+        <label class="form-field">
+          <span>State</span>
+          <select id="overrideValue">
+            <option value="true">Turn on</option>
+            <option value="false">Turn off</option>
+          </select>
+        </label>
+        <label class="form-field form-field-wide">
+          <span>Note</span>
+          <input id="overrideNote" type="text" placeholder="Reason or source">
+        </label>
+        <button class="btn-primary" id="addOverrideButton" type="button">Add override</button>
+      </div>
+      <div class="drawer-summary" id="overrideSummary"></div>
+      <div class="drawer-log" id="overrideLog"></div>
+    </aside>
 
-      <section class="kpi-band" id="kpiBand"></section>
+    <!-- MAIN CONTENT -->
+    <main class="main" id="main">
 
-      <section class="workbench">
-        <aside class="event-browser">
-          <div class="panel-heading">
-            <h2>Events</h2>
-            <button class="ghost-button" id="clearEventButton" type="button">All rows</button>
-          </div>
-          <div id="eventList" class="event-list"></div>
-        </aside>
+      <!-- FILTER BAR -->
+      <div class="filterbar" id="filterbar">
+        <div class="filters" id="filterFields"></div>
+        <div class="filter-flags" id="filterFlags"></div>
+      </div>
 
-        <section class="results-workspace">
-          <div class="context-panel" id="contextPanel"></div>
-          <div class="tabs" role="tablist" aria-label="Analysis views">
-            <button type="button" data-view="results" class="tab-button active">Results</button>
-            <button type="button" data-view="bumps" class="tab-button">Bumps</button>
-            <button type="button" data-view="flags" class="tab-button">Flags</button>
-            <button type="button" data-view="athletes" class="tab-button">Athletes</button>
-            <button type="button" data-view="overrides" class="tab-button">Overrides</button>
-            <button type="button" data-view="official" class="tab-button">Official Zone List</button>
-          </div>
-          <div class="table-actions">
-            <div id="rowCount"></div>
-            <div class="action-buttons">
-              <button class="secondary-button" id="copyTsvButton" type="button">Copy TSV</button>
-              <button class="secondary-button" id="downloadCsvButton" type="button">Download CSV</button>
+      <!-- STAGE CONTENT -->
+      <div class="stage-content" id="stageContent">
+
+        <!-- KPI ROW -->
+        <div class="kpi-row" id="kpiRow"></div>
+
+        <!-- WORKSPACE -->
+        <div class="workspace">
+          <!-- EVENT PANEL -->
+          <aside class="event-panel">
+            <div class="panel-head">
+              <span class="panel-head-title">Events</span>
+              <button class="btn-link" id="clearEventButton" type="button">Show all</button>
             </div>
+            <div class="event-search-wrap">
+              <input class="event-search" id="eventSearch" type="search" placeholder="Filter events…">
+            </div>
+            <div class="event-list" id="eventList"></div>
+          </aside>
+
+          <!-- RESULTS PANEL -->
+          <div class="results-panel">
+            <div class="results-context" id="resultsContext"></div>
+            <div class="results-toolbar">
+              <div class="view-tabs" id="viewTabs" role="tablist"></div>
+              <div class="toolbar-actions">
+                <span class="row-count" id="rowCount"></span>
+                <button class="btn-ghost btn-sm" id="copyTsvButton" type="button">Copy TSV</button>
+                <button class="btn-ghost btn-sm" id="downloadCsvButton" type="button">Download CSV</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="tableWrap"></div>
           </div>
-          <div class="table-wrap" id="tableWrap"></div>
-        </section>
-      </section>
+        </div>
+      </div>
     </main>
 
     <script src="../data/junior-data.js"></script>
