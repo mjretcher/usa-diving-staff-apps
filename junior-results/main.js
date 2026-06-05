@@ -925,24 +925,25 @@ function renderResultTable(rows) {
   const isZone = rows[0]?.stage === 'Zones';
   const isEWC  = rows[0]?.stage === 'EWC' || rows[0]?.stage === 'East/West/Central';
 
-  const cols = ['Place', 'Rank', isZone || isEWC ? 'Eligible' : '', 'Athlete', 'Team', 'Score', 'Qualification', 'Detail', 'Flags', 'Manual'].filter(Boolean);
+  const cols = ['Place', isZone || isEWC ? 'Elig' : 'Rank', 'Athlete', 'Team', 'Score', 'Qualification', 'Flags', 'Actions'].filter(Boolean);
 
   const tbody = rows.map(r => {
     const rowCls = [
-      (r.foreignDeclared || r.webpointNonUsEffective) ? 'row-foreign' : '',
+      (r.foreignDeclared || r.webpointNonUsEffective || r.exhibitionLikelyForeign) ? 'row-foreign' : '',
       r.dualDeclared ? 'row-dual' : '',
       r.declaredNotAttending ? 'row-decline' : '',
     ].filter(Boolean).join(' ');
 
+    // Only show rank info if meaningful (non-trivial)
+    const rankCol = (isZone || isEWC) ? eligCell(r) : rankCell(r);
+
     return `<tr class="${rowCls}">
-      <td class="mono">${esc(r.place || '')}</td>
-      <td class="mono">${rankCell(r)}</td>
-      ${(isZone || isEWC) ? `<td class="mono">${eligCell(r)}</td>` : ''}
+      <td class="mono" style="width:44px">${esc(r.place || '')}</td>
+      <td class="mono" style="width:54px;color:var(--ink-3)">${rankCol}</td>
       <td>${athleteCell(r)}</td>
-      <td style="white-space:nowrap">${esc(r.team || '')}</td>
-      <td class="mono">${fmtScore(r.score)}</td>
-      <td>${statusBadge(r)}</td>
-      <td>${detailCell(r)}</td>
+      <td style="white-space:nowrap;color:var(--ink-2)">${esc(r.team || '')}</td>
+      <td class="mono" style="width:68px;font-weight:600">${fmtScore(r.score)}</td>
+      <td style="min-width:180px">${statusBadge(r)}${inlineBumpNote(r)}</td>
       <td>${flagPills(r)}</td>
       <td>${rowActions(r)}</td>
     </tr>`;
@@ -1241,20 +1242,19 @@ function statusBadge(r) {
   return `<span class="status ${cls}">${esc(s)}</span>`;
 }
 
-function detailCell(r) {
-  const lines = [];
-  if (r.bumpIn)                    lines.push('Bumped in');
-  if (r.spotShifted && !r.bumpIn)  lines.push('Rank shifted');
-  if (r.openedSpot)                lines.push('Opened a spot');
-  if (r.juniorNationalStatus)      lines.push(`Nationals: ${r.juniorNationalStatus}`);
-  if (r.officialAverageScoreQualifier && !r.top15Qualifier) lines.push('Meets avg threshold');
-  if (r.officialThresholdScore != null) lines.push(`Threshold: ${fmtScore(r.officialThresholdScore)}`);
-  if (r.prequalification?.length)  lines.push(...r.prequalification);
-  if (r.bumpedBy?.length)          lines.push(`By: ${r.bumpedBy.map(x => x.athlete).join(', ')}`);
-  if (r.overrideNotes?.length)     lines.push(`Override: ${r.overrideNotes.join('; ')}`);
-  if (r.nonDisplacingReason)       lines.push(r.nonDisplacingReason);
-  return lines.map(l => `<div class="bump-detail">${esc(l)}</div>`).join('');
+/* Only show truly actionable info inline — threshold lives in context bar */
+function inlineBumpNote(r) {
+  const parts = [];
+  if (r.bumpIn && r.bumpedBy?.length)    parts.push(`↑ By: ${r.bumpedBy.map(x => x.athlete).join(', ')}`);
+  else if (r.bumpIn)                     parts.push('↑ Bumped in');
+  if (r.openedSpot && r.openedFor?.length) parts.push(`↓ Opened → ${r.openedFor.map(x => x.athlete).join(', ')}`);
+  else if (r.openedSpot)                 parts.push('↓ Spot opened');
+  if (r.overrideNotes?.length)           parts.push(`✎ ${r.overrideNotes[0]}`);
+  if (!parts.length) return '';
+  return `<div style="font-size:10.5px;color:var(--ink-3);margin-top:3px">${parts.map(p => esc(p)).join(' · ')}</div>`;
 }
+
+function detailCell(r) { return ''; } // kept for compatibility — logic moved to inlineBumpNote
 
 function flagPills(r) {
   const pills = [];
