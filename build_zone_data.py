@@ -154,25 +154,22 @@ def _rows_as_dicts(cursor: sqlite3.Cursor) -> list[dict]:
 
 def get_zone_meets(conn: sqlite3.Connection) -> list[dict]:
     cur = conn.execute(
-        "SELECT meet_id, meet_name, meet_year, start_date, end_date, location, location AS state FROM meets"
+        "SELECT meet_id, name, year, start_date, end_date, city, state FROM meets"
     )
-    rows = cur.fetchall()
-    cols = [d[0] for d in cur.description]
     return [
-        dict(zip(cols, row))
-        for row in rows
-        if _ZONE_MEET_RE.search(str(row[1] or ''))
+        dict(zip([d[0] for d in cur.description], row))
+        for row in cur.fetchall()
+        if _ZONE_MEET_RE.search(row[1])
     ]
 
 
 def get_events_for_meet(conn: sqlite3.Connection, meet_id: int) -> list[dict]:
     cur = conn.execute(
         """
-        SELECT event_id, event_id AS event_num, event_name AS name, gender,
-               discipline AS board_height, event_round AS division, NULL AS num_dives
+        SELECT event_id, event_num, name, gender, board_height, division, num_dives
         FROM events
         WHERE meet_id = ?
-        ORDER BY event_id
+        ORDER BY event_num
         """,
         (meet_id,),
     )
@@ -183,23 +180,23 @@ def get_results_for_event(conn: sqlite3.Connection, event_id: int) -> list[dict]
     cur = conn.execute(
         """
         SELECT
-            r.event_id || '_' || r.diver_id AS result_id,
+            r.result_id,
             r.place,
-            r.score                         AS score,
-            NULL                            AS prelim_score,
-            NULL                            AS semifinal_score,
-            NULL                            AS final_score,
+            r.total_score                   AS score,
+            r.prelim_score,
+            r.semifinal_score,
+            r.final_score,
             d.diver_id,
             d.first_name,
             d.last_name,
             d.full_name,
-            COALESCE(r.team_name, d.team, '') AS team
+            COALESCE(r.team, d.team, '')    AS team
         FROM results r
         JOIN divers d ON r.diver_id = d.diver_id
         WHERE r.event_id = ?
         ORDER BY
-            CAST(NULLIF(r.place, '') AS REAL) ASC NULLS LAST,
-            r.score DESC
+            CAST(NULLIF(REPLACE(REPLACE(r.place,'T',''),'DQ',''), '') AS REAL) ASC NULLS LAST,
+            r.total_score DESC
         """,
         (event_id,),
     )
@@ -213,6 +210,7 @@ def get_results_for_event(conn: sqlite3.Connection, event_id: int) -> list[dict]
 def build_athlete_index(existing_data: dict) -> dict:
     by_id: dict[str, dict] = {}
     by_name: dict[str, dict] = {}
+    # First pass: index from athletes summary array
     for ath in existing_data.get("athletes", []):
         dm = str(ath.get("diveMeetsId", "")).strip()
         if dm:
@@ -220,6 +218,29 @@ def build_athlete_index(existing_data: dict) -> dict:
         name = f"{ath.get('first', '')} {ath.get('last', '')}".lower().strip()
         if name:
             by_name[name] = ath
+    # Second pass: enrich from existing result rows (which have full flag data)
+    for r in existing_data.get("results", []):
+        dm = str(r.get("diveMeetsId", "")).strip()
+        if not dm:
+            continue
+        # Only update if this result has richer flag data than what we have
+        existing = by_id.get(dm, {})
+        has_flags = r.get("foreignDeclared") or r.get("dualDeclared") or r.get("hps") or not r.get("citizenshipUnknown", True)
+        if has_flags:
+            merged = dict(existing)
+            for k in _FLAG_KEYS:
+                if k in r:
+                    merged[k] = r[k]
+            # Map result field names to athlete field names
+            if "first" not in merged and r.get("first"):
+                merged["first"] = r["first"]
+            if "last" not in merged and r.get("last"):
+                merged["last"] = r["last"]
+            merged["diveMeetsId"] = dm
+            by_id[dm] = merged
+            name = f"{r.get('first', '')} {r.get('last', '')}".lower().strip()
+            if name:
+                by_name[name] = merged
     return {"by_id": by_id, "by_name": by_name}
 
 
@@ -486,22 +507,22 @@ def process_zones(
         return [], []
 
     print(f"Found {len(zone_meets)} Zone meet(s):")
-    for m in sorted(zone_meets, key=lambda x: x["meet_name"]):
-        print(f"  • {m['meet_name']}")
+    for m in sorted(zone_meets, key=lambda x: x["name"]):
+        print(f"  • {m['name']}")
 
     # Phase 1: collect enriched rows, grouped by (eventKey, ewc) for threshold calc
     # Each entry: (meet, db_event, parsed_meta, ewc, zone_letter, enriched_rows)
     collected: list[tuple[dict, dict, dict, str, str, list[dict]]] = []
     grouped_for_threshold: dict[tuple[str, str], list[list[dict]]] = defaultdict(list)
 
-    for meet in sorted(zone_meets, key=lambda m: m["meet_name"]):
-        zone_letter = extract_zone_letter(meet["meet_name"])
+    for meet in sorted(zone_meets, key=lambda m: m["name"]):
+        zone_letter = extract_zone_letter(meet["name"])
         if zone_letter is None:
-            print(f"  SKIP '{meet['meet_name']}' — cannot extract zone letter")
+            print(f"  SKIP '{meet['name']}' — cannot extract zone letter")
             continue
         ewc = zone_ewc_map.get(zone_letter, DEFAULT_ZONE_EWC.get(zone_letter, "East"))
 
-        for db_evt in get_events_for_meet(conn, int(meet["meet_id"])):
+        for db_evt in get_events_for_meet(conn, meet["meet_id"]):
             # Skip prelim/semifinal rounds; only process finals (or single-round events)
             division = (db_evt.get("division") or "").lower()
             if division in ("prelim", "semifinal"):
@@ -559,7 +580,7 @@ def process_zones(
 
         rows = apply_zone_qualification(list(enriched), threshold)
 
-        meet_name = meet["meet_name"]
+        meet_name = meet["name"]
         event_name = db_evt["name"]
         event_id = f"Zones|{meet_name}|{event_name}"
 
