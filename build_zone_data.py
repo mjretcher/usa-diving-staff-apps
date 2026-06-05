@@ -486,7 +486,7 @@ def process_zones(
         return [], []
 
     print(f"Found {len(zone_meets)} Zone meet(s):")
-    for m in sorted(zone_meets, key=lambda x: x["name"]):
+    for m in sorted(zone_meets, key=lambda x: x["meet_name"]):
         print(f"  • {m['name']}")
 
     # Phase 1: collect enriched rows, grouped by (eventKey, ewc) for threshold calc
