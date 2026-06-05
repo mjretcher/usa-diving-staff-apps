@@ -3,242 +3,529 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>USA Diving Staff Apps</title>
+  <title>USA Diving — Staff Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --red: #d91c35; --blue: #171f69; --blue-700: #1e2d8a;
-      --ink: #0d1117; --ink-2: #374151; --ink-3: #6b7280;
-      --line: #e5e7eb; --surface: #fff; --bg: #f5f7fa;
+      --red:   #e8192c;
+      --blue:  #0f1a5e;
+      --navy:  #08102e;
+      --gold:  #f5c842;
+      --ink:   #e8edf8;
+      --ink-2: #9aa5c0;
+      --ink-3: #5a6480;
+      --card:  rgba(255,255,255,.04);
+      --card-border: rgba(255,255,255,.08);
+      --glow:  rgba(232,25,44,.15);
     }
+
+    html { font-size: 15px; }
+
     body {
-      font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
-      background: var(--bg); color: var(--ink);
-      min-height: 100vh; -webkit-font-smoothing: antialiased;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--navy);
+      color: var(--ink);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
-    /* Header */
+    /* ── Background grid ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: -30%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 700px;
+      background: radial-gradient(ellipse at center, rgba(15,26,94,.7) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ── */
     .site-header {
-      background: var(--blue); border-bottom: 3px solid var(--red);
-      padding: 0 28px; height: 60px;
-      display: flex; align-items: center; gap: 12px;
-      box-shadow: 0 1px 0 rgba(0,0,0,.2); position: sticky; top: 0; z-index: 10;
-    }
-    .brand-mark {
-      display: flex; flex-direction: column; gap: 2px; width: 6px; flex-shrink: 0;
-    }
-    .brand-mark span { display: block; height: 14px; border-radius: 2px; }
-    .brand-mark span:first-child { background: var(--red); }
-    .brand-mark span:last-child  { background: rgba(255,255,255,.4); }
-    .brand-label {
-      font-size: 10px; font-weight: 700; letter-spacing: .08em;
-      text-transform: uppercase; color: rgba(255,255,255,.45);
-    }
-    .brand-name { font-size: 16px; font-weight: 700; color: #fff; line-height: 1.15; }
-    .header-divider { width: 1px; height: 28px; background: rgba(255,255,255,.15); margin: 0 8px; }
-    .header-sub {
-      font-size: 12px; color: rgba(255,255,255,.55); font-weight: 500;
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      height: 60px;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(8,16,46,.8);
+      backdrop-filter: blur(12px);
     }
 
-    /* Hero */
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-emblem {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .header-emblem span {
+      display: block;
+      width: 4px;
+      border-radius: 2px;
+    }
+    .header-emblem span:first-child { height: 16px; background: var(--red); }
+    .header-emblem span:last-child  { height: 10px; background: rgba(255,255,255,.3); }
+
+    .header-org {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+    }
+    .header-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -.01em;
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--card-border);
+      background: var(--card);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .header-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+    }
+
+    /* ── Hero ── */
     .hero {
-      background: var(--blue); color: #fff;
-      padding: 60px 40px 50px; text-align: center;
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      padding: 100px 40px 80px;
     }
-    .hero-eyebrow {
-      font-size: 11px; font-weight: 700; letter-spacing: .1em;
-      text-transform: uppercase; color: rgba(255,255,255,.45);
-      margin-bottom: 12px;
+
+    .hero-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 28px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(232,25,44,.3);
+      background: rgba(232,25,44,.08);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 28px;
     }
+
     .hero h1 {
-      font-size: 42px; font-weight: 800; letter-spacing: -.03em;
-      line-height: 1; margin-bottom: 14px;
-    }
-    .hero h1 span { color: var(--red); }
-    .hero p {
-      font-size: 16px; color: rgba(255,255,255,.6); line-height: 1.6;
-      max-width: 520px; margin: 0 auto;
+      font-size: clamp(42px, 6vw, 72px);
+      font-weight: 800;
+      letter-spacing: -.04em;
+      line-height: 1;
+      margin-bottom: 20px;
     }
 
-    /* Grid */
-    main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 60px; }
-
-    .section-label {
-      font-size: 11px; font-weight: 700; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--ink-3);
-      margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+    .hero h1 .accent {
+      background: linear-gradient(135deg, #e8192c 0%, #ff6b7a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .section-label::after {
-      content: ''; flex: 1; height: 1px; background: var(--line);
+
+    .hero-sub {
+      font-size: 17px;
+      color: var(--ink-2);
+      font-weight: 400;
+      line-height: 1.6;
+      max-width: 520px;
+      margin: 0 auto 48px;
+    }
+
+    .hero-stats {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+
+    .hero-stat {
+      padding: 0 32px;
+      text-align: center;
+    }
+
+    .hero-stat + .hero-stat {
+      border-left: 1px solid var(--card-border);
+    }
+
+    .hero-stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      color: #fff;
+    }
+
+    .hero-stat-label {
+      font-size: 12px;
+      color: var(--ink-3);
+      font-weight: 500;
+      margin-top: 3px;
+    }
+
+    /* ── App grid ── */
+    .apps-section {
+      position: relative;
+      z-index: 2;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 0 40px 80px;
+    }
+
+    .apps-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .apps-section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--card-border);
     }
 
     .app-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 16px;
     }
 
+    /* Featured card — spans full row */
     .app-card {
-      background: var(--surface); border: 1px solid var(--line);
-      border-radius: 12px; padding: 24px;
-      text-decoration: none; color: var(--ink);
-      display: flex; flex-direction: column; gap: 10px;
-      transition: box-shadow .2s, transform .2s, border-color .2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      position: relative;
+      display: block;
+      text-decoration: none;
+      color: var(--ink);
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      overflow: hidden;
+      transition: border-color .2s, transform .2s, box-shadow .2s;
     }
+
     .app-card:hover {
-      box-shadow: 0 8px 24px rgba(0,0,0,.1);
+      border-color: rgba(255,255,255,.18);
       transform: translateY(-2px);
-      border-color: var(--blue);
+      box-shadow: 0 20px 60px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    /* Glow effect per card */
+    .app-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--card-accent, rgba(255,255,255,.2)), transparent);
+    }
+
+    .card-junior   { --card-accent: rgba(34,197,94,.5); }
+    .card-schedule { --card-accent: rgba(99,102,241,.5); }
+    .card-criteria { --card-accent: rgba(245,200,66,.5); }
+    .card-analytics{ --card-accent: rgba(59,130,246,.5); }
+
+    .app-card-inner {
+      position: relative;
+      z-index: 1;
     }
 
     .app-card-top {
-      display: flex; align-items: flex-start; justify-content: space-between;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
     }
+
     .app-num {
-      font-size: 11px; font-weight: 800; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--ink-3); padding: 4px 8px;
-      background: var(--bg); border-radius: 4px; border: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--ink-3);
     }
+
     .app-icon {
-      width: 38px; height: 38px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      border: 1px solid var(--card-border);
+      background: rgba(255,255,255,.05);
     }
-    .icon-blue   { background: #e8ecf9; }
-    .icon-green  { background: #ecfdf5; }
-    .icon-amber  { background: #fffbeb; }
-    .icon-purple { background: #f5f3ff; }
 
     .app-card h3 {
-      font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.2;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      line-height: 1.2;
+      margin-bottom: 8px;
+      color: #fff;
     }
+
     .app-card p {
-      font-size: 13px; color: var(--ink-3); line-height: 1.6; flex: 1;
+      font-size: 13px;
+      color: var(--ink-2);
+      line-height: 1.65;
+      margin-bottom: 20px;
     }
+
     .app-tags {
-      display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 24px;
     }
+
     .tag {
-      font-size: 11px; font-weight: 600; padding: 2px 8px;
-      border-radius: 999px; border: 1px solid var(--line);
-      color: var(--ink-3); background: var(--bg);
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,.09);
+      background: rgba(255,255,255,.04);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-2);
+      letter-spacing: .02em;
     }
+
     .app-link {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 12px; font-weight: 700; color: var(--blue);
-      text-decoration: none; margin-top: 6px; padding: 6px 0;
-      border-top: 1px solid var(--line);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-2);
+      transition: color .15s;
     }
-    .app-link::after { content: '→'; }
-    .app-card:hover .app-link { color: var(--blue-700); }
 
-    /* Data note */
-    .data-note {
-      margin-top: 32px; padding: 14px 18px;
-      background: var(--surface); border: 1px solid var(--line);
-      border-left: 4px solid var(--blue); border-radius: 8px;
-      font-size: 13px; color: var(--ink-3); line-height: 1.6;
+    .app-link svg {
+      transition: transform .2s;
     }
-    .data-note strong { color: var(--ink-2); font-weight: 600; }
 
+    .app-card:hover .app-link {
+      color: #fff;
+    }
+
+    .app-card:hover .app-link svg {
+      transform: translateX(3px);
+    }
+
+    /* Background glow blobs per card */
+    .card-blob {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      opacity: .06;
+      filter: blur(40px);
+    }
+
+    .card-junior   .card-blob { width: 200px; height: 200px; background: #22c55e; bottom: -60px; right: -40px; }
+    .card-schedule .card-blob { width: 200px; height: 200px; background: #818cf8; bottom: -60px; right: -40px; }
+    .card-criteria .card-blob { width: 200px; height: 200px; background: #fbbf24; bottom: -60px; right: -40px; }
+    .card-analytics{ }
+    .card-analytics .card-blob { width: 200px; height: 200px; background: #3b82f6; bottom: -60px; right: -40px; }
+
+    /* ── Footer ── */
     footer {
-      text-align: center; padding: 24px; font-size: 12px; color: var(--ink-3);
-      border-top: 1px solid var(--line);
+      position: relative;
+      z-index: 2;
+      border-top: 1px solid var(--card-border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--ink-3);
+    }
+
+    @media (max-width: 860px) {
+      .app-grid { grid-template-columns: 1fr; }
+      .hero { padding: 60px 20px 50px; }
+      .apps-section { padding: 0 20px 60px; }
+      .hero-stats { flex-direction: column; gap: 16px; }
+      .hero-stat + .hero-stat { border-left: none; }
+      .site-header { padding: 0 20px; }
+      footer { padding: 20px; flex-direction: column; gap: 6px; }
     }
   </style>
 </head>
 <body>
+
   <header class="site-header">
-    <div class="brand-mark"><span></span><span></span></div>
-    <div>
-      <div class="brand-label">USA Diving</div>
-      <div class="brand-name">Staff Applications</div>
+    <div class="header-brand">
+      <div class="header-emblem"><span></span><span></span></div>
+      <div>
+        <div class="header-org">USA Diving</div>
+        <div class="header-name">Staff Platform</div>
+      </div>
     </div>
-    <div class="header-divider"></div>
-    <div class="header-sub">High Performance Department &mdash; Internal use only</div>
+    <div class="header-badge">Live · 2026 Season</div>
   </header>
 
-  <div class="hero">
-    <div class="hero-eyebrow">Internal staff toolkit</div>
-    <h1>Staff <span>Apps</span></h1>
-    <p>Four tools for schedule building, results auditing, criteria simulation, and athlete analytics.</p>
-  </div>
+  <section class="hero">
+    <div class="hero-label">High Performance Department</div>
+    <h1>The <span class="accent">Junior Circuit</span><br>Command Center</h1>
+    <p class="hero-sub">Four precision tools for qualification tracking, criteria simulation, schedule design, and athlete analytics — built for USA Diving staff.</p>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-value">4</div>
+        <div class="hero-stat-label">Integrated tools</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">6</div>
+        <div class="hero-stat-label">Zone meets tracked</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">2026</div>
+        <div class="hero-stat-label">Junior Circuit</div>
+      </div>
+    </div>
+  </section>
 
-  <main>
-    <div class="section-label">Applications</div>
+  <section class="apps-section">
+    <div class="apps-section-label">Applications</div>
     <div class="app-grid">
 
-      <a class="app-card" href="schedule-builder/index.html">
-        <div class="app-card-top">
-          <span class="app-num">01</span>
-          <div class="app-icon icon-blue">📅</div>
+      <a class="app-card card-junior" href="junior-results/index.html">
+        <div class="card-blob"></div>
+        <div class="app-card-inner">
+          <div class="app-card-top">
+            <span class="app-num">01 — LIVE</span>
+            <div class="app-icon">🏆</div>
+          </div>
+          <h3>Junior Circuit Results</h3>
+          <p>Full-season qualification tracker across all stages — Regionals, Zones, East/West/Central, and Junior Nationals. Real-time bumps, override management, and official qual lists per the 2026 rulebook.</p>
+          <div class="app-tags">
+            <span class="tag">Regionals</span>
+            <span class="tag">Zones B·E·F</span>
+            <span class="tag">E/W/C</span>
+            <span class="tag">Nationals</span>
+            <span class="tag">Qual lists</span>
+          </div>
+          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
-        <h3>Schedule Builder</h3>
-        <p>Build and manage meet schedules. Set event blocks, warm-up times, and session structures with print-ready and shareable output.</p>
-        <div class="app-tags">
-          <span class="tag">Meet design</span>
-          <span class="tag">PDF export</span>
-          <span class="tag">Auto-flow</span>
-        </div>
-        <span class="app-link">Open app</span>
       </a>
 
-      <a class="app-card" href="junior-results/index.html">
-        <div class="app-card-top">
-          <span class="app-num">02</span>
-          <div class="app-icon icon-green">🏆</div>
+      <a class="app-card card-schedule" href="schedule-builder/index.html">
+        <div class="card-blob"></div>
+        <div class="app-card-inner">
+          <div class="app-card-top">
+            <span class="app-num">02</span>
+            <div class="app-icon">📅</div>
+          </div>
+          <h3>Schedule Builder</h3>
+          <p>Design and manage meet schedules with smart event blocks, warm-up periods, and session structures. Generates print-ready and shareable formats for meet directors.</p>
+          <div class="app-tags">
+            <span class="tag">Meet design</span>
+            <span class="tag">Auto-flow</span>
+            <span class="tag">PDF export</span>
+          </div>
+          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
-        <h3>Junior Circuit</h3>
-        <p>Audit Junior Circuit results across all stages — Regionals, Zones, E/W/C, and Nationals. Tracks qualifiers, bumps, foreign athletes, HPS, and declared not-attending in real time.</p>
-        <div class="app-tags">
-          <span class="tag">Zones</span>
-          <span class="tag">Qualification lists</span>
-          <span class="tag">Override tracking</span>
-        </div>
-        <span class="app-link">Open app</span>
       </a>
 
-      <a class="app-card" href="criteria-simulator/index.html">
-        <div class="app-card-top">
-          <span class="app-num">03</span>
-          <div class="app-icon icon-amber">⚖️</div>
+      <a class="app-card card-criteria" href="criteria-simulator/index.html">
+        <div class="card-blob"></div>
+        <div class="app-card-inner">
+          <div class="app-card-top">
+            <span class="app-num">03</span>
+            <div class="app-icon">⚖️</div>
+          </div>
+          <h3>Criteria Simulator</h3>
+          <p>Model qualification scenarios against score and DD thresholds. Scenario manager, threshold optimizer, certification center, and full staff review export suite.</p>
+          <div class="app-tags">
+            <span class="tag">Score thresholds</span>
+            <span class="tag">DD analysis</span>
+            <span class="tag">Optimizer</span>
+            <span class="tag">Certification</span>
+          </div>
+          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
-        <h3>Criteria Simulator</h3>
-        <p>Simulate qualification criteria against score and DD thresholds. Scenario manager, threshold optimizer, certification center, and staff review exports.</p>
-        <div class="app-tags">
-          <span class="tag">Thresholds</span>
-          <span class="tag">Optimizer</span>
-          <span class="tag">Certification</span>
-        </div>
-        <span class="app-link">Open app</span>
       </a>
 
-      <a class="app-card" href="athlete-evaluation/index.html">
-        <div class="app-card-top">
-          <span class="app-num">04</span>
-          <div class="app-icon icon-purple">📊</div>
+      <a class="app-card card-analytics" href="athlete-evaluation/index.html">
+        <div class="card-blob"></div>
+        <div class="app-card-inner">
+          <div class="app-card-top">
+            <span class="app-num">04</span>
+            <div class="app-icon">📊</div>
+          </div>
+          <h3>Athlete Evaluation</h3>
+          <p>Dive-level analytics dashboard with heatmaps, strength radars, synchro pair builder, mixed team candidate analysis, and voluntary evidence workbook. 2021–2026 historical data.</p>
+          <div class="app-tags">
+            <span class="tag">Dive analytics</span>
+            <span class="tag">Synchro pairs</span>
+            <span class="tag">Mixed team</span>
+            <span class="tag">HP analytics</span>
+          </div>
+          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
-        <h3>Athlete Evaluation</h3>
-        <p>Full high-performance analytics dashboard with dive-level analysis, heatmaps, synchro pair builder, mixed team candidates, and voluntary evidence workbook. 2021–2026 data.</p>
-        <div class="app-tags">
-          <span class="tag">Analytics</span>
-          <span class="tag">Synchro pairs</span>
-          <span class="tag">Mixed team</span>
-        </div>
-        <span class="app-link">Open app</span>
       </a>
 
     </div>
+  </section>
 
-    <div class="data-note">
-      <strong>Shared data layer:</strong> Apps 2, 3, and 4 draw from the same competition results dataset in <code>data/</code>. The database is automatically scraped and rebuilt every Wednesday. All apps reflect changes immediately.
-    </div>
-  </main>
+  <footer>
+    <span>USA Diving · High Performance Department · Internal use only</span>
+    <span>Data auto-updates every Wednesday · 2026 Junior Circuit</span>
+  </footer>
 
-  <footer>USA Diving &mdash; Internal Staff Use Only &mdash; Not for public distribution</footer>
 </body>
 </html>

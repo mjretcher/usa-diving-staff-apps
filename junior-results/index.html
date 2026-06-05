@@ -3,64 +3,56 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Junior Circuit — USA Diving Staff</title>
+    <title>Junior Circuit — USA Diving</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <!-- TOP BAR -->
-    <header class="topbar">
+
+    <!-- ── TOP BAR ─────────────────────────────────────────────── -->
+    <header class="app-topbar">
       <div class="topbar-brand">
-        <div class="brand-mark">
-          <span class="brand-mark-red"></span>
-          <span class="brand-mark-blue"></span>
-        </div>
-        <div>
-          <div class="brand-label">USA Diving</div>
+        <div class="brand-mark"><span></span><span></span></div>
+        <div class="brand-text">
+          <div class="brand-org">USA Diving</div>
           <div class="brand-title">Junior Circuit</div>
         </div>
       </div>
 
-      <nav class="stage-nav" id="stageNav" aria-label="Circuit stages"></nav>
+      <nav class="stage-nav" id="stageNav" aria-label="Circuit stage"></nav>
 
       <div class="topbar-actions">
-        <button class="icon-button" id="overrideToggle" title="Overrides" aria-pressed="false">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <button class="topbar-btn" id="overrideToggle" aria-pressed="false">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 3.5h10M3.5 6.5h6M5.5 9.5h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           Overrides
           <span class="override-badge" id="overrideBadge" hidden>0</span>
         </button>
-        <button class="icon-button" id="exportBtn" title="Export">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3 3-3M2 11v1a2 2 0 002 2h8a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <button class="topbar-btn" id="exportBtn">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6M2 10.5v.5a1 1 0 001 1h7a1 1 0 001-1v-.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Export
         </button>
       </div>
     </header>
 
-    <!-- OVERRIDE DRAWER -->
-    <aside class="override-drawer" id="overrideDrawer" aria-label="Manual overrides" hidden>
+    <!-- ── OVERRIDE DRAWER ─────────────────────────────────────── -->
+    <aside class="override-drawer" id="overrideDrawer" hidden>
       <div class="drawer-header">
         <div>
           <h2>Manual Overrides</h2>
-          <p>Changes are saved in this browser and can be undone.</p>
+          <p>Saved in this browser. Can be undone.</p>
         </div>
         <div class="drawer-header-actions">
-          <button class="btn-ghost" id="undoOverrideButton" type="button">Undo</button>
-          <button class="btn-ghost" id="redoOverrideButton" type="button">Redo</button>
-          <button class="btn-ghost" id="exportOverridesButton" type="button">Export JSON</button>
-          <button class="btn-ghost btn-danger" id="clearOverridesButton" type="button">Clear all</button>
+          <button class="btn-ghost btn-sm" id="undoOverrideButton">Undo</button>
+          <button class="btn-ghost btn-sm" id="redoOverrideButton">Redo</button>
+          <button class="btn-ghost btn-sm" id="exportOverridesButton">Export JSON</button>
+          <button class="btn-ghost btn-sm btn-danger" id="clearOverridesButton">Clear</button>
         </div>
       </div>
       <div class="drawer-form">
-        <label class="form-field">
-          <span>Athlete ID</span>
-          <input id="overrideAthleteId" type="text" placeholder="DiveMeets ID">
-        </label>
-        <label class="form-field">
-          <span>Name</span>
-          <input id="overrideAthleteName" type="text" placeholder="Optional">
-        </label>
+        <label class="form-field"><span>Athlete ID</span><input id="overrideAthleteId" type="text" placeholder="DiveMeets ID"></label>
+        <label class="form-field"><span>Name</span><input id="overrideAthleteName" type="text" placeholder="Optional"></label>
         <label class="form-field">
           <span>Override type</span>
           <select id="overrideType">
@@ -72,66 +64,62 @@
         </label>
         <label class="form-field">
           <span>State</span>
-          <select id="overrideValue">
-            <option value="true">Turn on</option>
-            <option value="false">Turn off</option>
-          </select>
+          <select id="overrideValue"><option value="true">Turn on</option><option value="false">Turn off</option></select>
         </label>
-        <label class="form-field form-field-wide">
-          <span>Note</span>
-          <input id="overrideNote" type="text" placeholder="Reason or source">
-        </label>
-        <button class="btn-primary" id="addOverrideButton" type="button">Add override</button>
+        <label class="form-field form-field-wide"><span>Note</span><input id="overrideNote" type="text" placeholder="Reason or source"></label>
+        <button class="btn-primary" id="addOverrideButton">Add override</button>
       </div>
       <div class="drawer-summary" id="overrideSummary"></div>
       <div class="drawer-log" id="overrideLog"></div>
     </aside>
 
-    <!-- MAIN CONTENT -->
-    <main class="main" id="main">
+    <!-- ── BODY ────────────────────────────────────────────────── -->
+    <div class="app-body">
 
-      <!-- FILTER BAR -->
-      <div class="filterbar" id="filterbar">
-        <div class="filters" id="filterFields"></div>
-        <div class="filter-flags" id="filterFlags"></div>
-      </div>
+      <!-- SIDEBAR -->
+      <aside class="control-sidebar" aria-label="Filters">
+        <div class="sidebar-section" id="filterFields"></div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Filter by flag</div>
+          <div class="filter-flags" id="filterFlags"></div>
+        </div>
+      </aside>
 
-      <!-- STAGE CONTENT -->
-      <div class="stage-content" id="stageContent">
+      <!-- MAIN -->
+      <main class="main-workspace">
 
-        <!-- KPI ROW -->
-        <div class="kpi-row" id="kpiRow"></div>
-
-        <!-- WORKSPACE -->
-        <div class="workspace">
-          <!-- EVENT PANEL -->
-          <aside class="event-panel">
-            <div class="panel-head">
-              <span class="panel-head-title">Events</span>
-              <button class="btn-link" id="clearEventButton" type="button">Show all</button>
-            </div>
-            <div class="event-search-wrap">
-              <input class="event-search" id="eventSearch" type="search" placeholder="Filter events…">
-            </div>
-            <div class="event-list" id="eventList"></div>
-          </aside>
-
-          <!-- RESULTS PANEL -->
-          <div class="results-panel">
-            <div class="results-context" id="resultsContext"></div>
-            <div class="results-toolbar">
-              <div class="view-tabs" id="viewTabs" role="tablist"></div>
-              <div class="toolbar-actions">
-                <span class="row-count" id="rowCount"></span>
-                <button class="btn-ghost btn-sm" id="copyTsvButton" type="button">Copy TSV</button>
-                <button class="btn-ghost btn-sm" id="downloadCsvButton" type="button">Download CSV</button>
+        <!-- STAGE CONTENT -->
+        <div class="stage-content" id="stageContent">
+          <div class="kpi-row" id="kpiRow"></div>
+          <div class="workspace">
+            <aside class="event-panel">
+              <div class="panel-head">
+                <span class="panel-head-title">Events</span>
+                <button class="btn-link" id="clearEventButton">All</button>
               </div>
+              <div class="event-search-wrap">
+                <input class="event-search" id="eventSearch" type="search" placeholder="Filter events…">
+              </div>
+              <div class="event-list" id="eventList"></div>
+            </aside>
+
+            <div class="results-panel">
+              <div class="results-context" id="resultsContext"></div>
+              <div class="results-toolbar">
+                <div class="view-tabs" id="viewTabs" role="tablist"></div>
+                <div class="toolbar-actions">
+                  <span class="row-count" id="rowCount"></span>
+                  <button class="btn-ghost btn-sm" id="copyTsvButton">Copy TSV</button>
+                  <button class="btn-ghost btn-sm" id="downloadCsvButton">Download CSV</button>
+                </div>
+              </div>
+              <div class="table-wrap" id="tableWrap"></div>
             </div>
-            <div class="table-wrap" id="tableWrap"></div>
           </div>
         </div>
-      </div>
-    </main>
+
+      </main>
+    </div>
 
     <script src="../data/junior-data.js"></script>
     <script src="main.js"></script>

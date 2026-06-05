@@ -167,7 +167,7 @@ function buildFilters() {
     if (f.type === 'search') {
       return `<div class="filter-field">
         <span class="filter-label">${esc(f.label)}</span>
-        <input id="${f.id}" type="search" placeholder="Name, ID, team…" value="${esc(state.search)}">
+        <input id="${f.id}" type="search" placeholder="Name, ID, team…" value="${esc(state.search)}" style="width:100%;height:32px;padding:0 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(255,255,255,.06);color:#c4cde6;font-size:12.5px">
       </div>`;
     }
     return `<div class="filter-field">
