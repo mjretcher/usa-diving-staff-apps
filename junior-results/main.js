@@ -169,7 +169,7 @@ function buildFilters() {
     if (f.type === 'search') {
       return `<div class="filter-field">
         <span class="filter-label">${esc(f.label)}</span>
-        <input id="${f.id}" type="search" placeholder="Name, ID, team…" value="${esc(state.search)}" style="width:100%;height:32px;padding:0 10px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(255,255,255,.06);color:#c4cde6;font-size:12.5px">
+        <input id="${f.id}" type="search" placeholder="Name, ID, team…" value="${esc(state.search)}" class="filter-search-input">
       </div>`;
     }
     return `<div class="filter-field">
@@ -230,6 +230,15 @@ function attachGlobalListeners() {
     state.drawerOpen = !state.drawerOpen;
     $('overrideDrawer').hidden = !state.drawerOpen;
     $('overrideToggle').setAttribute('aria-pressed', state.drawerOpen);
+    $('overrideToggle').classList.toggle('topbar-btn-active', state.drawerOpen);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && state.drawerOpen) {
+      state.drawerOpen = false;
+      $('overrideDrawer').hidden = true;
+      $('overrideToggle').setAttribute('aria-pressed', false);
+      $('overrideToggle').classList.remove('topbar-btn-active');
+    }
   });
 
   $('exportBtn').addEventListener('click', () => {
@@ -941,9 +950,9 @@ function renderResultTable(rows) {
       <td class="mono" style="width:44px">${esc(r.place || '')}</td>
       <td class="mono" style="width:54px;color:var(--ink-3)">${rankCol}</td>
       <td>${athleteCell(r)}</td>
-      <td style="white-space:nowrap;color:var(--ink-2)">${esc(r.team || '')}</td>
-      <td class="mono" style="width:68px;font-weight:600">${fmtScore(r.score)}</td>
-      <td style="min-width:180px">${statusBadge(r)}${inlineBumpNote(r)}</td>
+      <td class="td-team">${esc(r.team || '')}</td>
+      <td class="td-score mono">${fmtScore(r.score)}</td>
+      <td class="td-status">${statusBadge(r)}${inlineBumpNote(r)}</td>
       <td>${flagPills(r)}</td>
       <td>${rowActions(r)}</td>
     </tr>`;
@@ -1204,7 +1213,7 @@ function overrideDesc(o) {
    ════════════════════════════════════════════════════════════════ */
 function athleteCell(r) {
   const showEvent = !state.selectedEventId; // hide event name when one event is selected
-  return `<div style="display:flex;align-items:baseline;gap:6px">
+  return `<div class="athlete-main">
     <span class="athlete-name">${esc(r.athlete)}</span>
     ${r.diveMeetsId ? `<span class="athlete-id">${esc(r.diveMeetsId)}</span>` : ''}
   </div>${showEvent ? `<div class="athlete-event">${esc(r.eventName || '')}</div>` : ''}`;
@@ -1229,17 +1238,25 @@ function eligCell(r) {
 
 function statusBadge(r) {
   const s = r.qualificationStatus || '';
+  if (!s) return '';
   let cls = 'status-out';
-  if (s.includes('direct'))       cls = 'status-qualifier';
-  if (s.includes('top 15'))       cls = 'status-qualifier';
-  if (s.includes('avg') || s.includes('average')) cls = 'status-average';
-  if (s.includes('replacement'))  cls = 'status-replacement';
-  if (s.includes('E/W/C'))        cls = 'status-qualifier';
-  if (s.includes('YMCA'))         cls = 'status-qualifier';
-  if (s.includes('Non-displacing')) cls = 'status-non-displacing';
-  if (s.includes('Declared not')) cls = 'status-decline';
-  if (s.includes('Does not') || s.includes('Non-qualifying')) cls = 'status-non-qual';
-  return `<span class="status ${cls}">${esc(s)}</span>`;
+  let label = 'Does not advance';
+  if (s.includes('direct'))                        { cls = 'status-qualifier';      label = 'Direct qualifier'; }
+  else if (s.includes('top 15'))                   { cls = 'status-qualifier';      label = 'Zone qualifier'; }
+  else if (s.includes('average score threshold'))  { cls = 'status-average';        label = 'Avg threshold'; }
+  else if (s.includes('E/W/C') && s.includes('position')) { cls = 'status-ewc';    label = 'E/W/C — position'; }
+  else if (s.includes('E/W/C'))                    { cls = 'status-ewc';            label = 'E/W/C qualifier'; }
+  else if (s.includes('decline replacement'))      { cls = 'status-replacement';    label = 'Decline fill'; }
+  else if (s.includes('Replacement pool') || s.includes('replacement eligible')) { cls = 'status-replacement'; label = 'Replacement pool'; }
+  else if (s.includes('replacement'))              { cls = 'status-replacement';    label = 'Replacement'; }
+  else if (s.includes('YMCA'))                     { cls = 'status-qualifier';      label = 'YMCA champion'; }
+  else if (s.includes('Prequalified'))             { cls = 'status-qualifier';      label = 'Prequalified'; }
+  else if (s.includes('Non-displacing'))           { cls = 'status-non-displacing'; label = 'Non-displacing'; }
+  else if (s.includes('Declared not'))             { cls = 'status-decline';        label = 'Not attending'; }
+  else if (s.includes('Does not') || s.includes('Non-qualifying')) { cls = 'status-out'; label = 'Does not advance'; }
+  else if (s.includes('Not eligible'))             { cls = 'status-out';            label = 'Not eligible'; }
+  else { label = s.length > 28 ? s.slice(0, 26) + '…' : s; }
+  return `<span class="status ${cls}" title="${esc(s)}">${esc(label)}</span>`;
 }
 
 /* Only show truly actionable info inline — threshold lives in context bar */
