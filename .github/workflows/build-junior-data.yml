@@ -1,8 +1,6 @@
 name: Build Junior Data
 
 on:
-  push:
-    branches: [main]
   repository_dispatch:
     types: [scrape-complete]
   workflow_dispatch:
