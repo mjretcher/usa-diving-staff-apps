@@ -11,8 +11,6 @@
     <link rel="stylesheet" href="ui-fixes.css">
   </head>
   <body>
-
-    <!-- ── TOP BAR ─────────────────────────────────────────────── -->
     <header class="app-topbar">
       <div class="topbar-brand">
         <div class="brand-mark"><span></span><span></span></div>
@@ -21,106 +19,50 @@
           <div class="brand-title">Junior Circuit</div>
         </div>
       </div>
-
       <nav class="stage-nav" id="stageNav" aria-label="Circuit stage"></nav>
-
       <div class="topbar-actions">
-        <button class="topbar-btn" id="overrideToggle" aria-pressed="false">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 3.5h10M3.5 6.5h6M5.5 9.5h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          Overrides
-          <span class="override-badge" id="overrideBadge" hidden>0</span>
-        </button>
-        <button class="topbar-btn" id="exportBtn">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5v7M6.5 8.5L4 6M6.5 8.5L9 6M2 10.5v.5a1 1 0 001 1h7a1 1 0 001-1v-.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Export
-        </button>
+        <button class="topbar-btn" id="overrideToggle" aria-pressed="false">Overrides <span class="override-badge" id="overrideBadge" hidden>0</span></button>
+        <button class="topbar-btn" id="exportBtn">Export</button>
       </div>
     </header>
 
-    <!-- ── OVERRIDE DRAWER ─────────────────────────────────────── -->
     <aside class="override-drawer" id="overrideDrawer" hidden>
       <div class="drawer-header">
-        <div>
-          <h2>Manual Overrides</h2>
-          <p>Saved in this browser. Can be undone.</p>
-        </div>
-        <div class="drawer-header-actions">
-          <button class="btn-ghost btn-sm" id="undoOverrideButton">Undo</button>
-          <button class="btn-ghost btn-sm" id="redoOverrideButton">Redo</button>
-          <button class="btn-ghost btn-sm" id="exportOverridesButton">Export JSON</button>
-          <button class="btn-ghost btn-sm btn-danger" id="clearOverridesButton">Clear</button>
-        </div>
+        <div><h2>Manual Overrides</h2><p>Saved in this browser. Can be undone.</p></div>
+        <div class="drawer-header-actions"><button class="btn-ghost btn-sm" id="undoOverrideButton">Undo</button><button class="btn-ghost btn-sm" id="redoOverrideButton">Redo</button><button class="btn-ghost btn-sm" id="exportOverridesButton">Export JSON</button><button class="btn-ghost btn-sm btn-danger" id="clearOverridesButton">Clear</button></div>
       </div>
       <div class="drawer-form">
         <label class="form-field"><span>Athlete ID</span><input id="overrideAthleteId" type="text" placeholder="DiveMeets ID"></label>
         <label class="form-field"><span>Name</span><input id="overrideAthleteName" type="text" placeholder="Optional"></label>
-        <label class="form-field">
-          <span>Override type</span>
-          <select id="overrideType">
-            <option value="foreign">Foreign athlete</option>
-            <option value="dual">Dual citizen</option>
-            <option value="dualEffect">Dual affects results</option>
-            <option value="hps">HPS athlete</option>
-            <option value="ymca">YMCA event champion</option>
-            <option value="notAttending">Declared not attending</option>
-          </select>
-        </label>
-        <label class="form-field">
-          <span>State</span>
-          <select id="overrideValue"><option value="true">Turn on</option><option value="false">Turn off</option></select>
-        </label>
+        <label class="form-field"><span>Override type</span><select id="overrideType"><option value="foreign">Foreign athlete</option><option value="dual">Dual citizen</option><option value="dualEffect">Dual affects results</option><option value="hps">HPS athlete</option><option value="ymca">YMCA event champion</option><option value="notAttending">Declared not attending</option></select></label>
+        <label class="form-field"><span>State</span><select id="overrideValue"><option value="true">Turn on</option><option value="false">Turn off</option></select></label>
         <label class="form-field form-field-wide"><span>Note</span><input id="overrideNote" type="text" placeholder="Reason or source"></label>
         <button class="btn-primary" id="addOverrideButton">Add override</button>
       </div>
-      <div class="drawer-summary" id="overrideSummary"></div>
-      <div class="drawer-log" id="overrideLog"></div>
+      <div class="drawer-summary" id="overrideSummary"></div><div class="drawer-log" id="overrideLog"></div>
     </aside>
 
-    <!-- ── BODY ────────────────────────────────────────────────── -->
     <div class="app-body">
-
-      <!-- SIDEBAR -->
       <aside class="control-sidebar" aria-label="Filters">
         <div class="sidebar-section" id="filterFields"></div>
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Filter by flag</div>
-          <div class="filter-flags" id="filterFlags"></div>
-        </div>
+        <div class="sidebar-section"><div class="sidebar-section-title">Filter by flag</div><div class="filter-flags" id="filterFlags"></div></div>
       </aside>
-
-      <!-- MAIN -->
       <main class="main-workspace">
-
-        <!-- STAGE CONTENT -->
         <div class="stage-content" id="stageContent">
           <div class="kpi-row" id="kpiRow"></div>
           <div class="workspace">
             <aside class="event-panel">
-              <div class="panel-head">
-                <span class="panel-head-title">Events</span>
-                <button class="btn-link" id="clearEventButton">All</button>
-              </div>
-              <div class="event-search-wrap">
-                <input class="event-search" id="eventSearch" type="search" placeholder="Filter events…">
-              </div>
+              <div class="panel-head"><span class="panel-head-title">Events</span><button class="btn-link" id="clearEventButton">All</button></div>
+              <div class="event-search-wrap"><input class="event-search" id="eventSearch" type="search" placeholder="Filter events…"></div>
               <div class="event-list" id="eventList"></div>
             </aside>
-
             <div class="results-panel">
               <div class="results-context" id="resultsContext"></div>
-              <div class="results-toolbar">
-                <div class="view-tabs" id="viewTabs" role="tablist"></div>
-                <div class="toolbar-actions">
-                  <span class="row-count" id="rowCount"></span>
-                  <button class="btn-ghost btn-sm" id="copyTsvButton">Copy TSV</button>
-                  <button class="btn-ghost btn-sm" id="downloadCsvButton">Download CSV</button>
-                </div>
-              </div>
+              <div class="results-toolbar"><div class="view-tabs" id="viewTabs" role="tablist"></div><div class="toolbar-actions"><span class="row-count" id="rowCount"></span><button class="btn-ghost btn-sm" id="copyTsvButton">Copy TSV</button><button class="btn-ghost btn-sm" id="downloadCsvButton">Download CSV</button></div></div>
               <div class="table-wrap" id="tableWrap"></div>
             </div>
           </div>
         </div>
-
       </main>
     </div>
 
@@ -130,5 +72,7 @@
     <script src="status-merge.js"></script>
     <script src="main.js"></script>
     <script src="dashboard-controls.js"></script>
+    <script src="qualification-impact.js"></script>
+    <script src="qualification-workbench.js"></script>
   </body>
 </html>
