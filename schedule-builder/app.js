@@ -875,6 +875,8 @@
 
 
   function rawSavedScheduleLibrary() {
+    // Synchronous: return localStorage immediately (fast, always works)
+    // GitHub sync runs in background and calls refreshLibraryIfOpen() when done
     try {
       const parsed = JSON.parse(localStorage.getItem(SCHEDULE_LIBRARY_KEY) || "[]");
       return Array.isArray(parsed) ? parsed : [];
@@ -882,6 +884,27 @@
       return [];
     }
   }
+
+  // Background GitHub sync — pulls shared schedules and merges with local
+  async function syncLibraryFromGitHub() {
+    if (!window.ScheduleSync) return;
+    try {
+      const remote = await window.ScheduleSync.loadSchedules();
+      if (!remote.length) return;
+      const local = rawSavedScheduleLibrary();
+      const localIds = new Set(local.map(s => s.id));
+      // Merge: remote schedules not in local get added
+      const merged = [...local];
+      remote.forEach(r => { if (!localIds.has(r.id)) merged.push(r); });
+      if (merged.length !== local.length) {
+        localStorage.setItem(SCHEDULE_LIBRARY_KEY, JSON.stringify(merged.filter(s => !s.builtIn).slice(0, 50)));
+        if (typeof refreshLibraryUI === 'function') refreshLibraryUI();
+      }
+    } catch(e) { console.warn('[schedule-sync] pull failed:', e); }
+  }
+
+  // Call on app load — background, non-blocking
+  setTimeout(() => syncLibraryFromGitHub(), 1500);
 
   function savedScheduleLibrary() {
     const local = rawSavedScheduleLibrary();
@@ -897,6 +920,30 @@
   function writeScheduleLibrary(items) {
     const clean = (items || []).filter((item) => !item.builtIn).slice(0, 50);
     localStorage.setItem(SCHEDULE_LIBRARY_KEY, JSON.stringify(clean));
+    // Push each new/updated schedule to GitHub in background
+    if (window.ScheduleSync) {
+      clean.forEach(item => {
+        if (item && item.id) {
+          window.ScheduleSync.saveSchedule(item).catch(e =>
+            console.warn('[schedule-sync] save failed for', item.id, e)
+          );
+        }
+      });
+    }
+  }
+
+  // Called by syncLibraryFromGitHub after merge
+  function refreshLibraryUI() {
+    try {
+      // Re-render the library panel if it's open
+      if (typeof actions !== 'undefined' && typeof actions.refreshLibrary === 'function') {
+        actions.refreshLibrary();
+      } else {
+        // Fallback: trigger a soft re-render via state update
+        const el = document.querySelector('.schedule-library-panel, .library-panel, [data-panel="library"]');
+        if (el) el.dispatchEvent(new CustomEvent('library-updated'));
+      }
+    } catch(e) {}
   }
 
   function uniqueScheduleName(base, library) {
