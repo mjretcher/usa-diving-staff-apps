@@ -11,8 +11,6 @@
     <link rel="stylesheet" href="ui-fixes.css">
   </head>
   <body>
-
-    <!-- ── TOP BAR ─────────────────────────────────────────────── -->
     <header class="app-topbar">
       <div class="topbar-brand">
         <div class="brand-mark"><span></span><span></span></div>
@@ -21,63 +19,33 @@
           <div class="brand-title">Junior Circuit</div>
         </div>
       </div>
-
       <nav class="stage-nav" id="stageNav" aria-label="Circuit stage"></nav>
-
       <div class="topbar-actions">
-        <button class="topbar-btn" id="overrideToggle" aria-pressed="false">
-          Overrides
-          <span class="override-badge" id="overrideBadge" hidden>0</span>
-        </button>
+        <button class="topbar-btn" id="overrideToggle" aria-pressed="false">Overrides <span class="override-badge" id="overrideBadge" hidden>0</span></button>
         <button class="topbar-btn" id="exportBtn">Export</button>
       </div>
     </header>
 
     <aside class="override-drawer" id="overrideDrawer" hidden>
       <div class="drawer-header">
-        <div>
-          <h2>Manual Overrides</h2>
-          <p>Saved in this browser. Can be undone.</p>
-        </div>
-        <div class="drawer-header-actions">
-          <button class="btn-ghost btn-sm" id="undoOverrideButton">Undo</button>
-          <button class="btn-ghost btn-sm" id="redoOverrideButton">Redo</button>
-          <button class="btn-ghost btn-sm" id="exportOverridesButton">Export JSON</button>
-          <button class="btn-ghost btn-sm btn-danger" id="clearOverridesButton">Clear</button>
-        </div>
+        <div><h2>Manual Overrides</h2><p>Saved in this browser. Can be undone.</p></div>
+        <div class="drawer-header-actions"><button class="btn-ghost btn-sm" id="undoOverrideButton">Undo</button><button class="btn-ghost btn-sm" id="redoOverrideButton">Redo</button><button class="btn-ghost btn-sm" id="exportOverridesButton">Export JSON</button><button class="btn-ghost btn-sm btn-danger" id="clearOverridesButton">Clear</button></div>
       </div>
       <div class="drawer-form">
         <label class="form-field"><span>Athlete ID</span><input id="overrideAthleteId" type="text" placeholder="DiveMeets ID"></label>
         <label class="form-field"><span>Name</span><input id="overrideAthleteName" type="text" placeholder="Optional"></label>
-        <label class="form-field">
-          <span>Override type</span>
-          <select id="overrideType">
-            <option value="foreign">Foreign athlete</option>
-            <option value="dual">Dual citizen</option>
-            <option value="dualEffect">Dual affects results</option>
-            <option value="hps">HPS athlete</option>
-            <option value="ymca">YMCA event champion</option>
-            <option value="notAttending">Declared not attending</option>
-          </select>
-        </label>
-        <label class="form-field">
-          <span>State</span>
-          <select id="overrideValue"><option value="true">Turn on</option><option value="false">Turn off</option></select>
-        </label>
+        <label class="form-field"><span>Override type</span><select id="overrideType"><option value="foreign">Foreign athlete</option><option value="dual">Dual citizen</option><option value="dualEffect">Dual affects results</option><option value="hps">HPS athlete</option><option value="ymca">YMCA event champion</option><option value="notAttending">Declared not attending</option></select></label>
+        <label class="form-field"><span>State</span><select id="overrideValue"><option value="true">Turn on</option><option value="false">Turn off</option></select></label>
         <label class="form-field form-field-wide"><span>Note</span><input id="overrideNote" type="text" placeholder="Reason or source"></label>
         <button class="btn-primary" id="addOverrideButton">Add override</button>
       </div>
-      <div class="drawer-summary" id="overrideSummary"></div>
-      <div class="drawer-log" id="overrideLog"></div>
+      <div class="drawer-summary" id="overrideSummary"></div><div class="drawer-log" id="overrideLog"></div>
     </aside>
 
     <div class="app-body">
       <aside class="control-sidebar" aria-label="Filters">
         <div class="sidebar-section" id="filterFields"></div>
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Filter by flag</div>
-          <div class="filter-flags" id="filterFlags"></div>
-        </div>
+        <div class="sidebar-section"><div class="sidebar-section-title">Filter by flag</div><div class="filter-flags" id="filterFlags"></div></div>
       </aside>
       <main class="main-workspace">
         <div class="stage-content" id="stageContent">
@@ -104,6 +72,7 @@
     <script src="status-merge.js"></script>
     <script src="main.js"></script>
     <script src="dashboard-controls.js"></script>
+    <script src="qualification-impact.js"></script>
     <script src="qualification-workbench.js"></script>
   </body>
 </html>
