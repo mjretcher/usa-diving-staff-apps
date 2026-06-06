@@ -101,6 +101,15 @@ function stageFilterDefs() {
    INIT
    ════════════════════════════════════════════════════════════════ */
 function init() {
+  // Kick off async GitHub override sync — resolves in background,
+  // patches state.overrides when the fetch returns.
+  if (window.OverridesSync) {
+    window.OverridesSync.init().then(() => {
+      // Re-render once GitHub overrides are loaded
+      recompute();
+      renderAll();
+    });
+  }
   buildStageNav();
   buildViewTabs();
   recompute();
@@ -1130,6 +1139,9 @@ function buildAthleteRows(rows) {
    OVERRIDES
    ════════════════════════════════════════════════════════════════ */
 function loadOverrides() {
+  // Initial synchronous load from localStorage.
+  // OverridesSync.init() will overwrite state.overrides with the
+  // GitHub-synced version as soon as the async fetch completes.
   try {
     const p = JSON.parse(localStorage.getItem(OVERRIDE_KEY) || '[]');
     return Array.isArray(p) ? p : [];
@@ -1138,6 +1150,10 @@ function loadOverrides() {
 
 function saveOverrides() {
   localStorage.setItem(OVERRIDE_KEY, JSON.stringify(state.overrides));
+  // Async push to GitHub shared storage
+  if (window.OverridesSync) {
+    window.OverridesSync.save(state.overrides);
+  }
 }
 
 function addOverride(input) {

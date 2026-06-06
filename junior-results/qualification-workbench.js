@@ -22,6 +22,16 @@
   function isDisplacement(r){ return !!(r.nonDisplacing || r.bumpIn || r.openedSpot || r.spotShifted || r.declaredNotAttending || r.displacementSource || r.displacementBeneficiary); }
   function isOutcomeImpact(r){ return !!(isQualified(r) || isDisplacement(r) || r.eligibleRank || r.countingRank); }
   function isStatusOnly(r){ return !!r.statusOnly; }
+  // Actionable = requires a staff decision now (not just monitoring)
+  // Excludes dual-pending (monitor category) from the urgent count
+  function isActionable(r){
+    return !!(
+      (r.exhibitionLikelyForeign && !r.foreignDeclared) ||  // unconfirmed foreign
+      hasMismatch(r) ||                                      // data mismatch
+      (r.foreignDeclared && !r.nonDisplacing) ||             // foreign not yet marked non-displacing
+      r.declaredNotAttending                                  // attendance decision needed
+    );
+  }
 
   const STATUS_FILTERS = [
     ['','All statuses'],
@@ -88,7 +98,7 @@
       ['official','Official list'],
       ['overrides','Decisions']
     ];
-    $('viewTabs').innerHTML = tabs.map(([id,label]) => `<button class="tab-btn ${state.view===id?'active':''}" data-view="${id}">${esc(label)}${id==='review'?` <span class="tab-count">${effectiveResults.filter(needsReview).length}</span>`:''}</button>`).join('');
+    $('viewTabs').innerHTML = tabs.map(([id,label]) => `<button class="tab-btn ${state.view===id?'active':''}" data-view="${id}">${esc(label)}${id==='review'?` <span class="tab-count">${effectiveResults.filter(r=>isActionable(r)).length}</span>`:id==='displacement'?` <span class="tab-count">${effectiveResults.filter(isDisplacement).length}</span>`:''}</button>`).join('');
     $('viewTabs').querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
       state.view = btn.dataset.view;
       $('viewTabs').querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
@@ -174,13 +184,126 @@
   }
 
   function renderDisplacementBoard(){
-    const rows = baseRows().filter(isDisplacement);
-    $('rowCount').textContent = `${rows.length.toLocaleString()} impact rows`;
-    if (!rows.length) return empty('No displacement or shift rows match the current filters.');
-    const cols=['Type','Event','Athlete','Why this changed the list','Who moved / corrected result','Actions'];
-    const body=rows.map(r=>`<tr>${td(displacementType(r))}${td(eventCell(r))}${td(athleteSummary(r))}${td(displacementReason(r))}${td(changeExplanation(r))}${td(decisionActions(r))}</tr>`).join('');
-    $('tableWrap').innerHTML = workbenchToolbar() + tableHtml(cols,body);
+    const allRows = baseRows().filter(isDisplacement);
+    if (!allRows.length) return empty('No displacement rows match the current filters.');
+
+    // Group by eventId
+    const byEvent = new Map();
+    allRows.forEach(r => {
+      const key = r.eventId || r.eventName;
+      if (!byEvent.has(key)) byEvent.set(key, []);
+      byEvent.get(key).push(r);
+    });
+
+    // Count only cause rows (non-displacing sources) for the summary
+    const causeRows = allRows.filter(r => r.nonDisplacing || r.declaredNotAttending || r.openedSpot);
+    $('rowCount').textContent = `${causeRows.length} cause${causeRows.length!==1?'s':''} · ${byEvent.size} event${byEvent.size!==1?'s':''}`;
+
+    // Build event cards (Option C) + cause detail inside (Option A)
+    let html = workbenchToolbar();
+    html += '<div class="disp-event-list">';
+
+    for (const [eventKey, rows] of byEvent) {
+      const eventRef = rows[0];
+      const eventName = eventRef.eventName || eventKey;
+      const meetMeta = [eventRef.meetName, eventRef.zone ? 'Zone '+eventRef.zone : '', eventRef.ewc].filter(Boolean).join(' · ');
+
+      // Causes: athletes who are non-displacing / DNA
+      const causes = rows.filter(r => r.nonDisplacing || r.declaredNotAttending);
+      // Beneficiaries: athletes who directly moved up because of a cause in this event
+      const beneficiaries = rows.filter(r => r.bumpIn || (r.spotShifted && r.bumpedBy?.length));
+      // Net qualification change
+      const netGain = beneficiaries.length;
+      const causeCount = causes.length;
+
+      // Collapsed summary line
+      const causeTypes = [...new Set(causes.map(r =>
+        r.nonDisplacing ? (r.foreignDeclared ? 'Foreign' : r.hps ? 'HPS' : 'Non-displacing') :
+        r.declaredNotAttending ? 'Not attending' : 'Impact'
+      ))].join(', ');
+
+      const netLabel = netGain > 0
+        ? `<span class="disp-net disp-net-gain">+${netGain} qualifier${netGain!==1?'s':''} shifted</span>`
+        : causeCount > 0
+          ? `<span class="disp-net disp-net-neutral">List reordered</span>`
+          : `<span class="disp-net disp-net-neutral">No net change</span>`;
+
+      const cardId = 'disp-' + CSS.escape(eventKey.replace(/[^a-z0-9]/gi,'_'));
+
+      html += `
+      <div class="disp-card" id="${escAttr(cardId)}">
+        <button class="disp-card-header" data-disp-toggle="${escAttr(cardId)}" type="button">
+          <div class="disp-card-left">
+            <span class="disp-card-event">${esc(eventName)}</span>
+            <span class="disp-card-meta">${esc(meetMeta)}</span>
+          </div>
+          <div class="disp-card-right">
+            <span class="disp-cause-summary">${esc(causeTypes)} (${causeCount})</span>
+            ${netLabel}
+            <span class="disp-chevron">▸</span>
+          </div>
+        </button>
+        <div class="disp-card-body" hidden>`;
+
+      // Option A: show ONLY cause rows + direct beneficiaries (skip middle-of-pack shifts)
+      const focusRows = [...causes, ...beneficiaries];
+
+      if (focusRows.length === 0) {
+        html += `<div class="disp-empty">No direct cause/beneficiary rows found for this event.</div>`;
+      } else {
+        html += `<table class="disp-table">
+          <thead><tr>
+            <th>Role</th><th>Athlete</th><th>Status / Action</th><th>Effect</th><th>Decision</th>
+          </tr></thead><tbody>`;
+        focusRows.forEach(r => {
+          const isCause = causes.includes(r);
+          const role = isCause
+            ? (r.nonDisplacing ? displacementType(r) : pill('Not attending','decline'))
+            : `<span class="disp-role-benefit">${pill('Moved up','bump')}</span>`;
+          const effect = isCause
+            ? `<span class="disp-effect">${r.openedFor?.length ? 'Opened spot for ' + r.openedFor.map(x=>x.athlete).join(', ') : 'Opens replacement spot'}</span>`
+            : `<span class="disp-effect">Moved to rank ${r.attendingEligibleRank || r.eligibleRank || '—'}${r.bumpedBy?.length ? ' (was displaced by ' + r.bumpedBy.map(x=>x.athlete).join(', ') + ')' : ''}</span>`;
+          html += `<tr class="${isCause?'disp-row-cause':'disp-row-benefit'}">
+            <td>${role}</td>
+            <td>${athleteSummary(r)}</td>
+            <td>${statusBadge(r)}</td>
+            <td>${effect}</td>
+            <td>${decisionActions(r)}</td>
+          </tr>`;
+        });
+
+        // If there are MORE rows that were just rank-shifted (not cause/benefit), show a suppressed count
+        const silentShifts = rows.filter(r => !causes.includes(r) && !beneficiaries.includes(r) && r.spotShifted);
+        if (silentShifts.length > 0) {
+          html += `<tr class="disp-row-silent">
+            <td colspan="5"><span class="disp-silent-note">
+              + ${silentShifts.length} athlete${silentShifts.length!==1?'s':''} had rank positions updated automatically — no action needed.
+            </span></td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+      }
+
+      html += `</div></div>`;
+    }
+
+    html += '</div>';
+    $('tableWrap').innerHTML = html;
     wireWorkbench();
+
+    // Wire card toggles
+    document.querySelectorAll('[data-disp-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const card = document.getElementById(btn.dataset.dispToggle);
+        if (!card) return;
+        const body = card.querySelector('.disp-card-body');
+        const chevron = btn.querySelector('.disp-chevron');
+        const open = body.hidden;
+        body.hidden = !open;
+        if (chevron) chevron.textContent = open ? '▾' : '▸';
+        card.classList.toggle('disp-card-open', open);
+      });
+    });
   }
 
   function workbenchToolbar(){
