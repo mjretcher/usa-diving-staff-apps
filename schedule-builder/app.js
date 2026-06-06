@@ -1573,36 +1573,33 @@
           <img src="assets/usa-diving-horizontal-color.png" alt="USA Diving" />
           <div>
             <h1>Schedule Builder</h1>
-            <p>${timedSessions.length} sessions | ${warnings.length} schedule health item${warnings.length === 1 ? "" : "s"}</p>
+            <p>${escapeHtml(state.meet.name||'New Schedule')}</p>
           </div>
         </div>
+        ${renderProgressSteps(timedSessions, warnings)}
         <div class="header-actions">
           <button class="text-button" onclick="actions.newSchedule()">New</button>
-          <button class="text-button" onclick="actions.openEntryManager()">Event Entries</button>
-          <button class="text-button danger-soft" onclick="actions.clearEntryDefaults()">Clear Entries</button>
-          <button class="text-button" onclick="actions.openScheduleLibrary()">Schedule Library</button>
-          <button class="text-button" onclick="actions.shareSchedulePackage()">Share Schedule</button>
-          <button class="text-button" onclick="document.getElementById('packageLoader').click()">Open Shared Schedule</button>
+          <button class="text-button" onclick="actions.openEntryManager()">Entries</button>
           <button class="text-button" onclick="actions.openResetWorkspace()">Reset</button>
-          <button class="primary-button compact-primary" onclick="actions.releaseCurrentSchedule()">Release</button>
-          <button class="text-button" onclick="actions.exportJson()">Export JSON</button>
-          <button class="text-button" onclick="document.getElementById('jsonLoader').click()">Load JSON</button>
           <input class="hidden" id="jsonLoader" type="file" accept="application/json" onchange="actions.loadJson(this.files[0])" />
           <input class="hidden" id="packageLoader" type="file" accept=".usadiving-schedule,.schedule,.json,application/json" onchange="actions.openSharedSchedulePackage(this.files[0]); this.value=''" />
+          <button class="primary-button compact-primary" onclick="actions.releaseCurrentSchedule()">Release</button>
         </div>
       </header>
       <main class="app-main">
-        <aside class="left-rail">
-          ${renderMeetSetup()}
-          ${renderCatalog()}
-          ${renderProfile()}
-          ${renderWarnings(warnings)}
-        </aside>
+        <div class="sb-left-rail">
+          ${renderSidebarNav()}
+          <div class="sb-tab-body" id="sbTabBody">
+            ${renderSidebarTabContent(timedSessions, warnings)}
+          </div>
+        </div>
         <section class="workspace">
-          ${renderCommandCenter(timedSessions, warnings)}
-          ${renderBuildChecklist(timedSessions, warnings)}
-          ${renderScheduleSetupSummary(timedSessions, warnings)}
-          ${renderBoard(timedSessions, warnings)}
+          <div class="sb-board-wrap">
+            ${renderCommandCenter(timedSessions, warnings)}
+            ${renderBuildChecklist(timedSessions, warnings)}
+            ${renderScheduleSetupSummary(timedSessions, warnings)}
+            ${renderBoard(timedSessions, warnings)}
+          </div>
           ${renderPreview(timedSessions)}
         </section>
       </main>
@@ -1758,6 +1755,221 @@
           </div>
         </section>
       </div>`;
+  }
+
+
+  // ═══════════════════════════════════════════════════
+  // SIDEBAR — tabbed navigation + per-tab content
+  // ═══════════════════════════════════════════════════
+  let _sbActiveTab = 'setup';
+
+  function renderProgressSteps(timedSessions, warnings) {
+    const activeWarnings = (warnings||[]).filter(w => !isWarningAcknowledged(w));
+    const hasEvents  = (state.profile.events||[]).length > 0;
+    const hasSessions = (state.sessions||[]).filter(s=>!s.autoTrainingForDayId).length > 0;
+    const hasEntries = (state.sessions||[]).some(s=>(s.events||[]).some(e=>Number(e.numberOfDivers||0)>0));
+    const isReleased = state.meet.publishStatus === 'published';
+    const steps = [
+      { label:'Setup',   done: !!(state.meet.name && state.meet.days.length) },
+      { label:'Entries', done: hasEntries },
+      { label:'Build',   done: hasSessions },
+      { label:'Release', done: isReleased },
+    ];
+    let activeDone = false;
+    return `<div class="sb-progress">
+      ${steps.map((st,i)=>{
+        const isActive = !st.done && !activeDone ? (activeDone=true,true) : false;
+        const cls = st.done ? 'done' : isActive ? 'active' : '';
+        return `${i>0?'<div class="sb-prog-sep"></div>':''}
+        <div class="sb-prog-step ${cls}"><div class="sb-prog-dot"></div>${escapeHtml(st.label)}</div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function renderSidebarNav() {
+    const timedSessions = allTimedSessions();
+    const warnings = validateWarnings(timedSessions);
+    const activeWarnings = warnings.filter(w => !isWarningAcknowledged(w));
+    const tabs = [
+      { id:'setup',   icon:'⚙',  label:'Meet setup'       },
+      { id:'catalog', icon:'☰',  label:'Event catalog'    },
+      { id:'timing',  icon:'◷',  label:'Timing profile'   },
+      { id:'health',  icon:'⚡',  label:'Schedule health', badge: activeWarnings.length },
+      { id:'library', icon:'⊟',  label:'Library'          },
+    ];
+    return `<div class="sb-tab-nav">
+      ${tabs.map(t=>`
+        <button class="sb-tab-btn${_sbActiveTab===t.id?' active':''}"
+          onclick="actions.switchSidebarTab('${t.id}')" type="button">
+          <span style="font-size:13px;flex-shrink:0">${t.icon}</span>
+          ${escapeHtml(t.label)}
+          ${t.badge ? `<span class="sb-tab-badge">${t.badge}</span>` : ''}
+        </button>`).join('')}
+    </div>`;
+  }
+
+  function renderSidebarTabContent(timedSessions, warnings) {
+    switch(_sbActiveTab) {
+      case 'catalog': return renderSidebarCatalog();
+      case 'timing':  return renderSidebarTiming();
+      case 'health':  return renderSidebarHealth(warnings);
+      case 'library': return renderSidebarLibrary();
+      default:        return renderSidebarSetup();
+    }
+  }
+
+  function renderSidebarSetup() {
+    const profileEntries = Object.entries(meetProfiles||{});
+    const publishOpts = ['draft','published','archived'];
+    return `
+      <div class="sb-field">
+        <span class="sb-field-label">Meet name</span>
+        <input value="${escapeHtml(state.meet.name||'')}" onchange="actions.setMeet('name',this.value)">
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Venue</span>
+        <input value="${escapeHtml(state.meet.venue||'')}" onchange="actions.setMeet('venue',this.value)">
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Timezone</span>
+        <select onchange="actions.setMeet('timezone',this.value)">
+          ${timeZoneSelectOptions()}
+        </select>
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Meet type</span>
+        <select onchange="actions.setMeetType(this.value)">
+          ${profileEntries.map(([k,v])=>`<option value="${escapeHtml(k)}" ${state.meet.meetType===k?'selected':''}>${escapeHtml(v.label||k)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Publish status</span>
+        <select onchange="actions.setMeet('publishStatus',this.value)">
+          ${publishOpts.map(o=>`<option value="${o}" ${state.meet.publishStatus===o?'selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Competition days</span>
+        ${state.meet.days.map(day=>`
+          <div class="sb-day-chip">
+            <span>${escapeHtml(shortDayName?shortDayName(day):(day.date||'Day'))}</span>
+            <span class="sb-day-chip-date">${escapeHtml(day.date||'')}</span>
+          </div>`).join('')}
+        <button onclick="actions.addDay()" type="button" style="width:100%;margin-top:4px;height:24px;border-radius:var(--sb-r);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:var(--sb-nav-ink);font-size:10.5px;cursor:pointer">+ Add day</button>
+      </div>
+    `;
+  }
+
+  function renderSidebarCatalog() {
+    const filter = (state.catalogFilter||'').toLowerCase();
+    const allEvents = state.profile.events||[];
+    const filtered = filter ? allEvents.filter(e=>
+      eventDisplayName(e).toLowerCase().includes(filter) ||
+      (e.style||'').toLowerCase().includes(filter) ||
+      (e.apparatus||'').toLowerCase().includes(filter)
+    ) : allEvents;
+    const allowedRounds = state.profile.allowedRounds||[];
+
+    return `
+      <div class="sb-field" style="margin-bottom:8px">
+        <input placeholder="Search events…" value="${escapeHtml(state.catalogFilter||'')}"
+          oninput="actions.sbSetCatalogFilter(this.value)">
+      </div>
+      ${filtered.length===0 ? '<div style="font-size:11px;color:var(--sb-nav-muted);text-align:center;padding:16px">No events match</div>' :
+        filtered.map(ev => {
+          const rounds = (ev.allowedRounds||[]).filter(r=>allowedRounds.includes(r));
+          return `<div class="sb-cat-item">
+            <div class="sb-cat-name">${escapeHtml(eventDisplayName(ev))}</div>
+            <div class="sb-cat-sub">${escapeHtml(ev.style||'')}${ev.apparatus?' · '+escapeHtml(apparatusDisplay(ev.apparatus)):''}</div>
+            <div class="sb-cat-pills">
+              ${rounds.map(r=>`
+                <button class="sb-round-pill" type="button"
+                  onclick="actions.addCatalogEventDirect('${escapeHtml(ev.id)}','${escapeHtml(r)}')"
+                  title="Add ${escapeHtml(eventDisplayName(ev))} ${escapeHtml(r)} to schedule">
+                  ${escapeHtml(r)}
+                </button>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+    `;
+  }
+
+  function renderSidebarTiming() {
+    const td = state.profile.timingDefaults||{};
+    const nf = (label,key,step=1)=>`
+      <div>
+        <span class="sb-field-label">${escapeHtml(label)}</span>
+        <input type="number" min="0" step="${step}" value="${Number(td[key]||0)}"
+          onchange="actions.setTimingDefault('${key}',this.value)">
+      </div>`;
+    return `
+      <div class="sb-field-row sb-field">
+        ${nf('Sec / dive','secondsPerDive',1)}
+        ${nf('Warmup min','warmupMinutes',5)}
+      </div>
+      <div class="sb-field-row sb-field">
+        ${nf('Buffer min','transitionBufferMinutes',1)}
+        ${nf('Time grid','roundingIncrementMinutes',1)}
+      </div>
+      <div class="sb-field-row sb-field">
+        ${nf('Awards min','awardsMinutes',1)}
+        ${nf('Intros min','introductionsMinutes',1)}
+      </div>
+      <div class="sb-field-row sb-field">
+        ${nf('Panel chg min','panelChangeMinutes',0.5)}
+        ${nf('Sec/dive lock','secondsPerDive',1)}
+      </div>
+      <div class="sb-field">
+        <span class="sb-field-label">Finals transition</span>
+        <select onchange="actions.setTimingDefault('finalsTransitionMode',this.value)">
+          <option value="openTransition" ${(td.finalsTransitionMode||'')===('openTransition')?'selected':''}>Open transition</option>
+          <option value="noTransition" ${(td.finalsTransitionMode||'')==='noTransition'?'selected':''}>No transition</option>
+        </select>
+      </div>
+    `;
+  }
+
+  function renderSidebarHealth(warnings) {
+    const active = (warnings||[]).filter(w=>!isWarningAcknowledged(w));
+    if (!active.length) return `<div style="padding:20px 8px;text-align:center;font-size:11px;color:var(--sb-nav-muted)">✓ No schedule issues</div>`;
+    return active.map(w=>`
+      <div class="sb-health-item ${w.severity==='error'?'err':w.severity==='info'?'info':'warn'}">
+        <div class="sb-health-title">${escapeHtml(w.message||w.title||'')}</div>
+        ${w.detail||w.description?`<div class="sb-health-sub">${escapeHtml(w.detail||w.description)}</div>`:''}
+      </div>`).join('');
+  }
+
+  function renderSidebarLibrary() {
+    const library = savedScheduleLibrary();
+    const userItems = library.filter(i=>!i.builtIn);
+    const builtIn   = library.filter(i=> i.builtIn);
+    const snapshotName = scheduleSnapshotName ? scheduleSnapshotName() : (state.meet.name||'My Schedule');
+    const saveRow = `
+      <div style="margin-bottom:8px">
+        <input id="sbLibSaveName" value="${escapeHtml(snapshotName)}" style="width:100%;margin-bottom:5px">
+        <button type="button" onclick="actions.saveNamedScheduleFromSidebar()"
+          style="width:100%;height:26px;border-radius:var(--sb-r);background:var(--sb-sky);color:#0a1840;border:none;font-size:11px;font-weight:700;cursor:pointer">
+          ↑ Save to library
+        </button>
+      </div>`;
+    const renderItem = (item)=>`
+      <div class="sb-lib-item ${state.currentLibraryId===item.id?'sb-lib-active':''}">
+        <div class="sb-lib-name">${escapeHtml(item.name||'Untitled')}</div>
+        <div class="sb-lib-sub">${item.builtIn?'Built-in':item.updatedAt?new Date(item.updatedAt).toLocaleDateString():''} · ${((item.schedule?.sessions)||[]).length} sessions</div>
+        <div style="display:flex;gap:3px;margin-top:4px">
+          <button onclick="actions.openSavedSchedule('${item.id}')" type="button"
+            style="height:20px;padding:0 8px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--sb-nav-ink);font-size:9.5px;cursor:pointer">
+            Open
+          </button>
+          ${!item.builtIn?`<button onclick="actions.deleteLibraryItem('${item.id}')" type="button"
+            style="height:20px;padding:0 8px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:transparent;color:var(--sb-nav-muted);font-size:9.5px;cursor:pointer">
+            Delete
+          </button>`:''}
+        </div>
+      </div>`;
+    return saveRow
+      + (userItems.length ? userItems.map(renderItem).join('') : '<div style="font-size:10.5px;color:var(--sb-nav-muted);text-align:center;padding:10px 0">No saved schedules yet</div>')
+      + (builtIn.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sb-nav-muted);margin:10px 0 5px">Templates</div>`+builtIn.map(renderItem).join('') : '');
   }
 
   function renderMeetSetup() {
