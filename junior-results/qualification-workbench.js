@@ -97,6 +97,7 @@
       ['athletes','Athletes'],
       ['roster','Flag Roster'],
       ['official','Official list'],
+      ['roster','Flag Roster'],
       ['overrides','Decisions']
     ];
     $('viewTabs').innerHTML = tabs.map(([id,label]) => `<button class="tab-btn ${state.view===id?'active':''}" data-view="${id}">${esc(label)}${id==='review'?` <span class="tab-count">${effectiveResults.filter(r=>isActionable(r)).length}</span>`:id==='displacement'?` <span class="tab-count">${effectiveResults.filter(isDisplacement).length}</span>`:''}</button>`).join('');
@@ -521,6 +522,75 @@
         });
       });
     }
+  }
+
+
+  function renderFlagRoster() {
+    const sd = window.USAD_JUNIOR_ATHLETE_STATUS;
+    if (!sd) return empty('Athlete status file not loaded.');
+    const records = sd.records || [], headers = sd.headers || [];
+    const gf = (rec, key) => Array.isArray(rec) ? rec[headers.indexOf(key)] : rec[key];
+    const gname = r => gf(r,'name') || gf(r,'athlete') || '—';
+    const gdmid = r => gf(r,'diveMeetsId') || '';
+    const gusaid = r => gf(r,'usaDivingId') || '';
+    const gapproval = r => gf(r,'approval') || '';
+    const greview = r => gf(r,'review') || '';
+
+    // Cross-ref results
+    const byId = new Map();
+    effectiveResults.forEach(r => {
+      const k = r.diveMeetsId;
+      if (!byId.has(k)) byId.set(k,[]);
+      byId.get(k).push(r);
+    });
+    function resultsSummary(rec) {
+      const rows = byId.get(gdmid(rec)) || [];
+      if (!rows.length) return '<span class="roster-no-results">Not in loaded results</span>';
+      const stages = [...new Set(rows.map(r=>r.stage))];
+      const zones = [...new Set(rows.filter(r=>r.zone).map(r=>'Zone '+r.zone))];
+      return `<span class="roster-stages">${stages.join(' · ')}</span>${zones.length?'<br><span class="roster-zones">'+zones.join(', ')+'</span>':''}`;
+    }
+
+    const cats = [
+      { label:'Foreign Athletes', icon:'🌐', test: r=>gf(r,'foreignDeclared'), note:'Non-displacing · competes at all stages as ghost' },
+      { label:'HPS Athletes', icon:'🏅', test: r=>gf(r,'hps'), note:'Pre-qualified to Nationals · non-displacing' },
+      { label:'YMCA Champions', icon:'🏆', test: r=>gf(r,'ymca'), note:'Non-displacing at Regionals · E/W/C qualifier from Zones' },
+      { label:'Dual Citizens — Declared', icon:'🔀', test: r=>gf(r,'dualDeclared') && !gf(r,'dualOtherCountry'), note:'Pending staff decision on whether affects results' },
+      { label:'Dual — Affects Results', icon:'⚠️', test: r=>gf(r,'dualOtherCountry'), note:'Staff approved: competed for another federation · non-displacing' },
+    ];
+
+    let html = `<div class="roster-bar"><input class="roster-search-input" id="rosterQ" type="search" placeholder="Search by name or ID…"></div>`;
+    cats.forEach(cat => {
+      const members = records.filter(cat.test);
+      if (!members.length) return;
+      html += `<div class="roster-cat">
+        <div class="roster-cat-hd">
+          <span class="rc-icon">${cat.icon}</span>
+          <span class="rc-lbl">${esc(cat.label)}</span>
+          <span class="rc-count">${members.length}</span>
+          <span class="rc-note">${esc(cat.note)}</span>
+        </div>
+        <table class="roster-tbl"><thead><tr>
+          <th>Athlete</th><th>DiveMeets</th><th>USA Diving ID</th><th>Approval / Note</th><th>In loaded results</th>
+        </tr></thead><tbody>${members.map(rec=>`
+          <tr class="rr" data-q="${escAttr((gname(rec)+' '+gdmid(rec)).toLowerCase())}">
+            <td><span class="athlete-name">${esc(gname(rec))}</span></td>
+            <td class="mono athlete-id">${gdmid(rec)||'<span class="roster-missing">No ID</span>'}</td>
+            <td class="mono">${gusaid(rec)||'—'}</td>
+            <td>${gapproval(rec)?`<span class="rc-approval">${esc(gapproval(rec))}</span>`:''}${greview(rec)?`<div class="wb-note">${esc(greview(rec))}</div>`:''}</td>
+            <td>${resultsSummary(rec)}</td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>`;
+    });
+
+    $('rowCount').textContent = `${records.length} athletes on file`;
+    $('tableWrap').innerHTML = html;
+    const q = document.getElementById('rosterQ');
+    if (q) q.addEventListener('input', () => {
+      const v = q.value.toLowerCase();
+      document.querySelectorAll('.rr').forEach(tr => tr.style.display = !v||tr.dataset.q.includes(v)?'':'none');
+    });
   }
 
   const stageNav = $('stageNav');

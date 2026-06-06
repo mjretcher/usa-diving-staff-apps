@@ -213,65 +213,54 @@ function populateFilters() {
 
 function buildFlagChips() {
   const wrap = $('filterFlags');
-  // Always render all flags — counts show how many match in current stage,
-  // but the filter buttons are always visible regardless.
   function renderChips() {
-    const stageRows = effectiveResults.filter(r => stageMatch(r, state.stage) || r.stage === state.stage);
+    const sr = effectiveResults.filter(r => r.stage === state.stage);
+    const rr = (window.USAD_JUNIOR_ATHLETE_STATUS?.records) || [];
+    const rh = (window.USAD_JUNIOR_ATHLETE_STATUS?.headers) || [];
+    function rosterCount(key) {
+      return rr.filter(rec => Array.isArray(rec) ? rec[rh.indexOf(key)] : rec[key]).length;
+    }
     const counts = {};
     FLAG_DEFS.forEach(f => {
-      counts[f.key] = stageRows.filter(r => {
-        if (f.key === 'review') return r.reviewFlags?.length;
-        return Boolean(r[f.key]);
-      }).length;
+      const fromResults = sr.filter(r => f.key === 'review' ? r.reviewFlags?.length : Boolean(r[f.key])).length;
+      // For HPS/foreign: show master roster count, not just results count
+      const rosterKeys = {foreignDeclared:'foreignDeclared', hps:'hps', dualDeclared:'dualDeclared', ymca:'ymca'};
+      const rc = rosterKeys[f.key] ? rosterCount(rosterKeys[f.key]) : 0;
+      counts[f.key] = { results: fromResults, roster: rc };
     });
 
-    // Mode toggle — minimal, no dropdown
-    const modeHtml = `<div class="flag-mode-toggle">
-      <button class="flag-mode-btn ${state.flagMode === 'any' ? 'active' : ''}" data-mode="any">Any</button>
-      <button class="flag-mode-btn ${state.flagMode === 'all' ? 'active' : ''}" data-mode="all">All</button>
-      ${state.flags.size > 0 ? `<button class="flag-clear-btn" id="flagClearBtn">Clear</button>` : ''}
+    const modeBar = `<div class="flag-mode-bar">
+      <span class="flag-mode-lbl">Match</span>
+      <div class="flag-mode-pills">
+        <button class="fmp ${state.flagMode==='any'?'on':''}" data-mode="any">Any</button>
+        <button class="fmp ${state.flagMode==='all'?'on':''}" data-mode="all">All</button>
+      </div>
+      ${state.flags.size?'<button class="flag-clear-all" id="flagClearAll">Clear</button>':''}
     </div>`;
 
-    const chipsHtml = FLAG_DEFS.map(f => {
-      const active = state.flags.has(f.key);
-      const count = counts[f.key];
-      return `<button class="flag-toggle ${active ? 'active' : ''} ${count === 0 ? 'zero' : ''}"
-        data-flag="${escAttr(f.key)}" type="button">
-        <span class="flag-toggle-label">${esc(f.label)}</span>
-        ${count > 0 ? `<span class="flag-toggle-count">${count}</span>` : ''}
+    const chips = FLAG_DEFS.map(f => {
+      const on = state.flags.has(f.key);
+      const {results: n, roster: r} = counts[f.key];
+      const displayN = r > 0 ? r : n;
+      return `<button class="ftog ${on?'on':''} ${n===0&&r===0?'zero':''}" data-flag="${escAttr(f.key)}" type="button">
+        <span class="ftog-lbl">${esc(f.label)}</span>
+        <span class="ftog-n">${displayN||''}</span>
       </button>`;
     }).join('');
 
-    wrap.innerHTML = modeHtml + `<div class="flag-toggle-grid">${chipsHtml}</div>`;
+    wrap.innerHTML = modeBar + `<div class="ftog-grid">${chips}</div>`;
 
-    // Wire mode buttons
-    wrap.querySelectorAll('.flag-mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        state.flagMode = btn.dataset.mode;
-        renderAll();
-      });
-    });
-    // Wire clear
-    const clearBtn = document.getElementById('flagClearBtn');
-    if (clearBtn) clearBtn.addEventListener('click', () => {
-      state.flags.clear();
+    wrap.querySelectorAll('.fmp').forEach(b => b.addEventListener('click', () => { state.flagMode = b.dataset.mode; renderAll(); }));
+    const clr = document.getElementById('flagClearAll');
+    if (clr) clr.addEventListener('click', () => { state.flags.clear(); renderAll(); });
+    wrap.querySelectorAll('.ftog').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.flag;
+      state.flags.has(k) ? state.flags.delete(k) : state.flags.add(k);
+      state.selectedEventId = '';
       renderAll();
-    });
-    // Wire flag toggles
-    wrap.querySelectorAll('.flag-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const key = btn.dataset.flag;
-        if (state.flags.has(key)) state.flags.delete(key);
-        else state.flags.add(key);
-        state.selectedEventId = '';
-        renderAll();
-      });
-    });
+    }));
   }
-
   renderChips();
-  // Re-render chips when stage changes (counts update)
-  // We hook into renderAll via a proxy below
   wrap._renderChips = renderChips;
 }
 
@@ -417,6 +406,7 @@ function applyOverrides(row, lookup) {
   if (r.foreignDeclared)  ndReasons.push('Foreign athlete');
   if (r.webpointNonUsEffective && !r.foreignDeclared) ndReasons.push('Webpoint non-US');
   if (r.dualOtherCountry) ndReasons.push('Dual — competed for another federation');
+  r.ghostAdvances = Boolean(r.foreignDeclared || r.webpointNonUsEffective || r.hps || r.dualOtherCountry);
   // Ghost advancement: foreign/HPS athletes advance through all stages
   // as non-displacing participants — they compete but don't consume spots.
   // They appear in next-stage results with a ghost badge.
@@ -1328,7 +1318,9 @@ function statusBadge(r) {
   else if (s.includes('replacement'))              { cls = 'status-replacement';    label = 'Replacement'; }
   else if (s.includes('YMCA'))                     { cls = 'status-qualifier';      label = 'YMCA champion'; }
   else if (s.includes('Prequalified'))             { cls = 'status-qualifier';      label = 'Prequalified'; }
-  else if (s.includes('Non-displacing'))           { cls = 'status-non-displacing'; label = 'Non-displacing'; }
+  else if (s.includes('foreign (ghost)'))           { cls = 'status-ghost'; label = '👻 Foreign ghost'; }
+  else if (s.includes('HPS (ghost)'))               { cls = 'status-ghost'; label = '👻 HPS ghost'; }
+  else if (s.includes('Non-displacing'))             { cls = 'status-non-displacing'; label = 'Non-displacing'; }
   else if (s.includes('Declared not'))             { cls = 'status-decline';        label = 'Not attending'; }
   else if (s.includes('Does not') || s.includes('Non-qualifying')) { cls = 'status-out'; label = 'Does not advance'; }
   else if (s.includes('Not eligible'))             { cls = 'status-out';            label = 'Not eligible'; }
