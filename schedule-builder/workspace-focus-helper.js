@@ -14,6 +14,8 @@
   }
 
   function installStyles() {
+    // Skip if new sidebar design is active
+    if (document.querySelector('.sb-left-rail')) return;
     if (document.getElementById("scheduleBuilderFocusWorkspaceStyles")) return;
     const style = document.createElement("style");
     style.id = "scheduleBuilderFocusWorkspaceStyles";

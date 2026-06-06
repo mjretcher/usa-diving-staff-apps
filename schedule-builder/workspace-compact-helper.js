@@ -2,6 +2,8 @@
   "use strict";
 
   function installCompactWorkspaceStyles() {
+    // Skip if new sidebar design is active — sb-design.css handles layout
+    if (document.querySelector('.sb-left-rail')) return;
     if (document.getElementById("scheduleBuilderCompactWorkspaceStyles")) return;
     const style = document.createElement("style");
     style.id = "scheduleBuilderCompactWorkspaceStyles";

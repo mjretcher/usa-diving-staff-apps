@@ -221,16 +221,19 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
   display: flex; align-items: center; gap: 7px;
   height: 33px; padding: 0 9px;
   border-radius: var(--sb-r); border: none;
-  background: transparent; color: var(--sb-nav-muted);
+  background: transparent; color: rgba(212,220,245,.65);
   font-size: 11.5px; cursor: pointer; width: 100%; text-align: left;
-  font-family: var(--sb-f-ui); transition: all .12s;
+  font-family: var(--sb-f-ui,-apple-system,sans-serif); transition: all .12s;
+  white-space: nowrap; overflow: hidden;
+  line-height: 1; letter-spacing: .01em;
 }
 .sb-tab-btn i { font-size: 14px; flex-shrink: 0; }
 .sb-tab-btn:hover { background: var(--sb-nav-hover); color: var(--sb-nav-ink); }
 .sb-tab-btn.active {
-  background: rgba(255,255,255,.07);
-  color: var(--sb-sky); font-weight: 600;
+  background: rgba(255,255,255,.09);
+  color: #8fc3ea; font-weight: 600;
 }
+.sb-tab-btn:hover { background: rgba(255,255,255,.06); color: rgba(212,220,245,.9); }
 .sb-tab-badge {
   margin-left: auto; height: 15px; min-width: 15px; padding: 0 4px;
   border-radius: 8px; background: var(--sb-red); color: #fff;

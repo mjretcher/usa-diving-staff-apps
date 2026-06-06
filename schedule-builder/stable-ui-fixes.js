@@ -10,7 +10,7 @@
     const style = document.createElement("style");
     style.id = "stableUiFixStyles";
     style.textContent = `
-      .app-header { min-height: 72px !important; height: auto !important; flex-wrap: wrap !important; gap: 8px 14px !important; padding: 8px 18px !important; align-items: center !important; }
+      .app-header { min-height: 48px !important; height: 48px !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 14px !important; align-items: center !important; }
       .brand-lockup { flex: 1 1 300px !important; min-width: 260px !important; }
       .brand-lockup h1, .brand-lockup p { color: #FFFFFF !important; }
       .header-actions { display: flex !important; flex: 2 1 760px !important; flex-wrap: wrap !important; gap: 6px !important; justify-content: flex-end !important; }
