@@ -8,7 +8,7 @@
 
   Guardrails:
   - dualOtherCountry is activated only by staff approval.
-  - status-only rows are visible in the Zones dashboard but never consume spots.
+  - unmatched status records are stored for review, not injected into event tables.
 */
 (function mergeJuniorAthleteStatus() {
   const data = window.JUNIOR_RESULTS_DATA;
@@ -46,7 +46,6 @@
     record.dualOtherCountry = Boolean(record.dualOtherCountry);
     record.hps = Boolean(record.hps);
     record.ymca = Boolean(record.ymca);
-
     const dm = normalizeId(record.diveMeetsId);
     const usad = normalizeId(record.usaDivingId);
     const nm = normalizeName(record.name);
@@ -95,91 +94,56 @@
     ];
   }
 
-  function asArray(value) {
-    return Array.isArray(value) ? value.slice() : [];
-  }
-
+  function asArray(value) { return Array.isArray(value) ? value.slice() : []; }
   function appendUnique(items, value) {
     const text = String(value || '').trim();
     if (text && !items.includes(text)) items.push(text);
   }
 
   function applyRecordToRow(row, record) {
-    row.statusRecord = {
-      approval: record.approval || '',
-      review: record.review || '',
-      source: 'junior-athlete-status',
-    };
-
+    row.statusRecord = { approval: record.approval || '', review: record.review || '', source: 'junior-athlete-status' };
     row.foreignDeclared = Boolean(row.foreignDeclared || record.foreignDeclared);
     row.dualDeclared = Boolean(row.dualDeclared || record.dualDeclared);
     row.hps = Boolean(row.hps || record.hps);
     row.ymca = Boolean(row.ymca || record.ymca);
-
     const explicitDataApproval = row.dualOtherCountryApproved === true || row.staffDualApproval === 'Approved - affects results';
     const staffApprovedDualEffect = record.dualOtherCountry === true && record.approval === 'Approved - affects results';
     row.dualOtherCountry = Boolean(explicitDataApproval || staffApprovedDualEffect);
-    row.dualSportNationalityStatus = record.dualDeclared
-      ? (record.approval || 'Pending staff approval')
-      : (row.dualSportNationalityStatus || 'No declaration');
-
+    row.dualSportNationalityStatus = record.dualDeclared ? (record.approval || 'Pending staff approval') : (row.dualSportNationalityStatus || 'No declaration');
     return row;
   }
 
-  function makeStatusRow(record, idx) {
+  function makeUnmatchedStatusRecord(record, idx) {
     const reviews = [];
     const notes = [];
     if (record.review) appendUnique(notes, record.review);
     if (record.dualDeclared && !record.dualOtherCountry) appendUnique(reviews, 'Dual citizen requires staff approval before affecting qualification');
     if (record.approval && record.approval !== 'N/A' && !String(record.approval).startsWith('Approved')) appendUnique(reviews, record.approval);
-    if (record.foreignDeclared) appendUnique(notes, 'Matched foreign athlete declaration');
-    if (record.hps) appendUnique(notes, 'Matched HPS list');
-    if (record.ymca) appendUnique(notes, 'Matched YMCA champion list');
-
-    const athlete = record.name || record.diveMeetsId || `Status record ${idx + 1}`;
-    const eventName = 'Athlete Status / Declarations & Prequalifications';
-    const row = {
-      id: `Status|Zones|${record._statusKey || idx}`,
-      stage: 'Zones',
-      meetName: 'Athlete Status',
-      region: null,
-      zone: '',
-      ewc: '',
-      eventName,
-      eventId: `Status|Zones|${eventName}`,
-      eventKey: eventName,
-      eventCategory: 'Athlete Status',
-      qualifyingEvent: false,
-      ageGroup: '',
-      gender: '',
-      discipline: '',
-      isSynchro: false,
+    if (record.foreignDeclared) appendUnique(notes, 'Foreign declaration has no matched result row');
+    if (record.hps) appendUnique(notes, 'HPS list record has no matched result row in current stage');
+    if (record.ymca) appendUnique(notes, 'YMCA champion list record has no matched result row in current stage');
+    return {
+      id: `StatusOnly|${record._statusKey || idx}`,
+      statusOnly: true,
+      athlete: record.name || record.diveMeetsId || `Status record ${idx + 1}`,
       diveMeetsId: record.diveMeetsId || '',
       usaDivingId: record.usaDivingId || '',
-      first: String(athlete).split(' ')[0] || '',
-      last: String(athlete).split(' ').slice(1).join(' '),
-      athlete,
-      team: '',
-      place: '',
-      placeNumber: null,
-      score: null,
-      officialThresholdScore: null,
-      declaredNotAttending: false,
-      statusOnly: true,
-      sourceRow: idx + 1,
+      foreignDeclared: Boolean(record.foreignDeclared),
+      dualDeclared: Boolean(record.dualDeclared),
+      dualOtherCountry: Boolean(record.dualOtherCountry && record.approval === 'Approved - affects results'),
+      hps: Boolean(record.hps),
+      ymca: Boolean(record.ymca),
+      approval: record.approval || '',
+      review: record.review || '',
       reviewFlags: reviews,
       sourceReviewNotes: notes,
-      qualificationStatus: 'Status record — not a result row',
-      advancesToZone: false,
-      advancesToNationals: false,
-      advancesToEWC: false,
+      source: 'junior-athlete-status',
+      qualificationStatus: 'Unmatched status record',
     };
-    return applyRecordToRow(row, record);
   }
 
   const statusOnlyRecords = [];
   const matchedRecordIds = new Set();
-  const matchedZoneKeys = new Set();
   let matchedRows = 0;
   let reviewRows = 0;
 
@@ -188,7 +152,6 @@
     const record = findRecord(row);
     const reviews = asArray(row.reviewFlags);
     const notes = asArray(row.sourceReviewNotes);
-
     const preMergeDualOtherCountry = Boolean(row.dualOtherCountry);
     const explicitDataApproval = row.dualOtherCountryApproved === true || row.staffDualApproval === 'Approved - affects results';
     row.dualOtherCountry = Boolean(explicitDataApproval);
@@ -196,9 +159,7 @@
     if (record) {
       matchedRows += 1;
       matchedRecordIds.add(record._statusKey || record.diveMeetsId || record.name);
-      if (row.stage === 'Zones') matchedZoneKeys.add(record._statusKey || record.diveMeetsId || record.name);
       applyRecordToRow(row, record);
-
       if (record.review) appendUnique(notes, record.review);
       if (record.dualDeclared && !row.dualOtherCountry) appendUnique(reviews, 'Dual citizen requires staff approval before affecting qualification');
       if (record.approval && record.approval !== 'N/A' && !String(record.approval).startsWith('Approved')) appendUnique(reviews, record.approval);
@@ -209,27 +170,20 @@
 
     const conflictsForRow = rowConflicts(row);
     if (conflictsForRow.length) {
-      row.dataConflicts = conflictsForRow.map(conflict => ({
-        issueType: conflict.issueType || '',
-        description: conflict.description || '',
-        recommendedAction: conflict.recommendedAction || '',
-      }));
+      row.dataConflicts = conflictsForRow.map(conflict => ({ issueType: conflict.issueType || '', description: conflict.description || '', recommendedAction: conflict.recommendedAction || '' }));
       conflictsForRow.forEach(conflict => appendUnique(reviews, conflict.issueType || 'Data conflict'));
       conflictsForRow.forEach(conflict => appendUnique(notes, conflict.recommendedAction || conflict.description));
     }
-
     if (preMergeDualOtherCountry && !row.dualOtherCountry) appendUnique(reviews, 'Legacy dualOtherCountry suppressed pending staff approval');
-
     row.reviewFlags = reviews;
     row.sourceReviewNotes = notes;
     if (reviews.length) reviewRows += 1;
     return row;
   });
 
-  records.forEach(record => {
+  records.forEach((record, idx) => {
     const key = record._statusKey || record.diveMeetsId || record.name;
-    if (!matchedRecordIds.has(key)) statusOnlyRecords.push(record);
-    if (!matchedZoneKeys.has(key)) data.results.push(makeStatusRow(record, data.results.length));
+    if (!matchedRecordIds.has(key)) statusOnlyRecords.push(makeUnmatchedStatusRecord(record, idx));
   });
 
   data.athleteStatusRecords = records;
@@ -240,8 +194,7 @@
     ...(source.meta || {}),
     matchedResultRows: matchedRows,
     statusOnlyRecords: statusOnlyRecords.length,
-    zoneStatusRowsAdded: records.length - matchedZoneKeys.size,
     reviewResultRows: reviewRows,
-    mergeRule: 'dualOtherCountry requires explicit staff approval; status-only rows never consume qualifying spots',
+    mergeRule: 'dualOtherCountry requires explicit staff approval; unmatched statuses remain review records and are not event rows',
   };
 })();
