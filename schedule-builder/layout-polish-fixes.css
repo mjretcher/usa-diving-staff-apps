@@ -60,7 +60,6 @@ body {
 }
 
 .app-main {
-  /* Layout overridden by sb-design.css when sb-left-rail is present */
   align-items: start;
   gap: 18px;
   grid-template-columns: minmax(300px, 350px) minmax(0, 1fr);
@@ -68,12 +67,12 @@ body {
 }
 
 .left-rail {
-  gap: 12px !important;
-  max-height: calc(100vh - 92px) !important;
-  overflow: auto !important;
-  padding-right: 3px !important;
-  position: sticky !important;
-  top: 78px !important;
+  gap: 12px;
+  max-height: calc(100vh - 92px);
+  overflow: auto;
+  padding-right: 3px;
+  position: sticky;
+  top: 78px;
 }
 
 .left-rail::-webkit-scrollbar,
@@ -444,7 +443,7 @@ button:has-text,
 
 @media (max-width: 1180px) {
   .app-main {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
   }
 
   .left-rail,
