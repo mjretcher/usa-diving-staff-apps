@@ -60,10 +60,11 @@ body {
 }
 
 .app-main {
-  align-items: start !important;
-  gap: 18px !important;
-  grid-template-columns: minmax(300px, 350px) minmax(0, 1fr) !important;
-  padding: 14px !important;
+  /* Layout overridden by sb-design.css when sb-left-rail is present */
+  align-items: start;
+  gap: 18px;
+  grid-template-columns: minmax(300px, 350px) minmax(0, 1fr);
+  padding: 14px;
 }
 
 .left-rail {

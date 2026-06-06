@@ -149,11 +149,27 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
   display: grid !important;
   grid-template-columns: 220px 1fr !important;
   grid-template-rows: 1fr !important;
+  grid-template-areas: "sidebar main" !important;
   gap: 0 !important;
   padding: 0 !important;
   height: calc(100vh - 48px) !important;
+  max-height: calc(100vh - 48px) !important;
   overflow: hidden !important;
   align-items: stretch !important;
+  position: relative !important;
+}
+/* Ensure sb-left-rail and workspace occupy the grid correctly */
+.app-main > .sb-left-rail {
+  grid-area: sidebar !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+.app-main > .workspace {
+  grid-area: main !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
 
 /* ── LEFT SIDEBAR ──────────────────────────────────────── */
@@ -273,11 +289,40 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
    ═══════════════════════════════════════════════════════ */
 .workspace {
   grid-column: 2 !important;
-  display: flex !important; flex-direction: row !important;
+  grid-row: 1 !important;
+  display: flex !important;
+  flex-direction: row !important;
   overflow: hidden !important;
   background: var(--sb-bg) !important;
   padding: 0 !important;
   gap: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+/* Board wrap takes all remaining space */
+.workspace > .sb-board-wrap {
+  flex: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+/* Preview shell constrained to right side — not full width */
+.workspace > .preview-shell {
+  width: 280px !important;
+  flex-shrink: 0 !important;
+  min-width: 0 !important;
+  border-radius: 0 !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-right: none !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* ── BOARD AREA ────────────────────────────────────────── */
