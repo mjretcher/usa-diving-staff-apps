@@ -1952,24 +1952,24 @@
           ↑ Save to library
         </button>
       </div>`;
-    const renderItem = (item)=>`
+    const renderItem = (item, index)=>`
       <div class="sb-lib-item ${state.currentLibraryId===item.id?'sb-lib-active':''}">
         <div class="sb-lib-name">${escapeHtml(item.name||'Untitled')}</div>
         <div class="sb-lib-sub">${item.builtIn?'Built-in':item.updatedAt?new Date(item.updatedAt).toLocaleDateString():''} · ${((item.schedule?.sessions)||[]).length} sessions</div>
         <div style="display:flex;gap:3px;margin-top:4px">
-          <button onclick="actions.openSavedSchedule('${item.id}')" type="button"
+          <button onclick="actions.loadSavedScheduleByIndex(${index})" type="button"
             style="height:20px;padding:0 8px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--sb-nav-ink);font-size:9.5px;cursor:pointer">
             Open
           </button>
-          ${!item.builtIn?`<button onclick="actions.deleteLibraryItem('${item.id}')" type="button"
+          ${!item.builtIn?`<button onclick="actions.deleteSavedScheduleByIndex(${index})" type="button"
             style="height:20px;padding:0 8px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:transparent;color:var(--sb-nav-muted);font-size:9.5px;cursor:pointer">
             Delete
           </button>`:''}
         </div>
       </div>`;
     return saveRow
-      + (userItems.length ? userItems.map(renderItem).join('') : '<div style="font-size:10.5px;color:var(--sb-nav-muted);text-align:center;padding:10px 0">No saved schedules yet</div>')
-      + (builtIn.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sb-nav-muted);margin:10px 0 5px">Templates</div>`+builtIn.map(renderItem).join('') : '');
+      + (userItems.length ? userItems.map((item,i)=>renderItem(item, library.indexOf(item))).join('') : '<div style="font-size:10.5px;color:var(--sb-nav-muted);text-align:center;padding:10px 0">No saved schedules yet</div>')
+      + (builtIn.length ? `<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sb-nav-muted);margin:10px 0 5px">Templates</div>`+builtIn.map((item,i)=>renderItem(item, library.indexOf(item))).join('') : '');
   }
 
   function renderMeetSetup() {
