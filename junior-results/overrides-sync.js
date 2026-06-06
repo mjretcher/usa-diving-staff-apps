@@ -28,10 +28,11 @@
   const REPO     = 'mjretcher/usa-diving-staff-apps';
   const PATH     = 'data/overrides.json';
   const API_BASE = 'https://api.github.com';
-  const TOKEN_KEY = 'usad.githubToken';
-  // Token is set once via the sync indicator setup prompt.
-  // Stored in localStorage — never embedded in source code.
-  function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+  // Token comes from window.USAD_CONFIG loaded via data/config.js
+  // No setup required — zero-touch for all staff.
+  function getToken() {
+    return (window.USAD_CONFIG && window.USAD_CONFIG.syncToken) || '';
+  }
   const LOCAL_KEY = 'usad.juniorResults.overrides.v2';
   const POLL_MS  = 60_000;
 
@@ -43,13 +44,7 @@
 
   /* ── Indicator UI ──────────────────────────────────────── */
   function mountIndicator() {
-    // Token setup on first use
-    if (!localStorage.getItem(TOKEN_KEY)) {
-      const t = prompt(
-        'USA Diving Staff Platform\n\nEnter the shared GitHub sync token to enable shared overrides.\n(Ask your team administrator for this token.)'
-      );
-      if (t && t.trim().length > 10) localStorage.setItem(TOKEN_KEY, t.trim());
-    }
+    // Token auto-loaded from window.USAD_CONFIG — no setup needed
   function _mountBody() {
     const el = document.createElement('div');
     el.id = 'syncIndicator';
