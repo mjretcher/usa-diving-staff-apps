@@ -1,531 +1,355 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>USA Diving — Staff Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --red:   #e8192c;
-      --blue:  #0f1a5e;
-      --navy:  #08102e;
-      --gold:  #f5c842;
-      --ink:   #e8edf8;
-      --ink-2: #9aa5c0;
-      --ink-3: #5a6480;
-      --card:  rgba(255,255,255,.04);
-      --card-border: rgba(255,255,255,.08);
-      --glow:  rgba(232,25,44,.15);
+      --brand-blue:   #171f69;
+      --brand-blue-2: #1e2d8a;
+      --brand-blue-3: #0d1040;
+      --brand-red:    #e31937;
+      --brand-pool:   #009ac7;
+      --brand-sky:    #8fc3ea;
+      --font-display: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif;
+      --font-ui:      'Inter', system-ui, sans-serif;
     }
 
-    html { font-size: 15px; }
-
+    html { font-size: 14px; }
     body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--navy);
-      color: var(--ink);
+      font-family: var(--font-ui);
+      background: var(--brand-blue-3);
+      color: #e8edf8;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
 
-    /* ── Background grid ── */
+    /* Subtle water texture background */
     body::before {
       content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-      background-size: 60px 60px;
-      pointer-events: none;
-      z-index: 0;
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 40%, rgba(23,31,105,.6) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 80% at 80% 60%, rgba(0,154,199,.12) 0%, transparent 60%),
+        linear-gradient(175deg, #0d1040 0%, #0a0d30 60%, #060920 100%);
     }
 
+    /* Grid overlay */
     body::after {
       content: '';
-      position: fixed;
-      top: -30%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 900px;
-      height: 700px;
-      background: radial-gradient(ellipse at center, rgba(15,26,94,.7) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+      background-size: 48px 48px;
     }
 
-    /* ── Header ── */
-    .site-header {
-      position: relative;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 40px;
-      height: 60px;
-      border-bottom: 1px solid var(--card-border);
-      background: rgba(8,16,46,.8);
-      backdrop-filter: blur(12px);
-    }
+    .page { position: relative; z-index: 1; }
 
-    .header-brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
+    /* ── Topbar ── */
+    .topbar {
+      display: flex; align-items: center;
+      height: 56px; padding: 0 32px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      backdrop-filter: blur(8px);
     }
-
-    .header-emblem {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
+    .logo-wrap { display: flex; align-items: center; gap: 12px; }
+    .logo-mark {
+      width: 34px; height: 34px; flex-shrink: 0;
+      background: var(--brand-blue-2);
+      border: 1.5px solid rgba(255,255,255,.15);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
     }
-    .header-emblem span {
-      display: block;
-      width: 4px;
-      border-radius: 2px;
+    .logo-mark svg { width: 20px; height: 20px; }
+    .logo-text { display: flex; flex-direction: column; line-height: 1.15; }
+    .logo-org {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 15px; letter-spacing: .05em; text-transform: uppercase;
+      color: #fff;
     }
-    .header-emblem span:first-child { height: 16px; background: var(--red); }
-    .header-emblem span:last-child  { height: 10px; background: rgba(255,255,255,.3); }
-
-    .header-org {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--ink-3);
-    }
-    .header-name {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--ink);
-      letter-spacing: -.01em;
-    }
-
-    .header-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      height: 26px;
-      padding: 0 10px;
-      border-radius: 999px;
-      border: 1px solid var(--card-border);
-      background: var(--card);
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--ink-2);
-    }
-
-    .header-badge::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #22c55e;
-      box-shadow: 0 0 6px #22c55e;
-    }
+    .logo-sub { font-size: 10px; font-weight: 500; color: rgba(200,208,240,.55); letter-spacing: .06em; text-transform: uppercase; }
 
     /* ── Hero ── */
     .hero {
-      position: relative;
-      z-index: 2;
-      text-align: center;
-      padding: 100px 40px 80px;
+      padding: 64px 32px 0;
+      max-width: 960px; margin: 0 auto;
     }
-
-    .hero-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      height: 28px;
-      padding: 0 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(232,25,44,.3);
-      background: rgba(232,25,44,.08);
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--red);
-      margin-bottom: 28px;
+    .hero-kicker {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 24px; padding: 0 10px; border-radius: 12px;
+      background: rgba(227,25,55,.12); border: 1px solid rgba(227,25,55,.2);
+      font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      color: #ff7a8a; margin-bottom: 20px;
     }
-
-    .hero h1 {
-      font-size: clamp(42px, 6vw, 72px);
-      font-weight: 800;
-      letter-spacing: -.04em;
-      line-height: 1;
-      margin-bottom: 20px;
+    .hero-kicker::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--brand-red); }
+    .hero-title {
+      font-family: var(--font-display); font-size: 52px; font-weight: 800;
+      line-height: .95; letter-spacing: -.01em; text-transform: uppercase;
+      color: #fff; margin-bottom: 16px;
     }
-
-    .hero h1 .accent {
-      background: linear-gradient(135deg, #e8192c 0%, #ff6b7a 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
+    .hero-title .accent { color: var(--brand-red); }
     .hero-sub {
-      font-size: 17px;
-      color: var(--ink-2);
-      font-weight: 400;
-      line-height: 1.6;
-      max-width: 520px;
-      margin: 0 auto 48px;
+      font-size: 15px; color: rgba(200,208,240,.65);
+      line-height: 1.6; max-width: 520px; margin-bottom: 0;
     }
 
-    .hero-stats {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0;
-    }
-
-    .hero-stat {
-      padding: 0 32px;
-      text-align: center;
-    }
-
-    .hero-stat + .hero-stat {
-      border-left: 1px solid var(--card-border);
-    }
-
-    .hero-stat-value {
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: -.03em;
-      color: #fff;
-    }
-
-    .hero-stat-label {
-      font-size: 12px;
-      color: var(--ink-3);
-      font-weight: 500;
-      margin-top: 3px;
-    }
+    /* Red rule divider */
+    .rule { height: 2px; background: var(--brand-red); width: 48px; margin: 24px 0; }
 
     /* ── App grid ── */
     .apps-section {
-      position: relative;
-      z-index: 2;
-      max-width: 1160px;
-      margin: 0 auto;
-      padding: 0 40px 80px;
+      padding: 0 32px 64px;
+      max-width: 960px; margin: 0 auto;
     }
-
-    .apps-section-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--ink-3);
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .section-label {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: rgba(200,208,240,.45);
+      margin-bottom: 16px;
     }
-
-    .apps-section-label::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--card-border);
-    }
-
     .app-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 14px;
     }
 
-    /* Featured card — spans full row */
+    /* App card */
     .app-card {
-      position: relative;
-      display: block;
-      text-decoration: none;
-      color: var(--ink);
-      background: var(--card);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 28px 32px;
-      overflow: hidden;
-      transition: border-color .2s, transform .2s, box-shadow .2s;
+      position: relative; overflow: hidden;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 24px 24px 20px;
+      text-decoration: none; color: inherit;
+      transition: all .2s; cursor: pointer;
+      display: flex; flex-direction: column; gap: 0;
     }
-
     .app-card:hover {
-      border-color: rgba(255,255,255,.18);
+      background: rgba(255,255,255,.07);
+      border-color: rgba(255,255,255,.14);
       transform: translateY(-2px);
-      box-shadow: 0 20px 60px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.06);
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
     }
+    .app-card.primary { border-color: rgba(227,25,55,.25); }
+    .app-card.primary:hover { border-color: rgba(227,25,55,.45); }
 
-    /* Glow effect per card */
+    /* Accent stripe */
     .app-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--card-accent, rgba(255,255,255,.2)), transparent);
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: rgba(255,255,255,.08); border-radius: 14px 14px 0 0;
     }
-
-    .card-junior   { --card-accent: rgba(34,197,94,.5); }
-    .card-schedule { --card-accent: rgba(99,102,241,.5); }
-    .card-criteria { --card-accent: rgba(245,200,66,.5); }
-    .card-analytics{ --card-accent: rgba(59,130,246,.5); }
-
-    .app-card-inner {
-      position: relative;
-      z-index: 1;
-    }
-
-    .app-card-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      margin-bottom: 20px;
-    }
-
-    .app-num {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .08em;
-      color: var(--ink-3);
-    }
+    .app-card.red::before    { background: var(--brand-red); }
+    .app-card.pool::before   { background: var(--brand-pool); }
+    .app-card.sky::before    { background: var(--brand-sky); }
+    .app-card.blue::before   { background: var(--brand-blue-2); }
 
     .app-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      border: 1px solid var(--card-border);
-      background: rgba(255,255,255,.05);
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 14px; flex-shrink: 0;
     }
+    .app-icon.red  { background: rgba(227,25,55,.15); color: #ff6b7a; }
+    .app-icon.pool { background: rgba(0,154,199,.15); color: var(--brand-pool); }
+    .app-icon.sky  { background: rgba(143,195,234,.12); color: var(--brand-sky); }
+    .app-icon.blue { background: rgba(30,45,138,.4); color: #8fa4ff; border: 1px solid rgba(255,255,255,.08); }
+    .app-icon svg  { width: 22px; height: 22px; }
 
-    .app-card h3 {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -.02em;
-      line-height: 1.2;
-      margin-bottom: 8px;
-      color: #fff;
+    .app-name {
+      font-family: var(--font-display); font-size: 20px; font-weight: 800;
+      letter-spacing: .02em; text-transform: uppercase; color: #fff;
+      margin-bottom: 6px; line-height: 1;
     }
+    .app-desc { font-size: 12.5px; color: rgba(200,208,240,.55); line-height: 1.5; margin-bottom: 18px; flex: 1; }
 
-    .app-card p {
-      font-size: 13px;
-      color: var(--ink-2);
-      line-height: 1.65;
-      margin-bottom: 20px;
+    .app-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 14px; border-top: 1px solid rgba(255,255,255,.07);
     }
-
-    .app-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 24px;
+    .app-status {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
     }
-
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      height: 22px;
-      padding: 0 9px;
-      border-radius: 6px;
-      border: 1px solid rgba(255,255,255,.09);
-      background: rgba(255,255,255,.04);
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--ink-2);
-      letter-spacing: .02em;
+    .status-dot { width: 6px; height: 6px; border-radius: 3px; }
+    .status-dot.live    { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,.5); }
+    .status-dot.active  { background: var(--brand-pool); box-shadow: 0 0 6px rgba(0,154,199,.5); }
+    .status-dot.beta    { background: #fbbf24; }
+    .status-dot.dev     { background: rgba(255,255,255,.3); }
+    .app-arrow {
+      width: 28px; height: 28px; border-radius: 14px;
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
     }
-
-    .app-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--ink-2);
-      transition: color .15s;
-    }
-
-    .app-link svg {
-      transition: transform .2s;
-    }
-
-    .app-card:hover .app-link {
-      color: #fff;
-    }
-
-    .app-card:hover .app-link svg {
-      transform: translateX(3px);
-    }
-
-    /* Background glow blobs per card */
-    .card-blob {
-      position: absolute;
-      border-radius: 50%;
-      pointer-events: none;
-      opacity: .06;
-      filter: blur(40px);
-    }
-
-    .card-junior   .card-blob { width: 200px; height: 200px; background: #22c55e; bottom: -60px; right: -40px; }
-    .card-schedule .card-blob { width: 200px; height: 200px; background: #818cf8; bottom: -60px; right: -40px; }
-    .card-criteria .card-blob { width: 200px; height: 200px; background: #fbbf24; bottom: -60px; right: -40px; }
-    .card-analytics{ }
-    .card-analytics .card-blob { width: 200px; height: 200px; background: #3b82f6; bottom: -60px; right: -40px; }
+    .app-card:hover .app-arrow { background: var(--brand-red); border-color: transparent; }
+    .app-arrow svg { width: 12px; height: 12px; }
 
     /* ── Footer ── */
-    footer {
-      position: relative;
-      z-index: 2;
-      border-top: 1px solid var(--card-border);
-      padding: 20px 40px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--ink-3);
+    .platform-footer {
+      border-top: 1px solid rgba(255,255,255,.06);
+      padding: 20px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: none;
+    }
+    .footer-text { font-size: 11.5px; color: rgba(200,208,240,.35); }
+    .footer-tagline {
+      font-family: var(--font-display); font-size: 13px; font-weight: 700;
+      letter-spacing: .04em; color: rgba(227,25,55,.5); text-transform: uppercase;
     }
 
-    @media (max-width: 860px) {
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .hero-title { font-size: 36px; }
       .app-grid { grid-template-columns: 1fr; }
-      .hero { padding: 60px 20px 50px; }
-      .apps-section { padding: 0 20px 60px; }
-      .hero-stats { flex-direction: column; gap: 16px; }
-      .hero-stat + .hero-stat { border-left: none; }
-      .site-header { padding: 0 20px; }
-      footer { padding: 20px; flex-direction: column; gap: 6px; }
+      .hero, .apps-section { padding-left: 20px; padding-right: 20px; }
+      .topbar { padding: 0 20px; }
     }
   </style>
 </head>
 <body>
+<div class="page">
 
-  <header class="site-header">
-    <div class="header-brand">
-      <div class="header-emblem"><span></span><span></span></div>
-      <div>
-        <div class="header-org">USA Diving</div>
-        <div class="header-name">Staff Platform</div>
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="logo-wrap">
+      <div class="logo-mark">
+        <svg viewBox="0 0 20 20" fill="none">
+          <path d="M10 2 C10 2 15 5.5 15 10 C15 14.5 10 18 10 18" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M6 5.5 C6 5.5 9 7.5 9 10 C9 12 7 14 7 14" stroke="white" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+          <circle cx="15" cy="4.5" r="2" fill="#e31937"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <div class="logo-org">USA Diving</div>
+        <div class="logo-sub">Staff Platform</div>
       </div>
     </div>
-    <div class="header-badge">Live · 2026 Season</div>
   </header>
 
+  <!-- Hero -->
   <section class="hero">
-    <div class="hero-label">Staff Operations Platform</div>
-    <h1><span class="accent">USA Diving</span><br>Intelligence Suite</h1>
-    <p class="hero-sub">Qualification intelligence, athlete analytics, and meet operations — purpose-built for USA Diving staff.</p>
-    <div class="hero-stats">
-      <div class="hero-stat">
-        <div class="hero-stat-value">4</div>
-        <div class="hero-stat-label">Integrated tools</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">6</div>
-        <div class="hero-stat-label">Zone meets tracked</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-value">2026</div>
-        <div class="hero-stat-label">Junior Circuit</div>
-      </div>
-    </div>
+    <div class="hero-kicker">2025–2026 Season</div>
+    <h1 class="hero-title">Staff<br><span class="accent">Platform</span></h1>
+    <p class="hero-sub">Internal tools for USA Diving high-performance and events staff. Select an app below to get started.</p>
+    <div class="rule"></div>
   </section>
 
+  <!-- App grid -->
   <section class="apps-section">
-    <div class="apps-section-label">Applications</div>
+    <div class="section-label">Applications</div>
     <div class="app-grid">
 
-      <a class="app-card card-junior" href="junior-results/index.html">
-        <div class="card-blob"></div>
-        <div class="app-card-inner">
-          <div class="app-card-top">
-            <span class="app-num">01 — LIVE</span>
-            <div class="app-icon">🏆</div>
+      <!-- Junior Results -->
+      <a class="app-card red" href="junior-results/index.html">
+        <div class="app-icon red">
+          <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="2" y="3" width="18" height="14" rx="2"/>
+            <path d="M6 8h10M6 11h7M6 14h4"/>
+          </svg>
+        </div>
+        <div class="app-name">Junior Results Audit</div>
+        <p class="app-desc">Circuit qualification tracker across Regionals, Zones, E/W/C, and Junior Nationals. Foreign athlete flags, override management, and official qualification lists.</p>
+        <div class="app-footer">
+          <div class="app-status">
+            <div class="status-dot live"></div>
+            <span style="color:rgba(200,208,240,.5)">Live · 2026 Season</span>
           </div>
-          <h3>Junior Circuit Results</h3>
-          <p>Full-season qualification tracker across all stages — Regionals, Zones, East/West/Central, and Junior Nationals. Real-time bumps, override management, and official qual lists per the 2026 rulebook.</p>
-          <div class="app-tags">
-            <span class="tag">Regionals</span>
-            <span class="tag">Zones B·E·F</span>
-            <span class="tag">E/W/C</span>
-            <span class="tag">Nationals</span>
-            <span class="tag">Qual lists</span>
+          <div class="app-arrow">
+            <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 6h8M7 3l3 3-3 3"/>
+            </svg>
           </div>
-          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
       </a>
 
-      <a class="app-card card-schedule" href="schedule-builder/index.html">
-        <div class="card-blob"></div>
-        <div class="app-card-inner">
-          <div class="app-card-top">
-            <span class="app-num">02</span>
-            <div class="app-icon">📅</div>
+      <!-- Schedule Builder -->
+      <a class="app-card pool" href="schedule-builder/index.html">
+        <div class="app-icon pool">
+          <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+            <rect x="13" y="2" width="7" height="7" rx="1.5"/>
+            <rect x="2" y="13" width="7" height="7" rx="1.5"/>
+            <path d="M13 16.5h7M16.5 13v7"/>
+          </svg>
+        </div>
+        <div class="app-name">Schedule Builder</div>
+        <p class="app-desc">Drag-and-drop meet schedule construction with session management, athlete entry flows, health checks, and poster/timeline export for public distribution.</p>
+        <div class="app-footer">
+          <div class="app-status">
+            <div class="status-dot active"></div>
+            <span style="color:rgba(200,208,240,.5)">Active</span>
           </div>
-          <h3>Schedule Builder</h3>
-          <p>Design and manage meet schedules with smart event blocks, warm-up periods, and session structures. Generates print-ready and shareable formats for meet directors.</p>
-          <div class="app-tags">
-            <span class="tag">Meet design</span>
-            <span class="tag">Auto-flow</span>
-            <span class="tag">PDF export</span>
+          <div class="app-arrow">
+            <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 6h8M7 3l3 3-3 3"/>
+            </svg>
           </div>
-          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
       </a>
 
-      <a class="app-card card-criteria" href="criteria-simulator/index.html">
-        <div class="card-blob"></div>
-        <div class="app-card-inner">
-          <div class="app-card-top">
-            <span class="app-num">03</span>
-            <div class="app-icon">⚖️</div>
+      <!-- Criteria Simulator -->
+      <a class="app-card sky" href="criteria-simulator/index.html">
+        <div class="app-icon sky">
+          <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 17 L8 11 L12 14 L16 7 L20 10"/>
+            <path d="M4 17h16" opacity=".4"/>
+            <circle cx="12" cy="14" r="1.5" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
+        <div class="app-name">Criteria Simulator</div>
+        <p class="app-desc">What-if qualification scenario modeling. Test score cutoffs, DD thresholds, and selection criteria across multiple meets before making official decisions.</p>
+        <div class="app-footer">
+          <div class="app-status">
+            <div class="status-dot beta"></div>
+            <span style="color:rgba(200,208,240,.5)">In development</span>
           </div>
-          <h3>Criteria Simulator</h3>
-          <p>Model qualification scenarios against score and DD thresholds. Scenario manager, threshold optimizer, certification center, and full staff review export suite.</p>
-          <div class="app-tags">
-            <span class="tag">Score thresholds</span>
-            <span class="tag">DD analysis</span>
-            <span class="tag">Optimizer</span>
-            <span class="tag">Certification</span>
+          <div class="app-arrow">
+            <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 6h8M7 3l3 3-3 3"/>
+            </svg>
           </div>
-          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
       </a>
 
-      <a class="app-card card-analytics" href="athlete-evaluation/index.html">
-        <div class="card-blob"></div>
-        <div class="app-card-inner">
-          <div class="app-card-top">
-            <span class="app-num">04</span>
-            <div class="app-icon">📊</div>
+      <!-- HP Analytics -->
+      <a class="app-card blue" href="athlete-evaluation/index.html">
+        <div class="app-icon blue">
+          <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="11" cy="8" r="3"/>
+            <path d="M5 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+            <path d="M16 3l2 2-2 2M19 5H15" opacity=".6"/>
+          </svg>
+        </div>
+        <div class="app-name">HP Analytics</div>
+        <p class="app-desc">High-performance athlete analytics — dive heatmaps, DD benchmarking, score trend analysis, synchro evaluation, and multi-year performance tracking.</p>
+        <div class="app-footer">
+          <div class="app-status">
+            <div class="status-dot dev"></div>
+            <span style="color:rgba(200,208,240,.5)">In development</span>
           </div>
-          <h3>Athlete Evaluation</h3>
-          <p>Dive-level analytics dashboard with heatmaps, strength radars, synchro pair builder, mixed team candidate analysis, and voluntary evidence workbook. 2021–2026 historical data.</p>
-          <div class="app-tags">
-            <span class="tag">Dive analytics</span>
-            <span class="tag">Synchro pairs</span>
-            <span class="tag">Mixed team</span>
-            <span class="tag">HP analytics</span>
+          <div class="app-arrow">
+            <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 6h8M7 3l3 3-3 3"/>
+            </svg>
           </div>
-          <div class="app-link">Open app <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
       </a>
 
     </div>
   </section>
 
-  <footer>
-    <span>USA Diving · Internal use only</span>
-    <span>Data auto-updates every Wednesday · 2026 Junior Circuit</span>
+  <!-- Footer -->
+  <footer class="platform-footer">
+    <span class="footer-text">USA Diving Staff Platform · Internal use only</span>
+    <span class="footer-tagline">Guts. Grace. Glory.</span>
   </footer>
 
+</div>
 </body>
 </html>
