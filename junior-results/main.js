@@ -355,7 +355,32 @@ function attachGlobalListeners() {
 /* ════════════════════════════════════════════════════════════════
    RECOMPUTE (applies overrides + recalculates qualification)
    ════════════════════════════════════════════════════════════════ */
+// Build a fast lookup Map from USAD_JUNIOR_ATHLETE_STATUS master roster
+// keyed by diveMeetsId so applyOverrides can fill flags baked before roster update
+let _rosterLookup = null;
+function buildRosterLookup() {
+  const sd = window.USAD_JUNIOR_ATHLETE_STATUS;
+  if (!sd) return new Map();
+  const records = sd.records || [];
+  const headers = sd.headers || [];
+  const map = new Map();
+  records.forEach(rec => {
+    const gf = k => Array.isArray(rec) ? rec[headers.indexOf(k)] : rec[k];
+    const dmId = String(gf('diveMeetsId') || '').trim();
+    if (!dmId) return;
+    map.set(dmId, {
+      hps:             Boolean(gf('hps')),
+      ymca:            Boolean(gf('ymca')),
+      foreignDeclared: Boolean(gf('foreignDeclared')),
+      dualDeclared:    Boolean(gf('dualDeclared')),
+      dualOtherCountry:Boolean(gf('dualOtherCountry')),
+    });
+  });
+  return map;
+}
+
 function recompute() {
+  _rosterLookup = buildRosterLookup();
   const lookup = buildOverrideLookup();
   effectiveResults = DATA.results.map(r => applyOverrides(r, lookup));
   recalcQualification(effectiveResults);
@@ -396,6 +421,23 @@ function applyOverrides(row, lookup) {
   r.dualDeclared     = get('dual')        ?? Boolean(row.dualDeclared);
   r.dualOtherCountry = get('dualEffect')  ?? Boolean(row.dualOtherCountry);
   r.declaredNotAttending = get('notAttending') ?? false;
+
+  // Overlay master roster flags — these are authoritative and override
+  // whatever was baked into junior-data.js at scrape time.
+  // This ensures HPS/foreign counts are always correct even if the
+  // roster was updated after the data was generated.
+  if (_rosterLookup && _rosterLookup.size > 0) {
+    const dmId = String(r.diveMeetsId || '').trim();
+    const roster = dmId ? _rosterLookup.get(dmId) : null;
+    if (roster) {
+      // Roster is authoritative for these flags (manual overrides still win)
+      if (get('foreign') === null) r.foreignDeclared  = roster.foreignDeclared || r.foreignDeclared;
+      if (get('dual')    === null) r.dualDeclared     = roster.dualDeclared    || r.dualDeclared;
+      if (get('dualEffect') === null) r.dualOtherCountry = roster.dualOtherCountry || r.dualOtherCountry;
+      r.hps  = roster.hps  || Boolean(row.hps);
+      r.ymca = roster.ymca || Boolean(row.ymca);
+    }
+  }
 
   r.webpointNonUsEffective = Boolean(r.webpointNonUs && get('foreign') !== false);
   r.foreignInternational   = r.foreignDeclared || r.webpointNonUsEffective || r.dualOtherCountry;
