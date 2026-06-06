@@ -1850,10 +1850,9 @@
       </div>
       <div class="sb-field">
         <span class="sb-field-label">Competition days</span>
-        ${state.meet.days.map(day=>`
+        ${(state.meet.days||[]).map(day=>`
           <div class="sb-day-chip">
-            <span>${escapeHtml(shortDayName?shortDayName(day):(day.date||'Day'))}</span>
-            <span class="sb-day-chip-date">${escapeHtml(day.date||'')}</span>
+            <span>${escapeHtml(shortDayLabel(day.date||'')||day.date||'Day')}</span>
           </div>`).join('')}
         <button onclick="actions.addDay()" type="button" style="width:100%;margin-top:4px;height:24px;border-radius:var(--sb-r);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:var(--sb-nav-ink);font-size:10.5px;cursor:pointer">+ Add day</button>
       </div>
@@ -1861,7 +1860,8 @@
   }
 
   function renderSidebarCatalog() {
-    const filter = (state.catalogFilter||'').toLowerCase();
+    // Use the real catalogSearch state var (same as full renderCatalog)
+    const filter = (catalogSearch||state.catalogFilter||'').toLowerCase();
     const allEvents = state.profile.events||[];
     const filtered = filter ? allEvents.filter(e=>
       eventDisplayName(e).toLowerCase().includes(filter) ||
@@ -1872,8 +1872,8 @@
 
     return `
       <div class="sb-field" style="margin-bottom:8px">
-        <input placeholder="Search events…" value="${escapeHtml(state.catalogFilter||'')}"
-          oninput="actions.sbSetCatalogFilter(this.value)">
+        <input placeholder="Search events…" value="${escapeHtml(catalogSearch||state.catalogFilter||'')}"
+          oninput="actions.setCatalogSearch(this.value)">
       </div>
       ${filtered.length===0 ? '<div style="font-size:11px;color:var(--sb-nav-muted);text-align:center;padding:16px">No events match</div>' :
         filtered.map(ev => {
@@ -1884,8 +1884,8 @@
             <div class="sb-cat-pills">
               ${rounds.map(r=>`
                 <button class="sb-round-pill" type="button"
-                  onclick="actions.addCatalogEventDirect('${escapeHtml(ev.id)}','${escapeHtml(r)}')"
-                  title="Add ${escapeHtml(eventDisplayName(ev))} ${escapeHtml(r)} to schedule">
+                  onclick="actions.selectCatalogEvent('${escapeHtml(ev.id)}');actions.selectRound('${escapeHtml(r)}');actions.addPresetEvent();"
+                  title="Add ${escapeHtml(eventDisplayName(ev))} ${escapeHtml(r)} to new session">
                   ${escapeHtml(r)}
                 </button>`).join('')}
             </div>
