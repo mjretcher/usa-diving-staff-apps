@@ -95,6 +95,7 @@
       ['displacement','Displaced / Why'],
       ['results','Results'],
       ['athletes','Athletes'],
+      ['roster','Flag Roster'],
       ['official','Official list'],
       ['overrides','Decisions']
     ];
@@ -107,14 +108,15 @@
   };
 
   renderContext = function workbenchRenderContext(){
-    if (['qualified','review','displacement'].includes(state.view)) return renderWorkbenchContext();
+    if (['qualified','review','displacement','roster'].includes(state.view)) return renderWorkbenchContext();
     return originalRenderContext();
   };
 
   renderTable = function workbenchRenderTable(){
-    if (state.view === 'qualified') return renderQualifiedBoard();
-    if (state.view === 'review') return renderDecisionReview();
+    if (state.view === 'qualified')    return renderQualifiedBoard();
+    if (state.view === 'review')       return renderDecisionReview();
     if (state.view === 'displacement') return renderDisplacementBoard();
+    if (state.view === 'roster')       return renderFlagRoster();
     return originalRenderTable();
   };
 
@@ -128,6 +130,22 @@
     const foreign = rows.filter(r=>r.foreignDeclared || r.webpointNonUsEffective || r.exhibitionLikelyForeign).length;
     const title = state.view === 'qualified' ? 'Qualification Board' : state.view === 'review' ? 'Needs Review' : 'Displaced / Why';
     const sub = state.view === 'qualified' ? 'Who qualified, by event, and why' : state.view === 'review' ? 'Why the athlete is on review, what decision is needed, and how to apply it' : 'Who changed the list, who moved up, and the corrected outcome';
+    if (state.view === 'roster') {
+      const statusData = window.USAD_JUNIOR_ATHLETE_STATUS;
+      const records = statusData ? statusData.records || [] : [];
+      const headers = statusData ? statusData.headers || [] : [];
+      function getField(rec, key) {
+        if (Array.isArray(rec)) { const i = headers.indexOf(key); return i >= 0 ? rec[i] : undefined; }
+        return rec[key];
+      }
+      const fCount  = records.filter(r => getField(r,'foreignDeclared')).length;
+      const hCount  = records.filter(r => getField(r,'hps')).length;
+      const dCount  = records.filter(r => getField(r,'dualDeclared')).length;
+      const yCount  = records.filter(r => getField(r,'ymca')).length;
+      $('resultsContext').innerHTML = `<div class="context-title-block"><strong>FLAG ROSTER</strong><span>All flagged athletes — from official declaration workbook, independent of results loaded</span></div>
+        ${[['Foreign',fCount],['HPS',hCount],['Dual',dCount],['YMCA',yCount]].map(([l,v])=>`<div class="context-stat"><span class="context-stat-value">${v}</span><span class="context-stat-label">${esc(l)}</span></div>`).join('')}`;
+      return;
+    }
     $('resultsContext').innerHTML = `<div class="context-title-block"><strong>${esc(title)}</strong><span>${esc(state.stage)} - ${esc(sub)}</span></div>
       ${[['Qualified',qualified],['Needs review',review],['Displaced/shifted',displaced],['Foreign',foreign]].map(([l,v])=>`<div class="context-stat"><span class="context-stat-value">${v}</span><span class="context-stat-label">${l}</span></div>`).join('')}`;
   }
@@ -404,6 +422,106 @@
   function riskScore(r){ let s=0; if(isOutcomeImpact(r))s+=20; if(isDisplacement(r))s+=25; if(hasMismatch(r))s+=20; if(r.dualDeclared&&!r.dualOtherCountry)s+=15; if(r.exhibitionLikelyForeign&&!r.foreignDeclared)s+=15; if(r.statusOnly)s+=10; return s; }
   function td(x){ return `<td>${x||''}</td>`; }
   function empty(msg){ $('tableWrap').innerHTML=`<div class="empty-state"><div class="empty-state-title">${esc(msg)}</div></div>`; }
+
+
+
+  /* ── Flag Roster — always shows complete flagged athlete list ── */
+  function renderFlagRoster() {
+    const statusData = window.USAD_JUNIOR_ATHLETE_STATUS;
+    if (!statusData) {
+      return empty('Athlete status data not loaded. Ensure junior-athlete-status.js is included.');
+    }
+
+    const records = statusData.records || [];
+    const headers = statusData.headers || [];
+    function getField(rec, key) {
+      if (Array.isArray(rec)) { const i = headers.indexOf(key); return i >= 0 ? rec[i] : undefined; }
+      return rec[key];
+    }
+    function getName(rec) { return getField(rec,'name') || getField(rec,'athlete') || '—'; }
+    function getDmId(rec) { return getField(rec,'diveMeetsId') || ''; }
+    function getUsaId(rec) { return getField(rec,'usaDivingId') || ''; }
+    function getApproval(rec) { return getField(rec,'approval') || ''; }
+    function getReview(rec) { return getField(rec,'review') || ''; }
+
+    // Cross-reference with results to show which stages they competed in
+    const resultsByAthlete = new Map();
+    effectiveResults.forEach(r => {
+      const key = r.diveMeetsId || r.athlete;
+      if (!resultsByAthlete.has(key)) resultsByAthlete.set(key, []);
+      resultsByAthlete.get(key).push(r);
+    });
+
+    function getResultsSummary(rec) {
+      const dmId = getDmId(rec);
+      const name = getName(rec);
+      const rows = resultsByAthlete.get(dmId) || resultsByAthlete.get(name) || [];
+      if (!rows.length) return `<span class="roster-no-results">No results in loaded data</span>`;
+      const stages = [...new Set(rows.map(r => r.stage))];
+      const zones  = [...new Set(rows.filter(r => r.zone).map(r => 'Zone ' + r.zone))];
+      return `<span class="roster-stages">${stages.join(' · ')}</span>${zones.length ? `<div class="roster-zones">${zones.join(', ')}</div>` : ''}`;
+    }
+
+    // Group into categories
+    const categories = [
+      { label: 'Foreign Athletes',        icon: '🌐', test: r => getField(r,'foreignDeclared'),  note: 'Declared foreign — non-displacing, advances as ghost through all stages' },
+      { label: 'HPS Athletes',            icon: '🏅', test: r => getField(r,'hps'),              note: 'High Performance Squad — non-displacing, prequalified to Junior Nationals' },
+      { label: 'YMCA Champions',          icon: '🏆', test: r => getField(r,'ymca'),             note: 'YMCA champion — non-displacing at Regionals, qualifies to E/W/C from Zones' },
+      { label: 'Dual Citizens',           icon: '🔀', test: r => getField(r,'dualDeclared'),     note: 'Dual citizenship declared — pending staff decision on whether affects results' },
+      { label: 'Dual (Affects Results)',  icon: '⚠️', test: r => getField(r,'dualOtherCountry'), note: 'Staff approved: dual citizen competing for another federation — non-displacing' },
+    ];
+
+    let html = `<div class="roster-search-bar">
+      <input class="roster-search" id="rosterSearch" type="search" placeholder="Search by name or ID…" value="">
+    </div>`;
+
+    categories.forEach(cat => {
+      const members = records.filter(cat.test);
+      if (!members.length) return;
+
+      html += `<div class="roster-category">
+        <div class="roster-cat-header">
+          <span class="roster-cat-icon">${cat.icon}</span>
+          <span class="roster-cat-label">${esc(cat.label)}</span>
+          <span class="roster-cat-count">${members.length}</span>
+          <span class="roster-cat-note">${esc(cat.note)}</span>
+        </div>
+        <table class="roster-table">
+          <thead><tr>
+            <th>Athlete</th>
+            <th>DiveMeets ID</th>
+            <th>USA Diving ID</th>
+            <th>Status / Approval</th>
+            <th>Results in loaded data</th>
+          </tr></thead>
+          <tbody>
+            ${members.map(rec => `<tr class="roster-row" data-name="${escAttr(getName(rec).toLowerCase())}" data-id="${escAttr(getDmId(rec))}">
+              <td><span class="athlete-name">${esc(getName(rec))}</span></td>
+              <td class="mono athlete-id">${esc(getDmId(rec)) || '<span class="roster-missing">No ID</span>'}</td>
+              <td class="mono">${esc(getUsaId(rec)) || '—'}</td>
+              <td>${getApproval(rec) ? `<span class="roster-approval">${esc(getApproval(rec))}</span>` : '—'}${getReview(rec) ? `<div class="wb-note">${esc(getReview(rec))}</div>` : ''}</td>
+              <td>${getResultsSummary(rec)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    });
+
+    $('rowCount').textContent = `${records.length} athletes on file`;
+    $('tableWrap').innerHTML = html;
+
+    // Wire search
+    const searchInput = document.getElementById('rosterSearch');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase();
+        document.querySelectorAll('.roster-row').forEach(row => {
+          const match = !q || row.dataset.name.includes(q) || row.dataset.id.includes(q);
+          row.style.display = match ? '' : 'none';
+        });
+      });
+    }
+  }
 
   const stageNav = $('stageNav');
   if(stageNav) stageNav.addEventListener('click',()=>setTimeout(()=>{ if(state.view==='results'){ state.view='qualified'; buildViewTabs(); renderContext(); renderTable(); }},0), true);

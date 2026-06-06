@@ -213,24 +213,66 @@ function populateFilters() {
 
 function buildFlagChips() {
   const wrap = $('filterFlags');
-  wrap.innerHTML = `<select class="flag-mode-select" id="flagModeSelect">
-    <option value="any">Any tag</option>
-    <option value="all">All tags</option>
-  </select>` + FLAG_DEFS.map(f =>
-    `<label class="flag-chip ${state.flags.has(f.key) ? 'checked' : ''}">
-      <input type="checkbox" data-flag="${f.key}" ${state.flags.has(f.key) ? 'checked' : ''}>${esc(f.label)}
-    </label>`
-  ).join('');
-  document.getElementById('flagModeSelect').addEventListener('change', e => { state.flagMode = e.target.value; renderAll(); });
-  wrap.querySelectorAll('input[data-flag]').forEach(input => {
-    input.addEventListener('change', () => {
-      input.parentElement.classList.toggle('checked', input.checked);
-      if (input.checked) state.flags.add(input.dataset.flag);
-      else state.flags.delete(input.dataset.flag);
-      state.selectedEventId = '';
+  // Always render all flags — counts show how many match in current stage,
+  // but the filter buttons are always visible regardless.
+  function renderChips() {
+    const stageRows = effectiveResults.filter(r => stageMatch(r, state.stage) || r.stage === state.stage);
+    const counts = {};
+    FLAG_DEFS.forEach(f => {
+      counts[f.key] = stageRows.filter(r => {
+        if (f.key === 'review') return r.reviewFlags?.length;
+        return Boolean(r[f.key]);
+      }).length;
+    });
+
+    // Mode toggle — minimal, no dropdown
+    const modeHtml = `<div class="flag-mode-toggle">
+      <button class="flag-mode-btn ${state.flagMode === 'any' ? 'active' : ''}" data-mode="any">Any</button>
+      <button class="flag-mode-btn ${state.flagMode === 'all' ? 'active' : ''}" data-mode="all">All</button>
+      ${state.flags.size > 0 ? `<button class="flag-clear-btn" id="flagClearBtn">Clear</button>` : ''}
+    </div>`;
+
+    const chipsHtml = FLAG_DEFS.map(f => {
+      const active = state.flags.has(f.key);
+      const count = counts[f.key];
+      return `<button class="flag-toggle ${active ? 'active' : ''} ${count === 0 ? 'zero' : ''}"
+        data-flag="${escAttr(f.key)}" type="button">
+        <span class="flag-toggle-label">${esc(f.label)}</span>
+        ${count > 0 ? `<span class="flag-toggle-count">${count}</span>` : ''}
+      </button>`;
+    }).join('');
+
+    wrap.innerHTML = modeHtml + `<div class="flag-toggle-grid">${chipsHtml}</div>`;
+
+    // Wire mode buttons
+    wrap.querySelectorAll('.flag-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.flagMode = btn.dataset.mode;
+        renderAll();
+      });
+    });
+    // Wire clear
+    const clearBtn = document.getElementById('flagClearBtn');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      state.flags.clear();
       renderAll();
     });
-  });
+    // Wire flag toggles
+    wrap.querySelectorAll('.flag-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.flag;
+        if (state.flags.has(key)) state.flags.delete(key);
+        else state.flags.add(key);
+        state.selectedEventId = '';
+        renderAll();
+      });
+    });
+  }
+
+  renderChips();
+  // Re-render chips when stage changes (counts update)
+  // We hook into renderAll via a proxy below
+  wrap._renderChips = renderChips;
 }
 
 /* ── Global listeners ─────────────────────────────────────────── */
@@ -371,10 +413,16 @@ function applyOverrides(row, lookup) {
 
   const ndReasons = [];
   if (r.hps)              ndReasons.push('HPS Tier 3 Junior squad');
-  if (r.ymca && r.stage !== 'Zones') ndReasons.push('YMCA champion');  // YMCA only non-displacing at Regionals, qualifies to E/W/C from Zones
+  if (r.ymca && r.stage !== 'Zones') ndReasons.push('YMCA champion');
   if (r.foreignDeclared)  ndReasons.push('Foreign athlete');
   if (r.webpointNonUsEffective && !r.foreignDeclared) ndReasons.push('Webpoint non-US');
   if (r.dualOtherCountry) ndReasons.push('Dual — competed for another federation');
+  // Ghost advancement: foreign/HPS athletes advance through all stages
+  // as non-displacing participants — they compete but don't consume spots.
+  // They appear in next-stage results with a ghost badge.
+  r.ghostAdvances = Boolean(
+    r.foreignDeclared || r.webpointNonUsEffective || r.hps || r.dualOtherCountry
+  );
 
   r.prequalified       = Boolean(r.hps || r.ymca);
   r.prequalification   = [];
@@ -438,7 +486,8 @@ function recalcRegionals(rows) {
     if (r.top15Qualifier && r.placeNumber > REGIONAL_ZONE_LIMIT) {
       r.bumpIn = true; bumpIns.push(r);
     }
-    r.advancesToZone = r.top15Qualifier || r.officialAverageScoreQualifier || r.officialQualified;
+    // Ghost athletes advance even if non-displacing
+    r.advancesToZone = r.top15Qualifier || r.officialAverageScoreQualifier || r.officialQualified || r.ghostAdvances;
     r.qualificationStatus = regionalStatus(r);
   });
   rows.forEach(r => {
@@ -474,11 +523,20 @@ function recalcZones(rows) {
       // YMCA qualifies to E/W/C from Zones (Art.304(a)(4))
       if (r.ymca && !r.hps && !r.foreignInternational) {
         r.advancesToEWC = true;
+        r.advancesToZone = true;
         r.qualificationStatus = 'E/W/C qualifier — YMCA champion';
+      } else if (r.ghostAdvances) {
+        // Ghost: foreign/HPS athletes advance through all stages
+        // as non-displacing — they participate but don't consume spots.
+        r.advancesToZone = true;
+        r.advancesToEWC  = true;  // shown at next stage, still non-displacing
+        r.qualificationStatus = r.foreignDeclared
+          ? 'Non-displacing — foreign athlete (advances as ghost)'
+          : 'Non-displacing — HPS athlete (advances as ghost)';
       } else {
         r.qualificationStatus = r.nonDisplacing ? 'Non-displacing' : 'Not eligible';
+        r.advancesToZone = false;
       }
-      r.advancesToZone = false;
       return;
     }
 
@@ -639,6 +697,9 @@ function renderAll() {
   renderEventList();
   renderContext();
   renderTable();
+  // Re-render flag chips to update counts for current stage
+  const flagWrap = $('filterFlags');
+  if (flagWrap && flagWrap._renderChips) flagWrap._renderChips();
 }
 
 /* ── Override badge ───────────────────────────────────────────── */

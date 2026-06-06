@@ -882,3 +882,117 @@ input, select { font-family: inherit; }
 .disp-effect{font-size:11.5px;color:var(--ink-3);line-height:1.4}
 .disp-empty{padding:20px 16px;font-size:12.5px;color:var(--ink-4);font-style:italic}
 #syncIndicator .sync-label{font-size:10.5px}
+
+
+/* ================================================================
+   FLAG TOGGLES — redesigned sidebar filter
+   ================================================================ */
+.flag-mode-toggle {
+  display: flex; align-items: center; gap: 4px; margin-bottom: 8px;
+}
+.flag-mode-btn {
+  height: 22px; padding: 0 9px; border-radius: 11px;
+  font-size: 10.5px; font-weight: 600;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.09);
+  color: var(--nav-muted); transition: all .12s;
+}
+.flag-mode-btn:hover { background: rgba(255,255,255,.10); color: var(--nav-ink); }
+.flag-mode-btn.active {
+  background: rgba(143,195,234,.2); border-color: rgba(143,195,234,.35);
+  color: var(--sky);
+}
+.flag-clear-btn {
+  height: 22px; padding: 0 8px; border-radius: 11px; margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  background: rgba(227,25,55,.12); border: 1px solid rgba(227,25,55,.2);
+  color: #ff8fa0; transition: all .12s;
+}
+.flag-clear-btn:hover { background: rgba(227,25,55,.2); color: #ffb3be; }
+
+.flag-toggle-grid {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.flag-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; height: 28px; padding: 0 9px;
+  border-radius: var(--radius-sm); border: 1px solid transparent;
+  background: transparent; text-align: left; transition: all .12s;
+}
+.flag-toggle:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.08); }
+.flag-toggle.active {
+  background: rgba(143,195,234,.14); border-color: rgba(143,195,234,.25);
+}
+.flag-toggle.zero { opacity: .4; }
+.flag-toggle.zero:hover { opacity: .7; }
+.flag-toggle-label { font-size: 12px; font-weight: 500; color: var(--nav-ink); }
+.flag-toggle.active .flag-toggle-label { color: var(--sky); font-weight: 600; }
+.flag-toggle-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 16px; min-width: 20px; padding: 0 5px; border-radius: 8px;
+  font-size: 10px; font-weight: 700;
+  background: rgba(255,255,255,.1); color: var(--nav-muted);
+}
+.flag-toggle.active .flag-toggle-count {
+  background: rgba(143,195,234,.25); color: var(--sky);
+}
+
+/* ================================================================
+   FLAG ROSTER VIEW
+   ================================================================ */
+.roster-search-bar {
+  padding: 10px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.roster-search {
+  width: 100%; height: 30px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 12.5px; color: var(--ink);
+  font-family: var(--f-ui);
+}
+.roster-search:focus { outline: none; border-color: var(--pool); }
+
+.roster-category { margin-bottom: 0; border-bottom: 1px solid var(--line-2); }
+.roster-category:last-child { border-bottom: none; }
+
+.roster-cat-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px 8px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 1;
+}
+.roster-cat-icon { font-size: 14px; flex-shrink: 0; }
+.roster-cat-label {
+  font-family: var(--f-display); font-size: 13px; font-weight: 700;
+  letter-spacing: .03em; text-transform: uppercase; color: var(--ink);
+}
+.roster-cat-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 18px; min-width: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--blue-700); color: #fff;
+  font-size: 10.5px; font-weight: 700;
+}
+.roster-cat-note { font-size: 11px; color: var(--ink-4); margin-left: 4px; }
+
+.roster-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.roster-table th {
+  background: var(--surface-2); color: var(--ink-4);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 12px; text-align: left; border-bottom: 1px solid var(--line);
+}
+.roster-table th:first-child,.roster-table td:first-child { padding-left: 16px; }
+.roster-table td { padding: 8px 12px; vertical-align: middle; border-bottom: 1px solid var(--line-2); color: var(--ink-2); }
+.roster-table tr:last-child td { border-bottom: none; }
+.roster-table tr:hover td { background: var(--surface-2); }
+
+.roster-no-results { font-size: 11px; color: var(--ink-4); font-style: italic; }
+.roster-stages { font-size: 11.5px; color: var(--ink-2); font-weight: 500; }
+.roster-zones { font-size: 10.5px; color: var(--ink-4); margin-top: 1px; }
+.roster-missing { font-size: 11px; color: var(--brand-red); font-style: italic; }
+.roster-approval { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 600; background: var(--q-direct-bg); color: var(--q-direct); border: 1px solid var(--q-direct-b); }
+
+/* Ghost badge in status column */
+.status.status-ghost {
+  background: rgba(23,31,105,.07); color: var(--blue-700);
+  border: 1px dashed rgba(23,31,105,.2);
+  font-style: italic;
+}
