@@ -1799,7 +1799,7 @@
     ];
     return `<div class="sb-tab-nav">
       ${tabs.map(t=>`
-        <button class="sb-tab-btn${_sbActiveTab===t.id?' active':''}"
+        <button class="sb-tab-btn${(window._sbActiveTab||_sbActiveTab)===t.id?' active':''}"
           onclick="actions.switchSidebarTab('${t.id}')" type="button">
           <span style="font-size:13px;flex-shrink:0">${t.icon}</span>
           ${escapeHtml(t.label)}
@@ -1809,7 +1809,7 @@
   }
 
   function renderSidebarTabContent(timedSessions, warnings) {
-    switch(_sbActiveTab) {
+    switch(window._sbActiveTab||_sbActiveTab) {
       case 'catalog': return renderSidebarCatalog();
       case 'timing':  return renderSidebarTiming();
       case 'health':  return renderSidebarHealth(warnings);
@@ -4259,6 +4259,47 @@
   }
 
   window.actions = {
+    // ── Sidebar tab navigation ──────────────────────────
+    switchSidebarTab(id) {
+      if (typeof _sbActiveTab !== 'undefined') {
+        _sbActiveTab = id;
+      } else {
+        window._sbActiveTab = id;
+      }
+      if (typeof render === 'function') render();
+    },
+    saveNamedScheduleFromSidebar() {
+      const inp = document.getElementById('sbLibSaveName');
+      const name = inp ? inp.value.trim() : (typeof state !== 'undefined' ? (state.meet?.name || 'My Schedule') : 'My Schedule');
+      if (name && typeof saveNamedSchedule === 'function') saveNamedSchedule(name);
+    },
+    sbSetCatalogFilter(val) {
+      if (typeof window.actions.setCatalogSearch === 'function') window.actions.setCatalogSearch(val);
+    },
+    addCatalogEventDirect(eventId, round) {
+      if (typeof window.actions.selectCatalogEvent === 'function') window.actions.selectCatalogEvent(eventId);
+      if (round && typeof window.actions.selectRound === 'function') window.actions.selectRound(round);
+      if (typeof window.actions.addPresetEvent === 'function') window.actions.addPresetEvent();
+    },
+    openSavedSchedule(id) {
+      if (typeof savedScheduleLibrary === 'function') {
+        const library = savedScheduleLibrary();
+        const index = library.findIndex(i => i.id === id);
+        if (index >= 0 && typeof window.actions.loadSavedScheduleByIndex === 'function') {
+          window.actions.loadSavedScheduleByIndex(index);
+        }
+      }
+    },
+    deleteLibraryItem(id) {
+      if (typeof savedScheduleLibrary === 'function') {
+        const library = savedScheduleLibrary();
+        const index = library.findIndex(i => i.id === id);
+        if (index >= 0 && typeof window.actions.deleteSavedScheduleByIndex === 'function') {
+          window.actions.deleteSavedScheduleByIndex(index);
+        }
+      }
+    },
+    // ── End sidebar actions ──────────────────────────────
     focusMeetSetup() {
       document.querySelector('.left-rail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
