@@ -56,19 +56,6 @@
         color: #FFFFFF !important;
       }
 
-      .builder-day-tabs {
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
-        max-height: 48px !important;
-        min-height: 44px !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        padding: 6px 12px !important;
-        align-items: center !important;
-      }
-      .builder-day-tab { flex: 1 1 170px !important; max-width: 235px !important; min-width: 150px !important; }
-      .builder-day-tab.active strong, .builder-day-tab.active span, .builder-day-tab.active em { color: #FFFFFF !important; }
 
       .report-shortcut-bar { align-items: center; background: #fff; border: 1px solid #D7E1EA; border-radius: 14px; box-shadow: 0 10px 24px rgba(21,27,70,.10); color: #151B46; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 16px; padding: 10px 12px; }
       .report-shortcut-bar strong { color: #151B46; font-size: 13px; font-weight: 900; text-transform: uppercase; }
