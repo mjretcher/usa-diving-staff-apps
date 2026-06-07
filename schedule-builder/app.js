@@ -1940,7 +1940,26 @@
   }
 
   function renderSidebarLibrary() {
+    // Force a fresh read in case localStorage was populated under old key
     const library = savedScheduleLibrary();
+    // Debug: if library is empty, try legacy key as fallback
+    if (!library.filter(i=>!i.builtIn).length) {
+      const legacyKeys = Object.keys(localStorage).filter(k =>
+        k.includes('schedule') || k.includes('diving') || k.includes('builder')
+      );
+      // Trigger a sync refresh quietly
+      if (window.ScheduleSync) window.ScheduleSync.loadSchedules().then(remote => {
+        if (remote && remote.length) {
+          const existing = savedScheduleLibrary().map(s=>s.id);
+          remote.filter(r=>!existing.includes(r.id)).forEach(r=>{
+            const lib = rawSavedScheduleLibrary();
+            lib.push(r);
+            localStorage.setItem(SCHEDULE_LIBRARY_KEY, JSON.stringify(lib.filter(s=>!s.builtIn).slice(0,50)));
+          });
+          render();
+        }
+      }).catch(()=>{});
+    }
     const userItems = library.filter(i=>!i.builtIn);
     const builtIn   = library.filter(i=> i.builtIn);
     const snapshotName = scheduleSnapshotName ? scheduleSnapshotName() : (state.meet.name||'My Schedule');
