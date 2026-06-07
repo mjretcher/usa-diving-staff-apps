@@ -11,13 +11,12 @@
     style.id = "stableUiFixStyles";
     style.textContent = `
       .app-header { min-height: 48px !important; height: 48px !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 14px !important; align-items: center !important; }
-      .brand-lockup { flex: 1 1 300px !important; min-width: 260px !important; }
+      .brand-lockup { flex: 0 0 auto !important; min-width: 0 !important; max-width: 220px !important; }
       .brand-lockup h1, .brand-lockup p { color: #FFFFFF !important; }
-      .header-actions { display: flex !important; flex: 2 1 760px !important; flex-wrap: wrap !important; gap: 6px !important; justify-content: flex-end !important; }
+      .header-actions { display: flex !important; flex: 0 0 auto !important; flex-wrap: nowrap !important; gap: 6px !important; justify-content: flex-end !important; align-items: center !important; }
       .header-actions button, .header-actions .text-button, .header-actions .primary-button { min-height: 30px !important; padding: 0 10px !important; width: auto !important; white-space: nowrap !important; }
 
-      .usad-readable-card,
-      .command-center-panel,
+      .usad-readable-card:not(.sb-board-wrap):not(.board-shell),
       .command-center-card,
       .command-center-hero,
       .schedule-command-card,
@@ -28,8 +27,8 @@
         text-shadow: none !important;
       }
 
-      .usad-readable-card *,
-      .command-center-panel *,
+      .usad-readable-card:not(.sb-board-wrap):not(.board-shell) *,
+      .command-center-panel:not(:where(.sb-board-wrap, .sb-board-wrap *)) *,
       .command-center-card *,
       .command-center-hero *,
       .schedule-command-card *,
@@ -38,6 +37,9 @@
         opacity: 1 !important;
         text-shadow: none !important;
       }
+      /* Hard exclusion: sb-board-wrap and board-shell never get the dark text treatment */
+      .sb-board-wrap *, .board-shell *, .sb-left-rail * { color: inherit; }
+      .sb-board-wrap .usad-readable-card *, .board-shell .usad-readable-card * { color: inherit !important; opacity: inherit !important; }
 
       .usad-readable-card .muted,
       .usad-readable-card p,
@@ -396,7 +398,16 @@
   }
 
   function markReadableCards() {
-    Array.from(document.querySelectorAll("section, article, div, .panel, .board-shell, .preview-shell")).slice(0, 120).forEach((node) => {
+    // Only mark the REPORTS bar and command-center panel — not the board/board-wrap
+    // which contains session cards, events, etc.
+    Array.from(document.querySelectorAll("section, article, div, .panel")).slice(0, 120).forEach((node) => {
+      // Skip anything inside the new design shell
+      if (node.closest('.sb-left-rail') || node.closest('.sb-board-wrap') ||
+          node.closest('.board-shell') || node.closest('.day-lane') ||
+          node.closest('.session-card') || node.closest('.preview-shell')) return;
+      // Skip the board-shell and everything that renders sessions
+      if (node.classList.contains('board-shell') || node.classList.contains('sb-board-wrap') ||
+          node.classList.contains('session-card') || node.classList.contains('day-lane')) return;
       if (/COMMAND CENTER|COLOR TEMPLATE|Review Warnings|CURRENT SCHEDULE|BUILD CHECKLIST/i.test(node.textContent || "")) {
         node.classList.add("usad-readable-card");
       }
