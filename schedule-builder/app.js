@@ -1581,6 +1581,7 @@
           <button class="text-button" onclick="actions.newSchedule()">New</button>
           <button class="text-button" onclick="actions.openEntryManager()">Entries</button>
           <button class="text-button" onclick="actions.openResetWorkspace()">Reset</button>
+          <button class="text-button" onclick="document.getElementById('previewAnchor')?.scrollIntoView({behavior:'smooth'})">Preview ↓</button>
           <input class="hidden" id="jsonLoader" type="file" accept="application/json" onchange="actions.loadJson(this.files[0])" />
           <input class="hidden" id="packageLoader" type="file" accept=".usadiving-schedule,.schedule,.json,application/json" onchange="actions.openSharedSchedulePackage(this.files[0]); this.value=''" />
           <button class="primary-button compact-primary" onclick="actions.releaseCurrentSchedule()">Release</button>
@@ -1599,8 +1600,9 @@
             ${renderBuildChecklist(timedSessions, warnings)}
             ${renderScheduleSetupSummary(timedSessions, warnings)}
             ${renderBoard(timedSessions, warnings)}
+            <div id="previewAnchor"></div>
+            ${renderPreview(timedSessions)}
           </div>
-          ${renderPreview(timedSessions)}
         </section>
       </main>
       ${entryManagerOpen ? renderEntryManager() : ""}
