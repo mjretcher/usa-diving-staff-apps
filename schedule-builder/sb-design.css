@@ -1310,3 +1310,43 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
   background-color: rgba(255,255,255,.07) !important;
   color: rgba(255,255,255,.95) !important;
 }
+
+
+/* ════════════════════════════════════════════════════
+   SIDEBAR DEFINITIVE OVERRIDES — appended last
+   These work in concert with stable-ui-fixes injection
+   ════════════════════════════════════════════════════ */
+
+/* Ensure the tab body scroll area has right background */
+#sbTabBody,
+.sb-tab-body {
+  background: #0a0e38 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  flex: 1 !important;
+  padding: 10px !important;
+}
+#sbTabBody::-webkit-scrollbar { width: 3px !important; }
+#sbTabBody::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1) !important; border-radius: 2px !important; }
+
+/* sb-field spacing */
+.sb-left-rail .sb-field { margin-bottom: 10px !important; }
+.sb-left-rail .sb-field-row {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 6px !important;
+}
+
+/* Catalog pill row */
+.sb-left-rail .sb-cat-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 3px !important;
+  margin-top: 5px !important;
+}
+
+/* Lib item button row */
+.sb-left-rail .sb-lib-item > div[style*="display:flex"],
+.sb-left-rail .sb-lib-item > div[style*="display: flex"] {
+  margin-top: 5px !important;
+}

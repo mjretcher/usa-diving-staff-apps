@@ -75,34 +75,273 @@
 
       .timeline-table .title th, .timeline-table .timeline-day-label td, .timeline-table .timeline-day-label th, .timeline-table .timeline-endcap-row td:not(.day-cell) { color: #FFFFFF !important; }
     
-      /* ── Sidebar tab buttons — always white text ── */
+      /* ════════════════════════════════════════════════
+         SIDEBAR COMPREHENSIVE COLOR OVERRIDES
+         Scoped to .sb-left-rail — beats all global rules
+         ════════════════════════════════════════════════ */
+
+      /* Base: everything in sidebar is light text */
+      .sb-left-rail,
+      .sb-left-rail * {
+        color: rgba(255,255,255,.82) !important;
+        opacity: 1 !important;
+        text-shadow: none !important;
+      }
+
+      /* Tab nav background */
+      .sb-left-rail { background: #0a0e38 !important; }
+      .sb-tab-body { background: #0a0e38 !important; }
+
+      /* Tab buttons */
       .sb-left-rail .sb-tab-btn {
         background: transparent !important;
-        color: rgba(255,255,255,.8) !important;
+        background-color: transparent !important;
+        color: rgba(255,255,255,.75) !important;
         border: none !important;
         border-radius: 5px !important;
         min-height: 0 !important;
         padding: 0 9px !important;
         font-size: 11.5px !important;
         font-weight: 400 !important;
+        width: 100% !important;
+        text-align: left !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 7px !important;
+        height: 33px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        cursor: pointer !important;
       }
       .sb-left-rail .sb-tab-btn.active {
         background: rgba(255,255,255,.1) !important;
+        background-color: rgba(255,255,255,.1) !important;
         color: #ffffff !important;
         font-weight: 600 !important;
       }
       .sb-left-rail .sb-tab-btn:hover {
         background: rgba(255,255,255,.07) !important;
+        background-color: rgba(255,255,255,.07) !important;
         color: rgba(255,255,255,.95) !important;
       }
-      .sb-left-rail .sb-field-label {
-        color: rgba(212,220,245,.75) !important;
+      .sb-left-rail .sb-tab-badge {
+        background: #e31937 !important;
+        color: #fff !important;
+        font-size: 9px !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
+        padding: 0 4px !important;
+        height: 15px !important;
+        min-width: 15px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin-left: auto !important;
       }
+
+      /* Field labels */
+      .sb-left-rail .sb-field-label,
+      .sb-left-rail label {
+        color: rgba(212,220,245,.7) !important;
+        font-size: 9.5px !important;
+        font-weight: 700 !important;
+        letter-spacing: .07em !important;
+        text-transform: uppercase !important;
+      }
+
+      /* Input and select fields */
       .sb-left-rail input,
-      .sb-left-rail select {
+      .sb-left-rail select,
+      .sb-left-rail textarea {
         color: rgba(255,255,255,.9) !important;
         background: rgba(255,255,255,.08) !important;
-        border-color: rgba(255,255,255,.15) !important;
+        background-color: rgba(255,255,255,.08) !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        border-radius: 5px !important;
+        padding: 0 8px !important;
+        height: 27px !important;
+        font-size: 11.5px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        font-family: inherit !important;
+        min-height: 0 !important;
+      }
+      .sb-left-rail input::placeholder { color: rgba(255,255,255,.35) !important; }
+      .sb-left-rail input:focus,
+      .sb-left-rail select:focus {
+        outline: none !important;
+        border-color: rgba(143,195,234,.5) !important;
+        background: rgba(255,255,255,.12) !important;
+        background-color: rgba(255,255,255,.12) !important;
+      }
+      .sb-left-rail select option {
+        background: #111650 !important;
+        color: #d4dcf5 !important;
+      }
+
+      /* Day chips */
+      .sb-left-rail .sb-day-chip {
+        background: rgba(255,255,255,.06) !important;
+        background-color: rgba(255,255,255,.06) !important;
+        border: 1px solid rgba(255,255,255,.1) !important;
+        border-radius: 5px !important;
+        padding: 5px 8px !important;
+        margin-bottom: 3px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        font-size: 11px !important;
+      }
+      .sb-left-rail .sb-day-chip-date { color: rgba(212,220,245,.55) !important; font-size: 10px !important; }
+
+      /* Catalog items */
+      .sb-left-rail .sb-cat-item {
+        background: rgba(255,255,255,.05) !important;
+        background-color: rgba(255,255,255,.05) !important;
+        border: 1px solid rgba(255,255,255,.1) !important;
+        border-radius: 5px !important;
+        padding: 7px 8px !important;
+        margin-bottom: 3px !important;
+        cursor: pointer !important;
+      }
+      .sb-left-rail .sb-cat-item:hover { border-color: rgba(143,195,234,.4) !important; background: rgba(255,255,255,.08) !important; }
+      .sb-left-rail .sb-cat-name { font-size: 11.5px !important; font-weight: 500 !important; color: rgba(255,255,255,.9) !important; }
+      .sb-left-rail .sb-cat-sub { font-size: 10px !important; color: rgba(212,220,245,.55) !important; margin-top: 1px !important; }
+      .sb-left-rail .sb-round-pill {
+        background: rgba(255,255,255,.06) !important;
+        background-color: rgba(255,255,255,.06) !important;
+        border: 1px solid rgba(255,255,255,.12) !important;
+        color: rgba(212,220,245,.75) !important;
+        border-radius: 8px !important;
+        padding: 0 6px !important;
+        height: 17px !important;
+        font-size: 9px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        min-height: 0 !important;
+      }
+      .sb-left-rail .sb-round-pill.active,
+      .sb-left-rail .sb-round-pill:hover {
+        background: #171f69 !important;
+        background-color: #171f69 !important;
+        color: #fff !important;
+        border-color: #1e2d8a !important;
+      }
+
+      /* Health items */
+      .sb-left-rail .sb-health-item {
+        border-radius: 5px !important;
+        padding: 6px 8px !important;
+        margin-bottom: 3px !important;
+      }
+      .sb-left-rail .sb-health-item.err {
+        background: rgba(239,68,68,.15) !important;
+        border: 1px solid rgba(239,68,68,.3) !important;
+      }
+      .sb-left-rail .sb-health-item.err,
+      .sb-left-rail .sb-health-item.err * { color: #fca5a5 !important; }
+      .sb-left-rail .sb-health-item.warn {
+        background: rgba(250,204,21,.1) !important;
+        border: 1px solid rgba(250,204,21,.25) !important;
+      }
+      .sb-left-rail .sb-health-item.warn,
+      .sb-left-rail .sb-health-item.warn * { color: #fde68a !important; }
+      .sb-left-rail .sb-health-item.info {
+        background: rgba(59,130,246,.1) !important;
+        border: 1px solid rgba(59,130,246,.25) !important;
+      }
+      .sb-left-rail .sb-health-item.info,
+      .sb-left-rail .sb-health-item.info * { color: #93c5fd !important; }
+      .sb-left-rail .sb-health-title { font-weight: 600 !important; font-size: 11px !important; }
+      .sb-left-rail .sb-health-sub { font-size: 10px !important; margin-top: 1px !important; opacity: .8 !important; }
+
+      /* Library items */
+      .sb-left-rail .sb-lib-item {
+        background: rgba(255,255,255,.05) !important;
+        background-color: rgba(255,255,255,.05) !important;
+        border: 1px solid rgba(255,255,255,.1) !important;
+        border-radius: 5px !important;
+        padding: 7px 8px !important;
+        margin-bottom: 3px !important;
+        cursor: pointer !important;
+      }
+      .sb-left-rail .sb-lib-item:hover { border-color: rgba(143,195,234,.3) !important; }
+      .sb-left-rail .sb-lib-active { border-color: rgba(143,195,234,.5) !important; background: rgba(143,195,234,.08) !important; }
+      .sb-left-rail .sb-lib-name { font-size: 11.5px !important; font-weight: 500 !important; color: rgba(255,255,255,.9) !important; }
+      .sb-left-rail .sb-lib-sub { font-size: 10px !important; color: rgba(212,220,245,.55) !important; margin-top: 1px !important; }
+
+      /* All buttons inside sidebar (non-tab) */
+      .sb-left-rail button:not(.sb-tab-btn) {
+        background: rgba(255,255,255,.08) !important;
+        background-color: rgba(255,255,255,.08) !important;
+        border: 1px solid rgba(255,255,255,.15) !important;
+        color: rgba(255,255,255,.82) !important;
+        border-radius: 5px !important;
+        cursor: pointer !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        min-height: 0 !important;
+        padding: 4px 8px !important;
+        line-height: 1.4 !important;
+      }
+      .sb-left-rail button:not(.sb-tab-btn):hover {
+        background: rgba(255,255,255,.13) !important;
+        background-color: rgba(255,255,255,.13) !important;
+        color: #fff !important;
+      }
+      /* Save to library button — sky blue accent */
+      .sb-left-rail button[onclick*="saveNamedSchedule"] {
+        background: #8fc3ea !important;
+        background-color: #8fc3ea !important;
+        color: #0a1840 !important;
+        border: none !important;
+        font-weight: 700 !important;
+        width: 100% !important;
+        height: 28px !important;
+        border-radius: 5px !important;
+        font-size: 11.5px !important;
+      }
+      .sb-left-rail button[onclick*="saveNamedSchedule"]:hover {
+        background: #a8d4f0 !important;
+        background-color: #a8d4f0 !important;
+      }
+
+      /* Section headers */
+      .sb-left-rail div[style*="text-transform: uppercase"],
+      .sb-left-rail div[style*="text-transform:uppercase"] {
+        color: rgba(212,220,245,.55) !important;
+      }
+
+      /* "No saved schedules yet" empty state */
+      .sb-left-rail div[style*="text-align:center"],
+      .sb-left-rail div[style*="text-align: center"] {
+        color: rgba(212,220,245,.45) !important;
+      }
+
+      /* TEMPLATES section label */
+      .sb-left-rail > div > div[style*="font-size:9px"],
+      .sb-left-rail > * div[style*="font-size:9px"] {
+        color: rgba(212,220,245,.5) !important;
+        font-weight: 700 !important;
+        letter-spacing: .08em !important;
+        text-transform: uppercase !important;
+        margin: 10px 0 5px !important;
+      }
+
+      /* Add day button */
+      .sb-left-rail button[onclick*="addDay"] {
+        width: 100% !important;
+        margin-top: 4px !important;
+        height: 26px !important;
+        border-radius: 5px !important;
+        background: rgba(255,255,255,.06) !important;
+        background-color: rgba(255,255,255,.06) !important;
+        border: 1px solid rgba(255,255,255,.12) !important;
+        color: rgba(255,255,255,.7) !important;
+        font-size: 10.5px !important;
+        cursor: pointer !important;
       }
     `;
     document.head.appendChild(style);
