@@ -935,14 +935,7 @@
   // Called by syncLibraryFromGitHub after merge
   function refreshLibraryUI() {
     try {
-      // Re-render the library panel if it's open
-      if (typeof actions !== 'undefined' && typeof actions.refreshLibrary === 'function') {
-        actions.refreshLibrary();
-      } else {
-        // Fallback: trigger a soft re-render via state update
-        const el = document.querySelector('.schedule-library-panel, .library-panel, [data-panel="library"]');
-        if (el) el.dispatchEvent(new CustomEvent('library-updated'));
-      }
+      if (typeof render === 'function') render();
     } catch(e) {}
   }
 
@@ -1589,7 +1582,7 @@
       </header>
       <main class="app-main">
         <div class="sb-left-rail">
-          ${renderSidebarNav()}
+          ${renderSidebarNav(timedSessions, warnings)}
           <div class="sb-tab-body" id="sbTabBody">
             ${renderSidebarTabContent(timedSessions, warnings)}
           </div>
@@ -1601,8 +1594,8 @@
             ${renderScheduleSetupSummary(timedSessions, warnings)}
             ${renderBoard(timedSessions, warnings)}
             <div id="previewAnchor"></div>
-            ${renderPreview(timedSessions)}
           </div>
+          ${renderPreview(timedSessions)}
         </section>
       </main>
       ${entryManagerOpen ? renderEntryManager() : ""}
@@ -1770,7 +1763,7 @@
     const hasEvents  = (state.profile.events||[]).length > 0;
     const hasSessions = (state.sessions||[]).filter(s=>!s.autoTrainingForDayId).length > 0;
     const hasEntries = (state.sessions||[]).some(s=>(s.events||[]).some(e=>Number(e.numberOfDivers||0)>0));
-    const isReleased = state.meet.publishStatus === 'published';
+    const isReleased = (state.publishStatus || state.meet.publishStatus) === 'published';
     const steps = [
       { label:'Setup',   done: !!(state.meet.name && state.meet.days.length) },
       { label:'Entries', done: hasEntries },
@@ -1788,10 +1781,9 @@
     </div>`;
   }
 
-  function renderSidebarNav() {
-    const timedSessions = allTimedSessions();
-    const warnings = validateWarnings(timedSessions);
-    const activeWarnings = warnings.filter(w => !isWarningAcknowledged(w));
+  function renderSidebarNav(timedSessions, warnings) {
+    if (!timedSessions) { timedSessions = allTimedSessions(); warnings = validateWarnings(timedSessions); }
+    const activeWarnings = (warnings||[]).filter(w => !isWarningAcknowledged(w));
     const tabs = [
       { id:'setup',   icon:'⚙',  label:'Meet setup'       },
       { id:'catalog', icon:'☰',  label:'Event catalog'    },
@@ -1846,8 +1838,8 @@
       </div>
       <div class="sb-field">
         <span class="sb-field-label">Publish status</span>
-        <select onchange="actions.setMeet('publishStatus',this.value)">
-          ${publishOpts.map(o=>`<option value="${o}" ${state.meet.publishStatus===o?'selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('')}
+        <select onchange="actions.setPublishStatus(this.value)">
+          ${publishOpts.map(o=>`<option value="${o}" ${(state.publishStatus||'draft')===o?'selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('')}
         </select>
       </div>
       <div class="sb-field">
@@ -1919,7 +1911,15 @@
       </div>
       <div class="sb-field-row sb-field">
         ${nf('Panel chg min','panelChangeMinutes',0.5)}
-        ${nf('Sec/dive lock','secondsPerDive',1)}
+        <div>
+          <span class="sb-field-label">Lock sec/dive</span>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
+            <input type="checkbox" ${td.secondsPerDiveLocked?'checked':''}
+              onchange="actions.setTimingDefault('secondsPerDiveLocked',this.checked)"
+              style="width:auto;min-height:auto">
+            <span style="font-size:11px;color:var(--sb-nav-ink)">Locked</span>
+          </label>
+        </div>
       </div>
       <div class="sb-field">
         <span class="sb-field-label">Finals transition</span>
@@ -4303,7 +4303,8 @@
     },
     // ── End sidebar actions ──────────────────────────────
     focusMeetSetup() {
-      document.querySelector('.left-rail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      actions.switchSidebarTab('setup');
+      document.querySelector('.sb-left-rail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
     focusBuilder() {
       document.getElementById('scheduleBuilderBoard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
