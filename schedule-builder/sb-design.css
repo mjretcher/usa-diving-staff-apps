@@ -37,25 +37,14 @@ html body #app .app-main > .workspace > .sb-board-wrap {
   overflow: hidden !important;
 }
 html body #app .app-main > .workspace > .preview-shell {
-  width: 300px !important; flex: 0 0 300px !important;
-  min-width: 300px !important; overflow: hidden !important;
+  width: 280px !important; flex: 0 0 280px !important;
+  min-width: 0 !important; overflow: hidden !important;
   display: flex !important; flex-direction: column !important;
   border-radius: 0 !important;
   border-top: none !important; border-bottom: none !important; border-right: none !important;
   margin: 0 !important; box-shadow: none !important;
   border-left: 1px solid var(--sb-line) !important;
 }
-.preview-toolbar {
-  padding: 6px 10px !important;
-  flex-wrap: wrap !important;
-  gap: 4px !important;
-}
-.preview-toolbar .segmented button {
-  padding: 0 8px !important;
-  font-size: 10.5px !important;
-}
-.export-actions { flex-wrap: wrap !important; gap: 3px !important; }
-.export-actions button { padding: 0 7px !important; font-size: 10.5px !important; }
 /* ================================================================
    SCHEDULE BUILDER — Design Overhaul v2.0
    Loads AFTER app.css, layout-polish-fixes.css, visual-contrast-fixes.css
@@ -75,7 +64,7 @@ html body #app .app-main > .workspace > .preview-shell {
   --sb-nav:       #0a0e38;
   --sb-nav-b:     rgba(255,255,255,.08);
   --sb-nav-ink:   #d4dcf5;
-  --sb-nav-muted: rgba(212,220,245,.6);
+  --sb-nav-muted: rgba(212,220,245,.45);
   --sb-nav-hover: rgba(255,255,255,.055);
   --sb-bg:        #eaecf5;
   --sb-surface:   #ffffff;
@@ -232,22 +221,19 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
   display: flex; align-items: center; gap: 7px;
   height: 33px; padding: 0 9px;
   border-radius: var(--sb-r); border: none;
-  background: transparent; color: rgba(255,255,255,.75) !important;
+  background: transparent; color: rgba(212,220,245,.65);
   font-size: 11.5px; cursor: pointer; width: 100%; text-align: left;
-  font-family: 'Inter',-apple-system,sans-serif; transition: all .12s;
+  font-family: var(--sb-f-ui,-apple-system,sans-serif); transition: all .12s;
   white-space: nowrap; overflow: hidden;
   line-height: 1; letter-spacing: .01em;
 }
 .sb-tab-btn i { font-size: 14px; flex-shrink: 0; }
 .sb-tab-btn:hover { background: var(--sb-nav-hover); color: var(--sb-nav-ink); }
 .sb-tab-btn.active {
-  background: rgba(255,255,255,.1) !important;
-  color: #fff !important; font-weight: 600 !important;
+  background: rgba(255,255,255,.09);
+  color: #8fc3ea; font-weight: 600;
 }
-.sb-tab-btn:hover {
-  background: rgba(255,255,255,.07) !important;
-  color: rgba(255,255,255,.92) !important;
-}
+.sb-tab-btn:hover { background: rgba(255,255,255,.06); color: rgba(212,220,245,.9); }
 .sb-tab-badge {
   margin-left: auto; height: 15px; min-width: 15px; padding: 0 4px;
   border-radius: 8px; background: var(--sb-red); color: #fff;
@@ -265,7 +251,7 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
 .sb-field-label {
   display: block; font-size: 9.5px; font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase;
-  color: rgba(212,220,245,.75); margin-bottom: 4px;
+  color: var(--sb-nav-muted); margin-bottom: 4px;
 }
 .sb-field input, .sb-field select, .sb-field textarea {
   width: 100%; border: 1px solid rgba(255,255,255,.1) !important;
@@ -734,24 +720,38 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
 
 /* ── COMMAND CENTER ─────────────────────────────────────── */
 .command-center-panel {
-  background: linear-gradient(135deg, var(--sb-blue), var(--sb-blue-2)) !important;
-  border-radius: var(--sb-r-lg) !important;
-  padding: 14px 16px !important; margin: 12px 12px 0 !important;
-  display: flex !important; align-items: center !important;
-  gap: 16px !important; box-shadow: var(--sb-sh-sm) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 6px 12px 0 !important;
+  padding: 6px 14px !important;
+  border-radius: var(--sb-r-md) !important;
+  min-height: 0 !important;
+  background: linear-gradient(90deg, var(--sb-blue), var(--sb-blue-2)) !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
 }
-.command-center-copy { flex: 1 !important; min-width: 0 !important; }
+.command-center-copy {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
 .summary-kicker {
   font-size: 9.5px !important; font-weight: 700 !important;
   letter-spacing: .1em !important; text-transform: uppercase !important;
   color: rgba(255,255,255,.5) !important;
 }
 .command-center-copy h2 {
-  font-family: var(--sb-f-display) !important; font-size: 18px !important;
-  font-weight: 800 !important; color: #fff !important;
-  letter-spacing: .01em !important; text-transform: uppercase !important;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin: 4px 0 2px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #fff !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  letter-spacing: .03em !important;
 }
 .command-center-copy p { font-size: 11px !important; color: rgba(255,255,255,.55) !important; }
 .command-center-actions {
@@ -780,14 +780,23 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
 
 /* ── BUILD CHECKLIST ────────────────────────────────────── */
 .build-checklist-panel {
-  margin: 8px 12px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  gap: 6px !important;
+  margin: 3px 12px 0 !important;
+  padding: 4px 12px !important;
   background: var(--sb-surface) !important;
   border: 1px solid var(--sb-line) !important;
   border-radius: var(--sb-r-md) !important;
-  padding: 10px 14px !important;
-  box-shadow: var(--sb-sh-xs) !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  min-height: 0 !important;
 }
-.build-checklist-panel h2 { font-size: 11px !important; font-weight: 700 !important; color: var(--sb-ink-3) !important; letter-spacing: .05em !important; text-transform: uppercase !important; margin-bottom: 8px !important; }
+.build-checklist-panel h2 {
+  display: none !important;
+}
 .checklist-item {
   display: inline-flex !important; align-items: center !important;
   gap: 4px !important; margin-right: 10px !important;
@@ -1203,4 +1212,62 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
 @media (max-width: 880px) {
   .app-main { grid-template-columns: 1fr !important; }
   .sb-left-rail { display: none; }
+}
+
+/* ── Collapse Build Checklist items to slim strip ── */
+.build-checklist-panel .checklist-heading {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+.build-checklist-panel .checklist-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  font-size: 9.5px !important;
+  padding: 2px 5px !important;
+  border-radius: 10px !important;
+  background: var(--sb-surface-2) !important;
+  border: 1px solid var(--sb-line) !important;
+  white-space: nowrap !important;
+}
+.build-checklist-panel .checklist-item.done {
+  background: rgba(5,150,105,.07) !important;
+  border-color: rgba(5,150,105,.2) !important;
+  color: #059669 !important;
+}
+.build-checklist-panel .checklist-item.active {
+  background: rgba(23,31,105,.06) !important;
+  border-color: rgba(23,31,105,.2) !important;
+  color: var(--sb-blue) !important;
+}
+/* Hide the big 7-item grid, keep only the inline strip */
+.build-checklist-panel > div:not(.checklist-heading):not(.checklist-status-row) {
+  display: none !important;
+}
+/* Keep the Status select and Release button */
+.build-checklist-panel .checklist-status-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex-shrink: 0 !important;
+}
+/* Hide setup summary entirely — info is in sidebar */
+.setup-summary-main { display: none !important; }
+/* Board shell fills everything below */
+.sb-board-wrap > .board-shell,
+.sb-board-wrap > .modern-builder-shell {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  margin: 4px 12px 8px !important;
+  border-radius: var(--sb-r-lg) !important;
+  border: 1px solid var(--sb-line) !important;
+  box-shadow: var(--sb-sh-sm) !important;
+  background: var(--sb-surface) !important;
 }
