@@ -32,18 +32,13 @@ html body #app .app-main > .workspace {
   background: var(--sb-bg) !important;
 }
 html body #app .app-main > .workspace > .sb-board-wrap {
-  flex: 1 1 0 !important; min-width: 0 !important;
+  flex: none !important; min-width: 0 !important;
   display: flex !important; flex-direction: column !important;
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 html body #app .app-main > .workspace > .preview-shell {
-  width: 280px !important; flex: 0 0 280px !important;
-  min-width: 0 !important; overflow: hidden !important;
-  display: flex !important; flex-direction: column !important;
-  border-radius: 0 !important;
-  border-top: none !important; border-bottom: none !important; border-right: none !important;
-  margin: 0 !important; box-shadow: none !important;
-  border-left: 1px solid var(--sb-line) !important;
+  width: calc(100% - 24px) !important; flex: none !important;
+  overflow: visible !important;
 }
 /* ================================================================
    SCHEDULE BUILDER — Design Overhaul v2.0
@@ -1720,7 +1715,7 @@ html body #app .app-main > .workspace {
 }
 
 /* Board wrap: natural height, no flex constraint */
-html body #app .workspace > .sb-board-wrap {
+html body #app .app-main > .workspace > .sb-board-wrap {
   flex: none !important;
   height: auto !important;
   min-height: 0 !important;
