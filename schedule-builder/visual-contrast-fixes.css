@@ -58,3 +58,9 @@
 .compact-event-main span {
   color: #5F6062 !important;
 }
+
+/* sb-left-rail is fully self-styled — exclude from all board overrides */
+.sb-left-rail .event-title-main strong,
+.sb-left-rail .compact-event-main strong { color: inherit !important; }
+.sb-left-rail .event-title-main span,
+.sb-left-rail .compact-event-main span { color: inherit !important; }

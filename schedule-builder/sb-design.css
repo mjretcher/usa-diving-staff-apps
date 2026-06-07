@@ -1352,87 +1352,360 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
 }
 
 
-/* ════════════════════════════════════════════════════
-   BOARD SCROLL FIX — board-shell scrolls internally
-   ════════════════════════════════════════════════════ */
-.sb-board-wrap {
+/* ════════════════════════════════════════════════════════════════
+   AUTHORITATIVE SIDEBAR — Final cascade position beats all others
+   Every element inside .sb-left-rail is explicitly styled here.
+   This is the single source of truth for sidebar appearance.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Container */
+.sb-left-rail {
+  background: #0b0f3d !important;
+  color: rgba(255,255,255,.82) !important;
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
   overflow: hidden !important;
-}
-.board-shell,
-.modern-builder-shell {
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-/* Day tabs row — fixed height, no shrink */
-.builder-day-tabs {
   flex-shrink: 0 !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  white-space: nowrap !important;
-  max-height: 52px !important;
-  padding: 6px 12px !important;
 }
-/* Active day panel — this is what scrolls */
-.active-day-panel,
-.day-lane {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
+
+/* Tab body scroll area */
+.sb-left-rail .sb-tab-body,
+.sb-left-rail #sbTabBody {
+  background: #0b0f3d !important;
+  flex: 1 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  padding: 8px 12px 20px !important;
+  padding: 10px !important;
 }
-.active-day-panel::-webkit-scrollbar,
-.day-lane::-webkit-scrollbar { width: 5px !important; }
-.active-day-panel::-webkit-scrollbar-thumb,
-.day-lane::-webkit-scrollbar-thumb { background: var(--sb-line) !important; border-radius: 3px !important; }
+.sb-left-rail .sb-tab-body::-webkit-scrollbar,
+.sb-left-rail #sbTabBody::-webkit-scrollbar { width: 3px !important; }
+.sb-left-rail .sb-tab-body::-webkit-scrollbar-thumb,
+.sb-left-rail #sbTabBody::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12) !important; border-radius: 2px !important; }
 
-/* ── Right preview panel — proper flex column with scroll ── */
-.workspace > .preview-shell {
+/* All text defaults to white */
+.sb-left-rail,
+.sb-left-rail div,
+.sb-left-rail span,
+.sb-left-rail p,
+.sb-left-rail strong,
+.sb-left-rail small,
+.sb-left-rail em {
+  color: rgba(255,255,255,.82) !important;
+}
+
+/* Tab buttons */
+.sb-left-rail .sb-tab-btn {
+  all: unset !important;
   display: flex !important;
-  flex-direction: column !important;
+  align-items: center !important;
+  gap: 7px !important;
+  height: 33px !important;
+  padding: 0 9px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 5px !important;
+  font-size: 11.5px !important;
+  font-weight: 400 !important;
+  color: rgba(255,255,255,.75) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
   overflow: hidden !important;
+  transition: background .12s, color .12s !important;
 }
-.preview-shell .preview-toolbar { flex-shrink: 0 !important; }
-.preview-shell > *:not(.preview-toolbar) { overflow-y: auto !important; flex: 1 1 0 !important; min-height: 0 !important; }
+.sb-left-rail .sb-tab-btn:hover {
+  background: rgba(255,255,255,.07) !important;
+  color: rgba(255,255,255,.95) !important;
+}
+.sb-left-rail .sb-tab-btn.active {
+  background: rgba(255,255,255,.1) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+.sb-left-rail .sb-tab-badge {
+  all: unset !important;
+  background: #e31937 !important;
+  color: #fff !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  padding: 0 5px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-left: auto !important;
+}
 
-/* ── Header: progress indicator visible ── */
-.sb-progress {
-  flex: 1 1 0 !important;
+/* Section labels */
+.sb-left-rail .sb-field-label {
+  display: block !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: .07em !important;
+  text-transform: uppercase !important;
+  color: rgba(212,220,245,.65) !important;
+  margin-bottom: 4px !important;
+}
+
+/* Inputs, selects */
+.sb-left-rail input:not([type="checkbox"]):not([type="radio"]),
+.sb-left-rail select,
+.sb-left-rail textarea {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  height: 28px !important;
+  padding: 0 8px !important;
+  font-size: 11.5px !important;
+  font-family: inherit !important;
+  color: rgba(255,255,255,.92) !important;
+  background: rgba(255,255,255,.09) !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 5px !important;
+  outline: none !important;
+  min-height: 0 !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+.sb-left-rail input::placeholder { color: rgba(255,255,255,.3) !important; }
+.sb-left-rail input:focus,
+.sb-left-rail select:focus {
+  border-color: #8fc3ea !important;
+  background: rgba(255,255,255,.13) !important;
+}
+.sb-left-rail select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0.5 0.5l4.5 4.5 4.5-4.5' stroke='rgba(255,255,255,.5)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  padding-right: 26px !important;
+}
+.sb-left-rail select option { background: #111650 !important; color: #d4dcf5 !important; }
+
+/* Field spacing */
+.sb-left-rail .sb-field { margin-bottom: 10px !important; }
+.sb-left-rail .sb-field-row { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+
+/* Day chips */
+.sb-left-rail .sb-day-chip {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 5px 8px !important;
+  margin-bottom: 3px !important;
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(255,255,255,.1) !important;
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  color: rgba(255,255,255,.82) !important;
+}
+.sb-left-rail .sb-day-chip-date {
+  font-size: 10px !important;
+  color: rgba(212,220,245,.5) !important;
+}
+
+/* Catalog cards */
+.sb-left-rail .sb-cat-item {
+  background: rgba(255,255,255,.05) !important;
+  border: 1px solid rgba(255,255,255,.1) !important;
+  border-radius: 5px !important;
+  padding: 7px 8px !important;
+  margin-bottom: 3px !important;
+  cursor: pointer !important;
+  transition: border-color .12s, background .12s !important;
+}
+.sb-left-rail .sb-cat-item:hover {
+  border-color: rgba(143,195,234,.4) !important;
+  background: rgba(255,255,255,.08) !important;
+}
+.sb-left-rail .sb-cat-name {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: rgba(255,255,255,.92) !important;
+}
+.sb-left-rail .sb-cat-sub {
+  font-size: 10px !important;
+  color: rgba(212,220,245,.5) !important;
+  margin-top: 1px !important;
+}
+.sb-left-rail .sb-cat-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 3px !important;
+  margin-top: 5px !important;
+}
+.sb-left-rail .sb-round-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 18px !important;
+  padding: 0 7px !important;
+  border-radius: 9px !important;
+  background: rgba(255,255,255,.07) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  color: rgba(212,220,245,.8) !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  min-height: 0 !important;
+  transition: all .12s !important;
+}
+.sb-left-rail .sb-round-pill:hover,
+.sb-left-rail .sb-round-pill.active {
+  background: #171f69 !important;
+  border-color: #2a3a99 !important;
+  color: #fff !important;
+}
+
+/* Health items */
+.sb-left-rail .sb-health-item {
+  border-radius: 5px !important;
+  padding: 7px 8px !important;
+  margin-bottom: 4px !important;
+  font-size: 11px !important;
+}
+.sb-left-rail .sb-health-item.err { background: rgba(239,68,68,.14) !important; border: 1px solid rgba(239,68,68,.28) !important; color: #fca5a5 !important; }
+.sb-left-rail .sb-health-item.err * { color: #fca5a5 !important; }
+.sb-left-rail .sb-health-item.warn { background: rgba(250,204,21,.1) !important; border: 1px solid rgba(250,204,21,.22) !important; color: #fde68a !important; }
+.sb-left-rail .sb-health-item.warn * { color: #fde68a !important; }
+.sb-left-rail .sb-health-item.info { background: rgba(59,130,246,.1) !important; border: 1px solid rgba(59,130,246,.22) !important; color: #93c5fd !important; }
+.sb-left-rail .sb-health-item.info * { color: #93c5fd !important; }
+.sb-left-rail .sb-health-title { font-weight: 600 !important; font-size: 11px !important; }
+.sb-left-rail .sb-health-sub { font-size: 10px !important; opacity: .75 !important; margin-top: 2px !important; }
+
+/* Library items */
+.sb-left-rail .sb-lib-item {
+  background: rgba(255,255,255,.05) !important;
+  border: 1px solid rgba(255,255,255,.1) !important;
+  border-radius: 5px !important;
+  padding: 7px 8px !important;
+  margin-bottom: 4px !important;
+  cursor: pointer !important;
+  transition: border-color .12s !important;
+}
+.sb-left-rail .sb-lib-item:hover { border-color: rgba(143,195,234,.35) !important; background: rgba(255,255,255,.07) !important; }
+.sb-left-rail .sb-lib-active { border-color: #8fc3ea !important; background: rgba(143,195,234,.1) !important; }
+.sb-left-rail .sb-lib-name { font-size: 12px !important; font-weight: 600 !important; color: rgba(255,255,255,.92) !important; display: block !important; }
+.sb-left-rail .sb-lib-sub { font-size: 10px !important; color: rgba(212,220,245,.5) !important; margin-top: 2px !important; display: block !important; }
+
+/* All buttons inside sidebar */
+.sb-left-rail button {
+  all: unset !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: rgba(255,255,255,.82) !important;
+  background: rgba(255,255,255,.08) !important;
+  border: 1px solid rgba(255,255,255,.14) !important;
+  padding: 4px 9px !important;
+  line-height: 1.4 !important;
+  transition: background .12s, color .12s !important;
+  min-height: 24px !important;
+}
+.sb-left-rail button:hover {
+  background: rgba(255,255,255,.14) !important;
+  color: #fff !important;
+}
+/* Tab buttons override the base button style */
+.sb-left-rail .sb-tab-btn {
+  all: unset !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  height: 33px !important;
+  width: 100% !important;
+  padding: 0 9px !important;
+  box-sizing: border-box !important;
+  border-radius: 5px !important;
+  font-size: 11.5px !important;
+  font-weight: 400 !important;
+  color: rgba(255,255,255,.75) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  transition: background .12s, color .12s !important;
+}
+/* Save to library — accent */
+.sb-left-rail button[onclick*="saveNamedSchedule"] {
+  all: unset !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 5px !important;
-  min-width: 0 !important;
-  overflow: hidden !important;
+  width: 100% !important;
+  height: 30px !important;
+  box-sizing: border-box !important;
+  background: #8fc3ea !important;
+  color: #0a1840 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  transition: background .12s !important;
 }
-.sb-prog-step {
-  white-space: nowrap !important;
-  font-size: 10px !important;
-}
-.sb-prog-sep { flex-shrink: 0 !important; }
+.sb-left-rail button[onclick*="saveNamedSchedule"]:hover { background: #aad3f2 !important; }
 
-/* ── Ensure board-shell content not dark-text-overridden ── */
-.board-shell,
-.board-shell *,
-.sb-board-wrap,
-.sb-board-wrap *,
-.session-card,
-.session-card * {
-  /* Reset any usad-readable-card color pollution */
-  color: revert;
+/* Save input */
+.sb-left-rail #sbLibSaveName {
+  width: 100% !important;
+  display: block !important;
+  margin-bottom: 6px !important;
+  height: 28px !important;
+  padding: 0 8px !important;
+  background: rgba(255,255,255,.09) !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 5px !important;
+  color: rgba(255,255,255,.92) !important;
+  font-size: 11.5px !important;
+  box-sizing: border-box !important;
 }
-/* Re-apply expected text colors */
-.session-card-header strong,
-.session-title-lockup strong { color: var(--sb-ink) !important; }
-.session-card-header span,
-.session-title-lockup span,
-.session-times span { color: var(--sb-ink-4) !important; }
-.event-title-main strong { color: var(--sb-ink) !important; }
-.event-title-main span { color: var(--sb-ink-4) !important; }
+
+/* Empty states and section labels */
+.sb-left-rail .sb-lib-empty,
+.sb-left-rail [style*="text-align:center"],
+.sb-left-rail [style*="text-align: center"] {
+  color: rgba(212,220,245,.45) !important;
+  font-size: 11px !important;
+  text-align: center !important;
+  padding: 10px 0 !important;
+}
+.sb-left-rail .sb-section-label,
+.sb-left-rail [style*="font-size:9px"],
+.sb-left-rail [style*="font-size: 9px"] {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+  color: rgba(212,220,245,.45) !important;
+  margin: 10px 0 5px !important;
+  display: block !important;
+}
+
+/* Add day button */
+.sb-left-rail button[onclick*="addDay"] {
+  all: unset !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 26px !important;
+  box-sizing: border-box !important;
+  background: rgba(255,255,255,.06) !important;
+  border: 1px dashed rgba(255,255,255,.2) !important;
+  border-radius: 5px !important;
+  color: rgba(255,255,255,.6) !important;
+  font-size: 10.5px !important;
+  cursor: pointer !important;
+  margin-top: 4px !important;
+  transition: all .12s !important;
+}
+.sb-left-rail button[onclick*="addDay"]:hover {
+  background: rgba(255,255,255,.1) !important;
+  color: rgba(255,255,255,.9) !important;
+  border-style: solid !important;
+}

@@ -1573,7 +1573,7 @@
           <img src="assets/usa-diving-horizontal-color.png" alt="USA Diving" />
           <div>
             <h1>Schedule Builder</h1>
-            <p>${escapeHtml(state.meet.name||'New Schedule')}</p>
+            <p style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(state.meet.name||'New Schedule')}</p>
           </div>
         </div>
         ${renderProgressSteps(timedSessions, warnings)}

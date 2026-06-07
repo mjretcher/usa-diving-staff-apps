@@ -398,14 +398,15 @@
   }
 
   function markReadableCards() {
-    // Only mark the REPORTS bar and command-center panel — not the board/board-wrap
-    // which contains session cards, events, etc.
+    // DISABLED for new design — markReadableCards causes color:#151B46 to bleed
+    // into board content via usad-readable-card * rule.
+    // The REPORTS bar is rendered by addReportBar() with explicit styling.
+    if (document.querySelector('.sb-left-rail')) return;
+
     Array.from(document.querySelectorAll("section, article, div, .panel")).slice(0, 120).forEach((node) => {
-      // Skip anything inside the new design shell
       if (node.closest('.sb-left-rail') || node.closest('.sb-board-wrap') ||
           node.closest('.board-shell') || node.closest('.day-lane') ||
           node.closest('.session-card') || node.closest('.preview-shell')) return;
-      // Skip the board-shell and everything that renders sessions
       if (node.classList.contains('board-shell') || node.classList.contains('sb-board-wrap') ||
           node.classList.contains('session-card') || node.classList.contains('day-lane')) return;
       if (/COMMAND CENTER|COLOR TEMPLATE|Review Warnings|CURRENT SCHEDULE|BUILD CHECKLIST/i.test(node.textContent || "")) {
