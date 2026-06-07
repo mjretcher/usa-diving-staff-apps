@@ -11,9 +11,9 @@
     style.id = "stableUiFixStyles";
     style.textContent = `
       .app-header { min-height: 48px !important; height: 48px !important; flex-wrap: nowrap !important; gap: 8px !important; padding: 0 14px !important; align-items: center !important; }
-      .brand-lockup { flex: 0 0 auto !important; min-width: 0 !important; max-width: 220px !important; }
+      .brand-lockup { flex: 0 0 auto !important; flex-shrink: 0 !important; min-width: 0 !important; max-width: 200px !important; }
       .brand-lockup h1, .brand-lockup p { color: #FFFFFF !important; }
-      .header-actions { display: flex !important; flex: 0 0 auto !important; flex-wrap: nowrap !important; gap: 6px !important; justify-content: flex-end !important; align-items: center !important; }
+      .header-actions { display: flex !important; flex: 0 0 auto !important; flex-shrink: 0 !important; flex-wrap: nowrap !important; gap: 5px !important; justify-content: flex-end !important; align-items: center !important; }
       .header-actions button, .header-actions .text-button, .header-actions .primary-button { min-height: 30px !important; padding: 0 10px !important; width: auto !important; white-space: nowrap !important; }
 
       .usad-readable-card:not(.sb-board-wrap):not(.board-shell),
@@ -58,13 +58,14 @@
 
       .builder-day-tabs {
         display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 10px !important;
-        max-height: 180px !important;
-        overflow-x: hidden !important;
-        overflow-y: auto !important;
-        padding: 12px 14px !important;
-        scrollbar-gutter: stable !important;
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+        max-height: 48px !important;
+        min-height: 44px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding: 6px 12px !important;
+        align-items: center !important;
       }
       .builder-day-tab { flex: 1 1 170px !important; max-width: 235px !important; min-width: 150px !important; }
       .builder-day-tab.active strong, .builder-day-tab.active span, .builder-day-tab.active em { color: #FFFFFF !important; }

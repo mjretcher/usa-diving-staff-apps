@@ -103,33 +103,56 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
    TOPBAR / APP HEADER
    ═══════════════════════════════════════════════════════ */
 .app-header {
-  background: var(--sb-nav) !important;
+  background: #0a0e38 !important;
   border-bottom: none !important;
-  box-shadow: 0 1px 0 rgba(0,0,0,.2) !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,.25) !important;
   height: 48px !important;
   min-height: 48px !important;
-  padding: 0 14px !important;
-  gap: 10px !important;
+  max-height: 48px !important;
+  padding: 0 12px !important;
+  gap: 0 !important;
   flex-wrap: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  overflow: hidden !important;
 }
 
-/* Brand lockup */
-.brand-lockup { gap: 10px !important; flex: 0 0 auto !important; }
-.brand-lockup img { height: 28px !important; filter: brightness(0) invert(1) !important; }
+/* Brand lockup — fixed width left zone */
+.brand-lockup {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  min-width: 0 !important;
+  max-width: 200px !important;
+  overflow: hidden !important;
+}
+.brand-lockup img { height: 28px !important; filter: brightness(0) invert(1) !important; flex-shrink: 0 !important; }
+.brand-lockup > div { min-width: 0 !important; overflow: hidden !important; }
 .brand-lockup h1 {
-  font-family: var(--sb-f-display) !important;
-  font-size: 14px !important; font-weight: 800 !important;
+  font-family: 'Barlow Condensed','Arial Narrow',Arial,sans-serif !important;
+  font-size: 13px !important; font-weight: 800 !important;
   letter-spacing: .05em !important; text-transform: uppercase !important;
   color: #fff !important; line-height: 1 !important;
+  white-space: nowrap !important;
 }
-.brand-lockup p { font-size: 10px !important; color: var(--sb-nav-muted) !important; line-height: 1 !important; margin-top: 3px !important; }
+.brand-lockup p {
+  font-size: 10px !important; color: rgba(212,220,245,.55) !important;
+  line-height: 1 !important; margin-top: 2px !important;
+  white-space: nowrap !important; overflow: hidden !important;
+  text-overflow: ellipsis !important; max-width: 160px !important;
+}
 
-/* Header actions — replace button pile with clean grouped actions */
+/* Header actions — fixed right zone */
 .header-actions {
-  display: flex !important; align-items: center !important;
-  gap: 5px !important; flex: 0 0 auto !important;
-  flex-wrap: nowrap !important; justify-content: flex-end !important;
-  margin-left: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
 }
 .header-actions button,
 .header-actions .text-button,
@@ -171,8 +194,14 @@ body { background: var(--sb-bg) !important; font-family: var(--sb-f-ui) !importa
    PROGRESS INDICATOR (injected via JS below)
    ═══════════════════════════════════════════════════════ */
 .sb-progress {
-  display: flex; align-items: center; gap: 5px;
-  margin: 0 12px;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  padding: 0 8px !important;
+  overflow: hidden !important;
 }
 .sb-prog-step {
   display: flex; align-items: center; gap: 3px;
