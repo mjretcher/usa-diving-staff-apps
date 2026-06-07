@@ -1593,9 +1593,9 @@
             ${renderBuildChecklist(timedSessions, warnings)}
             ${renderScheduleSetupSummary(timedSessions, warnings)}
             ${renderBoard(timedSessions, warnings)}
-            <div id="previewAnchor"></div>
+            <div id="previewAnchor" style="scroll-margin-top:60px"></div>
+            ${renderPreview(timedSessions)}
           </div>
-          ${renderPreview(timedSessions)}
         </section>
       </main>
       ${entryManagerOpen ? renderEntryManager() : ""}
