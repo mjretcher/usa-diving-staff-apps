@@ -70,10 +70,40 @@
       .report-shortcut-bar { align-items: center; background: #fff; border: 1px solid #D7E1EA; border-radius: 14px; box-shadow: 0 10px 24px rgba(21,27,70,.10); color: #151B46; display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 16px; padding: 10px 12px; }
       .report-shortcut-bar strong { color: #151B46; font-size: 13px; font-weight: 900; text-transform: uppercase; }
       .report-shortcut-bar span { color: #5F6062; font-size: 11px; font-weight: 700; margin-right: 8px; }
-      .report-shortcut-bar button { background: #fff; border: 1px solid #009AC7; border-radius: 999px; color: #151B46; cursor: pointer; font-size: 12px; font-weight: 800; min-height: 30px; padding: 4px 10px; }
+      .report-shortcut-bar :not(.sb-left-rail) > button:not(.sb-tab-btn):not(.sb-lib-item button) { background: #fff; border: 1px solid #009AC7; border-radius: 999px; color: #151B46; cursor: pointer; font-size: 12px; font-weight: 800; min-height: 30px; padding: 4px 10px; }
       .report-shortcut-bar button:hover { background: #EAF8FB; }
 
       .timeline-table .title th, .timeline-table .timeline-day-label td, .timeline-table .timeline-day-label th, .timeline-table .timeline-endcap-row td:not(.day-cell) { color: #FFFFFF !important; }
+    
+      /* ── Sidebar tab buttons — always white text ── */
+      .sb-left-rail .sb-tab-btn {
+        background: transparent !important;
+        color: rgba(255,255,255,.8) !important;
+        border: none !important;
+        border-radius: 5px !important;
+        min-height: 0 !important;
+        padding: 0 9px !important;
+        font-size: 11.5px !important;
+        font-weight: 400 !important;
+      }
+      .sb-left-rail .sb-tab-btn.active {
+        background: rgba(255,255,255,.1) !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+      }
+      .sb-left-rail .sb-tab-btn:hover {
+        background: rgba(255,255,255,.07) !important;
+        color: rgba(255,255,255,.95) !important;
+      }
+      .sb-left-rail .sb-field-label {
+        color: rgba(212,220,245,.75) !important;
+      }
+      .sb-left-rail input,
+      .sb-left-rail select {
+        color: rgba(255,255,255,.9) !important;
+        background: rgba(255,255,255,.08) !important;
+        border-color: rgba(255,255,255,.15) !important;
+      }
     `;
     document.head.appendChild(style);
   }
