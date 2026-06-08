@@ -72,9 +72,16 @@
     ].join(",")));
   }
 
+  function isDayTabClick(event) {
+    return Boolean(event.target && event.target.closest([
+      ".builder-day-tab",
+      ".sb-day-tab"
+    ].join(",")));
+  }
+
   function patchActions() {
     if (!window.actions || window.actions.__scrollPreserveHelperPatched) return false;
-    ["toggleSession", "toggleEventDetails", "openEventDetails"].forEach(function (name) {
+    ["toggleSession", "toggleEventDetails", "openEventDetails", "setActiveBuilderDay"].forEach(function (name) {
       if (typeof window.actions[name] !== "function") return;
       var original = window.actions[name];
       window.actions[name] = function () {
@@ -93,11 +100,11 @@
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
     document.addEventListener("pointerdown", function (event) {
-      if (isExpansionClick(event)) activeSnapshot = captureScroll();
+      if (isExpansionClick(event) || isDayTabClick(event)) activeSnapshot = captureScroll();
     }, true);
 
     document.addEventListener("click", function (event) {
-      if (isExpansionClick(event)) restoreFor(1600);
+      if (isExpansionClick(event) || isDayTabClick(event)) restoreFor(1600);
     }, true);
 
     var attempts = 0;
