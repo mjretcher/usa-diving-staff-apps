@@ -22,5 +22,29 @@
     "eventId": "",
     "eventName": "",
     "note": "Staff approved: dual affects results"
+  },
+  {
+    "id": "1780936812320-567b7a36d881a",
+    "createdAt": "2026-06-08T16:40:12.320Z",
+    "active": true,
+    "type": "dual",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Karolina Polizos",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff decision: dual citizen"
+  },
+  {
+    "id": "1780936812361-2d8eade45ed868",
+    "createdAt": "2026-06-08T16:40:12.361Z",
+    "active": true,
+    "type": "dualEffect",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Karolina Polizos",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff approved: dual affects results"
   }
 ]
