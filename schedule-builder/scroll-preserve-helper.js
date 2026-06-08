@@ -4,36 +4,36 @@
   var activeSnapshot = null;
   var restoreTimer = null;
 
-  function scrollContainers() {
-    return Array.from(document.querySelectorAll([
-      ".workspace",
-      ".sb-session-flow",
-      ".sb-board-wrap",
-      ".builder-flow-dock",
-      ".left-rail",
-      ".timeline-preview",
-      ".builder-day-tabs",
-      ".sb-day-tabs"
-    ].join(",")));
-  }
+  var SCROLL_SELECTORS = [
+    ".workspace",
+    ".sb-session-flow",
+    ".sb-board-wrap",
+    ".builder-flow-dock",
+    ".left-rail",
+    ".timeline-preview",
+    ".builder-day-tabs",
+    ".sb-day-tabs"
+  ];
 
   function captureScroll() {
     return {
       x: window.scrollX,
       y: window.scrollY,
-      nodes: scrollContainers().map(function (node) {
-        return { node: node, top: node.scrollTop, left: node.scrollLeft };
-      })
+      containers: SCROLL_SELECTORS.map(function (selector) {
+        var node = document.querySelector(selector);
+        return node ? { selector: selector, top: node.scrollTop, left: node.scrollLeft } : null;
+      }).filter(Boolean)
     };
   }
 
   function restoreScroll(snapshot) {
     if (!snapshot) return;
     window.scrollTo(snapshot.x, snapshot.y);
-    snapshot.nodes.forEach(function (item) {
-      if (!document.contains(item.node)) return;
-      item.node.scrollTop = item.top;
-      item.node.scrollLeft = item.left;
+    snapshot.containers.forEach(function (item) {
+      var node = document.querySelector(item.selector);
+      if (!node) return;
+      node.scrollTop = item.top;
+      node.scrollLeft = item.left;
     });
   }
 
@@ -50,14 +50,13 @@
         window.clearInterval(restoreTimer);
         activeSnapshot = null;
       }
-    }, 50);
+    }, 40);
   }
 
   function preserveDuring(callback) {
-    var snapshot = captureScroll();
-    activeSnapshot = snapshot;
+    activeSnapshot = captureScroll();
     var result = callback();
-    restoreFor(900);
+    restoreFor(1600);
     return result;
   }
 
@@ -91,18 +90,20 @@
   }
 
   function install() {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+
     document.addEventListener("pointerdown", function (event) {
       if (isExpansionClick(event)) activeSnapshot = captureScroll();
     }, true);
 
     document.addEventListener("click", function (event) {
-      if (isExpansionClick(event)) restoreFor(900);
+      if (isExpansionClick(event)) restoreFor(1600);
     }, true);
 
     var attempts = 0;
     var timer = window.setInterval(function () {
       attempts += 1;
-      if (patchActions() || attempts >= 120) window.clearInterval(timer);
+      if (patchActions() || attempts >= 180) window.clearInterval(timer);
     }, 100);
     patchActions();
   }
