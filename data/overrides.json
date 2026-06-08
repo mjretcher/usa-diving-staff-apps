@@ -12,18 +12,6 @@
     "note": "Staff decision: dual citizen"
   },
   {
-    "id": "1780936756171-73bc4f3585f83",
-    "createdAt": "2026-06-08T16:39:16.171Z",
-    "active": true,
-    "type": "dualEffect",
-    "value": true,
-    "athleteId": "",
-    "athleteName": "Beaumanoir Amprey",
-    "eventId": "",
-    "eventName": "",
-    "note": "Staff approved: dual affects results"
-  },
-  {
     "id": "1780936812320-567b7a36d881a",
     "createdAt": "2026-06-08T16:40:12.320Z",
     "active": true,
