@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "id": "1780936756128-f8cc5757dd37",
+    "createdAt": "2026-06-08T16:39:16.128Z",
+    "active": true,
+    "type": "dual",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Beaumanoir Amprey",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff decision: dual citizen"
+  },
+  {
+    "id": "1780936756171-73bc4f3585f83",
+    "createdAt": "2026-06-08T16:39:16.171Z",
+    "active": true,
+    "type": "dualEffect",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Beaumanoir Amprey",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff approved: dual affects results"
+  }
+]
