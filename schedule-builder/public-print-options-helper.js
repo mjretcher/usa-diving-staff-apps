@@ -12,13 +12,39 @@
       .replaceAll('"', "&quot;");
   }
 
+  function captureScroll() {
+    const containers = [".workspace", ".public-schedule-preview", ".preview-pane", ".builder-flow-dock", ".left-rail"]
+      .map((selector) => {
+        const node = document.querySelector(selector);
+        return node ? { selector, top: node.scrollTop, left: node.scrollLeft } : null;
+      })
+      .filter(Boolean);
+    return { x: window.scrollX, y: window.scrollY, containers };
+  }
+
+  function restoreScroll(snapshot) {
+    if (!snapshot) return;
+    window.scrollTo(snapshot.x, snapshot.y);
+    snapshot.containers.forEach((item) => {
+      const node = document.querySelector(item.selector);
+      if (!node) return;
+      node.scrollTop = item.top;
+      node.scrollLeft = item.left;
+    });
+  }
+
   function hideTimes() {
     return localStorage.getItem(HIDE_TIMES_KEY) === "true";
   }
 
   function setHideTimes(value) {
+    const snapshot = captureScroll();
     localStorage.setItem(HIDE_TIMES_KEY, value ? "true" : "false");
     installControl();
+    restoreScroll(snapshot);
+    requestAnimationFrame(() => restoreScroll(snapshot));
+    setTimeout(() => restoreScroll(snapshot), 80);
+    setTimeout(() => restoreScroll(snapshot), 220);
   }
 
   function readSchedule() {
@@ -152,6 +178,25 @@
     win.setTimeout(() => win.print(), 500);
   }
 
+  function styleControl(label) {
+    label.className = "public-hide-times-control";
+    label.style.display = "inline-flex";
+    label.style.alignItems = "center";
+    label.style.justifyContent = "center";
+    label.style.gap = "10px";
+    label.style.minHeight = "64px";
+    label.style.padding = "10px 22px";
+    label.style.border = "1px solid #d5dceb";
+    label.style.borderRadius = "999px";
+    label.style.background = "#fff";
+    label.style.boxShadow = "0 2px 8px rgba(23,31,105,.05)";
+    label.style.fontWeight = "800";
+    label.style.color = "#334155";
+    label.style.cursor = "pointer";
+    label.style.verticalAlign = "middle";
+    label.style.marginTop = "10px";
+  }
+
   function installControl() {
     const toolbar = document.querySelector(".preview-toolbar .export-actions");
     if (!toolbar) return;
@@ -159,17 +204,14 @@
     if (!label) {
       label = document.createElement("label");
       label.id = "publicHideTimesPrintControl";
-      label.className = "report-print-controls text-button";
-      label.style.display = "inline-flex";
-      label.style.alignItems = "center";
-      label.style.gap = "6px";
-      label.style.padding = "8px 10px";
-      label.innerHTML = `<input type="checkbox" data-public-hide-times> Hide public times`;
+      styleControl(label);
+      label.innerHTML = `<input type="checkbox" data-public-hide-times style="width:22px;height:22px;accent-color:#0074f6;cursor:pointer;"> <span>Hide public times</span>`;
       const after = document.getElementById("reportPrintControls");
       if (after && after.parentNode === toolbar) after.insertAdjacentElement("afterend", label);
       else toolbar.insertBefore(label, toolbar.firstChild);
       label.querySelector("input").addEventListener("change", (event) => setHideTimes(event.target.checked));
     }
+    styleControl(label);
     label.querySelector("input").checked = hideTimes();
   }
 
