@@ -1,0 +1,927 @@
+{
+  "id": "saved-gugb8tny",
+  "name": "2026 USA Diving East Championships",
+  "updatedAt": "2026-06-09T17:52:23.895Z",
+  "schedule": {
+    "updatedAt": "2026-06-09T17:52:23.895Z",
+    "meet": {
+      "name": "USA Diving Schedule Builder",
+      "venue": "Competition Pool",
+      "timezone": "America/New_York",
+      "meetType": "custom",
+      "canvaUrl": "",
+      "days": [
+        {
+          "id": "day-1",
+          "date": "2026-06-09",
+          "openMinutes": 420,
+          "closeMinutes": 1200
+        },
+        {
+          "id": "day-2",
+          "date": "2026-06-10",
+          "openMinutes": 420,
+          "closeMinutes": 1200
+        },
+        {
+          "id": "day-3",
+          "date": "2026-06-11",
+          "openMinutes": 420,
+          "closeMinutes": 1200
+        },
+        {
+          "id": "day-4",
+          "date": "2026-06-12",
+          "openMinutes": 420,
+          "closeMinutes": 1200
+        }
+      ],
+      "updatedAt": "2026-06-09T17:52:23.895Z"
+    },
+    "profile": {
+      "id": "custom",
+      "label": "Custom",
+      "description": "All standard event presets with editable rules.",
+      "allowedRounds": [
+        "Qualifier",
+        "Prelim",
+        "Semifinal",
+        "Final",
+        "Custom Block"
+      ],
+      "roundRelationships": [
+        {
+          "from": "Qualifier",
+          "to": "Prelim",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Prelim",
+          "to": "Semifinal",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Semifinal",
+          "to": "Final",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Prelim",
+          "to": "Final",
+          "relationship": "userChoice",
+          "configurable": true
+        }
+      ],
+      "events": [
+        {
+          "id": "group-d-girls-1m",
+          "level": "Group D",
+          "gender": "Girls",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-d-girls-3m",
+          "level": "Group D",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-d-boys-1m",
+          "level": "Group D",
+          "gender": "Boys",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-d-boys-3m",
+          "level": "Group D",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-girls-1m",
+          "level": "Group C",
+          "gender": "Girls",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 7,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-girls-3m",
+          "level": "Group C",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 7,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-boys-1m",
+          "level": "Group C",
+          "gender": "Boys",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-boys-3m",
+          "level": "Group C",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 35,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-b-girls-1m",
+          "level": "Group B",
+          "gender": "Girls",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 34,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "group-b-girls-3m",
+          "level": "Group B",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 34,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "group-b-boys-1m",
+          "level": "Group B",
+          "gender": "Boys",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 9,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 34,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-b-boys-3m",
+          "level": "Group B",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 9,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 33,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "group-a-girls-1m",
+          "level": "Group A",
+          "gender": "Girls",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 9,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "group-a-girls-3m",
+          "level": "Group A",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 9,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "group-a-boys-1m",
+          "level": "Group A",
+          "gender": "Boys",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 10,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "group-a-boys-3m",
+          "level": "Group A",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 10,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "group-d-girls-platform",
+          "level": "Group D",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-d-boys-platform",
+          "level": "Group D",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-girls-platform",
+          "level": "Group C",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-c-boys-platform",
+          "level": "Group C",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 7,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-b-girls-platform",
+          "level": "Group B",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 7,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 42,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-b-boys-platform",
+          "level": "Group B",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 42,
+          "defaultWarmupMinutes": 35
+        },
+        {
+          "id": "group-a-girls-platform",
+          "level": "Group A",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 8,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "group-a-boys-platform",
+          "level": "Group A",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Individual",
+          "defaultDives": 9,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "junior-13-&-under-girls-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-girls-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-girls-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-girls-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-boys-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-boys-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-boys-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-boys-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-mixed-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-mixed-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-mixed-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Mixed",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-mixed-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Mixed",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "senior-women-1m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-women-3m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-women-10m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "10m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-men-1m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-men-3m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-men-10m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "10m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-synchro-women-3m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-synchro-women-10m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-synchro-men-3m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-synchro-men-10m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-mixed-synchro-3m",
+          "level": "Senior",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Mixed synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-mixed-synchro-10m",
+          "level": "Senior",
+          "gender": "Mixed",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Mixed synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
+        }
+      ],
+      "timingDefaults": {
+        "transitionBufferMinutes": 5,
+        "roundingIncrementMinutes": 5,
+        "secondsPerDive": 42,
+        "secondsPerDiveLocked": false,
+        "warmupMinutes": 55,
+        "panelChangeMinutes": 2.5,
+        "introductionsMinutes": 10,
+        "awardsMinutes": 15,
+        "finalsTransitionMode": "openTraining",
+        "finalsTransitionMinutes": 45,
+        "splitThresholds": {
+          "recommendTotalDives": 180,
+          "reviewAthletes": 40
+        }
+      },
+      "advancementDefaults": {
+        "projectedAdvancers": 12,
+        "actualAdvancers": 0,
+        "finalFieldSize": 12,
+        "domesticEligibleAdvancers": 12,
+        "foreignAthleteAdjustment": 0,
+        "dualCitizenAdjustment": 0,
+        "notes": ""
+      }
+    },
+    "sessions": [],
+    "entryDefaults": {},
+    "splitDefaults": {},
+    "duplicateMessage": "",
+    "selectedEventId": "group-d-girls-1m",
+    "selectedRound": "Qualifier",
+    "combineSessionId": "",
+    "outputSettings": {
+      "publicShowWarmups": true,
+      "publicShowOpenPracticeNotes": true,
+      "publicPreset": "clean",
+      "showEndTimes": true,
+      "showSubjectToChange": true
+    },
+    "theme": "classic",
+    "entryMode": "projected",
+    "projectedEntryDefaults": {},
+    "actualEntryDefaults": {},
+    "locks": {
+      "entries": false,
+      "sessionOrder": false
+    },
+    "publishStatus": "draft",
+    "releasedAt": "",
+    "currentLibraryId": "saved-gugb8tny",
+    "scheduleNotes": [],
+    "exceptions": [],
+    "schedulePackageId": "saved-gugb8tny"
+  }
+}
