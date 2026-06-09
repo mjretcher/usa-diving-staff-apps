@@ -26,7 +26,7 @@
         justify-content: center !important;
         align-items: center !important;
         gap: 6px !important;
-        margin-top: 10px !important;
+        margin-top: 0 !important;
       }
 
       #reportPrintControls select {
@@ -41,7 +41,7 @@
       }
 
       #publicHideTimesPrintControl {
-        margin-top: 10px !important;
+        margin-top: 0 !important;
         align-self: flex-end !important;
       }
 
@@ -55,6 +55,15 @@
       .public-output-controls .toggle-pill,
       .public-designer-panel label {
         scroll-margin-top: 120px;
+      }
+
+      .public-schedule-preview .public-status,
+      .public-schedule-preview .schedule-status,
+      .public-schedule-preview .updated-at,
+      .public-schedule-preview .status-line,
+      .public-schedule-preview [class*="status"],
+      .public-schedule-preview [class*="updated"] {
+        display: none !important;
       }
 
       .entry-builder-drawer,
@@ -135,6 +144,55 @@
     document.head.appendChild(style);
   }
 
+  function snapshot() {
+    const containers = [".workspace", ".preview-pane", ".timeline-preview", ".public-schedule-preview", ".poster-preview", ".builder-flow-dock", ".left-rail"]
+      .map((selector) => {
+        const node = document.querySelector(selector);
+        return node ? { selector, top: node.scrollTop, left: node.scrollLeft } : null;
+      })
+      .filter(Boolean);
+    return { x: window.scrollX, y: window.scrollY, containers };
+  }
+
+  function restore(snap) {
+    if (!snap) return;
+    window.scrollTo(snap.x, snap.y);
+    snap.containers.forEach((item) => {
+      const node = document.querySelector(item.selector);
+      if (!node) return;
+      node.scrollTop = item.top;
+      node.scrollLeft = item.left;
+    });
+  }
+
+  function restoreFor(snap, ms) {
+    const started = Date.now();
+    restore(snap);
+    const timer = setInterval(() => {
+      restore(snap);
+      if (Date.now() - started > ms) clearInterval(timer);
+    }, 45);
+  }
+
+  function isReportNavClick(event) {
+    const button = event.target?.closest?.("button, a, [role='button']");
+    if (!button) return false;
+    const text = String(button.textContent || "").toLowerCase();
+    if (!/(operations timeline|public schedule|poster|canva|outputs|reports)/.test(text)) return false;
+    return Boolean(button.closest(".preview-toolbar, .reports-nav, .report-tabs, .output-tabs, #app"));
+  }
+
+  function stripStatusPreviewLines() {
+    document.querySelectorAll(".public-schedule-preview p, .public-schedule-preview div, .poster-preview p, .poster-preview div").forEach((node) => {
+      if (node.children.length > 2) return;
+      const text = String(node.textContent || "").trim().toLowerCase();
+      if (/^status:\s*review\b/.test(text) || /^status:\s*draft\b/.test(text) || /updated .*schedule subject to change/.test(text)) {
+        node.style.display = "none";
+        node.setAttribute("data-hidden-status-line", "true");
+      }
+    });
+  }
+
   function isEntryPanel(node) {
     if (!node || node.nodeType !== 1) return false;
     const text = String(node.textContent || "").toLowerCase();
@@ -160,10 +218,20 @@
   function install() {
     injectStyles();
     polishEntryPanels();
+    stripStatusPreviewLines();
   }
+
+  document.addEventListener("pointerdown", (event) => {
+    if (isReportNavClick(event)) window.__reportNavScrollSnapshot = snapshot();
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    if (!isReportNavClick(event)) return;
+    restoreFor(window.__reportNavScrollSnapshot || snapshot(), 1500);
+  }, true);
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
 
-  setInterval(install, 800);
+  setInterval(install, 500);
 })();
