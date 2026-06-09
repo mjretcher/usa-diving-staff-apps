@@ -1,59 +1,17 @@
 {
   "id": "saved-2026-junior-nationals-version-3",
-  "name": "2026 Junior Nationals - Version 3 Working Draft",
-  "updatedAt": "2026-06-08T18:30:00.000Z",
+  "name": "2026 USA Diving Junior National v.2",
+  "updatedAt": "2026-06-09T15:14:03.349Z",
   "schedule": {
-    "updatedAt": "2026-06-08T18:30:00.000Z",
+    "updatedAt": "2026-06-09T15:14:03.349Z",
     "meet": {
       "name": "2026 Junior Nationals - Version 3 Working Draft",
-      "venue": "Competition Pool",
+      "venue": "Peak Health Aquatic Center at Mylan Park, Morgantown, WV",
       "timezone": "America/New_York",
       "meetType": "custom",
       "canvaUrl": "",
-      "updatedAt": "2026-06-08T18:30:00.000Z",
+      "updatedAt": "2026-06-09T15:14:03.349Z",
       "days": [
-        {
-          "id": "day-2026-06-23",
-          "date": "2026-06-23",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
-        {
-          "id": "day-2026-06-24",
-          "date": "2026-06-24",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
-        {
-          "id": "day-2026-06-25",
-          "date": "2026-06-25",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
-        {
-          "id": "day-2026-06-26",
-          "date": "2026-06-26",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
-        {
-          "id": "day-2026-06-27",
-          "date": "2026-06-27",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
-        {
-          "id": "day-2026-06-28",
-          "date": "2026-06-28",
-          "openMinutes": 390,
-          "closeMinutes": 1200,
-          "locked": false
-        },
         {
           "id": "day-2026-07-28",
           "date": "2026-07-28",
@@ -164,16 +122,40 @@
     "profile": {
       "id": "custom",
       "label": "Custom",
-      "description": "Junior Version 3 revision: Day 1 competition begins around 2 PM; Group A Girls Platform is moved to standalone prelim/final sessions on Competition Day 2; all same-day individual prelim sessions are completed before same-day finals, with synchro treated as the exception.",
+      "description": "All standard event presets with editable rules.",
       "allowedRounds": [
         "Qualifier",
         "Prelim",
         "Semifinal",
         "Final",
-        "Custom Block",
-        "Open Practice"
+        "Custom Block"
       ],
-      "roundRelationships": [],
+      "roundRelationships": [
+        {
+          "from": "Qualifier",
+          "to": "Prelim",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Prelim",
+          "to": "Semifinal",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Semifinal",
+          "to": "Final",
+          "relationship": "userChoice",
+          "configurable": true
+        },
+        {
+          "from": "Prelim",
+          "to": "Final",
+          "relationship": "userChoice",
+          "configurable": true
+        }
+      ],
       "events": [
         {
           "id": "group-d-girls-1m",
@@ -183,7 +165,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -198,7 +182,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -213,7 +199,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -228,7 +216,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -243,7 +233,9 @@
           "style": "Individual",
           "defaultDives": 7,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -258,7 +250,9 @@
           "style": "Individual",
           "defaultDives": 7,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -273,7 +267,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -288,7 +284,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -303,7 +301,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -318,7 +318,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -333,7 +335,9 @@
           "style": "Individual",
           "defaultDives": 9,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -348,7 +352,9 @@
           "style": "Individual",
           "defaultDives": 9,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -363,7 +369,9 @@
           "style": "Individual",
           "defaultDives": 9,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -378,7 +386,9 @@
           "style": "Individual",
           "defaultDives": 9,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -393,7 +403,9 @@
           "style": "Individual",
           "defaultDives": 10,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -408,7 +420,9 @@
           "style": "Individual",
           "defaultDives": 10,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior springboard preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -423,7 +437,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -438,7 +454,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -453,7 +471,9 @@
           "style": "Individual",
           "defaultDives": 6,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -468,7 +488,9 @@
           "style": "Individual",
           "defaultDives": 7,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -483,7 +505,9 @@
           "style": "Individual",
           "defaultDives": 7,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -498,7 +522,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -513,7 +539,9 @@
           "style": "Individual",
           "defaultDives": 8,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
@@ -528,14 +556,425 @@
           "style": "Individual",
           "defaultDives": 9,
           "allowedRounds": [
+            "Qualifier",
             "Prelim",
+            "Semifinal",
             "Final"
           ],
           "sourceNote": "Junior platform preset from current circuit event structure. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
           "defaultSecondsPerDive": 38,
           "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "junior-13-&-under-girls-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-girls-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Girls",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-girls-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-girls-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Girls",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-boys-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-boys-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Boys",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-boys-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-boys-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Boys",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-mixed-synchro-3m",
+          "level": "Junior 13 & Under",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-mixed-synchro-3m",
+          "level": "Junior 14-18",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-13-&-under-mixed-synchro-platform",
+          "level": "Junior 13 & Under",
+          "gender": "Mixed",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "junior-14-18-mixed-synchro-platform",
+          "level": "Junior 14-18",
+          "gender": "Mixed",
+          "apparatus": "Platform",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Junior synchronized preset."
+        },
+        {
+          "id": "senior-women-1m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-women-3m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-women-10m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "10m",
+          "style": "Individual",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-men-1m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "1m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-men-3m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "3m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 32,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-men-10m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "10m",
+          "style": "Individual",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior individual preset. Advancement fields are editable. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 38,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-synchro-women-3m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-synchro-women-10m",
+          "level": "Senior",
+          "gender": "Women",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-synchro-men-3m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-synchro-men-10m",
+          "level": "Senior",
+          "gender": "Men",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 6,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Senior synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
+        },
+        {
+          "id": "senior-mixed-synchro-3m",
+          "level": "Senior",
+          "gender": "Mixed",
+          "apparatus": "3m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Mixed synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 40,
+          "defaultWarmupMinutes": 45
+        },
+        {
+          "id": "senior-mixed-synchro-10m",
+          "level": "Senior",
+          "gender": "Mixed",
+          "apparatus": "10m",
+          "style": "Synchronized",
+          "defaultDives": 5,
+          "allowedRounds": [
+            "Qualifier",
+            "Prelim",
+            "Semifinal",
+            "Final"
+          ],
+          "sourceNote": "Mixed synchronized preset. Timing seeded from prior USA Diving zone/JWCT workbook templates; edit per meet entries as needed.",
+          "defaultSecondsPerDive": 45,
+          "defaultWarmupMinutes": 55
         }
-      ]
+      ],
+      "timingDefaults": {
+        "transitionBufferMinutes": 5,
+        "roundingIncrementMinutes": 5,
+        "secondsPerDive": 42,
+        "secondsPerDiveLocked": false,
+        "warmupMinutes": 55,
+        "panelChangeMinutes": 2.5,
+        "introductionsMinutes": 10,
+        "awardsMinutes": 15,
+        "finalsTransitionMode": "openTraining",
+        "finalsTransitionMinutes": 45,
+        "splitThresholds": {
+          "recommendTotalDives": 180,
+          "reviewAthletes": 40
+        }
+      },
+      "advancementDefaults": {
+        "projectedAdvancers": 12,
+        "actualAdvancers": 0,
+        "finalFieldSize": 12,
+        "domesticEligibleAdvancers": 12,
+        "foreignAthleteAdjustment": 0,
+        "dualCitizenAdjustment": 0,
+        "notes": ""
+      }
     },
     "sessions": [
       {
@@ -568,7 +1007,13 @@
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "Full facility Junior Nationals official practice day before Competition Day 1.",
-            "canonicalKey": "Junior Nationals official practice - full facility day | 2026-07-28"
+            "canonicalKey": "Junior Nationals official practice - full facility day | 2026-07-28",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       },
@@ -602,7 +1047,13 @@
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "Junior Nationals open training before the first competition block; competition session begins at approximately 2 PM.",
-            "canonicalKey": "Junior Nationals open training - before 2 PM competition start | 2026-07-29"
+            "canonicalKey": "Junior Nationals open training - before 2 PM competition start | 2026-07-29",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       },
@@ -612,7 +1063,7 @@
         "title": "Session V3-1 - A/B Prelims",
         "warmupStartMinutes": 840,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -642,7 +1093,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-boys-3-meter-individual",
@@ -668,17 +1123,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-02",
         "dayId": "day-2026-07-29",
         "title": "Session V3-2 - A/B Finals",
-        "warmupStartMinutes": 1080,
+        "warmupStartMinutes": 1030,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -708,7 +1169,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-boys-3-meter-individual",
@@ -734,9 +1199,15 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-03",
@@ -744,7 +1215,7 @@
         "title": "Session V3-3 - A/B Prelims",
         "warmupStartMinutes": 480,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -774,7 +1245,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-girls-3-meter-individual",
@@ -800,7 +1275,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-boys-platform-individual",
@@ -826,17 +1305,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-04",
         "dayId": "day-2026-07-30",
         "title": "Session V3-4 - Group A Girls Platform Prelim",
-        "warmupStartMinutes": 720,
+        "warmupStartMinutes": 725,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -866,17 +1351,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-05",
         "dayId": "day-2026-07-30",
         "title": "Session V3-5 - A/B Finals",
-        "warmupStartMinutes": 900,
+        "warmupStartMinutes": 970,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -906,7 +1397,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-girls-3-meter-individual",
@@ -932,7 +1427,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-boys-platform-individual",
@@ -958,17 +1457,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-06",
         "dayId": "day-2026-07-30",
         "title": "Session V3-6 - Group A Girls Platform Final",
-        "warmupStartMinutes": 1050,
+        "warmupStartMinutes": 1070,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -998,9 +1503,15 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-07",
@@ -1008,7 +1519,7 @@
         "title": "Session V3-7 - A/B Prelims",
         "warmupStartMinutes": 450,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1038,7 +1549,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-girls-3-meter-individual",
@@ -1064,7 +1579,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-boys-platform-individual",
@@ -1090,17 +1609,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-08",
         "dayId": "day-2026-07-31",
         "title": "Session V3-8 - C/D Prelims",
-        "warmupStartMinutes": 760,
+        "warmupStartMinutes": 715,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1130,7 +1655,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-boys-3-meter-individual",
@@ -1156,7 +1685,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-girls-platform-individual",
@@ -1182,17 +1715,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-09",
         "dayId": "day-2026-07-31",
         "title": "Session V3-9 - A/B Finals",
-        "warmupStartMinutes": 930,
+        "warmupStartMinutes": 885,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -1222,7 +1761,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-girls-3-meter-individual",
@@ -1248,7 +1791,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-a-boys-platform-individual",
@@ -1274,17 +1821,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-10",
         "dayId": "day-2026-07-31",
         "title": "Session V3-10 - C/D Finals",
-        "warmupStartMinutes": 1035,
+        "warmupStartMinutes": 990,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -1314,7 +1867,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-boys-3-meter-individual",
@@ -1340,7 +1897,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-girls-platform-individual",
@@ -1366,9 +1927,15 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-11",
@@ -1376,7 +1943,7 @@
         "title": "Session V3-11 - A/B Prelims",
         "warmupStartMinutes": 450,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1406,7 +1973,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-boys-3-meter-individual",
@@ -1432,7 +2003,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-girls-platform-individual",
@@ -1458,17 +2033,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-12",
         "dayId": "day-2026-08-01",
         "title": "Session V3-12 - C/D Prelims",
-        "warmupStartMinutes": 740,
+        "warmupStartMinutes": 670,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1498,7 +2079,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-boys-3-meter-individual",
@@ -1524,7 +2109,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-girls-platform-individual",
@@ -1550,17 +2139,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-13",
         "dayId": "day-2026-08-01",
         "title": "Session V3-13 - A/B Finals",
-        "warmupStartMinutes": 900,
+        "warmupStartMinutes": 865,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -1590,7 +2185,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-boys-3-meter-individual",
@@ -1616,7 +2215,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 45,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-b-girls-platform-individual",
@@ -1642,17 +2245,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-14",
         "dayId": "day-2026-08-01",
         "title": "Session V3-14 - C/D Finals",
-        "warmupStartMinutes": 1020,
+        "warmupStartMinutes": 955,
         "warmupMinutes": 35,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -1682,7 +2291,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-boys-3-meter-individual",
@@ -1708,7 +2321,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-girls-platform-individual",
@@ -1734,9 +2351,15 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-15",
@@ -1744,7 +2367,7 @@
         "title": "Session V3-15 - C/D Prelims",
         "warmupStartMinutes": 480,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1774,7 +2397,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-girls-3-meter-individual",
@@ -1800,7 +2427,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-boys-platform-individual",
@@ -1826,17 +2457,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-16",
         "dayId": "day-2026-08-02",
         "title": "Session V3-16 - C/D Finals",
-        "warmupStartMinutes": 760,
+        "warmupStartMinutes": 650,
         "warmupMinutes": 40,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -1866,7 +2503,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-girls-3-meter-individual",
@@ -1892,7 +2533,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-d-boys-platform-individual",
@@ -1918,16 +2563,22 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-aug02-restricted-boards",
         "dayId": "day-2026-08-02",
         "title": "Restricted senior/qualifier open boards",
         "isOpenPracticeSession": true,
-        "warmupStartMinutes": 900,
+        "warmupStartMinutes": 740,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
@@ -1946,13 +2597,19 @@
             "display": "Restricted senior/qualifier open boards",
             "round": "Custom Block",
             "blockTitle": "Restricted senior/qualifier open boards",
-            "customDurationMinutes": 300,
+            "customDurationMinutes": 460,
             "numberOfDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "Restricted to USA Nationals / National Qualifier athletes only; junior-only athletes excluded.",
-            "canonicalKey": "Restricted senior/qualifier open boards | 2026-08-02"
+            "canonicalKey": "Restricted senior/qualifier open boards | 2026-08-02",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       },
@@ -1962,7 +2619,7 @@
         "title": "Session V3-17 - C/D Prelims",
         "warmupStartMinutes": 480,
         "warmupMinutes": 55,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": false,
         "locked": false,
@@ -1992,7 +2649,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-girls-3-meter-individual",
@@ -2018,7 +2679,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-boys-platform-individual",
@@ -2044,17 +2709,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-18",
         "dayId": "day-2026-08-03",
         "title": "Session V3-18 - C/D Finals",
-        "warmupStartMinutes": 760,
+        "warmupStartMinutes": 675,
         "warmupMinutes": 40,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -2084,7 +2755,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-girls-3-meter-individual",
@@ -2110,7 +2785,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "group-c-boys-platform-individual",
@@ -2136,17 +2815,23 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 35,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-session-19",
         "dayId": "day-2026-08-03",
         "title": "Session V3-19 - 14-18 Synchro Finals",
-        "warmupStartMinutes": 930,
+        "warmupStartMinutes": 780,
         "warmupMinutes": 60,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -2176,7 +2861,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "14-18-boys-platform-synchronized",
@@ -2202,16 +2891,22 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-aug03-restricted-boards",
         "dayId": "day-2026-08-03",
         "title": "Restricted senior/qualifier open boards",
         "isOpenPracticeSession": true,
-        "warmupStartMinutes": 1080,
+        "warmupStartMinutes": 905,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
@@ -2230,13 +2925,19 @@
             "display": "Restricted senior/qualifier open boards",
             "round": "Custom Block",
             "blockTitle": "Restricted senior/qualifier open boards",
-            "customDurationMinutes": 120,
+            "customDurationMinutes": 295,
             "numberOfDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "Restricted to USA Nationals / National Qualifier athletes only after the Junior Nationals synchro finals block.",
-            "canonicalKey": "Restricted senior/qualifier open boards | 2026-08-03"
+            "canonicalKey": "Restricted senior/qualifier open boards | 2026-08-03",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       },
@@ -2270,7 +2971,13 @@
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "USA Nationals senior open training before the remaining Junior Nationals synchro finals.",
-            "canonicalKey": "Senior open training | 2026-08-04"
+            "canonicalKey": "Senior open training | 2026-08-04",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       },
@@ -2278,9 +2985,9 @@
         "id": "jn-v3-session-20",
         "dayId": "day-2026-08-04",
         "title": "Session V3-20 - 14-18 Synchro Finals",
-        "warmupStartMinutes": 570,
+        "warmupStartMinutes": 580,
         "warmupMinutes": 60,
-        "transitionBufferMinutes": 5,
+        "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "awardsEnabled": true,
         "locked": false,
@@ -2310,7 +3017,11 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           },
           {
             "id": "14-18-girls-platform-synchronized",
@@ -2336,16 +3047,22 @@
             "finalFieldSize": 12,
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
-            "dualCitizenAdjustment": 0
+            "dualCitizenAdjustment": 0,
+            "numberOfDivesLocked": true,
+            "defaultWarmupMinutes": 55,
+            "customDurationMinutes": 0,
+            "detailsOpen": true
           }
-        ]
+        ],
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "jn-v3-aug04-nq-training",
         "dayId": "day-2026-08-04",
         "title": "National Qualifier open training",
         "isOpenPracticeSession": true,
-        "warmupStartMinutes": 720,
+        "warmupStartMinutes": 705,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
@@ -2364,13 +3081,19 @@
             "display": "National Qualifier open training",
             "round": "Custom Block",
             "blockTitle": "National Qualifier open training",
-            "customDurationMinutes": 480,
+            "customDurationMinutes": 495,
             "numberOfDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDivers": 0,
             "secondsPerDive": 0,
             "notes": "Remainder of day restricted to USA Nationals / National Qualifier athletes.",
-            "canonicalKey": "National Qualifier open training | 2026-08-04"
+            "canonicalKey": "National Qualifier open training | 2026-08-04",
+            "numberOfDivesLocked": false,
+            "defaultWarmupMinutes": 55,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 2.5,
+            "detailsOpen": true,
+            "manualSplit": false
           }
         ]
       }
@@ -2399,6 +3122,15 @@
         "audience": "operations",
         "text": "Junior Version 3 revision: Competition Day 1 starts around 2 PM after open training. Group A Girls Platform moved to standalone sessions on Competition Day 2. Individual prelim sessions are grouped before individual finals; synchro remains clustered at the end/transition window."
       }
-    ]
+    ],
+    "selectedEventId": "group-d-girls-1m",
+    "combineSessionId": "",
+    "entryDefaults": {},
+    "splitDefaults": {},
+    "duplicateMessage": "",
+    "projectedEntryDefaults": {},
+    "actualEntryDefaults": {},
+    "releasedAt": "",
+    "exceptions": []
   }
 }
