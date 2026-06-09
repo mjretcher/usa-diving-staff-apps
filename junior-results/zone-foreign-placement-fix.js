@@ -1,17 +1,18 @@
 /*
-  Zone foreign / exhibition placement fix
-  ---------------------------------------
-  DiveMeets pushes non-US citizen / exhibition athletes to place code 127 or EX,
-  which breaks rule-order calculations if the app sorts by official DiveMeets
-  place. USA Diving still needs the athlete's score-order participation impact:
-  they are foreign/non-displacing, and the next eligible athlete moves up.
+  Zone foreign / exhibition placement integrity fix
+  -------------------------------------------------
+  DiveMeets can mark non-US citizen athletes as exhibition / place 127. That
+  pushes them out of normal place order even when their score won the event.
+
+  USA Diving needs two truths at the same time:
+  - The athlete is foreign/non-displacing and does not consume a spot.
+  - Their score-order performance still determines who moved up and why.
 */
 (function installZoneForeignPlacementFix(){
   if (typeof state === 'undefined' || typeof effectiveResults === 'undefined') return;
 
   function norm(v){ return String(v == null ? '' : v).trim(); }
   function upper(v){ return norm(v).toUpperCase(); }
-  function isFiniteScore(v){ return Number.isFinite(Number(v)); }
   function athleteOverrideKey(v){ return typeof athleteKey === 'function' ? athleteKey(v) : ''; }
   function isDiveMeetsForeignCode(row){
     const place = upper(row.place);
@@ -20,7 +21,8 @@
     const rawPlaceNumber = Number(row.rawPlaceNumber || row.diveMeetsPlaceNumber || row.officialPlaceNumber);
     return place === '127' || rawPlace === '127' || place === 'EX' || place === 'EXH' ||
       rawPlace === 'EX' || rawPlace === 'EXH' || placeNumber === 127 || rawPlaceNumber === 127 ||
-      row.exhibition === true || String(row.qualified || '').toLowerCase().includes('exhibition');
+      row.exhibition === true || String(row.qualified || '').toLowerCase().includes('exhibition') ||
+      String(row.status || '').toLowerCase().includes('exhibition');
   }
   function hasForeignOffOverride(row){
     const key = athleteOverrideKey(row);
@@ -35,6 +37,11 @@
     if (text && !list.includes(text)) list.push(text);
     return list;
   }
+  function appendReason(current, reason){
+    const parts = String(current || '').split('|').map(s => s.trim()).filter(Boolean);
+    if (!parts.includes(reason)) parts.push(reason);
+    return parts.join(' | ');
+  }
   function performanceSort(a,b){
     const as = Number(a.score), bs = Number(b.score);
     if (Number.isFinite(as) || Number.isFinite(bs)) {
@@ -44,6 +51,18 @@
     }
     const ap = Number(a.placeNumber), bp = Number(b.placeNumber);
     return (Number.isFinite(ap) ? ap : 9999) - (Number.isFinite(bp) ? bp : 9999);
+  }
+  function isForeign(row){
+    return Boolean(row.foreignDeclared || row.webpointNonUsEffective || row.diveMeetsForeignCode || isDiveMeetsForeignCode(row));
+  }
+  function isGhost(row){
+    return Boolean(row.ghostAdvances || row.hps || row.dualOtherCountry || isForeign(row));
+  }
+  function sourceLabel(row){
+    if (row.hps) return 'HPS athlete';
+    if (row.dualOtherCountry) return 'Dual - competed for another federation';
+    if (isForeign(row)) return 'Foreign athlete';
+    return 'Non-displacing athlete';
   }
   function markDiveMeetsForeign(row){
     if (!isDiveMeetsForeignCode(row) || hasForeignOffOverride(row)) return row;
@@ -58,16 +77,10 @@
     row.countsTowardCutoff = false;
     return row;
   }
-  function appendReason(current, reason){
-    const parts = String(current || '').split('|').map(s => s.trim()).filter(Boolean);
-    if (!parts.includes(reason)) parts.push(reason);
-    return parts.join(' | ');
-  }
   function normalizeZoneEvent(eventRows){
-    if (!eventRows.length) return;
-    const stage = eventRows[0].stage;
-    if (stage !== 'Zones') return;
-    if (!eventRows.some(r => r.qualifyingEvent !== false && (isDiveMeetsForeignCode(r) || r.foreignDeclared || r.webpointNonUsEffective || r.nonDisplacing))) return;
+    if (!eventRows.length || eventRows[0].stage !== 'Zones') return;
+    const hasForeignOrNonDisplacing = eventRows.some(r => r.qualifyingEvent !== false && (isDiveMeetsForeignCode(r) || r.foreignDeclared || r.webpointNonUsEffective || r.nonDisplacing || r.hps || r.dualOtherCountry));
+    if (!hasForeignOrNonDisplacing) return;
     const ordered = [...eventRows].sort(performanceSort);
     ordered.forEach((row, idx) => {
       const performancePlace = idx + 1;
@@ -81,14 +94,51 @@
       markDiveMeetsForeign(row);
     });
   }
-  function normalizeAllZoneEvents(rows){
+  function groupedEvents(rows){
     const grouped = new Map();
     rows.forEach(r => {
       if (!r || !r.eventId) return;
       if (!grouped.has(r.eventId)) grouped.set(r.eventId, []);
       grouped.get(r.eventId).push(r);
     });
-    grouped.forEach(normalizeZoneEvent);
+    return grouped;
+  }
+  function normalizeAllZoneEvents(rows){
+    groupedEvents(rows).forEach(normalizeZoneEvent);
+  }
+  function applyGhostAdvancement(rows){
+    const report = [];
+    groupedEvents(rows).forEach(eventRows => {
+      if (!eventRows.length || eventRows[0].stage !== 'Zones') return;
+      eventRows.forEach(row => {
+        if (row.qualifyingEvent === false || !row.nonDisplacing || !isGhost(row)) return;
+        const p = Number(row.performancePlaceNumber || row.rulePlaceNumber || row.placeNumber);
+        if (!Number.isFinite(p)) return;
+        const threshold = Number(row.officialThresholdScore);
+        const meetsThreshold = Number.isFinite(threshold) && Number(row.score) >= threshold;
+        row.ghostAdvances = true;
+        row.ghostQualificationImpact = true;
+        row.ghostImpactReason = sourceLabel(row);
+        row.advancesToZone = true;
+        if (p <= 3) {
+          row.ghostAdvancesToNationals = true;
+          row.advancesToNationals = true;
+          row.advancesToEWC = false;
+          row.juniorNationalStatus = row.juniorNationalStatus || 'Non-displacing direct';
+          row.qualificationStatus = 'Non-displacing - ' + sourceLabel(row).toLowerCase() + ' in Nationals position';
+        } else if (p <= 18 || meetsThreshold) {
+          row.ghostAdvancesToEWC = true;
+          row.advancesToEWC = true;
+          if (!row.advancesToNationals) {
+            row.qualificationStatus = 'Non-displacing - ' + sourceLabel(row).toLowerCase() + ' in E/W/C position';
+          }
+        }
+        if (row.ghostAdvancesToNationals || row.ghostAdvancesToEWC) {
+          report.push({ athlete:row.athlete, event:row.eventName, zone:row.zone, performancePlace:p, score:row.score, path:row.ghostAdvancesToNationals ? 'Nationals position' : 'E/W/C position', reason:row.ghostImpactReason });
+        }
+      });
+    });
+    window.USAD_ZONE_FOREIGN_INTEGRITY = report;
   }
 
   if (typeof applyOverrides === 'function' && !applyOverrides.__zoneForeignPlacementFix) {
@@ -106,6 +156,7 @@
       normalizeAllZoneEvents(rows);
       originalRecalcQualification(rows);
       normalizeAllZoneEvents(rows);
+      applyGhostAdvancement(rows);
     };
     recalcQualification.__zoneForeignPlacementFix = true;
   }
