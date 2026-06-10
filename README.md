@@ -14,6 +14,7 @@ Internal staff tools for the USA Diving High Performance Department.
 | 2 | Junior Results Audit | `/junior-results/` |
 | 3 | Criteria Simulator | `/criteria-simulator/` |
 | 4 | Athlete Evaluation | `/athlete-evaluation/` |
+| 5 | Season Calendar Planner | `/season-calendar/` |
 
 ---
 
@@ -38,8 +39,30 @@ usa-diving-staff-apps/
 ├── schedule-builder/
 ├── junior-results/
 ├── criteria-simulator/
-└── athlete-evaluation/
+├── athlete-evaluation/
+└── season-calendar/            ← annual season planning calendar
 ```
+
+---
+
+## Season Calendar Planner
+
+The Season Calendar Planner is a no-login, browser-based annual planning tool for USA Diving events, AQUA overlays, NCAA context, international events, deadlines, holidays, and planning windows.
+
+Initial version includes:
+
+- Separate year views for 2027, 2028, and future years
+- Add, edit, duplicate, delete, and copy-forward event workflows
+- Category and status filters
+- Public/export and internal-view visibility toggles
+- USA and international holiday layers
+- Deadline fields attached to events plus standalone deadline support
+- Option groups for alternate planning scenarios
+- Executive annual calendar and expanded annual grid views
+- Browser print/PDF export and CSV export for Excel
+- Self-reported updated-by field and timestamp/version notes
+
+Data is currently stored in browser local storage for fast planning. Export CSV regularly when using the planner for formal working files.
 
 ---
 
