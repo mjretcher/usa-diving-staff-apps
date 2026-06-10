@@ -34,5 +34,29 @@
     "eventId": "",
     "eventName": "",
     "note": "Staff approved: dual affects results"
+  },
+  {
+    "id": "1781100221317-9272fa8dcc5e98",
+    "createdAt": "2026-06-10T14:03:41.318Z",
+    "active": true,
+    "type": "dual",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Barbara Chen",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff decision: dual citizen"
+  },
+  {
+    "id": "1781100221368-58628a5b6c8af8",
+    "createdAt": "2026-06-10T14:03:41.368Z",
+    "active": true,
+    "type": "dualEffect",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Barbara Chen",
+    "eventId": "",
+    "eventName": "",
+    "note": "Staff approved: dual affects results"
   }
 ]
