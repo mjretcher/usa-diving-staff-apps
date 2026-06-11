@@ -1,9 +1,9 @@
 {
   "id": "saved-x5o9meou",
   "name": "USA Diving East Championships",
-  "updatedAt": "2026-06-11T17:22:01.028Z",
+  "updatedAt": "2026-06-11T18:24:18.662Z",
   "schedule": {
-    "updatedAt": "2026-06-11T17:22:01.028Z",
+    "updatedAt": "2026-06-11T18:24:12.942Z",
     "meet": {
       "name": "USA Diving East Championships",
       "venue": "Competition Pool",
@@ -23,7 +23,7 @@
           "date": "2026-06-24",
           "openMinutes": 420,
           "closeMinutes": 1200,
-          "locked": true
+          "locked": false
         },
         {
           "id": "day-3",
@@ -54,12 +54,12 @@
           "locked": false
         }
       ],
-      "updatedAt": "2026-06-11T17:22:01.028Z"
+      "updatedAt": "2026-06-11T18:24:12.942Z"
     },
     "profile": {
       "id": "eastWestCentral",
       "label": "East/West/Central",
-      "description": "EWC profile using preliminaries and finals.",
+      "description": "EWC profile: prelims and finals are same-day; finals are top 12 and use Junior Nationals optional dives only.",
       "allowedRounds": [
         "Prelim",
         "Final"
@@ -68,7 +68,7 @@
         {
           "from": "Prelim",
           "to": "Final",
-          "relationship": "sameDayPreferred",
+          "relationship": "sameDayRequired",
           "configurable": true
         }
       ],
@@ -437,13 +437,13 @@
       "timingDefaults": {
         "transitionBufferMinutes": 5,
         "roundingIncrementMinutes": 5,
-        "secondsPerDive": 45,
+        "secondsPerDive": 42,
         "secondsPerDiveLocked": false,
-        "warmupMinutes": 35,
+        "warmupMinutes": 55,
         "panelChangeMinutes": 2.5,
-        "introductionsMinutes": 10,
+        "introductionsMinutes": 0,
         "awardsMinutes": 15,
-        "finalsTransitionMode": "openTraining",
+        "finalsTransitionMode": "openTransition",
         "finalsTransitionMinutes": 45,
         "splitThresholds": {
           "recommendTotalDives": 180,
@@ -535,11 +535,51 @@
             "secondsPerDiveLocked": false,
             "numberOfPanelChanges": 0,
             "minutesPerPanelChange": 0,
-            "customDurationMinutes": 360,
+            "customDurationMinutes": 300,
             "manualSplit": false,
             "detailsOpen": false,
             "notes": "Open practice.",
             "defaultWarmupMinutes": 55
+          }
+        ]
+      },
+      {
+        "id": "session-zm2ydzh1",
+        "dayId": "day-2",
+        "title": "Custom Block",
+        "isOpenPracticeSession": true,
+        "warmupStartMinutes": 1140,
+        "warmupMinutes": 0,
+        "transitionBufferMinutes": 0,
+        "roundingIncrementMinutes": 5,
+        "locked": false,
+        "collapsed": false,
+        "awardsEnabled": false,
+        "events": [
+          {
+            "id": "open-practice-preset-6uitdynz",
+            "scheduleEventId": "event-ey3qck1l",
+            "eventGroupId": "group-ai0s6d7r",
+            "level": "Open",
+            "gender": "",
+            "apparatus": "Practice",
+            "style": "Custom Block",
+            "round": "Open Practice",
+            "blockTitle": "Custom Block",
+            "canonicalKey": "open practice | block-5dl3fqvf",
+            "defaultDives": 0,
+            "defaultNumberOfDives": 0,
+            "numberOfDives": 0,
+            "numberOfDivers": 0,
+            "secondsPerDive": 0,
+            "numberOfDivesLocked": false,
+            "secondsPerDiveLocked": false,
+            "numberOfPanelChanges": 0,
+            "minutesPerPanelChange": 0,
+            "customDurationMinutes": 60,
+            "manualSplit": false,
+            "detailsOpen": false,
+            "notes": "Technical Meeting"
           }
         ]
       },
@@ -579,7 +619,8 @@
             "customDurationMinutes": 90,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open practice."
+            "notes": "Open practice.",
+            "defaultWarmupMinutes": 55
           }
         ]
       },
@@ -588,7 +629,7 @@
         "dayId": "day-3",
         "title": "Group B Girls Platform Prelim Session",
         "warmupStartMinutes": 480,
-        "warmupMinutes": 35,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -629,7 +670,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-b-boys-1m",
@@ -665,17 +707,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-yxbaxcnq",
         "dayId": "day-3",
         "title": "Group A Girls 1-Meter Prelim Session",
-        "warmupStartMinutes": 640,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 650,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -716,7 +760,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-a-boys-3m",
@@ -752,17 +797,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-eru71f10",
         "dayId": "day-3",
         "title": "Group C Girls 3-Meter Prelim Session",
-        "warmupStartMinutes": 800,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 820,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -803,7 +850,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-d-boys-1m",
@@ -839,34 +887,37 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
-        "id": "session-1imwr1c7",
+        "id": "session-n5m9qith",
         "dayId": "day-3",
         "title": "Open Training",
-        "autoTrainingForDayId": "day-3",
-        "warmupStartMinutes": 920,
+        "isOpenPracticeSession": true,
+        "warmupStartMinutes": 950,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
-        "collapsed": true,
+        "collapsed": false,
         "awardsEnabled": false,
         "events": [
           {
-            "id": "open-training-preset-ydqqpnvq",
-            "scheduleEventId": "event-a1q61dh7",
-            "eventGroupId": "group-aljyci1i",
+            "id": "open-practice-preset-xlqauogb",
+            "scheduleEventId": "event-j4qun8da",
+            "eventGroupId": "group-taezexky",
             "level": "Open",
             "gender": "",
-            "apparatus": "Training",
+            "apparatus": "Practice",
             "style": "Open Training",
-            "round": "Custom Block",
-            "canonicalKey": "open training | block-rv53h97c",
+            "round": "Open Practice",
+            "blockTitle": "Open Training",
+            "canonicalKey": "open practice | block-e66lxf5o",
             "defaultDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDives": 0,
@@ -879,7 +930,7 @@
             "customDurationMinutes": 40,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open training before finals."
+            "notes": "Open training."
           }
         ]
       },
@@ -887,13 +938,13 @@
         "id": "session-wvut2i4s",
         "dayId": "day-3",
         "title": "Finals",
-        "warmupStartMinutes": 970,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1000,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-b-girls-platform",
@@ -901,7 +952,7 @@
             "gender": "Girls",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 7,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -914,8 +965,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Girls | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 7,
-            "numberOfDives": 7,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 42,
             "secondsPerDiveLocked": false,
@@ -929,10 +980,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-cg3ovkm4",
             "autoCreatedFromSessionId": "session-jve6emw6",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-b-boys-1m",
@@ -940,7 +993,7 @@
             "gender": "Boys",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 9,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -953,8 +1006,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Boys | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 9,
-            "numberOfDives": 9,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 34,
             "secondsPerDiveLocked": false,
@@ -968,26 +1021,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-ewlp5uhb",
             "autoCreatedFromSessionId": "session-jve6emw6",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-jve6emw6",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-nz4hxmwq",
         "dayId": "day-3",
         "title": "Finals",
-        "warmupStartMinutes": 1095,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1070,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-a-girls-1m",
@@ -995,7 +1051,7 @@
             "gender": "Girls",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 9,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1008,8 +1064,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Girls | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 9,
-            "numberOfDives": 9,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 32,
             "secondsPerDiveLocked": false,
@@ -1023,10 +1079,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-7pfkkxpt",
             "autoCreatedFromSessionId": "session-yxbaxcnq",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-a-boys-3m",
@@ -1034,7 +1092,7 @@
             "gender": "Boys",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 10,
+            "defaultDives": 5,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1047,8 +1105,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Boys | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 10,
-            "numberOfDives": 10,
+            "defaultNumberOfDives": 5,
+            "numberOfDives": 5,
             "numberOfDivesLocked": true,
             "secondsPerDive": 32,
             "secondsPerDiveLocked": false,
@@ -1062,26 +1120,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-8sl2ccun",
             "autoCreatedFromSessionId": "session-yxbaxcnq",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-yxbaxcnq",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-v43xyyg2",
         "dayId": "day-3",
         "title": "Finals",
-        "warmupStartMinutes": 1220,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1140,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-c-girls-3m",
@@ -1089,7 +1150,7 @@
             "gender": "Girls",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 7,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1102,8 +1163,8 @@
             "round": "Final",
             "canonicalKey": "Group C | Girls | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 7,
-            "numberOfDives": 7,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -1117,10 +1178,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-hdd665c5",
             "autoCreatedFromSessionId": "session-eru71f10",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-d-boys-1m",
@@ -1128,7 +1191,7 @@
             "gender": "Boys",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1141,8 +1204,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Boys | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -1156,14 +1219,17 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-36mfl8si",
             "autoCreatedFromSessionId": "session-eru71f10",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-eru71f10",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-p6clnnco",
@@ -1201,7 +1267,8 @@
             "customDurationMinutes": 90,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open practice."
+            "notes": "Open practice.",
+            "defaultWarmupMinutes": 55
           }
         ]
       },
@@ -1210,7 +1277,7 @@
         "dayId": "day-4",
         "title": "Group A Girls Platform Prelim Session",
         "warmupStartMinutes": 480,
-        "warmupMinutes": 55,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -1251,7 +1318,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-a-boys-1m",
@@ -1287,16 +1355,18 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-38ac1635",
         "dayId": "day-4",
         "title": "Group B Girls 1-Meter Prelim Session",
-        "warmupStartMinutes": 710,
+        "warmupStartMinutes": 700,
         "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
@@ -1338,7 +1408,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-b-boys-3m",
@@ -1374,17 +1445,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-d3iicc39",
         "dayId": "day-4",
         "title": "Group D Girls 1-Meter Prelim Session",
-        "warmupStartMinutes": 840,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 830,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -1425,7 +1498,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-c-boys-platform",
@@ -1461,34 +1535,37 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
-        "id": "session-yqikr9if",
+        "id": "session-3gy9behm",
         "dayId": "day-4",
         "title": "Open Training",
-        "autoTrainingForDayId": "day-4",
+        "isOpenPracticeSession": true,
         "warmupStartMinutes": 940,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
-        "collapsed": true,
+        "collapsed": false,
         "awardsEnabled": false,
         "events": [
           {
-            "id": "open-training-preset-vp14sfe8",
-            "scheduleEventId": "event-djlyepeq",
-            "eventGroupId": "group-wptex03l",
+            "id": "open-practice-preset-i5jwv796",
+            "scheduleEventId": "event-c9jodprm",
+            "eventGroupId": "group-88fhu0ry",
             "level": "Open",
             "gender": "",
-            "apparatus": "Training",
+            "apparatus": "Practice",
             "style": "Open Training",
-            "round": "Custom Block",
-            "canonicalKey": "open training | block-nxffaq0l",
+            "round": "Open Practice",
+            "blockTitle": "Open Training",
+            "canonicalKey": "open practice | block-xpa6wee1",
             "defaultDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDives": 0,
@@ -1501,7 +1578,7 @@
             "customDurationMinutes": 40,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open training before finals."
+            "notes": "Open training."
           }
         ]
       },
@@ -1510,12 +1587,12 @@
         "dayId": "day-4",
         "title": "Finals",
         "warmupStartMinutes": 990,
-        "warmupMinutes": 55,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-a-girls-platform",
@@ -1523,7 +1600,7 @@
             "gender": "Girls",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 8,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1536,8 +1613,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Girls | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 8,
-            "numberOfDives": 8,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 38,
             "secondsPerDiveLocked": false,
@@ -1551,10 +1628,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-za589d8n",
             "autoCreatedFromSessionId": "session-xu9plxhq",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-a-boys-1m",
@@ -1562,7 +1641,7 @@
             "gender": "Boys",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 10,
+            "defaultDives": 5,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1575,8 +1654,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Boys | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 10,
-            "numberOfDives": 10,
+            "defaultNumberOfDives": 5,
+            "numberOfDives": 5,
             "numberOfDivesLocked": true,
             "secondsPerDive": 32,
             "secondsPerDiveLocked": false,
@@ -1590,26 +1669,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-j4ovf6qk",
             "autoCreatedFromSessionId": "session-xu9plxhq",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-xu9plxhq",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-sio7w63u",
         "dayId": "day-4",
         "title": "Finals",
-        "warmupStartMinutes": 1135,
-        "warmupMinutes": 45,
+        "warmupStartMinutes": 1060,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-b-girls-1m",
@@ -1617,7 +1699,7 @@
             "gender": "Girls",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 8,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1630,8 +1712,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Girls | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 8,
-            "numberOfDives": 8,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 34,
             "secondsPerDiveLocked": false,
@@ -1645,10 +1727,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-ow2zcnft",
             "autoCreatedFromSessionId": "session-38ac1635",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-b-boys-3m",
@@ -1656,7 +1740,7 @@
             "gender": "Boys",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 9,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1669,8 +1753,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Boys | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 9,
-            "numberOfDives": 9,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 33,
             "secondsPerDiveLocked": false,
@@ -1684,26 +1768,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-0wby8p52",
             "autoCreatedFromSessionId": "session-38ac1635",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-38ac1635",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-1a4wrib3",
         "dayId": "day-4",
         "title": "Finals",
-        "warmupStartMinutes": 1265,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1125,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-d-girls-1m",
@@ -1711,7 +1798,7 @@
             "gender": "Girls",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1724,8 +1811,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Girls | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -1739,10 +1826,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-qynfdcdz",
             "autoCreatedFromSessionId": "session-d3iicc39",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-c-boys-platform",
@@ -1750,7 +1839,7 @@
             "gender": "Boys",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 7,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -1763,8 +1852,8 @@
             "round": "Final",
             "canonicalKey": "Group C | Boys | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 7,
-            "numberOfDives": 7,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 45,
             "secondsPerDiveLocked": false,
@@ -1778,14 +1867,17 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-d2ur2bjp",
             "autoCreatedFromSessionId": "session-d3iicc39",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-d3iicc39",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-0zl1mt76",
@@ -1823,7 +1915,8 @@
             "customDurationMinutes": 90,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open practice."
+            "notes": "Open practice.",
+            "defaultWarmupMinutes": 55
           }
         ]
       },
@@ -1832,7 +1925,7 @@
         "dayId": "day-2026-06-13",
         "title": "Group B Girls 3-Meter Prelim Session",
         "warmupStartMinutes": 480,
-        "warmupMinutes": 55,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -1873,7 +1966,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-a-boys-platform",
@@ -1909,17 +2003,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-w1c449t4",
         "dayId": "day-2026-06-13",
         "title": "Group C Girls 1-Meter Prelim Session",
-        "warmupStartMinutes": 680,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 670,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -1960,7 +2056,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-c-boys-3m",
@@ -1996,17 +2093,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-iungxtow",
         "dayId": "day-2026-06-13",
         "title": "Group D Girls Platform Prelim Session",
         "warmupStartMinutes": 805,
-        "warmupMinutes": 35,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -2047,7 +2146,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-d-boys-3m",
@@ -2083,34 +2183,37 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
-        "id": "session-8ozbpwzo",
+        "id": "session-zoj343pe",
         "dayId": "day-2026-06-13",
         "title": "Open Training",
-        "autoTrainingForDayId": "day-2026-06-13",
-        "warmupStartMinutes": 910,
+        "isOpenPracticeSession": true,
+        "warmupStartMinutes": 920,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
-        "collapsed": true,
+        "collapsed": false,
         "awardsEnabled": false,
         "events": [
           {
-            "id": "open-training-preset-ce7h83ck",
-            "scheduleEventId": "event-v08t892i",
-            "eventGroupId": "group-oj55qdqf",
+            "id": "open-practice-preset-7n6vn6ot",
+            "scheduleEventId": "event-dx1lbsg8",
+            "eventGroupId": "group-a9e5kw86",
             "level": "Open",
             "gender": "",
-            "apparatus": "Training",
+            "apparatus": "Practice",
             "style": "Open Training",
-            "round": "Custom Block",
-            "canonicalKey": "open training | block-1gfe6w54",
+            "round": "Open Practice",
+            "blockTitle": "Open Training",
+            "canonicalKey": "open practice | block-ssl1m3ow",
             "defaultDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDives": 0,
@@ -2123,7 +2226,7 @@
             "customDurationMinutes": 40,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open training before finals."
+            "notes": "Open training."
           }
         ]
       },
@@ -2131,13 +2234,13 @@
         "id": "session-u6dgiff2",
         "dayId": "day-2026-06-13",
         "title": "Finals",
-        "warmupStartMinutes": 960,
-        "warmupMinutes": 45,
+        "warmupStartMinutes": 970,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-b-girls-3m",
@@ -2145,7 +2248,7 @@
             "gender": "Girls",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 8,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2158,8 +2261,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Girls | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 8,
-            "numberOfDives": 8,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 34,
             "secondsPerDiveLocked": false,
@@ -2173,10 +2276,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-0a9qhjvv",
             "autoCreatedFromSessionId": "session-obqru8jf",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-a-boys-platform",
@@ -2184,7 +2289,7 @@
             "gender": "Boys",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 9,
+            "defaultDives": 5,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2197,8 +2302,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Boys | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 9,
-            "numberOfDives": 9,
+            "defaultNumberOfDives": 5,
+            "numberOfDives": 5,
             "numberOfDivesLocked": true,
             "secondsPerDive": 38,
             "secondsPerDiveLocked": false,
@@ -2212,26 +2317,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-hwfceruc",
             "autoCreatedFromSessionId": "session-obqru8jf",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-obqru8jf",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-hv6wsru2",
         "dayId": "day-2026-06-13",
         "title": "Finals",
-        "warmupStartMinutes": 1100,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1045,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-c-girls-1m",
@@ -2239,7 +2347,7 @@
             "gender": "Girls",
             "apparatus": "1m",
             "style": "Individual",
-            "defaultDives": 7,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2252,8 +2360,8 @@
             "round": "Final",
             "canonicalKey": "Group C | Girls | 1m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 7,
-            "numberOfDives": 7,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -2267,10 +2375,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-b8bst7hu",
             "autoCreatedFromSessionId": "session-w1c449t4",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-c-boys-3m",
@@ -2278,7 +2388,7 @@
             "gender": "Boys",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 8,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2291,8 +2401,8 @@
             "round": "Final",
             "canonicalKey": "Group C | Boys | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 8,
-            "numberOfDives": 8,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -2306,26 +2416,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-r6jcz118",
             "autoCreatedFromSessionId": "session-w1c449t4",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-w1c449t4",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-h4n5y4u1",
         "dayId": "day-2026-06-13",
         "title": "Finals",
-        "warmupStartMinutes": 1220,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1105,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-d-girls-platform",
@@ -2333,7 +2446,7 @@
             "gender": "Girls",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2346,8 +2459,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Girls | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 45,
             "secondsPerDiveLocked": false,
@@ -2361,10 +2474,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-6r0i5lqt",
             "autoCreatedFromSessionId": "session-iungxtow",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-d-boys-3m",
@@ -2372,7 +2487,7 @@
             "gender": "Boys",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2385,8 +2500,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Boys | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -2400,14 +2515,17 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-s4zaw26r",
             "autoCreatedFromSessionId": "session-iungxtow",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-iungxtow",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-cp0gh0p7",
@@ -2445,7 +2563,8 @@
             "customDurationMinutes": 90,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open practice."
+            "notes": "Open practice.",
+            "defaultWarmupMinutes": 55
           }
         ]
       },
@@ -2454,7 +2573,7 @@
         "dayId": "day-2026-06-14",
         "title": "Group A Girls 3-Meter Prelim Session",
         "warmupStartMinutes": 480,
-        "warmupMinutes": 35,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -2495,7 +2614,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-b-boys-platform",
@@ -2531,17 +2651,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-2aq7polm",
         "dayId": "day-2026-06-14",
         "title": "Group C Girls Platform Prelim Session",
-        "warmupStartMinutes": 620,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 630,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -2582,7 +2704,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-c-boys-1m",
@@ -2618,17 +2741,19 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-aql6y0z6",
         "dayId": "day-2026-06-14",
         "title": "Group D Girls 3-Meter Prelim Session",
-        "warmupStartMinutes": 745,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 765,
+        "warmupMinutes": 45,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
@@ -2669,7 +2794,8 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           },
           {
             "id": "group-d-boys-platform",
@@ -2705,34 +2831,37 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": ""
+            "notes": "",
+            "customDurationMinutes": 0
           }
         ],
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
-        "id": "session-qx7l9e2s",
+        "id": "session-plnnwrk8",
         "dayId": "day-2026-06-14",
         "title": "Open Training",
-        "autoTrainingForDayId": "day-2026-06-14",
-        "warmupStartMinutes": 845,
+        "isOpenPracticeSession": true,
+        "warmupStartMinutes": 875,
         "warmupMinutes": 0,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
-        "collapsed": true,
+        "collapsed": false,
         "awardsEnabled": false,
         "events": [
           {
-            "id": "open-training-preset-83e7jan6",
-            "scheduleEventId": "event-xvtdaumb",
-            "eventGroupId": "group-k0vfxcuw",
+            "id": "open-practice-preset-jf1m56rs",
+            "scheduleEventId": "event-tpi8298x",
+            "eventGroupId": "group-gj80w6u8",
             "level": "Open",
             "gender": "",
-            "apparatus": "Training",
+            "apparatus": "Practice",
             "style": "Open Training",
-            "round": "Custom Block",
-            "canonicalKey": "open training | block-zwwj5b0n",
+            "round": "Open Practice",
+            "blockTitle": "Open Training",
+            "canonicalKey": "open practice | block-nls6cp0a",
             "defaultDives": 0,
             "defaultNumberOfDives": 0,
             "numberOfDives": 0,
@@ -2745,7 +2874,7 @@
             "customDurationMinutes": 40,
             "manualSplit": false,
             "detailsOpen": false,
-            "notes": "Open training before finals."
+            "notes": "Open training."
           }
         ]
       },
@@ -2753,13 +2882,13 @@
         "id": "session-n019fjvs",
         "dayId": "day-2026-06-14",
         "title": "Finals",
-        "warmupStartMinutes": 895,
-        "warmupMinutes": 55,
+        "warmupStartMinutes": 925,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-a-girls-3m",
@@ -2767,7 +2896,7 @@
             "gender": "Girls",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 9,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2780,8 +2909,8 @@
             "round": "Final",
             "canonicalKey": "Group A | Girls | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 9,
-            "numberOfDives": 9,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 32,
             "secondsPerDiveLocked": false,
@@ -2795,10 +2924,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-ps0giad8",
             "autoCreatedFromSessionId": "session-dcsf0p6t",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-b-boys-platform",
@@ -2806,7 +2937,7 @@
             "gender": "Boys",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 8,
+            "defaultDives": 4,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2819,8 +2950,8 @@
             "round": "Final",
             "canonicalKey": "Group B | Boys | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 8,
-            "numberOfDives": 8,
+            "defaultNumberOfDives": 4,
+            "numberOfDives": 4,
             "numberOfDivesLocked": true,
             "secondsPerDive": 42,
             "secondsPerDiveLocked": false,
@@ -2834,26 +2965,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-7tbxc42d",
             "autoCreatedFromSessionId": "session-dcsf0p6t",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-dcsf0p6t",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-qcenuuhx",
         "dayId": "day-2026-06-14",
         "title": "Finals",
-        "warmupStartMinutes": 1045,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 995,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-c-girls-platform",
@@ -2861,7 +2995,7 @@
             "gender": "Girls",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2874,8 +3008,8 @@
             "round": "Final",
             "canonicalKey": "Group C | Girls | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 45,
             "secondsPerDiveLocked": false,
@@ -2889,26 +3023,29 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-2a487aih",
             "autoCreatedFromSessionId": "session-2aq7polm",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-2aq7polm",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       },
       {
         "id": "session-07zp9jm9",
         "dayId": "day-2026-06-14",
         "title": "Finals",
-        "warmupStartMinutes": 1160,
-        "warmupMinutes": 35,
+        "warmupStartMinutes": 1060,
+        "warmupMinutes": 25,
         "transitionBufferMinutes": 0,
         "roundingIncrementMinutes": 5,
         "locked": false,
         "collapsed": false,
-        "awardsEnabled": true,
+        "awardsEnabled": false,
         "events": [
           {
             "id": "group-d-girls-3m",
@@ -2916,7 +3053,7 @@
             "gender": "Girls",
             "apparatus": "3m",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2929,8 +3066,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Girls | 3m | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 35,
             "secondsPerDiveLocked": false,
@@ -2944,10 +3081,12 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-4avgdoie",
             "autoCreatedFromSessionId": "session-aql6y0z6",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           },
           {
             "id": "group-d-boys-platform",
@@ -2955,7 +3094,7 @@
             "gender": "Boys",
             "apparatus": "Platform",
             "style": "Individual",
-            "defaultDives": 6,
+            "defaultDives": 3,
             "allowedRounds": [
               "Prelim",
               "Final"
@@ -2968,8 +3107,8 @@
             "round": "Final",
             "canonicalKey": "Group D | Boys | Platform | Individual | Final",
             "numberOfDivers": 12,
-            "defaultNumberOfDives": 6,
-            "numberOfDives": 6,
+            "defaultNumberOfDives": 3,
+            "numberOfDives": 3,
             "numberOfDivesLocked": true,
             "secondsPerDive": 45,
             "secondsPerDiveLocked": false,
@@ -2983,14 +3122,17 @@
             "domesticEligibleAdvancers": 12,
             "foreignAthleteAdjustment": 0,
             "dualCitizenAdjustment": 0,
-            "notes": "",
+            "notes": "Final timing uses top 12 and optional dives only.",
             "autoCreatedFromEventId": "event-awt08m50",
             "autoCreatedFromSessionId": "session-aql6y0z6",
-            "autoCreatedReason": "Prelim to Final sameDayPreferred"
+            "autoCreatedReason": "Prelim to Final sameDayPreferred",
+            "customDurationMinutes": 0,
+            "finalDiveMode": "optionalOnly"
           }
         ],
         "autoFinalForSessionId": "session-aql6y0z6",
-        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent"
+        "transitionBufferSource": "autoClearedNoGapBetweenWarmupAndEvent",
+        "isOpenPracticeSession": false
       }
     ],
     "entryDefaults": {
@@ -3017,7 +3159,31 @@
       "Group D | Boys | Platform | Individual | Prelim": 9,
       "Group D | Girls | 1m | Individual | Prelim": 30,
       "Group D | Girls | 3m | Individual | Prelim": 29,
-      "Group D | Girls | Platform | Individual | Prelim": 7
+      "Group D | Girls | Platform | Individual | Prelim": 7,
+      "Group B|Girls|Platform|Individual|Prelim": 25,
+      "Group B|Boys|1m|Individual|Prelim": 27,
+      "Group A|Girls|1m|Individual|Prelim": 32,
+      "Group A|Boys|3m|Individual|Prelim": 44,
+      "Group C|Girls|3m|Individual|Prelim": 36,
+      "Group D|Boys|1m|Individual|Prelim": 23,
+      "Group A|Girls|Platform|Individual|Prelim": 34,
+      "Group A|Boys|1m|Individual|Prelim": 37,
+      "Group B|Girls|1m|Individual|Prelim": 34,
+      "Group B|Boys|3m|Individual|Prelim": 28,
+      "Group D|Girls|1m|Individual|Prelim": 30,
+      "Group C|Boys|Platform|Individual|Prelim": 4,
+      "Group B|Girls|3m|Individual|Prelim": 32,
+      "Group A|Boys|Platform|Individual|Prelim": 25,
+      "Group C|Girls|1m|Individual|Prelim": 36,
+      "Group C|Boys|3m|Individual|Prelim": 19,
+      "Group D|Girls|Platform|Individual|Prelim": 7,
+      "Group D|Boys|3m|Individual|Prelim": 18,
+      "Group A|Girls|3m|Individual|Prelim": 36,
+      "Group B|Boys|Platform|Individual|Prelim": 18,
+      "Group C|Girls|Platform|Individual|Prelim": 19,
+      "Group C|Boys|1m|Individual|Prelim": 23,
+      "Group D|Girls|3m|Individual|Prelim": 29,
+      "Group D|Boys|Platform|Individual|Prelim": 9
     },
     "splitDefaults": {
       "Group A | Boys | 1m | Individual | Prelim": true,
@@ -3042,7 +3208,7 @@
     "outputSettings": {
       "publicShowWarmups": true,
       "publicShowOpenPracticeNotes": true,
-      "publicPreset": "clean",
+      "publicPreset": "compact",
       "showEndTimes": true,
       "showSubjectToChange": true
     },
@@ -3072,7 +3238,31 @@
       "Group D | Boys | Platform | Individual | Prelim": 9,
       "Group D | Girls | 1m | Individual | Prelim": 30,
       "Group D | Girls | 3m | Individual | Prelim": 29,
-      "Group D | Girls | Platform | Individual | Prelim": 7
+      "Group D | Girls | Platform | Individual | Prelim": 7,
+      "Group B|Girls|Platform|Individual|Prelim": 25,
+      "Group B|Boys|1m|Individual|Prelim": 27,
+      "Group A|Girls|1m|Individual|Prelim": 32,
+      "Group A|Boys|3m|Individual|Prelim": 44,
+      "Group C|Girls|3m|Individual|Prelim": 36,
+      "Group D|Boys|1m|Individual|Prelim": 23,
+      "Group A|Girls|Platform|Individual|Prelim": 34,
+      "Group A|Boys|1m|Individual|Prelim": 37,
+      "Group B|Girls|1m|Individual|Prelim": 34,
+      "Group B|Boys|3m|Individual|Prelim": 28,
+      "Group D|Girls|1m|Individual|Prelim": 30,
+      "Group C|Boys|Platform|Individual|Prelim": 4,
+      "Group B|Girls|3m|Individual|Prelim": 32,
+      "Group A|Boys|Platform|Individual|Prelim": 25,
+      "Group C|Girls|1m|Individual|Prelim": 36,
+      "Group C|Boys|3m|Individual|Prelim": 19,
+      "Group D|Girls|Platform|Individual|Prelim": 7,
+      "Group D|Boys|3m|Individual|Prelim": 18,
+      "Group A|Girls|3m|Individual|Prelim": 36,
+      "Group B|Boys|Platform|Individual|Prelim": 18,
+      "Group C|Girls|Platform|Individual|Prelim": 19,
+      "Group C|Boys|1m|Individual|Prelim": 23,
+      "Group D|Girls|3m|Individual|Prelim": 29,
+      "Group D|Boys|Platform|Individual|Prelim": 9
     },
     "actualEntryDefaults": {},
     "locks": {
@@ -3084,6 +3274,7 @@
     "currentLibraryId": "saved-x5o9meou",
     "scheduleNotes": [],
     "exceptions": [],
-    "schedulePackageId": "saved-x5o9meou"
+    "schedulePackageId": "saved-x5o9meou",
+    "projectedEntriesHydratedFromSchedule": "2026-06-11T17:22:06.112Z"
   }
 }
