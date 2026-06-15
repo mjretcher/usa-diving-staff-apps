@@ -1,9 +1,9 @@
 {
   "id": "saved-x5o9meou",
   "name": "USA Diving East Championships",
-  "updatedAt": "2026-06-15T20:16:57.104Z",
+  "updatedAt": "2026-06-15T20:17:20.213Z",
   "schedule": {
-    "updatedAt": "2026-06-15T20:16:57.104Z",
+    "updatedAt": "2026-06-15T20:17:20.213Z",
     "meet": {
       "name": "USA Diving East Championships",
       "venue": "Competition Pool",
@@ -54,7 +54,7 @@
           "locked": false
         }
       ],
-      "updatedAt": "2026-06-15T20:16:57.104Z"
+      "updatedAt": "2026-06-15T20:17:20.213Z"
     },
     "profile": {
       "id": "eastWestCentral",
@@ -3287,8 +3287,8 @@
       "entries": false,
       "sessionOrder": false
     },
-    "publishStatus": "draft",
-    "releasedAt": "",
+    "publishStatus": "ready",
+    "releasedAt": "2026-06-15T20:17:17.197Z",
     "currentLibraryId": "saved-x5o9meou",
     "scheduleNotes": [],
     "exceptions": [],
