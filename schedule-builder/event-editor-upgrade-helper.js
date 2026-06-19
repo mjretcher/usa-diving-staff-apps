@@ -16,6 +16,12 @@
     minutesPerPanelChange: "Minutes added for each split-board panel break."
   };
 
+  const GROUPS = [
+    { key: "advancement", title: "Advancement", fields: ["projectedAdvancers", "actualAdvancers", "finalFieldSize"] },
+    { key: "eligibility", title: "Eligibility adjustments", fields: ["domesticEligibleAdvancers", "foreignAthleteAdjustment", "dualCitizenAdjustment"] },
+    { key: "notes", title: "Operations notes", fields: ["notes"] }
+  ];
+
   function readState() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); }
     catch (_error) { return null; }
@@ -29,9 +35,7 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
-  function panelEventId(panel) {
-    return panel.closest(".scheduled-event")?.dataset?.eventId || "";
-  }
+  function panelEventId(panel) { return panel.closest(".scheduled-event")?.dataset?.eventId || ""; }
 
   function findEvent(state, scheduleEventId) {
     for (const session of state?.sessions || []) {
@@ -58,9 +62,7 @@
     return [...panel.querySelectorAll("input,textarea,select")].find((node) => fieldName(node) === field) || null;
   }
 
-  function valueFor(panel, field) {
-    return Number(inputFor(panel, field)?.value || 0);
-  }
+  function valueFor(panel, field) { return Number(inputFor(panel, field)?.value || 0); }
 
   function changeNumber(input, direction) {
     const step = Number(input.step || 1) || 1;
@@ -112,9 +114,8 @@
     const state = readState();
     const located = findEvent(state, eventId);
     if (!located) return;
+    if (!window.confirm("Reset this event to template defaults for dives, seconds per dive, locks, split settings, and notes?")) return;
     const event = located.event;
-    const ok = window.confirm("Reset this event to template defaults for dives, seconds per dive, locks, split settings, and notes?");
-    if (!ok) return;
     event.numberOfDives = Number(event.defaultNumberOfDives || event.defaultDives || event.numberOfDives || 0);
     event.numberOfDivesLocked = true;
     if (Number(event.defaultSecondsPerDive || 0) > 0) event.secondsPerDive = Number(event.defaultSecondsPerDive);
@@ -157,6 +158,31 @@
     }
   }
 
+  function organizeRoundFields(panel) {
+    const details = panel.querySelector("details");
+    if (!details || details.dataset.grouped) return;
+    const labels = [...details.querySelectorAll("label")];
+    if (!labels.length) return;
+    const fieldMap = new Map(labels.map((label) => [label.dataset.field || fieldName(label.querySelector("input,textarea,select") || {}), label]));
+    const wrapper = document.createElement("div");
+    wrapper.className = "editor-round-groups";
+    GROUPS.forEach((group) => {
+      const box = document.createElement("div");
+      box.className = `editor-round-group ${group.key}`;
+      box.innerHTML = `<h4>${group.title}</h4>`;
+      group.fields.forEach((field) => {
+        const label = fieldMap.get(field);
+        if (label) box.appendChild(label);
+      });
+      if (box.querySelector("label")) wrapper.appendChild(box);
+    });
+    labels.forEach((label) => { if (!wrapper.contains(label)) wrapper.appendChild(label); });
+    const grid = details.querySelector(".event-grid");
+    if (grid) grid.replaceWith(wrapper);
+    else details.appendChild(wrapper);
+    details.dataset.grouped = "true";
+  }
+
   function timingImpact(panel) {
     const divers = valueFor(panel, "numberOfDivers");
     const dives = valueFor(panel, "numberOfDives");
@@ -176,12 +202,32 @@
     if (!box) {
       box = document.createElement("div");
       box.className = "event-editor-impact";
-      const split = panel.querySelector(".split-controls");
-      if (split) split.insertAdjacentElement("beforebegin", box);
-      else panel.appendChild(box);
+      panel.appendChild(box);
     }
     const t = timingImpact(panel);
     box.innerHTML = `<div><strong>${t.totalDives || 0}</strong><span>Total dives</span></div><div><strong>${t.rawMinutes.toFixed(1)}</strong><span>Raw minutes</span></div><div><strong>${t.eventMinutes.toFixed(1)}</strong><span>${t.splitOn ? "Split minutes" : "Event minutes"}</span></div><div><strong>${t.seconds || 0}</strong><span>Sec / dive</span></div>${t.durationText ? `<p>${t.durationText}</p>` : ""}`;
+  }
+
+  function addActionPanel(panel) {
+    let box = panel.querySelector(".editor-action-panel");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "editor-action-panel";
+      box.innerHTML = `<h4>Event actions</h4><div class="editor-action-list"></div>`;
+      panel.appendChild(box);
+    }
+    const list = box.querySelector(".editor-action-list");
+    const originalButtons = [...panel.closest(".scheduled-event")?.querySelectorAll(".event-actions button") || []];
+    list.innerHTML = "";
+    originalButtons.forEach((button) => {
+      const label = String(button.textContent || button.title || "Action").trim() || button.title || "Action";
+      const clone = document.createElement("button");
+      clone.type = "button";
+      clone.textContent = label;
+      clone.className = button.classList.contains("icon-button") ? "danger-action" : "";
+      clone.addEventListener("click", (event) => { event.preventDefault(); button.click(); });
+      list.appendChild(clone);
+    });
   }
 
   function insights(panel) {
@@ -204,9 +250,7 @@
     if (!box) {
       box = document.createElement("div");
       box.className = "event-editor-insights";
-      const details = panel.querySelector("details");
-      if (details) details.insertAdjacentElement("beforebegin", box);
-      else panel.appendChild(box);
+      panel.appendChild(box);
     }
     const messages = insights(panel);
     if (!messages.length) {
@@ -218,12 +262,33 @@
     box.innerHTML = `<strong>Review before publishing</strong>${messages.map((item) => `<span>${item}</span>`).join("")}`;
   }
 
+  function buildShell(panel) {
+    if (panel.querySelector(".event-editor-shell")) return;
+    const header = panel.querySelector(".event-editor-header");
+    const shell = document.createElement("div");
+    shell.className = "event-editor-shell";
+    const main = document.createElement("div");
+    main.className = "event-editor-main";
+    const side = document.createElement("aside");
+    side.className = "event-editor-side";
+    shell.append(main, side);
+    [...panel.children].forEach((child) => { if (child !== header) main.appendChild(child); });
+    panel.appendChild(shell);
+    [".event-editor-impact", ".event-editor-insights", ".editor-action-panel"].forEach((selector) => {
+      const node = main.querySelector(selector);
+      if (node) side.appendChild(node);
+    });
+  }
+
   function installPanel(panel) {
     addPanelHeader(panel);
     addGroupTitles(panel);
     enhanceLabels(panel);
+    organizeRoundFields(panel);
     addImpact(panel);
+    addActionPanel(panel);
     addInsights(panel);
+    buildShell(panel);
   }
 
   function install() { document.querySelectorAll(".event-detail-panel").forEach(installPanel); }
