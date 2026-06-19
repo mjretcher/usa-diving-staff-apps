@@ -1,7 +1,7 @@
 {
   "id": "saved-000j6hc2",
   "name": "USA Diving West Championships",
-  "updatedAt": "2026-06-16T19:46:57.968Z",
+  "updatedAt": "2026-06-18T10:42:57.983Z",
   "schedule": {
     "updatedAt": "2026-06-16T19:46:57.968Z",
     "meet": {
@@ -59,7 +59,7 @@
     "profile": {
       "id": "eastWestCentral",
       "label": "East/West/Central",
-      "description": "EWC profile using preliminaries and finals.",
+      "description": "EWC profile: prelims and finals are same-day; finals are top 12 and use Junior Nationals optional dives only.",
       "allowedRounds": [
         "Prelim",
         "Final"
@@ -68,7 +68,7 @@
         {
           "from": "Prelim",
           "to": "Final",
-          "relationship": "sameDayPreferred",
+          "relationship": "sameDayRequired",
           "configurable": true
         }
       ],
