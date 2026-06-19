@@ -1,5 +1,20 @@
 (function(){
   "use strict";
+  const VERSION="20260618i";
+  function addCss(href){
+    if(Array.from(document.styleSheets).some(s=>String(s.href||"").includes(href))) return;
+    var l=document.createElement("link");
+    l.rel="stylesheet";
+    l.href=href+"?v="+VERSION;
+    document.head.appendChild(l);
+  }
+  function addScript(src){
+    if(Array.from(document.scripts).some(s=>String(s.src||"").includes(src))) return;
+    var sc=document.createElement("script");
+    sc.src=src+"?v="+VERSION;
+    sc.defer=true;
+    document.body.appendChild(sc);
+  }
   function inject(){
     if(document.getElementById("modernInterfaceHelperStyles")) return;
     var s=document.createElement("style");
@@ -30,7 +45,13 @@
     mark.innerHTML='<img src="'+logo+'" alt="USA Diving">';
     rail.insertBefore(mark,rail.firstChild);
   }
-  function install(){document.body.classList.add("modern-usad-ui");inject();brand();}
+  function install(){
+    document.body.classList.add("modern-usad-ui");
+    inject();
+    brand();
+    addCss("event-editor-upgrade.css");
+    addScript("event-editor-upgrade-helper.js");
+  }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",install); else install();
   setInterval(install,1000);
 })();
