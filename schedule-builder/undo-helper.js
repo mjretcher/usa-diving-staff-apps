@@ -12,6 +12,7 @@
   let actionOpen = false;
   let actionTimer = null;
   let lastScrollSnapshot = null;
+  let cleanupReloadPending = false;
 
   function captureScrollPosition() {
     lastScrollSnapshot = {
@@ -39,6 +40,48 @@
     window.requestAnimationFrame(restore);
     window.setTimeout(restore, 0);
     window.setTimeout(restore, 80);
+  }
+
+  function scheduleCleanupReload() {
+    if (cleanupReloadPending) return;
+    cleanupReloadPending = true;
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 120);
+  }
+
+  function scrubAutoTrainingSessions(schedule) {
+    if (!schedule || typeof schedule !== "object" || !Array.isArray(schedule.sessions)) return false;
+
+    const beforeCount = schedule.sessions.length;
+    schedule.sessions = schedule.sessions.filter((session) => !session || !session.autoTrainingForDayId);
+    const removedAutoTraining = schedule.sessions.length !== beforeCount;
+
+    if (removedAutoTraining && schedule.profile?.timingDefaults?.finalsTransitionMode === "openTraining") {
+      schedule.profile.timingDefaults.finalsTransitionMode = "manualGap";
+    }
+
+    return removedAutoTraining;
+  }
+
+  function sanitizeScheduleStorageValue(value, { reloadAfterCleanup = false } = {}) {
+    if (typeof value !== "string" || !value.trim()) return value;
+
+    try {
+      const parsed = JSON.parse(value);
+      let changed = false;
+
+      changed = scrubAutoTrainingSessions(parsed) || changed;
+      if (parsed?.schedule && typeof parsed.schedule === "object") {
+        changed = scrubAutoTrainingSessions(parsed.schedule) || changed;
+      }
+
+      if (!changed) return value;
+      if (reloadAfterCleanup) scheduleCleanupReload();
+      return JSON.stringify(parsed);
+    } catch (error) {
+      return value;
+    }
   }
 
   function installScrollPreserver() {
@@ -70,7 +113,7 @@
   }
 
   function rememberStateBeforeAction(nextValue) {
-    const previousValue = localStorage.getItem(STORAGE_KEY);
+    const previousValue = sanitizeScheduleStorageValue(localStorage.getItem(STORAGE_KEY));
     if (!previousValue || previousValue === nextValue) return;
 
     if (!actionOpen) {
@@ -85,8 +128,11 @@
   }
 
   localStorage.setItem = function patchedSetItem(key, value) {
-    if (key === STORAGE_KEY) rememberStateBeforeAction(value);
-    const result = originalSetItem(key, value);
+    const nextValue = key === STORAGE_KEY
+      ? sanitizeScheduleStorageValue(value, { reloadAfterCleanup: true })
+      : value;
+    if (key === STORAGE_KEY) rememberStateBeforeAction(nextValue);
+    const result = originalSetItem(key, nextValue);
     if (key === STORAGE_KEY) restoreScrollPosition();
     return result;
   };
@@ -104,7 +150,7 @@
 
     actionOpen = false;
     window.clearTimeout(actionTimer);
-    originalSetItem(STORAGE_KEY, action.value);
+    originalSetItem(STORAGE_KEY, sanitizeScheduleStorageValue(action.value));
     writeUndoAction(null);
     window.location.reload();
   }
@@ -122,6 +168,10 @@
     button.setAttribute("aria-label", button.title);
   }
 
+  function stopUndoPointer(event) {
+    event.stopPropagation();
+  }
+
   function installUndoButton() {
     if (document.getElementById("scheduleBuilderUndoButton")) return;
 
@@ -129,37 +179,40 @@
     style.textContent = `
       #scheduleBuilderUndoButton {
         position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 9999;
-        border: 0;
+        left: 16px;
+        right: auto;
+        bottom: max(18px, env(safe-area-inset-bottom));
+        z-index: 999999;
+        border: 2px solid #ffffff;
         border-radius: 999px;
-        padding: 8px 14px;
-        min-width: 68px;
-        min-height: 34px;
+        padding: 10px 16px;
+        min-width: 78px;
+        min-height: 40px;
         background: #171F69;
         color: #ffffff;
         font-family: inherit;
-        font-size: 0.8rem;
-        font-weight: 800;
+        font-size: 0.84rem;
+        font-weight: 900;
         line-height: 1;
-        box-shadow: 0 8px 18px rgba(23, 31, 105, 0.24);
+        box-shadow: 0 10px 24px rgba(23, 31, 105, 0.30);
         cursor: pointer;
+        pointer-events: auto;
       }
       #scheduleBuilderUndoButton:disabled {
         background: #5F6062;
         cursor: not-allowed;
-        opacity: 0.46;
+        opacity: 0.52;
         box-shadow: none;
       }
       @media (max-width: 720px) {
         #scheduleBuilderUndoButton {
-          right: 10px;
-          bottom: 10px;
-          padding: 7px 12px;
-          min-width: 58px;
-          min-height: 30px;
-          font-size: 0.74rem;
+          left: 10px;
+          right: auto;
+          bottom: max(12px, env(safe-area-inset-bottom));
+          padding: 8px 13px;
+          min-width: 64px;
+          min-height: 34px;
+          font-size: 0.76rem;
         }
       }
     `;
@@ -172,7 +225,14 @@
 
     document.head.appendChild(style);
     document.body.appendChild(button);
-    button.addEventListener("click", undoLastAction);
+    ["pointerdown", "mousedown", "touchstart"].forEach((eventName) => {
+      button.addEventListener(eventName, stopUndoPointer, true);
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      undoLastAction();
+    });
     updateUndoButton();
   }
 
