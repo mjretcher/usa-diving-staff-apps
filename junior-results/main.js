@@ -1195,22 +1195,20 @@ function renderTable() {
   if (state.stage === 'Nationals' && window._qvRenderNat)     { window._qvRenderNat();       return; }
   if (state.stage === 'Reports' && window._qvRenderReports)   { window._qvRenderReports();   return; }
 
-  // Review queue: inject at top of flags view
+  // Review queue: inject at top of flags view, INSIDE tableWrap so it scrolls with content
   if (state.view === 'flags' && window._qvRenderReviewQueue) {
     const wrap = $('tableWrap');
     if (wrap) {
-      // Create a review queue container before the table
       let rqEl = document.getElementById('rv-queue-wrap');
       if (!rqEl) {
         rqEl = document.createElement('div');
         rqEl.id = 'rv-queue-wrap';
-        rqEl.style.cssText = 'border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:4px';
-        wrap.parentNode.insertBefore(rqEl, wrap);
+        rqEl.style.cssText = 'border-bottom:1px solid var(--line);margin-bottom:8px;background:var(--surface)';
+        wrap.prepend(rqEl);
       }
       window._qvRenderReviewQueue(rqEl);
     }
   } else {
-    // Remove queue container when switching away from flags
     const old = document.getElementById('rv-queue-wrap');
     if (old) old.remove();
   }
