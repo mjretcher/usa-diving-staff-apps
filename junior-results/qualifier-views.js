@@ -706,7 +706,7 @@
             <td class="mono">${esc(String(r.eligibleRank||r.countingRank||'—'))}</td>
             <td><div class="ath-name">${esc(r.athlete)}</div><div class="ath-id">${esc(r.diveMeetsId||'')}</div></td>
             <td class="team-col">${esc(r.team||'')}</td>
-            <td><span class="zone-pill zone-${esc(r.zone)}">Z${esc(r.zone||'?')}</span></td>
+            <td><span class="zone-pill zone-${esc(r.zone)}">Zone ${esc(r.zone||'?')}</span></td>
             <td class="score-col">${fmtScore(r.score)}</td>
             <td>${qualBadge(r)} ${destBadge(r)}</td>
             <td>${flagBadges(r)}</td>
@@ -872,7 +872,7 @@
               <td class="mono">${esc(String(r.eligibleRank||'—'))}</td>
               <td><div class="ath-name">${esc(r.athlete)}</div><div class="ath-id">${esc(r.diveMeetsId||'')}</div></td>
               <td class="team-col">${esc(r.team||'')}</td>
-              <td><span class="zone-pill zone-${esc(r.zone)}">Z${esc(r.zone||'?')}</span></td>
+              <td><span class="zone-pill zone-${esc(r.zone)}">Zone ${esc(r.zone||'?')}</span></td>
               <td class="score-col">${fmtScore(r.score)}</td>
               <td>${qualBadge(r)}</td>
               <td>${flagBadges(r)}</td>
@@ -928,7 +928,7 @@
               <td class="mono">${esc(String(r.eligibleRank||'—'))}</td>
               <td><div class="ath-name">${esc(r.athlete)}</div><div class="ath-id">${esc(r.diveMeetsId||'')}</div></td>
               <td class="team-col">${esc(r.team||'')}</td>
-              <td><span class="zone-pill zone-${esc(r.zone)}">Z${esc(r.zone||'?')}</span></td>
+              <td><span class="zone-pill zone-${esc(r.zone)}">Zone ${esc(r.zone||'?')}</span></td>
               <td><span class="qvb qvb-ewc">${esc(ewc)}</span></td>
               <td class="score-col">${fmtScore(r.score)}</td>
               <td>${qualBadge(r)}</td>
@@ -1110,7 +1110,7 @@
             <td class="mono">${esc(String(r.eligibleRank||'—'))}</td>
             <td><div class="ath-name">${esc(r.athlete)}</div><div class="ath-id">${esc(r.diveMeetsId||'')}</div></td>
             <td class="team-col">${esc(r.team||'')}</td>
-            <td><span class="zone-pill zone-${esc(r.zone)}">Z${esc(r.zone||'?')}</span></td>
+            <td><span class="zone-pill zone-${esc(r.zone)}">Zone ${esc(r.zone||'?')}</span></td>
             <td class="score-col">${fmtScore(r.score)}</td>
             <td>${qualBadge(r)}</td>
             <td>${flagBadges(r)}</td>
@@ -1286,7 +1286,7 @@
 
 /* Tables */
 .qv-table{width:100%;border-collapse:collapse;font-size:12px}
-.qv-table th{position:sticky;top:0;background:var(--surface-2);padding:6px 10px;
+.qv-table th{position:sticky;top:0;z-index:2;background:var(--surface-2);padding:6px 10px;
   text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;
   color:var(--ink-3);border-bottom:1px solid var(--line);white-space:nowrap}
 .qv-table td{padding:7px 10px;border-bottom:1px solid var(--line-2);vertical-align:middle;color:var(--ink-2)}
