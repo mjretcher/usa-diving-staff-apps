@@ -335,7 +335,26 @@ function buildFilters() {
     const el = document.getElementById(f.id);
     if (!el) return;
     if (f.type === 'search') {
-      el.addEventListener('input', () => { state.search = el.value; state.selectedEventId = ''; renderAll(); });
+      el.addEventListener('input', () => { const q = el.value;
+      state.search = q;
+      // If query looks like an athlete name (not an event), find and select their event
+      if (q.length >= 2) {
+        const lower = q.toLowerCase();
+        const athleteMatch = effectiveResults.find(r =>
+          stageMatch(r, state.stage) &&
+          (r.athlete || '').toLowerCase().includes(lower) &&
+          !(r.eventName || '').toLowerCase().includes(lower)
+        );
+        if (athleteMatch && athleteMatch.eventId) {
+          state.selectedEventId = athleteMatch.eventId;
+        } else {
+          state.selectedEventId = '';
+        }
+      } else {
+        state.selectedEventId = '';
+      }
+      renderAll();
+    });
     } else {
       el.addEventListener('change', () => { state[f.key] = el.value; state.selectedEventId = ''; populateFilters(); renderAll(); });
     }
@@ -425,14 +444,55 @@ function attachGlobalListeners() {
   });
 
   $('exportBtn').addEventListener('click', () => {
-    const rows = currentRows();
+    // Show export options dropdown
+    const existing = document.getElementById('export-dropdown');
+    if (existing) { existing.remove(); return; }
+    const btn = $('exportBtn');
+    const dropdown = document.createElement('div');
+    dropdown.id = 'export-dropdown';
+    dropdown.style.cssText = `position:fixed;top:${btn.getBoundingClientRect().bottom+4}px;right:12px;
+      background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);
+      box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:500;min-width:220px;padding:6px`;
+    const opts = [
+      { label:'Current view (what\'s on screen)', icon:'ti-table', fn: () => doExport('current') },
+      { label:'Full stage — all events & athletes', icon:'ti-database', fn: () => doExport('stage') },
+      { label:'Analytics summary (TSV)', icon:'ti-chart-bar', fn: () => doExport('analytics') },
+    ];
+    dropdown.innerHTML = `<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);padding:4px 8px 6px">Export as CSV</div>` +
+      opts.map((o,i) => `<button class="export-opt" data-idx="${i}">
+        <i class="ti ${o.icon}" style="font-size:14px;color:var(--ink-3)"></i>
+        <span>${o.label}</span>
+      </button>`).join('');
+    document.body.appendChild(dropdown);
+    dropdown.querySelectorAll('.export-opt').forEach((b,i) => {
+      b.addEventListener('click', () => { opts[i].fn(); dropdown.remove(); });
+    });
+    // Close on outside click
+    setTimeout(() => document.addEventListener('click', function h(e) {
+      if (!dropdown.contains(e.target) && e.target !== btn) { dropdown.remove(); document.removeEventListener('click', h); }
+    }), 10);
+  });
+
+  function doExport(type) {
+    let rows, filename;
+    if (type === 'current') {
+      rows = currentRows();
+      filename = `junior-${state.stage}-${state.view}-${state.selectedEventId ? 'event' : 'all'}.csv`;
+    } else if (type === 'stage') {
+      rows = effectiveResults.filter(r => stageMatch(r, state.stage));
+      filename = `junior-${state.stage}-full.csv`;
+    } else {
+      // Analytics summary — all stages combined
+      rows = effectiveResults;
+      filename = `junior-circuit-2026-full.csv`;
+    }
     const text = buildCsv(rows, ',');
     const blob = new Blob([text], { type:'text/csv;charset=utf-8' });
     const url  = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `junior-${state.stage}-${state.view}.csv`;
+    a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  });
+  }
 
   $('copyTsvButton').addEventListener('click', () => {
     navigator.clipboard.writeText(buildCsv(currentRows(), '\t')).then(
@@ -1149,13 +1209,22 @@ function renderEventList() {
     const advancing = evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
     const nd        = evRows.filter(r => r.nonDisplacing).length;
     const notAtt    = evRows.filter(r => r.declaredNotAttending).length;
+    const bumps     = evRows.filter(r => r.bumpIn).length;
+    const flags     = evRows.filter(r => r.reviewFlags?.length || r.effectiveFlags?.length).length;
+    // Color code: red = has flags/bumps, amber = has ND, green = clean
+    const dotColor  = (flags || bumps) ? '#e31937' : nd ? '#d97706' : '#059669';
     return `<button type="button" class="event-item ${active ? 'active' : ''}" data-event-id="${escAttr(event.id)}">
-      <span class="event-item-name">${esc(event.eventName || event.id)}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};flex-shrink:0;margin-top:1px"></span>
+        <span class="event-item-name">${esc(event.eventName || event.id)}</span>
+      </div>
       <span class="event-item-meta">${esc((event.meetName || '').replace(/^2026 USA Diving (Junior )?/,'').replace(/ Championships$/,'').trim())}</span>
       <div class="event-item-badges">
-        ${advancing ? `<span class="mini-badge green">${advancing} advancing</span>` : ''}
+        ${advancing ? `<span class="mini-badge green">${advancing} adv</span>` : ''}
         ${nd        ? `<span class="mini-badge slate">${nd} ND</span>` : ''}
+        ${bumps     ? `<span class="mini-badge purple">${bumps} bump</span>` : ''}
         ${notAtt    ? `<span class="mini-badge amber">${notAtt} DNA</span>` : ''}
+        ${flags     ? `<span class="mini-badge red">${flags} ⚑</span>` : ''}
       </div>
     </button>`;
   }).join('');
@@ -1230,6 +1299,7 @@ function renderTable() {
   }
 
   if (state.view === 'athletes')   return renderAthleteTable(rows);
+  if (state.view === 'bumps')      return renderBumpsTable(rows);
   if (state.view === 'overrides')  return renderOverridesTable();
   if (state.view === 'official')   return renderOfficialTable(rows);
   renderResultTable(rows);
@@ -1277,19 +1347,40 @@ function renderResultTable(rows) {
 
 /* ── Athletes table ───────────────────────────────────────────── */
 function renderAthleteTable(rows) {
-  const cols = ['Athlete', 'ID', 'Team', 'Events', 'Advancing', 'ND', 'Flags', 'Pre-qualified to'];
-  const tbody = rows.map(r => `<tr>
-    <td><span class="athlete-name">${esc(r.athlete)}</span></td>
-    <td class="mono athlete-id">${esc(r.diveMeetsId)}</td>
-    <td>${esc(r.teams.join(', '))}</td>
-    <td class="mono">${r.events}</td>
-    <td class="mono">${r.advancing}</td>
-    <td class="mono">${r.nonDisplacing}</td>
-    <td>${pillList(r.flags)}</td>
-    <td>${esc(r.prequalification.join(' | '))}</td>
-  </tr>`).join('');
+  const cols = ['Athlete', 'Team', 'Events entered', 'Advancing', 'Flags'];
+  const tbody = rows.map(r => {
+    // Build event tags with status color
+    const evTags = (r.eventRows || []).map(ev => {
+      const cls = ev.advancesToNationals ? 'ev-tag-nat'
+                : ev.advancesToEWC || ev.advancesToZone ? 'ev-tag-ewc'
+                : ev.nonDisplacing ? 'ev-tag-nd'
+                : 'ev-tag-out';
+      return `<span class="ev-tag ${cls}">${esc(ev.eventKey || ev.eventName || '')}</span>`;
+    }).join('');
+
+    const qualSummary = r.advancing > 0
+      ? `<span style="color:#059669;font-weight:500">${r.advancing} advancing</span>`
+      : `<span style="color:var(--ink-4)">0 advancing</span>`;
+    const ndNote = r.nonDisplacing > 0
+      ? `<span style="color:var(--ink-4);font-size:10px"> · ${r.nonDisplacing} non-disp</span>`
+      : '';
+
+    return `<tr data-rid="${esc(r.diveMeetsId || r.athlete)}" style="cursor:pointer">
+      <td style="vertical-align:top">
+        <div class="athlete-name">${esc(r.athlete)}</div>
+        <div class="mono athlete-id">${esc(r.diveMeetsId || '')}</div>
+      </td>
+      <td style="vertical-align:top;font-size:11px;color:var(--ink-3)">${esc((r.teams || []).join(', '))}</td>
+      <td style="vertical-align:top">
+        <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px">${evTags || '<span style="color:var(--ink-4);font-size:11px">—</span>'}</div>
+      </td>
+      <td style="vertical-align:top;white-space:nowrap">${qualSummary}${ndNote}</td>
+      <td style="vertical-align:top">${pillList(r.flags || [])}</td>
+    </tr>`;
+  }).join('');
   $('tableWrap').innerHTML = tableHtml(cols, tbody);
 }
+
 
 /* ── Overrides table ──────────────────────────────────────────── */
 function renderOverridesTable() {
@@ -1321,28 +1412,153 @@ function renderOverridesTable() {
 }
 
 /* ── Official qual list ───────────────────────────────────────── */
-function renderOfficialTable(rows) {
-  const official = officialRows();
-  if (!official.length) {
+/* ── Bumps & shifts dedicated renderer ──────────────────────── */
+function renderBumpsTable(rows) {
+  // Group by event for cleaner display
+  const eventGroups = new Map();
+  rows.forEach(r => {
+    const eid = r.eventId || r.eventKey || '';
+    if (!eventGroups.has(eid)) eventGroups.set(eid, { event: r, rows: [] });
+    eventGroups.get(eid).rows.push(r);
+  });
+
+  if (!eventGroups.size) {
     $('tableWrap').innerHTML = `<div class="empty-state">
-      <div class="empty-state-title">No official list yet</div>
-      <div class="empty-state-sub">Data will appear once qualifier lists are finalized.</div>
+      <div class="empty-state-title">No displacements</div>
+      <div class="empty-state-sub">No bump-ins, spot shifts, or avg threshold qualifiers in this selection.</div>
     </div>`;
     return;
   }
-  const cols = ['Zone / Group', 'Event', 'Rank', 'Athlete', 'ID', 'Team', 'Score', 'Status'];
-  const tbody = official.map(r => `<tr>
-    <td style="font-weight:600">${esc(r.zone || r.ewc || r.group || '')}</td>
-    <td>${esc(r.eventName || '')}</td>
-    <td class="mono">${esc(String(r.rank || r.eligibleRank || ''))}</td>
-    <td><span class="athlete-name">${esc(r.athlete)}</span></td>
-    <td class="mono athlete-id">${esc(r.diveMeetsId || '')}</td>
-    <td>${esc(r.team || '')}</td>
-    <td class="mono">${fmtScore(r.score)}</td>
-    <td>${statusBadge(r)}</td>
-  </tr>`).join('');
-  $('tableWrap').innerHTML = tableHtml(cols, tbody);
+
+  const sections = [...eventGroups.values()].map(({ event: ev, rows: evRows }) => {
+    const bumped   = evRows.filter(r => r.bumpIn);
+    const opened   = evRows.filter(r => r.openedSpot);
+    const avgQ     = evRows.filter(r => r.officialAverageScoreQualifier && !r.bumpIn);
+
+    const rows_html = evRows.map(r => {
+      let rowType = '', icon = '', note = '';
+      if (r.openedSpot) {
+        rowType = 'bump-opened';
+        icon = '<span class="bump-icon bump-icon-open" title="Opened spot">↑</span>';
+        const openedFor = (r.openedFor || []).map(b => b.athlete || '').filter(Boolean);
+        note = openedFor.length
+          ? `Spot opened for: ${openedFor.join(', ')}`
+          : `Non-displacing — ${r.nonDisplacingReason || 'does not consume spot'}`;
+      } else if (r.bumpIn) {
+        rowType = 'bump-in';
+        icon = '<span class="bump-icon bump-icon-in" title="Bumped in">↓</span>';
+        const by = (r.bumpedBy || []).map(b => b.athlete || '').filter(Boolean);
+        note = by.length ? `Moved up because: ${by.join(', ')} is non-displacing` : 'Moved up due to non-displacing athlete';
+      } else if (r.officialAverageScoreQualifier) {
+        rowType = 'bump-avg';
+        icon = '<span class="bump-icon bump-icon-avg" title="Avg threshold">★</span>';
+        note = `Qualified via ${ev.stage === 'Regionals' ? '15th' : '18th'}-place average threshold`;
+      }
+
+      return `<tr class="bump-row bump-row-${rowType}">
+        <td style="width:28px;text-align:center;vertical-align:middle">${icon}</td>
+        <td style="vertical-align:top">
+          <div class="athlete-name">${esc(r.athlete || '')}</div>
+          <div class="mono athlete-id">${esc(r.diveMeetsId || '')}</div>
+          <div style="font-size:10px;color:var(--ink-3)">${esc(r.team || '')}</div>
+        </td>
+        <td class="mono" style="width:44px">${esc(r.place || '—')}</td>
+        <td class="mono" style="width:54px">${esc(String(r.eligibleRank != null ? r.eligibleRank : '—'))}</td>
+        <td class="mono" style="width:80px">${fmtScore(r.score)}</td>
+        <td style="font-size:11px;color:var(--ink-3);line-height:1.4">${esc(note)}</td>
+        <td>${pillList(r.effectiveFlags || [])}</td>
+      </tr>`;
+    }).join('');
+
+    const evName = ev.eventKey || ev.eventName || '';
+    const meetShort = (ev.meetName || '').replace(/^2026 USA Diving (Junior )?/,'').replace(/ Championships$/,'');
+    const badge = bumped.length ? `<span class="mini-badge slate">${bumped.length} bump-in${bumped.length!==1?'s':''}</span>` : '';
+    const avgBadge = avgQ.length ? `<span class="mini-badge" style="background:#f5f3ff;color:#5b21b6">${avgQ.length} avg qual</span>` : '';
+
+    return `<div class="bump-event-section">
+      <div class="bump-event-header">
+        <div class="bump-event-name">${esc(evName)}</div>
+        <div class="bump-event-meta">${esc(meetShort)}</div>
+        <div style="display:flex;gap:4px;flex-shrink:0">${badge}${avgBadge}</div>
+      </div>
+      <table class="results-table" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="width:28px"></th>
+          <th>Athlete</th><th style="width:44px">Place</th>
+          <th style="width:54px">Elig</th><th style="width:80px">Score</th>
+          <th>Reason</th><th>Flags</th>
+        </tr></thead>
+        <tbody>${rows_html}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  $('tableWrap').innerHTML = `<div style="display:flex;flex-direction:column;gap:0">${sections}</div>`;
 }
+
+function renderOfficialTable(rows) {
+  const NAT = window.USAD_JO_NAT_QUALIFIERS;
+  const isZones = state.stage === 'Zones' || state.stage === 'EWC';
+  const isRegionals = state.stage === 'Regionals';
+  const isNationals = state.stage === 'Nationals';
+
+  // Nationals stage: use JO Nationals qualifier list
+  if ((isNationals || (!isRegionals && !isZones)) && NAT?.qualifiers?.length) {
+    const q = (state.search || '').toLowerCase();
+    const natRows = NAT.qualifiers.filter(r => {
+      if (!q) return true;
+      return [r.name, r.diveMeetsId, r.firstName, r.lastName]
+        .join(' ').toLowerCase().includes(q);
+    });
+    if (!natRows.length) {
+      $('tableWrap').innerHTML = `<div class="empty-state"><div class="empty-state-title">No matches</div></div>`;
+      return;
+    }
+    const cols = ['Athlete', 'DM ID', 'Events qualified', 'Source'];
+    const tbody = natRows.map(r => `<tr>
+      <td><span class="athlete-name">${esc(r.name || (r.firstName+' '+r.lastName) || '')}</span></td>
+      <td class="mono athlete-id">${esc(r.diveMeetsId || '')}</td>
+      <td style="font-size:11px">${(r.qualifiedEvents || r.qualifiedEventKeys || []).map(e => `<span class="ev-tag ev-tag-nat">${esc(e)}</span>`).join(' ')}</td>
+      <td style="font-size:11px;color:var(--ink-3)">${esc(r.qualificationSource || 'Zone / E/W/C')}</td>
+    </tr>`).join('');
+    $('tableWrap').innerHTML = `<div style="padding:10px 12px;font-size:11px;color:var(--ink-3);border-bottom:1px solid var(--line)">
+      JO Nationals qualifier list — ${natRows.length} athletes · ${(NAT.meta?.eventCount || '')} event slots · as of ${esc(NAT.meta?.asOf || 'June 2026')}
+    </div>` + tableHtml(cols, tbody);
+    return;
+  }
+
+  // Zones/Regionals stage: use official zone qualifier list (OQZ)
+  const official = officialRows();
+  if (!official.length) {
+    $('tableWrap').innerHTML = `<div class="empty-state">
+      <div class="empty-state-title">No official list data</div>
+      <div class="empty-state-sub">${isRegionals ? 'Switch to the Zones stage to see the official zone qualifier list.' : 'Data will appear once qualifier lists are finalized.'}</div>
+    </div>`;
+    return;
+  }
+  const cols = ['Zone', 'Event', 'Rank', 'Athlete', 'DM ID', 'Score', 'Avg threshold'];
+  const q = (state.search || '').toLowerCase();
+  const filtered = official.filter(r => !q || [r.athlete, r.diveMeetsId, r.team, r.zone, r.eventName].join(' ').toLowerCase().includes(q));
+  const tbody = filtered.map(r => `<tr class="${r.isAverageScoreMarker ? 'row-avg-marker' : ''}">
+    <td style="font-weight:600;width:50px">
+      <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;
+        background:${{A:'#EEEDFE',B:'#EEEDFE',C:'#E1F5EE',D:'#E1F5EE',E:'#FAEEDA',F:'#FAEEDA'}[r.zone]||'var(--surface-2)'};
+        color:${{A:'#3C3489',B:'#3C3489',C:'#085041',D:'#085041',E:'#633806',F:'#633806'}[r.zone]||'var(--ink-3)'}">
+        Zone ${esc(r.zone || '')}
+      </span>
+    </td>
+    <td style="font-size:12px">${esc(r.eventKey || r.eventName || '')}</td>
+    <td class="mono" style="width:44px">${esc(String(r.rank || ''))}</td>
+    <td><span class="athlete-name">${esc(r.athlete || '')}</span></td>
+    <td class="mono athlete-id">${esc(r.diveMeetsId || '')}</td>
+    <td class="mono">${fmtScore(r.score)}${r.isAverageScoreMarker ? '<span style="color:var(--ink-4)"> *</span>' : ''}</td>
+    <td style="font-size:10px;color:var(--ink-4)">${r.isAverageScoreMarker ? 'Threshold marker' : ''}</td>
+  </tr>`).join('');
+  $('tableWrap').innerHTML = `<div style="padding:10px 12px;font-size:11px;color:var(--ink-3);border-bottom:1px solid var(--line)">
+    Official DiveMeets zone qualifier list — ${filtered.length} entries · * = average score threshold marker
+  </div>` + tableHtml(cols, tbody);
+}
+
 
 function officialRows() {
   if (DATA.officialZoneQualifiers?.length) {
@@ -1426,7 +1642,7 @@ function sortedRows(rows) {
 function buildAthleteRows(rows) {
   const grouped = new Map();
   rows.forEach(r => {
-    const k = `${r.diveMeetsId}|${r.athlete}`;
+    const k = `${r.diveMeetsId || ''}|${r.athlete}`;
     if (!grouped.has(k)) grouped.set(k, []);
     grouped.get(k).push(r);
   });
@@ -1437,13 +1653,16 @@ function buildAthleteRows(rows) {
       diveMeetsId:     first.diveMeetsId,
       teams:           [...new Set(evRows.map(r => r.team).filter(Boolean))],
       events:          evRows.length,
+      eventRows:       evRows,  // full rows for event tag rendering
       advancing:       evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length,
       nonDisplacing:   evRows.filter(r => r.nonDisplacing).length,
       flags:           [...new Set(evRows.flatMap(r => r.effectiveFlags || []))],
       prequalification:[...new Set(evRows.flatMap(r => r.prequalification || []))],
+      score:           Math.max(...evRows.map(r => r.score || 0)),
     };
-  }).sort((a, b) => a.athlete.localeCompare(b.athlete));
+  });
 }
+
 
 /* ════════════════════════════════════════════════════════════════
    OVERRIDES
