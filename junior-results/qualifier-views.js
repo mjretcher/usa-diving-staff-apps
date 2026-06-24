@@ -331,6 +331,9 @@
     const p = $('qv-panel');
     if (p) p.classList.remove('open');
     qv.panelRow = null;
+    // Clear body so stale content isn't briefly visible on reopen
+    const body = $('qv-panel-body');
+    if (body) body.innerHTML = '';
   }
 
   /* ── Review section ────────────────────────────────────────── */
@@ -485,10 +488,14 @@
         </div>
       </div>
 
-      ${dm ? `<a class="dm-full-btn" href="https://www.divemeets.com/profile.php?id=${esc(dm)}" target="_blank" rel="noopener">
+      ${dm
+        ? `<a class="dm-full-btn" href="https://www.divemeets.com/profile.php?id=${esc(dm)}" target="_blank" rel="noopener">
         <i class="ti ti-external-link" aria-hidden="true"></i>
         View on DiveMeets — ${esc(r.athlete)}
-      </a>` : ''}
+      </a>`
+        : `<div style="margin:0 16px 10px;font-size:11px;color:#c0392b;padding:6px 10px;background:#fff5f5;border-radius:var(--radius,6px);border:1px solid #fca5a5">
+        No DiveMeets ID — cannot link to profile or cross-reference official lists
+      </div>`}
 
       <div class="panel-flags">${flagBadges(r)}</div>
 
@@ -517,7 +524,7 @@
           <div class="trail-connector"><i class="ti ti-arrow-down" aria-hidden="true"></i></div>` : ''}
 
         <div class="trail-card">
-          <div class="trail-stage-label">Zone ${esc(r.zone||'')} — ${esc(r.meetName||'')}</div>
+          <div class="trail-stage-label">${r.zone ? `Zone ${esc(r.zone)}` : 'Zones'} — ${esc((r.meetName||'').replace(/^2026 USA Diving /,'').replace(/ Championships$/,''))}</div>
           <div class="trail-stats">
             <div class="trail-stat"><div class="trail-val">${esc(r.place||'—')}</div><div class="trail-lbl">Place</div></div>
             <div class="trail-stat"><div class="trail-val">${fmtScore(r.score)}</div><div class="trail-lbl">Score</div></div>
@@ -1170,7 +1177,7 @@
 #qv-panel-body{flex:1;overflow-y:auto;padding:0 0 24px;background:var(--surface)}
 
 /* Panel header */
-.panel-ath-header{display:flex;align-items:flex-start;gap:10px;padding:14px 16px 12px;background:var(--surface)}
+.panel-ath-header{display:flex;align-items:flex-start;gap:10px;padding:14px 16px 12px;background:var(--surface);border-bottom:1px solid var(--line-2)}
 .panel-avatar{width:40px;height:40px;border-radius:50%;background:#E6F1FB;color:#0C447C;
   display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0}
 .panel-ath-name{font-size:15px;font-weight:500;color:var(--ink)}
@@ -1391,6 +1398,17 @@
       <div id="qv-panel-body"></div>`;
     document.body.appendChild(panel);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') window._qvClosePanel(); });
+
+    // Click outside panel to close
+    document.addEventListener('mousedown', e => {
+      const panel = document.getElementById('qv-panel');
+      if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
+        // Don't close if clicking a table row (that would re-open it)
+        if (!e.target.closest('[data-rid]') && !e.target.closest('.rq-card-header')) {
+          window._qvClosePanel();
+        }
+      }
+    });
   }
 
   window._qvClosePanel = closePanel;
