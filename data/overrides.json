@@ -97,5 +97,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338474610-dc06f25130cc",
+    "createdAt": "2026-06-24T22:01:14.610Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "56790",
+    "athleteName": "Victoria Gullick",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
