@@ -536,11 +536,11 @@
   /* ── Hook into main.js ─────────────────────────────────────── */
   function patchMain() {
     injectCSS();
-    // Register as hook for Nationals stage
-    window._qvRenderNat = renderAnalytics;
+    // Register as hook for the Reports stage tab
+    window._qvRenderReports = renderAnalytics;
     // Also expose for direct calls
     window._anRender = renderAnalytics;
-    console.log('[analytics] registered');
+    console.log('[analytics] registered on Reports stage');
   }
 
   function waitForMain(cb, tries) {
