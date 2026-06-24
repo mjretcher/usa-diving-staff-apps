@@ -123,5 +123,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338487375-236058bd635cd",
+    "createdAt": "2026-06-24T22:01:27.375Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "65849",
+    "athleteName": "Claire Ching",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
