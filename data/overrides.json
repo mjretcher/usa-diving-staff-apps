@@ -149,5 +149,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338511311-4947205ec70c6",
+    "createdAt": "2026-06-24T22:01:51.311Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "77711",
+    "athleteName": "Arad Polak",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
