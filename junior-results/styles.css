@@ -440,6 +440,13 @@ input, select { font-family: inherit; }
   max-height: calc(100vh - 192px);
   min-height: 400px;
 }
+/* Review queue sits above table-wrap and scrolls with it */
+#rv-queue-wrap {
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 40vh;
+  border-bottom: 1px solid var(--line);
+}
 
 /* Context bar — navy, bold, informative */
 .results-context {
