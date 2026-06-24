@@ -275,6 +275,8 @@ function buildStageNav() {
     btn.addEventListener('click', () => {
       state.stage = btn.dataset.stage;
       state.selectedEventId = '';
+      state.kpiDrill = null;
+      state.kpiDrillFilter = null;
       state.view = 'results';
       nav.querySelectorAll('.stage-btn').forEach(b => b.classList.toggle('active', b === btn));
       buildViewTabs();
@@ -1149,7 +1151,7 @@ function renderEventList() {
     const notAtt    = evRows.filter(r => r.declaredNotAttending).length;
     return `<button type="button" class="event-item ${active ? 'active' : ''}" data-event-id="${escAttr(event.id)}">
       <span class="event-item-name">${esc(event.eventName || event.id)}</span>
-      <span class="event-item-meta">${esc((event.meetName || '').replace(/^2026 USA Diving Junior /,'').replace(/^2026 USA Diving /,''))}</span>
+      <span class="event-item-meta">${esc((event.meetName || '').replace(/^2026 USA Diving (Junior )?/,'').replace(/ Championships$/,'').trim())}</span>
       <div class="event-item-badges">
         ${advancing ? `<span class="mini-badge green">${advancing} advancing</span>` : ''}
         ${nd        ? `<span class="mini-badge slate">${nd} ND</span>` : ''}
