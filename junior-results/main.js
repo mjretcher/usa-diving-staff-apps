@@ -83,6 +83,8 @@ let eventById        = new Map();
 const FLAG_DEFS = [
   { key:'foreignDeclared',            label:'Foreign' },
   { key:'dualDeclared',               label:'Dual citizen' },
+  { key:'keptInvitedJoNationals',     label:'Kept invited' },
+  { key:'petition',                   label:'Petition' },
   { key:'prequalified',               label:'Prequalified' },
   { key:'hps',                        label:'HPS' },
   { key:'ymca',                       label:'YMCA' },
@@ -605,6 +607,34 @@ function applyOverrides(row, lookup) {
   r.nonDisplacing       = ndReasons.length > 0;
   r.countsTowardCutoff  = Boolean(r.qualifyingEvent && !r.nonDisplacing && r.placeNumber != null);
 
+  // Petition override: marks athlete as qualifying via medical/staff petition
+  const isPetition = get('petition');
+  if (isPetition === true) {
+    r.petition = true;
+    r.petitionGranted = true;
+    r.qualificationStatus = r.qualificationStatus || 'Medical/staff petition — approved';
+    if (!r.reviewFlags) r.reviewFlags = [];
+    // Remove review flag if staff has explicitly granted petition
+    r.reviewFlags = r.reviewFlags.filter(f => !f.toLowerCase().includes('verify') && !f.toLowerCase().includes('no qualifying path'));
+  }
+
+  // KeptInvited override: dual citizen kept on invitation list per policy
+  const isKeptInvited = get('keptInvited');
+  if (isKeptInvited === true) {
+    r.keptInvitedJoNationals = true;
+    if (!r.reviewFlags) r.reviewFlags = [];
+    r.reviewFlags = r.reviewFlags.filter(f => !f.toLowerCase().includes('policy'));
+  }
+
+  // Review override: flag for staff attention
+  const reviewOverride = get('review');
+  if (reviewOverride === true) {
+    if (!r.reviewFlags) r.reviewFlags = [];
+    if (!r.reviewFlags.some(f => f.includes('Flagged'))) {
+      r.reviewFlags.push('Flagged for staff review');
+    }
+  }
+
   return r;
 }
 
@@ -956,6 +986,8 @@ function buildFlags(r) {
   if (r.foreignDeclared)             f.push('Foreign declared');
   if (r.webpointNonUsEffective && !r.foreignDeclared) f.push('Webpoint non-US');
   if (r.dualDeclared)                f.push(r.dualOtherCountry ? 'Dual affects results' : 'Dual citizen');
+  if (r.keptInvitedJoNationals)      f.push('Kept invited');
+  if (r.petition)                    f.push('Petition');
   if (r.hps)                         f.push('HPS');
   if (r.ymca)                        f.push('YMCA');
   if (r.prequalified)                f.push('Prequalified');
@@ -1445,7 +1477,8 @@ function handleLogAction(action, id) {
 function overrideTypeLabel(type) {
   return {
     foreign:'Foreign athlete', dual:'Dual citizen', dualEffect:'Dual affects results',
-    hps:'HPS athlete', ymca:'YMCA event champion', notAttending:'Not attending'
+    hps:'HPS athlete', ymca:'YMCA event champion', notAttending:'Not attending',
+    petition:'Medical petition', keptInvited:'Kept invited (policy)', review:'Needs review',
   }[type] || type;
 }
 
@@ -1519,6 +1552,8 @@ function flagPills(r) {
   if (r.webpointNonUsEffective && !r.foreignDeclared) pills.push(pill('Webpoint','foreign'));
   if (r.diveMeetsForeignCode)                         pills.push(pill('DM-127','foreign'));
   if (r.dualDeclared)                                 pills.push(pill(r.dualOtherCountry ? 'Dual effect' : 'Dual','dual'));
+  if (r.keptInvitedJoNationals)                       pills.push(pill('Kept invited','preq'));
+  if (r.petition)                                     pills.push(pill('Petition','petition'));
   if (r.hps)                                          pills.push(pill('HPS','hps'));
   if (r.ymca)                                         pills.push(pill('YMCA','ymca'));
   if (r.prequalified)                                 pills.push(pill('Prequalified','preq'));
@@ -1535,12 +1570,13 @@ function pill(label, cls)  { return `<span class="pill pill-${cls}">${esc(label)
 function pillCls(l) {
   const s = String(l).toLowerCase();
   if (s.includes('foreign') || s.includes('non-us') || s.includes('webpoint') || s.includes('dm-')) return 'foreign';
-  if (s.includes('dual'))    return 'dual';
-  if (s.includes('hps'))     return 'hps';
-  if (s.includes('ymca'))    return 'ymca';
-  if (s.includes('preq'))    return 'preq';
-  if (s.includes('not att') || s.includes('decline')) return 'decline';
-  if (s.includes('bump') || s.includes('avg'))        return 'bump';
+  if (s.includes('dual'))                                     return 'dual';
+  if (s.includes('hps'))                                      return 'hps';
+  if (s.includes('ymca'))                                     return 'ymca';
+  if (s.includes('petition'))                                 return 'petition';
+  if (s.includes('kept') || s.includes('preq'))               return 'preq';
+  if (s.includes('not att') || s.includes('decline'))         return 'decline';
+  if (s.includes('bump') || s.includes('avg'))                return 'bump';
   return 'review';
 }
 
