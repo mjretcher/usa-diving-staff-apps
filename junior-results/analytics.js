@@ -1,13 +1,13 @@
 /* ================================================================
-   analytics.js — Junior Circuit pipeline analytics
-   "Qualified but didn't compete" reports, displacement maps,
-   foreign/dual/HPS participation breakdowns across all stages.
-   Mounted as a new tab on the Nationals stage.
+   analytics.js — Junior Circuit pipeline analytics v2
+   Per-stage dashboards: funnel + breakdown + category strip
+   Counts are unique athletes (not rows). Toggle to entries.
+   Foreign athletes shown at score-rank ghost position.
    ================================================================ */
 (function () {
   'use strict';
 
-  /* ── helpers ───────────────────────────────────────────────── */
+  /* ── helpers ────────────────────────────────────────────────── */
   function esc(v) {
     return String(v == null ? '' : v)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -18,536 +18,623 @@
       .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
   }
   function pct(n, d) { return d ? Math.round(100 * n / d) : 0; }
-  function fmtScore(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—'; }
-
-  /* ── Data sources ──────────────────────────────────────────── */
-  function allResults() {
-    return (typeof effectiveResults !== 'undefined' ? effectiveResults
-      : (window.JUNIOR_RESULTS_DATA?.results || []));
+  function fmtScore(v) { const n = Number(v); return Number.isFinite(n) && n > 0 ? n.toFixed(2) : '—'; }
+  function agLabel(k) {
+    return { 'Group A':'Group A','Group B':'Group B','Group C':'Group C','Group D':'Group D' }[k] || k || '—';
   }
-  const EWC    = window.USAD_EWC_DATA || null;
   const ZONE_TO_EWC = {A:'East',B:'East',C:'Central',D:'Central',E:'West',F:'West'};
+  const ZONE_COLOR  = {A:'#EEEDFE',B:'#EEEDFE',C:'#E1F5EE',D:'#E1F5EE',E:'#FAEEDA',F:'#FAEEDA'};
+  const ZONE_INK    = {A:'#3C3489',B:'#3C3489',C:'#085041',D:'#085041',E:'#633806',F:'#633806'};
 
-  /* ── EWC registration lookup ───────────────────────────────── */
-  const _ewcSet = new Set();
-  if (EWC?.entries) {
-    EWC.entries.forEach(e => _ewcSet.add(norm(e.name)));
+  /* ── data sources ───────────────────────────────────────────── */
+  function allResults() {
+    return typeof effectiveResults !== 'undefined'
+      ? effectiveResults : (window.JUNIOR_RESULTS_DATA?.results || []);
   }
-  function isEWCRegistered(name) { return _ewcSet.has(norm(name)); }
+  const EWC = window.USAD_EWC_DATA || null;
 
-  /* ── Core pipeline data builder ────────────────────────────── */
-  function buildPipelineData(filters = {}) {
-    const all = allResults();
-    function match(r) {
+  /* ── EWC registration lookup ─────────────────────────────────── */
+  const _ewcSet = new Set();
+  if (EWC?.entries) EWC.entries.forEach(e => _ewcSet.add(norm(e.name || '')));
+  function isEWCReg(name) { return _ewcSet.has(norm(name || '')); }
+
+  /* ── synthetic row check ─────────────────────────────────────── */
+  function isSynth(r) { const s = r.sourceRow; return typeof s === 'string' && s.startsWith('synthetic'); }
+
+  /* ── per-stage data builder ──────────────────────────────────── */
+  // Returns unique-athlete counts for each metric
+  function stageData(stage, filters) {
+    const all = allResults().filter(r => !isSynth(r));
+    function matchFilters(r) {
       if (filters.ageGroup && r.ageGroup !== filters.ageGroup) return false;
       if (filters.gender   && r.gender   !== filters.gender)   return false;
       if (filters.zone     && r.zone     !== filters.zone)     return false;
-      if (filters.ewc      && r.ewc      !== filters.ewc && ZONE_TO_EWC[r.zone] !== filters.ewc) return false;
+      if (filters.ewcMeet) {
+        const m = r.ewc || ZONE_TO_EWC[r.zone] || '';
+        if (m !== filters.ewcMeet) return false;
+      }
       if (filters.discipline && r.discipline !== filters.discipline) return false;
-      if (filters.team     && !(r.team||'').toLowerCase().includes(filters.team.toLowerCase())) return false;
       return true;
     }
 
-    const regRows  = all.filter(r => r.stage === 'Regionals' && match(r));
-    const zoneRows = all.filter(r => r.stage === 'Zones'     && match(r));
+    const rows = all.filter(r => {
+      let stageMatch = false;
+      if (stage === 'Regionals') stageMatch = r.stage === 'Regionals';
+      else if (stage === 'Zones') stageMatch = r.stage === 'Zones';
+      else if (stage === 'EWC')  stageMatch = r.stage === 'Zones'; // EWC dashboard uses zone data
+      return stageMatch && matchFilters(r);
+    });
 
-    // Regionals → Zones
-    const regQualified = regRows.filter(r => r.advancesToZone && !r.nonDisplacing);
-    const regNames     = new Set(zoneRows.map(r => norm(r.athlete)));
-    const regNoShow    = regQualified.filter(r => !regNames.has(norm(r.athlete)));
+    // Helper: unique athletes in a row set
+    function uniq(arr, key) {
+      const s = new Set(); arr.forEach(r => s.add(norm(r.athlete||''))); return s.size;
+    }
+    // Helper: entries count
+    function entries(arr) { return arr.length; }
 
-    // Zone → EWC (only Groups A–D advancing, non-displacing excluded)
-    const zoneEWCQual  = zoneRows.filter(r => (r.advancesToEWC || r.advancesToNationals) && !r.nonDisplacing);
-    const zoneNatDirect= zoneRows.filter(r => r.advancesToNationals && !r.nonDisplacing);
-    const zoneEWCOnly  = zoneRows.filter(r => r.advancesToEWC && !r.advancesToNationals && !r.nonDisplacing);
-    const zoneNoShowEWC= EWC ? zoneEWCOnly.filter(r => !isEWCRegistered(r.athlete)) : [];
-    const zoneNoShowNat= EWC ? zoneNatDirect.filter(r => !isEWCRegistered(r.athlete)) : [];
+    if (stage === 'Regionals') {
+      const qualified   = rows.filter(r => r.advancesToZone && !r.nonDisplacing);
+      const zoneNames   = new Set(all.filter(r => r.stage==='Zones').map(r => norm(r.athlete||'')));
+      const noShow      = qualified.filter(r => !zoneNames.has(norm(r.athlete||'')));
+      const nd          = rows.filter(r => r.nonDisplacing);
+      const foreign     = rows.filter(r => r.foreignDeclared || r.webpointNonUsEffective);
+      const dual        = rows.filter(r => r.dualOtherCountry);
+      const hps         = rows.filter(r => r.hps && !r.foreignDeclared);
+      const bumped      = rows.filter(r => r.bumpIn);
+      const opened      = rows.filter(r => r.openedSpot);
+      const avgQual     = rows.filter(r => r.officialAverageScoreQualifier);
 
-    // Non-displacing breakdown
-    const ndZone = zoneRows.filter(r => r.nonDisplacing);
-    const foreignZone = ndZone.filter(r => r.foreignDeclared || r.webpointNonUsEffective);
-    const hpsZone     = ndZone.filter(r => r.hps && !r.foreignDeclared);
-    const dualZone    = ndZone.filter(r => r.dualOtherCountry);
-    const ymcaZone    = zoneRows.filter(r => r.ymca && !r.nonDisplacing);
+      return {
+        total: uniq(rows), totalEntries: entries(rows),
+        qualified: uniq(qualified), qualifiedEntries: entries(qualified),
+        noShow: uniq(noShow), noShowEntries: entries(noShow),
+        nd: uniq(nd), ndEntries: entries(nd),
+        foreign: uniq(foreign), foreignEntries: entries(foreign), foreignRows: foreign,
+        dual: uniq(dual), dualEntries: entries(dual), dualRows: dual,
+        hps: uniq(hps), hpsEntries: entries(hps), hpsRows: hps,
+        bumped: uniq(bumped), bumpedEntries: entries(bumped), bumpedRows: bumped,
+        opened: uniq(opened), openedRows: opened,
+        avgQual: uniq(avgQual), avgQualEntries: entries(avgQual),
+        ymca: 0, ymcaEntries: 0, ymcaRows: [],
+        noShowRows: noShow,
+      };
+    }
 
-    // Displacement events (bump-ins caused by non-displacing)
-    const bumpedReg  = regRows.filter(r => r.bumpIn);
-    const bumpedZone = zoneRows.filter(r => r.bumpIn);
-    const openedReg  = regRows.filter(r => r.openedSpot);
-    const openedZone = zoneRows.filter(r => r.openedSpot);
+    if (stage === 'Zones' || stage === 'EWC') {
+      const nd          = rows.filter(r => r.nonDisplacing);
+      const foreign     = rows.filter(r => r.foreignDeclared || r.webpointNonUsEffective);
+      const dual        = rows.filter(r => r.dualOtherCountry);
+      const hps         = rows.filter(r => r.hps && !r.foreignDeclared);
+      const ymca        = rows.filter(r => r.ymca);
+      const natDirect   = rows.filter(r => r.advancesToNationals && !r.nonDisplacing);
+      const ewcQualAll  = rows.filter(r => (r.advancesToEWC || r.advancesToNationals) && !r.nonDisplacing);
+      const ewcOnly     = rows.filter(r => r.advancesToEWC && !r.advancesToNationals && !r.nonDisplacing);
+      const bumped      = rows.filter(r => r.bumpIn);
+      const opened      = rows.filter(r => r.openedSpot);
+      const notAtt      = rows.filter(r => r.declaredNotAttending);
 
-    // Avg threshold qualifiers
-    const regAvgQual  = regRows.filter(r => r.officialAverageScoreQualifier);
-    const zoneAvgQual = zoneRows.filter(r => r.officialAverageScoreQualifier);
+      // Unique athletes qualifying to EWC-only
+      const ewcOnlyAths = new Map();
+      ewcOnly.forEach(r => {
+        const n = norm(r.athlete||'');
+        if (!ewcOnlyAths.has(n)) ewcOnlyAths.set(n, r);
+      });
+      const regCount    = [...ewcOnlyAths.keys()].filter(n => isEWCReg(n)).length;
+      const notRegCount = ewcOnlyAths.size - regCount;
 
+      // Nat direct who are registered at EWC (non-displacing participation)
+      const natAtEWC    = [...new Set(natDirect.map(r => norm(r.athlete||'')))].filter(n => isEWCReg(n)).length;
+
+      return {
+        total: uniq(rows), totalEntries: entries(rows),
+        nd: uniq(nd), ndEntries: entries(nd),
+        foreign: uniq(foreign), foreignEntries: entries(foreign), foreignRows: foreign,
+        dual: uniq(dual), dualEntries: entries(dual), dualRows: dual,
+        hps: uniq(hps), hpsEntries: entries(hps), hpsRows: hps,
+        ymca: uniq(ymca), ymcaEntries: entries(ymca), ymcaRows: ymca,
+        natDirect: uniq(natDirect), natDirectEntries: entries(natDirect),
+        ewcQual: ewcOnlyAths.size, ewcQualEntries: entries(ewcOnly),
+        ewcReg: regCount, ewcNotReg: notRegCount,
+        natAtEWC,
+        bumped: uniq(bumped), bumpedEntries: entries(bumped), bumpedRows: bumped,
+        opened: uniq(opened), openedRows: opened,
+        notAtt: uniq(notAtt), notAttEntries: entries(notAtt),
+        noShowRows: [...ewcOnlyAths.values()].filter(r => !isEWCReg(r.athlete||'')),
+      };
+    }
+    return {};
+  }
+
+  /* ── per-age-group breakdown ──────────────────────────────────── */
+  function ageGenderBreakdown(stage, filters) {
+    const all = allResults().filter(r => !isSynth(r));
+    const groups  = ['Group A','Group B','Group C','Group D'];
+    const genders = ['Girls','Boys'];
+    const result  = {};
+    for (const g of groups) {
+      result[g] = {};
+      for (const gn of genders) {
+        const subset = all.filter(r => {
+          if (stage === 'EWC') return r.stage === 'Zones' && r.ageGroup === g && r.gender === gn;
+          return r.stage === stage && r.ageGroup === g && r.gender === gn;
+        });
+        const athletes = new Set(subset.map(r => norm(r.athlete||''))).size;
+        result[g][gn] = { athletes, entries: subset.length };
+      }
+    }
+    return result;
+  }
+
+  /* ── ghost rank calculator ───────────────────────────────────── */
+  // For foreign athletes (place=127), compute where they'd rank by score
+  function computeGhostRanks(eventRows) {
+    const sorted = [...eventRows].sort((a,b) => (b.score||0) - (a.score||0));
+    const ghostRanks = new Map();
+    sorted.forEach((r, i) => {
+      if (r.placeNumber === 127 || r.place === '127') {
+        ghostRanks.set(norm(r.athlete||''), i + 1);
+      }
+    });
+    return ghostRanks;
+  }
+
+  /* ── ui state ─────────────────────────────────────────────────── */
+  const uiState = {
+    stage:    'Zones',      // Regionals | Zones | EWC
+    countMode:'athletes',  // athletes | entries
+    openCat:  null,        // foreign | dual | hps | ymca | notatt | displacement | noshow
+    ewcMeet:  '',          // East | Central | West | ''
+    zone:     '',
+    ageGroup: '',
+    gender:   '',
+    discipline:'',
+  };
+
+  function filters() {
     return {
-      regRows, zoneRows,
-      regQualified, regNoShow,
-      zoneEWCQual, zoneNatDirect, zoneEWCOnly,
-      zoneNoShowEWC, zoneNoShowNat,
-      ndZone, foreignZone, hpsZone, dualZone, ymcaZone,
-      bumpedReg, bumpedZone, openedReg, openedZone,
-      regAvgQual, zoneAvgQual,
+      ageGroup:   uiState.ageGroup,
+      gender:     uiState.gender,
+      zone:       uiState.zone,
+      ewcMeet:    uiState.ewcMeet,
+      discipline: uiState.discipline,
     };
   }
 
-  /* ── Filter state ──────────────────────────────────────────── */
-  const aState = {
-    ageGroup:   '',
-    gender:     '',
-    zone:       '',
-    ewc:        '',
-    discipline: '',
-    team:       '',
-    activeTab:  'dropout',  // dropout | special | displacement
-  };
+  /* ── render ───────────────────────────────────────────────────── */
+  function render() {
+    const wrap = document.getElementById('tableWrap');
+    const ctx  = document.getElementById('resultsContext');
+    if (!wrap) return;
 
-  /* ── Render analytics ──────────────────────────────────────── */
-  function renderAnalytics() {
-    const tableWrap = document.getElementById('tableWrap');
-    const ctx       = document.getElementById('resultsContext');
-    if (!tableWrap) return;
+    const d   = stageData(uiState.stage, filters());
+    const bkd = ageGenderBreakdown(uiState.stage, filters());
 
     if (ctx) ctx.innerHTML = `
-      <div class="context-title-block">
-        <strong>Pipeline Analytics — Junior Circuit 2026</strong>
-        <span>Qualification flow, dropout rates, special athlete participation, displacement events</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <strong style="font-size:13px;color:var(--ink)">Pipeline Analytics</strong>
+        <span style="font-size:11px;color:var(--ink-3)">Junior Circuit 2026</span>
       </div>`;
 
-    // Build data with current filters
-    const d = buildPipelineData(aState);
-
-    tableWrap.innerHTML = `
-      <div class="an-shell">
-        ${renderAnFilters(d)}
-        <div class="an-tabs">
-          <button class="an-tab ${aState.activeTab==='dropout'?'active':''}" onclick="window._anTab('dropout')">
-            Qualified not competed
-          </button>
-          <button class="an-tab ${aState.activeTab==='special'?'active':''}" onclick="window._anTab('special')">
-            Foreign / Dual / HPS / YMCA
-          </button>
-          <button class="an-tab ${aState.activeTab==='displacement'?'active':''}" onclick="window._anTab('displacement')">
-            Displacement &amp; bump-ins
-          </button>
-        </div>
-        <div class="an-body">
-          ${aState.activeTab === 'dropout'     ? renderDropoutTab(d)     : ''}
-          ${aState.activeTab === 'special'     ? renderSpecialTab(d)     : ''}
-          ${aState.activeTab === 'displacement'? renderDisplacementTab(d): ''}
-        </div>
-      </div>`;
-
-    updateAnEventList(d);
-    wireAnFilters();
+    wrap.innerHTML = `<div class="an2-shell">${renderBody(d, bkd)}</div>`;
+    injectCSS();
+    wireEvents();
   }
 
-  window._anTab = function(tab) { aState.activeTab = tab; renderAnalytics(); };
+  function renderBody(d, bkd) {
+    return `
+      ${renderStageNav()}
+      ${renderCountToggle()}
+      ${renderFilters()}
+      ${renderFunnel(d)}
+      ${renderBreakdownGrid(bkd)}
+      ${renderCategoryStrip(d)}
+      ${uiState.openCat ? renderDetailPanel(d) : ''}
+    `;
+  }
 
-  /* ── Filter bar ────────────────────────────────────────────── */
-  function renderAnFilters(d) {
-    const all = allResults();
-    function opts(key) {
-      return [...new Set(all.map(r => r[key]).filter(Boolean))].sort();
-    }
-    function sel(id, key, label, values) {
-      return `<div class="an-filter">
-        <label class="an-filter-label">${esc(label)}</label>
-        <select id="an-f-${id}" onchange="window._anFilter('${key}',this.value)">
-          <option value="">All</option>
-          ${values.map(v=>`<option value="${esc(v)}" ${aState[key]===v?'selected':''}>${esc(v)}</option>`).join('')}
-        </select>
-      </div>`;
-    }
-    return `<div class="an-filters">
-      ${sel('ag','ageGroup','Age group',['Group A','Group B','Group C','Group D'])}
-      ${sel('gn','gender','Gender',['Girls','Boys'])}
-      ${sel('zn','zone','Zone',['A','B','C','D','E','F'])}
-      ${sel('ew','ewc','E/W/C meet',['East','Central','West'])}
-      ${sel('bd','discipline','Board',['1M','3M','Platform'])}
-      <div class="an-filter">
-        <label class="an-filter-label">Team</label>
-        <input id="an-f-team" type="search" placeholder="Search team…" value="${esc(aState.team)}"
-          oninput="window._anFilter('team',this.value)" class="an-search-input">
-      </div>
-      ${aState.ageGroup||aState.gender||aState.zone||aState.ewc||aState.discipline||aState.team
-        ? `<button class="an-clear-btn" onclick="window._anClearFilters()">Clear filters</button>` : ''}
+  /* ── stage nav ─────────────────────────────────────────────────── */
+  function renderStageNav() {
+    const stages = ['Regionals','Zones','EWC'];
+    const labels = {Regionals:'Regionals',Zones:'Zones',EWC:'East / West / Central'};
+    return `<div class="an2-stage-nav">
+      ${stages.map(s => `<button class="an2-stage-btn${s===uiState.stage?' active':''}"
+        onclick="window._anStage('${s}')">${esc(labels[s])}</button>`).join('')}
     </div>`;
   }
 
-  window._anFilter = function(key, val) { aState[key] = val; renderAnalytics(); };
-  window._anClearFilters = function() {
-    Object.assign(aState, {ageGroup:'',gender:'',zone:'',ewc:'',discipline:'',team:''});
-    renderAnalytics();
+  window._anStage = s => { uiState.stage = s; uiState.openCat = null; render(); };
+
+  /* ── count toggle ──────────────────────────────────────────────── */
+  function renderCountToggle() {
+    const on = uiState.countMode;
+    return `<div class="an2-bar">
+      <div class="an2-toggle">
+        <button class="an2-tpill${on==='athletes'?' on':''}" onclick="window._anMode('athletes')">Athletes</button>
+        <button class="an2-tpill${on==='entries'?' on':''}" onclick="window._anMode('entries')">Entries</button>
+      </div>
+      ${uiState.stage === 'EWC' ? `
+      <div class="an2-toggle" style="margin-left:12px">
+        ${['','East','Central','West'].map(m=>`
+          <button class="an2-tpill${uiState.ewcMeet===m?' on':''}" onclick="window._anEWC('${m}')">
+            ${m || 'All meets'}
+          </button>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }
+  window._anMode = m => { uiState.countMode = m; render(); };
+  window._anEWC  = m => { uiState.ewcMeet = m; render(); };
+
+  /* ── filters ────────────────────────────────────────────────────── */
+  function renderFilters() {
+    function chip(field, val, label) {
+      const on = uiState[field] === val;
+      return `<button class="an2-chip${on?' on':''}" onclick="window._anFilter('${field}','${val}')">${esc(label)}</button>`;
+    }
+    return `<div class="an2-filters">
+      <div class="an2-filter-group">
+        ${chip('ageGroup','','All groups')}
+        ${chip('ageGroup','Group A','Group A')}
+        ${chip('ageGroup','Group B','Group B')}
+        ${chip('ageGroup','Group C','Group C')}
+        ${chip('ageGroup','Group D','Group D')}
+      </div>
+      <div class="an2-filter-group">
+        ${chip('gender','','All genders')}
+        ${chip('gender','Girls','Girls')}
+        ${chip('gender','Boys','Boys')}
+      </div>
+      <div class="an2-filter-group">
+        ${chip('discipline','','All boards')}
+        ${chip('discipline','1M','1M')}
+        ${chip('discipline','3M','3M')}
+        ${chip('discipline','Platform','Platform')}
+      </div>
+      ${uiState.stage === 'Zones' || uiState.stage === 'EWC' ? `
+      <div class="an2-filter-group">
+        ${chip('zone','','All zones')}
+        ${['A','B','C','D','E','F'].map(z=>chip('zone',z,`Zone ${z}`)).join('')}
+      </div>` : ''}
+    </div>`;
+  }
+  window._anFilter = (f,v) => {
+    uiState[f] = uiState[f] === v ? '' : v;
+    render();
   };
 
-  function wireAnFilters() {
-    // Filters are inline onchange/oninput, nothing extra needed
-  }
-
-  /* ── Event list sidebar ────────────────────────────────────── */
-  function updateAnEventList(d) {
-    const el = document.getElementById('eventList');
-    if (!el) return;
-    el.innerHTML = `
-      <div style="padding:10px 12px">
-        <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:8px">Quick stats</div>
-        ${statRow('Reg. qualifiers', d.regQualified.length)}
-        ${statRow('Did not compete at Zones', d.regNoShow.length, d.regQualified.length)}
-        ${statRow('Zone EWC qualifiers', d.zoneEWCOnly.length)}
-        ${statRow('Did not register for EWC', d.zoneNoShowEWC.length, d.zoneEWCOnly.length)}
-        ${statRow('Zone Nat direct', d.zoneNatDirect.length)}
-        ${statRow('Non-displacing at Zones', d.ndZone.length)}
-        ${statRow('Foreign at Zones', d.foreignZone.length)}
-        ${statRow('HPS at Zones', d.hpsZone.length)}
-        ${statRow('Dual (affect results)', d.dualZone.length)}
-        ${statRow('Bump-ins at Regionals', d.bumpedReg.length)}
+  /* ── funnel ──────────────────────────────────────────────────────── */
+  function renderFunnel(d) {
+    const cm = uiState.countMode;
+    if (uiState.stage === 'Regionals') {
+      const total = cm==='athletes' ? d.total : d.totalEntries;
+      const qual  = cm==='athletes' ? d.qualified : d.qualifiedEntries;
+      const adv   = qual - (cm==='athletes' ? d.noShow : d.noShowEntries);
+      const noShow= cm==='athletes' ? d.noShow : d.noShowEntries;
+      return `<div class="an2-funnel">
+        <div class="an2-funnel-title">Regionals — qualification funnel
+          <span>${cm === 'athletes' ? 'Unique athletes' : 'Event entries'}</span></div>
+        ${funnelRow('Competed', total, total, '#E6F1FB','#0C447C', '')}
+        ${funnelRow('Qualified → Zones', qual, total, '#EAF3DE','#27500A',
+          `<span style="color:#D85A30;font-weight:500">${noShow}</span> <span>didn't compete at Zones (${pct(noShow,qual)}%)</span>`)}
+        ${funnelRow('Attended Zones', adv, total, '#B5D4F4','#0C447C', '')}
+        ${d.avgQual ? funnelRow('Via 15th avg threshold', cm==='athletes'?d.avgQual:d.avgQualEntries, qual, '#EEEDFE','#3C3489', '') : ''}
+        ${funnelRow('Non-displacing', cm==='athletes'?d.nd:d.ndEntries, total, '#F1EFE8','#5F5E5A', 'did not consume spots')}
+        ${funnelRow('Displacements (bump-ins)', cm==='athletes'?d.bumped:d.bumpedEntries, total, '#EEEDFE','#534AB7', 'athletes moved up')}
       </div>`;
-  }
-
-  function statRow(label, n, denom) {
-    const pctStr = denom != null ? ` <span style="color:var(--ink-4);font-size:10px">(${pct(n,denom)}%)</span>` : '';
-    return `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;border-bottom:0.5px solid var(--line-2)">
-      <span style="font-size:11px;color:var(--ink-2)">${esc(label)}</span>
-      <span style="font-size:12px;font-weight:500;font-family:var(--f-mono)">${n}${pctStr}</span>
-    </div>`;
-  }
-
-  /* ── Tab 1: Qualified not competed ───────────────────────────── */
-  function renderDropoutTab(d) {
-    return `
-      <div class="an-section-title">Regionals → Zones: athletes who qualified but did not compete</div>
-      ${kpiRow([
-        {label:'Qualified at Regionals', value: d.regQualified.length, sub:'Groups A & B only'},
-        {label:'Appeared at Zones', value: d.regQualified.length - d.regNoShow.length, accent:'green', sub: pct(d.regQualified.length - d.regNoShow.length, d.regQualified.length)+'% attendance'},
-        {label:'Did not compete', value: d.regNoShow.length, accent: d.regNoShow.length > 0 ? 'amber' : '', sub: pct(d.regNoShow.length, d.regQualified.length)+'% dropout'},
-        {label:'Avg threshold qualifiers', value: d.regAvgQual.length, sub:'qualified via 15th avg'},
-      ])}
-      ${d.regNoShow.length ? athleteTable(d.regNoShow, 'reg', [
-        {key:'athlete', label:'Athlete'},
-        {key:'team',    label:'Team'},
-        {key:'ageGroup',label:'Group'},
-        {key:'zone',    label:'Zone'},
-        {key:'eventKey',label:'Event'},
-        {key:'qualificationStatus', label:'How qualified', trunc:35},
-        {key:'score',   label:'Score', fmt:fmtScore},
-      ]) : '<div class="an-empty">No no-shows match these filters.</div>'}
-
-      <div class="an-section-title" style="margin-top:28px">Zones → E/W/C: athletes who qualified but did not register</div>
-      ${kpiRow([
-        {label:'Qualified to E/W/C', value: d.zoneEWCOnly.length, sub:'places 4–18 + avg threshold'},
-        {label:'Registered', value: d.zoneEWCOnly.length - d.zoneNoShowEWC.length, accent:'green', sub: pct(d.zoneEWCOnly.length - d.zoneNoShowEWC.length, d.zoneEWCOnly.length)+'%'},
-        {label:'Not registered', value: d.zoneNoShowEWC.length, accent: d.zoneNoShowEWC.length > 10 ? 'red' : 'amber', sub: pct(d.zoneNoShowEWC.length, d.zoneEWCOnly.length)+'% dropout'},
-        {label:'Nat direct — not at EWC', value: d.zoneNoShowNat.length, sub:'chose not to compete'},
-      ])}
-      ${d.zoneNoShowEWC.length ? `
-        <div style="margin-bottom:8px">
-          ${['East','Central','West'].map(meet => {
-            const zones = Object.entries(ZONE_TO_EWC).filter(([,m])=>m===meet).map(([z])=>z);
-            const q = d.zoneNoShowEWC.filter(r => zones.includes(r.zone));
-            return q.length ? `<span style="margin-right:12px;font-size:12px;color:var(--ink-2)">${esc(meet)}: <strong>${q.length}</strong> not registered</span>` : '';
-          }).join('')}
-        </div>
-        ${athleteTable(d.zoneNoShowEWC, 'ewc-noshow', [
-          {key:'athlete',  label:'Athlete'},
-          {key:'team',     label:'Team'},
-          {key:'ageGroup', label:'Group'},
-          {key:'zone',     label:'Zone', render: r => `<span class="zone-badge zone-${r.zone}">Z${r.zone}</span> → ${ZONE_TO_EWC[r.zone]||'?'}`},
-          {key:'eventKey', label:'Event'},
-          {key:'eligibleRank', label:'Elig rank'},
-          {key:'score',    label:'Score', fmt: fmtScore},
-          {key:'qualificationStatus', label:'How qualified', trunc:30},
-        ])}` : '<div class="an-empty">All zone qualifiers registered at E/W/C (or no filter match).</div>'}
-
-      ${d.zoneAvgQual.length ? `
-        <div class="an-section-title" style="margin-top:28px">Zones: athletes who qualified via 18th-place avg threshold</div>
-        ${athleteTable(d.zoneAvgQual, 'zone-avg', [
-          {key:'athlete',  label:'Athlete'},
-          {key:'team',     label:'Team'},
-          {key:'ageGroup', label:'Group'},
-          {key:'zone',     label:'Zone', render: r => `<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-          {key:'eventKey', label:'Event'},
-          {key:'score',    label:'Score', fmt:fmtScore},
-          {key:'officialThresholdScore', label:'Threshold', fmt:fmtScore},
-        ])}` : ''}`;
-  }
-
-  /* ── Tab 2: Foreign / Dual / HPS / YMCA ───────────────────── */
-  function renderSpecialTab(d) {
-    const all = allResults();
-    const regRows = all.filter(r => r.stage === 'Regionals');
-    const foreignReg = regRows.filter(r => r.foreignDeclared || r.webpointNonUsEffective);
-    const dualReg    = regRows.filter(r => r.dualOtherCountry);
-    const hpsReg     = regRows.filter(r => r.hps);
-
-    return `
-      <div class="an-section-grid">
-
-        <div class="an-section-card">
-          <div class="an-card-title">Foreign athletes</div>
-          ${kpiRow([
-            {label:'At Regionals',  value: foreignReg.length,       sub:'non-displacing'},
-            {label:'At Zones',      value: d.foreignZone.length,     sub:'non-displacing', accent:'red'},
-            {label:'At E/W/C',      value: EWC ? EWC.foreignAthletes.length : '?', sub:'declared', accent:'red'},
-          ], 'compact')}
-          <div class="an-card-sub-title">Zone-level foreign athletes</div>
-          ${d.foreignZone.length ? athleteTable(d.foreignZone, 'foreign-zone', [
-            {key:'athlete',  label:'Athlete'},
-            {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-            {key:'eventKey', label:'Event'},
-            {key:'place',    label:'Place'},
-            {key:'score',    label:'Score', fmt:fmtScore},
-          ]) : '<div class="an-empty">No foreign athletes match filters.</div>'}
-        </div>
-
-        <div class="an-section-card">
-          <div class="an-card-title">Dual citizens (affects results)</div>
-          ${kpiRow([
-            {label:'At Regionals', value: dualReg.length,       sub:'non-displacing'},
-            {label:'At Zones',     value: d.dualZone.length,    sub:'non-displacing', accent:'amber'},
-            {label:'Kept invited', value: d.zoneRows.filter(r=>r.keptInvitedJoNationals).length, sub:'to JO Nationals'},
-          ], 'compact')}
-          <div class="an-card-sub-title">Zone-level dual citizens</div>
-          ${d.dualZone.length ? athleteTable(d.dualZone, 'dual-zone', [
-            {key:'athlete',  label:'Athlete'},
-            {key:'team',     label:'Team'},
-            {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-            {key:'eventKey', label:'Event'},
-            {key:'eligibleRank', label:'Elig rank'},
-            {key:'score',    label:'Score', fmt:fmtScore},
-            {key:'keptInvitedJoNationals', label:'Kept invited', render: r => r.keptInvitedJoNationals
-              ? '<span class="an-badge an-badge-green">Yes</span>'
-              : '<span class="an-badge an-badge-gray">No</span>'},
-          ]) : '<div class="an-empty">No dual citizens match filters.</div>'}
-        </div>
-
-        <div class="an-section-card">
-          <div class="an-card-title">HPS athletes</div>
-          ${kpiRow([
-            {label:'Pre-qualified list', value: EWC ? EWC.hpsAthletes.length : 33, sub:'to JO Nationals prelims'},
-            {label:'Competing at E/W/C', value: 0, sub:'none registered', accent:''},
-            {label:'At Zones (ND)',      value: d.hpsZone.length, sub:'non-displacing'},
-          ], 'compact')}
-          <div class="an-card-sub-title">HPS athletes appearing at Zones (non-displacing)</div>
-          ${d.hpsZone.length ? athleteTable(d.hpsZone, 'hps-zone', [
-            {key:'athlete',  label:'Athlete'},
-            {key:'ageGroup', label:'Group'},
-            {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-            {key:'eventKey', label:'Event'},
-            {key:'place',    label:'Place'},
-            {key:'score',    label:'Score', fmt:fmtScore},
-          ]) : '<div class="an-empty">No HPS athletes at Zones match filters.</div>'}
-        </div>
-
-        <div class="an-section-card">
-          <div class="an-card-title">YMCA champions (E/W/C pre-qual)</div>
-          ${kpiRow([
-            {label:'YMCA champions', value: d.zoneRows.filter(r=>r.ymca).length, sub:'all appear at zones'},
-            {label:'At Zones (ND)',  value: d.ymcaZone.length, sub:'non-displacing'},
-            {label:'Registered EWC', value: EWC ? EWC.entries.filter(e =>
-              (window.USAD_JO_NAT_QUALIFIERS?.hpsPrequalFemale||[]).concat(window.USAD_JO_NAT_QUALIFIERS?.hpsPrequalMale||[])
-              .some(h => norm(h.name) === norm(e.name))
-            ).length : '?', sub:'of YMCA athletes'},
-          ], 'compact')}
-          <div class="an-card-sub-title">YMCA athletes at Zones</div>
-          ${d.zoneRows.filter(r=>r.ymca).length ? athleteTable(d.zoneRows.filter(r=>r.ymca), 'ymca-zone', [
-            {key:'athlete',  label:'Athlete'},
-            {key:'ageGroup', label:'Group'},
-            {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-            {key:'eventKey', label:'Event'},
-            {key:'place',    label:'Place'},
-            {key:'score',    label:'Score', fmt:fmtScore},
-            {key:'qualificationStatus', label:'Status', trunc:30},
-          ]) : '<div class="an-empty">No YMCA athletes match filters.</div>'}
-        </div>
-
+    }
+    if (uiState.stage === 'Zones' || uiState.stage === 'EWC') {
+      const total    = cm==='athletes' ? d.total : d.totalEntries;
+      const natD     = cm==='athletes' ? d.natDirect : d.natDirectEntries;
+      const ewcQ     = cm==='athletes' ? d.ewcQual : d.ewcQualEntries;
+      const ewcR     = d.ewcReg;
+      const ewcNR    = d.ewcNotReg;
+      return `<div class="an2-funnel">
+        <div class="an2-funnel-title">${uiState.stage === 'EWC' ? 'Zones → East / West / Central' : 'Zones'} — qualification funnel
+          <span>${cm === 'athletes' ? 'Unique athletes' : 'Event entries'}</span></div>
+        ${funnelRow('Competed at Zones', total, total, '#E6F1FB','#0C447C', '')}
+        ${funnelRow('→ Nationals direct', natD, total, '#EAF3DE','#27500A', 'top 3 per zone event')}
+        ${funnelRow('→ E/W/C qualified', ewcQ, total, '#E6F1FB','#185FA5', 'places 4–18 + avg threshold')}
+        ${funnelRow('Registered at E/W/C', ewcR, ewcQ, '#B5D4F4','#0C447C',
+          `<span style="color:#D85A30;font-weight:500">${ewcNR}</span> <span>qualified but didn't register (${pct(ewcNR,ewcQ)}%)</span>`)}
+        ${funnelRow('Non-displacing at Zones', cm==='athletes'?d.nd:d.ndEntries, total, '#F1EFE8','#5F5E5A', 'did not consume spots')}
+        ${funnelRow('Displacements (bump-ins)', cm==='athletes'?d.bumped:d.bumpedEntries, total, '#EEEDFE','#534AB7', '')}
       </div>`;
+    }
+    return '';
   }
 
-  /* ── Tab 3: Displacement & bump-ins ───────────────────────── */
-  function renderDisplacementTab(d) {
-    return `
-      <div class="an-section-title">Where non-displacing athletes opened spots and caused bump-ins</div>
-      ${kpiRow([
-        {label:'Non-displacing at Zones', value: d.ndZone.length, sub:'total ND athletes'},
-        {label:'Spots opened (Regionals)', value: d.openedReg.length, sub:'by ND athletes'},
-        {label:'Bump-ins (Regionals)',     value: d.bumpedReg.length, accent: d.bumpedReg.length ? 'green' : '', sub:'athletes moved up'},
-        {label:'Spots opened (Zones)',     value: d.openedZone.length, sub:'by ND athletes'},
-      ])}
-
-      ${d.bumpedReg.length ? `
-        <div class="an-card-sub-title">Regionals bump-ins — athletes who advanced due to non-displacing athletes ahead</div>
-        ${athleteTable(d.bumpedReg, 'bumped-reg', [
-          {key:'athlete',  label:'Athlete bumped in'},
-          {key:'team',     label:'Team'},
-          {key:'ageGroup', label:'Group'},
-          {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-          {key:'eventKey', label:'Event'},
-          {key:'place',    label:'Actual place'},
-          {key:'countingRank', label:'Counting rank'},
-          {key:'score',    label:'Score', fmt:fmtScore},
-          {key:'bumpedBy', label:'Bumped in by', render: r =>
-            (r.bumpedBy||[]).map(b=>`<div style="font-size:10px">${esc(b.athlete)}</div>`).join('') || '—'},
-        ])}` : ''}
-
-      ${d.openedReg.length ? `
-        <div class="an-card-sub-title" style="margin-top:20px">Non-displacing athletes who opened spots at Regionals</div>
-        ${athleteTable(d.openedReg, 'opened-reg', [
-          {key:'athlete',  label:'ND athlete'},
-          {key:'team',     label:'Team'},
-          {key:'ageGroup', label:'Group'},
-          {key:'zone',     label:'Zone', render: r=>`<span class="zone-badge zone-${r.zone}">Z${r.zone}</span>`},
-          {key:'eventKey', label:'Event'},
-          {key:'place',    label:'Place'},
-          {key:'nonDisplacingReason', label:'ND reason', trunc:30},
-          {key:'openedFor', label:'Spot opened for', render: r =>
-            (r.openedFor||[]).map(b=>`<div style="font-size:10px">${esc(b.athlete)}</div>`).join('') || '—'},
-        ])}` : ''}
-
-      ${d.ndZone.length ? `
-        <div class="an-card-sub-title" style="margin-top:20px">All non-displacing athletes at Zones by category</div>
-        <div class="an-nd-grid">
-          ${renderNDGroupCard('Foreign', d.foreignZone, 'red')}
-          ${renderNDGroupCard('HPS',     d.hpsZone,    'amber')}
-          ${renderNDGroupCard('Dual (affects results)', d.dualZone, 'blue')}
-        </div>` : ''}`;
-  }
-
-  function renderNDGroupCard(title, rows, accent) {
-    if (!rows.length) return '';
-    const byZone = {};
-    rows.forEach(r => { byZone[r.zone] = (byZone[r.zone]||0)+1; });
-    return `<div class="an-nd-card an-nd-${accent}">
-      <div class="an-nd-title">${esc(title)}</div>
-      <div class="an-nd-count">${rows.length}</div>
-      <div class="an-nd-zones">
-        ${Object.entries(byZone).sort().map(([z,n])=>`<span class="zone-badge zone-${z}">Z${z}: ${n}</span>`).join(' ')}
+  function funnelRow(label, n, total, fillColor, textColor, note) {
+    const w = total > 0 ? Math.max(4, Math.round(100 * n / total)) : 0;
+    return `<div class="an2-f-row">
+      <div class="an2-f-label">${esc(label)}</div>
+      <div class="an2-f-track">
+        <div class="an2-f-fill" style="width:${w}%;background:${fillColor}">
+          <span style="color:${textColor};font-weight:500;font-size:11px">${n.toLocaleString()}</span>
+        </div>
       </div>
-      <div class="an-nd-names">
-        ${[...new Set(rows.map(r=>r.athlete))].slice(0,8).map(n=>`<div class="an-nd-name">${esc(n)}</div>`).join('')}
-        ${[...new Set(rows.map(r=>r.athlete))].length > 8 ? `<div class="an-nd-name an-nd-more">+${[...new Set(rows.map(r=>r.athlete))].length-8} more</div>` : ''}
-      </div>
+      <div class="an2-f-note">${note}</div>
     </div>`;
   }
 
-  /* ── Shared table renderer ─────────────────────────────────── */
-  function athleteTable(rows, id, cols) {
-    if (!rows.length) return '<div class="an-empty">No data.</div>';
-    // Deduplicate by athlete+event
-    const seen = new Set();
-    const deduped = rows.filter(r => {
-      const k = `${r.athlete}|${r.eventId||r.eventKey}`;
-      if (seen.has(k)) return false;
-      seen.add(k); return true;
-    });
-
-    const thead = `<thead><tr>${cols.map(c=>`<th>${esc(c.label)}</th>`).join('')}</tr></thead>`;
-    const tbody = deduped.map(r => `<tr>${cols.map(c => {
-      if (c.render) return `<td>${c.render(r)}</td>`;
-      const v = r[c.key];
-      const s = c.fmt ? c.fmt(v) : String(v == null ? '—' : v);
-      const display = c.trunc && s.length > c.trunc ? s.slice(0, c.trunc)+'…' : s;
-      if (c.key === 'athlete') {
-        return `<td><div class="an-ath-name">${esc(r.athlete)}</div>${r.diveMeetsId?`<div class="an-ath-id">${esc(r.diveMeetsId)}</div>`:''}</td>`;
-      }
-      return `<td>${esc(display)}</td>`;
-    }).join('')}</tr>`).join('');
-
-    return `<div class="an-table-wrap">
-      <div class="an-table-count">${deduped.length} rows</div>
-      <div style="overflow-x:auto">
-        <table class="an-table"><${thead}<tbody>${tbody}</tbody></table>
-      </div>
-    </div>`;
-  }
-
-  /* ── KPI row ───────────────────────────────────────────────── */
-  function kpiRow(cards, style) {
-    return `<div class="an-kpi-row${style==='compact'?' an-kpi-compact':''}">
-      ${cards.map(k=>`<div class="an-kpi${k.accent?' an-kpi-'+k.accent:''}">
-        <div class="an-kpi-val">${typeof k.value === 'number' ? k.value.toLocaleString() : k.value}</div>
-        <div class="an-kpi-label">${esc(k.label)}</div>
-        ${k.sub?`<div class="an-kpi-sub">${esc(k.sub)}</div>`:''}
+  /* ── breakdown grid ──────────────────────────────────────────────── */
+  function renderBreakdownGrid(bkd) {
+    const cm = uiState.countMode;
+    const groups = ['Group A','Group B','Group C','Group D'];
+    return `<div class="an2-bk-grid">
+      ${groups.map(g => `<div class="an2-bk-card">
+        <div class="an2-bk-group">${esc(agLabel(g))}</div>
+        ${['Girls','Boys'].map(gn => {
+          const cell = bkd[g]?.[gn] || {athletes:0,entries:0};
+          const primary = cm==='athletes' ? cell.athletes : cell.entries;
+          const sub     = cm==='athletes' ? `${cell.entries} entries` : `${cell.athletes} athletes`;
+          return `<div class="an2-bk-row">
+            <span class="an2-bk-gender">${esc(gn)}</span>
+            <div class="an2-bk-vals">
+              <span class="an2-bk-primary">${primary}</span>
+              <span class="an2-bk-sub">${esc(sub)}</span>
+            </div>
+          </div>`;
+        }).join('')}
       </div>`).join('')}
     </div>`;
   }
 
-  /* ── CSS ───────────────────────────────────────────────────── */
+  /* ── category strip ──────────────────────────────────────────────── */
+  function renderCategoryStrip(d) {
+    const cm = uiState.countMode;
+    const cats = [
+      { key:'foreign',     icon:'ti-flag',           label:'Foreign',        n:d.foreign,    e:d.foreignEntries,  color:'#A32D2D', bg:'#FCEBEB', bc:'#E24B4A' },
+      { key:'dual',        icon:'ti-globe',          label:'Dual citizen',   n:d.dual,       e:d.dualEntries,     color:'#185FA5', bg:'#E6F1FB', bc:'#378ADD' },
+      { key:'hps',         icon:'ti-star',           label:'HPS',            n:d.hps,        e:d.hpsEntries,      color:'#854F0B', bg:'#FAEEDA', bc:'#EF9F27' },
+      { key:'ymca',        icon:'ti-award',          label:'YMCA',           n:d.ymca||0,    e:d.ymcaEntries||0,  color:'#0F6E56', bg:'#E1F5EE', bc:'#1D9E75' },
+      { key:'noshow',      icon:'ti-user-off',       label:'Did not compete',n:d.ewcNotReg||d.noShow||0, e:0, color:'#5F5E5A', bg:'#F1EFE8', bc:'#888780' },
+      { key:'displacement',icon:'ti-arrows-exchange',label:'Displacements',  n:d.bumped||0,  e:d.bumpedEntries||0,color:'#534AB7', bg:'#EEEDFE', bc:'#7F77DD' },
+    ];
+    return `<div class="an2-cat-strip">
+      ${cats.map(c => {
+        const isOpen = uiState.openCat === c.key;
+        const count  = cm==='athletes' ? c.n : c.e;
+        const sub    = cm==='athletes' ? `${c.e} entries` : `${c.n} athletes`;
+        return `<div class="an2-cat-card${isOpen?' open':''}"
+          style="${isOpen?`border-color:${c.bc};background:${c.bg};`:''}"
+          onclick="window._anCat('${c.key}')">
+          <i class="ti ${c.icon} an2-cat-icon" style="color:${isOpen?c.color:'var(--ink-3)'}" aria-hidden="true"></i>
+          <div class="an2-cat-name">${esc(c.label)}</div>
+          <div class="an2-cat-n" style="${isOpen?`color:${c.color}`:''}">${count}</div>
+          <div class="an2-cat-sub">${esc(sub)}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+  window._anCat = k => { uiState.openCat = uiState.openCat===k ? null : k; render(); };
+
+  /* ── detail panel ────────────────────────────────────────────────── */
+  function renderDetailPanel(d) {
+    const cat = uiState.openCat;
+    let rows = [];
+    let title = '', note = '', headerBg = '#F1F5F9', headerColor = '#334155';
+
+    if (cat === 'foreign') {
+      rows = d.foreignRows || [];
+      title = `Foreign athletes — ${d.foreign} athletes · ${d.foreignEntries} entries`;
+      note  = 'Non-displacing · shown at score-rank position (ghost place) · do not consume qualifying spots';
+      headerBg = '#FCEBEB'; headerColor = '#791F1F';
+    } else if (cat === 'dual') {
+      rows = d.dualRows || [];
+      title = `Dual citizens — ${d.dual} athletes · ${d.dualEntries} entries`;
+      note  = 'Competed for another federation · non-displacing · do not consume qualifying spots';
+      headerBg = '#E6F1FB'; headerColor = '#0C447C';
+    } else if (cat === 'hps') {
+      rows = d.hpsRows || [];
+      title = `HPS athletes — ${d.hps} athletes · ${d.hpsEntries} entries`;
+      note  = 'High Performance Squad Tier 3 · pre-qualified to Junior Nationals · non-displacing at Zones';
+      headerBg = '#FAEEDA'; headerColor = '#633806';
+    } else if (cat === 'ymca') {
+      rows = d.ymcaRows || [];
+      title = `YMCA champions — ${d.ymca} athletes · ${d.ymcaEntries} entries`;
+      note  = 'YMCA event champions · pre-qualified to East/West/Central';
+      headerBg = '#E1F5EE'; headerColor = '#085041';
+    } else if (cat === 'displacement') {
+      rows = d.bumpedRows || [];
+      title = `Displacement bump-ins — ${d.bumped} athletes`;
+      note  = 'Athletes who moved up due to a non-displacing athlete ahead of them';
+      headerBg = '#EEEDFE'; headerColor = '#3C3489';
+    } else if (cat === 'noshow') {
+      rows = d.noShowRows || [];
+      const n = rows.length > 0 ? new Set(rows.map(r => norm(r.athlete||''))).size : (d.ewcNotReg || d.noShow || 0);
+      title = `Did not compete — ${n} athletes`;
+      note  = uiState.stage === 'Regionals'
+        ? 'Qualified at Regionals but did not appear at Zones'
+        : 'Qualified at Zones (places 4–18) but did not register for East/West/Central';
+      headerBg = '#F1EFE8'; headerColor = '#444441';
+    }
+
+    if (!rows.length) {
+      return `<div class="an2-detail">
+        <div class="an2-detail-header" style="background:${headerBg}">
+          <div class="an2-detail-title" style="color:${headerColor}">${esc(title)}</div>
+          <div class="an2-detail-note">${esc(note)}</div>
+        </div>
+        <div style="padding:20px;text-align:center;color:var(--ink-4);font-size:12px">No data matches current filters.</div>
+      </div>`;
+    }
+
+    // Deduplicate: one row per athlete per event
+    const deduped = [];
+    const seen = new Set();
+    rows.forEach(r => {
+      const k = `${norm(r.athlete||'')}|${r.eventKey||''}|${r.zone||''}`;
+      if (!seen.has(k)) { seen.add(k); deduped.push(r); }
+    });
+
+    // Group by athlete
+    const byAthlete = new Map();
+    deduped.forEach(r => {
+      const k = norm(r.athlete||'');
+      if (!byAthlete.has(k)) byAthlete.set(k, { r, events: [] });
+      byAthlete.get(k).events.push(r);
+    });
+
+    // For ghost rank: compute per event
+    const all = allResults().filter(x => !isSynth(x));
+
+    const tableRows = [...byAthlete.values()].map(({ r, events }) => {
+      const zone = r.zone || '';
+      const zoneLabel = zone ? `Zone ${zone}` : '—';
+      const zBg = ZONE_COLOR[zone] || '#f3f4f6';
+      const zInk = ZONE_INK[zone] || '#374151';
+      const ewcMeet = r.ewc || ZONE_TO_EWC[zone] || '';
+
+      const eventCells = events.map(ev => {
+        // Ghost rank for foreign/127 athletes
+        let placeDisplay = ev.place === '127' || ev.placeNumber === 127 ? '—' : (ev.place || '—');
+        let ghostNote = '';
+        if (ev.placeNumber === 127 || ev.place === '127') {
+          const evRows = all.filter(x => x.stage === ev.stage && x.zone === ev.zone && x.eventKey === ev.eventKey);
+          const ghosts = computeGhostRanks(evRows);
+          const ghostRank = ghosts.get(norm(ev.athlete||''));
+          if (ghostRank) {
+            placeDisplay = `<span title="Score rank if eligible">${ghostRank}*</span>`;
+            ghostNote = `<span class="an2-ghost-note">*score rank (exhibition)</span>`;
+          }
+        } else {
+          placeDisplay = ev.place || '—';
+        }
+
+        const scoreDisp = fmtScore(ev.score);
+        const eligDisp  = ev.eligibleRank != null ? ev.eligibleRank : '—';
+        return `<div class="an2-ev-row">
+          <span class="an2-ev-name">${esc(ev.eventKey||'')}</span>
+          <span class="an2-ev-place">Place: ${placeDisplay} ${ghostNote}</span>
+          <span class="an2-ev-score">${esc(scoreDisp)}</span>
+          ${cat === 'displacement' ? `<span class="an2-ev-bump">bumped by ${esc((ev.bumpedBy||[]).map(b=>b.athlete).join(', '))}</span>` : ''}
+        </div>`;
+      }).join('');
+
+      const flags = [];
+      if (r.keptInvitedJoNationals) flags.push(`<span class="an2-pill an2-pill-kept">Kept invited</span>`);
+      if (r.petition)               flags.push(`<span class="an2-pill an2-pill-pet">Petition</span>`);
+      if (r.reviewFlags?.length)    flags.push(`<span class="an2-pill an2-pill-rev">Review</span>`);
+
+      return `<tr>
+        <td style="padding:10px 12px;border-bottom:0.5px solid var(--line-2);vertical-align:top">
+          <div style="font-weight:500;font-size:13px;color:var(--ink)">${esc(r.athlete||'')}</div>
+          ${r.diveMeetsId ? `<div style="font-size:10px;color:var(--ink-4);font-family:var(--f-mono,'JetBrains Mono',monospace)">DM ${esc(r.diveMeetsId)}</div>` : ''}
+          ${r.team ? `<div style="font-size:11px;color:var(--ink-3);margin-top:1px">${esc(r.team)}</div>` : ''}
+          ${flags.length ? `<div style="margin-top:4px;display:flex;gap:3px;flex-wrap:wrap">${flags.join('')}</div>` : ''}
+        </td>
+        <td style="padding:10px 12px;border-bottom:0.5px solid var(--line-2);vertical-align:top;white-space:nowrap">
+          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:${zBg};color:${zInk}">${esc(zoneLabel)}</span>
+          ${ewcMeet ? `<div style="font-size:10px;color:var(--ink-4);margin-top:3px">→ ${esc(ewcMeet)}</div>` : ''}
+        </td>
+        <td style="padding:10px 12px;border-bottom:0.5px solid var(--line-2);vertical-align:top">
+          ${eventCells}
+        </td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="an2-detail">
+      <div class="an2-detail-header" style="background:${headerBg}">
+        <div class="an2-detail-title" style="color:${headerColor}">${esc(title)}</div>
+        <div class="an2-detail-note">${esc(note)}</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr>
+              <th style="background:var(--surface-2);padding:7px 12px;text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line)">Athlete</th>
+              <th style="background:var(--surface-2);padding:7px 12px;text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line)">Zone</th>
+              <th style="background:var(--surface-2);padding:7px 12px;text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line)">Events</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  /* ── CSS ──────────────────────────────────────────────────────────── */
+  let cssInjected = false;
   function injectCSS() {
+    if (cssInjected) return;
+    cssInjected = true;
     const s = document.createElement('style');
     s.textContent = `
-.an-shell{display:flex;flex-direction:column;min-height:400px}
-.an-filters{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:0.5px solid var(--line);align-items:flex-end}
-.an-filter{display:flex;flex-direction:column;gap:3px}
-.an-filter-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
-.an-search-input{height:28px;padding:0 8px;font-size:12px;border-radius:var(--radius-sm);border:0.5px solid var(--line)}
-.an-clear-btn{align-self:flex-end;padding:4px 10px;font-size:11px;border-radius:var(--radius-sm);border:0.5px solid var(--line);background:var(--surface-2);cursor:pointer;color:var(--ink-2)}
-.an-tabs{display:flex;gap:0;border-bottom:0.5px solid var(--line);padding:0 16px}
-.an-tab{padding:8px 16px;font-size:12px;font-weight:500;border:none;background:transparent;cursor:pointer;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-0.5px}
-.an-tab:hover{color:var(--ink)}
-.an-tab.active{color:var(--pool);border-bottom-color:var(--pool)}
-.an-body{padding:16px;overflow-y:auto}
-.an-section-title{font-size:12px;font-weight:500;color:var(--ink-2);margin:0 0 12px;padding-bottom:6px;border-bottom:0.5px solid var(--line-2)}
-.an-card-sub-title{font-size:11px;font-weight:500;color:var(--ink-3);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em}
-.an-kpi-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
-.an-kpi-compact .an-kpi{flex:1;min-width:100px}
-.an-kpi{flex:1;min-width:120px;background:var(--surface-2);border-radius:var(--radius);padding:10px 12px;border:0.5px solid var(--line-2)}
-.an-kpi-val{font-size:22px;font-weight:500;font-family:var(--f-mono);color:var(--ink)}
-.an-kpi-label{font-size:11px;color:var(--ink-3);margin-top:2px}
-.an-kpi-sub{font-size:10px;color:var(--ink-4);margin-top:2px}
-.an-kpi-green .an-kpi-val{color:#047857}
-.an-kpi-amber .an-kpi-val{color:#b45309}
-.an-kpi-red .an-kpi-val{color:var(--red)}
-.an-kpi-blue .an-kpi-val{color:var(--pool)}
-.an-table-wrap{margin-bottom:16px}
-.an-table-count{font-size:10px;color:var(--ink-4);margin-bottom:4px}
-.an-table{width:100%;border-collapse:collapse;font-size:12px}
-.an-table th{background:var(--surface-2);padding:6px 8px;text-align:left;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);border-bottom:0.5px solid var(--line);white-space:nowrap}
-.an-table td{padding:6px 8px;border-bottom:0.5px solid var(--line-2);vertical-align:middle;color:var(--ink-2)}
-.an-table tr:last-child td{border-bottom:none}
-.an-table tr:hover td{background:var(--surface-2)}
-.an-ath-name{font-weight:500;color:var(--ink)}
-.an-ath-id{font-size:10px;color:var(--ink-4);font-family:var(--f-mono)}
-.an-empty{font-size:12px;color:var(--ink-4);padding:16px;text-align:center;background:var(--surface-2);border-radius:var(--radius);border:0.5px dashed var(--line)}
-.an-section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
-.an-section-card{background:var(--surface);border:0.5px solid var(--line);border-radius:var(--radius-md);padding:14px}
-.an-card-title{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:10px}
-.zone-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
-.zone-A,.zone-B{background:#EEEDFE;color:#3C3489}
-.zone-C,.zone-D{background:#E1F5EE;color:#085041}
-.zone-E,.zone-F{background:#FAEEDA;color:#633806}
-.an-nd-grid{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
-.an-nd-card{flex:1;min-width:160px;border-radius:var(--radius-md);padding:12px 14px;border:0.5px solid}
-.an-nd-red{background:#FCEBEB;border-color:#F09595}
-.an-nd-amber{background:#FAEEDA;border-color:#EF9F27}
-.an-nd-blue{background:#E6F1FB;border-color:#85B7EB}
-.an-nd-title{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin-bottom:4px}
-.an-nd-count{font-size:24px;font-weight:500;font-family:var(--f-mono);color:var(--ink);margin-bottom:6px}
-.an-nd-zones{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
-.an-nd-name{font-size:11px;color:var(--ink-2);padding:1px 0}
-.an-nd-more{color:var(--ink-4);font-style:italic}
-.an-badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
-.an-badge-green{background:#EAF3DE;color:#3B6D11}
-.an-badge-gray{background:var(--surface-3);color:var(--ink-3)}
+.an2-shell{display:flex;flex-direction:column;gap:10px;padding:0 0 24px}
+.an2-stage-nav{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0 4px}
+.an2-stage-btn{padding:7px 18px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;
+  border:1.5px solid var(--line);background:var(--surface);color:var(--ink-3);transition:all .15s}
+.an2-stage-btn:hover{border-color:var(--pool);color:var(--pool)}
+.an2-stage-btn.active{background:var(--nav,#0a0e38);color:#fff;border-color:var(--nav,#0a0e38)}
+.an2-bar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:4px 0}
+.an2-toggle{display:flex;background:var(--surface-2);border-radius:20px;padding:2px;border:1px solid var(--line);gap:2px}
+.an2-tpill{padding:4px 12px;border-radius:18px;font-size:11px;font-weight:500;cursor:pointer;
+  border:none;background:transparent;color:var(--ink-3);transition:all .15s}
+.an2-tpill.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.an2-filters{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 8px;border-bottom:1px solid var(--line-2)}
+.an2-filter-group{display:flex;gap:3px;flex-wrap:wrap}
+.an2-chip{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--ink-3);transition:all .12s}
+.an2-chip:hover{border-color:var(--pool);color:var(--pool)}
+.an2-chip.on{background:var(--nav,#0a0e38);color:#fff;border-color:var(--nav,#0a0e38)}
+.an2-funnel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);padding:14px 18px;display:flex;flex-direction:column;gap:7px}
+.an2-funnel-title{font-size:12px;font-weight:500;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.an2-funnel-title span{font-size:10px;font-weight:400;color:var(--ink-4)}
+.an2-f-row{display:flex;align-items:center;gap:10px}
+.an2-f-label{font-size:11px;color:var(--ink-3);width:160px;flex-shrink:0;text-align:right}
+.an2-f-track{flex:1;height:26px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.an2-f-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding:0 8px;min-width:32px;transition:width .35s}
+.an2-f-note{font-size:11px;color:var(--ink-3);width:240px;flex-shrink:0}
+.an2-bk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.an2-bk-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);padding:10px 12px}
+.an2-bk-group{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-4);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--line-2)}
+.an2-bk-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;border-bottom:0.5px solid var(--line-2)}
+.an2-bk-row:last-child{border-bottom:none}
+.an2-bk-gender{font-size:11px;color:var(--ink-3)}
+.an2-bk-vals{display:flex;flex-direction:column;align-items:flex-end}
+.an2-bk-primary{font-size:15px;font-weight:500;color:var(--ink);line-height:1.1}
+.an2-bk-sub{font-size:10px;color:var(--ink-4)}
+.an2-cat-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.an2-cat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);
+  padding:10px 10px 8px;cursor:pointer;transition:all .12s;text-align:left}
+.an2-cat-card:hover{border-color:var(--pool)}
+.an2-cat-icon{font-size:16px;display:block;margin-bottom:4px;color:var(--ink-4)}
+.an2-cat-name{font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-4);margin-bottom:3px}
+.an2-cat-n{font-size:18px;font-weight:500;color:var(--ink);line-height:1.1}
+.an2-cat-sub{font-size:10px;color:var(--ink-4);margin-top:1px}
+.an2-detail{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);overflow:hidden}
+.an2-detail-header{padding:12px 16px;border-bottom:1px solid var(--line)}
+.an2-detail-title{font-size:13px;font-weight:500}
+.an2-detail-note{font-size:11px;opacity:.75;margin-top:2px}
+.an2-ev-row{display:flex;align-items:baseline;gap:8px;padding:2px 0;border-bottom:0.5px solid var(--line-2)}
+.an2-ev-row:last-child{border-bottom:none}
+.an2-ev-name{font-size:11px;color:var(--ink-2);flex:1}
+.an2-ev-place{font-size:11px;color:var(--ink-3);white-space:nowrap}
+.an2-ev-score{font-size:11px;font-family:var(--f-mono,'JetBrains Mono',monospace);color:var(--ink-2);white-space:nowrap}
+.an2-ev-bump{font-size:10px;color:#534AB7;white-space:nowrap}
+.an2-ghost-note{font-size:9px;color:var(--ink-4);font-style:italic}
+.an2-pill{display:inline-block;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:500}
+.an2-pill-kept{background:#E1F5EE;color:#085041}
+.an2-pill-pet{background:#EEEDFE;color:#3C3489}
+.an2-pill-rev{background:#FAEEDA;color:#633806}
 `;
     document.head.appendChild(s);
   }
 
-  /* ── Hook into main.js ─────────────────────────────────────── */
-  function patchMain() {
+  function wireEvents() { /* all wired via onclick=window._ */ }
+
+  /* ── hook ─────────────────────────────────────────────────────────── */
+  function init() {
     injectCSS();
-    // Register as hook for the Reports stage tab
-    window._qvRenderReports = renderAnalytics;
-    // Also expose for direct calls
-    window._anRender = renderAnalytics;
-    console.log('[analytics] registered on Reports stage');
+    window._qvRenderReports = render;
+    window._anRender = render;
+    console.log('[analytics v2] ready');
   }
 
-  function waitForMain(cb, tries) {
-    tries = tries || 0;
-    if (typeof renderAll === 'function' && typeof state !== 'undefined') cb();
-    else if (tries < 100) setTimeout(() => waitForMain(cb, tries + 1), 50);
+  function waitForMain(cb, n) {
+    n = n || 0;
+    if (typeof effectiveResults !== 'undefined' || window.JUNIOR_RESULTS_DATA) cb();
+    else if (n < 120) setTimeout(() => waitForMain(cb, n+1), 50);
   }
 
-  waitForMain(patchMain);
+  waitForMain(init);
 })();
