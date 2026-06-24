@@ -49,6 +49,7 @@ const STAGES = [
   { id:'Zones',     label:'Zones',      icon:'Z', desc:'Zone Championships → E/W/C + Nationals' },
   { id:'EWC',       label:'E/W/C',      icon:'E', desc:'East/West/Central → Nationals' },
   { id:'Nationals', label:'Nationals',  icon:'N', desc:'Junior National Championship' },
+  { id:'Reports',   label:'Reports',    icon:'📊', desc:'Analytics — participation, displacements, special status' },
 ];
 
 const OVERRIDE_KEY = 'usad.juniorResults.overrides.v2';
@@ -264,7 +265,7 @@ function init() {
 function buildStageNav() {
   const nav = $('stageNav');
   nav.innerHTML = STAGES.map(s => {
-    const hasData = DATA.results.some(r => stageMatch(r, s.id));
+    const hasData = s.id === 'Reports' ? true : DATA.results.some(r => stageMatch(r, s.id));
     return `<button class="stage-btn ${s.id === state.stage ? 'active' : ''} ${hasData ? 'has-data' : ''}"
       data-stage="${s.id}" title="${esc(s.desc)}">
       <span class="stage-dot"></span>${esc(s.label)}
@@ -1106,7 +1107,7 @@ function renderKpis() {
 
 /* ── Event list ───────────────────────────────────────────────── */
 function renderEventList() {
-  if (state.stage === 'EWC' || state.stage === 'Nationals') return;
+  if (state.stage === 'EWC' || state.stage === 'Nationals' || state.stage === 'Reports') return;
   const rows = filteredRows({ ignoreEvent: true }).filter(r => stageMatch(r, state.stage));
   const grouped = new Map();
   rows.forEach(r => {
@@ -1144,7 +1145,7 @@ function renderEventList() {
 
 /* ── Context bar ──────────────────────────────────────────────── */
 function renderContext() {
-  if (state.stage === 'EWC' || state.stage === 'Nationals') return;
+  if (state.stage === 'EWC' || state.stage === 'Nationals' || state.stage === 'Reports') return;
   const rows     = filteredRows();
   const selected = state.selectedEventId ? eventById.get(state.selectedEventId) : null;
   const title    = selected ? (selected.eventName || selected.id) : 'All matching events';
@@ -1175,8 +1176,9 @@ function renderContext() {
 /* ── Table dispatch ───────────────────────────────────────────── */
 function renderTable() {
   // qualifier-views.js handles EWC and Nationals stages
-  if (state.stage === 'EWC' && window._qvRenderEWC)       { window._qvRenderEWC();       return; }
-  if (state.stage === 'Nationals' && window._qvRenderNat) { window._qvRenderNat();       return; }
+  if (state.stage === 'EWC' && window._qvRenderEWC)           { window._qvRenderEWC();       return; }
+  if (state.stage === 'Nationals' && window._qvRenderNat)     { window._qvRenderNat();       return; }
+  if (state.stage === 'Reports' && window._qvRenderReports)   { window._qvRenderReports();   return; }
 
   const rows = currentRows();
   $('rowCount').textContent = `${rows.length.toLocaleString()} ${state.view === 'athletes' ? 'athletes' : 'rows'}`;
