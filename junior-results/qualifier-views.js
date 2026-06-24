@@ -333,6 +333,134 @@
     qv.panelRow = null;
   }
 
+  /* ── Review section ────────────────────────────────────────── */
+  // Flag type → plain English reason + action buttons
+  const REVIEW_ACTIONS = {
+    'Zone result not in scraped data': {
+      reason: 'This athlete appears on the official DiveMeets qualifier list but has no scraped zone result. Verify their qualification route.',
+      actions: [
+        { label:'Normal qualification', type:'review', note:'Confirmed: normal zone qualifier — data gap only', value:false },
+        { label:'Medical petition',      type:'petition',note:'Medical petition approved',                       value:true  },
+        { label:'Exhibition only',       type:'foreign', note:'Exhibition/foreign — should not count',           value:true  },
+        { label:'Dismiss flag',          type:'review',  note:'Dismissed: data verified, no action needed',     value:false },
+      ],
+    },
+    'Citizenship missing/unknown': {
+      reason: 'This athlete\'s citizenship could not be confirmed from available data. Please designate their status.',
+      actions: [
+        { label:'US Citizen',       type:'review',   note:'Confirmed US citizen',           value:false },
+        { label:'Foreign declared', type:'foreign',  note:'Foreign declared — non-displacing', value:true },
+        { label:'Dual citizen',     type:'dual',     note:'Dual citizen declared',           value:true  },
+        { label:'Dismiss / TBD',    type:'review',   note:'Dismissed: citizenship TBD',     value:false },
+      ],
+    },
+    'Webpoint non-US but no foreign declaration': {
+      reason: 'Webpoint registration shows a non-US country but no formal foreign declaration was filed at this meet.',
+      actions: [
+        { label:'Mark foreign',         type:'foreign', note:'Foreign declared — non-displacing',  value:true  },
+        { label:'Confirm US citizen',   type:'review',  note:'Confirmed US citizen — Webpoint error', value:false },
+        { label:'Mark dual citizen',    type:'dual',    note:'Dual citizen declared',               value:true  },
+        { label:'Dismiss',              type:'review',  note:'Dismissed: reviewed and no action',  value:false },
+      ],
+    },
+    'Dual other-country declaration without foreign declaration': {
+      reason: 'This athlete has a dual citizenship affecting results flag but was not formally declared as foreign at meet check-in.',
+      actions: [
+        { label:'Non-displacing dual',  type:'dualEffect', note:'Dual — non-displacing, affects results', value:true  },
+        { label:'Mark foreign',         type:'foreign',    note:'Foreign declared — non-displacing',      value:true  },
+        { label:'Confirm US citizen',   type:'review',     note:'Confirmed US citizen — flag error',      value:false },
+        { label:'Dismiss',              type:'review',     note:'Dismissed: reviewed and no action',      value:false },
+      ],
+    },
+    'Dual declaration reviewed - no other sport nationality': {
+      reason: 'This athlete was flagged as a dual citizen but review indicates they have not competed for another federation in diving.',
+      actions: [
+        { label:'Confirm — no effect',  type:'review',   note:'Confirmed dual declared, no effect on diving results', value:false },
+        { label:'Mark non-displacing',  type:'dualEffect',note:'Dual — affects results, non-displacing',              value:true  },
+        { label:'Dismiss',              type:'review',   note:'Dismissed: reviewed and no action',                    value:false },
+      ],
+    },
+    'Place=127': {
+      reason: 'DiveMeets assigned place 127 (exhibition code) to this athlete but they are not flagged as foreign or non-displacing.',
+      actions: [
+        { label:'Mark foreign',     type:'foreign', note:'Foreign/exhibition — non-displacing', value:true  },
+        { label:'Data error',       type:'review',  note:'Data error — place 127 incorrect',    value:false },
+        { label:'Dismiss',          type:'review',  note:'Dismissed: reviewed',                 value:false },
+      ],
+    },
+    'Score=0': {
+      reason: 'This athlete has a score of zero, which usually indicates a DNS, scratch, or data entry error.',
+      actions: [
+        { label:'DNS / Scratch',    type:'notAttending', note:'DNS or scratch — did not compete', value:true  },
+        { label:'Data error',       type:'review',       note:'Data error — score incorrect',      value:false },
+        { label:'Dismiss',          type:'review',       note:'Dismissed: reviewed',               value:false },
+      ],
+    },
+    'Dual citizen (dualOtherCountry)': {
+      reason: 'This dual citizen competed for another federation. Confirm whether they are kept on the Junior Nationals invitation list per policy.',
+      actions: [
+        { label:'Kept invited to Nationals', type:'keptInvited', note:'Kept invited per policy despite dual OC status', value:true  },
+        { label:'Non-displacing only',       type:'dualEffect',  note:'Non-displacing — not kept on Nationals list',    value:true  },
+        { label:'Dismiss',                   type:'review',      note:'Dismissed: reviewed',                            value:false },
+      ],
+    },
+  };
+
+  function getReviewActions(reviewFlags) {
+    if (!reviewFlags?.length) return null;
+    for (const flag of reviewFlags) {
+      for (const [key, def] of Object.entries(REVIEW_ACTIONS)) {
+        if (flag.includes(key)) return { ...def, flag };
+      }
+    }
+    return {
+      reason: reviewFlags[0],
+      actions: [
+        { label:'Mark as resolved', type:'review', note:'Manually resolved', value:false },
+        { label:'Dismiss',          type:'review', note:'Dismissed',         value:false },
+      ],
+      flag: reviewFlags[0],
+    };
+  }
+
+  function renderReviewSection(r) {
+    const dm   = String(r.diveMeetsId || '').trim();
+    const name = esc(r.athlete || '');
+    const def  = getReviewActions(r.reviewFlags);
+    if (!def) return '';
+    const safeNote = def.reason.replace(/'/g, "\\'");
+    return `<div class="rv-section">
+      <div class="rv-header">
+        <i class="ti ti-alert-triangle rv-icon" aria-hidden="true"></i>
+        <div class="rv-title">Review required</div>
+      </div>
+      <div class="rv-reason">${esc(def.reason)}</div>
+      <div class="rv-flag-text">${esc(def.flag || '')}</div>
+      <div class="rv-actions">
+        ${def.actions.map(a => `
+          <button class="rv-btn rv-btn-${a.type==='review'?'dismiss':a.type}"
+            onclick="window._qvReviewAction('${esc(dm)}','${name}','${esc(a.type)}',${a.value},'${esc(a.note || '').replace(/'/g,'\\&apos;')}')">
+            ${esc(a.label)}
+          </button>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  window._qvReviewAction = function(dm, name, type, value, note) {
+    if (typeof addOverride === 'function') {
+      addOverride({
+        type,
+        value: Boolean(value),
+        athleteId:   dm,
+        athleteName: name,
+        note: note || 'Review decision',
+        resolvedReview: true,
+      });
+    }
+    // Close the panel after action
+    closePanel();
+  };
+
   function renderPanel() {
     const panel = $('qv-panel-body');
     if (!panel || !qv.panelRow) return;
@@ -363,6 +491,8 @@
       </a>` : ''}
 
       <div class="panel-flags">${flagBadges(r)}</div>
+
+      ${(r.reviewFlags?.length && !r.reviewResolved) ? renderReviewSection(r) : ''}
 
       ${natEvts.length ? `
         <div class="panel-section">
@@ -1097,6 +1227,56 @@
   border-radius:var(--radius,6px);border:1px solid var(--line);
   background:var(--surface-2);cursor:pointer;font-size:11px;color:var(--ink-2)}
 
+/* Review section */
+.rv-section{margin:0 16px 12px;border:1.5px solid #F59E0B;border-radius:var(--radius-md,8px);
+  background:#FFFBEB;overflow:hidden}
+.rv-header{display:flex;align-items:center;gap:8px;padding:10px 12px 6px;
+  border-bottom:1px solid #FDE68A}
+.rv-icon{font-size:15px;color:#D97706}
+.rv-title{font-size:12px;font-weight:500;color:#92400E}
+.rv-reason{font-size:11px;color:#78350F;padding:8px 12px 4px;line-height:1.5}
+.rv-flag-text{font-size:10px;color:#B45309;padding:0 12px 8px;font-style:italic}
+.rv-actions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 12px;
+  border-top:1px solid #FDE68A}
+.rv-btn{padding:5px 10px;font-size:11px;font-weight:500;border-radius:var(--radius,6px);
+  cursor:pointer;border:1px solid;transition:all .12s;white-space:nowrap}
+.rv-btn-foreign{background:#FFF1F2;color:#9F1239;border-color:#FDA4AF}
+.rv-btn-foreign:hover{background:#FFE4E6}
+.rv-btn-dual,.rv-btn-dualEffect{background:#EFF6FF;color:#1E3A8A;border-color:#93C5FD}
+.rv-btn-dual:hover,.rv-btn-dualEffect:hover{background:#DBEAFE}
+.rv-btn-petition{background:#F3E8FF;color:#581C87;border-color:#C4B5FD}
+.rv-btn-petition:hover{background:#EDE9FE}
+.rv-btn-keptInvited{background:#ECFDF5;color:#065F46;border-color:#6EE7B7}
+.rv-btn-keptInvited:hover{background:#D1FAE5}
+.rv-btn-notAttending{background:#F9FAFB;color:#374151;border-color:#D1D5DB}
+.rv-btn-notAttending:hover{background:#F3F4F6}
+.rv-btn-dismiss{background:var(--surface-2);color:var(--ink-3);border-color:var(--line)}
+.rv-btn-dismiss:hover{background:var(--surface);color:var(--ink)}
+
+/* Review queue in flags tab */
+.rq-wrap{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.rq-header{display:flex;align-items:center;justify-content:space-between;
+  padding-bottom:8px;border-bottom:1px solid var(--line)}
+.rq-title{font-size:13px;font-weight:500;color:var(--ink)}
+.rq-progress{font-size:11px;color:var(--ink-3)}
+.rq-group-label{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-4);margin:8px 0 4px}
+.rq-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md,8px);
+  overflow:hidden;transition:border-color .12s}
+.rq-card:hover{border-color:#F59E0B}
+.rq-card-header{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer}
+.rq-ath-name{font-weight:500;font-size:13px;color:var(--ink)}
+.rq-ath-meta{font-size:10px;color:var(--ink-4);font-family:var(--f-mono,'JetBrains Mono',monospace);margin-top:1px}
+.rq-ath-team{font-size:11px;color:var(--ink-3);margin-top:1px}
+.rq-flag-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;
+  font-weight:500;background:#FEF3C7;color:#92400E;margin-left:auto;flex-shrink:0}
+.rq-reason{font-size:11px;color:var(--ink-3);padding:0 12px 4px;line-height:1.5}
+.rq-acts{display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px 10px;
+  border-top:1px solid var(--line-2);background:var(--surface-2)}
+.rq-empty{padding:24px;text-align:center;color:var(--ink-4);font-size:12px;
+  background:var(--surface-2);border-radius:var(--radius-md,8px);
+  border:1px dashed var(--line)}
+
 /* Tables */
 .qv-table{width:100%;border-collapse:collapse;font-size:12px}
 .qv-table th{position:sticky;top:0;background:var(--surface-2);padding:6px 10px;
@@ -1216,6 +1396,84 @@
   window._qvClosePanel = closePanel;
 
   /* ── Wire into main.js hooks ───────────────────────────────── */
+  /* ── Review queue renderer (used by main.js flags view) ────── */
+  function renderReviewQueue(containerEl) {
+    const all = typeof effectiveResults !== 'undefined'
+      ? effectiveResults : (window.JUNIOR_RESULTS_DATA?.results || []);
+
+    const byAth = new Map();
+    all.forEach(r => {
+      if (!r.reviewFlags?.length) return;
+      const n = (r.athlete||'').trim();
+      if (!n) return;
+      if (!byAth.has(n)) byAth.set(n, {name:n, dm:String(r.diveMeetsId||''), team:r.team||'', flags:new Set(), stages:new Set()});
+      r.reviewFlags.forEach(f => byAth.get(n).flags.add(f));
+      byAth.get(n).stages.add(r.stage||'');
+    });
+
+    const resolvedNames = new Set(
+      (state?.overrides||[]).filter(o=>o.active&&o.resolvedReview).map(o=>(o.athleteName||'').trim())
+    );
+    const pending = [...byAth.values()].filter(a => !resolvedNames.has(a.name));
+    const total = byAth.size;
+    const resolved = resolvedNames.size;
+
+    if (!pending.length) {
+      containerEl.innerHTML = `<div class="rq-empty">
+        <i class="ti ti-circle-check" style="font-size:24px;color:#059669;display:block;margin-bottom:8px" aria-hidden="true"></i>
+        All ${total} review items resolved.
+      </div>`;
+      return;
+    }
+
+    const byType = new Map();
+    pending.forEach(a => {
+      const flag = [...a.flags][0]||'';
+      const typeKey = Object.keys(REVIEW_ACTIONS).find(k=>flag.includes(k))||'Other';
+      if (!byType.has(typeKey)) byType.set(typeKey,[]);
+      byType.get(typeKey).push({...a, primaryFlag:flag});
+    });
+
+    const groups = [...byType.entries()].map(([type, athletes]) => {
+      const cards = athletes.map(a => {
+        const def = getReviewActions([a.primaryFlag]);
+        return `<div class="rq-card">
+          <div class="rq-card-header" onclick="window._qvOpenPanelByName('${esc(a.name)}')">
+            <div>
+              <div class="rq-ath-name">${esc(a.name)}</div>
+              ${a.dm?`<div class="rq-ath-meta">DM ${esc(a.dm)}</div>`:''}
+              ${a.team?`<div class="rq-ath-team">${esc(a.team)}</div>`:''}
+            </div>
+            <span class="rq-flag-badge">${[...a.stages].join(' / ')}</span>
+          </div>
+          <div class="rq-reason">${def?esc(def.reason):esc(a.primaryFlag)}</div>
+          <div class="rq-acts">
+            ${(def?.actions||[]).map(act=>`
+              <button class="rv-btn rv-btn-${act.type==='review'?'dismiss':act.type}"
+                onclick="window._qvReviewAction('${esc(a.dm)}','${esc(a.name)}','${esc(act.type)}',${act.value},'${esc(act.note||'')}')">
+                ${esc(act.label)}
+              </button>`).join('')}
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="rq-group-label">${esc(type==='Other'?'Other flags':type)} — ${athletes.length}</div>${cards}`;
+    }).join('');
+
+    containerEl.innerHTML = `<div class="rq-wrap">
+      <div class="rq-header">
+        <div class="rq-title">Review queue</div>
+        <div class="rq-progress">${pending.length} pending · ${resolved} resolved</div>
+      </div>${groups}
+    </div>`;
+  }
+
+  window._qvOpenPanelByName = function(name) {
+    const all = typeof effectiveResults!=='undefined' ? effectiveResults : (window.JUNIOR_RESULTS_DATA?.results||[]);
+    const row = all.find(r=>(r.athlete||'').trim()===name && r.reviewFlags?.length);
+    if (row) openPanel(row, row.stage);
+  };
+  window._qvRenderReviewQueue = renderReviewQueue;
+
   function patchMain() {
     injectCSS();
     mountPanel();
