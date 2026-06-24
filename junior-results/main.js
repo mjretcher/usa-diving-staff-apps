@@ -2,6 +2,10 @@
    USA Diving Junior Circuit — Staff App  (main.js)
    Stages: Regionals → Zones → E/W/C → Nationals
    Qualification logic per Articles 303–306
+
+   All extension logic (YMCA, zone foreign fix, qualification
+   impact, workbench, dashboard controls) is consolidated here
+   to eliminate monkey-patch race conditions.
    ───────────────────────────────────────────────────────────── */
 
 const DATA = window.JUNIOR_RESULTS_DATA || {
@@ -10,16 +14,34 @@ const DATA = window.JUNIOR_RESULTS_DATA || {
 };
 
 /* ── Constants (Articles 303–306) ────────────────────────────── */
-const ZONE_NATIONALS_DIRECT_LIMIT     = 3;  // Art.303(b)(2)(i)
-const ZONE_NATIONALS_REPLACEMENT_MAX  = 6;  // Art.303(b)(2)(ii)
-const ZONE_EWC_UPPER_LIMIT            = 18; // Art.304(a)(2)
-const ZONE_EWC_LOWER_LIMIT            = 4;  // Art.304(a)(2)
-const EWC_NATIONALS_DIRECT_LIMIT      = 3;  // Art.303(b)(3)(i)
-const EWC_NATIONALS_AVG_MAX           = 6;  // Art.303(b)(3)(ii)
-const REGIONAL_ZONE_LIMIT             = 15; // Art.305(a)(1)
+const ZONE_NATIONALS_DIRECT_LIMIT     = 3;   // Art.303(b)(2)(i)
+const ZONE_NATIONALS_REPLACEMENT_MAX  = 6;   // Art.303(b)(2)(ii)
+const ZONE_EWC_UPPER_LIMIT            = 18;  // Art.304(a)(2)
+const ZONE_EWC_LOWER_LIMIT            = 4;   // Art.304(a)(2)
+const EWC_NATIONALS_DIRECT_LIMIT      = 3;   // Art.303(b)(3)(i)
+const EWC_NATIONALS_AVG_MAX           = 6;   // Art.303(b)(3)(ii)
+const REGIONAL_ZONE_LIMIT             = 15;  // Art.305(a)(1)
 
 // Zone → E/W/C alignment (Art.304 & Art.305)
 const ZONE_TO_EWC = { A:'East', B:'East', C:'Central', D:'Central', E:'West', F:'West' };
+
+/* ── YMCA E/W/C Prequalified Champions (2026) ─────────────────── */
+const YMCA_CHAMPIONS = [
+  {name:'Jhoset Quintero',  diveMeetsId:'42164', gender:'Boys',  ageGroup:'Group D', events:['1M','Platform']},
+  {name:'Aidan Turner',     diveMeetsId:'42115', gender:'Boys',  ageGroup:'Group D', events:['3M']},
+  {name:'Jeslynn Fang',     diveMeetsId:'42007', gender:'Girls', ageGroup:'Group D', events:['1M']},
+  {name:'Alex Birrer',      diveMeetsId:'42153', gender:'Girls', ageGroup:'Group D', events:['3M']},
+  {name:'Diya Firtel',      diveMeetsId:'42320', gender:'Girls', ageGroup:'Group D', events:['Platform']},
+  {name:'Levi Berlyn',      diveMeetsId:'41581', gender:'Boys',  ageGroup:'Group C', events:['1M']},
+  {name:'Haskell Fagan',    diveMeetsId:'41797', gender:'Boys',  ageGroup:'Group C', events:['3M','Platform']},
+  {name:'Sadie Marks',      diveMeetsId:'41894', gender:'Girls', ageGroup:'Group C', events:['1M','3M']},
+  {name:'Katerina Akimov',  diveMeetsId:'41650', gender:'Girls', ageGroup:'Group C', events:['Platform']},
+  {name:'Arthur Palladino', diveMeetsId:'41274', gender:'Boys',  ageGroup:'Group B', events:['1M','3M','Platform']},
+  {name:'Alden Charette',   diveMeetsId:'40695', gender:'Girls', ageGroup:'Group B', events:['1M','3M','Platform']},
+  {name:'Ezekiel Raybourn', diveMeetsId:'39693', gender:'Boys',  ageGroup:'Group A', events:['1M']},
+  {name:'Andres Winterman', diveMeetsId:'40239', gender:'Boys',  ageGroup:'Group A', events:['3M','Platform']},
+  {name:'Avaleigh Westfall',diveMeetsId:'39599', gender:'Girls', ageGroup:'Group A', events:['1M','3M','Platform']},
+];
 
 /* ── Stage definitions ────────────────────────────────────────── */
 const STAGES = [
@@ -98,14 +120,131 @@ function stageFilterDefs() {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   ZONE diveMeetsId ENRICHMENT
+   Builds a lookup from officialZoneQualifiers (which have IDs)
+   to patch Zone result rows that came in with null diveMeetsId.
+   ════════════════════════════════════════════════════════════════ */
+function buildZoneDiveMeetsIdLookup() {
+  const oqz = DATA.officialZoneQualifiers || [];
+  // Primary: name → diveMeetsId (lowercase normalized)
+  const byName = new Map();
+  oqz.forEach(q => {
+    if (!q.diveMeetsId || !q.athlete) return;
+    const key = normName(q.athlete);
+    if (!byName.has(key)) byName.set(key, q.diveMeetsId);
+  });
+  return byName;
+}
+
+function normName(v) {
+  return String(v || '').toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function enrichZoneDiveMeetsIds() {
+  const lookup = buildZoneDiveMeetsIdLookup();
+  let patched = 0;
+  DATA.results.forEach(r => {
+    if (r.stage !== 'Zones' || r.diveMeetsId) return;
+    const key = normName(r.athlete);
+    const id = lookup.get(key);
+    if (id) { r.diveMeetsId = String(id); patched++; }
+  });
+  DATA.meta = DATA.meta || {};
+  DATA.meta.zoneDiveMeetsIdPatch = { patched, total: DATA.results.filter(r => r.stage === 'Zones').length };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ZONE RULE NORMALIZATION (was zone-rule-normalize.js)
+   ════════════════════════════════════════════════════════════════ */
+function normalizeJuniorZoneRules() {
+  if (!Array.isArray(DATA.results)) return;
+  const qualifyingAges = new Set(['Group A', 'Group B', 'Group C', 'Group D']);
+  const qualifyingDisciplines = new Set(['1M', '3M', 'Platform']);
+
+  function inferAgeGroup(row) {
+    const text = `${row.ageGroup || ''} ${row.eventName || ''} ${row.eventKey || ''}`;
+    const match = text.match(/group\s+([abcd])/i);
+    return match ? `Group ${match[1].toUpperCase()}` : row.ageGroup;
+  }
+  function inferDiscipline(row) {
+    const text = `${row.discipline || ''} ${row.eventName || ''} ${row.eventKey || ''}`;
+    if (/platform/i.test(text)) return 'Platform';
+    if (/\b3\s*[- ]?m\b|3\s*meter/i.test(text)) return '3M';
+    if (/\b1\s*[- ]?m\b|1\s*meter/i.test(text)) return '1M';
+    return row.discipline;
+  }
+
+  DATA.results.forEach(row => {
+    if (row.statusOnly || row.stage !== 'Zones') return;
+    const ageGroup = inferAgeGroup(row);
+    const discipline = inferDiscipline(row);
+    const isSynchro = row.isSynchro === true || /synchro/i.test(`${row.eventName || ''} ${row.eventKey || ''}`);
+    if (qualifyingAges.has(ageGroup) && qualifyingDisciplines.has(discipline) && !isSynchro) {
+      row.ageGroup = ageGroup;
+      row.discipline = discipline;
+      row.qualifyingEvent = true;
+      row.eventCategory = 'Qualifying Event';
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   YMCA CHAMPION MATCHING HELPERS
+   ════════════════════════════════════════════════════════════════ */
+function boardOf(v) {
+  const s = normName(v);
+  if (s.includes('platform') || s.includes('tower')) return 'Platform';
+  if (s.includes('3m') || s.includes('3 meter') || s.includes('3 metre')) return '3M';
+  if (s.includes('1m') || s.includes('1 meter') || s.includes('1 metre')) return '1M';
+  return '';
+}
+function genderOf(row) {
+  const s = String(row.gender || row.eventName || row.eventKey || '').toLowerCase();
+  if (s.includes('girl') || s === 'f' || s === 'female') return 'Girls';
+  if (s.includes('boy')  || s === 'm' || s === 'male')   return 'Boys';
+  return '';
+}
+function ageGroupOf(row) {
+  const s = String(row.ageGroup || row.eventName || row.eventKey || '');
+  if (/group\s*a/i.test(s)) return 'Group A';
+  if (/group\s*b/i.test(s)) return 'Group B';
+  if (/group\s*c/i.test(s)) return 'Group C';
+  if (/group\s*d/i.test(s)) return 'Group D';
+  return '';
+}
+function ymcaChampionForRow(row) {
+  const id   = String(row.diveMeetsId || '').trim();
+  const name = normName(row.athlete || '');
+  const b    = boardOf(row.discipline || row.eventName || row.eventKey || row.apparatus || '');
+  const g    = genderOf(row);
+  const ag   = ageGroupOf(row);
+  return YMCA_CHAMPIONS.find(c =>
+    (id && id === c.diveMeetsId || (!id && name && normName(c.name) === name)) &&
+    (!b  || c.events.includes(b)) &&
+    (!g  || g  === c.gender) &&
+    (!ag || ag === c.ageGroup)
+  ) || null;
+}
+function isYmcaChampionAthlete(row) {
+  const id   = String(row.diveMeetsId || '').trim();
+  const name = normName(row.athlete || '');
+  return YMCA_CHAMPIONS.some(c =>
+    (id && id === c.diveMeetsId) || (!id && name && normName(c.name) === name)
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
    INIT
    ════════════════════════════════════════════════════════════════ */
 function init() {
-  // Kick off async GitHub override sync — resolves in background,
-  // patches state.overrides when the fetch returns.
+  // Run data preprocessing before anything renders
+  enrichZoneDiveMeetsIds();
+  normalizeJuniorZoneRules();
+
   if (window.OverridesSync) {
     window.OverridesSync.init().then(() => {
-      // Re-render once GitHub overrides are loaded
       recompute();
       renderAll();
     });
@@ -123,7 +262,7 @@ function init() {
 function buildStageNav() {
   const nav = $('stageNav');
   nav.innerHTML = STAGES.map(s => {
-    const hasData = DATA.results.some(r => r.stage === s.id || stageMatch(r, s.id));
+    const hasData = DATA.results.some(r => stageMatch(r, s.id));
     return `<button class="stage-btn ${s.id === state.stage ? 'active' : ''} ${hasData ? 'has-data' : ''}"
       data-stage="${s.id}" title="${esc(s.desc)}">
       <span class="stage-dot"></span>${esc(s.label)}
@@ -214,7 +353,7 @@ function populateFilters() {
 function buildFlagChips() {
   const wrap = $('filterFlags');
   function renderChips() {
-    const sr = effectiveResults.filter(r => r.stage === state.stage);
+    const sr = effectiveResults.filter(r => stageMatch(r, state.stage));
     const rr = (window.USAD_JUNIOR_ATHLETE_STATUS?.records) || [];
     const rh = (window.USAD_JUNIOR_ATHLETE_STATUS?.headers) || [];
     function rosterCount(key) {
@@ -223,7 +362,6 @@ function buildFlagChips() {
     const counts = {};
     FLAG_DEFS.forEach(f => {
       const fromResults = sr.filter(r => f.key === 'review' ? r.reviewFlags?.length : Boolean(r[f.key])).length;
-      // For HPS/foreign: show master roster count, not just results count
       const rosterKeys = {foreignDeclared:'foreignDeclared', hps:'hps', dualDeclared:'dualDeclared', ymca:'ymca'};
       const rc = rosterKeys[f.key] ? rosterCount(rosterKeys[f.key]) : 0;
       counts[f.key] = { results: fromResults, roster: rc };
@@ -315,8 +453,8 @@ function attachGlobalListeners() {
       value: btn.dataset.overrideValue === 'true',
       athleteId: row.diveMeetsId,
       athleteName: row.athlete,
-      eventId: btn.dataset.rowOverride === 'notAttending' ? row.eventId : '',
-      eventName: btn.dataset.rowOverride === 'notAttending' ? row.eventName : '',
+      eventId: '',
+      eventName: '',
       note: 'Row action',
     });
   });
@@ -353,10 +491,8 @@ function attachGlobalListeners() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   RECOMPUTE (applies overrides + recalculates qualification)
+   RECOMPUTE
    ════════════════════════════════════════════════════════════════ */
-// Build a fast lookup Map from USAD_JUNIOR_ATHLETE_STATUS master roster
-// keyed by diveMeetsId so applyOverrides can fill flags baked before roster update
 let _rosterLookup = null;
 function buildRosterLookup() {
   const sd = window.USAD_JUNIOR_ATHLETE_STATUS;
@@ -384,6 +520,7 @@ function recompute() {
   const lookup = buildOverrideLookup();
   effectiveResults = DATA.results.map(r => applyOverrides(r, lookup));
   recalcQualification(effectiveResults);
+  annotateQualificationImpact(effectiveResults);
   effectiveResults.forEach(r => { r.effectiveFlags = buildFlags(r); });
   effectiveEvents = buildEffectiveEvents(effectiveResults);
   eventById = new Map(effectiveEvents.map(e => [e.id, e]));
@@ -417,30 +554,33 @@ function applyOverrides(row, lookup) {
 
   const get = type => { const m = [...overrides].reverse().find(o => o.type === type); return m ? Boolean(m.value) : null; };
 
-  r.foreignDeclared  = get('foreign')     ?? Boolean(row.foreignDeclared);
-  r.dualDeclared     = get('dual')        ?? Boolean(row.dualDeclared);
-  r.dualOtherCountry = get('dualEffect')  ?? Boolean(row.dualOtherCountry);
-  r.declaredNotAttending = get('notAttending') ?? false;
+  // Manual overrides take priority; then roster; then baked data
+  r.foreignDeclared      = get('foreign')      ?? applyRoster(r, 'foreignDeclared');
+  r.dualDeclared         = get('dual')         ?? applyRoster(r, 'dualDeclared');
+  r.dualOtherCountry     = get('dualEffect')   ?? applyRoster(r, 'dualOtherCountry');
+  r.hps                  = get('hps')          ?? applyRoster(r, 'hps');
+  r.ymca                 = get('ymca')         ?? applyRoster(r, 'ymca');
+  r.declaredNotAttending = get('notAttending') ?? Boolean(row.declaredNotAttending);
 
-  // Overlay master roster flags — these are authoritative and override
-  // whatever was baked into junior-data.js at scrape time.
-  // This ensures HPS/foreign counts are always correct even if the
-  // roster was updated after the data was generated.
-  if (_rosterLookup && _rosterLookup.size > 0) {
-    const dmId = String(r.diveMeetsId || '').trim();
-    const roster = dmId ? _rosterLookup.get(dmId) : null;
-    if (roster) {
-      // Roster is authoritative for these flags (manual overrides still win)
-      if (get('foreign') === null) r.foreignDeclared  = roster.foreignDeclared || r.foreignDeclared;
-      if (get('dual')    === null) r.dualDeclared     = roster.dualDeclared    || r.dualDeclared;
-      if (get('dualEffect') === null) r.dualOtherCountry = roster.dualOtherCountry || r.dualOtherCountry;
-      r.hps  = roster.hps  || Boolean(row.hps);
-      r.ymca = roster.ymca || Boolean(row.ymca);
-    }
+  // DiveMeets exhibition/127 code → foreign
+  if (isDiveMeetsForeignCode(r) && get('foreign') !== false) {
+    r.diveMeetsForeignCode = true;
+    r.foreignDeclared = true;
   }
 
   r.webpointNonUsEffective = Boolean(r.webpointNonUs && get('foreign') !== false);
   r.foreignInternational   = r.foreignDeclared || r.webpointNonUsEffective || r.dualOtherCountry;
+
+  // YMCA champion event-specific matching
+  const ymcaChampAthlete = isYmcaChampionAthlete(r);
+  const ymcaMatch        = ymcaChampionForRow(r);
+  if (ymcaChampAthlete) {
+    r.ymca = Boolean(ymcaMatch); // only flag ymca on the matching event board
+    if (ymcaMatch) {
+      r.ymcaChampionEvents = ymcaMatch.events.slice();
+      r.prequalification = addUnique(r.prequalification || [], 'E/W/C prelims: YMCA event champion');
+    }
+  }
 
   const ndReasons = [];
   if (r.hps)              ndReasons.push('HPS Tier 3 Junior squad');
@@ -448,21 +588,14 @@ function applyOverrides(row, lookup) {
   if (r.foreignDeclared)  ndReasons.push('Foreign athlete');
   if (r.webpointNonUsEffective && !r.foreignDeclared) ndReasons.push('Webpoint non-US');
   if (r.dualOtherCountry) ndReasons.push('Dual — competed for another federation');
+
   r.ghostAdvances = Boolean(r.foreignDeclared || r.webpointNonUsEffective || r.hps || r.dualOtherCountry);
-  // Ghost advancement: foreign/HPS athletes advance through all stages
-  // as non-displacing participants — they compete but don't consume spots.
-  // They appear in next-stage results with a ghost badge.
-  r.ghostAdvances = Boolean(
-    r.foreignDeclared || r.webpointNonUsEffective || r.hps || r.dualOtherCountry
-  );
 
-  r.prequalified       = Boolean(r.hps || r.ymca);
-  r.prequalification   = [];
-  if (r.hps)  r.prequalification.push('Junior Nationals: Tier 3 HPS');
-  if (r.ymca) r.prequalification.push('E/W/C prelims: YMCA champion');
+  r.prequalified     = Boolean(r.hps || r.ymca);
+  r.prequalification = r.prequalification || [];
+  if (r.hps  && !r.prequalification.includes('Junior Nationals: Tier 3 HPS'))
+    r.prequalification.push('Junior Nationals: Tier 3 HPS');
 
-  // Exhibition in a qualifying event → highly likely foreign athlete
-  // DiveMeets marks foreign divers as "exhibition" before uploading results
   const isExhibition = r.exhibition === true ||
     String(r.place || '').toUpperCase() === 'EX' ||
     String(r.qualified || '').toLowerCase().includes('exhibition');
@@ -475,8 +608,38 @@ function applyOverrides(row, lookup) {
   return r;
 }
 
+function applyRoster(row, field) {
+  if (_rosterLookup && _rosterLookup.size > 0) {
+    const dmId = String(row.diveMeetsId || '').trim();
+    const roster = dmId ? _rosterLookup.get(dmId) : null;
+    if (roster && roster[field] !== undefined) {
+      return roster[field] || Boolean(row[field]);
+    }
+  }
+  return Boolean(row[field]);
+}
+
+function isDiveMeetsForeignCode(row) {
+  const place = String(row.place || '').toUpperCase();
+  const rawPlace = String(row.rawPlace || row.diveMeetsPlace || '').toUpperCase();
+  return place === '127' || rawPlace === '127' || place === 'EX' || place === 'EXH' ||
+    rawPlace === 'EX' || rawPlace === 'EXH' || row.placeNumber === 127 ||
+    row.exhibition === true || String(row.qualified || '').toLowerCase().includes('exhibition') ||
+    String(row.status || '').toLowerCase().includes('exhibition');
+}
+
+function addUnique(list, value) {
+  if (!Array.isArray(list)) list = [];
+  const v = String(value || '').trim();
+  if (v && !list.includes(v)) list.push(v);
+  return list;
+}
+
 /* ── Qualification recalculation ──────────────────────────────── */
 function recalcQualification(rows) {
+  // For Zone events with non-displacing athletes, restore score order for placement
+  normalizeZoneForeignPlacements(rows);
+
   const grouped = new Map();
   rows.forEach(r => {
     if (!grouped.has(r.eventId)) grouped.set(r.eventId, []);
@@ -488,6 +651,35 @@ function recalcQualification(rows) {
     if (stage === 'Zones') recalcZones(eventRows);
     else if (stage === 'EWC' || stage === 'East/West/Central') recalcEWC(eventRows);
     else recalcRegionals(eventRows);
+  });
+}
+
+/* Restore score-order placement in Zone events when foreign/ND athletes
+   have been assigned exhibition/127 place numbers by DiveMeets */
+function normalizeZoneForeignPlacements(rows) {
+  const grouped = new Map();
+  rows.forEach(r => {
+    if (r.stage !== 'Zones') return;
+    if (!grouped.has(r.eventId)) grouped.set(r.eventId, []);
+    grouped.get(r.eventId).push(r);
+  });
+  grouped.forEach(eventRows => {
+    const hasIssue = eventRows.some(r =>
+      r.qualifyingEvent !== false && (isDiveMeetsForeignCode(r) || r.foreignDeclared || r.nonDisplacing || r.hps || r.dualOtherCountry)
+    );
+    if (!hasIssue) return;
+    // Sort by score descending, using original place as tiebreaker
+    const ordered = [...eventRows].sort((a, b) => {
+      const as = Number(a.score), bs = Number(b.score);
+      if (Number.isFinite(as) && Number.isFinite(bs) && as !== bs) return bs - as;
+      return (Number(a.placeNumber) || 9999) - (Number(b.placeNumber) || 9999);
+    });
+    ordered.forEach((row, idx) => {
+      row.diveMeetsPlace = row.diveMeetsPlace ?? row.place;
+      row.diveMeetsPlaceNumber = row.diveMeetsPlaceNumber ?? row.placeNumber;
+      row.place = String(idx + 1);
+      row.placeNumber = idx + 1;
+    });
   });
 }
 
@@ -518,7 +710,6 @@ function recalcRegionals(rows) {
     if (r.top15Qualifier && r.placeNumber > REGIONAL_ZONE_LIMIT) {
       r.bumpIn = true; bumpIns.push(r);
     }
-    // Ghost athletes advance even if non-displacing
     r.advancesToZone = r.top15Qualifier || r.officialAverageScoreQualifier || r.officialQualified || r.ghostAdvances;
     r.qualificationStatus = regionalStatus(r);
   });
@@ -536,7 +727,7 @@ function regionalStatus(r) {
   if (!r.qualifyingEvent)               return 'Non-qualifying event';
   if (r.nonDisplacing)                  return 'Non-displacing';
   if (r.top15Qualifier)                 return 'Zone qualifier — top 15';
-  if (r.officialAverageScoreQualifier)  return 'Zone qualifier — 15th avg';
+  if (r.officialAverageScoreQualifier)  return 'Zone qualifier — avg threshold';
   if (r.officialQualified)              return 'Zone qualifier — official list';
   return 'Does not advance';
 }
@@ -552,19 +743,16 @@ function recalcZones(rows) {
     const eligible = r.qualifyingEvent !== false && !r.nonDisplacing && !r.prequalified;
 
     if (!eligible) {
-      // YMCA qualifies to E/W/C from Zones (Art.304(a)(4))
       if (r.ymca && !r.hps && !r.foreignInternational) {
         r.advancesToEWC = true;
         r.advancesToZone = true;
         r.qualificationStatus = 'E/W/C qualifier — YMCA champion';
       } else if (r.ghostAdvances) {
-        // Ghost: foreign/HPS athletes advance through all stages
-        // as non-displacing — they participate but don't consume spots.
         r.advancesToZone = true;
-        r.advancesToEWC  = true;  // shown at next stage, still non-displacing
+        r.advancesToEWC  = true;
         r.qualificationStatus = r.foreignDeclared
-          ? 'Non-displacing — foreign athlete (advances as ghost)'
-          : 'Non-displacing — HPS athlete (advances as ghost)';
+          ? 'Non-displacing — foreign athlete'
+          : 'Non-displacing — HPS athlete';
       } else {
         r.qualificationStatus = r.nonDisplacing ? 'Non-displacing' : 'Not eligible';
         r.advancesToZone = false;
@@ -591,7 +779,7 @@ function recalcZones(rows) {
     if (eligibleRank <= ZONE_NATIONALS_DIRECT_LIMIT) {
       r.juniorNationalStatus = 'Direct';
       r.advancesToNationals  = true;
-      r.qualificationStatus  = 'Nationals qualifier — direct';
+      r.qualificationStatus  = 'Nationals — direct';
     }
     // Nationals: replacement if someone in 1-3 declined (Art.303(b)(2)(ii))
     else if (declinedInDirect > 0 &&
@@ -600,15 +788,15 @@ function recalcZones(rows) {
       r.juniorNationalStatus = 'Replacement';
       r.advancesToNationals  = true;
       r.bumpIn               = true;
-      r.qualificationStatus  = 'Nationals qualifier — replacement';
+      r.qualificationStatus  = 'Nationals — replacement';
     }
     // Replacement pool (Art.303(b)(2)(ii))
     else if (eligibleRank <= ZONE_NATIONALS_REPLACEMENT_MAX) {
       r.juniorNationalStatus = 'Replacement pool';
-      r.qualificationStatus  = 'Replacement eligible if 1–3 declines';
+      r.qualificationStatus  = 'Replacement pool — eligible if 1–3 declines';
     }
 
-    // E/W/C: places 4-18 (Art.304(a)(2))
+    // E/W/C: places 4–18 (Art.304(a)(2))
     if (eligibleRank >= ZONE_EWC_LOWER_LIMIT && eligibleRank <= ZONE_EWC_UPPER_LIMIT) {
       r.advancesToEWC = true;
       if (!r.advancesToNationals) {
@@ -623,7 +811,7 @@ function recalcZones(rows) {
     );
     if (r.officialAverageScoreQualifier) {
       r.advancesToEWC = true;
-      if (!r.advancesToNationals) r.qualificationStatus = 'E/W/C qualifier — 18th avg';
+      if (!r.advancesToNationals) r.qualificationStatus = 'E/W/C qualifier — avg threshold';
     }
 
     r.advancesToZone = r.advancesToNationals || r.advancesToEWC;
@@ -660,24 +848,82 @@ function recalcEWC(rows) {
     // Top 3 direct (Art.303(b)(3)(i))
     if (eligibleRank <= EWC_NATIONALS_DIRECT_LIMIT) {
       r.advancesToNationals = true;
-      r.qualificationStatus = 'Nationals qualifier — direct';
+      r.qualificationStatus = 'Nationals — direct';
     }
-    // Average top-3 score qualifiers up to 6th place (Art.303(b)(3)(ii))
-    else if (r.officialThresholdScore != null && r.score != null && r.score >= r.officialThresholdScore && eligibleRank <= EWC_NATIONALS_AVG_MAX) {
+    // Average top-3 score qualifiers up to 6th (Art.303(b)(3)(ii))
+    else if (r.officialThresholdScore != null && r.score != null &&
+             r.score >= r.officialThresholdScore && eligibleRank <= EWC_NATIONALS_AVG_MAX) {
       r.advancesToNationals = true;
       r.bumpIn = true;
-      r.qualificationStatus = 'Nationals qualifier — avg top-3 score';
+      r.qualificationStatus = 'Nationals — avg top-3 score';
     }
     // Replacement if someone in 1-3 declined
-    else if (declinedInDirect > 0 && eligibleRank <= EWC_NATIONALS_AVG_MAX && attendingRank <= EWC_NATIONALS_DIRECT_LIMIT) {
+    else if (declinedInDirect > 0 &&
+             eligibleRank <= EWC_NATIONALS_AVG_MAX &&
+             attendingRank <= EWC_NATIONALS_DIRECT_LIMIT) {
       r.advancesToNationals = true;
       r.bumpIn = true;
-      r.qualificationStatus = 'Nationals qualifier — replacement';
+      r.qualificationStatus = 'Nationals — replacement';
     }
     else {
       r.qualificationStatus = 'Does not advance';
     }
     r.advancesToZone = r.advancesToNationals;
+  });
+}
+
+/* ── Qualification impact annotations ────────────────────────── */
+function annotateQualificationImpact(rows) {
+  rows.forEach(r => {
+    r.bumpedBy    = Array.isArray(r.bumpedBy)    ? r.bumpedBy.filter(x => !x._generated)    : [];
+    r.openedFor   = Array.isArray(r.openedFor)   ? r.openedFor.filter(x => !x._generated)   : [];
+    r.spotShifted = r._origSpotShifted ?? r.spotShifted ?? false;
+    r.bumpIn      = r._origBumpIn      ?? r.bumpIn      ?? false;
+    r.openedSpot  = r._origOpenedSpot  ?? r.openedSpot  ?? false;
+  });
+
+  const grouped = new Map();
+  rows.forEach(r => {
+    if (!r.eventId) return;
+    if (!grouped.has(r.eventId)) grouped.set(r.eventId, []);
+    grouped.get(r.eventId).push(r);
+  });
+
+  grouped.forEach(evRows => {
+    const ordered = evRows
+      .filter(r => !r.statusOnly && r.qualifyingEvent !== false && Number(r.placeNumber) > 0)
+      .sort((a, b) => Number(a.placeNumber) - Number(b.placeNumber) || (b.score || 0) - (a.score || 0));
+
+    const sources = [];
+    ordered.forEach(r => {
+      if (r.nonDisplacing) { sources.push(r); return; }
+      const prior = sources.filter(n => Number(n.placeNumber) < Number(r.placeNumber));
+      if (!prior.length) return;
+      r.spotShifted = true;
+      r.displacementBeneficiary = true;
+      prior.forEach(n => {
+        const item = { athlete: n.athlete, place: n.place, reason: n.nonDisplacingReason || 'Non-displacing', _generated: true };
+        if (!r.bumpedBy.some(x => x.athlete === n.athlete)) r.bumpedBy.push(item);
+      });
+      // Check if crossing a qualifying boundary
+      const stg = r.stage === 'East/West/Central' ? 'EWC' : r.stage;
+      const rank = Number(r.eligibleRank || r.countingRank || 0);
+      const place = Number(r.placeNumber || 0);
+      let crossed = false;
+      if (stg === 'Regionals') crossed = !!r.advancesToZone && rank <= REGIONAL_ZONE_LIMIT && place > REGIONAL_ZONE_LIMIT;
+      else if (stg === 'Zones') crossed = (r.advancesToNationals && rank <= ZONE_NATIONALS_DIRECT_LIMIT && place > ZONE_NATIONALS_DIRECT_LIMIT) ||
+                                          (r.advancesToEWC && rank <= ZONE_EWC_UPPER_LIMIT && place > ZONE_EWC_UPPER_LIMIT);
+      else if (stg === 'EWC') crossed = !!r.advancesToNationals && rank <= EWC_NATIONALS_DIRECT_LIMIT && place > EWC_NATIONALS_DIRECT_LIMIT;
+
+      if (crossed) {
+        r.bumpIn = true;
+        prior.forEach(n => {
+          n.openedSpot = true;
+          const item = { athlete: r.athlete, place: r.place, countingRank: r.eligibleRank || r.countingRank || '', _generated: true };
+          if (!n.openedFor.some(x => x.athlete === r.athlete)) n.openedFor.push(item);
+        });
+      }
+    });
   });
 }
 
@@ -692,15 +938,15 @@ function buildEffectiveEvents(rows) {
     const orig = DATA.events.find(e => e.id === id) || evRows[0];
     return {
       ...orig,
-      entries:            evRows.length,
-      countable:          evRows.filter(r => r.countsTowardCutoff).length,
-      nonDisplacing:      evRows.filter(r => r.nonDisplacing).length,
-      foreign:            evRows.filter(r => r.foreignDeclared || r.webpointNonUsEffective).length,
-      dual:               evRows.filter(r => r.dualDeclared).length,
-      notAttending:       evRows.filter(r => r.declaredNotAttending).length,
-      bumpIns:            evRows.filter(r => r.bumpIn).length,
-      advancingZone:      evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length,
-      reviewRows:         evRows.filter(r => r.reviewFlags?.length).length,
+      entries:        evRows.length,
+      countable:      evRows.filter(r => r.countsTowardCutoff).length,
+      nonDisplacing:  evRows.filter(r => r.nonDisplacing).length,
+      foreign:        evRows.filter(r => r.foreignDeclared || r.webpointNonUsEffective).length,
+      dual:           evRows.filter(r => r.dualDeclared).length,
+      notAttending:   evRows.filter(r => r.declaredNotAttending).length,
+      bumpIns:        evRows.filter(r => r.bumpIn).length,
+      advancingZone:  evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length,
+      reviewRows:     evRows.filter(r => r.reviewFlags?.length).length,
     };
   }).sort(evCompare);
 }
@@ -729,12 +975,10 @@ function renderAll() {
   renderEventList();
   renderContext();
   renderTable();
-  // Re-render flag chips to update counts for current stage
   const flagWrap = $('filterFlags');
   if (flagWrap && flagWrap._renderChips) flagWrap._renderChips();
 }
 
-/* ── Override badge ───────────────────────────────────────────── */
 function renderOverrideBadge() {
   const active = state.overrides.filter(o => o.active).length;
   const badge = $('overrideBadge');
@@ -742,7 +986,6 @@ function renderOverrideBadge() {
   badge.hidden = active === 0;
 }
 
-/* ── Override drawer ──────────────────────────────────────────── */
 function renderOverrideDrawer() {
   const active = state.overrides.filter(o => o.active);
   $('undoOverrideButton').disabled = !active.length;
@@ -775,39 +1018,34 @@ function renderOverrideDrawer() {
     </div>`).join('');
 }
 
-/* ── KPIs — interactive drill-down cards ──────────────────────── */
+/* ── KPIs ─────────────────────────────────────────────────────── */
 function renderKpis() {
   const rows = filteredRows({ ignoreEvent: true });
   const athletes = new Set(rows.map(r => r.diveMeetsId || r.athlete));
   const advancing = rows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
 
   const kpis = [
-    { key:'all',         label:'Rows',           value: rows.length,
-      sub: `${athletes.size} athletes` },
-    { key:'advancing',   label:'Advancing',      value: advancing, accent:'green',
+    { key:'all',       label:'Rows',           value: rows.length,     sub: `${athletes.size} athletes` },
+    { key:'advancing', label:'Advancing',      value: advancing,       accent:'green',
       sub: state.stage === 'Zones' ? '→ Nationals / E/W/C' : '→ next stage',
       filter: r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC },
-    { key:'nonDisp',     label:'Non-displacing', value: rows.filter(r=>r.nonDisplacing).length,
-      sub: 'no spot consumed',
-      filter: r => r.nonDisplacing },
-    { key:'foreign',     label:'Foreign',        value: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective||r.exhibitionLikelyForeign).length,
+    { key:'nonDisp',   label:'Non-displacing', value: rows.filter(r=>r.nonDisplacing).length,
+      sub: 'no spot consumed', filter: r => r.nonDisplacing },
+    { key:'foreign',   label:'Foreign',
+      value: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective||r.exhibitionLikelyForeign).length,
       accent: rows.filter(r=>r.foreignDeclared||r.webpointNonUsEffective||r.exhibitionLikelyForeign).length ? 'red' : '',
       sub: rows.filter(r=>r.exhibitionLikelyForeign&&!r.foreignDeclared).length
              ? `+${rows.filter(r=>r.exhibitionLikelyForeign&&!r.foreignDeclared).length} exhibition` : 'declared',
       filter: r => r.foreignDeclared || r.webpointNonUsEffective || r.exhibitionLikelyForeign },
-    { key:'dual',        label:'Dual',           value: rows.filter(r=>r.dualDeclared).length,
-      sub: rows.filter(r=>r.dualOtherCountry).length + ' affect results',
-      filter: r => r.dualDeclared },
-    { key:'hps',         label:'HPS',            value: rows.filter(r=>r.hps).length,
-      sub: 'pre-qualified',
-      filter: r => r.hps },
-    { key:'notAtt',      label:'Not Attending',  value: rows.filter(r=>r.declaredNotAttending).length,
+    { key:'dual',      label:'Dual',           value: rows.filter(r=>r.dualDeclared).length,
+      sub: rows.filter(r=>r.dualOtherCountry).length + ' affect results', filter: r => r.dualDeclared },
+    { key:'hps',       label:'HPS',            value: rows.filter(r=>r.hps).length,
+      sub: 'pre-qualified', filter: r => r.hps },
+    { key:'notAtt',    label:'Not Attending',  value: rows.filter(r=>r.declaredNotAttending).length,
       accent: rows.filter(r=>r.declaredNotAttending).length ? 'amber' : '',
-      sub: rows.filter(r=>r.openedSpot).length + ' spots opened',
-      filter: r => r.declaredNotAttending },
-    { key:'bumps',       label:'Bump-ins',       value: rows.filter(r=>r.bumpIn).length,
-      sub: 'moved up the list',
-      filter: r => r.bumpIn },
+      sub: rows.filter(r=>r.openedSpot).length + ' spots opened', filter: r => r.declaredNotAttending },
+    { key:'bumps',     label:'Bump-ins',       value: rows.filter(r=>r.bumpIn).length,
+      sub: 'moved up the list', filter: r => r.bumpIn },
   ];
 
   const active = state.kpiDrill;
@@ -827,118 +1065,17 @@ function renderKpis() {
       const key = card.dataset.kpi;
       state.kpiDrill = state.kpiDrill === key ? null : key;
       state.kpiDrillFilter = kpis.find(k => k.key === key)?.filter || null;
+      if (state.kpiDrill === null) state.kpiDrillFilter = null;
       renderKpis();
       renderTable();
-      showKpiDetail(key, rows, kpis);
     });
-  });
-}
-
-function showKpiDetail(key, allRows, kpis) {
-  const kpi = kpis.find(k => k.key === key);
-  if (!kpi || !kpi.filter || state.kpiDrill !== key) {
-    const panel = $('kpiDetailPanel');
-    if (panel) panel.remove();
-    return;
-  }
-
-  const subset = allRows.filter(kpi.filter);
-  const existing = $('kpiDetailPanel');
-  if (existing) existing.remove();
-  if (!subset.length) return;
-
-  // Build grouped detail HTML
-  let html = '';
-
-  if (key === 'foreign') {
-    // Group by athlete, show all their events
-    const byAthlete = new Map();
-    subset.forEach(r => {
-      const k = r.diveMeetsId || r.athlete;
-      if (!byAthlete.has(k)) byAthlete.set(k, { name: r.athlete, id: r.diveMeetsId, team: r.team, rows: [] });
-      byAthlete.get(k).rows.push(r);
-    });
-    const rows = [...byAthlete.values()].sort((a,b) => a.name.localeCompare(b.name));
-    html = `<div class="kpi-detail-grid">
-      ${rows.map(a => `
-        <div class="kdi-athlete">
-          <div class="kdi-name">${esc(a.name)} <span class="kdi-id">${esc(a.id||'')}</span></div>
-          <div class="kdi-team">${esc(a.team||'')}</div>
-          ${a.rows.map(r => `
-            <div class="kdi-event-row">
-              <span class="kdi-event">${esc(r.eventName||'')}</span>
-              <span class="mono kdi-place">#${esc(String(r.place||'?'))}</span>
-              <span class="mono kdi-score">${fmtScore(r.score)}</span>
-              <span class="kdi-badge ${r.exhibitionLikelyForeign && !r.foreignDeclared ? 'kdi-warn' : 'kdi-nd'}">${r.exhibitionLikelyForeign && !r.foreignDeclared ? 'Exhibition (likely foreign)' : 'Non-displacing'}</span>
-              ${r.openedFor?.length ? `<span class="kdi-bump">Opened spot → ${r.openedFor.map(x=>x.athlete).join(', ')}</span>` : ''}
-            </div>`).join('')}
-        </div>`).join('')}
-    </div>`;
-  } else if (key === 'notAtt') {
-    html = `<div class="kpi-detail-grid">
-      ${subset.map(r => `
-        <div class="kdi-athlete">
-          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
-          <div class="kdi-event-row">
-            <span class="kdi-event">${esc(r.eventName||'')}</span>
-            <span class="mono kdi-place">Elig #${esc(String(r.eligibleRank||r.countingRank||'?'))}</span>
-            <span class="mono kdi-score">${fmtScore(r.score)}</span>
-            ${r.openedSpot ? `<span class="kdi-bump">Spot opened</span>` : ''}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  } else if (key === 'bumps') {
-    html = `<div class="kpi-detail-grid">
-      ${subset.map(r => `
-        <div class="kdi-athlete">
-          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
-          <div class="kdi-event-row">
-            <span class="kdi-event">${esc(r.eventName||'')}</span>
-            <span class="mono kdi-place">Counted #${esc(String(r.countingRank||r.eligibleRank||'?'))}</span>
-            <span class="mono kdi-score">${fmtScore(r.score)}</span>
-            <span class="kdi-badge kdi-bump-badge">Bumped in</span>
-            ${r.bumpedBy?.length ? `<span class="kdi-bump">By: ${r.bumpedBy.map(x=>x.athlete).join(', ')}</span>` : ''}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  } else {
-    html = `<div class="kpi-detail-grid">
-      ${subset.map(r => `
-        <div class="kdi-athlete">
-          <div class="kdi-name">${esc(r.athlete)} <span class="kdi-id">${esc(r.diveMeetsId||'')}</span></div>
-          <div class="kdi-event-row">
-            <span class="kdi-event">${esc(r.eventName||'')}</span>
-            <span class="mono kdi-place">#${esc(String(r.place||r.eligibleRank||'?'))}</span>
-            <span class="mono kdi-score">${fmtScore(r.score)}</span>
-            <span class="kdi-badge kdi-qual">${esc(r.qualificationStatus||'')}</span>
-          </div>
-        </div>`).join('')}
-    </div>`;
-  }
-
-  const panel = document.createElement('div');
-  panel.id = 'kpiDetailPanel';
-  panel.className = 'kpi-detail-panel';
-  panel.innerHTML = `
-    <div class="kdi-header">
-      <span class="kdi-title">${esc(kpi.label)} — ${subset.length} ${subset.length === 1 ? 'row' : 'rows'}</span>
-      <button class="btn-ghost btn-sm" id="kpiDetailClose">✕</button>
-    </div>
-    ${html}`;
-  $('kpiRow').insertAdjacentElement('afterend', panel);
-  $('kpiDetailClose').addEventListener('click', () => {
-    state.kpiDrill = null; state.kpiDrillFilter = null;
-    panel.remove(); renderKpis(); renderTable();
   });
 }
 
 /* ── Event list ───────────────────────────────────────────────── */
 function renderEventList() {
-  const rows = filteredRows({ ignoreEvent: true }).filter(r => {
-    if (r.stage !== state.stage && !stageMatch(r, state.stage)) return false;
-    return true;
-  });
-
+  if (state.stage === 'EWC' || state.stage === 'Nationals') return;
+  const rows = filteredRows({ ignoreEvent: true }).filter(r => stageMatch(r, state.stage));
   const grouped = new Map();
   rows.forEach(r => {
     if (!grouped.has(r.eventId)) grouped.set(r.eventId, []);
@@ -957,13 +1094,13 @@ function renderEventList() {
   }
 
   $('eventList').innerHTML = events.map(({ event, rows: evRows }) => {
-    const active = event.id === state.selectedEventId;
+    const active    = event.id === state.selectedEventId;
     const advancing = evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
-    const nd = evRows.filter(r => r.nonDisplacing).length;
-    const notAtt = evRows.filter(r => r.declaredNotAttending).length;
+    const nd        = evRows.filter(r => r.nonDisplacing).length;
+    const notAtt    = evRows.filter(r => r.declaredNotAttending).length;
     return `<button type="button" class="event-item ${active ? 'active' : ''}" data-event-id="${escAttr(event.id)}">
       <span class="event-item-name">${esc(event.eventName || event.id)}</span>
-      <span class="event-item-meta">${esc((event.meetName || '').replace('2026 USA Diving Junior ', '').replace('2026 USA Diving ', ''))}</span>
+      <span class="event-item-meta">${esc((event.meetName || '').replace(/^2026 USA Diving Junior /,'').replace(/^2026 USA Diving /,''))}</span>
       <div class="event-item-badges">
         ${advancing ? `<span class="mini-badge green">${advancing} advancing</span>` : ''}
         ${nd        ? `<span class="mini-badge slate">${nd} ND</span>` : ''}
@@ -975,10 +1112,11 @@ function renderEventList() {
 
 /* ── Context bar ──────────────────────────────────────────────── */
 function renderContext() {
-  const rows = filteredRows();
+  if (state.stage === 'EWC' || state.stage === 'Nationals') return;
+  const rows     = filteredRows();
   const selected = state.selectedEventId ? eventById.get(state.selectedEventId) : null;
-  const title = selected ? (selected.eventName || selected.id) : 'All matching events';
-  const sub   = selected
+  const title    = selected ? (selected.eventName || selected.id) : 'All matching events';
+  const sub      = selected
     ? [selected.meetName, selected.zone ? 'Zone ' + selected.zone : '', selected.ewc, selected.eventCategory].filter(Boolean).join(' · ')
     : `${state.stage} — use filters or click an event`;
   const threshold = selected?.officialThresholdScore != null ? fmtScore(selected.officialThresholdScore) : '—';
@@ -990,7 +1128,7 @@ function renderContext() {
       <span>${esc(sub)}</span>
     </div>
     ${[
-      ['Entries',  rows.length],
+      ['Entries',   rows.length],
       ['Advancing', advancing],
       ['Threshold', threshold],
       ['Not att.', rows.filter(r => r.declaredNotAttending).length],
@@ -1004,6 +1142,10 @@ function renderContext() {
 
 /* ── Table dispatch ───────────────────────────────────────────── */
 function renderTable() {
+  // qualifier-views.js handles EWC and Nationals stages
+  if (state.stage === 'EWC' && window._qvRenderEWC)       { window._qvRenderEWC();       return; }
+  if (state.stage === 'Nationals' && window._qvRenderNat) { window._qvRenderNat();       return; }
+
   const rows = currentRows();
   $('rowCount').textContent = `${rows.length.toLocaleString()} ${state.view === 'athletes' ? 'athletes' : 'rows'}`;
 
@@ -1035,8 +1177,7 @@ function currentRows() {
 function renderResultTable(rows) {
   const isZone = rows[0]?.stage === 'Zones';
   const isEWC  = rows[0]?.stage === 'EWC' || rows[0]?.stage === 'East/West/Central';
-
-  const cols = ['Place', isZone || isEWC ? 'Elig' : 'Rank', 'Athlete', 'Team', 'Score', 'Qualification', 'Flags', 'Actions'].filter(Boolean);
+  const cols = ['Place', isZone || isEWC ? 'Elig' : 'Rank', 'Athlete', 'Team', 'Score', 'Qualification', 'Flags', 'Actions'];
 
   const tbody = rows.map(r => {
     const rowCls = [
@@ -1045,7 +1186,6 @@ function renderResultTable(rows) {
       r.declaredNotAttending ? 'row-decline' : '',
     ].filter(Boolean).join(' ');
 
-    // Only show rank info if meaningful (non-trivial)
     const rankCol = (isZone || isEWC) ? eligCell(r) : rankCell(r);
 
     return `<tr class="${rowCls}">
@@ -1103,7 +1243,6 @@ function renderOverridesTable() {
     </td>
   </tr>`).join('');
   $('tableWrap').innerHTML = tableHtml(cols, tbody);
-  // wire up buttons
   $('tableWrap').querySelectorAll('button[data-override-action]').forEach(btn => {
     btn.addEventListener('click', () => handleLogAction(btn.dataset.overrideAction, btn.dataset.overrideId));
   });
@@ -1111,7 +1250,6 @@ function renderOverridesTable() {
 
 /* ── Official qual list ───────────────────────────────────────── */
 function renderOfficialTable(rows) {
-  // Try DATA.officialZoneQualifiers first, fall back to computed advancing rows
   const official = officialRows();
   if (!official.length) {
     $('tableWrap').innerHTML = `<div class="empty-state">
@@ -1143,12 +1281,19 @@ function officialRows() {
         if (![r.athlete, r.diveMeetsId, r.team, r.zone, r.eventName].join(' ').toLowerCase().includes(q)) return false;
       }
       return true;
-    }).sort((a, b) => (a.zone||'').localeCompare(b.zone||'') || (a.eventSort||999) - (b.eventSort||999) || (a.rank||9999) - (b.rank||9999));
+    }).sort((a, b) =>
+      (a.zone||'').localeCompare(b.zone||'') ||
+      (a.eventSort||999) - (b.eventSort||999) ||
+      (a.rank||9999) - (b.rank||9999)
+    );
   }
-  // Compute from effective results
   return filteredRows({ ignoreEvent: true })
     .filter(r => r.advancesToNationals || r.advancesToZone || r.advancesToEWC)
-    .sort((a, b) => (a.zone||'').localeCompare(b.zone||'') || evCompare(eventById.get(a.eventId)||{}, eventById.get(b.eventId)||{}) || (a.eligibleRank||9999) - (b.eligibleRank||9999));
+    .sort((a, b) =>
+      (a.zone||'').localeCompare(b.zone||'') ||
+      evCompare(eventById.get(a.eventId)||{}, eventById.get(b.eventId)||{}) ||
+      (a.eligibleRank||9999) - (b.eligibleRank||9999)
+    );
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1158,7 +1303,7 @@ function filteredRows(opts = {}) {
   const ignoreEvent = Boolean(opts.ignoreEvent);
   const q = state.search.toLowerCase();
   return effectiveResults.filter(r => {
-    if (!stageMatch(r, state.stage) && r.stage !== state.stage) return false;
+    if (!stageMatch(r, state.stage)) return false;
     if (!opts.ignoreKpi && state.kpiDrillFilter && !state.kpiDrillFilter(r)) return false;
     if (!ignoreEvent && state.selectedEventId && r.eventId !== state.selectedEventId) return false;
     if (state.meetName      && r.meetName      !== state.meetName)      return false;
@@ -1176,7 +1321,7 @@ function filteredRows(opts = {}) {
 
 function rowsForOptions(exceptKey) {
   return effectiveResults.filter(r => {
-    if (!stageMatch(r, state.stage) && r.stage !== state.stage) return false;
+    if (!stageMatch(r, state.stage)) return false;
     const keys = ['meetName','eventCategory','discipline','gender','ageGroup','zone','ewc'];
     return keys.every(k => {
       if (k === exceptKey || !state[k]) return true;
@@ -1216,14 +1361,14 @@ function buildAthleteRows(rows) {
   return [...grouped.values()].map(evRows => {
     const first = evRows[0];
     return {
-      athlete: first.athlete,
-      diveMeetsId: first.diveMeetsId,
-      teams: [...new Set(evRows.map(r => r.team).filter(Boolean))],
-      events: evRows.length,
-      advancing: evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length,
-      nonDisplacing: evRows.filter(r => r.nonDisplacing).length,
-      flags: [...new Set(evRows.flatMap(r => r.effectiveFlags || []))],
-      prequalification: [...new Set(evRows.flatMap(r => r.prequalification || []))],
+      athlete:         first.athlete,
+      diveMeetsId:     first.diveMeetsId,
+      teams:           [...new Set(evRows.map(r => r.team).filter(Boolean))],
+      events:          evRows.length,
+      advancing:       evRows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length,
+      nonDisplacing:   evRows.filter(r => r.nonDisplacing).length,
+      flags:           [...new Set(evRows.flatMap(r => r.effectiveFlags || []))],
+      prequalification:[...new Set(evRows.flatMap(r => r.prequalification || []))],
     };
   }).sort((a, b) => a.athlete.localeCompare(b.athlete));
 }
@@ -1232,9 +1377,6 @@ function buildAthleteRows(rows) {
    OVERRIDES
    ════════════════════════════════════════════════════════════════ */
 function loadOverrides() {
-  // Initial synchronous load from localStorage.
-  // OverridesSync.init() will overwrite state.overrides with the
-  // GitHub-synced version as soon as the async fetch completes.
   try {
     const p = JSON.parse(localStorage.getItem(OVERRIDE_KEY) || '[]');
     return Array.isArray(p) ? p : [];
@@ -1243,10 +1385,7 @@ function loadOverrides() {
 
 function saveOverrides() {
   localStorage.setItem(OVERRIDE_KEY, JSON.stringify(state.overrides));
-  // Async push to GitHub shared storage
-  if (window.OverridesSync) {
-    window.OverridesSync.save(state.overrides);
-  }
+  if (window.OverridesSync) window.OverridesSync.save(state.overrides);
 }
 
 function addOverride(input) {
@@ -1255,31 +1394,25 @@ function addOverride(input) {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     createdAt: new Date().toISOString(),
     active: true,
-    type: input.type,
-    value: Boolean(input.value),
+    type:        input.type,
+    value:       Boolean(input.value),
     athleteId:   String(input.athleteId   || '').trim(),
     athleteName: String(input.athleteName || '').trim(),
-    eventId:   input.eventId   || '',
-    eventName: input.eventName || '',
-    note:      String(input.note || '').trim(),
+    eventId:     input.eventId   || '',
+    eventName:   input.eventName || '',
+    note:        String(input.note || '').trim(),
   });
-  saveOverrides();
-  recompute();
-  renderAll();
+  saveOverrides(); recompute(); renderAll();
 }
 
 function addOverrideFromForm() {
   const type = $('overrideType').value;
-  if (type === 'notAttending' && !state.selectedEventId) {
-    alert('Select an event first before adding a not-attending override.');
-    return;
-  }
   addOverride({
     type,
     value: $('overrideValue').value === 'true',
-    athleteId: $('overrideAthleteId').value,
+    athleteId:   $('overrideAthleteId').value,
     athleteName: $('overrideAthleteName').value,
-    eventId: type === 'notAttending' ? state.selectedEventId : '',
+    eventId:   type === 'notAttending' ? (state.selectedEventId || '') : '',
     eventName: type === 'notAttending' && state.selectedEventId ? (eventById.get(state.selectedEventId)?.eventName || '') : '',
     note: $('overrideNote').value || 'Manual entry',
   });
@@ -1310,7 +1443,10 @@ function handleLogAction(action, id) {
 }
 
 function overrideTypeLabel(type) {
-  return { foreign:'Foreign athlete', dual:'Dual citizen', dualEffect:'Dual affects results', notAttending:'Not attending' }[type] || type;
+  return {
+    foreign:'Foreign athlete', dual:'Dual citizen', dualEffect:'Dual affects results',
+    hps:'HPS athlete', ymca:'YMCA event champion', notAttending:'Not attending'
+  }[type] || type;
 }
 
 function overrideDesc(o) {
@@ -1321,7 +1457,7 @@ function overrideDesc(o) {
    CELL RENDERERS
    ════════════════════════════════════════════════════════════════ */
 function athleteCell(r) {
-  const showEvent = !state.selectedEventId; // hide event name when one event is selected
+  const showEvent = !state.selectedEventId;
   return `<div class="athlete-main">
     <span class="athlete-name">${esc(r.athlete)}</span>
     ${r.diveMeetsId ? `<span class="athlete-id">${esc(r.diveMeetsId)}</span>` : ''}
@@ -1329,16 +1465,11 @@ function athleteCell(r) {
 }
 
 function rankCell(r) {
-  // Zones/EWC: show eligible rank cleanly
-  if ((r.stage === 'Zones' || r.stage === 'EWC') && r.eligibleRank) {
-    return `<span style="color:var(--ink-3);font-size:11px">elig</span> ${esc(String(r.eligibleRank))}`;
-  }
   return esc(String(r.countingRank || ''));
 }
 
 function eligCell(r) {
   if (!r.attendingEligibleRank && !r.eligibleRank) return '';
-  // Show compactly: "att 1" or if they differ "4 → att 3"
   if (r.attendingEligibleRank && r.eligibleRank && r.attendingEligibleRank !== r.eligibleRank) {
     return `<span style="color:var(--ink-3)">${r.eligibleRank}</span>→<strong>${r.attendingEligibleRank}</strong>`;
   }
@@ -1346,85 +1477,80 @@ function eligCell(r) {
 }
 
 function statusBadge(r) {
-  const s = r.qualificationStatus || '';
+  const s = (r.qualificationStatus || r.juniorNationalStatus || '').toLowerCase();
   if (!s) return '';
-  let cls = 'status-out';
-  let label = 'Does not advance';
-  if (s.includes('direct'))                        { cls = 'status-qualifier';      label = 'Direct qualifier'; }
-  else if (s.includes('top 15'))                   { cls = 'status-qualifier';      label = 'Zone qualifier'; }
-  else if (s.includes('average score threshold'))  { cls = 'status-average';        label = 'Avg threshold'; }
-  else if (s.includes('E/W/C') && s.includes('position')) { cls = 'status-ewc';    label = 'E/W/C — position'; }
-  else if (s.includes('E/W/C'))                    { cls = 'status-ewc';            label = 'E/W/C qualifier'; }
-  else if (s.includes('decline replacement'))      { cls = 'status-replacement';    label = 'Decline fill'; }
-  else if (s.includes('Replacement pool') || s.includes('replacement eligible')) { cls = 'status-replacement'; label = 'Replacement pool'; }
-  else if (s.includes('replacement'))              { cls = 'status-replacement';    label = 'Replacement'; }
-  else if (s.includes('YMCA'))                     { cls = 'status-qualifier';      label = 'YMCA champion'; }
-  else if (s.includes('Prequalified'))             { cls = 'status-qualifier';      label = 'Prequalified'; }
-  else if (s.includes('foreign (ghost)'))           { cls = 'status-ghost'; label = '👻 Foreign ghost'; }
-  else if (s.includes('HPS (ghost)'))               { cls = 'status-ghost'; label = '👻 HPS ghost'; }
-  else if (s.includes('Non-displacing'))             { cls = 'status-non-displacing'; label = 'Non-displacing'; }
-  else if (s.includes('Declared not'))             { cls = 'status-decline';        label = 'Not attending'; }
-  else if (s.includes('Does not') || s.includes('Non-qualifying')) { cls = 'status-out'; label = 'Does not advance'; }
-  else if (s.includes('Not eligible'))             { cls = 'status-out';            label = 'Not eligible'; }
-  else { label = s.length > 28 ? s.slice(0, 26) + '…' : s; }
-  return `<span class="status ${cls}" title="${esc(s)}">${esc(label)}</span>`;
+
+  let cls = 'status-out', label = 'Does not advance';
+
+  if      (s.includes('nationals') && s.includes('direct'))      { cls = 'status-qualifier';   label = 'Nationals — direct'; }
+  else if (s.includes('nationals') && s.includes('replacement')) { cls = 'status-replacement'; label = 'Nationals — replacement'; }
+  else if (s.includes('nationals') && s.includes('avg'))         { cls = 'status-replacement'; label = 'Nationals — avg score'; }
+  else if (s.includes('zone qualifier') && s.includes('top 15')) { cls = 'status-qualifier';   label = 'Zone qualifier'; }
+  else if (s.includes('zone qualifier') && s.includes('avg'))    { cls = 'status-average';     label = 'Zone — avg threshold'; }
+  else if (s.includes('zone qualifier') && s.includes('official')){ cls = 'status-qualifier';  label = 'Zone — official list'; }
+  else if (s.includes('e/w/c') && s.includes('ymca'))            { cls = 'status-qualifier';   label = 'E/W/C — YMCA'; }
+  else if (s.includes('e/w/c') && s.includes('avg'))             { cls = 'status-average';     label = 'E/W/C — avg threshold'; }
+  else if (s.includes('e/w/c'))                                  { cls = 'status-ewc';         label = 'E/W/C qualifier'; }
+  else if (s.includes('replacement pool'))                       { cls = 'status-replacement'; label = 'Replacement pool'; }
+  else if (s.includes('replacement'))                            { cls = 'status-replacement'; label = 'Replacement'; }
+  else if (s.includes('ymca'))                                   { cls = 'status-qualifier';   label = 'YMCA champion'; }
+  else if (s.includes('non-displacing') || s.includes('non displacing')) { cls = 'status-non-displacing'; label = 'Non-displacing'; }
+  else if (s.includes('not attending') || s.includes('declared not'))    { cls = 'status-decline';  label = 'Not attending'; }
+  else if (s.includes('not eligible') || s.includes('does not advance') || s.includes('non-qualifying')) { cls = 'status-out'; label = 'Does not advance'; }
+  else { label = (r.qualificationStatus || ''); if (label.length > 28) label = label.slice(0,26)+'…'; }
+
+  return `<span class="status ${cls}" title="${esc(r.qualificationStatus || '')}">${esc(label)}</span>`;
 }
 
-/* Only show truly actionable info inline — threshold lives in context bar */
 function inlineBumpNote(r) {
   const parts = [];
-  if (r.bumpIn && r.bumpedBy?.length)    parts.push(`↑ By: ${r.bumpedBy.map(x => x.athlete).join(', ')}`);
-  else if (r.bumpIn)                     parts.push('↑ Bumped in');
+  if (r.bumpIn && r.bumpedBy?.length)      parts.push(`↑ By: ${r.bumpedBy.map(x => x.athlete).join(', ')}`);
+  else if (r.bumpIn)                        parts.push('↑ Bumped in');
   if (r.openedSpot && r.openedFor?.length) parts.push(`↓ Opened → ${r.openedFor.map(x => x.athlete).join(', ')}`);
-  else if (r.openedSpot)                 parts.push('↓ Spot opened');
-  if (r.overrideNotes?.length)           parts.push(`✎ ${r.overrideNotes[0]}`);
+  else if (r.openedSpot)                   parts.push('↓ Spot opened');
+  if (r.overrideNotes?.length)             parts.push(`✎ ${r.overrideNotes[0]}`);
   if (!parts.length) return '';
   return `<div style="font-size:10.5px;color:var(--ink-3);margin-top:3px">${parts.map(p => esc(p)).join(' · ')}</div>`;
 }
 
-function detailCell(r) { return ''; } // kept for compatibility — logic moved to inlineBumpNote
-
 function flagPills(r) {
   const pills = [];
-  if (r.foreignDeclared)                                    pills.push(pill('Foreign','foreign'));
-  if (r.webpointNonUsEffective && !r.foreignDeclared)       pills.push(pill('Webpoint','foreign'));
-  if (r.dualDeclared)                                       pills.push(pill(r.dualOtherCountry ? 'Dual effect' : 'Dual','dual'));
-  if (r.hps)                                                pills.push(pill('HPS','hps'));
-  if (r.ymca)                                               pills.push(pill('YMCA','ymca'));
-  if (r.prequalified)                                       pills.push(pill('Prequalified','preq'));
-  if (r.declaredNotAttending)                               pills.push(pill('Not attending','decline'));
-  if (r.bumpIn)                                             pills.push(pill('Bump in','bump'));
-  if (r.reviewFlags?.length)                                pills.push(pill('Review','review'));
+  if (r.foreignDeclared)                              pills.push(pill('Foreign','foreign'));
+  if (r.webpointNonUsEffective && !r.foreignDeclared) pills.push(pill('Webpoint','foreign'));
+  if (r.diveMeetsForeignCode)                         pills.push(pill('DM-127','foreign'));
+  if (r.dualDeclared)                                 pills.push(pill(r.dualOtherCountry ? 'Dual effect' : 'Dual','dual'));
+  if (r.hps)                                          pills.push(pill('HPS','hps'));
+  if (r.ymca)                                         pills.push(pill('YMCA','ymca'));
+  if (r.prequalified)                                 pills.push(pill('Prequalified','preq'));
+  if (r.declaredNotAttending)                         pills.push(pill('Not attending','decline'));
+  if (r.bumpIn)                                       pills.push(pill('Bump in','bump'));
+  if (r.reviewFlags?.length)                          pills.push(pill('Review','review'));
   return `<div class="pill-list">${pills.join('')}</div>`;
 }
 
 function pillList(labels) {
   return `<div class="pill-list">${labels.map(l => pill(l, pillCls(l))).join('')}</div>`;
 }
-
-function pill(label, cls) {
-  return `<span class="pill pill-${cls}">${esc(label)}</span>`;
-}
-
+function pill(label, cls)  { return `<span class="pill pill-${cls}">${esc(label)}</span>`; }
 function pillCls(l) {
   const s = String(l).toLowerCase();
-  if (s.includes('foreign') || s.includes('non-us') || s.includes('webpoint')) return 'foreign';
-  if (s.includes('dual'))     return 'dual';
-  if (s.includes('hps'))      return 'hps';
-  if (s.includes('ymca'))     return 'ymca';
-  if (s.includes('preq'))     return 'preq';
+  if (s.includes('foreign') || s.includes('non-us') || s.includes('webpoint') || s.includes('dm-')) return 'foreign';
+  if (s.includes('dual'))    return 'dual';
+  if (s.includes('hps'))     return 'hps';
+  if (s.includes('ymca'))    return 'ymca';
+  if (s.includes('preq'))    return 'preq';
   if (s.includes('not att') || s.includes('decline')) return 'decline';
-  if (s.includes('bump') || s.includes('avg')) return 'bump';
+  if (s.includes('bump') || s.includes('avg'))        return 'bump';
   return 'review';
 }
 
 function rowActions(r) {
   const fn = !r.foreignDeclared, dn = !r.dualDeclared, de = !r.dualOtherCountry, na = !r.declaredNotAttending;
+  const hn = !r.hps, yn = !r.ymca;
   return `<div class="row-actions">
-    <button class="row-act-btn" data-row-override="foreign"     data-override-value="${fn}" data-row-id="${escAttr(r.id)}">${fn?'Foreign':'Not foreign'}</button>
-    <button class="row-act-btn" data-row-override="dual"        data-override-value="${dn}" data-row-id="${escAttr(r.id)}">${dn?'Dual':'No dual'}</button>
-    <button class="row-act-btn" data-row-override="dualEffect"  data-override-value="${de}" data-row-id="${escAttr(r.id)}">${de?'Dual effect':'No effect'}</button>
-    <button class="row-act-btn" data-row-override="notAttending" data-override-value="${na}" data-row-id="${escAttr(r.id)}">${na?'Not attending':'Attending'}</button>
+    <button class="row-act-btn" data-row-override="foreign"      data-override-value="${fn}" data-row-id="${escAttr(r.id)}">${fn?'Mark Foreign':'Not Foreign'}</button>
+    <button class="row-act-btn" data-row-override="hps"          data-override-value="${hn}" data-row-id="${escAttr(r.id)}">${hn?'Mark HPS':'Remove HPS'}</button>
+    <button class="row-act-btn" data-row-override="notAttending" data-override-value="${na}" data-row-id="${escAttr(r.id)}">${na?'Not Attending':'Attending'}</button>
   </div>`;
 }
 
@@ -1473,7 +1599,6 @@ function esc(v) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-
 function escAttr(v) { return esc(v).replace(/`/g,'&#96;'); }
 
 function fmtScore(v) {
@@ -1488,7 +1613,9 @@ function uniqueVals(rows, key) {
 }
 
 function evCompare(a, b) {
-  return ((a.region || 999) - (b.region || 999)) || ((a.sort || 999) - (b.sort || 999)) || String(a.eventName || '').localeCompare(String(b.eventName || ''));
+  return ((a.region || 999) - (b.region || 999)) ||
+    ((a.sort || 999) - (b.sort || 999)) ||
+    String(a.eventName || '').localeCompare(String(b.eventName || ''));
 }
 
 function athleteKey(v) {
