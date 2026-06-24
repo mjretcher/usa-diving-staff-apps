@@ -9,13 +9,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../shared/design.css">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="ui-fixes.css">
   </head>
   <body>
 
     <!-- ── TOP BAR ─────────────────────────────────────────────── -->
     <header class="app-topbar">
-
-      <!-- Brand / home link -->
       <a class="topbar-brand" href="../index.html" title="Back to Staff Platform">
         <div class="brand-mark">
           <svg class="brand-mark-squiggle" viewBox="0 0 18 18">
@@ -134,20 +133,28 @@
       </main>
     </div>
 
+    <!--
+      LOAD ORDER:
+      1. config.js         — shared config (sync token)
+      2. overrides-sync.js — GitHub override sync (needs config)
+      3. junior-data.js    — results data
+      4. junior-athlete-status.js — HPS/foreign/dual roster
+      5. status-merge.js   — merges roster into data rows
+      6. main.js           — app core (includes zone normalization,
+                             YMCA logic, qual impact, all formerly
+                             separate patch files consolidated)
+      7. qualifier-views.js — E/W/C and Nationals view overlays
+      8. override-athlete-search.js — drawer athlete search
+      9. athlete-lookup.js — future athlete lookup stub
+    -->
     <script src="../data/config.js"></script>
     <script src="overrides-sync.js"></script>
     <script src="../data/junior-data.js"></script>
     <script src="../data/junior-athlete-status.js"></script>
-    <script src="ymca-ewc-prequal.js?v=20260608a"></script>
-    <script src="zone-rule-normalize.js"></script>
     <script src="status-merge.js"></script>
     <script src="main.js"></script>
-    <script src="zone-foreign-placement-fix.js?v=20260608a"></script>
-    <script src="dashboard-controls.js"></script>
-    <script src="qualification-impact.js"></script>
-    <script src="qualification-workbench.js"></script>
     <script src="qualifier-views.js"></script>
-    <script src="override-athlete-search.js?v=20260608a"></script>
-    <script src="athlete-lookup.js?v=20260608a"></script>
+    <script src="override-athlete-search.js"></script>
+    <script src="athlete-lookup.js"></script>
   </body>
 </html>
