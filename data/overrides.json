@@ -71,5 +71,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338466585-b4e9a6073acca",
+    "createdAt": "2026-06-24T22:01:06.585Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "169872",
+    "athleteName": "Alexander Crosby",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
