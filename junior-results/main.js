@@ -1056,24 +1056,25 @@ function renderKpis() {
   // For EWC stage, KPIs reflect the Zone qualifiers heading to E/W/C
   // For Nationals stage, reflect both Zone direct + EWC qualifiers
   // For Reports stage, no KPIs needed
-  let rows;
-  if (state.stage === 'EWC') {
-    rows = effectiveResults.filter(r => r.stage === 'Zones' &&
-      (r.advancesToEWC || r.advancesToNationals));
-  } else if (state.stage === 'Nationals' || state.stage === 'Reports') {
-    rows = [];  // analytics handles its own display
-  } else {
-    rows = filteredRows({ ignoreEvent: true });
-  }
   if (state.stage === 'Nationals' || state.stage === 'Reports') {
     $('kpiRow').innerHTML = '';
     return;
   }
-  const athletes = new Set(rows.map(r => r.diveMeetsId || r.athlete));
+  let rows;
+  if (state.stage === 'EWC') {
+    // EWC dashboard uses zone qualifier data
+    rows = effectiveResults.filter(r => r.stage === 'Zones' &&
+      (r.advancesToEWC || r.advancesToNationals));
+  } else {
+    // Use current event filter — KPIs reflect what's in the table
+    rows = filteredRows();
+  }
+  const hasEventSelected = Boolean(state.selectedEventId);
+  const uniqueAthletes = new Set(rows.map(r => r.diveMeetsId || r.athlete));
   const advancing = rows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
 
   const kpis = [
-    { key:'all',       label:'Rows',           value: rows.length,     sub: `${athletes.size} athletes` },
+    { key:'all',       label:'Entries',        value: rows.length,     sub: `${uniqueAthletes.size} athletes` },
     { key:'advancing', label:'Advancing',      value: advancing,       accent:'green',
       sub: state.stage === 'Zones' ? '→ Nationals / E/W/C' : '→ next stage',
       filter: r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC },
@@ -1195,20 +1196,22 @@ function renderTable() {
   if (state.stage === 'Nationals' && window._qvRenderNat)     { window._qvRenderNat();       return; }
   if (state.stage === 'Reports' && window._qvRenderReports)   { window._qvRenderReports();   return; }
 
-  // Review queue: inject at top of flags view, INSIDE tableWrap so it scrolls with content
+  // Review queue: inject at top of flags view
   if (state.view === 'flags' && window._qvRenderReviewQueue) {
     const wrap = $('tableWrap');
     if (wrap) {
+      // Create a review queue container before the table
       let rqEl = document.getElementById('rv-queue-wrap');
       if (!rqEl) {
         rqEl = document.createElement('div');
         rqEl.id = 'rv-queue-wrap';
-        rqEl.style.cssText = 'border-bottom:1px solid var(--line);margin-bottom:8px;background:var(--surface)';
-        wrap.prepend(rqEl);
+        rqEl.style.cssText = 'border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:4px';
+        wrap.parentNode.insertBefore(rqEl, wrap);
       }
       window._qvRenderReviewQueue(rqEl);
     }
   } else {
+    // Remove queue container when switching away from flags
     const old = document.getElementById('rv-queue-wrap');
     if (old) old.remove();
   }
