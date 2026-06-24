@@ -212,6 +212,17 @@
      RENDER
   ══════════════════════════════════════════════════════════════ */
   function render() {
+    try {
+      _render();
+    } catch(e) {
+      console.error('[analytics v3] render error:', e);
+      const wrap = document.getElementById('tableWrap');
+      if (wrap) wrap.innerHTML = `<div style="padding:24px;color:#b45309;font-size:12px;background:#fffbeb;border-radius:8px;margin:16px">
+        <strong>Analytics error:</strong> ${e.message}<br><small>Check browser console for details.</small>
+      </div>`;
+    }
+  }
+  function _render() {
     const wrap = document.getElementById('tableWrap');
     const ctx  = document.getElementById('resultsContext');
     if (!wrap) return;
@@ -667,18 +678,10 @@
     document.head.appendChild(s);
   }
 
-  /* ── init ───────────────────────────────────────────────────── */
-  function init() {
-    injectCSS();
-    window._qvRenderReports = render;
-    window._anRender = render;
-    console.log('[analytics v3] ready');
-  }
-
-  function wait(cb, n) {
-    n=n||0;
-    if (typeof effectiveResults!=='undefined'||window.JUNIOR_RESULTS_DATA) cb();
-    else if (n<120) setTimeout(()=>wait(cb,n+1),50);
-  }
-  wait(init);
+  /* ── init ─────────────────────────────────────────────────── */
+  // Register hook immediately — render() reads data lazily at call time
+  window._qvRenderReports = render;
+  window._anRender = render;
+  injectCSS();
+  console.log('[analytics v3] registered');
 })();
