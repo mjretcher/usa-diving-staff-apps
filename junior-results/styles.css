@@ -1146,3 +1146,37 @@ html, body { overflow-x: hidden; }
   background: var(--q-direct-bg); color: var(--q-direct); border: 1px solid var(--q-direct-b);
 }
 
+
+/* ── Bumps & shifts view ──────────────────────────────────────── */
+.bump-event-section{border-bottom:1px solid var(--line)}
+.bump-event-section:last-child{border-bottom:none}
+.bump-event-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bump-event-name{font-size:13px;font-weight:500;color:var(--ink);flex:1;min-width:120px}
+.bump-event-meta{font-size:11px;color:var(--ink-3)}
+.bump-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:700;flex-shrink:0}
+.bump-icon-open{background:#FEF3C7;color:#92400E}
+.bump-icon-in{background:#EDE9FE;color:#5B21B6}
+.bump-icon-avg{background:#EFF6FF;color:#1E40AF}
+.bump-row-bump-opened td{background:rgba(245,158,11,.03)}
+.bump-row-bump-in td{background:rgba(139,92,246,.03)}
+.bump-row-bump-avg td{background:rgba(59,130,246,.02)}
+
+/* ── Athletes tab event tags ──────────────────────────────────── */
+.ev-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;white-space:nowrap;margin:1px}
+.ev-tag-nat{background:#EAF3DE;color:#27500A}
+.ev-tag-ewc{background:#EFF6FF;color:#1E40AF}
+.ev-tag-nd{background:#F1EFE8;color:#5F5E5A}
+.ev-tag-out{background:var(--surface-2);color:var(--ink-4)}
+
+/* ── Export dropdown ──────────────────────────────────────────── */
+.export-opt{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;
+  border:none;background:transparent;cursor:pointer;border-radius:6px;font-size:12px;
+  color:var(--ink-2);text-align:left;transition:background .1s}
+.export-opt:hover{background:var(--surface-2)}
+
+/* ── Event list mini-badge additions ──────────────────────────── */
+.mini-badge.purple{background:#EDE9FE;color:#5B21B6}
+.mini-badge.red{background:#FEF2F2;color:#991B1B}
+
+/* ── Avg threshold row in official list ───────────────────────── */
+.row-avg-marker td{color:var(--ink-4);font-style:italic}
