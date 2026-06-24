@@ -790,48 +790,30 @@
   function patchMain() {
     injectCSS();
 
-    const origRenderTable     = window.renderTable;
-    const origRenderEventList = window.renderEventList;
-    const origRenderContext   = window.renderContext;
-    const origBuildStageNav   = window.buildStageNav;
+    // Register clean hooks used by main.js renderTable()
+    // instead of monkey-patching to avoid conflicts
+    window._qvRenderEWC = renderEWCView;
+    window._qvRenderNat = renderNationalsView;
 
-    window.renderTable = function () {
-      if (typeof state === 'undefined') return origRenderTable?.();
-      if (state.stage === 'EWC')       { renderEWCView();       return; }
-      if (state.stage === 'Nationals') { renderNationalsView(); return; }
-      return origRenderTable?.();
-    };
+    // Wire stage button listeners after nav is built
+    const stageNav = document.getElementById('stageNav');
+    if (stageNav) {
+      stageNav.addEventListener('click', e => {
+        const btn = e.target.closest('.stage-btn');
+        if (!btn) return;
+        if (btn.dataset.stage !== 'EWC') qv.ewcGroup = null;
+        qv.expanded.clear();
+        closeAudit();
+      }, { capture: true });
+    }
 
-    window.renderEventList = function () {
-      if (typeof state === 'undefined') return origRenderEventList?.();
-      if (state.stage === 'EWC' || state.stage === 'Nationals') return;
-      return origRenderEventList?.();
-    };
-
-    window.renderContext = function () {
-      if (typeof state === 'undefined') return origRenderContext?.();
-      if (state.stage === 'EWC' || state.stage === 'Nationals') return;
-      return origRenderContext?.();
-    };
-
-    window.buildStageNav = function () {
-      origBuildStageNav?.();
-      document.getElementById('stageNav')?.querySelectorAll('.stage-btn').forEach(btn =>
-        btn.addEventListener('click', () => {
-          if (btn.dataset.stage !== 'EWC') qv.ewcGroup = null;
-          qv.expanded.clear();
-          closeAudit();
-        }, { capture: true })
-      );
-    };
-
-    // Close audit on Escape
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') closeAudit();
     });
 
-    console.log('[qualifier-views v3] patched');
+    console.log('[qualifier-views v3] registered hooks');
   }
 
   waitForMain(patchMain);
 })();
+
