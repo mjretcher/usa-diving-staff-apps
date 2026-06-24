@@ -118,6 +118,24 @@ input, select { font-family: inherit; }
   transition: opacity .15s;
 }
 .topbar-brand:hover::before { opacity: .7; }
+/* Official logo in topbar */
+.topbar-logo {
+  height: 32px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
+}
+.topbar-app-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--nav-muted);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding-left: 12px;
+  border-left: 1px solid var(--nav-border);
+  margin-left: 2px;
+}
+
 
 .brand-mark {
   width: 30px; height: 30px; border-radius: var(--radius-sm);
@@ -1119,3 +1137,4 @@ html, body { overflow-x: hidden; }
   font-size: 10.5px; font-weight: 600;
   background: var(--q-direct-bg); color: var(--q-direct); border: 1px solid var(--q-direct-b);
 }
+
