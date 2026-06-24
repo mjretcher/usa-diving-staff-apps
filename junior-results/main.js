@@ -1053,7 +1053,22 @@ function renderOverrideDrawer() {
 
 /* ── KPIs ─────────────────────────────────────────────────────── */
 function renderKpis() {
-  const rows = filteredRows({ ignoreEvent: true });
+  // For EWC stage, KPIs reflect the Zone qualifiers heading to E/W/C
+  // For Nationals stage, reflect both Zone direct + EWC qualifiers
+  // For Reports stage, no KPIs needed
+  let rows;
+  if (state.stage === 'EWC') {
+    rows = effectiveResults.filter(r => r.stage === 'Zones' &&
+      (r.advancesToEWC || r.advancesToNationals));
+  } else if (state.stage === 'Nationals' || state.stage === 'Reports') {
+    rows = [];  // analytics handles its own display
+  } else {
+    rows = filteredRows({ ignoreEvent: true });
+  }
+  if (state.stage === 'Nationals' || state.stage === 'Reports') {
+    $('kpiRow').innerHTML = '';
+    return;
+  }
   const athletes = new Set(rows.map(r => r.diveMeetsId || r.athlete));
   const advancing = rows.filter(r => r.advancesToZone || r.advancesToNationals || r.advancesToEWC).length;
 
