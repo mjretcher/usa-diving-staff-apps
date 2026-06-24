@@ -1,7 +1,7 @@
 /* ================================================================
-   qualifier-views.js  v4
-   Complete rewrite — Zones qualifier origin view, E/W/C meet/event
-   toggle, athlete detail slide-in panel with full trail, registration
+   qualifier-views.js  v4.1
+   v4.1 patch — uses USAD_EWC_DATA for registration, foreign/dual/HPS,
+   EWC entry events in panel, corrected non-displacing logic.
    status overlay, prelims/finals format awareness.
    ================================================================ */
 (function () {
@@ -34,9 +34,11 @@
     </a>`;
   }
 
-  /* ── Nat qualifier lookup from uploaded data ───────────────── */
+  /* ── Data sources ──────────────────────────────────────────── */
   const NAT = window.USAD_JO_NAT_QUALIFIERS || null;
+  const EWC = window.USAD_EWC_DATA || null;
 
+  /* ── JO Nationals qualifier lookup ────────────────────────── */
   function isNatQualified(diveMeetsId, eventKey) {
     if (!NAT || !diveMeetsId) return false;
     const id = String(diveMeetsId).trim();
@@ -54,28 +56,75 @@
     return athlete ? athlete.qualifiedEvents : [];
   }
 
-  function isForeignEWC(name) {
-    if (!NAT) return null;
+  /* ── EWC registration lookup (from USAD_EWC_DATA) ─────────── */
+  function ewcEntry(name, meet) {
+    if (!EWC) return null;
     const n = norm(name);
-    return NAT.foreignEWC.find(f => norm(f.name) === n) || null;
+    return EWC.entries.find(e =>
+      norm(e.name) === n && (!meet || e.meet === meet)
+    ) || null;
   }
 
-  function isEWCAlreadyNatQual(name) {
-    if (!NAT) return [];
+  function isRegisteredAtEWC(name, meet) {
+    return Boolean(ewcEntry(name, meet));
+  }
+
+  function ewcEntryEvents(name, meet) {
+    const e = ewcEntry(name, meet);
+    return e ? e.events : [];
+  }
+
+  /* ── Foreign athlete lookup (EWC data is authoritative) ───── */
+  function isForeignEWC(name) {
+    // Use EWC data first (authoritative), fall back to NAT embedded list
+    if (EWC) {
+      const n = norm(name);
+      const f = EWC.foreignAthletes.find(a => norm(a.name) === n);
+      if (f) return f;
+    }
+    if (NAT) {
+      const n = norm(name);
+      return NAT.foreignEWC.find(f => norm(f.name) === n) || null;
+    }
+    return null;
+  }
+
+  /* ── Dual citizen lookup ───────────────────────────────────── */
+  function isDualCitizen(name) {
+    if (!EWC) return null;
     const n = norm(name);
-    for (const [athlete, evts] of Object.entries(NAT.ewcAlreadyNatQual || {})) {
-      if (norm(athlete) === n) return evts;
+    return EWC.dualCitizens.find(d => norm(d.name) === n) || null;
+  }
+
+  /* ── Already-nat-qual at EWC lookup ───────────────────────── */
+  function isEWCAlreadyNatQual(name) {
+    if (EWC) {
+      const n = norm(name);
+      const a = EWC.alreadyNatQual.find(x => norm(x.name) === n);
+      if (a) return a.qualifiedEvents || [];
+    }
+    if (NAT) {
+      const n = norm(name);
+      for (const [athlete, evts] of Object.entries(NAT.ewcAlreadyNatQual || {})) {
+        if (norm(athlete) === n) return evts;
+      }
     }
     return [];
   }
 
-  function isHPSPrequal(name, gender) {
-    if (!NAT) return null;
-    const n = norm(name);
-    const list = gender === 'F' || gender === 'Girls'
-      ? (NAT.hpsPrequalFemale || [])
-      : (NAT.hpsPrequalMale   || []);
-    return list.find(h => norm(h.name) === n) || null;
+  /* ── HPS lookup ────────────────────────────────────────────── */
+  function isHPSPrequal(name) {
+    // Use EWC data (has full HPS list, confirmed none registered at EWC)
+    if (EWC) {
+      const n = norm(name);
+      return EWC.hpsAthletes.find(h => norm(h.name) === n) || null;
+    }
+    if (NAT) {
+      const n = norm(name);
+      const all = [...(NAT.hpsPrequalFemale||[]), ...(NAT.hpsPrequalMale||[])];
+      return all.find(h => norm(h.name) === n) || null;
+    }
+    return null;
   }
 
   /* ── Overrides sync helpers ────────────────────────────────── */
@@ -136,10 +185,29 @@
   function enrichRow(r) {
     r._natQualifiedHere = isNatQualified(r.diveMeetsId, r.eventKey);
     r._natQualAllEvents = natQualEvents(r.diveMeetsId);
-    r._foreignEWC = isForeignEWC(r.athlete);
-    r._ewcAlreadyNat = isEWCAlreadyNatQual(r.athlete);
-    r._hpsPrequal = isHPSPrequal(r.athlete, r.gender);
-    r._nonDispAtEWC = Boolean(r._foreignEWC || (r._ewcAlreadyNat && r._ewcAlreadyNat.length > 0) || r.nonDisplacing);
+    r._foreignEWC       = isForeignEWC(r.athlete);
+    r._dualCitizen      = isDualCitizen(r.athlete);
+    r._ewcAlreadyNat    = isEWCAlreadyNatQual(r.athlete);
+    r._hpsPrequal       = isHPSPrequal(r.athlete);
+    const _zoneToEWC    = {A:'East',B:'East',C:'Central',D:'Central',E:'West',F:'West'};
+    const ewcMeet       = r.ewc || _zoneToEWC[r.zone] || null;
+    r._ewcRegistered    = isRegisteredAtEWC(r.athlete, ewcMeet);
+    r._ewcEntryEvents   = ewcEntryEvents(r.athlete, ewcMeet);
+    r._ewcMeet          = ewcMeet;
+    r._nonDispAtEWC = Boolean(
+      r._foreignEWC ||
+      (r._ewcAlreadyNat && r._ewcAlreadyNat.length > 0) ||
+      r.nonDisplacing
+    );
+    if (r._foreignEWC && !r.foreignDeclared) {
+      r.foreignDeclared = true;
+      r.nonDisplacing = true;
+      r._nonDispAtEWC = true;
+    }
+    if (r._dualCitizen && r._dualCitizen.dualOtherCountry && !r.dualOtherCountry) {
+      r.dualOtherCountry = true;
+      r.dualDeclared = true;
+    }
     return r;
   }
 
@@ -215,19 +283,34 @@
   function flagBadges(r) {
     const b = [];
     if (r.foreignDeclared || r._foreignEWC) b.push(`<span class="qvb qvb-foreign">Foreign</span>`);
-    if (r.hps) b.push(`<span class="qvb qvb-hps">HPS</span>`);
+    if (r.hps || r._hpsPrequal) b.push(`<span class="qvb qvb-hps">HPS</span>`);
     if (r.ymca) b.push(`<span class="qvb qvb-ymca">YMCA</span>`);
-    if (r.dualDeclared) b.push(`<span class="qvb qvb-dual">${r.dualOtherCountry?'Dual effect':'Dual'}</span>`);
-    if (r._ewcAlreadyNat?.length) b.push(`<span class="qvb qvb-nat">Already Nat's qual</span>`);
+    if (r._dualCitizen || r.dualDeclared) b.push(`<span class="qvb qvb-dual" title="${esc((r._dualCitizen?.federationRepresented)||'')}">${r.dualOtherCountry||r._dualCitizen?.dualOtherCountry?'Dual effect':'Dual'}</span>`);
+    if (r._ewcAlreadyNat?.length) b.push(`<span class="qvb qvb-nat">Already Nat\u2019s qual</span>`);
+    if (r._nonDispAtEWC && !r.nonDisplacing) b.push(`<span class="qvb qvb-nd">Non-displacing at E/W/C</span>`);
+    if (r.nonDisplacing && !r._nonDispAtEWC) b.push(`<span class="qvb qvb-nd">Non-displacing</span>`);
     if (r.declaredNotAttending) b.push(`<span class="qvb qvb-dna">Not attending</span>`);
     if (r.bumpIn) b.push(`<span class="qvb qvb-bump">Bump in</span>`);
     return b.join('');
   }
 
   function regStatus(r) {
+    // For zone/EWC rows: show whether athlete is registered at their EWC meet
+    const ewcMeet = r._ewcMeet || r.ewc || ({A:'East',B:'East',C:'Central',D:'Central',E:'West',F:'West'})[r.zone];
+    if (ewcMeet && EWC) {
+      // Non-displacing athletes (foreign, already-nat-qual) show a ghost icon
+      if (r._nonDispAtEWC && !r.nonDisplacing) {
+        return `<span title="Registered — non-displacing"><i class="ti ti-ghost reg-nd"></i></span>`;
+      }
+      const reg = r._ewcRegistered !== undefined ? r._ewcRegistered : isRegisteredAtEWC(r.athlete, ewcMeet);
+      if (reg) return `<i class="ti ti-check reg-yes" title="Registered at ${esc(ewcMeet)}"></i>`;
+      // Not registered — could still be coming (entries may not be final)
+      return `<i class="ti ti-x reg-no" title="Not in entry list"></i>`;
+    }
+    // For Nationals view: use JO qualifier list
     if (!NAT) return '';
     const qualified = isNatQualified(r.diveMeetsId, r.eventKey);
-    if (!qualified) return `<span class="reg-dot reg-none" title="Not in official qualifier list">—</span>`;
+    if (!qualified) return `<span class="reg-dot reg-none" title="Not in JO qualifier list">—</span>`;
     const confirmed = getConfirmedAttending(r.diveMeetsId);
     return confirmed
       ? `<i class="ti ti-check reg-yes" title="Confirmed attending"></i>`
@@ -337,6 +420,22 @@
             <div class="hps-pill ${hpsConfirmed?'on':''}" id="qv-hps-pill"><div class="hps-pip"></div></div>
             <span class="hps-lbl">${hpsConfirmed?'Confirmed attending':'Attendance unconfirmed'}</span>
           </div>
+        </div>` : ''}
+
+      ${r._dualCitizen ? `
+        <div class="panel-section">
+          <div class="panel-section-label">Dual citizenship — affects results</div>
+          <div class="trail-nd-note">Competed for <strong>${esc(r._dualCitizen.federationRepresented)}</strong></div>
+          <div class="trail-nd-note" style="font-size:10px;margin-top:2px">${esc(r._dualCitizen.events||'')}</div>
+        </div>` : ''}
+
+      ${r._ewcRegistered !== undefined ? `
+        <div class="panel-section">
+          <div class="panel-section-label">E/W/C registration</div>
+          ${r._ewcRegistered
+            ? `<div class="trail-reason good">Registered at ${esc(r._ewcMeet||'')} · ${r._ewcEntryEvents?.length||0} events</div>
+               <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${(r._ewcEntryEvents||[]).map(e=>`<span class="qvb qvb-ewc">${esc(e)}</span>`).join('')}</div>`
+            : `<div class="trail-reason" style="color:#c0392b">Not in entry list for ${esc(r._ewcMeet||'')}</div>`}
         </div>` : ''}
 
       ${r.bumpedBy?.length ? `
@@ -802,7 +901,7 @@
           <tbody>${athletes.map(a => {
             const alreadyEvts = isEWCAlreadyNatQual(a.name);
             const confirmed = getConfirmedAttending(a.diveMeetsId);
-            const hps = isHPSPrequal(a.name, '') ? true : false;
+            const hps = isHPSPrequal(a.name) ? true : false;
             const ewcEvts = alreadyEvts.filter(e => norm(e) === norm(a.eventKey)).length > 0;
             return `<tr>
               <td><div class="ath-name">${esc(a.name)}</div></td>
@@ -988,7 +1087,7 @@
 .team-col{font-size:11px;color:var(--color-text-secondary)}
 .score-col{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--color-text-primary)}
 .mono{font-family:var(--font-mono);font-size:12px}
-.reg-col{text-align:center}.reg-yes{color:#0a8f55;font-size:14px}.reg-pend{color:#b26a00;font-size:14px}.reg-none{color:var(--color-text-tertiary);font-size:14px}
+.reg-col{text-align:center}.reg-yes{color:#0a8f55;font-size:14px}.reg-pend{color:#b26a00;font-size:14px}.reg-no{color:#c0392b;font-size:14px}.reg-nd{color:#888780;font-size:14px}.reg-none{color:var(--color-text-tertiary);font-size:14px}
 /* Zone pills */
 .zone-pill{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
 .zone-A,.zone-B{background:#EEEDFE;color:#3C3489}
