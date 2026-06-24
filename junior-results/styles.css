@@ -598,6 +598,7 @@ input, select { font-family: inherit; }
 .pill-bump     { background: rgba(5,150,105,.1);   color: #047857; border-color: rgba(5,150,105,.2); }
 .pill-decline  { background: rgba(148,163,184,.1); color: #64748b; }
 .pill-review   { background: rgba(245,158,11,.1);  color: #b45309; border-color: rgba(245,158,11,.2); }
+.pill-petition { background: rgba(88,28,135,.1);   color: #5b1fa8; border-color: rgba(88,28,135,.2); }
 .pill-open-spot{ background: rgba(239,68,68,.1);   color: #dc2626; border-color: rgba(239,68,68,.2); }
 
 /* Mini badges */
