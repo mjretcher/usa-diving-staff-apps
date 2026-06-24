@@ -136,5 +136,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338510020-9c133f2d703ef",
+    "createdAt": "2026-06-24T22:01:50.020Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "78251",
+    "athleteName": "Elias Kuusela",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
