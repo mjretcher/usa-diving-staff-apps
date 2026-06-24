@@ -58,5 +58,18 @@
     "eventId": "",
     "eventName": "",
     "note": "Staff approved: dual affects results"
+  },
+  {
+    "id": "1782338462769-268a36527dbc98",
+    "createdAt": "2026-06-24T22:01:02.769Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "173631",
+    "athleteName": "Lucia Devault",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
