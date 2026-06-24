@@ -84,5 +84,18 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1782338472419-6a5718a7f9404",
+    "createdAt": "2026-06-24T22:01:12.419Z",
+    "active": true,
+    "type": "review",
+    "value": false,
+    "athleteId": "161806",
+    "athleteName": "Ana Svircic",
+    "eventId": "",
+    "eventName": "",
+    "note": "Confirmed dual declared, no effect on diving results",
+    "resolvedReview": true
   }
 ]
