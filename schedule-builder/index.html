@@ -836,7 +836,7 @@ window.addEventListener('beforeunload',()=>{if(S?.meet){saveS();if(S.currentLibr
 // ── TIMING ────────────────────────────────────────────────────────────
 function calcEvDur(ev){
   if(Number(ev.customDurationMinutes||0)>0)return{evMin:Number(ev.customDurationMinutes),rawMin:Number(ev.customDurationMinutes)};
-  const divers=Math.max(0,Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0));
+  const divers=Math.max(0,entryValue(ev));
   const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
   const spd=Math.max(0,Number(ev.secondsPerDive||ev.defaultSpd||35));
   const raw=(divers*dives*spd)/60;
@@ -1147,10 +1147,14 @@ function updEv(sessId,evId,field,value){
     const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
     const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
     const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','projectedDivers','finalDivers'];
-    ev[field]=nums.includes(field)?Number(value):value;
-    // Mirror projectedDivers/finalDivers into numberOfDivers for timing calc
+    // Entry counts: empty=unset(null), 0=real. Other numbers coerce normally.
+    if(field==='projectedDivers'||field==='finalDivers'){
+      ev[field]=(value===''||value==null)?null:Math.max(0,Number(value)||0);
+    } else {
+      ev[field]=nums.includes(field)?Number(value):value;
+    }
     if(field==='finalDivers'||field==='projectedDivers'){
-      ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
+      ev.numberOfDivers=entryValue(ev);
       if(ev.round==='Final')ev.autoFinals=false;
       if(ev.round==='Prelim'&&field==='finalDivers'){
         const prelimFinal=Number(ev.finalDivers||0);
@@ -1182,14 +1186,16 @@ async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();
 // ── RENDER CORE ───────────────────────────────────────────────────────
 function render(){
   initUI();
-  // Clear any stale drag indicators
   UI.draggedSessId=UI.draggedSessId||null;
-  // Capture scroll positions of the scrollable surfaces BEFORE we rebuild the DOM
-  const _tl=document.querySelector('.tl-body');
-  const _enp=document.querySelector('.enp-body');
-  const _scrollTl=_tl?_tl.scrollTop:0;
-  const _scrollEnp=_enp?_enp.scrollTop:0;
-  // Also remember which input was focused (entries grid) and its caret
+  // Capture scroll positions of EVERY scrollable surface by a stable selector,
+  // so nothing jumps when the DOM is rebuilt (timeline, entries, edit modal, etc).
+  const _scroll={};
+  document.querySelectorAll('.tl-body,.enp-body,.modal-body,.rp-body,.lib-body').forEach((el,i)=>{
+    // key by class + index so we can match the same element after re-render
+    const cls=el.className.split(' ')[0];
+    _scroll[cls+':'+i]=el.scrollTop;
+  });
+  // Remember focused input + caret
   const _act=document.activeElement;
   const _actId=_act&&_act.id?_act.id:null;
   const _selStart=_act&&_act.selectionStart!=null?_act.selectionStart:null;
@@ -1209,12 +1215,15 @@ function render(){
     ${UI.dialog?renderDialog():''}
   `;
   bindDrag();
-  // Focus dialog input when a prompt opens
   if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
-  // Restore scroll positions so editing doesn't jump you to the top
-  const ntl=document.querySelector('.tl-body');if(ntl&&_scrollTl)ntl.scrollTop=_scrollTl;
-  const nenp=document.querySelector('.enp-body');if(nenp&&_scrollEnp)nenp.scrollTop=_scrollEnp;
-  // Restore focus + caret to the same input if it still exists
+  // Restore scroll for every matched surface
+  const sel=document.querySelectorAll('.tl-body,.enp-body,.modal-body,.rp-body,.lib-body');
+  sel.forEach((el,i)=>{
+    const cls=el.className.split(' ')[0];
+    const v=_scroll[cls+':'+i];
+    if(v)el.scrollTop=v;
+  });
+  // Restore focus + caret
   if(_actId){const el=document.getElementById(_actId);if(el){try{el.focus({preventScroll:true});if(_selStart!=null&&el.setSelectionRange)el.setSelectionRange(_selStart,_selStart);}catch(e){}}}
 }
 
@@ -1591,21 +1600,23 @@ function renderEntriesPanel(timed){
       const split=ev.manualSplit&&!isPlatform(ev.apparatus);
       const dur=calcEvDur(ev);
       const isFinal=ev.round==='Final';
-      const proj=Number(ev.projectedDivers||0);
-      const finl=Number(ev.finalDivers||0);
-      const effective=finl||proj||0;
+      const projSet=ev.projectedDivers!=null&&ev.projectedDivers!=='';
+      const finlSet=ev.finalDivers!=null&&ev.finalDivers!=='';
+      const proj=projSet?Number(ev.projectedDivers):null;
+      const finl=finlSet?Number(ev.finalDivers):null;
+      const effective=entryValue(ev);
       const needsSplit=dur.rawMin>=3||effective>=40;
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
-      const usingFinal=finl>0;
+      const usingFinal=finlSet;
       rowsHtml+=`<tr>
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${proj>0?'on':''}" value="${proj||''}" placeholder="0" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finl>0?'on':''}" value="${finl||''}" placeholder="${proj||'—'}" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-using">${usingFinal?'<span class="feg-tag final">Final</span>':proj>0?'<span class="feg-tag proj">Proj</span>':''}</td>
+        <td class="feg-using">${finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':''}</td>
         <td class="feg-dives">${ev.numberOfDives||ev.defaultDives||0}<span class="feg-dives-lbl">dives</span></td>
         <td class="feg-split">${!isPlatform(ev.apparatus)?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
         <td class="feg-window">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
@@ -1638,25 +1649,34 @@ let _entryDirty=false;
 function setEntry(sessId,evId,field,value){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
   const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
-  ev[field]=Number(value)||0;
-  ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
-  // If the user typed into a FINALS event's number, mark it manually edited (stop auto-sync)
+  // Empty string = unset (null); any number including 0 is a real value
+  const v=(value===''||value==null)?null:Number(value);
+  ev[field]=(v==null||isNaN(v))?null:Math.max(0,v);
+  // Timeline divers: final takes precedence IF entered (incl 0); else projected IF entered; else 0
+  ev.numberOfDivers=entryValue(ev);
   if(ev.round==='Final'&&(field==='finalDivers'||field==='projectedDivers')){
     ev.autoFinals=false;
   }
-  // Live-reactive: if this is a PRELIM final count, sync the matching finals event
   if(ev.round==='Prelim'&&field==='finalDivers'){
     syncFinalsToPrelim(ev);
   }
   _entryDirty=true;
   saveS();
 }
+// The effective diver count an event uses for timing.
+// Final wins if it's been entered (including 0); otherwise projected (including 0); else 0.
+function entryValue(ev){
+  if(ev.finalDivers!=null&&ev.finalDivers!=='')return Number(ev.finalDivers)||0;
+  if(ev.projectedDivers!=null&&ev.projectedDivers!=='')return Number(ev.projectedDivers)||0;
+  return Number(ev.numberOfDivers)||0;
+}
 // Sync a finals event's entries from its matching prelim's FINAL count.
 // Rule: finals = min(12, prelimFinalCount) when prelim final < 12, else 12.
 // Only auto-updates finals events that haven't been manually edited (autoFinals=true).
 function syncFinalsToPrelim(prelimEv){
-  const prelimFinal=Number(prelimEv.finalDivers||0);
-  if(prelimFinal<=0)return;
+  // Only sync when the prelim final has actually been entered (incl. 0). Empty = don't touch.
+  if(prelimEv.finalDivers==null||prelimEv.finalDivers==='')return;
+  const prelimFinal=Number(prelimEv.finalDivers)||0;
   const target=prelimFinal<12?prelimFinal:12;
   // Find matching finals event(s) across all sessions (same group/gender/apparatus)
   S.sessions.forEach(sess=>{
