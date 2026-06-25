@@ -1501,6 +1501,7 @@ function renderGenerateModal(){
     <div class="modal-foot">
       <button class="btn" onclick="closeModal()">Close</button>
       <button class="btn" onclick="ui.modal='entries';render()">Edit entry counts</button>
+      <button class="btn" onclick="exportOperationsTimeline()" title="Full 16-col operations timeline">Ops Timeline</button>
       <button class="btn btn-green" onclick="exportExcel()" title="Download Excel (.xls)">Excel</button>
       <button class="btn btn-primary" onclick="window.print()">Print / PDF</button>
     </div>
@@ -1549,6 +1550,189 @@ function renderPrintPreview(timed,cfg){
 }
 
 // ── EXCEL EXPORT ──────────────────────────────────────────────────────
+
+// ── OPERATIONS TIMELINE EXPORT (full 16-col table) ───────────────────
+function exportOperationsTimeline(){
+  const timed=allTimedSessions();
+  const NAVY='#171F69',RED='#E31937',CYAN='#009AC7',LIGHT_BLUE='#D6EBF8',PINK='#FFF0F4',WHITE='#FFFFFF',GRAY='#F0F2F6',DARK='#1A1A2E';
+
+  function fmtDec(n){return Number(n||0).toFixed(1)}
+  function rowStyle(stripe){return stripe==='pink'?`background:${PINK}`:`background:${LIGHT_BLUE}`}
+  function th(txt,extra=''){return `<th style="background:${NAVY};color:${WHITE};border:1px solid #000;padding:5px 6px;font-size:11px;text-align:center;${extra}">${txt}</th>`}
+  function td(txt,extra=''){return `<td style="border:1px solid #888;padding:4px 6px;font-size:11px;text-align:center;${extra}">${esc(String(txt??''))}</td>`}
+  function tdLeft(txt,extra=''){return `<td style="border:1px solid #888;padding:4px 6px;font-size:11px;text-align:left;${extra}">${esc(String(txt??''))}</td>`}
+
+  let rows='';
+  const days=state.meet.days;
+  let sessNum=0;
+
+  days.forEach(day=>{
+    const daySessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.warmupStartMinutes-b.warmupStartMinutes);
+    if(!daySessions.length)return;
+    // Day separator row
+    rows+=`<tr><td colspan="16" style="background:${RED};color:${WHITE};font-weight:700;font-size:12px;text-align:center;border:1px solid #000;padding:5px;letter-spacing:.05em;text-transform:uppercase">${fullDate(day.date)}</td></tr>`;
+
+    let dayRowsDone=false;
+    daySessions.forEach((session,sIdx)=>{
+      const t=session.timing;
+      const isPrac=session.isPractice;
+      const stripe=sIdx%2===0?'blue':'pink';
+      const bg=stripe==='blue'?LIGHT_BLUE:PINK;
+      const sessLabel=isPrac?(session.title||'Open Practice'):`Session ${getSessionNumber(session,timed)}`;
+
+      // Session header row
+      rows+=`<tr style="background:${NAVY}"><td colspan="16" style="background:${NAVY};color:${WHITE};font-weight:700;font-size:12px;text-align:left;border:1px solid #000;padding:5px 8px">${esc(sessLabel)}</td></tr>`;
+
+      if(isPrac){
+        const ev=session.events[0]||{};
+        const dur=Number(ev.customDurationMinutes||0);
+        rows+=`<tr style="${rowStyle(stripe)}">
+          ${td('',`background:${NAVY};color:${WHITE}`)}
+          ${td('Practice')}
+          ${tdLeft(ev.customLabel||session.title||'Open Practice','font-weight:500')}
+          ${td('')}${td('')}${td('')}${td('')}${td('')}
+          ${td(fmtDec(dur))}
+          ${td(fmt12(t.eventStartMinutes))}
+          ${td(fmt12(t.sessionEndMinutes))}
+          ${td('')}${td('')}${td('')}
+          ${td(fmt12(t.eventStartMinutes))}
+          ${td(fmt12(t.sessionEndMinutes))}
+        </tr>`;
+        return;
+      }
+
+      // Intro block if present
+      const intro=Number(session.introMinutes||0);
+      if(intro>0){
+        rows+=`<tr style="${rowStyle(stripe)}">
+          ${td('',`background:${NAVY};color:${WHITE}`)}
+          ${td('Intro')}
+          ${tdLeft('Introductions / Ceremony','font-style:italic')}
+          ${td('')}${td('')}${td('')}${td('')}${td('')}
+          ${td(fmtDec(intro))}
+          ${td('')}${td('')}
+          ${td(session.warmupMinutes||0)}
+          ${td(fmt12(t.warmupStartMinutes))}
+          ${td(fmt12(t.warmupEndMinutes))}
+          ${td(fmt12(t.warmupStartMinutes-intro))}
+          ${td(fmt12(t.warmupStartMinutes))}
+        </tr>`;
+      }
+
+      // Events
+      (t.events||[]).forEach((ev,eIdx)=>{
+        const dur=calcEventDuration(ev);
+        const isSplit=ev.manualSplit&&!isPlatform(ev.apparatus);
+        const rotation=isSplit?splitPanelRotation(ev):'';
+        const roundBg=ev.round==='Final'?'#FFF0F0':ev.round==='Prelim'?'#EFF9F3':ev.round==='Semifinal'?'#F5F0FF':'#EEF3FD';
+        rows+=`<tr style="${rowStyle(stripe)}">
+          ${td('',`background:${NAVY};color:${WHITE}`)}
+          ${td(ev.round||'',`background:${roundBg};font-weight:700;font-size:10px`)}
+          ${tdLeft(eventDisplayName(ev)+(isSplit?' (Split)':''),'font-weight:500')}
+          ${td(isSplit?'Split':'')}
+          ${tdLeft(rotation,'font-size:9px;line-height:1.3;max-width:200px')}
+          ${td(ev.numberOfDives||ev.defaultDives||0,`background:${GRAY};font-weight:700`)}
+          ${td(ev.numberOfDivers||0,`background:${GRAY};font-weight:700`)}
+          ${td(ev.secondsPerDive||ev.defaultSpd||0,`background:${GRAY};font-weight:700`)}
+          ${td(fmtDec(dur.eventMinutes))}
+          ${td('')}${td('')}
+          ${td(session.warmupMinutes||0,`font-weight:700`)}
+          ${td(fmt12(t.warmupStartMinutes),`font-weight:700`)}
+          ${td(fmt12(t.warmupEndMinutes),`font-weight:700`)}
+          ${td(fmt12(ev.eventStartMinutes),`font-weight:700;background:${CYAN};color:${WHITE}`)}
+          ${td(fmt12(ev.eventEndMinutes),`font-weight:700;background:${CYAN};color:${WHITE}`)}
+        </tr>`;
+      });
+
+      // Awards row if enabled
+      if(session.awardsEnabled){
+        rows+=`<tr style="${rowStyle(stripe)}">
+          ${td('',`background:${NAVY};color:${WHITE}`)}
+          ${td('Awards',`background:#FFF8EC;font-weight:700`)}
+          ${tdLeft('Awards ceremony','font-style:italic')}
+          ${td('')}${td('')}${td('')}${td('')}${td('')}
+          ${td('15.0')}
+          ${td('')}${td('')}${td('')}${td('')}${td('')}
+          ${td(fmt12(t.competitiveEnd||t.sessionEndMinutes-15),`font-weight:700`)}
+          ${td(fmt12(t.sessionEndMinutes),`font-weight:700`)}
+        </tr>`;
+      }
+    });
+  });
+
+  // Assemble full HTML
+  const logoPath='../shared/images/logo-color-horizontal.png';
+  const html=`<html><head><meta charset="UTF-8">
+<style>
+body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0}
+table{border-collapse:collapse;width:100%}
+@media print{
+  .no-print{display:none}
+  body{margin:0}
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid}
+}
+</style></head><body>
+<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:3px solid ${NAVY};margin-bottom:12px">
+  <img src="${logoPath}" alt="USA Diving" style="height:40px;width:auto" />
+  <div>
+    <div style="font-size:18px;font-weight:700;color:${NAVY}">${esc(state.meet.name)}</div>
+    <div style="font-size:12px;color:#666">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''} · Operations Timeline</div>
+  </div>
+</div>
+<table>
+  <thead>
+    <tr>
+      ${th('Day / Session','min-width:90px')}
+      ${th('Round','min-width:60px')}
+      ${th('Event','min-width:160px;text-align:left')}
+      ${th('Format')}
+      ${th('Panel Rotation','min-width:160px;text-align:left')}
+      ${th('# Dives',`background:${CYAN};min-width:50px`)}
+      ${th('# Divers',`background:${CYAN};min-width:55px`)}
+      ${th('Sec / Dive',`background:${CYAN};min-width:60px`)}
+      ${th('Event Time (min)')}
+      ${th('Practice Start')}
+      ${th('Practice End')}
+      ${th('Warm-Up (min)')}
+      ${th('Warm-Up Start')}
+      ${th('Warm-Up End')}
+      ${th('Event Start',`background:${RED};min-width:70px`)}
+      ${th('Event End',`background:${RED};min-width:70px`)}
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div style="margin-top:12px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">
+  USA Diving · ${esc(state.meet.name)} · Operations Timeline · Generated ${new Date().toLocaleDateString()}
+</div>
+</body></html>`;
+
+  const blob=new Blob([html],{type:'application/vnd.ms-excel'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`${state.meet.name.replace(/[^a-z0-9]/gi,'-')}-operations-timeline.xls`;
+  a.click();URL.revokeObjectURL(a.href);
+  showToast('Operations timeline downloaded');
+}
+
+function splitPanelRotation(ev){
+  const rotations={
+    springboard:{
+      Girls:{'Group A':{dives:9,pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group B':{dives:8,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{dives:7,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{dives:6,pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},
+      Boys:{'Group A':{dives:10,pA:'Rounds 1,2,3,7,8',pB:'Rounds 4,5,6,9,10'},'Group B':{dives:9,pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group C':{dives:8,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group D':{dives:6,pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},
+    },
+    platform:{
+      Girls:{'Group A':{dives:8,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group B':{dives:7,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group C':{dives:6,pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'},'Group D':{dives:6,pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},
+      Boys:{'Group A':{dives:9,pA:'Rounds 1,2,5,6,7',pB:'Rounds 3,4,8,9'},'Group B':{dives:8,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{dives:7,pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{dives:6,pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},
+    },
+  };
+  const type=isPlatform(ev.apparatus)?'platform':'springboard';
+  const r=rotations[type]?.[ev.gender]?.[ev.level];
+  if(!r)return'Review manually';
+  return`Panel A: ${r.pA} | Panel B: ${r.pB}`;
+}
+
 function exportExcel(){
   const timed=allTimedSessions();
   let html=`<html><head><meta charset="UTF-8"><style>
