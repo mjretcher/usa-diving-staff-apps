@@ -404,6 +404,23 @@ button{cursor:pointer;border:none;background:none}
 .lib-card-acts{flex-shrink:0}
 /* Section label alias (JS renders lib-sec-lbl, CSS had lib-seclbl) */
 .lib-sec-lbl{font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px;margin:14px 0 7px}
+/* New library architecture: top tabs */
+.lib-toptabs{display:flex;gap:4px;padding:4px;background:var(--surf2);border-radius:10px;margin-bottom:14px}
+.lib-toptab{flex:1;height:36px;padding:0 14px;border-radius:7px;font-size:13px;font-weight:600;border:none;background:transparent;color:var(--tx2);cursor:pointer;transition:.14s;display:flex;align-items:center;justify-content:center;gap:6px}
+.lib-toptab:hover{color:var(--tx);background:rgba(255,255,255,.04)}
+.lib-toptab.active{background:var(--surf);color:var(--navy);font-weight:700;box-shadow:0 1px 4px rgba(23,31,105,.1)}
+.lib-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--navy);color:#fff;font-size:10px;font-weight:700}
+.lib-toptab.active .lib-count{background:var(--red)}
+.lib-note{font-size:11px;color:var(--tx3);padding:6px 10px;background:var(--surf2);border-radius:6px;margin-bottom:14px;line-height:1.5}
+.lib-pill-ct{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--bd3);color:var(--tx3);font-size:9px;font-weight:700;margin-left:3px}
+.lib-ftab.active .lib-pill-ct{background:#fff;color:var(--navy)}
+.lib-act.danger{color:var(--final);border-color:var(--final-bd);padding:0 9px;font-size:13px;line-height:1}
+.lib-act.danger:hover{background:var(--final);color:#fff;border-color:var(--final)}
+/* Folder picker in save dialog */
+.folder-picker{display:flex;flex-direction:column;gap:5px}
+.folder-pick{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:7px;font-size:12.5px;font-weight:600;border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx2);cursor:pointer;transition:.12s;text-align:left}
+.folder-pick:hover{background:var(--surf2);border-color:var(--bd3)}
+.folder-pick.active{background:var(--navy);border-color:var(--navy);color:#fff}
 
 .tog{position:relative;width:34px;height:18px;flex-shrink:0}
 .tog input{opacity:0;width:0;height:0}
@@ -839,11 +856,25 @@ const EV_TIMING=new Proxy({},{get(_,name){
   return{dives:rec?rec.full:6,spd:rulebookSpd(level,app)};
 }});
 const LIB_FOLDERS={
-  'Regionals & Zones':{icon:'🌊',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
+  'Zone Championships':{icon:'🌊',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
   'East / West / Central':{icon:'🗺️',ids:['saved-2026-east-championship','saved-2026-west-championship','saved-2026-central-championship']},
   'Junior Nationals':{icon:'🥇',ids:['saved-2026-jr-nationals','saved-2026-combined']},
   'Senior / USA Nationals':{icon:'🇺🇸',ids:['saved-2026-nationals','saved-2026-combined']},
 };
+// Folders available for user saves (includes catch-all "Other")
+const SAVE_FOLDERS=['Zone Championships','East / West / Central','Junior Nationals','Senior / USA Nationals','Other'];
+const SAVE_FOLDER_ICONS={'Zone Championships':'🌊','East / West / Central':'🗺️','Junior Nationals':'🥇','Senior / USA Nationals':'🇺🇸','Other':'📌'};
+// Infer a folder from a saved schedule when none is stored (legacy saves)
+function inferFolder(item){
+  if(item.folder)return item.folder;
+  const mt=(item.meetType||'').toLowerCase();
+  const nm=(item.name||'').toLowerCase();
+  if(mt==='zone')return 'Zone Championships';
+  if(mt==='eastwestcentral'||/east|west|central/.test(nm))return 'East / West / Central';
+  if(/junior/.test(nm))return 'Junior Nationals';
+  if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
+  return 'Other';
+}
 const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
@@ -875,18 +906,35 @@ async function nq(sql,params=[]){
 function scheduleSave(){clearTimeout(saveTimer);setSyncDot('saving');saveTimer=setTimeout(doSave,3000)}
 async function doSave(){
   if(!S.currentLibraryId)return;
-  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,data,updated_at)VALUES($1,$2,$3,$4,$5,$6::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,data=EXCLUDED.data,updated_at=now()`,[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;setSyncDot('ok');}catch(e){sync.err=e.message;setSyncDot('error')}
+  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;setSyncDot('ok');}catch(e){sync.err=e.message;setSyncDot('error')}
 }
-async function saveToNeon(name){
-  const id=S.currentLibraryId||uid();S.currentLibraryId=id;setSyncDot('saving');
-  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,data,updated_at)VALUES($1,$2,$3,$4,$5,$6::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,data=EXCLUDED.data,updated_at=now()`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;saveS();setSyncDot('ok');toast('Saved to cloud ✓');startSync();saveVersion('Manual save');}
+async function saveToNeon(name,folder){
+  const id=S.currentLibraryId||uid();S.currentLibraryId=id;
+  if(folder)S.libraryFolder=folder;
+  setSyncDot('saving');
+  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;saveS();setSyncDot('ok');toast('Saved to cloud ✓');startSync();saveVersion('Manual save');}
   catch(e){sync.err=e.message;setSyncDot('error');toast('Cloud save failed — saved locally');}
 }
-async function loadNeonLib(){try{const r=await nq(`SELECT id,name,meet_type,publish_status,updated_at FROM schedule_builder.schedules ORDER BY updated_at DESC LIMIT 50`);return(r.rows||[]).map(row=>({id:row[0],name:row[1],meetType:row[2],publishStatus:row[3],savedAt:row[4],fromNeon:true}));}catch{return[]}}
+async function loadNeonLib(){
+  try{
+    // Try with folder column first
+    let r;
+    try{r=await nq(`SELECT id,name,meet_type,publish_status,updated_at,folder FROM schedule_builder.schedules ORDER BY updated_at DESC LIMIT 100`);}
+    catch{r=await nq(`SELECT id,name,meet_type,publish_status,updated_at FROM schedule_builder.schedules ORDER BY updated_at DESC LIMIT 100`);}
+    return(r.rows||[]).map(row=>({id:row[0],name:row[1],meetType:row[2],publishStatus:row[3],savedAt:row[4],folder:row[5]||null,fromNeon:true}));
+  }catch{return[]}
+}
 async function loadFromNeon(id,opts={}){
-  try{const r=await nq(`SELECT data,updated_at FROM schedule_builder.schedules WHERE id=$1`,[id]);const rows=r.rows||[];if(!rows.length)return null;
+  try{
+    // Try with folder column; fall back if column doesn't exist yet
+    let r;
+    try{r=await nq(`SELECT data,updated_at,folder FROM schedule_builder.schedules WHERE id=$1`,[id]);}
+    catch{r=await nq(`SELECT data,updated_at FROM schedule_builder.schedules WHERE id=$1`,[id]);}
+    const rows=r.rows||[];if(!rows.length)return null;
     const loaded=typeof rows[0][0]==='string'?JSON.parse(rows[0][0]):rows[0][0];
-    S=loaded;S.currentLibraryId=id;saveS();lastSynced=new Date(rows[0][1]).toISOString();
+    S=loaded;S.currentLibraryId=id;
+    if(rows[0][2])S.libraryFolder=rows[0][2];
+    saveS();lastSynced=new Date(rows[0][1]).toISOString();
     if(!opts.silent){UI.modal=null;initUI();render();toast('Schedule loaded');}else render();return loaded;}
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
@@ -1170,7 +1218,8 @@ function buildCatalog(meetType){
 // ── UI STATE ──────────────────────────────────────────────────────────
 let UI={
   dayId:'',modal:null,editSessId:null,entriesOpen:false,entriesDayId:'',
-  entriesExpanded:[],entriesShowAll:false,previewOpen:false,libFolder:'Regionals & Zones',
+  entriesExpanded:[],entriesShowAll:false,previewOpen:false,
+  libTab:'templates',libFolder:'Zone Championships',savesFolder:'all',
   neonLib:[],neonLibLoading:false,genAud:'athletes',
   pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
   moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
@@ -1464,11 +1513,53 @@ function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
 function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
-function saveSchedule(){askPrompt({title:'Save schedule',message:'Name this schedule to save it.',placeholder:'Schedule name',defaultValue:S.meet.name||'Schedule',confirmText:'Save',onConfirm:(name)=>{if(!name)return;_doSaveSchedule(name);}});}
-async function _doSaveSchedule(name){S.meet.name=name;try{await saveToNeon(name)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}render()}
+function saveSchedule(){
+  // If already saved (has cloud id and folder), just push an update silently
+  if(S.currentLibraryId&&S.libraryFolder){
+    saveToNeon(S.meet.name,S.libraryFolder);
+    return;
+  }
+  // Otherwise prompt for name + folder
+  const defaultFolder=inferFolder({name:S.meet.name,meetType:S.meet.meetType,folder:S.libraryFolder});
+  UI.modal='saveDialog';
+  UI.saveDialogName=S.meet.name||'Schedule';
+  UI.saveDialogFolder=defaultFolder;
+  render();
+}
+function saveDialogConfirm(){
+  const name=(UI.saveDialogName||'').trim();
+  const folder=UI.saveDialogFolder||'Other';
+  if(!name){toast('Name required');return;}
+  UI.modal=null;
+  _doSaveSchedule(name,folder);
+}
+async function _doSaveSchedule(name,folder){
+  S.meet.name=name;
+  S.libraryFolder=folder;
+  try{await saveToNeon(name,folder)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,folder,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}
+  render();
+}
 function loadBuiltin(id){askConfirm({title:'Load template?',message:'Your current work will be replaced. Save it first if you want to keep it.',confirmText:'Load template',danger:true,onConfirm:()=>_doLoadBuiltin(id)});}
-function _doLoadBuiltin(id){const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;S=JSON.parse(JSON.stringify(item.schedule));S.currentLibraryId='';saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name)}
-async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();try{UI.neonLib=await loadNeonLib()}catch{UI.neonLib=[]}UI.neonLibLoading=false;render()}
+function _doLoadBuiltin(id){
+  const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;
+  S=JSON.parse(JSON.stringify(item.schedule));
+  // Clear so this is a fresh editable copy (template stays untouched).
+  // User must "Save to cloud" to begin autosaving — keeps templates clean.
+  S.currentLibraryId='';
+  S.libraryFolder='';
+  saveS();UI.modal=null;initUI();render();
+  toast('Loaded: '+item.name+' — click Save to cloud to begin autosave');
+}
+async function openLibrary(){
+  UI.modal='library';UI.neonLibLoading=true;
+  render();
+  try{UI.neonLib=await loadNeonLib()}catch{UI.neonLib=[]}
+  UI.neonLibLoading=false;
+  // First-time-open this session: if there are saves, default to Saves tab so user sees them
+  const local=JSON.parse(localStorage.getItem(LK)||'[]');
+  if(!UI._libOpened&&(UI.neonLib.length||local.length)){UI.libTab='saves';UI._libOpened=true;}
+  render();
+}
 
 // ── RENDER CORE ───────────────────────────────────────────────────────
 function render(){
@@ -2412,7 +2503,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -2533,27 +2624,114 @@ function renderPickerModal(timed){
 
 function renderLibraryModal(){
   const local=JSON.parse(localStorage.getItem(LK)||'[]');
+  const tab=UI.libTab||'templates';
+  // Top-level tabs
+  const topTabs=`
+    <div class="lib-toptabs">
+      <button class="lib-toptab ${tab==='templates'?'active':''}" onclick="UI.libTab='templates';render()">📚 Templates</button>
+      <button class="lib-toptab ${tab==='saves'?'active':''}" onclick="UI.libTab='saves';render()">📁 My Saved Meets${UI.neonLib.length?` <span class="lib-count">${UI.neonLib.length+local.length}</span>`:local.length?` <span class="lib-count">${local.length}</span>`:''}</button>
+    </div>`;
+  let body='';
+  if(tab==='templates'){
+    body=renderLibraryTemplates();
+  }else{
+    body=renderLibrarySaves(local);
+  }
+  return`<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px);display:flex;flex-direction:column">
+    <div class="modal-hd"><span class="modal-title">Schedule library</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      ${topTabs}
+      ${body}
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Close</button>${tab==='saves'?`<button class="btn btn-p" onclick="saveSchedule()">Save current to cloud</button>`:''}</div>
+  </div>`;
+}
+function renderLibraryTemplates(){
   const byId={};BUILTIN_SCHEDULES.forEach(x=>byId[x.id]=x);
-  if(!UI.libFolder)UI.libFolder='Regionals & Zones';
+  if(!UI.libFolder||!LIB_FOLDERS[UI.libFolder])UI.libFolder='Zone Championships';
   const folderTabs=Object.keys(LIB_FOLDERS).map(name=>`<button class="lib-ftab ${UI.libFolder===name?'active':''}" onclick="UI.libFolder=this.dataset.f;render()" data-f="${esc(name)}">${LIB_FOLDERS[name].icon} ${name}</button>`).join('');
   const cfg=LIB_FOLDERS[UI.libFolder]||Object.values(LIB_FOLDERS)[0];
   const seen=new Set();const items=(cfg.ids||[]).map(id=>byId[id]).filter(x=>x&&!seen.has(x.id)&&seen.add(x.id));
-  return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Schedule library</span><button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="modal-body">
-      <div class="lib-folder-tabs">${folderTabs}</div>
-      ${items.length?`<div class="lib-list">${items.map(item=>{const sc=item.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;return`<div class="lib-card"><div class="lib-card-icon">${cfg.icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${sc.meet.days.length} days · ${comp} comp sessions</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="loadBuiltin('${item.id}')">Load</button></div></div>`}).join('')}</div>`:`<div class="empty"><div class="empty-title">No templates in this folder</div></div>`}
-      ${ui_neonLib_section(local)}
-    </div>
-    <div class="modal-foot"><button class="btn" onclick="closeModal()">Close</button><button class="btn btn-p" onclick="saveSchedule()">Save to cloud</button></div>
-  </div>`;
+  return`
+    <div class="lib-note">Read-only meet templates. Loading one creates a fresh editable copy — your work won't change the template.</div>
+    <div class="lib-folder-tabs">${folderTabs}</div>
+    ${items.length?`<div class="lib-list">${items.map(item=>{const sc=item.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;return`<div class="lib-card"><div class="lib-card-icon">${cfg.icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${sc.meet.days.length} days · ${comp} comp sessions · template</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="loadBuiltin('${item.id}')">Load</button></div></div>`}).join('')}</div>`:`<div class="empty"><div class="empty-title">No templates in this folder</div></div>`}
+  `;
 }
-function ui_neonLib_section(local){
-  let out='';
-  if(UI.neonLibLoading)out+=`<div style="font-size:12px;color:var(--tx3);padding:10px 0">Loading cloud schedules…</div>`;
-  if(UI.neonLib.length){out+=`<div class="lib-sec-lbl">Cloud saves</div><div class="lib-list">${UI.neonLib.map(item=>`<div class="lib-card"><div class="lib-card-icon">☁</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${item.publishStatus||'draft'} · ${item.savedAt?new Date(item.savedAt).toLocaleDateString():''}</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="loadFromNeon('${item.id}')">Load</button></div></div>`).join('')}</div>`;}
-  if(local.length){out+=`<div class="lib-sec-lbl">Local saves</div><div class="lib-list">${local.map((item,i)=>`<div class="lib-card"><div class="lib-card-icon">💾</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">Local · ${new Date(item.savedAt).toLocaleDateString()}</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="(()=>{const lib=JSON.parse(localStorage.getItem('${LK}')||'[]');S=JSON.parse(JSON.stringify(lib[${i}]?.schedule||{}));saveS();UI.modal=null;initUI();render()})()">Load</button></div></div>`).join('')}</div>`;}
-  return out;
+function renderLibrarySaves(local){
+  if(!UI.savesFolder)UI.savesFolder='all';
+  // Group cloud saves by folder
+  const cloudSaves=UI.neonLib.map(it=>({...it,folder:inferFolder(it),source:'cloud'}));
+  const localSaves=local.map((it,i)=>({...it,folder:inferFolder(it),source:'local',_localIdx:i}));
+  const all=[...cloudSaves,...localSaves];
+  const folderCounts={all:all.length};
+  SAVE_FOLDERS.forEach(f=>folderCounts[f]=all.filter(x=>x.folder===f).length);
+  // Folder filter pills
+  const folderPills=`<button class="lib-ftab ${UI.savesFolder==='all'?'active':''}" onclick="UI.savesFolder='all';render()">All${folderCounts.all?` <span class="lib-pill-ct">${folderCounts.all}</span>`:''}</button>`+
+    SAVE_FOLDERS.map(f=>`<button class="lib-ftab ${UI.savesFolder===f?'active':''}" onclick="UI.savesFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}${folderCounts[f]?` <span class="lib-pill-ct">${folderCounts[f]}</span>`:''}</button>`).join('');
+  const filtered=UI.savesFolder==='all'?all:all.filter(x=>x.folder===UI.savesFolder);
+  // Sort: cloud first, then by date desc
+  filtered.sort((a,b)=>{
+    if(a.source!==b.source)return a.source==='cloud'?-1:1;
+    return new Date(b.savedAt||0)-new Date(a.savedAt||0);
+  });
+  let listHtml='';
+  if(UI.neonLibLoading){
+    listHtml+=`<div style="font-size:12px;color:var(--tx3);padding:10px 0">Loading cloud schedules…</div>`;
+  }
+  if(filtered.length){
+    listHtml+=`<div class="lib-list">${filtered.map(item=>{
+      const icon=item.source==='cloud'?'☁':'💾';
+      const fIcon=SAVE_FOLDER_ICONS[item.folder]||'📌';
+      const dt=item.savedAt?fmtRelativeTime(item.savedAt):'';
+      const loadCall=item.source==='cloud'?`loadFromNeon('${item.id}')`:`loadLocalSave(${item._localIdx})`;
+      const delCall=item.source==='cloud'?`deleteCloudSave('${item.id}','${esc(item.name).replace(/'/g,"\\'")}')`:`deleteLocalSave(${item._localIdx})`;
+      return`<div class="lib-card"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${item.source==='cloud'?'Cloud':'Local'} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" onclick="${delCall}" title="Delete">✕</button></div></div>`;
+    }).join('')}</div>`;
+  }else if(!UI.neonLibLoading){
+    listHtml+=`<div class="empty"><div class="empty-title">No saved meets ${UI.savesFolder==='all'?'yet':'in this folder'}</div><div class="empty-sub">${UI.savesFolder==='all'?'Click "Save current to cloud" below after editing a schedule.':'Try "All" to see saves in other folders.'}</div></div>`;
+  }
+  return`
+    <div class="lib-note">Your saved meets — separate from templates. Loading one resumes autosave on that save record.</div>
+    <div class="lib-folder-tabs">${folderPills}</div>
+    ${listHtml}
+  `;
+}
+function loadLocalSave(i){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const item=lib[i];if(!item)return;
+  askConfirm({title:'Load saved meet?',message:'Your current working copy will be replaced.',confirmText:'Load',onConfirm:()=>{
+    S=JSON.parse(JSON.stringify(item.schedule||{}));
+    if(item.folder)S.libraryFolder=item.folder;
+    saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
+  }});
+}
+function deleteLocalSave(i){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const item=lib[i];if(!item)return;
+  askConfirm({title:'Delete local save?',message:'Delete "'+item.name+'"? This cannot be undone.',confirmText:'Delete',danger:true,onConfirm:()=>{
+    lib.splice(i,1);localStorage.setItem(LK,JSON.stringify(lib));render();toast('Deleted');
+  }});
+}
+function deleteCloudSave(id,name){
+  askConfirm({title:'Delete cloud save?',message:'Delete "'+name+'" from the cloud? This cannot be undone.',confirmText:'Delete',danger:true,onConfirm:async()=>{
+    try{await nq(`DELETE FROM schedule_builder.schedules WHERE id=$1`,[id]);UI.neonLib=UI.neonLib.filter(x=>x.id!==id);if(S.currentLibraryId===id){S.currentLibraryId='';saveS();}render();toast('Deleted from cloud');}
+    catch(e){toast('Could not delete: '+e.message);}
+  }});
+}
+function renderSaveDialogModal(){
+  const folder=UI.saveDialogFolder||'Other';
+  const name=UI.saveDialogName||'';
+  const folderOpts=SAVE_FOLDERS.map(f=>`<button class="folder-pick ${folder===f?'active':''}" onclick="UI.saveDialogFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}</button>`).join('');
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><span class="modal-title">Save schedule to cloud</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="fg"><label class="fl">Schedule name</label><input id="save-dialog-name" class="fi" value="${esc(name)}" oninput="UI.saveDialogName=this.value" placeholder="2026 USA Diving …" autofocus/></div>
+      <div class="fg"><label class="fl">Save to folder</label><div class="folder-picker">${folderOpts}</div></div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:8px">After saving, autosave will keep this save record current.</div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-p" onclick="saveDialogConfirm()">Save</button></div>
+  </div>`;
 }
 
 
