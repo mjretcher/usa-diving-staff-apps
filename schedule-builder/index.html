@@ -92,11 +92,11 @@ button{cursor:pointer}
 .sc.finals{border-left:4px solid var(--red)}
 
 /* Card header — always visible, clean */
-.sc-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
+.sc-hd{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none}
 .sc-hd:hover{background:rgba(0,0,0,.015)}
 
 /* Type badge — compact pill, left of title */
-.sc-badge{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
+.sc-badge{display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:3px 10px;border-radius:11px;font-size:10px;font-weight:700;letter-spacing:.03em;white-space:nowrap;flex-shrink:0;line-height:1}
 .sc-badge.prac{background:var(--g-prac);color:#fff}
 .sc-badge.training{background:var(--gray);color:#fff}
 .sc-badge.comp{background:var(--navy);color:#fff}
@@ -118,13 +118,13 @@ button{cursor:pointer}
 .sc-edit-btn:hover{background:var(--bg);color:var(--tx2);border-color:var(--bd2)}
 
 /* WARMUP ROW — always shown for comp sessions */
-.sc-wu{display:flex;align-items:center;gap:8px;padding:6px 14px;background:var(--g-wu-bg);border-top:1px solid var(--g-wu-bd);border-bottom:1px solid var(--g-wu-bd)}
+.sc-wu{display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--g-wu-bg);border-top:1px solid var(--g-wu-bd);border-bottom:1px solid var(--g-wu-bd)}
 .sc-wu-dot{width:8px;height:8px;border-radius:50%;background:var(--g-wu);flex-shrink:0}
 .sc-wu-label{font-size:11px;font-weight:600;color:var(--g-wu);flex:1}
 .sc-wu-time{font-size:11px;font-weight:600;color:var(--g-wu)}
 
 /* PRACTICE OPEN POOL ROW */
-.sc-pool{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--g-prac-bg);border-top:1px solid var(--g-prac-bd)}
+.sc-pool{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--g-prac-bg);border-top:1px solid var(--g-prac-bd)}
 .sc-pool-dot{width:8px;height:8px;border-radius:50%;background:var(--g-prac);flex-shrink:0}
 .sc-pool-label{font-size:12px;font-weight:600;color:var(--g-prac);flex:1}
 .sc-pool-time{font-size:12px;font-weight:600;color:var(--g-prac)}
@@ -140,7 +140,7 @@ button{cursor:pointer}
 
 /* EVENT ROWS — always visible on card */
 .sc-events{padding:2px 0 6px}
-.sc-ev{display:flex;align-items:center;gap:8px;padding:7px 14px;border-top:1px solid var(--bd);cursor:grab;transition:background .1s}
+.sc-ev{display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--bd);cursor:grab;transition:background .1s}
 .sc-ev:hover{background:var(--surf2)}
 .sc-ev.dragging{opacity:.4}
 .ev-drag{color:var(--tx3);font-size:13px;flex-shrink:0;opacity:.45;cursor:grab}
@@ -167,7 +167,7 @@ button{cursor:pointer}
 .ev-remove:hover{background:#FEE2E2;color:var(--red)}
 
 /* Card footer — buffer + add event */
-.sc-foot{display:flex;align-items:center;gap:6px;padding:7px 14px;border-top:1px solid var(--bd);background:var(--surf2)}
+.sc-foot{display:flex;align-items:center;gap:8px;padding:9px 16px;border-top:1px solid var(--bd);background:var(--surf2)}
 .sc-buf-label{font-size:10px;color:var(--tx3);flex-shrink:0}
 .buf-chips{display:flex;gap:3px}
 .buf-chip{height:20px;padding:0 7px;border-radius:10px;font-size:10px;font-weight:600;border:1px solid var(--bd2);background:transparent;color:var(--tx3)}
@@ -203,7 +203,31 @@ button{cursor:pointer}
 
 /* ENTRIES PANEL — slides in from right, replaces edit panel */
 .entries-panel{width:0;flex-shrink:0;overflow:hidden;border-left:1px solid var(--bd);background:var(--surf);transition:width .22s;display:flex;flex-direction:column}
-.entries-panel.open{width:520px}
+.entries-panel.open{width:680px}
+
+/* Entries panel — projected vs final */
+.enp-panel-wider.entries-panel.open{width:680px}
+.enp-sub-title{font-size:11px;color:var(--tx3);margin-top:2px;font-weight:500}
+.enp-legend{display:flex;align-items:center;gap:16px;padding:8px 16px;background:var(--surf2);border-bottom:1px solid var(--bd);flex-wrap:wrap;font-size:11px;color:var(--tx3)}
+.enp-legend-item{display:flex;align-items:center;gap:6px}
+.enp-leg-pill{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;letter-spacing:.04em}
+.enp-leg-pill.proj{background:#DBEAFE;color:#1D4ED8;border:1px solid #BFDBFE}
+.enp-leg-pill.final{background:#FEE2E2;color:#B91C1C;border:1px solid #FECACA}
+.enp-match-all-btn{height:22px;padding:0 10px;border-radius:5px;font-size:10px;font-weight:600;border:1px solid var(--bd2);background:transparent;color:var(--tx2);margin-left:auto}
+.enp-match-all-btn:hover{background:var(--surf);border-color:var(--navy);color:var(--navy)}
+.enp-day-grp{font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px;padding:10px 16px 4px;background:var(--surf2);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:3}
+.enp-sess-wrap{border-bottom:1px solid var(--bd)}
+.enp-inp.proj{border-color:#BFDBFE}
+.enp-inp.proj:focus{border-color:#3B82F6;box-shadow:0 0 0 3px rgba(59,130,246,.1)}
+.enp-inp.proj.filled-p{background:#EFF6FF;border-color:#3B82F6;color:#1D4ED8;font-weight:600}
+.enp-inp.final{border-color:#FECACA}
+.enp-inp.final:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(227,25,55,.1)}
+.enp-inp.final.filled-f{background:#FEF2F2;border-color:var(--red);color:var(--red);font-weight:600}
+.enp-inp.final.matches{background:#F0FDF4;border-color:var(--g-prac);color:var(--g-prac)}
+.enp-inp.small{width:46px}
+.enp-copy-btn{width:24px;height:24px;border-radius:5px;border:1px solid var(--bd2);background:var(--surf2);color:var(--tx2);font-size:13px;cursor:pointer;font-weight:700}
+.enp-copy-btn:hover{background:var(--navy);color:#fff;border-color:var(--navy)}
+
 .enp-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bd);flex-shrink:0}
 .enp-title{font-size:15px;font-weight:700}
 .enp-close{width:28px;height:28px;border-radius:6px;border:1px solid var(--bd);background:transparent;color:var(--tx3);font-size:16px;display:flex;align-items:center;justify-content:center}
@@ -380,6 +404,21 @@ button{cursor:pointer}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 @media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}.pp{max-height:none;padding:0}}
+
+/* Day tab drop targets */
+.dp.drop-target{background:rgba(34,197,94,.25);border-color:#86EFAC;color:#fff;box-shadow:0 0 0 2px rgba(34,197,94,.4)}
+/* Move dialog */
+.move-dialog{position:fixed;top:60px;right:20px;width:280px;background:var(--surf);border-radius:var(--r-lg);box-shadow:var(--sh-lg);z-index:700;overflow:hidden;border:1px solid var(--bd2)}
+.move-dialog-hd{padding:12px 14px 8px;border-bottom:1px solid var(--bd);font-size:12px;font-weight:700;color:var(--tx)}
+.move-dialog-sub{font-size:11px;color:var(--tx3);font-weight:400;margin-top:2px}
+.move-dialog-body{padding:10px 14px}
+.move-day-list,.move-sess-list{display:flex;flex-direction:column;gap:4px}
+.move-day-btn,.move-sess-btn{padding:8px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--surf);color:var(--tx);font-size:12px;text-align:left;cursor:pointer;transition:.1s;display:flex;align-items:center;justify-content:space-between}
+.move-day-btn:hover,.move-sess-btn:hover{background:var(--surf2);border-color:var(--navy);color:var(--navy)}
+.move-day-btn.active,.move-sess-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.move-sess-meta{font-size:10px;color:var(--tx3);font-weight:400}
+.move-sess-btn.active .move-sess-meta,.move-sess-btn:hover .move-sess-meta{color:rgba(255,255,255,.65)}
+.move-foot{display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--bd);background:var(--surf2)}
 </style>
 </head>
 <body>
@@ -458,13 +497,37 @@ function startSync(){
   presT=setInterval(()=>S.currentLibraryId&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),8000);
   pollT=setInterval(async()=>{if(!S.currentLibraryId)return;try{const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced)await loadFromNeon(S.currentLibraryId,{silent:true});sync.ok=true;setSyncDot('ok');}catch(e){sync.ok=false;setSyncDot('error')}},8000);
 }
-function setSyncDot(s){const d=document.querySelector('.sync-pip'),l=document.querySelector('.sync-lbl');if(!d||!l)return;d.className='sync-pip'+(s==='saving'?' saving':s==='error'?' error':s==='offline'?' offline':'');l.textContent=s==='saving'?'Saving…':s==='error'?'Offline':s==='offline'?'Local only':'Synced'}
+let lastSavedAt=null;
+function fmtRelativeTime(iso){
+  if(!iso)return'';
+  const ms=Date.now()-new Date(iso).getTime();
+  if(ms<3000)return'just now';
+  if(ms<60000)return Math.floor(ms/1000)+'s ago';
+  if(ms<3600000)return Math.floor(ms/60000)+'m ago';
+  if(ms<86400000)return Math.floor(ms/3600000)+'h ago';
+  return new Date(iso).toLocaleDateString();
+}
+function setSyncDot(s){
+  const d=document.querySelector('.sync-pip'),l=document.querySelector('.sync-lbl');
+  if(!d||!l)return;
+  d.className='sync-pip'+(s==='saving'?' saving':s==='error'?' error':'');
+  if(s==='saving'){l.textContent='Saving…'}
+  else if(s==='error'){l.textContent='Connection lost'}
+  else if(s==='ok'){l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced);d.className='sync-pip'}
+  else{l.textContent='Saved locally'}
+}
+setInterval(()=>{
+  const l=document.querySelector('.sync-lbl');
+  if(l&&!l.textContent.startsWith('Saving')&&!l.textContent.startsWith('Connection')){
+    l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced||S.updatedAt);
+  }
+},15000);
 
 // ── STATE ─────────────────────────────────────────────────────────────
 function mkDay(off=0){const d=new Date();d.setDate(d.getDate()+off);return{id:uid(),date:d.toISOString().slice(0,10),openMinutes:390,closeMinutes:1200}}
 function mkInitial(){return{updatedAt:new Date().toISOString(),meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',days:[mkDay(0),mkDay(1),mkDay(2),mkDay(3)]},sessions:[],publishStatus:'draft',currentLibraryId:'',acknowledgedWarnings:[],outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true}}}
 function loadS(){try{const r=JSON.parse(localStorage.getItem(SK)||'');if(r?.meet&&Array.isArray(r.sessions))return r}catch{}return mkInitial()}
-function saveS(){S.updatedAt=new Date().toISOString();try{localStorage.setItem(SK,JSON.stringify(S))}catch{}}
+function saveS(){S.updatedAt=new Date().toISOString();lastSavedAt=S.updatedAt;try{localStorage.setItem(SK,JSON.stringify(S))}catch{}}
 let S=loadS();
 function upd(fn){fn(S);saveS();if(S.currentLibraryId)scheduleSave();render()}
 
@@ -535,9 +598,11 @@ function buildCatalog(meetType){
 // ── UI STATE ──────────────────────────────────────────────────────────
 let UI={
   dayId:'',modal:null,editSessId:null,entriesOpen:false,entriesDayId:'',
-  entriesExpanded:[],rightMode:'edit',libFolder:'Regionals & Zones',
+  entriesExpanded:[],entriesShowAll:false,rightMode:'edit',libFolder:'Regionals & Zones',
   neonLib:[],neonLibLoading:false,genAud:'athletes',
   pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
+  moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
+  draggedSessId:null,draggedEvFrom:null,
 };
 function initUI(){if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id}
 function openEdit(sessId){UI.editSessId=sessId;UI.entriesOpen=false;render()}
@@ -555,14 +620,67 @@ function addSession(dayId,isPractice){
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 function deleteSession(id){if(!confirm('Remove this session?'))return;if(UI.editSessId===id)UI.editSessId=null;upd(s=>{s.sessions=s.sessions.filter(x=>x.id!==id)})}
-function updSess(id,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===id);if(!sess)return;const nums=['warmupStartMinutes','warmupMinutes','rounding','introMinutes','bufferMinutes'];sess[field]=nums.includes(field)?Number(value):value})}
+function updSess(id,field,value){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
+    const nums=['warmupStartMinutes','warmupMinutes','rounding','introMinutes','bufferMinutes'];
+    const old=sess[field];
+    sess[field]=nums.includes(field)?Number(value):value;
+    // Cascade for time-affecting fields
+    if(['warmupStartMinutes','warmupMinutes','introMinutes','bufferMinutes','awardsEnabled'].includes(field)){
+      cascadeSession(s,sess.id);
+    }
+  });
+}
+
+// Cascade: after a session's timing changes, push subsequent same-day sessions
+// to start at endOfPrevious + buffer, but only if doing so doesn't move them BACKWARDS
+// (we never auto-move a session to an EARLIER time).
+function cascadeSession(stateSnap,changedId){
+  const all=stateSnap.sessions;
+  const sess=all.find(x=>x.id===changedId);
+  if(!sess)return;
+  const sameDay=all.filter(s=>s.dayId===sess.dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  // Find the index of the changed session
+  const idx=sameDay.findIndex(s=>s.id===changedId);
+  if(idx<0)return;
+  // Walk through sessions AFTER it
+  let prev=sess;
+  for(let i=idx+1;i<sameDay.length;i++){
+    const t=calcSessTimingFromObj(prev);
+    const minStart=t.sessionEndMinutes+Number(prev.bufferMinutes||0);
+    const curr=sameDay[i];
+    if(Number(curr.warmupStartMinutes)<minStart){
+      curr.warmupStartMinutes=ru(minStart,5);
+    }
+    prev=curr;
+  }
+}
+// Pure timing calc that doesn't read from S (used in cascade)
+function calcSessTimingFromObj(sess){return calcSessTiming(sess)}
 function addFlight(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;if(!sess.flights)sess.flights=[];const colors=['#171F69','#009AC7','#E31937','#16A34A','#D97706','#7C3AED'];sess.flights.push({id:uid(),name:`Flight ${sess.flights.length+1}`,durationMinutes:45,color:colors[sess.flights.length%colors.length]});const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot})}
 function updFlight(sessId,fid,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;const f=sess.flights.find(x=>x.id===fid);if(!f)return;f[field]=field==='durationMinutes'?Number(value):value;const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function removeFlight(sessId,fid){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;sess.flights=sess.flights.filter(f=>f.id!==fid);const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function addEvToSess(sessId,presetId,round){const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;const isFinal=round==='Final';const ev={id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,defaultDives:p.defaultDives,numberOfDivers:isFinal?12:0,numberOfDives:p.defaultDives,secondsPerDive:p.defaultSpd,defaultSpd:p.defaultSpd,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:2.5,customDurationMinutes:0,notes:''};upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events.push(ev)})}
 function removeEv(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events=sess.events.filter(e=>e.id!==evId)})}
-function updEv(sessId,evId,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;const ev=sess.events.find(e=>e.id===evId);if(!ev)return;const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes'];ev[field]=nums.includes(field)?Number(value):value})}
-function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus))ev.manualSplit=!ev.manualSplit})}
+function updEv(sessId,evId,field,value){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+    const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','projectedDivers','finalDivers'];
+    ev[field]=nums.includes(field)?Number(value):value;
+    // Mirror projectedDivers/finalDivers into numberOfDivers for timing calc
+    // Rule: if finalDivers set, use it; else projectedDivers; else numberOfDivers
+    if(field==='finalDivers'||field==='projectedDivers'){
+      ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
+    }
+    // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
+    if(['numberOfDivers','numberOfDives','secondsPerDive','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
+      cascadeSession(s,sessId);
+    }
+  });
+}
+function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;cascadeSession(s,sessId);}})}
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
@@ -583,6 +701,7 @@ function render(){
       ${UI.entriesOpen?renderEntriesPanel(timed):UI.editSessId?renderEditPanel(timed):''}
     </div>
     ${UI.modal?renderModal(timed):''}
+    ${UI.moveSessionId?renderMoveDialog():''}
   `;
   bindDrag();
 }
@@ -607,7 +726,7 @@ function renderBar(timed){
       <button class="bb" onclick="saveSchedule()">Save</button>
       <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
     </div>
-    <div class="bar-sync"><div class="sync-pip ${S.currentLibraryId?(sync.ok?'':'offline'):'offline'}"></div><span class="sync-lbl">${S.currentLibraryId?(sync.ok?'Synced':'Offline'):'Local only'}</span></div>
+    <div class="bar-sync"><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Connection lost':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
   </header>`;
 }
 
@@ -679,6 +798,7 @@ function renderCard(sess,timed,warns){
         <div class="sc-time-main">${f12(t.warmupStartMinutes)}</div>
         <div class="sc-time-range">–${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div>
       </div>
+      <button class="sc-edit-btn" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move to day/position" style="margin-right:4px">⇄</button>
       <button class="sc-edit-btn" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit">✎</button>
     </div>
 
@@ -828,51 +948,133 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
 function renderEntriesPanel(timed){
   const days=S.meet.days;
   const eDayId=UI.entriesDayId||days[0]?.id||'';
-  const sessions=timedForDay(eDayId).filter(s=>!s.isPractice);
-  const totalEvs=S.sessions.filter(s=>!s.isPractice).reduce((n,s)=>n+s.events.length,0);
-  const withDivers=S.sessions.filter(s=>!s.isPractice).reduce((n,s)=>n+s.events.filter(e=>Number(e.numberOfDivers||0)>0).length,0);
-  const dayTabs=days.map(d=>`<button class="enp-day-btn ${d.id===eDayId?'active':''}" onclick="UI.entriesDayId='${d.id}';render()">${shortDate(d.date).replace(/,.*/,'')}</button>`).join('');
-  const body=sessions.map(sess=>{
-    const t=sess.timing;const n=getSessNum(sess,timed);const isOpen=UI.entriesExpanded.includes(sess.id);
-    const hasFinals=sess.events.some(e=>e.round==='Final');
-    return`<div>
-      <div class="enp-sess-head ${hasFinals?'final-hd':'comp-hd'}" onclick="toggleEntriesSess('${sess.id}')">
-        <span class="enp-sess-label">Session ${n}${hasFinals?' — Finals':sess.events.some(e=>e.round==='Prelim')?' — Prelims':''} <span style="font-weight:400;opacity:.7">(${sess.events.length} events)</span></span>
-        <span class="enp-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
-        <span class="enp-sess-chevron ${isOpen?'open':''}">▾</span>
-      </div>
-      ${isOpen?`<table class="enp-table">
-        <thead><tr><th style="min-width:170px">Event</th><th>Round</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Duration</th><th>Window</th></tr></thead>
-        <tbody>${(t.events||[]).map(ev=>{
-          const split=ev.manualSplit&&!isPlatform(ev.apparatus);const dur=calcEvDur(ev);
-          const isFinal=ev.round==='Final';const divers=Number(ev.numberOfDivers||0);
-          const needsSplit=dur.rawMin>=3||divers>=40;const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
-          return`<tr>
-            <td class="enp-ev-name">${esc(evName(ev))}</td>
-            <td><span class="ev-badge ${rc}">${esc(ev.round||'')}</span></td>
-            <td><input type="number" min="0" class="enp-inp ${isFinal?'final-inp':divers>0?'filled':''}" value="${divers}" placeholder="${isFinal?'12':'0'}" onchange="updEv('${sess.id}','${ev.id}','numberOfDivers',this.value);this.className='enp-inp ${isFinal?'final-inp':''}'+(Number(this.value)>0?' filled':'');renderSyncDot()"/></td>
-            <td><input type="number" min="1" class="enp-inp" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/></td>
-            <td><input type="number" min="5" step="1" class="enp-inp" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></td>
-            <td>${!isPlatform(ev.apparatus)?`<button class="enp-split ${split?'on':needsSplit?'rec':''}" onclick="toggleSplit('${sess.id}','${ev.id}')">${split?'÷ Split':needsSplit?'⚠ Rec':'No split'}</button>`:'<span style="color:var(--tx3);font-size:11px">N/A</span>'}</td>
-            <td class="enp-ev-time">${fdur(dur.evMin)}</td>
-            <td class="enp-ev-time">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`:''}
-    </div>`;
-  }).join('');
+  // Filter: show ALL days or just one
+  const showAllDays=UI.entriesShowAll;
+  const allComp=S.sessions.filter(s=>!s.isPractice);
+  const allWithEntries=allComp.reduce((n,s)=>n+s.events.filter(e=>Number(e.projectedDivers||e.finalDivers||e.numberOfDivers||0)>0).length,0);
+  const totalEvs=allComp.reduce((n,s)=>n+s.events.length,0);
+  const dayTabs=`<button class="enp-day-btn ${showAllDays?'active':''}" onclick="UI.entriesShowAll=true;render()">All days</button>`+
+    days.map(d=>`<button class="enp-day-btn ${!showAllDays&&d.id===eDayId?'active':''}" onclick="UI.entriesShowAll=false;UI.entriesDayId='${d.id}';render()">${shortDate(d.date).replace(/,.*/,'')}</button>`).join('');
+
+  // Build sessions list (filtered by day or all)
+  const sessions=showAllDays?
+    days.flatMap(d=>timedForDay(d.id).filter(s=>!s.isPractice).map(s=>({...s,_day:d}))):
+    timedForDay(eDayId).filter(s=>!s.isPractice);
+
+  // Group by day if showing all
+  let groupedBody='';
+  if(showAllDays){
+    days.forEach(d=>{
+      const daySess=sessions.filter(s=>s._day&&s._day.id===d.id);
+      if(!daySess.length)return;
+      groupedBody+=`<div class="enp-day-grp">${shortDate(d.date)}</div>`;
+      groupedBody+=daySess.map(s=>renderEntriesSession(s,timed,true)).join('');
+    });
+  }else{
+    groupedBody=sessions.map(s=>renderEntriesSession(s,timed,true)).join('');
+  }
+
   return`<div class="entries-panel open">
     <div class="enp-head">
-      <span class="enp-title">Entry counts &amp; splits</span>
+      <div>
+        <div class="enp-title">Event Entries</div>
+        <div class="enp-sub-title">Projected vs Final · ${allWithEntries}/${totalEvs} events filled</div>
+      </div>
       <button class="enp-close" onclick="closeEntries()">×</button>
     </div>
     <div class="enp-day-bar">${dayTabs}</div>
-    <div class="enp-body">${sessions.length?body:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions this day</div></div>`}</div>
+    <div class="enp-legend">
+      <div class="enp-legend-item"><span class="enp-leg-pill proj">Projected</span> initial estimate</div>
+      <div class="enp-legend-item"><span class="enp-leg-pill final">Final</span> confirmed entries · used for timing</div>
+      <div class="enp-legend-item"><button class="enp-match-all-btn" onclick="copyAllProjectedToFinal()" title="For all events where Final is blank, copy Projected to Final">Copy all Projected → Final</button></div>
+    </div>
+    <div class="enp-body">${sessions.length?groupedBody:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
     <div class="enp-foot">
-      <span class="enp-foot-info">${withDivers}/${totalEvs} events have entries</span>
-      <button class="enp-finals-btn" onclick="applyFinalsAll()">Set all Finals → 12</button>
+      <span class="enp-foot-info">Final entries drive the schedule timing</span>
+      <button class="enp-finals-btn" onclick="applyFinalsAll()">Set all Finals events → 12</button>
     </div>
   </div>`;
+}
+
+function renderEntriesSession(sess,timed,expandable){
+  const t=sess.timing;const n=getSessNum(sess,timed);
+  const isOpen=UI.entriesExpanded.includes(sess.id);
+  const hasFinals=sess.events.some(e=>e.round==='Final');
+  const hasPrelims=sess.events.some(e=>e.round==='Prelim');
+  return`<div class="enp-sess-wrap">
+    <div class="enp-sess-head ${hasFinals?'final-hd':'comp-hd'}" onclick="toggleEntriesSess('${sess.id}')">
+      <span class="enp-sess-label">Session ${n}${hasFinals?' — Finals':hasPrelims?' — Prelims':''} <span style="font-weight:400;opacity:.7">(${sess.events.length} events)</span></span>
+      <span class="enp-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
+      <span class="enp-sess-chevron ${isOpen?'open':''}">▾</span>
+    </div>
+    ${isOpen?`<table class="enp-table">
+      <thead><tr>
+        <th style="min-width:170px">Event</th>
+        <th>Round</th>
+        <th title="Initial projected entry count">Projected</th>
+        <th title="Final confirmed entries (drives timing)">Final</th>
+        <th title="Copy projected to final for this event"></th>
+        <th>Dives</th>
+        <th>Sec/dive</th>
+        <th>Split</th>
+        <th>Window</th>
+      </tr></thead>
+      <tbody>${(t.events||[]).map(ev=>{
+        const split=ev.manualSplit&&!isPlatform(ev.apparatus);
+        const dur=calcEvDur(ev);
+        const isFinal=ev.round==='Final';
+        const proj=Number(ev.projectedDivers||0);
+        const finl=Number(ev.finalDivers||0);
+        const effective=finl||proj||Number(ev.numberOfDivers||0);
+        const needsSplit=dur.rawMin>=3||effective>=40;
+        const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
+        const match=(proj===finl)&&proj>0;
+        return`<tr>
+          <td class="enp-ev-name">${esc(evName(ev))}</td>
+          <td><span class="ev-badge ${rc}">${esc(ev.round||'')}</span></td>
+          <td><input type="number" min="0" class="enp-inp proj ${proj>0?'filled-p':''}" value="${proj||''}" placeholder="${isFinal?'12':'0'}" 
+              onchange="updEv('${sess.id}','${ev.id}','projectedDivers',this.value);render()"/></td>
+          <td><input type="number" min="0" class="enp-inp final ${finl>0?'filled-f':''} ${match&&finl>0?'matches':''}" value="${finl||''}" placeholder="${isFinal?'12':proj?String(proj):'0'}" 
+              onchange="updEv('${sess.id}','${ev.id}','finalDivers',this.value);render()"/></td>
+          <td>${proj>0&&proj!==finl?`<button class="enp-copy-btn" onclick="copyProjectedToFinal('${sess.id}','${ev.id}')" title="Copy projected → final">→</button>`:proj>0&&proj===finl&&finl>0?`<span style="color:var(--g-prac);font-size:14px" title="Match">✓</span>`:''}</td>
+          <td><input type="number" min="1" class="enp-inp small" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/></td>
+          <td><input type="number" min="5" step="1" class="enp-inp small" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></td>
+          <td>${!isPlatform(ev.apparatus)?`<button class="enp-split ${split?'on':needsSplit?'rec':''}" onclick="toggleSplit('${sess.id}','${ev.id}')">${split?'÷ Split':needsSplit?'⚠ Rec':'No split'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
+          <td class="enp-ev-time">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`:''}
+  </div>`;
+}
+
+function copyProjectedToFinal(sessId,evId){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+    ev.finalDivers=Number(ev.projectedDivers||0);
+    ev.numberOfDivers=ev.finalDivers;
+    cascadeSession(s,sessId);
+  });
+  toast('Final set to projected');
+}
+
+function copyAllProjectedToFinal(){
+  let count=0;
+  upd(s=>{
+    s.sessions.forEach(sess=>{
+      sess.events.forEach(ev=>{
+        const proj=Number(ev.projectedDivers||0);
+        const finl=Number(ev.finalDivers||0);
+        if(proj>0&&!finl){
+          ev.finalDivers=proj;
+          ev.numberOfDivers=proj;
+          count++;
+        }
+      });
+    });
+    s.sessions.forEach(sess=>cascadeSession(s,sess.id));
+  });
+  toast(`${count} events: Projected → Final`);
 }
 function renderSyncDot(){saveS();if(S.currentLibraryId)scheduleSave()}
 
@@ -885,19 +1087,171 @@ function showAddMenu(){
 
 // ── DRAG & DROP ───────────────────────────────────────────────────────
 function bindDrag(){
+  // Event rows: drag within or across sessions
   document.querySelectorAll('[data-ev][draggable]').forEach(el=>{
-    el.addEventListener('dragstart',e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',`${el.dataset.sess}::${el.dataset.ev}`);el.classList.add('dragging')});
-    el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+    el.addEventListener('dragstart',e=>{
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain','EV::'+el.dataset.sess+'::'+el.dataset.ev);
+      el.classList.add('dragging');
+      UI.draggedEvFrom={sessId:el.dataset.sess,evId:el.dataset.ev};
+    });
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging');UI.draggedEvFrom=null});
     el.addEventListener('dragover',e=>{e.preventDefault();el.style.outline='2px solid var(--navy)'});
     el.addEventListener('dragleave',()=>el.style.outline='');
     el.addEventListener('drop',e=>{
       e.preventDefault();el.style.outline='';
-      const[fromSess,fromEv]=e.dataTransfer.getData('text/plain').split('::');
+      const data=e.dataTransfer.getData('text/plain');
+      if(!data.startsWith('EV::'))return;
+      const[,fromSess,fromEv]=data.split('::');
       const toEv=el.dataset.ev,toSess=el.dataset.sess;
-      if(fromSess!==toSess||fromEv===toEv)return;
-      upd(s=>{const sess=s.sessions.find(x=>x.id===fromSess);if(!sess)return;const fi=sess.events.findIndex(e=>e.id===fromEv),ti=sess.events.findIndex(e=>e.id===toEv);if(fi<0||ti<0)return;const[m]=sess.events.splice(fi,1);sess.events.splice(ti,0,m)});
+      if(fromSess===toSess){
+        // Reorder within session
+        if(fromEv===toEv)return;
+        upd(s=>{const sess=s.sessions.find(x=>x.id===fromSess);if(!sess)return;const fi=sess.events.findIndex(e=>e.id===fromEv),ti=sess.events.findIndex(e=>e.id===toEv);if(fi<0||ti<0)return;const[m]=sess.events.splice(fi,1);sess.events.splice(ti,0,m);cascadeSession(s,fromSess)});
+      } else {
+        // Cross-session move
+        upd(s=>{
+          const fromS=s.sessions.find(x=>x.id===fromSess);
+          const toS=s.sessions.find(x=>x.id===toSess);
+          if(!fromS||!toS)return;
+          const fi=fromS.events.findIndex(e=>e.id===fromEv);if(fi<0)return;
+          const[ev]=fromS.events.splice(fi,1);
+          const ti=toS.events.findIndex(e=>e.id===toEv);
+          if(ti<0)toS.events.push(ev);else toS.events.splice(ti,0,ev);
+          cascadeSession(s,fromSess);
+          cascadeSession(s,toSess);
+        });
+        toast('Event moved');
+      }
     });
   });
+  // Drop event onto session card header (place at end of that session)
+  document.querySelectorAll('.sc').forEach(el=>{
+    const sessId=el.id.replace('sc-','');
+    el.addEventListener('dragover',e=>{if(UI.draggedEvFrom&&UI.draggedEvFrom.sessId!==sessId){e.preventDefault();el.style.boxShadow='inset 0 0 0 2px var(--navy)'}});
+    el.addEventListener('dragleave',()=>el.style.boxShadow='');
+    el.addEventListener('drop',e=>{
+      el.style.boxShadow='';
+      const data=e.dataTransfer.getData('text/plain');
+      if(!data.startsWith('EV::'))return;
+      const[,fromSess,fromEv]=data.split('::');
+      if(fromSess===sessId)return;
+      e.preventDefault();
+      upd(s=>{
+        const fromS=s.sessions.find(x=>x.id===fromSess);
+        const toS=s.sessions.find(x=>x.id===sessId);
+        if(!fromS||!toS)return;
+        const fi=fromS.events.findIndex(e=>e.id===fromEv);if(fi<0)return;
+        const[ev]=fromS.events.splice(fi,1);
+        toS.events.push(ev);
+        cascadeSession(s,fromSess);
+        cascadeSession(s,sessId);
+      });
+      toast('Event moved to session');
+    });
+  });
+  // Session card drag → drop on day tab
+  document.querySelectorAll('.sc-hd').forEach(hd=>{
+    const card=hd.closest('.sc');if(!card)return;
+    const sessId=card.id.replace('sc-','');
+    hd.setAttribute('draggable','true');
+    hd.addEventListener('dragstart',e=>{
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain','SESS::'+sessId);
+      UI.draggedSessId=sessId;
+      card.style.opacity='.4';
+    });
+    hd.addEventListener('dragend',()=>{card.style.opacity='';UI.draggedSessId=null});
+  });
+  // Day pills accept session drops
+  document.querySelectorAll('.dp[onclick*=selectDay]').forEach(pill=>{
+    const m=pill.getAttribute('onclick').match(/selectDay\('([^']+)'\)/);
+    if(!m)return;
+    const dayId=m[1];
+    pill.addEventListener('dragover',e=>{if(UI.draggedSessId){e.preventDefault();pill.classList.add('drop-target')}});
+    pill.addEventListener('dragleave',()=>pill.classList.remove('drop-target'));
+    pill.addEventListener('drop',e=>{
+      pill.classList.remove('drop-target');
+      const data=e.dataTransfer.getData('text/plain');
+      if(!data.startsWith('SESS::'))return;
+      e.preventDefault();
+      const sessId=data.replace('SESS::','');
+      UI.moveSessionId=sessId;
+      UI.moveTargetDayId=dayId;
+      UI.moveTargetPos='end';
+      render();
+    });
+  });
+}
+
+
+// ── MOVE SESSION (cross-day or reposition) ────────────────────────────
+function openMoveDialog(sessId){
+  UI.moveSessionId=sessId;
+  const sess=S.sessions.find(s=>s.id===sessId);
+  UI.moveTargetDayId=sess?.dayId||S.meet.days[0]?.id;
+  UI.moveTargetPos='end';
+  render();
+}
+function closeMoveDialog(){UI.moveSessionId=null;render()}
+function executeMoveSession(){
+  const sessId=UI.moveSessionId;const targetDay=UI.moveTargetDayId;const pos=UI.moveTargetPos;
+  if(!sessId||!targetDay)return;
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    sess.dayId=targetDay;
+    // Compute new warmupStart based on position
+    const sameDay=s.sessions.filter(x=>x.dayId===targetDay&&x.id!==sessId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+    if(pos==='start'){
+      // Place at start: 7 AM or earlier than first
+      const firstStart=sameDay.length?Number(sameDay[0].warmupStartMinutes):420;
+      const sessDur=calcSessTiming(sess).sessionEndMinutes-calcSessTiming(sess).warmupStartMinutes;
+      sess.warmupStartMinutes=Math.max(420,firstStart-sessDur-5);
+      cascadeSession(s,sessId);
+    } else if(pos==='end'){
+      const lastEnd=sameDay.reduce((m,x)=>Math.max(m,calcSessTiming(x).sessionEndMinutes),420);
+      sess.warmupStartMinutes=ru(lastEnd+5,5);
+    } else if(typeof pos==='string'&&pos.startsWith('after-')){
+      const afterId=pos.replace('after-','');
+      const afterSess=sameDay.find(x=>x.id===afterId);
+      if(afterSess){
+        const afterT=calcSessTiming(afterSess);
+        sess.warmupStartMinutes=ru(afterT.sessionEndMinutes+Number(afterSess.bufferMinutes||5),5);
+        cascadeSession(s,sessId);
+      }
+    }
+  });
+  UI.dayId=targetDay;
+  closeMoveDialog();
+  toast('Session moved');
+}
+
+function renderMoveDialog(){
+  if(!UI.moveSessionId)return'';
+  const sess=S.sessions.find(s=>s.id===UI.moveSessionId);if(!sess)return'';
+  const n=getSessNum(sess,allTimed());
+  const targetDay=UI.moveTargetDayId;
+  const targetDaySessions=S.sessions.filter(s=>s.dayId===targetDay&&s.id!==UI.moveSessionId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  const dayBtns=S.meet.days.map(d=>`<button class="move-day-btn ${d.id===targetDay?'active':''}" onclick="UI.moveTargetDayId='${d.id}';UI.moveTargetPos='end';render()">${shortDate(d.date)}${d.id===sess.dayId?' <span class="move-sess-meta">current</span>':''}</button>`).join('');
+  const posBtns=`<button class="move-sess-btn ${UI.moveTargetPos==='start'?'active':''}" onclick="UI.moveTargetPos='start';render()">▲ Place at start of day</button>`+
+    targetDaySessions.map(s=>{const t=calcSessTiming(s);const sn=getSessNum(s,allTimed());const lbl=s.isPractice?(s.title||'Practice'):`Session ${sn}`;return`<button class="move-sess-btn ${UI.moveTargetPos==='after-'+s.id?'active':''}" onclick="UI.moveTargetPos='after-${s.id}';render()">After ${esc(lbl)} <span class="move-sess-meta">ends ${f12(t.sessionEndMinutes)}</span></button>`}).join('')+
+    `<button class="move-sess-btn ${UI.moveTargetPos==='end'?'active':''}" onclick="UI.moveTargetPos='end';render()">▼ Place at end of day</button>`;
+  return`<div class="move-dialog">
+    <div class="move-dialog-hd">Move ${sess.isPractice?esc(sess.title||'Practice'):`Session ${n}`}
+      <div class="move-dialog-sub">From ${shortDate(S.meet.days.find(d=>d.id===sess.dayId)?.date||'')}</div>
+    </div>
+    <div class="move-dialog-body">
+      <label class="fl" style="margin-bottom:6px">Move to day</label>
+      <div class="move-day-list">${dayBtns}</div>
+      <label class="fl" style="margin:12px 0 6px">Position</label>
+      <div class="move-sess-list">${posBtns}</div>
+    </div>
+    <div class="move-foot">
+      <button class="btn btn-sm" onclick="closeMoveDialog()">Cancel</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-sm btn-p" onclick="executeMoveSession()">Move session</button>
+    </div>
+  </div>`;
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────
