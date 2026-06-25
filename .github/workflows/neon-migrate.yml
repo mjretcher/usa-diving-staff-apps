@@ -1,0 +1,41 @@
+name: Neon DB migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "db/schema.sql"
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    name: Apply schema to Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Run schema migration
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          echo "Running schema migration against Neon..."
+          psql "$DATABASE_URL" -f db/schema.sql --set ON_ERROR_STOP=1
+          echo "Migration complete."
+
+      - name: Verify schemas
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "
+            SELECT schema_name
+            FROM information_schema.schemata
+            WHERE schema_name IN (
+              'schedule_builder','junior_results',
+              'hp_analytics','criteria_simulator','app_meta'
+            )
+            ORDER BY schema_name;
+          "
