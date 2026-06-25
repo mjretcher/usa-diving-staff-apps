@@ -688,6 +688,7 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
 const ru=(n,inc)=>inc<=0?n:Math.ceil(n/inc)*inc;
+function ruUp(v,n){n=n||5;return Math.ceil(Number(v)/n)*n;}
 const pt=s=>{if(typeof s==='number')return s;const[h,m]=String(s||'00:00').split(':').map(Number);return(h||0)*60+(m||0)};
 const f24=m=>{m=Math.max(0,Math.round(m));return`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`};
 const f12=m=>{m=Math.max(0,Math.round(m));const h=Math.floor(m/60)%24,mn=m%60,ap=h>=12?'PM':'AM',h12=h%12||12;return`${h12}:${String(mn).padStart(2,'0')} ${ap}`};
@@ -837,8 +838,9 @@ function calcSessTiming(sess){
     const lane=lk(ev.apparatus);
     const cur=cursors[lane]??first;
     const dur=calcEvDur(ev);
-    tevs.push({...ev,eventStartMinutes:cur,eventEndMinutes:cur+dur.evMin,evMin:dur.evMin,rawMin:dur.rawMin});
-    cursors[lane]=ru(cur+dur.evMin,Number(sess.rounding||5));
+    const evMin=Math.ceil(dur.evMin); // whole minutes — no fractional display
+    tevs.push({...ev,eventStartMinutes:cur,eventEndMinutes:cur+evMin,evMin,rawMin:dur.rawMin});
+    cursors[lane]=ru(cur+evMin,Number(sess.rounding||5));
   });
   const compEnd=tevs.reduce((m,e)=>Math.max(m,e.eventEndMinutes),first);
   const awards=sess.awardsEnabled?15:0;
@@ -955,9 +957,9 @@ function updSess(id,field,value){
     const nums=['warmupStartMinutes','warmupMinutes','rounding','introMinutes','bufferMinutes'];
     const old=sess[field];
     sess[field]=nums.includes(field)?Number(value):value;
-    // Cascade for time-affecting fields
+    // Re-flow the whole day for time-affecting fields so downstream auto-adjusts
     if(['warmupStartMinutes','warmupMinutes','introMinutes','bufferMinutes','awardsEnabled'].includes(field)){
-      cascadeSession(s,sess.id);
+      reflowDay(s,sess.dayId);
     }
   });
 }
@@ -965,23 +967,38 @@ function updSess(id,field,value){
 // Cascade: after a session's timing changes, push subsequent same-day sessions
 // to start at endOfPrevious + buffer, but only if doing so doesn't move them BACKWARDS
 // (we never auto-move a session to an EARLIER time).
+// Re-flow an entire day: keep the first session's start, snap every later session to
+// the previous session's end + buffer (rounded up to 5). Fully automatic sequencing.
+function reflowDay(stateSnap,dayId){
+  const day=stateSnap.meet.days.find(x=>x.id===dayId);
+  const dayOpen=day&&day.openMinutes!=null?Number(day.openMinutes):0;
+  const sameDay=stateSnap.sessions.filter(s=>s.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  for(let i=1;i<sameDay.length;i++){
+    const prev=sameDay[i-1];
+    const t=calcSessTimingFromObj(prev);
+    const want=ruUp(t.sessionEndMinutes+Number(prev.bufferMinutes||0),5);
+    sameDay[i].warmupStartMinutes=Math.max(want,dayOpen);
+  }
+}
 function cascadeSession(stateSnap,changedId){
   const all=stateSnap.sessions;
   const sess=all.find(x=>x.id===changedId);
   if(!sess)return;
   const sameDay=all.filter(s=>s.dayId===sess.dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
-  // Find the index of the changed session
   const idx=sameDay.findIndex(s=>s.id===changedId);
   if(idx<0)return;
-  // Walk through sessions AFTER it
+  // Each later session starts the moment the previous one's LONGEST event (its session end)
+  // finishes, plus that session's buffer, rounded UP to the nearest 5 minutes. This both
+  // pushes sessions later when something grows and pulls them earlier to close gaps when
+  // something shrinks — fully automatic, no manual time edits needed.
+  const day=stateSnap.meet.days.find(x=>x.id===sess.dayId);
+  const dayOpen=day&&day.openMinutes!=null?Number(day.openMinutes):0;
   let prev=sess;
   for(let i=idx+1;i<sameDay.length;i++){
     const t=calcSessTimingFromObj(prev);
-    const minStart=t.sessionEndMinutes+Number(prev.bufferMinutes||0);
+    const want=ruUp(t.sessionEndMinutes+Number(prev.bufferMinutes||0),5);
     const curr=sameDay[i];
-    if(Number(curr.warmupStartMinutes)<minStart){
-      curr.warmupStartMinutes=ru(minStart,5);
-    }
+    curr.warmupStartMinutes=Math.max(want,dayOpen);
     prev=curr;
   }
 }
@@ -1099,11 +1116,11 @@ function updEv(sessId,evId,field,value){
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
     if(['numberOfDivers','numberOfDives','secondsPerDive','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
-      cascadeSession(s,sessId);
+      reflowDay(s,sess.dayId);
     }
   });
 }
-function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;cascadeSession(s,sessId);}})}
+function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
@@ -1591,9 +1608,8 @@ function entryKey(e,el){
 function commitEntries(){
   if(!_entryDirty)return;
   _entryDirty=false;
-  // Cascade all days then re-render once
-  S.meet.days.forEach(d=>S.sessions.filter(s=>s.dayId===d.id).forEach(s=>{}));
-  S.sessions.forEach(s=>{if(!s.isPractice)cascadeSession(S,s.id)});
+  // Re-flow every day so each session auto-starts after the previous one ends + buffer
+  S.meet.days.forEach(d=>reflowDay(S,d.id));
   saveS();if(S.currentLibraryId)scheduleSave();
   render();
 }
