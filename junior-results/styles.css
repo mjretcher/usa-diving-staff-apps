@@ -1155,10 +1155,4 @@ html, body { overflow-x: hidden; }
   border-bottom: 1px solid var(--line);
 }
 
-/* Also ensure qv-sort-bar sticks below event header */
-.qv-sort-bar {
-  position: sticky;
-  top: 41px;  /* height of qv-event-header */
-  z-index: 2;
-  background: var(--surface);
-}
+/* qv-sort-bar: no sticky positioning — flows inline within its view container */
