@@ -382,6 +382,12 @@ button{cursor:pointer;border:none;background:none}
 .lib-list{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
 .lib-card{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:var(--r-lg);border:1px solid var(--bd);background:var(--surf);transition:.1s}
 .lib-card:hover{border-color:var(--bd2);background:var(--surf2);transform:translateX(2px)}
+.lib-card.pending{border-color:#f59e0b;background:rgba(245,158,11,.06)}
+.lib-card.pending:hover{background:rgba(245,158,11,.1)}
+.lib-card.pending .lib-card-icon{background:rgba(245,158,11,.15);border-color:#f59e0b}
+.lib-pending-badge{display:inline-block;background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-right:6px;text-transform:uppercase;letter-spacing:.4px}
+.lib-pending-banner{background:rgba(245,158,11,.12);border:1px solid #f59e0b;color:#92400e;padding:10px 12px;border-radius:8px;font-size:12px;font-weight:500;margin-bottom:12px;line-height:1.4}
+.lib-pending-banner:hover{background:rgba(245,158,11,.18)}
 .lib-cicon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;background:var(--surf2);border:1px solid var(--bd)}
 .lib-cinfo{flex:1;min-width:0}
 .lib-cname{font-size:13px;font-weight:600;color:var(--tx)}
@@ -923,10 +929,12 @@ async function retryCloudSync(){
   try{
     await nq('SELECT 1');
     sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');toast('Back online ✓');
-    // Push any pending local changes if we have a save record
+    // Push any local saves that haven't made it to cloud yet
+    pushPendingLocalSaves().catch(e=>console.warn('Pending push error:',e));
+    // Push current working state if it has a save record
     if(S.currentLibraryId&&S.libraryFolder)doSave().catch(()=>{});
-    // Restart polling if we have a save record
     if(S.currentLibraryId)startSync();
+    render();
   }catch(e){
     sync.err=e.message;setSyncDot('error');
     toast('Still offline: '+(e.message||'').slice(0,100),5000);
@@ -934,17 +942,18 @@ async function retryCloudSync(){
   }
 }
 // Background heartbeat — every 60s while we're offline, try to wake Neon.
-// This runs even if no currentLibraryId so the user gets back online whenever Neon recovers.
 let _heartbeatT=null;
 function startHeartbeat(){
   clearInterval(_heartbeatT);
   _heartbeatT=setInterval(async()=>{
-    if(sync.err){ // only ping when we think we're offline
+    if(sync.err){
       try{
         await nq('SELECT 1');
         sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');
+        pushPendingLocalSaves().catch(()=>{});
         if(S.currentLibraryId&&S.libraryFolder)doSave().catch(()=>{});
         if(S.currentLibraryId)startSync();
+        render();
       }catch{}
     }
   },60000);
@@ -959,8 +968,47 @@ async function saveToNeon(name,folder){
   const id=S.currentLibraryId||uid();S.currentLibraryId=id;
   if(folder)S.libraryFolder=folder;
   setSyncDot('saving');
-  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;saveS();setSyncDot('ok');toast('Saved to cloud ✓');startSync();saveVersion('Manual save');}
-  catch(e){sync.err=e.message;setSyncDot('error');toast('Cloud save failed — saved locally');}
+  try{
+    await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
+    lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;saveS();setSyncDot('ok');startSync();saveVersion('Manual save');
+    return true;
+  }catch(e){
+    sync.err=e.message;setSyncDot('error');
+    throw e; // re-throw so callers can fall back to local
+  }
+}
+
+// Insert or update an entry in the local library (LK)
+function upsertLocalSave(entry){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const idx=lib.findIndex(x=>x.id===entry.id);
+  if(idx>=0)lib[idx]=entry;
+  else lib.unshift(entry);
+  // Keep 30 most recent
+  localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));
+}
+
+// Push any local saves that are flagged pendingSync to the cloud
+async function pushPendingLocalSaves(){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const pending=lib.filter(x=>x.pendingSync);
+  if(!pending.length)return 0;
+  let pushed=0;
+  for(const item of pending){
+    try{
+      const sch=item.schedule||{};
+      await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[item.id,item.name,sch.meet?.meetType||'',parseInt(sch.meet?.days?.[0]?.date)||2026,sch.publishStatus||'draft',item.folder||null,JSON.stringify(sch)]);
+      // Mark as synced
+      const idx=lib.findIndex(x=>x.id===item.id);
+      if(idx>=0){lib[idx].pendingSync=false;lib[idx].syncedAt=new Date().toISOString();}
+      pushed++;
+    }catch(e){console.warn('Could not push',item.name,e.message);break;}
+  }
+  if(pushed>0){
+    localStorage.setItem(LK,JSON.stringify(lib));
+    toast(`Pushed ${pushed} local save${pushed>1?'s':''} to cloud ✓`,3000);
+  }
+  return pushed;
 }
 async function loadNeonLib(){
   try{
@@ -1564,12 +1612,16 @@ function updEv(sessId,evId,field,value){
       if(ev.round==='Final')ev.autoFinals=false;
       if(ev.round==='Prelim'&&field==='finalDivers'){
         const prelimFinal=Number(ev.finalDivers||0);
-        if(prelimFinal>0){const target=prelimFinal<12?prelimFinal:12;
-          s.sessions.forEach(sess=>sess.events.forEach(fe=>{
-            if(fe.round==='Final'&&fe.autoFinals!==false&&fe.level===ev.level&&fe.gender===ev.gender&&fe.apparatus===ev.apparatus){
-              fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;}
-          }));
-        }
+        const target=Math.min(12,prelimFinal); // 0-12 cap; ties handled via manual override
+        s.sessions.forEach(sess=>sess.events.forEach(fe=>{
+          if(fe===ev)return;
+          if(fe.round!=='Final')return;
+          if(fe.level!==ev.level||fe.gender!==ev.gender||fe.apparatus!==ev.apparatus)return;
+          const currentFinal=Number(fe.finalDivers||0);
+          if(currentFinal>12)return; // preserve tie override
+          fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;
+          fe.autoFinals=true;
+        }));
       }
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
@@ -1623,7 +1675,32 @@ function saveDialogConfirm(){
 async function _doSaveSchedule(name,folder){
   S.meet.name=name;
   S.libraryFolder=folder;
-  try{await saveToNeon(name,folder)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,folder,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}
+  // Always assign an id and write to local library FIRST so save is never lost
+  const id=S.currentLibraryId||uid();
+  S.currentLibraryId=id;
+  saveS();
+  const localEntry={
+    id,name,folder,
+    savedAt:new Date().toISOString(),
+    schedule:JSON.parse(JSON.stringify(S)),
+    pendingSync:true // mark as needing cloud push; cleared on cloud success
+  };
+  upsertLocalSave(localEntry);
+  // Show immediate feedback so user knows save registered
+  toast('Saved locally — pushing to cloud…',1500);
+  // Now attempt cloud save
+  try{
+    await saveToNeon(name,folder);
+    // Cloud succeeded — clear the pendingSync flag
+    localEntry.pendingSync=false;
+    localEntry.syncedAt=new Date().toISOString();
+    upsertLocalSave(localEntry);
+    toast('Saved to cloud ✓',2400);
+  }catch(e){
+    // Cloud failed — local copy already saved with pendingSync:true
+    console.warn('Cloud save failed (will retry when online):',e.message);
+    toast('Offline — saved locally, will sync when back online',4000);
+  }
   render();
 }
 function loadBuiltin(id){askConfirm({title:'Load template?',message:'Your current work will be replaced. Save it first if you want to keep it.',confirmText:'Load template',danger:true,onConfirm:()=>_doLoadBuiltin(id)});}
@@ -2224,27 +2301,32 @@ function entryValue(ev){
   return Number(ev.numberOfDivers)||0;
 }
 // Sync a finals event's entries from its matching prelim's FINAL count.
-// Rule: finals = min(12, prelimFinalCount) when prelim final < 12, else 12.
-// Only auto-updates finals events that haven't been manually edited (autoFinals=true).
+// Rule (per user): when user enters Final entries on a PRELIM event, the matching
+// FINALS event auto-populates to min(12, prelimFinalCount). Manual override above
+// 12 (for ties) is preserved — only finals values <=12 are auto-synced.
 function syncFinalsToPrelim(prelimEv){
-  // Prelim entry counts are NEVER capped — a prelim can have 40+ divers before cuts.
-  // This only updates the matching FINALS event, capping IT at 12.
-  if(prelimEv.round!=='Prelim')return; // safety: never run off a non-prelim
+  if(prelimEv.round!=='Prelim')return; // safety
   if(prelimEv.finalDivers==null||prelimEv.finalDivers==='')return;
   const prelimFinal=Number(prelimEv.finalDivers)||0;
-  const target=Math.min(12,prelimFinal); // finals capped at 12; prelim itself untouched
+  const target=Math.min(12,prelimFinal); // 0-12 cap (ties handled by manual override)
   S.sessions.forEach(sess=>{
     sess.events.forEach(fe=>{
-      if(fe!==prelimEv&&fe.round==='Final'&&fe.autoFinals!==false&&
-         fe.level===prelimEv.level&&fe.gender===prelimEv.gender&&fe.apparatus===prelimEv.apparatus){
-        fe.projectedDivers=target;
-        fe.finalDivers=target;
-        fe.numberOfDivers=target;
-        const fp=document.getElementById('feg-'+fe.id+'-proj');
-        const ff=document.getElementById('feg-'+fe.id+'-final');
-        if(fp){fp.value=target;fp.classList.add('on');}
-        if(ff){ff.value=target;ff.classList.add('on');ff.classList.add('synced-flash');setTimeout(()=>ff.classList.remove('synced-flash'),600);}
-      }
+      if(fe===prelimEv)return;
+      if(fe.round!=='Final')return;
+      if(fe.level!==prelimEv.level||fe.gender!==prelimEv.gender||fe.apparatus!==prelimEv.apparatus)return;
+      // Preserve manual override for ties: if current finals count is >12, leave alone
+      const currentFinal=Number(fe.finalDivers||0);
+      if(currentFinal>12)return;
+      // Otherwise auto-sync (overrides previous autoFinals=false flag since we have
+      // a clear rule: 0-12 always tracks the prelim)
+      fe.projectedDivers=target;
+      fe.finalDivers=target;
+      fe.numberOfDivers=target;
+      fe.autoFinals=true; // reset to auto-tracking
+      const fp=document.getElementById('feg-'+fe.id+'-proj');
+      const ff=document.getElementById('feg-'+fe.id+'-final');
+      if(fp){fp.value=target;if(target>0)fp.classList.add('on');else fp.classList.remove('on');}
+      if(ff){ff.value=target;if(target>0)ff.classList.add('on');else ff.classList.remove('on');ff.classList.add('synced-flash');setTimeout(()=>ff.classList.remove('synced-flash'),600);}
     });
   });
 }
@@ -2759,42 +2841,96 @@ function renderLibraryTemplates(){
 }
 function renderLibrarySaves(local){
   if(!UI.savesFolder)UI.savesFolder='all';
-  // Group cloud saves by folder
+  // Build unified list with dedupe:
+  // - Local entries with pendingSync=true: ALWAYS shown (these are local-only/newer-than-cloud)
+  // - Local entries without pendingSync: ignored (cloud has the canonical version)
+  // - Cloud entries: shown unless there's a pendingSync local with the same id (local is newer)
   const cloudSaves=UI.neonLib.map(it=>({...it,folder:inferFolder(it),source:'cloud'}));
-  const localSaves=local.map((it,i)=>({...it,folder:inferFolder(it),source:'local',_localIdx:i}));
-  const all=[...cloudSaves,...localSaves];
+  const localSavesAll=local.map(it=>({...it,folder:inferFolder(it),source:'local'}));
+  const pendingLocal=localSavesAll.filter(l=>l.pendingSync);
+  const pendingIds=new Set(pendingLocal.map(l=>l.id));
+  const cloudIds=new Set(cloudSaves.map(c=>c.id));
+  // Local entries without any cloud counterpart (pure local, not yet pushed)
+  const orphanedLocal=localSavesAll.filter(l=>!l.pendingSync&&!cloudIds.has(l.id));
+  const filteredCloud=cloudSaves.filter(c=>!pendingIds.has(c.id));
+  const all=[...pendingLocal,...filteredCloud,...orphanedLocal];
   const folderCounts={all:all.length};
   SAVE_FOLDERS.forEach(f=>folderCounts[f]=all.filter(x=>x.folder===f).length);
-  // Folder filter pills
   const folderPills=`<button class="lib-ftab ${UI.savesFolder==='all'?'active':''}" onclick="UI.savesFolder='all';render()">All${folderCounts.all?` <span class="lib-pill-ct">${folderCounts.all}</span>`:''}</button>`+
     SAVE_FOLDERS.map(f=>`<button class="lib-ftab ${UI.savesFolder===f?'active':''}" onclick="UI.savesFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}${folderCounts[f]?` <span class="lib-pill-ct">${folderCounts[f]}</span>`:''}</button>`).join('');
   const filtered=UI.savesFolder==='all'?all:all.filter(x=>x.folder===UI.savesFolder);
-  // Sort: cloud first, then by date desc
+  // Sort: pending-sync first (most urgent), then cloud, then orphan-local; all by date desc within group
   filtered.sort((a,b)=>{
-    if(a.source!==b.source)return a.source==='cloud'?-1:1;
+    const aPri=a.pendingSync?0:a.source==='cloud'?1:2;
+    const bPri=b.pendingSync?0:b.source==='cloud'?1:2;
+    if(aPri!==bPri)return aPri-bPri;
     return new Date(b.savedAt||0)-new Date(a.savedAt||0);
   });
+  // Count pending for header note
+  const pendingCount=pendingLocal.length;
+  const pendingBanner=pendingCount>0?`<div class="lib-pending-banner" onclick="retryCloudSync()" style="cursor:pointer">⚠️ ${pendingCount} save${pendingCount>1?'s':''} not yet on cloud — tap to retry now (otherwise auto-pushes within ~60s when online)</div>`:'';
   let listHtml='';
   if(UI.neonLibLoading){
     listHtml+=`<div style="font-size:12px;color:var(--tx3);padding:10px 0">Loading cloud schedules…</div>`;
   }
   if(filtered.length){
     listHtml+=`<div class="lib-list">${filtered.map(item=>{
-      const icon=item.source==='cloud'?'☁':'💾';
+      const isPending=!!item.pendingSync;
+      const icon=isPending?'⏳':item.source==='cloud'?'☁':'💾';
       const fIcon=SAVE_FOLDER_ICONS[item.folder]||'📌';
       const dt=item.savedAt?fmtRelativeTime(item.savedAt):'';
-      const loadCall=item.source==='cloud'?`loadFromNeon('${item.id}')`:`loadLocalSave(${item._localIdx})`;
-      const delCall=item.source==='cloud'?`deleteCloudSave('${item.id}','${esc(item.name).replace(/'/g,"\\'")}')`:`deleteLocalSave(${item._localIdx})`;
-      return`<div class="lib-card"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${item.source==='cloud'?'Cloud':'Local'} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" onclick="${delCall}" title="Delete">✕</button></div></div>`;
+      const statusLine=isPending?`<span class="lib-pending-badge">Not on cloud yet</span>`:item.source==='cloud'?'Cloud':'Local only';
+      const loadCall=isPending||item.source==='local'?`loadLocalSaveById('${esc(item.id)}')`:`loadFromNeon('${esc(item.id)}')`;
+      const delCall=isPending||item.source==='local'?`deleteLocalSaveById('${esc(item.id)}')`:`deleteCloudSave('${esc(item.id)}','${esc(item.name).replace(/'/g,"\\'")}')`;
+      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" onclick="event.stopPropagation();pushOnePendingNow('${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" onclick="${delCall}" title="Delete">✕</button></div></div>`;
     }).join('')}</div>`;
   }else if(!UI.neonLibLoading){
     listHtml+=`<div class="empty"><div class="empty-title">No saved meets ${UI.savesFolder==='all'?'yet':'in this folder'}</div><div class="empty-sub">${UI.savesFolder==='all'?'Click "Save current to cloud" below after editing a schedule.':'Try "All" to see saves in other folders.'}</div></div>`;
   }
   return`
     <div class="lib-note">Your saved meets — separate from templates. Loading one resumes autosave on that save record.</div>
+    ${pendingBanner}
     <div class="lib-folder-tabs">${folderPills}</div>
     ${listHtml}
   `;
+}
+// Find local save by id (id-based, not index-based)
+function loadLocalSaveById(id){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const item=lib.find(x=>x.id===id);if(!item)return;
+  askConfirm({title:'Load saved meet?',message:'Your current working copy will be replaced.',confirmText:'Load',onConfirm:()=>{
+    S=JSON.parse(JSON.stringify(item.schedule||{}));
+    if(item.folder)S.libraryFolder=item.folder;
+    saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
+  }});
+}
+function deleteLocalSaveById(id){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const item=lib.find(x=>x.id===id);if(!item)return;
+  askConfirm({title:'Delete local save?',message:'Delete "'+item.name+'"? This cannot be undone.',confirmText:'Delete',danger:true,onConfirm:()=>{
+    const newLib=lib.filter(x=>x.id!==id);
+    localStorage.setItem(LK,JSON.stringify(newLib));render();toast('Deleted');
+  }});
+}
+// Push one specific pending save now (from the per-card up-arrow button)
+async function pushOnePendingNow(id){
+  const lib=JSON.parse(localStorage.getItem(LK)||'[]');
+  const item=lib.find(x=>x.id===id);if(!item)return;
+  toast('Pushing to cloud…',1200);
+  try{
+    const sch=item.schedule||{};
+    await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[item.id,item.name,sch.meet?.meetType||'',parseInt(sch.meet?.days?.[0]?.date)||2026,sch.publishStatus||'draft',item.folder||null,JSON.stringify(sch)]);
+    const idx=lib.findIndex(x=>x.id===id);
+    if(idx>=0){lib[idx].pendingSync=false;lib[idx].syncedAt=new Date().toISOString();localStorage.setItem(LK,JSON.stringify(lib));}
+    sync.ok=true;sync.err=null;setSyncDot('ok');
+    // Refresh cloud list so the just-pushed item appears as cloud-synced
+    UI.neonLibLoading=true;render();
+    const cloudLib=await loadNeonLib();UI.neonLib=cloudLib;UI.neonLibLoading=false;
+    toast('Pushed to cloud ✓',2400);render();
+  }catch(e){
+    console.error('Push failed:',e);
+    toast('Push failed: '+(e.message||'').slice(0,80),4000);
+  }
 }
 function loadLocalSave(i){
   const lib=JSON.parse(localStorage.getItem(LK)||'[]');
