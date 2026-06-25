@@ -767,28 +767,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pp-ft-l{color:var(--navy);font-weight:700}
 .pp-ft-r{color:var(--gray);font-style:italic}
 @page{size:letter portrait;margin:0}
-@media print{
-  body *{visibility:hidden}
-  #printPreview,#printPreview *{visibility:visible}
-  #printPreview{position:absolute;left:0;top:0;width:100%;background:#fff;padding:0;border:none}
-  .modal-bg{position:absolute;background:#fff;display:block;padding:0;inset:0}
-  .modal{width:100%;max-width:none;max-height:none;box-shadow:none;border-radius:0;border:none}
-  .modal-hd,.modal-foot,.gen-controls,.gen-sec-lbl,.pp-scrollhint{display:none!important}
-  .modal-body{padding:0!important;overflow:visible!important}
-  .gen-layout{display:block!important}
-  .pp{max-height:none;border:none;border-radius:0;overflow:visible;background:#fff;padding:0}
-  /* NO min-height — let break-after:page do the work. min-height:100vh was
-     inflating short pages and creating phantom blank overflow pages. */
-  .pp-page{box-shadow:none;border-radius:0;margin:0;max-width:none;width:100%;
-    break-after:page;page-break-after:always;display:block}
-  .pp-page:last-child{break-after:auto;page-break-after:auto}
-  .pp-body{padding:28px 44px 10px}
-  .pp-hd{padding:24px 44px}
-  .pp-ft{padding:13px 44px}
-  .pp-sess,.pp-prac{break-inside:avoid;page-break-inside:avoid}
-  .pp-day-hd{break-after:avoid;page-break-after:avoid}
-  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-}
+@media print{body *{display:none}.pp-print-direct{display:block}}
 </style>
 </head>
 <body>
@@ -2610,9 +2589,70 @@ function renderGenerateModal(timed){
       <div style="flex:1"></div>
       <button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xls)</button>
       <button class="btn" onclick="exportExcel()">Excel</button>
-      <button class="btn btn-p" onclick="window.print()">Print / PDF</button>
+      <button class="btn btn-p" onclick="printReport()">Print / PDF</button>
     </div>
   </div>`;
+}
+
+
+function printReport(){
+  const timed=allTimed();
+  const aud=UI.genAud||'public';
+  const cfg={...AUD[aud]};
+  const meetName=(S.meet.name||'USA Diving Schedule').replace(/[^\w\s\-\.]/g,'').trim();
+  const reportHTML=renderPP(timed,cfg);
+  // Extract the CSS we need (the .pp* rules + @media print)
+  const styleEl=document.querySelector('style');
+  const fullCSS=styleEl?styleEl.textContent:'';
+  // Pull out just the .pp rules and @page/@media print
+  const ppCSS=fullCSS.match(/(?:@page|\.pp[^{]*\{[^}]*\}|\.pe[^{]*\{[^}]*\}|@media print\{[\s\S]*?\}\s*\})/g)||[];
+  // Also grab CSS variables from :root
+  const rootMatch=fullCSS.match(/:root\s*\{[\s\S]*?\}/);
+  const rootCSS=rootMatch?rootMatch[0]:'';
+  // Base font
+  const fontLink='<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
+  const w=window.open('','_blank');
+  if(!w){alert('Pop-up blocked — allow pop-ups for this site and try again');return;}
+  w.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${meetName}</title>
+${fontLink}
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+${rootCSS}
+:root{--navy:#171F69;--red:#E31937;--gray:#5F6062}
+body{background:#fff;font-family:'Inter',system-ui,sans-serif;font-size:14px}
+${ppCSS.join('\n')}
+/* Clean print — every .pp-page is exactly one physical page */
+@page{size:letter portrait;margin:.5in}
+@media print{
+  body{background:#fff}
+  .pp{padding:0;background:#fff;overflow:visible}
+  .pp-page{break-after:page;page-break-after:always;display:block;margin:0;
+    box-shadow:none;border-radius:0;width:100%;max-width:100%}
+  .pp-page:last-child{break-after:auto;page-break-after:auto}
+  .pp-sess,.pp-prac{break-inside:avoid}
+  .pp-day-hd{break-after:avoid}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+}
+/* Screen only — make pages look like sheets */
+@media screen{
+  body{background:#E9ECF2;padding:20px}
+  .pp-page{background:#fff;border-radius:8px;box-shadow:0 2px 16px rgba(23,31,105,.12);
+    margin:0 auto 20px;max-width:760px;width:100%;display:block}
+}
+</style>
+</head>
+<body>
+${reportHTML}
+</body>
+</html>`);
+  w.document.close();
+  // Wait for fonts to load then print
+  w.addEventListener('load',()=>setTimeout(()=>{w.focus();w.print();},400));
 }
 
 function renderPP(timed,cfg){
