@@ -909,15 +909,21 @@ async function nq(sql,params=[]){
   try{
     r=await fetch('https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/sql',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer npg_SN1ULPtYhC6J','Neon-Connection-String':NEON},
-      body:JSON.stringify({query:sql,params})
+      headers:{
+        'Content-Type':'application/json',
+        'Neon-Connection-String':NEON,
+        'Neon-Raw-Text-Output':'false',
+        'Neon-Array-Mode':'true'
+      },
+      body:JSON.stringify({query:sql,params:(params||[]).map(p=>p===null||p===undefined?null:String(p))})
     });
   }catch(netErr){
-    // Network-level error (CORS, DNS, offline, etc.) — include explicit hint
-    const e=new Error('Network: '+(netErr.message||'fetch failed'));e._kind='network';throw e;
+    const e=new Error('Network: '+(netErr.message||'fetch failed'));e._kind='network';
+    console.error('[Neon] network error:',netErr);throw e;
   }
   if(!r.ok){
-    let body='';try{body=(await r.text()).slice(0,200);}catch{}
+    let body='';try{body=(await r.text()).slice(0,300);}catch{}
+    console.error('[Neon] HTTP '+r.status+':',body,'\nQuery:',sql.slice(0,100));
     const e=new Error('HTTP '+r.status+(body?' — '+body:''));e._kind='http'+r.status;throw e;
   }
   return r.json();
