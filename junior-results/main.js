@@ -537,9 +537,28 @@ function attachGlobalListeners() {
   $('addOverrideButton').addEventListener('click', addOverrideFromForm);
   $('undoOverrideButton').addEventListener('click', undoOverride);
   $('redoOverrideButton').addEventListener('click', redoOverride);
+  // Double-click confirmation — first click arms, second click fires (no native dialog)
+  let _clearArmed = false, _clearTimer = null;
   $('clearOverridesButton').addEventListener('click', () => {
     if (!state.overrides.length) return;
-    if (!confirm('Clear all overrides?')) return;
+    if (!_clearArmed) {
+      _clearArmed = true;
+      $('clearOverridesButton').textContent = 'Tap again to confirm';
+      $('clearOverridesButton').style.background = 'var(--red, #e31937)';
+      $('clearOverridesButton').style.color = '#fff';
+      _clearTimer = setTimeout(() => {
+        _clearArmed = false;
+        $('clearOverridesButton').textContent = 'Clear all';
+        $('clearOverridesButton').style.background = '';
+        $('clearOverridesButton').style.color = '';
+      }, 3000);
+      return;
+    }
+    clearTimeout(_clearTimer);
+    _clearArmed = false;
+    $('clearOverridesButton').textContent = 'Clear all';
+    $('clearOverridesButton').style.background = '';
+    $('clearOverridesButton').style.color = '';
     state.overrides = []; saveOverrides(); recompute(); renderAll();
   });
   $('exportOverridesButton').addEventListener('click', () => {
