@@ -1016,18 +1016,55 @@ function reorderSessionWithinDay(draggedId,targetId,placeAbove){
 function addFlight(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;if(!sess.flights)sess.flights=[];const colors=['#171F69','#009AC7','#E31937','#16A34A','#D97706','#7C3AED'];sess.flights.push({id:uid(),name:`Flight ${sess.flights.length+1}`,durationMinutes:45,color:colors[sess.flights.length%colors.length]});const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot})}
 function updFlight(sessId,fid,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;const f=sess.flights.find(x=>x.id===fid);if(!f)return;f[field]=field==='durationMinutes'?Number(value):value;const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function removeFlight(sessId,fid){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;sess.flights=sess.flights.filter(f=>f.id!==fid);const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
-function addEvToSess(sessId,presetId,round){
-  const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;
+function makeEvent(p,round){
   const isFinal=round==='Final';
-  // Dive count comes from the rulebook, locked to the round
   const rbDives=rulebookDives(p.level,p.gender,p.apparatus,round);
   const dives=rbDives!=null?rbDives:p.defaultDives;
   const spd=rulebookSpd(p.level,p.apparatus);
-  const ev={id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,
+  // Finals default BOTH projected and final to 12 (capped later by prelim count if lower)
+  return{id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,
     defaultDives:dives,numberOfDivers:isFinal?12:0,numberOfDives:dives,
+    projectedDivers:isFinal?12:0,finalDivers:isFinal?12:0,
     secondsPerDive:spd,defaultSpd:spd,manualSplit:false,numberOfPanelChanges:0,
-    minutesPerPanelChange:2.5,customDurationMinutes:0,notes:'',rulebookLocked:rbDives!=null};
-  upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events.push(ev)});
+    minutesPerPanelChange:2.5,customDurationMinutes:0,notes:'',rulebookLocked:rbDives!=null,
+    autoFinals:isFinal};
+}
+// Does this meet type pair prelims with finals (same day)?
+function meetHasFinals(){const def=MEET_TYPES[S.meet.meetType];return def&&def.rounds&&def.rounds.includes('Prelim')&&def.rounds.includes('Final')}
+// Find or create a finals session later the same day as the given prelim session
+function ensureFinalsSession(state,prelimSess){
+  const dayId=prelimSess.dayId;
+  // A "finals session" = a comp session on the same day that holds Final-round events
+  // Strategy: find the latest finals session that has room, else create one after the last session of the day.
+  let finalsSess=state.sessions.filter(s=>s.dayId===dayId&&!s.isPractice&&s.events.some(e=>e.round==='Final')).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes)).pop();
+  if(finalsSess&&finalsSess.events.length<2)return finalsSess;
+  // Create a new finals session after the last session that day
+  const dayS=state.sessions.filter(s=>s.dayId===dayId);
+  const lastEnd=dayS.reduce((m,s)=>Math.max(m,calcSessTiming(s).sessionEndMinutes),420);
+  const ns={id:uid(),dayId,warmupStartMinutes:ru(lastEnd+5,5),warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:5,awardsEnabled:false,isPractice:false,title:'',flights:[],events:[]};
+  state.sessions.push(ns);
+  return ns;
+}
+function addEvToSess(sessId,presetId,round){
+  const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=makeEvent(p,round);
+    sess.events.push(ev);
+    // Auto-create matching finals when adding a prelim at EWC / Jr Nationals
+    if(round==='Prelim'&&meetHasFinals()){
+      // Don't duplicate if a finals for this event already exists that day
+      const exists=s.sessions.some(x=>x.dayId===sess.dayId&&x.events.some(e=>e.round==='Final'&&e.level===p.level&&e.gender===p.gender&&e.apparatus===p.apparatus));
+      if(!exists){
+        const fSess=ensureFinalsSession(s,sess);
+        const fEv=makeEvent(p,'Final');
+        fEv.linkedPrelimId=ev.id; // track the pairing for live sync
+        fSess.events.push(fEv);
+      }
+    }
+    // recompute all timing
+    s.sessions.forEach(x=>{if(!x.isPractice)cascadeSession(s,x.id)});
+  });
 }
 // Re-lock dives whenever needed (e.g., loading older schedules)
 function relockDives(ev){
@@ -1043,9 +1080,18 @@ function updEv(sessId,evId,field,value){
     const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','projectedDivers','finalDivers'];
     ev[field]=nums.includes(field)?Number(value):value;
     // Mirror projectedDivers/finalDivers into numberOfDivers for timing calc
-    // Rule: if finalDivers set, use it; else projectedDivers; else numberOfDivers
     if(field==='finalDivers'||field==='projectedDivers'){
       ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
+      if(ev.round==='Final')ev.autoFinals=false;
+      if(ev.round==='Prelim'&&field==='finalDivers'){
+        const prelimFinal=Number(ev.finalDivers||0);
+        if(prelimFinal>0){const target=prelimFinal<12?prelimFinal:12;
+          s.sessions.forEach(sess=>sess.events.forEach(fe=>{
+            if(fe.round==='Final'&&fe.autoFinals!==false&&fe.level===ev.level&&fe.gender===ev.gender&&fe.apparatus===ev.apparatus){
+              fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;}
+          }));
+        }
+      }
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
     if(['numberOfDivers','numberOfDives','secondsPerDive','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
@@ -1491,10 +1537,36 @@ function setEntry(sessId,evId,field,value){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
   const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
   ev[field]=Number(value)||0;
-  // Timeline uses final if present, else projected
   ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
+  // If the user typed into a FINALS event's number, mark it manually edited (stop auto-sync)
+  if(ev.round==='Final'&&(field==='finalDivers'||field==='projectedDivers')){
+    ev.autoFinals=false;
+  }
+  // Live-reactive: if this is a PRELIM final count, sync the matching finals event
+  if(ev.round==='Prelim'&&field==='finalDivers'){
+    syncFinalsToPrelim(ev);
+  }
   _entryDirty=true;
   saveS();
+}
+// Sync a finals event's entries from its matching prelim's FINAL count.
+// Rule: finals = min(12, prelimFinalCount) when prelim final < 12, else 12.
+// Only auto-updates finals events that haven't been manually edited (autoFinals=true).
+function syncFinalsToPrelim(prelimEv){
+  const prelimFinal=Number(prelimEv.finalDivers||0);
+  if(prelimFinal<=0)return;
+  const target=prelimFinal<12?prelimFinal:12;
+  // Find matching finals event(s) across all sessions (same group/gender/apparatus)
+  S.sessions.forEach(sess=>{
+    sess.events.forEach(fe=>{
+      if(fe.round==='Final'&&fe.autoFinals!==false&&
+         fe.level===prelimEv.level&&fe.gender===prelimEv.gender&&fe.apparatus===prelimEv.apparatus){
+        fe.projectedDivers=target;
+        fe.finalDivers=target;
+        fe.numberOfDivers=target;
+      }
+    });
+  });
 }
 // On Enter or Tab, commit + cascade + light refresh of time columns
 function entryKey(e,el){
