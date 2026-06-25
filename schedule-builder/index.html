@@ -2629,23 +2629,42 @@ function renderPP(timed,cfg){
   // a training run joins it if light; comp days otherwise get their own page. A short
   // trailing training-only day attaches to the previous comp day's page rather than
   // creating a near-empty page.
-  const pages=[];let cur=null;let curWeight=0;
-  const MAX=4.4;
-  function dayWeight(d){
-    if(d.trainingOnly)return 0.7 + d.prac.length*0.4;
-    return d.comp.reduce((w,sx)=>w+1.1+(sx.events?.length||0)*0.42,0) + d.prac.length*0.5;
-  }
-  days.forEach((d)=>{
-    const w=dayWeight(d);
+  // Page grouping rules:
+  // • Each competition day is ONE page — never split a single day across pages.
+  //   All sessions AND practice blocks for that day stay together.
+  // • Training-only days (no comp sessions) are lightweight and group together
+  //   until they fill a page, OR they attach to the NEXT comp day if they fit.
+  // • The join threshold is generous so a trailing Open Training block on a
+  //   comp day never causes an orphaned near-empty second page.
+  const pages=[];
+  function pracWeight(d){ return 0.6 + d.prac.length*0.3; }
+  // Group training-only days together first, then decide whether to attach to following comp day
+  const trainingRun=[];
+  days.forEach((d,i)=>{
     if(d.trainingOnly){
-      if(cur&&curWeight+w<=MAX){cur.push(d);curWeight+=w;}
-      else{cur=[d];pages.push(cur);curWeight=w;}
+      trainingRun.push(d);
     } else {
-      const curAllTraining=cur&&cur.every(x=>x.trainingOnly);
-      if(cur&&curAllTraining&&curWeight+w<=MAX){cur.push(d);curWeight+=w;cur=null;curWeight=0;}
-      else{cur=[d];pages.push(cur);curWeight=w;}
+      // Comp day: check if the training run before it fits on the same page
+      if(trainingRun.length){
+        const runWeight=trainingRun.reduce((w,x)=>w+pracWeight(x),0);
+        const compEstimate=d.comp.length*2.1; // rough comp day weight for join decision
+        if(runWeight+compEstimate<=5.5){
+          // All fits: training run + this comp day share a page
+          pages.push([...trainingRun,d]);
+        } else {
+          // Training run gets its own page, comp day gets its own page
+          pages.push([...trainingRun]);
+          pages.push([d]);
+        }
+        trainingRun.length=0;
+      } else {
+        // No preceding training — comp day always gets its own page
+        pages.push([d]);
+      }
     }
   });
+  // Any remaining training-only days at the end
+  if(trainingRun.length) pages.push([...trainingRun]);
 
   function evRow(ev,i){
     const divers=ev._combined?ev._combinedDivers:entryValue(ev);
