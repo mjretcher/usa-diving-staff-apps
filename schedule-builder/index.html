@@ -1517,17 +1517,32 @@ function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
 function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
 function saveSchedule(){
-  // If already saved (has cloud id and folder), just push an update silently
-  if(S.currentLibraryId&&S.libraryFolder){
-    saveToNeon(S.meet.name,S.libraryFolder);
-    return;
+  try{
+    // If already saved (has cloud id and folder), just push an update with visible feedback
+    if(S.currentLibraryId&&S.libraryFolder){
+      toast('Saving to cloud…',1200);
+      saveToNeon(S.meet.name,S.libraryFolder).catch(e=>{console.error('Save failed:',e);toast('Save failed: '+(e&&e.message||'unknown'),4000);});
+      return;
+    }
+    // Otherwise prompt for name + folder
+    const defaultFolder=inferFolder({name:S.meet.name||'',meetType:S.meet.meetType||'',folder:S.libraryFolder||''});
+    UI.modal='saveDialog';
+    UI.saveDialogName=S.meet.name||'New Schedule';
+    UI.saveDialogFolder=defaultFolder;
+    render();
+    // If modal didn't appear (CSS issue, etc.), fallback to prompt
+    setTimeout(()=>{
+      if(UI.modal==='saveDialog'&&!document.querySelector('.folder-picker')){
+        console.warn('Save dialog did not render — falling back to prompt');
+        const n=prompt('Schedule name:',UI.saveDialogName);
+        if(n){_doSaveSchedule(n.trim(),UI.saveDialogFolder||'Other');UI.modal=null;render();}
+        else{UI.modal=null;render();}
+      }
+    },150);
+  }catch(e){
+    console.error('saveSchedule error:',e);
+    toast('Could not open save dialog — check console',4000);
   }
-  // Otherwise prompt for name + folder
-  const defaultFolder=inferFolder({name:S.meet.name,meetType:S.meet.meetType,folder:S.libraryFolder});
-  UI.modal='saveDialog';
-  UI.saveDialogName=S.meet.name||'Schedule';
-  UI.saveDialogFolder=defaultFolder;
-  render();
 }
 function saveDialogConfirm(){
   const name=(UI.saveDialogName||'').trim();
