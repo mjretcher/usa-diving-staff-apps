@@ -537,6 +537,23 @@ button{cursor:pointer;border:none;background:none}
 .ep-body::-webkit-scrollbar{width:5px}
 .ep-body::-webkit-scrollbar-thumb{background:var(--bd3);border-radius:3px}
 .ep-foot{display:flex;gap:7px;padding:11px 16px;border-top:1px solid var(--bd);flex-shrink:0}
+
+/* Clear split ON/OFF toggle */
+.split-toggle{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:7px;font-size:10px;font-weight:800;letter-spacing:.05em;border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx3);transition:.12s}
+.split-toggle-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3);transition:.12s}
+.split-toggle.off{border-color:var(--bd2);background:var(--surf);color:var(--tx3)}
+.split-toggle.off .split-toggle-dot{background:var(--tx3)}
+.split-toggle.off:hover{border-color:var(--split-bd);color:var(--split-tx)}
+.split-toggle.on{border-color:var(--split-bd);background:var(--split-bg);color:var(--split-tx)}
+.split-toggle.on .split-toggle-dot{background:var(--split-tx);box-shadow:0 0 0 3px rgba(217,119,6,.18)}
+.split-toggle.rec{border-color:var(--split-bd);background:var(--surf);color:var(--split-tx);animation:recPulse 2s infinite}
+.split-toggle.rec .split-toggle-dot{background:var(--warn)}
+@keyframes recPulse{0%,100%{border-color:var(--split-bd)}50%{border-color:var(--warn)}}
+.split-toggle.sm{height:26px;padding:0 9px}
+
+/* Session reorder drop indicators */
+.sc.sess-drop-above{box-shadow:0 -3px 0 -1px var(--cyan),var(--sh-md)}
+.sc.sess-drop-below{box-shadow:0 3px 0 -1px var(--cyan),var(--sh-md)}
 </style>
 </head>
 <body>
@@ -559,7 +576,51 @@ const STATUS=['draft','review','ready','published'];
 const STATUS_LBL={draft:'Draft',review:'In Review',ready:'Ready',published:'Published'};
 const TZS=[{v:'America/New_York',l:'Eastern (ET)',s:'ET'},{v:'America/Chicago',l:'Central (CT)',s:'CT'},{v:'America/Denver',l:'Mountain (MT)',s:'MT'},{v:'America/Los_Angeles',l:'Pacific (PT)',s:'PT'}];
 const MEET_TYPES={zone:{l:'Zone Championship',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier']},regional:{l:'Regional Championship',groups:['Group A','Group B'],plat:false,rounds:['Qualifier']},eastWestCentral:{l:'East/West/Central',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final']},juniorNationals:{l:'Junior Nationals',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final']},usaNationals:{l:'USA Nationals',groups:[],plat:true,rounds:['Qualifier','Prelim','Final'],senior:true},custom:{l:'Custom',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier','Prelim','Semifinal','Final'],senior:true}};
-const EV_TIMING={'Group A Girls 3-Meter':{dives:9,spd:32},'Group A Girls 1-Meter':{dives:9,spd:32},'Group A Girls Platform':{dives:8,spd:38},'Group A Boys 3-Meter':{dives:10,spd:32},'Group A Boys 1-Meter':{dives:10,spd:32},'Group A Boys Platform':{dives:9,spd:38},'Group B Girls 3-Meter':{dives:8,spd:34},'Group B Girls 1-Meter':{dives:8,spd:34},'Group B Girls Platform':{dives:7,spd:42},'Group B Boys 3-Meter':{dives:9,spd:33},'Group B Boys 1-Meter':{dives:9,spd:34},'Group B Boys Platform':{dives:8,spd:42},'Group C Girls 3-Meter':{dives:7,spd:35},'Group C Girls 1-Meter':{dives:7,spd:35},'Group C Girls Platform':{dives:6,spd:45},'Group C Boys 3-Meter':{dives:8,spd:35},'Group C Boys 1-Meter':{dives:8,spd:35},'Group C Boys Platform':{dives:7,spd:45},'Group D Girls 3-Meter':{dives:6,spd:35},'Group D Girls 1-Meter':{dives:6,spd:35},'Group D Girls Platform':{dives:6,spd:45},'Group D Boys 3-Meter':{dives:6,spd:35},'Group D Boys 1-Meter':{dives:6,spd:35},'Group D Boys Platform':{dives:6,spd:45}};
+// ── USA DIVING 2026 RULEBOOK — DIVE COUNTS (Article 302) ──────────────
+// fullList = Prelim / Qualifier / "one list" dive count
+// finalsOptionals = Finals dive count (optional/without-limit dives only)
+// Junior groups: A=16-18, B=14/15, C=12/13, D=11&under
+const RULEBOOK_DIVES={
+  // ── Springboard (1-Meter & 3-Meter identical counts) — Art. 302.1 ──
+  'Group A Girls 1-Meter':{full:9,finals:4},'Group A Girls 3-Meter':{full:9,finals:4},
+  'Group A Boys 1-Meter':{full:10,finals:5},'Group A Boys 3-Meter':{full:10,finals:5},
+  'Group B Girls 1-Meter':{full:8,finals:3},'Group B Girls 3-Meter':{full:8,finals:3},
+  'Group B Boys 1-Meter':{full:9,finals:4},'Group B Boys 3-Meter':{full:9,finals:4},
+  'Group C Girls 1-Meter':{full:7,finals:2},'Group C Girls 3-Meter':{full:7,finals:2},
+  'Group C Boys 1-Meter':{full:8,finals:3},'Group C Boys 3-Meter':{full:8,finals:3},
+  'Group D Girls 1-Meter':{full:6,finals:2},'Group D Girls 3-Meter':{full:6,finals:2},
+  'Group D Boys 1-Meter':{full:6,finals:2},'Group D Boys 3-Meter':{full:6,finals:2},
+  // ── Platform — Art. 302.2 ──
+  'Group A Girls Platform':{full:8,finals:4},'Group A Boys Platform':{full:9,finals:5},
+  'Group B Girls Platform':{full:7,finals:3},'Group B Boys Platform':{full:8,finals:4},
+  'Group C Girls Platform':{full:6,finals:2},'Group C Boys Platform':{full:7,finals:3},
+  'Group D Girls Platform':{full:6,finals:2},'Group D Boys Platform':{full:6,finals:2},
+};
+// Seconds-per-dive estimates by group/apparatus (timing only; not a rulebook value)
+const SPD_TABLE={
+  'Group A':{board:32,plat:38},'Group B':{board:34,plat:42},
+  'Group C':{board:35,plat:45},'Group D':{board:35,plat:45},'Senior':{board:32,plat:38}};
+// Returns the locked dive count for an event given its round
+function rulebookDives(level,gender,apparatus,round){
+  const app=isPlatform(apparatus)?'Platform':al(apparatus);
+  const key=`${level} ${gender} ${app}`;
+  const rec=RULEBOOK_DIVES[key];
+  if(!rec)return null; // senior/custom — no rulebook lock
+  // Finals = optionals only; everything else (Prelim, Qualifier, one-list) = full
+  return round==='Final'?rec.finals:rec.full;
+}
+function rulebookSpd(level,apparatus){
+  const rec=SPD_TABLE[level]||SPD_TABLE['Group A'];
+  return isPlatform(apparatus)?rec.plat:rec.board;
+}
+// Back-compat shim: some code still reads EV_TIMING[name].dives / .spd
+const EV_TIMING=new Proxy({},{get(_,name){
+  if(typeof name!=='string')return undefined;
+  const rec=RULEBOOK_DIVES[name];
+  const parts=name.split(' ');const level=parts[0]+' '+parts[1];
+  const app=name.includes('Platform')?'Platform':name.includes('1-Meter')?'1m':'3m';
+  return{dives:rec?rec.full:6,spd:rulebookSpd(level,app)};
+}});
 const LIB_FOLDERS={
   'Regionals & Zones':{icon:'🏊',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
   'East / West / Central':{icon:'🗺️',ids:['saved-2026-east-championship','saved-2026-west-championship','saved-2026-central-championship']},
@@ -801,8 +862,20 @@ let UI={
   moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
   draggedSessId:null,draggedEvFrom:null,
 };
-function initUI(){if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id}
-function openEdit(sessId){UI.editSessId=sessId;UI.entriesOpen=false;render()}
+function initUI(){
+  if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
+  // Re-lock rulebook dive counts on every load so seeds/old saves are correct
+  if(!UI._divesRelocked){
+    let changed=false;
+    S.sessions.forEach(sess=>{if(!sess.isPractice)sess.events.forEach(ev=>{
+      const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
+      if(rb!=null&&(ev.numberOfDives!==rb||!ev.rulebookLocked)){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;changed=true;}
+    })});
+    UI._divesRelocked=true;
+    if(changed)saveS();
+  }
+}
+function openEdit(sessId){UI.editSessId=sessId;render()}
 function closeEdit(){UI.editSessId=null;render()}
 function openEntries(){UI.entriesOpen=true;UI.editSessId=null;UI.entriesDayId=UI.dayId;UI.entriesExpanded=[];render()}
 function closeEntries(){UI.entriesOpen=false;render()}
@@ -855,10 +928,58 @@ function cascadeSession(stateSnap,changedId){
 }
 // Pure timing calc that doesn't read from S (used in cascade)
 function calcSessTimingFromObj(sess){return calcSessTiming(sess)}
+
+// Reorder a session within its day by dropping above/below another session.
+// Re-times the whole day sequentially from the earliest start, then cascades.
+function reorderSessionWithinDay(draggedId,targetId,placeAbove){
+  upd(s=>{
+    const dragged=s.sessions.find(x=>x.id===draggedId);
+    const target=s.sessions.find(x=>x.id===targetId);
+    if(!dragged||!target||dragged.dayId!==target.dayId)return;
+    const dayId=dragged.dayId;
+    // Build ordered list by current start time
+    let dayS=s.sessions.filter(x=>x.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+    // Remove dragged
+    dayS=dayS.filter(x=>x.id!==draggedId);
+    // Insert relative to target
+    const ti=dayS.findIndex(x=>x.id===targetId);
+    const insertAt=placeAbove?ti:ti+1;
+    dayS.splice(insertAt,0,dragged);
+    // Re-time sequentially: keep the earliest start, lay sessions back-to-back with buffers
+    const startAnchor=Number(dayS[0].warmupStartMinutes);
+    let cursor=startAnchor;
+    dayS.forEach((sess,i)=>{
+      sess.warmupStartMinutes=ru(cursor,5);
+      const t=calcSessTiming(sess);
+      const dur=t.sessionEndMinutes-t.warmupStartMinutes;
+      cursor=ru(sess.warmupStartMinutes+dur+Number(sess.bufferMinutes||0),5);
+    });
+  });
+  toast('Session reordered — times adjusted');
+}
+
 function addFlight(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;if(!sess.flights)sess.flights=[];const colors=['#171F69','#009AC7','#E31937','#16A34A','#D97706','#7C3AED'];sess.flights.push({id:uid(),name:`Flight ${sess.flights.length+1}`,durationMinutes:45,color:colors[sess.flights.length%colors.length]});const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot})}
 function updFlight(sessId,fid,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;const f=sess.flights.find(x=>x.id===fid);if(!f)return;f[field]=field==='durationMinutes'?Number(value):value;const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function removeFlight(sessId,fid){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;sess.flights=sess.flights.filter(f=>f.id!==fid);const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
-function addEvToSess(sessId,presetId,round){const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;const isFinal=round==='Final';const ev={id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,defaultDives:p.defaultDives,numberOfDivers:isFinal?12:0,numberOfDives:p.defaultDives,secondsPerDive:p.defaultSpd,defaultSpd:p.defaultSpd,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:2.5,customDurationMinutes:0,notes:''};upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events.push(ev)})}
+function addEvToSess(sessId,presetId,round){
+  const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;
+  const isFinal=round==='Final';
+  // Dive count comes from the rulebook, locked to the round
+  const rbDives=rulebookDives(p.level,p.gender,p.apparatus,round);
+  const dives=rbDives!=null?rbDives:p.defaultDives;
+  const spd=rulebookSpd(p.level,p.apparatus);
+  const ev={id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,
+    defaultDives:dives,numberOfDivers:isFinal?12:0,numberOfDives:dives,
+    secondsPerDive:spd,defaultSpd:spd,manualSplit:false,numberOfPanelChanges:0,
+    minutesPerPanelChange:2.5,customDurationMinutes:0,notes:'',rulebookLocked:rbDives!=null};
+  upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events.push(ev)});
+}
+// Re-lock dives whenever needed (e.g., loading older schedules)
+function relockDives(ev){
+  const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
+  if(rb!=null){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;}
+  return ev;
+}
 function removeEv(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events=sess.events.filter(e=>e.id!==evId)})}
 function updEv(sessId,evId,field,value){
   upd(s=>{
@@ -890,10 +1011,8 @@ async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();
 function render(){
   initUI();
   const timed=allTimed();
-  // Right panel priority: entries > edit > preview (if toggled on)
   let rightPanel='';
   if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
-  else if(UI.editSessId)rightPanel=renderEditPanel(timed);
   else if(UI.previewOpen)rightPanel=renderPreviewPanel(timed);
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
@@ -901,30 +1020,60 @@ function render(){
       <div class="tl-wrap">${renderTlBar(timed)}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
+    ${UI.editSessId?renderEditModal(timed):''}
     ${UI.modal?renderModal(timed):''}
     ${UI.moveSessionId?renderMoveDialog():''}
   `;
   bindDrag();
 }
 
+function renderEditModal(timed){
+  const sess=S.sessions.find(s=>s.id===UI.editSessId);if(!sess)return'';
+  const t=sess.timing||calcSessTiming(sess);
+  const isPrac=sess.isPractice;const n=getSessNum(sess,timed);
+  const title=isPrac?(sess.title||'Open Practice'):`Session ${n}`;
+  const flights=sess.flights||[];
+  const intro=Number(sess.introMinutes||0);const buf=Number(sess.bufferMinutes||0);
+  const cat=buildCatalog(S.meet.meetType);
+  const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
+  const body=isPrac?renderEditPrac(sess,t,flights):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
+  return`<div class="modal-bg" onclick="if(event.target===this)closeEdit()">
+    <div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
+      <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" onclick="closeEdit()">×</button></div>
+      <div class="modal-body">${body}</div>
+      <div class="modal-foot">
+        <button class="btn btn-sm btn-gh" style="color:var(--red)" onclick="deleteSession('${sess.id}')">Delete session</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" onclick="openMoveDialog('${sess.id}')">Move…</button>
+        <button class="btn btn-sm btn-p" onclick="closeEdit()">Done</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── PREVIEW PANEL (right side, quick reference) ───────────────────────
 function renderPreviewPanel(timed){
   const day=S.meet.days.find(d=>d.id===UI.dayId);
-  const sessions=day?timedForDay(UI.dayId):[];
-  const comp=sessions.filter(s=>!s.isPractice);
-  const prac=sessions.filter(s=>s.isPractice);
+  const sessions=(day?timedForDay(UI.dayId):[]).slice().sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
   return`<div class="rpanel open-sm">
     <div class="rp-hd">
-      <div><div class="rp-title">Quick preview</div><div class="rp-sub">${day?shortDate(day.date):''}</div></div>
+      <div><div class="rp-title">Quick preview</div><div class="rp-sub">${day?shortDate(day.date):''} · timeline flow</div></div>
       <button class="rp-close" onclick="UI.previewOpen=false;render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="rp-body">
-      ${prac.map(s=>{const t=s.timing;const ft=t.flightTimes||[];return`<div class="mini-prac">🏊 ${esc(s.title||'Open Practice')} · ${f12(t.eventStartMinutes)}–${f12(t.sessionEndMinutes)}</div>${ft.map(f=>`<div style="font-size:10px;color:var(--tx3);padding:2px 0 2px 11px;border-left:2px solid ${f.color||'#ccc'};margin:2px 0 2px 4px">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)}</div>`).join('')}`;}).join('')}
-      ${comp.map(sess=>{const t=sess.timing;const n=getSessNum(sess,timed);const hasF=sess.events.some(e=>e.round==='Final');return`<div class="mini-sess">
-        <div class="mini-sess-hd"><div class="mini-dot" style="background:${hasF?'var(--red)':'var(--navy)'}"></div><span class="mini-sess-name">Session ${n}</span><span class="mini-sess-time">${f12(t.eventStartMinutes)}</span></div>
-        <div class="mini-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>
-        ${(t.events||[]).map(ev=>`<div class="mini-ev"><span class="mini-ev-name">${esc(evName(ev))}${ev.manualSplit&&!isPlatform(ev.apparatus)?' (Split)':''}</span><span class="mini-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('')}
-      </div>`;}).join('')}
+      ${sessions.map(sess=>{
+        const t=sess.timing;
+        if(sess.isPractice){
+          const ft=t.flightTimes||[];const isTrain=sess.title==='Open Training';
+          return`<div class="mini-prac" style="${isTrain?'background:var(--train-bg);color:var(--train)':''}">${isTrain?'⏱':'🏊'} ${esc(sess.title||'Open Practice')} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}</div>${ft.map(f=>`<div style="font-size:10px;color:var(--tx3);padding:2px 0 2px 11px;border-left:2px solid ${f.color||'#ccc'};margin:2px 0 2px 4px">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)}</div>`).join('')}`;
+        }
+        const n=getSessNum(sess,timed);const hasF=sess.events.some(e=>e.round==='Final');
+        return`<div class="mini-sess">
+          <div class="mini-sess-hd"><div class="mini-dot" style="background:${hasF?'var(--red)':'var(--navy)'}"></div><span class="mini-sess-name">Session ${n}${hasF?' (Finals)':''}</span><span class="mini-sess-time">${f12(t.eventStartMinutes)}</span></div>
+          <div class="mini-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>
+          ${(t.events||[]).map(ev=>`<div class="mini-ev"><span class="mini-ev-name">${esc(evName(ev))}${ev.manualSplit&&!isPlatform(ev.apparatus)?' ÷':''}</span><span class="mini-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('')}
+        </div>`;
+      }).join('')}
       ${!sessions.length?`<div style="font-size:12px;color:var(--tx3);text-align:center;padding:24px">No sessions this day yet</div>`:''}
     </div>
   </div>`;
@@ -1173,9 +1322,9 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Divers</div><input class="ep-inp" type="number" min="0" value="${ev.numberOfDivers||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDivers',this.value)"/></div>
-          <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Dives</div><input class="ep-inp" type="number" min="1" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/></div>
+          <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Dives ${ev.rulebookLocked?'🔒':''}</div>${ev.rulebookLocked?`<div class="ep-inp" style="background:var(--surf3);color:var(--tx2);cursor:default;display:flex;align-items:center;justify-content:center;font-weight:700" title="Locked to USA Diving rulebook (${ev.round})">${ev.numberOfDives||ev.defaultDives||0}</div>`:`<input class="ep-inp" type="number" min="1" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</div>
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Sec/dive</div><input class="ep-inp" type="number" min="5" step="1" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></div>
-          ${canSplit?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split</div><button class="ev-splitbtn ${split?'on':''}" onclick="toggleSplit('${sess.id}','${ev.id}')">${split?'÷ On':'Off'}</button></div>`:''}
+          ${canSplit?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split boards</div><button class="split-toggle ${split?'on':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')"><span class="split-toggle-dot"></span>${split?'ON':'OFF'}</button></div>`:'<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split</div><div style="font-size:11px;color:var(--tx3);padding:6px 0">Platform — N/A</div></div>'}
           <div style="flex:1;text-align:right"><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Runs</div><div style="font-size:12px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums">${tev.eventStartMinutes!==undefined?`${f12(tev.eventStartMinutes)}–${f12(tev.eventEndMinutes)}`:'—'}</div></div>
         </div>
         ${splitHint}
@@ -1277,9 +1426,9 @@ function renderEntriesSession(sess,timed,expandable){
           <td><input type="number" min="0" class="enp-inp final ${finl>0?'filled-f':''} ${match&&finl>0?'matches':''}" value="${finl||''}" placeholder="${isFinal?'12':proj?String(proj):'0'}" 
               onchange="updEv('${sess.id}','${ev.id}','finalDivers',this.value);render()"/></td>
           <td>${proj>0&&proj!==finl?`<button class="enp-copy-btn" onclick="copyProjectedToFinal('${sess.id}','${ev.id}')" title="Copy projected → final">→</button>`:proj>0&&proj===finl&&finl>0?`<span style="color:var(--g-prac);font-size:14px" title="Match">✓</span>`:''}</td>
-          <td><input type="number" min="1" class="enp-inp small" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/></td>
+          <td>${ev.rulebookLocked?`<span class="enp-inp small" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surf3);color:var(--tx2);font-weight:700" title="Locked to rulebook">${ev.numberOfDives||ev.defaultDives||0}</span>`:`<input type="number" min="1" class="enp-inp small" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</td>
           <td><input type="number" min="5" step="1" class="enp-inp small" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></td>
-          <td>${!isPlatform(ev.apparatus)?`<button class="enp-split ${split?'on':needsSplit?'rec':''}" onclick="toggleSplit('${sess.id}','${ev.id}')">${split?'÷ Split':needsSplit?'⚠ Rec':'No split'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
+          <td>${!isPlatform(ev.apparatus)?`<button class="split-toggle sm ${split?'on':needsSplit&&!split?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split boards ON':needsSplit?'Split recommended — click to enable':'Split boards OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
           <td class="enp-ev-time">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
         </tr>`;
       }).join('')}</tbody>
@@ -1389,18 +1538,50 @@ function bindDrag(){
       toast('Event moved to session');
     });
   });
-  // Session card drag → drop on day tab
+  // Session card drag → reorder within day OR drop on day tab for cross-day
   document.querySelectorAll('.sc-hd').forEach(hd=>{
     const card=hd.closest('.sc');if(!card)return;
     const sessId=card.id.replace('sc-','');
     hd.setAttribute('draggable','true');
     hd.addEventListener('dragstart',e=>{
+      // Only start a SESSION drag if not dragging an event row
       e.dataTransfer.effectAllowed='move';
       e.dataTransfer.setData('text/plain','SESS::'+sessId);
       UI.draggedSessId=sessId;
       card.style.opacity='.4';
     });
-    hd.addEventListener('dragend',()=>{card.style.opacity='';UI.draggedSessId=null});
+    hd.addEventListener('dragend',()=>{card.style.opacity='';UI.draggedSessId=null;document.querySelectorAll('.sc').forEach(x=>x.classList.remove('sess-drop-above','sess-drop-below'))});
+  });
+  // Session cards accept session-card drops (same-day reorder, slides into place)
+  document.querySelectorAll('.sc').forEach(card=>{
+    const targetId=card.id.replace('sc-','');
+    card.addEventListener('dragover',e=>{
+      if(!UI.draggedSessId||UI.draggedSessId===targetId)return;
+      // only if same day
+      const dragged=S.sessions.find(s=>s.id===UI.draggedSessId);
+      const target=S.sessions.find(s=>s.id===targetId);
+      if(!dragged||!target||dragged.dayId!==target.dayId)return;
+      e.preventDefault();
+      const rect=card.getBoundingClientRect();
+      const above=e.clientY<rect.top+rect.height/2;
+      card.classList.toggle('sess-drop-above',above);
+      card.classList.toggle('sess-drop-below',!above);
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('sess-drop-above','sess-drop-below'));
+    card.addEventListener('drop',e=>{
+      const data=e.dataTransfer.getData('text/plain');
+      if(!data.startsWith('SESS::'))return;
+      const draggedId=data.replace('SESS::','');
+      if(draggedId===targetId)return;
+      const dragged=S.sessions.find(s=>s.id===draggedId);
+      const target=S.sessions.find(s=>s.id===targetId);
+      if(!dragged||!target||dragged.dayId!==target.dayId){card.classList.remove('sess-drop-above','sess-drop-below');return;}
+      e.preventDefault();
+      const rect=card.getBoundingClientRect();
+      const above=e.clientY<rect.top+rect.height/2;
+      card.classList.remove('sess-drop-above','sess-drop-below');
+      reorderSessionWithinDay(draggedId,targetId,above);
+    });
   });
   // Day pills accept session drops
   document.querySelectorAll('.dp[onclick*=selectDay]').forEach(pill=>{
