@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
-<meta name="app-version" content="2026-06-25-2010"/>
+<meta name="app-version" content="2026-06-25-2030"/>
 <title>Schedule Builder — USA Diving</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -911,7 +911,7 @@ let sync={ok:false,saving:false,err:null},saveTimer=null,lastSynced=null;
 async function nq(sql,params=[]){
   let r;
   try{
-    r=await fetch('https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/sql',{
+    r=await fetch('https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
