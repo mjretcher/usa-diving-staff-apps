@@ -1047,7 +1047,7 @@
               <td>${ewcEvts?`<span class="qvb qvb-nd">Competing EWC (non-disp.)</span>`:`<span class="qvb qvb-direct">Direct qualifier</span>`}</td>
               <td class="reg-col">
                 ${hps ? `<button class="hps-attend-btn" onclick="window._qvToggleHPS('${esc(a.diveMeetsId)}')" title="${confirmed?'Confirmed':'Unconfirmed'}">
-                  <i class="ti ti-${confirmed?'check':'help'}" style="color:${confirmed?'#0a8f55':'#b26a00'}"></i>
+                  <i class="ti ti-${confirmed?'check':'help'}" style="color:${confirmed?'var(--pool, #009ac7)':'#b26a00'}"></i>
                 </button>` : `<i class="ti ti-check reg-yes"></i>`}
               </td>
             </tr>`;
@@ -1080,7 +1080,7 @@
             <td>${esc(h.group)}</td>
             <td>${h.gender==='F'||h.gender==='Girls'?'Girls':'Boys'}</td>
             <td><button class="hps-attend-btn" onclick="window._qvToggleHPS('hps:${esc(norm(h.name))}')" title="${confirmed?'Confirmed attending — click to toggle':'Unconfirmed — click to mark attending'}">
-              <i class="ti ti-${confirmed?'check':'help'}" style="color:${confirmed?'#0a8f55':'#b26a00'}"></i>
+              <i class="ti ti-${confirmed?'check':'help'}" style="color:${confirmed?'var(--pool, #009ac7)':'#b26a00'}"></i>
               ${confirmed?'Confirmed':'Unconfirmed'}
             </button></td>
           </tr>`;
