@@ -39,7 +39,7 @@ input,select,textarea{font-family:inherit}
   padding:0;border-bottom:1px solid rgba(255,255,255,.06);z-index:200;
   box-shadow:0 2px 8px rgba(0,0,0,.25)
 }
-.bar-logo{display:flex;align-items:center;padding:0 16px;height:52px;border-right:1px solid rgba(255,255,255,.1);flex-shrink:0}
+.bar-logo{display:flex;align-items:center;padding:0 16px;height:52px;border-right:1px solid rgba(255,255,255,.1);flex-shrink:0;text-decoration:none;cursor:pointer}.bar-logo:hover{background:rgba(255,255,255,.06)}
 .bar-logo img{height:28px;width:auto;display:block}
 .bar-meet{flex:1;padding:0 16px;cursor:pointer;overflow:hidden;min-width:0}
 .bar-meet:hover .bar-meet-name{color:#fff}
@@ -605,6 +605,54 @@ input,select,textarea{font-family:inherit}
   .modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}
   .pp-wrap{max-height:none;padding:0}
 }
+
+/* ── ENTRIES PANEL ── */
+.entries-panel{
+  position:fixed;left:0;right:0;bottom:0;z-index:450;
+  background:var(--surface);border-radius:var(--r-xl) var(--r-xl) 0 0;
+  box-shadow:var(--shadow-lg);
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);
+  max-height:80vh;display:flex;flex-direction:column
+}
+.entries-panel.open{transform:translateY(0)}
+.ep-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.ep-title{font-size:16px;font-weight:700;color:var(--tx)}
+.ep-subtitle{font-size:12px;color:var(--tx-3);margin-top:2px}
+.ep-close{width:32px;height:32px;border-radius:var(--r-sm);border:1px solid var(--bd);background:transparent;color:var(--tx-3);font-size:18px;display:flex;align-items:center;justify-content:center}
+.ep-close:hover{background:var(--bg)}
+.ep-day-tabs{display:flex;gap:4px;padding:8px 20px;border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto}
+.ep-day-tab{height:28px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;border:1px solid var(--bd-md);background:transparent;color:var(--tx-2);white-space:nowrap}
+.ep-day-tab:hover{background:var(--bg)}
+.ep-day-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.ep-body{flex:1;overflow-y:auto;padding:0}
+.ep-body::-webkit-scrollbar{width:4px}
+.ep-body::-webkit-scrollbar-thumb{background:var(--bd-strong);border-radius:2px}
+.ep-sess-block{border-bottom:1px solid var(--bd)}
+.ep-sess-head{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--navy);color:#fff;cursor:pointer;user-select:none}
+.ep-sess-label{font-size:13px;font-weight:700;flex:1}
+.ep-sess-time{font-size:11px;opacity:.7}
+.ep-sess-arrow{font-size:12px;transition:transform .2s}
+.ep-sess-arrow.open{transform:rotate(180deg)}
+.ep-events-table{width:100%;border-collapse:collapse}
+.ep-events-table th{font-size:10px;font-weight:700;color:var(--tx-3);text-transform:uppercase;letter-spacing:.5px;padding:8px 16px;text-align:left;border-bottom:1px solid var(--bd);background:var(--surface-2);position:sticky;top:0;z-index:1}
+.ep-events-table td{padding:8px 16px;border-bottom:1px solid var(--bd);vertical-align:middle;font-size:13px}
+.ep-events-table tr:last-child td{border-bottom:none}
+.ep-events-table tr:hover td{background:var(--surface-2)}
+.ep-ev-name{font-weight:500;color:var(--tx);min-width:180px}
+.ep-ev-round{min-width:80px}
+.ep-inp{width:60px;font-size:13px;padding:5px 7px;border-radius:6px;border:1.5px solid var(--bd-md);text-align:center;font-family:inherit;background:var(--surface);color:var(--tx);transition:border-color .12s}
+.ep-inp:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(23,31,105,.08)}
+.ep-inp.finals{border-color:var(--red);color:var(--red);font-weight:700}
+.ep-inp.has-value{border-color:var(--navy);background:#EEF3FD}
+.ep-split-btn{height:28px;padding:0 10px;border-radius:6px;font-size:11px;font-weight:600;border:1.5px solid var(--bd-md);background:transparent;color:var(--tx-3);transition:.12s;white-space:nowrap}
+.ep-split-btn:hover:not(.on){background:var(--bg);border-color:var(--bd-strong)}
+.ep-split-btn.on{background:var(--split-bg);border-color:var(--split-bd);color:var(--split-tx)}
+.ep-time{font-size:11px;color:var(--tx-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ep-dur{font-size:11px;color:var(--tx-3);white-space:nowrap}
+.ep-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--bd);flex-shrink:0;background:var(--surface-2)}
+.ep-footer-info{font-size:12px;color:var(--tx-3)}
+.ep-apply-finals{height:30px;padding:0 14px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:var(--red);color:#fff;cursor:pointer}
+.ep-apply-finals:hover{background:#CC1530}
 </style>
 </head>
 <body>
@@ -802,6 +850,18 @@ function makeInitialState(){
     outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true,showRound:true}};
 }
 function loadState(){try{const r=JSON.parse(localStorage.getItem(STORAGE_KEY)||'');if(r?.meet&&Array.isArray(r.sessions))return r}catch{}return makeInitialState()}
+// Auto-save to localStorage every 30 seconds — industry standard
+// This ensures work is never lost even if browser closes unexpectedly
+let _autoSaveTimer=setInterval(()=>{
+  if(state&&state.meet){
+    saveState();
+    // Also flush pending Neon write if one is queued
+    if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(state.currentLibraryId)doSave()}
+  }
+},30000);
+// Also save on page visibility change (tab switch, minimize) and before unload
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state?.meet)saveState()});
+window.addEventListener('beforeunload',()=>{if(state?.meet){saveState();if(state.currentLibraryId&&saveTimer){clearTimeout(saveTimer);saveTimer=null;doSave()}}});
 function saveState(){state.updatedAt=new Date().toISOString();try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch{}}
 let state=loadState();
 function update(fn){fn(state);saveState();if(state.currentLibraryId)scheduleSave();render()}
@@ -950,7 +1010,8 @@ let ui={
   activeDayId:'',modal:null,drawerSessId:null,
   rightOpen:false,previewMode:'operations',genAud:'athletes',
   pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
-  neonLib:[],neonLibLoading:false,
+  neonLib:[],neonLibLoading:false,libFolder:'Regionals & Zones',
+  entriesPanel:false,entriesDayId:'',entriesOpenSessions:new Set(),
 };
 
 function initUI(){
@@ -1029,9 +1090,11 @@ function removeFlight(sessId,flightId){
 function addEventToSess(sessId,presetId,round){
   const catalog=buildCatalog(state.meet.meetType);
   const preset=catalog.find(e=>e.id===presetId);if(!preset)return;
+  // Finals auto-set to 12 divers; Prelims/Qualifiers start at 0 (user enters from entries)
+  const isFinal=round==='Final';
   const ev={id:uid(),level:preset.level,gender:preset.gender,apparatus:preset.apparatus,
     style:preset.style,round,defaultDives:preset.defaultDives,
-    numberOfDivers:0,numberOfDives:preset.defaultDives,
+    numberOfDivers:isFinal?12:0,numberOfDives:preset.defaultDives,
     secondsPerDive:preset.defaultSpd,defaultSpd:preset.defaultSpd,
     manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:2.5,
     customDurationMinutes:0,notes:''};
@@ -1087,6 +1150,144 @@ function loadBuiltin(id){
   showToast(`Loaded: ${item.name}`);
 }
 
+
+// ── ENTRIES PANEL ─────────────────────────────────────────────────────
+// Quick side-up panel showing all events in day order with inline divers/split editing
+
+function openEntriesPanel(){
+  // Default to active day or first day with sessions
+  ui.entriesDayId = ui.activeDayId || state.meet.days[0]?.id || '';
+  ui.entriesOpenSessions = new Set(); // all collapsed by default; click to expand
+  ui.entriesPanel = true;
+  render();
+}
+function closeEntriesPanel(){ ui.entriesPanel = false; render(); }
+function setEntriesDay(dayId){ ui.entriesDayId = dayId; render(); }
+function toggleEntriesSession(sessId){
+  if(!ui.entriesOpenSessions) ui.entriesOpenSessions = new Set();
+  if(ui.entriesOpenSessions.has(sessId)) ui.entriesOpenSessions.delete(sessId);
+  else ui.entriesOpenSessions.add(sessId);
+  render();
+}
+function applyFinalsToAll(){
+  // Set all Final events across entire schedule to 12 divers
+  update(s=>{
+    s.sessions.forEach(sess=>{
+      sess.events.forEach(ev=>{
+        if(ev.round==='Final') ev.numberOfDivers=12;
+      });
+    });
+  });
+  showToast('All Finals set to 12 divers ✓');
+}
+
+function renderEntriesPanel(timed){
+  if(!ui.entriesPanel) return '';
+  const days = state.meet.days;
+  const dayId = ui.entriesDayId || days[0]?.id || '';
+  const sessions = sessForDay(dayId, true).filter(s=>!s.isPractice);
+  
+  // Count total events across all days for footer info
+  const totalEvs = state.sessions.filter(s=>!s.isPractice).reduce((n,s)=>n+s.events.length,0);
+  const withDivers = state.sessions.filter(s=>!s.isPractice).reduce((n,s)=>n+s.events.filter(e=>Number(e.numberOfDivers||0)>0).length,0);
+
+  const dayTabs = days.map(d=>{
+    const hasSessions = state.sessions.some(s=>s.dayId===d.id&&!s.isPractice);
+    return`<button class="ep-day-tab ${d.id===dayId?'active':''}" 
+      onclick="setEntriesDay('${d.id}')"
+      ${!hasSessions?'style="opacity:.45"':''}
+    >${shortDate(d.date).split(',')[0]}</button>`;
+  }).join('');
+
+  const sessBlocks = sessions.map(sess=>{
+    const t = sess.timing;
+    const n = getSessNum(sess, timed);
+    const isOpen = ui.entriesOpenSessions?.has(sess.id) ?? false;
+    const hasFinals = sess.events.some(e=>e.round==='Final');
+    
+    return`<div class="ep-sess-block">
+      <div class="ep-sess-head" onclick="toggleEntriesSession('${sess.id}')" 
+        style="${hasFinals?'background:var(--red)':'background:var(--navy)'}">
+        <span class="ep-sess-label">Session ${n}${hasFinals?' — Finals':sess.events.some(e=>e.round==='Prelim')?' — Prelims':''}</span>
+        <span class="ep-sess-time">${fmt12(t.eventStartMinutes)} – ${fmt12(t.sessionEndMinutes)}</span>
+        <span class="ep-sess-arrow ${isOpen?'open':''}">▾</span>
+      </div>
+      ${isOpen?`<table class="ep-events-table">
+        <thead><tr>
+          <th style="min-width:200px">Event</th>
+          <th>Round</th>
+          <th>Divers</th>
+          <th>Dives</th>
+          <th>Sec/dive</th>
+          <th>Split</th>
+          <th>Est. time</th>
+          <th>Window</th>
+        </tr></thead>
+        <tbody>${(t.events||[]).map(ev=>{
+          const split = ev.manualSplit && !isPlatform(ev.apparatus);
+          const dur = calcEvDur(ev);
+          const isFinal = ev.round === 'Final';
+          const divers = Number(ev.numberOfDivers||0);
+          const dives = Number(ev.numberOfDives||ev.defaultDives||0);
+          const spd = Number(ev.secondsPerDive||ev.defaultSpd||35);
+          const splitRec = dur.rawMinutes >= 3 || divers >= 40;
+          const roundClass = (ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
+          return`<tr>
+            <td class="ep-ev-name">${esc(evName(ev))}${split?' <span class="ev-badge split" style="font-size:9px">SPLIT</span>':''}</td>
+            <td class="ep-ev-round"><span class="ev-badge ${roundClass}">${esc(ev.round||'')}</span></td>
+            <td>
+              <input type="number" min="0" class="ep-inp ${isFinal?'finals':divers>0?'has-value':''}"
+                value="${divers}"
+                placeholder="${isFinal?'12':'0'}"
+                title="${isFinal?'Finals: typically 12 divers':'Enter number of divers'}"
+                onchange="updateEvent('${sess.id}','${ev.id}','numberOfDivers',this.value);this.className='ep-inp ${isFinal?'finals':''}'+' '+(this.value>0?'has-value':'')" />
+            </td>
+            <td>
+              <input type="number" min="1" class="ep-inp"
+                value="${dives}"
+                onchange="updateEvent('${sess.id}','${ev.id}','numberOfDives',this.value)" />
+            </td>
+            <td>
+              <input type="number" min="5" step="1" class="ep-inp"
+                value="${spd}"
+                onchange="updateEvent('${sess.id}','${ev.id}','secondsPerDive',this.value)" />
+            </td>
+            <td>
+              ${!isPlatform(ev.apparatus)?`<button class="ep-split-btn ${split?'on':splitRec?'':''}${splitRec&&!split?' ep-warn':''}"
+                onclick="toggleSplit('${sess.id}','${ev.id}')"
+                title="${split?'Click to remove split':splitRec?'Split recommended — click to enable':'Click to split this event'}"
+              >${split?'÷ Split':splitRec?'⚠ Split?':'No split'}</button>`:'<span style="color:var(--tx-3);font-size:11px">N/A</span>'}
+            </td>
+            <td class="ep-dur">${fmtDur(dur.eventMinutes)}</td>
+            <td class="ep-time">${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`:''}
+    </div>`;
+  }).join('');
+
+  return`<div class="drawer-overlay open" onclick="if(event.target===this)closeEntriesPanel()" style="z-index:450">
+    <div class="entries-panel open">
+      <div class="drawer-grip"></div>
+      <div class="ep-head">
+        <div>
+          <div class="ep-title">Entry counts & splits</div>
+          <div class="ep-subtitle">${withDivers}/${totalEvs} events have entries · click a session to expand</div>
+        </div>
+        <button class="ep-close" onclick="closeEntriesPanel()">×</button>
+      </div>
+      <div class="ep-day-tabs">${dayTabs}</div>
+      <div class="ep-body">
+        ${sessions.length?sessBlocks:`<div class="empty" style="padding:32px"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions on this day</div></div>`}
+      </div>
+      <div class="ep-footer">
+        <span class="ep-footer-info">${withDivers} of ${totalEvs} events have entries across all days</span>
+        <button class="ep-apply-finals" onclick="applyFinalsToAll()" title="Set all Final events to 12 divers">Set all Finals → 12</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────
 function render(){
   initUI();
@@ -1098,6 +1299,7 @@ function render(){
       ${renderRightPanel(timed)}
     </div>
     ${ui.drawerSessId?renderDrawerOverlay(timed):''}
+    ${ui.entriesPanel?renderEntriesPanel(timed):''}
     ${ui.modal?renderModal(timed):''}
   `;
   afterRender();
@@ -1141,7 +1343,7 @@ function renderBar(timed){
   const status=state.publishStatus||'draft';
   const dayBtns=state.meet.days.map(d=>`<button class="day-pill ${d.id===ui.activeDayId?'active':''}" onclick="selectDay('${d.id}')">${shortDate(d.date).split(',')[0]}</button>`).join('');
   return`<header class="bar">
-    <div class="bar-logo"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving"/></div>
+    <a class="bar-logo" href="../" title="Back to USA Diving Staff Apps"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving"/></a>
     <div class="bar-meet" onclick="ui.modal='meet';render()">
       <div class="bar-meet-name">${esc(state.meet.name||'New Schedule')}</div>
       <div class="bar-meet-meta">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''}${tz?' · '+tz.short:''} · ${MEET_TYPES[state.meet.meetType]?.label||'Custom'}</div>
@@ -1152,6 +1354,7 @@ function renderBar(timed){
     <div class="bar-actions">
       <button class="bar-status ${status}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LABELS[status]}</button>
       <div class="bar-sep"></div>
+      <button class="bar-btn" onclick="openEntriesPanel()">Entries</button>
       <button class="bar-btn" onclick="openLibrary()">Library</button>
       <button class="bar-btn" onclick="saveSchedule()">Save</button>
       <button class="bar-btn primary" onclick="ui.modal='generate';render()">Generate</button>
@@ -1539,7 +1742,8 @@ function showAddMenu(){
 
 // ── MODALS ────────────────────────────────────────────────────────────
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,entries:renderEntriesModal};
+  // Note: entries panel is rendered separately below modal, not as a modal
   const fn=fns[ui.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){ui.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -1616,20 +1820,46 @@ function renderPickerModal(timed){
 
 function renderLibraryModal(){
   const local=JSON.parse(localStorage.getItem(LIB_KEY)||'[]');
+  // Organize built-ins into folders
+  const folders={
+    'Templates':{icon:'📁',color:'var(--navy)',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
+    'Regionals & Zones':{icon:'🏊',color:'var(--cyan)',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
+    'East / West / Central':{icon:'🗺️',color:'#7C3AED',ids:['saved-2026-east-championship','saved-2026-west-championship','saved-2026-central-championship']},
+    'Junior Nationals':{icon:'🥇',color:'var(--navy)',ids:['saved-2026-jr-nationals','saved-2026-combined']},
+    'Senior / USA Nationals':{icon:'🇺🇸',color:'var(--red)',ids:['saved-2026-nationals','saved-2026-combined']},
+  };
+  // Map id -> item for easy lookup
+  const byId={};BUILTIN_SCHEDULES.forEach(x=>byId[x.id]=x);
+  // Active folder in ui
+  if(!ui.libFolder)ui.libFolder='Regionals & Zones';
+
+  const folderTabs=Object.entries(folders).map(([name,cfg])=>
+    `<button class="ep-day-tab ${ui.libFolder===name?'active':''}" 
+      style="${ui.libFolder===name?'':'border-color:'+cfg.color+';color:'+cfg.color}"
+      onclick="ui.libFolder='${name.replace(/'/g,"\'")}';render()">${cfg.icon} ${name}</button>`
+  ).join('');
+
+  const activeCfg=folders[ui.libFolder]||Object.values(folders)[0];
+  const activeItems=(activeCfg.ids||[]).map(id=>byId[id]).filter(Boolean);
+  // Remove duplicates
+  const seen=new Set();const uniqueItems=activeItems.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true});
+
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-head"><span class="modal-title">Schedule library</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="lib-section-label">Built-in templates</div>
-      <div class="lib-list" style="margin-bottom:16px">
-        ${BUILTIN_SCHEDULES.map(item=>{
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bd)">
+        ${folderTabs}
+      </div>
+      ${uniqueItems.length?`<div class="lib-list" style="margin-bottom:16px">
+        ${uniqueItems.map(item=>{
           const c=item.schedule;const comp=c.sessions.filter(s=>!s.isPractice).length;
           return`<div class="lib-item">
-            <div class="lib-icon builtin">📋</div>
-            <div class="lib-info"><div class="lib-name">${esc(item.name)}</div><div class="lib-meta">${c.meet.days.length} days · ${comp} competition sessions</div></div>
+            <div class="lib-icon builtin">${activeCfg.icon}</div>
+            <div class="lib-info"><div class="lib-name">${esc(item.name)}</div><div class="lib-meta">${c.meet.days.length} days · ${comp} competition sessions · ${c.meet.venue||'Competition Pool'}</div></div>
             <div class="lib-acts"><button class="lib-act primary" onclick="loadBuiltin('${item.id}')">Load</button></div>
           </div>`;
         }).join('')}
-      </div>
+      </div>`:`<div class="empty" style="padding:24px"><div class="empty-title">No templates in this folder yet</div></div>`}
       ${ui.neonLibLoading?`<div style="font-size:12px;color:var(--tx-3);padding:12px 0">Loading cloud schedules…</div>`:''}
       ${ui.neonLib.length?`<div class="lib-section-label">Cloud schedules</div><div class="lib-list" style="margin-bottom:16px">
         ${ui.neonLib.map(item=>`<div class="lib-item">
