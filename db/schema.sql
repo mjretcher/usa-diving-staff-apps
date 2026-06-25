@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS schedule_builder.presence (
 CREATE INDEX IF NOT EXISTS idx_sb_year ON schedule_builder.schedules(year);
 CREATE INDEX IF NOT EXISTS idx_sb_type ON schedule_builder.schedules(meet_type);
 
+-- Add folder column for library organization (idempotent)
+ALTER TABLE schedule_builder.schedules ADD COLUMN IF NOT EXISTS folder TEXT;
+CREATE INDEX IF NOT EXISTS idx_sb_folder ON schedule_builder.schedules(folder);
+
 
 -- SCHEMA 2: junior_results
 CREATE SCHEMA IF NOT EXISTS junior_results;
