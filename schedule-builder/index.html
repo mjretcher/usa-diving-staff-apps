@@ -604,6 +604,10 @@ button{cursor:pointer;border:none;background:none}
 .feg-dives-lbl{font-size:8px;color:var(--tx3);text-transform:uppercase;display:block;font-weight:600;margin-top:1px}
 .feg-split{width:64px}
 .feg-window{font-size:10.5px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Finals auto-sync flash */
+.feg-inp.synced-flash{animation:syncFlash .6s ease}
+@keyframes syncFlash{0%{background:var(--final);color:#fff}100%{background:var(--final-bg);color:var(--final)}}
 </style>
 </head>
 <body>
@@ -1497,10 +1501,10 @@ function renderEntriesPanel(timed){
       const usingFinal=finl>0;
       rowsHtml+=`<tr>
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" class="feg-inp proj ${proj>0?'on':''}" value="${proj||''}" placeholder="0" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${proj>0?'on':''}" value="${proj||''}" placeholder="0" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" class="feg-inp final ${finl>0?'on':''}" value="${finl||''}" placeholder="${proj||'—'}" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finl>0?'on':''}" value="${finl||''}" placeholder="${proj||'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
         <td class="feg-using">${usingFinal?'<span class="feg-tag final">Final</span>':proj>0?'<span class="feg-tag proj">Proj</span>':''}</td>
@@ -1564,6 +1568,11 @@ function syncFinalsToPrelim(prelimEv){
         fe.projectedDivers=target;
         fe.finalDivers=target;
         fe.numberOfDivers=target;
+        // Live-update the finals inputs in the DOM (no full re-render — preserves focus)
+        const fp=document.getElementById('feg-'+fe.id+'-proj');
+        const ff=document.getElementById('feg-'+fe.id+'-final');
+        if(fp){fp.value=target;fp.classList.add('on');}
+        if(ff){ff.value=target;ff.classList.add('on');ff.classList.add('synced-flash');setTimeout(()=>ff.classList.remove('synced-flash'),600);}
       }
     });
   });
