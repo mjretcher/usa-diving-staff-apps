@@ -2481,14 +2481,15 @@ function renderGenerateModal(timed){
   const showLbl=S.meet.showCombineLabels!==false;
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="modal-body"><div class="print-label-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()" style="width:15px;height:15px;accent-color:var(--navy)"/> Show "Combined" / "Simultaneous" labels on output</label></div>
-      <div class="aud-grid">${Object.entries(AUD).map(([k,c])=>`<div class="aud-card ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="aud-name">${c.l}</div></div>`).join('')}</div>
+    <div class="modal-body">
+      <div class="audgrid">${Object.entries(AUD).map(([k,c])=>`<div class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="audname">${c.l}</div></div>`).join('')}</div>
       <div style="margin-bottom:14px">
-        <div class="tog-row">Show warm-up times <label class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="tog-sl"></span></label></div>
-        <div class="tog-row">Show event start/end times <label class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;render()"><span class="tog-sl"></span></label></div>
-        <div class="tog-row">Show event entries (divers) <label class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="tog-sl"></span></label></div>
-        <div class="tog-row">Show sec/dive detail <label class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="tog-sl"></span></label></div>
-        <div class="tog-row">Group practice blocks at top of day <label class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="tog-sl"></span></label></div>
+        <div class="togrow">Show warm-up times <label class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="togsl"></span></label></div>
+        <div class="togrow">Show event start/end times <label class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;render()"><span class="togsl"></span></label></div>
+        <div class="togrow">Show event entries (divers) <label class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="togsl"></span></label></div>
+        <div class="togrow">Show sec/dive detail <label class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></label></div>
+        <div class="togrow">Group practice blocks at top of day <label class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></label></div>
+        <div class="togrow">Show "Combined" / "Simultaneous" labels <label class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></label></div>
       </div>
       <div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Preview</div>
       ${renderPP(timed,cfg)}
