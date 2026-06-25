@@ -26,8 +26,8 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
 /* TOP BAR */
 .topbar{background:var(--navy);display:flex;align-items:center;gap:0;padding:0;z-index:100;border-bottom:1px solid rgba(255,255,255,.08)}
 .tb-brand{display:flex;align-items:center;gap:10px;padding:0 16px;border-right:1px solid rgba(255,255,255,.12);height:48px;flex-shrink:0}
-.tb-logo{width:26px;height:26px;background:var(--red);border-radius:5px;display:flex;align-items:center;justify-content:center}
-.tb-logo svg{width:16px;height:16px;fill:white}
+.tb-logo{height:26px;display:flex;align-items:center}
+.tb-logo img{height:26px;width:auto;display:block}
 .tb-brand-name{color:white;font-size:13px;font-weight:600;letter-spacing:.3px}
 .tb-meet{flex:1;padding:0 14px;overflow:hidden;cursor:pointer;min-width:0}
 .tb-meet:hover .tb-meet-name{color:white}
@@ -333,8 +333,7 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
 .pp-org{font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
 .pp-meet{font-size:18px;font-weight:700;color:var(--navy);margin:2px 0}
 .pp-venue{font-size:11px;color:var(--gray)}
-.pp-mark{width:40px;height:40px;background:var(--navy);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.pp-mark::after{content:'';width:18px;height:18px;background:var(--red);border-radius:50%}
+.pp-logo{height:44px;width:auto;display:block;flex-shrink:0}
 .pp-day{margin-bottom:16px}
 .pp-day-head{background:var(--navy);color:white;padding:5px 10px;border-radius:4px;font-size:12px;font-weight:700;margin-bottom:6px}
 .pp-sess{padding:5px 0 7px;border-bottom:1px solid #eee}
@@ -983,8 +982,7 @@ function renderTopbar(){
   const status=state.publishStatus||'draft';
   return`<header class="topbar">
     <div class="tb-brand">
-      <div class="tb-logo"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M10 3v14M3 10h14" stroke="white" stroke-width="2" fill="none"/></svg></div>
-      <span class="tb-brand-name">USA Diving</span>
+      <div class="tb-logo"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" /></div>
     </div>
     <div class="tb-meet" onclick="document.getElementById('app').dispatchEvent(new CustomEvent('openMeet'))">
       <div class="tb-meet-name">${esc(state.meet.name||'New Schedule')}</div>
@@ -1519,7 +1517,7 @@ function renderPrintPreview(timed,cfg){
         <div class="pp-meet">${esc(state.meet.name)}</div>
         <div class="pp-venue">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''}</div>
       </div>
-      <div class="pp-mark"></div>
+      <img class="pp-logo" src="../shared/images/logo-color-horizontal.png" alt="USA Diving" />
     </div>
     ${days.map(day=>{
       const daySess=timed.filter(s=>s.dayId===day.id&&!s.isPractice).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
