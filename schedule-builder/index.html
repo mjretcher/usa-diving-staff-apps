@@ -777,11 +777,14 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   .modal-body{padding:0!important;overflow:visible!important}
   .gen-layout{display:block!important}
   .pp{max-height:none;border:none;border-radius:0;overflow:visible;background:#fff;padding:0}
-  .pp-page{box-shadow:none;border-radius:0;margin:0;max-width:none;width:100%;min-height:100vh;break-after:page;page-break-after:always;display:flex;flex-direction:column}
-  .pp-page:last-child{break-after:auto;page-break-after:auto;min-height:0}
+  /* NO min-height — let break-after:page do the work. min-height:100vh was
+     inflating short pages and creating phantom blank overflow pages. */
+  .pp-page{box-shadow:none;border-radius:0;margin:0;max-width:none;width:100%;
+    break-after:page;page-break-after:always;display:block}
+  .pp-page:last-child{break-after:auto;page-break-after:auto}
   .pp-body{padding:28px 44px 10px}
   .pp-hd{padding:24px 44px}
-  .pp-ft{padding:13px 44px;margin-top:auto}
+  .pp-ft{padding:13px 44px}
   .pp-sess,.pp-prac{break-inside:avoid;page-break-inside:avoid}
   .pp-day-hd{break-after:avoid;page-break-after:avoid}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
