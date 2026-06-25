@@ -1134,6 +1134,15 @@ function render(){
   initUI();
   // Clear any stale drag indicators
   UI.draggedSessId=UI.draggedSessId||null;
+  // Capture scroll positions of the scrollable surfaces BEFORE we rebuild the DOM
+  const _tl=document.querySelector('.tl-body');
+  const _enp=document.querySelector('.enp-body');
+  const _scrollTl=_tl?_tl.scrollTop:0;
+  const _scrollEnp=_enp?_enp.scrollTop:0;
+  // Also remember which input was focused (entries grid) and its caret
+  const _act=document.activeElement;
+  const _actId=_act&&_act.id?_act.id:null;
+  const _selStart=_act&&_act.selectionStart!=null?_act.selectionStart:null;
   const timed=allTimed();
   let rightPanel='';
   if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
@@ -1149,6 +1158,11 @@ function render(){
     ${UI.moveSessionId?renderMoveDialog():''}
   `;
   bindDrag();
+  // Restore scroll positions so editing doesn't jump you to the top
+  const ntl=document.querySelector('.tl-body');if(ntl&&_scrollTl)ntl.scrollTop=_scrollTl;
+  const nenp=document.querySelector('.enp-body');if(nenp&&_scrollEnp)nenp.scrollTop=_scrollEnp;
+  // Restore focus + caret to the same input if it still exists
+  if(_actId){const el=document.getElementById(_actId);if(el){try{el.focus({preventScroll:true});if(_selStart!=null&&el.setSelectionRange)el.setSelectionRange(_selStart,_selStart);}catch(e){}}}
 }
 
 function renderEditModal(timed){
