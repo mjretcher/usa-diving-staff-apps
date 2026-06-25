@@ -938,11 +938,33 @@ async function loadFromNeon(id,opts={}){
     if(!opts.silent){UI.modal=null;initUI();render();toast('Schedule loaded');}else render();return loaded;}
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
-let presT=null,pollT=null;
+let presT=null,pollT=null,_pollFailures=0;
 async function startSync(){
-  clearInterval(presT);clearInterval(pollT);
-  presT=setInterval(()=>S.currentLibraryId&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),8000);
-  pollT=setInterval(async()=>{if(!S.currentLibraryId)return;try{const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced)await loadFromNeon(S.currentLibraryId,{silent:true});sync.ok=true;setSyncDot('ok');}catch(e){sync.ok=false;setSyncDot('error')}},8000);
+  clearInterval(presT);clearTimeout(pollT);
+  _pollFailures=0;
+  presT=setInterval(()=>S.currentLibraryId&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),30000);
+  // Poll for remote changes, backing off if Neon is unreachable
+  const tick=async()=>{
+    if(!S.currentLibraryId)return;
+    try{
+      const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);
+      if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced)
+        await loadFromNeon(S.currentLibraryId,{silent:true});
+      sync.ok=true;sync.err=null;setSyncDot('ok');
+      // Came back online: also push any pending local changes
+      if(_pollFailures>0&&S.currentLibraryId){_pollFailures=0;doSave().catch(()=>{});}
+    }catch(e){
+      _pollFailures++;sync.ok=false;sync.err=e.message;setSyncDot('error');
+    }
+  };
+  // First poll quick, then 8s, backing off to 60s on repeated failures
+  let nextDelay=8000;
+  const scheduleNext=()=>{
+    if(_pollFailures>0){nextDelay=Math.min(60000,8000*Math.pow(2,Math.min(3,_pollFailures-1)));}
+    else nextDelay=8000;
+    pollT=setTimeout(async()=>{await tick();scheduleNext();},nextDelay);
+  };
+  await tick();scheduleNext();
 }
 let lastSavedAt=null;
 function fmtRelativeTime(iso){
@@ -959,13 +981,13 @@ function setSyncDot(s){
   if(!d||!l)return;
   d.className='sync-pip'+(s==='saving'?' saving':s==='error'?' error':'');
   if(s==='saving'){l.textContent='Saving…'}
-  else if(s==='error'){l.textContent='Connection lost'}
+  else if(s==='error'){l.textContent='Offline · saved locally'}
   else if(s==='ok'){l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced);d.className='sync-pip'}
   else{l.textContent='Saved locally'}
 }
 setInterval(()=>{
   const l=document.querySelector('.sync-lbl');
-  if(l&&!l.textContent.startsWith('Saving')&&!l.textContent.startsWith('Connection')){
+  if(l&&!l.textContent.startsWith('Saving')&&!l.textContent.startsWith('Offline')){
     l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced||S.updatedAt);
   }
 },15000);
@@ -1707,7 +1729,7 @@ function renderBar(timed){
       <button class="bb" onclick="saveSchedule()">Save</button>
       <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
     </div>
-    <div class="bar-sync"><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Connection lost':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
+    <div class="bar-sync"><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline · saved locally':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
   </header>`;
 }
 
@@ -2135,9 +2157,18 @@ function setEntry(sessId,evId,field,value){
   if(ev.round==='Prelim'&&field==='finalDivers'){
     syncFinalsToPrelim(ev);
   }
+  // Re-flow this day immediately so session times update as user types
+  reflowDay(S,sess.dayId);
   _entryDirty=true;
   saveS();
+  // Debounced re-render so the user sees updated times without losing focus
+  clearTimeout(_entryRenderT);
+  _entryRenderT=setTimeout(()=>{
+    if(S.currentLibraryId)scheduleSave();
+    render();
+  },350);
 }
+let _entryRenderT=null;
 // The effective diver count an event uses for timing.
 // Final wins if it's been entered (including 0); otherwise projected (including 0); else 0.
 function entryValue(ev){
@@ -2179,6 +2210,9 @@ function entryKey(e,el){
     const inputs=[...document.querySelectorAll('.feg-inp')];
     const i=inputs.indexOf(el);
     if(i>=0&&i<inputs.length-1)inputs[i+1].focus();
+  }else if(e.key==='Tab'){
+    // Tab also commits — let the browser handle focus movement naturally
+    commitEntries();
   }
 }
 function commitEntries(){
