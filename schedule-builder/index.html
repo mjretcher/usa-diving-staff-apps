@@ -764,6 +764,8 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pp-prac-f{display:flex;justify-content:space-between;font-size:11px;color:var(--gray);font-weight:500;max-width:360px}
 /* Footer */
 .pp-ft{display:flex;justify-content:space-between;align-items:center;padding:11px 30px;border-top:2px solid var(--navy);font-size:10px;font-weight:600;color:var(--gray);letter-spacing:.01em}
+.pp-ft-l{color:var(--navy);font-weight:700}
+.pp-ft-r{color:var(--gray);font-style:italic}
 @page{size:letter portrait;margin:0}
 @media print{
   body *{visibility:hidden}
@@ -904,7 +906,7 @@ async function loadFromNeon(id,opts={}){
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
 let presT=null,pollT=null;
-function startSync(){
+async function startSync(){
   clearInterval(presT);clearInterval(pollT);
   presT=setInterval(()=>S.currentLibraryId&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),8000);
   pollT=setInterval(async()=>{if(!S.currentLibraryId)return;try{const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced)await loadFromNeon(S.currentLibraryId,{silent:true});sync.ok=true;setSyncDot('ok');}catch(e){sync.ok=false;setSyncDot('error')}},8000);
@@ -1130,7 +1132,7 @@ function detectConflicts(){
           for(let i=0;i<evs.length-1;i++){
             for(let j=i+1;j<evs.length;j++){
               if(evs[i].eventStartMinutes<evs[j].eventEndMinutes&&evs[j].eventStartMinutes<evs[i].eventEndMinutes){
-                issues.push({sev:'err',title:'Same board, overlapping events',detail:`${sn}: ${evName(evs[i])} and ${evName(evs[j])} both use ${al(lane==='platform'?'Platform':lane)} at the same time`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
+                issues.push({sev:'err',title:'Same board, overlapping events',detail:`${sn}: ${evName(evs[i])} and ${evName(evs[j])} both scheduled on ${al(lane==='platform'?'Platform':lane)} at the same time`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
               }
             }
           }
@@ -1195,9 +1197,9 @@ function initUI(){
   if(!UI._divesRelocked){
     let changed=false;
     S.sessions.forEach(sess=>{
-      // Legacy practice blocks named "Open Practice" → "Open Training"
-      if(sess.isPractice&&(sess.title==='Open Practice'||!sess.title)){sess.title='Open Training';changed=true;}
-      if(sess.events&&sess.events[0]&&sess.events[0].customLabel==='Open Practice'){sess.events[0].customLabel='Open Training';changed=true;}
+      // Legacy practice blocks named "Open Training" → "Open Training"
+      if(sess.isPractice&&(sess.title==='Open Training'||!sess.title)){sess.title='Open Training';changed=true;}
+      if(sess.events&&sess.events[0]&&sess.events[0].customLabel==='Open Training'){sess.events[0].customLabel='Open Training';changed=true;}
       if(!sess.isPractice)sess.events.forEach(ev=>{
         const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
         if(rb!=null&&(ev.numberOfDives!==rb||!ev.rulebookLocked)){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;changed=true;}
@@ -1875,7 +1877,7 @@ function renderCombinePickerModal(){
     <div class="modal modal-sm" onclick="event.stopPropagation()">
       <div class="modal-hd"><span class="modal-title">${isCombine?'Combine events':'Run simultaneously'}</span><button class="modal-close" onclick="UI.combinePicker=null;render()">×</button></div>
       <div class="modal-body">
-        <p style="font-size:12.5px;color:var(--tx2);line-height:1.5;margin-bottom:12px">${isCombine?'Select 2–3 events to merge into one. They run together as a single event — each diver keeps their own dive count and the times add up. The first one you pick is the lead.':'Select events that should run at the same time on different boards. They will share a start time.'}</p>
+        <p style="font-size:12.5px;color:var(--tx2);line-height:1.5;margin-bottom:12px">${isCombine?'Select 2–3 events to merge into one. They run together as a single event — each diver keeps their own dive count and the times add up. The first one you pick is the lead.':'Select events that run at the same time on separate boards. They share a start time — this is distinct from Combined, where events merge into one.'}</p>
         <div class="cpick-list">${sess.events.filter(e=>!e.combinedWith).map(ev=>{
           const sel=cp.selected.indexOf(ev.id);
           const order=sel>=0?sel+1:null;
