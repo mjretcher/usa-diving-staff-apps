@@ -619,6 +619,24 @@ button{cursor:pointer;border:none;background:none}
 .fi-sm{height:30px;padding:0 8px;border-radius:7px;border:1.5px solid var(--bd2);background:var(--surf);font-size:12px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums}
 .fi-sm:focus{outline:none;border-color:var(--train);box-shadow:0 0 0 3px rgba(5,150,105,.12)}
 .fitclose-note{margin-top:9px;font-size:11px;color:var(--tx2);line-height:1.5}
+
+/* Styled dialogs (replace native confirm/prompt) */
+.dialog-bg{z-index:1000}
+.dialog{background:var(--surf);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.28);width:min(420px,calc(100vw - 40px));padding:22px 22px 18px;animation:dialogIn .16s ease}
+@keyframes dialogIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.dialog-title{font-size:17px;font-weight:700;color:var(--tx);letter-spacing:-.01em;margin-bottom:7px}
+.dialog-msg{font-size:13.5px;color:var(--tx2);line-height:1.5;margin-bottom:16px}
+.dialog-input{width:100%;height:42px;padding:0 13px;border-radius:9px;border:1.5px solid var(--bd2);background:var(--surf);font-size:14px;color:var(--tx);font-weight:500;margin-bottom:18px}
+.dialog-input:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(23,31,105,.12)}
+.dialog-actions{display:flex;justify-content:flex-end;gap:9px}
+.btn-danger{background:var(--red);color:#fff;border:1px solid var(--red)}
+.btn-danger:hover{background:#b91c1c;border-color:#b91c1c}
+/* Warm-up hot buttons */
+.wu-hotrow{display:flex;align-items:center;gap:6px}
+.wu-hot{height:38px;min-width:46px;padding:0 12px;border-radius:8px;font-size:13px;font-weight:700;border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx2);transition:.12s;font-variant-numeric:tabular-nums;cursor:pointer}
+.wu-hot:hover{border-color:var(--navy);color:var(--navy)}
+.wu-hot.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.wu-hotinp{flex:1;min-width:60px}
 </style>
 </head>
 <body>
@@ -966,7 +984,15 @@ function addSession(dayId,isPractice){
   const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
-function deleteSession(id){if(!confirm('Remove this session?'))return;if(UI.editSessId===id)UI.editSessId=null;upd(s=>{s.sessions=s.sessions.filter(x=>x.id!==id)})}
+function deleteSession(id){
+  const sess=S.sessions.find(x=>x.id===id);
+  const label=sess&&sess.isPractice?(sess.title||'Open Training'):'this session';
+  askConfirm({title:'Delete '+(sess&&sess.isPractice?'block':'session')+'?',message:'Remove '+label+'? This can be undone with Cmd+Z.',confirmText:'Delete',danger:true,onConfirm:()=>{
+    if(UI.editSessId===id)UI.editSessId=null;
+    upd(s=>{s.sessions=s.sessions.filter(x=>x.id!==id);if(s.sessions.length)reflowDay(s,sess.dayId);});
+    toast('Deleted');
+  }});
+}
 function updSess(id,field,value){
   upd(s=>{
     const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
@@ -1147,8 +1173,10 @@ function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
 function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
-async function saveSchedule(){const name=prompt('Save as:',S.meet.name||'Schedule');if(!name)return;S.meet.name=name;try{await saveToNeon(name)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}render()}
-function loadBuiltin(id){if(!confirm('Load template? Current work will be replaced.'))return;const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;S=JSON.parse(JSON.stringify(item.schedule));S.currentLibraryId='';saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name)}
+function saveSchedule(){askPrompt({title:'Save schedule',message:'Name this schedule to save it.',placeholder:'Schedule name',defaultValue:S.meet.name||'Schedule',confirmText:'Save',onConfirm:(name)=>{if(!name)return;_doSaveSchedule(name);}});}
+async function _doSaveSchedule(name){S.meet.name=name;try{await saveToNeon(name)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}render()}
+function loadBuiltin(id){askConfirm({title:'Load template?',message:'Your current work will be replaced. Save it first if you want to keep it.',confirmText:'Load template',danger:true,onConfirm:()=>_doLoadBuiltin(id)});}
+function _doLoadBuiltin(id){const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;S=JSON.parse(JSON.stringify(item.schedule));S.currentLibraryId='';saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name)}
 async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();try{UI.neonLib=await loadNeonLib()}catch{UI.neonLib=[]}UI.neonLibLoading=false;render()}
 
 // ── RENDER CORE ───────────────────────────────────────────────────────
@@ -1178,8 +1206,11 @@ function render(){
     ${UI.editSessId?renderEditModal(timed):''}
     ${UI.modal?renderModal(timed):''}
     ${UI.moveSessionId?renderMoveDialog():''}
+    ${UI.dialog?renderDialog():''}
   `;
   bindDrag();
+  // Focus dialog input when a prompt opens
+  if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
   // Restore scroll positions so editing doesn't jump you to the top
   const ntl=document.querySelector('.tl-body');if(ntl&&_scrollTl)ntl.scrollTop=_scrollTl;
   const nenp=document.querySelector('.enp-body');if(nenp&&_scrollEnp)nenp.scrollTop=_scrollEnp;
@@ -1486,10 +1517,14 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     ${sessSummary}
     <div class="fg2">
       <div class="fg"><label class="fl">Warm-up start</label><input class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
-      <div class="fg"><label class="fl">Warm-up length</label><input class="fi" type="number" min="0" step="5" value="${sess.warmupMinutes||55}" onchange="updSess('${sess.id}','warmupMinutes',this.value)"/></div>
+      <div class="fg"><label class="fl">Warm-up length</label>
+      <div class="wu-hotrow">
+        ${[25,45,55].map(v=>`<button class="wu-hot ${Number(sess.warmupMinutes||55)===v?'on':''}" onclick="updSess('${sess.id}','warmupMinutes',${v})">${v}m</button>`).join('')}
+        <input class="fi wu-hotinp" type="number" min="0" step="5" value="${sess.warmupMinutes||55}" onchange="updSess('${sess.id}','warmupMinutes',this.value)"/>
+      </div></div>
     </div>
-    <div class="fg"><label class="fl">Intro / ceremony before events</label><div class="chiprow">${introChips}<button class="chip" onclick="const v=prompt('Intro (min):','0');if(v!==null)updSess('${sess.id}','introMinutes',Number(v)||0)">Custom</button></div></div>
-    <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="const v=prompt('Buffer (min):','5');if(v!==null)setBuffer('${sess.id}',Number(v)||0)">Custom</button></div></div>
+    <div class="fg"><label class="fl">Intro / ceremony before events</label><div class="chiprow">${introChips}<button class="chip" onclick="askPrompt({title:'Intro / parade (min)',message:'Minutes for intro before the first event.',inputType:'number',defaultValue:sess.introMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')updSess('${sess.id}','introMinutes',Number(v)||0)}})">Custom</button></div></div>
+    <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after session (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
@@ -1860,8 +1895,10 @@ async function loadVersions(){
     return(r.rows||[]).map(row=>({id:row[0],label:row[1],createdAt:row[2]}));
   }catch{return[]}
 }
-async function restoreVersion(vid){
-  if(!confirm('Restore this version? Your current state will be saved as a new version first.'))return;
+function restoreVersion(vid){
+  askConfirm({title:'Restore this version?',message:'Your current state will be saved as a new version first, then this version will be loaded.',confirmText:'Restore',onConfirm:()=>_doRestoreVersion(vid)});
+}
+async function _doRestoreVersion(vid){
   await saveVersion('Auto-backup before restore');
   try{
     const r=await nq(`SELECT data FROM schedule_builder.schedule_versions WHERE id=$1`,[vid]);
@@ -1943,6 +1980,51 @@ function renderMoveDialog(){
 }
 
 // ── MODALS ────────────────────────────────────────────────────────────
+
+// ── Styled confirm / prompt dialogs (replace ALL native browser popups) ──
+function askConfirm(opts){
+  // opts: {title, message, confirmText, cancelText, danger, onConfirm}
+  UI.dialog={type:'confirm',title:opts.title||'Confirm',message:opts.message||'',
+    confirmText:opts.confirmText||'Confirm',cancelText:opts.cancelText||'Cancel',
+    danger:Boolean(opts.danger),onConfirm:opts.onConfirm};
+  render();
+}
+function askPrompt(opts){
+  // opts: {title, message, placeholder, defaultValue, confirmText, inputType, onConfirm(value)}
+  UI.dialog={type:'prompt',title:opts.title||'Enter value',message:opts.message||'',
+    placeholder:opts.placeholder||'',defaultValue:opts.defaultValue!=null?String(opts.defaultValue):'',
+    confirmText:opts.confirmText||'OK',inputType:opts.inputType||'text',onConfirm:opts.onConfirm};
+  render();
+}
+function closeDialog(){UI.dialog=null;render();}
+function dialogConfirm(){
+  const d=UI.dialog;if(!d)return;
+  if(d.type==='prompt'){
+    const el=document.getElementById('dialog-input');
+    const val=el?el.value:'';
+    UI.dialog=null;render();
+    if(d.onConfirm)d.onConfirm(val);
+  } else {
+    UI.dialog=null;render();
+    if(d.onConfirm)d.onConfirm();
+  }
+}
+function renderDialog(){
+  const d=UI.dialog;if(!d)return'';
+  const isPrompt=d.type==='prompt';
+  return`<div class="modal-bg dialog-bg" onclick="if(event.target===this)closeDialog()">
+    <div class="dialog" onclick="event.stopPropagation()">
+      <div class="dialog-title">${esc(d.title)}</div>
+      ${d.message?`<div class="dialog-msg">${esc(d.message)}</div>`:''}
+      ${isPrompt?`<input id="dialog-input" class="dialog-input" type="${d.inputType}" value="${esc(d.defaultValue)}" placeholder="${esc(d.placeholder)}" onkeydown="if(event.key==='Enter'){event.preventDefault();dialogConfirm()}if(event.key==='Escape')closeDialog()"/>`:''}
+      <div class="dialog-actions">
+        <button class="btn btn-sm btn-gh" onclick="closeDialog()">${esc(d.cancelText||'Cancel')}</button>
+        <button class="btn btn-sm ${d.danger?'btn-danger':'btn-p'}" onclick="dialogConfirm()">${esc(d.confirmText)}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal};
   const fn=fns[UI.modal];if(!fn)return'';
