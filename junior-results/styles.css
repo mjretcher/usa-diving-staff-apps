@@ -12,6 +12,7 @@
   --blue-900:   #0d1040;
   --blue-800:   #111650;
   --blue-700:   #171f69;   /* USA Diving Blue */
+  --navy:       #171f69;   /* alias: --navy = USA Diving Blue */
   --blue-600:   #1e2d8a;
   --blue-500:   #2640b0;
   --red:        #e31937;   /* USA Diving Red  */
@@ -675,6 +676,7 @@ input, select { font-family: inherit; }
   gap: 10px; border-bottom: 1px solid var(--line);
 }
 .form-field { display: flex; flex-direction: column; gap: 4px; }
+.form-field-wide { grid-column: 1 / -1; }
 .form-field > span, .form-field > label > span {
   font-size: 9.5px; font-weight: 700; color: var(--ink-4);
   text-transform: uppercase; letter-spacing: .07em;
@@ -1156,3 +1158,5 @@ html, body { overflow-x: hidden; }
 }
 
 /* qv-sort-bar: no sticky positioning — flows inline within its view container */
+
+.stage-content { display: contents; }
