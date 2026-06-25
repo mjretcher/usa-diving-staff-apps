@@ -1,50 +1,1652 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Schedule Builder - USA Diving Staff</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=20260618h" />
-    <link rel="stylesheet" href="sb-design.css?v=20260618h" />
-    <link rel="stylesheet" href="day-tabs-polish.css?v=20260618h" />
-    <link rel="stylesheet" href="design-system.css?v=20260618h" />
-  </head>
-  <body>
-    <div id="app"></div>
-    <script src="assetData.js?v=20260618h"></script>
-    <script src="projected-entries-helper.js?v=20260618h"></script>
-    <script src="autoflow-helper.js?v=20260618h"></script>
-    <script src="restore-2026-championships-once.js?v=20260618h"></script>
-    <script src="cleanup-old-schedule-library-items.js?v=20260618h"></script>
-    <script src="timing-reload-helper.js?v=20260618h" defer></script>
-    <script src="ewc-final-dive-helper.js?v=20260618h"></script>
-    <script src="app.js?v=20260618h"></script>
-    <script src="undo-helper.js?v=20260619a"></script>
-    <script src="pdf-print-helper.js?v=20260618h"></script>
-    <script src="public-print-options-helper.js?v=20260618h"></script>
-    <script src="junior-rule-helper.js?v=20260618h"></script>
-    <script src="health-panel-helper.js?v=20260618h"></script>
-    <script src="health-review-helper.js?v=20260618h" defer></script>
-    <script src="modal-scroll-helper.js?v=20260618h"></script>
-    <script src="workspace-compact-helper.js?v=20260618h" defer></script>
-    <script src="workspace-focus-helper.js?v=20260618h" defer></script>
-    <script src="stable-ui-fixes.js?v=20260618h" defer></script>
-    <script src="scroll-preserve-helper.js?v=20260618h" defer></script>
-    <script src="day-delete-helper.js?v=20260618h" defer></script>
-    <script src="session-text-edit-helper.js?v=20260618h" defer></script>
-    <script src="ui-polish-helper.js?v=20260618h" defer></script>
-    <script src="event-placement-helper.js?v=20260618h" defer></script>
-    <script src="event-delete-helper.js?v=20260618h" defer></script>
-    <script src="entries-drawer-fit-helper.js?v=20260618h" defer></script>
-    <script src="event-catalog-stability-helper.js?v=20260618h" defer></script>
-    <script src="modern-interface-helper.js?v=20260618h" defer></script>
-    <script src="emergency-move-helper.js?v=20260618h" defer></script>
-    <script src="../data/config.js"></script>
-    <script src="schedule-sync.js"></script>
-    <script src="shared-library-sync-helper.js?v=20260618h" defer></script>
-    <script src="remove-v12-schedule-helper.js?v=20260618h" defer></script>
-  </body>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Schedule Builder — USA Diving</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#171F69;--red:#E31937;--gray:#5F6062;--cyan:#009AC7;
+  --bg:#F0F2F6;--surface:#fff;--border:rgba(0,0,0,.09);--border-strong:rgba(0,0,0,.16);
+  --text:#1A1A2E;--text-2:#4A4A6A;--text-3:#8888AA;
+  --amber:#E8A020;--amber-bg:#FFF8EC;--amber-text:#7A4A00;
+  --red-bg:#FFF0F0;--red-text:#8A1A1A;
+  --split-bg:#FFF4E0;--split-bd:#D4840A;--split-tx:#6A3800;
+  --green:#2A9D50;--green-bg:#EFF9F3;--green-text:#1A5A30;
+  --navy-bg:#EEF3FD;--navy-text:#2A3878;
+  --r:8px;--r-lg:12px;
+}
+html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.4}
+#app{display:grid;grid-template-rows:48px 1fr;height:100vh}
+
+/* TOP BAR */
+.topbar{background:var(--navy);display:flex;align-items:center;gap:0;padding:0;z-index:100;border-bottom:1px solid rgba(255,255,255,.08)}
+.tb-brand{display:flex;align-items:center;gap:10px;padding:0 16px;border-right:1px solid rgba(255,255,255,.12);height:48px;flex-shrink:0}
+.tb-logo{width:26px;height:26px;background:var(--red);border-radius:5px;display:flex;align-items:center;justify-content:center}
+.tb-logo svg{width:16px;height:16px;fill:white}
+.tb-brand-name{color:white;font-size:13px;font-weight:600;letter-spacing:.3px}
+.tb-meet{flex:1;padding:0 14px;overflow:hidden;cursor:pointer;min-width:0}
+.tb-meet:hover .tb-meet-name{color:white}
+.tb-meet-name{color:rgba(255,255,255,.88);font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-meet-meta{color:rgba(255,255,255,.42);font-size:11px}
+.tb-actions{display:flex;align-items:center;gap:6px;padding:0 10px;flex-shrink:0}
+.tb-btn{height:29px;padding:0 11px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap;font-family:inherit;transition:.12s}
+.tb-btn:hover{background:rgba(255,255,255,.15);color:white}
+.tb-btn.accent{background:var(--red);border-color:var(--red);color:white}
+.tb-btn.accent:hover{background:#cc1530}
+.tb-status{height:24px;padding:0 10px;border-radius:12px;font-size:11px;font-weight:500;border:1px solid rgba(255,255,255,.15);cursor:pointer;transition:.12s;white-space:nowrap;font-family:inherit}
+.tb-status.draft{background:rgba(255,255,255,.08);color:rgba(255,255,255,.55)}
+.tb-status.review{background:rgba(232,160,32,.2);border-color:rgba(232,160,32,.4);color:#FFD070}
+.tb-status.ready{background:rgba(42,157,80,.2);border-color:rgba(42,157,80,.4);color:#70FFAA}
+.tb-status.published{background:rgba(0,154,199,.2);border-color:rgba(0,154,199,.4);color:#70DFFF}
+.tb-sep{width:1px;height:22px;background:rgba(255,255,255,.12)}
+.tb-sync{display:flex;align-items:center;gap:5px;padding:0 12px;flex-shrink:0}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);transition:background .3s}
+.sync-dot.saving{background:var(--amber)}
+.sync-dot.error{background:var(--red)}
+.sync-dot.offline{background:var(--gray)}
+.sync-label{font-size:11px;color:rgba(255,255,255,.45)}
+.sync-editors{font-size:11px;color:rgba(0,154,199,.8);margin-left:4px}
+
+/* MAIN GRID */
+.main{display:grid;grid-template-columns:252px 1fr 206px;overflow:hidden;height:100%}
+
+/* SHARED COL */
+.col{display:flex;flex-direction:column;overflow:hidden;background:var(--surface);border-right:1px solid var(--border)}
+.col:last-child{border-right:none}
+.col-head{display:flex;align-items:center;justify-content:space-between;padding:0 13px;height:37px;min-height:37px;border-bottom:1px solid var(--border);background:var(--surface)}
+.col-head-label{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.7px}
+.col-head-btn{height:23px;padding:0 8px;border:1px solid var(--border-strong);border-radius:5px;background:transparent;color:var(--text-2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px;font-family:inherit}
+.col-head-btn:hover{background:var(--bg)}
+.col-body{flex:1;overflow-y:auto}
+.col-body::-webkit-scrollbar{width:3px}
+.col-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+
+/* LEFT: DAYS + SESSIONS */
+.day-tab{padding:9px 13px;border-bottom:1px solid var(--border);cursor:pointer;border-left:3px solid transparent;transition:background .1s}
+.day-tab:hover{background:var(--bg)}
+.day-tab.active{background:#EEF3FD;border-left-color:var(--navy)}
+.day-tab-date{font-size:12px;font-weight:600;color:var(--text)}
+.day-tab.active .day-tab-date{color:var(--navy)}
+.day-tab-sub{font-size:10px;color:var(--text-3);margin-top:1px}
+.day-tab-time{font-size:10px;color:var(--text-3)}
+.day-add-row{padding:7px 13px;font-size:11px;color:var(--text-3);cursor:pointer;display:flex;align-items:center;gap:5px;border-bottom:1px solid var(--border)}
+.day-add-row:hover{background:var(--bg);color:var(--text-2)}
+
+.sess-list{padding:7px}
+.sess-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:7px;overflow:hidden;cursor:pointer;transition:border-color .12s}
+.sess-card:hover{border-color:var(--border-strong)}
+.sess-card.active{border:1.5px solid var(--navy)}
+.sess-card.practice{border-left:3px solid var(--gray)}
+.sess-card.practice.active{border:1.5px solid var(--gray)}
+.sess-head{padding:8px 9px 7px;display:flex;align-items:flex-start;gap:7px}
+.sess-badge{width:21px;height:21px;border-radius:50%;background:var(--navy);color:white;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.sess-badge.p{background:var(--gray);font-size:9px}
+.sess-info{flex:1;min-width:0}
+.sess-name{font-size:12px;font-weight:600;color:var(--text)}
+.sess-time-sub{font-size:10px;color:var(--text-3);margin-top:1px}
+.sess-acts{display:flex;gap:3px;flex-shrink:0}
+.icon-btn{width:23px;height:23px;border-radius:5px;border:1px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-3);font-size:12px;transition:.1s;font-family:inherit}
+.icon-btn:hover{background:var(--bg);color:var(--text-2)}
+.icon-btn.danger:hover{background:var(--red-bg);color:var(--red);border-color:var(--red)}
+
+/* Session expanded controls */
+.sess-ctrl{padding:7px 9px 4px;border-top:1px solid var(--border)}
+.sc-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
+.sc-field{display:flex;flex-direction:column;gap:2px}
+.sc-label{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px}
+.sc-input{width:100%;font-size:12px;padding:3px 6px;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);color:var(--text);font-family:inherit}
+.sc-input:focus{outline:none;border-color:var(--navy)}
+.sc-chips-row{display:flex;align-items:center;gap:5px;margin-bottom:5px}
+.sc-chips-label{font-size:10px;color:var(--text-3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-chips{display:flex;gap:3px;flex-shrink:0}
+.chip{font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid var(--border-strong);cursor:pointer;color:var(--text-3);background:transparent;transition:.1s;white-space:nowrap;font-family:inherit}
+.chip:hover{background:var(--bg)}
+.chip.on{background:var(--navy);border-color:var(--navy);color:white}
+.chip.on-amber{background:var(--amber);border-color:var(--amber);color:white}
+.chip.on-green{background:var(--green);border-color:var(--green);color:white}
+
+/* Event rows in session card */
+.ev-list{padding:0 9px 2px}
+.ev-row{display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px solid var(--border)}
+.ev-row:last-child{border-bottom:none}
+.ev-drag{color:var(--text-3);font-size:13px;cursor:grab;flex-shrink:0}
+.ev-name-wrap{flex:1;min-width:0}
+.ev-n{font-size:11px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev-sub{font-size:9px;color:var(--text-3)}
+.ev-divers{width:36px;font-size:11px;padding:2px 3px;border:1px solid var(--border-strong);border-radius:4px;text-align:center;background:var(--surface);color:var(--text);font-family:inherit}
+.ev-divers:focus{outline:none;border-color:var(--navy)}
+.ev-tag{font-size:9px;padding:1px 5px;border-radius:8px;white-space:nowrap;flex-shrink:0}
+.ev-tag.split{background:var(--split-bg);border:1px solid var(--split-bd);color:var(--split-tx)}
+.ev-tag.qualifier{background:var(--navy-bg);border:1px solid #C0D0F0;color:var(--navy-text)}
+.ev-tag.final{background:var(--red-bg);border:1px solid #F0C0C0;color:var(--red-text)}
+.ev-tag.prelim{background:var(--green-bg);border:1px solid #A0D8B8;color:var(--green-text)}
+.ev-tag.semifinal{background:#F5F0FF;border:1px solid #C8B8F0;color:#4A2878}
+.ev-x{width:17px;height:17px;border-radius:4px;border:none;background:transparent;cursor:pointer;color:var(--text-3);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
+.ev-x:hover{background:var(--red-bg);color:var(--red)}
+.add-ev-btn{width:100%;padding:5px;margin:4px 0 7px;border:1px dashed var(--border-strong);border-radius:6px;background:transparent;cursor:pointer;font-size:11px;color:var(--text-3);display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;transition:.1s}
+.add-ev-btn:hover{background:var(--bg);color:var(--text-2)}
+.add-sess-btn{width:calc(100% - 14px);margin:0 7px 8px;padding:7px;border:1px dashed var(--border-strong);border-radius:8px;background:transparent;cursor:pointer;font-size:11px;color:var(--text-2);display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;transition:.1s}
+.add-sess-btn:hover{background:var(--bg)}
+
+/* CENTER TIMELINE */
+.center-col{background:#ECEEF3;border-right:1px solid var(--border)}
+.tl-toolbar{display:flex;align-items:center;gap:5px;padding:0 11px;height:37px;min-height:37px;background:var(--surface);border-bottom:1px solid var(--border)}
+.tl-toolbar select{height:25px;padding:0 7px;font-size:12px;font-family:inherit;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);color:var(--text);cursor:pointer}
+.tl-sep{width:1px;height:19px;background:var(--border);flex-shrink:0}
+.tl-spacer{flex:1}
+.tl-day-btn{height:25px;padding:0 9px;font-size:11px;font-family:inherit;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);color:var(--text-2);cursor:pointer;white-space:nowrap}
+.tl-day-btn:hover{background:var(--bg)}
+.tl-day-btn.active{background:var(--navy);color:white;border-color:var(--navy)}
+.tl-export-btn{height:25px;padding:0 9px;font-size:11px;font-family:inherit;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface);color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:4px}
+.tl-export-btn:hover{background:var(--bg)}
+
+.tl-body{flex:1;overflow-y:auto;padding:11px 13px;display:flex;flex-direction:column;gap:9px}
+.tl-body::-webkit-scrollbar{width:3px}
+.tl-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+.tl-day-label{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.7px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+
+.tl-block{background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);border-left:3px solid var(--navy);overflow:hidden;transition:border-color .12s}
+.tl-block.practice{border-left-color:var(--gray)}
+.tl-block.active{border-color:var(--navy);box-shadow:0 0 0 2px rgba(23,31,105,.08)}
+.tl-block.practice.active{border-color:var(--gray);box-shadow:0 0 0 2px rgba(95,96,98,.08)}
+.tl-block.has-warn{border-top:2px solid var(--amber)}
+.tl-block-head{display:flex;align-items:center;gap:9px;padding:7px 11px;cursor:pointer}
+.tl-pill{background:var(--navy);color:white;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.tl-pill.practice{background:var(--gray)}
+.tl-block-title{flex:1;font-size:13px;font-weight:600;color:var(--text)}
+.tl-block-dur{font-size:11px;color:var(--text-3);white-space:nowrap}
+.tl-ico{width:23px;height:23px;border-radius:5px;border:1px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-3);font-size:12px;flex-shrink:0;font-family:inherit}
+.tl-ico:hover{background:var(--bg)}
+
+/* Inline rows on timeline blocks */
+.tl-row{display:flex;align-items:center;gap:7px;padding:4px 11px 4px;border-top:1px solid var(--border)}
+.tl-row.intro-row{background:#F6F8FF}
+.tl-row.buffer-row{background:#F5FBF7}
+.tl-row.warn-row{background:var(--amber-bg);border-top-color:#E0C040}
+.tl-row-label{font-size:10px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-row.intro-row .tl-row-label{color:#4A5A9A}
+.tl-row.buffer-row .tl-row-label{color:#3A6A4A}
+.tl-row.warn-row .tl-row-label{color:var(--amber-text)}
+.tl-mini-input{width:38px;font-size:11px;padding:2px 4px;border-radius:4px;text-align:center;font-family:inherit}
+.tl-row.intro-row .tl-mini-input{border:1px solid rgba(23,31,105,.25);background:white;color:var(--navy)}
+.tl-row.buffer-row .tl-mini-input{border:1px solid rgba(42,157,80,.3);background:white;color:#1A5A30}
+.tl-mini-input:focus{outline:none}
+.tl-mini-unit{font-size:10px}
+.tl-row.intro-row .tl-mini-unit{color:#4A5A9A}
+.tl-row.buffer-row .tl-mini-unit{color:#3A6A4A}
+.tl-mini-toggle{font-size:10px;padding:2px 7px;border-radius:8px;border:1px solid currentColor;background:transparent;cursor:pointer;font-family:inherit}
+.tl-row.intro-row .tl-mini-toggle{color:#4A5A9A}
+.tl-row.buffer-row .tl-mini-toggle{color:#3A6A4A}
+.tl-warn-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+.tl-warn-text{font-size:10px;color:var(--amber-text);flex:1}
+.tl-warn-ack{font-size:10px;color:var(--amber-text);text-decoration:underline;cursor:pointer;white-space:nowrap;background:none;border:none;font-family:inherit}
+.tl-buf-chips{display:flex;gap:3px}
+.tl-buf-chip{font-size:10px;padding:2px 6px;border-radius:8px;border:1px solid var(--border-strong);cursor:pointer;color:var(--text-3);background:transparent;font-family:inherit;transition:.1s}
+.tl-buf-chip:hover{background:var(--bg)}
+.tl-buf-chip.on{background:var(--green);border-color:var(--green);color:white}
+
+.tl-events{padding:0 11px 5px}
+.tl-ev{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--border);cursor:grab}
+.tl-ev:last-child{border-bottom:none}
+.tl-ev-drag{color:var(--text-3);font-size:13px;flex-shrink:0}
+.tl-ev-label{flex:1;font-size:12px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-ev-split{font-size:9px;padding:1px 5px;border-radius:7px;background:var(--split-bg);border:1px solid var(--split-bd);color:var(--split-tx);white-space:nowrap;flex-shrink:0}
+.tl-ev-time{font-size:11px;color:var(--text-3);white-space:nowrap;flex-shrink:0}
+.tl-ev-spd{font-size:10px;color:var(--text-3);flex-shrink:0}
+.tl-spd-input{width:36px;font-size:11px;padding:1px 3px;border:1px solid var(--border-strong);border-radius:4px;text-align:center;font-family:inherit;background:var(--surface);color:var(--text)}
+.tl-spd-input:focus{outline:none;border-color:var(--navy)}
+
+/* Public schedule view */
+.pub-day{margin-bottom:14px}
+.pub-day-head{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;padding:5px 11px;background:var(--navy-bg);border-radius:6px;margin-bottom:6px}
+.pub-sess{padding:5px 11px 6px;border-bottom:1px solid var(--border)}
+.pub-sess:last-child{border-bottom:none}
+.pub-time{font-size:12px;font-weight:700;color:var(--text)}
+.pub-warmup{font-size:10px;color:var(--text-3);margin-bottom:3px}
+.pub-ev-item{font-size:11px;color:var(--text-2);padding:1px 0;display:flex;align-items:center;gap:5px}
+.pub-ev-round{font-size:9px;padding:1px 5px;border-radius:5px;background:var(--navy-bg);color:var(--navy-text)}
+
+/* RIGHT: LANES */
+.right-col{background:var(--surface);display:flex;flex-direction:column}
+.lanes-body{flex:1;overflow-y:auto;padding:9px 11px}
+.lanes-body::-webkit-scrollbar{width:3px}
+.lanes-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+.lane-section{margin-bottom:13px}
+.lane-head{display:flex;align-items:center;gap:5px;margin-bottom:5px}
+.lane-head-label{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.lane-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.lane-bar-fill{height:100%;border-radius:2px}
+.lane-ev{padding:3px 0;border-bottom:1px solid var(--border)}
+.lane-ev:last-child{border-bottom:none}
+.le-time{font-size:9px;color:var(--text-3)}
+.le-name{font-size:11px;color:var(--text)}
+.le-chips{display:flex;gap:3px;margin-top:2px;flex-wrap:wrap}
+.le-chip{font-size:9px;padding:1px 4px;border-radius:4px}
+.le-chip.split{background:var(--split-bg);color:var(--split-tx)}
+.le-chip.divers{background:var(--navy-bg);color:var(--navy-text)}
+.day-totals{border-top:1px solid var(--border);padding:9px 11px}
+.day-totals-label{font-size:9px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px}
+.day-stat{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+.day-stat-k{color:var(--text-3)}
+.day-stat-v{color:var(--text);font-weight:600}
+.day-stat-v.warn{color:var(--amber-text)}
+.day-stat-v.ok{color:var(--green-text)}
+.gen-btn{margin:9px 11px;padding:9px;background:var(--red);border:none;border-radius:var(--r);color:white;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:.12s}
+.gen-btn:hover{background:#cc1530}
+
+/* MODALS */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.38);display:flex;align-items:center;justify-content:center;z-index:500}
+.modal{background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border-strong);width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 60px);overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)}
+.modal-lg{width:640px}
+.modal-xl{width:720px}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:16px;font-weight:600}
+.modal-close{width:27px;height:27px;border-radius:6px;border:1px solid var(--border);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--text-3);font-family:inherit}
+.modal-close:hover{background:var(--bg)}
+.modal-body{padding:18px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 18px;border-top:1px solid var(--border)}
+.form-row{margin-bottom:13px}
+.form-label{font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px;display:block}
+.form-input{width:100%;font-size:13px;padding:6px 9px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:inherit}
+.form-input:focus{outline:none;border-color:var(--navy)}
+.form-select{width:100%;font-size:13px;padding:6px 9px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:inherit;cursor:pointer}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.form-hint{font-size:11px;color:var(--text-3);margin-top:3px}
+.btn{height:33px;padding:0 15px;border-radius:var(--r);font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);transition:.1s}
+.btn:hover{background:var(--bg)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--navy);color:white;border-color:var(--navy)}
+.btn-primary:hover{background:#111750}
+.btn-danger{background:var(--red);color:white;border-color:var(--red)}
+.btn-danger:hover{background:#cc1530}
+.btn-green{background:var(--green);color:white;border-color:var(--green)}
+.btn-green:hover{background:#1f7a3d}
+
+/* Event picker */
+.ev-search{width:100%;font-size:13px;padding:6px 9px;border:1px solid var(--border-strong);border-radius:var(--r);background:var(--surface);color:var(--text);font-family:inherit;margin-bottom:9px}
+.ev-search:focus{outline:none;border-color:var(--navy)}
+.ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;max-height:260px;overflow-y:auto;padding-right:3px;margin-bottom:12px}
+.ev-grid::-webkit-scrollbar{width:3px}
+.ev-grid::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+.ev-card{padding:7px 9px;border-radius:var(--r);border:1px solid var(--border);cursor:pointer;transition:.1s}
+.ev-card:hover{background:var(--bg);border-color:var(--border-strong)}
+.ev-card.sel{border-color:var(--navy);background:var(--navy-bg)}
+.ec-name{font-size:12px;font-weight:500;color:var(--text)}
+.ec-meta{font-size:10px;color:var(--text-3);margin-top:1px}
+.ec-badge{font-size:9px;padding:1px 5px;border-radius:4px;margin-top:2px;display:inline-block}
+.ec-badge.used{background:var(--navy-bg);color:var(--navy-text)}
+.ec-badge.avail{background:var(--green-bg);color:var(--green-text)}
+.round-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px}
+.round-btn{padding:4px 11px;border-radius:10px;font-size:12px;font-family:inherit;border:1px solid var(--border-strong);background:transparent;color:var(--text-2);cursor:pointer;transition:.1s}
+.round-btn:hover{background:var(--bg)}
+.round-btn.active{background:var(--navy);color:white;border-color:var(--navy)}
+.round-btn.used{opacity:.45;cursor:not-allowed}
+
+/* Library */
+.lib-grid{display:flex;flex-direction:column;gap:7px}
+.lib-card{padding:11px 13px;border-radius:var(--r-lg);border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:11px;transition:.1s}
+.lib-card:hover{border-color:var(--border-strong);background:var(--bg)}
+.lib-icon{width:34px;height:34px;border-radius:8px;background:var(--navy-bg);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.lib-icon.builtin{background:var(--red-bg)}
+.lib-info{flex:1;min-width:0}
+.lib-name{font-size:13px;font-weight:600;color:var(--text)}
+.lib-meta{font-size:11px;color:var(--text-3);margin-top:1px}
+.lib-acts{display:flex;gap:5px;flex-shrink:0}
+.lib-btn{height:25px;padding:0 9px;border-radius:5px;font-size:11px;font-family:inherit;border:1px solid var(--border-strong);background:transparent;color:var(--text-2);cursor:pointer}
+.lib-btn:hover{background:var(--bg)}
+.lib-btn.primary{background:var(--navy);color:white;border-color:var(--navy)}
+.lib-badge{font-size:9px;padding:1px 5px;border-radius:4px;background:var(--navy-bg);color:var(--navy-text);margin-left:4px}
+
+/* Entries manager */
+.entries-table{width:100%;border-collapse:collapse;font-size:12px}
+.entries-table th{font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;background:var(--bg)}
+.entries-table td{padding:4px 8px;border-bottom:1px solid var(--border)}
+.entries-table tr:last-child td{border-bottom:none}
+.entries-table tr:hover td{background:var(--bg)}
+.entries-input{width:50px;font-size:12px;padding:2px 4px;border:1px solid var(--border-strong);border-radius:4px;text-align:center;font-family:inherit}
+.entries-input:focus{outline:none;border-color:var(--navy)}
+
+/* Output / generate */
+.aud-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
+.aud-card{padding:9px 11px;border-radius:var(--r);border:1px solid var(--border);cursor:pointer;transition:.1s}
+.aud-card:hover{border-color:var(--border-strong);background:var(--bg)}
+.aud-card.sel{border-color:var(--navy);background:var(--navy-bg)}
+.aud-name{font-size:12px;font-weight:600;color:var(--text)}
+.aud-desc{font-size:10px;color:var(--text-3);margin-top:1px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-2)}
+.toggle-row:last-child{border-bottom:none}
+.toggle{position:relative;width:32px;height:17px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border-strong);border-radius:8px;transition:.2s}
+.toggle-slider::before{content:'';position:absolute;width:13px;height:13px;left:2px;bottom:2px;background:white;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider{background:var(--navy)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(15px)}
+
+/* Print preview */
+.print-preview{background:white;border-radius:var(--r-lg);padding:24px 28px;font-family:'Inter',sans-serif;max-height:420px;overflow-y:auto}
+.pp-head{border-bottom:3px solid var(--navy);padding-bottom:12px;margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between}
+.pp-org{font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
+.pp-meet{font-size:18px;font-weight:700;color:var(--navy);margin:2px 0}
+.pp-venue{font-size:11px;color:var(--gray)}
+.pp-mark{width:40px;height:40px;background:var(--navy);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pp-mark::after{content:'';width:18px;height:18px;background:var(--red);border-radius:50%}
+.pp-day{margin-bottom:16px}
+.pp-day-head{background:var(--navy);color:white;padding:5px 10px;border-radius:4px;font-size:12px;font-weight:700;margin-bottom:6px}
+.pp-sess{padding:5px 0 7px;border-bottom:1px solid #eee}
+.pp-sess:last-child{border-bottom:none}
+.pp-sess-time{font-size:11px;font-weight:700;color:var(--navy)}
+.pp-warmup{font-size:10px;color:#888;margin-bottom:2px}
+.pp-ev{display:flex;align-items:center;gap:5px;font-size:11px;color:#333;padding:1px 0}
+.pp-ev-badge{font-size:9px;padding:1px 4px;border-radius:3px;background:#EEF3FD;color:#2A3878}
+.pp-footer{border-top:1px solid #eee;padding-top:8px;margin-top:12px;font-size:10px;color:#888;display:flex;justify-content:space-between}
+
+/* Empty / toast */
+.empty-state{padding:28px 16px;text-align:center;font-size:12px;color:var(--text-3)}
+.empty-title{font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:4px}
+.toast{position:fixed;bottom:18px;right:18px;background:#1A1A2E;color:white;padding:9px 14px;border-radius:var(--r);font-size:12px;font-weight:500;z-index:1000;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+
+/* Neon status panel */
+.neon-panel{position:fixed;bottom:18px;left:18px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--r);padding:10px 14px;font-size:11px;z-index:200;box-shadow:0 2px 12px rgba(0,0,0,.12);display:none}
+.neon-panel.show{display:block}
+
+@media print{
+  .topbar,.main .col,.main .center-col .tl-toolbar,.main .right-col,
+  .modal-head button,.modal-foot{display:none!important}
+  .modal-backdrop{position:static;background:none;display:block}
+  .modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}
+  .print-preview{max-height:none;padding:0}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+
+// ── CONNECTION STRING ─────────────────────────────────────────────────
+// Neon HTTP API — no pg driver needed in the browser
+const NEON_URL = 'https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech';
+const NEON_DB  = 'neondb';
+const NEON_KEY = 'npg_SN1ULPtYhC6J'; // read-write key only
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────
+const STORAGE_KEY = 'usa-diving-sb-v2';
+const EDITOR_ID   = localStorage.getItem('sb-editor-id') || (() => {
+  const id = 'ed-' + Math.random().toString(36).slice(2,10);
+  localStorage.setItem('sb-editor-id', id);
+  return id;
+})();
+
+const DEFAULT_TIMING = {
+  transitionBuffer:5, rounding:5, secondsPerDive:42,
+  warmupMinutes:55, panelChangeMinutes:2.5,
+  introductionsMinutes:10, awardsMinutes:15,
+  splitDives:180, splitDivers:40,
+};
+
+const EVENT_TIMING = {
+  'Group A Girls 3-Meter':{dives:9,spd:32,warmup:55},'Group A Girls 1-Meter':{dives:9,spd:32,warmup:55},
+  'Group A Girls Platform':{dives:8,spd:38,warmup:55},'Group A Boys 3-Meter':{dives:10,spd:32,warmup:55},
+  'Group A Boys 1-Meter':{dives:10,spd:32,warmup:55},'Group A Boys Platform':{dives:9,spd:38,warmup:55},
+  'Group B Girls 3-Meter':{dives:8,spd:34,warmup:45},'Group B Girls 1-Meter':{dives:8,spd:34,warmup:45},
+  'Group B Girls Platform':{dives:7,spd:42,warmup:35},'Group B Boys 3-Meter':{dives:9,spd:33,warmup:45},
+  'Group B Boys 1-Meter':{dives:9,spd:34,warmup:35},'Group B Boys Platform':{dives:8,spd:42,warmup:35},
+  'Group C Girls 3-Meter':{dives:7,spd:35,warmup:35},'Group C Girls 1-Meter':{dives:7,spd:35,warmup:35},
+  'Group C Girls Platform':{dives:6,spd:45,warmup:35},'Group C Boys 3-Meter':{dives:8,spd:35,warmup:35},
+  'Group C Boys 1-Meter':{dives:8,spd:35,warmup:35},'Group C Boys Platform':{dives:7,spd:45,warmup:35},
+  'Group D Girls 3-Meter':{dives:6,spd:35,warmup:35},'Group D Girls 1-Meter':{dives:6,spd:35,warmup:35},
+  'Group D Girls Platform':{dives:6,spd:45,warmup:35},'Group D Boys 3-Meter':{dives:6,spd:35,warmup:35},
+  'Group D Boys 1-Meter':{dives:6,spd:35,warmup:35},'Group D Boys Platform':{dives:6,spd:45,warmup:35},
+};
+
+const MEET_TYPES = {
+  zone:{label:'Zone Championship',groups:['Group A','Group B','Group C','Group D'],platform:true,rounds:['Qualifier']},
+  regional:{label:'Regional Championship',groups:['Group A','Group B'],platform:false,rounds:['Qualifier']},
+  juniorNationals:{label:'Junior Nationals',groups:['Group A','Group B','Group C','Group D'],platform:true,rounds:['Prelim','Final']},
+  eastWestCentral:{label:'East/West/Central',groups:['Group A','Group B','Group C','Group D'],platform:true,rounds:['Prelim','Final']},
+  usaNationals:{label:'USA Nationals',groups:[],platform:true,rounds:['Qualifier','Prelim','Final'],senior:true},
+  winterNationals:{label:'Winter Nationals',groups:[],platform:true,rounds:['Qualifier','Prelim','Final'],senior:true},
+  custom:{label:'Custom',groups:['Group A','Group B','Group C','Group D'],platform:true,rounds:['Qualifier','Prelim','Semifinal','Final'],senior:true},
+};
+
+const TZ_OPTS = [
+  {value:'America/New_York',label:'Eastern (ET)',short:'ET'},
+  {value:'America/Chicago',label:'Central (CT)',short:'CT'},
+  {value:'America/Denver',label:'Mountain (MT)',short:'MT'},
+  {value:'America/Los_Angeles',label:'Pacific (PT)',short:'PT'},
+];
+
+const STATUS_ORDER = ['draft','review','ready','published'];
+const STATUS_LABELS = {draft:'Draft',review:'In Review',ready:'Ready',published:'Published'};
+
+const AUDIENCE_CONFIGS = {
+  public:   {label:'Public schedule',      desc:'Events by day, times optional',             showWarmup:false,showBuffer:false,showRound:false,showSec:false,showTimes:false},
+  athletes: {label:'Athletes & coaches',   desc:'Full session times, warm-up, events',       showWarmup:true, showBuffer:false,showRound:true, showSec:false,showTimes:true},
+  judges:   {label:'Judges',               desc:'Session times, event order, panel info',    showWarmup:true, showBuffer:false,showRound:true, showSec:true, showTimes:true},
+  facility: {label:'Venue / facility',     desc:'Pool usage blocks, full day timeline',      showWarmup:true, showBuffer:true, showRound:false,showSec:false,showTimes:true},
+  internal: {label:'Internal operations',  desc:'All detail — buffers, notes, timing',       showWarmup:true, showBuffer:true, showRound:true, showSec:true, showTimes:true},
+};
+
+// ── BUILTIN SEED SCHEDULES ────────────────────────────────────────────
+const BUILTIN_SCHEDULES = [{"id":"seed-zone-b","name":"2026 USA Diving Zone B Championship","builtIn":true,"savedAt":"2026-05-26T23:59:00.000Z","schedule":{"updatedAt":"2026-05-26T23:59:00.000Z","meet":{"name":"2026 USA Diving Zone B Championship","venue":"Competition Pool","city":"","timezone":"America/New_York","meetType":"zone","days":[{"id":"zone-b-day-1","date":"2026-05-27","openMinutes":420,"closeMinutes":1200},{"id":"zone-b-day-2","date":"2026-05-28","openMinutes":420,"closeMinutes":1200},{"id":"zone-b-day-3","date":"2026-05-29","openMinutes":420,"closeMinutes":1200},{"id":"zone-b-day-4","date":"2026-05-30","openMinutes":420,"closeMinutes":1200},{"id":"zone-b-day-5","date":"2026-05-31","openMinutes":420,"closeMinutes":1200}]},"sessions":[{"id":"b-practice-session-003","dayId":"zone-b-day-1","warmupStartMinutes":780,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"b-practice-003","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":240,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"b-practice-session-005","dayId":"zone-b-day-2","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"b-practice-005","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":480,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"b-practice-session-008","dayId":"zone-b-day-3","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Flighted Warm-Ups","events":[{"id":"b-practice-008","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":120,"notes":"Flighted warm-up block.","customLabel":"Flighted warm-up block."}]},{"id":"b-session-01","dayId":"zone-b-day-3","warmupStartMinutes":540,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-001-group-d-boys-1-meter","level":"Group D","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":12.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-002-group-c-girls-1-meter","level":"Group C","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-003-group-b-girls-platform","level":"Group B","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":7,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"b-session-02","dayId":"zone-b-day-3","warmupStartMinutes":665,"warmupMinutes":45,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-004-group-d-girls-platform","level":"Group D","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":6.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-005-group-c-boys-platform","level":"Group C","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":3.0,"numberOfDives":7,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-006-group-b-boys-1-meter","level":"Group B","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"b-session-03","dayId":"zone-b-day-3","warmupStartMinutes":800,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-007-group-a-girls-1-meter","level":"Group A","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":28.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-b-event-008-group-a-boys-3-meter","level":"Group A","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":30.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"b-practice-session-021","dayId":"zone-b-day-4","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Flighted Warm-Ups","events":[{"id":"b-practice-021","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":120,"notes":"Flighted warm-up block.","customLabel":"Flighted warm-up block."}]},{"id":"b-session-04","dayId":"zone-b-day-4","warmupStartMinutes":540,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-009-group-d-girls-1-meter","level":"Group D","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":19.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-010-group-c-boys-1-meter","level":"Group C","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":8.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-011-group-b-boys-platform","level":"Group B","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":12.0,"numberOfDives":8,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"b-session-05","dayId":"zone-b-day-4","warmupStartMinutes":660,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-012-group-d-boys-3-meter","level":"Group D","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":10.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-013-group-c-girls-3-meter","level":"Group C","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-014-group-a-girls-platform","level":"Group A","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":24.0,"numberOfDives":8,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review platform load","customLabel":"Review platform load"}]},{"id":"b-session-06","dayId":"zone-b-day-4","warmupStartMinutes":855,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-015-group-a-boys-1-meter","level":"Group A","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":28.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-b-event-016-group-b-girls-3-meter","level":"Group B","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":27.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"b-practice-session-034","dayId":"zone-b-day-5","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Flighted Warm-Ups","events":[{"id":"b-practice-034","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":120,"notes":"Flighted warm-up block.","customLabel":"Flighted warm-up block."}]},{"id":"b-session-07","dayId":"zone-b-day-5","warmupStartMinutes":540,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-017-group-d-girls-3-meter","level":"Group D","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":17.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-018-group-c-boys-3-meter","level":"Group C","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":7.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-019-group-b-girls-1-meter","level":"Group B","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":30.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"b-session-08","dayId":"zone-b-day-5","warmupStartMinutes":690,"warmupMinutes":45,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-020-group-d-boys-platform","level":"Group D","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":7.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-021-group-c-girls-platform","level":"Group C","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":7.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-022-group-b-boys-3-meter","level":"Group B","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"b-session-09","dayId":"zone-b-day-5","warmupStartMinutes":825,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-b-event-023-group-a-boys-platform","level":"Group A","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":18.0,"numberOfDives":9,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-b-event-024-group-a-girls-3-meter","level":"Group A","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":35.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]}],"publishStatus":"draft","currentLibraryId":"seed-zone-b","acknowledgedWarnings":[],"outputSettings":{"showWarmup":true,"showEndTimes":true,"showSubjectToChange":true,"showRound":true}}},{"id":"seed-zone-e","name":"2026 USA Diving Zone E Championship","builtIn":true,"savedAt":"2026-05-27T20:15:00.000Z","schedule":{"updatedAt":"2026-05-27T20:15:00.000Z","meet":{"name":"2026 USA Diving Zone E Championship","venue":"Competition Pool","city":"","timezone":"America/Los_Angeles","meetType":"zone","days":[{"id":"zone-e-day-1","date":"2026-05-27","openMinutes":420,"closeMinutes":1200},{"id":"zone-e-day-2","date":"2026-05-28","openMinutes":420,"closeMinutes":1200},{"id":"zone-e-day-3","date":"2026-05-29","openMinutes":420,"closeMinutes":1200},{"id":"zone-e-day-4","date":"2026-05-30","openMinutes":420,"closeMinutes":1200},{"id":"zone-e-day-5","date":"2026-05-31","openMinutes":420,"closeMinutes":1200}]},"sessions":[{"id":"e-practice-session-003","dayId":"zone-e-day-1","warmupStartMinutes":540,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"e-practice-003","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":420,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"e-practice-session-005","dayId":"zone-e-day-2","warmupStartMinutes":540,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"e-practice-005","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":420,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"e-practice-session-008","dayId":"zone-e-day-3","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Restricted Training","events":[{"id":"e-restricted-friday-region-10","level":"Schedule","gender":"Open","apparatus":"Practice","style":"Restricted Training","round":"Open Practice","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":30,"notes":"Region 10 restricted training.","customLabel":"Restricted Training"}]},{"id":"e-restricted-session-009-friday","dayId":"zone-e-day-3","warmupStartMinutes":450,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Restricted Training","events":[{"id":"e-restricted-friday-region-9","level":"Schedule","gender":"Open","apparatus":"Practice","style":"Restricted Training","round":"Open Practice","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":30,"notes":"Region 9 restricted training.","customLabel":"Restricted Training"}]},{"id":"e-session-01","dayId":"zone-e-day-3","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-001-group-a-girls-1-meter","level":"Group A","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":28.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-e-event-002-group-a-boys-3-meter","level":"Group A","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":22.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"e-session-02","dayId":"zone-e-day-3","warmupStartMinutes":630,"warmupMinutes":45,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-003-group-b-girls-platform","level":"Group B","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":9.0,"numberOfDives":7,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-004-group-b-boys-1-meter","level":"Group B","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-03","dayId":"zone-e-day-3","warmupStartMinutes":765,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-005-group-c-girls-1-meter","level":"Group C","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":18.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-006-group-c-boys-platform","level":"Group C","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":1.0,"numberOfDives":7,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-04","dayId":"zone-e-day-3","warmupStartMinutes":890,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-007-group-d-girls-platform","level":"Group D","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":6.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-008-group-d-boys-1-meter","level":"Group D","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":4.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-practice-session-021","dayId":"zone-e-day-3","warmupStartMinutes":970,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"e-practice-021","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":170,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"e-practice-session-023","dayId":"zone-e-day-4","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Restricted Training","events":[{"id":"e-restricted-saturday-region-9","level":"Schedule","gender":"Open","apparatus":"Practice","style":"Restricted Training","round":"Open Practice","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":30,"notes":"Region 9 restricted training.","customLabel":"Restricted Training"}]},{"id":"e-restricted-session-024-saturday","dayId":"zone-e-day-4","warmupStartMinutes":450,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Restricted Training","events":[{"id":"e-restricted-saturday-region-10","level":"Schedule","gender":"Open","apparatus":"Practice","style":"Restricted Training","round":"Open Practice","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":30,"notes":"Region 10 restricted training.","customLabel":"Restricted Training"}]},{"id":"e-session-05","dayId":"zone-e-day-4","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-009-group-a-girls-platform","level":"Group A","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":21.0,"numberOfDives":8,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-010-group-a-boys-1-meter","level":"Group A","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":22.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"e-session-06","dayId":"zone-e-day-4","warmupStartMinutes":660,"warmupMinutes":45,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-011-group-b-girls-3-meter","level":"Group B","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":22.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-012-group-b-boys-platform","level":"Group B","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":7.0,"numberOfDives":8,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-07","dayId":"zone-e-day-4","warmupStartMinutes":820,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-013-group-c-girls-3-meter","level":"Group C","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":16.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-014-group-c-boys-1-meter","level":"Group C","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":8.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-08","dayId":"zone-e-day-4","warmupStartMinutes":940,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-015-group-d-girls-1-meter","level":"Group D","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-016-group-d-boys-3-meter","level":"Group D","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":2.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-practice-session-036","dayId":"zone-e-day-4","warmupStartMinutes":1045,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"e-practice-036","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":95,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"e-practice-session-038","dayId":"zone-e-day-5","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"e-practice-038","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":60,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"e-session-09","dayId":"zone-e-day-5","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-017-group-a-girls-3-meter","level":"Group A","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":26.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-e-event-018-group-a-boys-platform","level":"Group A","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":14.0,"numberOfDives":9,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-10","dayId":"zone-e-day-5","warmupStartMinutes":630,"warmupMinutes":45,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-019-group-b-girls-1-meter","level":"Group B","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":23.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-e-event-020-group-b-boys-3-meter","level":"Group B","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":15.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-11","dayId":"zone-e-day-5","warmupStartMinutes":765,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-021-group-c-girls-platform","level":"Group C","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":8.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-022-group-c-boys-3-meter","level":"Group C","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":7.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"e-session-12","dayId":"zone-e-day-5","warmupStartMinutes":855,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-e-event-023-group-d-girls-3-meter","level":"Group D","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":14.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-e-event-024-group-d-boys-platform","level":"Group D","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":0.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]}],"publishStatus":"draft","currentLibraryId":"seed-zone-e","acknowledgedWarnings":[],"outputSettings":{"showWarmup":true,"showEndTimes":true,"showSubjectToChange":true,"showRound":true}}},{"id":"seed-zone-f","name":"2026 USA Diving Zone F Championship","builtIn":true,"savedAt":"2026-05-26T23:59:00.000Z","schedule":{"updatedAt":"2026-05-26T23:59:00.000Z","meet":{"name":"2026 USA Diving Zone F Championship","venue":"Competition Pool","city":"","timezone":"America/Los_Angeles","meetType":"zone","days":[{"id":"zone-f-day-1","date":"2026-05-27","openMinutes":420,"closeMinutes":1200},{"id":"zone-f-day-2","date":"2026-05-28","openMinutes":420,"closeMinutes":1200},{"id":"zone-f-day-3","date":"2026-05-29","openMinutes":420,"closeMinutes":1200},{"id":"zone-f-day-4","date":"2026-05-30","openMinutes":420,"closeMinutes":1200},{"id":"zone-f-day-5","date":"2026-05-31","openMinutes":420,"closeMinutes":1200}]},"sessions":[{"id":"f-practice-session-003","dayId":"zone-f-day-1","warmupStartMinutes":900,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"f-practice-003","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":240,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"f-practice-session-005","dayId":"zone-f-day-2","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"f-practice-005","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":480,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"f-practice-session-008","dayId":"zone-f-day-3","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"f-practice-008","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":60,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"f-session-01","dayId":"zone-f-day-3","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-001-group-d-girls-1-meter","level":"Group D","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":23.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-002-group-c-girls-platform","level":"Group C","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":13.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-003-group-a-girls-3-meter","level":"Group A","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":37.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"f-session-02","dayId":"zone-f-day-3","warmupStartMinutes":650,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-004-group-b-boys-3-meter","level":"Group B","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":21.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-f-event-005-group-b-girls-1-meter","level":"Group B","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":42.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow; Split strongly recommended if springboard","customLabel":"Review split board / flow; Split strongly recommended if springboard"}]},{"id":"f-session-03","dayId":"zone-f-day-3","warmupStartMinutes":825,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-006-group-d-boys-platform","level":"Group D","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":1.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-007-group-c-boys-platform","level":"Group C","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":11.0,"numberOfDives":7,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-008-group-a-boys-1-meter","level":"Group A","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":23.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"f-practice-session-021","dayId":"zone-f-day-4","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"f-practice-021","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":60,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"f-session-04","dayId":"zone-f-day-4","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-009-group-d-girls-platform","level":"Group D","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":8.0,"numberOfDives":6,"secondsPerDive":45.0,"defaultSpd":45.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-010-group-c-girls-3-meter","level":"Group C","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":28.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-f-event-011-group-a-girls-1-meter","level":"Group A","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":39.0,"numberOfDives":9,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":9,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"f-session-05","dayId":"zone-f-day-4","warmupStartMinutes":665,"warmupMinutes":35,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-012-group-d-boys-1-meter","level":"Group D","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":10.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-013-group-c-boys-1-meter","level":"Group C","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":18.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-014-group-b-girls-platform","level":"Group B","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":24.0,"numberOfDives":7,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"f-session-06","dayId":"zone-f-day-4","warmupStartMinutes":835,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-015-group-b-boys-platform","level":"Group B","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":17.0,"numberOfDives":8,"secondsPerDive":42.0,"defaultSpd":42.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-016-group-a-boys-3-meter","level":"Group A","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":24.0,"numberOfDives":10,"secondsPerDive":32.0,"defaultSpd":32.0,"defaultDives":10,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"f-practice-session-034","dayId":"zone-f-day-5","warmupStartMinutes":420,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":0,"awardsEnabled":false,"isPractice":true,"title":"Open Practice","events":[{"id":"f-practice-034","level":"Schedule","gender":"Open","apparatus":"Pool","style":"Custom Block","round":"Custom Block","numberOfDivers":0.0,"numberOfDives":0,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":0,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":60,"notes":"Open practice block.","customLabel":"Open practice block."}]},{"id":"f-session-07","dayId":"zone-f-day-5","warmupStartMinutes":480,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-017-group-c-girls-1-meter","level":"Group C","gender":"Girls","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":33.0,"numberOfDives":7,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":7,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-f-event-018-group-d-girls-3-meter","level":"Group D","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":19.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-019-group-a-boys-platform","level":"Group A","gender":"Boys","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":14.0,"numberOfDives":9,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""}]},{"id":"f-session-08","dayId":"zone-f-day-5","warmupStartMinutes":685,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-020-group-b-boys-1-meter","level":"Group B","gender":"Boys","apparatus":"1-Meter","style":"Individual","round":"Qualifier","numberOfDivers":22.0,"numberOfDives":9,"secondsPerDive":33.0,"defaultSpd":33.0,"defaultDives":9,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"},{"id":"zone-f-event-021-group-b-girls-3-meter","level":"Group B","gender":"Girls","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":37.0,"numberOfDives":8,"secondsPerDive":34.0,"defaultSpd":34.0,"defaultDives":8,"manualSplit":true,"numberOfPanelChanges":3,"minutesPerPanelChange":3.0,"customDurationMinutes":0,"notes":"Review split board / flow","customLabel":"Review split board / flow"}]},{"id":"f-session-09","dayId":"zone-f-day-5","warmupStartMinutes":865,"warmupMinutes":55,"rounding":5,"introMinutes":0,"bufferMinutes":5,"awardsEnabled":true,"isPractice":false,"title":"","events":[{"id":"zone-f-event-022-group-d-boys-3-meter","level":"Group D","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":9.0,"numberOfDives":6,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":6,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-023-group-c-boys-3-meter","level":"Group C","gender":"Boys","apparatus":"3-Meter","style":"Individual","round":"Qualifier","numberOfDivers":17.0,"numberOfDives":8,"secondsPerDive":35.0,"defaultSpd":35.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"","customLabel":""},{"id":"zone-f-event-024-group-a-girls-platform","level":"Group A","gender":"Girls","apparatus":"Platform","style":"Individual","round":"Qualifier","numberOfDivers":28.0,"numberOfDives":8,"secondsPerDive":38.0,"defaultSpd":38.0,"defaultDives":8,"manualSplit":false,"numberOfPanelChanges":0,"minutesPerPanelChange":0,"customDurationMinutes":0,"notes":"Review platform load","customLabel":"Review platform load"}]}],"publishStatus":"draft","currentLibraryId":"seed-zone-f","acknowledgedWarnings":[],"outputSettings":{"showWarmup":true,"showEndTimes":true,"showSubjectToChange":true,"showRound":true}}}];
+
+// ── UTILITIES ─────────────────────────────────────────────────────────
+function uid(){return Math.random().toString(36).slice(2,10)}
+function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function roundUp(n,inc){return inc<=0?n:Math.ceil(n/inc)*inc}
+function parseTime(s){if(typeof s==='number')return s;const[h,m]=String(s||'08:00').split(':').map(Number);return(h||0)*60+(m||0)}
+function fmt24(m){m=Math.max(0,Math.round(m));return`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`}
+function fmt12(m){m=Math.max(0,Math.round(m));const h24=Math.floor(m/60)%24,min=m%60,ap=h24>=12?'PM':'AM',h12=h24%12||12;return`${h12}:${String(min).padStart(2,'0')} ${ap}`}
+function fmtDur(mins){mins=Math.round(mins);if(mins<60)return`${mins} min`;const h=Math.floor(mins/60),m=mins%60;return m?`${h} h ${m} min`:`${h} h`}
+function isPlatform(a){return['Platform','10m','10-Meter'].includes(a)}
+function laneKey(a){if(['1m','1-Meter'].includes(a))return'1m';if(['3m','3-Meter'].includes(a))return'3m';if(isPlatform(a))return'platform';return'other'}
+function apparatusLabel(a){if(a==='1m')return'1-Meter';if(a==='3m')return'3-Meter';return a}
+function eventDisplayName(ev){
+  if(ev.style==='Custom Block')return ev.customLabel||ev.title||'Custom block';
+  if(ev.style==='Synchronized')return`${ev.level||''} ${ev.gender} Synchro ${apparatusLabel(ev.apparatus)}`.trim();
+  return`${ev.level||''} ${ev.gender} ${apparatusLabel(ev.apparatus)}`.replace(/\s+/g,' ').trim();
+}
+function shortDate(ds){const d=new Date(`${ds}T00:00:00`);if(isNaN(d))return ds;return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+function fullDate(ds){const d=new Date(`${ds}T00:00:00`);if(isNaN(d))return ds;return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}
+function showToast(msg,dur=2400){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)}
+
+// ── NEON HTTP SYNC ────────────────────────────────────────────────────
+// Uses Neon's serverless HTTP driver — no WebSocket, no pg install.
+// All writes are debounced: at most one write per 3s during editing.
+// Presence heartbeat: tiny row update every 8s only while tab is active.
+// Reads: poll every 8s for other editor changes (checks updated_at only).
+
+let syncState = {connected:false,saving:false,error:null,otherEditors:[]};
+let saveDebounceTimer = null;
+let lastSyncedAt = null;
+let presenceTimer = null;
+let pollTimer = null;
+
+async function neonQuery(sql, params=[]) {
+  // Neon serverless HTTP driver endpoint
+  const endpoint = `https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/sql`;
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${NEON_KEY}`,
+        'Neon-Connection-String': `postgresql://neondb_owner:${NEON_KEY}@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require`,
+      },
+      body: JSON.stringify({query: sql, params}),
+    });
+    if(!res.ok){const err=await res.text();throw new Error(`Neon HTTP ${res.status}: ${err}`)}
+    return await res.json();
+  } catch(e) {
+    console.warn('Neon query error:', e.message);
+    throw e;
+  }
+}
+
+// Debounced save — won't fire more than once per 3 seconds
+function scheduleSave() {
+  if(saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  setSyncDot('saving');
+  saveDebounceTimer = setTimeout(() => doSave(), 3000);
+}
+
+async function doSave() {
+  if(!state.currentLibraryId) return; // nothing in Neon yet — local only
+  setSyncDot('saving');
+  try {
+    await neonQuery(`
+      INSERT INTO schedule_builder.schedules (id,name,meet_type,year,is_builtin,publish_status,data,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,now())
+      ON CONFLICT (id) DO UPDATE SET
+        name=EXCLUDED.name, meet_type=EXCLUDED.meet_type,
+        publish_status=EXCLUDED.publish_status,
+        data=EXCLUDED.data, updated_at=now()
+    `, [
+      state.currentLibraryId,
+      state.meet.name,
+      state.meet.meetType,
+      new Date(state.meet.days[0]?.date||'').getFullYear()||2026,
+      false,
+      state.publishStatus||'draft',
+      JSON.stringify(state),
+    ]);
+    lastSyncedAt = new Date().toISOString();
+    syncState.connected = true;
+    syncState.error = null;
+    setSyncDot('ok');
+  } catch(e) {
+    syncState.error = e.message;
+    setSyncDot('error');
+  }
+}
+
+// Presence heartbeat — tiny update, runs every 8s while tab is active
+async function sendPresence() {
+  if(!state.currentLibraryId) return;
+  try {
+    await neonQuery(`
+      INSERT INTO schedule_builder.presence (editor_id, schedule_id, display_name, updated_at)
+      VALUES ($1,$2,$3,now())
+      ON CONFLICT (editor_id) DO UPDATE SET
+        schedule_id=EXCLUDED.schedule_id,
+        updated_at=now()
+    `, [EDITOR_ID, state.currentLibraryId, 'Editor']);
+  } catch {}
+}
+
+// Poll for other editors — only checks updated_at, not full data
+async function pollForChanges() {
+  if(!state.currentLibraryId) return;
+  try {
+    // Check other active editors (presence updated in last 20s)
+    const presResult = await neonQuery(`
+      SELECT editor_id, display_name FROM schedule_builder.presence
+      WHERE schedule_id=$1 AND editor_id!=$2
+        AND updated_at > now() - interval '20 seconds'
+    `, [state.currentLibraryId, EDITOR_ID]);
+    const others = (presResult.rows||[]).map(r=>r[1]||'Editor');
+    syncState.otherEditors = others;
+
+    // Check if another editor saved a newer version
+    const chkResult = await neonQuery(`
+      SELECT updated_at FROM schedule_builder.schedules
+      WHERE id=$1
+    `, [state.currentLibraryId]);
+    const rows = chkResult.rows||[];
+    if(rows.length && rows[0][0]) {
+      const remoteAt = new Date(rows[0][0]).toISOString();
+      if(lastSyncedAt && remoteAt > lastSyncedAt && others.length > 0) {
+        // Another editor saved something newer — fetch it
+        await loadFromNeon(state.currentLibraryId, {silent:true});
+      }
+    }
+    syncState.connected = true;
+    updateSyncUI();
+  } catch(e) {
+    syncState.connected = false;
+  }
+}
+
+async function saveToNeon(name) {
+  const id = state.currentLibraryId || uid();
+  state.currentLibraryId = id;
+  setSyncDot('saving');
+  try {
+    await neonQuery(`
+      INSERT INTO schedule_builder.schedules (id,name,meet_type,year,is_builtin,publish_status,data,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,now())
+      ON CONFLICT (id) DO UPDATE SET
+        name=EXCLUDED.name, meet_type=EXCLUDED.meet_type,
+        publish_status=EXCLUDED.publish_status,
+        data=EXCLUDED.data, updated_at=now()
+    `, [
+      id, name||state.meet.name, state.meet.meetType,
+      new Date(state.meet.days[0]?.date||'').getFullYear()||2026,
+      false, state.publishStatus||'draft', JSON.stringify(state),
+    ]);
+    lastSyncedAt = new Date().toISOString();
+    syncState.connected = true;
+    syncState.error = null;
+    saveState();
+    setSyncDot('ok');
+    showToast('Saved to cloud ✓');
+    startSyncLoop();
+  } catch(e) {
+    syncState.error = e.message;
+    setSyncDot('error');
+    showToast('Cloud save failed — working offline');
+    throw e;
+  }
+}
+
+async function loadNeonLibrary() {
+  try {
+    const res = await neonQuery(`
+      SELECT id, name, meet_type, year, is_builtin, publish_status, updated_at
+      FROM schedule_builder.schedules
+      ORDER BY updated_at DESC
+      LIMIT 50
+    `);
+    return (res.rows||[]).map(r=>({
+      id:r[0], name:r[1], meetType:r[2], year:r[3],
+      builtIn:r[4], publishStatus:r[5],
+      savedAt:r[6], fromNeon:true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function loadFromNeon(id, opts={}) {
+  try {
+    const res = await neonQuery(`
+      SELECT data, updated_at FROM schedule_builder.schedules WHERE id=$1
+    `, [id]);
+    const rows = res.rows||[];
+    if(!rows.length) return null;
+    const loaded = typeof rows[0][0]==='string' ? JSON.parse(rows[0][0]) : rows[0][0];
+    if(!opts.silent) {
+      state = loaded;
+      state.currentLibraryId = id;
+      saveState();
+      initUI();
+      render();
+      showToast('Schedule loaded');
+    } else {
+      state = loaded;
+      state.currentLibraryId = id;
+      saveState();
+      render();
+    }
+    lastSyncedAt = new Date(rows[0][1]).toISOString();
+    return loaded;
+  } catch(e) {
+    if(!opts.silent) showToast('Could not load from cloud');
+    return null;
+  }
+}
+
+function startSyncLoop() {
+  if(presenceTimer) clearInterval(presenceTimer);
+  if(pollTimer) clearInterval(pollTimer);
+  presenceTimer = setInterval(sendPresence, 8000);
+  pollTimer = setInterval(pollForChanges, 8000);
+  sendPresence();
+}
+
+function setSyncDot(state) {
+  const dot = document.querySelector('.sync-dot');
+  const label = document.querySelector('.sync-label');
+  if(!dot||!label) return;
+  dot.className = 'sync-dot';
+  if(state==='saving'){dot.classList.add('saving');label.textContent='Saving…'}
+  else if(state==='error'){dot.classList.add('error');label.textContent='Offline'}
+  else if(state==='offline'){dot.classList.add('offline');label.textContent='Local only'}
+  else{label.textContent='Saved'}
+}
+
+function updateSyncUI() {
+  const el = document.querySelector('.sync-editors');
+  if(!el) return;
+  el.textContent = syncState.otherEditors.length ? `· ${syncState.otherEditors.length} other editor${syncState.otherEditors.length>1?'s':''}` : '';
+}
+
+// Local storage fallback
+function loadLocalLibrary() {
+  try{return JSON.parse(localStorage.getItem('usa-diving-sb-v2-lib')||'[]')}catch{return[]}
+}
+function saveLocalLibrary(lib){try{localStorage.setItem('usa-diving-sb-v2-lib',JSON.stringify(lib))}catch{}}
+
+// ── STATE ─────────────────────────────────────────────────────────────
+function makeDay(offset=0){
+  const d=new Date();d.setDate(d.getDate()+offset);
+  return{id:uid(),date:d.toISOString().slice(0,10),openMinutes:7*60,closeMinutes:20*60}
+}
+function makeInitialState(){
+  return{
+    updatedAt:new Date().toISOString(),
+    meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',
+          days:[makeDay(0),makeDay(1),makeDay(2),makeDay(3)]},
+    sessions:[],publishStatus:'draft',currentLibraryId:'',
+    acknowledgedWarnings:[],
+    outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true,showRound:true},
+  }
+}
+function loadState(){
+  try{const r=JSON.parse(localStorage.getItem(STORAGE_KEY)||'');if(r&&r.meet&&Array.isArray(r.sessions))return r}catch{}
+  return makeInitialState()
+}
+function saveState(){
+  state.updatedAt=new Date().toISOString();
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch{}
+}
+let state=loadState();
+function update(fn){fn(state);saveState();if(state.currentLibraryId)scheduleSave();render()}
+
+// ── TIMING ENGINE ─────────────────────────────────────────────────────
+function calcEventDuration(ev){
+  if(Number(ev.customDurationMinutes||0)>0)return{totalDives:0,eventMinutes:Number(ev.customDurationMinutes),rawMinutes:Number(ev.customDurationMinutes),splitLanes:1}
+  const divers=Math.max(0,Number(ev.numberOfDivers||0));
+  const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
+  const spd=Math.max(0,Number(ev.secondsPerDive||ev.defaultSpd||DEFAULT_TIMING.secondsPerDive));
+  const total=divers*dives;
+  const raw=(total*spd)/60;
+  const split=Boolean(ev.manualSplit)&&!isPlatform(ev.apparatus);
+  const comp=split?raw/2:raw;
+  const panels=split?Number(ev.numberOfPanelChanges||0)*Number(ev.minutesPerPanelChange||DEFAULT_TIMING.panelChangeMinutes):0;
+  return{totalDives:total,eventMinutes:comp+panels,rawMinutes:raw,splitLanes:split?2:1}
+}
+
+function calcSessionTiming(session){
+  if(session.isPractice){
+    const dur=Number(session.events[0]?.customDurationMinutes||60);
+    return{warmupStartMinutes:session.warmupStartMinutes,warmupEndMinutes:session.warmupStartMinutes,
+           eventStartMinutes:session.warmupStartMinutes,sessionEndMinutes:session.warmupStartMinutes+dur,events:[]}
+  }
+  const wu=Number(session.warmupStartMinutes);
+  const wuEnd=wu+Number(session.warmupMinutes||DEFAULT_TIMING.warmupMinutes);
+  const intro=Number(session.introMinutes||0);
+  const firstEvent=roundUp(wuEnd+intro,Number(session.rounding||DEFAULT_TIMING.rounding));
+  const cursors={};const timedEvs=[];
+  (session.events||[]).forEach(ev=>{
+    const lane=laneKey(ev.apparatus);
+    const cursor=cursors[lane]??firstEvent;
+    const dur=calcEventDuration(ev);
+    timedEvs.push({...ev,eventStartMinutes:cursor,eventEndMinutes:cursor+dur.eventMinutes,totalDives:dur.totalDives,rawMinutes:dur.rawMinutes,splitLanes:dur.splitLanes});
+    cursors[lane]=roundUp(cursor+dur.eventMinutes,Number(session.rounding||DEFAULT_TIMING.rounding));
+  });
+  const compEnd=timedEvs.reduce((m,e)=>Math.max(m,e.eventEndMinutes),firstEvent);
+  const awardsMin=session.awardsEnabled?DEFAULT_TIMING.awardsMinutes:0;
+  return{warmupStartMinutes:wu,warmupEndMinutes:wuEnd,eventStartMinutes:firstEvent,
+         competitiveEnd:compEnd,sessionEndMinutes:compEnd+awardsMin,
+         awardsEnabled:session.awardsEnabled,awardsMinutes:awardsMin,events:timedEvs}
+}
+
+function allTimedSessions(){
+  return state.meet.days.flatMap(day=>
+    state.sessions.filter(s=>s.dayId===day.id)
+      .sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes))
+      .map(s=>({...s,timing:calcSessionTiming(s)}))
+  )
+}
+
+function sessionsForDay(dayId,timed=false){
+  const src=timed?allTimedSessions():state.sessions;
+  return src.filter(s=>s.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes))
+}
+
+function getSessionNumber(sess,all){
+  if(sess.isPractice)return null;
+  let n=1;
+  for(const s of all){if(s.isPractice)continue;if(s.id===sess.id)return n;n++}
+  return n;
+}
+
+function dayTimeSummary(dayId){
+  const s=sessionsForDay(dayId,true);
+  if(!s.length)return null;
+  return{start:Math.min(...s.map(x=>x.timing.warmupStartMinutes)),
+         end:Math.max(...s.map(x=>x.timing.sessionEndMinutes))}
+}
+
+function buildLaneSummary(dayId){
+  const lanes={'1m':[],'3m':[],'platform':[],'practice':[]};
+  sessionsForDay(dayId,true).forEach(sess=>{
+    const t=sess.timing;
+    if(sess.isPractice){
+      lanes.practice.push({time:`${fmt12(t.eventStartMinutes)}–${fmt12(t.sessionEndMinutes)}`,
+        name:sess.title||'Practice block',split:false,divers:0});return;
+    }
+    (t.events||[]).forEach(ev=>{
+      const k=laneKey(ev.apparatus);
+      if(lanes[k])lanes[k].push({time:`${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}`,
+        name:eventDisplayName(ev),split:Boolean(ev.manualSplit&&!isPlatform(ev.apparatus)),divers:ev.numberOfDivers||0});
+    });
+  });
+  return lanes;
+}
+
+function buildWarnings(dayId){
+  const warns=[];
+  const sessions=sessionsForDay(dayId,true).filter(s=>!s.isPractice);
+  for(let i=0;i<sessions.length-1;i++){
+    const a=sessions[i],b=sessions[i+1];
+    if(a.timing.sessionEndMinutes>b.timing.eventStartMinutes){
+      const key=`overlap-${a.id}-${b.id}`;
+      warns.push({key,sessionId:a.id,msg:`Session ends after next session starts (${fmt12(a.timing.sessionEndMinutes)} vs ${fmt12(b.timing.eventStartMinutes)})`});
+    }
+  }
+  return warns.filter(w=>!(state.acknowledgedWarnings||[]).includes(w.key));
+}
+
+function buildEventCatalog(meetType){
+  const def=MEET_TYPES[meetType]||MEET_TYPES.custom;
+  const evs=[];
+  const rounds=def.rounds||['Qualifier'];
+  for(const group of(def.groups||[])){
+    for(const gender of['Girls','Boys']){
+      for(const app of['1m','3m']){
+        const name=`${group} ${gender} ${apparatusLabel(app)}`;
+        const t=EVENT_TIMING[name]||{};
+        evs.push({id:`${group}-${gender}-${app}`.toLowerCase().replace(/\s+/g,'-'),
+          level:group,gender,apparatus:app,style:'Individual',
+          defaultDives:t.dives||6,defaultSpd:t.spd||35,defaultWarmup:t.warmup||35,allowedRounds:rounds});
+      }
+      if(def.platform){
+        const name=`${group} ${gender} Platform`;const t=EVENT_TIMING[name]||{};
+        evs.push({id:`${group}-${gender}-platform`.toLowerCase().replace(/\s+/g,'-'),
+          level:group,gender,apparatus:'Platform',style:'Individual',
+          defaultDives:t.dives||6,defaultSpd:t.spd||45,defaultWarmup:t.warmup||35,allowedRounds:rounds});
+      }
+    }
+  }
+  if(def.senior){
+    for(const gender of['Women','Men']){
+      for(const app of['1m','3m','10m']){
+        evs.push({id:`senior-${gender}-${app}`.toLowerCase(),
+          level:'Senior',gender,apparatus:app,style:'Individual',
+          defaultDives:gender==='Women'?5:6,defaultSpd:isPlatform(app)?38:32,
+          defaultWarmup:isPlatform(app)?55:45,allowedRounds:rounds});
+      }
+    }
+  }
+  return evs;
+}
+
+// ── UI STATE ──────────────────────────────────────────────────────────
+let ui={
+  activeDayId:'',activeSessionId:'',modal:null,
+  pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
+  generateAud:'athletes',previewMode:'operations',
+  neonLibrary:[],neonLibraryLoading:false,
+};
+
+function initUI(){
+  if(state.meet.days.length&&!ui.activeDayId)ui.activeDayId=state.meet.days[0].id;
+  if(state.sessions.length&&!ui.activeSessionId)ui.activeSessionId=state.sessions[0].id;
+}
+
+// ── MUTATIONS ─────────────────────────────────────────────────────────
+function addDay(){
+  const days=state.meet.days;
+  const last=days[days.length-1];
+  const nextDate=last?(()=>{const d=new Date(`${last.date}T00:00:00`);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)})():new Date().toISOString().slice(0,10);
+  update(s=>{const day={id:uid(),date:nextDate,openMinutes:7*60,closeMinutes:20*60};s.meet.days.push(day);ui.activeDayId=day.id});
+}
+function deleteDay(dayId){
+  if(!confirm('Delete this day and all its sessions?'))return;
+  update(s=>{s.meet.days=s.meet.days.filter(d=>d.id!==dayId);s.sessions=s.sessions.filter(x=>x.dayId!==dayId);if(ui.activeDayId===dayId)ui.activeDayId=s.meet.days[0]?.id||''});
+}
+function addSession(dayId,isPractice=false){
+  const existing=sessionsForDay(dayId,true);
+  const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||s.warmupStartMinutes),7*60);
+  const buf=existing[existing.length-1]?.bufferMinutes||0;
+  const start=roundUp(lastEnd+buf,DEFAULT_TIMING.rounding);
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:DEFAULT_TIMING.warmupMinutes,
+    rounding:DEFAULT_TIMING.rounding,introMinutes:0,bufferMinutes:5,awardsEnabled:false,
+    isPractice,title:isPractice?'Open practice':'',
+    events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open practice',
+      customDurationMinutes:120,apparatus:'Pool',gender:'Open',level:'Schedule',
+      numberOfDivers:0,numberOfDives:0,secondsPerDive:0}]:[]};
+  update(s=>{s.sessions.push(sess);ui.activeSessionId=sess.id});
+}
+function deleteSession(id){if(!confirm('Remove this session?'))return;update(s=>{s.sessions=s.sessions.filter(x=>x.id!==id)})}
+function updateSession(id,field,value){
+  update(s=>{const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
+    const nums=['warmupStartMinutes','warmupMinutes','rounding','introMinutes','bufferMinutes'];
+    sess[field]=nums.includes(field)?Number(value):value});
+}
+function setBuffer(id,mins){updateSession(id,'bufferMinutes',mins)}
+function updatePracticeBlock(id,dur){
+  update(s=>{const sess=s.sessions.find(x=>x.id===id);if(sess&&sess.events[0])sess.events[0].customDurationMinutes=Number(dur)});
+}
+function addEventToSession(sessId,presetId,round){
+  const catalog=buildEventCatalog(state.meet.meetType);
+  const preset=catalog.find(e=>e.id===presetId);
+  if(!preset)return;
+  const ev={id:uid(),level:preset.level,gender:preset.gender,apparatus:preset.apparatus,
+    style:preset.style,round,defaultDives:preset.defaultDives,
+    numberOfDivers:0,numberOfDives:preset.defaultDives,
+    secondsPerDive:preset.defaultSpd,defaultSpd:preset.defaultSpd,
+    manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:DEFAULT_TIMING.panelChangeMinutes,
+    customDurationMinutes:0,notes:''};
+  update(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events.push(ev)});
+}
+function removeEvent(sessId,evId){update(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.events=sess.events.filter(e=>e.id!==evId)})}
+function updateEvent(sessId,evId,field,value){
+  update(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+    const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes'];
+    ev[field]=nums.includes(field)?Number(value):value});
+}
+function toggleSplit(sessId,evId){
+  update(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);
+    if(ev&&!isPlatform(ev.apparatus))ev.manualSplit=!ev.manualSplit});
+}
+function acknowledgeWarning(key){
+  update(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)});
+}
+function moveSessionUp(id){
+  const sess=state.sessions.find(s=>s.id===id);if(!sess)return;
+  const day=sessionsForDay(sess.dayId).filter(s=>!s.isPractice).sort((a,b)=>a.warmupStartMinutes-b.warmupStartMinutes);
+  const idx=day.findIndex(s=>s.id===id);if(idx<=0)return;
+  const prev=day[idx-1];
+  update(s=>{const a=s.sessions.find(x=>x.id===id),b=s.sessions.find(x=>x.id===prev.id);const tmp=a.warmupStartMinutes;a.warmupStartMinutes=b.warmupStartMinutes;b.warmupStartMinutes=tmp});
+}
+function cycleStatus(){
+  const idx=STATUS_ORDER.indexOf(state.publishStatus||'draft');
+  update(s=>s.publishStatus=STATUS_ORDER[(idx+1)%STATUS_ORDER.length]);
+}
+function selectDay(id){ui.activeDayId=id;const first=state.sessions.find(s=>s.dayId===id);if(first)ui.activeSessionId=first.id;render()}
+function selectSession(id){ui.activeSessionId=id;render()}
+
+// Library
+async function openLibrary(){
+  ui.modal='library';ui.neonLibraryLoading=true;render();
+  try{ui.neonLibrary=await loadNeonLibrary()}catch{ui.neonLibrary=[]}
+  ui.neonLibraryLoading=false;render();
+}
+async function saveSchedule(){
+  const name=prompt('Save as:',state.meet.name||'Schedule');
+  if(!name)return;
+  state.meet.name=name;
+  try{await saveToNeon(name)}catch{
+    // fallback to local
+    const lib=loadLocalLibrary();
+    lib.unshift({id:uid(),name,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(state))});
+    saveLocalLibrary(lib.slice(0,30));
+    showToast('Saved locally (cloud unavailable)');
+  }
+  render();
+}
+async function deleteNeonSchedule(id){
+  if(!confirm('Delete this schedule from the cloud? This cannot be undone.'))return;
+  try{await neonQuery('DELETE FROM schedule_builder.schedules WHERE id=$1 AND is_builtin=false',[id]);ui.neonLibrary=ui.neonLibrary.filter(x=>x.id!==id);render()}
+  catch{showToast('Could not delete')}
+}
+
+// Load builtin seed into state (no Neon write — read-only templates)
+function loadBuiltinSchedule(id){
+  if(!confirm('Load this template? Your current workspace will be replaced.'))return;
+  const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;
+  state=JSON.parse(JSON.stringify(item.schedule));
+  state.currentLibraryId=''; // new copy, not linked to Neon
+  saveState();initUI();ui.modal=null;render();
+  showToast(`Loaded: ${item.name}`);
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────
+function render(){
+  initUI();
+  const timed=allTimedSessions();
+  document.getElementById('app').innerHTML=`
+    ${renderTopbar()}
+    <div class="main">
+      ${renderLeft(timed)}
+      ${renderCenter(timed)}
+      ${renderRight(timed)}
+    </div>
+    ${ui.modal?renderModal(timed):''}
+  `;
+}
+
+// ── TOP BAR ───────────────────────────────────────────────────────────
+function renderTopbar(){
+  const tz=TZ_OPTS.find(t=>t.value===state.meet.timezone)||TZ_OPTS[0];
+  const status=state.publishStatus||'draft';
+  return`<header class="topbar">
+    <div class="tb-brand">
+      <div class="tb-logo"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M10 3v14M3 10h14" stroke="white" stroke-width="2" fill="none"/></svg></div>
+      <span class="tb-brand-name">USA Diving</span>
+    </div>
+    <div class="tb-meet" onclick="document.getElementById('app').dispatchEvent(new CustomEvent('openMeet'))">
+      <div class="tb-meet-name">${esc(state.meet.name||'New Schedule')}</div>
+      <div class="tb-meet-meta">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''}${tz?' · '+tz.short:''} · ${MEET_TYPES[state.meet.meetType]?.label||'Custom'}</div>
+    </div>
+    <div class="tb-actions">
+      <button class="tb-status ${status}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LABELS[status]||'Draft'}</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="openLibrary()">Library</button>
+      <button class="tb-btn" onclick="saveSchedule()">Save to cloud</button>
+      <button class="tb-btn accent" onclick="ui.modal='generate';render()">Generate</button>
+    </div>
+    <div class="tb-sync">
+      <div class="sync-dot ${syncState.connected?'':'offline'}"></div>
+      <span class="sync-label">${state.currentLibraryId?(syncState.connected?'Synced':'Offline'):'Local'}</span>
+      <span class="sync-editors"></span>
+    </div>
+  </header>`;
+}
+
+// ── LEFT COLUMN ───────────────────────────────────────────────────────
+function renderLeft(timed){
+  const activeDay=state.meet.days.find(d=>d.id===ui.activeDayId);
+  return`<div class="col" style="background:#FAFBFD">
+    <div class="col-head">
+      <span class="col-head-label">Schedule</span>
+      <button class="col-head-btn" onclick="addDay()">+ Day</button>
+    </div>
+    <div class="col-body">
+      ${state.meet.days.map(day=>renderDayTab(day,timed)).join('')}
+      <div class="day-add-row" onclick="addDay()">+ Add competition day</div>
+      ${activeDay?`<div style="height:1px;background:var(--border)"></div>
+        <div class="sess-list">
+          ${sessionsForDay(ui.activeDayId,true).map(s=>renderSessCard(s,timed)).join('')}
+          <button class="add-sess-btn" onclick="showSessMenu('${ui.activeDayId}')">+ Add session or practice block</button>
+        </div>`
+      :`<div class="empty-state"><div class="empty-title">No days</div>Click "+ Day" to start.</div>`}
+    </div>
+  </div>`;
+}
+
+function renderDayTab(day,timed){
+  const active=day.id===ui.activeDayId;
+  const sessions=sessionsForDay(day.id,true);
+  const comp=sessions.filter(s=>!s.isPractice);
+  const ts=dayTimeSummary(day.id);
+  const sub=comp.length?`${comp.length} session${comp.length>1?'s':''} · competition`:sessions.length?'Practice only':'Empty';
+  const timeStr=ts?`${fmt12(ts.start)} – ${fmt12(ts.end)}`:'';
+  return`<div class="day-tab ${active?'active':''}" onclick="selectDay('${day.id}')">
+    <div class="day-tab-date">${shortDate(day.date)}</div>
+    <div class="day-tab-sub">${esc(sub)}</div>
+    ${timeStr?`<div class="day-tab-time">${timeStr}</div>`:''}
+  </div>`;
+}
+
+function renderSessCard(session,timed){
+  const active=session.id===ui.activeSessionId;
+  const t=session.timing||calcSessionTiming(session);
+  const n=getSessionNumber(session,timed);
+  const label=session.isPractice?(session.title||'Practice block'):`Session ${n}`;
+  const sub=session.isPractice?'practice block':`${session.events.length} event${session.events.length!==1?'s':''}`;
+  return`<div class="sess-card ${active?'active':''} ${session.isPractice?'practice':''}" onclick="selectSession('${session.id}')">
+    <div class="sess-head">
+      <div class="sess-badge ${session.isPractice?'p':''}">${session.isPractice?'P':n}</div>
+      <div class="sess-info">
+        <div class="sess-name">${esc(label)}</div>
+        <div class="sess-time-sub">${fmt12(t.warmupStartMinutes)} – ${fmt12(t.sessionEndMinutes)} · ${esc(sub)}</div>
+      </div>
+      <div class="sess-acts" onclick="event.stopPropagation()">
+        <button class="icon-btn" title="Move earlier" onclick="moveSessionUp('${session.id}')">↑</button>
+        <button class="icon-btn danger" title="Delete" onclick="deleteSession('${session.id}')">×</button>
+      </div>
+    </div>
+    ${active?renderSessCtrl(session):''}
+  </div>`;
+}
+
+function renderSessCtrl(session){
+  const buf=Number(session.bufferMinutes||0);
+  const intro=Number(session.introMinutes||0);
+  const bufChips=[0,5,10,15].map(n=>`<button class="chip ${buf===n?'on-green':''}" onclick="setBuffer('${session.id}',${n})">${n===0?'Off':n+'m'}</button>`).join('');
+  const introChips=[0,5,10,15].map(n=>`<button class="chip ${intro===n?'on':''}" onclick="updateSession('${session.id}','introMinutes',${n})">${n===0?'Off':n+'m'}</button>`).join('');
+
+  if(session.isPractice){
+    const ev=session.events[0];
+    return`<div class="sess-ctrl">
+      <div class="sc-row">
+        <div class="sc-field"><span class="sc-label">Start</span>
+          <input class="sc-input" type="time" value="${fmt24(session.warmupStartMinutes)}" onchange="updateSession('${session.id}','warmupStartMinutes',parseTime(this.value))" /></div>
+        <div class="sc-field"><span class="sc-label">Duration (min)</span>
+          <input class="sc-input" type="number" min="15" step="15" value="${ev?.customDurationMinutes||60}" onchange="updatePracticeBlock('${session.id}',this.value)" /></div>
+      </div>
+      <div class="sc-row"><div class="sc-field" style="grid-column:1/-1"><span class="sc-label">Block name</span>
+        <input class="sc-input" value="${esc(session.title||'')}" onchange="updateSession('${session.id}','title',this.value)" placeholder="Open practice" /></div></div>
+    </div>`;
+  }
+
+  return`<div class="sess-ctrl">
+    <div class="sc-row">
+      <div class="sc-field"><span class="sc-label">Warm-up start</span>
+        <input class="sc-input" type="time" value="${fmt24(session.warmupStartMinutes)}" onchange="updateSession('${session.id}','warmupStartMinutes',parseTime(this.value))" /></div>
+      <div class="sc-field"><span class="sc-label">Warm-up length (min)</span>
+        <input class="sc-input" type="number" min="0" step="5" value="${session.warmupMinutes||55}" onchange="updateSession('${session.id}','warmupMinutes',this.value)" /></div>
+    </div>
+    <div class="sc-chips-row">
+      <span class="sc-chips-label">Buffer after session</span>
+      <div class="sc-chips">${bufChips}
+        <button class="chip ${![0,5,10,15].includes(buf)?'on-green':''}" onclick="promptBuf('${session.id}')">…</button>
+      </div>
+    </div>
+    <div class="sc-chips-row">
+      <span class="sc-chips-label">Intro / ceremony block</span>
+      <div class="sc-chips">${introChips}
+        <button class="chip ${![0,5,10,15].includes(intro)?'on':''}" onclick="promptIntro('${session.id}')">…</button>
+      </div>
+    </div>
+    <div class="ev-list">
+      ${session.events.map(ev=>renderEvRow(session,ev)).join('')}
+    </div>
+    <div style="padding:0 0 2px">
+      <button class="add-ev-btn" onclick="openPicker('${session.id}')">+ Add event to this session</button>
+    </div>
+    <div class="sc-chips-row" style="padding-bottom:7px">
+      <span class="sc-chips-label" style="color:var(--text-3)">Awards ceremony (+15 min)</span>
+      <button class="chip ${session.awardsEnabled?'on-amber':''}" onclick="updateSession('${session.id}','awardsEnabled',${!session.awardsEnabled})">${session.awardsEnabled?'On':'Off'}</button>
+    </div>
+  </div>`;
+}
+
+function renderEvRow(session,ev){
+  const name=eventDisplayName(ev);
+  const dur=calcEventDuration(ev);
+  const splitRec=dur.rawMinutes*60>(DEFAULT_TIMING.splitDives*ev.secondsPerDive||9999)||(ev.numberOfDivers||0)>=DEFAULT_TIMING.splitDivers;
+  const roundClass=(ev.round||'qualifier').toLowerCase().replace(/\s+/g,'');
+  return`<div class="ev-row" draggable="true" data-ev="${ev.id}" data-sess="${session.id}">
+    <span class="ev-drag">⠿</span>
+    <div class="ev-name-wrap">
+      <div class="ev-n">${esc(name)}</div>
+      <div class="ev-sub">${ev.numberOfDives||ev.defaultDives||0} dives · ${ev.secondsPerDive||ev.defaultSpd||35}s · ${fmtDur(dur.eventMinutes)}</div>
+    </div>
+    <input class="ev-divers" type="number" min="0" value="${ev.numberOfDivers||0}" title="Divers" onchange="updateEvent('${session.id}','${ev.id}','numberOfDivers',this.value)" onclick="event.stopPropagation()" />
+    ${ev.round&&ev.round!=='Custom Block'?`<span class="ev-tag ${roundClass}">${esc(ev.round)}</span>`:''}
+    ${!isPlatform(ev.apparatus)?`<button class="ev-tag ${ev.manualSplit?'split':''}" style="cursor:pointer;border:none;background:${ev.manualSplit?'':'transparent'}" title="${ev.manualSplit?'Split on':'Split off'}" onclick="event.stopPropagation();toggleSplit('${session.id}','${ev.id}')">${ev.manualSplit?'÷ Split':splitRec?'⚠ Split?':'Split'}</button>`:''}
+    <button class="ev-x" onclick="event.stopPropagation();removeEvent('${session.id}','${ev.id}')">×</button>
+  </div>`;
+}
+
+function showSessMenu(dayId){
+  const choice=confirm('Add competition session?\n\nOK = Competition session\nCancel = Practice / custom block');
+  addSession(dayId,!choice);
+}
+function promptBuf(id){const v=prompt('Buffer (minutes):','5');if(v!==null)setBuffer(id,Number(v)||0)}
+function promptIntro(id){const v=prompt('Intro block (minutes):','10');if(v!==null)updateSession(id,'introMinutes',Number(v)||0)}
+
+// ── CENTER COLUMN ─────────────────────────────────────────────────────
+function renderCenter(timed){
+  const day=state.meet.days.find(d=>d.id===ui.activeDayId);
+  const warns=day?buildWarnings(ui.activeDayId):[];
+  const dayBtns=state.meet.days.map(d=>`<button class="tl-day-btn ${d.id===ui.activeDayId?'active':''}" onclick="selectDay('${d.id}')">${shortDate(d.date).split(',')[0]}</button>`).join('');
+  return`<div class="col center-col">
+    <div class="tl-toolbar">
+      <select onchange="ui.previewMode=this.value;render()">
+        <option value="operations" ${ui.previewMode==='operations'?'selected':''}>Operations timeline</option>
+        <option value="public" ${ui.previewMode==='public'?'selected':''}>Public schedule</option>
+      </select>
+      <div class="tl-sep"></div>
+      ${dayBtns}
+      <div class="tl-spacer"></div>
+      <button class="tl-export-btn" onclick="ui.modal='generate';render()">PDF / Excel</button>
+    </div>
+    <div class="tl-body">
+      ${day?`<div class="tl-day-label">${fullDate(day.date)} · ${ui.previewMode==='public'?'public view':'operations view'}</div>`:''}
+      ${day?(ui.previewMode==='public'?renderPublicView(ui.activeDayId,timed):renderTimeline(ui.activeDayId,timed,warns))
+           :`<div class="empty-state"><div class="empty-title">No days yet</div>Click "+ Day" to start.</div>`}
+    </div>
+  </div>`;
+}
+
+function renderTimeline(dayId,timed,warns){
+  const sessions=sessionsForDay(dayId,true);
+  if(!sessions.length)return`<div class="empty-state"><div class="empty-title">No sessions on this day</div>Add sessions from the left panel.</div>`;
+  return sessions.map(s=>renderTlBlock(s,warns)).join('');
+}
+
+function renderTlBlock(session,warns){
+  const t=session.timing;
+  const active=session.id===ui.activeSessionId;
+  const isPrac=session.isPractice;
+  const warn=warns&&warns.find(w=>w.sessionId===session.id);
+  const buf=Number(session.bufferMinutes||0);
+  const intro=Number(session.introMinutes||0);
+  const timed=allTimedSessions();
+  const n=getSessionNumber(session,timed);
+  const title=isPrac?(session.title||'Practice block'):`Session ${n}`;
+  const timeLabel=isPrac?`${fmt12(t.eventStartMinutes)}–${fmt12(t.sessionEndMinutes)}`:fmt12(t.warmupStartMinutes);
+  const dur=fmtDur(t.sessionEndMinutes-t.warmupStartMinutes);
+  const bufChips=[0,5,10,15].map(v=>`<button class="tl-buf-chip ${buf===v?'on':''}" onclick="setBuffer('${session.id}',${v})">${v===0?'Off':v+'m'}</button>`).join('');
+
+  return`<div class="tl-block ${isPrac?'practice':''} ${active?'active':''} ${warn?'has-warn':''}" onclick="selectSession('${session.id}')">
+    <div class="tl-block-head">
+      <span class="tl-pill ${isPrac?'practice':''}">${timeLabel}</span>
+      <span class="tl-block-title">${esc(title)}</span>
+      <span class="tl-block-dur">${dur}</span>
+      <button class="tl-ico" title="Select" onclick="event.stopPropagation();selectSession('${session.id}')">✎</button>
+    </div>
+    ${!isPrac?renderTlEvEvents(session):''}
+    ${!isPrac&&intro>0?`<div class="tl-row intro-row" onclick="event.stopPropagation()">
+      <span style="font-size:11px">🎙</span>
+      <span class="tl-row-label">Intro / ceremony before events</span>
+      <input class="tl-mini-input" type="number" min="0" step="5" value="${intro}" onchange="updateSession('${session.id}','introMinutes',this.value)" />
+      <span class="tl-mini-unit">min</span>
+      <button class="tl-mini-toggle" onclick="updateSession('${session.id}','introMinutes',0)">Remove</button>
+    </div>`:''}
+    ${!isPrac&&intro===0?`<div class="tl-row" style="padding:3px 11px;background:#FAFBFF;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+      <span class="tl-row-label" style="color:var(--text-3);font-size:10px">Add intro / ceremony block</span>
+      <button class="tl-mini-toggle" style="color:#4A5A9A;border-color:#4A5A9A" onclick="updateSession('${session.id}','introMinutes',10)">+ 10 min</button>
+    </div>`:''}
+    ${warn?`<div class="tl-row warn-row" onclick="event.stopPropagation()">
+      <div class="tl-warn-dot"></div>
+      <span class="tl-warn-text">${esc(warn.msg)}</span>
+      <button class="tl-warn-ack" onclick="acknowledgeWarning('${warn.key}')">Dismiss</button>
+    </div>`:''}
+    ${!isPrac?`<div class="tl-row buffer-row" onclick="event.stopPropagation()">
+      <span class="tl-row-label">Buffer after session</span>
+      <div class="tl-buf-chips">${bufChips}
+        <button class="tl-buf-chip" onclick="promptBuf('${session.id}')">…</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+function renderTlEvEvents(session){
+  const t=session.timing;
+  if(!session.events.length)return`<div style="padding:5px 11px 7px;font-size:11px;color:var(--text-3)">No events — add from session panel on left.</div>`;
+  return`<div class="tl-events">${(t.events||[]).map(ev=>{
+    const split=ev.manualSplit&&!isPlatform(ev.apparatus);
+    const spd=ev.secondsPerDive||ev.defaultSpd||35;
+    return`<div class="tl-ev">
+      <span class="tl-ev-drag">⠿</span>
+      <span class="tl-ev-label">${esc(eventDisplayName(ev))}</span>
+      ${split?`<span class="tl-ev-split">÷ Split</span>`:''}
+      <span class="tl-ev-spd"><input class="tl-spd-input" type="number" min="5" step="1" value="${spd}" title="Sec/dive" onchange="updateEvent('${session.id}','${ev.id}','secondsPerDive',this.value)" onclick="event.stopPropagation()" /></span>
+      <span class="tl-ev-time">${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function renderPublicView(dayId,timed){
+  const sessions=sessionsForDay(dayId,true).filter(s=>!s.isPractice);
+  if(!sessions.length)return`<div class="empty-state"><div class="empty-title">No competition sessions</div></div>`;
+  const day=state.meet.days.find(d=>d.id===dayId);
+  return`<div class="pub-day">
+    <div class="pub-day-head">${fullDate(day?.date||'')}</div>
+    ${sessions.map(sess=>{
+      const t=sess.timing;
+      return`<div class="pub-sess">
+        <div class="pub-time">Events start ${fmt12(t.eventStartMinutes)}</div>
+        <div class="pub-warmup">Warm-up ${fmt12(t.warmupStartMinutes)}–${fmt12(t.warmupEndMinutes)}</div>
+        ${(t.events||[]).map(ev=>`<div class="pub-ev-item">
+          ${esc(eventDisplayName(ev))}
+          ${ev.round&&ev.round!=='Custom Block'?`<span class="pub-ev-round">${esc(ev.round)}</span>`:''}
+          <span style="margin-left:auto;font-size:10px;color:var(--text-3)">${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}</span>
+        </div>`).join('')}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── RIGHT COLUMN ──────────────────────────────────────────────────────
+function renderRight(timed){
+  const day=state.meet.days.find(d=>d.id===ui.activeDayId);
+  const lanes=day?buildLaneSummary(ui.activeDayId):null;
+  const sessions=day?sessionsForDay(ui.activeDayId,true):[];
+  const comp=sessions.filter(s=>!s.isPractice);
+  const totalEvs=comp.reduce((n,s)=>n+s.events.length,0);
+  const dayEnd=sessions.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||0),0);
+  const warns=day?buildWarnings(ui.activeDayId):[];
+  const laneNames={'1m':'1-Meter','3m':'3-Meter','platform':'Platform','practice':'Practice / blocks'};
+  const laneColors={'1m':'#171F69','3m':'#009AC7','platform':'#E31937','practice':'#5F6062'};
+
+  return`<div class="col right-col">
+    <div class="col-head">
+      <span class="col-head-label">Board lanes${day?' · '+shortDate(day.date).split(',')[0]:''}</span>
+    </div>
+    <div class="lanes-body">
+      ${lanes?Object.entries(laneNames).map(([k,label])=>{
+        const evs=lanes[k]||[];if(!evs.length)return'';
+        const fill=Math.min(100,Math.round(evs.length/Math.max(1,totalEvs)*160));
+        return`<div class="lane-section">
+          <div class="lane-head">
+            <span class="lane-head-label">${label}</span>
+            <div class="lane-bar"><div class="lane-bar-fill" style="width:${fill}%;background:${laneColors[k]}"></div></div>
+          </div>
+          ${evs.map(ev=>`<div class="lane-ev">
+            <div class="le-time">${esc(ev.time)}</div>
+            <div class="le-name">${esc(ev.name)}</div>
+            <div class="le-chips">
+              ${ev.split?`<span class="le-chip split">Split</span>`:''}
+              ${ev.divers?`<span class="le-chip divers">${ev.divers} divers</span>`:''}
+            </div>
+          </div>`).join('')}
+        </div>`;
+      }).join(''):`<div class="empty-state" style="padding:16px 10px;font-size:11px">Select a day</div>`}
+    </div>
+    ${day?`<div class="day-totals">
+      <div class="day-totals-label">Day summary</div>
+      <div class="day-stat"><span class="day-stat-k">Competition sessions</span><span class="day-stat-v">${comp.length}</span></div>
+      <div class="day-stat"><span class="day-stat-k">Total events</span><span class="day-stat-v">${totalEvs}</span></div>
+      ${dayEnd?`<div class="day-stat"><span class="day-stat-k">Day ends</span><span class="day-stat-v">${fmt12(dayEnd)}</span></div>`:''}
+      <div class="day-stat"><span class="day-stat-k">Warnings</span><span class="day-stat-v ${warns.length?'warn':'ok'}">${warns.length||'None'}</span></div>
+    </div>`:''}
+    <button class="gen-btn" onclick="ui.modal='generate';render()">Generate outputs →</button>
+  </div>`;
+}
+
+// ── MODALS ────────────────────────────────────────────────────────────
+function renderModal(timed){
+  const M={'meet':renderMeetModal,'add-event':renderPickerModal,'library':renderLibraryModal,'generate':renderGenerateModal,'entries':renderEntriesModal};
+  const fn=M[ui.modal];if(!fn)return'';
+  return`<div class="modal-backdrop" onclick="if(event.target===this){ui.modal=null;render()}">${fn(timed)}</div>`;
+}
+function closeModal(){ui.modal=null;render()}
+
+function renderMeetModal(){
+  const tzOpts=TZ_OPTS.map(t=>`<option value="${t.value}" ${state.meet.timezone===t.value?'selected':''}>${t.label}</option>`).join('');
+  const typeOpts=Object.entries(MEET_TYPES).map(([k,v])=>`<option value="${k}" ${state.meet.meetType===k?'selected':''}>${v.label}</option>`).join('');
+  return`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head"><span class="modal-title">Meet setup</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Meet name</label><input class="form-input" value="${esc(state.meet.name)}" onchange="update(s=>s.meet.name=this.value)" /></div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Venue</label><input class="form-input" value="${esc(state.meet.venue)}" onchange="update(s=>s.meet.venue=this.value)" /></div>
+        <div class="form-row"><label class="form-label">City / state</label><input class="form-input" value="${esc(state.meet.city||'')}" onchange="update(s=>s.meet.city=this.value)" /></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Meet type</label><select class="form-select" onchange="update(s=>s.meet.meetType=this.value)">${typeOpts}</select></div>
+        <div class="form-row"><label class="form-label">Time zone</label><select class="form-select" onchange="update(s=>s.meet.timezone=this.value)">${tzOpts}</select></div>
+      </div>
+      <div class="form-row"><label class="form-label">Competition days</label>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+          ${state.meet.days.map((day,i)=>`<div style="display:flex;align-items:center;gap:4px">
+            <input class="form-input" type="date" style="width:155px" value="${day.date}" onchange="update(s=>s.meet.days[${i}].date=this.value)" />
+            <button class="icon-btn danger" onclick="deleteDay('${day.id}')">×</button>
+          </div>`).join('')}
+        </div>
+        <button class="btn" onclick="addDay()">+ Add day</button>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Done</button></div>
+  </div>`;
+}
+
+function openPicker(sessId){ui.modal='add-event';ui.pickerSessId=sessId;ui.pickerSearch='';ui.pickerPreset='';ui.pickerRound='';render()}
+
+function renderPickerModal(){
+  const sess=state.sessions.find(s=>s.id===ui.pickerSessId);if(!sess)return'';
+  const catalog=buildEventCatalog(state.meet.meetType);
+  const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
+  const allUsed=new Set(state.sessions.flatMap(s=>s.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`)));
+  const search=(ui.pickerSearch||'').toLowerCase();
+  const filtered=search?catalog.filter(e=>eventDisplayName(e).toLowerCase().includes(search)):catalog;
+  const sel=catalog.find(e=>e.id===ui.pickerPreset);
+  const def=MEET_TYPES[state.meet.meetType]||MEET_TYPES.custom;
+  const rounds=sel?(sel.allowedRounds||def.rounds||['Qualifier']):[];
+  const selRound=ui.pickerRound||rounds[0]||'';
+  const n=getSessionNumber(sess,allTimedSessions());
+
+  return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-head"><span class="modal-title">Add event — Session ${n}</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <input class="ev-search" placeholder="Search — Group A Girls, platform, 3-meter…" value="${esc(ui.pickerSearch)}" oninput="ui.pickerSearch=this.value;render()" />
+      <div class="ev-grid">
+        ${filtered.map(ev=>{
+          const k=`${ev.level}|${ev.gender}|${ev.apparatus}`;
+          const inSched=[...allUsed].some(x=>x.startsWith(k));
+          return`<div class="ev-card ${ev.id===ui.pickerPreset?'sel':''}" onclick="ui.pickerPreset='${ev.id}';ui.pickerRound='';render()">
+            <div class="ec-name">${esc(eventDisplayName(ev))}</div>
+            <div class="ec-meta">${esc(ev.style)} · ${ev.defaultDives} dives default</div>
+            <span class="ec-badge ${inSched?'used':'avail'}">${inSched?'In schedule':'Available'}</span>
+          </div>`;
+        }).join('')}
+        ${!filtered.length?`<div style="grid-column:1/-1;padding:20px;text-align:center;font-size:12px;color:var(--text-3)">No events match</div>`:''}
+      </div>
+      ${sel?`<div class="form-row"><label class="form-label" style="margin-bottom:7px">Round</label>
+        <div class="round-row">${rounds.map(r=>{
+          const used=sessUsed.has(`${sel.level}|${sel.gender}|${sel.apparatus}|${r}`);
+          return`<button class="round-btn ${r===selRound?'active':''} ${used?'used':''}" ${used?'disabled title="Already in this session"':''} onclick="ui.pickerRound='${r}';render()">${r}${used?' ✓':''}</button>`;
+        }).join('')}</div>
+      </div>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" ${!sel||!selRound?'disabled':''} onclick="addEventToSession('${ui.pickerSessId}','${ui.pickerPreset}','${selRound}');closeModal()">Add ${esc(selRound||'event')}</button>
+    </div>
+  </div>`;
+}
+
+function renderLibraryModal(){
+  const local=loadLocalLibrary();
+  return`<div class="modal modal-xl" onclick="event.stopPropagation()">
+    <div class="modal-head"><span class="modal-title">Schedule library</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-label" style="margin-bottom:8px">Built-in templates (read-only)</div>
+      <div class="lib-grid" style="margin-bottom:18px">
+        ${BUILTIN_SCHEDULES.map(item=>{
+          const sched=item.schedule;
+          const comp=sched.sessions.filter(s=>!s.isPractice).length;
+          const days=sched.meet.days.length;
+          return`<div class="lib-card">
+            <div class="lib-icon builtin">📋</div>
+            <div class="lib-info">
+              <div class="lib-name">${esc(item.name)} <span class="lib-badge">Template</span></div>
+              <div class="lib-meta">${days} days · ${comp} competition sessions</div>
+            </div>
+            <div class="lib-acts"><button class="lib-btn primary" onclick="loadBuiltinSchedule('${item.id}')">Load</button></div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${ui.neonLibraryLoading?`<div style="font-size:12px;color:var(--text-3);padding:12px 0">Loading cloud schedules…</div>`:''}
+      ${ui.neonLibrary.length?`<div class="form-label" style="margin-bottom:8px">Cloud schedules</div>
+        <div class="lib-grid" style="margin-bottom:18px">
+          ${ui.neonLibrary.map(item=>`<div class="lib-card">
+            <div class="lib-icon">☁</div>
+            <div class="lib-info">
+              <div class="lib-name">${esc(item.name)}</div>
+              <div class="lib-meta">${item.publishStatus||'draft'} · ${item.savedAt?new Date(item.savedAt).toLocaleDateString():''}</div>
+            </div>
+            <div class="lib-acts">
+              <button class="lib-btn primary" onclick="loadFromNeon('${item.id}')">Load</button>
+              <button class="lib-btn" onclick="deleteNeonSchedule('${item.id}')">Delete</button>
+            </div>
+          </div>`).join('')}
+        </div>`:''}
+      ${local.length?`<div class="form-label" style="margin-bottom:8px">Locally saved</div>
+        <div class="lib-grid">${local.map(item=>`<div class="lib-card">
+          <div class="lib-icon">💾</div>
+          <div class="lib-info">
+            <div class="lib-name">${esc(item.name)}</div>
+            <div class="lib-meta">Local · ${new Date(item.savedAt).toLocaleDateString()}</div>
+          </div>
+          <div class="lib-acts"><button class="lib-btn primary" onclick="loadLocal('${item.id}')">Load</button></div>
+        </div>`).join('')}</div>`:''}
+      ${!ui.neonLibrary.length&&!local.length&&!ui.neonLibraryLoading?`<div class="empty-state"><div class="empty-title">No saved schedules</div>Click "Save to cloud" to save your work.</div>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-primary" onclick="saveSchedule()">Save current to cloud</button>
+    </div>
+  </div>`;
+}
+
+function loadLocal(id){
+  const lib=loadLocalLibrary();const item=lib.find(x=>x.id===id);if(!item)return;
+  if(!confirm(`Load "${item.name}"?`))return;
+  state=item.schedule;saveState();ui.modal=null;initUI();render();showToast('Schedule loaded');
+}
+
+function renderEntriesModal(){
+  const timed=allTimedSessions();
+  const rows=[];
+  timed.filter(s=>!s.isPractice).forEach(sess=>{
+    const n=getSessionNumber(sess,timed);
+    sess.events.forEach(ev=>{
+      rows.push({sessId:sess.id,evId:ev.id,sessLabel:`Session ${n}`,evLabel:eventDisplayName(ev),divers:ev.numberOfDivers||0,dives:ev.numberOfDives||ev.defaultDives||0,spd:ev.secondsPerDive||ev.defaultSpd||35,split:ev.manualSplit&&!isPlatform(ev.apparatus)});
+    });
+  });
+  return`<div class="modal modal-xl" onclick="event.stopPropagation()">
+    <div class="modal-head"><span class="modal-title">Entry counts</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body" style="padding:0">
+      <table class="entries-table">
+        <thead><tr><th>Session</th><th>Event</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Est. time</th></tr></thead>
+        <tbody>${rows.map(r=>{
+          const dur=calcEventDuration({...r,numberOfDivers:r.divers,numberOfDives:r.dives,secondsPerDive:r.spd,manualSplit:r.split});
+          return`<tr>
+            <td style="color:var(--text-3)">${esc(r.sessLabel)}</td>
+            <td>${esc(r.evLabel)}</td>
+            <td><input class="entries-input" type="number" min="0" value="${r.divers}" onchange="updateEvent('${r.sessId}','${r.evId}','numberOfDivers',this.value)" /></td>
+            <td><input class="entries-input" type="number" min="1" value="${r.dives}" onchange="updateEvent('${r.sessId}','${r.evId}','numberOfDives',this.value)" /></td>
+            <td><input class="entries-input" type="number" min="5" step="1" value="${r.spd}" onchange="updateEvent('${r.sessId}','${r.evId}','secondsPerDive',this.value)" /></td>
+            <td style="text-align:center">${r.split?'÷':''}</td>
+            <td style="color:var(--text-3)">${fmtDur(dur.eventMinutes)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      ${!rows.length?`<div class="empty-state"><div class="empty-title">No events yet</div>Add events to sessions first.</div>`:''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Done</button></div>
+  </div>`;
+}
+
+function renderGenerateModal(){
+  const timed=allTimedSessions();
+  const aud=ui.generateAud;
+  const cfg={...AUDIENCE_CONFIGS[aud]};
+  return`<div class="modal modal-xl" onclick="event.stopPropagation()">
+    <div class="modal-head"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-label" style="margin-bottom:8px">Audience</div>
+      <div class="aud-grid">
+        ${Object.entries(AUDIENCE_CONFIGS).map(([k,c])=>`<div class="aud-card ${aud===k?'sel':''}" onclick="ui.generateAud='${k}';render()">
+          <div class="aud-name">${c.label}</div>
+          <div class="aud-desc">${c.desc}</div>
+        </div>`).join('')}
+      </div>
+      <div class="form-label" style="margin-bottom:8px">What to include</div>
+      <div style="margin-bottom:14px">
+        <div class="toggle-row">Show warm-up times <label class="toggle"><input type="checkbox" ${cfg.showWarmup?'checked':''} onchange="AUDIENCE_CONFIGS['${aud}'].showWarmup=this.checked;render()"><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row">Show between-session buffers <label class="toggle"><input type="checkbox" ${cfg.showBuffer?'checked':''} onchange="AUDIENCE_CONFIGS['${aud}'].showBuffer=this.checked;render()"><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row">Show round labels (Qualifier, Prelim, Final…) <label class="toggle"><input type="checkbox" ${cfg.showRound?'checked':''} onchange="AUDIENCE_CONFIGS['${aud}'].showRound=this.checked;render()"><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row">Show event start / end times <label class="toggle"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUDIENCE_CONFIGS['${aud}'].showTimes=this.checked;render()"><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row">Show sec/dive detail <label class="toggle"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUDIENCE_CONFIGS['${aud}'].showSec=this.checked;render()"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="form-label" style="margin-bottom:8px">Preview — <span style="color:var(--text-3);font-weight:400">${cfg.label}</span></div>
+      ${renderPrintPreview(timed,cfg)}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn" onclick="ui.modal='entries';render()">Edit entry counts</button>
+      <button class="btn btn-green" onclick="exportExcel()" title="Download Excel (.xls)">Excel</button>
+      <button class="btn btn-primary" onclick="window.print()">Print / PDF</button>
+    </div>
+  </div>`;
+}
+
+function renderPrintPreview(timed,cfg){
+  const days=state.meet.days;
+  if(!days.length||!timed.length)return`<div class="print-preview"><p style="color:var(--text-3);font-size:12px;text-align:center;padding:16px">No schedule to preview yet.</p></div>`;
+  return`<div class="print-preview" id="printPreview">
+    <div class="pp-head">
+      <div>
+        <div class="pp-org">USA Diving</div>
+        <div class="pp-meet">${esc(state.meet.name)}</div>
+        <div class="pp-venue">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''}</div>
+      </div>
+      <div class="pp-mark"></div>
+    </div>
+    ${days.map(day=>{
+      const daySess=timed.filter(s=>s.dayId===day.id&&!s.isPractice).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
+      if(!daySess.length)return'';
+      return`<div class="pp-day">
+        <div class="pp-day-head">${fullDate(day.date)}</div>
+        ${daySess.map(sess=>{
+          const t=sess.timing;
+          const n=getSessionNumber(sess,timed);
+          return`<div class="pp-sess">
+            <div class="pp-sess-time">Session ${n} — Events start ${fmt12(t.eventStartMinutes)}</div>
+            ${cfg.showWarmup?`<div class="pp-warmup">Warm-up ${fmt12(t.warmupStartMinutes)}–${fmt12(t.warmupEndMinutes)}</div>`:''}
+            ${(t.events||[]).map(ev=>`<div class="pp-ev">
+              ${esc(eventDisplayName(ev))}
+              ${cfg.showRound&&ev.round&&ev.round!=='Custom Block'?`<span class="pp-ev-badge">${esc(ev.round)}</span>`:''}
+              ${ev.manualSplit&&!isPlatform(ev.apparatus)?`<span class="pp-ev-badge" style="background:var(--split-bg);color:var(--split-tx)">Split</span>`:''}
+              ${cfg.showSec?`<span style="font-size:10px;color:#888;margin-left:4px">${ev.secondsPerDive||ev.defaultSpd}s/dive</span>`:''}
+              ${cfg.showTimes?`<span style="font-size:10px;color:#888;margin-left:auto">${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}</span>`:''}
+            </div>`).join('')}
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('')}
+    <div class="pp-footer">
+      <span>USA Diving · ${esc(state.meet.name)}</span>
+      <span>Schedule subject to change · ${new Date().toLocaleDateString()}</span>
+    </div>
+  </div>`;
+}
+
+// ── EXCEL EXPORT ──────────────────────────────────────────────────────
+function exportExcel(){
+  const timed=allTimedSessions();
+  let html=`<html><head><meta charset="UTF-8"><style>
+    body{font-family:Arial,sans-serif;font-size:11pt}
+    table{border-collapse:collapse;width:100%}
+    th{background:#171F69;color:white;padding:6px 10px;text-align:left;font-size:10pt}
+    td{padding:5px 10px;border-bottom:1px solid #ddd}
+    .day-row td{background:#E8ECFF;font-weight:bold;color:#171F69;font-size:11pt}
+    .sess-row td{background:#F5F6FA;font-weight:bold}
+  </style></head><body>
+    <h2 style="color:#171F69;margin-bottom:4px">${esc(state.meet.name)}</h2>
+    <p style="color:#666;margin-bottom:16px">${esc(state.meet.venue)}${state.meet.city?' · '+esc(state.meet.city):''}</p>
+    <table>
+      <thead><tr><th>Day</th><th>Session</th><th>Event</th><th>Round</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Warm-up</th><th>Events start</th><th>Event time</th><th>Est. duration</th></tr></thead>
+      <tbody>`;
+  state.meet.days.forEach(day=>{
+    const daySess=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
+    if(!daySess.length)return;
+    html+=`<tr class="day-row"><td colspan="12">${fullDate(day.date)}</td></tr>`;
+    daySess.forEach(sess=>{
+      const t=sess.timing;const n=getSessionNumber(sess,timed);
+      const sessLabel=sess.isPractice?(sess.title||'Practice'):(`Session ${n}`);
+      html+=`<tr class="sess-row"><td></td><td colspan="11">${esc(sessLabel)} · Warm-up ${fmt12(t.warmupStartMinutes)}, events ${fmt12(t.eventStartMinutes)}</td></tr>`;
+      (t.events||[]).forEach(ev=>{
+        const dur=calcEventDuration(ev);
+        html+=`<tr><td>${fullDate(day.date)}</td><td>${esc(sessLabel)}</td><td>${esc(eventDisplayName(ev))}</td><td>${esc(ev.round||'')}</td><td>${ev.numberOfDivers||0}</td><td>${ev.numberOfDives||ev.defaultDives||0}</td><td>${ev.secondsPerDive||ev.defaultSpd||35}</td><td>${ev.manualSplit&&!isPlatform(ev.apparatus)?'Yes':''}</td><td>${fmt12(t.warmupStartMinutes)}</td><td>${fmt12(ev.eventStartMinutes)}</td><td>${fmt12(ev.eventStartMinutes)}–${fmt12(ev.eventEndMinutes)}</td><td>${fmtDur(dur.eventMinutes)}</td></tr>`;
+      });
+    });
+  });
+  html+='</tbody></table></body></html>';
+  const blob=new Blob([html],{type:'application/vnd.ms-excel'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`${state.meet.name.replace(/[^a-z0-9]/gi,'-')}-schedule.xls`;
+  a.click();URL.revokeObjectURL(a.href);
+  showToast('Excel file downloaded');
+}
+
+// ── PRINT STYLES ──────────────────────────────────────────────────────
+const ps=document.createElement('style');
+ps.textContent=`@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-backdrop{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}}`;
+document.head.appendChild(ps);
+
+// ── MEET SETUP CLICK HANDLER ──────────────────────────────────────────
+document.getElementById('app').addEventListener('openMeet',()=>{ui.modal='meet';render()});
+
+// ── DRAG & DROP FOR EVENT REORDER ─────────────────────────────────────
+let dragEvId='',dragSessId='';
+document.addEventListener('dragstart',e=>{
+  const row=e.target.closest('[data-ev]');
+  if(!row)return;
+  dragEvId=row.dataset.ev;dragSessId=row.dataset.sess;
+  e.dataTransfer.effectAllowed='move';
+  row.style.opacity='0.4';
+});
+document.addEventListener('dragend',e=>{
+  const row=e.target.closest('[data-ev]');
+  if(row)row.style.opacity='1';
+  dragEvId='';dragSessId='';
+});
+document.addEventListener('dragover',e=>{
+  const row=e.target.closest('[data-ev]');
+  if(row&&dragEvId&&dragEvId!==row.dataset.ev)e.preventDefault();
+});
+document.addEventListener('drop',e=>{
+  e.preventDefault();
+  const target=e.target.closest('[data-ev]');
+  if(!target||!dragEvId||dragEvId===target.dataset.ev)return;
+  const targetEvId=target.dataset.ev;
+  const targetSessId=target.dataset.sess;
+  if(dragSessId!==targetSessId)return; // only same-session reorder for now
+  update(s=>{
+    const sess=s.sessions.find(x=>x.id===dragSessId);if(!sess)return;
+    const evs=sess.events;
+    const fromIdx=evs.findIndex(e=>e.id===dragEvId);
+    const toIdx=evs.findIndex(e=>e.id===targetEvId);
+    if(fromIdx<0||toIdx<0)return;
+    const[moved]=evs.splice(fromIdx,1);evs.splice(toIdx,0,moved);
+  });
+});
+
+// ── BOOT ─────────────────────────────────────────────────────────────
+// Re-register the meet event listener after each render
+const origRender=render;
+window.render=function(){
+  origRender();
+  const app=document.getElementById('app');
+  if(app)app.addEventListener('openMeet',()=>{ui.modal='meet';render()},{once:true});
+  setSyncDot(state.currentLibraryId?(syncState.connected?'ok':'offline'):'offline');
+};
+
+// Start sync loop if we have a saved schedule in Neon
+if(state.currentLibraryId){
+  startSyncLoop();
+}
+
+render();
+</script>
+</body>
 </html>
