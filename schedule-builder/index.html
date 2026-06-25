@@ -648,6 +648,11 @@ button{cursor:pointer;border:none;background:none}
 .sc-warn-fix{height:24px;padding:0 10px;border-radius:6px;font-size:10.5px;font-weight:700;border:1px solid var(--warn);background:var(--warn);color:#fff;cursor:pointer;margin-left:auto;white-space:nowrap}
 .sc-warn-fix:hover{filter:brightness(.93)}
 .sc-warn-ack{margin-left:6px}
+
+/* Remove number input spinners everywhere — cleaner, no accidental clamping */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
 </style>
 </head>
 <body>
@@ -1720,19 +1725,19 @@ function entryValue(ev){
 // Rule: finals = min(12, prelimFinalCount) when prelim final < 12, else 12.
 // Only auto-updates finals events that haven't been manually edited (autoFinals=true).
 function syncFinalsToPrelim(prelimEv){
-  // Only sync when the prelim final has actually been entered (incl. 0). Empty = don't touch.
+  // Prelim entry counts are NEVER capped — a prelim can have 40+ divers before cuts.
+  // This only updates the matching FINALS event, capping IT at 12.
+  if(prelimEv.round!=='Prelim')return; // safety: never run off a non-prelim
   if(prelimEv.finalDivers==null||prelimEv.finalDivers==='')return;
   const prelimFinal=Number(prelimEv.finalDivers)||0;
-  const target=prelimFinal<12?prelimFinal:12;
-  // Find matching finals event(s) across all sessions (same group/gender/apparatus)
+  const target=Math.min(12,prelimFinal); // finals capped at 12; prelim itself untouched
   S.sessions.forEach(sess=>{
     sess.events.forEach(fe=>{
-      if(fe.round==='Final'&&fe.autoFinals!==false&&
+      if(fe!==prelimEv&&fe.round==='Final'&&fe.autoFinals!==false&&
          fe.level===prelimEv.level&&fe.gender===prelimEv.gender&&fe.apparatus===prelimEv.apparatus){
         fe.projectedDivers=target;
         fe.finalDivers=target;
         fe.numberOfDivers=target;
-        // Live-update the finals inputs in the DOM (no full re-render — preserves focus)
         const fp=document.getElementById('feg-'+fe.id+'-proj');
         const ff=document.getElementById('feg-'+fe.id+'-final');
         if(fp){fp.value=target;fp.classList.add('on');}
