@@ -954,37 +954,31 @@ function calcSessTiming(sess){
     }
   });
 
-  // 2) Lay out units in order. Simultaneous units (same simulGroup) share a start time.
-  //    Otherwise each unit follows the previous (sequential). Events without an explicit
-  //    simulGroup but on DIFFERENT apparatus still default to running in parallel by lane,
-  //    preserving prior behavior.
-  const tevs=[];let cursor=first;const simulStart={};const laneCursor={};
+  // 2) Lay out units. DEFAULT (restored original behavior): each unit starts at `first`
+  //    and events run in parallel by apparatus lane (different boards = simultaneous).
+  //    A unit on the same lane as a prior one stacks after it on that lane.
+  //    OVERRIDES:
+  //      - Simultaneous group: all members share one start time (forced parallel).
+  //      - Combined: members already merged into one unit; it occupies its lane like a single.
+  const tevs=[];const laneCursor={};const simulStart={};
   units.forEach(u=>{
-    let start;
-    if(u.simulGroup&&simulStart[u.simulGroup]!=null){
-      // share the start of others in this simultaneous group
-      start=simulStart[u.simulGroup];
-    } else if(!u.simulGroup){
-      // default lane behavior for non-grouped units: parallel across apparatus
-      const lane=lk(u.apparatus);
-      start=laneCursor[lane]??cursor;
-    } else {
-      start=cursor;
-    }
-    start=ru(start,round);
-    const end=start+u.evMin;
-    if(u.simulGroup&&simulStart[u.simulGroup]==null)simulStart[u.simulGroup]=start;
-    // advance cursors
     const lane=lk(u.apparatus);
+    let start;
+    if(u.simulGroup){
+      // First member of a simul group sets the start; the rest share it
+      if(simulStart[u.simulGroup]==null)simulStart[u.simulGroup]=ru(laneCursor[lane]??first,round);
+      start=simulStart[u.simulGroup];
+    } else {
+      // Default: start where this lane currently is (first if lane unused = parallel)
+      start=ru(laneCursor[lane]??first,round);
+    }
+    const end=start+u.evMin;
+    // Advance this lane's cursor so the next same-lane event stacks after
     laneCursor[lane]=ru(end,round);
-    // sequential cursor advances to the max end so the next non-parallel unit follows
-    cursor=ru(Math.max(cursor,end),round);
-
     if(u.kind==='single'){
       tevs.push({...u.ev,eventStartMinutes:start,eventEndMinutes:end,evMin:u.evMin,rawMin:u.rawMin,
         _combined:false,_simul:Boolean(u.simulGroup)});
     } else {
-      // combined: emit the lead with combined metadata for rendering
       tevs.push({...u.lead,eventStartMinutes:start,eventEndMinutes:end,evMin:u.evMin,rawMin:u.rawMin,
         _combined:true,_combinedMembers:u.members.map(m=>m.id),
         _combinedNames:u.members.map(m=>evName(m)),
