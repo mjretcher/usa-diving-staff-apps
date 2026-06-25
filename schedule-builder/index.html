@@ -899,10 +899,57 @@ const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)retu
 // ── NEON ──────────────────────────────────────────────────────────────
 let sync={ok:false,saving:false,err:null},saveTimer=null,lastSynced=null;
 async function nq(sql,params=[]){
-  const r=await fetch('https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/sql',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer npg_SN1ULPtYhC6J','Neon-Connection-String':NEON},body:JSON.stringify({query:sql,params})});
-  if(!r.ok)throw new Error('HTTP '+r.status);
+  let r;
+  try{
+    r=await fetch('https://ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/sql',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer npg_SN1ULPtYhC6J','Neon-Connection-String':NEON},
+      body:JSON.stringify({query:sql,params})
+    });
+  }catch(netErr){
+    // Network-level error (CORS, DNS, offline, etc.) — include explicit hint
+    const e=new Error('Network: '+(netErr.message||'fetch failed'));e._kind='network';throw e;
+  }
+  if(!r.ok){
+    let body='';try{body=(await r.text()).slice(0,200);}catch{}
+    const e=new Error('HTTP '+r.status+(body?' — '+body:''));e._kind='http'+r.status;throw e;
+  }
   return r.json();
 }
+// Manual retry — pings Neon with a cheap query to wake/check, called from the sync indicator
+async function retryCloudSync(){
+  const l=document.querySelector('.sync-lbl');
+  if(l){l.textContent='Reconnecting…';}
+  try{
+    await nq('SELECT 1');
+    sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');toast('Back online ✓');
+    // Push any pending local changes if we have a save record
+    if(S.currentLibraryId&&S.libraryFolder)doSave().catch(()=>{});
+    // Restart polling if we have a save record
+    if(S.currentLibraryId)startSync();
+  }catch(e){
+    sync.err=e.message;setSyncDot('error');
+    toast('Still offline: '+(e.message||'').slice(0,100),5000);
+    console.error('Retry failed:',e);
+  }
+}
+// Background heartbeat — every 60s while we're offline, try to wake Neon.
+// This runs even if no currentLibraryId so the user gets back online whenever Neon recovers.
+let _heartbeatT=null;
+function startHeartbeat(){
+  clearInterval(_heartbeatT);
+  _heartbeatT=setInterval(async()=>{
+    if(sync.err){ // only ping when we think we're offline
+      try{
+        await nq('SELECT 1');
+        sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');
+        if(S.currentLibraryId&&S.libraryFolder)doSave().catch(()=>{});
+        if(S.currentLibraryId)startSync();
+      }catch{}
+    }
+  },60000);
+}
+startHeartbeat();
 function scheduleSave(){clearTimeout(saveTimer);setSyncDot('saving');saveTimer=setTimeout(doSave,3000)}
 async function doSave(){
   if(!S.currentLibraryId)return;
@@ -981,8 +1028,8 @@ function setSyncDot(s){
   if(!d||!l)return;
   d.className='sync-pip'+(s==='saving'?' saving':s==='error'?' error':'');
   if(s==='saving'){l.textContent='Saving…'}
-  else if(s==='error'){l.textContent='Offline · saved locally'}
-  else if(s==='ok'){l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced);d.className='sync-pip'}
+  else if(s==='error'){l.textContent='Offline — tap to retry';l.style.cursor='pointer';l.onclick=retryCloudSync;}
+  else if(s==='ok'){l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced);d.className='sync-pip';l.style.cursor='';l.onclick=null;}
   else{l.textContent='Saved locally'}
 }
 setInterval(()=>{
@@ -1729,7 +1776,7 @@ function renderBar(timed){
       <button class="bb" onclick="saveSchedule()">Save</button>
       <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
     </div>
-    <div class="bar-sync"><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline · saved locally':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
+    <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
   </header>`;
 }
 
