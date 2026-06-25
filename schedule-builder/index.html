@@ -653,6 +653,41 @@ button{cursor:pointer;border:none;background:none}
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 input[type=number]{-moz-appearance:textfield;appearance:textfield}
+
+/* Combined / Simultaneous indicators on event rows */
+.ev-tag{display:inline-block;font-size:8px;font-weight:800;letter-spacing:.04em;padding:2px 5px;border-radius:4px;margin-left:7px;vertical-align:middle}
+.ev-tag.combined{background:#EDE9FE;color:#6D28D9}
+.ev-tag.simul{background:#DBEAFE;color:#1D4ED8}
+.sc-ev.is-combined{background:linear-gradient(to right,rgba(109,40,217,.04),transparent)}
+.sc-ev.is-simul{background:linear-gradient(to right,rgba(29,78,216,.04),transparent)}
+/* Combine panel in editor */
+.combine-panel{border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--surf2)}
+.combine-head{margin-bottom:10px}
+.combine-title{font-size:13px;font-weight:700;color:var(--tx)}
+.combine-sub{display:block;font-size:11px;color:var(--tx3);margin-top:1px}
+.combine-actions{display:flex;gap:8px;flex-wrap:wrap}
+.combine-btn{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:8px;font-size:12px;font-weight:600;border:1.5px solid var(--bd2);background:var(--surf);color:var(--tx);cursor:pointer;transition:.12s}
+.combine-btn:hover{border-color:var(--navy);color:var(--navy)}
+.cb-ic{font-size:13px}
+.combine-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.combine-cluster{display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--surf);border:1px solid var(--bd);border-radius:7px}
+.cc-tag{font-size:8px;font-weight:800;padding:2px 5px;border-radius:4px;flex-shrink:0}
+.cc-tag.combined{background:#EDE9FE;color:#6D28D9}
+.cc-tag.simul{background:#DBEAFE;color:#1D4ED8}
+.cc-names{flex:1;font-size:11.5px;color:var(--tx);font-weight:500}
+.cc-split{flex-shrink:0;height:26px;padding:0 10px;border-radius:6px;font-size:10.5px;font-weight:700;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);cursor:pointer}
+.cc-split:hover{border-color:var(--red);color:var(--red)}
+/* Combine picker */
+.cpick-list{display:flex;flex-direction:column;gap:6px}
+.cpick-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--bd2);border-radius:8px;background:var(--surf);cursor:pointer;transition:.1s;text-align:left;width:100%}
+.cpick-item:hover{border-color:var(--navy)}
+.cpick-item.sel{border-color:var(--navy);background:var(--navy-soft,#EEF)}
+.cpick-check{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--navy);flex-shrink:0}
+.cpick-item.sel .cpick-check{background:var(--navy);color:#fff;border-color:var(--navy)}
+.cpick-name{flex:1;font-size:13px;font-weight:600;color:var(--tx)}
+.cpick-meta{font-size:11px;color:var(--tx3)}
+/* Print toggle for combine/simul labels */
+.print-label-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--tx2)}
 </style>
 </head>
 <body>
@@ -882,15 +917,80 @@ function calcSessTiming(sess){
   const wu=Number(sess.warmupStartMinutes);
   const wuEnd=wu+Number(sess.warmupMinutes||55);
   const intro=Number(sess.introMinutes||0);
-  const first=ru(wuEnd+intro,Number(sess.rounding||5));
-  const cursors={};const tevs=[];
-  (sess.events||[]).forEach(ev=>{
-    const lane=lk(ev.apparatus);
-    const cur=cursors[lane]??first;
-    const dur=calcEvDur(ev);
-    const evMin=Math.ceil(dur.evMin); // whole minutes — no fractional display
-    tevs.push({...ev,eventStartMinutes:cur,eventEndMinutes:cur+evMin,evMin,rawMin:dur.rawMin});
-    cursors[lane]=ru(cur+evMin,Number(sess.rounding||5));
+  const round=Number(sess.rounding||5);
+  const first=ru(wuEnd+intro,round);
+
+  // ── Build display units from events, honoring Combined + Simultaneous ──
+  // Combined: events merged into a lead event; their durations SUM, render as one unit.
+  // Simultaneous: separate units that share the same start time (parallel boards).
+  const evs=(sess.events||[]);
+  // 1) Group combined events. combinedWith points at the lead event's id.
+  const combinedMap={}; // leadId -> [member events incl lead]
+  const standalone=[];
+  evs.forEach(ev=>{
+    if(ev.combinedWith){
+      (combinedMap[ev.combinedWith]=combinedMap[ev.combinedWith]||[]).push(ev);
+    }
+  });
+  // Build ordered "units": each unit is either a single event or a combined cluster (lead + members)
+  const units=[];const seen=new Set();
+  evs.forEach(ev=>{
+    if(seen.has(ev.id))return;
+    if(ev.combinedWith)return; // members handled with their lead
+    const members=combinedMap[ev.id];
+    if(members&&members.length){
+      const all=[ev,...members];
+      all.forEach(e=>seen.add(e.id));
+      // combined duration = sum of each member's own duration (each keeps its own dive count)
+      let sumMin=0,sumRaw=0;
+      all.forEach(e=>{const d=calcEvDur(e);sumMin+=Math.ceil(d.evMin);sumRaw+=d.rawMin;});
+      units.push({kind:'combined',lead:ev,members:all,evMin:sumMin,rawMin:sumRaw,
+        simulGroup:ev.simulGroup||null,apparatus:ev.apparatus});
+    } else {
+      seen.add(ev.id);
+      const d=calcEvDur(ev);
+      units.push({kind:'single',ev,evMin:Math.ceil(d.evMin),rawMin:d.rawMin,
+        simulGroup:ev.simulGroup||null,apparatus:ev.apparatus});
+    }
+  });
+
+  // 2) Lay out units in order. Simultaneous units (same simulGroup) share a start time.
+  //    Otherwise each unit follows the previous (sequential). Events without an explicit
+  //    simulGroup but on DIFFERENT apparatus still default to running in parallel by lane,
+  //    preserving prior behavior.
+  const tevs=[];let cursor=first;const simulStart={};const laneCursor={};
+  units.forEach(u=>{
+    let start;
+    if(u.simulGroup&&simulStart[u.simulGroup]!=null){
+      // share the start of others in this simultaneous group
+      start=simulStart[u.simulGroup];
+    } else if(!u.simulGroup){
+      // default lane behavior for non-grouped units: parallel across apparatus
+      const lane=lk(u.apparatus);
+      start=laneCursor[lane]??cursor;
+    } else {
+      start=cursor;
+    }
+    start=ru(start,round);
+    const end=start+u.evMin;
+    if(u.simulGroup&&simulStart[u.simulGroup]==null)simulStart[u.simulGroup]=start;
+    // advance cursors
+    const lane=lk(u.apparatus);
+    laneCursor[lane]=ru(end,round);
+    // sequential cursor advances to the max end so the next non-parallel unit follows
+    cursor=ru(Math.max(cursor,end),round);
+
+    if(u.kind==='single'){
+      tevs.push({...u.ev,eventStartMinutes:start,eventEndMinutes:end,evMin:u.evMin,rawMin:u.rawMin,
+        _combined:false,_simul:Boolean(u.simulGroup)});
+    } else {
+      // combined: emit the lead with combined metadata for rendering
+      tevs.push({...u.lead,eventStartMinutes:start,eventEndMinutes:end,evMin:u.evMin,rawMin:u.rawMin,
+        _combined:true,_combinedMembers:u.members.map(m=>m.id),
+        _combinedNames:u.members.map(m=>evName(m)),
+        _combinedDivers:u.members.reduce((a,m)=>a+entryValue(m),0),
+        _simul:Boolean(u.simulGroup)});
+    }
   });
   const compEnd=tevs.reduce((m,e)=>Math.max(m,e.eventEndMinutes),first);
   const awards=sess.awardsEnabled?15:0;
@@ -1064,6 +1164,65 @@ function dayCloseFor(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);retu
 function setDayClose(dayId,mins){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d){d.closeMinutes=Number(mins);}reflowDay(s,dayId);});}
 function toggleFitToClose(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess){sess.fitToClose=!sess.fitToClose;}reflowDay(s,sess.dayId);});}
 
+
+// ── Combine / Simultaneous actions ──
+// Combine: attach member events to a lead event. They run as one; durations sum.
+function combineEvents(sessId,leadId,memberIds){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    memberIds.forEach(mid=>{
+      if(mid===leadId)return;
+      const m=sess.events.find(e=>e.id===mid);
+      if(m){m.combinedWith=leadId;m.simulGroup=null;}
+    });
+    reflowDay(s,sess.dayId);
+  });
+  toast('Events combined');
+}
+// Split apart: remove an event from its combined cluster (back to standalone)
+function uncombineEvent(sessId,evId){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);
+    if(ev)ev.combinedWith=null;
+    // if this WAS a lead, its members now point at a gone lead — promote first member to lead
+    const orphans=sess.events.filter(e=>e.combinedWith===evId);
+    if(orphans.length){const newLead=orphans[0];newLead.combinedWith=null;orphans.slice(1).forEach(o=>o.combinedWith=newLead.id);}
+    reflowDay(s,sess.dayId);
+  });
+  toast('Split apart');
+}
+// Break a whole combined cluster back into separate events
+function uncombineCluster(sessId,leadId){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    sess.events.forEach(e=>{if(e.id===leadId||e.combinedWith===leadId)e.combinedWith=null;});
+    reflowDay(s,sess.dayId);
+  });
+  toast('Events separated');
+}
+// Toggle simultaneous: tag selected events with a shared simulGroup so they share a start time
+function setSimultaneous(sessId,evIds){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const gid='simul-'+uid();
+    evIds.forEach(id=>{const e=sess.events.find(x=>x.id===id);if(e){e.simulGroup=gid;e.combinedWith=null;}});
+    reflowDay(s,sess.dayId);
+  });
+  toast('Set to run simultaneously');
+}
+function clearSimultaneous(sessId,evId){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+    const g=ev.simulGroup;
+    // clear the whole group
+    if(g)sess.events.forEach(e=>{if(e.simulGroup===g)e.simulGroup=null;});
+    reflowDay(s,sess.dayId);
+  });
+  toast('Simultaneous cleared');
+}
+
 // Re-flow an entire day: keep the first session's start, snap every later session to
 // the previous session's end + buffer (rounded up to 5). Fully automatic sequencing.
 function reflowDay(stateSnap,dayId){
@@ -1139,10 +1298,10 @@ function makeEvent(p,round){
   const rbDives=rulebookDives(p.level,p.gender,p.apparatus,round);
   const dives=rbDives!=null?rbDives:p.defaultDives;
   const spd=rulebookSpd(p.level,p.apparatus);
-  // Finals default BOTH projected and final to 12 (capped later by prelim count if lower)
+  // Finals default BOTH projected and final to 12; prelims/qualifiers start UNSET (null)
   return{id:uid(),level:p.level,gender:p.gender,apparatus:p.apparatus,style:p.style,round,
     defaultDives:dives,numberOfDivers:isFinal?12:0,numberOfDives:dives,
-    projectedDivers:isFinal?12:0,finalDivers:isFinal?12:0,
+    projectedDivers:isFinal?12:null,finalDivers:isFinal?12:null,
     secondsPerDive:spd,defaultSpd:spd,manualSplit:false,numberOfPanelChanges:0,
     minutesPerPanelChange:2.5,customDurationMinutes:0,notes:'',rulebookLocked:rbDives!=null,
     autoFinals:isFinal};
@@ -1264,6 +1423,7 @@ function render(){
     ${UI.modal?renderModal(timed):''}
     ${UI.moveSessionId?renderMoveDialog():''}
     ${UI.dialog?renderDialog():''}
+    ${UI.combinePicker?renderCombinePickerModal():''}
   `;
   bindDrag();
   if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
@@ -1482,24 +1642,26 @@ function renderCardPrac(sess,t){
 
 function renderCardEvents(sess,t){
   return`<div class="sc-events">${(t.events||[]).map(ev=>{
-    const split=ev.manualSplit&&!isPlatform(ev.apparatus);
-    const dur=calcEvDur(ev);
-    const divers=Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0);
-    const needsSplit=dur.rawMin>=3||divers>=40&&ev.round!=='Final';
+    const split=ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final';
+    const dur={evMin:ev.evMin,rawMin:ev.rawMin};
+    const divers=ev._combined?ev._combinedDivers:entryValue(ev);
+    const needsSplit=(ev.rawMin>=3||divers>=40)&&ev.round!=='Final'&&!ev._combined;
     const roundCls=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
-    return`<div class="sc-ev" draggable="true" data-ev="${ev.id}" data-sess="${sess.id}">
+    const name=ev._combined?ev._combinedNames.join(' + '):evName(ev);
+    const diveSub=ev._combined?`${ev._combinedMembers.length} events combined`:`${ev.numberOfDives||ev.defaultDives||0} dives · ${ev.secondsPerDive||ev.defaultSpd||35}s/dive`;
+    return`<div class="sc-ev ${ev._combined?'is-combined':''} ${ev._simul?'is-simul':''}" draggable="true" data-ev="${ev.id}" data-sess="${sess.id}">
       <span class="ev-handle" title="Drag to reorder or to another session">⠿</span>
       <div class="ev-info">
-        <div class="ev-name">${esc(evName(ev))}</div>
-        <div class="ev-sub">${ev.numberOfDives||ev.defaultDives||0} dives · ${ev.secondsPerDive||ev.defaultSpd||35}s/dive · ${fdur(dur.evMin)}</div>
+        <div class="ev-name">${esc(name)}${ev._combined?'<span class="ev-tag combined">COMBINED</span>':''}${ev._simul?'<span class="ev-tag simul">SIMULTANEOUS</span>':''}</div>
+        <div class="ev-sub">${diveSub} · ${fdur(ev.evMin)}</div>
       </div>
       <div class="ev-stat">
         <span class="ev-stat-val ${divers?'':'empty'}">${divers||'—'}</span>
         <span class="ev-stat-lbl">divers</span>
       </div>
-      ${ev.round&&ev.round!=='Custom Block'?`<span class="ev-badge ${roundCls}">${esc(ev.round)}</span>`:''}
+      ${ev.round&&ev.round!=='Custom Block'&&!ev._combined?`<span class="ev-badge ${roundCls}">${esc(ev.round)}</span>`:''}
       ${split?`<span class="ev-badge split">Split</span>`:''}
-      ${(!isPlatform(ev.apparatus)&&ev.round!=='Final')?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
+      ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
       <span class="ev-time">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</span>
       <button class="ev-rm" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
     </div>`;
@@ -1565,6 +1727,81 @@ function renderEditPrac(sess,t,flights){
     <button class="add-flight-btn" onclick="addFlight('${sess.id}')">+ Add flight</button>`;
 }
 
+
+// Combine / Simultaneous management panel inside the session editor
+function renderCombinePanel(sess,t){
+  const evs=sess.events;
+  // Current combined clusters and simul groups
+  const clusters={};evs.forEach(e=>{if(e.combinedWith)(clusters[e.combinedWith]=clusters[e.combinedWith]||[]).push(e);});
+  const simulGroups={};evs.forEach(e=>{if(e.simulGroup)(simulGroups[e.simulGroup]=simulGroups[e.simulGroup]||[]).push(e);});
+  const hasCombos=Object.keys(clusters).length>0;
+  const hasSimul=Object.keys(simulGroups).length>0;
+  return`<div class="combine-panel">
+    <div class="combine-head">
+      <span class="combine-title">Combine &amp; Simultaneous</span>
+      <span class="combine-sub">Merge small events, or run boards at the same time</span>
+    </div>
+    <div class="combine-actions">
+      <button class="combine-btn" onclick="openCombinePicker('${sess.id}','combine')"><span class="cb-ic">⛓</span> Combine events…</button>
+      <button class="combine-btn" onclick="openCombinePicker('${sess.id}','simul')"><span class="cb-ic">⇉</span> Run simultaneously…</button>
+    </div>
+    ${hasCombos?`<div class="combine-list">${Object.entries(clusters).map(([leadId,members])=>{
+      const lead=evs.find(e=>e.id===leadId);if(!lead)return'';
+      const all=[lead,...members];
+      return`<div class="combine-cluster"><span class="cc-tag combined">COMBINED</span><span class="cc-names">${all.map(e=>esc(evName(e))).join(' + ')}</span><button class="cc-split" onclick="uncombineCluster('${sess.id}','${leadId}')">Split apart</button></div>`;
+    }).join('')}</div>`:''}
+    ${hasSimul?`<div class="combine-list">${Object.entries(simulGroups).map(([gid,members])=>{
+      if(members.length<2)return'';
+      return`<div class="combine-cluster"><span class="cc-tag simul">SIMULTANEOUS</span><span class="cc-names">${members.map(e=>esc(evName(e))).join(' + ')}</span><button class="cc-split" onclick="clearSimultaneous('${sess.id}','${members[0].id}')">Separate</button></div>`;
+    }).join('')}</div>`:''}
+  </div>`;
+}
+// Picker modal to select which events to combine / run simultaneously
+function openCombinePicker(sessId,mode){
+  UI.combinePicker={sessId,mode,selected:[]};
+  render();
+}
+function toggleCombinePick(evId){
+  const cp=UI.combinePicker;if(!cp)return;
+  const i=cp.selected.indexOf(evId);
+  if(i>=0)cp.selected.splice(i,1);else cp.selected.push(evId);
+  render();
+}
+function confirmCombinePicker(){
+  const cp=UI.combinePicker;if(!cp||cp.selected.length<2){toast('Pick at least 2 events');return;}
+  if(cp.mode==='combine'){
+    // first selected = lead
+    combineEvents(cp.sessId,cp.selected[0],cp.selected.slice(1));
+  } else {
+    setSimultaneous(cp.sessId,cp.selected);
+  }
+  UI.combinePicker=null;render();
+}
+function renderCombinePickerModal(){
+  const cp=UI.combinePicker;if(!cp)return'';
+  const sess=S.sessions.find(s=>s.id===cp.sessId);if(!sess)return'';
+  const isCombine=cp.mode==='combine';
+  return`<div class="modal-bg" onclick="if(event.target===this){UI.combinePicker=null;render()}">
+    <div class="modal modal-sm" onclick="event.stopPropagation()">
+      <div class="modal-hd"><span class="modal-title">${isCombine?'Combine events':'Run simultaneously'}</span><button class="modal-close" onclick="UI.combinePicker=null;render()">×</button></div>
+      <div class="modal-body">
+        <p style="font-size:12.5px;color:var(--tx2);line-height:1.5;margin-bottom:12px">${isCombine?'Select 2–3 events to merge into one. They run together as a single event — each diver keeps their own dive count and the times add up. The first one you pick is the lead.':'Select events that should run at the same time on different boards. They will share a start time.'}</p>
+        <div class="cpick-list">${sess.events.filter(e=>!e.combinedWith).map(ev=>{
+          const sel=cp.selected.indexOf(ev.id);
+          const order=sel>=0?sel+1:null;
+          return`<button class="cpick-item ${sel>=0?'sel':''}" onclick="toggleCombinePick('${ev.id}')">
+            <span class="cpick-check">${sel>=0?(isCombine?(order===1?'★':order):'✓'):''}</span>
+            <span class="cpick-name">${esc(evName(ev))}</span>
+            <span class="cpick-meta">${entryValue(ev)||0} divers · ${ev.round||''}</span>
+          </button>`;
+        }).join('')}</div>
+        ${isCombine&&cp.selected.length>0?`<div style="font-size:11px;color:var(--tx3);margin-top:8px">★ = lead event</div>`:''}
+      </div>
+      <div class="modal-foot"><button class="btn btn-sm btn-gh" onclick="UI.combinePicker=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="confirmCombinePicker()">${isCombine?'Combine':'Set simultaneous'} (${cp.selected.length})</button></div>
+    </div>
+  </div>`;
+}
+
 function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
   const introChips=[0,5,10,15].map(v=>`<button class="chip ${intro===v?'on':''}" onclick="updSess('${sess.id}','introMinutes',${v})">${v===0?'Off':v+'m'}</button>`).join('');
   const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
@@ -1588,6 +1825,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
+    ${sess.events.length>1?renderCombinePanel(sess,t):''}
     ${sess.events.length?`<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">${sess.events.map(ev=>{
       const dur=calcEvDur(ev);
       const tev=(t.events||[]).find(e=>e.id===ev.id)||{};
@@ -2241,11 +2479,15 @@ function ui_neonLib_section(local){
   return out;
 }
 
+
+function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabels!==false);saveS();render();}
+
 function renderGenerateModal(timed){
   const aud=UI.genAud;const cfg={...AUD[aud]};
+  const showLbl=S.meet.showCombineLabels!==false;
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="modal-body">
+    <div class="modal-body"><div class="print-label-row"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()" style="width:15px;height:15px;accent-color:var(--navy)"/> Show "Combined" / "Simultaneous" labels on output</label></div>
       <div class="aud-grid">${Object.entries(AUD).map(([k,c])=>`<div class="aud-card ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="aud-name">${c.l}</div></div>`).join('')}</div>
       <div style="margin-bottom:14px">
         <div class="tog-row">Show warm-up times <label class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="tog-sl"></span></label></div>
@@ -2286,7 +2528,7 @@ function renderPP(timed,cfg){
             </div>`;
           }
           const n=getSessNum(sess,timed);
-          return`<div class="pp-sess"><div class="pp-sess-t">Session ${n} — ${f12(t.eventStartMinutes)}</div>${cfg.showWU?`<div class="pp-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>`:''}<div>${(t.events||[]).map(ev=>{const divers=Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0);return`<div class="pp-ev">${esc(evName(ev))}${ev.round&&ev.round!=='Custom Block'?`<span class="pp-ev-b">${esc(ev.round)}</span>`:''}${ev.manualSplit&&!isPlatform(ev.apparatus)?`<span class="pp-ev-b" style="background:#FFFBEB;color:#92400E">Split</span>`:''}${cfg.showEntries&&divers?`<span class="pp-ev-b" style="background:#F0FDF4;color:#15803D">${divers} divers</span>`:''}${cfg.showSec?`<span style="font-size:9px;color:#aaa">${ev.secondsPerDive||ev.defaultSpd||35}s</span>`:''}${cfg.showTimes?`<span style="margin-left:auto;font-size:10px;color:#888">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</span>`:''}</div>`}).join('')}</div></div>`;
+          return`<div class="pp-sess"><div class="pp-sess-t">Session ${n} — ${f12(t.eventStartMinutes)}</div>${cfg.showWU?`<div class="pp-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>`:''}<div>${(t.events||[]).map(ev=>{const divers=ev._combined?ev._combinedDivers:Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0);const nm=ev._combined?ev._combinedNames.join(' + '):evName(ev);const showLbl=S.meet.showCombineLabels!==false;return`<div class="pp-ev">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pp-ev-b" style="background:#EDE9FE;color:#6D28D9">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pp-ev-b" style="background:#DBEAFE;color:#1D4ED8">Simultaneous</span>`:''}${ev.round&&ev.round!=='Custom Block'&&!ev._combined?`<span class="pp-ev-b">${esc(ev.round)}</span>`:''}${ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined?`<span class="pp-ev-b" style="background:#FFFBEB;color:#92400E">Split</span>`:''}${cfg.showEntries&&divers?`<span class="pp-ev-b" style="background:#F0FDF4;color:#15803D">${divers} divers</span>`:''}${cfg.showSec?`<span style="font-size:9px;color:#aaa">${ev.secondsPerDive||ev.defaultSpd||35}s</span>`:''}${cfg.showTimes?`<span style="margin-left:auto;font-size:10px;color:#888">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</span>`:''}</div>`}).join('')}</div></div>`;
         }).join('')}
       </div>`;
     }).join('')}
