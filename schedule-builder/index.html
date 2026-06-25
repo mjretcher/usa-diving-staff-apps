@@ -554,6 +554,56 @@ button{cursor:pointer;border:none;background:none}
 /* Session reorder drop indicators */
 .sc.sess-drop-above{box-shadow:0 -3px 0 -1px var(--cyan),var(--sh-md)}
 .sc.sess-drop-below{box-shadow:0 3px 0 -1px var(--cyan),var(--sh-md)}
+
+/* PRACTICE / TRAINING CARDS — distinct, readable */
+.sc.pcard{overflow:visible}
+.pcard-hd{display:flex;align-items:center;gap:14px;padding:14px 16px 14px 18px;cursor:pointer;border-radius:var(--r-lg)}
+.pcard-icon{font-size:20px;flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(255,255,255,.6)}
+.pcard-main{flex:1;min-width:0}
+.pcard-name{font-size:14.5px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pcard-meta{font-size:11.5px;color:var(--tx2);margin-top:2px;font-weight:500}
+.pcard-time{text-align:right;flex-shrink:0}
+.pcard-time-range{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
+.pcard-time-dur{font-size:11px;color:var(--tx3);margin-top:2px}
+.pcard-flights{padding:4px 16px 10px 18px;border-top:1px solid var(--bd)}
+.pcard-flight{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.pcard-flight:last-child{border-bottom:none}
+.pcard-flight-bar{width:4px;height:28px;border-radius:2px;flex-shrink:0}
+.pcard-flight-name{flex:1;font-size:12.5px;font-weight:600;color:var(--tx)}
+.pcard-flight-time{font-size:11.5px;color:var(--tx2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pcard-flight-dur{font-size:11px;color:var(--tx3);white-space:nowrap;min-width:40px;text-align:right}
+
+/* FAST ENTRY GRID */
+.entries-panel.open{width:680px}
+.feg-table{width:100%;border-collapse:collapse}
+.feg-table thead th{font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;padding:9px 10px;text-align:center;border-bottom:1px solid var(--bd);background:var(--surf2);position:sticky;top:0;z-index:2}
+.feg-table thead th:first-child{text-align:left}
+.feg-table td{padding:7px 10px;border-bottom:1px solid var(--bd);vertical-align:middle;text-align:center}
+.feg-day-row td{background:var(--navy);color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;padding:7px 12px;text-align:left;position:sticky;top:31px;z-index:1}
+.feg-sess-row td{background:var(--surf3);font-size:12px;font-weight:600;color:var(--tx);padding:8px 12px;text-align:left}
+.feg-sess-row.finals td{background:#FEF2F2}
+.feg-sess-badge{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-right:7px;color:#fff}
+.feg-sess-badge.prelim{background:var(--prelim)}
+.feg-sess-badge.final{background:var(--final)}
+.feg-sess-time{font-size:10px;color:var(--tx3);font-weight:500;margin-left:6px;font-variant-numeric:tabular-nums}
+.feg-name{text-align:left!important;font-size:12px;font-weight:500;color:var(--tx);min-width:160px}
+.feg-cell{padding:5px 6px!important}
+.feg-inp{width:60px;font-size:14px;padding:7px 6px;border-radius:7px;border:1.5px solid var(--bd2);text-align:center;background:var(--surf);color:var(--tx);font-weight:600;font-variant-numeric:tabular-nums;transition:border-color .1s,background .1s}
+.feg-inp:focus{outline:none;box-shadow:0 0 0 3px rgba(23,31,105,.12);border-color:var(--navy)}
+.feg-inp.proj{border-color:var(--qual-bd)}
+.feg-inp.proj:focus{border-color:var(--qual);box-shadow:0 0 0 3px rgba(29,78,216,.12)}
+.feg-inp.proj.on{background:var(--qual-bg);border-color:var(--qual);color:var(--qual)}
+.feg-inp.final{border-color:var(--final-bd)}
+.feg-inp.final:focus{border-color:var(--final);box-shadow:0 0 0 3px rgba(220,38,38,.12)}
+.feg-inp.final.on{background:var(--final-bg);border-color:var(--final);color:var(--final)}
+.feg-using{width:48px}
+.feg-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.03em}
+.feg-tag.final{background:var(--final-bg);color:var(--final);border:1px solid var(--final-bd)}
+.feg-tag.proj{background:var(--qual-bg);color:var(--qual);border:1px solid var(--qual-bd)}
+.feg-dives{font-size:13px;font-weight:700;color:var(--tx2);font-variant-numeric:tabular-nums}
+.feg-dives-lbl{font-size:8px;color:var(--tx3);text-transform:uppercase;display:block;font-weight:600;margin-top:1px}
+.feg-split{width:64px}
+.feg-window{font-size:10.5px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -752,7 +802,7 @@ window.addEventListener('beforeunload',()=>{if(S?.meet){saveS();if(S.currentLibr
 // ── TIMING ────────────────────────────────────────────────────────────
 function calcEvDur(ev){
   if(Number(ev.customDurationMinutes||0)>0)return{evMin:Number(ev.customDurationMinutes),rawMin:Number(ev.customDurationMinutes)};
-  const divers=Math.max(0,Number(ev.numberOfDivers||0));
+  const divers=Math.max(0,Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0));
   const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
   const spd=Math.max(0,Number(ev.secondsPerDive||ev.defaultSpd||35));
   const raw=(divers*dives*spd)/60;
@@ -878,7 +928,7 @@ function initUI(){
 function openEdit(sessId){UI.editSessId=sessId;render()}
 function closeEdit(){UI.editSessId=null;render()}
 function openEntries(){UI.entriesOpen=true;UI.editSessId=null;UI.entriesDayId=UI.dayId;UI.entriesExpanded=[];render()}
-function closeEntries(){UI.entriesOpen=false;render()}
+function closeEntries(){if(_entryDirty)commitEntries();UI.entriesOpen=false;render()}
 function selectDay(id){UI.dayId=id;UI.editSessId=null;render()}
 function toggleEntriesSess(id){const i=UI.entriesExpanded.indexOf(id);if(i>=0)UI.entriesExpanded.splice(i,1);else UI.entriesExpanded.push(id);render()}
 
@@ -1002,7 +1052,7 @@ function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===s
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
-function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final')ev.numberOfDivers=12}))});toast('All Finals set to 12 ✓')}
+function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
 async function saveSchedule(){const name=prompt('Save as:',S.meet.name||'Schedule');if(!name)return;S.meet.name=name;try{await saveToNeon(name)}catch{const lib=JSON.parse(localStorage.getItem(LK)||'[]');lib.unshift({id:uid(),name,savedAt:new Date().toISOString(),schedule:JSON.parse(JSON.stringify(S))});localStorage.setItem(LK,JSON.stringify(lib.slice(0,30)));toast('Saved locally');}render()}
 function loadBuiltin(id){if(!confirm('Load template? Current work will be replaced.'))return;const item=BUILTIN_SCHEDULES.find(x=>x.id===id);if(!item)return;S=JSON.parse(JSON.stringify(item.schedule));S.currentLibraryId='';saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name)}
 async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();try{UI.neonLib=await loadNeonLib()}catch{UI.neonLib=[]}UI.neonLibLoading=false;render()}
@@ -1148,34 +1198,56 @@ function renderCard(sess,timed,warns){
   const isEditing=UI.editSessId===sess.id;
   const n=getSessNum(sess,timed);
   const isTraining=isPrac&&sess.title==='Open Training';
-  const hasFinals=!isPrac&&sess.events.some(e=>e.round==='Final');
-  const hasPrelims=!isPrac&&sess.events.some(e=>e.round==='Prelim');
-  const hasQual=!isPrac&&sess.events.some(e=>e.round==='Qualifier');
+
+  // ── PRACTICE / TRAINING CARDS — distinct, informative layout ──
+  if(isPrac){
+    const flights=t.flightTimes||[];
+    const dur=t.sessionEndMinutes-t.warmupStartMinutes;
+    const typeColor=isTraining?'var(--train)':'var(--prac)';
+    const typeBg=isTraining?'var(--train-bg)':'var(--prac-bg)';
+    const typeLabel=isTraining?'Open Training':'Open Practice';
+    const icon=isTraining?'⏱':'🏊';
+    return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
+      <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
+        <div class="pcard-icon" style="color:${typeColor}">${icon}</div>
+        <div class="pcard-main">
+          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}</div>
+          <div class="pcard-meta">${flights.length?`${flights.length} flight${flights.length>1?'s':''}`:'Open pool'} · ${fdur(dur)}</div>
+        </div>
+        <div class="pcard-time">
+          <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}</div>
+          <div class="pcard-time-dur">${fdur(dur)}</div>
+        </div>
+        <div class="sc-actions">
+          <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
+          <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        </div>
+      </div>
+      ${flights.length?`<div class="pcard-flights">${flights.map(f=>`<div class="pcard-flight"><div class="pcard-flight-bar" style="background:${f.color||typeColor}"></div><div class="pcard-flight-name">${esc(f.name)}</div><div class="pcard-flight-time">${f12(f.startMinutes)} – ${f12(f.endMinutes)}</div><div class="pcard-flight-dur">${fdur(f.durationMinutes)}</div></div>`).join('')}</div>`:''}
+    </div>`;
+  }
+
+  // ── COMPETITION CARDS ──
+  const hasFinals=sess.events.some(e=>e.round==='Final');
+  const hasPrelims=sess.events.some(e=>e.round==='Prelim');
+  const hasQual=sess.events.some(e=>e.round==='Qualifier');
   const warn=warns?.find(w=>w.sessId===sess.id);
   const buf=Number(sess.bufferMinutes||0);
 
-  // Badge — clean, fixed treatment
-  let badgeClass='comp',badgeTxt='';
-  if(isTraining){badgeClass='train';badgeTxt='Training';}
-  else if(isPrac){badgeClass='prac';badgeTxt='Practice';}
-  else if(hasFinals){badgeClass='final';badgeTxt='Finals';}
+  let badgeClass='comp',badgeTxt='Session';
+  if(hasFinals){badgeClass='final';badgeTxt='Finals';}
   else if(hasPrelims){badgeClass='prelim';badgeTxt='Prelims';}
   else if(hasQual){badgeClass='qualifier';badgeTxt='Qualifier';}
-  else{badgeClass='comp';badgeTxt='Session';}
 
-  const cardClass=isTraining?'train':isPrac?'prac':hasFinals?'finals':'comp';
-  const name=isPrac?(sess.title||'Open Practice'):`Session ${n}`;
-  const sub=isPrac?
-    (sess.flights?.length?`${sess.flights.length} flights · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}`:`Pool open · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}`):
-    `${sess.events.length} event${sess.events.length!==1?'s':''}${sess.events.some(e=>e.manualSplit&&!isPlatform(e.apparatus))?' · splits':''}`;
-
+  const cardClass=hasFinals?'finals':'comp';
+  const sub=`${sess.events.length} event${sess.events.length!==1?'s':''}${sess.events.some(e=>e.manualSplit&&!isPlatform(e.apparatus))?' · splits':''}`;
   const bufChips=[0,5,10,15].map(v=>`<button class="bufchip ${buf===v?'on':''}" onclick="event.stopPropagation();setBuffer('${sess.id}',${v})">${v===0?'0':v+'m'}</button>`).join('');
 
   return`<div class="sc ${cardClass} ${isEditing?'editing':''}" id="sc-${sess.id}">
     <div class="sc-hd" onclick="openEdit('${sess.id}')">
       <span class="badge ${badgeClass}">${badgeTxt}</span>
       <div class="sc-titles">
-        <div class="sc-name">${esc(name)}</div>
+        <div class="sc-name">Session ${n}</div>
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
@@ -1187,17 +1259,15 @@ function renderCard(sess,timed,warns){
         <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </div>
     </div>
-    ${!isPrac?`<div class="sc-wu"><div class="sc-wu-icon"></div><span class="sc-wu-lbl">Warm-up</span><span class="sc-wu-time">${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)} · ${sess.warmupMinutes||55} min</span></div>`:''}
-    ${isPrac?renderCardPrac(sess,t):''}
-    ${!isPrac&&sess.events.length?renderCardEvents(sess,t):''}
-    ${!isPrac&&!sess.events.length?`<div style="padding:12px 18px;font-size:12px;color:var(--tx3)">No events yet — add one below</div>`:''}
+    <div class="sc-wu"><div class="sc-wu-icon"></div><span class="sc-wu-lbl">Warm-up</span><span class="sc-wu-time">${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)} · ${sess.warmupMinutes||55} min</span></div>
+    ${sess.events.length?renderCardEvents(sess,t):`<div style="padding:12px 18px;font-size:12px;color:var(--tx3)">No events yet — add one below</div>`}
     ${warn?`<div class="sc-warn"><div class="sc-warn-icon"></div><span class="sc-warn-txt">${esc(warn.msg)}</span><button class="sc-warn-ack" onclick="ackWarn('${warn.key}')">Dismiss</button></div>`:''}
-    ${!isPrac?`<div class="sc-foot">
+    <div class="sc-foot">
       <span class="sc-foot-lbl">Buffer:</span>
       <div class="bufchips">${bufChips}</div>
       <div class="sc-foot-sp"></div>
       <button class="sc-addev" onclick="event.stopPropagation();UI.modal='add-event';UI.pickerSessId='${sess.id}';UI.pickerSearch='';UI.pickerPreset='';UI.pickerRound='';render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:12px;height:12px"><path d="M12 5v14M5 12h14"/></svg> Add event</button>
-    </div>`:''}
+    </div>
   </div>`;
 }
 
@@ -1337,104 +1407,115 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
 function renderEntriesPanel(timed){
   const days=S.meet.days;
   const eDayId=UI.entriesDayId||days[0]?.id||'';
-  // Filter: show ALL days or just one
   const showAllDays=UI.entriesShowAll;
   const allComp=S.sessions.filter(s=>!s.isPractice);
-  const allWithEntries=allComp.reduce((n,s)=>n+s.events.filter(e=>Number(e.projectedDivers||e.finalDivers||e.numberOfDivers||0)>0).length,0);
-  const totalEvs=allComp.reduce((n,s)=>n+s.events.length,0);
-  const dayTabs=`<button class="enp-day-btn ${showAllDays?'active':''}" onclick="UI.entriesShowAll=true;render()">All days</button>`+
-    days.map(d=>`<button class="enp-day-btn ${!showAllDays&&d.id===eDayId?'active':''}" onclick="UI.entriesShowAll=false;UI.entriesDayId='${d.id}';render()">${shortDate(d.date).replace(/,.*/,'')}</button>`).join('');
+  const allWithEntries=allComp.reduce((nn,s)=>nn+s.events.filter(e=>Number(e.finalDivers||e.projectedDivers||0)>0).length,0);
+  const totalEvs=allComp.reduce((nn,s)=>nn+s.events.length,0);
+  const dayTabs=`<button class="enp-daybtn ${showAllDays?'active':''}" onclick="UI.entriesShowAll=true;render()">All days</button>`+
+    days.map(d=>`<button class="enp-daybtn ${!showAllDays&&d.id===eDayId?'active':''}" onclick="UI.entriesShowAll=false;UI.entriesDayId='${d.id}';render()">${shortDate(d.date).replace(/,.*/,'')}</button>`).join('');
 
-  // Build sessions list (filtered by day or all)
-  const sessions=showAllDays?
-    days.flatMap(d=>timedForDay(d.id).filter(s=>!s.isPractice).map(s=>({...s,_day:d}))):
-    timedForDay(eDayId).filter(s=>!s.isPractice);
+  // All competition sessions in scope, in timeline order
+  const scope=showAllDays?
+    days.flatMap(d=>timedForDay(d.id).filter(s=>!s.isPractice).map(s=>({sess:s,day:d}))):
+    timedForDay(eDayId).filter(s=>!s.isPractice).map(s=>({sess:s,day:S.meet.days.find(d=>d.id===eDayId)}));
 
-  // Group by day if showing all
-  let groupedBody='';
-  if(showAllDays){
-    days.forEach(d=>{
-      const daySess=sessions.filter(s=>s._day&&s._day.id===d.id);
-      if(!daySess.length)return;
-      groupedBody+=`<div class="enp-day-grp">${shortDate(d.date)}</div>`;
-      groupedBody+=daySess.map(s=>renderEntriesSession(s,timed,true)).join('');
+  // Build one continuous fast-entry grid. Each row = an event.
+  // Inputs use oninput (store silently, no re-render) so Tab flow + focus is preserved.
+  let rowsHtml='';let lastDayId=null;let tabIndex=1;
+  scope.forEach(({sess,day})=>{
+    const t=sess.timing;const n=getSessNum(sess,timed);
+    const hasFinals=sess.events.some(e=>e.round==='Final');
+    if(showAllDays&&day&&day.id!==lastDayId){
+      rowsHtml+=`<tr class="feg-day-row"><td colspan="7">${shortDate(day.date)}</td></tr>`;
+      lastDayId=day.id;
+    }
+    rowsHtml+=`<tr class="feg-sess-row ${hasFinals?'finals':''}"><td colspan="7"><span class="feg-sess-badge ${hasFinals?'final':'prelim'}">${hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Prelims':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session'}</span> Session ${n} <span class="feg-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span></td></tr>`;
+    (t.events||[]).forEach(ev=>{
+      const split=ev.manualSplit&&!isPlatform(ev.apparatus);
+      const dur=calcEvDur(ev);
+      const isFinal=ev.round==='Final';
+      const proj=Number(ev.projectedDivers||0);
+      const finl=Number(ev.finalDivers||0);
+      const effective=finl||proj||0;
+      const needsSplit=dur.rawMin>=3||effective>=40;
+      const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
+      const usingFinal=finl>0;
+      rowsHtml+=`<tr>
+        <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" class="feg-inp proj ${proj>0?'on':''}" value="${proj||''}" placeholder="0" tabindex="${tabIndex++}"
+          oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
+          onkeydown="entryKey(event,this)"/></td>
+        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" class="feg-inp final ${finl>0?'on':''}" value="${finl||''}" placeholder="${proj||'—'}" tabindex="${tabIndex++}"
+          oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
+          onkeydown="entryKey(event,this)"/></td>
+        <td class="feg-using">${usingFinal?'<span class="feg-tag final">Final</span>':proj>0?'<span class="feg-tag proj">Proj</span>':''}</td>
+        <td class="feg-dives">${ev.numberOfDives||ev.defaultDives||0}<span class="feg-dives-lbl">dives</span></td>
+        <td class="feg-split">${!isPlatform(ev.apparatus)?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
+        <td class="feg-window">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
+      </tr>`;
     });
-  }else{
-    groupedBody=sessions.map(s=>renderEntriesSession(s,timed,true)).join('');
-  }
+  });
 
   return`<div class="entries-panel open">
     <div class="enp-head">
-      <div>
-        <div class="enp-title">Event Entries</div>
-        <div class="enp-sub-title">Projected vs Final · ${allWithEntries}/${totalEvs} events filled</div>
-      </div>
-      <button class="enp-close" onclick="closeEntries()">×</button>
+      <div><div class="enp-title">Event Entries</div><div class="enp-sub-title">Type a number, press Tab → next cell · ${allWithEntries}/${totalEvs} filled</div></div>
+      <button class="enp-close" onclick="closeEntries()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
     </div>
-    <div class="enp-day-bar">${dayTabs}</div>
+    <div class="enp-daybar">${dayTabs}</div>
     <div class="enp-legend">
-      <div class="enp-legend-item"><span class="enp-leg-pill proj">Projected</span> initial estimate</div>
-      <div class="enp-legend-item"><span class="enp-leg-pill final">Final</span> confirmed entries · used for timing</div>
-      <div class="enp-legend-item"><button class="enp-match-all-btn" onclick="copyAllProjectedToFinal()" title="For all events where Final is blank, copy Projected to Final">Copy all Projected → Final</button></div>
+      <div class="enp-legitem"><span class="enp-legpill proj">Projected</span> estimate</div>
+      <div class="enp-legitem"><span class="enp-legpill final">Final</span> confirmed — overrides projected</div>
+      <button class="enp-matchall" onclick="copyAllProjectedToFinal()">Copy all Proj → Final</button>
     </div>
-    <div class="enp-body">${sessions.length?groupedBody:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
+    <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th>Final</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
     <div class="enp-foot">
-      <span class="enp-foot-info">Final entries drive the schedule timing</span>
-      <button class="enp-finals-btn" onclick="applyFinalsAll()">Set all Finals events → 12</button>
+      <span class="enp-footinfo">Final overrides Projected for timing · finals can exceed 12 for ties</span>
+      <button class="enp-finalsbtn" onclick="applyFinalsAll()">Set Finals → 12</button>
     </div>
   </div>`;
 }
 
-function renderEntriesSession(sess,timed,expandable){
-  const t=sess.timing;const n=getSessNum(sess,timed);
-  const isOpen=UI.entriesExpanded.includes(sess.id);
-  const hasFinals=sess.events.some(e=>e.round==='Final');
-  const hasPrelims=sess.events.some(e=>e.round==='Prelim');
-  return`<div class="enp-sess-wrap">
-    <div class="enp-sess-head ${hasFinals?'final-hd':'comp-hd'}" onclick="toggleEntriesSess('${sess.id}')">
-      <span class="enp-sess-label">Session ${n}${hasFinals?' — Finals':hasPrelims?' — Prelims':''} <span style="font-weight:400;opacity:.7">(${sess.events.length} events)</span></span>
-      <span class="enp-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
-      <span class="enp-sess-chevron ${isOpen?'open':''}">▾</span>
-    </div>
-    ${isOpen?`<table class="enp-table">
-      <thead><tr>
-        <th style="min-width:170px">Event</th>
-        <th>Round</th>
-        <th title="Initial projected entry count">Projected</th>
-        <th title="Final confirmed entries (drives timing)">Final</th>
-        <th title="Copy projected to final for this event"></th>
-        <th>Dives</th>
-        <th>Sec/dive</th>
-        <th>Split</th>
-        <th>Window</th>
-      </tr></thead>
-      <tbody>${(t.events||[]).map(ev=>{
-        const split=ev.manualSplit&&!isPlatform(ev.apparatus);
-        const dur=calcEvDur(ev);
-        const isFinal=ev.round==='Final';
-        const proj=Number(ev.projectedDivers||0);
-        const finl=Number(ev.finalDivers||0);
-        const effective=finl||proj||Number(ev.numberOfDivers||0);
-        const needsSplit=dur.rawMin>=3||effective>=40;
-        const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
-        const match=(proj===finl)&&proj>0;
-        return`<tr>
-          <td class="enp-ev-name">${esc(evName(ev))}</td>
-          <td><span class="ev-badge ${rc}">${esc(ev.round||'')}</span></td>
-          <td><input type="number" min="0" class="enp-inp proj ${proj>0?'filled-p':''}" value="${proj||''}" placeholder="${isFinal?'12':'0'}" 
-              onchange="updEv('${sess.id}','${ev.id}','projectedDivers',this.value);render()"/></td>
-          <td><input type="number" min="0" class="enp-inp final ${finl>0?'filled-f':''} ${match&&finl>0?'matches':''}" value="${finl||''}" placeholder="${isFinal?'12':proj?String(proj):'0'}" 
-              onchange="updEv('${sess.id}','${ev.id}','finalDivers',this.value);render()"/></td>
-          <td>${proj>0&&proj!==finl?`<button class="enp-copy-btn" onclick="copyProjectedToFinal('${sess.id}','${ev.id}')" title="Copy projected → final">→</button>`:proj>0&&proj===finl&&finl>0?`<span style="color:var(--g-prac);font-size:14px" title="Match">✓</span>`:''}</td>
-          <td>${ev.rulebookLocked?`<span class="enp-inp small" style="display:inline-flex;align-items:center;justify-content:center;background:var(--surf3);color:var(--tx2);font-weight:700" title="Locked to rulebook">${ev.numberOfDives||ev.defaultDives||0}</span>`:`<input type="number" min="1" class="enp-inp small" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</td>
-          <td><input type="number" min="5" step="1" class="enp-inp small" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></td>
-          <td>${!isPlatform(ev.apparatus)?`<button class="split-toggle sm ${split?'on':needsSplit&&!split?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split boards ON':needsSplit?'Split recommended — click to enable':'Split boards OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
-          <td class="enp-ev-time">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`:''}
-  </div>`;
+// Fast entry: store value WITHOUT re-rendering (preserves focus + Tab flow).
+// Recompute timing silently and update just the affected time displays on blur/commit.
+let _entryDirty=false;
+function setEntry(sessId,evId,field,value){
+  const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
+  const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+  ev[field]=Number(value)||0;
+  // Timeline uses final if present, else projected
+  ev.numberOfDivers=Number(ev.finalDivers||ev.projectedDivers||0);
+  _entryDirty=true;
+  saveS();
 }
+// On Enter or Tab, commit + cascade + light refresh of time columns
+function entryKey(e,el){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    commitEntries();
+    // move focus to next entry input
+    const inputs=[...document.querySelectorAll('.feg-inp')];
+    const i=inputs.indexOf(el);
+    if(i>=0&&i<inputs.length-1)inputs[i+1].focus();
+  }
+}
+function commitEntries(){
+  if(!_entryDirty)return;
+  _entryDirty=false;
+  // Cascade all days then re-render once
+  S.meet.days.forEach(d=>S.sessions.filter(s=>s.dayId===d.id).forEach(s=>{}));
+  S.sessions.forEach(s=>{if(!s.isPractice)cascadeSession(S,s.id)});
+  saveS();if(S.currentLibraryId)scheduleSave();
+  render();
+}
+// Commit when the entries body loses focus (clicking away / closing)
+function copyProjectedToFinal(sessId,evId){
+  const sess=S.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);
+  if(ev){ev.finalDivers=Number(ev.projectedDivers||0);ev.numberOfDivers=ev.finalDivers;}
+  S.sessions.forEach(s=>{if(!s.isPractice)cascadeSession(S,s.id)});
+  saveS();if(S.currentLibraryId)scheduleSave();render();
+}
+
+
 
 function copyProjectedToFinal(sessId,evId){
   upd(s=>{
