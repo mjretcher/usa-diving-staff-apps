@@ -964,6 +964,8 @@ function initUI(){
       if(!sess.isPractice)sess.events.forEach(ev=>{
         const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
         if(rb!=null&&(ev.numberOfDives!==rb||!ev.rulebookLocked)){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;changed=true;}
+        // Finals are never split — clear any legacy split flag
+        if(ev.round==='Final'&&ev.manualSplit){ev.manualSplit=false;changed=true;}
       });
     });
     UI._divesRelocked=true;
@@ -1172,7 +1174,9 @@ function updEv(sessId,evId,field,value){
     }
   });
 }
-function toggleSplit(sessId,evId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
+function toggleSplit(sessId,evId){
+  // Finals are never split — ignore any attempt
+  {const _s=S.sessions.find(x=>x.id===sessId);const _e=_s&&_s.events.find(x=>x.id===evId);if(_e&&_e.round==='Final')return;}upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
@@ -1434,7 +1438,7 @@ function renderCardEvents(sess,t){
     const split=ev.manualSplit&&!isPlatform(ev.apparatus);
     const dur=calcEvDur(ev);
     const divers=Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0);
-    const needsSplit=dur.rawMin>=3||divers>=40;
+    const needsSplit=dur.rawMin>=3||divers>=40&&ev.round!=='Final';
     const roundCls=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
     return`<div class="sc-ev" draggable="true" data-ev="${ev.id}" data-sess="${sess.id}">
       <span class="ev-handle" title="Drag to reorder or to another session">⠿</span>
@@ -1448,7 +1452,7 @@ function renderCardEvents(sess,t){
       </div>
       ${ev.round&&ev.round!=='Custom Block'?`<span class="ev-badge ${roundCls}">${esc(ev.round)}</span>`:''}
       ${split?`<span class="ev-badge split">Split</span>`:''}
-      ${!isPlatform(ev.apparatus)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
+      ${(!isPlatform(ev.apparatus)&&ev.round!=='Final')?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
       <span class="ev-time">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</span>
       <button class="ev-rm" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
     </div>`;
@@ -1540,7 +1544,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     ${sess.events.length?`<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">${sess.events.map(ev=>{
       const dur=calcEvDur(ev);
       const tev=(t.events||[]).find(e=>e.id===ev.id)||{};
-      const canSplit=!isPlatform(ev.apparatus);
+      const canSplit=!isPlatform(ev.apparatus)&&ev.round!=='Final';
       const split=ev.manualSplit&&canSplit;
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       // Split delta: compute both ways
@@ -1605,7 +1609,7 @@ function renderEntriesPanel(timed){
       const proj=projSet?Number(ev.projectedDivers):null;
       const finl=finlSet?Number(ev.finalDivers):null;
       const effective=entryValue(ev);
-      const needsSplit=dur.rawMin>=3||effective>=40;
+      const needsSplit=dur.rawMin>=3||effective>=40&&ev.round!=='Final';
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       const usingFinal=finlSet;
       rowsHtml+=`<tr>
@@ -1618,7 +1622,7 @@ function renderEntriesPanel(timed){
           onkeydown="entryKey(event,this)"/></td>
         <td class="feg-using">${finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':''}</td>
         <td class="feg-dives">${ev.numberOfDives||ev.defaultDives||0}<span class="feg-dives-lbl">dives</span></td>
-        <td class="feg-split">${!isPlatform(ev.apparatus)?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
+        <td class="feg-split">${(!isPlatform(ev.apparatus)&&ev.round!=='Final')?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
         <td class="feg-window">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</td>
       </tr>`;
     });
