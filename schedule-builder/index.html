@@ -637,6 +637,17 @@ button{cursor:pointer;border:none;background:none}
 .wu-hot:hover{border-color:var(--navy);color:var(--navy)}
 .wu-hot.on{background:var(--navy);border-color:var(--navy);color:#fff}
 .wu-hotinp{flex:1;min-width:60px}
+
+/* Clickable conflicts / warnings */
+.conflict-item.clickable{cursor:pointer;transition:background .12s,transform .06s}
+.conflict-item.clickable:hover{background:var(--surf2)}
+.conflict-item.clickable:active{transform:scale(.995)}
+.conflict-fix{margin-left:auto;flex-shrink:0;height:30px;padding:0 13px;border-radius:8px;font-size:11.5px;font-weight:700;border:1.5px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;transition:.12s;white-space:nowrap;align-self:center}
+.conflict-fix:hover{background:var(--navy-d,#0f1547);border-color:var(--navy-d,#0f1547)}
+.sc-warn.clickable{cursor:pointer}
+.sc-warn-fix{height:24px;padding:0 10px;border-radius:6px;font-size:10.5px;font-weight:700;border:1px solid var(--warn);background:var(--warn);color:#fff;cursor:pointer;margin-left:auto;white-space:nowrap}
+.sc-warn-fix:hover{filter:brightness(.93)}
+.sc-warn-ack{margin-left:6px}
 </style>
 </head>
 <body>
@@ -898,25 +909,25 @@ function detectConflicts(){
     const sessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
     const dayLabel=shortDate(day.date);
     const openM=Number(day.openMinutes||420),closeM=Number(day.closeMinutes||1200);
-    // Overlaps between sessions
+    // Overlaps between sessions — fix points at the LATER session (adjust its start/buffer)
     for(let i=0;i<sessions.length-1;i++){
       const a=sessions[i],b=sessions[i+1];
       if(a.timing.sessionEndMinutes>b.timing.warmupStartMinutes){
-        const an=a.isPractice?(a.title||'Practice'):'Session '+getSessNum(a,timed);
-        const bn=b.isPractice?(b.title||'Practice'):'Session '+getSessNum(b,timed);
-        issues.push({sev:'err',title:'Sessions overlap',detail:`${an} ends ${f12(a.timing.sessionEndMinutes)} but ${bn} starts ${f12(b.timing.warmupStartMinutes)}`,loc:dayLabel});
+        const an=a.isPractice?(a.title||'Open Training'):'Session '+getSessNum(a,timed);
+        const bn=b.isPractice?(b.title||'Open Training'):'Session '+getSessNum(b,timed);
+        issues.push({sev:'err',title:'Sessions overlap',detail:`${an} ends ${f12(a.timing.sessionEndMinutes)} but ${bn} starts ${f12(b.timing.warmupStartMinutes)}`,loc:dayLabel,fixSessId:b.id,dayId:day.id,fixHint:'autoSpace',autoData:{prevId:a.id,nextId:b.id}});
       }
     }
     sessions.forEach(s=>{
-      const sn=s.isPractice?(s.title||'Practice'):'Session '+getSessNum(s,timed);
+      const sn=s.isPractice?(s.title||'Open Training'):'Session '+getSessNum(s,timed);
       // Day boundary
-      if(s.timing.warmupStartMinutes<openM)issues.push({sev:'warn',title:'Starts before venue opens',detail:`${sn} starts ${f12(s.timing.warmupStartMinutes)}, venue opens ${f12(openM)}`,loc:dayLabel});
-      if(s.timing.sessionEndMinutes>closeM)issues.push({sev:'warn',title:'Runs past venue close',detail:`${sn} ends ${f12(s.timing.sessionEndMinutes)}, venue closes ${f12(closeM)}`,loc:dayLabel});
-      if(s.timing.sessionEndMinutes>=1440)issues.push({sev:'err',title:'Session crosses midnight',detail:`${sn} extends past midnight — check entry counts`,loc:dayLabel});
+      if(s.timing.warmupStartMinutes<openM)issues.push({sev:'warn',title:'Starts before venue opens',detail:`${sn} starts ${f12(s.timing.warmupStartMinutes)}, venue opens ${f12(openM)}`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
+      if(s.timing.sessionEndMinutes>closeM)issues.push({sev:'warn',title:'Runs past venue close',detail:`${sn} ends ${f12(s.timing.sessionEndMinutes)}, venue closes ${f12(closeM)}`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
+      if(s.timing.sessionEndMinutes>=1440)issues.push({sev:'err',title:'Session crosses midnight',detail:`${sn} extends past midnight — check entry counts`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'entries'});
       if(!s.isPractice){
         // Events with no divers
-        const emptyEvs=s.events.filter(e=>Number(e.numberOfDivers||e.finalDivers||e.projectedDivers||0)===0);
-        if(emptyEvs.length)issues.push({sev:'info',title:'Events missing entries',detail:`${sn}: ${emptyEvs.map(e=>evName(e)).join(', ')} — no divers entered yet`,loc:dayLabel});
+        const emptyEvs=s.events.filter(e=>entryValue(e)===0&&!(e.finalDivers===0||e.projectedDivers===0));
+        if(emptyEvs.length)issues.push({sev:'info',title:'Events missing entries',detail:`${sn}: ${emptyEvs.map(e=>evName(e)).join(', ')} — no divers entered yet`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'entries'});
         // Same apparatus parallel (impossible)
         const byLane={};
         s.timing.events.forEach(e=>{const l=lk(e.apparatus);if(!byLane[l])byLane[l]=[];byLane[l].push(e)});
@@ -924,7 +935,7 @@ function detectConflicts(){
           for(let i=0;i<evs.length-1;i++){
             for(let j=i+1;j<evs.length;j++){
               if(evs[i].eventStartMinutes<evs[j].eventEndMinutes&&evs[j].eventStartMinutes<evs[i].eventEndMinutes){
-                issues.push({sev:'err',title:'Same board, overlapping events',detail:`${sn}: ${evName(evs[i])} and ${evName(evs[j])} both use ${al(lane==='platform'?'Platform':lane)} at the same time`,loc:dayLabel});
+                issues.push({sev:'err',title:'Same board, overlapping events',detail:`${sn}: ${evName(evs[i])} and ${evName(evs[j])} both use ${al(lane==='platform'?'Platform':lane)} at the same time`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
               }
             }
           }
@@ -933,6 +944,37 @@ function detectConflicts(){
     });
   });
   return issues;
+}
+// Open the right place to fix a given conflict, then act
+
+// Fix a card's inline warning (these are session-overlap warnings) by re-flowing the day
+function resolveCardWarning(sessId){
+  const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
+  upd(s=>{reflowDay(s,sess.dayId);});
+  toast('Spacing fixed automatically');
+}
+
+function resolveConflict(idx){
+  const conflicts=detectConflicts();
+  const c=conflicts[idx];if(!c)return;
+  closeModal();
+  // Switch to the day the issue is on
+  if(c.dayId)UI.dayId=c.dayId;
+  if(c.fixHint==='autoSpace'&&c.autoData){
+    // One-click fix: re-flow so the next session starts after the previous ends + buffer
+    upd(s=>{reflowDay(s,c.dayId);});
+    toast('Spacing fixed — session moved after the previous one');
+    return;
+  }
+  if(c.fixHint==='entries'){
+    // Open the entries panel focused on that day
+    UI.entriesOpen=true;UI.entriesShowAll=false;UI.entriesDayId=c.dayId;
+    render();
+    toast('Enter the missing counts here');
+    return;
+  }
+  // Default: open that session's editor
+  if(c.fixSessId){UI.editSessId=c.fixSessId;render();}
 }
 
 // ── EVENT CATALOG ─────────────────────────────────────────────────────
@@ -1417,7 +1459,7 @@ function renderCard(sess,timed,warns){
     </div>
     <div class="sc-wu"><div class="sc-wu-icon"></div><span class="sc-wu-lbl">Warm-up</span><span class="sc-wu-time">${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)} · ${sess.warmupMinutes||55} min</span></div>
     ${sess.events.length?renderCardEvents(sess,t):`<div style="padding:12px 18px;font-size:12px;color:var(--tx3)">No events yet — add one below</div>`}
-    ${warn?`<div class="sc-warn"><div class="sc-warn-icon"></div><span class="sc-warn-txt">${esc(warn.msg)}</span><button class="sc-warn-ack" onclick="ackWarn('${warn.key}')">Dismiss</button></div>`:''}
+    ${warn?`<div class="sc-warn clickable" onclick="resolveCardWarning('${sess.id}')"><div class="sc-warn-icon"></div><span class="sc-warn-txt">${esc(warn.msg)}</span><button class="sc-warn-fix" onclick="event.stopPropagation();resolveCardWarning('${sess.id}')">Fix →</button><button class="sc-warn-ack" onclick="event.stopPropagation();ackWarn('${warn.key}')">Dismiss</button></div>`:''}
     <div class="sc-foot">
       <span class="sc-foot-lbl">Buffer:</span>
       <div class="bufchips">${bufChips}</div>
@@ -2086,10 +2128,14 @@ function renderConflictsModal(){
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Issues & conflicts ${conflicts.length?`<span style="color:var(--tx3);font-weight:500">(${conflicts.length})</span>`:''}</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      ${conflicts.length?`<div class="conflicts-list">${ordered.map(c=>`<div class="conflict-item ${c.sev}">
+      ${conflicts.length?`<div class="conflicts-list">${ordered.map((c)=>{
+        const realIdx=conflicts.indexOf(c);
+        const fixLabel=c.fixHint==='autoSpace'?'Auto-fix spacing':c.fixHint==='entries'?'Enter counts':'Open & fix';
+        return`<div class="conflict-item ${c.sev} clickable" onclick="resolveConflict(${realIdx})">
         <div class="conflict-icon ${c.sev}">${c.sev==='err'?'!':c.sev==='warn'?'!':'i'}</div>
         <div class="conflict-body"><div class="conflict-title">${esc(c.title)}</div><div class="conflict-detail">${esc(c.detail)}</div><div class="conflict-loc">${esc(c.loc)}</div></div>
-      </div>`).join('')}</div>`:`<div class="conflict-ok"><div class="conflict-ok-icon">✓</div><div class="empty-title">No conflicts found</div><div class="empty-sub">Your schedule looks clean — no overlaps, boundary issues, or missing entries.</div></div>`}
+        <button class="conflict-fix" onclick="event.stopPropagation();resolveConflict(${realIdx})">${fixLabel} →</button>
+      </div>`;}).join('')}</div>`:`<div class="conflict-ok"><div class="conflict-ok-icon">✓</div><div class="empty-title">No conflicts found</div><div class="empty-sub">Your schedule looks clean — no overlaps, boundary issues, or missing entries.</div></div>`}
     </div>
     <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Done</button></div>
   </div>`;
