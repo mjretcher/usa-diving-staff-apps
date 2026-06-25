@@ -914,13 +914,18 @@ let UI={
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
-  // Re-lock rulebook dive counts on every load so seeds/old saves are correct
+  // Re-lock rulebook dive counts + normalize legacy titles on load
   if(!UI._divesRelocked){
     let changed=false;
-    S.sessions.forEach(sess=>{if(!sess.isPractice)sess.events.forEach(ev=>{
-      const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
-      if(rb!=null&&(ev.numberOfDives!==rb||!ev.rulebookLocked)){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;changed=true;}
-    })});
+    S.sessions.forEach(sess=>{
+      // Legacy practice blocks named "Open Practice" → "Open Training"
+      if(sess.isPractice&&(sess.title==='Open Practice'||!sess.title)){sess.title='Open Training';changed=true;}
+      if(sess.events&&sess.events[0]&&sess.events[0].customLabel==='Open Practice'){sess.events[0].customLabel='Open Training';changed=true;}
+      if(!sess.isPractice)sess.events.forEach(ev=>{
+        const rb=rulebookDives(ev.level,ev.gender,ev.apparatus,ev.round);
+        if(rb!=null&&(ev.numberOfDives!==rb||!ev.rulebookLocked)){ev.numberOfDives=rb;ev.defaultDives=rb;ev.rulebookLocked=true;changed=true;}
+      });
+    });
     UI._divesRelocked=true;
     if(changed)saveS();
   }
@@ -1060,6 +1065,8 @@ async function openLibrary(){UI.modal='library';UI.neonLibLoading=true;render();
 // ── RENDER CORE ───────────────────────────────────────────────────────
 function render(){
   initUI();
+  // Clear any stale drag indicators
+  UI.draggedSessId=UI.draggedSessId||null;
   const timed=allTimed();
   let rightPanel='';
   if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
@@ -1240,7 +1247,9 @@ function renderCard(sess,timed,warns){
   else if(hasQual){badgeClass='qualifier';badgeTxt='Qualifier';}
 
   const cardClass=hasFinals?'finals':'comp';
-  const sub=`${sess.events.length} event${sess.events.length!==1?'s':''}${sess.events.some(e=>e.manualSplit&&!isPlatform(e.apparatus))?' · splits':''}`;
+  // Sub-line summarizes the actual events so you can read the card at a glance
+  const evNames=sess.events.map(e=>evName(e)).join(' · ');
+  const sub=sess.events.length?evNames:'No events yet';
   const bufChips=[0,5,10,15].map(v=>`<button class="bufchip ${buf===v?'on':''}" onclick="event.stopPropagation();setBuffer('${sess.id}',${v})">${v===0?'0':v+'m'}</button>`).join('');
 
   return`<div class="sc ${cardClass} ${isEditing?'editing':''}" id="sc-${sess.id}">
@@ -1251,8 +1260,8 @@ function renderCard(sess,timed,warns){
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
-        <div class="sc-time-main">${f12(t.warmupStartMinutes)}</div>
-        <div class="sc-time-sub">${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div>
+        <div class="sc-time-main">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}</div>
+        <div class="sc-time-sub">${fdur(t.sessionEndMinutes-t.warmupStartMinutes)} · ${sess.events.reduce((a,e)=>a+Number(e.finalDivers||e.projectedDivers||e.numberOfDivers||0),0)} athletes</div>
       </div>
       <div class="sc-actions">
         <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
