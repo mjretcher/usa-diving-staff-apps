@@ -408,19 +408,19 @@ button{cursor:pointer;border:none;background:none}
 .tog input:checked+.togsl::before{transform:translateX(16px)}
 
 /* Print preview */
-.pp{background:white;border-radius:var(--r-lg);padding:24px 28px;max-height:380px;overflow-y:auto;border:1px solid var(--bd)}
-.pp-hd{border-bottom:3px solid var(--navy);padding-bottom:12px;margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between}
-.pp-org{font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:1px}
-.pp-meet{font-size:18px;font-weight:700;color:var(--navy);margin:2px 0}
-.pp-venue{font-size:11px;color:var(--gray)}
-.pp-logo{height:40px;width:auto}
-.pp-dayhd{background:var(--navy);color:#fff;padding:5px 10px;border-radius:5px;font-size:12px;font-weight:700;margin:12px 0 6px}
-.pp-sess{padding:5px 0 6px;border-bottom:1px solid #eee}
-.pp-sesst{font-size:11px;font-weight:700;color:var(--navy)}
-.pp-wu{font-size:10px;color:#888;margin-bottom:2px}
-.pp-ev{font-size:11px;color:#333;padding:1px 0;display:flex;align-items:center;gap:5px}
-.pp-evb{font-size:9px;padding:1px 4px;border-radius:3px;background:#EEF3FD;color:#171F69}
-.pp-ft{border-top:1px solid #eee;padding-top:8px;margin-top:12px;font-size:10px;color:#888;display:flex;justify-content:space-between}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Move dialog (proper centered modal now) */
 .move-day-list,.move-pos-list{display:flex;flex-direction:column;gap:5px}
@@ -484,7 +484,7 @@ button{cursor:pointer;border:none;background:none}
 /* Keyboard hint */
 .kbd{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:4px;background:var(--surf3);border:1px solid var(--bd2);font-size:10px;font-weight:600;color:var(--tx2);font-family:inherit}
 
-@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none}.pp{max-height:none;padding:0;border:none}}
+
 
 /* ── COMPATIBILITY ALIASES (entries + edit panels use these names) ── */
 .entries-panel{width:0;flex-shrink:0;overflow:hidden;border-left:1px solid var(--bd);background:var(--surf);transition:width .24s var(--ease);display:flex;flex-direction:column}
@@ -688,6 +688,80 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .cpick-meta{font-size:11px;color:var(--tx3)}
 /* Print toggle for combine/simul labels */
 .print-label-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--tx2)}
+
+/* ════ USA DIVING REPORT / PRINT STYLES (brand-compliant) ════ */
+.pp{background:#fff;border-radius:14px;padding:0;max-height:440px;overflow-y:auto;border:1px solid var(--bd);font-family:'Inter',system-ui,sans-serif}
+/* Report header band — USA Diving Blue, white text (ADA-safe: never red on blue) */
+.pp-hd{background:var(--navy);color:#fff;padding:20px 26px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.pp-hd-l{display:flex;flex-direction:column;gap:3px;min-width:0}
+.pp-org{font-size:10px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.14em;opacity:.85}
+.pp-meet{font-size:21px;font-weight:800;color:#fff;letter-spacing:-.01em;line-height:1.1}
+.pp-venue{font-size:12px;color:#fff;opacity:.8;font-weight:500}
+.pp-hd-r{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.pp-logo{height:46px;width:auto;display:block}
+.pp-body{padding:22px 26px 8px}
+/* Day header */
+.pp-day-hd{font-size:14px;font-weight:800;color:var(--navy);letter-spacing:-.01em;padding-bottom:6px;margin:18px 0 10px;border-bottom:2px solid var(--navy);display:flex;align-items:center;gap:8px}
+.pp-day-hd:first-child{margin-top:0}
+.pp-day-hd::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0}
+/* Session block */
+.pp-sess{margin-bottom:14px;break-inside:avoid}
+.pp-sess-t{font-size:13px;font-weight:800;color:var(--navy);display:flex;align-items:baseline;gap:8px;margin-bottom:1px}
+.pp-sess-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:var(--navy);color:#fff}
+.pp-sess-badge.finals{background:var(--red)}
+.pp-wu{font-size:11px;color:var(--gray);margin:1px 0 5px;font-weight:500}
+/* Event row */
+.pp-ev{font-size:12px;color:#222;padding:4px 0;display:flex;align-items:center;gap:7px;border-bottom:1px solid #f1f1f3}
+.pp-ev:last-child{border-bottom:none}
+.pp-ev-nm{font-weight:600;color:#1a1a2e}
+.pp-ev-b{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.02em;white-space:nowrap}
+.pp-ev-b.round{background:#EEF1FB;color:var(--navy)}
+.pp-ev-b.combined{background:var(--navy);color:#fff}
+.pp-ev-b.simul{background:#8FC3EA;color:var(--navy)}
+.pp-ev-b.split{background:#FFF4E5;color:#92400E}
+.pp-ev-b.divers{background:#FCE8EC;color:var(--red)}
+.pp-ev-sec{font-size:10px;color:#999;font-weight:500}
+.pp-ev-tm{margin-left:auto;font-size:11px;color:var(--gray);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Practice / open training block */
+.pp-prac{padding:8px 10px;margin-bottom:10px;background:#F7F9FC;border-left:3px solid var(--navy);border-radius:0 6px 6px 0}
+.pp-prac-t{font-size:12px;color:var(--navy);font-weight:700;display:flex;align-items:center;gap:6px}
+.pp-prac-t img{width:15px;height:13px;object-fit:contain}
+.pp-prac-f{font-size:10.5px;color:var(--gray);padding:2px 0 0 21px;font-weight:500}
+/* Footer */
+.pp-ft{border-top:2px solid var(--navy);padding:12px 26px;margin-top:14px;font-size:10px;color:var(--gray);display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.pp-ft-wave{height:5px;background:var(--navy);opacity:.08;margin:0}
+@media print{
+  body *{visibility:hidden}
+  #printPreview,#printPreview *{visibility:visible}
+  #printPreview{position:absolute;left:0;top:0;width:100%;max-height:none}
+  .modal-bg{position:absolute;background:#fff;display:block;padding:0;inset:0}
+  .modal{width:100%;max-width:none;max-height:none;box-shadow:none;border-radius:0}
+  .modal-hd,.modal-foot,.audgrid,.togrow,.print-opts,.pp-scrollhint{display:none!important}
+  .modal-body{padding:0!important;overflow:visible!important}
+  .pp{max-height:none;border:none;border-radius:0;overflow:visible}
+  .pp-sess{break-inside:avoid}
+  .pp-day-hd{break-after:avoid}
+}
+
+/* ════ Generate modal layout (brand) ════ */
+.gen-modal{width:min(1080px,calc(100vw - 48px))}
+.gen-layout{display:grid;grid-template-columns:300px 1fr;gap:22px;align-items:start}
+.gen-controls{display:flex;flex-direction:column}
+.gen-sec-lbl{font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:0 0 9px}
+.gen-sec-lbl:not(:first-child){margin-top:18px}
+.audgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.audcard{padding:11px 13px;border-radius:9px;border:1.5px solid var(--bd2);background:var(--surf);cursor:pointer;transition:.12s;text-align:left}
+.audcard:hover{border-color:var(--navy)}
+.audcard.sel{border-color:var(--navy);background:var(--navy);}
+.audcard.sel .audname{color:#fff}
+.audname{font-size:13px;font-weight:700;color:var(--tx)}
+.gen-aud-desc{font-size:11.5px;color:var(--tx2);line-height:1.5;margin:10px 0 0;min-height:34px}
+.gen-toggles{display:flex;flex-direction:column;gap:2px}
+.togrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--bd);font-size:12.5px;color:var(--tx);font-weight:500;cursor:pointer}
+.togrow:last-child{border-bottom:none}
+.gen-preview{min-width:0}
+.pp-scrollhint{font-size:9px;font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0;margin-left:8px;opacity:.7}
+@media (max-width:820px){.gen-layout{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -2479,23 +2553,34 @@ function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabe
 function renderGenerateModal(timed){
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
-  return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+  const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
+  return`<div class="modal modal-lg gen-modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="audgrid">${Object.entries(AUD).map(([k,c])=>`<div class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="audname">${c.l}</div></div>`).join('')}</div>
-      <div style="margin-bottom:14px">
-        <div class="togrow">Show warm-up times <label class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="togsl"></span></label></div>
-        <div class="togrow">Show event start/end times <label class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;render()"><span class="togsl"></span></label></div>
-        <div class="togrow">Show event entries (divers) <label class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="togsl"></span></label></div>
-        <div class="togrow">Show sec/dive detail <label class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></label></div>
-        <div class="togrow">Group practice blocks at top of day <label class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></label></div>
-        <div class="togrow">Show "Combined" / "Simultaneous" labels <label class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></label></div>
+      <div class="gen-layout">
+        <div class="gen-controls">
+          <div class="gen-sec-lbl">Audience</div>
+          <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="audname">${a.l}</div></button>`).join('')}</div>
+          <p class="gen-aud-desc">${audDesc[aud]||''}</p>
+          <div class="gen-sec-lbl">Show / hide</div>
+          <div class="gen-toggles">
+            <label class="togrow"><span>Warm-up times</span><span class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Event start / end times</span><span class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
+          </div>
+        </div>
+        <div class="gen-preview">
+          <div class="gen-sec-lbl">Preview <span class="pp-scrollhint">scroll to see full schedule</span></div>
+          ${renderPP(timed,cfg)}
+        </div>
       </div>
-      <div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Preview</div>
-      ${renderPP(timed,cfg)}
     </div>
     <div class="modal-foot">
-      <button class="btn" onclick="closeModal()">Close</button>
+      <button class="btn btn-gh" onclick="closeModal()">Close</button>
+      <div style="flex:1"></div>
       <button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xls)</button>
       <button class="btn" onclick="exportExcel()">Excel</button>
       <button class="btn btn-p" onclick="window.print()">Print / PDF</button>
@@ -2504,30 +2589,64 @@ function renderGenerateModal(timed){
 }
 
 function renderPP(timed,cfg){
-  if(!S.meet.days.length||!timed.length)return`<div class="pp"><p style="text-align:center;color:var(--tx3);font-size:12px;padding:16px">No schedule to preview</p></div>`;
+  if(!S.meet.days.length||!timed.length)return`<div class="pp"><p style="text-align:center;color:var(--tx3);font-size:12px;padding:40px 16px">No schedule to preview yet — add sessions and events first.</p></div>`;
+  const showLbl=S.meet.showCombineLabels!==false;
+  const meetName=esc(S.meet.name||'Championship');
+  const venueLine=[S.meet.venue,S.meet.city].filter(Boolean).map(esc).join(' · ');
   return`<div class="pp" id="printPreview">
-    <div class="pp-hd"><div><div class="pp-org">USA Diving</div><div class="pp-meet">${esc(S.meet.name)}</div><div class="pp-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}</div></div><img class="pp-logo" src="../shared/images/logo-color-horizontal.png" alt="USA Diving"/></div>
+    <div class="pp-hd">
+      <div class="pp-hd-l">
+        <div class="pp-org">USA Diving</div>
+        <div class="pp-meet">${meetName}</div>
+        ${venueLine?`<div class="pp-venue">${venueLine}</div>`:''}
+      </div>
+      <div class="pp-hd-r">
+        <img class="pp-logo" src="../shared/images/logo-white-horizontal.png?v=202606250200" alt="USA Diving"/>
+      </div>
+    </div>
+    <div class="pp-body">
     ${S.meet.days.map(day=>{
       const ds=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
       if(!ds.length)return'';
-      // Optional: practice blocks pulled to top; default is timeline flow (interleaved by start time)
       const ordered=cfg.practiceTop?[...ds.filter(s=>s.isPractice),...ds.filter(s=>!s.isPractice)]:ds;
-      return`<div><div class="pp-day-hd">${fullDate(day.date)}</div>
+      return`<div class="pp-day"><div class="pp-day-hd">${esc(fullDate(day.date))}</div>
         ${ordered.map(sess=>{
           const t=sess.timing;
           if(sess.isPractice){
             const ft=t.flightTimes||[];
-            return`<div style="padding:4px 0 6px;border-bottom:1px solid #f0f0f0">
-              <div style="font-size:11.5px;color:var(--g-prac);font-weight:600"><img src="../shared/images/diver-mark.svg?v=202606250120" alt="" style="width:13px;height:13px;object-fit:contain;vertical-align:middle;margin-right:3px"/>${esc(sess.title||'Open Training')} · ${f12(t.eventStartMinutes)}–${f12(t.sessionEndMinutes)}</div>
-              ${ft.map(f=>`<div style="font-size:10.5px;color:#666;padding:1px 0 1px 16px">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)} (${fdur(f.durationMinutes)})</div>`).join('')}
+            const closeNote=sess.fitToClose?' · until facility close':'';
+            return`<div class="pp-prac">
+              <div class="pp-prac-t"><img src="../shared/images/diver-mark.svg?v=202606250200" alt=""/>${esc(sess.title||'Open Training')} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}${closeNote}</div>
+              ${ft.map(f=>`<div class="pp-prac-f">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)} (${fdur(f.durationMinutes)})</div>`).join('')}
             </div>`;
           }
           const n=getSessNum(sess,timed);
-          return`<div class="pp-sess"><div class="pp-sess-t">Session ${n} — ${f12(t.eventStartMinutes)}</div>${cfg.showWU?`<div class="pp-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>`:''}<div>${(t.events||[]).map(ev=>{const divers=ev._combined?ev._combinedDivers:Number(ev.finalDivers||ev.projectedDivers||ev.numberOfDivers||0);const nm=ev._combined?ev._combinedNames.join(' + '):evName(ev);const showLbl=S.meet.showCombineLabels!==false;return`<div class="pp-ev">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pp-ev-b" style="background:#EDE9FE;color:#6D28D9">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pp-ev-b" style="background:#DBEAFE;color:#1D4ED8">Simultaneous</span>`:''}${ev.round&&ev.round!=='Custom Block'&&!ev._combined?`<span class="pp-ev-b">${esc(ev.round)}</span>`:''}${ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined?`<span class="pp-ev-b" style="background:#FFFBEB;color:#92400E">Split</span>`:''}${cfg.showEntries&&divers?`<span class="pp-ev-b" style="background:#F0FDF4;color:#15803D">${divers} divers</span>`:''}${cfg.showSec?`<span style="font-size:9px;color:#aaa">${ev.secondsPerDive||ev.defaultSpd||35}s</span>`:''}${cfg.showTimes?`<span style="margin-left:auto;font-size:10px;color:#888">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</span>`:''}</div>`}).join('')}</div></div>`;
+          const hasFinals=sess.events.some(e=>e.round==='Final');
+          const badge=hasFinals?'<span class="pp-sess-badge finals">Finals</span>':sess.events.some(e=>e.round==='Prelim')?'<span class="pp-sess-badge">Prelims</span>':sess.events.some(e=>e.round==='Qualifier')?'<span class="pp-sess-badge">Qualifier</span>':'';
+          return`<div class="pp-sess">
+            <div class="pp-sess-t">${badge} Session ${n} <span style="font-weight:600;color:var(--gray)">${f12(t.eventStartMinutes)}–${f12(t.sessionEndMinutes)}</span></div>
+            ${cfg.showWU?`<div class="pp-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</div>`:''}
+            <div>${(t.events||[]).map(ev=>{
+              const divers=ev._combined?ev._combinedDivers:entryValue(ev);
+              const nm=ev._combined?ev._combinedNames.join(' + '):evName(ev);
+              return`<div class="pp-ev">
+                <span class="pp-ev-nm">${esc(nm)}</span>
+                ${(ev._combined&&showLbl)?`<span class="pp-ev-b combined">Combined</span>`:''}
+                ${(ev._simul&&showLbl)?`<span class="pp-ev-b simul">Simultaneous</span>`:''}
+                ${(ev.round&&ev.round!=='Custom Block'&&!ev._combined)?`<span class="pp-ev-b round">${esc(ev.round)}</span>`:''}
+                ${(ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<span class="pp-ev-b split">Split boards</span>`:''}
+                ${(cfg.showEntries&&divers)?`<span class="pp-ev-b divers">${divers} divers</span>`:''}
+                ${cfg.showSec?`<span class="pp-ev-sec">${ev.secondsPerDive||ev.defaultSpd||35}s/dive</span>`:''}
+                ${cfg.showTimes?`<span class="pp-ev-tm">${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}</span>`:''}
+              </div>`;
+            }).join('')}</div>
+          </div>`;
         }).join('')}
       </div>`;
     }).join('')}
-    <div class="pp-ft"><span>USA Diving · ${esc(S.meet.name)}</span><span>Subject to change · ${new Date().toLocaleDateString()}</span></div>
+    </div>
+    <div class="pp-ft-wave"></div>
+    <div class="pp-ft"><span>USA Diving · ${meetName}</span><span>Schedule subject to change · Generated ${esc(new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}))}</span></div>
   </div>`;
 }
 
@@ -2578,7 +2697,7 @@ function exportExcel(){
 function dl(html,type,name){const blob=new Blob([html],{type});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
 
 // Print
-const ps=document.createElement('style');ps.textContent='@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}.pp{max-height:none;padding:0}}';document.head.appendChild(ps);
+const ps=document.createElement('style');ps.textContent='@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}}';document.head.appendChild(ps);
 
 // ── BOOT ──────────────────────────────────────────────────────────────
 if(S.currentLibraryId)startSync();
