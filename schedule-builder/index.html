@@ -780,8 +780,8 @@ async function pollChanges(){
     }
     syncState.connected=true;
     const el=document.querySelector('.sync-editors');
-    if(el)el.textContent=others?`· ${others} other${others>1?'s':''}':'';
-  }catch(){syncState.connected=false}
+    if(el)el.textContent=others?`· ${others} other${others>1?'s':''}` :'';
+  }catch(e){syncState.connected=false}
 }
 
 async function saveToNeon(name){
@@ -1011,7 +1011,7 @@ let ui={
   rightOpen:false,previewMode:'operations',genAud:'athletes',
   pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
   neonLib:[],neonLibLoading:false,libFolder:'Regionals & Zones',
-  entriesPanel:false,entriesDayId:'',entriesOpenSessions:new Set(),
+  entriesPanel:false,entriesDayId:'',entriesOpenSessions:[],
 };
 
 function initUI(){
@@ -1164,9 +1164,11 @@ function openEntriesPanel(){
 function closeEntriesPanel(){ ui.entriesPanel = false; render(); }
 function setEntriesDay(dayId){ ui.entriesDayId = dayId; render(); }
 function toggleEntriesSession(sessId){
-  if(!ui.entriesOpenSessions) ui.entriesOpenSessions = new Set();
-  if(ui.entriesOpenSessions.has(sessId)) ui.entriesOpenSessions.delete(sessId);
-  else ui.entriesOpenSessions.add(sessId);
+  if(!ui.entriesOpenSessions) ui.entriesOpenSessions = [];
+  const eos=ui.entriesOpenSessions;
+  const eosIdx=eos.indexOf(sessId);
+  if(eosIdx>=0) eos.splice(eosIdx,1);
+  else eos.push(sessId);
   render();
 }
 function applyFinalsToAll(){
@@ -1202,7 +1204,7 @@ function renderEntriesPanel(timed){
   const sessBlocks = sessions.map(sess=>{
     const t = sess.timing;
     const n = getSessNum(sess, timed);
-    const isOpen = ui.entriesOpenSessions?.has(sess.id) ?? false;
+    const isOpen = (ui.entriesOpenSessions||[]).includes(sess.id);
     const hasFinals = sess.events.some(e=>e.round==='Final');
     
     return`<div class="ep-sess-block">
@@ -1742,8 +1744,7 @@ function showAddMenu(){
 
 // ── MODALS ────────────────────────────────────────────────────────────
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,entries:renderEntriesModal};
-  // Note: entries panel is rendered separately below modal, not as a modal
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal};
   const fn=fns[ui.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){ui.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -1836,7 +1837,7 @@ function renderLibraryModal(){
   const folderTabs=Object.entries(folders).map(([name,cfg])=>
     `<button class="ep-day-tab ${ui.libFolder===name?'active':''}" 
       style="${ui.libFolder===name?'':'border-color:'+cfg.color+';color:'+cfg.color}"
-      onclick="ui.libFolder='${name.replace(/'/g,"\'")}';render()">${cfg.icon} ${name}</button>`
+      onclick="ui.libFolder=this.dataset.folder;render()" data-folder="${name}">${cfg.icon} ${name}</button>`
   ).join('');
 
   const activeCfg=folders[ui.libFolder]||Object.values(folders)[0];
@@ -1852,10 +1853,10 @@ function renderLibraryModal(){
       </div>
       ${uniqueItems.length?`<div class="lib-list" style="margin-bottom:16px">
         ${uniqueItems.map(item=>{
-          const c=item.schedule;const comp=c.sessions.filter(s=>!s.isPractice).length;
+          const sc=item.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;
           return`<div class="lib-item">
             <div class="lib-icon builtin">${activeCfg.icon}</div>
-            <div class="lib-info"><div class="lib-name">${esc(item.name)}</div><div class="lib-meta">${c.meet.days.length} days · ${comp} competition sessions · ${c.meet.venue||'Competition Pool'}</div></div>
+            <div class="lib-info"><div class="lib-name">${esc(item.name)}</div><div class="lib-meta">${sc.meet.days.length} days · ${comp} competition sessions · ${sc.meet.venue||'Competition Pool'}</div></div>
             <div class="lib-acts"><button class="lib-act primary" onclick="loadBuiltin('${item.id}')">Load</button></div>
           </div>`;
         }).join('')}
