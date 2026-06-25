@@ -608,6 +608,17 @@ button{cursor:pointer;border:none;background:none}
 /* Finals auto-sync flash */
 .feg-inp.synced-flash{animation:syncFlash .6s ease}
 @keyframes syncFlash{0%{background:var(--final);color:#fff}100%{background:var(--final-bg);color:var(--final)}}
+
+/* Fit-to-close control */
+.fitclose-box{margin-top:14px;padding:12px 14px;background:var(--train-bg);border:1px solid var(--train-bd,var(--bd));border-radius:10px}
+.fitclose-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.fitclose-label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--train);cursor:pointer}
+.fitclose-label input{width:16px;height:16px;accent-color:var(--train);cursor:pointer}
+.fitclose-time{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--tx2);font-weight:500}
+.fitclose-time.dim{opacity:.55}
+.fi-sm{height:30px;padding:0 8px;border-radius:7px;border:1.5px solid var(--bd2);background:var(--surf);font-size:12px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums}
+.fi-sm:focus{outline:none;border-color:var(--train);box-shadow:0 0 0 3px rgba(5,150,105,.12)}
+.fitclose-note{margin-top:9px;font-size:11px;color:var(--tx2);line-height:1.5}
 </style>
 </head>
 <body>
@@ -823,11 +834,16 @@ function calcFlightTimes(sess){
 function calcSessTiming(sess){
   if(sess.isPractice){
     const ft=calcFlightTimes(sess);
-    let dur;
-    if(ft.length){const last=ft[ft.length-1];dur=last.endMinutes-Number(sess.warmupStartMinutes);}
-    else dur=Number(sess.events[0]?.customDurationMinutes||90);
     const s=Number(sess.warmupStartMinutes);
-    return{warmupStartMinutes:s,warmupEndMinutes:s,eventStartMinutes:s,sessionEndMinutes:s+dur,competitiveEnd:s+dur,events:[],flightTimes:ft};
+    let dur;
+    if(sess.fitToClose){
+      // Fit-to-close: end exactly at the day's facility close time; duration is whatever's left
+      const day=(S.meet.days||[]).find(d=>d.id===sess.dayId);
+      const close=day&&day.closeMinutes!=null?Number(day.closeMinutes):1200;
+      dur=Math.max(0,close-s);
+    } else if(ft.length){const last=ft[ft.length-1];dur=last.endMinutes-s;}
+    else dur=Number(sess.events[0]?.customDurationMinutes||90);
+    return{warmupStartMinutes:s,warmupEndMinutes:s,eventStartMinutes:s,sessionEndMinutes:s+dur,competitiveEnd:s+dur,events:[],flightTimes:ft,fitToClose:Boolean(sess.fitToClose),fitDur:dur};
   }
   const wu=Number(sess.warmupStartMinutes);
   const wuEnd=wu+Number(sess.warmupMinutes||55);
@@ -967,6 +983,12 @@ function updSess(id,field,value){
 // Cascade: after a session's timing changes, push subsequent same-day sessions
 // to start at endOfPrevious + buffer, but only if doing so doesn't move them BACKWARDS
 // (we never auto-move a session to an EARLIER time).
+
+// Day facility close time (minutes); default 8:00 PM (1200)
+function dayCloseFor(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);return d&&d.closeMinutes!=null?Number(d.closeMinutes):1200;}
+function setDayClose(dayId,mins){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d){d.closeMinutes=Number(mins);}reflowDay(s,dayId);});}
+function toggleFitToClose(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess){sess.fitToClose=!sess.fitToClose;}reflowDay(s,sess.dayId);});}
+
 // Re-flow an entire day: keep the first session's start, snap every later session to
 // the previous session's end + buffer (rounded up to 5). Fully automatic sequencing.
 function reflowDay(stateSnap,dayId){
@@ -1300,11 +1322,11 @@ function renderCard(sess,timed,warns){
         <div class="pcard-icon" style="color:${typeColor}">${icon}</div>
         <div class="pcard-main">
           <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}</div>
-          <div class="pcard-meta">${flights.length?`${flights.length} flight${flights.length>1?'s':''}`:'Open pool'} · ${fdur(dur)}</div>
+          <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
-          <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}</div>
-          <div class="pcard-time-dur">${fdur(dur)}</div>
+          <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${sess.fitToClose?' 🔒':''}</div>
+          <div class="pcard-time-dur">${sess.fitToClose?'fits to close':fdur(dur)}</div>
         </div>
         <div class="sc-actions">
           <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
@@ -1424,7 +1446,17 @@ function renderEditPrac(sess,t,flights){
     <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2">
       <div class="fg"><label class="fl">Start time</label><input class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
-      <div class="fg"><label class="fl">Duration (min)</label><input class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" ${flights.length?'disabled':''} onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/></div>
+      <div class="fg"><label class="fl">Duration (min) ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)} (auto)</div>`:`<input class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" ${flights.length?'disabled':''} onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
+    </div>
+    <div class="fitclose-box">
+      <div class="fitclose-toggle-row">
+        <label class="fitclose-label"><input type="checkbox" ${sess.fitToClose?'checked':''} onchange="toggleFitToClose('${sess.id}')"/> Fit to facility close time</label>
+        <div class="fitclose-time ${sess.fitToClose?'':'dim'}">
+          <span>Facility closes</span>
+          <input class="fi-sm" type="time" value="${f24(dayCloseFor(sess.dayId))}" onchange="setDayClose('${sess.dayId}',pt(this.value))"/>
+        </div>
+      </div>
+      ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
     <div class="fdiv"></div>
     <div class="fsec">Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></div>
