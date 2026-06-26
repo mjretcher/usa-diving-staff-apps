@@ -909,132 +909,319 @@
 
   function renderScoringPanel(wrap){
     const d = buildScoringData();
-    const filtered = activeFilterCount() > 0;
     const desc = activeFilterDescription();
+    const filtered = activeFilterCount() > 0;
     const places = placeFilter(rptState.scoringPlaces, d.places);
+    const placesSorted = places.slice().sort((a,b)=>a-b);
+
+    const ordinal = (n) => {
+      const s = ['th','st','nd','rd']; const v = n % 100;
+      return n + (s[(v-20)%10] || s[v] || s[0]);
+    };
 
     if (!d.summary.length) {
-      wrap.innerHTML = `<div class="rpt-section"><div class="rpt-section-title">Scoring analysis</div>
-        <div class="rpt-empty">No scored results match the current filters at the
-        <strong>${esc(d.stage)}</strong> stage.</div></div>`;
+      wrap.innerHTML = `<div class="rpt-section">
+        ${scoringControls()}
+        <div class="rpt-empty">
+          <strong>No scored results match the current filters at the ${esc(d.stage)} stage.</strong><br>
+          <span style="font-size:12px">Try a different stage above, or clear some filter chips.</span>
+        </div>
+      </div>`;
       return;
     }
 
-    const summary = d.summary.filter(s => places.includes(s.place));
+    const eventKeys = [...d.byEvent.keys()].sort();
+    const drill = rptState._scoringDrill || null;
 
-    /* Build place summary table */
-    const tableRows = summary.map(s => `
-      <tr>
-        <td class="mono"><strong>${esc(String(s.place))}</strong></td>
-        <td class="mono">${fmtScore(s.mean)}</td>
-        <td class="mono">${fmtScore(s.median)}</td>
-        <td class="mono">${fmtScore(s.min)}</td>
-        <td class="mono">${fmtScore(s.max)}</td>
-        <td class="mono">${Number.isFinite(s.sd) ? s.sd.toFixed(2) : '—'}</td>
-        <td class="mono">${fmtNum(s.n)}</td>
-        <td class="mono">${fmtNum(s.events)}</td>
-      </tr>`).join('');
-
-    /* Build per-event table — average score at each requested place,
-       grouped by event key, with rows for each zone/region instance. */
-    const eventNames = [...d.byEvent.keys()].sort();
-    const placeSet = new Set(places);
-    const eventRowsHtml = eventNames.map(ek => {
-      const byPlaceMap = d.byEvent.get(ek);
-      const placedAvgs = [...placeSet].sort((a,b)=>a-b).map(p => {
-        const arr = (byPlaceMap.get(p) || []).map(x => x.score);
-        return arr.length ? fmtScore(mean(arr)) : '—';
+    // Build per-event aggregates across the selected place range
+    const eventStats = eventKeys.map(ek => {
+      const byPlace = d.byEvent.get(ek);
+      const perPlace = placesSorted.map(p => {
+        const entries = byPlace.get(p) || [];
+        const scores = entries.map(x => x.score).filter(Number.isFinite);
+        return scores.length
+          ? { place: p, entries, scores, mean: mean(scores), median: median(scores), min: Math.min(...scores), max: Math.max(...scores), sd: stddev(scores), n: scores.length }
+          : { place: p, entries: [], scores: [], mean: NaN, n: 0 };
       });
-      const counts = [...placeSet].sort((a,b)=>a-b).map(p => (byPlaceMap.get(p) || []).length);
-      return `<tr>
-        <td class="r-name">${esc(ek)}</td>
-        ${placedAvgs.map((v,i) => `<td class="mono">${v}<span class="cell-sub">${counts[i]}×</span></td>`).join('')}
-      </tr>`;
+      const totalSamples = perPlace.reduce((a,b)=>a+b.n, 0);
+      return { eventKey: ek, perPlace, totalSamples, byPlaceMap: byPlace };
+    }).filter(es => es.totalSamples > 0);
+
+    const drillStats = drill ? eventStats.find(e => e.eventKey === drill) : null;
+
+    wrap.innerHTML = `<div class="rpt-section">
+
+      ${scoringControls()}
+
+      <div class="rpt-note">
+        <strong>Scores are only comparable within the same event type.</strong>
+        Group A Boys 1M, Group D Girls Platform, and every other combination use
+        different scoring scales (different dive lists, DDs, board heights), so an
+        overall &ldquo;average score for 1st place&rdquo; would mix incomparable numbers.
+        Each row below is one event type — those numbers are meaningful.
+        ${filtered ? `<br><strong>Active filter:</strong> ${esc(desc)}` : ''}
+      </div>
+
+      <div class="rpt-h2">
+        <span class="rpt-h2-l">Score profiles by event type</span>
+        <span class="rpt-h2-sub">Click any row to see place-by-place detail, score range, and per-meet breakdown</span>
+      </div>
+
+      <div class="rpt-table-scroll">
+        <table class="rpt-table sc-event-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              ${placesSorted.map(p => `<th class="mono sc-place-col">${ordinal(p)} place</th>`).join('')}
+              <th class="mono" title="Total scored results in the selected place range">Total n</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${eventStats.map(es => `
+              <tr class="sc-event-row ${drill === es.eventKey ? 'is-drill' : ''}" onclick="window._rptScoringDrill('${esc(es.eventKey)}')">
+                <td class="r-name sc-event-name">${esc(es.eventKey)}${drill === es.eventKey ? ' <span class="sc-drill-tag">↓ open</span>' : ''}</td>
+                ${es.perPlace.map(pp => `
+                  <td class="mono sc-cell-td">
+                    ${pp.n ? `
+                      <div class="sc-cell-mean">${fmtScore(pp.mean)}</div>
+                      <div class="sc-cell-range">${fmtScore(pp.min)}&ndash;${fmtScore(pp.max)}</div>
+                      <div class="sc-cell-n">n=${pp.n}</div>
+                    ` : '<span class="sc-cell-na">—</span>'}
+                  </td>`).join('')}
+                <td class="mono sc-event-n"><strong>${es.totalSamples}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      ${drillStats ? renderScoringDrillDetail(drillStats, d) : `
+        <div class="cf-drill-prompt" style="margin-top:18px">
+          <span class="cf-drill-prompt-icon">↑</span>
+          <span>Click any event row above to open its full score profile (place-by-place stats, mean+range chart, and per-meet breakdown).</span>
+        </div>`}
+
+    </div>`;
+  }
+
+  function scoringControls(){
+    return `<div class="scoring-controls">
+      <div class="scoring-control">
+        <label>Stage</label>
+        <select onchange="window._rptScoring('scoringStage', this.value)">
+          <option value="Regionals" ${rptState.scoringStage==='Regionals'?'selected':''}>Regionals</option>
+          <option value="Zones"     ${rptState.scoringStage==='Zones'?'selected':''}>Zones</option>
+          <option value="EWC"       ${rptState.scoringStage==='EWC'?'selected':''}>E/W/C (when results loaded)</option>
+        </select>
+      </div>
+      <div class="scoring-control">
+        <label>Places shown</label>
+        <select onchange="window._rptScoring('scoringPlaces', this.value)">
+          <option value="1"    ${rptState.scoringPlaces==='1'?'selected':''}>1st only</option>
+          <option value="1-3"  ${rptState.scoringPlaces==='1-3'?'selected':''}>1st – 3rd (Nat-direct band)</option>
+          <option value="1-5"  ${rptState.scoringPlaces==='1-5'?'selected':''}>1st – 5th</option>
+          <option value="1-15" ${rptState.scoringPlaces==='1-15'?'selected':''}>1st – 15th (Regional qual band)</option>
+          <option value="1-18" ${rptState.scoringPlaces==='1-18'?'selected':''}>1st – 18th (Zone field cap)</option>
+          <option value="all"  ${rptState.scoringPlaces==='all'?'selected':''}>All places</option>
+        </select>
+      </div>
+      <button class="rpt-export-btn" style="margin-left:auto;align-self:flex-end" onclick="window._rptExportScoring()">Download CSV</button>
+    </div>`;
+  }
+
+  function renderScoringDrillDetail(es, d){
+    // All places where this event has any data (not just the filtered range)
+    const allPlaces = [...es.byPlaceMap.keys()].sort((a,b)=>a-b);
+
+    // Per-meet (scope) breakdown
+    const scopeSet = new Set();
+    allPlaces.forEach(p => (es.byPlaceMap.get(p) || []).forEach(x => scopeSet.add(x.scope)));
+    const scopes = [...scopeSet].sort();
+
+    // Place-by-place stats over ALL places
+    const placeStats = allPlaces.map(p => {
+      const scores = (es.byPlaceMap.get(p) || []).map(x => x.score).filter(Number.isFinite);
+      return scores.length
+        ? { place: p, n: scores.length, mean: mean(scores), median: median(scores), min: Math.min(...scores), max: Math.max(...scores), sd: stddev(scores) }
+        : null;
+    }).filter(Boolean);
+
+    const statRows = placeStats.map(s => `<tr>
+      <td class="mono"><strong>${s.place}</strong></td>
+      <td class="mono">${fmtScore(s.mean)}</td>
+      <td class="mono">${fmtScore(s.median)}</td>
+      <td class="mono">${fmtScore(s.min)}</td>
+      <td class="mono">${fmtScore(s.max)}</td>
+      <td class="mono">${s.n > 1 ? s.sd.toFixed(2) : '—'}</td>
+      <td class="mono">${s.n}</td>
+    </tr>`).join('');
+
+    // Per-meet rows: each scope, mean score at each place (cap at first 12 places for readability)
+    const meetPlaceCols = allPlaces.slice(0, 12);
+    const meetRows = scopes.map(scope => {
+      const cells = meetPlaceCols.map(p => {
+        const scores = (es.byPlaceMap.get(p) || []).filter(x => x.scope === scope).map(x => x.score).filter(Number.isFinite);
+        if (!scores.length) return '<td class="mono sc-cell-na">—</td>';
+        const v = scores.length === 1 ? scores[0] : mean(scores);
+        const note = scores.length > 1 ? `<span class="cell-sub">avg of ${scores.length}</span>` : '';
+        return `<td class="mono">${fmtScore(v)}${note}</td>`;
+      });
+      return `<tr><td class="r-name">${esc(scope)}</td>${cells.join('')}</tr>`;
     }).join('');
 
-    const sortedPlaces = [...placeSet].sort((a,b)=>a-b);
+    const chart = buildScoringChart(placeStats);
 
-    wrap.innerHTML = `
-      <div class="rpt-section">
-        <div class="rpt-section-title">
-          Scoring analysis
-          <button class="rpt-export-btn" onclick="window._rptExportScoring()">Download CSV</button>
+    return `<div class="cf-drill" id="cf-drill-anchor" style="margin-top:22px">
+      <div class="cf-drill-head">
+        <div>
+          <div class="cf-drill-eyebrow">Score profile</div>
+          <div class="cf-drill-title">${esc(es.eventKey)}</div>
+          <div class="cf-drill-hint">${esc(d.stage)} stage · ${scopes.length} meet instance${scopes.length===1?'':'s'} · ${placeStats.reduce((a,b)=>a+b.n,0)} scored results</div>
         </div>
-
-        <div class="scoring-controls">
-          <div class="scoring-control">
-            <label>Stage</label>
-            <select onchange="window._rptScoring('scoringStage', this.value)">
-              <option value="Regionals" ${rptState.scoringStage==='Regionals'?'selected':''}>Regionals</option>
-              <option value="Zones"     ${rptState.scoringStage==='Zones'?'selected':''}>Zones</option>
-              <option value="EWC"       ${rptState.scoringStage==='EWC'?'selected':''}>E/W/C (when results loaded)</option>
-            </select>
+        <div class="cf-drill-actions">
+          <button class="rpt-export-btn rpt-export-btn-ghost" onclick="window._rptScoringDrillClear()">✕ Close detail</button>
+        </div>
+      </div>
+      <div style="padding:18px 22px 22px">
+        ${chart}
+        <div class="sc-drill-grid">
+          <div>
+            <div class="rpt-subsection-title" style="margin-top:6px">Place-by-place stats (all places with data)</div>
+            <div class="rpt-table-scroll" style="max-height:420px">
+              <table class="rpt-table">
+                <thead><tr><th>Place</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th><th>Std dev</th><th>Samples</th></tr></thead>
+                <tbody>${statRows}</tbody>
+              </table>
+            </div>
           </div>
-          <div class="scoring-control">
-            <label>Places to include</label>
-            <select onchange="window._rptScoring('scoringPlaces', this.value)">
-              <option value="1"    ${rptState.scoringPlaces==='1'?'selected':''}>1st only</option>
-              <option value="1-3"  ${rptState.scoringPlaces==='1-3'?'selected':''}>1st – 3rd (Nat-direct band)</option>
-              <option value="1-5"  ${rptState.scoringPlaces==='1-5'?'selected':''}>1st – 5th</option>
-              <option value="1-15" ${rptState.scoringPlaces==='1-15'?'selected':''}>1st – 15th (Regional qual band)</option>
-              <option value="1-18" ${rptState.scoringPlaces==='1-18'?'selected':''}>1st – 18th (Zone field cap)</option>
-              <option value="all"  ${rptState.scoringPlaces==='all'?'selected':''}>All places</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="rpt-note">
-          <strong>About these scores:</strong> Each row at Regionals/Zones is a
-          single total score combining prelims (and finals if held). At E/W/C
-          and Junior Nationals the finals score is on optional dives only and
-          is tabulated separately by USA Diving — once results are scraped,
-          this panel will surface them as Prelim, Final, and Total columns.
-          <span style="display:block;margin-top:4px">${filtered ? '<strong>Filter:</strong> '+esc(desc) : 'No filters active — averaged across every event in stage.'}</span>
-        </div>
-
-        <div class="rpt-subsection">
-          <div class="rpt-subsection-title">Placement summary <span class="rpt-pill">${d.eventCount} events · ${d.rowCount} rows</span></div>
-          <table class="rpt-table">
-            <thead><tr>
-              <th>Place</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th><th>Std dev</th><th>Samples</th><th>Events</th>
-            </tr></thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-        </div>
-
-        <div class="rpt-subsection">
-          <div class="rpt-subsection-title">Average score at each place — by event</div>
-          <div class="rpt-note" style="font-size:11px">Each cell shows the mean score at that place across all instances of the event in the filtered scope. The small "Nx" annotation is the sample size.</div>
-          <div class="rpt-table-scroll">
-            <table class="rpt-table">
-              <thead><tr>
-                <th>Event</th>${sortedPlaces.map(p => `<th class="mono">P${p}</th>`).join('')}
-              </tr></thead>
-              <tbody>${eventRowsHtml}</tbody>
-            </table>
+          <div>
+            <div class="rpt-subsection-title" style="margin-top:6px">Per-meet breakdown ${meetPlaceCols.length < allPlaces.length ? `<span class="rpt-pill-note">(first ${meetPlaceCols.length} places shown)</span>` : ''}</div>
+            <div class="rpt-table-scroll" style="max-height:420px">
+              <table class="rpt-table">
+                <thead><tr><th>Meet</th>${meetPlaceCols.map(p=>`<th class="mono">P${p}</th>`).join('')}</tr></thead>
+                <tbody>${meetRows}</tbody>
+              </table>
+            </div>
           </div>
         </div>
+      </div>
+    </div>`;
+  }
+
+  function buildScoringChart(placeStats){
+    if (!placeStats.length) return '';
+    if (placeStats.length === 1) {
+      const s = placeStats[0];
+      return `<div class="sc-single">
+        <div class="sc-single-place">${s.place}${s.place===1?'st':s.place===2?'nd':s.place===3?'rd':'th'} place</div>
+        <div class="sc-single-mean">${fmtScore(s.mean)}</div>
+        <div class="sc-single-meta">mean across ${s.n} sample${s.n===1?'':'s'} · range ${fmtScore(s.min)}–${fmtScore(s.max)}</div>
       </div>`;
+    }
+
+    const w = 820, h = 240;
+    const padL = 56, padR = 24, padT = 22, padB = 36;
+    const innerW = w - padL - padR;
+    const innerH = h - padT - padB;
+
+    const maxScore = Math.max(...placeStats.map(p => p.max));
+    const minScore = Math.min(...placeStats.map(p => p.min));
+    const range = maxScore - minScore || 1;
+    const padR2 = range * 0.08;
+    const yLo = minScore - padR2;
+    const yHi = maxScore + padR2;
+    const yRange = yHi - yLo;
+
+    const xStep = innerW / placeStats.length;
+    const xy = placeStats.map((p, i) => ({
+      x: padL + i * xStep + xStep/2,
+      y: padT + innerH - ((p.mean - yLo) / yRange) * innerH,
+      yMin: padT + innerH - ((p.min - yLo) / yRange) * innerH,
+      yMax: padT + innerH - ((p.max - yLo) / yRange) * innerH,
+      place: p.place, mean: p.mean, min: p.min, max: p.max, n: p.n,
+    }));
+    const linePath = 'M ' + xy.map(d => `${d.x.toFixed(1)} ${d.y.toFixed(1)}`).join(' L ');
+
+    // Y axis ticks (5)
+    const ticks = 4;
+    const tickHtml = Array.from({length: ticks+1}, (_, i) => {
+      const v = yLo + (yRange * i / ticks);
+      const y = padT + innerH - (i / ticks) * innerH;
+      return `<g><line x1="${padL}" x2="${w-padR}" y1="${y}" y2="${y}" stroke="var(--line-2)" stroke-dasharray="2 3" stroke-width="1"/><text x="${padL-8}" y="${y+3}" text-anchor="end" font-size="10" fill="var(--ink-3)" font-family="JetBrains Mono, monospace">${v.toFixed(0)}</text></g>`;
+    }).join('');
+
+    // Range bars (min-max)
+    const ranges = xy.map(d => `<line x1="${d.x}" x2="${d.x}" y1="${d.yMin}" y2="${d.yMax}" stroke="#8fc3ea" stroke-width="6" stroke-linecap="round" opacity="0.55"/>`).join('');
+
+    // Mean dots + labels
+    const dots = xy.map(d => `
+      <g>
+        <circle cx="${d.x}" cy="${d.y}" r="5" fill="#171f69" stroke="#fff" stroke-width="2"><title>P${d.place}: mean ${d.mean.toFixed(2)} · range ${d.min.toFixed(2)}–${d.max.toFixed(2)} · n=${d.n}</title></circle>
+        <text x="${d.x}" y="${d.y - 11}" text-anchor="middle" font-size="11" fill="#171f69" font-weight="700" font-family="JetBrains Mono, monospace">${d.mean.toFixed(0)}</text>
+      </g>
+    `).join('');
+
+    // X axis labels
+    const xLabels = xy.map(d => `<text x="${d.x}" y="${h-12}" text-anchor="middle" font-size="11" fill="#566170" font-family="JetBrains Mono, monospace">P${d.place}</text>`).join('');
+
+    return `<svg class="sc-chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Score profile chart" style="width:100%;height:auto;max-height:260px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:0">
+      <text x="${padL}" y="${padT - 6}" font-size="11" fill="#566170" font-family="Inter, sans-serif">Mean score at each place (sky band = score range across meets)</text>
+      ${tickHtml}
+      ${ranges}
+      <path d="${linePath}" fill="none" stroke="#171f69" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+      ${dots}
+      ${xLabels}
+    </svg>`;
   }
 
   window._rptScoring = function(key, val){
     rptState[key] = val;
+    // Clear drill if changing stage (event keys may differ)
+    if (key === 'scoringStage') rptState._scoringDrill = null;
+    renderReports();
+  };
+
+  window._rptScoringDrill = function(eventKey){
+    rptState._scoringDrill = (rptState._scoringDrill === eventKey) ? null : eventKey;
+    renderReports();
+    if (rptState._scoringDrill) {
+      setTimeout(() => {
+        const el = document.getElementById('cf-drill-anchor');
+        if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+      }, 60);
+    }
+  };
+
+  window._rptScoringDrillClear = function(){
+    rptState._scoringDrill = null;
     renderReports();
   };
 
   window._rptExportScoring = function(){
     const d = buildScoringData();
-    const places = placeFilter(rptState.scoringPlaces, d.places);
-    const summary = d.summary.filter(s => places.includes(s.place));
-    const lines = ['Stage,Place,Mean,Median,Min,Max,StdDev,Samples,Events'];
-    summary.forEach(s => {
-      lines.push([
-        d.stage, s.place, fmtScore(s.mean), fmtScore(s.median),
-        fmtScore(s.min), fmtScore(s.max),
-        Number.isFinite(s.sd)?s.sd.toFixed(2):'', s.n, s.events,
-      ].join(','));
+    const lines = [
+      `# Scoring profiles · ${d.stage}`,
+      'Event,Place,Mean,Median,Min,Max,StdDev,Samples,Meets'
+    ];
+    const eventKeys = [...d.byEvent.keys()].sort();
+    eventKeys.forEach(ek => {
+      const byPlace = d.byEvent.get(ek);
+      const places = [...byPlace.keys()].sort((a,b)=>a-b);
+      places.forEach(p => {
+        const entries = byPlace.get(p) || [];
+        const scores = entries.map(x => x.score).filter(Number.isFinite);
+        if (!scores.length) return;
+        const scopes = new Set(entries.map(x => x.scope));
+        lines.push([
+          ek, p,
+          fmtScore(mean(scores)), fmtScore(median(scores)),
+          fmtScore(Math.min(...scores)), fmtScore(Math.max(...scores)),
+          scores.length > 1 ? stddev(scores).toFixed(2) : '',
+          scores.length, scopes.size,
+        ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+      });
     });
-    downloadCSV(lines.join('\n'), `scoring-${d.stage.toLowerCase()}-places-${rptState.scoringPlaces}.csv`);
+    downloadCSV(lines.join('\n'), `scoring-profiles-${d.stage.toLowerCase()}.csv`);
   };
 
   /* ====================================================================
@@ -2336,6 +2523,32 @@ body.rpt-stage-active .rpt-section { padding: 18px 24px 80px; }
 .rpt-export-btn-ghost:hover { color: var(--red); border-color: var(--red); background: var(--surface); }
 
 .rpt-toolbar-row { display: flex; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* === Scoring panel (per-event view) === */
+.sc-event-table thead th { background: var(--navy); color: #fff; border-bottom: 0; }
+.sc-event-table thead th.sc-place-col { background: var(--navy); color: #fff; text-align: center; }
+.sc-event-table tbody td.sc-cell-td { padding: 7px 9px; text-align: center; vertical-align: middle; line-height: 1.25; }
+.sc-event-table tbody td.sc-cell-td .sc-cell-mean { font-family: var(--f-mono); font-size: 14px; font-weight: 700; color: var(--ink); }
+.sc-event-table tbody td.sc-cell-td .sc-cell-range { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+.sc-event-table tbody td.sc-cell-td .sc-cell-n { font-family: var(--f-mono); font-size: 10px; color: var(--ink-4); margin-top: 1px; }
+.sc-event-table tbody td.sc-cell-td .sc-cell-na { color: var(--ink-4); font-style: italic; }
+.sc-event-table tbody tr.sc-event-row { cursor: pointer; transition: background .12s; }
+.sc-event-table tbody tr.sc-event-row:hover td { background: var(--surface-2); }
+.sc-event-table tbody tr.sc-event-row.is-drill td { background: rgba(0,154,199,.10); box-shadow: inset 4px 0 0 var(--pool); }
+.sc-event-table tbody tr.sc-event-row.is-drill td.sc-event-name { color: var(--navy); font-weight: 700; }
+.sc-drill-tag { font-family: var(--f-mono); font-size: 10px; color: var(--pool); margin-left: 6px; font-weight: 600; }
+.sc-event-name { font-weight: 600; color: var(--ink); }
+.sc-event-n { background: var(--surface-2) !important; font-weight: 600; }
+
+.sc-drill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }
+@media (max-width: 1100px) { .sc-drill-grid { grid-template-columns: 1fr; } }
+
+.sc-chart { display: block; }
+
+.sc-single { display: flex; flex-direction: column; align-items: center; padding: 30px 20px; background: var(--surface-2); border-radius: var(--radius); border: 1px solid var(--line); }
+.sc-single-place { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; }
+.sc-single-mean { font-family: var(--f-display); font-size: 48px; font-weight: 700; color: var(--navy); margin-top: 6px; line-height: 1; }
+.sc-single-meta { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
 `;
     document.head.appendChild(s);
   }
