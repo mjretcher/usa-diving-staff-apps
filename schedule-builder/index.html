@@ -1070,7 +1070,7 @@ async function loadFromNeon(id,opts={}){
     const loaded=typeof rows[0][0]==='string'?JSON.parse(rows[0][0]):rows[0][0];
     S=loaded;S.currentLibraryId=id;
     if(rows[0][2])S.libraryFolder=rows[0][2];
-    saveS();lastSynced=new Date(rows[0][1]).toISOString();
+    normalizeAllDays(S);saveS();lastSynced=new Date(rows[0][1]).toISOString();
     if(!opts.silent){UI.modal=null;initUI();render();toast('Schedule loaded');}else render();return loaded;}
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
@@ -1138,8 +1138,8 @@ let S=loadS();
 let undoStack=[],redoStack=[];const UNDO_MAX=50;
 function snapshot(){return JSON.stringify(S)}
 function pushUndo(){undoStack.push(snapshot());if(undoStack.length>UNDO_MAX)undoStack.shift();redoStack=[]}
-function undo(){if(!undoStack.length){toast('Nothing to undo');return}redoStack.push(snapshot());S=JSON.parse(undoStack.pop());saveS();if(S.currentLibraryId)scheduleSave();render();toast('Undone')}
-function redo(){if(!redoStack.length){toast('Nothing to redo');return}undoStack.push(snapshot());S=JSON.parse(redoStack.pop());saveS();if(S.currentLibraryId)scheduleSave();render();toast('Redone')}
+function undo(){if(!undoStack.length){toast('Nothing to undo');return}redoStack.push(snapshot());S=JSON.parse(undoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Undone')}
+function redo(){if(!redoStack.length){toast('Nothing to redo');return}undoStack.push(snapshot());S=JSON.parse(redoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Redone')}
 function upd(fn){pushUndo();fn(S);saveS();if(S.currentLibraryId)scheduleSave();render()}
 
 // ── KEYBOARD SHORTCUTS ───────────────────────────────────────────────
@@ -1523,6 +1523,14 @@ function reflowDay(stateSnap,dayId){
     sameDay[i].warmupStartMinutes=Math.max(want,dayOpen);
   }
 }
+// Reflow every day at once. Used after loading a schedule, undo/redo, or anywhere
+// a bulk import could leave gaps between sessions (e.g. Open Training → next session).
+// This is the "normalize" pass — every day is laid out back-to-back per session buffers.
+function normalizeAllDays(stateSnap){
+  const st=stateSnap||S;
+  if(!st||!st.meet||!Array.isArray(st.meet.days))return;
+  st.meet.days.forEach(d=>reflowDay(st,d.id));
+}
 function cascadeSession(stateSnap,changedId){
   const all=stateSnap.sessions;
   const sess=all.find(x=>x.id===changedId);
@@ -1752,7 +1760,7 @@ function _doLoadBuiltin(id){
   // User must "Save to cloud" to begin autosaving — keeps templates clean.
   S.currentLibraryId='';
   S.libraryFolder='';
-  saveS();UI.modal=null;initUI();render();
+  normalizeAllDays(S);saveS();UI.modal=null;initUI();render();
   toast('Loaded: '+item.name+' — click Save to cloud to begin autosave');
 }
 async function openLibrary(){
@@ -2257,7 +2265,7 @@ function renderEntriesPanel(timed){
       rowsHtml+=`<tr class="feg-day-row"><td colspan="7">${shortDate(day.date)}</td></tr>`;
       lastDayId=day.id;
     }
-    rowsHtml+=`<tr class="feg-sess-row ${hasFinals?'finals':''}"><td colspan="7"><span class="feg-sess-badge ${hasFinals?'final':'prelim'}">${hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Prelims':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session'}</span> Session ${n} <span class="feg-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span></td></tr>`;
+    rowsHtml+=`<tr class="feg-sess-row ${hasFinals?'finals':''}" data-sess-id="${sess.id}"><td colspan="7"><span class="feg-sess-badge ${hasFinals?'final':'prelim'}">${hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Prelims':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session'}</span> Session ${n} <span class="feg-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span></td></tr>`;
     (t.events||[]).forEach(ev=>{
       const split=ev.manualSplit&&!isPlatform(ev.apparatus);
       const dur=calcEvDur(ev);
@@ -2270,7 +2278,7 @@ function renderEntriesPanel(timed){
       const needsSplit=dur.rawMin>=3||effective>=40&&ev.round!=='Final';
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       const usingFinal=finlSet;
-      rowsHtml+=`<tr>
+      rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
         <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
@@ -2306,7 +2314,10 @@ function renderEntriesPanel(timed){
 }
 
 // Fast entry: store value WITHOUT re-rendering (preserves focus + Tab flow).
-// Recompute timing silently and update just the affected time displays on blur/commit.
+// Recompute timing silently and update just the affected time displays in place.
+// CRITICAL: do NOT call render() here — it would destroy the focused <input>
+// the user is actively typing into, which causes the "flash" and dropped keystrokes.
+// Full render only happens on Tab/Enter/blur/close via commitEntries().
 let _entryDirty=false;
 function setEntry(sessId,evId,field,value){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
@@ -2326,14 +2337,58 @@ function setEntry(sessId,evId,field,value){
   reflowDay(S,sess.dayId);
   _entryDirty=true;
   saveS();
-  // Debounced re-render so the user sees updated times without losing focus
+  // Surgical DOM update — refresh the time/badge text only, leaving the
+  // focused <input> element untouched so the user's typing isn't disturbed.
+  surgicalUpdateEntryTimes();
+  // Debounced cloud save (no re-render — render only on commit)
   clearTimeout(_entryRenderT);
   _entryRenderT=setTimeout(()=>{
     if(S.currentLibraryId)scheduleSave();
-    render();
-  },350);
+  },800);
 }
 let _entryRenderT=null;
+// Walk visible entry-panel rows and update only the time cells / session times.
+// This is the live-feedback equivalent of render() but without destroying inputs.
+function surgicalUpdateEntryTimes(){
+  const panel=document.querySelector('.entries-panel');
+  if(!panel)return;
+  // Recompute timing for every session touched by visible rows
+  const sessIds=new Set();
+  panel.querySelectorAll('tr[data-sess-id]').forEach(tr=>sessIds.add(tr.getAttribute('data-sess-id')));
+  sessIds.forEach(sid=>{
+    const sess=S.sessions.find(x=>x.id===sid);if(!sess)return;
+    const t=calcSessTiming(sess);
+    // Update session header time
+    const hdr=panel.querySelector(`tr.feg-sess-row[data-sess-id="${sid}"] .feg-sess-time`);
+    if(hdr)hdr.textContent=`${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}`;
+    // Update each event row's "Runs" window cell
+    (t.events||[]).forEach(ev=>{
+      const row=panel.querySelector(`tr[data-ev-id="${ev.id}"][data-sess-id="${sid}"]`);
+      if(!row)return;
+      const win=row.querySelector('.feg-window');
+      if(win)win.textContent=`${f12(ev.eventStartMinutes)}–${f12(ev.eventEndMinutes)}`;
+    });
+  });
+  // Update the "Using" tag column for every row (Final / Proj / blank) without touching inputs
+  panel.querySelectorAll('tr[data-ev-id]').forEach(row=>{
+    const evId=row.getAttribute('data-ev-id');
+    const sid=row.getAttribute('data-sess-id');
+    const sess=S.sessions.find(x=>x.id===sid);if(!sess)return;
+    const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
+    const projSet=ev.projectedDivers!=null&&ev.projectedDivers!=='';
+    const finlSet=ev.finalDivers!=null&&ev.finalDivers!=='';
+    const using=row.querySelector('.feg-using');
+    if(using)using.innerHTML=finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':'';
+    // Sync the "on" state on the proj/final inputs without rewriting their value
+    const projInp=row.querySelector('.feg-inp.proj');
+    const finlInp=row.querySelector('.feg-inp.final');
+    if(projInp){projSet?projInp.classList.add('on'):projInp.classList.remove('on');}
+    if(finlInp){finlSet?finlInp.classList.add('on'):finlInp.classList.remove('on');
+      // Keep placeholder synced to current projected (so unset final shows the proj fallback)
+      finlInp.placeholder=projSet?String(Number(ev.projectedDivers)):'—';
+    }
+  });
+}
 // The effective diver count an event uses for timing.
 // Final wins if it's been entered (including 0); otherwise projected (including 0); else 0.
 function entryValue(ev){
@@ -2385,6 +2440,21 @@ function entryKey(e,el){
     commitEntries();
   }
 }
+// Belt-and-suspenders: if focus leaves the entries panel entirely (e.g. user
+// clicks the main timeline area without using Tab/Enter), commit so the
+// timeline updates too. Uses focusout + a short timeout to check whether
+// focus actually moved outside the panel rather than between its inputs.
+document.addEventListener('focusout',function(e){
+  if(!_entryDirty)return;
+  const panel=e.target&&e.target.closest&&e.target.closest('.entries-panel');
+  if(!panel)return;
+  setTimeout(()=>{
+    if(!_entryDirty)return;
+    const active=document.activeElement;
+    if(active&&active.closest&&active.closest('.entries-panel'))return; // still inside, no commit
+    commitEntries();
+  },50);
+});
 function commitEntries(){
   if(!_entryDirty)return;
   _entryDirty=false;
@@ -2604,7 +2674,7 @@ async function _doRestoreVersion(vid){
     if(r.rows?.length){
       const data=typeof r.rows[0][0]==='string'?JSON.parse(r.rows[0][0]):r.rows[0][0];
       pushUndo();
-      S=data;saveS();if(S.currentLibraryId)scheduleSave();
+      S=data;normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();
       UI.modal=null;initUI();render();toast('Version restored');
     }
   }catch(e){toast('Could not restore version')}
@@ -2942,7 +3012,7 @@ function loadLocalSaveById(id){
   askConfirm({title:'Load saved meet?',message:'Your current working copy will be replaced.',confirmText:'Load',onConfirm:()=>{
     S=JSON.parse(JSON.stringify(item.schedule||{}));
     if(item.folder)S.libraryFolder=item.folder;
-    saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
+    normalizeAllDays(S);saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
   }});
 }
 function deleteLocalSaveById(id){
@@ -2979,7 +3049,7 @@ function loadLocalSave(i){
   askConfirm({title:'Load saved meet?',message:'Your current working copy will be replaced.',confirmText:'Load',onConfirm:()=>{
     S=JSON.parse(JSON.stringify(item.schedule||{}));
     if(item.folder)S.libraryFolder=item.folder;
-    saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
+    normalizeAllDays(S);saveS();UI.modal=null;initUI();render();toast('Loaded: '+item.name);
   }});
 }
 function deleteLocalSave(i){
@@ -3311,6 +3381,9 @@ function dl(html,type,name){const blob=new Blob([html],{type});const a=document.
 const ps=document.createElement('style');ps.textContent='@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}}';document.head.appendChild(ps);
 
 // ── BOOT ──────────────────────────────────────────────────────────────
+// Tighten any saved gaps between sessions (esp. Open Training → next session)
+// before the first paint, so the user sees a clean back-to-back layout on load.
+normalizeAllDays(S);saveS();
 if(S.currentLibraryId)startSync();
 render();
 
