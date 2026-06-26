@@ -51,7 +51,7 @@ button{cursor:pointer;border:none;background:none}
 .bar-meet:hover{background:rgba(255,255,255,.04)}
 .bar-meet-name{font-size:13px;font-weight:600;color:rgba(255,255,255,.95);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;letter-spacing:-.01em}
 .bar-meet-meta{font-size:11px;color:rgba(255,255,255,.4);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar-days{display:flex;align-items:center;gap:2px;padding:0 8px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;overflow-x:auto;max-width:42vw}
+.bar-days{display:flex;align-items:center;gap:2px;padding:0 8px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;overflow-x:auto;max-width:36vw}
 .bar-days::-webkit-scrollbar{display:none}
 .dp{height:30px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.55);transition:.14s;white-space:nowrap;flex-shrink:0;position:relative}
 .dp:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.9)}
@@ -59,8 +59,8 @@ button{cursor:pointer;border:none;background:none}
 .dp-add{width:30px;height:30px;border-radius:8px;font-size:16px;color:rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;transition:.14s}
 .dp-add:hover{background:rgba(255,255,255,.1);color:#fff}
 .dp.drop-active{background:rgba(74,222,128,.3);box-shadow:inset 0 0 0 2px #4ADE80}
-.bar-right{display:flex;align-items:center;gap:6px;padding:0 10px;flex-shrink:0}
-.bb{height:30px;padding:0 13px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.82);background:rgba(255,255,255,.09);transition:.14s;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.bar-right{display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0}
+.bb{height:30px;padding:0 10px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.82);background:rgba(255,255,255,.09);transition:.14s;white-space:nowrap;display:flex;align-items:center;gap:5px;flex-shrink:0}
 .bb:hover{background:rgba(255,255,255,.16);color:#fff}
 .bb svg{width:14px;height:14px}
 .bb.red{background:var(--red);color:#fff}
@@ -73,7 +73,7 @@ button{cursor:pointer;border:none;background:none}
 .bar-status.ready{background:rgba(74,222,128,.18);color:#86EFAC}
 .bar-status.published{background:rgba(56,189,248,.2);color:#7DD3FC}
 .bar-sep{width:1px;height:22px;background:rgba(255,255,255,.1);margin:0 2px}
-.bar-sync{display:flex;align-items:center;gap:6px;padding:0 14px 0 8px;flex-shrink:0}
+.bar-sync{display:flex;align-items:center;gap:6px;padding:0 10px 0 6px;flex-shrink:0}
 .sync-pip{width:7px;height:7px;border-radius:50%;background:#4ADE80;transition:.3s;flex-shrink:0;box-shadow:0 0 0 3px rgba(74,222,128,.15)}
 .sync-pip.saving{background:#FBBF24;box-shadow:0 0 0 3px rgba(251,191,36,.15)}
 .sync-pip.error{background:#F87171;box-shadow:0 0 0 3px rgba(248,113,113,.15)}
@@ -167,7 +167,7 @@ button{cursor:pointer;border:none;background:none}
 
 /* Event rows */
 .sc-events{padding:2px 0 4px}
-.sc-ev{display:flex;align-items:center;gap:11px;padding:10px 16px 10px 18px;border-top:1px solid var(--bd);transition:background .1s}
+.sc-ev{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 14px;border-top:1px solid var(--bd);transition:background .1s;min-width:0}
 .sc-ev:hover{background:var(--surf2)}
 .sc-ev.dragging{opacity:.4}
 .ev-handle{color:var(--tx3);font-size:13px;flex-shrink:0;opacity:.4;cursor:grab;line-height:1;letter-spacing:-2px}
@@ -190,7 +190,7 @@ button{cursor:pointer;border:none;background:none}
 .ev-splitbtn:hover:not(.on){background:var(--surf2);border-color:var(--bd3)}
 .ev-splitbtn.on{background:var(--split-bg);border-color:var(--split-bd);color:var(--split-tx)}
 .ev-splitbtn.rec{border-color:var(--split-bd);color:var(--split-tx);background:var(--split-bg)}
-.ev-time{font-size:11px;color:var(--tx2);white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:118px;text-align:right;font-weight:500}
+.ev-time{font-size:11px;color:var(--tx2);white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:100px;text-align:right;font-weight:500}
 .ev-remove{width:22px;height:22px;border-radius:5px;color:var(--tx3);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.1s}.ev-remove:hover{background:var(--final-bg);color:var(--final)}
 .ev-rm{width:22px;height:22px;border-radius:5px;color:var(--tx3);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.1s}
 .ev-rm:hover{background:var(--final-bg);color:var(--final)}
@@ -798,6 +798,33 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pp-ft-r{color:var(--gray);font-style:italic}
 @page{size:letter portrait;margin:0}
 @media print{body *{display:none}.pp-print-direct{display:block}}
+
+/* ════ RESPONSIVE: tighten for narrow viewports ════ */
+@media (max-width: 1400px) {
+  .bar-days { max-width: 32vw }
+  .bb { padding: 0 9px; font-size: 11.5px }
+  .ev-stat-lbl { font-size: 8.5px }
+}
+@media (max-width: 1280px) {
+  .bar-days { max-width: 28vw }
+  .bb { padding: 0 8px; font-size: 11px }
+  .bar-meet-meta { font-size: 10.5px }
+  .sync-lbl { display: none }
+  .bar-sync { padding: 0 8px 0 4px }
+  .sc-ev { gap: 7px; padding: 9px 10px 9px 12px }
+  .ev-time { min-width: 92px; font-size: 10.5px }
+  .ev-stat-lbl { display: none }
+  .ev-stat { min-width: auto }
+  .ev-handle { font-size: 11px }
+  .ev-splitbtn { padding: 0 7px; font-size: 9.5px }
+}
+@media (max-width: 1100px) {
+  .bar-meet-meta { display: none }
+  .bar-days { max-width: 30vw }
+  .ev-handle { display: none }
+  .sc-ev { gap: 6px; padding: 9px 10px 9px 12px }
+  .ev-time { min-width: 84px }
+}
 </style>
 </head>
 <body>
@@ -896,6 +923,7 @@ function ruUp(v,n){n=n||5;return Math.ceil(Number(v)/n)*n;}
 const pt=s=>{if(typeof s==='number')return s;const[h,m]=String(s||'00:00').split(':').map(Number);return(h||0)*60+(m||0)};
 const f24=m=>{m=Math.max(0,Math.round(m));return`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`};
 const f12=m=>{m=Math.max(0,Math.round(m));const h=Math.floor(m/60)%24,mn=m%60,ap=h>=12?'PM':'AM',h12=h%12||12;return`${h12}:${String(mn).padStart(2,'0')} ${ap}`};
+const f12r=(s,e)=>{s=Math.max(0,Math.round(s));e=Math.max(0,Math.round(e));const sh=Math.floor(s/60)%24,sm=s%60,eh=Math.floor(e/60)%24,em=e%60,sa=sh>=12?'PM':'AM',ea=eh>=12?'PM':'AM',s12=sh%12||12,e12=eh%12||12,sMM=String(sm).padStart(2,'0'),eMM=String(em).padStart(2,'0');return sa===ea?`${s12}:${sMM} – ${e12}:${eMM} ${ea}`:`${s12}:${sMM} ${sa} – ${e12}:${eMM} ${ea}`};
 const fdur=m=>{m=Math.round(m);if(m<60)return`${m}m`;const h=Math.floor(m/60),r=m%60;return r?`${h}h ${r}m`:`${h}h`};
 const fd1=n=>Number(n||0).toFixed(1);
 const isPlatform=a=>['Platform','10m','10-Meter'].includes(a);
@@ -1995,7 +2023,7 @@ function renderCard(sess,timed,warns){
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
-        <div class="sc-time-main">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}</div>
+        <div class="sc-time-main">${f12r(t.warmupStartMinutes,t.sessionEndMinutes)}</div>
         <div class="sc-time-sub">${fdur(t.sessionEndMinutes-t.warmupStartMinutes)} · ${sess.events.reduce((a,e)=>a+Number(e.finalDivers||e.projectedDivers||e.numberOfDivers||0),0)} athletes</div>
       </div>
       <div class="sc-actions">
@@ -2041,9 +2069,9 @@ function renderCardEvents(sess,t){
         <span class="ev-stat-lbl">divers</span>
       </div>
       ${ev.round&&ev.round!=='Custom Block'&&!ev._combined?`<span class="ev-badge ${roundCls}">${esc(ev.round)}</span>`:''}
-      ${split?`<span class="ev-badge split">Split</span>`:''}
       ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
-      <span class="ev-time">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</span>
+      ${split&&(isPlatform(ev.apparatus)||ev.round==='Final'||ev._combined)?`<span class="ev-badge split">Split</span>`:''}
+      <span class="ev-time">${f12r(ev.eventStartMinutes,ev.eventEndMinutes)}</span>
       <button class="ev-rm" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
     </div>`;
   }).join('')}</div>`;
