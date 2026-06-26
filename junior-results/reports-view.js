@@ -87,6 +87,10 @@
     // Cohort panel
     cohortStart: 'auto',    // auto = Regionals for A/B, Zones for C/D
     cohortPath:  'any',     // any = either path counted
+    cohortBreakBy: 'none',  // none | ageGroup | gender | region | zone | ewc | team — slice comparison
+
+    // Drill provenance grouping (used inside drill-down panel)
+    drillGroupBy: 'region',  // ageGroup | gender | region | zone | ewc | team
 
     // Scoring panel
     scoringStage:  'Zones',
@@ -550,6 +554,167 @@
     };
   }
 
+  /* ── Slice comparison (break funnel down by demographic) ─────────── */
+  const SLICE_FIELDS = {
+    none:      { label: 'None — combined funnel', getValue: (a) => null },
+    ageGroup:  { label: 'Age group',  getValue: (a) => a.ageGroup || '(unknown)' },
+    gender:    { label: 'Gender',     getValue: (a) => a.gender || '(unknown)' },
+    region:    { label: 'Region',     getValue: (a) => { const r = [...a.regions][0]; return r ? 'Region ' + r : '(unknown)'; } },
+    zone:      { label: 'Zone',       getValue: (a) => { const z = [...a.zones][0]; return z ? 'Zone ' + z : '(unknown)'; } },
+    ewc:       { label: 'E/W/C',      getValue: (a) => a.ewc || '(unknown)' },
+    team:      { label: 'Team',       getValue: (a) => a.team || '(unknown)' },
+  };
+
+  function buildSlicedCohort(d, sliceKey){
+    if (!sliceKey || sliceKey === 'none') return null;
+    const def = SLICE_FIELDS[sliceKey];
+    if (!def) return null;
+    const groups = new Map();
+    d.athletes.forEach(a => {
+      const v = def.getValue(a);
+      if (!groups.has(v)) groups.set(v, []);
+      groups.get(v).push(a);
+    });
+    const slices = [...groups.entries()].map(([value, athletes]) => {
+      const reachedZones = athletes.filter(a => a.zonEvents.length > 0);
+      const reachedEWC = athletes.filter(a => a.atEWCRegistered || a.qualifiedToEWC || a.qualifiedToNationals || a.atNationals);
+      const madeNats = athletes.filter(a => a.atNationals);
+      return {
+        value,
+        total: athletes.length,
+        reachedZones: reachedZones.length,
+        reachedEWC: reachedEWC.length,
+        madeNats: madeNats.length,
+        athletes,
+      };
+    });
+    // Sort: known values first by natural sort, "(unknown)" last
+    slices.sort((a, b) => {
+      const aUnk = a.value === '(unknown)', bUnk = b.value === '(unknown)';
+      if (aUnk && !bUnk) return 1;
+      if (bUnk && !aUnk) return -1;
+      return String(a.value).localeCompare(String(b.value), undefined, { numeric: true, sensitivity: 'base' });
+    });
+    return slices;
+  }
+
+  function renderSliceComparison(slices, total, sliceKey){
+    const sliceLabel = SLICE_FIELDS[sliceKey].label;
+    if (!slices.length) {
+      return `<div class="rpt-empty">No data to break down by ${esc(sliceLabel)}.</div>`;
+    }
+
+    // Find max total in any slice for bar scaling
+    const maxTotal = Math.max(...slices.map(s => s.total), 1);
+
+    // Comparison table
+    const tableRows = slices.map(s => {
+      const ratio = (n) => s.total > 0 ? Math.round(n / s.total * 100) : 0;
+      const sliceFilterKey = sliceKey === 'region' ? 'region' :
+                             sliceKey === 'zone' ? 'zone' :
+                             sliceKey;
+      // Strip "Region " / "Zone " prefixes when applying as filter
+      const rawValue = sliceKey === 'region' ? String(s.value).replace(/^Region\s+/, '') :
+                       sliceKey === 'zone'   ? String(s.value).replace(/^Zone\s+/, '') :
+                       s.value;
+      return `<tr class="cf-slice-row" onclick="window._rptFilter('${sliceFilterKey}', '${esc(rawValue)}')">
+        <td class="r-name"><strong>${esc(s.value)}</strong></td>
+        <td class="mono"><strong>${fmtNum(s.total)}</strong></td>
+        <td class="mono">${fmtNum(s.reachedZones)} <span class="cf-slice-pct">${ratio(s.reachedZones)}%</span></td>
+        <td class="mono">${fmtNum(s.reachedEWC)} <span class="cf-slice-pct">${ratio(s.reachedEWC)}%</span></td>
+        <td class="mono"><strong style="color:var(--q-direct)">${fmtNum(s.madeNats)}</strong> <span class="cf-slice-pct">${ratio(s.madeNats)}%</span></td>
+        <td class="mono cf-slice-conv">${ratio(s.madeNats)}%</td>
+      </tr>`;
+    }).join('');
+
+    // Mini-funnels grid (visual)
+    const mini = slices.map(s => {
+      const w0 = 100;
+      const w1 = s.total > 0 ? Math.max(8, Math.round(s.reachedZones / s.total * 100)) : 0;
+      const w2 = s.total > 0 ? Math.max(8, Math.round(s.reachedEWC / s.total * 100)) : 0;
+      const w3 = s.total > 0 ? Math.max(4, Math.round(s.madeNats / s.total * 100)) : 0;
+      const conv = s.total > 0 ? Math.round(s.madeNats / s.total * 100) : 0;
+      const sliceFilterKey = sliceKey === 'region' || sliceKey === 'zone' ? sliceKey : sliceKey;
+      const rawValue = sliceKey === 'region' ? String(s.value).replace(/^Region\s+/, '') :
+                       sliceKey === 'zone'   ? String(s.value).replace(/^Zone\s+/, '') :
+                       s.value;
+      return `<div class="cf-mini" onclick="window._rptFilter('${sliceFilterKey}', '${esc(rawValue)}')">
+        <div class="cf-mini-head">
+          <span class="cf-mini-label">${esc(s.value)}</span>
+          <span class="cf-mini-conv">${conv}% → Nat</span>
+        </div>
+        <div class="cf-mini-bars">
+          <div class="cf-mini-bar cf-mb-0" style="width:${w0}%" title="Started: ${s.total}"><span>${s.total}</span></div>
+          <div class="cf-mini-bar cf-mb-1" style="width:${w1}%" title="Reached Zones: ${s.reachedZones}"><span>${s.reachedZones}</span></div>
+          <div class="cf-mini-bar cf-mb-2" style="width:${w2}%" title="Reached E/W/C: ${s.reachedEWC}"><span>${s.reachedEWC}</span></div>
+          <div class="cf-mini-bar cf-mb-3" style="width:${w3}%" title="On Nat list: ${s.madeNats}"><span>${s.madeNats}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="rpt-h2">
+        <span class="rpt-h2-l">Funnel by ${esc(sliceLabel.toLowerCase())}</span>
+        <span class="rpt-h2-sub">Click any row or mini-funnel to filter the whole panel to that ${esc(sliceLabel.toLowerCase())}</span>
+      </div>
+
+      <div class="rpt-table-scroll">
+        <table class="rpt-table cf-slice-table">
+          <thead><tr>
+            <th>${esc(sliceLabel)}</th><th class="mono">Started</th><th class="mono">Reached Zones</th><th class="mono">Reached E/W/C</th><th class="mono">On Nat list</th><th class="mono">Conversion</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr>
+            <td class="r-name"><strong>Combined total</strong></td>
+            <td class="mono"><strong>${fmtNum(total)}</strong></td>
+            <td class="mono">${fmtNum(slices.reduce((a,b)=>a+b.reachedZones,0))}</td>
+            <td class="mono">${fmtNum(slices.reduce((a,b)=>a+b.reachedEWC,0))}</td>
+            <td class="mono">${fmtNum(slices.reduce((a,b)=>a+b.madeNats,0))}</td>
+            <td class="mono">${pct(slices.reduce((a,b)=>a+b.madeNats,0), total)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+
+      <div class="cf-mini-grid">${mini}</div>
+    `;
+  }
+
+  /* ── Provenance breakdown (used inside drill-down panel) ─────────── */
+  function buildProvenanceBuckets(athletes, sliceKey){
+    const def = SLICE_FIELDS[sliceKey] || SLICE_FIELDS.region;
+    const m = new Map();
+    athletes.forEach(a => {
+      const v = def.getValue(a);
+      m.set(v, (m.get(v) || 0) + 1);
+    });
+    const arr = [...m.entries()].map(([value, count]) => ({ value, count }));
+    arr.sort((a,b) => b.count - a.count || String(a.value).localeCompare(String(b.value), undefined, {numeric:true}));
+    return arr;
+  }
+
+  function renderProvenanceCard(athletes, sliceKey, title){
+    const buckets = buildProvenanceBuckets(athletes, sliceKey);
+    const total = athletes.length || 1;
+    const top = buckets.slice(0, 8);
+    const max = Math.max(...top.map(b => b.count), 1);
+    const rest = buckets.length - top.length;
+    const restCount = buckets.slice(8).reduce((a,b)=>a+b.count, 0);
+
+    return `<div class="cf-prov-card">
+      <div class="cf-prov-head">${esc(title)}</div>
+      <div class="cf-prov-rows">
+        ${top.map(b => `
+          <div class="cf-prov-row">
+            <span class="cf-prov-val" title="${esc(b.value)}">${esc(b.value)}</span>
+            <div class="cf-prov-bar-bg"><div class="cf-prov-bar" style="width:${Math.round(b.count/max*100)}%"></div></div>
+            <span class="cf-prov-n">${b.count}</span>
+            <span class="cf-prov-pct">${Math.round(b.count/total*100)}%</span>
+          </div>`).join('')}
+        ${rest > 0 ? `<div class="cf-prov-row cf-prov-row-rest"><span class="cf-prov-val">+ ${rest} more</span><span class="cf-prov-n">${restCount}</span><span class="cf-prov-pct">${Math.round(restCount/total*100)}%</span></div>` : ''}
+      </div>
+    </div>`;
+  }
+
   function renderCohortPanel(wrap){
     const d = buildCohortData();
     const desc = activeFilterDescription();
@@ -569,6 +734,8 @@
     const drops  = buildFunnelDrops(stages);
     const outcomes = buildOutcomeCards(d);
     const drill = rptState._cohortDrill || null;
+    const sliceKey = rptState.cohortBreakBy || 'none';
+    const slices = buildSlicedCohort(d, sliceKey);
 
     const madeNats = stages[3].athletes.length;
     const droppedOff = total - madeNats;
@@ -595,10 +762,21 @@
         </div>
       </div>
 
+      <!-- Break-by selector: pick a demographic dimension to slice the funnel -->
+      <div class="cf-slicer-bar">
+        <span class="cf-slicer-l">Break funnel down by:</span>
+        <div class="cf-slicer-opts">
+          ${Object.entries(SLICE_FIELDS).map(([k, def]) => `
+            <button class="cf-slicer-btn ${sliceKey===k?'is-active':''}" onclick="window._rptCohortBreakBy('${k}')">${esc(def.label.split(' — ')[0])}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      ${slices ? renderSliceComparison(slices, total, sliceKey) : `
       <!-- Pipeline funnel: stages with drop-offs -->
       <div class="rpt-h2">
         <span class="rpt-h2-l">Pipeline funnel</span>
-        <span class="rpt-h2-sub">Click any bar or drop-off to see who's there</span>
+        <span class="rpt-h2-sub">Click any bar or drop-off to see who's there. Use &ldquo;Break funnel down by&rdquo; above to compare slices side-by-side.</span>
       </div>
       <div class="cf-funnel">
         ${stages.map((s, i) => {
@@ -635,8 +813,9 @@
           </div>` : ''}`;
         }).join('')}
       </div>
+      `}
 
-      <!-- Outcome breakdown cards -->
+      <!-- Outcome breakdown cards (always shown) -->
       <div class="rpt-h2">
         <span class="rpt-h2-l">Outcome breakdown</span>
         <span class="rpt-h2-sub">Every athlete lands in exactly one category — click to see who</span>
@@ -659,7 +838,7 @@
       ${drill ? renderCohortDrillDown(d, stages, drops, outcomes, drill) : `
         <div class="cf-drill-prompt">
           <span class="cf-drill-prompt-icon">↑</span>
-          <span>Click a funnel bar, a drop-off, or an outcome card above to see the named list of athletes.</span>
+          <span>Click a funnel bar, a drop-off, or an outcome card above to see the named list of athletes — plus a geographic breakdown of where they come from.</span>
         </div>`}
 
       <div class="rpt-toolbar-row">
@@ -743,6 +922,17 @@
           <button class="rpt-export-btn rpt-export-btn-ghost" onclick="window._rptDrillClear()">✕ Clear</button>
         </div>
       </div>
+
+      <!-- Provenance breakdown: where do these athletes come from? -->
+      <div class="cf-prov-grid">
+        ${renderProvenanceCard(athletes, 'ageGroup', 'By age group')}
+        ${renderProvenanceCard(athletes, 'gender',   'By gender')}
+        ${renderProvenanceCard(athletes, 'region',   'By region')}
+        ${renderProvenanceCard(athletes, 'zone',     'By zone')}
+        ${renderProvenanceCard(athletes, 'ewc',      'By E/W/C')}
+        ${renderProvenanceCard(athletes, 'team',     'By team (top 8)')}
+      </div>
+
       <div class="rpt-table-scroll" style="max-height:520px">
         <table class="rpt-table">
           <thead><tr>
@@ -772,6 +962,11 @@
   };
   window._rptDrillClear = function(){
     rptState._cohortDrill = null;
+    renderReports();
+  };
+
+  window._rptCohortBreakBy = function(key){
+    rptState.cohortBreakBy = key || 'none';
     renderReports();
   };
 
@@ -2549,6 +2744,50 @@ body.rpt-stage-active .rpt-section { padding: 18px 24px 80px; }
 .sc-single-place { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; }
 .sc-single-mean { font-family: var(--f-display); font-size: 48px; font-weight: 700; color: var(--navy); margin-top: 6px; line-height: 1; }
 .sc-single-meta { font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+
+/* === Cohort slicer (break-by selector) === */
+.cf-slicer-bar { display: flex; align-items: center; gap: 14px; padding: 12px 16px; margin: 4px 0 18px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); flex-wrap: wrap; }
+.cf-slicer-l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.cf-slicer-opts { display: flex; gap: 4px; flex-wrap: wrap; }
+.cf-slicer-btn { background: var(--surface); border: 1px solid var(--line); padding: 6px 12px; font-size: 12px; font-family: var(--f-ui); color: var(--ink-2); cursor: pointer; border-radius: 14px; transition: all .12s; font-weight: 500; }
+.cf-slicer-btn:hover { border-color: var(--navy); color: var(--navy); }
+.cf-slicer-btn.is-active { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 700; }
+
+/* === Slice comparison table === */
+.cf-slice-table tbody tr.cf-slice-row { cursor: pointer; }
+.cf-slice-table tbody tr.cf-slice-row:hover td { background: var(--surface-2); }
+.cf-slice-pct { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); margin-left: 4px; }
+.cf-slice-conv { color: var(--q-direct); font-weight: 700; }
+.cf-slice-table tfoot td { background: var(--surface-2); border-top: 2px solid var(--navy); font-family: var(--f-mono); color: var(--ink); font-weight: 600; }
+
+/* === Mini-funnels grid === */
+.cf-mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 16px 0 6px; }
+.cf-mini { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; transition: all .12s; box-shadow: var(--sh-xs); }
+.cf-mini:hover { border-color: var(--navy); transform: translateY(-1px); box-shadow: var(--sh-sm); }
+.cf-mini-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; gap: 8px; }
+.cf-mini-label { font-family: var(--f-display); font-size: 14px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .02em; }
+.cf-mini-conv { font-family: var(--f-mono); font-size: 11px; color: var(--q-direct); font-weight: 700; background: var(--q-direct-bg); padding: 2px 7px; border-radius: 10px; }
+.cf-mini-bars { display: flex; flex-direction: column; gap: 3px; }
+.cf-mini-bar { height: 16px; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; min-width: 30px; transition: width .25s; }
+.cf-mini-bar span { font-family: var(--f-mono); font-size: 10.5px; font-weight: 700; }
+.cf-mini-bar.cf-mb-0 { background: linear-gradient(90deg, var(--navy), #2c3899); color: #fff; }
+.cf-mini-bar.cf-mb-1 { background: linear-gradient(90deg, var(--pool), #00b6e8); color: #fff; }
+.cf-mini-bar.cf-mb-2 { background: linear-gradient(90deg, #6daed8, var(--sky)); color: var(--navy); }
+.cf-mini-bar.cf-mb-3 { background: linear-gradient(90deg, var(--q-direct), #2ab86a); color: #fff; }
+
+/* === Provenance breakdown (in drill-down) === */
+.cf-prov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 16px 20px; background: linear-gradient(180deg, var(--surface-2) 0%, transparent 100%); border-bottom: 1px solid var(--line); }
+.cf-prov-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.cf-prov-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--navy); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-2); }
+.cf-prov-rows { display: flex; flex-direction: column; gap: 4px; }
+.cf-prov-row { display: grid; grid-template-columns: 1fr 60px 36px 38px; gap: 8px; align-items: center; font-size: 11.5px; }
+.cf-prov-val { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-prov-bar-bg { height: 8px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
+.cf-prov-bar { height: 100%; background: linear-gradient(90deg, var(--navy), var(--pool)); border-radius: 4px; }
+.cf-prov-n { font-family: var(--f-mono); font-size: 11px; color: var(--ink); font-weight: 700; text-align: right; }
+.cf-prov-pct { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); text-align: right; }
+.cf-prov-row-rest .cf-prov-val { font-style: italic; color: var(--ink-3); }
+.cf-prov-row-rest { grid-template-columns: 1fr 36px 38px; }
 `;
     document.head.appendChild(s);
   }
