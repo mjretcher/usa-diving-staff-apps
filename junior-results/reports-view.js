@@ -553,89 +553,157 @@
   function renderCohortPanel(wrap){
     const d = buildCohortData();
     const desc = activeFilterDescription();
-
     const total = d.total;
 
-    /* Color-coded bucket cards */
-    const card = (key, label, hint, color) => {
-      const arr = d.buckets[key];
-      if (!arr.length) return '';
-      return `<div class="cohort-card cohort-${color}" onclick="window._rptCohortBucket('${key}')">
-        <div class="cohort-card-val">${fmtNum(arr.length)}</div>
-        <div class="cohort-card-pct">${pct(arr.length, total)}</div>
-        <div class="cohort-card-label">${esc(label)}</div>
-        <div class="cohort-card-hint">${esc(hint)}</div>
-      </div>`;
-    };
-
-    const cards = `
-      <div class="cohort-cards">
-        ${card('madeNationals_direct',  'Made Nationals — Zone direct', 'Top-3 at zone event', 'green')}
-        ${card('madeNationals_viaEWC',  'Made Nationals — via E/W/C',   'Registered + on Nat list', 'green')}
-        ${card('madeNationals_other',   'Made Nationals — other',       'HPS / kept-invited / non-zone path', 'green')}
-        ${card('atEWC_notNat',          'At E/W/C — not yet Nat',       'Registered, decision pending', 'blue')}
-        ${card('qualifiedEWC_noReg',    'Qualified E/W/C — did not register', 'Zone result said EWC, but no entry', 'amber')}
-        ${card('atZones_outOfNat',      'Competed Zones — out of Nat',  'No advancement', 'gray')}
-        ${card('qualifiedRegOnly_DNS',  'Qualified Regionals — did not compete at Zones', 'Withdrawal / no-show', 'amber')}
-        ${card('regionalsOnly_NoQual',  'Regionals only — did not qualify', 'End of road at Regionals', 'gray')}
-        ${card('nonDisplacing_path',    'Non-displacing track',         'Foreign · dual · HPS · YMCA', 'purple')}
-      </div>`;
-
-    const bucketTable = renderCohortBucketTable(d, rptState._cohortDrill || 'madeNationals_direct');
-
-    wrap.innerHTML = `
-      <div class="rpt-section">
-        <div class="rpt-section-title">
-          Cohort tracker
-          <button class="rpt-export-btn" onclick="window._rptExportCohort()">Download CSV</button>
+    if (total === 0) {
+      wrap.innerHTML = `<div class="rpt-section">
+        <div class="rpt-empty">
+          <strong>No athletes match the current filters.</strong><br>
+          <span style="font-size:12px">Try clearing some filter chips at the top of the page.</span>
         </div>
+      </div>`;
+      return;
+    }
 
-        <div class="cohort-summary">
-          <div class="cohort-summary-block">
-            <div class="cohort-summary-label">Cohort definition</div>
-            <div class="cohort-summary-value">${esc(desc)}</div>
-            <div class="cohort-summary-hint">Entry stage: ${esc(d.entryStage)}
-              ${rptState.ageGroup && GROUPS_DIRECT_Z.has(rptState.ageGroup) ? ' (Groups C/D skip Regionals)' : ''}
+    const stages = buildFunnelStages(d);
+    const drops  = buildFunnelDrops(stages);
+    const outcomes = buildOutcomeCards(d);
+    const drill = rptState._cohortDrill || null;
+
+    const madeNats = stages[3].athletes.length;
+    const droppedOff = total - madeNats;
+
+    wrap.innerHTML = `<div class="rpt-section">
+
+      <!-- Hero summary: 3 big blocks -->
+      <div class="cohort-hero">
+        <div class="cohort-hero-block primary">
+          <div class="cohort-hero-eyebrow">Tracking this cohort</div>
+          <div class="cohort-hero-num">${fmtNum(total)}</div>
+          <div class="cohort-hero-l">athletes through the pipeline</div>
+          <div class="cohort-hero-sub">${esc(desc)} · entry stage: ${esc(d.entryStage)}${rptState.ageGroup && GROUPS_DIRECT_Z.has(rptState.ageGroup) ? ' (C/D skip Regionals)' : ''}</div>
+        </div>
+        <div class="cohort-hero-block">
+          <div class="cohort-hero-eyebrow">Made the Nationals list</div>
+          <div class="cohort-hero-num good">${fmtNum(madeNats)}</div>
+          <div class="cohort-hero-l">${pct(madeNats, total)} of cohort</div>
+        </div>
+        <div class="cohort-hero-block">
+          <div class="cohort-hero-eyebrow">Did not advance to Nationals</div>
+          <div class="cohort-hero-num neutral">${fmtNum(droppedOff)}</div>
+          <div class="cohort-hero-l">${pct(droppedOff, total)} of cohort</div>
+        </div>
+      </div>
+
+      <!-- Pipeline funnel: stages with drop-offs -->
+      <div class="rpt-h2">
+        <span class="rpt-h2-l">Pipeline funnel</span>
+        <span class="rpt-h2-sub">Click any bar or drop-off to see who's there</span>
+      </div>
+      <div class="cf-funnel">
+        ${stages.map((s, i) => {
+          const widthPct = total > 0 ? Math.max(10, Math.round(s.athletes.length / total * 100)) : 0;
+          const isDrill = drill === 'stage_' + s.id;
+          const drop = drops[i];
+          return `
+          <div class="cf-stage cf-stage-${i} ${isDrill?'is-drill':''}" onclick="window._rptDrillFunnel('stage_${s.id}')">
+            <div class="cf-stage-info">
+              <span class="cf-stage-step">${i+1}</span>
+              <div>
+                <div class="cf-stage-title">${esc(s.label)}</div>
+                <div class="cf-stage-sub">${esc(s.sub)}</div>
+              </div>
+            </div>
+            <div class="cf-stage-bar-wrap">
+              <div class="cf-stage-bar cf-bar-${i}" style="width:${widthPct}%">
+                <span class="cf-stage-n">${fmtNum(s.athletes.length)}</span>
+              </div>
+              <span class="cf-stage-pct">${pct(s.athletes.length, total)}</span>
             </div>
           </div>
-          <div class="cohort-summary-block">
-            <div class="cohort-summary-label">Cohort size</div>
-            <div class="cohort-summary-value">${fmtNum(total)} athletes</div>
-            <div class="cohort-summary-hint">Click a card below to see the named list</div>
-          </div>
-          <div class="cohort-summary-block">
-            <div class="cohort-summary-label">Made Nationals</div>
-            <div class="cohort-summary-value">${fmtNum(d.buckets.madeNationals_direct.length + d.buckets.madeNationals_viaEWC.length + d.buckets.madeNationals_other.length)}</div>
-            <div class="cohort-summary-hint">${pct(d.buckets.madeNationals_direct.length + d.buckets.madeNationals_viaEWC.length + d.buckets.madeNationals_other.length, total)} of cohort</div>
-          </div>
-        </div>
+          ${drop && drop.athletes.length > 0 ? `
+          <div class="cf-drop ${drill==='drop_'+drop.id?'is-drill':''}" onclick="window._rptDrillFunnel('drop_${drop.id}')">
+            <span class="cf-drop-spacer"></span>
+            <div class="cf-drop-arrow-wrap">
+              <span class="cf-drop-arrow">↓</span>
+            </div>
+            <div class="cf-drop-info">
+              <span class="cf-drop-n">−${fmtNum(drop.athletes.length)} athletes</span>
+              <span class="cf-drop-l">${esc(drop.label)}</span>
+            </div>
+            <span class="cf-drop-pct">${pct(drop.athletes.length, s.athletes.length)} dropped here</span>
+          </div>` : ''}`;
+        }).join('')}
+      </div>
 
-        ${total === 0 ? '<div class="rpt-empty">No athletes match this cohort definition.</div>' : ''}
+      <!-- Outcome breakdown cards -->
+      <div class="rpt-h2">
+        <span class="rpt-h2-l">Outcome breakdown</span>
+        <span class="rpt-h2-sub">Every athlete lands in exactly one category — click to see who</span>
+      </div>
+      <div class="cf-outcomes">
+        ${outcomes.map(o => `
+          <div class="cf-outcome cf-outcome-${o.color} ${drill==='outcome_'+o.key?'is-drill':''}" onclick="window._rptDrillOutcome('${o.key}')">
+            <div class="cf-outcome-head">
+              <span class="cf-outcome-n">${fmtNum(o.count)}</span>
+              <span class="cf-outcome-pct">${o.pct}%</span>
+            </div>
+            <div class="cf-outcome-title">${esc(o.label)}</div>
+            <div class="cf-outcome-hint">${esc(o.hint)}</div>
+            <div class="cf-outcome-bar-wrap">
+              <div class="cf-outcome-bar cf-outcome-bar-${o.color}" style="width:${Math.max(2, o.pct)}%"></div>
+            </div>
+          </div>`).join('')}
+      </div>
 
-        ${total > 0 ? cards : ''}
+      ${drill ? renderCohortDrillDown(d, stages, drops, outcomes, drill) : `
+        <div class="cf-drill-prompt">
+          <span class="cf-drill-prompt-icon">↑</span>
+          <span>Click a funnel bar, a drop-off, or an outcome card above to see the named list of athletes.</span>
+        </div>`}
 
-        ${total > 0 ? bucketTable : ''}
-      </div>`;
+      <div class="rpt-toolbar-row">
+        <button class="rpt-export-btn" onclick="window._rptExportCohort()">Download full cohort CSV</button>
+      </div>
+    </div>`;
   }
 
-  function renderCohortBucketTable(d, key){
-    const arr = d.buckets[key] || [];
-    if (!arr.length) return `<div class="rpt-empty">No athletes in this bucket.</div>`;
+  function renderCohortDrillDown(d, stages, drops, outcomes, drill){
+    let title = '', sub = '', athletes = [], context = '';
 
-    const labelMap = {
-      madeNationals_direct:  'Made Nationals — Zone direct',
-      madeNationals_viaEWC:  'Made Nationals — via E/W/C',
-      madeNationals_other:   'Made Nationals — other path',
-      atEWC_notNat:          'At E/W/C — not yet on Nat list',
-      qualifiedEWC_noReg:    'Qualified E/W/C — did not register',
-      atZones_outOfNat:      'Competed Zones — out of Nationals',
-      qualifiedRegOnly_DNS:  'Qualified Regionals — did not compete at Zones',
-      regionalsOnly_NoQual:  'Regionals only — did not qualify out',
-      nonDisplacing_path:    'Non-displacing track',
-    };
+    if (drill.startsWith('stage_')) {
+      const stage = stages.find(s => 'stage_' + s.id === drill);
+      if (stage) {
+        title = stage.label;
+        sub = stage.sub;
+        athletes = stage.athletes;
+        context = `Stage ${stages.indexOf(stage)+1} of 4`;
+      }
+    } else if (drill.startsWith('drop_')) {
+      const dropId = drill.replace(/^drop_/, '');
+      const drop = drops.find(x => x.id === dropId);
+      if (drop) {
+        title = 'Dropped off: ' + drop.label;
+        sub = `Between ${drop.from} → ${drop.to}`;
+        athletes = drop.athletes;
+        context = 'Drop-off';
+      }
+    } else if (drill.startsWith('outcome_')) {
+      const okey = drill.replace(/^outcome_/, '');
+      const outc = outcomes.find(o => o.key === okey);
+      if (outc) {
+        title = outc.label;
+        sub = outc.hint;
+        athletes = outc.athletes;
+        context = 'Outcome category';
+      }
+    }
 
-    const sorted = arr.slice().sort((a,b)=>a.name.localeCompare(b.name));
+    if (!athletes.length) {
+      return `<div class="cf-drill"><div class="cf-drill-head"><div><div class="cf-drill-eyebrow">${esc(context)}</div><div class="cf-drill-title">${esc(title)}</div></div><div class="cf-drill-actions"><button class="rpt-export-btn" onclick="window._rptDrillClear()">Clear selection</button></div></div><div class="cf-drill-empty">No athletes in this slice.</div></div>`;
+    }
 
+    const sorted = athletes.slice().sort((a,b)=>a.name.localeCompare(b.name));
     const rows = sorted.map(a => {
       const regEv = a.regEvents.map(e => `${esc(e.key)} #${esc(String(e.place||'?'))}`).join(' · ') || '—';
       const zonEv = a.zonEvents.map(e => {
@@ -643,6 +711,8 @@
         return `<span class="badge ${tag}">${esc(e.key)} #${esc(String(e.place||'?'))}</span>`;
       }).join(' ') || '—';
       const status = [];
+      if (a.atNationals) status.push('<span class="badge badge-green">Nat</span>');
+      if (a.atEWCRegistered) status.push('<span class="badge badge-blue">E/W/C</span>');
       if (a.hps) status.push('<span class="badge badge-purple">HPS</span>');
       if (a.ymca) status.push('<span class="badge badge-pool">YMCA</span>');
       if (a.foreign) status.push('<span class="badge badge-red">Foreign</span>');
@@ -650,32 +720,64 @@
       const dm = a.diveMeetsId ? `<a class="ext-link" target="_blank" rel="noopener" href="https://www.divemeets.com/profile.php?id=${esc(a.diveMeetsId)}">${esc(a.diveMeetsId)}</a>` : '';
 
       return `<tr>
-        <td class="r-name">${esc(a.name)} ${status.join(' ')}</td>
+        <td class="r-name">${esc(a.name)}</td>
+        <td>${status.join(' ')||'—'}</td>
         <td>${dm}</td>
         <td>${esc(a.team || '—')}</td>
         <td>${esc(a.ageGroup||'')} ${esc(a.gender||'')}</td>
-        <td>${[...a.regions].map(x => 'R'+x).join(', ')||'—'} · ${[...a.zones].map(x => 'Z'+x).join(', ')||'—'}</td>
+        <td class="small">${[...a.regions].map(x => 'R'+x).join(', ')||'—'} · ${[...a.zones].map(x => 'Z'+x).join(', ')||'—'}</td>
         <td>${regEv}</td>
         <td>${zonEv}</td>
       </tr>`;
     }).join('');
 
-    return `<div class="rpt-subsection">
-      <div class="rpt-subsection-title">${esc(labelMap[key]||'Bucket')} <span class="rpt-pill">${arr.length}</span></div>
-      <table class="rpt-table"><thead><tr>
-        <th>Athlete</th><th>DiveMeets</th><th>Team</th><th>Group</th><th>R · Z</th><th>Regionals</th><th>Zones</th>
-      </tr></thead><tbody>${rows}</tbody></table>
+    return `<div class="cf-drill" id="cf-drill-anchor">
+      <div class="cf-drill-head">
+        <div>
+          <div class="cf-drill-eyebrow">${esc(context)}</div>
+          <div class="cf-drill-title">${esc(title)}</div>
+          <div class="cf-drill-hint">${esc(sub)} — <strong>${fmtNum(athletes.length)} athletes</strong> (${pct(athletes.length, d.total)} of cohort)</div>
+        </div>
+        <div class="cf-drill-actions">
+          <button class="rpt-export-btn" onclick="window._rptExportDrill('${esc(drill)}')">Download this list</button>
+          <button class="rpt-export-btn rpt-export-btn-ghost" onclick="window._rptDrillClear()">✕ Clear</button>
+        </div>
+      </div>
+      <div class="rpt-table-scroll" style="max-height:520px">
+        <table class="rpt-table">
+          <thead><tr>
+            <th>Athlete</th><th>Flags</th><th>DiveMeets</th><th>Team</th><th>Group</th><th>R · Z</th><th>Regionals</th><th>Zones</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>`;
   }
 
-  window._rptCohortBucket = function(key){
+  window._rptDrillFunnel = function(key){
     rptState._cohortDrill = key;
+    renderReports();
+    setTimeout(() => {
+      const el = document.getElementById('cf-drill-anchor');
+      if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 60);
+  };
+  window._rptDrillOutcome = function(key){
+    rptState._cohortDrill = 'outcome_' + key;
+    renderReports();
+    setTimeout(() => {
+      const el = document.getElementById('cf-drill-anchor');
+      if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 60);
+  };
+  window._rptDrillClear = function(){
+    rptState._cohortDrill = null;
     renderReports();
   };
 
   window._rptExportCohort = function(){
     const d = buildCohortData();
-    const lines = ['Bucket,Athlete,DiveMeetsID,Team,AgeGroup,Gender,Regions,Zones,RegEvents,ZoneEvents'];
+    const lines = ['Bucket,Athlete,DiveMeetsID,Team,AgeGroup,Gender,Regions,Zones,RegEvents,ZoneEvents,E/W/C Registered,On Nat List'];
     Object.entries(d.buckets).forEach(([k, arr]) => {
       arr.forEach(a => {
         lines.push([
@@ -683,10 +785,35 @@
           [...a.regions].join('|'), [...a.zones].join('|'),
           a.regEvents.map(e => `${e.key}#${e.place}`).join('|'),
           a.zonEvents.map(e => `${e.key}#${e.place}`).join('|'),
+          a.atEWCRegistered ? 'Yes' : '',
+          a.atNationals ? 'Yes' : '',
         ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
       });
     });
     downloadCSV(lines.join('\n'), 'cohort-tracker.csv');
+  };
+
+  window._rptExportDrill = function(drill){
+    const d = buildCohortData();
+    const stages = buildFunnelStages(d);
+    const drops = buildFunnelDrops(stages);
+    const outcomes = buildOutcomeCards(d);
+    let athletes = [], label = drill;
+    if (drill.startsWith('stage_')) { const s = stages.find(x => 'stage_'+x.id === drill); if (s) { athletes = s.athletes; label = s.label; } }
+    else if (drill.startsWith('drop_')) { const id = drill.replace(/^drop_/,''); const dr = drops.find(x => x.id === id); if (dr) { athletes = dr.athletes; label = dr.label; } }
+    else if (drill.startsWith('outcome_')) { const okey = drill.replace(/^outcome_/,''); const o = outcomes.find(x => x.key === okey); if (o) { athletes = o.athletes; label = o.label; } }
+    const lines = ['# ' + label.replace(/[\r\n,]/g,' '), 'Athlete,DiveMeetsID,Team,AgeGroup,Gender,Regions,Zones,E/W/C Registered,On Nat List,RegEvents,ZoneEvents'];
+    athletes.forEach(a => {
+      lines.push([
+        a.name, a.diveMeetsId, a.team, a.ageGroup, a.gender,
+        [...a.regions].join('|'), [...a.zones].join('|'),
+        a.atEWCRegistered ? 'Yes' : '',
+        a.atNationals ? 'Yes' : '',
+        a.regEvents.map(e => `${e.key}#${e.place}`).join('|'),
+        a.zonEvents.map(e => `${e.key}#${e.place}`).join('|'),
+      ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+    });
+    downloadCSV(lines.join('\n'), `cohort-drill-${drill.replace(/[^a-z0-9_]/gi,'_')}.csv`);
   };
 
   /* ====================================================================
@@ -1690,6 +1817,168 @@
     URL.revokeObjectURL(a.href);
   }
 
+  /* ── Chrome control (hide main app's irrelevant view-tabs / sidebar) ── */
+  function applyReportsChrome(){
+    document.body.classList.add('rpt-stage-active');
+  }
+  function unwindReportsChrome(){
+    document.body.classList.remove('rpt-stage-active');
+  }
+  function setupStageWatcher(){
+    if (window._rptStageWatcher) return;
+    const tick = () => {
+      try {
+        let isReports = false;
+        // Prefer the app's state object
+        if (typeof state !== 'undefined' && state && typeof state.stage === 'string') {
+          const s = state.stage.toLowerCase();
+          isReports = s === 'reports' || s === 'analytics' || s.includes('report');
+        }
+        // Fallback: look at the active stage-nav button
+        if (!isReports) {
+          const nav = document.getElementById('stageNav');
+          if (nav) {
+            const active = nav.querySelector('.is-active, .active, [aria-current="page"], [aria-pressed="true"]');
+            const txt = (active?.textContent || '').toLowerCase();
+            if (txt.includes('report') || txt.includes('analytics')) isReports = true;
+          }
+        }
+        if (isReports) applyReportsChrome(); else unwindReportsChrome();
+      } catch (e) { /* ignore */ }
+    };
+    window._rptStageWatcher = setInterval(tick, 250);
+    tick();
+  }
+
+  /* ── Top header (panel tabs + filter chips) ─────────────────── */
+  const PANELS = [
+    ['flow',         'Pipeline',          '📊'],
+    ['cohort',       'Cohort tracker',    '🎯'],
+    ['scoring',      'Scoring',           '📈'],
+    ['breakdowns',   'Breakdowns',        '🗂️'],
+    ['displacement', 'Displacements',     '↔️'],
+    ['status',       'Special status',    '🛡️'],
+  ];
+
+  function buildTopHeader(){
+    const tabs = PANELS.map(([k,l,ic]) =>
+      `<button class="rpt-toptab ${rptState.panel===k?'is-active':''}" onclick="window._rptPanel('${k}')">
+         <span class="rpt-toptab-ic">${ic}</span><span>${esc(l)}</span>
+       </button>`).join('');
+
+    return `<div class="rpt-top">
+      <div class="rpt-top-row1">
+        <span class="rpt-top-eyebrow">Analytics &amp; Reports</span>
+        <span class="rpt-top-meta">${esc(activeFilterDescription())}</span>
+      </div>
+      <div class="rpt-top-row2">${tabs}</div>
+      <div class="rpt-top-row3">${buildFilterChips()}</div>
+    </div>`;
+  }
+
+  function buildFilterChips(){
+    const all = allResults();
+    const opts = (vals) => [...new Set(vals.filter(Boolean))].sort((a,b) => {
+      const na = Number(a), nb = Number(b);
+      return (Number.isFinite(na) && Number.isFinite(nb)) ? na - nb : String(a).localeCompare(String(b));
+    });
+
+    const fields = [
+      {key:'ageGroup',   label:'Age group',  opts:opts(all.map(r=>r.ageGroup)),  allLabel:'All ages'},
+      {key:'gender',     label:'Gender',     opts:opts(all.map(r=>r.gender)),    allLabel:'All'},
+      {key:'discipline', label:'Board',      opts:opts(all.map(r=>r.discipline)),allLabel:'All boards'},
+      {key:'region',     label:'Region',     opts:opts(all.map(r=>r.region)),    allLabel:'All regions'},
+      {key:'zone',       label:'Zone',       opts:opts(all.map(r=>r.zone)),      allLabel:'All zones'},
+      {key:'ewc',        label:'E/W/C',      opts:opts(all.map(r=>r.ewc)),       allLabel:'All'},
+      {key:'team',       label:'Team',       opts:opts(all.map(r=>r.team)),      allLabel:'All teams'},
+    ];
+
+    const chips = fields.map(f => {
+      const val = rptState[f.key];
+      const active = val ? 'is-active' : '';
+      return `<div class="rpt-chip ${active}">
+        <span class="rpt-chip-l">${esc(f.label)}</span>
+        <select class="rpt-chip-s" onchange="window._rptFilter('${f.key}',this.value)">
+          <option value="">${esc(f.allLabel)}</option>
+          ${f.opts.map(o=>`<option value="${esc(o)}" ${val===String(o)?'selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+        ${val ? `<button class="rpt-chip-x" onclick="event.stopPropagation();window._rptFilter('${f.key}','')" title="Clear ${esc(f.label)}">✕</button>` : ''}
+      </div>`;
+    }).join('');
+
+    const activeCount = activeFilterCount();
+    const clearBtn = activeCount > 0
+      ? `<button class="rpt-chip-clear" onclick="window._rptClear()">Clear all (${activeCount})</button>`
+      : `<span class="rpt-chip-hint">No filters — showing all athletes</span>`;
+
+    return chips + clearBtn;
+  }
+
+  /* ── Funnel data builders (used by Cohort Tracker) ──────────── */
+  function buildFunnelStages(d){
+    const all = d.athletes;
+    const reachedZones = all.filter(a => a.zonEvents.length > 0);
+    const reachedEWC = all.filter(a =>
+      a.atEWCRegistered || a.qualifiedToEWC || a.qualifiedToNationals || a.atNationals
+    );
+    const madeNationals = all.filter(a => a.atNationals);
+
+    const startLabel = 'Started in the cohort';
+    const startSub = d.entryStage === 'Zones'
+      ? 'direct to Zones (Groups C/D)'
+      : 'most enter at Regionals';
+
+    return [
+      { id:'start',     label:startLabel,               sub:startSub,                                  athletes:all },
+      { id:'zones',     label:'Competed at Zones',      sub:'showed up at the Zone meet',              athletes:reachedZones },
+      { id:'ewc',       label:'Reached E/W/C territory',sub:'qualified to or registered at E/W/C',     athletes:reachedEWC },
+      { id:'nationals', label:'On the Jr Nationals list',sub:'the final destination',                  athletes:madeNationals },
+    ];
+  }
+
+  function buildFunnelDrops(stages){
+    const drops = [];
+    const dropLabels = [
+      'did not make it to Zones — finished at Regionals or did not show',
+      'competed at Zones but did not advance to E/W/C tier',
+      'reached E/W/C tier but did not make the Nationals list',
+    ];
+    for (let i = 0; i < stages.length - 1; i++) {
+      const a = stages[i], b = stages[i+1];
+      const inB = new Set(b.athletes.map(x => x.key));
+      const dropped = a.athletes.filter(x => !inB.has(x.key));
+      drops.push({
+        id: `${a.id}_${b.id}`,
+        from: a.id, to: b.id,
+        label: dropLabels[i] || `dropped between ${a.label} and ${b.label}`,
+        athletes: dropped,
+      });
+    }
+    return drops;
+  }
+
+  function buildOutcomeCards(d){
+    const total = d.total || 1;
+    const b = d.buckets;
+    const all = [
+      { key:'madeNationals_direct',  label:'Direct to Nationals',                      hint:'Top-3 at zone event',                        color:'green' },
+      { key:'madeNationals_viaEWC',  label:'Nationals via E/W/C',                      hint:'Registered + on Nat list',                   color:'green' },
+      { key:'madeNationals_other',   label:'Nationals (other path)',                   hint:'HPS · kept-invited',                         color:'green' },
+      { key:'atEWC_notNat',          label:'At E/W/C — not yet on Nat list',           hint:'Registered, decision pending',               color:'blue'  },
+      { key:'qualifiedEWC_noReg',    label:'Qualified to E/W/C — did not register',    hint:'Zone said yes, no E/W/C entry',              color:'amber' },
+      { key:'atZones_outOfNat',      label:'Competed Zones — out',                     hint:'No advancement',                             color:'gray'  },
+      { key:'qualifiedRegOnly_DNS',  label:'Qualified at Regionals — DNS at Zones',    hint:'Withdrawal / no-show',                       color:'amber' },
+      { key:'regionalsOnly_NoQual',  label:'Regionals only — no qualification',        hint:'End of road at Regionals',                   color:'gray'  },
+      { key:'nonDisplacing_path',    label:'Non-displacing track',                     hint:'Foreign · dual · HPS · YMCA',                color:'purple'},
+    ];
+    return all.map(o => ({
+      ...o,
+      count: b[o.key].length,
+      pct: Math.round(b[o.key].length / total * 100),
+      athletes: b[o.key],
+    })).filter(o => o.count > 0);
+  }
+
   /* ── Sidebar (panel switcher + filters) ─────────────────────── */
   function renderSidebar(){
     const el = $('eventList');
@@ -1769,17 +2058,15 @@
   /* ── Top-level render entry point ───────────────────────────── */
   function renderReports(){
     pullMainFilters();
+    applyReportsChrome();
+    setupStageWatcher();
+
     const wrap = $('tableWrap');
     const ctx  = $('resultsContext');
     if (!wrap) return;
 
+    if (ctx) ctx.innerHTML = buildTopHeader();
     renderSidebar();
-
-    if (ctx) ctx.innerHTML = `
-      <div class="context-title-block">
-        <strong>Analytics &amp; Reports</strong>
-        <span>Pipeline · cohorts · scoring · breakdowns · displacement · special status</span>
-      </div>`;
 
     if (rptState.panel === 'flow')              renderFlowPanel(wrap);
     else if (rptState.panel === 'cohort')       renderCohortPanel(wrap);
@@ -1919,6 +2206,136 @@
 .gm-bar{display:flex;height:14px;background:var(--surface-2);border-radius:7px;overflow:hidden;width:160px}
 .gm-bar-b{background:var(--pool);height:100%}
 .gm-bar-g{background:var(--red);height:100%}
+
+/* === Reports stage chrome (hide dead main-app UI) === */
+body.rpt-stage-active .event-panel,
+body.rpt-stage-active .results-toolbar,
+body.rpt-stage-active .kpi-row { display: none !important; }
+body.rpt-stage-active .workspace { grid-template-columns: 1fr !important; gap: 0 !important; }
+body.rpt-stage-active .results-panel { width: 100% }
+body.rpt-stage-active .results-context { padding: 0 !important; margin: 0 !important; background: transparent !important; border: none !important; }
+body.rpt-stage-active .table-wrap { padding: 0 !important; background: transparent !important; }
+
+/* === Top header (panel tabs + filter chips) === */
+.rpt-top { padding: 14px 24px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.rpt-top-row1 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.rpt-top-eyebrow { font-family: var(--f-display); font-size: 20px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .03em; }
+.rpt-top-meta { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
+
+.rpt-top-row2 { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 -24px; padding: 0 24px; }
+.rpt-toptab { background: transparent; border: 0; padding: 11px 16px; font-size: 13px; font-family: var(--f-ui); color: var(--ink-3); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; font-weight: 500; display: inline-flex; gap: 7px; align-items: center; transition: all .12s; }
+.rpt-toptab:hover { color: var(--navy); background: var(--surface-2); }
+.rpt-toptab.is-active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; background: linear-gradient(180deg, transparent 50%, var(--surface-2) 100%); }
+.rpt-toptab-ic { font-size: 15px; }
+
+.rpt-top-row3 { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 0 14px; align-items: center; }
+.rpt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 11px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); transition: all .12s; }
+.rpt-chip:hover { border-color: var(--ink-3); }
+.rpt-chip.is-active { border-color: var(--navy); background: var(--surface-2); box-shadow: 0 0 0 1px var(--navy) inset; }
+.rpt-chip-l { color: var(--ink-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.rpt-chip.is-active .rpt-chip-l { color: var(--navy); }
+.rpt-chip-s { border: 0; background: transparent; font-size: 12.5px; color: var(--ink); padding: 4px 22px 4px 4px; font-family: var(--f-ui); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
+.rpt-chip-s:focus { outline: none; }
+.rpt-chip-x { background: var(--ink-3); color: #fff; border: 0; width: 18px; height: 18px; border-radius: 50%; font-size: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; margin-left: 1px; }
+.rpt-chip-x:hover { background: var(--red); }
+.rpt-chip-clear { margin-left: 8px; padding: 6px 13px; font-size: 11.5px; border-radius: 14px; border: 1px solid var(--red); background: var(--surface); color: var(--red); cursor: pointer; font-weight: 600; font-family: var(--f-ui); }
+.rpt-chip-clear:hover { background: var(--red); color: #fff; }
+.rpt-chip-hint { font-size: 11.5px; color: var(--ink-4); font-style: italic; margin-left: 6px; }
+
+/* === Section wrap padding adjust under sticky header === */
+body.rpt-stage-active .rpt-section { padding: 18px 24px 80px; }
+
+/* === Cohort hero === */
+.cohort-hero { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+@media (max-width: 980px) { .cohort-hero { grid-template-columns: 1fr; } }
+.cohort-hero-block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px 20px; box-shadow: var(--sh-xs); }
+.cohort-hero-block.primary { background: linear-gradient(135deg, var(--navy) 0%, #2a3493 100%); color: #fff; border-color: var(--navy); }
+.cohort-hero-eyebrow { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; opacity: .75; font-weight: 600; margin-bottom: 6px; }
+.cohort-hero-block.primary .cohort-hero-eyebrow { color: rgba(255,255,255,.78); opacity: 1; }
+.cohort-hero-num { font-family: var(--f-display); font-size: 42px; font-weight: 700; line-height: 1; color: var(--navy); }
+.cohort-hero-block.primary .cohort-hero-num { color: #fff; }
+.cohort-hero-num.good { color: var(--q-direct); }
+.cohort-hero-num.neutral { color: var(--ink-3); }
+.cohort-hero-l { font-size: 13.5px; color: var(--ink-2); margin-top: 5px; font-weight: 500; }
+.cohort-hero-block.primary .cohort-hero-l { color: rgba(255,255,255,.88); }
+.cohort-hero-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); }
+.cohort-hero-block.primary .cohort-hero-sub { color: rgba(255,255,255,.7); border-top-color: rgba(255,255,255,.18); }
+
+/* === Section H2 === */
+.rpt-h2 { display: flex; align-items: baseline; gap: 14px; margin: 26px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.rpt-h2-l { font-family: var(--f-display); font-size: 16px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .04em; }
+.rpt-h2-sub { font-size: 12px; color: var(--ink-3); font-style: italic; }
+
+/* === Funnel === */
+.cf-funnel { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+.cf-stage { display: grid; grid-template-columns: 280px 1fr; gap: 18px; align-items: center; padding: 14px 8px; cursor: pointer; border-radius: var(--radius); transition: all .12s; border: 1px solid transparent; }
+.cf-stage:hover { background: var(--surface-2); border-color: var(--line-2); }
+.cf-stage.is-drill { background: rgba(0,154,199,.08); border-color: var(--pool); box-shadow: 0 0 0 1px var(--pool); }
+.cf-stage-info { display: flex; align-items: center; gap: 12px; }
+.cf-stage-step { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-family: var(--f-display); font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.cf-stage.cf-stage-0 .cf-stage-step { background: var(--navy); color: #fff; border-color: var(--navy); }
+.cf-stage.cf-stage-1 .cf-stage-step { background: var(--pool); color: #fff; border-color: var(--pool); }
+.cf-stage.cf-stage-2 .cf-stage-step { background: var(--sky); color: var(--navy); border-color: var(--sky); }
+.cf-stage.cf-stage-3 .cf-stage-step { background: var(--q-direct); color: #fff; border-color: var(--q-direct); }
+.cf-stage-title { font-family: var(--f-display); font-size: 16px; font-weight: 700; color: var(--navy); line-height: 1.15; }
+.cf-stage-sub { font-size: 11.5px; color: var(--ink-3); font-style: italic; margin-top: 1px; }
+.cf-stage-bar-wrap { display: flex; align-items: center; gap: 14px; }
+.cf-stage-bar { height: 46px; border-radius: var(--radius); display: flex; align-items: center; padding: 0 18px; min-width: 80px; transition: all .12s; box-shadow: var(--sh-xs); }
+.cf-bar-0 { background: linear-gradient(90deg, var(--navy) 0%, #2c3899 100%); color: #fff; }
+.cf-bar-1 { background: linear-gradient(90deg, var(--pool) 0%, #00b6e8 100%); color: #fff; }
+.cf-bar-2 { background: linear-gradient(90deg, #6daed8 0%, var(--sky) 100%); color: var(--navy); }
+.cf-bar-3 { background: linear-gradient(90deg, var(--q-direct) 0%, #2ab86a 100%); color: #fff; }
+.cf-stage-n { font-family: var(--f-mono); font-size: 22px; font-weight: 700; }
+.cf-stage-pct { font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); font-weight: 600; min-width: 52px; text-align: right; }
+
+.cf-drop { display: grid; grid-template-columns: 280px 32px 1fr auto; gap: 16px; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: var(--radius); transition: all .12s; border: 1px solid transparent; }
+.cf-drop:hover { background: rgba(217,119,6,.05); border-color: var(--q-repl-b); }
+.cf-drop.is-drill { background: rgba(217,119,6,.1); border-color: var(--q-repl); box-shadow: 0 0 0 1px var(--q-repl); }
+.cf-drop-spacer { }
+.cf-drop-arrow-wrap { display: flex; justify-content: flex-end; padding-right: 8px; }
+.cf-drop-arrow { font-size: 22px; color: var(--q-repl); line-height: 1; font-weight: 700; }
+.cf-drop-info { display: flex; flex-direction: column; gap: 1px; }
+.cf-drop-n { font-family: var(--f-mono); font-size: 14px; font-weight: 700; color: var(--q-repl); }
+.cf-drop-l { font-size: 12px; color: var(--ink-2); }
+.cf-drop-pct { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); font-style: italic; text-align: right; }
+
+/* === Outcome cards === */
+.cf-outcomes { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-bottom: 6px; }
+.cf-outcome { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 14px 14px; cursor: pointer; transition: all .12s; box-shadow: var(--sh-xs); overflow: hidden; }
+.cf-outcome:hover { border-color: var(--navy); transform: translateY(-1px); box-shadow: var(--sh-sm); }
+.cf-outcome.is-drill { border-color: var(--pool); box-shadow: 0 0 0 2px var(--pool); }
+.cf-outcome-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.cf-outcome-n { font-family: var(--f-mono); font-size: 26px; font-weight: 700; color: var(--ink); line-height: 1; }
+.cf-outcome-pct { font-family: var(--f-mono); font-size: 12px; color: var(--ink-3); background: var(--surface-2); padding: 2px 7px; border-radius: 8px; font-weight: 500; }
+.cf-outcome-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; line-height: 1.3; }
+.cf-outcome-hint { font-size: 11px; color: var(--ink-3); font-style: italic; line-height: 1.35; margin-bottom: 10px; }
+.cf-outcome-bar-wrap { height: 6px; background: var(--line-2); border-radius: 3px; overflow: hidden; }
+.cf-outcome-bar { height: 100%; transition: width .25s; border-radius: 3px; }
+.cf-outcome-bar-green { background: var(--q-direct); }
+.cf-outcome-bar-blue  { background: var(--q-ewc); }
+.cf-outcome-bar-amber { background: var(--q-repl); }
+.cf-outcome-bar-gray  { background: var(--ink-4); }
+.cf-outcome-bar-purple{ background: var(--q-avg); }
+.cf-outcome-green  { border-left: 4px solid var(--q-direct); }
+.cf-outcome-blue   { border-left: 4px solid var(--q-ewc); }
+.cf-outcome-amber  { border-left: 4px solid var(--q-repl); }
+.cf-outcome-gray   { border-left: 4px solid var(--ink-4); }
+.cf-outcome-purple { border-left: 4px solid var(--q-avg); }
+
+/* === Drill-down === */
+.cf-drill-prompt { display: flex; align-items: center; gap: 12px; padding: 18px 22px; margin-top: 20px; background: var(--surface-2); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--ink-3); font-size: 12.5px; font-style: italic; }
+.cf-drill-prompt-icon { font-size: 22px; color: var(--pool); font-style: normal; }
+.cf-drill { margin-top: 24px; border: 2px solid var(--pool); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; box-shadow: var(--sh-sm); }
+.cf-drill-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px 20px; background: linear-gradient(180deg, rgba(0,154,199,.1), rgba(0,154,199,.02)); border-bottom: 1px solid var(--line); }
+.cf-drill-eyebrow { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--pool); font-weight: 700; }
+.cf-drill-title { font-family: var(--f-display); font-size: 18px; font-weight: 700; color: var(--navy); margin-top: 3px; line-height: 1.2; }
+.cf-drill-hint { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.cf-drill-actions { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+.cf-drill-empty { padding: 36px; text-align: center; color: var(--ink-3); font-size: 13px; font-style: italic; }
+.rpt-export-btn-ghost { color: var(--ink-3); border-color: var(--line); }
+.rpt-export-btn-ghost:hover { color: var(--red); border-color: var(--red); background: var(--surface); }
+
+.rpt-toolbar-row { display: flex; justify-content: flex-end; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
 `;
     document.head.appendChild(s);
   }
@@ -1933,7 +2350,8 @@
   function init(){
     injectCSS();
     window._qvRenderReports = renderReports;
-    console.log('[reports-view] v2 registered — 6 panels');
+    setupStageWatcher();
+    console.log('[reports-view] v3 registered — visual dashboard + funnel cohort tracker');
   }
 
   waitForMain(init);
