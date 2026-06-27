@@ -2261,6 +2261,8 @@
     ['breakdowns',   'Breakdowns',        '🗂️'],
     ['displacement', 'Displacements',     '↔️'],
     ['status',       'Special status',    '🛡️'],
+    ['historical',   'Historical (multi-year)', '📅'],
+    ['declined',     'Declined Nationals', '🚫'],
   ];
 
   function buildTopHeader(){
@@ -2416,6 +2418,8 @@
       ['breakdowns',   'Participation breakdowns','🗂️'],
       ['displacement', 'Displacements',         '↔️'],
       ['status',       'Special status',        '🛡️'],
+      ['historical',   'Historical (multi-year)', '📅'],
+      ['declined',     'Declined Nationals',    '🚫'],
     ];
 
     el.innerHTML = `
@@ -2476,6 +2480,8 @@
     else if (rptState.panel === 'scoring')      renderScoringPanel(wrap);
     else if (rptState.panel === 'breakdowns')   renderBreakdownsPanel(wrap);
     else if (rptState.panel === 'displacement') renderDisplacementPanel(wrap);
+    else if (rptState.panel === 'historical')   renderHistoricalPanel(wrap);
+    else if (rptState.panel === 'declined')     renderDeclinedPanel(wrap);
     else if (rptState.panel === 'status')       renderStatusPanel(wrap);
   }
 
@@ -2824,9 +2830,492 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .cf-prov-pct { font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); text-align: right; }
 .cf-prov-row-rest .cf-prov-val { font-style: italic; color: var(--ink-3); }
 .cf-prov-row-rest { grid-template-columns: 1fr 36px 38px; }
+
+/* === Historical + Declined panels === */
+.rpt-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px; }
+.rpt-card-h { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--navy); font-family: var(--f-ui); text-transform: uppercase; letter-spacing: 0.04em; }
+.rpt-loading { color: var(--ink-3); font-size: 12px; font-style: italic; padding: 14px 0; }
+.rpt-err { color: var(--red, #E31937); background: #fef2f3; padding: 10px 12px; border-radius: 6px; font-size: 12px; }
+.rpt-soft { color: var(--ink-3); font-size: 11px; font-weight: 400; }
+.rpt-yr-chip { display: inline-block; padding: 5px 10px; margin: 0 4px 4px 0; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); cursor: pointer; font-size: 12px; font-variant-numeric: tabular-nums; font-family: var(--f-ui); }
+.rpt-yr-chip:hover { background: var(--surface-3); }
+.rpt-yr-chip.is-on { background: var(--navy); color: white; border-color: var(--navy); font-weight: 600; }
+.rpt-stats-row { display: flex; flex-wrap: wrap; gap: 26px; }
+.rpt-stat { min-width: 130px; }
+.rpt-stat-num { font-size: 28px; font-weight: 700; color: var(--navy); font-family: var(--f-display); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rpt-stat-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.rpt-btn-prim { background: var(--navy); color: white; border: 0; padding: 7px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-family: var(--f-ui); font-weight: 600; }
+.rpt-btn-prim:hover { background: var(--pool); }
 `;
     document.head.appendChild(s);
   }
+
+  /* ── Historical (multi-year) panel ─────────────────────────────
+     Queries Neon for cross-year stats. Default selected years: all available.
+     Shows year × stage matrix, demographic shift, regional strength, dropoff. */
+  const fmt = fmtNum;  // alias for new panels (rest of module uses fmtNum)
+  const histState = {
+    yearsSelected: null,   // null = all years; otherwise Set of selected years
+    drillKind: null,       // null | 'yearStage' | 'demographic'
+    drillContext: null,
+  };
+
+  async function neonQuery(sql, params){
+    if (!window.NEON || !window.NEON.query) throw new Error('Neon client not loaded');
+    return await window.NEON.query(sql, params || []);
+  }
+
+  function renderHistoricalPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Historical comparison <span class="rpt-soft">(2021&ndash;present)</span></div>
+          <div class="rpt-soft">Live from Neon: <code>core.event_results</code></div>
+        </div>
+        <div id="hist-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
+        <div id="hist-overall" class="rpt-card"><div class="rpt-loading">Loading overall stats…</div></div>
+        <div id="hist-matrix" class="rpt-card"><div class="rpt-loading">Loading year &times; stage matrix…</div></div>
+        <div id="hist-funnel" class="rpt-card"><div class="rpt-loading">Loading per-year funnel comparison…</div></div>
+        <div id="hist-demographics" class="rpt-card"><div class="rpt-loading">Loading demographic shift over time…</div></div>
+        <div id="hist-region" class="rpt-card"><div class="rpt-loading">Loading regional strength over time…</div></div>
+      </div>
+    `;
+    loadHistoricalData();
+  }
+
+  async function loadHistoricalData(){
+    try {
+      // Overall: rows-per-year, athletes-per-year, junior-circuit %
+      const r = await neonQuery(
+        "SELECT year, COUNT(*)::int AS rows, "+
+        "COUNT(DISTINCT diver_id_dm)::int AS divers, "+
+        "COUNT(*) FILTER (WHERE is_junior_circuit)::int AS jr_rows, "+
+        "COUNT(DISTINCT diver_id_dm) FILTER (WHERE is_junior_circuit)::int AS jr_divers "+
+        "FROM core.event_results WHERE year IS NOT NULL GROUP BY year ORDER BY year"
+      );
+      const years = r.rows.map(x => x.year);
+      if (histState.yearsSelected === null) histState.yearsSelected = new Set(years);
+      renderHistoricalControls(years);
+      renderHistoricalOverall(r.rows);
+      renderHistoricalMatrix();
+      renderHistoricalFunnel();
+      renderHistoricalDemographics();
+      renderHistoricalRegion();
+    } catch (e) {
+      document.getElementById('hist-overall').innerHTML =
+        '<div class="rpt-err">Failed to load from Neon: '+esc(String(e.message||e))+'</div>'+
+        '<div class="rpt-soft" style="margin-top:8px">Check <a href="neon-status.html">neon-status.html</a> for diagnostics.</div>';
+    }
+  }
+
+  function renderHistoricalControls(years){
+    const el = document.getElementById('hist-controls');
+    if (!el) return;
+    const sel = histState.yearsSelected;
+    el.innerHTML = '<span class="rpt-slicer-lbl">Compare years:</span> '+
+      years.map(y => `<button class="rpt-yr-chip ${sel.has(y)?'is-on':''}" onclick="window._histToggleYear(${y})">${y}</button>`).join('') +
+      ` <button class="rpt-yr-chip" onclick="window._histAllYears()">All</button>`+
+      ` <button class="rpt-yr-chip" onclick="window._histRecent()">Last 3</button>`;
+  }
+
+  function renderHistoricalOverall(perYear){
+    const el = document.getElementById('hist-overall');
+    if (!el) return;
+    const sel = histState.yearsSelected;
+    const shown = perYear.filter(x => sel.has(x.year));
+    const totRows = shown.reduce((a,b)=>a+b.rows, 0);
+    const totJr   = shown.reduce((a,b)=>a+b.jr_rows, 0);
+    const totDv   = shown.reduce((a,b)=>a+b.divers, 0);  // not unique across years
+    el.innerHTML = `
+      <h3 class="rpt-card-h">Selected years: ${shown.length} (${shown.map(x=>x.year).join(', ') || '—'})</h3>
+      <div class="rpt-stats-row">
+        <div class="rpt-stat"><div class="rpt-stat-num">${fmt(totRows)}</div><div class="rpt-stat-lbl">Total result rows</div></div>
+        <div class="rpt-stat"><div class="rpt-stat-num">${fmt(totJr)}</div><div class="rpt-stat-lbl">Junior circuit rows</div></div>
+        <div class="rpt-stat"><div class="rpt-stat-num">${fmt(totDv)}</div><div class="rpt-stat-lbl">Diver-year appearances</div></div>
+      </div>
+      <table class="rpt-table" style="margin-top:14px">
+        <thead><tr><th>Year</th><th>Rows</th><th>Junior circuit</th><th>Unique divers</th><th>JR %</th></tr></thead>
+        <tbody>
+          ${shown.map(x => `<tr>
+            <td><strong>${x.year}</strong></td>
+            <td>${fmt(x.rows)}</td>
+            <td>${fmt(x.jr_rows)}</td>
+            <td>${fmt(x.divers)}</td>
+            <td>${(100*x.jr_rows/Math.max(1,x.rows)).toFixed(1)}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function renderHistoricalMatrix(){
+    const el = document.getElementById('hist-matrix'); if (!el) return;
+    try {
+      const r = await neonQuery(
+        "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS athletes "+
+        "FROM core.event_results WHERE is_junior_circuit AND year IS NOT NULL "+
+        "GROUP BY year, stage ORDER BY year, stage"
+      );
+      const sel = histState.yearsSelected;
+      const stages = ['Regionals','Zones','EWC','Nationals'];
+      const years = Array.from(new Set(r.rows.map(x=>x.year))).filter(y => sel.has(y)).sort();
+      const grid = {};
+      r.rows.forEach(x => { grid[x.year+'|'+x.stage] = x.athletes; });
+      el.innerHTML = `
+        <h3 class="rpt-card-h">Athletes per stage, by year <span class="rpt-soft">(junior circuit, unique divers per stage)</span></h3>
+        <table class="rpt-table">
+          <thead><tr><th>Year</th>${stages.map(s=>`<th>${s}</th>`).join('')}<th>R→Z drop</th><th>Z→N or Z→EWC drop</th></tr></thead>
+          <tbody>
+          ${years.map(y => {
+            const reg = grid[y+'|Regionals']||0;
+            const zon = grid[y+'|Zones']||0;
+            const ewc = grid[y+'|EWC']||0;
+            const nat = grid[y+'|Nationals']||0;
+            const r2z = reg ? (1 - zon/reg) : null;
+            // 2026+ uses EWC, 2021-25 uses Nationals
+            const nextStage = y >= 2026 ? ewc : nat;
+            const z2n = zon ? (1 - nextStage/zon) : null;
+            return `<tr>
+              <td><strong>${y}</strong></td>
+              <td>${fmt(reg)}</td>
+              <td>${fmt(zon)}</td>
+              <td>${ewc?fmt(ewc):'<span class="rpt-soft">—</span>'}</td>
+              <td>${nat?fmt(nat):'<span class="rpt-soft">—</span>'}</td>
+              <td>${r2z !== null ? (r2z*100).toFixed(1)+'%' : ''}</td>
+              <td>${z2n !== null ? (z2n*100).toFixed(1)+'%' : ''}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+        <div class="rpt-soft" style="margin-top:8px">Unique divers per stage. An athlete in multiple events at the same stage is counted once. R→Z drop is the % of Regionals divers who didn't appear at Zones.</div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<div class="rpt-err">Failed to load matrix: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  async function renderHistoricalFunnel(){
+    const el = document.getElementById('hist-funnel'); if (!el) return;
+    try {
+      // For each year, count distinct divers entering each stage
+      const sel = histState.yearsSelected;
+      if (sel.size === 0) { el.innerHTML = ''; return; }
+      const yrList = Array.from(sel).sort();
+      el.innerHTML = `<h3 class="rpt-card-h">Per-year mini-funnels</h3><div id="hist-funnel-grid" class="cf-mini-grid"></div>`;
+      const grid = el.querySelector('#hist-funnel-grid');
+      grid.innerHTML = yrList.map(y => `<div class="cf-mini-card" id="hf-${y}"><div class="cf-mini-title">${y}</div><div class="rpt-loading">…</div></div>`).join('');
+      // Parallel queries
+      await Promise.all(yrList.map(async y => {
+        const r = await neonQuery(
+          "SELECT stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE year = $1 AND is_junior_circuit "+
+          "GROUP BY stage ORDER BY stage",
+          [y]
+        );
+        const m = {};
+        r.rows.forEach(x => m[x.stage] = x.n);
+        const reg = m['Regionals']||0, zon = m['Zones']||0, ewc = m['EWC']||0, nat = m['Nationals']||0;
+        const stages = [
+          {k:'Regionals', n:reg, col:'var(--navy)'},
+          {k:'Zones',     n:zon, col:'var(--pool)'},
+        ];
+        if (ewc) stages.push({k:'E/W/C', n:ewc, col:'var(--sky)'});
+        if (nat) stages.push({k:'Nationals', n:nat, col:'var(--q-direct)'});
+        const max = Math.max.apply(null, stages.map(s => s.n));
+        const html = stages.map(s => `
+          <div class="cf-mini-row">
+            <div class="cf-mini-bar" style="width:${max?Math.max(2, 100*s.n/max):0}%;background:${s.col}">${fmt(s.n)}</div>
+            <div class="cf-mini-lbl">${s.k}</div>
+          </div>`).join('');
+        const cell = document.getElementById('hf-'+y);
+        if (cell) cell.innerHTML = `<div class="cf-mini-title">${y}</div>${html}`;
+      }));
+    } catch (e) {
+      el.innerHTML = '<div class="rpt-err">Failed to load funnel: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  async function renderHistoricalDemographics(){
+    const el = document.getElementById('hist-demographics'); if (!el) return;
+    try {
+      const sel = histState.yearsSelected;
+      const yrList = Array.from(sel).sort();
+      const r = await neonQuery(
+        "SELECT year, age_group, gender, COUNT(DISTINCT diver_id_dm)::int AS n "+
+        "FROM core.event_results WHERE is_junior_circuit AND stage IN ('Regionals','Zones','EWC','Nationals') "+
+        "AND year = ANY($1::int[]) "+
+        "GROUP BY year, age_group, gender ORDER BY year, age_group, gender",
+        ['{'+yrList.join(',')+'}']
+      );
+      // Pivot: rows = year, cols = age_group_gender combos
+      const combos = ['Group A Boys','Group A Girls','Group B Boys','Group B Girls','Group C Boys','Group C Girls','Group D Boys','Group D Girls'];
+      const grid = {};
+      r.rows.forEach(x => grid[x.year+'|'+(x.age_group||'?')+' '+(x.gender||'?')] = x.n);
+      el.innerHTML = `
+        <h3 class="rpt-card-h">Demographic mix (unique divers participating, by age group × gender)</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Year</th>${combos.map(c=>`<th>${c.replace('Group ','Gp ')}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>
+          ${yrList.map(y => {
+            let tot = 0;
+            const cells = combos.map(c => { const n = grid[y+'|'+c]||0; tot += n; return `<td>${n?fmt(n):'<span class="rpt-soft">·</span>'}</td>`; }).join('');
+            return `<tr><td><strong>${y}</strong></td>${cells}<td><strong>${fmt(tot)}</strong></td></tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      el.innerHTML = '<div class="rpt-err">Failed to load demographics: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  async function renderHistoricalRegion(){
+    const el = document.getElementById('hist-region'); if (!el) return;
+    try {
+      const sel = histState.yearsSelected;
+      const yrList = Array.from(sel).sort();
+      const r = await neonQuery(
+        "SELECT year, region, COUNT(DISTINCT diver_id_dm)::int AS n "+
+        "FROM core.event_results WHERE is_junior_circuit AND region IS NOT NULL "+
+        "AND year = ANY($1::int[]) "+
+        "GROUP BY year, region ORDER BY year, region",
+        ['{'+yrList.join(',')+'}']
+      );
+      const regs = Array.from({length:12}, (_,i)=>i+1);
+      const grid = {};
+      r.rows.forEach(x => grid[x.year+'|'+x.region] = x.n);
+      el.innerHTML = `
+        <h3 class="rpt-card-h">Regional strength (divers at Regionals, by region × year)</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Year</th>${regs.map(r=>`<th>R${r}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>
+          ${yrList.map(y => {
+            let tot = 0;
+            const cells = regs.map(r => { const n = grid[y+'|'+r]||0; tot += n; return `<td>${n?fmt(n):'<span class="rpt-soft">·</span>'}</td>`; }).join('');
+            return `<tr><td><strong>${y}</strong></td>${cells}<td><strong>${fmt(tot)}</strong></td></tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      el.innerHTML = '<div class="rpt-err">Failed to load regional view: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  // Window handlers
+  window._histToggleYear = function(y){
+    if (histState.yearsSelected.has(y)) histState.yearsSelected.delete(y);
+    else histState.yearsSelected.add(y);
+    loadHistoricalData();
+  };
+  window._histAllYears = function(){
+    histState.yearsSelected = null;
+    loadHistoricalData();
+  };
+  window._histRecent = function(){
+    histState.yearsSelected = new Set([2024,2025,2026]);
+    loadHistoricalData();
+  };
+
+  /* ── Declined Nationals panel ──────────────────────────────────
+     For each year, finds athletes who placed top 3 at Zones (event-by-event)
+     but DID NOT appear at the subsequent destination stage:
+       - 2021-2025: subsequent = Junior Nationals
+       - 2026+: subsequent = E/W/C  (since under new system top 3 from Zones go direct to Junior Nats; this view captures Zones top-3 absent from EWC if year=2026 only relevant if E/W/C is treated as next stage; for 2026 only, decliners = top-3 Zone qualifiers absent from Junior Nationals — but 2026 Junior Nats hasn't happened yet, so we show top-3 absent from E/W/C as a proxy for engagement)
+     This is the headline CCE/Board question: "how many top-3 Zone qualifiers chose not to compete at the next stage?"
+  */
+  const declState = { years: null, drill: null };
+
+  function renderDeclinedPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Declined Nationals <span class="rpt-soft">(top-3 Zone qualifiers absent from next stage)</span></div>
+          <div class="rpt-soft">Live from Neon. Old system (2021&ndash;2025): next stage = Junior Nationals. 2026+: next = E/W/C.</div>
+        </div>
+        <div id="decl-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
+        <div id="decl-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
+        <div id="decl-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year breakdown…</div></div>
+        <div id="decl-by-demographic" class="rpt-card"><div class="rpt-loading">Loading demographic breakdown…</div></div>
+        <div id="decl-athletes" class="rpt-card"><div class="rpt-loading">Loading athletes list…</div></div>
+      </div>
+    `;
+    loadDeclinedData();
+  }
+
+  async function loadDeclinedData(){
+    try {
+      // First, get list of available years
+      const yrRes = await neonQuery(
+        "SELECT DISTINCT year FROM core.event_results WHERE is_junior_circuit AND stage='Zones' AND year IS NOT NULL ORDER BY year"
+      );
+      const years = yrRes.rows.map(r=>r.year);
+      if (declState.years === null) declState.years = new Set(years);
+      renderDeclinedControls(years);
+      runDeclinedAnalysis();
+    } catch (e) {
+      document.getElementById('decl-summary').innerHTML =
+        '<div class="rpt-err">Failed to load: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  function renderDeclinedControls(years){
+    const el = document.getElementById('decl-controls'); if (!el) return;
+    const sel = declState.years;
+    el.innerHTML = '<span class="rpt-slicer-lbl">Years:</span> '+
+      years.map(y => `<button class="rpt-yr-chip ${sel.has(y)?'is-on':''}" onclick="window._declToggleYear(${y})">${y}</button>`).join('') +
+      ` <button class="rpt-yr-chip" onclick="window._declAllYears()">All</button>`+
+      ` <button class="rpt-yr-chip" onclick="window._declPre2026()">2021–2025 (old system)</button>`;
+  }
+
+  async function runDeclinedAnalysis(){
+    const yrs = Array.from(declState.years).sort();
+    if (yrs.length === 0) {
+      document.getElementById('decl-summary').innerHTML = '<div class="rpt-soft">Select at least one year above.</div>';
+      ['decl-by-year','decl-by-demographic','decl-athletes'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.innerHTML = '';
+      });
+      return;
+    }
+    try {
+      // SQL: for each year, get athletes who were top-3 at Zones (by FINAL place per event_key)
+      // who did NOT appear at the next stage in same year (Junior Nationals for 2021-25, E/W/C for 2026).
+      const sql = `
+        WITH zones_top3 AS (
+          SELECT DISTINCT ON (year, event_key, zone, diver_id_dm)
+            year, event_key, zone, diver_id_dm,
+            place AS zone_place,
+            score AS zone_score,
+            diver_first, diver_last, team_name, age_group, gender, discipline, region
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Zones' AND round IN ('Final','')
+            AND place IS NOT NULL AND place BETWEEN 1 AND 3
+            AND year = ANY($1::int[])
+          ORDER BY year, event_key, zone, diver_id_dm, place
+        ),
+        next_stage AS (
+          SELECT DISTINCT year, event_key, diver_id_dm
+          FROM core.event_results
+          WHERE is_junior_circuit
+            AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+            AND year = ANY($1::int[])
+        )
+        SELECT z.year, z.event_key, z.zone, z.diver_id_dm,
+               z.zone_place, z.zone_score, z.diver_first, z.diver_last,
+               z.team_name, z.age_group, z.gender, z.discipline, z.region
+        FROM zones_top3 z
+        LEFT JOIN next_stage n
+          ON n.year = z.year AND n.event_key = z.event_key AND n.diver_id_dm = z.diver_id_dm
+        WHERE n.diver_id_dm IS NULL
+        ORDER BY z.year DESC, z.zone, z.event_key, z.zone_place
+      `;
+      const r = await neonQuery(sql, ['{'+yrs.join(',')+'}']);
+      const rows = r.rows;
+
+      // Summary
+      const sumEl = document.getElementById('decl-summary');
+      const tot = rows.length;
+      const byYear = {}, byZone = {}, byGroup = {}, byGender = {}, byDisc = {};
+      rows.forEach(x => {
+        byYear[x.year] = (byYear[x.year]||0)+1;
+        byZone[x.zone||'?'] = (byZone[x.zone||'?']||0)+1;
+        byGroup[x.age_group||'?'] = (byGroup[x.age_group||'?']||0)+1;
+        byGender[x.gender||'?'] = (byGender[x.gender||'?']||0)+1;
+        byDisc[x.discipline||'?'] = (byDisc[x.discipline||'?']||0)+1;
+      });
+      sumEl.innerHTML = `
+        <h3 class="rpt-card-h">Headline</h3>
+        <div class="rpt-stats-row">
+          <div class="rpt-stat"><div class="rpt-stat-num">${fmt(tot)}</div><div class="rpt-stat-lbl">Top-3 Zone qualifiers absent from next stage<br><span class="rpt-soft">across ${yrs.length} selected year${yrs.length===1?'':'s'}</span></div></div>
+          <div class="rpt-stat"><div class="rpt-stat-num">${tot? (tot/yrs.length).toFixed(1) : '0'}</div><div class="rpt-stat-lbl">Average per year</div></div>
+        </div>
+      `;
+
+      // By year
+      const byYearEl = document.getElementById('decl-by-year');
+      byYearEl.innerHTML = `
+        <h3 class="rpt-card-h">By year</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Year</th><th>Decliners</th></tr></thead>
+          <tbody>${yrs.map(y => `<tr><td><strong>${y}</strong></td><td>${fmt(byYear[y]||0)}</td></tr>`).join('')}</tbody>
+        </table>
+      `;
+
+      // Demographic
+      const demoEl = document.getElementById('decl-by-demographic');
+      const card = (title, dict) => {
+        const keys = Object.keys(dict).sort();
+        if (keys.length === 0) return '';
+        const max = Math.max.apply(null, keys.map(k => dict[k]));
+        return `<div class="cf-prov-card">
+          <div class="cf-prov-title">${title}</div>
+          ${keys.map(k => `<div class="cf-prov-row">
+            <div class="cf-prov-lbl">${esc(k)}</div>
+            <div class="cf-prov-bar" style="width:${100*dict[k]/Math.max(1,max)}%"></div>
+            <div class="cf-prov-val">${fmt(dict[k])}</div>
+          </div>`).join('')}
+        </div>`;
+      };
+      demoEl.innerHTML = `<h3 class="rpt-card-h">By demographic</h3>
+        <div class="cf-prov-grid">
+          ${card('Zone', byZone)}
+          ${card('Age group', byGroup)}
+          ${card('Gender', byGender)}
+          ${card('Discipline', byDisc)}
+        </div>`;
+
+      // Athletes list
+      const athEl = document.getElementById('decl-athletes');
+      athEl.innerHTML = `
+        <h3 class="rpt-card-h">Athletes (${fmt(tot)})</h3>
+        <div class="rpt-table-scroll" style="max-height:520px;overflow:auto">
+          <table class="rpt-table">
+            <thead><tr><th>Year</th><th>Athlete</th><th>Team</th><th>Zone</th><th>Event</th><th>Place</th><th>Score</th><th>Region</th></tr></thead>
+            <tbody>
+            ${rows.slice(0,500).map(x => `<tr>
+              <td>${x.year}</td>
+              <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong> <span class="rpt-soft">(DM ${x.diver_id_dm})</span></td>
+              <td>${esc(x.team_name||'')}</td>
+              <td>Zone ${esc(x.zone||'?')}</td>
+              <td>${esc(x.event_key||'')}</td>
+              <td>${x.zone_place}</td>
+              <td>${x.zone_score!=null?Number(x.zone_score).toFixed(2):''}</td>
+              <td>${x.region!=null?'R'+x.region:''}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+          ${rows.length>500?`<div class="rpt-soft" style="padding:8px">Showing first 500 of ${fmt(rows.length)}. Use year filter to narrow.</div>`:''}
+        </div>
+        <div style="margin-top:10px"><button class="rpt-btn-prim" onclick="window._declExport()">Export CSV</button></div>
+      `;
+
+      // Cache rows for export
+      window._declCachedRows = rows;
+    } catch (e) {
+      document.getElementById('decl-summary').innerHTML =
+        '<div class="rpt-err">Query failed: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  window._declToggleYear = function(y){
+    if (declState.years.has(y)) declState.years.delete(y);
+    else declState.years.add(y);
+    loadDeclinedData();
+  };
+  window._declAllYears = function(){ declState.years = null; loadDeclinedData(); };
+  window._declPre2026 = function(){ declState.years = new Set([2021,2022,2023,2024,2025]); loadDeclinedData(); };
+  window._declExport = function(){
+    const rows = window._declCachedRows || [];
+    const hdr = ['year','diver_first','diver_last','diver_id_dm','team_name','zone','event_key','zone_place','zone_score','age_group','gender','discipline','region'];
+    const out = [hdr.join(',')].concat(rows.map(r => hdr.map(h => {
+      const v = r[h]; if (v == null) return '';
+      const s = String(v); return s.includes(',')||s.includes('"') ? '"'+s.replace(/"/g,'""')+'"' : s;
+    }).join(','))).join('\n');
+    const blob = new Blob([out],{type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'declined-nationals.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   /* ── Hook into main.js ──────────────────────────────────────── */
   function waitForMain(cb, tries){
