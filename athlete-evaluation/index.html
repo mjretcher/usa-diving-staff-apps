@@ -1,675 +1,246 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HP Analytics — USA Diving Staff</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../shared/design.css" />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HP Analytics — USA Diving Staff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../shared/design.css?v=20260627" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
+  <link rel="stylesheet" href="styles.css?v=20260627" />
+</head>
+<body>
 
-    <!-- TOPBAR -->
-    <header class="app-topbar">
-      <div class="topbar-brand">
-        <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" style="height:28px;width:auto;display:block" />
-        <div style="border-left:1px solid rgba(255,255,255,.2);padding-left:10px;margin-left:4px">
-          <div class="topbar-brand-title">High Performance Analytics</div>
-        </div>
+<header class="app-topbar">
+  <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
+    <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" class="topbar-logo" />
+  </a>
+  <div class="topbar-divider"></div>
+  <div class="topbar-identity">
+    <div class="topbar-eyebrow">High Performance Analytics</div>
+    <div class="topbar-title">Athlete Performance</div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-metrics">
+    <span class="topbar-pill"><b id="kpiMeets">—</b> meets</span>
+    <span class="topbar-pill"><b id="kpiEvents">—</b> events</span>
+    <span class="topbar-pill"><b id="kpiAthletes">—</b> athletes</span>
+    <span class="topbar-pill"><b id="kpiDives">—</b> dives</span>
+    <span class="topbar-pill topbar-source" id="kpiSource">—</span>
+  </div>
+</header>
+
+<div class="app-shell">
+
+  <aside class="control-sidebar" aria-label="Dashboard filters">
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Dataset</div>
+      <span class="sidebar-label">Focus scope</span>
+      <select class="sidebar-select" id="scopePreset">
+        <option value="hpd" selected>HPD focus (Junior + Senior National)</option>
+        <option value="senior">Senior events only</option>
+        <option value="junior">Junior events only</option>
+        <option value="national">National / Championship only</option>
+        <option value="all">All levels</option>
+      </select>
+      <div id="scopeSummary" class="sidebar-help"></div>
+
+      <span class="sidebar-label">Year scope</span>
+      <input class="sidebar-input" id="yearSearch" type="search" placeholder="Filter years…" />
+      <div class="sidebar-actions-row">
+        <button class="btn btn-ghost btn-sm" id="yearUseAll">Use all</button>
+        <button class="btn btn-ghost btn-sm" id="yearRecent">2024–2026</button>
+        <button class="btn btn-ghost btn-sm" id="yearClear">Clear</button>
       </div>
-      <div class="topbar-divider"></div>
-      <div>
-        <div class="topbar-eyebrow">Analytics Dashboard</div>
-        <div class="topbar-title">Athlete Performance</div>
-      </div>
-      <div class="topbar-spacer"></div>
-      <div class="topbar-metrics">
-        <span class="topbar-pill" id="summaryMeets">— meets</span>
-        <span class="topbar-pill" id="summaryEvents">— events</span>
-        <span class="topbar-pill" id="summaryAthletes">— athletes</span>
-        <span class="topbar-pill" id="summaryDives">— dives</span>
-      </div>
-    </header>
-
-    <div class="app-shell">
-
-      <!-- SIDEBAR -->
-      <aside class="control-sidebar" aria-label="Dashboard filters">
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Dataset</div>
-          <span class="sidebar-label">Focus scope</span>
-          <select class="sidebar-select" id="scopePreset">
-            <option value="hpd" selected>HPD focus</option>
-            <option value="senior">Senior events only</option>
-            <option value="junior">Junior events only</option>
-            <option value="national">National / Championship</option>
-            <option value="all">All levels</option>
-          </select>
-          <div id="scopeSummary" class="sidebar-help"></div>
-          <span class="sidebar-label">Year scope</span>
-          <div id="yearPicker" class="multi-picker year-picker"></div>
-          <select id="yearFilter" multiple class="native-multi-select-hidden" aria-hidden="true" tabindex="-1"></select>
-          <div class="sidebar-help" id="yearFilterHelp">Default 2025–2026. Add older years for historical context.</div>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Filters</div>
-          <span class="sidebar-label">Event level</span>
-          <select class="sidebar-select" id="eventLevelFilter"></select>
-          <span class="sidebar-label">Age group</span>
-          <select class="sidebar-select" id="ageGroupFilter"></select>
-          <span class="sidebar-label">Meet</span>
-          <div id="meetPicker" class="multi-picker"></div>
-          <select id="meetFilter" multiple class="native-multi-select-hidden" aria-hidden="true" tabindex="-1"></select>
-          <span class="sidebar-label">Event</span>
-          <div id="eventPicker" class="multi-picker"></div>
-          <select id="eventFilter" multiple class="native-multi-select-hidden" aria-hidden="true" tabindex="-1"></select>
-          <span class="sidebar-label">Athlete</span>
-          <input class="sidebar-input" id="athleteSearch" type="search" list="athleteOptions" placeholder="Search by name" />
-          <datalist id="athleteOptions"></datalist>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Event controls</div>
-          <div class="sidebar-grid-2">
-            <div>
-              <span class="sidebar-label">Gender</span>
-              <select class="sidebar-select" id="genderFilter"></select>
-            </div>
-            <div>
-              <span class="sidebar-label">Board</span>
-              <select class="sidebar-select" id="boardFilter">
-                <option value="all">All</option>
-                <option value="1m">1M</option>
-                <option value="3m">3M</option>
-                <option value="platform">10M</option>
-              </select>
-            </div>
-          </div>
-          <div class="sidebar-grid-2" style="margin-top:8px">
-            <div>
-              <span class="sidebar-label">Dive group</span>
-              <select class="sidebar-select" id="groupFilter">
-                <option value="all">All</option>
-                <option value="1">Front</option>
-                <option value="2">Back</option>
-                <option value="3">Reverse</option>
-                <option value="4">Inward</option>
-                <option value="5">Twister</option>
-                <option value="6">Armstand</option>
-              </select>
-            </div>
-            <div>
-              <span class="sidebar-label">Placement</span>
-              <input class="sidebar-input" id="placementCutoff" type="number" min="1" step="1" value="12" />
-            </div>
-          </div>
-          <span class="sidebar-label">Comparison population</span>
-          <select class="sidebar-select" id="comparisonPopulation">
-            <option value="full">Full field</option>
-            <option value="finalists">Finalists</option>
-            <option value="medalists">Medalists</option>
-            <option value="athlete">Selected athlete</option>
-            <option value="meet">Selected meet</option>
-            <option value="event">Selected event</option>
-            <option value="gender">Selected gender</option>
-          </select>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Visualization</div>
-          <span class="sidebar-label">Heatmap rows</span>
-          <select class="sidebar-select" id="heatmapDimension">
-            <option value="athlete">Athlete</option>
-            <option value="event">Event</option>
-            <option value="meet">Meet</option>
-            <option value="gender">Gender</option>
-          </select>
-          <span class="sidebar-label">Heatmap metric</span>
-          <select class="sidebar-select" id="heatmapMetric">
-            <option value="score">Average dive score</option>
-            <option value="dd">Average DD</option>
-            <option value="gap">Score gap vs benchmark</option>
-            <option value="consistency">Consistency</option>
-            <option value="count">Dive count</option>
-          </select>
-        </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-section-title">Exports</div>
-          <div class="sidebar-export-grid">
-            <button class="secondary-button btn-sm" id="exportFiltered">Filtered CSV</button>
-            <button class="secondary-button btn-sm" id="exportAthlete">Athlete CSV</button>
-            <button class="secondary-button btn-sm" id="exportEvent">Event CSV</button>
-            <button class="secondary-button btn-sm" id="exportDd">DD comparison</button>
-            <button class="secondary-button btn-sm" id="exportWeakness">Weakness CSV</button>
-            <button class="secondary-button btn-sm" id="exportMixed">Mixed team CSV</button>
-            <button class="secondary-button btn-sm wide-button" id="exportVoluntary">Voluntary report CSV</button>
-          </div>
-          <div id="exportStatus" class="status-line" aria-live="polite"></div>
-        </div>
-
-      </aside>
-
-      <!-- MAIN WORKSPACE -->
-      <main class="main-workspace">
-
-        <!-- KPI strip -->
-        <div class="kpi-grid" aria-label="Current filter summary">
-          <div class="kpi-card">
-            <div class="kpi-value" id="kpiResults">0</div>
-            <div class="kpi-label">Results</div>
-            <div class="kpi-sub" id="kpiResultContext">filtered rows</div>
-          </div>
-          <div class="kpi-card kpi-blue">
-            <div class="kpi-value" id="kpiScore">—</div>
-            <div class="kpi-label">Avg Score</div>
-            <div class="kpi-sub">result score</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-value" id="kpiDd">—</div>
-            <div class="kpi-label">Avg DD</div>
-            <div class="kpi-sub">total DD</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-value" id="kpiGap">—</div>
-            <div class="kpi-label">Benchmark Gap</div>
-            <div class="kpi-sub" id="kpiGapLabel">vs comparison</div>
-          </div>
-        </div>
-
-        <!-- Decision summary -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Analysis engine</div>
-              <div class="panel-title">High-Performance Decision Summary</div>
-            </div>
-            <span id="decisionContext" class="panel-chip">Current filters</span>
-          </div>
-          <div class="panel-body">
-            <div id="decisionSummary" class="decision-summary"></div>
-          </div>
-        </div>
-
-        <!-- Priority matrix -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Priority matrix</div>
-              <div class="panel-title">Where The Data Says To Focus</div>
-            </div>
-            <span class="panel-chip">Score gap + DD gap + consistency</span>
-          </div>
-          <div class="panel-body">
-            <div id="priorityMatrix" class="priority-matrix"></div>
-          </div>
-        </div>
-
-        <!-- Main visuals grid -->
-        <div class="viz-grid-2">
-          <div class="panel dashboard-radar-legacy" aria-hidden="true">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Athlete vs field</div>
-                <div class="panel-title">Strength Radar — Dive Group</div>
-              </div>
-              <span id="radarContext" class="panel-chip"></span>
-            </div>
-            <div class="panel-body">
-              <div id="radarChart" class="chart-frame"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Comparison</div>
-                <div class="panel-title">Benchmark Panel</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="comparisonCards" class="comparison-cards"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Heatmap -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Field pattern</div>
-              <div class="panel-title">Score Strength & Weakness Heatmap</div>
-            </div>
-            <span id="heatmapContext" class="panel-chip"></span>
-          </div>
-          <div class="panel-body">
-            <div id="heatmap" class="heatmap"></div>
-          </div>
-        </div>
-
-        <!-- Bubble + scatter -->
-        <div class="viz-grid-2">
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Risk and return</div>
-                <div class="panel-title">Bubble Map</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="bubbleChart" class="chart-frame"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Advanced</div>
-                <div class="panel-title">DD vs Score Scatter</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <details class="advanced-viz">
-                <summary>Show scatter chart</summary>
-                <div id="scatterChart" class="chart-frame"></div>
-              </details>
-            </div>
-          </div>
-        </div>
-
-        <!-- Drilldown -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Interactive detail</div>
-              <div class="panel-title">Drill-Down</div>
-            </div>
-            <span id="drilldownContext" class="panel-chip">Click a point</span>
-          </div>
-          <div class="panel-body">
-            <div id="pointDetail" class="drilldown-detail"></div>
-          </div>
-        </div>
-
-        <!-- Group bars + box plot -->
-        <div class="viz-grid-2">
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Dive groups</div>
-                <div class="panel-title">Average Score & DD</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="groupBars" class="chart-frame compact-chart"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Distribution</div>
-                <div class="panel-title">Score Distribution by Group</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="boxPlot" class="chart-frame compact-chart"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Event profile -->
-        <div class="viz-grid-2">
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Event profile</div>
-                <div class="panel-title">Strongest & Weakest Groups</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="eventProfileCards" class="profile-cards"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Progression</div>
-                <div class="panel-title">Meet-to-Meet Trend</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <details class="advanced-viz">
-                <summary>Show progression chart</summary>
-                <div id="progressionChart" class="chart-frame compact-chart"></div>
-              </details>
-            </div>
-          </div>
-        </div>
-
-        <!-- Evidence comparison workspace -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Evidence comparison</div>
-              <div class="panel-title">Year / Meet / Event Side-by-Side</div>
-            </div>
-            <span class="panel-chip">Confirm or dispute performance claims</span>
-          </div>
-          <div class="panel-body">
-            <div class="compare-grid">
-              <fieldset class="compare-fieldset">
-                <legend>Comparison A</legend>
-                <div class="compare-fields">
-                  <label>Year<select id="compareYearA"></select></label>
-                  <label>Meet<select id="compareMeetA"></select></label>
-                  <label>Event<select id="compareEventA"></select></label>
-                  <label>Gender<select id="compareGenderA"></select></label>
-                  <label>Board
-                    <select id="compareBoardA">
-                      <option value="all">All</option><option value="1m">1M</option>
-                      <option value="3m">3M</option><option value="platform">10M</option>
-                    </select>
-                  </label>
-                </div>
-              </fieldset>
-              <fieldset class="compare-fieldset">
-                <legend>Comparison B</legend>
-                <div class="compare-fields">
-                  <label>Year<select id="compareYearB"></select></label>
-                  <label>Meet<select id="compareMeetB"></select></label>
-                  <label>Event<select id="compareEventB"></select></label>
-                  <label>Gender<select id="compareGenderB"></select></label>
-                  <label>Board
-                    <select id="compareBoardB">
-                      <option value="all">All</option><option value="1m">1M</option>
-                      <option value="3m">3M</option><option value="platform">10M</option>
-                    </select>
-                  </label>
-                </div>
-              </fieldset>
-            </div>
-            <div class="compare-actions">
-              <button id="runEvidenceComparison">Run evidence comparison</button>
-              <span id="comparisonLoadStatus" class="status-line" aria-live="polite"></span>
-            </div>
-            <div id="comparisonOutput" class="comparison-output"></div>
-          </div>
-        </div>
-
-        <!-- Athlete profile + dive sheet -->
-        <div class="viz-grid-2">
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Diver profile</div>
-                <div class="panel-title">Athlete Analytics</div>
-              </div>
-            </div>
-            <div class="panel-body">
-              <div id="athleteProfile" class="athlete-profile"></div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-eyebrow">Dive sheet</div>
-                <div class="panel-title">Selected Athlete Dives</div>
-              </div>
-            </div>
-            <div class="panel-body table-wrap">
-              <div id="diveSheetTable"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Individual dive-list builder -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Individual intelligence</div>
-              <div class="panel-title">Athlete Strongest Dive List Builder</div>
-            </div>
-            <span class="panel-chip">All results scope</span>
-          </div>
-          <div class="panel-body">
-            <div class="builder-grid">
-              <label class="builder-field">Athlete name
-                <input id="individualAthleteSearch" type="search" list="individualAthleteOptions" placeholder="Type athlete name" autocomplete="off" />
-                <datalist id="individualAthleteOptions"></datalist>
-              </label>
-              <label class="builder-field">Athlete dropdown
-                <select id="individualAthleteSelect"></select>
-              </label>
-              <label class="builder-field">Board / platform
-                <select id="individualBoardSelect">
-                  <option value="3m">3M</option>
-                  <option value="platform">10M / platform</option>
-                  <option value="1m">1M</option>
-                </select>
-              </label>
-              <label class="builder-field">Dive list size
-                <select id="individualListSize">
-                  <option value="auto">Auto by gender</option>
-                  <option value="5">5 dives</option>
-                  <option value="6">6 dives</option>
-                </select>
-              </label>
-              <label class="builder-field">Benchmark
-                <select id="individualBenchmarkScope">
-                  <option value="top3">Average top 3, same gender/board</option>
-                  <option value="field">Full field, same gender/board</option>
-                  <option value="athlete_events">Athlete average across events</option>
-                </select>
-              </label>
-              <div class="builder-actions">
-                <button id="buildIndividualList">Build list</button>
-              </div>
-            </div>
-            <p class="builder-warning">Data-informed candidate list only. Does not replace coach judgment.</p>
-            <div id="individualListSummary" class="mixed-summary"></div>
-            <div id="individualStrengthRadar" class="individual-radar-panel"></div>
-            <div id="individualListTable" class="table-wrap"></div>
-            <div id="individualWhatIfArea"></div>
-          </div>
-        </div>
-
-        <!-- Synchro pair builder -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Synchro intelligence</div>
-              <div class="panel-title">Manual Synchro Pair Builder</div>
-            </div>
-            <span class="panel-chip">Candidate analysis only</span>
-          </div>
-          <div class="panel-body">
-            <div class="builder-grid">
-              <label class="builder-field">Gender
-                <select id="synchroPairGender">
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                </select>
-              </label>
-              <label class="builder-field">Board
-                <select id="synchroPairBoard">
-                  <option value="3m">3M</option>
-                  <option value="platform">10M / platform</option>
-                </select>
-              </label>
-              <label class="builder-field">Event rule set
-                <select id="synchroPairEventType">
-                  <option value="senior">Senior National synchro</option>
-                  <option value="junior_ab">Junior A/B synchro</option>
-                  <option value="junior_13u">Junior 13U synchro</option>
-                </select>
-              </label>
-              <label class="builder-field">Diver 1
-                <input id="synchroPairDiver1" type="search" list="synchroPairDiver1Options" placeholder="Type athlete name" autocomplete="off" />
-                <datalist id="synchroPairDiver1Options"></datalist>
-              </label>
-              <label class="builder-field">Diver 2
-                <input id="synchroPairDiver2" type="search" list="synchroPairDiver2Options" placeholder="Type athlete name" autocomplete="off" />
-                <datalist id="synchroPairDiver2Options"></datalist>
-              </label>
-              <label class="builder-field">Dive list size
-                <select id="synchroPairListSize"></select>
-              </label>
-              <label class="builder-field">Benchmark
-                <select id="synchroPairBenchmarkScope">
-                  <option value="top3">Average top 3 synchro</option>
-                  <option value="field">Full synchro field</option>
-                </select>
-              </label>
-              <div class="builder-actions">
-                <button id="buildSynchroPair">Build pair</button>
-              </div>
-            </div>
-            <p class="builder-warning">Follows senior/junior synchro rule model. Missing data shown as "No data present."</p>
-            <div id="synchroPairSummary" class="mixed-summary"></div>
-            <div id="synchroPairChart" class="mini-bars"></div>
-            <div id="synchroPairTable" class="table-wrap"></div>
-          </div>
-        </div>
-
-        <!-- Voluntary evidence builder -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">HPD voluntary evidence workbook</div>
-              <div class="panel-title">Individual + Synchro Voluntary Evidence Builder</div>
-            </div>
-            <span class="panel-chip">In-app preview + CSV / XLSX</span>
-          </div>
-          <div class="panel-body">
-            <p class="builder-warning">Independent from main dashboard presets. Missing evidence shown as "No data present," not estimated.</p>
-            <div class="builder-grid voluntary-controls workbook-controls">
-              <div class="wide-control">
-                <label class="builder-label">Event tabs</label>
-                <div id="volReportEventTabs" class="segmented-chip-row">
-                  <label class="event-tab-pill"><input type="checkbox" class="vol-event-type" value="women_3m" checked /><span>Women 3M</span></label>
-                  <label class="event-tab-pill"><input type="checkbox" class="vol-event-type" value="women_10m" checked /><span>Women 10M</span></label>
-                  <label class="event-tab-pill"><input type="checkbox" class="vol-event-type" value="men_3m" checked /><span>Men 3M</span></label>
-                  <label class="event-tab-pill"><input type="checkbox" class="vol-event-type" value="men_10m" checked /><span>Men 10M</span></label>
-                </div>
-              </div>
-              <label class="builder-field">Year scope
-                <select id="volReportYearScope">
-                  <option value="loaded">Currently loaded years</option>
-                  <option value="recent">Recent: 2024–2026</option>
-                  <option value="all">Full history: 2021–2026</option>
-                </select>
-              </label>
-              <label class="builder-field">Report mode
-                <select id="volReportMode">
-                  <option value="manual_pair">Manual assigned synchro pair</option>
-                  <option value="individual">Individual athlete only</option>
-                  <option value="actual_pair">Actual competed synchro pair</option>
-                  <option value="watchlist">Saved watchlist</option>
-                </select>
-              </label>
-              <label class="builder-field">Diver 1 / athlete
-                <input id="volReportDiver1Search" type="search" list="volReportNameOptions" placeholder="Type athlete name" autocomplete="off" />
-              </label>
-              <label class="builder-field">Diver 2 / partner
-                <input id="volReportDiver2Search" type="search" list="volReportNameOptions" placeholder="Optional partner name" autocomplete="off" />
-              </label>
-              <label class="builder-field">Pair / team name
-                <input id="volReportPairSearch" type="search" list="volReportNameOptions" placeholder="Optional: Diver A / Diver B" autocomplete="off" />
-              </label>
-              <label class="builder-field wide-control">Voluntary dive set
-                <input id="volReportDiveCodes" type="text" placeholder="Optional: 401B, 301B, 201B. Leave blank to auto-detect." autocomplete="off" />
-              </label>
-              <datalist id="volReportNameOptions"></datalist>
-              <div class="builder-actions stacked-actions">
-                <button id="addVolReportName">Save Diver 1 / team</button>
-                <button class="secondary-button" id="addCurrentAthleteVolReport">Use current athlete</button>
-              </div>
-              <div class="builder-actions stacked-actions">
-                <button id="buildVolReport">Build in-app workbook</button>
-                <button class="secondary-button" id="exportVolReport">Export CSV</button>
-                <button class="secondary-button" id="exportVolReportXlsx">Export Excel</button>
-              </div>
-            </div>
-            <div id="volReportWatchlist" class="watchlist-chips"></div>
-            <div id="volReportSummary" class="mixed-summary"></div>
-            <div id="volReportEvidenceQuality" class="evidence-quality-panel"></div>
-            <div id="volReportSourceDetail" class="source-detail-panel" aria-live="polite"></div>
-            <div id="volReportTable" class="workbook-preview"></div>
-          </div>
-        </div>
-
-        <!-- Mixed team builder -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Candidate analysis</div>
-              <div class="panel-title">Mixed Team Event Builder</div>
-            </div>
-            <div class="panel-header-actions">
-              <label class="inline-label">Teams
-                <input id="mixedLimit" type="number" min="5" max="60" step="5" value="20" style="width:60px" />
-              </label>
-              <button id="buildMixedTeams">Build candidates</button>
-            </div>
-          </div>
-          <div class="rule-strip">
-            <span>6 dives</span><span>1 female min</span><span>1 male min</span>
-            <span>Max 4 divers</span><span>USA-eligible only</span>
-            <span>3 dives from 3m</span><span>3 dives from 10m</span><span>6 different groups</span>
-          </div>
-          <div class="panel-body">
-            <p class="builder-warning">Mixed Team candidates exclude athletes with non-USA federation indicators.</p>
-            <div id="mixedTeamSummary" class="mixed-summary"></div>
-            <section class="whatif-panel">
-              <div class="subheader">
-                <div>
-                  <div class="panel-eyebrow">Manual what-if</div>
-                  <strong>Build and adjust a 4-diver Mixed Team lineup</strong>
-                </div>
-                <button class="secondary-button" id="autoFillWhatIf">Load top candidate</button>
-              </div>
-              <div class="builder-grid">
-                <label class="builder-field">Female 3M<select id="whatIfFemale3"></select></label>
-                <label class="builder-field">Male 3M<select id="whatIfMale3"></select></label>
-                <label class="builder-field">Female 10M<select id="whatIfFemale10"></select></label>
-                <label class="builder-field">Male 10M<select id="whatIfMale10"></select></label>
-              </div>
-              <div id="whatIfDiveGrid" class="whatif-dive-grid"></div>
-              <div id="whatIfSummary" class="mixed-summary"></div>
-            </section>
-            <p class="help-text">Tip: click "Load" on a ranked candidate to move it into the what-if lineup.</p>
-            <div id="mixedTeamTable" class="table-wrap"></div>
-          </div>
-        </div>
-
-        <!-- Top rows table -->
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-eyebrow">Sortable detail</div>
-              <div class="panel-title">Top Athlete / Event Rows</div>
-            </div>
-            <span class="panel-chip">Click headers to sort</span>
-          </div>
-          <div class="panel-body table-wrap">
-            <div id="topRowsTable"></div>
-          </div>
-        </div>
-
-        <!-- Limitations -->
-        <div class="limitations-note">
-          <strong>Assumptions & Limitations</strong>
-          <p>This dashboard does not fabricate missing data. Optional/voluntary status is preserved when present and shown as unknown when absent. Mixed team and synchro-pair candidates are model projections from historical DiveMeets dive sheets, not official selection recommendations.</p>
-        </div>
-
-      </main>
+      <div id="yearPicker" class="multi-picker"></div>
     </div>
 
-    <script src="../data/data.js"></script>
-    <script src="../data/dd_table.js"></script>
-    <script src="main.js"></script>
-  </body>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Event Filters</div>
+      <span class="sidebar-label">Event level</span>
+      <select class="sidebar-select" id="eventLevelFilter"></select>
+
+      <span class="sidebar-label">Age group</span>
+      <select class="sidebar-select" id="ageGroupFilter"></select>
+
+      <span class="sidebar-label">Meets</span>
+      <input class="sidebar-input" id="meetSearch" type="search" placeholder="Filter meets…" />
+      <div class="sidebar-actions-row">
+        <button class="btn btn-ghost btn-sm" id="meetUseAll">Use all</button>
+        <button class="btn btn-ghost btn-sm" id="meetClear">Clear</button>
+      </div>
+      <div id="meetPicker" class="multi-picker"></div>
+
+      <span class="sidebar-label">Athlete search</span>
+      <input class="sidebar-input" id="athleteSearch" type="search" placeholder="Search by name…" list="athleteOptions" />
+      <datalist id="athleteOptions"></datalist>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Event Controls</div>
+      <div class="sidebar-grid-2">
+        <div>
+          <span class="sidebar-label">Gender</span>
+          <select class="sidebar-select" id="genderFilter">
+            <option value="all">All</option>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+          </select>
+        </div>
+        <div>
+          <span class="sidebar-label">Board</span>
+          <select class="sidebar-select" id="boardFilter">
+            <option value="all">All</option>
+            <option value="1m">1M</option>
+            <option value="3m">3M</option>
+            <option value="Platform">10M / Platform</option>
+          </select>
+        </div>
+      </div>
+      <div class="sidebar-grid-2">
+        <div>
+          <span class="sidebar-label">Dive group</span>
+          <select class="sidebar-select" id="groupFilter">
+            <option value="all">All</option>
+            <option value="1">Front</option>
+            <option value="2">Back</option>
+            <option value="3">Reverse</option>
+            <option value="4">Inward</option>
+            <option value="5">Twister</option>
+            <option value="6">Armstand</option>
+          </select>
+        </div>
+        <div>
+          <span class="sidebar-label">Placement cutoff</span>
+          <input class="sidebar-input" id="placementCutoff" type="number" min="0" max="200" step="1" value="0" />
+        </div>
+      </div>
+      <div class="sidebar-help">Placement cutoff filters to top N finishers per event (0 = all).</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Visualization</div>
+      <span class="sidebar-label">Heatmap metric</span>
+      <select class="sidebar-select" id="heatmapMetric">
+        <option value="avgScore">Average dive score</option>
+        <option value="avgDd">Average DD</option>
+        <option value="diveCount">Dive count</option>
+        <option value="successRate">Success rate (score ≥ 7)</option>
+      </select>
+    </div>
+
+  </aside>
+
+  <main class="workspace" id="workspace">
+
+    <div id="loadingPanel" class="loading-panel">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loadingText">Loading data…</div>
+    </div>
+
+    <div id="mainContent" hidden>
+
+      <section class="kpi-row" aria-label="Dataset summary">
+        <div class="kpi-card kpi-accent-blue">
+          <div class="kpi-label">Athletes in scope</div>
+          <div class="kpi-value" id="heroAthletes">0</div>
+          <div class="kpi-foot" id="heroAthletesFoot">After all filters</div>
+        </div>
+        <div class="kpi-card kpi-accent-green">
+          <div class="kpi-label">Dives analyzed</div>
+          <div class="kpi-value" id="heroDives">0</div>
+          <div class="kpi-foot">Per-dive scoring rows</div>
+        </div>
+        <div class="kpi-card kpi-accent-amber">
+          <div class="kpi-label">Average dive score</div>
+          <div class="kpi-value" id="heroAvgScore">—</div>
+          <div class="kpi-foot">Across selected dives</div>
+        </div>
+        <div class="kpi-card kpi-accent-red">
+          <div class="kpi-label">Average DD</div>
+          <div class="kpi-value" id="heroAvgDd">—</div>
+          <div class="kpi-foot">Across selected dives</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Dive Category Heatmap</h2>
+          <p>Athletes × dive groups, coloured by the selected metric.</p>
+        </header>
+        <div id="heatmap" class="heatmap"></div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Athlete Leaderboard</h2>
+          <p id="leaderboardSubtitle">Top athletes by total score in the current scope.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Athlete</th>
+                <th>Team</th>
+                <th>Gender</th>
+                <th class="num">Events</th>
+                <th class="num">Dives</th>
+                <th class="num">Avg score</th>
+                <th class="num">Avg DD</th>
+                <th class="num">Best total</th>
+                <th class="num">Best place</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Top Dives</h2>
+          <p>Highest-scoring dive performances in the current scope.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Athlete</th>
+                <th>Meet</th>
+                <th>Event</th>
+                <th>Dive</th>
+                <th>Position</th>
+                <th class="num">DD</th>
+                <th class="num">Avg judge</th>
+                <th class="num">Score</th>
+              </tr>
+            </thead>
+            <tbody id="topDivesRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+</div>
+
+<script>
+  window.USAD_CONFIG = {
+    neon: {
+      sqlEndpoint: 'https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',
+      connectionString: 'postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+    }
+  };
+</script>
+<script src="../shared/neon-client.js?v=20260627"></script>
+<script src="../shared/usad-data.js?v=20260627"></script>
+<script src="../shared/usad-modal.js?v=20260627"></script>
+<script src="../shared/usad-toast.js?v=20260627"></script>
+<script src="main.js?v=20260627"></script>
+
+</body>
 </html>
