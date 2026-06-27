@@ -13,6 +13,21 @@ html { overflow-x: hidden; }
    browser's default [hidden] { display:none }. Force it back. */
 [hidden] { display: none !important; }
 
+/* Force the 2-column grid even at narrower widths (shared @media at 680px
+   collapses to 1fr; we want to keep sidebar+workspace until 900px instead) */
+.app-body {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  padding-top: var(--topbar-h);
+  min-height: 100vh;
+}
+@media (max-width: 760px) {
+  .app-body { grid-template-columns: 1fr; }
+}
+
+/* mainContent fills the workspace column completely */
+#mainContent { width: 100%; min-width: 0; }
+
 /* Reset panel-head — shared/design.css makes it dark navy by default;
    we want light cards with dark-ink headers (better contrast for body content). */
 .panel-head {
@@ -287,12 +302,12 @@ html { overflow-x: hidden; }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
 
 /* Workspace area ── on light bg, ghost buttons need different treatment */
-.workspace .btn-ghost {
+.app-workspace .btn-ghost {
   background: var(--surface);
   color: var(--ink-2);
   border-color: var(--line);
 }
-.workspace .btn-ghost:hover { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.app-workspace .btn-ghost:hover { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
 
 /* ── Meet picker ───────────────────────────────────────────── */
 .meet-picker {
@@ -330,11 +345,27 @@ html { overflow-x: hidden; }
 }
 
 /* ── Workspace ─────────────────────────────────────────────── */
-.workspace {
+.app-workspace {
+  display: block;
   padding: 14px 18px 40px;
   background: var(--bg);
   overflow-y: auto;
   min-width: 0;
+  width: 100%;
+}
+/* Force-override the shared .kpi-row grid rule so 4-up cards work at our widths */
+#mainContent .kpi-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px;
+  padding: 0;
+  margin-bottom: 14px;
+}
+@media (max-width: 1100px) {
+  #mainContent .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 720px) {
+  #mainContent .kpi-row { grid-template-columns: 1fr !important; }
 }
 
 .loading-panel {
@@ -357,13 +388,7 @@ html { overflow-x: hidden; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-size: 14px; color: var(--ink-2); }
 
-/* ── KPI row ───────────────────────────────────────────────── */
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 18px;
-}
+/* ── KPI cards ─────────────────────────────────────────────── */
 .kpi-card {
   background: var(--surface);
   border: 1px solid var(--line);
