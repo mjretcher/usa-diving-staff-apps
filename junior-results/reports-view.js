@@ -3159,6 +3159,47 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-historical-banner { background: linear-gradient(90deg, #FEF3C7 0%, #fdf8e1 100%); border-left: 4px solid #d97706; padding: 10px 16px; margin: 0 0 14px; border-radius: var(--radius-sm); font-size: 12px; color: #78350f; display: flex; align-items: center; gap: 10px; }
 .rpt-historical-banner strong { color: #78350f; font-weight: 700; }
 .rpt-historical-banner .rpt-year-num { background: var(--navy); color: white; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; font-family: var(--f-mono); }
+
+/* Report Builder modal */
+.rb-overlay { position: fixed; inset: 0; background: rgba(23,31,105,0.4); z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+.rb-dialog { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); width: 100%; max-width: 980px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; overflow: hidden; }
+.rb-head { padding: 20px 28px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #fafbfd 0%, #f0f3fa 100%); }
+.rb-eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
+.rb-title { font-size: 22px; font-weight: 700; color: var(--navy); margin: 4px 0 0; font-family: var(--f-display); }
+.rb-close { background: transparent; border: 0; font-size: 22px; cursor: pointer; color: var(--ink-3); padding: 4px 10px; border-radius: 6px; }
+.rb-close:hover { background: var(--surface-2); color: var(--ink); }
+.rb-body { padding: 24px 28px; overflow-y: auto; flex: 1; }
+.rb-step { display: flex; gap: 14px; margin-bottom: 22px; }
+.rb-step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: white; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: var(--f-display); }
+.rb-step-content { flex: 1; min-width: 0; }
+.rb-step-h { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 10px; font-family: var(--f-display); text-transform: uppercase; letter-spacing: 0.03em; }
+.rb-templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.rb-tmpl { text-align: left; background: var(--surface); border: 2px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: all 0.12s; }
+.rb-tmpl:hover { border-color: var(--pool); background: var(--surface-2); }
+.rb-tmpl.is-on { border-color: var(--navy); background: linear-gradient(135deg, #f0f3fa 0%, #e8edf7 100%); box-shadow: 0 2px 8px rgba(23,31,105,0.12); }
+.rb-tmpl-name { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.rb-tmpl-desc { font-size: 11px; color: var(--ink-2); line-height: 1.4; }
+.rb-tmpl-sections { font-size: 10px; color: var(--ink-3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.rb-sections-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+.rb-section-opt { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; background: var(--surface); transition: all 0.12s; }
+.rb-section-opt:hover { background: var(--surface-2); }
+.rb-section-opt.is-on { border-color: var(--navy); background: #f0f3fa; }
+.rb-section-opt input { margin-top: 2px; }
+.rb-section-name { font-size: 12.5px; font-weight: 600; color: var(--navy); margin-bottom: 2px; }
+.rb-section-desc { font-size: 11px; color: var(--ink-2); line-height: 1.4; }
+.rb-tag { display: inline-block; background: #FEF3C7; color: #78350f; padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 600; margin-left: 4px; }
+.rb-year-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rb-yr-chip { padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink-2); cursor: pointer; font-size: 12px; font-family: var(--f-ui); font-weight: 600; }
+.rb-yr-chip:hover { background: var(--surface-2); }
+.rb-yr-chip.is-on { background: var(--navy); color: white; border-color: var(--navy); }
+.rb-dmid-input { padding: 7px 11px; border: 1px solid var(--line); border-radius: 5px; font-family: var(--f-mono); font-size: 13px; width: 200px; }
+.rb-foot { padding: 16px 28px; border-top: 1px solid var(--line); background: var(--surface-2); display: flex; align-items: center; gap: 14px; }
+.rb-btn-prim { background: var(--navy); color: white; border: 0; padding: 9px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: var(--f-ui); }
+.rb-btn-prim:hover { background: var(--pool); }
+.rb-btn-prim.is-disabled { background: var(--ink-3); cursor: not-allowed; opacity: 0.6; }
+.rb-btn-sec { background: white; color: var(--ink-2); border: 1px solid var(--line); padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: var(--f-ui); }
+.rb-btn-sec:hover { background: var(--surface-2); }
+.rb-soft { color: var(--ink-3); font-size: 11px; }
 `;
     document.head.appendChild(s);
   }
@@ -4187,54 +4228,631 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     return true;
   }
 
-  /* ── Generate report (PDF-friendly print mode) ─────────────────
-     Adds a "Generate report" button to every panel header. Triggers a print mode
-     with branded header + filter context, then window.print(). */
-  function generateReport(){
-    const panel = rptState.panel || 'flow';
-    const panelLabels = {
-      flow:'Pipeline flow', cohort:'Cohort tracker', scoring:'Scoring analysis',
-      breakdowns:'Participation breakdowns', displacement:'Displacements', status:'Special status',
-      historical:'Historical (multi-year)', declined:'Declined Nationals',
-      anomaly:'Anomalies', career:'Athlete career', tier_entry:'Tier entry (old system)'
-    };
-    const f = (rptState.filters || {});
-    const filterSummary = Object.keys(f).filter(k => f[k]).map(k => k+': '+f[k]).join(' · ') || 'No filters applied';
-    const now = new Date();
-    const overlay = document.createElement('div');
-    overlay.id = 'rpt-print-overlay';
-    overlay.innerHTML = `
+  /* ── Report Builder ─────────────────────────────────────────────
+     Replaces the simple "snapshot current panel" approach with a real
+     builder: pick a template or assemble custom sections, choose year(s),
+     apply filters, and produce a branded multi-section document. */
+
+  // Each section is a self-contained block with its own async data loader.
+  // Sections take an `opts` object (years, filters) and return HTML.
+  const REPORT_SECTIONS = {
+    exec_summary: {
+      label: 'Executive Summary',
+      desc: 'Top-line athlete counts per stage with year-over-year change',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const r = await neonQuery(
+          "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS divers, COUNT(*)::int AS rows "+
+          "FROM core.event_results WHERE is_junior_circuit AND year = ANY($1::int[]) "+
+          "AND stage IN ('Regionals','Zones','EWC','Nationals') GROUP BY year, stage ORDER BY year, stage",
+          ['{'+yrs.join(',')+'}']
+        );
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+x.stage] = x);
+        const stages = ['Regionals','Zones','EWC','Nationals'];
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Executive Summary</h2>
+          <table class="rb-table">
+            <thead><tr><th>Year</th>${stages.map(s=>`<th>${s}<br><span class="rb-soft">athletes</span></th>`).join('')}<th>R→Z conv.</th></tr></thead>
+            <tbody>
+            ${yrs.map(y => {
+              const r_=(grid[y+'|Regionals']||{}).divers||0;
+              const z_=(grid[y+'|Zones']||{}).divers||0;
+              const e_=(grid[y+'|EWC']||{}).divers||0;
+              const n_=(grid[y+'|Nationals']||{}).divers||0;
+              return `<tr><td><strong>${y}</strong></td>
+                <td>${fmt(r_)}</td><td>${fmt(z_)}</td>
+                <td>${e_?fmt(e_):'<span class="rb-soft">—</span>'}</td>
+                <td>${n_?fmt(n_):'<span class="rb-soft">—</span>'}</td>
+                <td>${r_?(100*z_/r_).toFixed(1)+'%':'—'}</td></tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    pipeline_funnel: {
+      label: 'Pipeline Funnel',
+      desc: 'Stage-by-stage athlete counts as a visual funnel for selected year(s)',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const r = await neonQuery(
+          "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE is_junior_circuit AND year = ANY($1::int[]) "+
+          "GROUP BY year, stage ORDER BY year, stage",
+          ['{'+yrs.join(',')+'}']
+        );
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Pipeline Funnel ${yrs.length===1?'('+yrs[0]+')':'('+yrs.length+' years)'}</h2>
+          <div class="rb-funnels">
+            ${yrs.map(y => {
+              const stages = [['Regionals', grid[y+'|Regionals']||0, '#171F69']];
+              stages.push(['Zones', grid[y+'|Zones']||0, '#3F5BAA']);
+              const ewc = grid[y+'|EWC']||0; if (ewc) stages.push(['E/W/C', ewc, '#7BA4DB']);
+              const nat = grid[y+'|Nationals']||0; if (nat) stages.push(['Nationals', nat, '#22893E']);
+              const max = Math.max.apply(null, stages.map(s => s[1]));
+              return `<div class="rb-funnel-card">
+                <div class="rb-funnel-yr">${y}</div>
+                ${stages.map(([lbl,n,col]) => `
+                  <div class="rb-funnel-row">
+                    <div class="rb-funnel-lbl">${lbl}</div>
+                    <div class="rb-funnel-bar" style="width:${max?Math.max(8,100*n/max):0}%;background:${col}">${fmt(n)}</div>
+                  </div>
+                `).join('')}
+              </div>`;
+            }).join('')}
+          </div>
+        </section>`;
+      },
+    },
+
+    year_matrix: {
+      label: 'Year × Stage Matrix',
+      desc: 'Cross-year participation matrix with drop-off percentages',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : _availableYears || [2021,2022,2023,2024,2025,2026];
+        const r = await neonQuery(
+          "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE is_junior_circuit AND year IS NOT NULL "+
+          "AND year = ANY($1::int[]) GROUP BY year, stage ORDER BY year",
+          ['{'+yrs.join(',')+'}']
+        );
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Year × Stage Matrix</h2>
+          <table class="rb-table">
+            <thead><tr><th>Year</th><th>Regionals</th><th>Zones</th><th>E/W/C</th><th>Nationals</th><th>R→Z drop</th><th>Z→Next drop</th></tr></thead>
+            <tbody>
+            ${yrs.map(y => {
+              const reg=grid[y+'|Regionals']||0, zon=grid[y+'|Zones']||0, ewc=grid[y+'|EWC']||0, nat=grid[y+'|Nationals']||0;
+              const next = y >= 2026 ? ewc : nat;
+              return `<tr><td><strong>${y}</strong></td>
+                <td>${fmt(reg)}</td><td>${fmt(zon)}</td>
+                <td>${ewc?fmt(ewc):'<span class="rb-soft">—</span>'}</td>
+                <td>${nat?fmt(nat):'<span class="rb-soft">—</span>'}</td>
+                <td>${reg?(100*(1-zon/reg)).toFixed(1)+'%':'—'}</td>
+                <td>${zon?(100*(1-next/zon)).toFixed(1)+'%':'—'}</td>
+              </tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    declined_summary: {
+      label: 'Declined Nationals — Summary',
+      desc: 'Top-3 Zone qualifiers absent from the next stage, count by year',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [2021,2022,2023,2024,2025];
+        const r = await neonQuery(`
+          WITH top3 AS (
+            SELECT DISTINCT year, event_key, diver_id_dm
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND place <= 3
+              AND year = ANY($1::int[])
+          ),
+          nexts AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])
+          ),
+          dec AS (
+            SELECT t.year, COUNT(*) AS n_dec FROM top3 t LEFT JOIN nexts n USING (year, event_key, diver_id_dm)
+            WHERE n.diver_id_dm IS NULL GROUP BY t.year
+          ),
+          tots AS (SELECT year, COUNT(*) AS n_total FROM top3 GROUP BY year)
+          SELECT t.year, COALESCE(d.n_dec, 0)::int AS decliners, t.n_total::int AS total
+          FROM tots t LEFT JOIN dec d USING (year) ORDER BY t.year
+        `, ['{'+yrs.join(',')+'}']);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Top-3 Zone Qualifiers Absent From Next Stage</h2>
+          <p class="rb-p">Direct answer to the CCE headline question: "of the athletes who placed top 3 at Zones, how many chose not to attend the next stage?"</p>
+          <table class="rb-table">
+            <thead><tr><th>Year</th><th>Total Top-3</th><th>Decliners</th><th>Decline Rate</th></tr></thead>
+            <tbody>
+            ${r.rows.map(x => `<tr><td><strong>${x.year}</strong></td><td>${fmt(x.total)}</td><td>${fmt(x.decliners)}</td><td>${x.total?(100*x.decliners/x.total).toFixed(1)+'%':'—'}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    declined_athletes: {
+      label: 'Declined Nationals — Athlete List',
+      desc: 'Names, teams, events of each decliner (may be long)',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [2021,2022,2023,2024,2025];
+        const r = await neonQuery(`
+          WITH top3 AS (
+            SELECT DISTINCT ON (year, event_key, zone, diver_id_dm)
+              year, event_key, zone, diver_id_dm, place AS zp, score AS zs,
+              diver_first, diver_last, team_name, age_group, gender, region
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND place <= 3
+              AND year = ANY($1::int[])
+            ORDER BY year, event_key, zone, diver_id_dm, place
+          ),
+          nexts AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])
+          )
+          SELECT t.* FROM top3 t LEFT JOIN nexts n USING (year, event_key, diver_id_dm)
+          WHERE n.diver_id_dm IS NULL ORDER BY t.year, t.zone, t.event_key, t.zp
+        `, ['{'+yrs.join(',')+'}']);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Declined Nationals — Full Athlete List</h2>
+          <p class="rb-p">${fmt(r.rows.length)} athletes across ${yrs.length} year${yrs.length===1?'':'s'}.</p>
+          <table class="rb-table rb-table-sm">
+            <thead><tr><th>Yr</th><th>Athlete</th><th>Team</th><th>Zone</th><th>Event</th><th>Place</th><th>Region</th></tr></thead>
+            <tbody>
+            ${r.rows.map(x => `<tr>
+              <td>${x.year}</td>
+              <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong></td>
+              <td>${esc(x.team_name||'')}</td>
+              <td>${esc(x.zone||'')}</td>
+              <td>${esc(x.event_key||'')}</td>
+              <td>${x.zp}</td>
+              <td>${x.region?'R'+x.region:''}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    demographic_mix: {
+      label: 'Demographic Mix',
+      desc: 'Athletes by age group × gender for selected year(s)',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const r = await neonQuery(
+          "SELECT year, age_group, gender, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE is_junior_circuit AND age_group LIKE 'Group %' "+
+          "AND year = ANY($1::int[]) GROUP BY year, age_group, gender ORDER BY year, age_group, gender",
+          ['{'+yrs.join(',')+'}']
+        );
+        const combos = ['Group A Boys','Group A Girls','Group B Boys','Group B Girls','Group C Boys','Group C Girls','Group D Boys','Group D Girls'];
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+(x.age_group||'')+' '+(x.gender||'')] = x.n);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Demographic Mix</h2>
+          <table class="rb-table">
+            <thead><tr><th>Year</th>${combos.map(c=>`<th>${c.replace('Group ','Gp ')}</th>`).join('')}<th>Total</th></tr></thead>
+            <tbody>
+            ${yrs.map(y => {
+              let tot=0;
+              const cells=combos.map(c => { const n=grid[y+'|'+c]||0; tot+=n; return `<td>${n?fmt(n):'<span class="rb-soft">·</span>'}</td>`; }).join('');
+              return `<tr><td><strong>${y}</strong></td>${cells}<td><strong>${fmt(tot)}</strong></td></tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    regional_strength: {
+      label: 'Regional Strength',
+      desc: 'Athletes at Regionals per region per year',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const r = await neonQuery(
+          "SELECT year, region, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE is_junior_circuit AND region IS NOT NULL "+
+          "AND year = ANY($1::int[]) GROUP BY year, region ORDER BY year, region",
+          ['{'+yrs.join(',')+'}']
+        );
+        const regs = Array.from({length:12}, (_,i)=>i+1);
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+x.region] = x.n);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Regional Strength</h2>
+          <table class="rb-table">
+            <thead><tr><th>Year</th>${regs.map(r=>`<th>R${r}</th>`).join('')}<th>Total</th></tr></thead>
+            <tbody>
+            ${yrs.map(y => {
+              let tot=0;
+              const cells=regs.map(r => { const n=grid[y+'|'+r]||0; tot+=n; return `<td>${n?fmt(n):'<span class="rb-soft">·</span>'}</td>`; }).join('');
+              return `<tr><td><strong>${y}</strong></td>${cells}<td><strong>${fmt(tot)}</strong></td></tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    rule_era: {
+      label: 'Rule Era Comparison',
+      desc: 'Three-era comparison: 2021-22 (foreign restricted), 2023-25 (foreign allowed), 2026+ (new system)',
+      async build(opts){
+        const r = await neonQuery(
+          "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
+          "FROM core.event_results WHERE is_junior_circuit GROUP BY year, stage"
+        );
+        const grid = {};
+        r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
+        const eras = [
+          { lbl: '2021–2022', years: [2021,2022], desc: 'Old system + foreign Regionals-only', color: '#171F69' },
+          { lbl: '2023–2025', years: [2023,2024,2025], desc: 'Old system + foreign non-displacing', color: '#3F5BAA' },
+          { lbl: '2026+',     years: [2026], desc: 'New system + E/W/C tier', color: '#22893E' },
+        ];
+        const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Rule Era Comparison</h2>
+          <table class="rb-table">
+            <thead><tr><th>Era</th><th>Description</th><th>Avg Regionals</th><th>Avg Zones</th><th>Avg E/W/C</th><th>Avg Nationals</th></tr></thead>
+            <tbody>
+            ${eras.map(e => {
+              const regs=avg(e.years.map(y=>grid[y+'|Regionals']||0));
+              const zons=avg(e.years.map(y=>grid[y+'|Zones']||0));
+              const ewcs=avg(e.years.map(y=>grid[y+'|EWC']||0));
+              const nats=avg(e.years.map(y=>grid[y+'|Nationals']||0));
+              return `<tr>
+                <td><strong style="color:${e.color}">${e.lbl}</strong></td>
+                <td class="rb-soft">${esc(e.desc)}</td>
+                <td>${regs>0?fmt(Math.round(regs)):'—'}</td>
+                <td>${zons>0?fmt(Math.round(zons)):'—'}</td>
+                <td>${ewcs>0?fmt(Math.round(ewcs)):'<span class="rb-soft">—</span>'}</td>
+                <td>${nats>0?fmt(Math.round(nats)):'<span class="rb-soft">—</span>'}</td>
+              </tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    anomaly_summary: {
+      label: 'Anomaly Summary',
+      desc: 'Count of athletes flagged under each anomaly rule',
+      async build(opts){
+        // Skipped Zones (at Nats with no Zone row)
+        const r1 = await neonQuery(`
+          SELECT COUNT(*)::int AS n FROM (
+            SELECT DISTINCT a.year, a.event_key, a.diver_id_dm
+            FROM core.event_results a
+            LEFT JOIN core.event_results z
+              ON z.is_junior_circuit AND z.stage='Zones'
+              AND z.year=a.year AND z.event_key=a.event_key AND z.diver_id_dm=a.diver_id_dm
+            WHERE a.is_junior_circuit AND a.stage='Nationals' AND a.year < 2026
+              AND a.diver_id_dm IS NOT NULL AND z.diver_id_dm IS NULL
+          ) x
+        `);
+        // Above alternate cutoff
+        const r2 = await neonQuery(`
+          SELECT COUNT(*)::int AS n FROM (
+            SELECT DISTINCT a.year, a.event_key, a.diver_id_dm
+            FROM core.event_results a
+            JOIN (
+              SELECT year, event_key, diver_id_dm, MIN(place) AS p
+              FROM core.event_results WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL
+              GROUP BY 1,2,3
+            ) z USING (year, event_key, diver_id_dm)
+            WHERE a.is_junior_circuit AND a.stage='Nationals' AND a.year < 2026 AND z.p > 16
+          ) x
+        `);
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Data Quality / Rule Anomalies</h2>
+          <table class="rb-table">
+            <thead><tr><th>Anomaly</th><th>Count</th><th>Interpretation</th></tr></thead>
+            <tbody>
+              <tr><td>At Nationals with no Zone record</td><td><strong>${fmt(r1.rows[0].n)}</strong></td><td class="rb-soft">Likely HPS/prequal route; small share may be data gaps</td></tr>
+              <tr><td>At Nationals with Zone placement > 16 (above alternate cap)</td><td><strong>${fmt(r2.rows[0].n)}</strong></td><td class="rb-soft">Old rule cuts alternates at 16; these may be rule exceptions or data noise</td></tr>
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
+    athlete_career: {
+      label: 'Athlete Career Trace',
+      desc: 'Full history for a single athlete by DM ID',
+      requiresDmId: true,
+      async build(opts){
+        if (!opts.dmId) return '';
+        const r = await neonQuery(
+          "SELECT year, stage, meet_name, event_key, round, place, score, team_name "+
+          "FROM core.event_results WHERE diver_id_dm = $1 ORDER BY year, meet_name, event_name, round",
+          [opts.dmId]
+        );
+        if (!r.rows.length) return '<section class="rb-section"><p>No data for DM '+esc(opts.dmId)+'.</p></section>';
+        const first = await neonQuery("SELECT first_name, last_name FROM core.divers WHERE diver_id_dm=$1", [opts.dmId]);
+        const name = first.rows[0] ? (first.rows[0].first_name||'')+' '+(first.rows[0].last_name||'') : 'DM '+opts.dmId;
+        const byYear = {};
+        r.rows.forEach(x => (byYear[x.year]=byYear[x.year]||[]).push(x));
+        return `<section class="rb-section">
+          <h2 class="rb-h2">${esc(name)} — Career Trace</h2>
+          <p class="rb-soft">DM ${esc(opts.dmId)} · ${fmt(r.rows.length)} result rows · ${Object.keys(byYear).length} year${Object.keys(byYear).length===1?'':'s'}</p>
+          ${Object.keys(byYear).sort().map(y => `
+            <h3 class="rb-h3">${y}</h3>
+            <table class="rb-table rb-table-sm">
+              <thead><tr><th>Stage</th><th>Meet</th><th>Event</th><th>Round</th><th>Place</th><th>Score</th></tr></thead>
+              <tbody>${byYear[y].map(x => `<tr>
+                <td>${esc(x.stage||'')}</td><td>${esc(x.meet_name||'')}</td><td>${esc(x.event_key||'')}</td>
+                <td>${esc(x.round||'')}</td><td>${x.place||''}</td>
+                <td>${x.score!=null?Number(x.score).toFixed(2):''}</td>
+              </tr>`).join('')}</tbody>
+            </table>
+          `).join('')}
+        </section>`;
+      },
+    },
+  };
+
+  // Templates — curated section sequences for common deliverables
+  const REPORT_TEMPLATES = [
+    { id: 'cce_briefing', label: 'CCE Briefing',
+      desc: 'For Committee for Competitive Excellence meetings. Covers year-over-year pipeline, decline rates, and demographic shifts.',
+      sections: ['exec_summary','year_matrix','declined_summary','demographic_mix','rule_era'],
+      defaultYears: [2021,2022,2023,2024,2025,2026] },
+    { id: 'board_update', label: 'Board Update',
+      desc: 'Concise update for Board of Directors. Pipeline funnel + multi-year context + anomalies.',
+      sections: ['exec_summary','pipeline_funnel','year_matrix','anomaly_summary'],
+      defaultYears: [2024,2025,2026] },
+    { id: 'year_review', label: 'Year in Review',
+      desc: 'Single-year deep dive. Funnel, demographics, region, anomalies for the selected year.',
+      sections: ['exec_summary','pipeline_funnel','demographic_mix','regional_strength','anomaly_summary'],
+      defaultYears: [_currentSeason] },
+    { id: 'rule_change', label: 'Rule Change Impact',
+      desc: 'Compare the three rule eras directly. For policy review and proposed-change conversations.',
+      sections: ['rule_era','year_matrix','declined_summary','demographic_mix'],
+      defaultYears: [2021,2022,2023,2024,2025,2026] },
+    { id: 'decliner_deep', label: 'Decliner Deep Dive',
+      desc: 'Full breakdown of top-3 Zone qualifiers who skipped the next stage. Includes named athlete list.',
+      sections: ['declined_summary','declined_athletes','demographic_mix'],
+      defaultYears: [2021,2022,2023,2024,2025] },
+    { id: 'athlete_spotlight', label: 'Athlete Spotlight',
+      desc: 'Single-athlete career trace. Requires DM ID.',
+      sections: ['athlete_career'],
+      defaultYears: [],
+      requiresDmId: true },
+  ];
+
+  // Builder state
+  const rbState = {
+    selectedTemplate: null,
+    selectedSections: new Set(),
+    years: null,
+    dmId: '',
+  };
+
+  function openReportBuilder(){
+    // Make sure we have year list
+    if (!_availableYears) fetchAvailableYears();
+    rbState.selectedTemplate = null;
+    rbState.selectedSections = new Set();
+    rbState.years = null;
+    rbState.dmId = '';
+    const m = document.createElement('div');
+    m.id = 'rb-modal';
+    document.body.appendChild(m);
+    renderBuilder();
+  }
+
+  function renderBuilder(){
+    const m = document.getElementById('rb-modal');
+    if (!m) return;
+    const years = _availableYears || [2021,2022,2023,2024,2025,2026];
+    const selYears = rbState.years || (rbState.selectedTemplate ? REPORT_TEMPLATES.find(t=>t.id===rbState.selectedTemplate)?.defaultYears : null) || [_currentSeason];
+    const requiresDmId = Array.from(rbState.selectedSections).some(s => REPORT_SECTIONS[s] && REPORT_SECTIONS[s].requiresDmId);
+    const canGenerate = rbState.selectedSections.size > 0 && (!requiresDmId || rbState.dmId.trim());
+
+    m.innerHTML = `
+      <div class="rb-overlay" onclick="if(event.target===this)window._rbClose()">
+        <div class="rb-dialog">
+          <div class="rb-head">
+            <div>
+              <div class="rb-eyebrow">USA Diving</div>
+              <h2 class="rb-title">Build a Report</h2>
+            </div>
+            <button class="rb-close" onclick="window._rbClose()" title="Close">✕</button>
+          </div>
+
+          <div class="rb-body">
+            <!-- Templates row -->
+            <div class="rb-step">
+              <div class="rb-step-num">1</div>
+              <div class="rb-step-content">
+                <div class="rb-step-h">Start from a template</div>
+                <div class="rb-templates">
+                  ${REPORT_TEMPLATES.map(t => `
+                    <button class="rb-tmpl ${rbState.selectedTemplate===t.id?'is-on':''}" onclick="window._rbPickTemplate('${t.id}')">
+                      <div class="rb-tmpl-name">${esc(t.label)}</div>
+                      <div class="rb-tmpl-desc">${esc(t.desc)}</div>
+                      <div class="rb-tmpl-sections">${t.sections.length} sections</div>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+
+            <!-- Custom sections -->
+            <div class="rb-step">
+              <div class="rb-step-num">2</div>
+              <div class="rb-step-content">
+                <div class="rb-step-h">Choose sections <span class="rb-soft">(${rbState.selectedSections.size} selected)</span></div>
+                <div class="rb-sections-grid">
+                  ${Object.entries(REPORT_SECTIONS).map(([id,sec]) => `
+                    <label class="rb-section-opt ${rbState.selectedSections.has(id)?'is-on':''}">
+                      <input type="checkbox" ${rbState.selectedSections.has(id)?'checked':''} onchange="window._rbToggleSection('${id}')">
+                      <div>
+                        <div class="rb-section-name">${esc(sec.label)}${sec.requiresDmId?' <span class="rb-tag">needs DM ID</span>':''}</div>
+                        <div class="rb-section-desc">${esc(sec.desc)}</div>
+                      </div>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+
+            <!-- Year selection -->
+            <div class="rb-step">
+              <div class="rb-step-num">3</div>
+              <div class="rb-step-content">
+                <div class="rb-step-h">Pick year(s) for the report</div>
+                <div class="rb-year-chips">
+                  ${years.map(y => `
+                    <button class="rb-yr-chip ${selYears.includes(y)?'is-on':''}" onclick="window._rbToggleYear(${y})">${y}</button>
+                  `).join('')}
+                  <button class="rb-yr-chip" onclick="window._rbAllYears()">All</button>
+                  <button class="rb-yr-chip" onclick="window._rbCurrentOnly()">Current only</button>
+                </div>
+              </div>
+            </div>
+
+            ${requiresDmId ? `
+              <div class="rb-step">
+                <div class="rb-step-num">4</div>
+                <div class="rb-step-content">
+                  <div class="rb-step-h">Athlete DM ID required</div>
+                  <input type="text" class="rb-dmid-input" placeholder="e.g. 73023" value="${esc(rbState.dmId)}" oninput="window._rbSetDmId(this.value)" />
+                  <div class="rb-soft" style="margin-top:6px">Find DM IDs via the Athlete Career panel.</div>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="rb-foot">
+            <span class="rb-soft">Output: a print-ready, USA Diving-branded document opens in a new view. From there you can print to PDF.</span>
+            <span style="margin-left:auto;display:inline-flex;gap:8px">
+              <button class="rb-btn-sec" onclick="window._rbClose()">Cancel</button>
+              <button class="rb-btn-prim ${!canGenerate?'is-disabled':''}" onclick="window._rbGenerate()" ${!canGenerate?'disabled':''}>📄 Generate report</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  window._rbClose = function(){ const m = document.getElementById('rb-modal'); if (m) m.remove(); };
+  window._rbPickTemplate = function(id){
+    rbState.selectedTemplate = id;
+    const t = REPORT_TEMPLATES.find(x => x.id === id);
+    if (t) {
+      rbState.selectedSections = new Set(t.sections);
+      rbState.years = (t.defaultYears && t.defaultYears.length) ? t.defaultYears.slice() : null;
+    }
+    renderBuilder();
+  };
+  window._rbToggleSection = function(id){
+    if (rbState.selectedSections.has(id)) rbState.selectedSections.delete(id);
+    else rbState.selectedSections.add(id);
+    rbState.selectedTemplate = null;  // user is customizing now
+    renderBuilder();
+  };
+  window._rbToggleYear = function(y){
+    const cur = rbState.years || (rbState.selectedTemplate ? REPORT_TEMPLATES.find(t=>t.id===rbState.selectedTemplate)?.defaultYears.slice() : null) || [_currentSeason];
+    const idx = cur.indexOf(y);
+    if (idx >= 0) cur.splice(idx, 1); else cur.push(y);
+    rbState.years = cur.slice().sort();
+    renderBuilder();
+  };
+  window._rbAllYears = function(){ rbState.years = (_availableYears || [2021,2022,2023,2024,2025,2026]).slice().sort(); renderBuilder(); };
+  window._rbCurrentOnly = function(){ rbState.years = [_currentSeason]; renderBuilder(); };
+  window._rbSetDmId = function(v){ rbState.dmId = v; };
+
+  window._rbGenerate = async function(){
+    const sectionIds = Array.from(rbState.selectedSections);
+    if (sectionIds.length === 0) return;
+    const years = (rbState.years && rbState.years.length) ? rbState.years.slice().sort() : [_currentSeason];
+    const opts = { years: years, dmId: rbState.dmId.trim() };
+
+    // Close the modal, open the output container
+    window._rbClose();
+    const out = document.createElement('div');
+    out.id = 'rb-output';
+    out.innerHTML = `
       <style>
         @media print {
           body * { visibility: hidden !important; }
-          #rpt-print-overlay, #rpt-print-overlay * { visibility: visible !important; }
-          #rpt-print-overlay { position: absolute; left: 0; top: 0; width: 100%; }
+          #rb-output, #rb-output * { visibility: visible !important; }
+          #rb-output { position: absolute; left: 0; top: 0; width: 100%; background: white; }
+          #rb-output .rb-toolbar { display: none !important; }
+          @page { margin: 0.6in; }
         }
-        #rpt-print-overlay { position: fixed; inset: 0; background: white; z-index: 99999; overflow: auto; padding: 24px; font-family: var(--f-ui, system-ui); color: #171F69; }
-        #rpt-print-overlay .ph-head { border-bottom: 4px solid #E31937; padding-bottom: 10px; margin-bottom: 18px; }
-        #rpt-print-overlay .ph-head h1 { font-size: 22px; color: #171F69; margin: 0; }
-        #rpt-print-overlay .ph-head .ph-sub { font-size: 12px; color: #5a6480; margin-top: 6px; }
-        #rpt-print-overlay .ph-close { position: fixed; top: 12px; right: 12px; padding: 8px 14px; background: #171F69; color: white; border: 0; border-radius: 6px; cursor: pointer; }
-        @media print { #rpt-print-overlay .ph-close, #rpt-print-overlay .ph-print { display: none !important; } }
+        #rb-output { position: fixed; inset: 0; background: #fafbfd; z-index: 99999; overflow: auto; font-family: var(--f-ui, system-ui); color: #171F69; }
+        #rb-output .rb-toolbar { position: sticky; top: 0; background: white; border-bottom: 1px solid #e5e9f2; padding: 10px 18px; display: flex; align-items: center; gap: 8px; z-index: 1; }
+        #rb-output .rb-doc { max-width: 900px; margin: 24px auto; padding: 32px 44px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+        #rb-output .rb-doc-head { border-bottom: 4px solid #E31937; padding-bottom: 14px; margin-bottom: 22px; }
+        #rb-output .rb-doc-head h1 { font-size: 26px; margin: 0; color: #171F69; }
+        #rb-output .rb-doc-head .rb-doc-sub { font-size: 12px; color: #5a6480; margin-top: 8px; }
+        #rb-output .rb-section { margin: 26px 0; page-break-inside: avoid; }
+        #rb-output .rb-h2 { font-size: 16px; color: #171F69; border-bottom: 2px solid #171F69; padding-bottom: 4px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+        #rb-output .rb-h3 { font-size: 13px; color: #171F69; margin: 16px 0 6px; }
+        #rb-output .rb-p { font-size: 12px; color: #2d3450; margin: 0 0 8px; }
+        #rb-output .rb-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+        #rb-output .rb-table th { background: #eef1f7; color: #171F69; text-align: left; padding: 5px 8px; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; border-bottom: 1px solid #c5cce0; }
+        #rb-output .rb-table td { padding: 5px 8px; border-bottom: 1px solid #e5e9f2; font-variant-numeric: tabular-nums; }
+        #rb-output .rb-table-sm { font-size: 10px; }
+        #rb-output .rb-soft { color: #6b7390; font-size: 11px; }
+        #rb-output .rb-funnels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        #rb-output .rb-funnel-card { background: #f6f8fc; border-radius: 6px; padding: 10px; }
+        #rb-output .rb-funnel-yr { font-weight: 700; color: #171F69; margin-bottom: 6px; }
+        #rb-output .rb-funnel-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 10px; }
+        #rb-output .rb-funnel-lbl { width: 70px; color: #5a6480; }
+        #rb-output .rb-funnel-bar { color: white; padding: 3px 8px; border-radius: 2px; font-weight: 700; }
+        #rb-output .rb-toolbar button { padding: 6px 12px; border-radius: 4px; border: 1px solid #c5cce0; background: white; cursor: pointer; font-family: inherit; font-size: 12px; }
+        #rb-output .rb-toolbar .rb-print-btn { background: #171F69; color: white; border-color: #171F69; font-weight: 600; }
       </style>
-      <button class="ph-close" onclick="document.getElementById('rpt-print-overlay').remove()">Close</button>
-      <button class="ph-close ph-print" style="right: 100px; background: #E31937" onclick="window.print()">Print</button>
-      <div class="ph-head">
-        <h1>USA Diving — ${panelLabels[panel] || panel}</h1>
-        <div class="ph-sub">
-          Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}<br>
-          Filters: ${filterSummary}<br>
-          Source: live Neon (<code>core.event_results</code>)
+      <div class="rb-toolbar">
+        <button class="rb-print-btn" onclick="window.print()">🖨️ Print / save as PDF</button>
+        <button onclick="document.getElementById('rb-output').remove()">✕ Close</button>
+        <span class="rb-soft" style="margin-left:auto">Print to PDF for the cleanest result. The report is sized to print on US Letter paper.</span>
+      </div>
+      <div class="rb-doc">
+        <div class="rb-doc-head">
+          <h1 id="rb-doc-title">${esc(rbState.selectedTemplate ? REPORT_TEMPLATES.find(t=>t.id===rbState.selectedTemplate).label : 'Custom Report')}</h1>
+          <div class="rb-doc-sub">
+            Generated: ${new Date().toLocaleString()}<br>
+            Year(s): ${esc(years.join(', '))}<br>
+            Sections: ${esc(sectionIds.map(s => REPORT_SECTIONS[s].label).join(' · '))}<br>
+            Data source: live Neon (core.event_results)
+          </div>
+        </div>
+        <div id="rb-doc-body">
+          <div class="rb-soft">Building sections… <span id="rb-progress">0 / ${sectionIds.length}</span></div>
         </div>
       </div>
-      <div id="ph-body"></div>
     `;
-    document.body.appendChild(overlay);
-    // Clone the current panel into the overlay body
-    const cur = document.getElementById('resultsPanel');
-    if (cur) overlay.querySelector('#ph-body').innerHTML = cur.innerHTML;
-  }
-  window._rptGenerateReport = generateReport;
+    document.body.appendChild(out);
+
+    // Build sections in parallel
+    const promises = sectionIds.map(id => REPORT_SECTIONS[id].build(opts).catch(e => `<section class="rb-section"><h2 class="rb-h2">${esc(REPORT_SECTIONS[id].label)}</h2><p class="rb-p" style="color:#E31937">Failed to build: ${esc(String(e.message||e))}</p></section>`));
+    let done = 0;
+    const results = await Promise.all(promises.map(p => p.then(html => { done++; const el=document.getElementById('rb-progress'); if (el) el.textContent = done+' / '+sectionIds.length; return html; })));
+    const body = document.getElementById('rb-doc-body');
+    if (body) body.innerHTML = results.join('');
+  };
+
+  function generateReport(){ openReportBuilder(); }
+  window._rptGenerateReport = openReportBuilder;
 
   /* ── Rule Era Comparison panel ─────────────────────────────────
      Compares the three rule eras side by side:
