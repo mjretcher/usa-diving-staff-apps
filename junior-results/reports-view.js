@@ -2299,6 +2299,7 @@
   const PANELS = [
     ['flow',         'Pipeline',          '📊'],
     ['cohort',       'Cohort tracker',    '🎯'],
+    ['reconcile',    'Qual / Reg / Att',  '🎯'],
     ['scoring',      'Scoring',           '📈'],
     ['breakdowns',   'Breakdowns',        '🗂️'],
     ['displacement', 'Displacements',     '↔️'],
@@ -2735,6 +2736,7 @@
     const panels = [
       ['flow',         'Pipeline flow',         '📊'],
       ['cohort',       'Cohort tracker',        '🎯'],
+      ['reconcile',    'Qual / Reg / Att',      '🎯'],
       ['scoring',      'Scoring analysis',      '📈'],
       ['breakdowns',   'Participation breakdowns','🗂️'],
       ['displacement', 'Displacements',         '↔️'],
@@ -2822,6 +2824,7 @@
 
     if (rptState.panel === 'flow')              renderFlowPanel(panelWrap);
     else if (rptState.panel === 'cohort')       renderCohortPanel(panelWrap);
+    else if (rptState.panel === 'reconcile')    renderReconcilePanel(panelWrap);
     else if (rptState.panel === 'scoring')      renderScoringPanel(panelWrap);
     else if (rptState.panel === 'breakdowns')   renderBreakdownsPanel(panelWrap);
     else if (rptState.panel === 'displacement') renderDisplacementPanel(panelWrap);
@@ -3218,6 +3221,12 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-active-filter strong { color: var(--navy); font-weight: 700; }
 .rpt-filt-tag { display: inline-block; background: #d97706; color: white; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-left: 6px; vertical-align: middle; font-family: var(--f-mono); }
 
+/* Qual/Reg/Att reconciliation table — each column has its own subtle tint to make the 4 datasets visually distinct */
+.recon-table th { font-size: 11px; padding: 8px 10px; border-bottom: 2px solid var(--navy); color: var(--navy); font-family: var(--f-display); }
+.recon-table td { padding: 9px 10px; vertical-align: top; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.recon-table tr:nth-child(even) td { background: rgba(0,0,0,0.012); }
+.recon-table tr:hover td { background: rgba(23,31,105,0.04); }
+
 /* Cohort tracker — data key (definitions/source legend) */
 .cf-data-key { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border: 1px solid var(--line); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 18px; }
 .cf-data-key-h { font-size: 12px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; font-family: var(--f-display); }
@@ -3293,6 +3302,320 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 `;
     document.head.appendChild(s);
   }
+
+  /* ── Qual / Reg / Att (Pipeline Reconciliation) panel ─────────────
+     Side-by-side comparison of FOUR distinct concepts at every pipeline
+     stage. The whole point is to surface that these are DIFFERENT datasets
+     and counts will not match — that mismatch is exactly the operational
+     question (who qualified but didn't register? who registered but didn't
+     attend? are there phantom attendees with no qualification?). */
+  const reconcileState = { year: null };
+
+  function renderReconcilePanel(wrap){
+    if (!reconcileState.year) reconcileState.year = _currentSeason || 2026;
+    const filterSummary = activeRptFilterSummary();
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Qualification &middot; Registration &middot; Attendance</div>
+          <div class="rpt-soft">Side-by-side counts of distinct concepts at every pipeline stage</div>
+        </div>
+        ${filterSummary
+          ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px"><strong>📌 ACTIVE FILTER:</strong> ${esc(filterSummary)} <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear</button></div>`
+          : ''}
+        <div class="rpt-card" style="background:linear-gradient(135deg,#f8f9fd,#eef2fa);border-left:4px solid var(--pool)">
+          <h3 class="rpt-card-h" style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--navy)">Why this panel exists</h3>
+          <p style="margin:6px 0 8px;font-size:13px;line-height:1.5">
+            At every stage there are FOUR distinct datasets that get confused for each other.
+            This panel keeps them in named columns so you (and the CCE/Board) can see them side by side.
+          </p>
+          <table class="rpt-table" style="font-size:12px">
+            <thead><tr>
+              <th style="background:#e8f3fb">🅰 Qualification spots</th>
+              <th style="background:#e7f5ec">🅱 Athletes who qualified</th>
+              <th style="background:#fff4e0">🅲 Athletes who registered</th>
+              <th style="background:#fde6e8">🅳 Athletes who attended</th>
+            </tr></thead>
+            <tbody><tr>
+              <td>Slots authorized by rulebook for that meet/stage (capacity, not athletes). May be unfilled.</td>
+              <td>Athletes who EARNED a slot by placement at the prior stage (e.g. top-3 at Zones, place 4–18, HPS pre-qualification).</td>
+              <td>Athletes who actually <em>signed up</em> on the registration / qualifier list for the next stage.</td>
+              <td>Athletes with a <em>result row</em> at that stage — they actually competed.</td>
+            </tr></tbody>
+          </table>
+        </div>
+        <div id="recon-controls" class="rpt-slicer-bar" style="margin:14px 0"><span class="rpt-slicer-lbl">Season:</span> <span id="recon-yr-chips"></span></div>
+        <div id="recon-stage-table" class="rpt-card"><div class="rpt-loading">Loading per-stage reconciliation…</div></div>
+        <div id="recon-band-table" class="rpt-card"><div class="rpt-loading">Loading band reconciliation…</div></div>
+        <div id="recon-event-table" class="rpt-card"><div class="rpt-loading">Loading per-event reconciliation…</div></div>
+      </div>
+    `;
+    loadReconcileYears();
+  }
+
+  async function loadReconcileYears(){
+    try {
+      const r = await neonQuery("SELECT DISTINCT year FROM core.event_results WHERE is_junior_circuit ORDER BY year DESC");
+      const yrs = r.rows.map(x => x.year).filter(Boolean);
+      const chips = document.getElementById('recon-yr-chips');
+      if (chips) chips.innerHTML = yrs.map(y => `<button class="rpt-yr-chip ${reconcileState.year===y?'is-on':''}" onclick="window._reconYr(${y})">${y}</button>`).join('');
+    } catch(_){}
+    loadReconcileData();
+  }
+
+  window._reconYr = function(y){ reconcileState.year = y; renderReconcilePanel(document.querySelector('.rpt-panel-wrap')); };
+
+  async function loadReconcileData(){
+    const y = reconcileState.year;
+    const fb = rptFiltersToSQL(2);
+    // ── 1) Stage-level reconciliation ─────────────────────────────
+    try {
+      // Qualified (Neon-computed):
+      //   To Zones from Regionals: athletes with place ≤ 16 at Regionals (approximate — actual rule varies by age group)
+      //   To E/W/C (2026+): athletes with place 4-18 at Zones OR top-3 at Zones (top-3 = direct to Nationals path)
+      //   To Nationals (2021-25): athletes with place 1-3 at Zones (top-3 direct)
+      //   To Nationals (2026+): athletes with top placement at E/W/C (best estimate: place ≤ 3 at E/W/C, varies by event)
+      const isNewSystem = y >= 2026;
+
+      const qualifiedQ = await neonQuery(`
+        WITH zone_best AS (
+          SELECT diver_id_dm, event_key, MIN(place) AS p
+          FROM core.event_results
+          WHERE year = $1 AND is_junior_circuit AND stage = 'Zones' AND place IS NOT NULL${fb.sql}
+          GROUP BY diver_id_dm, event_key
+        ),
+        ewc_best AS (
+          SELECT diver_id_dm, event_key, MIN(place) AS p
+          FROM core.event_results
+          WHERE year = $1 AND is_junior_circuit AND stage = 'EWC' AND place IS NOT NULL${fb.sql}
+          GROUP BY diver_id_dm, event_key
+        )
+        SELECT
+          (SELECT COUNT(DISTINCT diver_id_dm)::int FROM zone_best) AS qualified_for_ewc_or_nat,
+          (SELECT COUNT(DISTINCT diver_id_dm)::int FROM zone_best WHERE p BETWEEN 1 AND 3) AS qualified_to_nat_direct,
+          (SELECT COUNT(DISTINCT diver_id_dm)::int FROM zone_best WHERE p BETWEEN 4 AND 18) AS qualified_to_ewc_band,
+          (SELECT COUNT(DISTINCT diver_id_dm)::int FROM ewc_best WHERE p BETWEEN 1 AND 3) AS qualified_to_nat_from_ewc
+      `, [y, ...fb.params]);
+
+      // Attended (Neon)
+      const attendedQ = await neonQuery(`
+        SELECT stage, COUNT(DISTINCT diver_id_dm)::int AS n
+        FROM core.event_results
+        WHERE year = $1 AND is_junior_circuit${fb.sql}
+        GROUP BY stage
+      `, [y, ...fb.params]);
+
+      const att = {};
+      attendedQ.rows.forEach(r => att[r.stage] = r.n);
+      const q = qualifiedQ.rows[0] || {};
+
+      // Registered counts come from in-app data files (USAD_EWC_DATA + JO_NAT_QUALIFIERS).
+      // These only have current-year (2026) data. Older years: registered = unknown / "—".
+      let regEWC = '—';
+      let regNat = '—';
+      const filtMatch = (entry) => {
+        // entry should have ageGroup, gender, etc.
+        const f = rptState || {};
+        if (f.ageGroup && entry.ageGroup && entry.ageGroup !== f.ageGroup) return false;
+        if (f.gender && entry.gender && entry.gender !== f.gender) return false;
+        if (f.discipline && entry.discipline && entry.discipline !== f.discipline) return false;
+        return true;
+      };
+      if (y === 2026) {
+        try {
+          if (window.USAD_EWC_DATA && Array.isArray(window.USAD_EWC_DATA.entries)) {
+            const ewcAths = new Set();
+            window.USAD_EWC_DATA.entries.forEach(e => {
+              if (filtMatch(e)) ewcAths.add((e.athlete||'').toLowerCase());
+            });
+            regEWC = ewcAths.size;
+          }
+          if (window.USAD_JO_NAT_QUALIFIERS && Array.isArray(window.USAD_JO_NAT_QUALIFIERS.qualifiers)) {
+            const natAths = new Set();
+            window.USAD_JO_NAT_QUALIFIERS.qualifiers.forEach(e => {
+              if (filtMatch(e)) natAths.add((e.athlete||'').toLowerCase());
+            });
+            regNat = natAths.size;
+          }
+        } catch(_){}
+      }
+
+      // Compose table
+      // Stage rows: Regionals, Zones, E/W/C (if 2026+), Nationals
+      const stages = [
+        { key:'Regionals', label:'Regionals', spots:'<span class="rpt-soft">capacity unbounded (open registration)</span>', qualified:'<span class="rpt-soft">n/a (entry stage)</span>', registered:'<span class="rpt-soft">—</span>', attended: att['Regionals']||0 },
+        { key:'Zones', label:'Zones', spots:'<span class="rpt-soft">limited by Regionals advancement</span>', qualified:'<span class="rpt-soft">all Regionals advancers</span>', registered:'<span class="rpt-soft">—</span>', attended: att['Zones']||0 },
+      ];
+      if (isNewSystem) {
+        stages.push({
+          key:'EWC', label:'E/W/C',
+          spots: '<span class="rpt-soft">3 zones × events × ~15 per event</span>',
+          qualified: `<strong>${fmtNum(q.qualified_to_ewc_band||0)}</strong> at Zones places 4–18`,
+          registered: regEWC === '—' ? '<span class="rpt-soft">—</span>' : `<strong>${fmtNum(regEWC)}</strong>`,
+          attended: att['EWC']||0,
+        });
+      }
+      stages.push({
+        key:'Nationals', label:'Junior Nationals',
+        spots: '<span class="rpt-soft">per-event quotas in rulebook</span>',
+        qualified: isNewSystem
+          ? `<strong>${fmtNum((q.qualified_to_nat_direct||0)+(q.qualified_to_nat_from_ewc||0))}</strong> (${fmtNum(q.qualified_to_nat_direct||0)} top-3 Zones + ${fmtNum(q.qualified_to_nat_from_ewc||0)} top E/W/C)`
+          : `<strong>${fmtNum(q.qualified_to_nat_direct||0)}</strong> top-3 at Zones (direct)`,
+        registered: regNat === '—' ? '<span class="rpt-soft">—</span>' : `<strong>${fmtNum(regNat)}</strong>`,
+        attended: (y >= 2026) ? '<span class="rpt-soft">event has not occurred</span>' : (att['Nationals']||0),
+      });
+
+      const el = document.getElementById('recon-stage-table');
+      el.innerHTML = `
+        <h3 class="rpt-card-h">Stage-level reconciliation · ${y} season</h3>
+        <div class="rpt-soft" style="margin-bottom:8px">Each column is a DIFFERENT dataset. Numbers will not match each other — gaps are operationally interesting.</div>
+        <table class="rpt-table recon-table">
+          <thead><tr>
+            <th>Stage</th>
+            <th style="background:#e8f3fb">🅰 Qualification spots</th>
+            <th style="background:#e7f5ec">🅱 Athletes who qualified</th>
+            <th style="background:#fff4e0">🅲 Athletes who registered</th>
+            <th style="background:#fde6e8">🅳 Athletes who attended</th>
+          </tr></thead>
+          <tbody>
+            ${stages.map(s => `<tr>
+              <td><strong>${esc(s.label)}</strong></td>
+              <td>${s.spots}</td>
+              <td>${s.qualified}</td>
+              <td>${s.registered}</td>
+              <td><strong>${typeof s.attended==='number'?fmtNum(s.attended):s.attended}</strong></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="rpt-soft" style="margin-top:10px;font-size:11px;line-height:1.6">
+          <strong>Column data sources:</strong><br>
+          🅰 <em>Spots</em> — Per-event quotas per the Technical Rulebook (not yet wired into the data; descriptive text only).<br>
+          🅱 <em>Qualified</em> — Computed from Neon <code>core.event_results</code> placements at the prior stage.<br>
+          🅲 <em>Registered</em> — From <code>USAD_EWC_DATA.entries</code> (E/W/C) and <code>USAD_JO_NAT_QUALIFIERS.qualifiers</code> (Nationals list). Current season only.<br>
+          🅳 <em>Attended</em> — <code>COUNT(DISTINCT diver_id_dm) FROM core.event_results WHERE stage = X</code>.
+        </div>
+      `;
+    } catch (e) {
+      const el = document.getElementById('recon-stage-table');
+      if (el) el.innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+
+    // ── 2) Band-level reconciliation (Zones place band → E/W/C) ───
+    try {
+      const r = await neonQuery(`
+        WITH zone_best AS (
+          SELECT diver_id_dm, event_key, MIN(place) AS p
+          FROM core.event_results
+          WHERE year = $1 AND is_junior_circuit AND stage='Zones' AND place IS NOT NULL${fb.sql}
+          GROUP BY diver_id_dm, event_key
+        ),
+        ewc_attended AS (
+          SELECT DISTINCT diver_id_dm, event_key
+          FROM core.event_results
+          WHERE year = $1 AND is_junior_circuit AND stage='EWC'${fb.sql}
+        )
+        SELECT
+          CASE WHEN zb.p BETWEEN 1 AND 3 THEN '1-3'
+               WHEN zb.p BETWEEN 4 AND 10 THEN '4-10'
+               WHEN zb.p BETWEEN 11 AND 18 THEN '11-18'
+               ELSE '19+' END AS band,
+          COUNT(*)::int AS qualified,
+          COUNT(*) FILTER (WHERE ea.diver_id_dm IS NOT NULL)::int AS attended
+        FROM zone_best zb
+        LEFT JOIN ewc_attended ea USING (diver_id_dm, event_key)
+        GROUP BY band ORDER BY band
+      `, [y, ...fb.params]);
+
+      // Pull registered-by-band from USAD_EWC_DATA if possible (only current year, only if entries have zone placement)
+      // We approximate by counting registered athletes via name match to zone_best
+      const bands = [
+        { label:'1-3 (top-3 direct)', min:1, max:3 },
+        { label:'4-10 (qualifier band)', min:4, max:10 },
+        { label:'11-18 (alternate / E/W/C band)', min:11, max:18 },
+        { label:'19+ (below cut)', min:19, max:99 },
+      ];
+      const dataByBand = {};
+      r.rows.forEach(x => dataByBand[x.band] = x);
+
+      const el2 = document.getElementById('recon-band-table');
+      el2.innerHTML = `
+        <h3 class="rpt-card-h">Zone placement band reconciliation · ${y}</h3>
+        <div class="rpt-soft" style="margin-bottom:8px">For each Zone placement band: how many athletes qualified vs. how many actually attended ${isNewSystemReconcile(y)?'E/W/C':'Junior Nationals'}.</div>
+        <table class="rpt-table recon-table">
+          <thead><tr>
+            <th>Zone placement band</th>
+            <th style="background:#e7f5ec">🅱 Qualified count</th>
+            <th style="background:#fde6e8">🅳 Attended count</th>
+            <th>Attendance rate</th>
+            <th>Gap (qualified − attended)</th>
+          </tr></thead>
+          <tbody>
+            ${bands.map(b => {
+              const k = b.label.split(' ')[0];
+              const d = dataByBand[k];
+              if (!d || !d.qualified) return `<tr><td><strong>${esc(b.label)}</strong></td><td colspan=4 class="rpt-soft">no data</td></tr>`;
+              const rate = d.qualified ? Math.round(100*d.attended/d.qualified)+'%' : '—';
+              const gap = d.qualified - d.attended;
+              return `<tr>
+                <td><strong>${esc(b.label)}</strong></td>
+                <td>${fmtNum(d.qualified)}</td>
+                <td><strong>${fmtNum(d.attended)}</strong></td>
+                <td>${rate}</td>
+                <td style="color:${gap>0?'#d97706':'var(--ink-3)'}">${gap>0?'-'+fmtNum(gap):'0'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      const el2 = document.getElementById('recon-band-table');
+      if (el2) el2.innerHTML = '<div class="rpt-err">Failed (band): '+esc(String(e.message||e))+'</div>';
+    }
+
+    // ── 3) Per-event reconciliation ────────────────────────────────
+    try {
+      const r = await neonQuery(`
+        SELECT event_key,
+          COUNT(DISTINCT diver_id_dm) FILTER (WHERE stage='Zones')::int AS zones_n,
+          COUNT(DISTINCT diver_id_dm) FILTER (WHERE stage='EWC')::int AS ewc_n,
+          COUNT(DISTINCT diver_id_dm) FILTER (WHERE stage='Nationals')::int AS nat_n
+        FROM core.event_results
+        WHERE year = $1 AND is_junior_circuit${fb.sql}
+        GROUP BY event_key
+        HAVING COUNT(DISTINCT diver_id_dm) FILTER (WHERE stage='Zones') > 0
+        ORDER BY event_key
+      `, [y, ...fb.params]);
+      const el3 = document.getElementById('recon-event-table');
+      if (el3) {
+        el3.innerHTML = `
+          <h3 class="rpt-card-h">Per-event reconciliation · ${y}</h3>
+          <div class="rpt-soft" style="margin-bottom:8px">Attended counts at each stage, by event_key. Use this to spot events where attendance falls off unexpectedly.</div>
+          <div class="rpt-table-scroll" style="max-height:480px;overflow:auto">
+            <table class="rpt-table recon-table">
+              <thead><tr><th>Event</th><th style="background:#fde6e8">🅳 at Zones</th><th style="background:#fde6e8">🅳 at E/W/C</th><th style="background:#fde6e8">🅳 at Nationals</th><th>Z→EWC retention</th></tr></thead>
+              <tbody>
+                ${r.rows.map(x => {
+                  const z2e = (x.zones_n && x.ewc_n) ? Math.round(100*x.ewc_n/x.zones_n)+'%' : '—';
+                  return `<tr>
+                    <td><strong>${esc(x.event_key||'')}</strong></td>
+                    <td>${fmtNum(x.zones_n||0)}</td>
+                    <td>${x.ewc_n?fmtNum(x.ewc_n):'<span class="rpt-soft">—</span>'}</td>
+                    <td>${x.nat_n?fmtNum(x.nat_n):'<span class="rpt-soft">—</span>'}</td>
+                    <td>${z2e}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+    } catch (e) {
+      const el3 = document.getElementById('recon-event-table');
+      if (el3) el3.innerHTML = '<div class="rpt-err">Failed (event): '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  function isNewSystemReconcile(y){ return y >= 2026; }
 
   /* ── Historical (multi-year) panel ─────────────────────────────
      Queries Neon for cross-year stats. Default selected years: all available.
