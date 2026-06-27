@@ -255,6 +255,10 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 -- and 3-letter country team codes like "CHN", "AUS", "MEX").
 -- Each ALTER is guarded so the migration can re-run without error.
 
+-- Drop dependent view so we can change the column types it references.
+-- View is recreated immediately after the type migration completes.
+DROP VIEW IF EXISTS core.junior_results;
+
 DO $$ BEGIN
   IF (SELECT data_type FROM information_schema.columns
       WHERE table_schema='core' AND table_name='event_results' AND column_name='meet_id_dm') = 'integer' THEN
@@ -281,6 +285,12 @@ DO $$ BEGIN
     ALTER TABLE core.teams ALTER COLUMN team_id_dm TYPE TEXT USING team_id_dm::TEXT;
   END IF;
 END $$;
+
+-- Recreate view (now references TEXT columns)
+CREATE OR REPLACE VIEW core.junior_results AS
+SELECT * FROM core.event_results
+WHERE is_junior_circuit = TRUE
+  AND is_synchro = FALSE;
 
 
 -- ============================================================
