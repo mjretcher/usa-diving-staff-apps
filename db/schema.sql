@@ -160,3 +160,86 @@ DO $$ BEGIN
   CREATE TRIGGER trg_hp_summaries BEFORE UPDATE ON hp_analytics.athlete_summaries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+
+-- ============================================================
+-- SCHEMA 6: core — raw event results from DiveMeets (ALL meets, all years)
+-- Used by every app (junior results, HP analytics, criteria sim)
+-- One row per (meet, event, round, athlete)
+-- ============================================================
+CREATE SCHEMA IF NOT EXISTS core;
+
+CREATE TABLE IF NOT EXISTS core.event_results (
+    id              BIGSERIAL PRIMARY KEY,
+    -- DiveMeets identifiers
+    meet_id_dm      INTEGER,
+    diver_id_dm     INTEGER,
+    team_id_dm      INTEGER,
+    -- Raw fields (verbatim from DiveMeets)
+    meet_name       TEXT NOT NULL,
+    event_name      TEXT NOT NULL,
+    round           TEXT,
+    diver_first     TEXT,
+    diver_last      TEXT,
+    team_name       TEXT,
+    team_code       TEXT,
+    place           SMALLINT,
+    score           NUMERIC(10,2),
+    -- Derived classification (set at import time)
+    year            SMALLINT,
+    stage           TEXT,        -- Regionals / Zones / EWC / Nationals / Senior-Nationals / Winter-Nationals / Open / Trials / Other
+    event_level     TEXT,        -- Junior / Senior / Open / Other
+    age_group       TEXT,        -- Group A / Group B / Group C / Group D / Senior / null
+    gender          TEXT,        -- Boys / Girls / Men / Women / Mixed
+    discipline      TEXT,        -- 1M / 3M / Platform / Synchro-3M / Synchro-Platform / etc.
+    event_key       TEXT,        -- normalized: "Group A Boys 1M" (cross-year stable)
+    is_synchro      BOOLEAN DEFAULT FALSE,
+    is_junior_circuit BOOLEAN DEFAULT FALSE,  -- true iff stage in (Regionals, Zones, EWC, Nationals) and not Senior
+    region          SMALLINT,    -- 1-12 for Regionals
+    zone            TEXT,        -- A-F for Zones
+    ewc_meet        TEXT,        -- East / West / Central
+    -- House-keeping
+    source_file     TEXT,
+    imported_at     TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ev_year         ON core.event_results(year);
+CREATE INDEX IF NOT EXISTS idx_ev_stage_year   ON core.event_results(stage, year);
+CREATE INDEX IF NOT EXISTS idx_ev_diver        ON core.event_results(diver_id_dm);
+CREATE INDEX IF NOT EXISTS idx_ev_event_key    ON core.event_results(event_key, year);
+CREATE INDEX IF NOT EXISTS idx_ev_meet         ON core.event_results(meet_id_dm);
+CREATE INDEX IF NOT EXISTS idx_ev_team         ON core.event_results(team_id_dm);
+CREATE INDEX IF NOT EXISTS idx_ev_junior       ON core.event_results(year, is_junior_circuit) WHERE is_junior_circuit;
+CREATE INDEX IF NOT EXISTS idx_ev_athlete_year ON core.event_results(diver_id_dm, year);
+
+-- Athlete identity table (populated by import via INSERT...ON CONFLICT)
+CREATE TABLE IF NOT EXISTS core.divers (
+    diver_id_dm        INTEGER PRIMARY KEY,
+    first_name         TEXT,
+    last_name          TEXT,
+    current_team_id_dm INTEGER,
+    first_seen_year    SMALLINT,
+    last_seen_year     SMALLINT,
+    result_count       INT DEFAULT 0,
+    notes              JSONB,
+    updated_at         TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS core.teams (
+    team_id_dm INTEGER PRIMARY KEY,
+    name       TEXT,
+    code       TEXT,
+    notes      JSONB,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Helper view: junior circuit only, common subset apps will use
+CREATE OR REPLACE VIEW core.junior_results AS
+SELECT * FROM core.event_results
+WHERE is_junior_circuit = TRUE
+  AND is_synchro = FALSE;
+
+-- Bump version
+INSERT INTO app_meta.config (key, value, description) VALUES
+  ('core_schema_version', '1', 'Core event_results schema version')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
