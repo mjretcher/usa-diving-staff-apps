@@ -1,0 +1,125 @@
+name: Neon seed — criteria simulator (result_phases + dive_sheets)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/seeds/criteria_phases.csv'
+      - 'db/seeds/criteria_dives.csv'
+      - 'db/seeds/criteria_event_results_supplement.csv'
+  workflow_dispatch:
+
+jobs:
+  seed:
+    name: Bulk load criteria simulator data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Verify schema exists
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT to_regclass('core.result_phases') AS phases_table, to_regclass('core.dive_sheets') AS dives_table, to_regclass('core.event_results') AS event_results_table;"
+
+      - name: Truncate target tables (idempotent reload)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE core.result_phases RESTART IDENTITY;"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE core.dive_sheets RESTART IDENTITY;"
+
+      - name: Bulk load result_phases
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core.result_phases(meet_id,event_id,result_set_id,sheet_key,diver_id,diver_name,team_name,team_id,nat,place,posted_score,phase_score_from_dives,phase_dive_count,phase_dd_sum,score_delta_posted_minus_phase,score_is_cumulative,score_analysis_mode,meet_name,meet_year,competition_family,competition_group,ncaa_division,gender,discipline,event_level,age_group,event_round,round_stage,is_synchronized,source_system,ncaa_women_springboard_raw_6_dive_score,ncaa_women_springboard_5cat_score,ncaa_women_springboard_5cat_dd_sum,ncaa_women_springboard_repeated_category,ncaa_women_springboard_dropped_dive_number,ncaa_women_springboard_dropped_dive_score,ncaa_women_springboard_adjustment_status,ncaa_women_springboard_adjustment_note) FROM 'db/seeds/criteria_phases.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+
+      - name: Bulk load dive_sheets
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core.dive_sheets(meet_id,event_id,result_set_id,diver_id,sheet_key,dive_order,dive_number,height,description,dd,score,net_score,round_place,optional_voluntary,judges_scores,running_total_points,diver_name,team_name,event_name,gender,discipline,round_stage,competition_family,competition_group,ncaa_division,meet_year,dive_category_code,dive_category_label,ncaa_5cat_inclusion_status,ncaa_5cat_inclusion_note) FROM 'db/seeds/criteria_dives.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+
+      - name: Project criteria-sim meets into core.event_results (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          # Load supplement into a staging table, then INSERT only rows that
+          # don't already exist in core.event_results. This makes the projection
+          # idempotent on re-runs (no duplicates, no truncation of real data).
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS core._criteria_supplement_stage;"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE core._criteria_supplement_stage (LIKE core.event_results INCLUDING DEFAULTS);"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core._criteria_supplement_stage(meet_id_dm,meet_name,event_name,round,diver_id_dm,diver_first,diver_last,place,score,team_id_dm,team_name,team_code,year,stage,event_level,age_group,gender,discipline,event_key,is_synchro,is_junior_circuit,region,zone,ewc_meet,source_file) FROM 'db/seeds/criteria_event_results_supplement.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+            INSERT INTO core.event_results(
+              meet_id_dm, meet_name, event_name, round, diver_id_dm, diver_first, diver_last,
+              place, score, team_id_dm, team_name, team_code, year, stage, event_level,
+              age_group, gender, discipline, event_key, is_synchro, is_junior_circuit,
+              region, zone, ewc_meet, source_file
+            )
+            SELECT
+              s.meet_id_dm, s.meet_name, s.event_name, s.round, s.diver_id_dm, s.diver_first, s.diver_last,
+              s.place, s.score, s.team_id_dm, s.team_name, s.team_code, s.year, s.stage, s.event_level,
+              s.age_group, s.gender, s.discipline, s.event_key, s.is_synchro, s.is_junior_circuit,
+              s.region, s.zone, s.ewc_meet, s.source_file
+            FROM core._criteria_supplement_stage s
+            WHERE NOT EXISTS (
+              SELECT 1 FROM core.event_results er
+              WHERE er.meet_id_dm = s.meet_id_dm
+                AND er.diver_id_dm = s.diver_id_dm
+                AND er.event_name  = s.event_name
+                AND COALESCE(er.round,'') = COALESCE(s.round,'')
+            );
+            DROP TABLE core._criteria_supplement_stage;
+          SQL
+
+      - name: Refresh divers + teams from event_results
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+            INSERT INTO core.teams(team_id_dm, name, code)
+            SELECT DISTINCT ON (team_id_dm) team_id_dm, team_name, team_code
+            FROM core.event_results
+            WHERE team_id_dm IS NOT NULL
+            ON CONFLICT (team_id_dm) DO UPDATE
+              SET name = EXCLUDED.name, code = EXCLUDED.code, updated_at = now();
+
+            INSERT INTO core.divers(diver_id_dm, first_name, last_name, current_team_id_dm, first_seen_year, last_seen_year, result_count)
+            SELECT
+              diver_id_dm,
+              (array_agg(diver_first ORDER BY year DESC))[1] AS first_name,
+              (array_agg(diver_last  ORDER BY year DESC))[1] AS last_name,
+              (array_agg(team_id_dm  ORDER BY year DESC) FILTER (WHERE team_id_dm IS NOT NULL))[1] AS current_team_id_dm,
+              MIN(year) AS first_seen_year,
+              MAX(year) AS last_seen_year,
+              COUNT(*) AS result_count
+            FROM core.event_results
+            WHERE diver_id_dm IS NOT NULL
+            GROUP BY diver_id_dm
+            ON CONFLICT (diver_id_dm) DO UPDATE
+              SET first_name         = EXCLUDED.first_name,
+                  last_name          = EXCLUDED.last_name,
+                  current_team_id_dm = EXCLUDED.current_team_id_dm,
+                  first_seen_year    = LEAST(core.divers.first_seen_year, EXCLUDED.first_seen_year),
+                  last_seen_year     = GREATEST(core.divers.last_seen_year, EXCLUDED.last_seen_year),
+                  result_count       = EXCLUDED.result_count,
+                  updated_at         = now();
+          SQL
+
+      - name: Report load stats
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS phases_loaded FROM core.result_phases;"
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS dives_loaded  FROM core.dive_sheets;"
+          psql "$DATABASE_URL" -c "SELECT meet_year, COUNT(*) FROM core.result_phases GROUP BY meet_year ORDER BY meet_year;"
+          psql "$DATABASE_URL" -c "SELECT competition_family, competition_group, COUNT(*) FROM core.result_phases GROUP BY 1,2 ORDER BY 3 DESC;"
+          psql "$DATABASE_URL" -c "SELECT stage, COUNT(*) FROM core.event_results WHERE source_file='criteria-simulator/data.js' GROUP BY stage ORDER BY 2 DESC;"
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS total_event_results FROM core.event_results;"
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS total_divers FROM core.divers; SELECT COUNT(*) AS total_teams FROM core.teams;"
