@@ -2266,6 +2266,8 @@
     ['anomaly',      'Anomalies',          '⚠️'],
     ['career',       'Athlete career',     '🧬'],
     ['tier_entry',   'Tier entry (old sys)', '🪜'],
+    ['rule_era',     'Rule era comparison', '⚖️'],
+    ['saved',        'Saved views',        '⭐'],
   ];
 
   function buildTopHeader(){
@@ -2430,6 +2432,8 @@
       ['anomaly',      'Anomalies',             '⚠️'],
       ['career',       'Athlete career',        '🧬'],
       ['tier_entry',   'Tier entry (old sys)',  '🪜'],
+      ['rule_era',     'Rule era comparison',   '⚖️'],
+      ['saved',        'Saved views',           '⭐'],
     ];
 
     el.innerHTML = `
@@ -2495,6 +2499,8 @@
     else if (rptState.panel === 'anomaly')      renderAnomalyPanel(wrap);
     else if (rptState.panel === 'career')       renderCareerPanel(wrap);
     else if (rptState.panel === 'tier_entry')   renderTierEntryPanel(wrap);
+    else if (rptState.panel === 'rule_era')     renderRuleEraPanel(wrap);
+    else if (rptState.panel === 'saved')        renderSavedViewsPanel(wrap);
     else if (rptState.panel === 'status')       renderStatusPanel(wrap);
   }
 
@@ -3935,6 +3941,302 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     if (cur) overlay.querySelector('#ph-body').innerHTML = cur.innerHTML;
   }
   window._rptGenerateReport = generateReport;
+
+  /* ── Rule Era Comparison panel ─────────────────────────────────
+     Compares the three rule eras side by side:
+       Era 1: 2021-2022 — old system + Art. 102.4 (foreign athletes Regionals-only)
+       Era 2: 2023-2025 — old system + foreign non-displacing at any stage
+       Era 3: 2026+ — new system with E/W/C tier inserted between Zones and Nationals
+     Each row of the comparison answers: "did this metric change with the rule change?"
+  */
+  const ERAS = [
+    { id: 'e1', label: '2021–2022', desc: 'Old system + foreign Regionals-only', years: [2021, 2022], color: 'var(--navy)' },
+    { id: 'e2', label: '2023–2025', desc: 'Old system + foreign non-displacing', years: [2023, 2024, 2025], color: 'var(--pool)' },
+    { id: 'e3', label: '2026+',     desc: 'New system + E/W/C tier',            years: [2026], color: 'var(--q-direct)' },
+  ];
+
+  function renderRuleEraPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Rule era comparison <span class="rpt-soft">(impact of policy changes)</span></div>
+          <div class="rpt-soft">Compare three rule eras directly. Each metric is per-year-averaged within the era for fair comparison.</div>
+        </div>
+        <div class="rpt-card">
+          <h3 class="rpt-card-h">The three eras</h3>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+            ${ERAS.map(e => `
+              <div style="border-top:3px solid ${e.color};border-radius:var(--radius);padding:12px;background:var(--surface)">
+                <div style="font-size:20px;font-weight:700;color:var(--navy);font-family:var(--f-display)">${e.label}</div>
+                <div class="rpt-soft" style="margin-top:4px">${esc(e.desc)}</div>
+                <div style="margin-top:6px;font-size:11px;color:var(--ink-3)">Years: ${e.years.join(', ')}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div id="era-participation" class="rpt-card"><div class="rpt-loading">Loading participation comparison…</div></div>
+        <div id="era-funnel" class="rpt-card"><div class="rpt-loading">Loading pipeline funnel comparison…</div></div>
+        <div id="era-decliners" class="rpt-card"><div class="rpt-loading">Loading decliner comparison…</div></div>
+        <div id="era-demographic" class="rpt-card"><div class="rpt-loading">Loading demographic comparison…</div></div>
+      </div>
+    `;
+    loadRuleEraData();
+  }
+
+  async function loadRuleEraData(){
+    try {
+      // Participation: athletes-per-year-averaged by era, by stage
+      const r = await neonQuery(`
+        SELECT year, stage,
+               COUNT(DISTINCT diver_id_dm)::int AS divers,
+               COUNT(*)::int AS rows
+        FROM core.event_results
+        WHERE is_junior_circuit AND stage IN ('Regionals','Zones','EWC','Nationals') AND year IS NOT NULL
+        GROUP BY year, stage ORDER BY year, stage
+      `);
+      const byEra = {};
+      ERAS.forEach(e => { byEra[e.id] = { Regionals: [], Zones: [], EWC: [], Nationals: [] }; });
+      r.rows.forEach(x => {
+        const era = ERAS.find(e => e.years.includes(x.year));
+        if (era && byEra[era.id][x.stage]) byEra[era.id][x.stage].push(x.divers);
+      });
+      const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : 0;
+      const stages = ['Regionals','Zones','EWC','Nationals'];
+      const html = `
+        <h3 class="rpt-card-h">Avg athletes per year, per stage</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Era</th>${stages.map(s=>`<th>${s}</th>`).join('')}<th>R→Z conversion</th></tr></thead>
+          <tbody>
+          ${ERAS.map(e => {
+            const r_ = avg(byEra[e.id].Regionals);
+            const z_ = avg(byEra[e.id].Zones);
+            const ewc_ = avg(byEra[e.id].EWC);
+            const n_ = avg(byEra[e.id].Nationals);
+            const conv = r_ > 0 ? (100*z_/r_).toFixed(1)+'%' : '—';
+            return `<tr>
+              <td><strong style="color:${e.color}">${e.label}</strong></td>
+              <td>${r_>0?fmt(Math.round(r_)):'—'}</td>
+              <td>${z_>0?fmt(Math.round(z_)):'—'}</td>
+              <td>${ewc_>0?fmt(Math.round(ewc_)):'<span class="rpt-soft">—</span>'}</td>
+              <td>${n_>0?fmt(Math.round(n_)):'<span class="rpt-soft">—</span>'}</td>
+              <td>${conv}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+        <div class="rpt-soft" style="margin-top:8px">In 2026 the system added an E/W/C tier between Zones and Nationals. Nationals data for 2026 will appear after the 2026 Jr Nationals event.</div>
+      `;
+      document.getElementById('era-participation').innerHTML = html;
+
+      // Decliner comparison
+      const dr = await neonQuery(`
+        WITH zones_top3 AS (
+          SELECT DISTINCT year, event_key, diver_id_dm
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND place <= 3 AND year IS NOT NULL
+        ),
+        nexts AS (
+          SELECT DISTINCT year, event_key, diver_id_dm
+          FROM core.event_results
+          WHERE is_junior_circuit AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+        ),
+        decliners AS (
+          SELECT z.year FROM zones_top3 z
+          LEFT JOIN nexts n USING (year, event_key, diver_id_dm)
+          WHERE n.diver_id_dm IS NULL
+        )
+        SELECT year, COUNT(*)::int AS decliners FROM decliners GROUP BY year ORDER BY year
+      `);
+      const declByEra = { e1: [], e2: [], e3: [] };
+      const top3ByEra = { e1: [], e2: [], e3: [] };
+      // Need top-3 counts per year too
+      const tr = await neonQuery(`
+        SELECT year, COUNT(DISTINCT (year, event_key, diver_id_dm))::int AS n
+        FROM core.event_results
+        WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND place <= 3 AND year IS NOT NULL
+        GROUP BY year ORDER BY year
+      `);
+      const top3Map = {}; tr.rows.forEach(x => top3Map[x.year] = x.n);
+      dr.rows.forEach(x => {
+        const era = ERAS.find(e => e.years.includes(x.year));
+        if (era) {
+          declByEra[era.id].push(x.decliners);
+          if (top3Map[x.year]) top3ByEra[era.id].push(top3Map[x.year]);
+        }
+      });
+      const declHtml = `
+        <h3 class="rpt-card-h">Top-3 Zone qualifiers who skipped the next stage</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Era</th><th>Avg decliners / year</th><th>Avg top-3 / year</th><th>Decline rate</th></tr></thead>
+          <tbody>
+          ${ERAS.map(e => {
+            const d = avg(declByEra[e.id]);
+            const t = avg(top3ByEra[e.id]);
+            const rate = t > 0 ? (100*d/t).toFixed(1)+'%' : '—';
+            return `<tr>
+              <td><strong style="color:${e.color}">${e.label}</strong></td>
+              <td>${d>0?fmt(Math.round(d)):'—'}</td>
+              <td>${t>0?fmt(Math.round(t)):'—'}</td>
+              <td><strong>${rate}</strong></td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+        <div class="rpt-soft" style="margin-top:8px">Decline rate = (top-3 athletes from Zones who didn't appear at Nationals or E/W/C the same year) ÷ (total top-3 Zone qualifiers). The CCE's headline question.</div>
+      `;
+      document.getElementById('era-decliners').innerHTML = declHtml;
+
+      // Funnel: avg per-year R→Z→Next per era
+      document.getElementById('era-funnel').innerHTML = `
+        <h3 class="rpt-card-h">Pipeline funnels per era (avg per year)</h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+          ${ERAS.map(e => {
+            const r_ = avg(byEra[e.id].Regionals);
+            const z_ = avg(byEra[e.id].Zones);
+            const ewc_ = avg(byEra[e.id].EWC);
+            const n_ = avg(byEra[e.id].Nationals);
+            const stages = [['Regionals', r_], ['Zones', z_]];
+            if (ewc_ > 0) stages.push(['E/W/C', ewc_]);
+            if (n_ > 0) stages.push(['Nationals', n_]);
+            const max = Math.max.apply(null, stages.map(s => s[1]));
+            return `<div style="background:var(--surface-2);border-radius:var(--radius);padding:12px">
+              <div style="font-weight:600;color:${e.color};margin-bottom:8px">${e.label}</div>
+              ${stages.map(([lbl, val]) => `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+                  <div style="background:${e.color};height:24px;width:${100*val/Math.max(1,max)}%;min-width:40px;display:flex;align-items:center;padding-left:8px;color:white;font-size:11px;font-weight:600;border-radius:3px">${fmt(Math.round(val))}</div>
+                  <div style="font-size:11px;color:var(--ink-3);flex-shrink:0;width:60px">${lbl}</div>
+                </div>`).join('')}
+            </div>`;
+          }).join('')}
+        </div>
+      `;
+
+      // Demographic comparison (junior circuit, by age group)
+      const dem = await neonQuery(`
+        SELECT year, age_group,
+               COUNT(DISTINCT diver_id_dm)::int AS divers
+        FROM core.event_results
+        WHERE is_junior_circuit AND age_group IS NOT NULL AND age_group LIKE 'Group %'
+        GROUP BY year, age_group ORDER BY year, age_group
+      `);
+      const demByEra = { e1: {}, e2: {}, e3: {} };
+      dem.rows.forEach(x => {
+        const era = ERAS.find(e => e.years.includes(x.year));
+        if (era) {
+          demByEra[era.id][x.age_group] = (demByEra[era.id][x.age_group] || []).concat(x.divers);
+        }
+      });
+      const groups = ['Group A','Group B','Group C','Group D'];
+      document.getElementById('era-demographic').innerHTML = `
+        <h3 class="rpt-card-h">Avg athletes per age group, per era</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Era</th>${groups.map(g=>`<th>${g}</th>`).join('')}</tr></thead>
+          <tbody>
+          ${ERAS.map(e => `<tr>
+            <td><strong style="color:${e.color}">${e.label}</strong></td>
+            ${groups.map(g => {
+              const arr = demByEra[e.id][g] || [];
+              const a = avg(arr);
+              return `<td>${a>0?fmt(Math.round(a)):'—'}</td>`;
+            }).join('')}
+          </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="rpt-soft" style="margin-top:8px">2026 doesn't have Group C/D at Regionals (per new rules — they skip Regionals and start at Zones).</div>
+      `;
+    } catch (e) {
+      document.getElementById('era-participation').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  /* ── Saved Views panel ─────────────────────────────────────────
+     LocalStorage-backed: name + pin a filter+panel+selection state. */
+  const SAVED_KEY = 'usad_reports_saved_views_v1';
+
+  function loadSavedViews(){
+    try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); }
+    catch(e) { return []; }
+  }
+  function saveSavedViews(list){
+    localStorage.setItem(SAVED_KEY, JSON.stringify(list));
+  }
+
+  function captureCurrentView(){
+    const f = rptState.filters || {};
+    return {
+      panel: rptState.panel,
+      filters: { ageGroup:f.ageGroup||null, gender:f.gender||null, discipline:f.discipline||null, region:f.region||null, zone:f.zone||null, ewc:f.ewc||null, team:f.team||null },
+      histYears: (typeof histState !== 'undefined' && histState.yearsSelected) ? Array.from(histState.yearsSelected) : null,
+      declYears: (typeof declState !== 'undefined' && declState.years) ? Array.from(declState.years) : null,
+      tierYears: (typeof tierState !== 'undefined' && tierState.years) ? Array.from(tierState.years) : null,
+      savedAt: new Date().toISOString(),
+    };
+  }
+  function applyView(v){
+    if (v.panel) rptState.panel = v.panel;
+    if (!rptState.filters) rptState.filters = {};
+    Object.assign(rptState.filters, v.filters || {});
+    if (v.histYears && typeof histState !== 'undefined') histState.yearsSelected = new Set(v.histYears);
+    if (v.declYears && typeof declState !== 'undefined') declState.years = new Set(v.declYears);
+    if (v.tierYears && typeof tierState !== 'undefined') tierState.years = new Set(v.tierYears);
+    renderReports();
+  }
+
+  function renderSavedViewsPanel(wrap){
+    const list = loadSavedViews();
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Saved views</div>
+          <div class="rpt-soft">Pin a filter + panel + year state for quick recall. Stored in this browser.</div>
+        </div>
+        <div class="rpt-card">
+          <h3 class="rpt-card-h">Save current view</h3>
+          <div class="rpt-slicer-bar">
+            <input id="sv-name" type="text" placeholder="Name this view (e.g., 'CCE deck — Q3 dropoff 2024 v 2026')" style="padding:6px 9px;border:1px solid var(--line);border-radius:var(--radius-sm);width:480px"/>
+            <button class="rpt-btn-prim" onclick="window._savedAdd()">Save</button>
+          </div>
+        </div>
+        <div class="rpt-card">
+          <h3 class="rpt-card-h">Your views (${list.length})</h3>
+          ${list.length === 0 ? '<div class="rpt-soft">None saved yet. Set up the filters/panel you want, type a name, and click Save.</div>' :
+            '<table class="rpt-table"><thead><tr><th>Name</th><th>Panel</th><th>Filters</th><th>Saved</th><th></th></tr></thead><tbody>'+
+            list.map((v,i) => {
+              const fSummary = Object.entries(v.filters||{}).filter(x => x[1]).map(x => x[0]+'='+x[1]).join(', ') || '—';
+              return `<tr>
+                <td><strong>${esc(v.name||'(unnamed)')}</strong></td>
+                <td>${esc(v.panel||'')}</td>
+                <td class="rpt-soft">${esc(fSummary)}</td>
+                <td class="rpt-soft">${new Date(v.savedAt).toLocaleString()}</td>
+                <td>
+                  <button class="rpt-btn-prim" onclick="window._savedApply(${i})">Open</button>
+                  <button class="rpt-export-btn" onclick="window._savedDelete(${i})" style="color:var(--red)">Delete</button>
+                </td>
+              </tr>`;
+            }).join('') + '</tbody></table>'}
+        </div>
+      </div>
+    `;
+  }
+
+  window._savedAdd = function(){
+    const name = (document.getElementById('sv-name').value || '').trim();
+    if (!name) { alert('Please name the view first.'); return; }
+    const list = loadSavedViews();
+    list.push(Object.assign({ name: name }, captureCurrentView()));
+    saveSavedViews(list);
+    renderReports();
+  };
+  window._savedApply = function(idx){
+    const list = loadSavedViews();
+    if (list[idx]) applyView(list[idx]);
+  };
+  window._savedDelete = function(idx){
+    if (!confirm('Delete this saved view?')) return;
+    const list = loadSavedViews();
+    list.splice(idx, 1);
+    saveSavedViews(list);
+    renderReports();
+  };
 
   /* ── Hook into main.js ──────────────────────────────────────── */
   function waitForMain(cb, tries){
