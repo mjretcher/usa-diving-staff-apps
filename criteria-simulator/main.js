@@ -342,11 +342,161 @@ function recompute() {
 function render() {
   renderFilterStrip();
   renderHero();
+  renderFunnel();
+  renderEventHeatmap();
+  renderScoreHistogram();
   renderSourceImpact();
   renderBreakdown();
   renderQualifiedTable();
   renderBubbleTable();
   renderScenarioStrip();
+}
+
+function renderFunnel() {
+  const target = $('funnel');
+  if (!target) return;
+  const total = state.data.results.length;
+  const filtered = state.filtered.length;
+  const passScore = state.evaluated.filter(r =>
+    isNum(r.analysis_score) && isNum(r.threshold_used) && r.analysis_score >= r.threshold_used
+  ).length;
+  const passBoth = state.evaluated.filter(r => {
+    const scoreOK = isNum(r.analysis_score) && isNum(r.threshold_used) && r.analysis_score >= r.threshold_used;
+    const ddOK = r.dd_status === 'pass' || r.dd_status === 'ignored' || r.dd_status === 'unknownPass';
+    return scoreOK && ddOK;
+  }).length;
+  const final = state.qualified.length;
+  const stages = [
+    { label: 'All results',          count: total,    final: false },
+    { label: 'After event filters',  count: filtered, final: false },
+    { label: 'Met score threshold',  count: passScore, final: false },
+    { label: 'Met score + DD',       count: passBoth, final: false },
+    { label: 'Qualified athletes',   count: final,    final: true  },
+  ];
+  const max = stages[0].count || 1;
+  target.innerHTML = stages.map(s => {
+    const widthPct = max > 0 ? (s.count / max * 100) : 0;
+    const overallPct = total > 0 ? (s.count / total * 100).toFixed(1) : '0';
+    return `
+      <div class="funnel-row ${s.final ? 'stage-final' : ''}">
+        <div class="label">${esc(s.label)}</div>
+        <div class="bar"><div class="bar-fill" style="width:${Math.max(widthPct, 4).toFixed(1)}%">${s.count.toLocaleString()}</div></div>
+        <div class="count">${s.count.toLocaleString()}</div>
+        <div class="pct">${overallPct}% of all</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderEventHeatmap() {
+  const target = $('eventHeatmap');
+  if (!target) return;
+  if (!state.qualified.length) {
+    target.innerHTML = '<div class="source-impact-empty">No qualifying results to chart.</div>';
+    return;
+  }
+  // Year × Discipline matrix of qualifying counts
+  const yearSet = new Set();
+  const discSet = new Set();
+  const matrix = new Map();
+  for (const r of state.qualified) {
+    const y = r.meet_year || '—';
+    const d = r.discipline || '—';
+    yearSet.add(y);
+    discSet.add(d);
+    const k = `${y}::${d}`;
+    matrix.set(k, (matrix.get(k) || 0) + 1);
+  }
+  const years = [...yearSet].sort((a,b) => String(b).localeCompare(String(a)));
+  // Stable discipline order
+  const discOrder = ['1m','3m','Platform','10m','Synchro 3m','Synchro 10m'];
+  const discs = discOrder.filter(d => discSet.has(d)).concat([...discSet].filter(d => !discOrder.includes(d)).sort());
+  const max = Math.max(...[...matrix.values()], 1);
+  const cols = ['80px', ...discs.map(() => 'minmax(60px, 1fr)')].join(' ');
+  let html = `<div class="cs-heatmap-grid" style="grid-template-columns: ${cols}">`;
+  html += `<div class="cs-heatmap-cell head"></div>`;
+  for (const d of discs) html += `<div class="cs-heatmap-cell head">${esc(d)}</div>`;
+  for (const y of years) {
+    html += `<div class="cs-heatmap-cell row-label">${esc(String(y))}</div>`;
+    for (const d of discs) {
+      const k = `${y}::${d}`;
+      const n = matrix.get(k) || 0;
+      const intensity = max > 0 ? n / max : 0;
+      let bg = 'var(--surface-2)';
+      let color = 'var(--ink-4)';
+      if (n > 0) {
+        bg = `rgba(23,31,105,${(0.10 + 0.70 * intensity).toFixed(2)})`;
+        color = intensity > 0.5 ? 'rgba(255,255,255,.95)' : 'var(--ink)';
+      }
+      const cls = n > 0 ? 'data' : 'data zero';
+      html += `<div class="cs-heatmap-cell ${cls}" style="background:${bg};color:${color}">${n || '·'}</div>`;
+    }
+  }
+  html += '</div>';
+  target.innerHTML = html;
+}
+
+function renderScoreHistogram() {
+  const target = $('scoreHistogram');
+  if (!target) return;
+  const scored = state.evaluated.filter(r => isNum(r.analysis_score));
+  if (!scored.length) {
+    target.innerHTML = '<div class="source-impact-empty">No scored results.</div>';
+    return;
+  }
+  const threshold = scored.find(r => isNum(r.threshold_used))?.threshold_used ?? null;
+  const scores = scored.map(r => r.analysis_score);
+  const lo = Math.min(...scores);
+  const hi = Math.max(...scores);
+  const range = (hi - lo) || 1;
+  const N = 24;
+  const step = range / N;
+  const buckets = new Array(N).fill(0).map(() => ({ below: 0, above: 0 }));
+  for (const r of scored) {
+    let i = Math.floor((r.analysis_score - lo) / step);
+    if (i >= N) i = N - 1;
+    if (i < 0)  i = 0;
+    const passing = isNum(threshold) && r.analysis_score >= threshold;
+    if (passing) buckets[i].above++; else buckets[i].below++;
+  }
+  const maxCount = Math.max(...buckets.map(b => b.below + b.above), 1);
+  const W = 700, H = 200;
+  const padL = 32, padR = 14, padT = 16, padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const barW = innerW / N;
+  let bars = '';
+  for (let i = 0; i < N; i++) {
+    const x = padL + i * barW;
+    const total = buckets[i].below + buckets[i].above;
+    const totalH = (total / maxCount) * innerH;
+    const aboveH = (buckets[i].above / maxCount) * innerH;
+    const belowH = totalH - aboveH;
+    const yBelowTop = padT + innerH - belowH;
+    const yAboveTop = padT + innerH - totalH;
+    if (belowH > 0) bars += `<rect class="bar" x="${(x+1).toFixed(1)}" y="${yBelowTop.toFixed(1)}" width="${(barW-2).toFixed(1)}" height="${belowH.toFixed(1)}" />`;
+    if (aboveH > 0) bars += `<rect class="bar qualified" x="${(x+1).toFixed(1)}" y="${yAboveTop.toFixed(1)}" width="${(barW-2).toFixed(1)}" height="${aboveH.toFixed(1)}" />`;
+  }
+  // Threshold line
+  let thresh = '';
+  if (isNum(threshold) && threshold >= lo && threshold <= hi) {
+    const tx = padL + ((threshold - lo) / range) * innerW;
+    thresh = `
+      <line class="threshold-line" x1="${tx.toFixed(1)}" y1="${padT}" x2="${tx.toFixed(1)}" y2="${(padT + innerH).toFixed(1)}" />
+      <text class="threshold-label" x="${(tx + 5).toFixed(1)}" y="${(padT + 12).toFixed(1)}">≥ ${threshold.toFixed(0)}</text>
+    `;
+  }
+  // Axis
+  const axisY = padT + innerH;
+  const axis = `
+    <line class="axis-line" x1="${padL}" y1="${axisY}" x2="${padL + innerW}" y2="${axisY}" />
+    <text class="axis-label" x="${padL}" y="${H - 6}" text-anchor="start">${lo.toFixed(0)}</text>
+    <text class="axis-label" x="${(padL + innerW/2).toFixed(1)}" y="${H - 6}" text-anchor="middle">score</text>
+    <text class="axis-label" x="${padL + innerW}" y="${H - 6}" text-anchor="end">${hi.toFixed(0)}</text>
+    <text class="axis-label" x="${padL - 4}" y="${(padT + 8).toFixed(1)}" text-anchor="end">${maxCount}</text>
+    <text class="axis-label" x="${padL - 4}" y="${axisY}" text-anchor="end">0</text>
+  `;
+  target.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}${thresh}${axis}</svg>`;
 }
 
 function renderBreakdown() {

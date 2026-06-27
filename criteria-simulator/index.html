@@ -202,10 +202,11 @@
         <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeets">All</em></span>
         <div class="section-nav">
           <a href="#hero">Summary</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#strength">Strength</a>
+          <a href="#distribution">Distribution</a>
           <a href="#sources">Sources</a>
-          <a href="#breakdown">Breakdown</a>
-          <a href="#qualified">Qualified</a>
-          <a href="#bubble">Bubble</a>
+          <a href="#qualified">Detail</a>
         </div>
       </nav>
 
@@ -232,6 +233,40 @@
         </div>
       </section>
 
+      <!-- Qualification Pipeline funnel -->
+      <section id="pipeline" class="panel">
+        <header class="panel-head">
+          <h2>Qualification Pipeline</h2>
+          <p>How results filter down to qualifying athletes.</p>
+        </header>
+        <div id="funnel" class="funnel"></div>
+      </section>
+
+      <!-- Event Strength heatmap + Score Distribution -->
+      <div class="dual-grid">
+        <section id="strength" class="panel">
+          <header class="panel-head">
+            <h2>Event Strength</h2>
+            <p>Qualifying athletes by year × discipline.</p>
+          </header>
+          <div id="eventHeatmap" class="cs-heatmap"></div>
+        </section>
+
+        <section id="distribution" class="panel">
+          <header class="panel-head">
+            <h2>Score Distribution</h2>
+            <p>All evaluated scores. Threshold marked.</p>
+          </header>
+          <div id="scoreHistogram" class="histo"></div>
+          <div class="histo-legend">
+            <span><span class="swatch" style="background:var(--brand-pool)"></span>Below threshold</span>
+            <span><span class="swatch" style="background:var(--status-direct,#16a34a)"></span>At or above threshold</span>
+            <span><span class="swatch" style="background:var(--brand-red);height:2px;width:14px;border-radius:0"></span>Threshold line</span>
+          </div>
+        </section>
+      </div>
+
+      <!-- Source impact + by-year breakdown -->
       <div class="dual-grid">
         <section id="sources" class="panel">
           <header class="panel-head">
@@ -250,11 +285,12 @@
         </section>
       </div>
 
-      <section id="qualified" class="panel">
-        <header class="panel-head">
-          <h2>Qualified Athletes</h2>
-          <p id="qualifiedSubtitle">Best qualifying result per athlete.</p>
-        </header>
+      <!-- Detail tables — collapsed by default, expand for individual names -->
+      <details id="qualified" class="panel">
+        <summary>
+          <h2>Qualifying Detail</h2>
+          <p id="qualifiedSubtitle">Best qualifying result per athlete. Expand to see individual names.</p>
+        </summary>
         <div class="table-wrap">
           <table class="data-table" id="qualifiedTable">
             <thead>
@@ -276,13 +312,13 @@
             <tbody id="qualifiedRows"></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section id="bubble" class="panel">
-        <header class="panel-head">
-          <h2>Bubble Athletes</h2>
-          <p>Closest athletes below the score threshold.</p>
-        </header>
+      <details id="bubble" class="panel">
+        <summary>
+          <h2>Bubble Detail</h2>
+          <p>Closest athletes below the score threshold. Expand for names.</p>
+        </summary>
         <div class="table-wrap">
           <table class="data-table">
             <thead>
@@ -302,7 +338,7 @@
             <tbody id="bubbleRows"></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
     </div>
 

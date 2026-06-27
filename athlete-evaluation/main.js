@@ -201,8 +201,134 @@ function render() {
   renderHero();
   renderHeatmap();
   renderBreakdown();
+  renderScoreHistogram();
+  renderActivityMatrix();
   renderLeaderboard();
   renderTopDives();
+}
+
+function renderScoreHistogram() {
+  const target = $('scoreHistogram');
+  const legend = $('scoreHistoLegend');
+  if (!target) return;
+  const dives = state.filteredDives.filter(d => isNum(d.score));
+  if (!dives.length) {
+    target.innerHTML = '<div class="source-impact-empty">No scored dives in scope.</div>';
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+  // Detect boards present
+  const boardSet = new Set(dives.map(d => d.board || d.discipline || '—').filter(Boolean));
+  const boards = ['1m','3m','Platform','10m'].filter(b => boardSet.has(b))
+    .concat([...boardSet].filter(b => !['1m','3m','Platform','10m'].includes(b)));
+  const scores = dives.map(d => d.score);
+  const lo = Math.min(...scores);
+  const hi = Math.max(...scores);
+  const range = (hi - lo) || 1;
+  const N = 24;
+  const step = range / N;
+  // Bucket per board
+  const bucketsByBoard = new Map(boards.map(b => [b, new Array(N).fill(0)]));
+  for (const d of dives) {
+    const b = d.board || d.discipline || '—';
+    if (!bucketsByBoard.has(b)) continue;
+    let i = Math.floor((d.score - lo) / step);
+    if (i >= N) i = N - 1;
+    if (i < 0)  i = 0;
+    bucketsByBoard.get(b)[i]++;
+  }
+  // Stacked totals per bucket
+  const stackTotals = new Array(N).fill(0);
+  for (const arr of bucketsByBoard.values())
+    for (let i = 0; i < N; i++) stackTotals[i] += arr[i];
+  const maxCount = Math.max(...stackTotals, 1);
+  const W = 700, H = 200;
+  const padL = 32, padR = 14, padT = 16, padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const barW = innerW / N;
+  const boardColors = {
+    '1m':       'var(--brand-pool)',
+    '3m':       'var(--brand-blue)',
+    'Platform': 'var(--brand-red)',
+    '10m':      'var(--brand-red)',
+  };
+  let bars = '';
+  for (let i = 0; i < N; i++) {
+    let stackY = padT + innerH;
+    const x = padL + i * barW;
+    for (const b of boards) {
+      const c = bucketsByBoard.get(b)[i];
+      if (!c) continue;
+      const h = (c / maxCount) * innerH;
+      stackY -= h;
+      const fill = boardColors[b] || 'var(--brand-pool)';
+      bars += `<rect x="${(x+1).toFixed(1)}" y="${stackY.toFixed(1)}" width="${(barW-2).toFixed(1)}" height="${h.toFixed(1)}" fill="${fill}" opacity=".85"/>`;
+    }
+  }
+  const axisY = padT + innerH;
+  const axis = `
+    <line class="axis-line" x1="${padL}" y1="${axisY}" x2="${padL + innerW}" y2="${axisY}" />
+    <text class="axis-label" x="${padL}" y="${H - 6}" text-anchor="start">${lo.toFixed(1)}</text>
+    <text class="axis-label" x="${(padL + innerW/2).toFixed(1)}" y="${H - 6}" text-anchor="middle">dive score</text>
+    <text class="axis-label" x="${padL + innerW}" y="${H - 6}" text-anchor="end">${hi.toFixed(1)}</text>
+    <text class="axis-label" x="${padL - 4}" y="${(padT + 8).toFixed(1)}" text-anchor="end">${maxCount}</text>
+    <text class="axis-label" x="${padL - 4}" y="${axisY}" text-anchor="end">0</text>
+  `;
+  target.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}${axis}</svg>`;
+  if (legend) {
+    legend.innerHTML = boards.map(b => {
+      const c = boardColors[b] || 'var(--brand-pool)';
+      return `<span><span class="swatch" style="background:${c}"></span>${esc(b)}</span>`;
+    }).join('');
+  }
+}
+
+function renderActivityMatrix() {
+  const target = $('activityMatrix');
+  if (!target) return;
+  if (!state.filteredResults.length) {
+    target.innerHTML = '<div class="source-impact-empty">No entries in scope.</div>';
+    return;
+  }
+  // Year × Board matrix
+  const yearSet = new Set();
+  const boardSet = new Set();
+  const matrix = new Map();
+  for (const r of state.filteredResults) {
+    const y = r.meet_year || '—';
+    const b = r.discipline || '—';
+    yearSet.add(y);
+    boardSet.add(b);
+    const k = `${y}::${b}`;
+    matrix.set(k, (matrix.get(k) || 0) + 1);
+  }
+  const years = [...yearSet].sort((a,b) => String(b).localeCompare(String(a)));
+  const boardOrder = ['1m','3m','Platform','10m','Synchro 3m','Synchro 10m'];
+  const boards = boardOrder.filter(b => boardSet.has(b)).concat([...boardSet].filter(b => !boardOrder.includes(b)).sort());
+  const max = Math.max(...[...matrix.values()], 1);
+  const cols = ['80px', ...boards.map(() => 'minmax(60px, 1fr)')].join(' ');
+  let html = `<div class="cs-heatmap-grid" style="grid-template-columns: ${cols}">`;
+  html += `<div class="cs-heatmap-cell head"></div>`;
+  for (const b of boards) html += `<div class="cs-heatmap-cell head">${esc(b)}</div>`;
+  for (const y of years) {
+    html += `<div class="cs-heatmap-cell row-label">${esc(String(y))}</div>`;
+    for (const b of boards) {
+      const k = `${y}::${b}`;
+      const n = matrix.get(k) || 0;
+      const intensity = max > 0 ? n / max : 0;
+      let bg = 'var(--surface-2)';
+      let color = 'var(--ink-4)';
+      if (n > 0) {
+        bg = `rgba(23,31,105,${(0.10 + 0.70 * intensity).toFixed(2)})`;
+        color = intensity > 0.5 ? 'rgba(255,255,255,.95)' : 'var(--ink)';
+      }
+      const cls = n > 0 ? 'data' : 'data zero';
+      html += `<div class="cs-heatmap-cell ${cls}" style="background:${bg};color:${color}">${n || '·'}</div>`;
+    }
+  }
+  html += '</div>';
+  target.innerHTML = html;
 }
 
 function renderBreakdown() {

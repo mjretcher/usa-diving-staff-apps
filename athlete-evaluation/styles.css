@@ -52,6 +52,58 @@ html { overflow-x: hidden; }
 }
 @media (max-width: 1100px) { .dual-grid { grid-template-columns: 1fr; } }
 
+/* ── Heatmap matrix (year × discipline / etc.) ─────────────── */
+.cs-heatmap { padding: 14px 18px; }
+.cs-heatmap-grid { display: grid; gap: 4px; }
+.cs-heatmap-cell {
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cs-heatmap-cell.head {
+  background: transparent; color: var(--ink-3);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; padding: 6px 4px;
+}
+.cs-heatmap-cell.row-label {
+  background: transparent; color: var(--ink-2); text-align: right;
+  font-weight: 700; padding-right: 12px; font-size: 12px;
+}
+.cs-heatmap-cell.data { background: var(--surface-2); color: var(--ink); }
+.cs-heatmap-cell.zero { color: var(--ink-4); font-weight: 400; }
+
+/* ── SVG histogram ─────────────────────────────────────────── */
+.histo { padding: 14px 18px; }
+.histo svg { display: block; width: 100%; height: 200px; }
+.histo .bar { fill: var(--brand-pool); opacity: .85; }
+.histo .bar.b-1m       { fill: var(--brand-pool); }
+.histo .bar.b-3m       { fill: var(--brand-blue); }
+.histo .bar.b-Platform { fill: var(--brand-red); }
+.histo .axis-line { stroke: var(--line); stroke-width: 1; }
+.histo .axis-label { fill: var(--ink-3); font-size: 10px; }
+.histo-legend { display: flex; gap: 14px; padding: 0 18px 12px; font-size: 11px; color: var(--ink-3); }
+.histo-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* ── Collapsible panel ─────────────────────────────────────── */
+details.panel { padding: 0; }
+details.panel > summary {
+  list-style: none; cursor: pointer; position: relative;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--surface);
+}
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::after {
+  content: '▾'; position: absolute; right: 18px; top: 14px;
+  color: var(--ink-3); font-size: 14px; transition: transform .15s;
+}
+details.panel[open] > summary::after { transform: rotate(180deg); }
+details.panel > summary h2 { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--ink); margin: 0 0 2px; }
+details.panel > summary p  { font-size: 12px; color: var(--ink-3); margin: 0; }
+
 /* ── Filter chip strip (above content) ───────────────────────── */
 .filter-strip {
   position: sticky;

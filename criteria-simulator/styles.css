@@ -445,6 +445,93 @@ html { overflow-x: hidden; }
 }
 @media (max-width: 1100px) { .dual-grid { grid-template-columns: 1fr; } }
 
+/* ── Qualification Pipeline funnel ─────────────────────────── */
+.funnel { padding: 14px 18px; }
+.funnel-row {
+  display: grid;
+  grid-template-columns: 170px 1fr 80px 70px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.funnel-row .label { color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+.funnel-row .bar { height: 26px; background: var(--surface-2); border-radius: 4px; overflow: hidden; position: relative; border: 1px solid var(--line); }
+.funnel-row .bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-blue), var(--brand-pool));
+  display: flex; align-items: center; padding-left: 10px;
+  color: rgba(255,255,255,.96); font-size: 11.5px; font-weight: 700;
+  transition: width .2s;
+}
+.funnel-row.stage-final .bar-fill { background: linear-gradient(90deg, var(--status-direct, #16a34a), #1ec7a5); }
+.funnel-row .count { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); text-align: right; font-size: 14px; }
+.funnel-row .pct   { font-variant-numeric: tabular-nums; color: var(--ink-3); font-size: 11px; text-align: right; }
+
+/* ── Heatmap matrix (year × discipline / etc.) ─────────────── */
+.cs-heatmap { padding: 14px 18px; }
+.cs-heatmap-grid { display: grid; gap: 4px; }
+.cs-heatmap-cell {
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cs-heatmap-cell.head {
+  background: transparent; color: var(--ink-3);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  font-weight: 700; padding: 6px 4px;
+}
+.cs-heatmap-cell.row-label {
+  background: transparent; color: var(--ink-2); text-align: right;
+  font-weight: 700; padding-right: 12px; font-size: 12px;
+}
+.cs-heatmap-cell.data { background: var(--surface-2); color: var(--ink); }
+.cs-heatmap-cell.zero { color: var(--ink-4); font-weight: 400; }
+
+/* ── SVG histogram ─────────────────────────────────────────── */
+.histo { padding: 14px 18px; }
+.histo svg { display: block; width: 100%; height: 200px; }
+.histo .bar { fill: var(--brand-pool); opacity: .85; }
+.histo .bar.qualified { fill: var(--status-direct, #16a34a); opacity: .9; }
+.histo .axis-line { stroke: var(--line); stroke-width: 1; }
+.histo .axis-label { fill: var(--ink-3); font-size: 10px; }
+.histo .threshold-line { stroke: var(--brand-red); stroke-width: 2; stroke-dasharray: 5 3; }
+.histo .threshold-label { fill: var(--brand-red); font-size: 10.5px; font-weight: 700; }
+.histo-legend { display: flex; gap: 14px; padding: 0 18px 12px; font-size: 11px; color: var(--ink-3); }
+.histo-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+
+/* ── Collapsible panel ─────────────────────────────────────── */
+details.panel { padding: 0; }
+details.panel > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--surface);
+  position: relative;
+}
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::after {
+  content: '▾';
+  position: absolute;
+  right: 18px; top: 14px;
+  color: var(--ink-3);
+  font-size: 14px;
+  transition: transform .15s;
+}
+details.panel[open] > summary::after { transform: rotate(180deg); }
+details.panel > summary h2 {
+  font-family: var(--font-display);
+  font-size: 14px; font-weight: 700; color: var(--ink);
+  margin: 0 0 2px;
+}
+details.panel > summary p {
+  font-size: 12px; color: var(--ink-3); margin: 0;
+}
+
 .source-impact { padding: 14px 18px; max-height: 320px; overflow-y: auto; }
 .source-impact-row {
   display: grid;

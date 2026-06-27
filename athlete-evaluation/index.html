@@ -155,8 +155,10 @@
         <div class="section-nav">
           <a href="#hero">Summary</a>
           <a href="#heatmap-section">Heatmap</a>
-          <a href="#leaderboard">Leaderboard</a>
-          <a href="#topdives">Top Dives</a>
+          <a href="#breakdown-section">Activity</a>
+          <a href="#distribution-section">Distribution</a>
+          <a href="#matrix-section">Matrix</a>
+          <a href="#leaderboard">Detail</a>
         </div>
       </nav>
 
@@ -201,11 +203,32 @@
         </section>
       </div>
 
-      <section id="leaderboard" class="panel">
-        <header class="panel-head">
-          <h2>Athlete Leaderboard</h2>
-          <p id="leaderboardSubtitle">Top athletes by total score in the current scope.</p>
-        </header>
+      <!-- Score Distribution + Year × Discipline matrix -->
+      <div class="dual-grid">
+        <section id="distribution-section" class="panel">
+          <header class="panel-head">
+            <h2>Score Distribution</h2>
+            <p>Per-dive scores in the current scope, by board.</p>
+          </header>
+          <div id="scoreHistogram" class="histo"></div>
+          <div class="histo-legend" id="scoreHistoLegend"></div>
+        </section>
+
+        <section id="matrix-section" class="panel">
+          <header class="panel-head">
+            <h2>Activity Matrix</h2>
+            <p>Event entries by year × board.</p>
+          </header>
+          <div id="activityMatrix" class="cs-heatmap"></div>
+        </section>
+      </div>
+
+      <!-- Detail tables — collapsed by default -->
+      <details id="leaderboard" class="panel">
+        <summary>
+          <h2>Athlete Leaderboard Detail</h2>
+          <p id="leaderboardSubtitle">Expand to see top athletes by total score in the current scope.</p>
+        </summary>
         <div class="table-wrap">
           <table class="data-table" id="leaderboardTable">
             <thead>
@@ -225,13 +248,13 @@
             <tbody id="leaderboardRows"></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section id="topdives" class="panel">
-        <header class="panel-head">
-          <h2>Top Dives</h2>
-          <p>Highest-scoring dive performances in the current scope.</p>
-        </header>
+      <details id="topdives" class="panel">
+        <summary>
+          <h2>Top Dives Detail</h2>
+          <p>Highest-scoring dive performances. Expand for names.</p>
+        </summary>
         <div class="table-wrap">
           <table class="data-table">
             <thead>
@@ -249,7 +272,7 @@
             <tbody id="topDivesRows"></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
     </div>
 
