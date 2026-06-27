@@ -52,11 +52,21 @@
   }
 
   /* ── Data accessors ──────────────────────────────────────────── */
+  // Year-override layer: when user picks a year other than the current season's
+  // static data, fetch that year from Neon and swap it in via _yearOverrideRows.
+  // null = use original (static junior-data.js for current season).
+  let _yearOverrideRows = null;
+  let _yearOverrideEvents = null;
+  const _yearDataCache = {};   // year -> { rows, events }
+  let _currentSeason = 2026;   // updated on init from app_meta.config or static data
+
   function allResults(){
+    if (_yearOverrideRows) return _yearOverrideRows;
     return typeof effectiveResults !== 'undefined' ? effectiveResults
       : (window.JUNIOR_RESULTS_DATA?.results || []);
   }
   function allEvents(){
+    if (_yearOverrideEvents) return _yearOverrideEvents;
     return typeof effectiveEvents !== 'undefined' ? effectiveEvents
       : (window.JUNIOR_RESULTS_DATA?.events || []);
   }
@@ -2279,6 +2289,7 @@
     return `<div class="rpt-top">
       <div class="rpt-top-row1">
         <span class="rpt-top-eyebrow">Analytics &amp; Reports</span>
+        <span class="rpt-year-selector" id="rpt-year-selector">${buildYearSelector()}</span>
         <span class="rpt-top-meta">${esc(activeFilterDescription())}</span>
         <span style="margin-left:auto;display:inline-flex;gap:6px">
           <button class="rpt-export-btn" onclick="window._rptShareUrl()" title="Copy a shareable URL of this view to clipboard">🔗 Share view</button>
@@ -2289,6 +2300,254 @@
       <div class="rpt-top-row3">${buildFilterChips()}</div>
     </div>`;
   }
+
+  /* ── Year selector + Neon year loader ───────────────────────── */
+  let _availableYears = null;   // populated async
+  let _yearLoading = false;
+  let _yearLoadError = null;
+
+  function buildYearSelector(){
+    const cur = (_yearOverrideRows ? rptState.selectedYear : _currentSeason);
+    if (_yearLoading) {
+      return `<span class="rpt-year-badge rpt-year-loading">⏳ Loading ${esc(rptState.selectedYear)}…</span>`;
+    }
+    if (!_availableYears) {
+      // Trigger background load of available years
+      fetchAvailableYears();
+      return `<span class="rpt-year-badge">${cur} <span class="rpt-soft">(loading year list…)</span></span>`;
+    }
+    const opts = _availableYears.map(y => {
+      const label = (y === _currentSeason) ? `${y} (current)` : `${y}`;
+      return `<option value="${y}" ${y===cur?'selected':''}>${label}</option>`;
+    }).join('');
+    return `
+      <label class="rpt-year-lbl">Season:</label>
+      <select class="rpt-year-select" onchange="window._rptSetYear(parseInt(this.value,10))">${opts}</select>
+      ${cur !== _currentSeason ? `<button class="rpt-year-reset" onclick="window._rptSetYear(${_currentSeason})" title="Back to current season">↩</button>` : ''}
+      ${_yearLoadError ? `<span class="rpt-year-err">${esc(_yearLoadError)}</span>` : ''}
+    `;
+  }
+
+  async function fetchAvailableYears(){
+    if (_availableYears !== null) return _availableYears;
+    try {
+      const r = await neonQuery("SELECT DISTINCT year FROM core.event_results WHERE year IS NOT NULL AND is_junior_circuit ORDER BY year DESC");
+      _availableYears = r.rows.map(x => Number(x.year)).filter(y => y);
+      // Detect current season from data: max year that has the most recent activity
+      // (use 2026 default which matches app_meta config)
+      const sel = document.getElementById('rpt-year-selector');
+      if (sel) sel.innerHTML = buildYearSelector();
+    } catch (e) {
+      console.warn('[year-selector] failed to load year list', e);
+      _yearLoadError = 'Year list unavailable';
+      const sel = document.getElementById('rpt-year-selector');
+      if (sel) sel.innerHTML = buildYearSelector();
+    }
+    return _availableYears;
+  }
+
+  /* Convert one or many Neon rows for a year into the
+     JUNIOR_RESULTS_DATA.results-compatible shape the existing panels expect.
+     Aggregates Prelim/Semi/Final rounds into one row per athlete-event-meet
+     (using Final placement when available, falling back to Semi then Prelim). */
+  function transformYearRows(rows){
+    const grouped = {};
+    for (const r of rows){
+      const key = (r.meet_name||'')+'|'+(r.event_key||r.event_name||'')+'|'+(r.diver_id_dm||'');
+      if (!grouped[key]){
+        grouped[key] = { sample: r, rounds: {} };
+      }
+      const rd = r.round || 'Final';
+      grouped[key].rounds[rd] = { place: r.place != null ? Number(r.place) : null, score: r.score != null ? Number(r.score) : null };
+    }
+    const out = [];
+    for (const k in grouped){
+      const g = grouped[k];
+      const s = g.sample;
+      // Pick effective place/score
+      let place = null, score = null, sourceRound = null;
+      if (g.rounds.Final && g.rounds.Final.place != null) {
+        place = g.rounds.Final.place; score = g.rounds.Final.score; sourceRound = 'Final';
+      } else if (g.rounds.Semifinal && g.rounds.Semifinal.place != null) {
+        place = g.rounds.Semifinal.place; score = g.rounds.Semifinal.score; sourceRound = 'Semifinal';
+      } else if (g.rounds.Prelim && g.rounds.Prelim.place != null) {
+        place = g.rounds.Prelim.place; score = g.rounds.Prelim.score; sourceRound = 'Prelim';
+      }
+      out.push({
+        id: (s.stage||'?')+'|'+(s.meet_name||'?')+'|'+(s.event_name||'?')+'|'+(s.diver_id_dm||'?'),
+        stage: s.stage || '',
+        meetName: s.meet_name || '',
+        meetIdDivemeets: s.meet_id_dm != null ? String(s.meet_id_dm) : '',
+        region: s.region != null ? Number(s.region) : null,
+        zone: s.zone || '',
+        ewc: s.ewc_meet || '',
+        eventName: s.event_name || '',
+        eventId: (s.stage||'?')+'|'+(s.meet_name||'?')+'|'+(s.event_name||'?'),
+        eventKey: s.event_key || '',
+        eventCategory: 'Qualifying Event',
+        qualifyingEvent: true,
+        ageGroup: s.age_group || '',
+        gender: s.gender || '',
+        discipline: s.discipline || '',
+        isSynchro: !!s.is_synchro,
+        diveMeetsId: s.diver_id_dm != null ? String(s.diver_id_dm) : '',
+        first: s.diver_first || '',
+        last: s.diver_last || '',
+        athlete: ((s.diver_first||'')+' '+(s.diver_last||'')).trim(),
+        team: s.team_name || '',
+        place: place != null ? String(place) : '',
+        placeNumber: place != null ? Number(place) : null,
+        score: score != null ? Number(score) : null,
+        // Round-specific (new field, additive)
+        prelimPlace: g.rounds.Prelim ? g.rounds.Prelim.place : null,
+        prelimScore: g.rounds.Prelim ? g.rounds.Prelim.score : null,
+        semiPlace:   g.rounds.Semifinal ? g.rounds.Semifinal.place : null,
+        semiScore:   g.rounds.Semifinal ? g.rounds.Semifinal.score : null,
+        finalPlace:  g.rounds.Final ? g.rounds.Final.place : null,
+        finalScore:  g.rounds.Final ? g.rounds.Final.score : null,
+        madeFinal:   !!g.rounds.Final,
+        primarySourceRound: sourceRound,
+        // Status fields not available for historical years — defaults so panels don't crash
+        citizenship: '',
+        usCitizen: '',
+        membershipCitizenStatus: 'Historical data — status not tracked',
+        foreignDeclared: false,
+        foreignDeclarationDetail: '',
+        dualDeclared: false,
+        dualOtherCountry: false,
+        dualSportNationalityStatus: 'No declaration',
+        dualDeclarationDetail: '',
+        hps: false,
+        ymca: false,
+        prequalified: false,
+        prequalification: [],
+        webpointNonUs: false,
+        citizenshipUnknown: true,
+        foreignInternational: false,
+        nonDisplacing: false,
+        nonDisplacingReason: '',
+        countsTowardTop15: true,
+        countingRank: null,
+        top15Qualifier: place != null && place <= 15,
+        officialThresholdScore: null,
+        scoreMeetsOfficialThreshold: false,
+        officialAverageScoreQualifier: false,
+        officialQualified: place != null && place <= 15,
+        officialQualifierRank: place,
+        officialQualifierScore: score,
+        officialQualifierType: '',
+        officialQualifierRegion: s.region != null ? ('Region ' + s.region) : '',
+        qualificationStatus: '',
+        advancesToZone: s.stage === 'Regionals' && place != null && place <= 15,
+        flags: [],
+        reviewFlags: [],
+        originalStatus: '',
+        sourceRow: 0,
+        bumpIn: false,
+        spotShifted: false,
+        openedSpot: false,
+        bumpedBy: [],
+        openedFor: [],
+      });
+    }
+    return out;
+  }
+
+  function transformYearEvents(yearRows){
+    // Derive minimal events list from the transformed rows
+    const map = {};
+    for (const r of yearRows){
+      if (!r.eventId || map[r.eventId]) continue;
+      map[r.eventId] = {
+        id: r.eventId,
+        stage: r.stage,
+        meetName: r.meetName,
+        region: r.region,
+        zone: r.zone,
+        ewc: r.ewc,
+        eventName: r.eventName,
+        eventKey: r.eventKey,
+        eventCategory: 'Qualifying Event',
+        qualifyingEvent: true,
+        ageGroup: r.ageGroup,
+        gender: r.gender,
+        discipline: r.discipline,
+        isSynchro: r.isSynchro,
+        entries: 0,
+        countableEntries: 0,
+        nonDisplacingEntries: 0,
+        foreignRows: 0,
+        dualRows: 0,
+        prequalifiedRows: 0,
+        top15Qualifiers: 0,
+        officialAverageQualifiers: 0,
+        officialQualifiedRows: 0,
+        bumpIns: 0,
+        spotShifts: 0,
+        openedSpots: 0,
+      };
+    }
+    // Count entries per event
+    for (const r of yearRows){
+      if (!r.eventId || !map[r.eventId]) continue;
+      map[r.eventId].entries += 1;
+      map[r.eventId].countableEntries += 1;
+      if (r.placeNumber != null && r.placeNumber <= 15) map[r.eventId].top15Qualifiers += 1;
+    }
+    return Object.values(map);
+  }
+
+  window._rptSetYear = async function(year){
+    year = Number(year);
+    if (!Number.isFinite(year)) return;
+    if (year === _currentSeason) {
+      _yearOverrideRows = null;
+      _yearOverrideEvents = null;
+      rptState.selectedYear = year;
+      renderReports();
+      return;
+    }
+    if (_yearDataCache[year]) {
+      _yearOverrideRows = _yearDataCache[year].rows;
+      _yearOverrideEvents = _yearDataCache[year].events;
+      rptState.selectedYear = year;
+      renderReports();
+      return;
+    }
+    rptState.selectedYear = year;
+    _yearLoading = true;
+    _yearLoadError = null;
+    // Re-render header to show loading state
+    const ctx = document.getElementById('resultsContext');
+    if (ctx) ctx.innerHTML = buildTopHeader();
+    try {
+      const r = await neonQuery(
+        "SELECT meet_id_dm, meet_name, event_name, event_key, year, stage, "+
+        "age_group, gender, discipline, is_synchro, region, zone, ewc_meet, "+
+        "diver_id_dm, diver_first, diver_last, team_name, team_code, "+
+        "round, place, score "+
+        "FROM core.event_results "+
+        "WHERE year = $1 AND is_junior_circuit AND NOT is_synchro "+
+        "ORDER BY stage, meet_name, event_name, diver_id_dm, round",
+        [year]
+      );
+      const rows = transformYearRows(r.rows);
+      const events = transformYearEvents(rows);
+      _yearDataCache[year] = { rows: rows, events: events };
+      _yearOverrideRows = rows;
+      _yearOverrideEvents = events;
+      console.log('[year-selector] loaded', year, '— rows:', rows.length, 'events:', events.length);
+    } catch (e) {
+      console.error('[year-selector] failed', e);
+      _yearLoadError = 'Load failed: ' + (e.message || e);
+      _yearOverrideRows = null;
+      _yearOverrideEvents = null;
+      rptState.selectedYear = _currentSeason;
+    } finally {
+      _yearLoading = false;
+    }
+    renderReports();
+  };
 
   function buildFilterChips(){
     const all = allResults();
@@ -2489,19 +2748,38 @@
     if (ctx) ctx.innerHTML = buildTopHeader();
     renderSidebar();
 
-    if (rptState.panel === 'flow')              renderFlowPanel(wrap);
-    else if (rptState.panel === 'cohort')       renderCohortPanel(wrap);
-    else if (rptState.panel === 'scoring')      renderScoringPanel(wrap);
-    else if (rptState.panel === 'breakdowns')   renderBreakdownsPanel(wrap);
-    else if (rptState.panel === 'displacement') renderDisplacementPanel(wrap);
-    else if (rptState.panel === 'historical')   renderHistoricalPanel(wrap);
-    else if (rptState.panel === 'declined')     renderDeclinedPanel(wrap);
-    else if (rptState.panel === 'anomaly')      renderAnomalyPanel(wrap);
-    else if (rptState.panel === 'career')       renderCareerPanel(wrap);
-    else if (rptState.panel === 'tier_entry')   renderTierEntryPanel(wrap);
-    else if (rptState.panel === 'rule_era')     renderRuleEraPanel(wrap);
-    else if (rptState.panel === 'saved')        renderSavedViewsPanel(wrap);
-    else if (rptState.panel === 'status')       renderStatusPanel(wrap);
+    // Show banner when viewing a non-current season
+    if (_yearOverrideRows && rptState.selectedYear && rptState.selectedYear !== _currentSeason) {
+      wrap.innerHTML = `<div class="rpt-historical-banner">
+        <span class="rpt-year-num">${rptState.selectedYear}</span>
+        <span><strong>Viewing historical season.</strong> Citizenship, HPS, foreign-declaration, and dual-citizen flags weren't tracked in this archive — derived panels (Displacements, Special Status) will be limited.
+        Click <button class="rpt-export-btn" onclick="window._rptSetYear(${_currentSeason})" style="padding:2px 8px;font-size:11px">${_currentSeason} (current)</button> to return.</span>
+      </div>`;
+    } else {
+      wrap.innerHTML = '';
+    }
+
+    // Sub-wrap so panels render below the banner without overwriting it
+    let panelWrap = wrap.querySelector('.rpt-panel-wrap');
+    if (!panelWrap) {
+      panelWrap = document.createElement('div');
+      panelWrap.className = 'rpt-panel-wrap';
+      wrap.appendChild(panelWrap);
+    }
+
+    if (rptState.panel === 'flow')              renderFlowPanel(panelWrap);
+    else if (rptState.panel === 'cohort')       renderCohortPanel(panelWrap);
+    else if (rptState.panel === 'scoring')      renderScoringPanel(panelWrap);
+    else if (rptState.panel === 'breakdowns')   renderBreakdownsPanel(panelWrap);
+    else if (rptState.panel === 'displacement') renderDisplacementPanel(panelWrap);
+    else if (rptState.panel === 'historical')   renderHistoricalPanel(panelWrap);
+    else if (rptState.panel === 'declined')     renderDeclinedPanel(panelWrap);
+    else if (rptState.panel === 'anomaly')      renderAnomalyPanel(panelWrap);
+    else if (rptState.panel === 'career')       renderCareerPanel(panelWrap);
+    else if (rptState.panel === 'tier_entry')   renderTierEntryPanel(panelWrap);
+    else if (rptState.panel === 'rule_era')     renderRuleEraPanel(panelWrap);
+    else if (rptState.panel === 'saved')        renderSavedViewsPanel(panelWrap);
+    else if (rptState.panel === 'status')       renderStatusPanel(panelWrap);
   }
 
   /* ── CSS injection ──────────────────────────────────────────── */
@@ -2865,6 +3143,22 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-stat-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
 .rpt-btn-prim { background: var(--navy); color: white; border: 0; padding: 7px 14px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-family: var(--f-ui); font-weight: 600; }
 .rpt-btn-prim:hover { background: var(--pool); }
+
+/* Year selector in top header */
+.rpt-year-selector { display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; padding: 0 12px 0 14px; border-left: 2px solid var(--line); }
+.rpt-year-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-right: 4px; }
+.rpt-year-select { padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--f-ui); font-size: 13px; font-weight: 700; color: var(--navy); cursor: pointer; }
+.rpt-year-select:focus { outline: 2px solid var(--navy); outline-offset: -1px; }
+.rpt-year-reset { background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 3px 8px; font-size: 14px; cursor: pointer; color: var(--ink-2); }
+.rpt-year-reset:hover { background: var(--surface-2); color: var(--navy); }
+.rpt-year-badge { display: inline-block; padding: 4px 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; color: var(--navy); }
+.rpt-year-loading { background: #FEF3C7; border-color: #d97706; color: #92400e; }
+.rpt-year-err { font-size: 11px; color: var(--red, #E31937); margin-left: 6px; }
+
+/* Historical-year banner appears on every panel when not current season */
+.rpt-historical-banner { background: linear-gradient(90deg, #FEF3C7 0%, #fdf8e1 100%); border-left: 4px solid #d97706; padding: 10px 16px; margin: 0 0 14px; border-radius: var(--radius-sm); font-size: 12px; color: #78350f; display: flex; align-items: center; gap: 10px; }
+.rpt-historical-banner strong { color: #78350f; font-weight: 700; }
+.rpt-historical-banner .rpt-year-num { background: var(--navy); color: white; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; font-family: var(--f-mono); }
 `;
     document.head.appendChild(s);
   }
