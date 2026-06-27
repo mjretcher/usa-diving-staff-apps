@@ -2263,6 +2263,9 @@
     ['status',       'Special status',    '🛡️'],
     ['historical',   'Historical (multi-year)', '📅'],
     ['declined',     'Declined Nationals', '🚫'],
+    ['anomaly',      'Anomalies',          '⚠️'],
+    ['career',       'Athlete career',     '🧬'],
+    ['tier_entry',   'Tier entry (old sys)', '🪜'],
   ];
 
   function buildTopHeader(){
@@ -2275,6 +2278,10 @@
       <div class="rpt-top-row1">
         <span class="rpt-top-eyebrow">Analytics &amp; Reports</span>
         <span class="rpt-top-meta">${esc(activeFilterDescription())}</span>
+        <span style="margin-left:auto;display:inline-flex;gap:6px">
+          <button class="rpt-export-btn" onclick="window._rptShareUrl()" title="Copy a shareable URL of this view to clipboard">🔗 Share view</button>
+          <button class="rpt-export-btn" onclick="window._rptGenerateReport()" title="Open a print-friendly version of this panel">📄 Generate report</button>
+        </span>
       </div>
       <div class="rpt-top-row2">${tabs}</div>
       <div class="rpt-top-row3">${buildFilterChips()}</div>
@@ -2420,6 +2427,9 @@
       ['status',       'Special status',        '🛡️'],
       ['historical',   'Historical (multi-year)', '📅'],
       ['declined',     'Declined Nationals',    '🚫'],
+      ['anomaly',      'Anomalies',             '⚠️'],
+      ['career',       'Athlete career',        '🧬'],
+      ['tier_entry',   'Tier entry (old sys)',  '🪜'],
     ];
 
     el.innerHTML = `
@@ -2482,6 +2492,9 @@
     else if (rptState.panel === 'displacement') renderDisplacementPanel(wrap);
     else if (rptState.panel === 'historical')   renderHistoricalPanel(wrap);
     else if (rptState.panel === 'declined')     renderDeclinedPanel(wrap);
+    else if (rptState.panel === 'anomaly')      renderAnomalyPanel(wrap);
+    else if (rptState.panel === 'career')       renderCareerPanel(wrap);
+    else if (rptState.panel === 'tier_entry')   renderTierEntryPanel(wrap);
     else if (rptState.panel === 'status')       renderStatusPanel(wrap);
   }
 
@@ -3317,6 +3330,612 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     URL.revokeObjectURL(url);
   };
 
+  /* ── Anomaly panel ─────────────────────────────────────────────
+     Surfaces athletes whose attendance pattern violates expected rules.
+     Detection logic per anomaly type:
+       - foreign_at_zones_pre2023: any athlete (or row) at Zones in 2021-2022 was, by rule, a US citizen. Foreign athletes were Regionals-only. So if a row at Zones 2021-2022 ALSO appears in a foreign-declared roster, that's an anomaly. (Heuristic: detect by joining against citizenship status if available; otherwise list low-confidence.)
+       - alternate_below_threshold: athlete at Junior Nationals (pre-2026) who was 17+ at Zones in same event. Old rule cuts alternates at 16th.
+       - skipped_stage: athlete at Junior Nationals (pre-2026) with NO Zones row in same year+event. Possible HPS/prequal OR data gap.
+       - score_outlier_high: score > 3.5 standard deviations above event mean (likely scraping error).
+  */
+
+  function renderAnomalyPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Anomaly surveillance <span class="rpt-soft">(rulebook violations + data gaps)</span></div>
+          <div class="rpt-soft">Each card runs an independent Neon query. False positives are normal — these are starting points for review.</div>
+        </div>
+        <div id="anom-skipped" class="rpt-card"><div class="rpt-loading">Loading "skipped Zones" check…</div></div>
+        <div id="anom-altexc" class="rpt-card"><div class="rpt-loading">Loading "alternate above cutoff" check…</div></div>
+        <div id="anom-outlier" class="rpt-card"><div class="rpt-loading">Loading score outlier check…</div></div>
+        <div id="anom-future" class="rpt-card"><div class="rpt-loading">Loading "future records" check…</div></div>
+      </div>
+    `;
+    loadAnomalies();
+  }
+
+  async function loadAnomalies(){
+    // 1) Skipped Zones — at Nationals with no Zones row same year + event_key
+    try {
+      const r = await neonQuery(`
+        WITH at_nat AS (
+          SELECT DISTINCT year, event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender, region
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
+        ),
+        at_zone AS (
+          SELECT DISTINCT year, event_key, diver_id_dm
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Zones' AND diver_id_dm IS NOT NULL
+        )
+        SELECT a.* FROM at_nat a
+        LEFT JOIN at_zone z USING (year, event_key, diver_id_dm)
+        WHERE z.diver_id_dm IS NULL
+        ORDER BY a.year DESC, a.event_key
+        LIMIT 1000
+      `);
+      const rows = r.rows;
+      const byYear = {};
+      rows.forEach(x => byYear[x.year] = (byYear[x.year]||0)+1);
+      document.getElementById('anom-skipped').innerHTML = `
+        <h3 class="rpt-card-h">Athletes at Jr Nationals with no Zones record (likely HPS/prequal or data gap)</h3>
+        <div class="rpt-stats-row">
+          <div class="rpt-stat"><div class="rpt-stat-num">${fmt(rows.length)}</div><div class="rpt-stat-lbl">Total records (2021–2025, capped at 1000)</div></div>
+        </div>
+        <table class="rpt-table" style="margin-top:8px"><thead><tr><th>Year</th><th>Count</th></tr></thead>
+          <tbody>${Object.keys(byYear).sort().map(y => `<tr><td><strong>${y}</strong></td><td>${fmt(byYear[y])}</td></tr>`).join('')}</tbody>
+        </table>
+        <div class="rpt-table-scroll" style="max-height:340px;overflow:auto;margin-top:10px">
+          <table class="rpt-table">
+            <thead><tr><th>Yr</th><th>Athlete</th><th>Team</th><th>Event</th><th>Group</th><th>Region (from Nats row)</th></tr></thead>
+            <tbody>
+            ${rows.slice(0,300).map(x => `<tr>
+              <td>${x.year}</td>
+              <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong> <span class="rpt-soft">DM ${x.diver_id_dm}</span></td>
+              <td>${esc(x.team_name||'')}</td>
+              <td>${esc(x.event_key||'')}</td>
+              <td>${esc(x.age_group||'')}</td>
+              <td>${x.region?'R'+x.region:''}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+          ${rows.length>300?`<div class="rpt-soft" style="padding:8px">Showing first 300 of ${fmt(rows.length)}.</div>`:''}
+        </div>
+        <div style="margin-top:10px"><button class="rpt-btn-prim" onclick="window._anomExport('skipped')">Export CSV</button></div>
+      `;
+      window._anomCache = window._anomCache || {};
+      window._anomCache.skipped = rows;
+    } catch (e) {
+      document.getElementById('anom-skipped').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+
+    // 2) Alternate above cutoff — at Nationals pre-2026 with Zone place 17+ same event
+    try {
+      const r = await neonQuery(`
+        WITH zone_place AS (
+          SELECT year, event_key, diver_id_dm, MIN(place) AS best_zone_place
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL
+          GROUP BY year, event_key, diver_id_dm
+        ),
+        at_nat AS (
+          SELECT DISTINCT year, event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026
+        )
+        SELECT a.year, a.event_key, a.diver_id_dm, a.diver_first, a.diver_last, a.team_name, a.age_group, a.gender, zp.best_zone_place
+        FROM at_nat a
+        JOIN zone_place zp USING (year, event_key, diver_id_dm)
+        WHERE zp.best_zone_place > 16
+        ORDER BY a.year DESC, zp.best_zone_place DESC
+        LIMIT 500
+      `);
+      const rows = r.rows;
+      document.getElementById('anom-altexc').innerHTML = `
+        <h3 class="rpt-card-h">At Jr Nationals with Zones placement &gt; 16 (old rule alternate cap)</h3>
+        <div class="rpt-stats-row">
+          <div class="rpt-stat"><div class="rpt-stat-num">${fmt(rows.length)}</div><div class="rpt-stat-lbl">Records (2021–2025)</div></div>
+        </div>
+        <div class="rpt-soft" style="margin:8px 0">Per the old system, alternates from positions 11–16 could be called up; 17th+ should not have been at Nationals. These rows are either rule exceptions, replacements from elsewhere, or data noise.</div>
+        <div class="rpt-table-scroll" style="max-height:340px;overflow:auto">
+          <table class="rpt-table">
+            <thead><tr><th>Yr</th><th>Athlete</th><th>Event</th><th>Group</th><th>Zone place</th></tr></thead>
+            <tbody>
+            ${rows.slice(0,300).map(x => `<tr>
+              <td>${x.year}</td>
+              <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong> <span class="rpt-soft">DM ${x.diver_id_dm}</span></td>
+              <td>${esc(x.event_key||'')}</td>
+              <td>${esc(x.age_group||'')}</td>
+              <td><strong>${x.best_zone_place}</strong></td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px"><button class="rpt-btn-prim" onclick="window._anomExport('altexc')">Export CSV</button></div>
+      `;
+      window._anomCache.altexc = rows;
+    } catch (e) {
+      document.getElementById('anom-altexc').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+
+    // 3) Score outliers — score > mean+3.5*sd of same event_key+stage+year+round
+    try {
+      const r = await neonQuery(`
+        WITH ev_stats AS (
+          SELECT year, stage, event_key, round,
+                 AVG(score)::numeric AS mu,
+                 STDDEV_POP(score)::numeric AS sd,
+                 COUNT(*) AS n
+          FROM core.event_results
+          WHERE is_junior_circuit AND score IS NOT NULL
+          GROUP BY year, stage, event_key, round
+          HAVING COUNT(*) >= 8
+        )
+        SELECT er.year, er.stage, er.event_key, er.round, er.diver_id_dm, er.diver_first, er.diver_last,
+               er.team_name, er.score, s.mu, s.sd
+        FROM core.event_results er
+        JOIN ev_stats s USING (year, stage, event_key, round)
+        WHERE er.score IS NOT NULL
+          AND s.sd > 0
+          AND er.score > s.mu + 3.5 * s.sd
+        ORDER BY (er.score - s.mu) / NULLIF(s.sd, 0) DESC
+        LIMIT 200
+      `);
+      const rows = r.rows;
+      document.getElementById('anom-outlier').innerHTML = `
+        <h3 class="rpt-card-h">Score outliers (z &gt; 3.5)</h3>
+        <div class="rpt-stats-row">
+          <div class="rpt-stat"><div class="rpt-stat-num">${fmt(rows.length)}</div><div class="rpt-stat-lbl">High-score outliers</div></div>
+        </div>
+        <div class="rpt-soft" style="margin:8px 0">Scores more than 3.5 standard deviations above the event mean. Most are scraping errors or score-entry mistakes.</div>
+        <div class="rpt-table-scroll" style="max-height:340px;overflow:auto">
+          <table class="rpt-table">
+            <thead><tr><th>Yr</th><th>Athlete</th><th>Stage</th><th>Event</th><th>Round</th><th>Score</th><th>Mean</th><th>z</th></tr></thead>
+            <tbody>
+            ${rows.slice(0,200).map(x => `<tr>
+              <td>${x.year}</td>
+              <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong></td>
+              <td>${esc(x.stage||'')}</td>
+              <td>${esc(x.event_key||'')}</td>
+              <td>${esc(x.round||'')}</td>
+              <td><strong>${Number(x.score).toFixed(2)}</strong></td>
+              <td>${Number(x.mu).toFixed(2)}</td>
+              <td>${((x.score-x.mu)/Math.max(0.0001,x.sd)).toFixed(1)}</td>
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px"><button class="rpt-btn-prim" onclick="window._anomExport('outlier')">Export CSV</button></div>
+      `;
+      window._anomCache.outlier = rows;
+    } catch (e) {
+      document.getElementById('anom-outlier').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+
+    // 4) Future records — rows with year > current_season
+    try {
+      const r = await neonQuery(`
+        SELECT year, COUNT(*)::int AS n FROM core.event_results
+        WHERE year > (SELECT COALESCE(NULLIF(value,'')::int, 2026) FROM app_meta.config WHERE key='current_season_year')
+        GROUP BY year ORDER BY year DESC
+      `);
+      document.getElementById('anom-future').innerHTML = `
+        <h3 class="rpt-card-h">Future-dated records <span class="rpt-soft">(should be zero unless data is misclassified)</span></h3>
+        ${r.rows.length===0 ? '<div class="rpt-soft">None. ✓</div>' :
+          '<table class="rpt-table"><thead><tr><th>Year</th><th>Rows</th></tr></thead><tbody>'+
+          r.rows.map(x => `<tr><td>${x.year}</td><td>${fmt(x.n)}</td></tr>`).join('')+'</tbody></table>'}
+      `;
+    } catch (e) {
+      document.getElementById('anom-future').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  window._anomExport = function(which){
+    const cache = window._anomCache || {};
+    const rows = cache[which] || [];
+    if (rows.length === 0) return;
+    const hdr = Object.keys(rows[0]);
+    const out = [hdr.join(',')].concat(rows.map(r => hdr.map(h => {
+      const v = r[h]; if (v == null) return '';
+      const s = String(v); return s.includes(',')||s.includes('"') ? '"'+s.replace(/"/g,'""')+'"' : s;
+    }).join(','))).join('\n');
+    const blob = new Blob([out],{type:'text/csv'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'anomaly-'+which+'.csv'; a.click();
+  };
+
+  /* ── Athlete Career trace panel ────────────────────────────────
+     Trace a single athlete across years by DM ID. Shows every meet, every event, every placement, plus a season-arc visualization. */
+  const careerState = { dmId: null, results: null, loading: false };
+
+  function renderCareerPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Athlete career trace</div>
+          <div class="rpt-soft">Search by DiveMeets ID or by name. Shows full career history across all meets and years.</div>
+        </div>
+        <div class="rpt-card">
+          <div class="rpt-slicer-bar">
+            <span class="rpt-slicer-lbl">DM ID:</span>
+            <input id="career-dm-input" type="text" placeholder="e.g. 73023" style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);font-family:var(--f-mono);width:120px"/>
+            <button class="rpt-btn-prim" onclick="window._careerByDm()">Search by DM ID</button>
+            <span class="rpt-slicer-lbl" style="margin-left:18px">or name:</span>
+            <input id="career-name-input" type="text" placeholder="last name, partial" style="padding:5px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);width:180px"/>
+            <button class="rpt-btn-prim" onclick="window._careerByName()">Search by name</button>
+          </div>
+        </div>
+        <div id="career-results"></div>
+      </div>
+    `;
+  }
+
+  window._careerByDm = async function(){
+    const v = (document.getElementById('career-dm-input').value || '').trim();
+    if (!v) return;
+    await loadCareer(v);
+  };
+  window._careerByName = async function(){
+    const v = (document.getElementById('career-name-input').value || '').trim();
+    if (!v) return;
+    try {
+      const r = await neonQuery(
+        "SELECT diver_id_dm, first_name, last_name, first_seen_year, last_seen_year, result_count "+
+        "FROM core.divers WHERE last_name ILIKE $1 OR first_name ILIKE $1 ORDER BY result_count DESC LIMIT 20",
+        ['%'+v+'%']
+      );
+      const out = document.getElementById('career-results');
+      if (r.rows.length === 0) { out.innerHTML = '<div class="rpt-card"><div class="rpt-soft">No matches.</div></div>'; return; }
+      out.innerHTML = '<div class="rpt-card"><h3 class="rpt-card-h">Candidates</h3>'+
+        '<table class="rpt-table"><thead><tr><th>DM ID</th><th>Name</th><th>Years</th><th>Result count</th><th></th></tr></thead><tbody>'+
+        r.rows.map(x => `<tr><td>${x.diver_id_dm}</td><td><strong>${esc((x.first_name||'')+' '+(x.last_name||''))}</strong></td><td>${x.first_seen_year}–${x.last_seen_year}</td><td>${fmt(x.result_count)}</td><td><button class="rpt-btn-prim" onclick="window._careerLoad(${x.diver_id_dm})">View career</button></td></tr>`).join('')+
+        '</tbody></table></div>';
+    } catch(e) {
+      document.getElementById('career-results').innerHTML = '<div class="rpt-err">'+esc(String(e.message||e))+'</div>';
+    }
+  };
+  window._careerLoad = async function(dm){
+    document.getElementById('career-dm-input').value = String(dm);
+    await loadCareer(String(dm));
+  };
+
+  async function loadCareer(dm){
+    const out = document.getElementById('career-results');
+    out.innerHTML = '<div class="rpt-card"><div class="rpt-loading">Loading career for DM '+esc(dm)+'…</div></div>';
+    try {
+      const r = await neonQuery(
+        "SELECT year, stage, meet_name, event_key, event_name, round, place, score, "+
+        "team_name, region, zone, ewc_meet, age_group, gender, discipline, is_synchro, "+
+        "diver_first, diver_last "+
+        "FROM core.event_results WHERE diver_id_dm = $1 ORDER BY year, meet_name, event_name, round",
+        [dm]
+      );
+      if (r.rows.length === 0) { out.innerHTML = '<div class="rpt-card"><div class="rpt-soft">No results for DM '+esc(dm)+'.</div></div>'; return; }
+      const first = r.rows[0];
+      const name = (first.diver_first||'')+' '+(first.diver_last||'');
+      const byYear = {};
+      r.rows.forEach(x => { (byYear[x.year] = byYear[x.year] || []).push(x); });
+      const years = Object.keys(byYear).sort();
+      const meetCount = new Set(r.rows.map(x => x.year+'|'+x.meet_name)).size;
+      const top3s = r.rows.filter(x => x.place != null && x.place <= 3 && (x.round==='Final'||x.round==='')).length;
+      const stages = {};
+      r.rows.forEach(x => { stages[x.stage||'?'] = (stages[x.stage||'?']||0)+1; });
+
+      out.innerHTML = `
+        <div class="rpt-card">
+          <h3 class="rpt-card-h">${esc(name)} <span class="rpt-soft">— DM ${esc(dm)}</span></h3>
+          <div class="rpt-stats-row">
+            <div class="rpt-stat"><div class="rpt-stat-num">${fmt(r.rows.length)}</div><div class="rpt-stat-lbl">Result rows</div></div>
+            <div class="rpt-stat"><div class="rpt-stat-num">${fmt(meetCount)}</div><div class="rpt-stat-lbl">Meets entered</div></div>
+            <div class="rpt-stat"><div class="rpt-stat-num">${years[0]}–${years[years.length-1]}</div><div class="rpt-stat-lbl">Career span</div></div>
+            <div class="rpt-stat"><div class="rpt-stat-num">${fmt(top3s)}</div><div class="rpt-stat-lbl">Top-3 final placements</div></div>
+          </div>
+          <div style="margin-top:10px">
+            <strong>Stages competed:</strong> ${Object.keys(stages).map(s => esc(s)+' ('+stages[s]+')').join(', ')}
+          </div>
+        </div>
+        ${years.map(y => {
+          const rows = byYear[y];
+          return `<div class="rpt-card">
+            <h3 class="rpt-card-h">${y} <span class="rpt-soft">— ${fmt(rows.length)} result rows</span></h3>
+            <table class="rpt-table">
+              <thead><tr><th>Stage</th><th>Meet</th><th>Event</th><th>Round</th><th>Place</th><th>Score</th><th>Team</th></tr></thead>
+              <tbody>
+              ${rows.map(x => `<tr>
+                <td><span class="rpt-soft">${esc(x.stage||'')}</span></td>
+                <td>${esc(x.meet_name||'')}</td>
+                <td>${esc(x.event_key||x.event_name||'')}</td>
+                <td>${esc(x.round||'')}</td>
+                <td><strong>${x.place!=null?x.place:''}</strong></td>
+                <td>${x.score!=null?Number(x.score).toFixed(2):''}</td>
+                <td>${esc(x.team_name||'')}</td>
+              </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+        }).join('')}
+      `;
+      careerState.dmId = dm;
+      careerState.results = r.rows;
+    } catch (e) {
+      out.innerHTML = '<div class="rpt-err">'+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  /* ── Tier-entry analysis panel (old-system back-trace) ─────────
+     For 2021-2025 Junior Nationals: directly observe entry tier from rounds present.
+       - Prelim+Semi+Final = entered at prelims (Zone 4-10/4-7 path)
+       - Semi+Final only   = entered at semis (Zone top-3 direct)
+       - Prelim only       = cut after prelims
+     Cross-references with athlete's Zone placement same year/event to validate.
+  */
+  function renderTierEntryPanel(wrap){
+    wrap.innerHTML = `
+      <div class="rpt-stage-results">
+        <div class="rpt-flow-head">
+          <div class="rpt-flow-title">Junior Nationals tier entry <span class="rpt-soft">(2021–2025, old system back-trace)</span></div>
+          <div class="rpt-soft">Directly observed from which rounds each athlete appeared in. Cross-validated against Zone placement.</div>
+        </div>
+        <div id="tier-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
+        <div id="tier-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
+        <div id="tier-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year…</div></div>
+        <div id="tier-mismatch" class="rpt-card"><div class="rpt-loading">Loading cross-validation…</div></div>
+      </div>
+    `;
+    loadTierEntry();
+  }
+
+  const tierState = { years: new Set([2021,2022,2023,2024,2025]) };
+
+  async function loadTierEntry(){
+    renderTierControls();
+    const yrs = Array.from(tierState.years).sort();
+    if (yrs.length === 0) {
+      document.getElementById('tier-summary').innerHTML = '<div class="rpt-soft">Select at least one year.</div>';
+      document.getElementById('tier-by-year').innerHTML = '';
+      document.getElementById('tier-mismatch').innerHTML = '';
+      return;
+    }
+    try {
+      // For each athlete at Nationals same year+event_key, collect set of rounds. Classify.
+      const r = await neonQuery(`
+        WITH nat_rounds AS (
+          SELECT year, event_key, diver_id_dm,
+                 BOOL_OR(round='Prelim') AS had_prelim,
+                 BOOL_OR(round='Semifinal') AS had_semi,
+                 BOOL_OR(round='Final') AS had_final
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
+            AND year = ANY($1::int[])
+          GROUP BY year, event_key, diver_id_dm
+        )
+        SELECT year,
+               CASE
+                 WHEN had_semi AND NOT had_prelim THEN 'Top-3 direct (semi entry)'
+                 WHEN had_prelim AND had_semi THEN 'Prelim entry → advanced'
+                 WHEN had_prelim AND NOT had_semi THEN 'Prelim entry → cut'
+                 WHEN had_final AND NOT had_prelim AND NOT had_semi THEN 'Final only (data gap?)'
+                 ELSE 'Other'
+               END AS tier,
+               COUNT(*)::int AS n
+        FROM nat_rounds GROUP BY year, tier ORDER BY year, tier
+      `, ['{'+yrs.join(',')+'}']);
+      const rows = r.rows;
+      const tiers = ['Top-3 direct (semi entry)','Prelim entry → advanced','Prelim entry → cut','Final only (data gap?)','Other'];
+      const yrSet = Array.from(new Set(rows.map(x => x.year))).sort();
+      const grid = {};
+      rows.forEach(x => grid[x.year+'|'+x.tier] = x.n);
+      const totalsByTier = {};
+      const totalsByYear = {};
+      rows.forEach(x => {
+        totalsByTier[x.tier] = (totalsByTier[x.tier]||0) + x.n;
+        totalsByYear[x.year] = (totalsByYear[x.year]||0) + x.n;
+      });
+      const grandTotal = Object.values(totalsByYear).reduce((a,b)=>a+b, 0);
+
+      document.getElementById('tier-summary').innerHTML = `
+        <h3 class="rpt-card-h">Aggregate entry tier (${yrs.length} year${yrs.length===1?'':'s'})</h3>
+        <div class="rpt-stats-row">
+          ${tiers.filter(t => totalsByTier[t]).map(t => `
+            <div class="rpt-stat">
+              <div class="rpt-stat-num">${fmt(totalsByTier[t]||0)}</div>
+              <div class="rpt-stat-lbl">${esc(t)}<br><span class="rpt-soft">${grandTotal?((100*(totalsByTier[t]||0)/grandTotal).toFixed(1)+'%'):''}</span></div>
+            </div>`).join('')}
+        </div>
+      `;
+
+      document.getElementById('tier-by-year').innerHTML = `
+        <h3 class="rpt-card-h">By year</h3>
+        <table class="rpt-table">
+          <thead><tr><th>Year</th>${tiers.map(t=>`<th>${esc(t)}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>
+          ${yrSet.map(y => {
+            const cells = tiers.map(t => `<td>${grid[y+'|'+t]?fmt(grid[y+'|'+t]):'<span class="rpt-soft">·</span>'}</td>`).join('');
+            return `<tr><td><strong>${y}</strong></td>${cells}<td><strong>${fmt(totalsByYear[y]||0)}</strong></td></tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      // Cross-validation: tier observed vs zone placement implies
+      const r2 = await neonQuery(`
+        WITH nat_rounds AS (
+          SELECT year, event_key, diver_id_dm,
+                 BOOL_OR(round='Prelim') AS had_prelim,
+                 BOOL_OR(round='Semifinal') AS had_semi
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
+            AND year = ANY($1::int[])
+          GROUP BY year, event_key, diver_id_dm
+        ),
+        zone_place AS (
+          SELECT year, event_key, diver_id_dm, MIN(place) AS best_place
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL
+          GROUP BY year, event_key, diver_id_dm
+        )
+        SELECT n.year,
+               CASE WHEN n.had_semi AND NOT n.had_prelim THEN 'observed: top-3 direct'
+                    WHEN n.had_prelim THEN 'observed: prelim entry'
+                    ELSE 'observed: other' END AS observed,
+               CASE WHEN zp.best_place IS NULL THEN 'zone: absent'
+                    WHEN zp.best_place BETWEEN 1 AND 3 THEN 'zone: top-3'
+                    WHEN zp.best_place BETWEEN 4 AND 10 THEN 'zone: 4-10'
+                    WHEN zp.best_place BETWEEN 11 AND 16 THEN 'zone: 11-16'
+                    ELSE 'zone: 17+' END AS zone_band,
+               COUNT(*)::int AS n
+        FROM nat_rounds n
+        LEFT JOIN zone_place zp USING (year, event_key, diver_id_dm)
+        GROUP BY 1,2,3
+        ORDER BY 1,2,3
+      `, ['{'+yrs.join(',')+'}']);
+      const xv = r2.rows;
+      const observedKeys = Array.from(new Set(xv.map(x=>x.observed))).sort();
+      const zoneKeys = Array.from(new Set(xv.map(x=>x.zone_band))).sort();
+      const xvGrid = {};
+      xv.forEach(x => xvGrid[x.observed+'|'+x.zone_band] = (xvGrid[x.observed+'|'+x.zone_band]||0) + x.n);
+      document.getElementById('tier-mismatch').innerHTML = `
+        <h3 class="rpt-card-h">Cross-validation: observed entry tier vs Zone placement</h3>
+        <div class="rpt-soft" style="margin-bottom:8px">Expected:
+          <em>top-3 direct</em> should be Zone top-3;
+          <em>prelim entry</em> should be Zone 4-10 (or 4-7 platform) or alternate from 11-16.
+          Cells away from the diagonal are interesting: e.g. observed top-3 direct with Zone absent = HPS/prequal route.
+        </div>
+        <table class="rpt-table">
+          <thead><tr><th></th>${zoneKeys.map(z=>`<th>${esc(z)}</th>`).join('')}<th>Row total</th></tr></thead>
+          <tbody>
+          ${observedKeys.map(o => {
+            let tot = 0;
+            const cells = zoneKeys.map(z => { const n = xvGrid[o+'|'+z]||0; tot += n; return `<td>${n?fmt(n):'<span class="rpt-soft">·</span>'}</td>`; }).join('');
+            return `<tr><td><strong>${esc(o)}</strong></td>${cells}<td><strong>${fmt(tot)}</strong></td></tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      document.getElementById('tier-summary').innerHTML = '<div class="rpt-err">Failed: '+esc(String(e.message||e))+'</div>';
+    }
+  }
+
+  function renderTierControls(){
+    const el = document.getElementById('tier-controls'); if (!el) return;
+    const years = [2021,2022,2023,2024,2025];
+    const sel = tierState.years;
+    el.innerHTML = '<span class="rpt-slicer-lbl">Years:</span> '+
+      years.map(y => `<button class="rpt-yr-chip ${sel.has(y)?'is-on':''}" onclick="window._tierToggleYear(${y})">${y}</button>`).join('')+
+      ` <button class="rpt-yr-chip" onclick="window._tierAllYears()">All</button>`;
+  }
+
+  window._tierToggleYear = function(y){
+    if (tierState.years.has(y)) tierState.years.delete(y);
+    else tierState.years.add(y);
+    loadTierEntry();
+  };
+  window._tierAllYears = function(){ tierState.years = new Set([2021,2022,2023,2024,2025]); loadTierEntry(); };
+
+  /* ── Shareable view URLs ──────────────────────────────────────
+     Encode current filter+drill+panel state in URL hash. Apply on page load. */
+  function rptStateToHash(){
+    const s = rptState;
+    const parts = ['panel='+encodeURIComponent(s.panel||'flow')];
+    ['ageGroup','gender','discipline','region','zone','ewc','team'].forEach(k => {
+      if (s.filters && s.filters[k]) parts.push(k+'='+encodeURIComponent(s.filters[k]));
+    });
+    if (typeof histState !== 'undefined' && histState.yearsSelected && histState.yearsSelected.size) {
+      parts.push('histYears='+Array.from(histState.yearsSelected).join(','));
+    }
+    if (typeof declState !== 'undefined' && declState.years && declState.years.size) {
+      parts.push('declYears='+Array.from(declState.years).join(','));
+    }
+    return '#rpt-share/' + parts.join('&');
+  }
+  window._rptShareUrl = function(){
+    const h = rptStateToHash();
+    const url = location.origin + location.pathname + h;
+    navigator.clipboard.writeText(url).then(function(){
+      const toast = document.createElement('div');
+      toast.textContent = 'Share URL copied to clipboard';
+      toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--navy);color:white;padding:10px 16px;border-radius:6px;font-size:13px;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
+      document.body.appendChild(toast);
+      setTimeout(function(){ toast.remove(); }, 2500);
+    }, function(){ alert(url); });
+  };
+  function applyHashState(){
+    const h = location.hash || '';
+    if (!h.startsWith('#rpt-share/')) return false;
+    const qs = h.slice('#rpt-share/'.length);
+    const map = {};
+    qs.split('&').forEach(pair => {
+      const [k,v] = pair.split('=');
+      if (k) map[k] = decodeURIComponent(v || '');
+    });
+    if (map.panel) rptState.panel = map.panel;
+    if (!rptState.filters) rptState.filters = {};
+    ['ageGroup','gender','discipline','region','zone','ewc','team'].forEach(k => {
+      if (map[k]) rptState.filters[k] = map[k];
+    });
+    if (map.histYears) {
+      try {
+        if (typeof histState !== 'undefined') histState.yearsSelected = new Set(map.histYears.split(',').map(Number));
+      } catch(e) {}
+    }
+    if (map.declYears) {
+      try {
+        if (typeof declState !== 'undefined') declState.years = new Set(map.declYears.split(',').map(Number));
+      } catch(e) {}
+    }
+    return true;
+  }
+
+  /* ── Generate report (PDF-friendly print mode) ─────────────────
+     Adds a "Generate report" button to every panel header. Triggers a print mode
+     with branded header + filter context, then window.print(). */
+  function generateReport(){
+    const panel = rptState.panel || 'flow';
+    const panelLabels = {
+      flow:'Pipeline flow', cohort:'Cohort tracker', scoring:'Scoring analysis',
+      breakdowns:'Participation breakdowns', displacement:'Displacements', status:'Special status',
+      historical:'Historical (multi-year)', declined:'Declined Nationals',
+      anomaly:'Anomalies', career:'Athlete career', tier_entry:'Tier entry (old system)'
+    };
+    const f = (rptState.filters || {});
+    const filterSummary = Object.keys(f).filter(k => f[k]).map(k => k+': '+f[k]).join(' · ') || 'No filters applied';
+    const now = new Date();
+    const overlay = document.createElement('div');
+    overlay.id = 'rpt-print-overlay';
+    overlay.innerHTML = `
+      <style>
+        @media print {
+          body * { visibility: hidden !important; }
+          #rpt-print-overlay, #rpt-print-overlay * { visibility: visible !important; }
+          #rpt-print-overlay { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+        #rpt-print-overlay { position: fixed; inset: 0; background: white; z-index: 99999; overflow: auto; padding: 24px; font-family: var(--f-ui, system-ui); color: #171F69; }
+        #rpt-print-overlay .ph-head { border-bottom: 4px solid #E31937; padding-bottom: 10px; margin-bottom: 18px; }
+        #rpt-print-overlay .ph-head h1 { font-size: 22px; color: #171F69; margin: 0; }
+        #rpt-print-overlay .ph-head .ph-sub { font-size: 12px; color: #5a6480; margin-top: 6px; }
+        #rpt-print-overlay .ph-close { position: fixed; top: 12px; right: 12px; padding: 8px 14px; background: #171F69; color: white; border: 0; border-radius: 6px; cursor: pointer; }
+        @media print { #rpt-print-overlay .ph-close, #rpt-print-overlay .ph-print { display: none !important; } }
+      </style>
+      <button class="ph-close" onclick="document.getElementById('rpt-print-overlay').remove()">Close</button>
+      <button class="ph-close ph-print" style="right: 100px; background: #E31937" onclick="window.print()">Print</button>
+      <div class="ph-head">
+        <h1>USA Diving — ${panelLabels[panel] || panel}</h1>
+        <div class="ph-sub">
+          Generated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}<br>
+          Filters: ${filterSummary}<br>
+          Source: live Neon (<code>core.event_results</code>)
+        </div>
+      </div>
+      <div id="ph-body"></div>
+    `;
+    document.body.appendChild(overlay);
+    // Clone the current panel into the overlay body
+    const cur = document.getElementById('resultsPanel');
+    if (cur) overlay.querySelector('#ph-body').innerHTML = cur.innerHTML;
+  }
+  window._rptGenerateReport = generateReport;
+
   /* ── Hook into main.js ──────────────────────────────────────── */
   function waitForMain(cb, tries){
     tries = tries || 0;
@@ -3328,7 +3947,9 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     injectCSS();
     window._qvRenderReports = renderReports;
     setupStageWatcher();
-    console.log('[reports-view] v3 registered — visual dashboard + funnel cohort tracker');
+    // Apply shared-view URL state if present
+    try { applyHashState(); } catch(e) { console.warn('[reports-view] hash state apply failed', e); }
+    console.log('[reports-view] v4 — historical + declined + anomaly + career + tier-entry + share/print');
   }
 
   waitForMain(init);
