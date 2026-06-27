@@ -3271,6 +3271,20 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rb-btn-sec { background: white; color: var(--ink-2); border: 1px solid var(--line); padding: 9px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: var(--f-ui); }
 .rb-btn-sec:hover { background: var(--surface-2); }
 .rb-soft { color: var(--ink-3); font-size: 11px; }
+
+/* Filter UI inside Report Builder */
+.rb-filter-row { display: flex; flex-wrap: wrap; gap: 18px; }
+.rb-filter-grp { flex: 1; min-width: 160px; }
+.rb-filter-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin-bottom: 5px; }
+.rb-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.rb-fchip { padding: 4px 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink-2); cursor: pointer; font-size: 11px; font-weight: 600; font-family: var(--f-ui); }
+.rb-fchip:hover { background: var(--surface-2); }
+.rb-fchip.is-on { background: var(--navy); color: white; border-color: var(--navy); }
+.rb-fchip-tight { padding: 4px 8px; min-width: 28px; text-align: center; }
+.rb-fchip-more { color: var(--pool); border-color: var(--pool); border-style: dashed; }
+.rb-filter-summary { display: flex; align-items: center; margin-top: 10px; padding: 8px 12px; background: #f0f3fa; border-radius: 6px; font-size: 12px; color: var(--navy); }
+.rb-bands-list { display: flex; flex-direction: column; gap: 6px; }
+.rb-band-row { display: flex; align-items: center; gap: 8px; }
 `;
     document.head.appendChild(s);
   }
@@ -4305,7 +4319,41 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
      apply filters, and produce a branded multi-section document. */
 
   // Each section is a self-contained block with its own async data loader.
-  // Sections take an `opts` object (years, filters) and return HTML.
+  // Sections take an `opts` object (years, filters, dmId, bands) and return HTML.
+
+  /* Filter SQL builder — converts builder filter selections to a WHERE fragment
+     applicable to core.event_results queries. Returns { sql, params, summary }
+     where params start AFTER the years-array param ($1). */
+  function buildFilterSQL(filters, startIdx){
+    startIdx = startIdx || 2;
+    const f = filters || {};
+    const conds = [];
+    const params = [];
+    let n = startIdx;
+    if (f.ageGroups && f.ageGroups.length) { conds.push('age_group = ANY($'+n+'::text[])'); params.push('{'+f.ageGroups.join(',')+'}'); n++; }
+    if (f.genders && f.genders.length)     { conds.push('gender = ANY($'+n+'::text[])');    params.push('{'+f.genders.join(',')+'}');    n++; }
+    if (f.disciplines && f.disciplines.length){ conds.push('discipline = ANY($'+n+'::text[])');params.push('{'+f.disciplines.join(',')+'}');n++; }
+    if (f.regions && f.regions.length)     { conds.push('region = ANY($'+n+'::int[])');     params.push('{'+f.regions.join(',')+'}');    n++; }
+    if (f.zones && f.zones.length)         { conds.push('zone = ANY($'+n+'::text[])');      params.push('{'+f.zones.join(',')+'}');      n++; }
+    const sql = conds.length ? ' AND ' + conds.join(' AND ') : '';
+    const parts = [];
+    if (f.ageGroups && f.ageGroups.length) parts.push(f.ageGroups.join('/'));
+    if (f.genders && f.genders.length) parts.push(f.genders.join('/'));
+    if (f.disciplines && f.disciplines.length) parts.push(f.disciplines.join('/'));
+    if (f.regions && f.regions.length) parts.push('Reg ' + f.regions.join(','));
+    if (f.zones && f.zones.length) parts.push('Zone ' + f.zones.join(','));
+    const summary = parts.length ? parts.join(' · ') : 'All athletes';
+    return { sql, params, summary, hasFilters: parts.length > 0 };
+  }
+
+  /* Default place bands. User can edit in the builder. */
+  const DEFAULT_BANDS = [
+    { label: '1–3 (direct/top-3)', min: 1, max: 3 },
+    { label: '4–10 (springboard qualifier)', min: 4, max: 10 },
+    { label: '11–18 (alternate / new-system E/W/C band)', min: 11, max: 18 },
+    { label: '19+ (below cut)', min: 19, max: 99 },
+  ];
+
   const REPORT_SECTIONS = {
     exec_summary: {
       label: 'Executive Summary',
@@ -4642,6 +4690,280 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       },
     },
 
+    band_conversion: {
+      label: 'Zone Placement Band → Next Stage Attendance',
+      desc: 'For 1–3 / 4–10 / 11–18 / 19+ Zone placements: how many qualified vs. how many attended the next stage. Directly answers the CCE band-conversion questions.',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const bands = opts.bands || DEFAULT_BANDS;
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          WITH zone_best AS (
+            SELECT year, event_key, diver_id_dm, MIN(place) AS zone_place
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL
+              AND year = ANY($1::int[])${fb.sql}
+            GROUP BY year, event_key, diver_id_dm
+          ),
+          next_stage AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])${fb.sql}
+          )
+          SELECT zb.year, zb.zone_place,
+                 (ns.diver_id_dm IS NOT NULL) AS attended
+          FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
+        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        // Aggregate by band x year
+        const grid = {};
+        r.rows.forEach(x => {
+          const band = bands.find(b => x.zone_place >= b.min && x.zone_place <= b.max);
+          if (!band) return;
+          const key = band.label + '|' + x.year;
+          if (!grid[key]) grid[key] = { qualified: 0, attended: 0 };
+          grid[key].qualified++;
+          if (x.attended) grid[key].attended++;
+        });
+        // Build aggregated-across-years totals too
+        const byBand = {};
+        bands.forEach(b => byBand[b.label] = { qualified: 0, attended: 0 });
+        Object.entries(grid).forEach(([k, v]) => {
+          const band = k.split('|')[0];
+          byBand[band].qualified += v.qualified;
+          byBand[band].attended += v.attended;
+        });
+        const isPre2026 = yrs.every(y => y < 2026);
+        const isPost2026 = yrs.every(y => y >= 2026);
+        const nextStageLabel = isPre2026 ? 'Junior Nationals' : (isPost2026 ? 'E/W/C tier' : 'Next stage (E/W/C for 2026+, Nationals for 2021–25)');
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Zone Placement Band → ${nextStageLabel} Attendance</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          <p class="rb-p">For each Zone placement band, this shows how many divers fell in that band at their best Zone event, and how many of them actually appeared at the next stage of the pipeline.</p>
+          <table class="rb-table">
+            <thead><tr><th>Band (best Zone placement)</th><th>Qualified</th><th>Attended next stage</th><th>Attendance rate</th></tr></thead>
+            <tbody>
+            ${bands.map(b => {
+              const v = byBand[b.label];
+              const pct = v.qualified ? (100*v.attended/v.qualified).toFixed(1)+'%' : '—';
+              return `<tr>
+                <td><strong>${esc(b.label)}</strong></td>
+                <td>${fmt(v.qualified)}</td>
+                <td>${fmt(v.attended)}</td>
+                <td><strong>${pct}</strong></td>
+              </tr>`;
+            }).join('')}
+            </tbody>
+          </table>
+          ${yrs.length > 1 ? `
+            <h3 class="rb-h3">Year-by-year breakdown</h3>
+            <table class="rb-table">
+              <thead><tr><th>Year</th>${bands.map(b => `<th>${esc(b.label.split(' ')[0])}<br><span class="rb-soft">qual / att</span></th>`).join('')}</tr></thead>
+              <tbody>
+              ${yrs.map(y => `<tr><td><strong>${y}</strong></td>${bands.map(b => {
+                const v = grid[b.label+'|'+y] || { qualified: 0, attended: 0 };
+                const pct = v.qualified ? Math.round(100*v.attended/v.qualified)+'%' : '';
+                return `<td>${v.qualified?`${fmt(v.qualified)} / ${fmt(v.attended)} <span class="rb-soft">(${pct})</span>`:'<span class="rb-soft">—</span>'}</td>`;
+              }).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+          ` : ''}
+        </section>`;
+      },
+    },
+
+    band_demographic: {
+      label: 'Band Conversion — by Age Group × Gender',
+      desc: 'Same place-band conversion analysis, sliced by demographic. Useful when CCE/Board asks "and how does that look for Group A Boys vs Group B Girls?"',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const bands = opts.bands || DEFAULT_BANDS;
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          WITH zone_best AS (
+            SELECT year, event_key, diver_id_dm, MIN(place) AS zone_place,
+                   (array_agg(age_group))[1] AS age_group,
+                   (array_agg(gender))[1] AS gender
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL
+              AND year = ANY($1::int[])${fb.sql}
+            GROUP BY year, event_key, diver_id_dm
+          ),
+          next_stage AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])${fb.sql}
+          )
+          SELECT zb.age_group, zb.gender, zb.zone_place,
+                 (ns.diver_id_dm IS NOT NULL) AS attended
+          FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
+        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        // Aggregate by (age_group, gender, band)
+        const grid = {};
+        r.rows.forEach(x => {
+          const band = bands.find(b => x.zone_place >= b.min && x.zone_place <= b.max);
+          if (!band) return;
+          const k = (x.age_group||'?')+'|'+(x.gender||'?')+'|'+band.label;
+          if (!grid[k]) grid[k] = { q: 0, a: 0 };
+          grid[k].q++;
+          if (x.attended) grid[k].a++;
+        });
+        const ageGroups = ['Group A','Group B','Group C','Group D'];
+        const genders = ['Boys','Girls'];
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Band Conversion by Demographic</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)} · <strong>Years:</strong> ${yrs.join(', ')}</p>
+          ${bands.map(b => `
+            <h3 class="rb-h3">${esc(b.label)}</h3>
+            <table class="rb-table">
+              <thead><tr><th>Age group</th>${genders.map(g => `<th>${g}<br><span class="rb-soft">qual → att (%)</span></th>`).join('')}</tr></thead>
+              <tbody>
+              ${ageGroups.map(ag => `<tr><td><strong>${ag}</strong></td>${genders.map(g => {
+                const v = grid[ag+'|'+g+'|'+b.label] || { q: 0, a: 0 };
+                const pct = v.q ? Math.round(100*v.a/v.q)+'%' : '';
+                return `<td>${v.q?`${fmt(v.q)} → ${fmt(v.a)} <span class="rb-soft">(${pct})</span>`:'<span class="rb-soft">—</span>'}</td>`;
+              }).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+          `).join('')}
+        </section>`;
+      },
+    },
+
+    band_athlete_list: {
+      label: 'Band Conversion — Named Athletes',
+      desc: 'For selected bands, list every athlete: who qualified, who attended, who didn\'t. Up to 500 rows.',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const bands = opts.bands || DEFAULT_BANDS;
+        const fb = buildFilterSQL(opts.filters);
+        // Only show bands the user selected (default all)
+        const r = await neonQuery(`
+          WITH zone_best AS (
+            SELECT year, event_key, diver_id_dm, MIN(place) AS zone_place,
+                   (array_agg(diver_first))[1] AS diver_first,
+                   (array_agg(diver_last))[1] AS diver_last,
+                   (array_agg(team_name))[1] AS team_name,
+                   (array_agg(age_group))[1] AS age_group,
+                   (array_agg(gender))[1] AS gender,
+                   (array_agg(discipline))[1] AS discipline,
+                   (array_agg(zone))[1] AS zone,
+                   (array_agg(region))[1] AS region
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL
+              AND year = ANY($1::int[])${fb.sql}
+            GROUP BY year, event_key, diver_id_dm
+          ),
+          next_stage AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])${fb.sql}
+          )
+          SELECT zb.*, (ns.diver_id_dm IS NOT NULL) AS attended
+          FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
+          ORDER BY zb.year DESC, zb.zone_place, zb.diver_last
+          LIMIT 500
+        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        // Group by band
+        const byBand = {};
+        r.rows.forEach(x => {
+          const band = bands.find(b => x.zone_place >= b.min && x.zone_place <= b.max);
+          if (!band) return;
+          (byBand[band.label] = byBand[band.label] || []).push(x);
+        });
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Named Athletes by Band</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)} · <strong>Years:</strong> ${yrs.join(', ')}</p>
+          ${bands.map(b => {
+            const rows = byBand[b.label] || [];
+            if (rows.length === 0) return '';
+            const att = rows.filter(x => x.attended).length;
+            return `<h3 class="rb-h3">${esc(b.label)} <span class="rb-soft">(${fmt(rows.length)} athletes; ${fmt(att)} attended, ${fmt(rows.length-att)} did not)</span></h3>
+              <table class="rb-table rb-table-sm">
+                <thead><tr><th>Yr</th><th>Athlete</th><th>Team</th><th>Event</th><th>Zone</th><th>Place</th><th>Region</th><th>Next stage?</th></tr></thead>
+                <tbody>
+                ${rows.map(x => `<tr style="${x.attended?'':'background:#fef2f3'}">
+                  <td>${x.year}</td>
+                  <td><strong>${esc((x.diver_first||'')+' '+(x.diver_last||''))}</strong></td>
+                  <td>${esc(x.team_name||'')}</td>
+                  <td>${esc(x.event_key||'')}</td>
+                  <td>${esc(x.zone||'')}</td>
+                  <td>${x.zone_place}</td>
+                  <td>${x.region?'R'+x.region:''}</td>
+                  <td>${x.attended?'<strong style="color:#22893E">Attended</strong>':'<strong style="color:#E31937">Did not</strong>'}</td>
+                </tr>`).join('')}
+                </tbody>
+              </table>`;
+          }).join('')}
+        </section>`;
+      },
+    },
+
+    qualifier_rates: {
+      label: 'Qualifier-Attendance Rates (CCE Headline)',
+      desc: 'The headline answer: for each Zone band, what percentage attended the next stage? Shown as a single comparison table — ideal for a CCE talking-point slide.',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        const bands = opts.bands || DEFAULT_BANDS;
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          WITH zone_best AS (
+            SELECT year, event_key, diver_id_dm, MIN(place) AS zone_place
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL
+              AND year = ANY($1::int[])${fb.sql}
+            GROUP BY year, event_key, diver_id_dm
+          ),
+          next_stage AS (
+            SELECT DISTINCT year, event_key, diver_id_dm FROM core.event_results
+            WHERE is_junior_circuit
+              AND ((year < 2026 AND stage='Nationals') OR (year >= 2026 AND stage IN ('EWC','Nationals')))
+              AND year = ANY($1::int[])${fb.sql}
+          )
+          SELECT zb.year, zb.zone_place,
+                 (ns.diver_id_dm IS NOT NULL) AS attended
+          FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
+        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        const yrSet = Array.from(new Set(r.rows.map(x => x.year))).sort();
+        const grid = {};
+        r.rows.forEach(x => {
+          const band = bands.find(b => x.zone_place >= b.min && x.zone_place <= b.max);
+          if (!band) return;
+          const k = band.label + '|' + x.year;
+          if (!grid[k]) grid[k] = { q: 0, a: 0 };
+          grid[k].q++;
+          if (x.attended) grid[k].a++;
+        });
+        // Big visual chart: 2D grid of band × year showing attendance rate as colored cell
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Qualifier → Attendance Rates</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}</p>
+          <p class="rb-p">Color intensity reflects attendance rate. Each cell shows "<em>qualified → attended (%)</em>".</p>
+          <table class="rb-table">
+            <thead><tr><th>Band</th>${yrSet.map(y => `<th>${y}</th>`).join('')}</tr></thead>
+            <tbody>
+            ${bands.map(b => `<tr>
+              <td><strong>${esc(b.label)}</strong></td>
+              ${yrSet.map(y => {
+                const v = grid[b.label+'|'+y] || { q: 0, a: 0 };
+                if (v.q === 0) return '<td><span class="rb-soft">—</span></td>';
+                const pct = v.a / v.q;
+                const r_ = Math.round(255 - pct*135);
+                const g_ = Math.round(155 + pct*100);
+                const b_ = Math.round(155 - pct*120);
+                const bg = `rgb(${r_},${g_},${b_})`;
+                const textColor = pct > 0.5 ? 'white' : '#171F69';
+                return `<td style="background:${bg};color:${textColor};font-weight:600">${fmt(v.q)}→${fmt(v.a)}<br><span style="font-size:14px">${Math.round(100*pct)}%</span></td>`;
+              }).join('')}
+            </tr>`).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
     athlete_career: {
       label: 'Athlete Career Trace',
       desc: 'Full history for a single athlete by DM ID',
@@ -4679,25 +5001,29 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
   // Templates — curated section sequences for common deliverables
   const REPORT_TEMPLATES = [
+    { id: 'cce_band_question', label: 'CCE Band Question',
+      desc: 'Directly answers "how many 1–3 / 4–10 / 11–18 Zone divers attended E/W/C vs qualified?" — Mike\'s specific CCE/Board ask.',
+      sections: ['qualifier_rates','band_conversion','band_demographic','band_athlete_list'],
+      defaultYears: [2026] },
     { id: 'cce_briefing', label: 'CCE Briefing',
-      desc: 'For Committee for Competitive Excellence meetings. Covers year-over-year pipeline, decline rates, and demographic shifts.',
-      sections: ['exec_summary','year_matrix','declined_summary','demographic_mix','rule_era'],
+      desc: 'For Committee for Competitive Excellence meetings. Year-over-year pipeline, decline rates, demographics, and band conversion.',
+      sections: ['exec_summary','year_matrix','qualifier_rates','declined_summary','demographic_mix','rule_era'],
       defaultYears: [2021,2022,2023,2024,2025,2026] },
     { id: 'board_update', label: 'Board Update',
       desc: 'Concise update for Board of Directors. Pipeline funnel + multi-year context + anomalies.',
       sections: ['exec_summary','pipeline_funnel','year_matrix','anomaly_summary'],
       defaultYears: [2024,2025,2026] },
     { id: 'year_review', label: 'Year in Review',
-      desc: 'Single-year deep dive. Funnel, demographics, region, anomalies for the selected year.',
-      sections: ['exec_summary','pipeline_funnel','demographic_mix','regional_strength','anomaly_summary'],
+      desc: 'Single-year deep dive. Funnel, demographics, region, band conversion, anomalies.',
+      sections: ['exec_summary','pipeline_funnel','band_conversion','demographic_mix','regional_strength','anomaly_summary'],
       defaultYears: [_currentSeason] },
     { id: 'rule_change', label: 'Rule Change Impact',
-      desc: 'Compare the three rule eras directly. For policy review and proposed-change conversations.',
-      sections: ['rule_era','year_matrix','declined_summary','demographic_mix'],
+      desc: 'Compare the three rule eras. Includes band conversion to show structural shifts.',
+      sections: ['rule_era','year_matrix','qualifier_rates','declined_summary','demographic_mix'],
       defaultYears: [2021,2022,2023,2024,2025,2026] },
     { id: 'decliner_deep', label: 'Decliner Deep Dive',
-      desc: 'Full breakdown of top-3 Zone qualifiers who skipped the next stage. Includes named athlete list.',
-      sections: ['declined_summary','declined_athletes','demographic_mix'],
+      desc: 'Full breakdown of top-3 Zone qualifiers who skipped the next stage. Named athlete list.',
+      sections: ['declined_summary','declined_athletes','band_demographic','demographic_mix'],
       defaultYears: [2021,2022,2023,2024,2025] },
     { id: 'athlete_spotlight', label: 'Athlete Spotlight',
       desc: 'Single-athlete career trace. Requires DM ID.',
@@ -4706,12 +5032,15 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       requiresDmId: true },
   ];
 
-  // Builder state
+  // Builder state — now includes filters
   const rbState = {
     selectedTemplate: null,
     selectedSections: new Set(),
     years: null,
     dmId: '',
+    filters: { ageGroups: [], genders: [], disciplines: [], regions: [], zones: [] },
+    bands: DEFAULT_BANDS.slice(),
+    filtersExpanded: false,
   };
 
   function openReportBuilder(){
@@ -4721,10 +5050,24 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     rbState.selectedSections = new Set();
     rbState.years = null;
     rbState.dmId = '';
+    rbState.filters = { ageGroups: [], genders: [], disciplines: [], regions: [], zones: [] };
+    rbState.bands = DEFAULT_BANDS.slice();
+    rbState.filtersExpanded = false;
     const m = document.createElement('div');
     m.id = 'rb-modal';
     document.body.appendChild(m);
     renderBuilder();
+  }
+
+  function rbFilterSummary(){
+    const f = rbState.filters;
+    const parts = [];
+    if (f.ageGroups.length) parts.push(f.ageGroups.join('/'));
+    if (f.genders.length) parts.push(f.genders.join('/'));
+    if (f.disciplines.length) parts.push(f.disciplines.join('/'));
+    if (f.regions.length) parts.push('R' + f.regions.join(','));
+    if (f.zones.length) parts.push('Zone ' + f.zones.join(','));
+    return parts.length ? parts.join(' · ') : 'All athletes';
   }
 
   function renderBuilder(){
@@ -4798,9 +5141,82 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
               </div>
             </div>
 
+            <!-- Filters step -->
+            <div class="rb-step">
+              <div class="rb-step-num">4</div>
+              <div class="rb-step-content">
+                <div class="rb-step-h">Filters <span class="rb-soft">(optional — narrows every section)</span></div>
+                <div class="rb-filter-row">
+                  <div class="rb-filter-grp">
+                    <div class="rb-filter-lbl">Age group</div>
+                    <div class="rb-filter-chips">
+                      ${['Group A','Group B','Group C','Group D'].map(g => `<button class="rb-fchip ${rbState.filters.ageGroups.includes(g)?'is-on':''}" onclick="window._rbToggleFilter('ageGroups','${g}')">${g.replace('Group ','')}</button>`).join('')}
+                    </div>
+                  </div>
+                  <div class="rb-filter-grp">
+                    <div class="rb-filter-lbl">Gender</div>
+                    <div class="rb-filter-chips">
+                      ${['Boys','Girls'].map(g => `<button class="rb-fchip ${rbState.filters.genders.includes(g)?'is-on':''}" onclick="window._rbToggleFilter('genders','${g}')">${g}</button>`).join('')}
+                    </div>
+                  </div>
+                  <div class="rb-filter-grp">
+                    <div class="rb-filter-lbl">Discipline</div>
+                    <div class="rb-filter-chips">
+                      ${['1M','3M','Platform'].map(g => `<button class="rb-fchip ${rbState.filters.disciplines.includes(g)?'is-on':''}" onclick="window._rbToggleFilter('disciplines','${g}')">${g}</button>`).join('')}
+                    </div>
+                  </div>
+                </div>
+                ${rbState.filtersExpanded ? `
+                  <div class="rb-filter-row" style="margin-top:10px">
+                    <div class="rb-filter-grp">
+                      <div class="rb-filter-lbl">Region</div>
+                      <div class="rb-filter-chips">
+                        ${[1,2,3,4,5,6,7,8,9,10,11,12].map(r => `<button class="rb-fchip rb-fchip-tight ${rbState.filters.regions.includes(r)?'is-on':''}" onclick="window._rbToggleFilter('regions',${r})">${r}</button>`).join('')}
+                      </div>
+                    </div>
+                    <div class="rb-filter-grp">
+                      <div class="rb-filter-lbl">Zone</div>
+                      <div class="rb-filter-chips">
+                        ${['A','B','C','D','E','F'].map(z => `<button class="rb-fchip ${rbState.filters.zones.includes(z)?'is-on':''}" onclick="window._rbToggleFilter('zones','${z}')">${z}</button>`).join('')}
+                      </div>
+                    </div>
+                  </div>
+                ` : `<button class="rb-fchip rb-fchip-more" onclick="window._rbExpandFilters()" style="margin-top:8px">+ Region / Zone filters</button>`}
+                ${(rbState.filters.ageGroups.length || rbState.filters.genders.length || rbState.filters.disciplines.length || rbState.filters.regions.length || rbState.filters.zones.length) ? `
+                  <div class="rb-filter-summary">
+                    <strong>Current scope:</strong> ${esc(rbFilterSummary())}
+                    <button class="rb-fchip" style="margin-left:auto" onclick="window._rbClearFilters()">Clear all</button>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Place bands editor — only show if band-related section selected -->
+            ${(Array.from(rbState.selectedSections).some(s => s.startsWith('band_') || s === 'qualifier_rates')) ? `
+              <div class="rb-step">
+                <div class="rb-step-num">5</div>
+                <div class="rb-step-content">
+                  <div class="rb-step-h">Place bands <span class="rb-soft">(for band-conversion sections)</span></div>
+                  <div class="rb-bands-list">
+                    ${rbState.bands.map((b,i) => `
+                      <div class="rb-band-row">
+                        <input type="text" value="${esc(b.label)}" onchange="window._rbSetBand(${i},'label',this.value)" style="flex:1;padding:5px 8px;border:1px solid var(--line);border-radius:4px"/>
+                        <input type="number" value="${b.min}" min="1" max="50" onchange="window._rbSetBand(${i},'min',parseInt(this.value,10))" style="width:60px;padding:5px 8px;border:1px solid var(--line);border-radius:4px" title="min place"/>
+                        <span class="rb-soft">to</span>
+                        <input type="number" value="${b.max}" min="1" max="99" onchange="window._rbSetBand(${i},'max',parseInt(this.value,10))" style="width:60px;padding:5px 8px;border:1px solid var(--line);border-radius:4px" title="max place"/>
+                        <button class="rb-fchip" onclick="window._rbRemoveBand(${i})" title="Remove this band">✕</button>
+                      </div>
+                    `).join('')}
+                    <button class="rb-fchip" onclick="window._rbAddBand()" style="align-self:flex-start">+ Add band</button>
+                    <button class="rb-fchip" onclick="window._rbResetBands()" style="align-self:flex-start;margin-left:6px">Reset to default (1–3, 4–10, 11–18, 19+)</button>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+
             ${requiresDmId ? `
               <div class="rb-step">
-                <div class="rb-step-num">4</div>
+                <div class="rb-step-num">${(Array.from(rbState.selectedSections).some(s => s.startsWith('band_') || s === 'qualifier_rates')) ? '6' : '5'}</div>
                 <div class="rb-step-content">
                   <div class="rb-step-h">Athlete DM ID required</div>
                   <input type="text" class="rb-dmid-input" placeholder="e.g. 73023" value="${esc(rbState.dmId)}" oninput="window._rbSetDmId(this.value)" />
@@ -4849,11 +5265,47 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   window._rbCurrentOnly = function(){ rbState.years = [_currentSeason]; renderBuilder(); };
   window._rbSetDmId = function(v){ rbState.dmId = v; };
 
+  window._rbToggleFilter = function(key, val){
+    const arr = rbState.filters[key] || [];
+    const idx = arr.indexOf(val);
+    if (idx >= 0) arr.splice(idx, 1); else arr.push(val);
+    rbState.filters[key] = arr;
+    renderBuilder();
+  };
+  window._rbExpandFilters = function(){ rbState.filtersExpanded = true; renderBuilder(); };
+  window._rbClearFilters = function(){
+    rbState.filters = { ageGroups: [], genders: [], disciplines: [], regions: [], zones: [] };
+    renderBuilder();
+  };
+
+  window._rbSetBand = function(i, field, value){
+    if (!rbState.bands[i]) return;
+    rbState.bands[i][field] = value;
+  };
+  window._rbAddBand = function(){
+    rbState.bands.push({ label: 'New band', min: 1, max: 3 });
+    renderBuilder();
+  };
+  window._rbRemoveBand = function(i){
+    rbState.bands.splice(i, 1);
+    renderBuilder();
+  };
+  window._rbResetBands = function(){
+    rbState.bands = DEFAULT_BANDS.slice();
+    renderBuilder();
+  };
+
   window._rbGenerate = async function(){
     const sectionIds = Array.from(rbState.selectedSections);
     if (sectionIds.length === 0) return;
     const years = (rbState.years && rbState.years.length) ? rbState.years.slice().sort() : [_currentSeason];
-    const opts = { years: years, dmId: rbState.dmId.trim() };
+    const opts = {
+      years: years,
+      dmId: rbState.dmId.trim(),
+      filters: JSON.parse(JSON.stringify(rbState.filters)),
+      bands: rbState.bands.slice(),
+    };
+    const filterSummary = rbFilterSummary();
 
     // Close the modal, open the output container
     window._rbClose();
@@ -4903,6 +5355,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rb-doc-sub">
             Generated: ${new Date().toLocaleString()}<br>
             Year(s): ${esc(years.join(', '))}<br>
+            Scope: <strong>${esc(filterSummary)}</strong>${(opts.bands && opts.bands.length && sectionIds.some(s => s.startsWith('band_') || s === 'qualifier_rates'))?`<br>Bands: ${esc(opts.bands.map(b => b.label).join(' · '))}`:''}<br>
             Sections: ${esc(sectionIds.map(s => REPORT_SECTIONS[s].label).join(' · '))}<br>
             Data source: live Neon (core.event_results)
           </div>
