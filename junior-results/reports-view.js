@@ -809,18 +809,40 @@
         <span class="rpt-h2-l">Pipeline funnel</span>
         <span class="rpt-h2-sub">Click any bar or drop-off to see who's there. Use &ldquo;Break funnel down by&rdquo; above to compare slices side-by-side.</span>
       </div>
+
+      <!-- Data-source legend so the metric for each stage is unambiguous -->
+      <div class="cf-data-key">
+        <div class="cf-data-key-h">What each row counts <span class="rpt-soft">(definitions matter for CCE/Board accuracy)</span></div>
+        <ol class="cf-data-key-list">
+          <li><strong>In the pipeline:</strong> Every unique athlete who has at least one Regionals or direct-to-Zones row this season. Source: junior-data.js + Official Zone Qualifier list.</li>
+          <li><strong>Competed at Zones:</strong> Athletes with at least one Zone meet result row. <em>Actual attendance, not registration.</em></li>
+          <li><strong>E/W/C-eligible:</strong> Athletes who EITHER appear on the E/W/C registration list OR qualified from Zones OR are on the Nationals qualifier list. <strong>This is the eligible/registered set, not actual attendance</strong> — actual attendance appears in the row itself.</li>
+          <li><strong>Jr Nationals qualifier list:</strong> Athletes on the published 2026 qualifier list. The Jr Nationals event has not happened yet, so this is the eligible-to-attend roster, not the final attendance.</li>
+        </ol>
+        <div class="cf-data-key-foot">
+          Drop counts can be larger or smaller than the difference between adjacent rows because some athletes enter the pipeline downstream (HPS / pre-qualified / kept invited). Click any &ldquo;dropped here&rdquo; or &ldquo;added here&rdquo; line to see the named athletes.
+        </div>
+      </div>
+
       <div class="cf-funnel">
         ${stages.map((s, i) => {
           const widthPct = total > 0 ? Math.max(10, Math.round(s.athletes.length / total * 100)) : 0;
           const isDrill = drill === 'stage_' + s.id;
           const drop = drops[i];
+          // Detect "added at this stage": athletes here who weren't in prior stage
+          let addedCount = 0;
+          if (i > 0) {
+            const prevKeys = new Set(stages[i-1].athletes.map(x => x.key));
+            addedCount = s.athletes.filter(x => !prevKeys.has(x.key)).length;
+          }
           return `
           <div class="cf-stage cf-stage-${i} ${isDrill?'is-drill':''}" onclick="window._rptDrillFunnel('stage_${s.id}')">
             <div class="cf-stage-info">
               <span class="cf-stage-step">${i+1}</span>
               <div>
                 <div class="cf-stage-title">${esc(s.label)}</div>
-                <div class="cf-stage-sub">${esc(s.sub)}</div>
+                <div class="cf-stage-sub">${s.sub}</div>
+                ${s.source ? `<div class="cf-stage-source">${esc(s.source)}</div>` : ''}
               </div>
             </div>
             <div class="cf-stage-bar-wrap">
@@ -830,6 +852,16 @@
               <span class="cf-stage-pct">${pct(s.athletes.length, total)}</span>
             </div>
           </div>
+          ${addedCount > 0 ? `
+          <div class="cf-added" onclick="window._rptDrillFunnel('added_${s.id}')">
+            <span class="cf-drop-spacer"></span>
+            <div class="cf-drop-arrow-wrap"><span class="cf-added-arrow">+</span></div>
+            <div class="cf-drop-info">
+              <span class="cf-added-n">+${fmtNum(addedCount)} added here</span>
+              <span class="cf-drop-l">athletes who entered the pipeline at this stage (HPS / pre-qualified / kept-invited / non-displacing)</span>
+            </div>
+            <span class="cf-drop-pct">${pct(addedCount, s.athletes.length)} of this row</span>
+          </div>` : ''}
           ${drop && drop.athletes.length > 0 ? `
           <div class="cf-drop ${drill==='drop_'+drop.id?'is-drill':''}" onclick="window._rptDrillFunnel('drop_${drop.id}')">
             <span class="cf-drop-spacer"></span>
@@ -2596,16 +2628,37 @@
     );
     const madeNationals = all.filter(a => a.atNationals);
 
-    const startLabel = 'Started in the cohort';
+    // Actually-competed-at-EWC: athletes with at least one row whose stage is 'E/W/C'
+    const allRows = allResults();
+    const ewcAttendedKeys = new Set();
+    allRows.forEach(r => {
+      if (r.stage === 'E/W/C' && r.athlete) ewcAttendedKeys.add(r.athlete.toLowerCase());
+    });
+    const actuallyAtEWC = all.filter(a => ewcAttendedKeys.has(a.key));
+
+    const startLabel = 'In the 2026 pipeline';
     const startSub = d.entryStage === 'Zones'
-      ? 'direct to Zones (Groups C/D)'
-      : 'most enter at Regionals';
+      ? 'Direct-to-Zones starters (Groups C/D) — first appearance is at Zones'
+      : 'All athletes with any Regionals or direct-to-Zones entry this season';
 
     return [
-      { id:'start',     label:startLabel,               sub:startSub,                                  athletes:all },
-      { id:'zones',     label:'Competed at Zones',      sub:'showed up at the Zone meet',              athletes:reachedZones },
-      { id:'ewc',       label:'Reached E/W/C territory',sub:'qualified to or registered at E/W/C',     athletes:reachedEWC },
-      { id:'nationals', label:'On the Jr Nationals list',sub:'the final destination',                  athletes:madeNationals },
+      { id:'start',     label:startLabel,
+        sub:startSub,
+        source:'Source: Regionals + Zones results in junior-data.js plus Official Zone Qualifier list for direct entrants',
+        athletes:all },
+      { id:'zones',     label:'Competed at Zones',
+        sub:'Actually attended a Zone meet (≥1 Zone result row)',
+        source:'Source: Zone Championship results in junior-data.js',
+        athletes:reachedZones },
+      { id:'ewc',       label:'E/W/C-eligible',
+        sub:`${reachedEWC.length} athletes are on the E/W/C registration list, qualified from Zones, or on the Nationals qualifier list. <strong>Actually competed at E/W/C: ${actuallyAtEWC.length}.</strong>`,
+        source:'Source: E/W/C registration data + Zone advancement flags + Jr Nationals qualifier list. Note: this row is the ELIGIBLE/REGISTERED set, not actual attendance.',
+        athletes:reachedEWC,
+        attendedCount: actuallyAtEWC.length },
+      { id:'nationals', label:'On the Jr Nationals qualifier list',
+        sub:'Published qualifier list — 2026 Jr Nationals event has not occurred yet',
+        source:'Source: jo-nat-qualifiers.js (USA Diving published list)',
+        athletes:madeNationals },
     ];
   }
 
@@ -3160,6 +3213,24 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-historical-banner strong { color: #78350f; font-weight: 700; }
 .rpt-historical-banner .rpt-year-num { background: var(--navy); color: white; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; font-family: var(--f-mono); }
 
+/* Cohort tracker — data key (definitions/source legend) */
+.cf-data-key { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border: 1px solid var(--line); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 18px; }
+.cf-data-key-h { font-size: 12px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; font-family: var(--f-display); }
+.cf-data-key-list { margin: 0 0 8px; padding: 0 0 0 22px; }
+.cf-data-key-list li { font-size: 12px; color: var(--ink); margin-bottom: 5px; line-height: 1.5; }
+.cf-data-key-list li strong { color: var(--navy); }
+.cf-data-key-list li em { font-style: italic; color: var(--ink-2); }
+.cf-data-key-foot { font-size: 11px; color: var(--ink-3); font-style: italic; padding-top: 7px; border-top: 1px dashed var(--line); margin-top: 6px; }
+
+/* Stage source attribution under the cohort tracker stage subtitle */
+.cf-stage-source { font-size: 10px; color: var(--ink-3); margin-top: 3px; font-style: italic; line-height: 1.4; }
+
+/* "Added at this stage" indicator — mirror of cf-drop in green */
+.cf-added { display: grid; grid-template-columns: 28px 28px 1fr auto; gap: 12px; align-items: center; padding: 6px 10px 6px 0; margin: 0 0 4px; cursor: pointer; border-left: 3px solid transparent; transition: background 0.12s, border-color 0.12s; }
+.cf-added:hover { background: var(--surface-2); border-left-color: var(--q-direct); }
+.cf-added-arrow { color: var(--q-direct); font-size: 18px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(34,137,62,0.1); }
+.cf-added-n { color: var(--q-direct); font-weight: 700; font-family: var(--f-mono); font-size: 13px; display: block; }
+
 /* Report Builder modal */
 .rb-overlay { position: fixed; inset: 0; background: rgba(23,31,105,0.4); z-index: 9998; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
 .rb-dialog { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); width: 100%; max-width: 980px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; overflow: hidden; }
@@ -3357,7 +3428,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const yrList = Array.from(sel).sort();
       el.innerHTML = `<h3 class="rpt-card-h">Per-year mini-funnels</h3><div id="hist-funnel-grid" class="cf-mini-grid"></div>`;
       const grid = el.querySelector('#hist-funnel-grid');
-      grid.innerHTML = yrList.map(y => `<div class="cf-mini-card" id="hf-${y}"><div class="cf-mini-title">${y}</div><div class="rpt-loading">…</div></div>`).join('');
+      grid.innerHTML = yrList.map(y => `<div class="cf-mini-card" id="hf-${y}" style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px"><div class="cf-mini-title" style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:8px;font-family:var(--f-display)">${y}</div><div class="rpt-loading">…</div></div>`).join('');
       // Parallel queries
       await Promise.all(yrList.map(async y => {
         const r = await neonQuery(
@@ -3378,11 +3449,11 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         const max = Math.max.apply(null, stages.map(s => s.n));
         const html = stages.map(s => `
           <div class="cf-mini-row">
-            <div class="cf-mini-bar" style="width:${max?Math.max(2, 100*s.n/max):0}%;background:${s.col}">${fmt(s.n)}</div>
-            <div class="cf-mini-lbl">${s.k}</div>
+            <div class="cf-mini-bar" style="width:${max?Math.max(2, 100*s.n/max):0}%;background:${s.col};height:22px;line-height:22px;border-radius:4px;color:#fff;padding:0 10px;min-width:50px;display:flex;align-items:center"><span style="font-family:var(--f-mono);font-size:12px;font-weight:700">${fmt(s.n)}</span></div>
+            <div class="cf-mini-lbl" style="font-size:11px;color:var(--ink-3);margin:1px 0 6px">${s.k}</div>
           </div>`).join('');
         const cell = document.getElementById('hf-'+y);
-        if (cell) cell.innerHTML = `<div class="cf-mini-title">${y}</div>${html}`;
+        if (cell) cell.innerHTML = `<div class="cf-mini-title" style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:8px;font-family:var(--f-display)">${y}</div>${html}`;
       }));
     } catch (e) {
       el.innerHTML = '<div class="rpt-err">Failed to load funnel: '+esc(String(e.message||e))+'</div>';
