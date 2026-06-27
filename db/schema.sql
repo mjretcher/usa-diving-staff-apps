@@ -243,3 +243,153 @@ WHERE is_junior_circuit = TRUE
 INSERT INTO app_meta.config (key, value, description) VALUES
   ('core_schema_version', '1', 'Core event_results schema version')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+
+
+-- ============================================================
+-- MIGRATION: criteria simulator data + type widening for international IDs
+-- Idempotent: safe to re-run.
+-- ============================================================
+
+-- Widen identifier columns to TEXT so they can hold both numeric DiveMeets IDs
+-- (e.g. "11526") and World Aquatics IDs (e.g. "WA-4847", "WA-29edadbb-..." UUIDs,
+-- and 3-letter country team codes like "CHN", "AUS", "MEX").
+-- Each ALTER is guarded so the migration can re-run without error.
+
+DO $$ BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='event_results' AND column_name='meet_id_dm') = 'integer' THEN
+    ALTER TABLE core.event_results ALTER COLUMN meet_id_dm TYPE TEXT USING meet_id_dm::TEXT;
+  END IF;
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='event_results' AND column_name='diver_id_dm') = 'integer' THEN
+    ALTER TABLE core.event_results ALTER COLUMN diver_id_dm TYPE TEXT USING diver_id_dm::TEXT;
+  END IF;
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='event_results' AND column_name='team_id_dm') = 'integer' THEN
+    ALTER TABLE core.event_results ALTER COLUMN team_id_dm TYPE TEXT USING team_id_dm::TEXT;
+  END IF;
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='divers' AND column_name='diver_id_dm') = 'integer' THEN
+    ALTER TABLE core.divers ALTER COLUMN diver_id_dm TYPE TEXT USING diver_id_dm::TEXT;
+  END IF;
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='divers' AND column_name='current_team_id_dm') = 'integer' THEN
+    ALTER TABLE core.divers ALTER COLUMN current_team_id_dm TYPE TEXT USING current_team_id_dm::TEXT;
+  END IF;
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_schema='core' AND table_name='teams' AND column_name='team_id_dm') = 'integer' THEN
+    ALTER TABLE core.teams ALTER COLUMN team_id_dm TYPE TEXT USING team_id_dm::TEXT;
+  END IF;
+END $$;
+
+
+-- ============================================================
+-- core.result_phases — phase-level results (criteria simulator scope: 2024-2026)
+-- 5,393 rows: USA Diving Senior/Junior Nationals, Trials, NCAA Championships,
+-- World Aquatics Championships, World Cup, American Cup, etc.
+-- Augments core.event_results with DD-sum, dive-count, and NCAA 5-cat scoring detail.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS core.result_phases (
+    id                                          BIGSERIAL PRIMARY KEY,
+    meet_id                                     TEXT NOT NULL,
+    event_id                                    TEXT NOT NULL,
+    result_set_id                               TEXT NOT NULL,
+    sheet_key                                   TEXT NOT NULL,
+    diver_id                                    TEXT NOT NULL,
+    diver_name                                  TEXT,
+    team_name                                   TEXT,
+    team_id                                     TEXT,
+    nat                                         TEXT,
+    place                                       NUMERIC(6,1),
+    posted_score                                NUMERIC(10,2),
+    phase_score_from_dives                      NUMERIC(10,2),
+    phase_dive_count                            SMALLINT,
+    phase_dd_sum                                NUMERIC(8,3),
+    score_delta_posted_minus_phase              NUMERIC(10,4),
+    score_is_cumulative                         BOOLEAN,
+    score_analysis_mode                         TEXT,
+    meet_name                                   TEXT,
+    meet_year                                   SMALLINT,
+    competition_family                          TEXT,
+    competition_group                           TEXT,
+    ncaa_division                               TEXT,
+    gender                                      TEXT,
+    discipline                                  TEXT,
+    event_level                                 TEXT,
+    age_group                                   TEXT,
+    event_round                                 TEXT,
+    round_stage                                 TEXT,
+    is_synchronized                             BOOLEAN,
+    source_system                               TEXT,
+    ncaa_women_springboard_raw_6_dive_score     NUMERIC(10,2),
+    ncaa_women_springboard_5cat_score           NUMERIC(10,2),
+    ncaa_women_springboard_5cat_dd_sum          NUMERIC(8,3),
+    ncaa_women_springboard_repeated_category    TEXT,
+    ncaa_women_springboard_dropped_dive_number  TEXT,
+    ncaa_women_springboard_dropped_dive_score   NUMERIC(10,2),
+    ncaa_women_springboard_adjustment_status    TEXT,
+    ncaa_women_springboard_adjustment_note      TEXT,
+    imported_at                                 TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rp_natural ON core.result_phases(meet_id, event_id, result_set_id, diver_id, sheet_key);
+CREATE INDEX IF NOT EXISTS idx_rp_diver        ON core.result_phases(diver_id);
+CREATE INDEX IF NOT EXISTS idx_rp_meet         ON core.result_phases(meet_id);
+CREATE INDEX IF NOT EXISTS idx_rp_year         ON core.result_phases(meet_year);
+CREATE INDEX IF NOT EXISTS idx_rp_event        ON core.result_phases(meet_year, age_group, gender, discipline);
+CREATE INDEX IF NOT EXISTS idx_rp_family       ON core.result_phases(competition_family, competition_group);
+
+
+-- ============================================================
+-- core.dive_sheets — per-dive detail (criteria simulator scope: 2024-2026)
+-- 31,957 rows. One row per dive on a diver's sheet.
+-- Join to result_phases on (meet_id, event_id, result_set_id, diver_id, sheet_key)
+-- or to event_results on (meet_id_dm, diver_id_dm).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS core.dive_sheets (
+    id                          BIGSERIAL PRIMARY KEY,
+    meet_id                     TEXT NOT NULL,
+    event_id                    TEXT NOT NULL,
+    result_set_id               TEXT NOT NULL,
+    diver_id                    TEXT NOT NULL,
+    sheet_key                   TEXT NOT NULL,
+    dive_order                  SMALLINT NOT NULL,
+    dive_number                 TEXT,
+    height                      TEXT,
+    description                 TEXT,
+    dd                          NUMERIC(6,3),
+    score                       NUMERIC(8,2),
+    net_score                   NUMERIC(8,2),
+    round_place                 NUMERIC(6,1),
+    optional_voluntary          TEXT,
+    judges_scores               TEXT,
+    running_total_points        NUMERIC(10,2),
+    diver_name                  TEXT,
+    team_name                   TEXT,
+    event_name                  TEXT,
+    gender                      TEXT,
+    discipline                  TEXT,
+    round_stage                 TEXT,
+    competition_family          TEXT,
+    competition_group           TEXT,
+    ncaa_division               TEXT,
+    meet_year                   SMALLINT,
+    dive_category_code          TEXT,
+    dive_category_label         TEXT,
+    ncaa_5cat_inclusion_status  TEXT,
+    ncaa_5cat_inclusion_note    TEXT,
+    imported_at                 TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ds_natural ON core.dive_sheets(meet_id, event_id, result_set_id, diver_id, sheet_key, dive_order);
+CREATE INDEX IF NOT EXISTS idx_ds_diver        ON core.dive_sheets(diver_id);
+CREATE INDEX IF NOT EXISTS idx_ds_meet         ON core.dive_sheets(meet_id);
+CREATE INDEX IF NOT EXISTS idx_ds_year         ON core.dive_sheets(meet_year);
+CREATE INDEX IF NOT EXISTS idx_ds_dd           ON core.dive_sheets(dd);
+CREATE INDEX IF NOT EXISTS idx_ds_category     ON core.dive_sheets(dive_category_code);
+CREATE INDEX IF NOT EXISTS idx_ds_optional     ON core.dive_sheets(meet_year, discipline) WHERE optional_voluntary = 'O';
+
+-- Bump version
+INSERT INTO app_meta.config (key, value, description) VALUES
+  ('criteria_simulator_data_version', '1', 'Criteria sim phases + dive sheets in core')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
