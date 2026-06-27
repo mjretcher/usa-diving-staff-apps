@@ -3216,6 +3216,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 /* Active-filter banner shown on Neon-backed panels when filter chips applied */
 .rpt-active-filter { background: linear-gradient(90deg, #f0f3fa 0%, #e8edf7 100%); border-left: 4px solid var(--navy); padding: 9px 14px; margin: 0 0 14px; border-radius: var(--radius-sm); font-size: 12px; color: var(--navy); display: flex; align-items: center; gap: 8px; }
 .rpt-active-filter strong { color: var(--navy); font-weight: 700; }
+.rpt-filt-tag { display: inline-block; background: #d97706; color: white; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-left: 6px; vertical-align: middle; font-family: var(--f-mono); }
 
 /* Cohort tracker — data key (definitions/source legend) */
 .cf-data-key { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border: 1px solid var(--line); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 18px; }
@@ -3310,13 +3311,21 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
   function renderHistoricalPanel(wrap){
     const filterSummary = activeRptFilterSummary();
+    const filterTag = filterSummary ? ` <span class="rpt-filt-tag">${esc(filterSummary)}</span>` : '';
     wrap.innerHTML = `
       <div class="rpt-stage-results">
         <div class="rpt-flow-head">
-          <div class="rpt-flow-title">Historical comparison <span class="rpt-soft">(2021&ndash;present)</span></div>
-          <div class="rpt-soft">Live from Neon: <code>core.event_results</code></div>
+          <div class="rpt-flow-title">Historical comparison${filterTag} <span class="rpt-soft">(2021&ndash;present)</span></div>
+          <div class="rpt-soft">Live from Neon: <code>core.event_results</code> · Build 202606271716</div>
         </div>
-        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
+        ${filterSummary
+          ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px">
+              <strong>📌 ACTIVE FILTER:</strong> ${esc(filterSummary)} · all 5 queries below are scoped to this subset.
+              <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear all filters</button>
+            </div>`
+          : `<div class="rpt-active-filter" style="background:#f6f7fa;border-left-color:#9aa3b1;color:var(--ink-3);font-size:11px;font-style:italic">
+              No filters active. Use chips above to filter by age group, gender, board, region, zone, etc.
+            </div>`}
         <div id="hist-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="hist-overall" class="rpt-card"><div class="rpt-loading">Loading overall stats…</div></div>
         <div id="hist-matrix" class="rpt-card"><div class="rpt-loading">Loading year &times; stage matrix…</div></div>
@@ -3362,6 +3371,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   async function loadHistoricalData(){
     try {
       const fb = rptFiltersToSQL(1);
+      console.log('[Historical] rptState filters:', JSON.parse(JSON.stringify(rptState)), 'SQL fragment:', fb.sql, 'params:', fb.params);
       // Overall: rows-per-year, athletes-per-year, junior-circuit %
       const r = await neonQuery(
         "SELECT year, COUNT(*)::int AS rows, "+
