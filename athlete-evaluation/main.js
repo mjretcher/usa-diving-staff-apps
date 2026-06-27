@@ -200,8 +200,44 @@ function render() {
   renderFilterStrip();
   renderHero();
   renderHeatmap();
+  renderBreakdown();
   renderLeaderboard();
   renderTopDives();
+}
+
+function renderBreakdown() {
+  const target = $('breakdownContent');
+  if (!target) return;
+  if (!state.filteredResults.length) {
+    target.innerHTML = '<div class="source-impact-empty">No results to break down.</div>';
+    return;
+  }
+  // Group by year, then by board
+  const byYear = new Map();
+  for (const r of state.filteredResults) {
+    const y = r.meet_year || '—';
+    if (!byYear.has(y)) byYear.set(y, { total: 0, byBoard: new Map() });
+    const slot = byYear.get(y);
+    slot.total++;
+    const b = r.discipline || '—';
+    slot.byBoard.set(b, (slot.byBoard.get(b) || 0) + 1);
+  }
+  const years = [...byYear.keys()].sort((a,b) => String(b).localeCompare(String(a)));
+  const max = Math.max(...[...byYear.values()].map(v => v.total));
+  target.innerHTML = years.map(y => {
+    const slot = byYear.get(y);
+    const list = [...slot.byBoard.entries()]
+      .sort((a,b) => b[1] - a[1])
+      .map(([d, n]) => `${esc(d)} <em>${n}</em>`)
+      .join(' · ');
+    return `
+      <div class="source-impact-row">
+        <div class="name">${esc(String(y))}<br><span style="font-size:11px;color:var(--ink-4)">${list}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(slot.total/max*100).toFixed(1)}%"></div></div>
+        <div class="count">${slot.total}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderFilterStrip() {

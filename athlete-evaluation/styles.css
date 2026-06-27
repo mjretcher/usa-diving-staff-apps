@@ -5,7 +5,37 @@
 
 /* Sidebar width override (shared default is 240px) */
 :root { --sidebar-w: 300px; }
-body { background: var(--bg); color: var(--ink); }
+body { background: var(--bg); color: var(--ink); overflow-x: hidden; }
+html { overflow-x: hidden; }
+
+[hidden] { display: none !important; }
+
+/* Reset panel-head — shared/design.css makes it dark navy by default. */
+.panel-head {
+  display: block;
+  background: var(--surface);
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 2px;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.panel-head p { font-size: 12px; color: var(--ink-3); margin: 0; }
+
+/* Dual-column section grid */
+.dual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 1100px) { .dual-grid { grid-template-columns: 1fr; } }
 
 /* ── Filter chip strip (above content) ───────────────────────── */
 .filter-strip {
@@ -207,9 +237,22 @@ body { background: var(--bg); color: var(--ink); }
   margin-bottom: 16px;
   overflow: hidden;
 }
-.panel-head { padding: 14px 18px 8px; border-bottom: 1px solid var(--line-2); }
-.panel-head h2 { font-size: 14px; font-weight: 700; color: var(--ink); margin: 0 0 2px; }
-.panel-head p { font-size: 12px; color: var(--ink-3); margin: 0; }
+
+/* ── Bar-list (used by activity breakdown) ───────────────────── */
+.source-impact { padding: 14px 18px; max-height: 320px; overflow-y: auto; }
+.source-impact-row {
+  display: grid;
+  grid-template-columns: 220px 1fr 60px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.source-impact-row .name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-impact-row .bar-track { height: 8px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
+.source-impact-row .bar-fill { height: 100%; background: linear-gradient(90deg, var(--brand-blue), var(--brand-pool)); border-radius: 4px; }
+.source-impact-row .count { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
+.source-impact-empty { padding: 20px; text-align: center; color: var(--ink-3); font-size: 13px; }
 
 /* ── Heatmap ─────────────────────────────────────────────────── */
 .heatmap {

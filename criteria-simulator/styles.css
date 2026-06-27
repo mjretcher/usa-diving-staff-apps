@@ -6,7 +6,31 @@
 /* Set sidebar width to match .control-sidebar's actual width.
    shared/design.css default is 240px; we widen to 300px for the filter density. */
 :root { --sidebar-w: 300px; }
-body { background: var(--bg); color: var(--ink); }
+body { background: var(--bg); color: var(--ink); overflow-x: hidden; }
+html { overflow-x: hidden; }
+
+/* CRITICAL: shared design.css and our flex containers override the
+   browser's default [hidden] { display:none }. Force it back. */
+[hidden] { display: none !important; }
+
+/* Reset panel-head — shared/design.css makes it dark navy by default;
+   we want light cards with dark-ink headers (better contrast for body content). */
+.panel-head {
+  display: block;
+  background: var(--surface);
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 2px;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.panel-head p { font-size: 12px; color: var(--ink-3); margin: 0; }
 
 /* ── Filter chip strip (above content) ───────────────────────── */
 .filter-strip {
@@ -386,25 +410,17 @@ body { background: var(--bg); color: var(--ink); }
   margin-bottom: 16px;
   overflow: hidden;
 }
-.panel-head {
-  padding: 14px 18px 8px;
-  border-bottom: 1px solid var(--line-2);
-}
-.panel-head h2 {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
-  margin: 0 0 2px;
-  letter-spacing: 0;
-}
-.panel-head p {
-  font-size: 12px;
-  color: var(--ink-3);
-  margin: 0;
-}
 
 /* ── Source impact bars ────────────────────────────────────── */
-.source-impact { padding: 14px 18px; }
+.dual-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 1100px) { .dual-grid { grid-template-columns: 1fr; } }
+
+.source-impact { padding: 14px 18px; max-height: 320px; overflow-y: auto; }
 .source-impact-row {
   display: grid;
   grid-template-columns: 220px 1fr 60px;

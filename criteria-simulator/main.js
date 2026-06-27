@@ -343,9 +343,45 @@ function render() {
   renderFilterStrip();
   renderHero();
   renderSourceImpact();
+  renderBreakdown();
   renderQualifiedTable();
   renderBubbleTable();
   renderScenarioStrip();
+}
+
+function renderBreakdown() {
+  const target = $('breakdownContent');
+  if (!target) return;
+  if (!state.qualified.length) {
+    target.innerHTML = '<div class="source-impact-empty">No qualifying results to break down.</div>';
+    return;
+  }
+  // Group by year, then by discipline
+  const byYear = new Map();
+  for (const r of state.qualified) {
+    const y = r.meet_year || '—';
+    if (!byYear.has(y)) byYear.set(y, { total: 0, byDisc: new Map() });
+    const slot = byYear.get(y);
+    slot.total++;
+    const d = r.discipline || '—';
+    slot.byDisc.set(d, (slot.byDisc.get(d) || 0) + 1);
+  }
+  const years = [...byYear.keys()].sort((a,b) => String(b).localeCompare(String(a)));
+  const max = Math.max(...[...byYear.values()].map(v => v.total));
+  target.innerHTML = years.map(y => {
+    const slot = byYear.get(y);
+    const discList = [...slot.byDisc.entries()]
+      .sort((a,b) => b[1] - a[1])
+      .map(([d, n]) => `${esc(d)} <em>${n}</em>`)
+      .join(' · ');
+    return `
+      <div class="source-impact-row">
+        <div class="name">${esc(String(y))}<br><span style="font-size:11px;color:var(--ink-4)">${discList}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(slot.total/max*100).toFixed(1)}%"></div></div>
+        <div class="count">${slot.total}</div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderFilterStrip() {
