@@ -3222,10 +3222,33 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-filt-tag { display: inline-block; background: #d97706; color: white; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-left: 6px; vertical-align: middle; font-family: var(--f-mono); }
 
 /* Qual/Reg/Att reconciliation table — each column has its own subtle tint to make the 4 datasets visually distinct */
-.recon-table th { font-size: 11px; padding: 8px 10px; border-bottom: 2px solid var(--navy); color: var(--navy); font-family: var(--f-display); }
-.recon-table td { padding: 9px 10px; vertical-align: top; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.recon-table th { font-size: 11.5px !important; padding: 10px 12px !important; border-bottom: 2px solid var(--navy) !important; color: var(--navy) !important; font-family: var(--f-display) !important; font-weight: 700 !important; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-2) !important; }
+.recon-table th.recon-col-a { background: #c5dff5 !important; }
+.recon-table th.recon-col-b { background: #b9e0c8 !important; }
+.recon-table th.recon-col-c { background: #fce4b0 !important; }
+.recon-table th.recon-col-d { background: #f9c5cc !important; }
+.recon-table td { padding: 9px 12px; vertical-align: top; font-size: 12.5px; border-bottom: 1px solid var(--line); color: var(--ink); }
 .recon-table tr:nth-child(even) td { background: rgba(0,0,0,0.012); }
 .recon-table tr:hover td { background: rgba(23,31,105,0.04); }
+.recon-table td.recon-col-a-cell { background: #f0f6fc; }
+.recon-table td.recon-col-b-cell { background: #f1faf3; }
+.recon-table td.recon-col-c-cell { background: #fefaef; }
+.recon-table td.recon-col-d-cell { background: #fdf2f3; }
+
+/* The "Why this panel exists" legend at top of reconcile panel */
+.recon-legend { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; }
+.recon-legend-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--navy); font-weight: 700; font-family: var(--f-display); margin-bottom: 8px; }
+.recon-legend-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.recon-legend-col { padding: 10px 12px; font-size: 12px; line-height: 1.5; }
+.recon-legend-col-h { font-size: 11px; font-weight: 700; color: var(--navy); margin-bottom: 6px; font-family: var(--f-display); text-transform: uppercase; letter-spacing: 0.04em; }
+.recon-legend-col.col-a { background: #f0f6fc; border-right: 1px solid var(--line); }
+.recon-legend-col.col-b { background: #f1faf3; border-right: 1px solid var(--line); }
+.recon-legend-col.col-c { background: #fefaef; border-right: 1px solid var(--line); }
+.recon-legend-col.col-d { background: #fdf2f3; }
+@media (max-width: 900px) {
+  .recon-legend-grid { grid-template-columns: 1fr 1fr; }
+  .recon-legend-col { border-right: 1px solid var(--line) !important; border-bottom: 1px solid var(--line); }
+}
 
 /* Cohort tracker — data key (definitions/source legend) */
 .cf-data-key { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border: 1px solid var(--line); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 18px; }
@@ -3323,26 +3346,18 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         ${filterSummary
           ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px"><strong>📌 ACTIVE FILTER:</strong> ${esc(filterSummary)} <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear</button></div>`
           : ''}
-        <div class="rpt-card" style="background:linear-gradient(135deg,#f8f9fd,#eef2fa);border-left:4px solid var(--pool)">
-          <h3 class="rpt-card-h" style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--navy)">Why this panel exists</h3>
-          <p style="margin:6px 0 8px;font-size:13px;line-height:1.5">
+        <div class="recon-legend">
+          <div class="recon-legend-h">Why this panel exists</div>
+          <p style="margin:0 0 10px;font-size:13px;line-height:1.55;color:var(--ink)">
             At every stage there are FOUR distinct datasets that get confused for each other.
             This panel keeps them in named columns so you (and the CCE/Board) can see them side by side.
           </p>
-          <table class="rpt-table" style="font-size:12px">
-            <thead><tr>
-              <th style="background:#e8f3fb">🅰 Qualification spots</th>
-              <th style="background:#e7f5ec">🅱 Athletes who qualified</th>
-              <th style="background:#fff4e0">🅲 Athletes who registered</th>
-              <th style="background:#fde6e8">🅳 Athletes who attended</th>
-            </tr></thead>
-            <tbody><tr>
-              <td>Slots authorized by rulebook for that meet/stage (capacity, not athletes). May be unfilled.</td>
-              <td>Athletes who EARNED a slot by placement at the prior stage (e.g. top-3 at Zones, place 4–18, HPS pre-qualification).</td>
-              <td>Athletes who actually <em>signed up</em> on the registration / qualifier list for the next stage.</td>
-              <td>Athletes with a <em>result row</em> at that stage — they actually competed.</td>
-            </tr></tbody>
-          </table>
+          <div class="recon-legend-grid">
+            <div class="recon-legend-col col-a"><div class="recon-legend-col-h">🅰 Qualification spots</div>Slots authorized by rulebook for that meet/stage (capacity, not athletes). May be unfilled.</div>
+            <div class="recon-legend-col col-b"><div class="recon-legend-col-h">🅱 Athletes who qualified</div>Athletes who EARNED a slot by placement at the prior stage (e.g. top-3 at Zones, place 4–18, HPS pre-qualification).</div>
+            <div class="recon-legend-col col-c"><div class="recon-legend-col-h">🅲 Athletes who registered</div>Athletes who actually <em>signed up</em> on the registration / qualifier list for the next stage.</div>
+            <div class="recon-legend-col col-d"><div class="recon-legend-col-h">🅳 Athletes who attended</div>Athletes with a <em>result row</em> at that stage — they actually competed.</div>
+          </div>
         </div>
         <div id="recon-controls" class="rpt-slicer-bar" style="margin:14px 0"><span class="rpt-slicer-lbl">Season:</span> <span id="recon-yr-chips"></span></div>
         <div id="recon-stage-table" class="rpt-card"><div class="rpt-loading">Loading per-stage reconciliation…</div></div>
@@ -3472,18 +3487,18 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <table class="rpt-table recon-table">
           <thead><tr>
             <th>Stage</th>
-            <th style="background:#e8f3fb">🅰 Qualification spots</th>
-            <th style="background:#e7f5ec">🅱 Athletes who qualified</th>
-            <th style="background:#fff4e0">🅲 Athletes who registered</th>
-            <th style="background:#fde6e8">🅳 Athletes who attended</th>
+            <th class="recon-col-a">🅰 Qualification spots</th>
+            <th class="recon-col-b">🅱 Athletes who qualified</th>
+            <th class="recon-col-c">🅲 Athletes who registered</th>
+            <th class="recon-col-d">🅳 Athletes who attended</th>
           </tr></thead>
           <tbody>
             ${stages.map(s => `<tr>
               <td><strong>${esc(s.label)}</strong></td>
-              <td>${s.spots}</td>
-              <td>${s.qualified}</td>
-              <td>${s.registered}</td>
-              <td><strong>${typeof s.attended==='number'?fmtNum(s.attended):s.attended}</strong></td>
+              <td class="recon-col-a-cell">${s.spots}</td>
+              <td class="recon-col-b-cell">${s.qualified}</td>
+              <td class="recon-col-c-cell">${s.registered}</td>
+              <td class="recon-col-d-cell"><strong>${typeof s.attended==='number'?fmtNum(s.attended):s.attended}</strong></td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -3544,8 +3559,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <table class="rpt-table recon-table">
           <thead><tr>
             <th>Zone placement band</th>
-            <th style="background:#e7f5ec">🅱 Qualified count</th>
-            <th style="background:#fde6e8">🅳 Attended count</th>
+            <th class="recon-col-b">🅱 Qualified count</th>
+            <th class="recon-col-d">🅳 Attended count</th>
             <th>Attendance rate</th>
             <th>Gap (qualified − attended)</th>
           </tr></thead>
@@ -3558,8 +3573,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
               const gap = d.qualified - d.attended;
               return `<tr>
                 <td><strong>${esc(b.label)}</strong></td>
-                <td>${fmtNum(d.qualified)}</td>
-                <td><strong>${fmtNum(d.attended)}</strong></td>
+                <td class="recon-col-b-cell">${fmtNum(d.qualified)}</td>
+                <td class="recon-col-d-cell"><strong>${fmtNum(d.attended)}</strong></td>
                 <td>${rate}</td>
                 <td style="color:${gap>0?'#d97706':'var(--ink-3)'}">${gap>0?'-'+fmtNum(gap):'0'}</td>
               </tr>`;
@@ -3592,15 +3607,15 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-soft" style="margin-bottom:8px">Attended counts at each stage, by event_key. Use this to spot events where attendance falls off unexpectedly.</div>
           <div class="rpt-table-scroll" style="max-height:480px;overflow:auto">
             <table class="rpt-table recon-table">
-              <thead><tr><th>Event</th><th style="background:#fde6e8">🅳 at Zones</th><th style="background:#fde6e8">🅳 at E/W/C</th><th style="background:#fde6e8">🅳 at Nationals</th><th>Z→EWC retention</th></tr></thead>
+              <thead><tr><th>Event</th><th class="recon-col-d">🅳 at Zones</th><th class="recon-col-d">🅳 at E/W/C</th><th class="recon-col-d">🅳 at Nationals</th><th>Z→EWC retention</th></tr></thead>
               <tbody>
                 ${r.rows.map(x => {
                   const z2e = (x.zones_n && x.ewc_n) ? Math.round(100*x.ewc_n/x.zones_n)+'%' : '—';
                   return `<tr>
                     <td><strong>${esc(x.event_key||'')}</strong></td>
-                    <td>${fmtNum(x.zones_n||0)}</td>
-                    <td>${x.ewc_n?fmtNum(x.ewc_n):'<span class="rpt-soft">—</span>'}</td>
-                    <td>${x.nat_n?fmtNum(x.nat_n):'<span class="rpt-soft">—</span>'}</td>
+                    <td class="recon-col-d-cell">${fmtNum(x.zones_n||0)}</td>
+                    <td class="recon-col-d-cell">${x.ewc_n?fmtNum(x.ewc_n):'<span class="rpt-soft">—</span>'}</td>
+                    <td class="recon-col-d-cell">${x.nat_n?fmtNum(x.nat_n):'<span class="rpt-soft">—</span>'}</td>
                     <td>${z2e}</td>
                   </tr>`;
                 }).join('')}
