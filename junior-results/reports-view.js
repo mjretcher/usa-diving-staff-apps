@@ -3213,6 +3213,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rpt-historical-banner strong { color: #78350f; font-weight: 700; }
 .rpt-historical-banner .rpt-year-num { background: var(--navy); color: white; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; font-family: var(--f-mono); }
 
+/* Active-filter banner shown on Neon-backed panels when filter chips applied */
+.rpt-active-filter { background: linear-gradient(90deg, #f0f3fa 0%, #e8edf7 100%); border-left: 4px solid var(--navy); padding: 9px 14px; margin: 0 0 14px; border-radius: var(--radius-sm); font-size: 12px; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+.rpt-active-filter strong { color: var(--navy); font-weight: 700; }
+
 /* Cohort tracker — data key (definitions/source legend) */
 .cf-data-key { background: linear-gradient(135deg, #f8f9fd 0%, #eef2fa 100%); border: 1px solid var(--line); border-left: 4px solid var(--pool); border-radius: var(--radius); padding: 14px 18px; margin: 0 0 18px; }
 .cf-data-key-h { font-size: 12px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; font-family: var(--f-display); }
@@ -3305,12 +3309,14 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   }
 
   function renderHistoricalPanel(wrap){
+    const filterSummary = activeRptFilterSummary();
     wrap.innerHTML = `
       <div class="rpt-stage-results">
         <div class="rpt-flow-head">
           <div class="rpt-flow-title">Historical comparison <span class="rpt-soft">(2021&ndash;present)</span></div>
           <div class="rpt-soft">Live from Neon: <code>core.event_results</code></div>
         </div>
+        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="hist-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="hist-overall" class="rpt-card"><div class="rpt-loading">Loading overall stats…</div></div>
         <div id="hist-matrix" class="rpt-card"><div class="rpt-loading">Loading year &times; stage matrix…</div></div>
@@ -3322,15 +3328,48 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     loadHistoricalData();
   }
 
+  /* Convert the global filter chips (rptState ageGroup/gender/discipline/region/zone/ewc/team)
+     into an extra-AND WHERE fragment + params for Neon queries on core.event_results.
+     `startIdx` is the next $N parameter index (since most queries use $1 for years). */
+  function rptFiltersToSQL(startIdx){
+    let n = startIdx || 1;
+    const f = rptState || {};
+    const conds = [];
+    const params = [];
+    if (f.ageGroup)   { conds.push('age_group = $'+(n++));   params.push(f.ageGroup); }
+    if (f.gender)     { conds.push('gender = $'+(n++));      params.push(f.gender); }
+    if (f.discipline) { conds.push('discipline = $'+(n++));  params.push(f.discipline); }
+    if (f.region)     { conds.push('region = $'+(n++));      params.push(parseInt(f.region, 10)); }
+    if (f.zone)       { conds.push('zone = $'+(n++));        params.push(f.zone); }
+    if (f.ewc)        { conds.push('ewc_meet = $'+(n++));    params.push(f.ewc); }
+    if (f.team)       { conds.push('team_name = $'+(n++));   params.push(f.team); }
+    return { sql: conds.length ? ' AND ' + conds.join(' AND ') : '', params: params };
+  }
+
+  function activeRptFilterSummary(){
+    const f = rptState || {};
+    const parts = [];
+    if (f.ageGroup) parts.push(f.ageGroup);
+    if (f.gender) parts.push(f.gender);
+    if (f.discipline) parts.push(f.discipline);
+    if (f.region) parts.push('Region ' + f.region);
+    if (f.zone) parts.push('Zone ' + f.zone);
+    if (f.ewc) parts.push('E/W/C: ' + f.ewc);
+    if (f.team) parts.push('Team: ' + f.team);
+    return parts.length ? parts.join(' · ') : null;
+  }
+
   async function loadHistoricalData(){
     try {
+      const fb = rptFiltersToSQL(1);
       // Overall: rows-per-year, athletes-per-year, junior-circuit %
       const r = await neonQuery(
         "SELECT year, COUNT(*)::int AS rows, "+
         "COUNT(DISTINCT diver_id_dm)::int AS divers, "+
         "COUNT(*) FILTER (WHERE is_junior_circuit)::int AS jr_rows, "+
         "COUNT(DISTINCT diver_id_dm) FILTER (WHERE is_junior_circuit)::int AS jr_divers "+
-        "FROM core.event_results WHERE year IS NOT NULL GROUP BY year ORDER BY year"
+        "FROM core.event_results WHERE year IS NOT NULL"+fb.sql+" GROUP BY year ORDER BY year",
+        fb.params
       );
       const years = r.rows.map(x => x.year);
       if (histState.yearsSelected === null) histState.yearsSelected = new Set(years);
@@ -3390,10 +3429,12 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   async function renderHistoricalMatrix(){
     const el = document.getElementById('hist-matrix'); if (!el) return;
     try {
+      const fb = rptFiltersToSQL(1);
       const r = await neonQuery(
         "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS athletes "+
-        "FROM core.event_results WHERE is_junior_circuit AND year IS NOT NULL "+
-        "GROUP BY year, stage ORDER BY year, stage"
+        "FROM core.event_results WHERE is_junior_circuit AND year IS NOT NULL"+fb.sql+" "+
+        "GROUP BY year, stage ORDER BY year, stage",
+        fb.params
       );
       const sel = histState.yearsSelected;
       const stages = ['Regionals','Zones','EWC','Nationals'];
@@ -3445,11 +3486,12 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       grid.innerHTML = yrList.map(y => `<div class="cf-mini-card" id="hf-${y}" style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px"><div class="cf-mini-title" style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:8px;font-family:var(--f-display)">${y}</div><div class="rpt-loading">…</div></div>`).join('');
       // Parallel queries
       await Promise.all(yrList.map(async y => {
+        const fb = rptFiltersToSQL(2);
         const r = await neonQuery(
           "SELECT stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
-          "FROM core.event_results WHERE year = $1 AND is_junior_circuit "+
+          "FROM core.event_results WHERE year = $1 AND is_junior_circuit"+fb.sql+" "+
           "GROUP BY stage ORDER BY stage",
-          [y]
+          [y, ...fb.params]
         );
         const m = {};
         r.rows.forEach(x => m[x.stage] = x.n);
@@ -3479,12 +3521,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     try {
       const sel = histState.yearsSelected;
       const yrList = Array.from(sel).sort();
+      const fb = rptFiltersToSQL(2);
       const r = await neonQuery(
         "SELECT year, age_group, gender, COUNT(DISTINCT diver_id_dm)::int AS n "+
         "FROM core.event_results WHERE is_junior_circuit AND stage IN ('Regionals','Zones','EWC','Nationals') "+
-        "AND year = ANY($1::int[]) "+
+        "AND year = ANY($1::int[])"+fb.sql+" "+
         "GROUP BY year, age_group, gender ORDER BY year, age_group, gender",
-        ['{'+yrList.join(',')+'}']
+        ['{'+yrList.join(',')+'}', ...fb.params]
       );
       // Pivot: rows = year, cols = age_group_gender combos
       const combos = ['Group A Boys','Group A Girls','Group B Boys','Group B Girls','Group C Boys','Group C Girls','Group D Boys','Group D Girls'];
@@ -3513,12 +3556,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     try {
       const sel = histState.yearsSelected;
       const yrList = Array.from(sel).sort();
+      const fb = rptFiltersToSQL(2);
       const r = await neonQuery(
         "SELECT year, region, COUNT(DISTINCT diver_id_dm)::int AS n "+
         "FROM core.event_results WHERE is_junior_circuit AND region IS NOT NULL "+
-        "AND year = ANY($1::int[]) "+
+        "AND year = ANY($1::int[])"+fb.sql+" "+
         "GROUP BY year, region ORDER BY year, region",
-        ['{'+yrList.join(',')+'}']
+        ['{'+yrList.join(',')+'}', ...fb.params]
       );
       const regs = Array.from({length:12}, (_,i)=>i+1);
       const grid = {};
@@ -3566,12 +3610,14 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   const declState = { years: null, drill: null };
 
   function renderDeclinedPanel(wrap){
+    const filterSummary = activeRptFilterSummary();
     wrap.innerHTML = `
       <div class="rpt-stage-results">
         <div class="rpt-flow-head">
           <div class="rpt-flow-title">Declined Nationals <span class="rpt-soft">(top-3 Zone qualifiers absent from next stage)</span></div>
           <div class="rpt-soft">Live from Neon. Old system (2021&ndash;2025): next stage = Junior Nationals. 2026+: next = E/W/C.</div>
         </div>
+        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="decl-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="decl-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
         <div id="decl-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year breakdown…</div></div>
@@ -3617,6 +3663,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       return;
     }
     try {
+      const fb = rptFiltersToSQL(2);
       // SQL: for each year, get athletes who were top-3 at Zones (by FINAL place per event_key)
       // who did NOT appear at the next stage in same year (Junior Nationals for 2021-25, E/W/C for 2026).
       const sql = `
@@ -3629,7 +3676,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           FROM core.event_results
           WHERE is_junior_circuit AND stage='Zones' AND round IN ('Final','')
             AND place IS NOT NULL AND place BETWEEN 1 AND 3
-            AND year = ANY($1::int[])
+            AND year = ANY($1::int[])${fb.sql}
           ORDER BY year, event_key, zone, diver_id_dm, place
         ),
         next_stage AS (
@@ -3647,8 +3694,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           ON n.year = z.year AND n.event_key = z.event_key AND n.diver_id_dm = z.diver_id_dm
         WHERE n.diver_id_dm IS NULL
         ORDER BY z.year DESC, z.zone, z.event_key, z.zone_place
-      `;
-      const r = await neonQuery(sql, ['{'+yrs.join(',')+'}']);
+      `.replace("AND year = ANY($1::int[])\n        ),", "AND year = ANY($1::int[])"+fb.sql+"\n        ),");
+      const r = await neonQuery(sql, ['{'+yrs.join(',')+'}', ...fb.params]);
       const rows = r.rows;
 
       // Summary
@@ -3766,12 +3813,14 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   */
 
   function renderAnomalyPanel(wrap){
+    const filterSummary = activeRptFilterSummary();
     wrap.innerHTML = `
       <div class="rpt-stage-results">
         <div class="rpt-flow-head">
           <div class="rpt-flow-title">Anomaly surveillance <span class="rpt-soft">(rulebook violations + data gaps)</span></div>
           <div class="rpt-soft">Each card runs an independent Neon query. False positives are normal — these are starting points for review.</div>
         </div>
+        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="anom-skipped" class="rpt-card"><div class="rpt-loading">Loading "skipped Zones" check…</div></div>
         <div id="anom-altexc" class="rpt-card"><div class="rpt-loading">Loading "alternate above cutoff" check…</div></div>
         <div id="anom-outlier" class="rpt-card"><div class="rpt-loading">Loading score outlier check…</div></div>
@@ -3784,23 +3833,24 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   async function loadAnomalies(){
     // 1) Skipped Zones — at Nationals with no Zones row same year + event_key
     try {
+      const fb = rptFiltersToSQL(1);
       const r = await neonQuery(`
         WITH at_nat AS (
           SELECT DISTINCT year, event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender, region
           FROM core.event_results
-          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL${fb.sql}
         ),
         at_zone AS (
           SELECT DISTINCT year, event_key, diver_id_dm
           FROM core.event_results
-          WHERE is_junior_circuit AND stage='Zones' AND diver_id_dm IS NOT NULL
+          WHERE is_junior_circuit AND stage='Zones' AND diver_id_dm IS NOT NULL${fb.sql}
         )
         SELECT a.* FROM at_nat a
         LEFT JOIN at_zone z USING (year, event_key, diver_id_dm)
         WHERE z.diver_id_dm IS NULL
         ORDER BY a.year DESC, a.event_key
         LIMIT 1000
-      `);
+      `, fb.params);
       const rows = r.rows;
       const byYear = {};
       rows.forEach(x => byYear[x.year] = (byYear[x.year]||0)+1);
@@ -3838,17 +3888,18 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
     // 2) Alternate above cutoff — at Nationals pre-2026 with Zone place 17+ same event
     try {
+      const fb = rptFiltersToSQL(1);
       const r = await neonQuery(`
         WITH zone_place AS (
           SELECT year, event_key, diver_id_dm, MIN(place) AS best_zone_place
           FROM core.event_results
-          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL
+          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL${fb.sql}
           GROUP BY year, event_key, diver_id_dm
         ),
         at_nat AS (
           SELECT DISTINCT year, event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender
           FROM core.event_results
-          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026
+          WHERE is_junior_circuit AND stage='Nationals' AND year < 2026${fb.sql}
         )
         SELECT a.year, a.event_key, a.diver_id_dm, a.diver_first, a.diver_last, a.team_name, a.age_group, a.gender, zp.best_zone_place
         FROM at_nat a
@@ -3856,7 +3907,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         WHERE zp.best_zone_place > 16
         ORDER BY a.year DESC, zp.best_zone_place DESC
         LIMIT 500
-      `);
+      `, fb.params);
       const rows = r.rows;
       document.getElementById('anom-altexc').innerHTML = `
         <h3 class="rpt-card-h">At Jr Nationals with Zones placement &gt; 16 (old rule alternate cap)</h3>
@@ -4096,12 +4147,14 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
      Cross-references with athlete's Zone placement same year/event to validate.
   */
   function renderTierEntryPanel(wrap){
+    const filterSummary = activeRptFilterSummary();
     wrap.innerHTML = `
       <div class="rpt-stage-results">
         <div class="rpt-flow-head">
           <div class="rpt-flow-title">Junior Nationals tier entry <span class="rpt-soft">(2021–2025, old system back-trace)</span></div>
           <div class="rpt-soft">Directly observed from which rounds each athlete appeared in. Cross-validated against Zone placement.</div>
         </div>
+        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="tier-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="tier-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
         <div id="tier-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year…</div></div>
@@ -4123,6 +4176,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       return;
     }
     try {
+      const fb = rptFiltersToSQL(2);
       // For each athlete at Nationals same year+event_key, collect set of rounds. Classify.
       const r = await neonQuery(`
         WITH nat_rounds AS (
@@ -4132,7 +4186,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
                  BOOL_OR(round='Final') AS had_final
           FROM core.event_results
           WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
-            AND year = ANY($1::int[])
+            AND year = ANY($1::int[])${fb.sql}
           GROUP BY year, event_key, diver_id_dm
         )
         SELECT year,
@@ -4145,7 +4199,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
                END AS tier,
                COUNT(*)::int AS n
         FROM nat_rounds GROUP BY year, tier ORDER BY year, tier
-      `, ['{'+yrs.join(',')+'}']);
+      `, ['{'+yrs.join(',')+'}', ...fb.params]);
       const rows = r.rows;
       const tiers = ['Top-3 direct (semi entry)','Prelim entry → advanced','Prelim entry → cut','Final only (data gap?)','Other'];
       const yrSet = Array.from(new Set(rows.map(x => x.year))).sort();
@@ -4184,6 +4238,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       `;
 
       // Cross-validation: tier observed vs zone placement implies
+      const fb2 = rptFiltersToSQL(2);
       const r2 = await neonQuery(`
         WITH nat_rounds AS (
           SELECT year, event_key, diver_id_dm,
@@ -4191,13 +4246,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
                  BOOL_OR(round='Semifinal') AS had_semi
           FROM core.event_results
           WHERE is_junior_circuit AND stage='Nationals' AND year < 2026 AND diver_id_dm IS NOT NULL
-            AND year = ANY($1::int[])
+            AND year = ANY($1::int[])${fb2.sql}
           GROUP BY year, event_key, diver_id_dm
         ),
         zone_place AS (
           SELECT year, event_key, diver_id_dm, MIN(place) AS best_place
           FROM core.event_results
-          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL
+          WHERE is_junior_circuit AND stage='Zones' AND place IS NOT NULL AND diver_id_dm IS NOT NULL${fb2.sql}
           GROUP BY year, event_key, diver_id_dm
         )
         SELECT n.year,
@@ -4214,7 +4269,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         LEFT JOIN zone_place zp USING (year, event_key, diver_id_dm)
         GROUP BY 1,2,3
         ORDER BY 1,2,3
-      `, ['{'+yrs.join(',')+'}']);
+      `, ['{'+yrs.join(',')+'}', ...fb2.params]);
       const xv = r2.rows;
       const observedKeys = Array.from(new Set(xv.map(x=>x.observed))).sort();
       const zoneKeys = Array.from(new Set(xv.map(x=>x.zone_band))).sort();
@@ -4714,7 +4769,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           SELECT zb.year, zb.zone_place,
                  (ns.diver_id_dm IS NOT NULL) AS attended
           FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
-        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
         // Aggregate by band x year
         const grid = {};
         r.rows.forEach(x => {
@@ -4798,7 +4853,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           SELECT zb.age_group, zb.gender, zb.zone_place,
                  (ns.diver_id_dm IS NOT NULL) AS attended
           FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
-        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
         // Aggregate by (age_group, gender, band)
         const grid = {};
         r.rows.forEach(x => {
@@ -4865,7 +4920,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
           ORDER BY zb.year DESC, zb.zone_place, zb.diver_last
           LIMIT 500
-        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
         // Group by band
         const byBand = {};
         r.rows.forEach(x => {
@@ -4925,7 +4980,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           SELECT zb.year, zb.zone_place,
                  (ns.diver_id_dm IS NOT NULL) AS attended
           FROM zone_best zb LEFT JOIN next_stage ns USING (year, event_key, diver_id_dm)
-        `, ['{'+yrs.join(',')+'}', ...fb.params, ...fb.params]);
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
         const yrSet = Array.from(new Set(r.rows.map(x => x.year))).sort();
         const grid = {};
         r.rows.forEach(x => {
