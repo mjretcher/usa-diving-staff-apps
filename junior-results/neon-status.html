@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Neon DB status — USA Diving</title>
+  <link rel="stylesheet" href="styles.css?v=202606271541">
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f6f8fc; color: #171F69; padding: 24px; max-width: 1100px; margin: 0 auto; }
+    h1 { color: #171F69; border-bottom: 4px solid #E31937; padding-bottom: 8px; }
+    .card { background: white; border-radius: 10px; padding: 18px 22px; margin: 14px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .stat { display: inline-block; min-width: 160px; margin: 6px 18px 6px 0; }
+    .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #5a6480; }
+    .stat .num { font-size: 28px; font-weight: 700; color: #171F69; font-variant-numeric: tabular-nums; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th { text-align: left; padding: 6px 10px; background: #eef1f7; color: #171F69; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td { padding: 6px 10px; border-top: 1px solid #e5e9f2; font-variant-numeric: tabular-nums; }
+    .err { color: #E31937; background: #fef2f3; padding: 10px; border-radius: 6px; }
+    .loading { color: #5a6480; font-style: italic; }
+    a { color: #171F69; }
+  </style>
+</head>
+<body>
+  <h1>Neon DB status</h1>
+  <p>Real-time check of the <code>core.event_results</code> table in Neon Postgres.</p>
+  <p><a href="index.html">&larr; back to Junior Results Audit</a></p>
+
+  <div class="card">
+    <h3 style="margin-top:0">Overall</h3>
+    <div id="overall" class="loading">Querying Neon…</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Rows by year</h3>
+    <div id="byYear" class="loading">Querying…</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Rows by stage</h3>
+    <div id="byStage" class="loading">Querying…</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Year × stage matrix (junior circuit only)</h3>
+    <div id="matrix" class="loading">Querying…</div>
+  </div>
+
+  <script src="../data/config.js?v=202606271541"></script>
+  <script src="../shared/neon-client.js?v=202606271541"></script>
+  <script>
+  (async function(){
+    function fmt(n){ return Number(n).toLocaleString(); }
+    function err(el, e){ el.innerHTML = '<div class="err">' + (e.message || e) + '</div>'; console.error(e); }
+
+    // Overall
+    try {
+      const r = await NEON.query(
+        'SELECT COUNT(*)::int AS rows, COUNT(DISTINCT diver_id_dm)::int AS divers, '+
+        'COUNT(DISTINCT team_id_dm)::int AS teams, COUNT(DISTINCT meet_id_dm)::int AS meets, '+
+        'COUNT(*) FILTER (WHERE is_junior_circuit)::int AS jr, '+
+        'COUNT(*) FILTER (WHERE is_synchro)::int AS synchro, '+
+        'MIN(year) AS minyr, MAX(year) AS maxyr FROM core.event_results'
+      );
+      const o = r.rows[0];
+      document.getElementById('overall').innerHTML =
+        '<span class="stat"><span class="lbl">Total rows</span><br><span class="num">'+fmt(o.rows)+'</span></span>'+
+        '<span class="stat"><span class="lbl">Junior circuit rows</span><br><span class="num">'+fmt(o.jr)+'</span></span>'+
+        '<span class="stat"><span class="lbl">Unique divers</span><br><span class="num">'+fmt(o.divers)+'</span></span>'+
+        '<span class="stat"><span class="lbl">Unique teams</span><br><span class="num">'+fmt(o.teams)+'</span></span>'+
+        '<span class="stat"><span class="lbl">Unique meets</span><br><span class="num">'+fmt(o.meets)+'</span></span>'+
+        '<span class="stat"><span class="lbl">Year range</span><br><span class="num">'+o.minyr+'&ndash;'+o.maxyr+'</span></span>'+
+        '<span class="stat"><span class="lbl">Synchro rows</span><br><span class="num">'+fmt(o.synchro)+'</span></span>';
+    } catch(e) { err(document.getElementById('overall'), e); }
+
+    // By year
+    try {
+      const r = await NEON.query('SELECT year, COUNT(*)::int AS n FROM core.event_results GROUP BY year ORDER BY year');
+      const rows = r.rows.map(function(x){ return '<tr><td>'+x.year+'</td><td>'+fmt(x.n)+'</td></tr>'; }).join('');
+      document.getElementById('byYear').innerHTML = '<table><thead><tr><th>Year</th><th>Rows</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    } catch(e) { err(document.getElementById('byYear'), e); }
+
+    // By stage
+    try {
+      const r = await NEON.query('SELECT stage, COUNT(*)::int AS n FROM core.event_results GROUP BY stage ORDER BY n DESC');
+      const rows = r.rows.map(function(x){ return '<tr><td>'+(x.stage||'(unknown)')+'</td><td>'+fmt(x.n)+'</td></tr>'; }).join('');
+      document.getElementById('byStage').innerHTML = '<table><thead><tr><th>Stage</th><th>Rows</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    } catch(e) { err(document.getElementById('byStage'), e); }
+
+    // Year × stage matrix (junior only)
+    try {
+      const r = await NEON.query(
+        "SELECT year, stage, COUNT(*)::int AS n FROM core.event_results "+
+        "WHERE is_junior_circuit GROUP BY year, stage ORDER BY year, stage"
+      );
+      const stages = Array.from(new Set(r.rows.map(function(x){return x.stage;})));
+      const years = Array.from(new Set(r.rows.map(function(x){return x.year;}))).sort();
+      const grid = {};
+      r.rows.forEach(function(x){ grid[x.year+'|'+x.stage] = x.n; });
+      let html = '<table><thead><tr><th>Year</th>'+stages.map(function(s){return '<th>'+s+'</th>';}).join('')+'<th>Total</th></tr></thead><tbody>';
+      years.forEach(function(y){
+        let tot = 0;
+        html += '<tr><td><strong>'+y+'</strong></td>';
+        stages.forEach(function(s){
+          const n = grid[y+'|'+s] || 0; tot += n;
+          html += '<td>'+(n?fmt(n):'')+'</td>';
+        });
+        html += '<td><strong>'+fmt(tot)+'</strong></td></tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('matrix').innerHTML = html;
+    } catch(e) { err(document.getElementById('matrix'), e); }
+  })();
+  </script>
+</body>
+</html>
