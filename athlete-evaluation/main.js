@@ -20,6 +20,7 @@ const state = {
   scope: 'hpd',
   filteredResults: [],
   filteredDives: [],
+  leaderboardSort: { key: 'bestTotal', dir: 'desc' },
 };
 
 const els = {};
@@ -196,10 +197,51 @@ function recompute() {
 }
 
 function render() {
+  renderFilterStrip();
   renderHero();
   renderHeatmap();
   renderLeaderboard();
   renderTopDives();
+}
+
+function renderFilterStrip() {
+  const scopeLabels = {
+    hpd: 'HPD focus',
+    senior: 'Senior only',
+    junior: 'Junior only',
+    national: 'National only',
+    all: 'All levels',
+  };
+  $('chipScope').textContent = scopeLabels[els.scopePreset.value] || els.scopePreset.value;
+
+  const yrs = [...state.selectedYears].sort((a,b)=>b-a);
+  $('chipYears').textContent = yrs.length
+    ? (yrs.length === 1 ? String(yrs[0]) : `${yrs[yrs.length-1]}–${yrs[0]}`)
+    : 'All';
+
+  $('chipGender').textContent = els.genderFilter.value === 'all' ? 'All' : els.genderFilter.value;
+  $('chipBoard').textContent  = els.boardFilter.value  === 'all' ? 'All' : els.boardFilter.value;
+  $('chipLevel').textContent  = els.eventLevelFilter.value === 'all' ? 'All' : els.eventLevelFilter.value;
+  $('chipAge').textContent    = els.ageGroupFilter.value   === 'all' ? 'All' : els.ageGroupFilter.value;
+  const groupLabels = { all:'All', '1':'Front', '2':'Back', '3':'Reverse', '4':'Inward', '5':'Twister', '6':'Armstand' };
+  $('chipGroup').textContent  = groupLabels[els.groupFilter.value] || els.groupFilter.value;
+  const placement = num(els.placementCutoff.value) || 0;
+  $('chipPlacement').textContent = placement > 0 ? placement : '—';
+
+  const totalMeets = state.meetsById.size;
+  const selMeets   = state.selectedMeets.size;
+  $('chipMeetsCount').textContent = (selMeets && selMeets < totalMeets)
+    ? `${selMeets} of ${totalMeets}` : `All ${totalMeets}`;
+
+  const toggleActive = (id, on) => {
+    const el = $(id);
+    if (el) el.classList.toggle('active', !!on);
+  };
+  toggleActive('chipLevelWrap',     els.eventLevelFilter.value !== 'all');
+  toggleActive('chipAgeWrap',       els.ageGroupFilter.value   !== 'all');
+  toggleActive('chipGroupWrap',     els.groupFilter.value      !== 'all');
+  toggleActive('chipPlacementWrap', placement > 0);
+  toggleActive('chipMeetsWrap',     selMeets && selMeets < totalMeets);
 }
 
 function renderHero() {
@@ -354,9 +396,29 @@ function renderLeaderboard() {
     if (isNum(d.score)) { cur.scoreSum += d.score; cur.scoreN += 1; }
     if (isNum(d.dd))    { cur.ddSum    += d.dd;    cur.ddN += 1; }
   }
-  const rows = [...byAthlete.values()]
-    .sort((a,b) => b.bestTotal - a.bestTotal)
-    .slice(0, 100);
+  // Compute derived metrics
+  const derived = [...byAthlete.values()].map(r => ({
+    ...r,
+    avgScore: r.scoreN ? r.scoreSum / r.scoreN : null,
+    avgDd:    r.ddN    ? r.ddSum / r.ddN    : null,
+    bestTotal: r.bestTotal > -Infinity ? r.bestTotal : null,
+    bestPlace: r.bestPlace < Infinity  ? r.bestPlace : null,
+  }));
+
+  // Sort by the active key
+  const sort = state.leaderboardSort || { key: 'bestTotal', dir: 'desc' };
+  const cmp = (a, b) => {
+    const av = a[sort.key];
+    const bv = b[sort.key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;          // nulls last
+    if (bv == null) return -1;
+    if (typeof av === 'string')
+      return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sort.dir === 'asc' ? av - bv : bv - av;
+  };
+  const rows = derived.sort(cmp).slice(0, 100);
+
   const tbody = $('leaderboardRows');
   if (!rows.length) {
     tbody.innerHTML = '<tr class="row-empty"><td colspan="10">No athletes match the current filters.</td></tr>';
@@ -370,13 +432,22 @@ function renderLeaderboard() {
       <td>${esc(r.gender)}</td>
       <td class="num">${r.events}</td>
       <td class="num">${r.dives}</td>
-      <td class="num">${r.scoreN ? fmtScore(r.scoreSum / r.scoreN) : '—'}</td>
-      <td class="num">${r.ddN ? fmtDd(r.ddSum / r.ddN) : '—'}</td>
-      <td class="num">${r.bestTotal > -Infinity ? fmtScore(r.bestTotal) : '—'}</td>
-      <td class="num">${r.bestPlace < Infinity ? r.bestPlace : '—'}</td>
+      <td class="num">${r.avgScore != null ? fmtScore(r.avgScore) : '—'}</td>
+      <td class="num">${r.avgDd != null ? fmtDd(r.avgDd) : '—'}</td>
+      <td class="num">${r.bestTotal != null ? fmtScore(r.bestTotal) : '—'}</td>
+      <td class="num">${r.bestPlace != null ? r.bestPlace : '—'}</td>
     </tr>
   `).join('');
-  $('leaderboardSubtitle').textContent = `Top ${Math.min(100, rows.length)} of ${rows.length} athletes in the current scope.`;
+  $('leaderboardSubtitle').textContent = `Top ${Math.min(100, rows.length)} of ${derived.length} athletes in the current scope.`;
+
+  // Sync sort markers on header
+  const head = $('leaderboardTable')?.querySelector('thead');
+  if (head) {
+    head.querySelectorAll('th.sortable').forEach(th => {
+      th.classList.remove('sort-asc','sort-desc');
+      if (th.dataset.sort === sort.key) th.classList.add(sort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+  }
 }
 
 function renderTopDives() {
@@ -613,6 +684,24 @@ function wireEvents() {
     state.selectedMeets = new Set();
     renderMeetPicker(); recompute();
   });
+
+  // Sortable leaderboard headers
+  const lbTable = $('leaderboardTable');
+  if (lbTable) {
+    lbTable.querySelector('thead').addEventListener('click', (e) => {
+      const th = e.target.closest('th.sortable');
+      if (!th) return;
+      const key = th.dataset.sort;
+      if (state.leaderboardSort.key === key) {
+        state.leaderboardSort.dir = state.leaderboardSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.leaderboardSort.key = key;
+        // Default to descending for numeric, ascending for text
+        state.leaderboardSort.dir = ['name','team','gender'].includes(key) ? 'asc' : 'desc';
+      }
+      renderLeaderboard();
+    });
+  }
 }
 
 // ── Go ────────────────────────────────────────────────────────────────

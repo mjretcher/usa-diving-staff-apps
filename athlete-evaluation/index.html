@@ -31,7 +31,7 @@
   </div>
 </header>
 
-<div class="app-shell">
+<div class="app-body">
 
   <aside class="control-sidebar" aria-label="Dashboard filters">
 
@@ -142,7 +142,25 @@
 
     <div id="mainContent" hidden>
 
-      <section class="kpi-row" aria-label="Dataset summary">
+      <nav class="filter-strip" aria-label="Active filter summary">
+        <span class="filter-chip active"><b>Scope</b> <em id="chipScope">—</em></span>
+        <span class="filter-chip"><b>Years</b> <em id="chipYears">—</em></span>
+        <span class="filter-chip"><b>Gender</b> <em id="chipGender">All</em></span>
+        <span class="filter-chip"><b>Board</b> <em id="chipBoard">All</em></span>
+        <span class="filter-chip" id="chipLevelWrap"><b>Level</b> <em id="chipLevel">All</em></span>
+        <span class="filter-chip" id="chipAgeWrap"><b>Age</b> <em id="chipAge">All</em></span>
+        <span class="filter-chip" id="chipGroupWrap"><b>Dive group</b> <em id="chipGroup">All</em></span>
+        <span class="filter-chip" id="chipPlacementWrap"><b>Top</b> <em id="chipPlacement">—</em></span>
+        <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeetsCount">All</em></span>
+        <div class="section-nav">
+          <a href="#hero">Summary</a>
+          <a href="#heatmap-section">Heatmap</a>
+          <a href="#leaderboard">Leaderboard</a>
+          <a href="#topdives">Top Dives</a>
+        </div>
+      </nav>
+
+      <section id="hero" class="kpi-row" aria-label="Dataset summary">
         <div class="kpi-card kpi-accent-blue">
           <div class="kpi-label">Athletes in scope</div>
           <div class="kpi-value" id="heroAthletes">0</div>
@@ -165,7 +183,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="heatmap-section" class="panel">
         <header class="panel-head">
           <h2>Dive Category Heatmap</h2>
           <p>Athletes × dive groups, coloured by the selected metric.</p>
@@ -173,25 +191,25 @@
         <div id="heatmap" class="heatmap"></div>
       </section>
 
-      <section class="panel">
+      <section id="leaderboard" class="panel">
         <header class="panel-head">
           <h2>Athlete Leaderboard</h2>
           <p id="leaderboardSubtitle">Top athletes by total score in the current scope.</p>
         </header>
         <div class="table-wrap">
-          <table class="data-table">
+          <table class="data-table" id="leaderboardTable">
             <thead>
               <tr>
                 <th>Rank</th>
-                <th>Athlete</th>
-                <th>Team</th>
-                <th>Gender</th>
-                <th class="num">Events</th>
-                <th class="num">Dives</th>
-                <th class="num">Avg score</th>
-                <th class="num">Avg DD</th>
-                <th class="num">Best total</th>
-                <th class="num">Best place</th>
+                <th class="sortable" data-sort="name">Athlete</th>
+                <th class="sortable" data-sort="team">Team</th>
+                <th class="sortable" data-sort="gender">Gender</th>
+                <th class="num sortable" data-sort="events">Events</th>
+                <th class="num sortable" data-sort="dives">Dives</th>
+                <th class="num sortable" data-sort="avgScore">Avg score</th>
+                <th class="num sortable" data-sort="avgDd">Avg DD</th>
+                <th class="num sortable sort-desc" data-sort="bestTotal">Best total</th>
+                <th class="num sortable" data-sort="bestPlace">Best place</th>
               </tr>
             </thead>
             <tbody id="leaderboardRows"></tbody>
@@ -199,7 +217,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="topdives" class="panel">
         <header class="panel-head">
           <h2>Top Dives</h2>
           <p>Highest-scoring dive performances in the current scope.</p>

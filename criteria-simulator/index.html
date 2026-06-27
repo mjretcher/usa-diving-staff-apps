@@ -51,7 +51,7 @@
 </nav>
 
 <!-- SHELL -->
-<div class="app-shell">
+<div class="app-body">
 
   <aside class="control-sidebar" aria-label="Criteria controls">
 
@@ -189,7 +189,26 @@
 
     <div id="mainContent" hidden>
 
-      <section class="kpi-row" aria-label="Scenario summary">
+      <!-- Filter chip strip: shows current scope, click any chip to reset that filter -->
+      <nav class="filter-strip" aria-label="Active filter summary">
+        <span class="filter-chip active"><b>Model</b> <em id="chipPreset">—</em></span>
+        <span class="filter-chip active"><b>Gender</b> <em id="chipGender">—</em></span>
+        <span class="filter-chip active"><b>Event</b> <em id="chipDiscipline">—</em></span>
+        <span class="filter-chip" id="chipRoundWrap"><b>Round</b> <em id="chipRound">Any</em></span>
+        <span class="filter-chip"><b>Score basis</b> <em id="chipBasis">—</em></span>
+        <span class="filter-chip" id="chipScoreWrap"><b>Score ≥</b> <em id="chipScore">—</em></span>
+        <span class="filter-chip" id="chipDdWrap"><b>DD ≥</b> <em id="chipDd">—</em></span>
+        <span class="filter-chip" id="chipTopNWrap"><b>Place ≤</b> <em id="chipTopN">—</em></span>
+        <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeets">All</em></span>
+        <div class="section-nav">
+          <a href="#hero">Summary</a>
+          <a href="#sources">Sources</a>
+          <a href="#qualified">Qualified</a>
+          <a href="#bubble">Bubble</a>
+        </div>
+      </nav>
+
+      <section id="hero" class="kpi-row" aria-label="Scenario summary">
         <div class="kpi-card kpi-accent-blue">
           <div class="kpi-label">Qualified Athletes</div>
           <div class="kpi-value" id="heroQualified">0</div>
@@ -212,7 +231,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="sources" class="panel">
         <header class="panel-head">
           <h2>Meet Source Impact</h2>
           <p>Where qualifying results are coming from.</p>
@@ -220,25 +239,25 @@
         <div id="sourceImpact" class="source-impact"></div>
       </section>
 
-      <section class="panel">
+      <section id="qualified" class="panel">
         <header class="panel-head">
           <h2>Qualified Athletes</h2>
           <p id="qualifiedSubtitle">Best qualifying result per athlete.</p>
         </header>
         <div class="table-wrap">
-          <table class="data-table">
+          <table class="data-table" id="qualifiedTable">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Team</th>
-                <th>Meet</th>
-                <th>Round</th>
-                <th class="num">Place</th>
-                <th class="num">Score</th>
-                <th class="num">Standard</th>
+                <th class="sortable" data-sort="diver_name">Name</th>
+                <th class="sortable" data-sort="team_name">Team</th>
+                <th class="sortable" data-sort="meet_name">Meet</th>
+                <th class="sortable" data-sort="round_stage">Round</th>
+                <th class="num sortable" data-sort="place">Place</th>
+                <th class="num sortable sort-desc" data-sort="analysis_score">Score</th>
+                <th class="num sortable" data-sort="threshold_used">Standard</th>
                 <th>Basis</th>
-                <th class="num">DD</th>
-                <th class="num">DD min</th>
+                <th class="num sortable" data-sort="dd_total_used">DD</th>
+                <th class="num sortable" data-sort="dd_minimum_used">DD min</th>
                 <th>DD status</th>
                 <th>Reason</th>
               </tr>
@@ -248,7 +267,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="bubble" class="panel">
         <header class="panel-head">
           <h2>Bubble Athletes</h2>
           <p>Closest athletes below the score threshold.</p>

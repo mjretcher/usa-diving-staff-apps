@@ -64,6 +64,7 @@ const state = {
   bubble: [],
   thresholdEdited: false,
   ddThresholdEdited: false,
+  qualifiedSort: { key: 'analysis_score', dir: 'desc' },
 };
 
 const els = {};
@@ -339,11 +340,52 @@ function recompute() {
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 function render() {
+  renderFilterStrip();
   renderHero();
   renderSourceImpact();
   renderQualifiedTable();
   renderBubbleTable();
   renderScenarioStrip();
+}
+
+function renderFilterStrip() {
+  const presetLabels = {
+    winterEligibility: 'Winter Eligibility',
+    winterQualifier:   'Winter Qualifier',
+    nationalQualifier: 'Nationals Qualifier',
+    custom:            'Custom',
+  };
+  $('chipPreset').textContent     = presetLabels[els.criteriaPreset.value] || '—';
+  $('chipGender').textContent     = els.genderFilter.value || '—';
+  $('chipDiscipline').textContent = els.disciplineFilter.value || '—';
+  $('chipRound').textContent      = els.roundFilter.value === 'any' ? 'Any' : els.roundFilter.value;
+  const basisLabels = {
+    ncaaWomen5Category: 'NCAA 5-cat',
+    phaseOrStandalone:  'Non-cumulative',
+    posted:             'Posted',
+    phasePreferred:     'Phase preferred',
+  };
+  $('chipBasis').textContent = basisLabels[els.scoreMode.value] || els.scoreMode.value;
+  $('chipScore').textContent = els.scoreThreshold.value || '—';
+  $('chipDd').textContent    = els.ddThreshold.value || '—';
+  const tn = num(els.topN.value);
+  $('chipTopN').textContent  = (tn && tn > 0) ? tn : '—';
+  const totalMeets = state.meetsById.size;
+  const selMeets   = state.selectedMeetIds.size;
+  $('chipMeets').textContent = (selMeets && selMeets < totalMeets)
+    ? `${selMeets} of ${totalMeets}` : `All ${totalMeets}`;
+
+  // Toggle "active" class on chips that constrain results
+  const toggleActive = (id, condition) => {
+    const el = $(id);
+    if (!el) return;
+    el.classList.toggle('active', !!condition);
+  };
+  toggleActive('chipRoundWrap',  els.roundFilter.value !== 'any');
+  toggleActive('chipScoreWrap',  !!els.scoreThreshold.value);
+  toggleActive('chipDdWrap',     !!els.ddThreshold.value && els.ddMode.value !== 'ignore');
+  toggleActive('chipTopNWrap',   tn && tn > 0);
+  toggleActive('chipMeetsWrap',  selMeets && selMeets < totalMeets);
 }
 
 function renderHero() {
@@ -411,10 +453,33 @@ function renderQualifiedTable() {
     tbody.innerHTML = '<tr class="row-empty"><td colspan="12">No athletes qualify under this scenario.</td></tr>';
     return;
   }
-  tbody.innerHTML = state.qualified.slice(0, 250)
-    .map((r, i) => rowCellsForQualified(r, i)).join('');
+  // Apply sort
+  const sort = state.qualifiedSort;
+  const cmp = (a, b) => {
+    const av = a[sort.key];
+    const bv = b[sort.key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;          // nulls last
+    if (bv == null) return -1;
+    if (typeof av === 'string')
+      return sort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sort.dir === 'asc' ? av - bv : bv - av;
+  };
+  const sorted = [...state.qualified].sort(cmp).slice(0, 250);
+  // Re-key indices for click-to-drill-down lookup
+  state.qualifiedRowOrder = sorted;
+  tbody.innerHTML = sorted.map((r, i) => rowCellsForQualified(r, i)).join('');
   $('qualifiedSubtitle').textContent =
     `Best qualifying result per athlete · ${state.qualified.length} total`;
+
+  // Update header sort markers
+  const head = $('qualifiedTable')?.querySelector('thead');
+  if (head) {
+    head.querySelectorAll('th.sortable').forEach(th => {
+      th.classList.remove('sort-asc','sort-desc');
+      if (th.dataset.sort === sort.key) th.classList.add(sort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+    });
+  }
 }
 
 function rowCellsForBubble(r, i) {
@@ -905,12 +970,13 @@ function wireEvents() {
   });
   $('scenarioResetPreset').addEventListener('click', () => { applyPresetDefaults(false); recompute(); });
 
-  // Drill-down
+  // Drill-down — use the sorted view so clicks always hit the right row
   $('qualifiedRows').addEventListener('click', (e) => {
     const tr = e.target.closest('tr.row-clickable');
     if (!tr) return;
     const i = Number(tr.dataset.index);
-    if (state.qualified[i]) openDrilldown(state.qualified[i]);
+    const row = (state.qualifiedRowOrder || state.qualified)[i];
+    if (row) openDrilldown(row);
   });
   $('bubbleRows').addEventListener('click', (e) => {
     const tr = e.target.closest('tr.row-clickable');
@@ -920,6 +986,23 @@ function wireEvents() {
   });
   $('drilldownClose').addEventListener('click', closeDrilldown);
   $('drilldownOverlay').addEventListener('click', closeDrilldown);
+
+  // Sortable qualified-table headers
+  const qualTable = $('qualifiedTable');
+  if (qualTable) {
+    qualTable.querySelector('thead').addEventListener('click', (e) => {
+      const th = e.target.closest('th.sortable');
+      if (!th) return;
+      const key = th.dataset.sort;
+      if (state.qualifiedSort.key === key) {
+        state.qualifiedSort.dir = state.qualifiedSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.qualifiedSort.key = key;
+        state.qualifiedSort.dir = ['diver_name','team_name','meet_name','round_stage'].includes(key) ? 'asc' : 'desc';
+      }
+      renderQualifiedTable();
+    });
+  }
 
   // Copy summary
   $('btnCopySummary').addEventListener('click', async () => {

@@ -3,6 +3,58 @@
    Extends shared/design.css v2.0
    ============================================================ */
 
+/* Set sidebar width to match .control-sidebar's actual width.
+   shared/design.css default is 240px; we widen to 300px for the filter density. */
+:root { --sidebar-w: 300px; }
+body { background: var(--bg); color: var(--ink); }
+
+/* ── Filter chip strip (above content) ───────────────────────── */
+.filter-strip {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px 5px 8px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.filter-chip b { color: var(--ink-3); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.filter-chip em { font-style: normal; color: var(--brand-blue); font-weight: 700; }
+.filter-chip.active   { background: rgba(23,31,105,.07); border-color: rgba(23,31,105,.18); }
+.filter-chip-reset {
+  background: transparent; border: 1px solid var(--line); color: var(--ink-3);
+  padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer;
+}
+.filter-chip-reset:hover { color: var(--brand-red); border-color: var(--brand-red); }
+
+/* Quick-jump nav */
+.section-nav { display: flex; gap: 4px; margin-left: auto; }
+.section-nav a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background .12s, color .12s;
+}
+.section-nav a:hover { background: var(--surface-2); color: var(--brand-blue); }
+
 /* ── Topbar polish (the original was overlapping) ────────────── */
 .app-topbar {
   display: flex;
@@ -108,7 +160,7 @@
 
 /* ── Sidebar additions ──────────────────────────────────────── */
 .control-sidebar {
-  width: 320px;
+  width: var(--sidebar-w);
   flex-shrink: 0;
   color: var(--nav-ink);
 }
@@ -255,9 +307,10 @@
 
 /* ── Workspace ─────────────────────────────────────────────── */
 .workspace {
-  padding: 20px 24px 40px;
+  padding: 14px 18px 40px;
   background: var(--bg);
   overflow-y: auto;
+  min-width: 0;
 }
 
 .loading-panel {
@@ -405,7 +458,25 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  user-select: none;
 }
+.data-table thead th.sortable { cursor: pointer; }
+.data-table thead th.sortable:hover { background: var(--line-2); }
+.data-table thead th.sortable::after {
+  content: '';
+  display: inline-block;
+  width: 0; height: 0;
+  margin-left: 6px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--ink-4);
+  opacity: 0;
+  transition: opacity .15s, transform .15s;
+  vertical-align: middle;
+}
+.data-table thead th.sortable.sort-asc::after,
+.data-table thead th.sortable.sort-desc::after { opacity: 1; }
+.data-table thead th.sortable.sort-asc::after { transform: rotate(180deg); }
 .data-table thead th.num { text-align: right; }
 .data-table tbody td {
   padding: 9px 12px;

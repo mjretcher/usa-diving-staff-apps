@@ -3,6 +3,46 @@
    Extends shared/design.css v2.0
    ============================================================ */
 
+/* Sidebar width override (shared default is 240px) */
+:root { --sidebar-w: 300px; }
+body { background: var(--bg); color: var(--ink); }
+
+/* ── Filter chip strip (above content) ───────────────────────── */
+.filter-strip {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px 5px 8px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.filter-chip b { color: var(--ink-3); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
+.filter-chip em { font-style: normal; color: var(--brand-blue); font-weight: 700; }
+.filter-chip.active   { background: rgba(23,31,105,.07); border-color: rgba(23,31,105,.18); }
+.section-nav { display: flex; gap: 4px; margin-left: auto; }
+.section-nav a {
+  font-size: 12px; font-weight: 600; color: var(--ink-3); text-decoration: none;
+  padding: 4px 10px; border-radius: 6px;
+  transition: background .12s, color .12s;
+}
+.section-nav a:hover { background: var(--surface-2); color: var(--brand-blue); }
+
 /* ── Topbar (shared with criteria-sim approach) ──────────────── */
 .app-topbar {
   display: flex;
@@ -38,7 +78,7 @@
 .topbar-source[data-source="fallback"] { background: rgba(227,25,55,.22);  border-color: rgba(227,25,55,.4); }
 
 /* ── Sidebar (uses --nav-ink for label color) ──────────────────── */
-.control-sidebar { width: 320px; flex-shrink: 0; color: var(--nav-ink); }
+.control-sidebar { width: var(--sidebar-w); flex-shrink: 0; color: var(--nav-ink); }
 .sidebar-section-title {
   font-size: 10px; font-weight: 700;
   letter-spacing: .14em; text-transform: uppercase;
@@ -119,7 +159,7 @@
 }
 
 /* ── Workspace ───────────────────────────────────────────────── */
-.workspace { padding: 20px 24px 40px; background: var(--bg); overflow-y: auto; }
+.workspace { padding: 14px 18px 40px; background: var(--bg); overflow-y: auto; min-width: 0; }
 
 .loading-panel {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -235,7 +275,24 @@
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 1;
+  user-select: none;
 }
+.data-table thead th.sortable { cursor: pointer; }
+.data-table thead th.sortable:hover { background: var(--line-2); }
+.data-table thead th.sortable::after {
+  content: '';
+  display: inline-block;
+  width: 0; height: 0; margin-left: 6px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--ink-4);
+  opacity: 0;
+  transition: opacity .15s, transform .15s;
+  vertical-align: middle;
+}
+.data-table thead th.sortable.sort-asc::after,
+.data-table thead th.sortable.sort-desc::after { opacity: 1; }
+.data-table thead th.sortable.sort-asc::after { transform: rotate(180deg); }
 .data-table thead th.num { text-align: right; }
 .data-table tbody td {
   padding: 9px 12px;
