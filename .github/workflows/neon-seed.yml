@@ -1,0 +1,80 @@
+name: Neon seed — core.event_results
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/seeds/core_event_results.csv'
+  workflow_dispatch:
+
+jobs:
+  seed:
+    name: Bulk load core.event_results
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Verify schema exists
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "SELECT to_regclass('core.event_results') AS table_exists;"
+
+      - name: Truncate table (idempotent reload)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "TRUNCATE core.event_results RESTART IDENTITY;"
+
+      - name: Bulk load via \copy
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core.event_results(meet_id_dm,meet_name,event_name,round,diver_id_dm,diver_first,diver_last,place,score,team_id_dm,team_name,team_code,year,stage,event_level,age_group,gender,discipline,event_key,is_synchro,is_junior_circuit,region,zone,ewc_meet,source_file) FROM 'db/seeds/core_event_results.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+
+      - name: Populate divers + teams from event_results
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+            INSERT INTO core.teams(team_id_dm, name, code)
+            SELECT DISTINCT ON (team_id_dm) team_id_dm, team_name, team_code
+            FROM core.event_results
+            WHERE team_id_dm IS NOT NULL
+            ON CONFLICT (team_id_dm) DO UPDATE
+              SET name = EXCLUDED.name, code = EXCLUDED.code, updated_at = now();
+
+            INSERT INTO core.divers(diver_id_dm, first_name, last_name, current_team_id_dm, first_seen_year, last_seen_year, result_count)
+            SELECT
+              diver_id_dm,
+              (array_agg(diver_first ORDER BY year DESC))[1] AS first_name,
+              (array_agg(diver_last ORDER BY year DESC))[1] AS last_name,
+              (array_agg(team_id_dm ORDER BY year DESC) FILTER (WHERE team_id_dm IS NOT NULL))[1] AS current_team_id_dm,
+              MIN(year) AS first_seen_year,
+              MAX(year) AS last_seen_year,
+              COUNT(*) AS result_count
+            FROM core.event_results
+            WHERE diver_id_dm IS NOT NULL
+            GROUP BY diver_id_dm
+            ON CONFLICT (diver_id_dm) DO UPDATE
+              SET first_name = EXCLUDED.first_name,
+                  last_name = EXCLUDED.last_name,
+                  current_team_id_dm = EXCLUDED.current_team_id_dm,
+                  first_seen_year = LEAST(core.divers.first_seen_year, EXCLUDED.first_seen_year),
+                  last_seen_year = GREATEST(core.divers.last_seen_year, EXCLUDED.last_seen_year),
+                  result_count = EXCLUDED.result_count,
+                  updated_at = now();
+          SQL
+
+      - name: Report load stats
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS rows_loaded FROM core.event_results;"
+          psql "$DATABASE_URL" -c "SELECT year, COUNT(*) AS rows FROM core.event_results GROUP BY year ORDER BY year;"
+          psql "$DATABASE_URL" -c "SELECT stage, COUNT(*) AS rows FROM core.event_results GROUP BY stage ORDER BY rows DESC;"
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM core.divers; SELECT COUNT(*) FROM core.teams;"
