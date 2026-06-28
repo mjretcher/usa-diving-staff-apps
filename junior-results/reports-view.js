@@ -2942,7 +2942,9 @@
 /* === Tables === */
 .rpt-table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
 .rpt-table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--f-ui)}
-.rpt-table th{background:var(--surface-2);padding:7px 11px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;z-index:1}
+.rpt-table th{background:var(--surface-2);padding:7px 11px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:var(--bar-h,52px);z-index:1}
+/* tables inside a height-capped scroll box stick to the box top, not the page topbar */
+.rpt-table-scroll .rpt-table th{top:0}
 .rpt-table td{padding:8px 11px;border-bottom:1px solid var(--line-2);vertical-align:middle;color:var(--ink-2)}
 .rpt-table tr:last-child td{border-bottom:none}
 .rpt-table tr:hover td{background:var(--surface-2)}
@@ -2983,7 +2985,10 @@ body.rpt-stage-active .results-context { padding: 0 !important; margin: 0 !impor
 body.rpt-stage-active .table-wrap { padding: 0 !important; background: transparent !important; }
 
 /* === Top header (panel tabs + filter chips) === */
-.rpt-top { padding: 14px 24px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+/* Scrolls away with the page so the content below (long tables, etc.) gets the
+   full viewport. (Previously position:sticky, which kept this ~200px tall header
+   pinned and cut off the tables underneath.) */
+.rpt-top { padding: 14px 24px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .rpt-top-row1 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
 .rpt-top-eyebrow { font-family: var(--f-display); font-size: 20px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .03em; }
 .rpt-top-meta { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
