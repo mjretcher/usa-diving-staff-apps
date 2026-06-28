@@ -177,6 +177,25 @@
     return "is_junior_circuit AND year IS NOT NULL";
   }
 
+  // SQL predicate that drops events which are NOT part of the Junior qualification
+  // pipeline, so they never inflate participation / advancement counts:
+  //   - Future Champions, incl. the abbreviated "FC Level N" events inside Region meets
+  //   - Senior / "open" events run alongside a junior meet
+  //   - host-added non-championship events: "Non Qualifier ...", Intermediate, Novice
+  //     (e.g. 2026 Zone C "Non Qualifier", Zone D Intermediate/Novice)
+  // NOTE: platform at Regionals is also non-qualifying, but per policy it stays
+  // VISIBLE with an asterisk (handled by the asterisk logic), so it is deliberately
+  // NOT removed here. Gated by the same toggle as before (default = excluded).
+  function nonQualSql(){
+    return " AND (meet_name NOT ILIKE '%Future Champions%' " +
+           "AND event_name NOT ILIKE '%Future Champions%' " +
+           "AND event_name NOT ILIKE 'FC %' " +
+           "AND event_name NOT ILIKE 'Senior %' " +
+           "AND event_name NOT ILIKE '%Non Qualifier%' " +
+           "AND event_name NOT ILIKE '%Intermediate%' " +
+           "AND event_name NOT ILIKE '%Novice%')";
+  }
+
   /* ── Discovery queries ─────────────────────────────────── */
   async function loadAvailableYears(){
     if (pmState.yearsAvailable !== null) return pmState.yearsAvailable;
@@ -224,7 +243,7 @@
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
-      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + fb.sql + " " +
       "GROUP BY stage";
     const stagesR = await neonQ(stagesSql, [year].concat(fb.params));
 
@@ -234,7 +253,7 @@
     const astFb = { sql: '', params: [] };
     let astParamIdx = 2;
     const f2 = pmState.filters;
-    if (pmState.excludeFutureChamps) astFb.sql += " AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%')";
+    if (pmState.excludeFutureChamps) astFb.sql += nonQualSql();
     if (f2.age_group)  { astFb.sql += " AND age_group = $" + astParamIdx;  astFb.params.push(f2.age_group);  astParamIdx++; }
     if (f2.gender)     { astFb.sql += " AND gender = $" + astParamIdx;     astFb.params.push(f2.gender);     astParamIdx++; }
     if (f2.discipline) { astFb.sql += " AND discipline = $" + astParamIdx; astFb.params.push(f2.discipline); astParamIdx++; }
@@ -260,7 +279,7 @@
     const transSql =
       "WITH per_stage AS ( " +
       "  SELECT stage, diver_id_dm FROM core.event_results " +
-      "  WHERE year = $1 AND " + whereJrCircuit() + transFb.sql + " " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + transFb.sql + " " +
       "  GROUP BY stage, diver_id_dm " +
       ") " +
       "SELECT a.stage AS from_stage, b.stage AS to_stage, " +
@@ -390,7 +409,7 @@
       "  SELECT DISTINCT diver_id_dm FROM core.event_results " +
       "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + " " +
       "    AND diver_id_dm IS NOT NULL " +
-      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "), " +
       "journey AS ( " +
@@ -402,7 +421,7 @@
       "  FROM core.event_results er " +
       "  JOIN cohort c ON c.diver_id_dm = er.diver_id_dm " +
       "  WHERE er.year = $1 AND " + whereJrCircuit() + " " +
-      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "  GROUP BY er.diver_id_dm, er.stage " +
       ") " +
@@ -458,7 +477,7 @@
       "  SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n " +
       "  FROM core.event_results " +
       "  WHERE " + whereJrCircuit() + " AND diver_id_dm IS NOT NULL " +
-      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "  GROUP BY year, stage " +
       ") " +
@@ -602,7 +621,7 @@
       "  FROM core.event_results " +
       "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + " " +
       "    AND score IS NOT NULL AND score > 0 " +
-      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "  GROUP BY event_key, diver_id_dm " +
       ") " +
@@ -727,7 +746,7 @@
       "  SELECT diver_id_dm, MAX(age_group) AS age_group, MAX(gender) AS gender, MIN(place) AS best_place " +
       "  FROM core.event_results " +
       "  WHERE year = $1 AND stage = 'Zones' AND " + whereJrCircuit() + " AND place IS NOT NULL " +
-      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "  GROUP BY diver_id_dm " +              // ONE ROW PER ATHLETE (best finish across their events)
       "), " +
@@ -913,8 +932,8 @@
           '<label class="pm-toggle">' +
             '<input type="checkbox" id="pmToggleFC" ' + (pmState.excludeFutureChamps ? 'checked' : '') + '>' +
             '<span class="pm-toggle-switch"></span>' +
-            '<span>Exclude Future Champions</span>' +
-            '<span class="pm-toggle-help" title="Future Champions meets are developmental and per USA Diving policy do not count in Junior Circuit participation data. Default: ON (excluded).">?</span>' +
+            '<span>Exclude non-qualifying events</span>' +
+            '<span class="pm-toggle-help" title="Excludes events that are not part of the qualifying pipeline: Future Champions (including the abbreviated &quot;FC Level&quot; events), Senior / open events, and host non-qualifying events (e.g. 2026 Zone C &quot;Non Qualifier&quot;, Zone D Intermediate / Novice). Default: ON (excluded). Platform at Regionals is non-qualifying too but is kept visible with an asterisk.">?</span>' +
           '</label>' +
         '</div>' +
 
@@ -1074,7 +1093,7 @@
         (chips.length
           ? chips.map(function(c){ return '<span class="pm-flow-chip">' + escapeHtml(c) + '</span>'; }).join('')
           : '<span class="pm-flow-chip all">all divers \u00b7 all events</span>') +
-        (pmState.excludeFutureChamps ? '<span class="pm-flow-chip muted">Future Champions excluded</span>' : '') +
+        (pmState.excludeFutureChamps ? '<span class="pm-flow-chip muted">Non-qualifying events excluded</span>' : '') +
       '</div>';
 
     /* ============================ THE RIVER (SVG) ============================ */
