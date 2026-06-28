@@ -4,6 +4,241 @@
    Type: Barlow Condensed (display) + Inter (UI) + JetBrains Mono
    ============================================================ */
 
+/* ── Filter bar ──────────────────────────────────────────── */
+.pm-filter-bar {
+  background: linear-gradient(180deg, #fff 0%, #f7f8fc 100%);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 12px;
+  padding: 14px 18px 16px;
+  margin-bottom: 22px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.pm-filter-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.pm-filter-bar-label {
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: #171f69;
+}
+.pm-filter-bar-hint {
+  font-size: 12px;
+  color: var(--ink-3, #5a6a7e);
+  flex: 1;
+}
+.pm-filter-bar-hint strong { color: #e31937; font-weight: 700; }
+.pm-filter-clear {
+  background: none;
+  border: 1px solid rgba(227,25,55,.30);
+  color: #e31937;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pm-filter-clear:hover { background: #e31937; color: #fff; border-color: #e31937; }
+.pm-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.pm-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pm-filter-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  font-weight: 700;
+  color: var(--ink-3, #5a6a7e);
+}
+.pm-filter-select {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink, #0d1117);
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 8px;
+  padding: 8px 30px 8px 12px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="%235a6a7e" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color .15s;
+}
+.pm-filter-select:hover { border-color: #009ac7; }
+.pm-filter-select:focus { outline: none; border-color: #171f69; box-shadow: 0 0 0 3px rgba(23,31,105,.10); }
+.pm-filter-select:not([value=""]):not(:focus) {
+  border-color: #171f69;
+  background-color: rgba(23,31,105,.04);
+  font-weight: 600;
+}
+.pm-ctl-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line, #e2e5ef);
+  margin: 0 4px;
+}
+
+/* ── Demographics section ────────────────────────────────── */
+.pm-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 1100px) { .pm-demo-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px)  { .pm-demo-grid { grid-template-columns: 1fr; } }
+
+.pm-demo-card {
+  background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 12px;
+  padding: 18px 20px;
+  --accent: #171f69;
+}
+.pm-demo-card.wide { grid-column: 1 / -1; }
+.pm-demo-card-head { margin-bottom: 14px; }
+.pm-demo-card-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+.pm-demo-card-sub {
+  font-size: 11.5px;
+  color: var(--ink-3, #5a6a7e);
+  line-height: 1.4;
+}
+.pm-demo-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.pm-demo-table thead th {
+  background: transparent;
+  color: var(--ink-3, #5a6a7e);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid var(--line, #e2e5ef);
+}
+.pm-demo-table thead th:first-child { text-align: left; }
+.pm-demo-table thead th.pm-demo-total {
+  color: #e31937;
+}
+.pm-demo-table tbody th {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2, #2d3a4a);
+  text-align: left;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.pm-demo-table tbody td {
+  text-align: center;
+  padding: 8px 6px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  transition: transform .12s;
+  cursor: default;
+}
+.pm-demo-table tbody td:hover { transform: scale(1.04); z-index: 2; position: relative; }
+.pm-demo-table tbody td.pm-demo-total {
+  background: rgba(227,25,55,.08) !important;
+  color: #e31937 !important;
+  font-weight: 800;
+}
+
+/* Zone breakdown bar list */
+.pm-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pm-zone-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 220px;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0;
+  font-size: 12.5px;
+}
+@media (max-width: 760px) {
+  .pm-zone-row { grid-template-columns: 70px 1fr; }
+  .pm-zone-trail { grid-column: 1 / -1; padding-left: 84px; }
+}
+.pm-zone-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: #171f69;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.pm-zone-bar-stack {
+  background: #fff;
+  border-radius: 6px;
+  height: 26px;
+  position: relative;
+  border: 1px solid var(--line-2, #f0f2f8);
+  overflow: hidden;
+}
+.pm-zone-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #009ac7 0%, #171f69 100%);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  min-width: 60px;
+  transition: width .4s cubic-bezier(.2,.7,.4,1);
+}
+.pm-zone-bar-text {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+  white-space: nowrap;
+}
+.pm-zone-trail {
+  font-size: 11.5px;
+  color: var(--ink-3, #5a6a7e);
+  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* ── Layout escape: break out of the regular grid layout ─────
    .app-body is `display: grid; grid-template-columns: var(--side-w) 1fr`
    so even when the sidebar is display:none, the first column is still

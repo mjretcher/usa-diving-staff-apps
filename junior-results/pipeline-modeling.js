@@ -55,12 +55,32 @@
     excludeAsterisked: false,  // hide platform@Regionals etc (default: show with *)
     excludeFutureChamps: true, // default exclude FC events
     showFinancials: false,     // financial overlay toggle
-    funnelCache:    {},        // by year
-    yoyCache:       null,
+    // Master filters — apply to ALL data pulls
+    filters: {
+      age_group: '',           // '' = all
+      gender:    '',
+      discipline:'',
+      zone:      '',
+    },
+    filterOptions: null,       // distinct values discovered from Neon
+    funnelCache:    {},        // by year+filters key
+    yoyCache:       null,      // by filters key
+    demoCache:      {},        // by year+filters key
     futureChampMeets: null,    // discovered list
     loading: false,
     error:   null,
   };
+
+  // Cache-key helper: any change to filters/toggles invalidates per-year caches
+  function cacheKey(year){
+    const f = pmState.filters;
+    return [
+      year || 'all',
+      pmState.excludeAsterisked ? 'noast' : 'wast',
+      pmState.excludeFutureChamps ? 'nofc' : 'wfc',
+      f.age_group || '*', f.gender || '*', f.discipline || '*', f.zone || '*'
+    ].join('|');
+  }
 
   /* ── Neon helpers ──────────────────────────────────────── */
   async function neonQ(sql, params){
@@ -70,11 +90,18 @@
     return await window.NEON.query(sql, params || []);
   }
 
-  /* Filter clause for Future Champions + asterisked rules.       *
-   * Returns SQL fragment that goes inside WHERE. Includes leading * 
-   * space if non-empty. Apply to a query on core.event_results.   */
-  function buildFiltersSql(){
+  /* Filter clause for Future Champions + asterisked rules + master filters. *
+   * Returns SQL fragment that goes inside WHERE. Includes leading space if  *
+   * non-empty. Apply to any query on core.event_results.                    *
+   * NOTE: master filter values are bound via $N params (caller appends them). *
+   * Caller passes startIdx and gets back { sql, params } so it can correctly  *
+   * sequence parameter numbers.                                              */
+  function buildFiltersSql(startIdx){
+    if (startIdx == null) startIdx = 1;
     const parts = [];
+    const params = [];
+    let p = startIdx;
+
     if (pmState.excludeFutureChamps) {
       parts.push("(meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%')");
     }
@@ -84,7 +111,18 @@
       parts.push("NOT (stage = 'Regionals' AND discipline ILIKE '%platform%')");
       parts.push("NOT (stage = 'Regionals' AND year = 2026 AND age_group IN ('Group C','Group D'))");
     }
-    return parts.length ? ' AND ' + parts.join(' AND ') : '';
+    // Master filters
+    const f = pmState.filters;
+    if (f.age_group)  { parts.push('age_group = $' + p);  params.push(f.age_group);  p++; }
+    if (f.gender)     { parts.push('gender = $' + p);     params.push(f.gender);     p++; }
+    if (f.discipline) { parts.push('discipline = $' + p); params.push(f.discipline); p++; }
+    if (f.zone)       { parts.push('zone = $' + p);       params.push(f.zone);       p++; }
+
+    return {
+      sql: parts.length ? ' AND ' + parts.join(' AND ') : '',
+      params: params,
+      nextIdx: p,
+    };
   }
 
   /* Always-on filter: synchro events excluded from athlete counts *
@@ -128,9 +166,11 @@
   /* Per-year funnel data: unique athletes & event entries per stage. *
    * Also splits "asterisked" (non-qualifying) from clean counts.     */
   async function loadFunnelData(year){
-    if (pmState.funnelCache[year]) return pmState.funnelCache[year];
+    const ck = cacheKey(year);
+    if (pmState.funnelCache[ck]) return pmState.funnelCache[ck];
 
-    const fb = buildFiltersSql();
+    // $1 = year, then $2..$N for any active master filter values
+    const fb = buildFiltersSql(2);
 
     // 1) Per-stage unique athletes + event entries
     const stagesSql =
@@ -138,11 +178,21 @@
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
-      "WHERE year = $1 AND " + whereJrCircuit() + fb + " " +
+      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
       "GROUP BY stage";
-    const stagesR = await neonQ(stagesSql, [year]);
+    const stagesR = await neonQ(stagesSql, [year].concat(fb.params));
 
-    // 2) Asterisked counts (always queried, regardless of toggle)
+    // 2) Asterisked counts — always queried so we can show "X were marked
+    //    non-qualifying" footnote. Master filters apply so the count lines
+    //    up with the filtered view. Future-Champions filter applies per toggle.
+    const astFb = { sql: '', params: [] };
+    let astParamIdx = 2;
+    const f2 = pmState.filters;
+    if (pmState.excludeFutureChamps) astFb.sql += " AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%')";
+    if (f2.age_group)  { astFb.sql += " AND age_group = $" + astParamIdx;  astFb.params.push(f2.age_group);  astParamIdx++; }
+    if (f2.gender)     { astFb.sql += " AND gender = $" + astParamIdx;     astFb.params.push(f2.gender);     astParamIdx++; }
+    if (f2.discipline) { astFb.sql += " AND discipline = $" + astParamIdx; astFb.params.push(f2.discipline); astParamIdx++; }
+    if (f2.zone)       { astFb.sql += " AND zone = $" + astParamIdx;       astFb.params.push(f2.zone);       astParamIdx++; }
     const astSql =
       "SELECT stage, " +
       "  CASE " +
@@ -152,19 +202,19 @@
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
-      "WHERE year = $1 AND " + whereJrCircuit() +
-      (pmState.excludeFutureChamps ? " AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%')" : '') + " " +
+      "WHERE year = $1 AND " + whereJrCircuit() + astFb.sql + " " +
       "AND ((stage = 'Regionals' AND discipline ILIKE '%platform%') " +
       "  OR (stage = 'Regionals' AND year = 2026 AND age_group IN ('Group C','Group D'))) " +
       "GROUP BY stage, reason";
-    const astR = await neonQ(astSql, [year]);
+    const astR = await neonQ(astSql, [year].concat(astFb.params));
 
     // 3) Stage transitions: athletes who appear at both stage N and N+1
     //    (this gives us the "advanced" count for the funnel)
+    const transFb = buildFiltersSql(2);
     const transSql =
       "WITH per_stage AS ( " +
       "  SELECT stage, diver_id_dm FROM core.event_results " +
-      "  WHERE year = $1 AND " + whereJrCircuit() + fb + " " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + transFb.sql + " " +
       "  GROUP BY stage, diver_id_dm " +
       ") " +
       "SELECT a.stage AS from_stage, b.stage AS to_stage, " +
@@ -172,7 +222,7 @@
       "FROM per_stage a JOIN per_stage b ON a.diver_id_dm = b.diver_id_dm " +
       "WHERE a.stage <> b.stage " +
       "GROUP BY a.stage, b.stage";
-    const transR = await neonQ(transSql, [year]);
+    const transR = await neonQ(transSql, [year].concat(transFb.params));
 
     const out = {
       year,
@@ -200,38 +250,41 @@
       out.transitions[r.from_stage + '->' + r.to_stage] = Number(r.advanced) || 0;
     });
 
-    pmState.funnelCache[year] = out;
+    pmState.funnelCache[ck] = out;
     return out;
   }
 
   /* Year-over-year aggregate: athletes & entries per stage per year */
   async function loadYoYData(){
-    if (pmState.yoyCache) return pmState.yoyCache;
-    const fb = buildFiltersSql();
+    const ck = cacheKey('yoy');
+    if (pmState.yoyCache && pmState.yoyCache.__ck === ck) return pmState.yoyCache;
+    const fb = buildFiltersSql(1);
     const sql =
       "SELECT year, stage, " +
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
-      "WHERE " + whereJrCircuit() + fb + " " +
+      "WHERE " + whereJrCircuit() + fb.sql + " " +
       "GROUP BY year, stage " +
       "ORDER BY year, stage";
-    const r = await neonQ(sql);
-    pmState.yoyCache = r.rows.map(row => ({
+    const r = await neonQ(sql, fb.params);
+    const out = r.rows.map(row => ({
       year: Number(row.year),
       stage: row.stage,
       unique_athletes: Number(row.unique_athletes) || 0,
       event_entries:   Number(row.event_entries) || 0,
     }));
-    return pmState.yoyCache;
+    out.__ck = ck;
+    pmState.yoyCache = out;
+    return out;
   }
 
   /* Per-athlete attendance pattern (how many stops each athlete attended) *
    * — used by financial overlay to compute "actual cost paid" distribution */
   async function loadAttendancePattern(year){
-    const cacheKey = '__attendance__' + year;
-    if (pmState.funnelCache[cacheKey]) return pmState.funnelCache[cacheKey];
-    const fb = buildFiltersSql();
+    const akey = '__attendance__' + cacheKey(year);
+    if (pmState.funnelCache[akey]) return pmState.funnelCache[akey];
+    const fb = buildFiltersSql(2);
     const sql =
       "WITH per_athlete AS ( " +
       "  SELECT diver_id_dm, " +
@@ -240,27 +293,99 @@
       "    BOOL_OR(stage = 'EWC')       AS at_ewc, " +
       "    BOOL_OR(stage = 'Nationals') AS at_nat " +
       "  FROM core.event_results " +
-      "  WHERE year = $1 AND " + whereJrCircuit() + fb + " " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
       "  GROUP BY diver_id_dm " +
       ") " +
       "SELECT at_reg, at_zon, at_ewc, at_nat, COUNT(*)::int AS n " +
       "FROM per_athlete " +
       "GROUP BY at_reg, at_zon, at_ewc, at_nat";
-    const r = await neonQ(sql, [year]);
-    pmState.funnelCache[cacheKey] = r.rows.map(x => ({
+    const r = await neonQ(sql, [year].concat(fb.params));
+    pmState.funnelCache[akey] = r.rows.map(x => ({
       at_reg: x.at_reg === true || x.at_reg === 't' || x.at_reg === 'true',
       at_zon: x.at_zon === true || x.at_zon === 't' || x.at_zon === 'true',
       at_ewc: x.at_ewc === true || x.at_ewc === 't' || x.at_ewc === 'true',
       at_nat: x.at_nat === true || x.at_nat === 't' || x.at_nat === 'true',
       n: Number(x.n) || 0,
     }));
-    return pmState.funnelCache[cacheKey];
+    return pmState.funnelCache[akey];
+  }
+
+  /* Discover distinct filter-option values from Neon (populate dropdowns).  */
+  async function loadFilterOptions(){
+    if (pmState.filterOptions) return pmState.filterOptions;
+    const sql =
+      "SELECT 'age_group' AS dim, age_group AS val FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND age_group IS NOT NULL " +
+      "UNION " +
+      "SELECT 'gender' AS dim, gender AS val FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND gender IS NOT NULL " +
+      "UNION " +
+      "SELECT 'discipline' AS dim, discipline AS val FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND discipline IS NOT NULL " +
+      "UNION " +
+      "SELECT 'zone' AS dim, zone AS val FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND zone IS NOT NULL " +
+      "ORDER BY dim, val";
+    const r = await neonQ(sql);
+    const opts = { age_group: [], gender: [], discipline: [], zone: [] };
+    r.rows.forEach(row => {
+      if (opts[row.dim] && row.val) opts[row.dim].push(row.val);
+    });
+    pmState.filterOptions = opts;
+    return opts;
+  }
+
+  /* Demographics + composition: counts split by age_group × stage,        *
+   * gender × stage, discipline × stage, and zone (entry-point distribution). */
+  async function loadDemographicsData(year){
+    const ck = cacheKey(year);
+    if (pmState.demoCache[ck]) return pmState.demoCache[ck];
+    const fb = buildFiltersSql(2);
+
+    // Single roundtrip with UNION ALL to get all four dimensions at once
+    const sql =
+      "SELECT 'age' AS dim, COALESCE(age_group, '(unknown)') AS bucket, stage, " +
+      "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
+      "FROM core.event_results " +
+      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "GROUP BY age_group, stage " +
+      "UNION ALL " +
+      "SELECT 'gender' AS dim, COALESCE(gender, '(unknown)') AS bucket, stage, " +
+      "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
+      "FROM core.event_results " +
+      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "GROUP BY gender, stage " +
+      "UNION ALL " +
+      "SELECT 'discipline' AS dim, COALESCE(discipline, '(unknown)') AS bucket, stage, " +
+      "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
+      "FROM core.event_results " +
+      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "GROUP BY discipline, stage " +
+      "UNION ALL " +
+      "SELECT 'zone' AS dim, COALESCE(zone, '(unknown)') AS bucket, stage, " +
+      "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
+      "FROM core.event_results " +
+      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "GROUP BY zone, stage";
+    const r = await neonQ(sql, [year].concat(fb.params));
+
+    // Pivot into per-dimension matrices
+    const out = { age: {}, gender: {}, discipline: {}, zone: {} };
+    r.rows.forEach(row => {
+      const d = row.dim, b = row.bucket, s = row.stage, n = Number(row.athletes) || 0;
+      if (!out[d]) return;
+      if (!out[d][b]) out[d][b] = {};
+      out[d][b][s] = n;
+    });
+    pmState.demoCache[ck] = out;
+    return out;
   }
 
   /* Clear caches when filter toggles change                            */
   function invalidateCache(){
     pmState.funnelCache = {};
     pmState.yoyCache = null;
+    pmState.demoCache = {};
   }
 
   /* ── Utility: format helpers ───────────────────────────── */
@@ -352,6 +477,20 @@
              (isCurrent ? 'current' : '') + '" data-pm-year="' + y + '">' + y + '</button>';
     }).join('');
 
+    // Build filter dropdowns
+    const opts = pmState.filterOptions || { age_group: [], gender: [], discipline: [], zone: [] };
+    function dropdown(key, label, optsList){
+      const cur = pmState.filters[key] || '';
+      const optsHtml = ['<option value="">All ' + label.toLowerCase() + '</option>']
+        .concat(optsList.map(v => '<option value="' + escapeHtml(v) + '" ' + (cur === v ? 'selected' : '') + '>' + escapeHtml(v) + '</option>'))
+        .join('');
+      return '<div class="pm-filter-field">' +
+        '<label class="pm-filter-label">' + escapeHtml(label) + '</label>' +
+        '<select class="pm-filter-select" data-pm-filter="' + key + '">' + optsHtml + '</select>' +
+      '</div>';
+    }
+    const activeFilterCount = Object.values(pmState.filters).filter(v => v).length;
+
     return (
       '<div class="pm-controls">' +
         '<div class="pm-ctl-group">' +
@@ -359,12 +498,14 @@
           '<div class="pm-year-pills">' + yearPills + '</div>' +
         '</div>' +
 
+        '<div class="pm-ctl-divider"></div>' +
+
         '<div class="pm-ctl-group">' +
           '<label class="pm-toggle">' +
             '<input type="checkbox" id="pmToggleAst" ' + (pmState.excludeAsterisked ? '' : 'checked') + '>' +
             '<span class="pm-toggle-switch"></span>' +
-            '<span>Include non-qualifying entries<sup class="pm-asterisk">*</sup></span>' +
-            '<span class="pm-toggle-help" title="When ON (default), platform results at Regionals and Group C/D Regionals entries in 2026 are included with an asterisk. Toggle OFF to remove them from all counts.">?</span>' +
+            '<span>Include non-qualifying<sup class="pm-asterisk">*</sup></span>' +
+            '<span class="pm-toggle-help" title="When ON (default), platform results at Regionals and Group C/D Regionals entries in 2026 are included with an asterisk. Toggle OFF to remove them entirely from all counts.">?</span>' +
           '</label>' +
         '</div>' +
 
@@ -372,7 +513,7 @@
           '<label class="pm-toggle">' +
             '<input type="checkbox" id="pmToggleFC" ' + (pmState.excludeFutureChamps ? 'checked' : '') + '>' +
             '<span class="pm-toggle-switch"></span>' +
-            '<span>Exclude Future Champions events</span>' +
+            '<span>Exclude Future Champions</span>' +
             '<span class="pm-toggle-help" title="Future Champions meets are developmental and per USA Diving policy do not count in Junior Circuit participation data. Default: ON (excluded).">?</span>' +
           '</label>' +
         '</div>' +
@@ -381,9 +522,26 @@
           '<label class="pm-toggle financial">' +
             '<input type="checkbox" id="pmToggleFin" ' + (pmState.showFinancials ? 'checked' : '') + '>' +
             '<span class="pm-toggle-switch"></span>' +
-            '<span><strong>Show financial overlay</strong></span>' +
+            '<span><strong>Financial overlay</strong></span>' +
             '<span class="pm-toggle-help" title="Layers entry-fee data on every section: what families actually paid per athlete and what each meet collected in aggregate.">?</span>' +
           '</label>' +
+        '</div>' +
+      '</div>' +
+
+      // Filter bar — separate row, scoped to all data pulls
+      '<div class="pm-filter-bar">' +
+        '<div class="pm-filter-bar-head">' +
+          '<span class="pm-filter-bar-label">Filter the data</span>' +
+          '<span class="pm-filter-bar-hint">All sections below update together. ' +
+            (activeFilterCount ? '<strong>' + activeFilterCount + ' active filter' + (activeFilterCount === 1 ? '' : 's') + '</strong>' : 'No filters applied') +
+          '</span>' +
+          (activeFilterCount ? '<button class="pm-filter-clear" id="pmFilterClear">Clear all filters</button>' : '') +
+        '</div>' +
+        '<div class="pm-filter-fields">' +
+          dropdown('age_group',  'Age group',  opts.age_group) +
+          dropdown('gender',     'Gender',     opts.gender) +
+          dropdown('discipline', 'Discipline', opts.discipline) +
+          dropdown('zone',       'Zone',       opts.zone) +
         '</div>' +
       '</div>'
     );
@@ -413,7 +571,12 @@
 
     const totalEntries = stages.reduce((a, s) => a + data.stages[s].event_entries, 0);
     const fees = ENTRY_FEES[year] || {};
-    const fullCircuitCost = stages.reduce((a, s) => a + (fees[s] || 0), 0);
+    // Full-circuit reference cost = theoretical cost across ALL 4 stages, regardless
+    // of which have completed. (Previously summed only visible stages, which
+    // under-reported when Nationals hadn't happened yet for the current season.)
+    const fullCircuitCost = STAGE_ORDER.reduce((a, s) => a + (fees[s] || 0), 0);
+    const nationalsHasData = data.stages.Nationals && data.stages.Nationals.unique_athletes > 0;
+    const fullCircuitNote = nationalsHasData ? 'per athlete attending every stop' : 'reference cost (Nationals upcoming for ' + year + ')';
 
     let kpiHtml = '<div class="pm-kpi-strip">';
     kpiHtml +=
@@ -439,7 +602,7 @@
         '<div class="pm-kpi financial">' +
           '<div class="pm-kpi-label">Full-circuit cost</div>' +
           '<div class="pm-kpi-value">' + fmtMoney(fullCircuitCost) + '</div>' +
-          '<div class="pm-kpi-sub">per athlete attending every stop</div>' +
+          '<div class="pm-kpi-sub">' + fullCircuitNote + '</div>' +
         '</div>';
     }
     kpiHtml += '</div>';
@@ -545,19 +708,177 @@
       '</div>';
 
     return sectionShell(1, 'Pipeline Funnel — ' + year,
-      'Each band shows how many unique athletes competed at that stage of the ' + year + ' Junior Circuit. The bar width is proportional to the count, so the narrowing visually shows attrition through the qualification pipeline. Hover toggles on the right to add financial detail.',
+      'Each band shows how many unique athletes competed at that stage of the ' + year + ' Junior Circuit. The bar width is proportional to the count, so the narrowing visually shows attrition through the qualification pipeline. Use the financial overlay toggle in the controls bar to add fee revenue detail to each band.',
       kpiHtml + '<div class="pm-funnel-wrap">' + svg + legend + '</div>' + footnote);
   }
 
-  /* ── SECTION 2: Year-over-Year ─────────────────────────── */
+  /* ── SECTION 2: Demographics & Composition ─────────────── */
+  function renderDemographicsSection(year, data){
+    if (!data) {
+      return sectionShell(2, 'Demographics & Composition — ' + year,
+        'Who is competing at each stage — age groups, gender, discipline, and zone of origin. The filter bar above narrows everything here too.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading demographics…</div></div>');
+    }
+
+    // Sort the bucket keys for each dimension in a sensible order
+    function sortAge(a, b){
+      const order = ['Group A','Group B','Group C','Group D'];
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.localeCompare(b);
+    }
+    function sortDefault(a, b){ return a.localeCompare(b); }
+    const sorters = { age: sortAge, gender: sortDefault, discipline: sortDefault, zone: sortDefault };
+
+    function matrixCard(dim, title, subtitle, accentColor){
+      const matrix = data[dim] || {};
+      const buckets = Object.keys(matrix).sort(sorters[dim] || sortDefault);
+      if (!buckets.length) {
+        return '<div class="pm-demo-card"><div class="pm-demo-card-head">' +
+          '<div class="pm-demo-card-title">' + escapeHtml(title) + '</div>' +
+          '<div class="pm-demo-card-sub">' + escapeHtml(subtitle) + '</div>' +
+          '</div><div class="pm-empty"><div class="pm-empty-sub">No data for this dimension</div></div></div>';
+      }
+      // Stages with any data
+      const activeStages = STAGE_ORDER.filter(s => buckets.some(b => (matrix[b][s] || 0) > 0));
+
+      // Find max for bar scaling
+      let maxVal = 0;
+      buckets.forEach(b => activeStages.forEach(s => { maxVal = Math.max(maxVal, matrix[b][s] || 0); }));
+
+      // Build the matrix as a card with bucket rows × stage columns
+      let rows = '';
+      buckets.forEach(b => {
+        const total = activeStages.reduce((a, s) => a + (matrix[b][s] || 0), 0);
+        const cells = activeStages.map(s => {
+          const v = matrix[b][s] || 0;
+          const opacity = maxVal ? (0.18 + 0.82 * v / maxVal) : 0.18;
+          return '<td style="background: rgba(23,31,105,' + opacity.toFixed(3) + ')' +
+                 '; color: ' + (opacity > 0.55 ? '#fff' : '#171f69') + '">' +
+                 (v > 0 ? fmtNum(v) : '<span style="opacity:.4">—</span>') +
+                 '</td>';
+        }).join('');
+        rows += '<tr><th>' + escapeHtml(b) + '</th>' + cells +
+                '<td class="pm-demo-total">' + fmtNum(total) + '</td></tr>';
+      });
+
+      const headerCells = activeStages.map(s =>
+        '<th>' + escapeHtml(STAGE_SHORT[s] || s) + '</th>'
+      ).join('');
+
+      return (
+        '<div class="pm-demo-card" style="--accent: ' + accentColor + '">' +
+          '<div class="pm-demo-card-head">' +
+            '<div class="pm-demo-card-title">' + escapeHtml(title) + '</div>' +
+            '<div class="pm-demo-card-sub">' + escapeHtml(subtitle) + '</div>' +
+          '</div>' +
+          '<table class="pm-demo-table">' +
+            '<thead><tr><th></th>' + headerCells + '<th class="pm-demo-total">Total</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>' +
+        '</div>'
+      );
+    }
+
+    // Bar-chart card for zone (single-column horizontal-bar visualization)
+    function zoneBarCard(){
+      const matrix = data.zone || {};
+      const buckets = Object.keys(matrix).sort();
+      if (!buckets.length) {
+        return '<div class="pm-demo-card"><div class="pm-demo-card-head">' +
+          '<div class="pm-demo-card-title">Zone breakdown</div>' +
+          '<div class="pm-demo-card-sub">Where athletes come from geographically</div>' +
+          '</div><div class="pm-empty"><div class="pm-empty-sub">Zone data not available</div></div></div>';
+      }
+      // Use Regionals as the entry-point measure (max per zone is essentially attendance there)
+      const entryPoint = buckets.map(b => ({
+        zone: b,
+        regionals: matrix[b]['Regionals'] || 0,
+        zones: matrix[b]['Zones'] || 0,
+        ewc: matrix[b]['EWC'] || 0,
+      }));
+      entryPoint.sort((a, b) => b.regionals - a.regionals);
+      const maxRegionals = Math.max.apply(null, entryPoint.map(z => z.regionals).concat([1]));
+
+      let bars = '';
+      entryPoint.forEach(z => {
+        const pctR = (z.regionals / maxRegionals * 100).toFixed(1);
+        const pctZ = z.regionals ? (z.zones / z.regionals * 100).toFixed(0) : 0;
+        const pctE = z.regionals ? (z.ewc   / z.regionals * 100).toFixed(0) : 0;
+        bars += '<div class="pm-zone-row">' +
+          '<div class="pm-zone-label">' + escapeHtml('Zone ' + z.zone) + '</div>' +
+          '<div class="pm-zone-bar-stack">' +
+            '<div class="pm-zone-bar regionals" style="width: ' + pctR + '%">' +
+              '<span class="pm-zone-bar-text">' + fmtNum(z.regionals) + ' at Regionals</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pm-zone-trail">' +
+            '<span>' + fmtNum(z.zones) + ' → Zones (' + pctZ + '%)</span>' +
+            (z.ewc > 0 ? '<span>' + fmtNum(z.ewc) + ' → E/W/C (' + pctE + '%)</span>' : '') +
+          '</div>' +
+        '</div>';
+      });
+
+      return (
+        '<div class="pm-demo-card wide">' +
+          '<div class="pm-demo-card-head">' +
+            '<div class="pm-demo-card-title">Zone breakdown</div>' +
+            '<div class="pm-demo-card-sub">' +
+              'Athletes by zone at the entry point (Regionals), with the share that advanced. ' +
+              'Bar length is proportional to that zone\'s Regionals count.' +
+            '</div>' +
+          '</div>' +
+          '<div class="pm-zone-list">' + bars + '</div>' +
+        '</div>'
+      );
+    }
+
+    // KPI strip for demographics
+    const ageBuckets = Object.keys(data.age || {});
+    const totalDistinctAge = ageBuckets.length;
+    const genderBuckets = Object.keys(data.gender || {});
+    const disciplineBuckets = Object.keys(data.discipline || {});
+    const zoneBuckets = Object.keys(data.zone || {});
+
+    let kpis = '<div class="pm-kpi-strip">';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Age groups represented</div>' +
+            '<div class="pm-kpi-value">' + totalDistinctAge + '</div>' +
+            '<div class="pm-kpi-sub">' + ageBuckets.join(' · ') + '</div></div>';
+    kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Genders represented</div>' +
+            '<div class="pm-kpi-value">' + genderBuckets.length + '</div>' +
+            '<div class="pm-kpi-sub">' + genderBuckets.join(' · ') + '</div></div>';
+    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Disciplines</div>' +
+            '<div class="pm-kpi-value">' + disciplineBuckets.length + '</div>' +
+            '<div class="pm-kpi-sub">' + disciplineBuckets.join(' · ') + '</div></div>';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Zones contributing</div>' +
+            '<div class="pm-kpi-value">' + zoneBuckets.length + '</div>' +
+            '<div class="pm-kpi-sub">at least one athlete from each</div></div>';
+    kpis += '</div>';
+
+    const grid =
+      '<div class="pm-demo-grid">' +
+        matrixCard('age',        'Age groups by stage',    'Unique athletes — darker cell = larger cohort',  C.blue) +
+        matrixCard('gender',     'Gender by stage',        'How representation shifts through the pipeline', C.pool) +
+        matrixCard('discipline', 'Discipline by stage',    'Spring­board, platform, and synchro participation', C.red) +
+      '</div>' +
+      zoneBarCard();
+
+    return sectionShell(2, 'Demographics & Composition — ' + year,
+      'Who is competing at each stage of the circuit, broken down by age group, gender, discipline, and zone of origin. The matrix cells use intensity to show cohort size — the darker the cell, the more athletes. All filters in the bar above narrow these counts too.',
+      kpis + grid);
+  }
+
+  /* ── SECTION 3: Year-over-Year ─────────────────────────── */
   function renderYoYSection(rows){
     if (!rows) {
-      return sectionShell(2, 'Year-Over-Year Comparison',
+      return sectionShell(3, 'Year-Over-Year Comparison',
         'How participation has changed across 2021–2026. Useful for the "is the circuit growing or shrinking?" conversation.',
         '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading multi-year data…</div></div>');
     }
     if (!rows.length) {
-      return sectionShell(2, 'Year-Over-Year Comparison',
+      return sectionShell(3, 'Year-Over-Year Comparison',
         'How participation has changed across 2021–2026.',
         '<div class="pm-empty"><div class="pm-empty-title">No multi-year data found</div></div>');
     }
@@ -623,7 +944,7 @@
       ? renderYoYRevenueChart(yearTotals)
       : renderYoYStackedChart(allYears, byYearStage, 'event_entries', 'Total event entries per stage, by year');
 
-    return sectionShell(2, 'Year-Over-Year Comparison',
+    return sectionShell(3, 'Year-Over-Year Comparison',
       'How participation and revenue have moved across ' + first.year + '–' + last.year + '. The left chart shows unique athletes per stage; the right chart shows total event entries — these tell different stories because one athlete typically enters multiple events.' +
       (pmState.showFinancials ? ' With the financial overlay on, the right chart switches to aggregate entry-fee revenue per year.' : ''),
       kpiHtml +
@@ -861,7 +1182,7 @@
       '</div>' +
       feeTable + hist;
 
-    return sectionShell(3, 'Financial Breakdown — ' + year,
+    return sectionShell(4, 'Financial Breakdown — ' + year,
       'What families paid and what the NGB collected in entry fees. The headline number ' +
       'people often quote is the "full-circuit cost" — what one athlete would pay to compete at every meet — ' +
       'but most athletes only paid for the meets they actually qualified into. This section shows both.',
@@ -928,6 +1249,22 @@
     const tFin = document.getElementById('pmToggleFin');
     if (tFin) tFin.addEventListener('change', function(){
       pmState.showFinancials = this.checked;
+      renderPipeline();
+    });
+    // Filter dropdowns — apply across all sections
+    document.querySelectorAll('[data-pm-filter]').forEach(el => {
+      el.addEventListener('change', function(){
+        const key = this.getAttribute('data-pm-filter');
+        pmState.filters[key] = this.value;
+        invalidateCache();
+        renderPipeline();
+      });
+    });
+    // Clear all filters
+    const clearBtn = document.getElementById('pmFilterClear');
+    if (clearBtn) clearBtn.addEventListener('click', function(){
+      pmState.filters = { age_group: '', gender: '', discipline: '', zone: '' };
+      invalidateCache();
       renderPipeline();
     });
     // Print
@@ -1017,9 +1354,11 @@
       }
 
       // Load all needed data in parallel
-      const [funnel, yoy] = await Promise.all([
+      const [filterOpts, funnel, yoy, demo] = await Promise.all([
+        loadFilterOptions(),
         loadFunnelData(pmState.selectedYear),
         loadYoYData(),
+        loadDemographicsData(pmState.selectedYear),
       ]);
 
       // Render skeleton with controls
@@ -1028,6 +1367,7 @@
           renderHero() +
           renderControls() +
           renderFunnelSection(pmState.selectedYear, funnel) +
+          renderDemographicsSection(pmState.selectedYear, demo) +
           renderYoYSection(yoy) +
           '<div id="pmFinSlot"></div>' +
         '</div>';
