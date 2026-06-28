@@ -495,13 +495,7 @@
       "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
       "FROM core.event_results " +
       "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
-      "GROUP BY discipline, stage " +
-      "UNION ALL " +
-      "SELECT 'zone' AS dim, COALESCE(zone, '(unknown)') AS bucket, stage, " +
-      "  COUNT(DISTINCT diver_id_dm)::int AS athletes " +
-      "FROM core.event_results " +
-      "WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
-      "GROUP BY zone, stage";
+      "GROUP BY discipline, stage";
     const r = await neonQ(sql, [year].concat(fb.params));
 
     // Pivot into per-dimension matrices
@@ -512,6 +506,38 @@
       if (!out[d][b]) out[d][b] = {};
       out[d][b][s] = n;
     });
+
+    // Zone needs special handling. Regionals rows carry a REGION (1-12) but no
+    // zone; Zones rows carry a ZONE (A-F) but no region; E/W/C rows carry
+    // neither. USA Diving groups regions into zones two-at-a-time, so we derive
+    // each diver's "home zone" (their Zones zone if present, otherwise mapped
+    // from their Regionals region) and attribute every stage to it — this is
+    // why the chart no longer dumps everyone into a single "(unknown)" bucket.
+    const regionToZone =
+      "CASE WHEN region IN (1,2) THEN 'A' WHEN region IN (3,4) THEN 'B' " +
+      "WHEN region IN (5,6) THEN 'C' WHEN region IN (7,8) THEN 'D' " +
+      "WHEN region IN (9,10) THEN 'E' WHEN region IN (11,12) THEN 'F' END";
+    const zoneSql =
+      "WITH dz AS (" +
+      "  SELECT diver_id_dm, COALESCE(MAX(zone), MAX(" + regionToZone + ")) AS home_zone " +
+      "  FROM core.event_results " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "  GROUP BY diver_id_dm" +
+      ") " +
+      "SELECT COALESCE(dz.home_zone, '(unknown)') AS bucket, er.stage AS stage, " +
+      "  COUNT(DISTINCT er.diver_id_dm)::int AS athletes " +
+      "FROM core.event_results er JOIN dz ON dz.diver_id_dm = er.diver_id_dm " +
+      "WHERE er.year = $1 AND " + whereJrCircuit() + fb.sql + " " +
+      "GROUP BY dz.home_zone, er.stage";
+    try {
+      const rz = await neonQ(zoneSql, [year].concat(fb.params));
+      rz.rows.forEach(row => {
+        const b = row.bucket, s = row.stage, n = Number(row.athletes) || 0;
+        if (!out.zone[b]) out.zone[b] = {};
+        out.zone[b][s] = n;
+      });
+    } catch (e) { /* leave zone empty on failure rather than break the section */ }
+
     pmState.demoCache[ck] = out;
     return out;
   }
@@ -671,23 +697,23 @@
       : "stage = 'Nationals'";
     const declinedSql =
       "WITH zone_qual AS ( " +
-      "  SELECT DISTINCT event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender, MIN(place) AS best_place " +
+      "  SELECT diver_id_dm, MAX(age_group) AS age_group, MAX(gender) AS gender, MIN(place) AS best_place " +
       "  FROM core.event_results " +
       "  WHERE year = $1 AND stage = 'Zones' AND " + whereJrCircuit() + " AND place IS NOT NULL " +
       (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
       fb.sql + " " +
-      "  GROUP BY event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender " +
+      "  GROUP BY diver_id_dm " +              // ONE ROW PER ATHLETE (best finish across their events)
       "), " +
       "advanced AS ( " +
-      "  SELECT DISTINCT event_key, diver_id_dm FROM core.event_results " +
+      "  SELECT DISTINCT diver_id_dm FROM core.event_results " +
       "  WHERE year = $1 AND " + nextStageClause + " AND " + whereJrCircuit() + " " +
       fb.sql + " " +
       ") " +
       "SELECT zq.age_group, zq.gender, " +
-      "  COUNT(*)::int AS qualified, " +
+      "  COUNT(*)::int AS qualified, " +                                  // distinct athletes
       "  COUNT(*) FILTER (WHERE a.diver_id_dm IS NULL)::int AS declined " +
       "FROM zone_qual zq " +
-      "LEFT JOIN advanced a ON a.event_key = zq.event_key AND a.diver_id_dm = zq.diver_id_dm " +
+      "LEFT JOIN advanced a ON a.diver_id_dm = zq.diver_id_dm " +
       "WHERE zq.best_place BETWEEN 1 AND 18 " +
       "GROUP BY zq.age_group, zq.gender " +
       "ORDER BY zq.age_group, zq.gender";
@@ -1908,7 +1934,7 @@
       .join('');
     const picker = '<div class="pm-cohort-controls"><div class="pm-cohort-stage-picker">' + stagePicker + '</div>' +
       '<div class="pm-score-hint">Box = middle 50% of scores (Q1–Q3). Line in box = median. Whiskers = full range. ' +
-      '<span class="pm-score-cutoff-key"></span> = 15th-place score (advancement cutoff proxy).</div></div>';
+      '<span class="pm-score-cutoff-key"></span> = 15th-place score (reference line only — see note).</div></div>';
 
     if (!data) {
       return sectionShell(5, 'Score & Placement Distribution — ' + year,
@@ -1942,15 +1968,15 @@
             '<div class="pm-kpi-value">' + avgN + '</div>' +
             '<div class="pm-kpi-sub">scored athletes per event</div></div>';
     kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Widest spread</div>' +
-            '<div class="pm-kpi-value" style="font-size:22px">' + escapeHtml(shortEventLabel(widestEvent)) + '</div>' +
+            '<div class="pm-kpi-value" style="font-size:16px;line-height:1.15">' + escapeHtml(fullEventLabel(widestEvent)) + '</div>' +
             '<div class="pm-kpi-sub">range ' + widestEvent.min.toFixed(0) + '–' + widestEvent.max.toFixed(0) + '</div></div>';
     kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Tightest spread</div>' +
-            '<div class="pm-kpi-value" style="font-size:22px">' + escapeHtml(shortEventLabel(tightestEvent)) + '</div>' +
+            '<div class="pm-kpi-value" style="font-size:16px;line-height:1.15">' + escapeHtml(fullEventLabel(tightestEvent)) + '</div>' +
             '<div class="pm-kpi-sub">range ' + tightestEvent.min.toFixed(0) + '–' + tightestEvent.max.toFixed(0) + '</div></div>';
     kpis += '</div>';
 
     // Box-plot rows
-    const rowH = 46, labelW = 230, chartW = 720, padR = 30;
+    const rowH = 46, labelW = 268, chartW = 690, padR = 30;
     const W = labelW + chartW + padR;
     const H = data.length * rowH + 50;
     function xOf(v){ return labelW + (v - axMin) / (axMax - axMin) * chartW; }
@@ -1985,14 +2011,14 @@
       if (d.cutoff15 != null && d.n >= 15) {
         svg += '<line x1="' + xOf(d.cutoff15) + '" y1="' + (boxTop-5) + '" x2="' + xOf(d.cutoff15) + '" y2="' + (boxTop+boxH+5) + '" stroke="#e31937" stroke-width="2" stroke-dasharray="3,2"><title>15th-place score: ' + d.cutoff15.toFixed(1) + '</title></line>';
       }
-      // Event label
-      svg += '<text x="' + (labelW - 12) + '" y="' + (cy - 1) + '" text-anchor="end" class="pm-score-event-label">' + escapeHtml(shortEventLabel(d)) + '</text>';
-      svg += '<text x="' + (labelW - 12) + '" y="' + (cy + 11) + '" text-anchor="end" class="pm-score-event-sub">n=' + d.n + '</text>';
+      // Event label (full words)
+      svg += '<text x="' + (labelW - 12) + '" y="' + (cy - 1) + '" text-anchor="end" class="pm-score-event-label">' + escapeHtml(fullEventLabel(d)) + '</text>';
+      svg += '<text x="' + (labelW - 12) + '" y="' + (cy + 11) + '" text-anchor="end" class="pm-score-event-sub">' + fmtNum(d.n) + ' athletes</text>';
     });
     svg += '</svg>';
 
     return sectionShell(5, 'Score & Placement Distribution — ' + year + ' ' + STAGE_SHORT[stage],
-      'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores. The red dashed line marks the 15th-place score — a proxy for the advancement cutoff — so you can see whether the cutoff sits in the dense middle of the field or out in the tail.',
+      'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores. The red dashed line marks the 15th-place score in that event as a rough reference — note that advancement is decided event by event, so the true cutoff varies and is not a single fixed place.',
       kpis + picker + '<div class="pm-score-wrap">' + svg + '</div>');
   }
 
@@ -2004,6 +2030,22 @@
     var g = (d.gender || '').replace('Boys', 'B').replace('Girls', 'G').replace('Male','B').replace('Female','G');
     var s = (ag + ' ' + g + ' ' + disc).replace(/\s+/g, ' ').trim();
     return s || (d.event_name || d.event_key || '').slice(0, 24);
+  }
+
+  function fullEventLabel(d){
+    // Full-word label, e.g. "Group A · Boys · 1M" / "Group B · Girls · Platform".
+    var ag = (d.age_group || '').trim();
+    var g  = (d.gender || '').trim();
+    var disc = (d.discipline || '').trim()
+      .replace(/spring ?board/i, '')
+      .replace(/1 ?meter/i, '1M').replace(/3 ?meter/i, '3M')
+      .replace(/^platform$/i, 'Platform')
+      .replace(/synchro[\s-]*platform/i, 'Synchro Platform')
+      .replace(/synchro[\s-]*3 ?m/i, 'Synchro 3M')
+      .replace(/synchro[\s-]*1 ?m/i, 'Synchro 1M')
+      .replace(/\s+/g, ' ').trim();
+    var parts = [ag, g, disc].filter(function(x){ return x; });
+    return parts.join(' \u00b7 ') || (d.event_name || d.event_key || '').slice(0, 28);
   }
 
   /* ── SECTION 6: Special Status & Flags (#4) ──────────────
@@ -2024,15 +2066,15 @@
     const nextStageLabel = year >= 2026 ? 'E/W/C or Nationals' : 'Junior Nationals';
 
     let kpis = '<div class="pm-kpi-strip">';
-    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Qualified at Zones (top 18)</div>' +
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Top-18 finishers at Zones</div>' +
             '<div class="pm-kpi-value">' + fmtNum(totQual) + '</div>' +
-            '<div class="pm-kpi-sub">' + year + ' advancing-band athletes</div></div>';
-    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Declined to advance</div>' +
+            '<div class="pm-kpi-sub">distinct athletes · best event placing ≤ 18</div></div>';
+    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Did not continue</div>' +
             '<div class="pm-kpi-value">' + fmtNum(totDeclined) + '</div>' +
-            '<div class="pm-kpi-sub">did not appear at ' + nextStageLabel + '</div></div>';
-    kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Decline rate</div>' +
+            '<div class="pm-kpi-sub">no appearance at ' + nextStageLabel + '</div></div>';
+    kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Did-not-continue rate</div>' +
             '<div class="pm-kpi-value">' + declineRate + '%</div>' +
-            '<div class="pm-kpi-sub">of qualified athletes</div></div>';
+            '<div class="pm-kpi-sub">share of top-18 athletes</div></div>';
     if (data.flags.tracked) {
       kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Special-status flags</div>' +
               '<div class="pm-kpi-value" style="font-size:20px">' + (data.flags.foreign + data.flags.dual + data.flags.hps + data.flags.ymca) + '</div>' +
@@ -2043,10 +2085,11 @@
     // Declined breakdown table by age × gender
     let tbl = '';
     if (data.declined.length) {
-      tbl = '<div class="pm-status-block"><div class="pm-status-block-head">Declined to advance — by age group &amp; gender</div>' +
-        '<div class="pm-status-block-sub">Athletes who finished in the top 18 at ' + year + ' Zones but did not appear at ' + nextStageLabel + '. ' +
-        'A high decline rate may indicate cost, travel, or scheduling barriers.</div>' +
-        '<table class="pm-status-table"><thead><tr><th>Age group</th><th>Gender</th><th>Qualified</th><th>Declined</th><th>Decline rate</th></tr></thead><tbody>';
+      tbl = '<div class="pm-status-block"><div class="pm-status-block-head">Did not continue — by age group &amp; gender</div>' +
+        '<div class="pm-status-block-sub">Distinct athletes who finished in the top 18 in at least one event at ' + year + ' Zones but did not appear at ' + nextStageLabel + '. ' +
+        'Each athlete is counted once (by their best event), not once per event. Top 18 is used here as a working advancing-band definition. ' +
+        'A high rate may indicate cost, travel, or scheduling barriers.</div>' +
+        '<table class="pm-status-table"><thead><tr><th>Age group</th><th>Gender</th><th>Top-18 athletes</th><th>Did not continue</th><th>Rate</th></tr></thead><tbody>';
       data.declined.forEach(r => {
         const rate = r.qualified ? (r.declined / r.qualified * 100).toFixed(1) : '0.0';
         const hot = Number(rate) >= 25;
@@ -2078,7 +2121,7 @@
     }
 
     return sectionShell(6, 'Special Status & Flags — ' + year,
-      'Two lenses on the athletes the standard funnel doesn\'t fully capture. First, athletes who earned an advancing position at Zones but chose not to continue — the "declined" cohort, which speaks to barriers like cost and travel. Second, special-status designations (foreign, dual-citizen, High Performance Squad, YMCA) where the data is tracked.',
+      'Two lenses on the athletes the standard funnel doesn\'t fully capture. First, distinct athletes who reached the top 18 at Zones but did not appear at the next stage — which can point to barriers like cost and travel. Second, special-status designations (foreign, dual-citizen, High Performance Squad, YMCA) where the data is tracked.',
       kpis + tbl + flagsBlock);
   }
 
@@ -2517,6 +2560,10 @@
     const stageContent = document.getElementById('stageContent');
     if (!stageContent) return;
 
+    // Preserve scroll position across re-renders so clicking a toggle/tab/filter
+    // doesn't throw the user back to the top of the page.
+    const prevScroll = window.scrollY || window.pageYOffset || 0;
+
     // Find or create the dashboard container (sibling to the regular
     // kpi-row + workspace inside #stageContent). Using a separate
     // container instead of overwriting #stageContent.innerHTML
@@ -2528,15 +2575,20 @@
       dash.id = 'pmDashboard';
       stageContent.appendChild(dash);
     }
+    const firstLoad = !dash.querySelector('.pm-section');
 
-    // First-load: show shell with spinner
-    dash.innerHTML =
-      '<div class="pm-root">' +
-        renderHero() +
-        '<div class="pm-loading"><div class="pm-loading-spinner"></div>' +
-        '<div class="pm-loading-text">Loading from Neon…</div>' +
-        '<div class="pm-loading-sub">Pulling Junior Circuit data, 2021–2026</div></div>' +
-      '</div>';
+    // First-load only: show shell with spinner. On re-renders we keep the
+    // current content on screen until the new content is ready, which avoids
+    // a height-collapsing flash that scrolls the page to the top.
+    if (firstLoad) {
+      dash.innerHTML =
+        '<div class="pm-root">' +
+          renderHero() +
+          '<div class="pm-loading"><div class="pm-loading-spinner"></div>' +
+          '<div class="pm-loading-text">Loading from Neon…</div>' +
+          '<div class="pm-loading-sub">Pulling Junior Circuit data, 2021–2026</div></div>' +
+        '</div>';
+    }
 
     try {
       // Make sure years are loaded
@@ -2601,6 +2653,9 @@
       }
 
       bindHandlers();
+      if (!firstLoad) {
+        requestAnimationFrame(function(){ window.scrollTo(0, prevScroll); });
+      }
     } catch (e) {
       console.error('[pipeline-modeling]', e);
       dash.innerHTML =
