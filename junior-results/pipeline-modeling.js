@@ -300,7 +300,8 @@
       "SELECT diver_id_dm, stage, " +
       "  MAX(age_group) AS ag, " +
       "  MIN(place) AS bp_any, " +
-      "  MIN(CASE WHEN discipline IN ('1M','3M') THEN place END) AS bp_sb " +
+      "  MIN(CASE WHEN discipline IN ('1M','3M') THEN place END) AS bp_sb, " +
+      "  MIN(CASE WHEN discipline = 'Platform' THEN place END) AS bp_pl " +
       "FROM core.event_results " +
       "WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + splitFb.sql + " " +
       "GROUP BY diver_id_dm, stage";
@@ -333,16 +334,25 @@
     });
 
     /* ---- did-not-advance split per stage ---- */
-    // Qualifying standard per stage (matches the rulebook + the Special-Status
-    // "qualified" band): Regionals -> Zones = Groups A/B top 15 in a springboard
-    // event (Groups C/D advance to Zones automatically); Zones -> next = top 18
-    // (places 1-3 to Junior Nationals, 4-18 to E/W/C); E/W/C -> Nationals = top 3.
+    // Qualifying standard per stage, era-aware (verified against the 2021–2025
+    // rulebook and the 2026 rulebook):
+    //   2026 (new system): Regionals = Groups A/B top 15 in a springboard event,
+    //     Groups C/D auto-advance to Zones; Zones = top 18 (1-3 direct to Junior
+    //     Nationals, 4-18 to E/W/C); E/W/C = top 3.
+    //   2021–2025 (old system): Regionals = top 15 in a springboard event for ALL
+    //     groups (no C/D auto); Zones -> Junior Nationals = springboard top 10 OR
+    //     platform top 7. (Places 11–16 are conditional alternates only, so they are
+    //     NOT counted as qualified; 17th+ never advance.)
+    const newSystem = Number(year) >= 2026;
     function qualifiedAt(stage, info){
       if (stage === 'Regionals'){
-        if (info.ag === 'Group C' || info.ag === 'Group D') return true;
+        if (newSystem && (info.ag === 'Group C' || info.ag === 'Group D')) return true;
         return info.bp_sb != null && info.bp_sb <= 15;
       }
-      if (stage === 'Zones') return info.bp_any != null && info.bp_any <= 18;
+      if (stage === 'Zones'){
+        if (newSystem) return info.bp_any != null && info.bp_any <= 18;
+        return (info.bp_sb != null && info.bp_sb <= 10) || (info.bp_pl != null && info.bp_pl <= 7);
+      }
       if (stage === 'EWC')   return info.bp_any != null && info.bp_any <= 3;
       return false;
     }
@@ -357,6 +367,7 @@
         ag: r.ag || '',
         bp_any: (r.bp_any != null ? Number(r.bp_any) : null),
         bp_sb:  (r.bp_sb  != null ? Number(r.bp_sb)  : null),
+        bp_pl:  (r.bp_pl  != null ? Number(r.bp_pl)  : null),
       };
     });
     const presentCount = {};
@@ -368,12 +379,14 @@
       for (let j = idx + 1; j < STAGE_ORDER.length; j++){ if (presentCount[STAGE_ORDER[j]] > 0){ T = STAGE_ORDER[j]; break; } }
       if (!T) return;
       // Only split where the qualifying rule for THIS transition is well-defined.
-      // Region->Zone is stable across all years; Zone->E/W/C and E/W/C->Nationals
-      // are the 2026 structure. Pre-2026 Zone->Nationals used a different (pre-E/W/C)
-      // rule we haven't pinned down, so we leave it un-split (renderer shows a single
-      // neutral "did not advance" stream rather than guess the qualified/declined line).
+      // Region->Zone (top 15 springboard) is stable across all years. Zone->E/W/C
+      // and E/W/C->Nationals are the 2026 structure. Pre-2026 Zone->Nationals is now
+      // verified from the 2021–2025 rulebook (springboard top 10 / platform top 7),
+      // so it splits too. (S='Zones' & T='Nationals' only occurs pre-2026, since in
+      // 2026 the next stage after Zones with data is E/W/C.)
       const confident = (S === 'Regionals' && T === 'Zones') ||
                         (S === 'Zones' && T === 'EWC') ||
+                        (S === 'Zones' && T === 'Nationals') ||
                         (S === 'EWC' && T === 'Nationals');
       if (!confident) return;
       let adv = 0, qnc = 0, dnq = 0;
@@ -1426,9 +1439,12 @@
       if (EXIT[i] > 0 && data.exitSplit && data.exitSplit[realStages[i]]) { splitShown = true; break; }
     }
     if (splitShown) {
-      let qn = '\u201cQualified\u201d here means placing in an advancing position at that stage (Regionals: top 15 in a springboard event for Groups A/B \u2014 Groups C/D advance to Zones automatically';
-      if (Number(year) >= 2026) qn += '; Zones: top 18 \u2014 places 1\u20133 to Junior Nationals, 4\u201318 to E/W/C';
-      qn += '). A few who qualify on the average-score rule may show as \u201cdid not qualify\u201d';
+      const ns = Number(year) >= 2026;
+      let qn = '\u201cQualified\u201d here means placing in an advancing position at that stage \u2014 ';
+      qn += ns
+        ? 'Regionals: top 15 in a springboard event for Groups A/B (Groups C/D advance to Zones automatically); Zones: top 18 (places 1\u20133 to Junior Nationals, 4\u201318 to E/W/C)'
+        : 'Regionals: top 15 in a springboard event (all groups); Zones \u2192 Junior Nationals: springboard top 10 or platform top 7 (places 11\u201316 are alternates only)';
+      qn += '. A few who qualify on the average-score rule may show as \u201cdid not qualify\u201d';
       notes.push(qn);
     }
 
