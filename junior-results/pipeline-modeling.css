@@ -1316,3 +1316,386 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   }
   .pm-section:hover { box-shadow: none; }
 }
+
+/* ============================================================
+   ADDITIONS: Cross-cohort comparison, Score/Placement,
+   Status & Flags, Athlete Career, Click-to-filter
+   ============================================================ */
+
+/* ── Click-to-filter affordances ─────────────────────────── */
+.pm-demo-rowhead.clickable,
+.pm-zone-row.clickable {
+  cursor: pointer;
+  transition: background .14s, box-shadow .14s;
+}
+.pm-demo-rowhead.clickable:hover {
+  background: rgba(0,154,199,.12) !important;
+  box-shadow: inset 3px 0 0 #009ac7;
+}
+.pm-demo-rowhead.clickable.active {
+  background: rgba(23,31,105,.10) !important;
+  box-shadow: inset 3px 0 0 #171f69;
+}
+.pm-zone-row.clickable:hover { background: rgba(0,154,199,.06); border-radius: 8px; }
+.pm-zone-row.clickable.active { background: rgba(23,31,105,.07); border-radius: 8px; }
+.pm-demo-filter-on { color: #e31937; font-size: 10px; vertical-align: middle; }
+
+/* ── Cross-cohort comparison ─────────────────────────────── */
+.pm-cohort-cmp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 16px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 10px;
+}
+.pm-cohort-cmp-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #171f69;
+}
+.pm-cohort-cmp-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.pm-cohort-cmp-pill {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #e2e5ef);
+  background: #fff;
+  color: var(--ink-2, #2d3a4a);
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pm-cohort-cmp-pill:hover { border-color: #009ac7; color: #171f69; }
+.pm-cohort-cmp-pill.active {
+  background: #009ac7;
+  color: #fff;
+  border-color: #009ac7;
+  box-shadow: 0 2px 6px rgba(0,154,199,.3);
+}
+.pm-cohort-cmp-clear {
+  background: none;
+  border: 1px solid rgba(227,25,55,.3);
+  color: #e31937;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pm-cohort-cmp-clear:hover { background: #e31937; color: #fff; }
+.pm-cohort-cmp-slot { margin-bottom: 18px; }
+.pm-cohort-cmp-overlay {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+
+/* ── Score & Placement (box plots) ───────────────────────── */
+.pm-score-wrap {
+  background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 12px;
+  padding: 20px;
+  overflow-x: auto;
+}
+.pm-score-svg { width: 100%; min-width: 700px; height: auto; display: block; }
+.pm-score-event-label {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  fill: #171f69;
+}
+.pm-score-event-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--ink-3, #5a6a7e);
+}
+.pm-score-hint {
+  font-size: 12px;
+  color: var(--ink-3, #5a6a7e);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 240px;
+}
+.pm-score-cutoff-key {
+  display: inline-block;
+  width: 16px;
+  border-top: 2px dashed #e31937;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+/* ── Status & Flags ──────────────────────────────────────── */
+.pm-status-block {
+  background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+.pm-status-block-head {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #171f69;
+  margin-bottom: 4px;
+}
+.pm-status-block-sub {
+  font-size: 12px;
+  color: var(--ink-3, #5a6a7e);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.pm-status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pm-status-table th {
+  background: #171f69;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 9px 14px;
+  text-align: left;
+  font-weight: 700;
+}
+.pm-status-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line-2, #f0f2f8);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--ink-2, #2d3a4a);
+}
+.pm-status-table td:first-child,
+.pm-status-table td:nth-child(2) { font-family: var(--font-ui); }
+.pm-status-table tr:last-child td { border-bottom: none; }
+.pm-status-hot { color: #e31937 !important; font-weight: 800; }
+
+.pm-status-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.pm-status-flag-chip {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-left: 4px solid var(--c, #171f69);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.pm-status-flag-chip .cnt {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--c, #171f69);
+  line-height: 1;
+}
+.pm-status-flag-chip .lbl {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-3, #5a6a7e);
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+/* ── Athlete Career Trace ────────────────────────────────── */
+.pm-career-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.pm-career-input {
+  flex: 1;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  padding: 11px 16px;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 10px;
+  color: var(--ink, #0d1117);
+  transition: border-color .15s, box-shadow .15s;
+}
+.pm-career-input:focus {
+  outline: none;
+  border-color: #171f69;
+  box-shadow: 0 0 0 3px rgba(23,31,105,.1);
+}
+.pm-career-btn {
+  background: #171f69;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 24px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.pm-career-btn:hover { background: #0d1040; }
+.pm-career-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.pm-career-result {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pm-career-result:hover {
+  border-color: #009ac7;
+  box-shadow: 0 4px 12px rgba(0,154,199,.12);
+  transform: translateY(-1px);
+}
+.pm-career-result-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: #171f69;
+}
+.pm-career-result-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3, #5a6a7e);
+}
+.pm-career-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.pm-career-name {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: #171f69;
+}
+.pm-career-clear {
+  background: none;
+  border: 1px solid var(--line, #e2e5ef);
+  color: var(--ink-2, #2d3a4a);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pm-career-clear:hover { border-color: #171f69; color: #171f69; }
+.pm-career-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.pm-career-year {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.pm-career-year-label {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  color: #171f69;
+  padding-top: 8px;
+}
+.pm-career-stages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.pm-career-stage {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-top: 3px solid var(--c, #171f69);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.pm-career-stage-head {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--c, #171f69);
+  margin-bottom: 8px;
+}
+.pm-career-final-badge {
+  display: inline-block;
+  background: #e31937;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.pm-career-stage-body { display: flex; gap: 14px; }
+.pm-career-stat { display: flex; flex-direction: column; }
+.pm-career-stat .v {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink, #0d1117);
+  line-height: 1;
+}
+.pm-career-stat .l {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-3, #5a6a7e);
+  margin-top: 3px;
+}
+.pm-career-detail {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+}
+.pm-career-detail summary {
+  padding: 14px 18px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 13px;
+  color: #171f69;
+  cursor: pointer;
+  background: var(--surface-2, #f7f8fc);
+  user-select: none;
+}
+.pm-career-detail summary:hover { background: rgba(0,154,199,.06); }
+.pm-career-detail[open] summary { border-bottom: 1px solid var(--line, #e2e5ef); }
+.pm-career-detail .pm-status-table { border-radius: 0; }

@@ -66,12 +66,23 @@
     // Cohort progression state — scoped to that section
     cohortStartStage: 'Regionals',  // starting point of the traced cohort
     cohortShowFinals: true,         // expose Nationals Prelim/Final split
+    cohortCompareYears: [],         // cross-cohort comparison (empty = single year)
+    // Score & placement section state
+    scoringStage:   'Nationals',    // which stage's score distribution to show
+    // Athlete career trace state
+    careerQuery:    '',             // search box text
+    careerResults:  null,           // search candidate list
+    careerSelectedId: null,         // chosen diver_id_dm
+    careerData:     null,           // that diver's loaded history
     filterOptions: null,       // distinct values discovered from Neon
     funnelCache:    {},        // by year+filters key
     yoyCache:       null,      // by filters key
     demoCache:      {},        // by year+filters key
     cohortCache:    {},        // by year+startStage+filters key
+    cohortCompareCache: {},    // by years+startStage+filters key
     retentionCache: null,      // by filters key
+    scoringCache:   {},        // by year+stage+filters key
+    careerCache:    {},        // by diverId
     futureChampMeets: null,    // discovered list
     loading: false,
     error:   null,
@@ -262,30 +273,6 @@
     return out;
   }
 
-  /* Year-over-year aggregate: athletes & entries per stage per year */
-  async function loadYoYData(){
-    const ck = cacheKey('yoy');
-    if (pmState.yoyCache && pmState.yoyCache.__ck === ck) return pmState.yoyCache;
-    const fb = buildFiltersSql(1);
-    const sql =
-      "SELECT year, stage, " +
-      "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
-      "  COUNT(*)::int AS event_entries " +
-      "FROM core.event_results " +
-      "WHERE " + whereJrCircuit() + fb.sql + " " +
-      "GROUP BY year, stage " +
-      "ORDER BY year, stage";
-    const r = await neonQ(sql, fb.params);
-    const out = r.rows.map(row => ({
-      year: Number(row.year),
-      stage: row.stage,
-      unique_athletes: Number(row.unique_athletes) || 0,
-      event_entries:   Number(row.event_entries) || 0,
-    }));
-    out.__ck = ck;
-    pmState.yoyCache = out;
-    return out;
-  }
 
   /* Per-athlete attendance pattern (how many stops each athlete attended) *
    * — used by financial overlay to compute "actual cost paid" distribution */
@@ -529,13 +516,217 @@
     return out;
   }
 
+  /* === CROSS-COHORT COMPARISON (#2) ===========================================
+   * Run loadCohortProgression for multiple years and return them together so
+   * the renderer can overlay trajectories. Reuses the single-cohort loader.
+   * ========================================================================== */
+  async function loadCohortComparison(years, startStage){
+    const ck = years.slice().sort().join(',') + '|cmp|' + startStage + '|' + cacheKey('x');
+    if (pmState.cohortCompareCache[ck]) return pmState.cohortCompareCache[ck];
+    const results = await Promise.all(years.map(y => loadCohortProgression(y, startStage)));
+    const out = results.map((data, i) => ({ year: years[i], data: data }));
+    pmState.cohortCompareCache[ck] = out;
+    return out;
+  }
+
+  /* === SCORE & PLACEMENT DISTRIBUTION (#1) ====================================
+   * Per-event score distribution at a chosen stage: min / Q1 / median / Q3 /
+   * max / mean / stddev / n via PERCENTILE_CONT, plus the 15th-best score
+   * (advancement-cutoff proxy) so we can draw it as a reference line.
+   * Uses each athlete's best score per event (MAX across rounds).
+   * ========================================================================== */
+  async function loadScoringData(year, stage){
+    const ck = cacheKey(year) + '|score|' + stage;
+    if (pmState.scoringCache[ck]) return pmState.scoringCache[ck];
+    const fb = buildFiltersSql(3);  // $1=year, $2=stage, $3+=filters
+
+    const sql =
+      "WITH scored AS ( " +
+      "  SELECT event_key, " +
+      "    MAX(event_name) AS event_name, MAX(discipline) AS discipline, " +
+      "    MAX(age_group) AS age_group, MAX(gender) AS gender, " +
+      "    diver_id_dm, MAX(score) AS best_score " +
+      "  FROM core.event_results " +
+      "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + " " +
+      "    AND score IS NOT NULL AND score > 0 " +
+      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      fb.sql + " " +
+      "  GROUP BY event_key, diver_id_dm " +
+      ") " +
+      "SELECT event_key, " +
+      "  MAX(event_name) AS event_name, MAX(discipline) AS discipline, " +
+      "  MAX(age_group) AS age_group, MAX(gender) AS gender, " +
+      "  COUNT(*)::int AS n, " +
+      "  MIN(best_score)::numeric AS min_s, " +
+      "  PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY best_score)::numeric AS q1, " +
+      "  PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY best_score)::numeric AS median_s, " +
+      "  PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY best_score)::numeric AS q3, " +
+      "  MAX(best_score)::numeric AS max_s, " +
+      "  AVG(best_score)::numeric AS mean_s, " +
+      "  STDDEV_POP(best_score)::numeric AS sd_s, " +
+      "  (SELECT s2.best_score FROM scored s2 WHERE s2.event_key = scored.event_key " +
+      "    ORDER BY s2.best_score DESC OFFSET 14 LIMIT 1)::numeric AS cutoff_15th " +
+      "FROM scored " +
+      "GROUP BY event_key " +
+      "HAVING COUNT(*) >= 6 " +
+      "ORDER BY age_group, gender, discipline";
+    const r = await neonQ(sql, [year, stage].concat(fb.params));
+
+    const out = r.rows.map(row => ({
+      event_key: row.event_key,
+      event_name: row.event_name,
+      discipline: row.discipline,
+      age_group: row.age_group,
+      gender: row.gender,
+      n: Number(row.n) || 0,
+      min: Number(row.min_s) || 0,
+      q1: Number(row.q1) || 0,
+      median: Number(row.median_s) || 0,
+      q3: Number(row.q3) || 0,
+      max: Number(row.max_s) || 0,
+      mean: Number(row.mean_s) || 0,
+      sd: Number(row.sd_s) || 0,
+      cutoff15: row.cutoff_15th != null ? Number(row.cutoff_15th) : null,
+    }));
+    pmState.scoringCache[ck] = out;
+    return out;
+  }
+
+  /* === ATHLETE CAREER SEARCH + TRACE (#3) =====================================
+   * Search core.divers by name or DiveMeets ID; trace one athlete's full
+   * multi-year, multi-stage journey across the Junior Circuit.
+   * ========================================================================== */
+  async function searchAthletes(query){
+    const term = (query || '').trim();
+    if (term.length < 2) return [];
+    if (/^\d+$/.test(term)) {
+      const r = await neonQ(
+        "SELECT diver_id_dm, first_name, last_name FROM core.divers WHERE diver_id_dm = $1 LIMIT 5",
+        [term]
+      );
+      return r.rows.map(x => ({ id: x.diver_id_dm, first: x.first_name, last: x.last_name, count: null }));
+    }
+    const r = await neonQ(
+      "SELECT d.diver_id_dm, d.first_name, d.last_name, COUNT(er.*)::int AS result_count " +
+      "FROM core.divers d " +
+      "JOIN core.event_results er ON er.diver_id_dm = d.diver_id_dm AND er.is_junior_circuit " +
+      "WHERE (d.last_name ILIKE $1 OR d.first_name ILIKE $1 OR (d.first_name || ' ' || d.last_name) ILIKE $1) " +
+      "GROUP BY d.diver_id_dm, d.first_name, d.last_name " +
+      "ORDER BY result_count DESC LIMIT 20",
+      ['%' + term + '%']
+    );
+    return r.rows.map(x => ({ id: x.diver_id_dm, first: x.first_name, last: x.last_name, count: Number(x.result_count) }));
+  }
+
+  async function loadAthleteCareer(diverId){
+    const key = String(diverId);
+    if (pmState.careerCache[key]) return pmState.careerCache[key];
+    const nameR = await neonQ("SELECT first_name, last_name FROM core.divers WHERE diver_id_dm = $1", [key]);
+    const name = nameR.rows.length ? (nameR.rows[0].first_name + ' ' + nameR.rows[0].last_name) : ('Diver ' + diverId);
+    const r = await neonQ(
+      "SELECT year, stage, meet_name, event_name, event_key, round, place, score, team_name, " +
+      "  age_group, gender, discipline, zone, region " +
+      "FROM core.event_results WHERE diver_id_dm = $1 AND is_junior_circuit " +
+      "ORDER BY year, " +
+      "  CASE stage WHEN 'Regionals' THEN 1 WHEN 'Zones' THEN 2 WHEN 'EWC' THEN 3 WHEN 'Nationals' THEN 4 ELSE 5 END, " +
+      "  event_name, " +
+      "  CASE round WHEN 'Prelim' THEN 1 WHEN 'Semifinal' THEN 2 WHEN 'Final' THEN 3 ELSE 4 END",
+      [key]
+    );
+    const out = {
+      id: diverId, name: name,
+      rows: r.rows.map(x => ({
+        year: Number(x.year), stage: x.stage, meet_name: x.meet_name,
+        event_name: x.event_name, event_key: x.event_key, round: x.round,
+        place: x.place != null ? Number(x.place) : null,
+        score: x.score != null ? Number(x.score) : null,
+        team_name: x.team_name, age_group: x.age_group, gender: x.gender,
+        discipline: x.discipline, zone: x.zone, region: x.region,
+      })),
+    };
+    pmState.careerCache[key] = out;
+    return out;
+  }
+
+  /* === SPECIAL STATUS & FLAGS (#4) ============================================
+   * Two sources, presented honestly:
+   *  (a) "Declined Nationals" — computable from Neon across ALL years: athletes
+   *      who placed in an advancing position at the prior stage but never
+   *      appeared at the next stage. Mirrors the existing app's declined logic
+   *      (pre-2026: Zones top-3 → Nationals; 2026+: Zones → EWC/Nationals).
+   *  (b) Foreign / Dual / HPS / YMCA — only tracked client-side in
+   *      window.USAD_EWC_DATA and only for 2026. We surface them when present
+   *      and clearly note that status tracking began in 2026 otherwise.
+   * ========================================================================== */
+  async function loadStatusData(year){
+    const ck = cacheKey(year) + '|status';
+    if (pmState.statusCache && pmState.statusCache[ck]) return pmState.statusCache[ck];
+    if (!pmState.statusCache) pmState.statusCache = {};
+    const fb = buildFiltersSql(2);  // $1=year, $2+=filters
+
+    // Declined: qualified at Zones (best place 1-3 pre-2026 advancing band, or
+    // any Zones appearance 2026+) but did NOT appear at the next stage.
+    const nextStageClause = year >= 2026
+      ? "stage IN ('EWC','Nationals')"
+      : "stage = 'Nationals'";
+    const declinedSql =
+      "WITH zone_qual AS ( " +
+      "  SELECT DISTINCT event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender, MIN(place) AS best_place " +
+      "  FROM core.event_results " +
+      "  WHERE year = $1 AND stage = 'Zones' AND " + whereJrCircuit() + " AND place IS NOT NULL " +
+      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      fb.sql + " " +
+      "  GROUP BY event_key, diver_id_dm, diver_first, diver_last, team_name, age_group, gender " +
+      "), " +
+      "advanced AS ( " +
+      "  SELECT DISTINCT event_key, diver_id_dm FROM core.event_results " +
+      "  WHERE year = $1 AND " + nextStageClause + " AND " + whereJrCircuit() + " " +
+      fb.sql + " " +
+      ") " +
+      "SELECT zq.age_group, zq.gender, " +
+      "  COUNT(*)::int AS qualified, " +
+      "  COUNT(*) FILTER (WHERE a.diver_id_dm IS NULL)::int AS declined " +
+      "FROM zone_qual zq " +
+      "LEFT JOIN advanced a ON a.event_key = zq.event_key AND a.diver_id_dm = zq.diver_id_dm " +
+      "WHERE zq.best_place BETWEEN 1 AND 18 " +
+      "GROUP BY zq.age_group, zq.gender " +
+      "ORDER BY zq.age_group, zq.gender";
+    let declinedRows = [];
+    try {
+      const dr = await neonQ(declinedSql, [year].concat(fb.params));
+      declinedRows = dr.rows.map(x => ({
+        age_group: x.age_group, gender: x.gender,
+        qualified: Number(x.qualified) || 0, declined: Number(x.declined) || 0,
+      }));
+    } catch (e) { declinedRows = []; }
+
+    // Client-side status flags (2026 only)
+    const ewc = (typeof window !== 'undefined' && window.USAD_EWC_DATA) ? window.USAD_EWC_DATA : null;
+    const flags = { tracked: false, hps: 0, foreign: 0, dual: 0, ymca: 0 };
+    if (ewc && year >= 2026) {
+      flags.tracked = true;
+      flags.hps     = (ewc.hpsAthletes     || []).length;
+      flags.foreign = (ewc.foreignAthletes || []).length;
+      flags.dual    = (ewc.dualCitizens || ewc.dualCitizenAthletes || []).length;
+      flags.ymca    = (ewc.ymcaAthletes    || []).length;
+    }
+
+    const out = { year, declined: declinedRows, flags };
+    pmState.statusCache[ck] = out;
+    return out;
+  }
+
   /* Clear caches when filter toggles change                            */
   function invalidateCache(){
     pmState.funnelCache = {};
     pmState.yoyCache = null;
     pmState.demoCache = {};
     pmState.cohortCache = {};
+    pmState.cohortCompareCache = {};
     pmState.retentionCache = null;
+    pmState.scoringCache = {};
+    pmState.statusCache = {};
+    // careerCache is keyed by diver id and not affected by filters; keep it.
   }
 
   /* ── Utility: format helpers ───────────────────────────── */
@@ -692,6 +883,7 @@
           dropdown('gender',     'Gender',     opts.gender) +
           dropdown('discipline', 'Discipline', opts.discipline) +
           dropdown('zone',       'Zone',       opts.zone) +
+          dropdown('region',     'Region',     opts.region) +
         '</div>' +
       '</div>'
     );
@@ -898,6 +1090,9 @@
       let maxVal = 0;
       buckets.forEach(b => activeStages.forEach(s => { maxVal = Math.max(maxVal, matrix[b][s] || 0); }));
 
+      // Map demographics dimension to its master-filter key
+      const filterKey = { age: 'age_group', gender: 'gender', discipline: 'discipline' }[dim] || null;
+
       // Build the matrix as a card with bucket rows × stage columns
       let rows = '';
       buckets.forEach(b => {
@@ -910,7 +1105,12 @@
                  (v > 0 ? fmtNum(v) : '<span style="opacity:.4">—</span>') +
                  '</td>';
         }).join('');
-        rows += '<tr><th>' + escapeHtml(b) + '</th>' + cells +
+        // Row header is click-to-filter when this dimension maps to a filter
+        const isActiveFilter = filterKey && pmState.filters[filterKey] === b;
+        const thAttrs = filterKey
+          ? ' class="pm-demo-rowhead clickable' + (isActiveFilter ? ' active' : '') + '" data-pm-setfilter="' + filterKey + ':' + escapeHtml(b) + '" title="Click to filter all sections by ' + escapeHtml(b) + '"'
+          : ' class="pm-demo-rowhead"';
+        rows += '<tr><th' + thAttrs + '>' + escapeHtml(b) + (isActiveFilter ? ' <span class="pm-demo-filter-on">●</span>' : '') + '</th>' + cells +
                 '<td class="pm-demo-total">' + fmtNum(total) + '</td></tr>';
       });
 
@@ -957,8 +1157,9 @@
         const pctR = (z.regionals / maxRegionals * 100).toFixed(1);
         const pctZ = z.regionals ? (z.zones / z.regionals * 100).toFixed(0) : 0;
         const pctE = z.regionals ? (z.ewc   / z.regionals * 100).toFixed(0) : 0;
-        bars += '<div class="pm-zone-row">' +
-          '<div class="pm-zone-label">' + escapeHtml('Zone ' + z.zone) + '</div>' +
+        const zoneActive = pmState.filters.zone === String(z.zone);
+        bars += '<div class="pm-zone-row clickable' + (zoneActive ? ' active' : '') + '" data-pm-setfilter="zone:' + escapeHtml(String(z.zone)) + '" title="Click to filter all sections by Zone ' + escapeHtml(String(z.zone)) + '">' +
+          '<div class="pm-zone-label">' + escapeHtml('Zone ' + z.zone) + (zoneActive ? ' <span class="pm-demo-filter-on">●</span>' : '') + '</div>' +
           '<div class="pm-zone-bar-stack">' +
             '<div class="pm-zone-bar regionals" style="width: ' + pctR + '%">' +
               '<span class="pm-zone-bar-text">' + fmtNum(z.regionals) + ' at Regionals</span>' +
@@ -1193,6 +1394,20 @@
       .filter(s => s !== 'EWC' || year >= 2026)
       .map(s => '<button class="pm-cohort-stage-btn ' + (s === startStage ? 'active' : '') + '" data-pm-cohort-stage="' + s + '">Starting at ' + STAGE_SHORT[s] + '</button>')
       .join('');
+
+    // Cross-cohort comparison year pills (#2)
+    const years = pmState.yearsAvailable || [];
+    const cmpYears = pmState.cohortCompareYears || [];
+    const cmpPills = years.map(y =>
+      '<button class="pm-cohort-cmp-pill ' + (cmpYears.indexOf(y) >= 0 ? 'active' : '') + '" data-pm-cohort-cmp="' + y + '">' + y + '</button>'
+    ).join('');
+    const cmpControls =
+      '<div class="pm-cohort-cmp">' +
+        '<span class="pm-cohort-cmp-label">Compare years</span>' +
+        '<div class="pm-cohort-cmp-pills">' + cmpPills + '</div>' +
+        (cmpYears.length ? '<button class="pm-cohort-cmp-clear" id="pmCohortCmpClear">Clear</button>' : '') +
+      '</div>';
+
     const controls =
       '<div class="pm-cohort-controls">' +
         '<div class="pm-cohort-stage-picker">' + stageBtns + '</div>' +
@@ -1210,9 +1425,71 @@
       ? '<div class="pm-cohort-era">This cohort runs under the <strong>2026+ four-meet system</strong> (Regionals → Zones → E/W/C → Junior Nationals). Counts within a stage are non-cumulative and stack to that stage\'s total.</div>'
       : '<div class="pm-cohort-era">This cohort runs under the <strong>2021–2025 three-meet system</strong> (Regionals → Zones → Junior Nationals — no E/W/C). Counts within a stage are non-cumulative and stack to that stage\'s total.</div>';
 
+    // Cross-cohort comparison overlay (rendered async into a slot)
+    const cmpSlot = cmpYears.length ? '<div id="pmCohortCmpSlot" class="pm-cohort-cmp-slot"><div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading comparison cohorts…</div></div></div>' : '';
+
     return sectionShell(3, 'Cohort Progression — Following the ' + year + ' ' + STAGE_SHORT[startStage] + ' cohort',
-      'Every athlete in the starting cohort, traced through every subsequent stage of the ' + year + ' pipeline. The bar width is the share of the starting cohort that reached that stage; each color segment is a placement tier at that stage. For Junior Nationals, the round-by-round breakdown below shows who made the Final, who was in the Semifinal round, and who was cut after Prelim.',
-      kpis + eraNote + controls + lanes);
+      'Every athlete in the starting cohort, traced through every subsequent stage of the ' + year + ' pipeline. The bar width is the share of the starting cohort that reached that stage; each color segment is a placement tier at that stage. For Junior Nationals, the round-by-round breakdown below shows who made the Final, who was in the Semifinal round, and who was cut after Prelim. Use "Compare years" to overlay multiple cohorts\' survival curves.',
+      kpis + eraNote + controls + cmpControls + cmpSlot + lanes);
+  }
+
+  /* Cross-cohort comparison overlay — retention curves for multiple years */
+  function renderCohortComparisonOverlay(comparison, startStage){
+    if (!comparison || !comparison.length) return '';
+    const startIdx = STAGE_ORDER.indexOf(startStage);
+    const stages = STAGE_ORDER.slice(startIdx);
+
+    // Build retention curve per year: % of starting cohort reaching each stage
+    const W = 760, H = 340, padL = 60, padR = 140, padT = 20, padB = 50;
+    const innerW = W - padL - padR, innerH = H - padT - padB;
+    const colors = ['#171f69', '#009ac7', '#e31937', '#d97706', '#059669', '#7c3aed'];
+
+    function xOf(i){ return padL + (stages.length === 1 ? 0 : i / (stages.length - 1) * innerW); }
+    function yOf(rate){ return padT + innerH - rate * innerH; }
+
+    let svg = '<svg class="pm-score-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
+    // Gridlines
+    for (let i = 0; i <= 4; i++) {
+      const rate = i / 4, yp = yOf(rate);
+      svg += '<line class="pm-grid-line" x1="' + padL + '" y1="' + yp + '" x2="' + (padL + innerW) + '" y2="' + yp + '"/>';
+      svg += '<text class="pm-axis-tick" x="' + (padL - 6) + '" y="' + (yp + 3) + '" text-anchor="end">' + (rate*100).toFixed(0) + '%</text>';
+    }
+    // Stage labels on x-axis
+    stages.forEach((s, i) => {
+      svg += '<text class="pm-bar-year" x="' + xOf(i) + '" y="' + (padT + innerH + 20) + '" text-anchor="middle">' + STAGE_SHORT[s] + '</text>';
+    });
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT+innerH) + '"/>';
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT+innerH) + '" x2="' + (padL+innerW) + '" y2="' + (padT+innerH) + '"/>';
+
+    comparison.forEach((c, ci) => {
+      const color = colors[ci % colors.length];
+      const base = c.data.cohortSize || (c.data.stages[startStage] ? c.data.stages[startStage].reached : 0);
+      const pts = [];
+      stages.forEach((s, i) => {
+        const reached = (c.data.stages[s] || {}).reached || 0;
+        if (s === 'EWC' && c.year < 2026) return; // skip non-existent stage
+        const rate = base ? reached / base : 0;
+        pts.push({ x: xOf(i), y: yOf(rate), rate: rate, reached: reached, stage: s });
+      });
+      if (pts.length >= 2) {
+        svg += '<polyline points="' + pts.map(p => p.x + ',' + p.y).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round"/>';
+      }
+      pts.forEach(p => {
+        svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="' + color + '" stroke="#fff" stroke-width="2"><title>' +
+          c.year + ' — ' + STAGE_SHORT[p.stage] + ': ' + (p.rate*100).toFixed(1) + '% (' + fmtNum(p.reached) + ')</title></circle>';
+      });
+      // Right-edge year label
+      const lastPt = pts[pts.length - 1];
+      if (lastPt) {
+        svg += '<text x="' + (padL + innerW + 8) + '" y="' + (lastPt.y + 4) + '" class="pm-bar-value" fill="' + color + '">' + c.year + ' (' + fmtNum(base) + ')</text>';
+      }
+    });
+    svg += '</svg>';
+
+    return '<div class="pm-cohort-cmp-overlay">' +
+      '<div class="pm-yoy-chart-title">Cohort survival comparison — share of starting cohort reaching each stage</div>' +
+      '<div class="pm-yoy-chart-sub">Each line is one year\'s ' + STAGE_SHORT[startStage] + ' cohort. The y-axis is the percent of that starting cohort still competing at each later stage. Numbers in the legend are the starting cohort size. This normalizes for cohort size so you compare retention shape, not just volume.</div>' +
+      svg + '</div>';
   }
 
   /* ── SECTION 4: Retention Rate Trends (replaces stacked YoY bars) ──
@@ -1449,137 +1726,310 @@
     return svg;
   }
 
-  /* Build a stacked-bar chart: years × stages */
-  function renderYoYStackedChart(years, byYearStage, metric, title){
-    const W = 540, H = 320;
-    const padL = 50, padR = 14, padT = 14, padB = 50;
-    const innerW = W - padL - padR;
-    const innerH = H - padT - padB;
 
-    // Compute totals
-    const totals = years.map(y => {
-      const s = byYearStage[y] || {};
-      return STAGE_ORDER.reduce((a, st) => a + ((s[st] && s[st][metric]) || 0), 0);
-    });
-    const maxT = Math.max.apply(null, totals.concat([1]));
-    // Round up for nicer axis
-    const niceMax = niceCeiling(maxT);
+  /* ── SECTION 5: Score & Placement Distribution (#1) ──────
+     Box plots per event at a chosen stage, with the 15th-place cutoff score
+     drawn as a reference line so you can see how close the advancement cutoff
+     falls to the distribution's mass.
+  ──────────────────────────────────────────────────────── */
+  function renderScoringSection(year, data){
+    const stage = pmState.scoringStage;
+    const stagePicker = STAGE_ORDER
+      .filter(s => s !== 'EWC' || year >= 2026)
+      .map(s => '<button class="pm-cohort-stage-btn ' + (s === stage ? 'active' : '') + '" data-pm-score-stage="' + s + '">' + STAGE_SHORT[s] + '</button>')
+      .join('');
+    const picker = '<div class="pm-cohort-controls"><div class="pm-cohort-stage-picker">' + stagePicker + '</div>' +
+      '<div class="pm-score-hint">Box = middle 50% of scores (Q1–Q3). Line in box = median. Whiskers = full range. ' +
+      '<span class="pm-score-cutoff-key"></span> = 15th-place score (advancement cutoff proxy).</div></div>';
 
-    const stageColors = { Regionals: C.blue, Zones: C.blue700, EWC: C.pool, Nationals: C.red };
-
-    const barW = innerW / years.length * 0.62;
-    const gap = innerW / years.length;
-
-    let svg = '<svg class="pm-yoy-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
-
-    // Gridlines & y-axis
-    const ticks = 5;
-    for (let i = 0; i <= ticks; i++) {
-      const yv = niceMax * i / ticks;
-      const yp = padT + innerH - (yv / niceMax) * innerH;
-      svg += '<line class="pm-grid-line" x1="' + padL + '" y1="' + yp + '" x2="' + (padL + innerW) + '" y2="' + yp + '"/>';
-      svg += '<text class="pm-axis-tick" x="' + (padL - 6) + '" y="' + (yp + 3) + '" text-anchor="end">' + fmtNum(Math.round(yv)) + '</text>';
+    if (!data) {
+      return sectionShell(5, 'Score & Placement Distribution — ' + year,
+        'How scores are distributed within each event, and where the advancement cutoff falls on that distribution.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading score distributions…</div></div>');
     }
-    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + innerH) + '"/>';
-    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (padL + innerW) + '" y2="' + (padT + innerH) + '"/>';
+    if (!data.length) {
+      return sectionShell(5, 'Score & Placement Distribution — ' + year + ' ' + STAGE_SHORT[stage],
+        'How scores are distributed within each event at this stage.',
+        picker + '<div class="pm-empty"><div class="pm-empty-title">No score data</div>' +
+        '<div class="pm-empty-sub">No events at ' + STAGE_SHORT[stage] + ' in ' + year + ' have enough scored athletes (need 6+) under the current filters.</div></div>');
+    }
 
-    // Bars
-    years.forEach(function(y, i){
-      const cx = padL + gap * i + gap/2;
-      const x0 = cx - barW/2;
-      const stages = byYearStage[y] || {};
-      let yCursor = padT + innerH;
-      STAGE_ORDER.forEach(function(st){
-        const v = (stages[st] && stages[st][metric]) || 0;
-        if (v <= 0) return;
-        const h = (v / niceMax) * innerH;
-        const yTop = yCursor - h;
-        svg += '<rect class="pm-bar-rect" x="' + x0 + '" y="' + yTop + '" width="' + barW + '" height="' + h + '" ' +
-               'fill="' + stageColors[st] + '" opacity="0.92"><title>' + y + ' ' + STAGE_LABELS[st] + ': ' + fmtNum(v) + '</title></rect>';
-        yCursor = yTop;
-      });
-      // Year label
-      svg += '<text class="pm-bar-year" x="' + cx + '" y="' + (padT + innerH + 18) + '" text-anchor="middle">' + y + '</text>';
-      // Total label on top
-      const tot = totals[i];
-      const totY = padT + innerH - (tot / niceMax) * innerH - 4;
-      svg += '<text class="pm-bar-value" x="' + cx + '" y="' + totY + '" text-anchor="middle">' + fmtNum(tot) + '</text>';
+    // Global score range across all events for a shared x-axis
+    const allMin = Math.min.apply(null, data.map(d => d.min));
+    const allMax = Math.max.apply(null, data.map(d => d.max));
+    const pad = (allMax - allMin) * 0.05 || 10;
+    const axMin = Math.max(0, allMin - pad);
+    const axMax = allMax + pad;
+
+    // KPIs
+    const totalEvents = data.length;
+    const avgN = Math.round(data.reduce((a, d) => a + d.n, 0) / totalEvents);
+    const widestEvent = data.slice().sort((a, b) => (b.max - b.min) - (a.max - a.min))[0];
+    const tightestEvent = data.slice().sort((a, b) => (a.max - a.min) - (b.max - b.min))[0];
+    let kpis = '<div class="pm-kpi-strip">';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Events analyzed</div>' +
+            '<div class="pm-kpi-value">' + totalEvents + '</div>' +
+            '<div class="pm-kpi-sub">at ' + STAGE_SHORT[stage] + ', ' + year + ' (6+ scored)</div></div>';
+    kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Median field size</div>' +
+            '<div class="pm-kpi-value">' + avgN + '</div>' +
+            '<div class="pm-kpi-sub">scored athletes per event</div></div>';
+    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Widest spread</div>' +
+            '<div class="pm-kpi-value" style="font-size:22px">' + escapeHtml(shortEventLabel(widestEvent)) + '</div>' +
+            '<div class="pm-kpi-sub">range ' + widestEvent.min.toFixed(0) + '–' + widestEvent.max.toFixed(0) + '</div></div>';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Tightest spread</div>' +
+            '<div class="pm-kpi-value" style="font-size:22px">' + escapeHtml(shortEventLabel(tightestEvent)) + '</div>' +
+            '<div class="pm-kpi-sub">range ' + tightestEvent.min.toFixed(0) + '–' + tightestEvent.max.toFixed(0) + '</div></div>';
+    kpis += '</div>';
+
+    // Box-plot rows
+    const rowH = 46, labelW = 230, chartW = 720, padR = 30;
+    const W = labelW + chartW + padR;
+    const H = data.length * rowH + 50;
+    function xOf(v){ return labelW + (v - axMin) / (axMax - axMin) * chartW; }
+
+    let svg = '<svg class="pm-score-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
+    // X-axis ticks
+    const tickCount = 6;
+    for (let i = 0; i <= tickCount; i++) {
+      const v = axMin + (axMax - axMin) * i / tickCount;
+      const x = xOf(v);
+      svg += '<line x1="' + x + '" y1="34" x2="' + x + '" y2="' + (H - 12) + '" stroke="#eaecf3" stroke-width="1"/>';
+      svg += '<text x="' + x + '" y="24" text-anchor="middle" class="pm-axis-tick">' + v.toFixed(0) + '</text>';
+    }
+    svg += '<text x="' + (labelW + chartW/2) + '" y="' + (H - 1) + '" text-anchor="middle" class="pm-bar-label">Score</text>';
+
+    data.forEach((d, i) => {
+      const cy = 44 + i * rowH + rowH/2 - 6;
+      const boxTop = cy - 11, boxH = 22;
+      // Whisker
+      svg += '<line x1="' + xOf(d.min) + '" y1="' + cy + '" x2="' + xOf(d.max) + '" y2="' + cy + '" stroke="#94a3b8" stroke-width="1.5"/>';
+      svg += '<line x1="' + xOf(d.min) + '" y1="' + (cy-6) + '" x2="' + xOf(d.min) + '" y2="' + (cy+6) + '" stroke="#94a3b8" stroke-width="1.5"/>';
+      svg += '<line x1="' + xOf(d.max) + '" y1="' + (cy-6) + '" x2="' + xOf(d.max) + '" y2="' + (cy+6) + '" stroke="#94a3b8" stroke-width="1.5"/>';
+      // Box (Q1–Q3)
+      svg += '<rect x="' + xOf(d.q1) + '" y="' + boxTop + '" width="' + (xOf(d.q3) - xOf(d.q1)) + '" height="' + boxH + '" ' +
+             'fill="rgba(0,154,199,0.22)" stroke="#009ac7" stroke-width="1.5" rx="3"><title>' +
+             escapeHtml(d.event_name) + ' — n=' + d.n + ', median ' + d.median.toFixed(1) + ', Q1 ' + d.q1.toFixed(1) + ', Q3 ' + d.q3.toFixed(1) + '</title></rect>';
+      // Median line
+      svg += '<line x1="' + xOf(d.median) + '" y1="' + boxTop + '" x2="' + xOf(d.median) + '" y2="' + (boxTop+boxH) + '" stroke="#171f69" stroke-width="2.5"/>';
+      // Mean dot
+      svg += '<circle cx="' + xOf(d.mean) + '" cy="' + cy + '" r="3" fill="#171f69" opacity="0.5"/>';
+      // 15th-place cutoff reference line
+      if (d.cutoff15 != null && d.n >= 15) {
+        svg += '<line x1="' + xOf(d.cutoff15) + '" y1="' + (boxTop-5) + '" x2="' + xOf(d.cutoff15) + '" y2="' + (boxTop+boxH+5) + '" stroke="#e31937" stroke-width="2" stroke-dasharray="3,2"><title>15th-place score: ' + d.cutoff15.toFixed(1) + '</title></line>';
+      }
+      // Event label
+      svg += '<text x="' + (labelW - 12) + '" y="' + (cy - 1) + '" text-anchor="end" class="pm-score-event-label">' + escapeHtml(shortEventLabel(d)) + '</text>';
+      svg += '<text x="' + (labelW - 12) + '" y="' + (cy + 11) + '" text-anchor="end" class="pm-score-event-sub">n=' + d.n + '</text>';
     });
-
-    // Legend
-    let lx = padL;
-    const ly = H - 14;
-    STAGE_ORDER.forEach(function(st){
-      svg += '<rect x="' + lx + '" y="' + (ly - 8) + '" width="10" height="10" fill="' + stageColors[st] + '"/>';
-      svg += '<text class="pm-bar-label" x="' + (lx + 14) + '" y="' + ly + '">' + STAGE_SHORT[st] + '</text>';
-      lx += 90;
-    });
-
     svg += '</svg>';
 
-    return {
-      title: title,
-      sub: metric === 'unique_athletes'
-        ? 'Each bar segment is the number of distinct athletes who competed at that stage.'
-        : 'Total entries — one athlete can enter multiple events (e.g., 1m + 3m + synchro).',
-      svg: svg,
-    };
+    return sectionShell(5, 'Score & Placement Distribution — ' + year + ' ' + STAGE_SHORT[stage],
+      'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores. The red dashed line marks the 15th-place score — a proxy for the advancement cutoff — so you can see whether the cutoff sits in the dense middle of the field or out in the tail.',
+      kpis + picker + '<div class="pm-score-wrap">' + svg + '</div>');
   }
 
-  /* Revenue chart: line of aggregate per-meet entry fee revenue */
-  function renderYoYRevenueChart(yearTotals){
-    const W = 540, H = 320;
-    const padL = 60, padR = 14, padT = 14, padB = 50;
-    const innerW = W - padL - padR;
-    const innerH = H - padT - padB;
+  function shortEventLabel(d){
+    // Compress "Group A Boys 3 Meter Springboard" → "A Boys 3m"
+    var ag = (d.age_group || '').replace('Group ', '');
+    var disc = (d.discipline || '');
+    disc = disc.replace(/spring ?board/i, 'm').replace(/platform/i, 'Plat').replace(/1 ?meter/i, '1m').replace(/3 ?meter/i, '3m').replace(/synchro/i, 'Syn');
+    var g = (d.gender || '').replace('Boys', 'B').replace('Girls', 'G').replace('Male','B').replace('Female','G');
+    var s = (ag + ' ' + g + ' ' + disc).replace(/\s+/g, ' ').trim();
+    return s || (d.event_name || d.event_key || '').slice(0, 24);
+  }
 
-    const maxR = Math.max.apply(null, yearTotals.map(y => y.revenue).concat([1]));
-    const niceMax = niceCeiling(maxR);
-    const ticks = 5;
-
-    let svg = '<svg class="pm-yoy-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
-
-    for (let i = 0; i <= ticks; i++) {
-      const yv = niceMax * i / ticks;
-      const yp = padT + innerH - (yv / niceMax) * innerH;
-      svg += '<line class="pm-grid-line" x1="' + padL + '" y1="' + yp + '" x2="' + (padL + innerW) + '" y2="' + yp + '"/>';
-      svg += '<text class="pm-axis-tick" x="' + (padL - 6) + '" y="' + (yp + 3) + '" text-anchor="end">' + fmtMoney(yv) + '</text>';
+  /* ── SECTION 6: Special Status & Flags (#4) ──────────────
+     Declined-Nationals analysis (computable all years from Neon) plus the
+     2026-only foreign/dual/HPS/YMCA flags from client-side EWC data.
+  ──────────────────────────────────────────────────────── */
+  function renderStatusSection(year, data){
+    if (!data) {
+      return sectionShell(6, 'Special Status & Flags — ' + year,
+        'Athletes who qualified but declined to advance, plus special-status flags where tracked.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading status data…</div></div>');
     }
-    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + innerH) + '"/>';
-    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (padL + innerW) + '" y2="' + (padT + innerH) + '"/>';
 
-    const gap = innerW / Math.max(yearTotals.length - 1, 1);
+    // Declined totals
+    const totQual = data.declined.reduce((a, r) => a + r.qualified, 0);
+    const totDeclined = data.declined.reduce((a, r) => a + r.declined, 0);
+    const declineRate = totQual ? (totDeclined / totQual * 100).toFixed(1) : '—';
+    const nextStageLabel = year >= 2026 ? 'E/W/C or Nationals' : 'Junior Nationals';
 
-    // Area under line
-    let pts = yearTotals.map((y, i) => {
-      const x = padL + gap * i;
-      const yp = padT + innerH - (y.revenue / niceMax) * innerH;
-      return x + ',' + yp;
-    });
-    // Build area path
-    const areaPath = 'M' + (padL) + ',' + (padT + innerH) + ' L' +
-                     pts.join(' L') + ' L' + (padL + gap * (yearTotals.length-1)) + ',' + (padT + innerH) + ' Z';
-    svg += '<path d="' + areaPath + '" fill="' + C.amber + '" opacity="0.18"/>';
+    let kpis = '<div class="pm-kpi-strip">';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Qualified at Zones (top 18)</div>' +
+            '<div class="pm-kpi-value">' + fmtNum(totQual) + '</div>' +
+            '<div class="pm-kpi-sub">' + year + ' advancing-band athletes</div></div>';
+    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Declined to advance</div>' +
+            '<div class="pm-kpi-value">' + fmtNum(totDeclined) + '</div>' +
+            '<div class="pm-kpi-sub">did not appear at ' + nextStageLabel + '</div></div>';
+    kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Decline rate</div>' +
+            '<div class="pm-kpi-value">' + declineRate + '%</div>' +
+            '<div class="pm-kpi-sub">of qualified athletes</div></div>';
+    if (data.flags.tracked) {
+      kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Special-status flags</div>' +
+              '<div class="pm-kpi-value" style="font-size:20px">' + (data.flags.foreign + data.flags.dual + data.flags.hps + data.flags.ymca) + '</div>' +
+              '<div class="pm-kpi-sub">foreign + dual + HPS + YMCA</div></div>';
+    }
+    kpis += '</div>';
 
-    // Line
-    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + C.amber + '" stroke-width="2.5"/>';
+    // Declined breakdown table by age × gender
+    let tbl = '';
+    if (data.declined.length) {
+      tbl = '<div class="pm-status-block"><div class="pm-status-block-head">Declined to advance — by age group &amp; gender</div>' +
+        '<div class="pm-status-block-sub">Athletes who finished in the top 18 at ' + year + ' Zones but did not appear at ' + nextStageLabel + '. ' +
+        'A high decline rate may indicate cost, travel, or scheduling barriers.</div>' +
+        '<table class="pm-status-table"><thead><tr><th>Age group</th><th>Gender</th><th>Qualified</th><th>Declined</th><th>Decline rate</th></tr></thead><tbody>';
+      data.declined.forEach(r => {
+        const rate = r.qualified ? (r.declined / r.qualified * 100).toFixed(1) : '0.0';
+        const hot = Number(rate) >= 25;
+        tbl += '<tr><td>' + escapeHtml(r.age_group || '—') + '</td><td>' + escapeHtml(r.gender || '—') + '</td>' +
+          '<td>' + fmtNum(r.qualified) + '</td><td>' + fmtNum(r.declined) + '</td>' +
+          '<td class="' + (hot ? 'pm-status-hot' : '') + '">' + rate + '%</td></tr>';
+      });
+      tbl += '</tbody></table></div>';
+    } else {
+      tbl = '<div class="pm-empty"><div class="pm-empty-sub">No declined-athlete data available for ' + year + ' under the current filters.</div></div>';
+    }
 
-    // Points & labels
-    yearTotals.forEach(function(y, i){
-      const x = padL + gap * i;
-      const yp = padT + innerH - (y.revenue / niceMax) * innerH;
-      svg += '<circle cx="' + x + '" cy="' + yp + '" r="5" fill="' + C.amber + '" stroke="#fff" stroke-width="2"/>';
-      svg += '<text class="pm-bar-value" x="' + x + '" y="' + (yp - 10) + '" text-anchor="middle" fill="' + C.amber + '">' + fmtMoney(y.revenue) + '</text>';
-      svg += '<text class="pm-bar-year" x="' + x + '" y="' + (padT + innerH + 18) + '" text-anchor="middle">' + y.year + '</text>';
-    });
+    // Status flags block
+    let flagsBlock = '';
+    if (data.flags.tracked) {
+      const chip = (label, count, color) =>
+        '<div class="pm-status-flag-chip" style="--c:' + color + '"><div class="cnt">' + fmtNum(count) + '</div><div class="lbl">' + label + '</div></div>';
+      flagsBlock = '<div class="pm-status-block"><div class="pm-status-block-head">Special-status athletes — ' + year + '</div>' +
+        '<div class="pm-status-block-sub">From the official E/W/C status data. These designations affect qualification and counting rules.</div>' +
+        '<div class="pm-status-flags">' +
+          chip('Foreign', data.flags.foreign, '#009ac7') +
+          chip('Dual citizen', data.flags.dual, '#171f69') +
+          chip('HPS', data.flags.hps, '#d97706') +
+          chip('YMCA', data.flags.ymca, '#e31937') +
+        '</div></div>';
+    } else {
+      flagsBlock = '<div class="pm-footnote"><strong>Note:</strong> Foreign / dual-citizen / HPS / YMCA status flags began being tracked in 2026 with the E/W/C system. ' +
+        'For ' + year + ', only the declined-to-advance analysis above is available — it is computed directly from placement and attendance data.</div>';
+    }
 
-    svg += '</svg>';
+    return sectionShell(6, 'Special Status & Flags — ' + year,
+      'Two lenses on the athletes the standard funnel doesn\'t fully capture. First, athletes who earned an advancing position at Zones but chose not to continue — the "declined" cohort, which speaks to barriers like cost and travel. Second, special-status designations (foreign, dual-citizen, High Performance Squad, YMCA) where the data is tracked.',
+      kpis + tbl + flagsBlock);
+  }
 
-    return {
-      title: 'Aggregate entry-fee revenue, by year',
-      sub: 'Sum of (athletes-at-stage × entry-fee-at-stage) for all stages. Estimates revenue collected from athlete entries; does not include judge fees or other revenue.',
-      svg: svg,
-    };
+  /* ── SECTION 7: Athlete Career Trace (#3) ────────────────
+     Search by name or DiveMeets ID; render one athlete's full multi-year
+     journey as a timeline of meets, placements, and scores.
+  ──────────────────────────────────────────────────────── */
+  function renderCareerSection(){
+    const searchBox =
+      '<div class="pm-career-search">' +
+        '<input type="text" id="pmCareerInput" class="pm-career-input" placeholder="Search by athlete name or DiveMeets ID…" ' +
+          'value="' + escapeHtml(pmState.careerQuery || '') + '" autocomplete="off">' +
+        '<button class="pm-career-btn" id="pmCareerGo">Search</button>' +
+      '</div>';
+
+    let resultsBlock = '';
+    if (pmState.careerResults && !pmState.careerSelectedId) {
+      if (!pmState.careerResults.length) {
+        resultsBlock = '<div class="pm-empty"><div class="pm-empty-sub">No athletes found matching "' + escapeHtml(pmState.careerQuery) + '". Try a different spelling or a DiveMeets ID.</div></div>';
+      } else {
+        resultsBlock = '<div class="pm-career-results">' +
+          pmState.careerResults.map(a =>
+            '<button class="pm-career-result" data-pm-career-id="' + escapeHtml(String(a.id)) + '">' +
+              '<span class="pm-career-result-name">' + escapeHtml((a.first || '') + ' ' + (a.last || '')) + '</span>' +
+              '<span class="pm-career-result-meta">DM ' + escapeHtml(String(a.id)) + (a.count != null ? ' · ' + a.count + ' results' : '') + '</span>' +
+            '</button>'
+          ).join('') +
+        '</div>';
+      }
+    }
+
+    let careerBlock = '';
+    if (pmState.careerSelectedId && pmState.careerData) {
+      const c = pmState.careerData;
+      // Group rows by year, then stage
+      const byYear = {};
+      c.rows.forEach(r => {
+        if (!byYear[r.year]) byYear[r.year] = {};
+        if (!byYear[r.year][r.stage]) byYear[r.year][r.stage] = [];
+        byYear[r.year][r.stage].push(r);
+      });
+      const years = Object.keys(byYear).map(Number).sort();
+
+      // Career summary KPIs
+      const allYears = years.length;
+      const bestPlace = Math.min.apply(null, c.rows.filter(r => r.place != null).map(r => r.place).concat([Infinity]));
+      const natFinals = c.rows.filter(r => r.stage === 'Nationals' && r.round === 'Final').length;
+      const teams = Array.from(new Set(c.rows.map(r => r.team_name).filter(Boolean)));
+
+      let kpis = '<div class="pm-kpi-strip">';
+      kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Seasons on record</div>' +
+              '<div class="pm-kpi-value">' + allYears + '</div>' +
+              '<div class="pm-kpi-sub">' + (years.length ? years[0] + '–' + years[years.length-1] : '') + '</div></div>';
+      kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Best placement</div>' +
+              '<div class="pm-kpi-value">' + (bestPlace === Infinity ? '—' : ordinal(bestPlace)) + '</div>' +
+              '<div class="pm-kpi-sub">across all meets</div></div>';
+      kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Junior Nationals finals</div>' +
+              '<div class="pm-kpi-value">' + natFinals + '</div>' +
+              '<div class="pm-kpi-sub">final-round appearances</div></div>';
+      kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Team(s)</div>' +
+              '<div class="pm-kpi-value" style="font-size:16px;line-height:1.2">' + escapeHtml(teams[0] || '—') + '</div>' +
+              '<div class="pm-kpi-sub">' + (teams.length > 1 ? '+' + (teams.length-1) + ' more' : 'club affiliation') + '</div></div>';
+      kpis += '</div>';
+
+      // Timeline
+      let timeline = '<div class="pm-career-timeline">';
+      years.forEach(y => {
+        timeline += '<div class="pm-career-year">' +
+          '<div class="pm-career-year-label">' + y + '</div>' +
+          '<div class="pm-career-stages">';
+        STAGE_ORDER.forEach(stg => {
+          const rows = byYear[y][stg];
+          if (!rows || !rows.length) return;
+          // Best place at this stage
+          const places = rows.filter(r => r.place != null).map(r => r.place);
+          const best = places.length ? Math.min.apply(null, places) : null;
+          const madeFinal = rows.some(r => r.round === 'Final');
+          const stageColor = { Regionals: '#171f69', Zones: '#1e2d8a', EWC: '#009ac7', Nationals: '#e31937' }[stg] || '#171f69';
+          // Distinct events
+          const events = Array.from(new Set(rows.map(r => r.event_name))).length;
+          timeline += '<div class="pm-career-stage" style="--c:' + stageColor + '">' +
+            '<div class="pm-career-stage-head">' + STAGE_SHORT[stg] + (madeFinal && stg === 'Nationals' ? ' <span class="pm-career-final-badge">FINAL</span>' : '') + '</div>' +
+            '<div class="pm-career-stage-body">' +
+              '<div class="pm-career-stat"><span class="v">' + (best != null ? ordinal(best) : '—') + '</span><span class="l">best place</span></div>' +
+              '<div class="pm-career-stat"><span class="v">' + events + '</span><span class="l">event' + (events===1?'':'s') + '</span></div>' +
+            '</div>' +
+          '</div>';
+        });
+        timeline += '</div></div>';
+      });
+      timeline += '</div>';
+
+      // Detail table (collapsed)
+      let detail = '<details class="pm-career-detail"><summary>Full result detail (' + c.rows.length + ' rows)</summary>' +
+        '<table class="pm-status-table"><thead><tr><th>Year</th><th>Stage</th><th>Event</th><th>Round</th><th>Place</th><th>Score</th></tr></thead><tbody>';
+      c.rows.forEach(r => {
+        detail += '<tr><td>' + r.year + '</td><td>' + escapeHtml(r.stage) + '</td>' +
+          '<td>' + escapeHtml(r.event_name || '') + '</td><td>' + escapeHtml(r.round || '—') + '</td>' +
+          '<td>' + (r.place != null ? r.place : '—') + '</td><td>' + (r.score != null ? r.score.toFixed(2) : '—') + '</td></tr>';
+      });
+      detail += '</tbody></table></details>';
+
+      careerBlock =
+        '<div class="pm-career-header">' +
+          '<div class="pm-career-name">' + escapeHtml(c.name) + '</div>' +
+          '<button class="pm-career-clear" id="pmCareerClear">← New search</button>' +
+        '</div>' +
+        kpis + timeline + detail;
+    }
+
+    return sectionShell(7, 'Athlete Career Trace',
+      'Search for any athlete by name or DiveMeets ID to see their full journey through the Junior Circuit — every season, every stage, best placements, and Junior Nationals final-round appearances. Useful for answering "how has this athlete progressed?" or verifying an individual\'s history.',
+      searchBox + resultsBlock + careerBlock);
+  }
+
+  function ordinal(n){
+    if (n == null) return '—';
+    const s = ['th','st','nd','rd'], v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
   }
 
   /* ── SECTION 3: Financial detail (full breakdown) ──────── */
@@ -1668,7 +2118,7 @@
       '</div>' +
       feeTable + hist;
 
-    return sectionShell(5, 'Financial Breakdown — ' + year,
+    return sectionShell(8, 'Financial Breakdown — ' + year,
       'What families paid and what the NGB collected in entry fees. The headline number ' +
       'people often quote is the "full-circuit cost" — what one athlete would pay to compete at every meet — ' +
       'but most athletes only paid for the meets they actually qualified into. This section shows both.',
@@ -1759,7 +2209,89 @@
         const s = this.getAttribute('data-pm-cohort-stage');
         if (s && s !== pmState.cohortStartStage) {
           pmState.cohortStartStage = s;
-          pmState.cohortCache = {};  // invalidate just this section's cache
+          pmState.cohortCache = {};       // invalidate just this section's cache
+          pmState.cohortCompareCache = {}; // comparison depends on start stage too
+          renderPipeline();
+        }
+      });
+    });
+    // Cross-cohort comparison year pills (#2)
+    document.querySelectorAll('[data-pm-cohort-cmp]').forEach(el => {
+      el.addEventListener('click', function(){
+        const y = Number(this.getAttribute('data-pm-cohort-cmp'));
+        const idx = pmState.cohortCompareYears.indexOf(y);
+        if (idx >= 0) pmState.cohortCompareYears.splice(idx, 1);
+        else pmState.cohortCompareYears.push(y);
+        renderPipeline();
+      });
+    });
+    const cmpClear = document.getElementById('pmCohortCmpClear');
+    if (cmpClear) cmpClear.addEventListener('click', function(){
+      pmState.cohortCompareYears = [];
+      renderPipeline();
+    });
+    // Score & placement stage picker (#1)
+    document.querySelectorAll('[data-pm-score-stage]').forEach(el => {
+      el.addEventListener('click', function(){
+        const s = this.getAttribute('data-pm-score-stage');
+        if (s && s !== pmState.scoringStage) {
+          pmState.scoringStage = s;
+          renderPipeline();
+        }
+      });
+    });
+    // Athlete career search (#3)
+    const careerInput = document.getElementById('pmCareerInput');
+    const careerGo = document.getElementById('pmCareerGo');
+    async function doCareerSearch(){
+      const q = careerInput ? careerInput.value.trim() : '';
+      if (q.length < 2) return;
+      pmState.careerQuery = q;
+      pmState.careerSelectedId = null;
+      pmState.careerData = null;
+      pmState.careerResults = [{ id: '__loading__', first: 'Searching', last: '…' }];
+      try {
+        pmState.careerResults = await searchAthletes(q);
+      } catch (e) {
+        pmState.careerResults = [];
+      }
+      renderPipeline();
+    }
+    if (careerGo) careerGo.addEventListener('click', doCareerSearch);
+    if (careerInput) careerInput.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') { e.preventDefault(); doCareerSearch(); }
+    });
+    document.querySelectorAll('[data-pm-career-id]').forEach(el => {
+      el.addEventListener('click', async function(){
+        const id = this.getAttribute('data-pm-career-id');
+        pmState.careerSelectedId = id;
+        try {
+          pmState.careerData = await loadAthleteCareer(id);
+        } catch (e) {
+          pmState.careerData = null;
+        }
+        renderPipeline();
+      });
+    });
+    const careerClear = document.getElementById('pmCareerClear');
+    if (careerClear) careerClear.addEventListener('click', function(){
+      pmState.careerSelectedId = null;
+      pmState.careerData = null;
+      pmState.careerResults = null;
+      pmState.careerQuery = '';
+      renderPipeline();
+    });
+    // Click-to-filter (#5): any element with data-pm-setfilter="key:value"
+    document.querySelectorAll('[data-pm-setfilter]').forEach(el => {
+      el.addEventListener('click', function(){
+        const spec = this.getAttribute('data-pm-setfilter');
+        const ci = spec.indexOf(':');
+        if (ci < 0) return;
+        const key = spec.slice(0, ci), val = spec.slice(ci + 1);
+        if (pmState.filters.hasOwnProperty(key)) {
+          // Toggle: clicking the same value again clears it
+          pmState.filters[key] = (pmState.filters[key] === val) ? '' : val;
+          invalidateCache();
           renderPipeline();
         }
       });
@@ -1851,12 +2383,14 @@
       }
 
       // Load all needed data in parallel
-      const [filterOpts, funnel, demo, cohort, retention] = await Promise.all([
+      const [filterOpts, funnel, demo, cohort, retention, scoring, status] = await Promise.all([
         loadFilterOptions(),
         loadFunnelData(pmState.selectedYear),
         loadDemographicsData(pmState.selectedYear),
         loadCohortProgression(pmState.selectedYear, pmState.cohortStartStage),
         loadRetentionRates(),
+        loadScoringData(pmState.selectedYear, pmState.scoringStage),
+        loadStatusData(pmState.selectedYear),
       ]);
 
       // Render skeleton with controls
@@ -1868,6 +2402,9 @@
           renderDemographicsSection(pmState.selectedYear, demo) +
           renderCohortSection(pmState.selectedYear, cohort) +
           renderRetentionSection(retention) +
+          renderScoringSection(pmState.selectedYear, scoring) +
+          renderStatusSection(pmState.selectedYear, status) +
+          renderCareerSection() +
           '<div id="pmFinSlot"></div>' +
         '</div>';
 
@@ -1880,6 +2417,18 @@
         } catch (e) {
           const slot = document.getElementById('pmFinSlot');
           if (slot) slot.innerHTML = '<div class="pm-error"><strong>Could not load financial detail:</strong> ' + escapeHtml(e.message) + '</div>';
+        }
+      }
+
+      // Cross-cohort comparison overlay (async)
+      if (pmState.cohortCompareYears && pmState.cohortCompareYears.length) {
+        try {
+          const cmp = await loadCohortComparison(pmState.cohortCompareYears, pmState.cohortStartStage);
+          const slot = document.getElementById('pmCohortCmpSlot');
+          if (slot) slot.innerHTML = renderCohortComparisonOverlay(cmp, pmState.cohortStartStage);
+        } catch (e) {
+          const slot = document.getElementById('pmCohortCmpSlot');
+          if (slot) slot.innerHTML = '<div class="pm-error"><strong>Could not load comparison:</strong> ' + escapeHtml(e.message) + '</div>';
         }
       }
 
