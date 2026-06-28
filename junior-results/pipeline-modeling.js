@@ -31,6 +31,33 @@
     Regionals:'Regionals', Zones:'Zones', EWC:'E/W/C', Nationals:'Nationals'
   };
 
+  /* Nominal end-of-window for each stage, per the rulebook competition calendar
+     (Art. 301.2): Regions ~ first weekend of May, Zones ~ first weekend of June,
+     E/W/C ends July 3, Junior Nationals ~ early August. A small buffer is added
+     for results being entered after the last day of competition. Used only to
+     tell whether a stage that already has SOME results is still being contested
+     (so we don't present a half-finished meet as a settled, final stage). The
+     check is client-side against the viewer's current date, so it self-resolves
+     once a meet wraps. */
+  function stageEndDate(year, stage){
+    year = Number(year);
+    switch (stage) {
+      case 'Regionals': return new Date(year, 4, 12);  // ~May 12
+      case 'Zones':     return new Date(year, 5, 10);  // ~June 10
+      case 'EWC':       return new Date(year, 6, 4);   // July 3 + buffer
+      case 'Nationals': return new Date(year, 7, 15);  // ~mid-August
+      default: return null;
+    }
+  }
+  // 'not_started' (no results yet) | 'in_progress' (some results, still being
+  // contested) | 'complete' (window has passed).
+  function stageStatus(year, stage, hasData){
+    if (!hasData) return 'not_started';
+    const end = stageEndDate(year, stage);
+    if (!end) return 'complete';
+    return (Date.now() <= end.getTime()) ? 'in_progress' : 'complete';
+  }
+
   /* Brand colors (mirror design.css tokens, used in inline SVG) */
   const C = {
     blue:    '#171f69',
@@ -591,7 +618,7 @@
       "  AVG(best_score)::numeric AS mean_s, " +
       "  STDDEV_POP(best_score)::numeric AS sd_s, " +
       "  (SELECT s2.best_score FROM scored s2 WHERE s2.event_key = scored.event_key " +
-      "    ORDER BY s2.best_score DESC OFFSET 14 LIMIT 1)::numeric AS cutoff_15th " +
+      "    ORDER BY s2.best_score DESC OFFSET 17 LIMIT 1)::numeric AS cutoff_18th " +
       "FROM scored " +
       "GROUP BY event_key " +
       "HAVING COUNT(*) >= 6 " +
@@ -612,7 +639,7 @@
       max: Number(row.max_s) || 0,
       mean: Number(row.mean_s) || 0,
       sd: Number(row.sd_s) || 0,
-      cutoff15: row.cutoff_15th != null ? Number(row.cutoff_15th) : null,
+      cutoff18: row.cutoff_18th != null ? Number(row.cutoff_18th) : null,
     }));
     pmState.scoringCache[ck] = out;
     return out;
@@ -737,7 +764,13 @@
       flags.ymca    = (ewc.ymcaAthletes    || []).length;
     }
 
-    const out = { year, declined: declinedRows, flags };
+    // The "did not continue" lens is only meaningful once the stages an athlete
+    // could advance to have finished. In 2026 the season is still live (E/W/C
+    // through early July, Junior Nationals in late July/August), so we flag it
+    // and let the renderer hold the decline numbers back until it's decided.
+    const advancementComplete = Date.now() > stageEndDate(year, 'Nationals').getTime();
+
+    const out = { year, declined: declinedRows, flags, advancementComplete };
     pmState.statusCache[ck] = out;
     return out;
   }
@@ -962,16 +995,22 @@
     const fullCircuitCost = STAGE_ORDER.reduce(function(a,s){ return a + (fees[s] || 0); }, 0);
     const nationalsHasData = has('Nationals');
 
+    /* ---- is the deepest stage still being contested? (e.g. E/W/C mid-meet) ---- */
+    const deepStageName = realStages[realStages.length - 1];
+    const deepInProgress = stageStatus(year, deepStageName, true) === 'in_progress';
+    const lastGate = realStages.length - 2;  // gate INTO the deepest stage (-1 if single stage)
+
     /* ======================= KPI STRIP (re-framed) ======================= */
     const entryStage = realStages[0];
     const deepStage  = realStages[realStages.length - 1];
 
-    // biggest single-gate drop-off (the actionable bottleneck)
+    // biggest single-gate drop-off — only over COMPLETED gates. A still-running
+    // stage has no trustworthy drop-off yet, so skip the gate leading into it.
     let bigIdx = -1, bigVal = -1;
-    EXIT.forEach(function(v,i){ if (v > bigVal){ bigVal = v; bigIdx = i; } });
-    // largest late-entry inflow (hidden in a funnel)
+    EXIT.forEach(function(v,i){ if (deepInProgress && i === lastGate) return; if (v > bigVal){ bigVal = v; bigIdx = i; } });
+    // largest late-entry inflow (also skip the still-running stage)
     let entIdx = -1, entVal = -1;
-    ENTER.forEach(function(v,i){ if (v > entVal){ entVal = v; entIdx = i; } });
+    ENTER.forEach(function(v,i){ if (deepInProgress && i === realStages.length - 1) return; if (v > entVal){ entVal = v; entIdx = i; } });
 
     const totalEntries = realStages.reduce(function(a,s){ return a + EN[s]; }, 0);
 
@@ -984,9 +1023,9 @@
       '</div>';
     kpiHtml +=
       '<div class="pm-kpi pool">' +
-        '<div class="pm-kpi-label">Reached ' + STAGE_SHORT[deepStage] + '</div>' +
+        '<div class="pm-kpi-label">Reached ' + STAGE_SHORT[deepStage] + (deepInProgress ? ' (so far)' : '') + '</div>' +
         '<div class="pm-kpi-value">' + fmtNum(N[deepStage]) + '</div>' +
-        '<div class="pm-kpi-sub">' + (pendingStage ? 'deepest stage completed so far' : 'the championship field') + '</div>' +
+        '<div class="pm-kpi-sub">' + (deepInProgress ? 'in progress \u00b7 results still arriving' : (pendingStage ? 'deepest stage completed so far' : 'the championship field')) + '</div>' +
       '</div>';
     if (bigIdx >= 0 && bigVal > 0) {
       kpiHtml +=
@@ -1108,8 +1147,9 @@
       // advance count riding the current
       const midx = (x1 + x2) / 2;
       if (ha >= 22) {
+        const advWord = (deepInProgress && i === lastGate) ? ' advanced so far' : ' advanced';
         svg += '<text class="pm-flow-advlabel" x="' + midx + '" y="' + (Y0 + Math.min(ha/2 + 5, ha - 6)) + '" text-anchor="middle">' +
-               fmtNum(A[i]) + ' advanced</text>';
+               fmtNum(A[i]) + advWord + '</text>';
       }
     }
 
@@ -1125,6 +1165,7 @@
 
     /* ---- exit tributaries (red), shedding downward ---- */
     for (let i = 0; i < realStages.length - 1; i++){
+      if (deepInProgress && i === lastGate) continue;  // drop-off into a still-running stage isn't known yet
       if (EXIT[i] <= 0) continue;
       const x1 = gateLeft(i) + wNode;
       const ha = hOf(A[i]);
@@ -1144,6 +1185,7 @@
 
     /* ---- late-entry inflows (pale blue), rising from a lower lane into the next post ---- */
     for (let i = 1; i < realStages.length; i++){
+      if (deepInProgress && i === realStages.length - 1) continue;  // inflow to a still-running stage isn't known yet
       const he = hOf(ENTER[i]);
       if (ENTER[i] < 8 || he < 6) continue;   // tiny inflows handled in footnote
       const x2 = gateLeft(i);
@@ -1163,8 +1205,10 @@
       const x = gateLeft(i);
       const h = hOf(N[s]);
       const cx = cxOf(i);
+      const isIP = deepInProgress && i === realStages.length - 1;
       // post
-      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + h + '" rx="6" fill="url(#pmFlowPost)"/>';
+      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + h + '" rx="6" fill="url(#pmFlowPost)"' + (isIP ? ' opacity="0.5"' : '') + '/>';
+      if (isIP) svg += '<rect x="' + (x - 1.5) + '" y="' + (Y0 - 1.5) + '" width="' + (wNode + 3) + '" height="' + (h + 3) + '" rx="7" fill="none" stroke="#009ac7" stroke-width="1.5" stroke-dasharray="4 4"/>';
       svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="4" rx="2" fill="#009ac7"/>';
       // connector tick from header to post
       svg += '<line x1="' + cx + '" y1="160" x2="' + cx + '" y2="' + (Y0 - 6) + '" stroke="#cdd3e6" stroke-width="1" stroke-dasharray="1 4"/>';
@@ -1173,14 +1217,18 @@
       if (tl[0]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tl[0]) + '</text>';
       if (tl[1]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tl[1]) + '</text>';
       svg += '<text class="pm-flow-count" x="' + cx + '" y="94" text-anchor="middle">' + fmtNum(N[s]) + '</text>';
-      svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">divers \u00b7 ' + fmtNum(EN[s]) + ' entries</text>';
-      const feeTxt = (fees[s] !== undefined && fees[s] !== null)
-        ? (fees[s] > 0 ? '$' + fees[s] + ' entry fee' : 'no separate entry fee')
-        : '';
-      if (feeTxt) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">' + feeTxt + '</text>';
-      if (pmState.showFinancials && fees[s]) {
-        svg += '<text class="pm-flow-rev" x="' + cx + '" y="150" text-anchor="middle">' +
-               fmtMoney(N[s] * fees[s]) + ' collected</text>';
+      svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">divers' + (isIP ? ' so far' : '') + ' \u00b7 ' + fmtNum(EN[s]) + ' entries</text>';
+      if (isIP) {
+        svg += '<text x="' + cx + '" y="133" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="700" fill="#0d7fa6">\u25cf in progress</text>';
+      } else {
+        const feeTxt = (fees[s] !== undefined && fees[s] !== null)
+          ? (fees[s] > 0 ? '$' + fees[s] + ' entry fee' : 'no separate entry fee')
+          : '';
+        if (feeTxt) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">' + feeTxt + '</text>';
+        if (pmState.showFinancials && fees[s]) {
+          svg += '<text class="pm-flow-rev" x="' + cx + '" y="150" text-anchor="middle">' +
+                 fmtMoney(N[s] * fees[s]) + ' collected</text>';
+        }
       }
     });
 
@@ -1208,6 +1256,7 @@
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6)"></span>Advancing current \u2014 divers who competed at the next stage too</span>' +
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 competed at this stage but not the next</span>' +
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 first appeared at this stage (byes / new entrants)</span>' +
+        (deepInProgress ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6);opacity:0.5;box-shadow:inset 0 0 0 1.5px #009ac7"></span>In progress \u2014 results still arriving</span>' : '') +
         (pendingStage ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>' : '') +
         (pmState.showFinancials ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#d97706"></span>Entry-fee revenue collected</span>' : '') +
       '</div>';
@@ -1216,6 +1265,7 @@
     let notes = [];
     // tiny inflows folded into footnote
     for (let i = 1; i < realStages.length; i++){
+      if (deepInProgress && i === realStages.length - 1) continue;  // inflow to a still-running stage isn't final yet
       if (ENTER[i] > 0 && (ENTER[i] < 8 || hOf(ENTER[i]) < 6)) {
         notes.push(fmtNum(ENTER[i]) + ' diver' + (ENTER[i]>1?'s':'') + ' entered at ' + STAGE_SHORT[realStages[i]] +
           ' without a ' + STAGE_SHORT[realStages[i-1]] + ' result (too few to draw)');
@@ -1232,6 +1282,21 @@
         });
       });
     }
+    // In-progress banner (prominent, brand-safe pool-blue on light)
+    let banner = '';
+    if (deepInProgress) {
+      const priorShort = realStages.length >= 2 ? STAGE_SHORT[realStages[realStages.length - 2]] : null;
+      const heldBack = priorShort
+        ? ', so the drop-off after ' + priorShort + ' and any late entries at ' + STAGE_SHORT[deepStageName] + ' are held back until the meet finishes'
+        : '';
+      banner =
+        '<div style="display:flex;gap:10px;align-items:flex-start;background:#eaf6fb;border-left:4px solid #009ac7;border-radius:8px;padding:12px 16px;margin:0 0 14px;font-family:Inter,sans-serif;font-size:14px;line-height:1.45;color:#0d2230">' +
+          '<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#009ac7;margin-top:5px;box-shadow:0 0 0 3px rgba(0,154,199,0.25)"></span>' +
+          '<span><strong>' + escapeHtml(STAGE_LABELS[deepStageName] || STAGE_SHORT[deepStageName]) + ' is still being contested.</strong> ' +
+          'The ' + STAGE_SHORT[deepStageName] + ' numbers below are preliminary and will keep changing as the remaining sessions are scored' + heldBack + '.</span>' +
+        '</div>';
+    }
+
     let footnote = '';
     if (notes.length) {
       footnote = '<div class="pm-footnote"><strong>Notes</strong> \u2014 ' + notes.join('; ') + '.</div>';
@@ -1245,7 +1310,7 @@
       ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
 
     return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
-      kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote);
+      banner + kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */
@@ -1928,13 +1993,17 @@
   ──────────────────────────────────────────────────────── */
   function renderScoringSection(year, data){
     const stage = pmState.scoringStage;
+    // 18th-place line is only meaningful at Zones from 2026 on: places 4–18
+    // advance to E/W/C, while places 1–3 advance straight to Junior Nationals.
+    const showCutoff = stage === 'Zones' && Number(year) >= 2026;
     const stagePicker = STAGE_ORDER
       .filter(s => s !== 'EWC' || year >= 2026)
       .map(s => '<button class="pm-cohort-stage-btn ' + (s === stage ? 'active' : '') + '" data-pm-score-stage="' + s + '">' + STAGE_SHORT[s] + '</button>')
       .join('');
     const picker = '<div class="pm-cohort-controls"><div class="pm-cohort-stage-picker">' + stagePicker + '</div>' +
-      '<div class="pm-score-hint">Box = middle 50% of scores (Q1–Q3). Line in box = median. Whiskers = full range. ' +
-      '<span class="pm-score-cutoff-key"></span> = 15th-place score (reference line only — see note).</div></div>';
+      '<div class="pm-score-hint">Box = middle 50% of scores (Q1–Q3). Line in box = median. Whiskers = full range.' +
+      (showCutoff ? ' <span class="pm-score-cutoff-key"></span> = 18th-place score (E/W/C qualifying cutoff).' : '') +
+      '</div></div>';
 
     if (!data) {
       return sectionShell(5, 'Score & Placement Distribution — ' + year,
@@ -2007,9 +2076,9 @@
       svg += '<line x1="' + xOf(d.median) + '" y1="' + boxTop + '" x2="' + xOf(d.median) + '" y2="' + (boxTop+boxH) + '" stroke="#171f69" stroke-width="2.5"/>';
       // Mean dot
       svg += '<circle cx="' + xOf(d.mean) + '" cy="' + cy + '" r="3" fill="#171f69" opacity="0.5"/>';
-      // 15th-place cutoff reference line
-      if (d.cutoff15 != null && d.n >= 15) {
-        svg += '<line x1="' + xOf(d.cutoff15) + '" y1="' + (boxTop-5) + '" x2="' + xOf(d.cutoff15) + '" y2="' + (boxTop+boxH+5) + '" stroke="#e31937" stroke-width="2" stroke-dasharray="3,2"><title>15th-place score: ' + d.cutoff15.toFixed(1) + '</title></line>';
+      // 18th-place cutoff reference line (Zones → E/W/C; places 1–3 go to Nationals)
+      if (showCutoff && d.cutoff18 != null && d.n >= 18) {
+        svg += '<line x1="' + xOf(d.cutoff18) + '" y1="' + (boxTop-5) + '" x2="' + xOf(d.cutoff18) + '" y2="' + (boxTop+boxH+5) + '" stroke="#e31937" stroke-width="2" stroke-dasharray="3,2"><title>18th-place score: ' + d.cutoff18.toFixed(1) + ' \u2014 places 4\u201318 advance to E/W/C; places 1\u20133 advance to Junior Nationals</title></line>';
       }
       // Event label (full words)
       svg += '<text x="' + (labelW - 12) + '" y="' + (cy - 1) + '" text-anchor="end" class="pm-score-event-label">' + escapeHtml(fullEventLabel(d)) + '</text>';
@@ -2018,7 +2087,8 @@
     svg += '</svg>';
 
     return sectionShell(5, 'Score & Placement Distribution — ' + year + ' ' + STAGE_SHORT[stage],
-      'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores. The red dashed line marks the 15th-place score in that event as a rough reference — note that advancement is decided event by event, so the true cutoff varies and is not a single fixed place.',
+      'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores.' +
+      (showCutoff ? ' The red dashed line marks the 18th-place score — the cutoff to advance to the E/W/C Championships (places 4–18). Places 1–3 in each event advance directly to Junior Nationals, and divers near the 18th-place score may also qualify on the average-score rule, so treat the line as the primary cutoff rather than an exact one.' : ''),
       kpis + picker + '<div class="pm-score-wrap">' + svg + '</div>');
   }
 
@@ -2057,6 +2127,41 @@
       return sectionShell(6, 'Special Status & Flags — ' + year,
         'Athletes who qualified but declined to advance, plus special-status flags where tracked.',
         '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading status data…</div></div>');
+    }
+
+    // Status flags block (valid to show even mid-season — these are registration
+    // designations, not advancement outcomes). Computed once, used by both paths.
+    let flagsBlock = '';
+    if (data.flags.tracked) {
+      const chip = (label, count, color) =>
+        '<div class="pm-status-flag-chip" style="--c:' + color + '"><div class="cnt">' + fmtNum(count) + '</div><div class="lbl">' + label + '</div></div>';
+      flagsBlock = '<div class="pm-status-block"><div class="pm-status-block-head">Special-status athletes — ' + year + '</div>' +
+        '<div class="pm-status-block-sub">From the official E/W/C status data. These designations affect qualification and counting rules.</div>' +
+        '<div class="pm-status-flags">' +
+          chip('Foreign', data.flags.foreign, '#009ac7') +
+          chip('Dual citizen', data.flags.dual, '#171f69') +
+          chip('HPS', data.flags.hps, '#d97706') +
+          chip('YMCA', data.flags.ymca, '#e31937') +
+        '</div></div>';
+    } else {
+      flagsBlock = '<div class="pm-footnote"><strong>Note:</strong> Foreign / dual-citizen / HPS / YMCA status flags began being tracked in 2026 with the E/W/C system. ' +
+        'For ' + year + ', only the declined-to-advance analysis is available — it is computed directly from placement and attendance data.</div>';
+    }
+
+    // The did-not-continue lens needs the stages an athlete could advance to be
+    // finished. While the season is still live, hold those numbers back rather
+    // than show a misleading "decline" rate that's really just unfinished meets.
+    if (!data.advancementComplete) {
+      const banner =
+        '<div style="display:flex;gap:10px;align-items:flex-start;background:#eaf6fb;border-left:4px solid #009ac7;border-radius:8px;padding:14px 16px;margin:0 0 14px;font-family:Inter,sans-serif;font-size:14px;line-height:1.45;color:#0d2230">' +
+          '<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#009ac7;margin-top:5px;box-shadow:0 0 0 3px rgba(0,154,199,0.25)"></span>' +
+          '<span><strong>Advancement is still in progress for ' + year + '.</strong> ' +
+          'Whether a Zone qualifier continued on can\'t be measured yet \u2014 places 1\u20133 advance straight to Junior Nationals and places 4\u201318 advance to the E/W/C Championships, and those meets are still being contested or have not yet been held. ' +
+          'A reliable did-not-continue rate will appear here once Junior Nationals is complete.</span>' +
+        '</div>';
+      return sectionShell(6, 'Special Status & Flags — ' + year,
+        'Two lenses on athletes the standard funnel doesn\'t fully capture: who qualified at Zones but didn\'t continue on, and special-status designations (foreign, dual-citizen, HPS, YMCA) where tracked. The did-not-continue lens waits until the season\u2019s remaining meets are complete.',
+        banner + flagsBlock);
     }
 
     // Declined totals
@@ -2100,24 +2205,6 @@
       tbl += '</tbody></table></div>';
     } else {
       tbl = '<div class="pm-empty"><div class="pm-empty-sub">No declined-athlete data available for ' + year + ' under the current filters.</div></div>';
-    }
-
-    // Status flags block
-    let flagsBlock = '';
-    if (data.flags.tracked) {
-      const chip = (label, count, color) =>
-        '<div class="pm-status-flag-chip" style="--c:' + color + '"><div class="cnt">' + fmtNum(count) + '</div><div class="lbl">' + label + '</div></div>';
-      flagsBlock = '<div class="pm-status-block"><div class="pm-status-block-head">Special-status athletes — ' + year + '</div>' +
-        '<div class="pm-status-block-sub">From the official E/W/C status data. These designations affect qualification and counting rules.</div>' +
-        '<div class="pm-status-flags">' +
-          chip('Foreign', data.flags.foreign, '#009ac7') +
-          chip('Dual citizen', data.flags.dual, '#171f69') +
-          chip('HPS', data.flags.hps, '#d97706') +
-          chip('YMCA', data.flags.ymca, '#e31937') +
-        '</div></div>';
-    } else {
-      flagsBlock = '<div class="pm-footnote"><strong>Note:</strong> Foreign / dual-citizen / HPS / YMCA status flags began being tracked in 2026 with the E/W/C system. ' +
-        'For ' + year + ', only the declined-to-advance analysis above is available — it is computed directly from placement and attendance data.</div>';
     }
 
     return sectionShell(6, 'Special Status & Flags — ' + year,
