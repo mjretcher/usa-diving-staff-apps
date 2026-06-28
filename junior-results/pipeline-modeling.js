@@ -316,24 +316,25 @@
   function renderHero(){
     return (
       '<div class="pm-hero">' +
-        '<div>' +
+        '<div class="pm-hero-inner">' +
+          '<div class="pm-hero-eyebrow">Junior Circuit Analytics</div>' +
           '<div class="pm-hero-title">Pipeline &amp; Modeling</div>' +
           '<div class="pm-hero-sub">' +
-            'Multi-year view of the USA Diving Junior Circuit — how athletes flow from Regionals through Zones, ' +
-            'East/West/Central, and into the Junior National Championships. ' +
-            'Toggle the financial overlay to see what families pay and what the meets generate in entry fees.' +
+            'Multi-year view of how athletes flow through the USA Diving Junior Circuit — ' +
+            'from Regionals through Zones, East/West/Central, and into the Junior National Championships. ' +
+            'Toggle the financial overlay to layer in what families pay and what each meet generates in entry fees.' +
           '</div>' +
         '</div>' +
         '<div class="pm-hero-actions">' +
-          '<button class="pm-hero-btn" id="pmPrintBtn" title="Open a print-ready report in a new window">' +
-            '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">' +
-              '<path d="M4 1h6v3M3 4h8v6H3zM4 10v3h6v-3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
-            '</svg> Print / PDF Report' +
-          '</button>' +
           '<button class="pm-hero-btn" id="pmRefreshBtn" title="Re-pull data from Neon">' +
             '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">' +
               '<path d="M12 7a5 5 0 1 1-1.5-3.5M12 1v3.5H8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
             '</svg> Refresh' +
+          '</button>' +
+          '<button class="pm-hero-btn primary" id="pmPrintBtn" title="Open a print-ready report in a new window">' +
+            '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">' +
+              '<path d="M4 1h6v3M3 4h8v6H3zM4 10v3h6v-3" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
+            '</svg> Print / PDF Report' +
           '</button>' +
         '</div>' +
       '</div>'
@@ -443,19 +444,19 @@
     }
     kpiHtml += '</div>';
 
-    // Funnel SVG
-    const W = 1100, H = 60 + stages.length * 90;
-    const bandH = 60;
+    // Funnel SVG — larger now that we have full width
+    const W = 1400, H = 80 + stages.length * 110;
+    const bandH = 80;
     const cx = W / 2;
     const maxAth = totalAthletes || 1;
-    const minWidth = 180; // never narrower than this so labels fit
+    const minWidth = 240; // never narrower than this so labels fit
 
     let svg = '<svg class="pm-funnel-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
 
     stages.forEach(function(s, i){
       const cnt = data.stages[s].unique_athletes;
       const entries = data.stages[s].event_entries;
-      const yTop = 30 + i * 90;
+      const yTop = 36 + i * 110;
       const widthRatio = Math.max(cnt / maxAth, minWidth / (W - 80));
       const bandW = Math.max(minWidth, (W - 80) * widthRatio);
       const x0 = cx - bandW/2;
@@ -467,41 +468,41 @@
       // Band shape (slight trapezoid for funnel feel)
       const nextW = (i < stages.length - 1)
         ? Math.max(minWidth, (W - 80) * Math.max(data.stages[stages[i+1]].unique_athletes / maxAth, minWidth / (W - 80)))
-        : bandW * 0.88;
+        : bandW * 0.86;
       const nx0 = cx - nextW/2;
 
-      // Trapezoid path
+      // Trapezoid path with rounded top-left and top-right on the first band
       svg += '<path d="M' + x0 + ' ' + yTop + ' L' + (x0+bandW) + ' ' + yTop +
              ' L' + (nx0 + nextW) + ' ' + (yTop + bandH) + ' L' + nx0 + ' ' + (yTop + bandH) + ' Z" ' +
-             'fill="' + fill + '" stroke="' + C.blue900 + '" stroke-width="1.2" opacity="0.95"/>';
+             'fill="' + fill + '" stroke="' + C.blue900 + '" stroke-width="1" opacity="0.96"/>';
 
       // Stage label (left side)
-      svg += '<text class="pm-funnel-stage-label" x="20" y="' + (yTop + 28) + '">' + escapeHtml(STAGE_LABELS[s]) + '</text>';
-      svg += '<text class="pm-funnel-stage-sublabel" x="20" y="' + (yTop + 46) + '">$' + (fees[s] || 0) + ' entry fee' + (year === 2026 ? '' : '') + '</text>';
+      svg += '<text class="pm-funnel-stage-label" x="24" y="' + (yTop + 32) + '">' + escapeHtml(STAGE_LABELS[s]) + '</text>';
+      svg += '<text class="pm-funnel-stage-sublabel" x="24" y="' + (yTop + 52) + '">' + (fees[s] !== undefined ? '$' + fees[s] + ' entry fee' : 'entry fee not set') + '</text>';
 
       // Athlete count (center of band)
-      svg += '<text class="pm-funnel-band-count" x="' + cx + '" y="' + (yTop + 30) + '" text-anchor="middle">' +
+      svg += '<text class="pm-funnel-band-count" x="' + cx + '" y="' + (yTop + 38) + '" text-anchor="middle">' +
              fmtNum(cnt) + ' athletes</text>';
-      svg += '<text class="pm-funnel-band-label" x="' + cx + '" y="' + (yTop + 48) + '" text-anchor="middle">' +
+      svg += '<text class="pm-funnel-band-label" x="' + cx + '" y="' + (yTop + 60) + '" text-anchor="middle">' +
              fmtNum(entries) + ' event entries</text>';
 
       // Financial overlay on the right
       if (pmState.showFinancials) {
         const revenue = cnt * (fees[s] || 0);
-        svg += '<text class="pm-funnel-financial" x="' + (W - 20) + '" y="' + (yTop + 28) + '" text-anchor="end">' +
+        svg += '<text class="pm-funnel-financial" x="' + (W - 24) + '" y="' + (yTop + 32) + '" text-anchor="end">' +
                fmtMoney(revenue) + ' collected</text>';
-        svg += '<text class="pm-funnel-financial" x="' + (W - 20) + '" y="' + (yTop + 46) + '" text-anchor="end" style="font-size:10.5px;opacity:.8">' +
+        svg += '<text class="pm-funnel-financial-sub" x="' + (W - 24) + '" y="' + (yTop + 52) + '" text-anchor="end">' +
                cnt + ' × $' + (fees[s] || 0) + '</text>';
       }
 
-      // Attrition note between bands (right side)
+      // Attrition note between bands (centered below current band)
       if (i < stages.length - 1) {
         const nextCnt = data.stages[stages[i+1]].unique_athletes;
         const dropped = cnt - nextCnt;
-        const arrowY = yTop + bandH + 12;
+        const arrowY = yTop + bandH + 16;
         if (dropped > 0) {
-          svg += '<text class="pm-funnel-attrition" x="' + cx + '" y="' + (arrowY + 14) + '" text-anchor="middle">' +
-                 '↓ ' + fmtNum(dropped) + ' did not advance (' + pct(dropped, cnt) + ')</text>';
+          svg += '<text class="pm-funnel-attrition" x="' + cx + '" y="' + arrowY + '" text-anchor="middle">' +
+                 '↓ ' + fmtNum(dropped) + ' did not advance (' + pct(dropped, cnt) + ' of stage)</text>';
         }
       }
     });
@@ -782,10 +783,9 @@
 
     // Build fees table covering all years for reference
     const allFeeYears = Object.keys(ENTRY_FEES).map(Number).sort();
-    let feeTable =
-      '<table class="pm-fee-table">' +
+    let feeTable = '<div class="pm-fee-table-wrap"><table class="pm-fee-table">' +
         '<thead><tr><th>Meet</th>' +
-          allFeeYears.map(y => '<th>' + y + (y === year ? ' ◄' : '') + '</th>').join('') +
+          allFeeYears.map(y => '<th' + (y === year ? ' class="col-current"' : '') + '>' + y + '</th>').join('') +
         '</tr></thead>' +
         '<tbody>';
     STAGE_ORDER.forEach(s => {
@@ -793,7 +793,10 @@
         allFeeYears.map(y => {
           const f = ENTRY_FEES[y][s];
           const isNew = (s === 'EWC' && y === 2026);
-          return '<td class="' + (isNew ? 'new-2026' : '') + '">' + (f ? '$' + f : '—') + '</td>';
+          const cls = [];
+          if (y === year) cls.push('col-current');
+          if (isNew) cls.push('new-2026');
+          return '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' + (f ? '$' + f : '—') + '</td>';
         }).join('') +
         '</tr>';
     });
@@ -801,55 +804,60 @@
     feeTable += '<tr class="total-row"><td>Full-circuit total</td>' +
       allFeeYears.map(y => {
         const total = STAGE_ORDER.reduce((a, s) => a + (ENTRY_FEES[y][s] || 0), 0);
-        return '<td>' + fmtMoney(total) + '</td>';
+        return '<td' + (y === year ? ' class="col-current"' : '') + '>' + fmtMoney(total) + '</td>';
       }).join('') + '</tr>';
-    feeTable += '</tbody></table>';
+    feeTable += '</tbody></table></div>';
 
     // Cost histogram — bands of "what families actually paid"
     let hist = '<div class="pm-fin-cost-hist">';
-    hist += '<div style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--brand-blue); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;">' +
-            'What families actually paid — ' + year + '</div>';
-    hist += '<div style="font-size: 11.5px; color: var(--ink-3); margin-bottom: 14px;">' +
-            'Each row is a cohort of athletes grouped by which meets they actually attended. ' +
-            'Most athletes only paid the entry fee for the meets they competed in, not the full circuit.</div>';
+    hist += '<div class="pm-fin-hist-head">What families actually paid &mdash; ' + year + '</div>';
+    hist += '<div class="pm-fin-hist-sub">' +
+            'Each row is a cohort of athletes grouped by which meets they competed in. ' +
+            'Most athletes only paid the entry fee for the meets they actually attended — not the full circuit cost.' +
+            '</div>';
 
     const maxBand = Math.max.apply(null, dist.bands.map(b => b.n).concat([1]));
     dist.bands.forEach(b => {
       const widthPct = (b.n / maxBand * 100).toFixed(1);
+      const pctOfAll = dist.totalAthletes ? (b.n / dist.totalAthletes * 100).toFixed(1) : '0.0';
       const isFull = b.stops.length === STAGE_ORDER.length;
       hist += '<div class="pm-fin-hist-bar' + (isFull ? ' full' : '') + '">' +
-        '<div class="pm-fin-hist-label">' + escapeHtml(b.label || '(none)') + '<br>' +
-          '<span style="font-size: 10.5px; color: var(--ink-4);">' + fmtMoney(b.cost) + ' / athlete</span>' +
+        '<div class="pm-fin-hist-label">' + escapeHtml(b.label || '(none)') +
+          '<span class="cost-tag">' + fmtMoney(b.cost) + ' per athlete</span>' +
         '</div>' +
         '<div class="pm-fin-hist-bar-track">' +
           '<div class="pm-fin-hist-bar-fill" style="width: ' + widthPct + '%"></div>' +
         '</div>' +
-        '<div class="pm-fin-hist-count">' + fmtNum(b.n) + '</div>' +
+        '<div class="pm-fin-hist-count">' + fmtNum(b.n) +
+          '<span class="pct">' + pctOfAll + '% of all</span>' +
+        '</div>' +
       '</div>';
     });
 
     // Summary
     const avgCost = dist.totalAthletes ? dist.totalRevenue / dist.totalAthletes : 0;
-    hist += '<div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">' +
-      '<div><div style="font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 700;">Avg per athlete</div>' +
-        '<div style="font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--brand-blue);">' + fmtMoney(avgCost) + '</div></div>' +
-      '<div><div style="font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 700;">Full-circuit cost (reference)</div>' +
-        '<div style="font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--brand-red);">' +
-          fmtMoney(STAGE_ORDER.reduce((a, s) => a + (fees[s] || 0), 0)) + '</div></div>' +
-      '<div><div style="font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 700;">Total entry-fee revenue</div>' +
-        '<div style="font-family: var(--font-display); font-size: 22px; font-weight: 800; color: ' + C.amber + ';">' + fmtMoney(dist.totalRevenue) + '</div></div>' +
+    const fullCircuitCost = STAGE_ORDER.reduce((a, s) => a + (fees[s] || 0), 0);
+    hist += '<div class="pm-fin-summary">' +
+      '<div class="pm-fin-summary-item">' +
+        '<div class="label">Average per athlete</div>' +
+        '<div class="value">' + fmtMoney(avgCost) + '</div>' +
+      '</div>' +
+      '<div class="pm-fin-summary-item red">' +
+        '<div class="label">Full-circuit reference cost</div>' +
+        '<div class="value">' + fmtMoney(fullCircuitCost) + '</div>' +
+      '</div>' +
+      '<div class="pm-fin-summary-item amber">' +
+        '<div class="label">Total entry-fee revenue</div>' +
+        '<div class="value">' + fmtMoney(dist.totalRevenue) + '</div>' +
+      '</div>' +
     '</div>';
     hist += '</div>';
 
     const body =
-      '<div style="margin-bottom: 18px;">' +
-        '<div style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--brand-blue); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px;">' +
-          'Entry-fee history — all years' +
-        '</div>' +
-        '<div style="font-size: 12px; color: var(--ink-3); margin-bottom: 10px;">' +
-          'Per-meet entry fees by year. The highlighted column is the year shown above. ' +
-          'The E/W/C row is a new meet added to the circuit in 2026.' +
-        '</div>' +
+      '<div class="pm-fin-hist-head" style="margin-bottom: 6px;">Entry-fee history &mdash; all years</div>' +
+      '<div class="pm-fin-hist-sub" style="margin-bottom: 14px;">' +
+        'Per-meet entry fees by year. The highlighted column is the year shown above. ' +
+        'The 2026 E/W/C row is a new meet added to the circuit this year — flagged with a NEW badge.' +
       '</div>' +
       feeTable + hist;
 
@@ -972,14 +980,23 @@
 
   /* ── Top-level render ──────────────────────────────────── */
   async function renderPipeline(){
-    const root = document.getElementById('stageContent');
-    if (!root) return;
-    // Clear KPI row & other stage UI (since we own the entire content)
-    const kpi = document.getElementById('kpiRow');
-    if (kpi) kpi.innerHTML = '';
+    const stageContent = document.getElementById('stageContent');
+    if (!stageContent) return;
+
+    // Find or create the dashboard container (sibling to the regular
+    // kpi-row + workspace inside #stageContent). Using a separate
+    // container instead of overwriting #stageContent.innerHTML
+    // preserves the original DOM so we can switch back to other
+    // stages without breaking them.
+    let dash = document.getElementById('pmDashboard');
+    if (!dash) {
+      dash = document.createElement('div');
+      dash.id = 'pmDashboard';
+      stageContent.appendChild(dash);
+    }
 
     // First-load: show shell with spinner
-    root.innerHTML =
+    dash.innerHTML =
       '<div class="pm-root">' +
         renderHero() +
         '<div class="pm-loading"><div class="pm-loading-spinner"></div>' +
@@ -991,7 +1008,7 @@
       // Make sure years are loaded
       await loadAvailableYears();
       if (!pmState.yearsAvailable.length) {
-        root.innerHTML =
+        dash.innerHTML =
           '<div class="pm-root">' + renderHero() +
             '<div class="pm-error"><strong>No data available.</strong> Neon returned no Junior Circuit results. ' +
             'Check that data has been ingested and the <code>is_junior_circuit</code> flag is set on rows in <code>core.event_results</code>.</div>' +
@@ -1006,7 +1023,7 @@
       ]);
 
       // Render skeleton with controls
-      root.innerHTML =
+      dash.innerHTML =
         '<div class="pm-root">' +
           renderHero() +
           renderControls() +
@@ -1030,7 +1047,7 @@
       bindHandlers();
     } catch (e) {
       console.error('[pipeline-modeling]', e);
-      root.innerHTML =
+      dash.innerHTML =
         '<div class="pm-root">' + renderHero() +
           '<div class="pm-error"><strong>Could not load data from Neon.</strong> ' + escapeHtml(e.message || String(e)) +
           '<br><br>Try the Refresh button. If the problem persists, check that the Neon connection ' +
