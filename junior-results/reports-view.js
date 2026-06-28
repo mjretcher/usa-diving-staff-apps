@@ -2988,30 +2988,30 @@ body.rpt-stage-active .table-wrap { padding: 0 !important; background: transpare
 /* Scrolls away with the page so the content below (long tables, etc.) gets the
    full viewport. (Previously position:sticky, which kept this ~200px tall header
    pinned and cut off the tables underneath.) */
-.rpt-top { padding: 14px 24px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.rpt-top-row1 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
-.rpt-top-eyebrow { font-family: var(--f-display); font-size: 20px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .03em; }
-.rpt-top-meta { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
+.rpt-top { padding: 7px 22px 0 22px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.rpt-top-row1 { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; }
+.rpt-top-eyebrow { font-family: var(--f-display); font-size: 13px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .04em; }
+.rpt-top-meta { font-size: 11px; color: var(--ink-3); font-style: italic; }
 
-.rpt-top-row2 { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 -24px; padding: 0 24px; }
-.rpt-toptab { background: transparent; border: 0; padding: 11px 16px; font-size: 13px; font-family: var(--f-ui); color: var(--ink-3); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; font-weight: 500; display: inline-flex; gap: 7px; align-items: center; transition: all .12s; }
+.rpt-top-row2 { display: flex; gap: 1px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 -22px; padding: 0 22px; }
+.rpt-toptab { background: transparent; border: 0; padding: 6px 10px; font-size: 12px; font-family: var(--f-ui); color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; display: inline-flex; gap: 5px; align-items: center; transition: all .12s; white-space: nowrap; }
 .rpt-toptab:hover { color: var(--navy); background: var(--surface-2); }
 .rpt-toptab.is-active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; background: linear-gradient(180deg, transparent 50%, var(--surface-2) 100%); }
-.rpt-toptab-ic { font-size: 15px; }
+.rpt-toptab-ic { font-size: 13px; }
 
-.rpt-top-row3 { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 0 14px; align-items: center; }
-.rpt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 11px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); transition: all .12s; }
+.rpt-top-row3 { display: flex; gap: 5px; flex-wrap: wrap; padding: 7px 0 8px; align-items: center; }
+.rpt-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 3px 1px 9px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); transition: all .12s; }
 .rpt-chip:hover { border-color: var(--ink-3); }
 .rpt-chip.is-active { border-color: var(--navy); background: var(--surface-2); box-shadow: 0 0 0 1px var(--navy) inset; }
-.rpt-chip-l { color: var(--ink-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.rpt-chip-l { color: var(--ink-3); font-weight: 600; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; }
 .rpt-chip.is-active .rpt-chip-l { color: var(--navy); }
-.rpt-chip-s { border: 0; background: transparent; font-size: 12.5px; color: var(--ink); padding: 4px 22px 4px 4px; font-family: var(--f-ui); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
+.rpt-chip-s { border: 0; background: transparent; font-size: 12px; color: var(--ink); padding: 3px 19px 3px 4px; font-family: var(--f-ui); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
 .rpt-chip-s:focus { outline: none; }
-.rpt-chip-x { background: var(--ink-3); color: #fff; border: 0; width: 18px; height: 18px; border-radius: 50%; font-size: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; margin-left: 1px; }
+.rpt-chip-x { background: var(--ink-3); color: #fff; border: 0; width: 16px; height: 16px; border-radius: 50%; font-size: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; margin-left: 1px; }
 .rpt-chip-x:hover { background: var(--red); }
-.rpt-chip-clear { margin-left: 8px; padding: 6px 13px; font-size: 11.5px; border-radius: 14px; border: 1px solid var(--red); background: var(--surface); color: var(--red); cursor: pointer; font-weight: 600; font-family: var(--f-ui); }
+.rpt-chip-clear { margin-left: 6px; padding: 4px 11px; font-size: 11px; border-radius: 13px; border: 1px solid var(--red); background: var(--surface); color: var(--red); cursor: pointer; font-weight: 600; font-family: var(--f-ui); }
 .rpt-chip-clear:hover { background: var(--red); color: #fff; }
-.rpt-chip-hint { font-size: 11.5px; color: var(--ink-4); font-style: italic; margin-left: 6px; }
+.rpt-chip-hint { font-size: 11px; color: var(--ink-4); font-style: italic; margin-left: 6px; }
 
 /* === Section wrap padding adjust under sticky header === */
 body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
