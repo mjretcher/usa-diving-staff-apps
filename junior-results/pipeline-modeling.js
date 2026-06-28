@@ -289,6 +289,23 @@
       "GROUP BY a.stage, b.stage";
     const transR = await neonQ(transSql, [year].concat(transFb.params));
 
+    // 4) Did-not-advance split inputs: one row per (diver, stage) with their
+    //    group and best placement (any event + springboard only), so the
+    //    renderer can split non-advancers into "qualified but did not register"
+    //    vs "did not qualify (performance)". No place filter -> unplaced divers
+    //    are still present (MIN ignores NULLs), keeping this population identical
+    //    to the per-stage unique-diver counts above.
+    const splitFb = buildFiltersSql(2);
+    const splitSql =
+      "SELECT diver_id_dm, stage, " +
+      "  MAX(age_group) AS ag, " +
+      "  MIN(place) AS bp_any, " +
+      "  MIN(CASE WHEN discipline IN ('1M','3M') THEN place END) AS bp_sb " +
+      "FROM core.event_results " +
+      "WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + splitFb.sql + " " +
+      "GROUP BY diver_id_dm, stage";
+    const splitR = await neonQ(splitSql, [year].concat(splitFb.params));
+
     const out = {
       year,
       stages: {},      // stage -> { unique_athletes, event_entries }
@@ -313,6 +330,58 @@
     });
     transR.rows.forEach(r => {
       out.transitions[r.from_stage + '->' + r.to_stage] = Number(r.advanced) || 0;
+    });
+
+    /* ---- did-not-advance split per stage ---- */
+    // Qualifying standard per stage (matches the rulebook + the Special-Status
+    // "qualified" band): Regionals -> Zones = Groups A/B top 15 in a springboard
+    // event (Groups C/D advance to Zones automatically); Zones -> next = top 18
+    // (places 1-3 to Junior Nationals, 4-18 to E/W/C); E/W/C -> Nationals = top 3.
+    function qualifiedAt(stage, info){
+      if (stage === 'Regionals'){
+        if (info.ag === 'Group C' || info.ag === 'Group D') return true;
+        return info.bp_sb != null && info.bp_sb <= 15;
+      }
+      if (stage === 'Zones') return info.bp_any != null && info.bp_any <= 18;
+      if (stage === 'EWC')   return info.bp_any != null && info.bp_any <= 3;
+      return false;
+    }
+    const presence = {};   // diver -> { stage: true }
+    const perDS = {};      // stage -> { diver -> {ag,bp_any,bp_sb} }
+    STAGE_ORDER.forEach(s => { perDS[s] = {}; });
+    splitR.rows.forEach(r => {
+      const d = r.diver_id_dm, s = r.stage;
+      if (!STAGE_ORDER.includes(s)) return;
+      (presence[d] || (presence[d] = {}))[s] = true;
+      perDS[s][d] = {
+        ag: r.ag || '',
+        bp_any: (r.bp_any != null ? Number(r.bp_any) : null),
+        bp_sb:  (r.bp_sb  != null ? Number(r.bp_sb)  : null),
+      };
+    });
+    const presentCount = {};
+    STAGE_ORDER.forEach(s => { presentCount[s] = out.stages[s] ? out.stages[s].unique_athletes : 0; });
+    out.exitSplit = {};
+    STAGE_ORDER.forEach((S, idx) => {
+      if (presentCount[S] <= 0) return;
+      let T = null;
+      for (let j = idx + 1; j < STAGE_ORDER.length; j++){ if (presentCount[STAGE_ORDER[j]] > 0){ T = STAGE_ORDER[j]; break; } }
+      if (!T) return;
+      // Only split where the qualifying rule for THIS transition is well-defined.
+      // Region->Zone is stable across all years; Zone->E/W/C and E/W/C->Nationals
+      // are the 2026 structure. Pre-2026 Zone->Nationals used a different (pre-E/W/C)
+      // rule we haven't pinned down, so we leave it un-split (renderer shows a single
+      // neutral "did not advance" stream rather than guess the qualified/declined line).
+      const confident = (S === 'Regionals' && T === 'Zones') ||
+                        (S === 'Zones' && T === 'EWC') ||
+                        (S === 'EWC' && T === 'Nationals');
+      if (!confident) return;
+      let adv = 0, qnc = 0, dnq = 0;
+      Object.keys(perDS[S]).forEach(d => {
+        if (presence[d] && presence[d][T]) { adv++; return; }
+        if (qualifiedAt(S, perDS[S][d])) qnc++; else dnq++;
+      });
+      out.exitSplit[S] = { next: T, advanced: adv, qualified_no_continue: qnc, did_not_qualify: dnq };
     });
 
     pmState.funnelCache[ck] = out;
@@ -1033,6 +1102,15 @@
 
     const totalEntries = realStages.reduce(function(a,s){ return a + EN[s]; }, 0);
 
+    // total "qualified but did not register" across the gates we actually draw
+    // (exclude a still-running gate, whose split isn't decided yet)
+    let totalQnc = 0;
+    for (let i = 0; i < realStages.length - 1; i++){
+      if (deepInProgress && i === lastGate) continue;
+      const sp = data.exitSplit && data.exitSplit[realStages[i]];
+      if (sp) totalQnc += sp.qualified_no_continue;
+    }
+
     let kpiHtml = '<div class="pm-kpi-strip">';
     kpiHtml +=
       '<div class="pm-kpi">' +
@@ -1051,8 +1129,16 @@
         '<div class="pm-kpi accent">' +
           '<div class="pm-kpi-label">Biggest drop-off</div>' +
           '<div class="pm-kpi-value">' + fmtNum(bigVal) + '</div>' +
-          '<div class="pm-kpi-sub">stopped after ' + STAGE_SHORT[realStages[bigIdx]] +
+          '<div class="pm-kpi-sub">did not advance past ' + STAGE_SHORT[realStages[bigIdx]] +
             ' \u00b7 ' + pct(bigVal, N[realStages[bigIdx]]) + ' of that field</div>' +
+        '</div>';
+    }
+    if (totalQnc > 0) {
+      kpiHtml +=
+        '<div class="pm-kpi" style="border-top-color:#d97706">' +
+          '<div class="pm-kpi-label">Qualified, didn\u2019t register</div>' +
+          '<div class="pm-kpi-value" style="color:#b45309">' + fmtNum(totalQnc) + '</div>' +
+          '<div class="pm-kpi-sub">earned an advancing spot but did not compete at the next stage</div>' +
         '</div>';
     }
     if (entIdx >= 1 && entVal >= 8) {
@@ -1110,9 +1196,9 @@
     const RIVER_H = 280;       // height of the largest (entry) post
     const hOf = function(n){ return (n / maxN) * RIVER_H; };
     const yExit = Y0 + RIVER_H + 34;   // red exit pools sit on this line
-    let maxExitH = 0;  EXIT.forEach(function(v){ maxExitH = Math.max(maxExitH, hOf(v)); });
+    let maxExitH = 0;  EXIT.forEach(function(v,i){ if (deepInProgress && i === lastGate) return; maxExitH = Math.max(maxExitH, hOf(v)); });
     let maxEnterH = 0; ENTER.forEach(function(v){ if (v >= 8) maxEnterH = Math.max(maxEnterH, hOf(v)); });
-    const yEnter = yExit + Math.max(maxExitH * 0.6, 72);   // pale "joined late" pools on a lower lane
+    const yEnter = yExit + Math.max(maxExitH + 46, 92);   // pale "joined late" pools on a lower lane, clear of exit pools + labels
     const H = Math.max(yExit + maxExitH, yEnter + maxEnterH) + 56;
 
     /* two-line stage titles keep the long official names inside the canvas */
@@ -1144,6 +1230,9 @@
         '</linearGradient>' +
         '<linearGradient id="pmFlowExit" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0" stop-color="#e31937" stop-opacity="0.92"/><stop offset="1" stop-color="#e31937" stop-opacity="0.62"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="pmFlowQual" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#d97706" stop-opacity="0.92"/><stop offset="1" stop-color="#d97706" stop-opacity="0.6"/>' +
         '</linearGradient>' +
         '<linearGradient id="pmFlowEnter" x1="0" y1="1" x2="0" y2="0">' +
           '<stop offset="0" stop-color="#8fc3ea" stop-opacity="0.95"/><stop offset="1" stop-color="#56a8da" stop-opacity="0.8"/>' +
@@ -1182,24 +1271,52 @@
              '" fill="#cfe0ee" opacity="0.5" stroke="#9db8d6" stroke-width="1" stroke-dasharray="2 5"/>';
     }
 
-    /* ---- exit tributaries (red), shedding downward ---- */
+    /* ---- exit tributaries ----
+       Where the qualifying rule is known (data.exitSplit present) we split the
+       drop-off into "did not qualify" (red, performance) and "qualified, did not
+       register" (amber, the actionable barrier group). Where it isn't, we show a
+       single neutral "did not advance" stream rather than guess the split. ---- */
     for (let i = 0; i < realStages.length - 1; i++){
       if (deepInProgress && i === lastGate) continue;  // drop-off into a still-running stage isn't known yet
       if (EXIT[i] <= 0) continue;
+      const split = (data.exitSplit && data.exitSplit[realStages[i]]) || null;
       const x1 = gateLeft(i) + wNode;
       const ha = hOf(A[i]);
       const he = hOf(EXIT[i]);
       const sinkX = x1 + step * 0.42;
       const sinkW = 13;
-      svg += '<path d="' + ribbon(x1, Y0 + ha, Y0 + ha + he, sinkX, yExit, yExit + he) + '" fill="url(#pmFlowExit)"/>';
-      // exit "pool" cap
-      svg += '<rect x="' + sinkX + '" y="' + yExit + '" width="' + sinkW + '" height="' + he +
-             '" rx="3" fill="#e31937" opacity="0.92"/>';
-      // labels (always on white, ADA-safe)
-      const ly = yExit + Math.max(he / 2, 9);
-      svg += '<text class="pm-flow-exit-n" x="' + (sinkX + sinkW + 9) + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' divers</text>';
-      svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">stopped after ' + STAGE_SHORT[realStages[i]] +
-             ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + '</text>';
+      const top = Y0 + ha;
+      const lx = sinkX + sinkW + 9;
+      const cy = yExit + he / 2;
+
+      if (split) {
+        let dnq = split.did_not_qualify, qnc = split.qualified_no_continue;
+        if (dnq + qnc !== EXIT[i]) {           // keep the two parts summing to the drawn exit
+          const tot = Math.max(1, dnq + qnc);
+          dnq = Math.round(EXIT[i] * dnq / tot); qnc = EXIT[i] - dnq;
+        }
+        const heD = hOf(dnq), heQ = he - heD;
+        // red "did not qualify" sub-band + top pool segment
+        if (dnq > 0) {
+          svg += '<path d="' + ribbon(x1, top, top + heD, sinkX, yExit, yExit + heD) + '" fill="url(#pmFlowExit)"/>';
+          svg += '<rect x="' + sinkX + '" y="' + yExit + '" width="' + sinkW + '" height="' + Math.max(heD, 1) + '" rx="3" fill="#e31937" opacity="0.92"/>';
+        }
+        // amber "qualified, did not register" sub-band + bottom pool segment
+        if (qnc > 0) {
+          svg += '<path d="' + ribbon(x1, top + heD, top + he, sinkX, yExit + heD, yExit + he) + '" fill="url(#pmFlowQual)"/>';
+          svg += '<rect x="' + sinkX + '" y="' + (yExit + heD) + '" width="' + sinkW + '" height="' + Math.max(heQ, 1) + '" rx="3" fill="#d97706" opacity="0.92"/>';
+        }
+        svg += '<text class="pm-flow-exit-n" x="' + lx + '" y="' + (cy - 6) + '">\u2193 ' + fmtNum(EXIT[i]) + ' did not advance past ' + STAGE_SHORT[realStages[i]] + '</text>';
+        if (dnq > 0) svg += '<text class="pm-flow-exit-sub" x="' + lx + '" y="' + (cy + 11) + '"><tspan fill="#e31937" font-size="13">\u25cf</tspan> ' + fmtNum(dnq) + ' did not qualify \u00b7 ' + pct(dnq, N[realStages[i]]) + '</text>';
+        if (qnc > 0) svg += '<text class="pm-flow-exit-sub" x="' + lx + '" y="' + (cy + 28) + '"><tspan fill="#d97706" font-size="13">\u25cf</tspan> ' + fmtNum(qnc) + ' qualified \u00b7 did not register</text>';
+      } else {
+        // single neutral stream (qualified/declined split not available for this gate)
+        svg += '<path d="' + ribbon(x1, top, top + he, sinkX, yExit, yExit + he) + '" fill="url(#pmFlowExit)"/>';
+        svg += '<rect x="' + sinkX + '" y="' + yExit + '" width="' + sinkW + '" height="' + Math.max(he, 1) + '" rx="3" fill="#e31937" opacity="0.92"/>';
+        const ly = yExit + Math.max(he / 2, 9);
+        svg += '<text class="pm-flow-exit-n" x="' + lx + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' divers</text>';
+        svg += '<text class="pm-flow-exit-sub" x="' + lx + '" y="' + (ly + 15) + '">did not advance past ' + STAGE_SHORT[realStages[i]] + ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + '</text>';
+      }
     }
 
     /* ---- late-entry inflows (pale blue), rising from a lower lane into the next post ---- */
@@ -1273,7 +1390,8 @@
     const legend =
       '<div class="pm-flow-legend">' +
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6)"></span>Advancing current \u2014 divers who competed at the next stage too</span>' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 competed at this stage but not the next</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Did not qualify \u2014 competed but didn\u2019t place/score into an advancing spot</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#d97706"></span>Qualified, didn\u2019t register \u2014 earned a spot but didn\u2019t compete at the next stage</span>' +
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 first appeared at this stage (byes / new entrants)</span>' +
         (deepInProgress ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6);opacity:0.5;box-shadow:inset 0 0 0 1.5px #009ac7"></span>In progress \u2014 results still arriving</span>' : '') +
         (pendingStage ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>' : '') +
@@ -1301,6 +1419,19 @@
         });
       });
     }
+    // qualifying-band note when a completed gate's drop-off split is actually shown
+    let splitShown = false;
+    for (let i = 0; i < realStages.length - 1; i++){
+      if (deepInProgress && i === lastGate) continue;
+      if (EXIT[i] > 0 && data.exitSplit && data.exitSplit[realStages[i]]) { splitShown = true; break; }
+    }
+    if (splitShown) {
+      let qn = '\u201cQualified\u201d here means placing in an advancing position at that stage (Regionals: top 15 in a springboard event for Groups A/B \u2014 Groups C/D advance to Zones automatically';
+      if (Number(year) >= 2026) qn += '; Zones: top 18 \u2014 places 1\u20133 to Junior Nationals, 4\u201318 to E/W/C';
+      qn += '). A few who qualify on the average-score rule may show as \u201cdid not qualify\u201d';
+      notes.push(qn);
+    }
+
     // In-progress banner (prominent, brand-safe pool-blue on light)
     let banner = '';
     if (deepInProgress) {
@@ -1323,8 +1454,9 @@
 
     const explainer =
       'Read it left to right as the ' + year + ' season unfolds. Each navy post is a stage; its height is how many unique divers competed there. ' +
-      'The blue current carries divers who advanced (competed at the next stage too); red streams peeling off are divers who stopped; ' +
-      'a pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide.' +
+      'The blue current carries divers who advanced (competed at the next stage too). Where divers leave, the stream splits two ways: ' +
+      'a red stream for those who did not qualify (fell short on placement/score), and an amber stream for those who qualified but did not register for the next meet \u2014 the group that points to cost, travel, or scheduling barriers. ' +
+      'A pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide.' +
       (pendingStage ? ' The dashed basin is the stage still to come.' : '') +
       ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
 
