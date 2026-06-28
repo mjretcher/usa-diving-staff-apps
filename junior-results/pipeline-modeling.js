@@ -889,169 +889,337 @@
     );
   }
 
-  /* ── SECTION 1: Funnel ─────────────────────────────────── */
+  /* ── SECTION 1: Qualification Pipeline (alluvial flow / "the river") ──
+     Replaces the old vertical funnel. Shows TRUE cohort flow using the
+     transition data: advancing current, real exits, and late entrants.
+     Brand-locked, ADA-safe (red only ever sits on white), zero deps.    */
   function renderFunnelSection(year, data){
     if (!data) {
-      return sectionShell(1, 'Pipeline Funnel — ' + year,
-        'How many unique athletes appear at each stage of the circuit, and how many advance from one stage to the next. The widest bar is the entry point; each band shows the count that actually competed at that level.',
-        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading funnel data…</div></div>');
+      return sectionShell(1, 'Qualification Pipeline — ' + year,
+        'How the season\u2019s divers move from one stage to the next \u2014 the blue current carries everyone who advanced, red streams peel off where divers stopped, and a pale stream joining from below marks divers who entered straight at that stage.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading the pipeline\u2026</div></div>');
     }
 
-    const stages = STAGE_ORDER.filter(s => data.stages[s].unique_athletes > 0 || s === 'Regionals' || s === 'Zones');
-    if (!stages.length) {
-      return sectionShell(1, 'Pipeline Funnel — ' + year,
-        'How athletes flow from Regionals through to Junior Nationals for the selected year.',
-        '<div class="pm-empty"><div class="pm-empty-title">No data available</div>' +
-        '<div class="pm-empty-sub">No Junior Circuit results found in Neon for ' + year + '.</div></div>');
+    /* ---- which stages actually have results, plus a trailing "pending" stage ---- */
+    const has = function(s){ return data.stages[s] && data.stages[s].unique_athletes > 0; };
+    let lastRealIdx = -1;
+    STAGE_ORDER.forEach(function(s,i){ if (has(s)) lastRealIdx = i; });
+    if (lastRealIdx < 0) {
+      return sectionShell(1, 'Qualification Pipeline — ' + year,
+        'How athletes flow from Regionals through to Junior Nationals for the selected season.',
+        '<div class="pm-empty"><div class="pm-empty-title">No results yet</div>' +
+        '<div class="pm-empty-sub">No Junior Circuit results found for ' + year + '. As meets are scored they will appear here.</div></div>');
+    }
+    const realStages = STAGE_ORDER.slice(0, lastRealIdx + 1).filter(has);
+    let pendingStage = null;
+    if (lastRealIdx < STAGE_ORDER.length - 1 && !has(STAGE_ORDER[lastRealIdx + 1])) {
+      pendingStage = STAGE_ORDER[lastRealIdx + 1];
     }
 
-    // KPI strip
-    const totalAthletes = Math.max.apply(null, stages.map(s => data.stages[s].unique_athletes));
-    const lastStage = stages[stages.length - 1];
-    const lastCount = data.stages[lastStage].unique_athletes;
-    const retentionPct = totalAthletes ? (lastCount/totalAthletes*100).toFixed(1) : '—';
+    /* ---- per-stage counts ---- */
+    const N = {}, EN = {};
+    realStages.forEach(function(s){ N[s] = data.stages[s].unique_athletes; EN[s] = data.stages[s].event_entries; });
+    const maxN = N[realStages[0]] || 1;
 
-    const totalEntries = stages.reduce((a, s) => a + data.stages[s].event_entries, 0);
+    /* ---- TRUE transitions: advanced / exited / entered-fresh ---- */
+    const A = [], EXIT = [], ENTER = [];
+    ENTER[0] = 0;
+    for (let i = 0; i < realStages.length - 1; i++){
+      const advRaw = data.transitions[realStages[i] + '->' + realStages[i+1]];
+      const adv = (advRaw != null) ? advRaw : Math.min(N[realStages[i]], N[realStages[i+1]]);
+      A[i] = adv;
+      EXIT[i] = Math.max(0, N[realStages[i]] - adv);
+      ENTER[i+1] = Math.max(0, N[realStages[i+1]] - adv);
+    }
+
     const fees = ENTRY_FEES[year] || {};
-    // Full-circuit reference cost = theoretical cost across ALL 4 stages, regardless
-    // of which have completed. (Previously summed only visible stages, which
-    // under-reported when Nationals hadn't happened yet for the current season.)
-    const fullCircuitCost = STAGE_ORDER.reduce((a, s) => a + (fees[s] || 0), 0);
-    const nationalsHasData = data.stages.Nationals && data.stages.Nationals.unique_athletes > 0;
-    const fullCircuitNote = nationalsHasData ? 'per athlete attending every stop' : 'reference cost (Nationals upcoming for ' + year + ')';
+    const fullCircuitCost = STAGE_ORDER.reduce(function(a,s){ return a + (fees[s] || 0); }, 0);
+    const nationalsHasData = has('Nationals');
+
+    /* ======================= KPI STRIP (re-framed) ======================= */
+    const entryStage = realStages[0];
+    const deepStage  = realStages[realStages.length - 1];
+
+    // biggest single-gate drop-off (the actionable bottleneck)
+    let bigIdx = -1, bigVal = -1;
+    EXIT.forEach(function(v,i){ if (v > bigVal){ bigVal = v; bigIdx = i; } });
+    // largest late-entry inflow (hidden in a funnel)
+    let entIdx = -1, entVal = -1;
+    ENTER.forEach(function(v,i){ if (v > entVal){ entVal = v; entIdx = i; } });
+
+    const totalEntries = realStages.reduce(function(a,s){ return a + EN[s]; }, 0);
 
     let kpiHtml = '<div class="pm-kpi-strip">';
     kpiHtml +=
       '<div class="pm-kpi">' +
-        '<div class="pm-kpi-label">Total athletes (entry-point)</div>' +
-        '<div class="pm-kpi-value">' + fmtNum(totalAthletes) + '</div>' +
-        '<div class="pm-kpi-sub">unique divers at ' + STAGE_SHORT[stages[0]] + '</div>' +
-      '</div>';
-    kpiHtml +=
-      '<div class="pm-kpi accent">' +
-        '<div class="pm-kpi-label">Reached ' + STAGE_SHORT[lastStage] + '</div>' +
-        '<div class="pm-kpi-value">' + fmtNum(lastCount) + '</div>' +
-        '<div class="pm-kpi-sub">' + retentionPct + '% of entry-point athletes</div>' +
+        '<div class="pm-kpi-label">Entry-point divers</div>' +
+        '<div class="pm-kpi-value">' + fmtNum(N[entryStage]) + '</div>' +
+        '<div class="pm-kpi-sub">unique divers at ' + STAGE_SHORT[entryStage] + '</div>' +
       '</div>';
     kpiHtml +=
       '<div class="pm-kpi pool">' +
+        '<div class="pm-kpi-label">Reached ' + STAGE_SHORT[deepStage] + '</div>' +
+        '<div class="pm-kpi-value">' + fmtNum(N[deepStage]) + '</div>' +
+        '<div class="pm-kpi-sub">' + (pendingStage ? 'deepest stage completed so far' : 'the championship field') + '</div>' +
+      '</div>';
+    if (bigIdx >= 0 && bigVal > 0) {
+      kpiHtml +=
+        '<div class="pm-kpi accent">' +
+          '<div class="pm-kpi-label">Biggest drop-off</div>' +
+          '<div class="pm-kpi-value">' + fmtNum(bigVal) + '</div>' +
+          '<div class="pm-kpi-sub">stopped after ' + STAGE_SHORT[realStages[bigIdx]] +
+            ' \u00b7 ' + pct(bigVal, N[realStages[bigIdx]]) + ' of that field</div>' +
+        '</div>';
+    }
+    if (entIdx >= 1 && entVal >= 8) {
+      kpiHtml +=
+        '<div class="pm-kpi sky">' +
+          '<div class="pm-kpi-label">Joined at ' + STAGE_SHORT[realStages[entIdx]] + '</div>' +
+          '<div class="pm-kpi-value">' + fmtNum(entVal) + '</div>' +
+          '<div class="pm-kpi-sub">competed with no ' + STAGE_SHORT[realStages[entIdx-1]] + ' result \u00b7 byes / new entrants</div>' +
+        '</div>';
+    }
+    kpiHtml +=
+      '<div class="pm-kpi neutral">' +
         '<div class="pm-kpi-label">Total event entries</div>' +
         '<div class="pm-kpi-value">' + fmtNum(totalEntries) + '</div>' +
-        '<div class="pm-kpi-sub">across all stages (events ≠ athletes)</div>' +
+        '<div class="pm-kpi-sub">across ' + realStages.length + ' stage' + (realStages.length>1?'s':'') + ' (entries \u2260 divers)</div>' +
       '</div>';
     if (pmState.showFinancials) {
       kpiHtml +=
         '<div class="pm-kpi financial">' +
-          '<div class="pm-kpi-label">Full-circuit cost</div>' +
+          '<div class="pm-kpi-label">Cost of the full climb</div>' +
           '<div class="pm-kpi-value">' + fmtMoney(fullCircuitCost) + '</div>' +
-          '<div class="pm-kpi-sub">' + fullCircuitNote + '</div>' +
+          '<div class="pm-kpi-sub">' + (nationalsHasData ? 'one diver, every stop' : 'Regionals \u2192 Nationals (reference)') + '</div>' +
         '</div>';
     }
     kpiHtml += '</div>';
 
-    // Funnel SVG — larger now that we have full width
-    const W = 1400, H = 80 + stages.length * 110;
-    const bandH = 80;
-    const cx = W / 2;
-    const maxAth = totalAthletes || 1;
-    const minWidth = 240; // never narrower than this so labels fit
+    /* ===== "Viewing" context chip (always say which slice is on screen) ===== */
+    const f = pmState.filters || {};
+    const chips = [];
+    if (f.age_group) chips.push(f.age_group);
+    if (f.gender)    chips.push(f.gender);
+    if (f.discipline)chips.push(f.discipline);
+    if (f.zone)      chips.push('Zone ' + f.zone);
+    if (f.region)    chips.push('Region ' + f.region);
+    const viewingHtml =
+      '<div class="pm-flow-viewing">' +
+        '<span class="pm-flow-viewing-key">Viewing</span>' +
+        (chips.length
+          ? chips.map(function(c){ return '<span class="pm-flow-chip">' + escapeHtml(c) + '</span>'; }).join('')
+          : '<span class="pm-flow-chip all">all divers \u00b7 all events</span>') +
+        (pmState.excludeFutureChamps ? '<span class="pm-flow-chip muted">Future Champions excluded</span>' : '') +
+      '</div>';
 
-    let svg = '<svg class="pm-funnel-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
+    /* ============================ THE RIVER (SVG) ============================ */
+    const W = 1400;
+    const marginL = 56, marginR = 56;
+    const wNode = 30;
+    const nGates = realStages.length + (pendingStage ? 1 : 0);
+    const usable = W - marginL - marginR;
+    const step = nGates > 1 ? (usable - wNode) / (nGates - 1) : 0;
+    const gateLeft = function(i){ return marginL + i * step; };
+    const cxOf = function(i){ return gateLeft(i) + wNode / 2; };
 
-    stages.forEach(function(s, i){
-      const cnt = data.stages[s].unique_athletes;
-      const entries = data.stages[s].event_entries;
-      const yTop = 36 + i * 110;
-      const widthRatio = Math.max(cnt / maxAth, minWidth / (W - 80));
-      const bandW = Math.max(minWidth, (W - 80) * widthRatio);
-      const x0 = cx - bandW/2;
+    const Y0 = 208;            // river top line
+    const RIVER_H = 280;       // height of the largest (entry) post
+    const hOf = function(n){ return (n / maxN) * RIVER_H; };
+    const yExit = Y0 + RIVER_H + 34;   // red exit pools sit on this line
+    let maxExitH = 0;  EXIT.forEach(function(v){ maxExitH = Math.max(maxExitH, hOf(v)); });
+    let maxEnterH = 0; ENTER.forEach(function(v){ if (v >= 8) maxEnterH = Math.max(maxEnterH, hOf(v)); });
+    const yEnter = yExit + Math.max(maxExitH * 0.6, 72);   // pale "joined late" pools on a lower lane
+    const H = Math.max(yExit + maxExitH, yEnter + maxEnterH) + 56;
 
-      // Color: deeper blue at top, lighter pool toward the bottom
-      const colors = [C.blue, C.blue700, C.pool, C.red];
-      const fill = colors[i] || C.blue;
+    /* two-line stage titles keep the long official names inside the canvas */
+    const STAGE_TITLE_LINES = {
+      Regionals: ['REGIONAL', 'CHAMPIONSHIPS'],
+      Zones:     ['ZONE', 'CHAMPIONSHIPS'],
+      EWC:       ['', 'EAST / WEST / CENTRAL'],
+      Nationals: ['JUNIOR NATIONAL', 'CHAMPIONSHIPS'],
+    };
+    const titleLines = function(s){ return STAGE_TITLE_LINES[s] || [ (STAGE_LABELS[s] || s).toUpperCase(), '' ]; };
 
-      // Band shape (slight trapezoid for funnel feel)
-      const nextW = (i < stages.length - 1)
-        ? Math.max(minWidth, (W - 80) * Math.max(data.stages[stages[i+1]].unique_athletes / maxAth, minWidth / (W - 80)))
-        : bandW * 0.86;
-      const nx0 = cx - nextW/2;
+    // smooth Sankey ribbon between two vertical slices
+    const ribbon = function(x1, y1t, y1b, x2, y2t, y2b){
+      const mx = (x1 + x2) / 2;
+      return 'M' + x1 + ',' + y1t +
+             ' C' + mx + ',' + y1t + ' ' + mx + ',' + y2t + ' ' + x2 + ',' + y2t +
+             ' L' + x2 + ',' + y2b +
+             ' C' + mx + ',' + y2b + ' ' + mx + ',' + y1b + ' ' + x1 + ',' + y1b + ' Z';
+    };
 
-      // Trapezoid path with rounded top-left and top-right on the first band
-      svg += '<path d="M' + x0 + ' ' + yTop + ' L' + (x0+bandW) + ' ' + yTop +
-             ' L' + (nx0 + nextW) + ' ' + (yTop + bandH) + ' L' + nx0 + ' ' + (yTop + bandH) + ' Z" ' +
-             'fill="' + fill + '" stroke="' + C.blue900 + '" stroke-width="1" opacity="0.96"/>';
+    let svg = '<svg class="pm-flow-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+      'aria-label="Qualification pipeline flow for ' + year + '">';
 
-      // Stage label (left side)
-      svg += '<text class="pm-funnel-stage-label" x="24" y="' + (yTop + 32) + '">' + escapeHtml(STAGE_LABELS[s]) + '</text>';
-      svg += '<text class="pm-funnel-stage-sublabel" x="24" y="' + (yTop + 52) + '">' + (fees[s] !== undefined ? '$' + fees[s] + ' entry fee' : 'entry fee not set') + '</text>';
+    // defs: water gradients
+    svg +=
+      '<defs>' +
+        '<linearGradient id="pmFlowCurrent" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0" stop-color="#0d7fa6"/><stop offset="1" stop-color="#33b4d6"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="pmFlowExit" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#e31937" stop-opacity="0.92"/><stop offset="1" stop-color="#e31937" stop-opacity="0.62"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="pmFlowEnter" x1="0" y1="1" x2="0" y2="0">' +
+          '<stop offset="0" stop-color="#8fc3ea" stop-opacity="0.95"/><stop offset="1" stop-color="#56a8da" stop-opacity="0.8"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="pmFlowPost" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#1e2d8a"/><stop offset="1" stop-color="#171f69"/>' +
+        '</linearGradient>' +
+      '</defs>';
 
-      // Athlete count (center of band)
-      svg += '<text class="pm-funnel-band-count" x="' + cx + '" y="' + (yTop + 38) + '" text-anchor="middle">' +
-             fmtNum(cnt) + ' athletes</text>';
-      svg += '<text class="pm-funnel-band-label" x="' + cx + '" y="' + (yTop + 60) + '" text-anchor="middle">' +
-             fmtNum(entries) + ' event entries</text>';
+    // faint baseline under the river (the "waterline")
+    svg += '<line x1="' + (marginL - 8) + '" y1="' + (Y0 + RIVER_H + 1) + '" x2="' + (W - marginR + 8) + '" y2="' + (Y0 + RIVER_H + 1) +
+           '" stroke="#dfe3ef" stroke-width="1"/>';
 
-      // Financial overlay on the right
-      if (pmState.showFinancials) {
-        const revenue = cnt * (fees[s] || 0);
-        svg += '<text class="pm-funnel-financial" x="' + (W - 24) + '" y="' + (yTop + 32) + '" text-anchor="end">' +
-               fmtMoney(revenue) + ' collected</text>';
-        svg += '<text class="pm-funnel-financial-sub" x="' + (W - 24) + '" y="' + (yTop + 52) + '" text-anchor="end">' +
-               cnt + ' × $' + (fees[s] || 0) + '</text>';
-      }
-
-      // Attrition note between bands (centered below current band)
-      if (i < stages.length - 1) {
-        const nextCnt = data.stages[stages[i+1]].unique_athletes;
-        const dropped = cnt - nextCnt;
-        const arrowY = yTop + bandH + 16;
-        if (dropped > 0) {
-          svg += '<text class="pm-funnel-attrition" x="' + cx + '" y="' + arrowY + '" text-anchor="middle">' +
-                 '↓ ' + fmtNum(dropped) + ' did not advance (' + pct(dropped, cnt) + ' of stage)</text>';
-        }
-      }
-    });
-
-    svg += '</svg>';
-
-    // Asterisk footnote if any
-    let footnote = '';
-    const astStages = Object.keys(data.asterisked || {});
-    if (astStages.length && !pmState.excludeAsterisked) {
-      const reasons = [];
-      astStages.forEach(s => {
-        Object.keys(data.asterisked[s]).forEach(reason => {
-          const r = data.asterisked[s][reason];
-          let txt = '';
-          if (reason === 'platform_at_regionals') {
-            txt = r.event_entries + ' platform entries at ' + s + ' (exhibition / non-qualifying)';
-          } else if (reason === 'group_cd_at_regionals_2026') {
-            txt = r.event_entries + ' Group C/D entries at Regionals (in 2026, C/D enter at Zones)';
-          }
-          if (txt) reasons.push(txt);
-        });
-      });
-      if (reasons.length) {
-        footnote =
-          '<div class="pm-footnote">' +
-            '<strong>*</strong> Counts above include ' + reasons.join('; ') +
-            '. These are kept in view by default with this asterisk marker. ' +
-            'Toggle "Include non-qualifying entries" off above to remove them entirely from all counts.' +
-          '</div>';
+    /* ---- advancing current (pool-blue), drawn first ---- */
+    for (let i = 0; i < realStages.length - 1; i++){
+      const x1 = gateLeft(i) + wNode;
+      const x2 = gateLeft(i + 1);
+      const ha = hOf(A[i]);
+      svg += '<path d="' + ribbon(x1, Y0, Y0 + ha, x2, Y0, Y0 + ha) + '" fill="url(#pmFlowCurrent)" opacity="0.93"/>';
+      // advance count riding the current
+      const midx = (x1 + x2) / 2;
+      if (ha >= 22) {
+        svg += '<text class="pm-flow-advlabel" x="' + midx + '" y="' + (Y0 + Math.min(ha/2 + 5, ha - 6)) + '" text-anchor="middle">' +
+               fmtNum(A[i]) + ' advanced</text>';
       }
     }
 
-    // Legend
+    /* ---- projected (pending) flow into the ghost basin ---- */
+    if (pendingStage) {
+      const li = realStages.length - 1;
+      const x1 = gateLeft(li) + wNode;
+      const x2 = gateLeft(li + 1);
+      const hp = Math.min(hOf(N[deepStage]) * 0.62, 120);
+      svg += '<path d="' + ribbon(x1, Y0, Y0 + Math.min(hOf(N[deepStage]), hp + 18), x2, Y0, Y0 + hp) +
+             '" fill="#cfe0ee" opacity="0.5" stroke="#9db8d6" stroke-width="1" stroke-dasharray="2 5"/>';
+    }
+
+    /* ---- exit tributaries (red), shedding downward ---- */
+    for (let i = 0; i < realStages.length - 1; i++){
+      if (EXIT[i] <= 0) continue;
+      const x1 = gateLeft(i) + wNode;
+      const ha = hOf(A[i]);
+      const he = hOf(EXIT[i]);
+      const sinkX = x1 + step * 0.42;
+      const sinkW = 13;
+      svg += '<path d="' + ribbon(x1, Y0 + ha, Y0 + ha + he, sinkX, yExit, yExit + he) + '" fill="url(#pmFlowExit)"/>';
+      // exit "pool" cap
+      svg += '<rect x="' + sinkX + '" y="' + yExit + '" width="' + sinkW + '" height="' + he +
+             '" rx="3" fill="#e31937" opacity="0.92"/>';
+      // labels (always on white, ADA-safe)
+      const ly = yExit + Math.max(he / 2, 9);
+      svg += '<text class="pm-flow-exit-n" x="' + (sinkX + sinkW + 9) + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' divers</text>';
+      svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">stopped after ' + STAGE_SHORT[realStages[i]] +
+             ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + '</text>';
+    }
+
+    /* ---- late-entry inflows (pale blue), rising from a lower lane into the next post ---- */
+    for (let i = 1; i < realStages.length; i++){
+      const he = hOf(ENTER[i]);
+      if (ENTER[i] < 8 || he < 6) continue;   // tiny inflows handled in footnote
+      const x2 = gateLeft(i);
+      const ha = hOf(A[i-1]);
+      const srcX = x2 - step * 0.34;
+      const srcW = 12;
+      const ySrc = yEnter;
+      svg += '<path d="' + ribbon(srcX + srcW, ySrc, ySrc + he, x2, Y0 + ha, Y0 + ha + he) + '" fill="url(#pmFlowEnter)" opacity="0.9"/>';
+      svg += '<rect x="' + (srcX) + '" y="' + ySrc + '" width="' + srcW + '" height="' + he + '" rx="3" fill="#56a8da" opacity="0.95"/>';
+      const ly = ySrc + Math.max(he / 2, 9);
+      svg += '<text class="pm-flow-enter-n" x="' + (srcX - 9) + '" y="' + (ly - 2) + '" text-anchor="end">\u2191 ' + fmtNum(ENTER[i]) + ' joined</text>';
+      svg += '<text class="pm-flow-enter-sub" x="' + (srcX - 9) + '" y="' + (ly + 15) + '" text-anchor="end">entered at ' + STAGE_SHORT[realStages[i]] + ' \u00b7 no prior result</text>';
+    }
+
+    /* ---- gate posts (navy) + headers ---- */
+    realStages.forEach(function(s, i){
+      const x = gateLeft(i);
+      const h = hOf(N[s]);
+      const cx = cxOf(i);
+      // post
+      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + h + '" rx="6" fill="url(#pmFlowPost)"/>';
+      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="4" rx="2" fill="#009ac7"/>';
+      // connector tick from header to post
+      svg += '<line x1="' + cx + '" y1="160" x2="' + cx + '" y2="' + (Y0 - 6) + '" stroke="#cdd3e6" stroke-width="1" stroke-dasharray="1 4"/>';
+      // header card text (two-line title keeps long names on-canvas)
+      const tl = titleLines(s);
+      if (tl[0]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tl[0]) + '</text>';
+      if (tl[1]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tl[1]) + '</text>';
+      svg += '<text class="pm-flow-count" x="' + cx + '" y="94" text-anchor="middle">' + fmtNum(N[s]) + '</text>';
+      svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">divers \u00b7 ' + fmtNum(EN[s]) + ' entries</text>';
+      const feeTxt = (fees[s] !== undefined && fees[s] !== null)
+        ? (fees[s] > 0 ? '$' + fees[s] + ' entry fee' : 'no separate entry fee')
+        : '';
+      if (feeTxt) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">' + feeTxt + '</text>';
+      if (pmState.showFinancials && fees[s]) {
+        svg += '<text class="pm-flow-rev" x="' + cx + '" y="150" text-anchor="middle">' +
+               fmtMoney(N[s] * fees[s]) + ' collected</text>';
+      }
+    });
+
+    /* ---- pending ghost basin ---- */
+    if (pendingStage) {
+      const i = realStages.length;
+      const x = gateLeft(i);
+      const cx = cxOf(i);
+      const gh = 132;
+      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + gh + '" rx="6" fill="#eef1f8" stroke="#9db8d6" stroke-width="1.5" stroke-dasharray="4 5"/>';
+      const tlp = titleLines(pendingStage);
+      if (tlp[0]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tlp[0]) + '</text>';
+      if (tlp[1]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tlp[1]) + '</text>';
+      svg += '<text class="pm-flow-pending" x="' + cx + '" y="94" text-anchor="middle">Results</text>';
+      svg += '<text class="pm-flow-pending" x="' + cx + '" y="114" text-anchor="middle">pending</text>';
+      const pf = fees[pendingStage];
+      if (pf) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">$' + pf + ' entry fee</text>';
+    }
+
+    svg += '</svg>';
+
+    /* ============================ legend ============================ */
     const legend =
-      '<div class="pm-funnel-legend">' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:' + C.blue + '"></span>Stage band height shows unique athlete count</span>' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:' + C.ink3 + ';opacity:.4"></span>Drop-off arrows show athletes who did not advance</span>' +
-        (pmState.showFinancials ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:' + C.amber + '"></span>Aggregate entry-fee revenue collected per stage</span>' : '') +
+      '<div class="pm-flow-legend">' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6)"></span>Advancing current \u2014 divers who competed at the next stage too</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 competed at this stage but not the next</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 first appeared at this stage (byes / new entrants)</span>' +
+        (pendingStage ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>' : '') +
+        (pmState.showFinancials ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#d97706"></span>Entry-fee revenue collected</span>' : '') +
       '</div>';
 
-    return sectionShell(1, 'Pipeline Funnel — ' + year,
-      'Each band shows how many unique athletes competed at that stage of the ' + year + ' Junior Circuit. The bar width is proportional to the count, so the narrowing visually shows attrition through the qualification pipeline. Use the financial overlay toggle in the controls bar to add fee revenue detail to each band.',
-      kpiHtml + '<div class="pm-funnel-wrap">' + svg + legend + '</div>' + footnote);
+    /* ============================ footnotes ============================ */
+    let notes = [];
+    // tiny inflows folded into footnote
+    for (let i = 1; i < realStages.length; i++){
+      if (ENTER[i] > 0 && (ENTER[i] < 8 || hOf(ENTER[i]) < 6)) {
+        notes.push(fmtNum(ENTER[i]) + ' diver' + (ENTER[i]>1?'s':'') + ' entered at ' + STAGE_SHORT[realStages[i]] +
+          ' without a ' + STAGE_SHORT[realStages[i-1]] + ' result (too few to draw)');
+      }
+    }
+    // asterisk (non-qualifying) note — preserved from prior behavior
+    const astStages = Object.keys(data.asterisked || {});
+    if (astStages.length && !pmState.excludeAsterisked) {
+      astStages.forEach(function(s){
+        Object.keys(data.asterisked[s]).forEach(function(reason){
+          const r = data.asterisked[s][reason];
+          if (reason === 'platform_at_regionals') notes.push(r.event_entries + ' platform entries at ' + STAGE_SHORT[s] + ' are exhibition / non-qualifying (kept in view, marked *)');
+          else if (reason === 'group_cd_at_regionals_2026') notes.push(r.event_entries + ' Group C/D entries at Regionals (in 2026, C/D enter at Zones)');
+        });
+      });
+    }
+    let footnote = '';
+    if (notes.length) {
+      footnote = '<div class="pm-footnote"><strong>Notes</strong> \u2014 ' + notes.join('; ') + '.</div>';
+    }
+
+    const explainer =
+      'Read it left to right as the ' + year + ' season unfolds. Each navy post is a stage; its height is how many unique divers competed there. ' +
+      'The blue current carries divers who advanced (competed at the next stage too); red streams peeling off are divers who stopped; ' +
+      'a pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide.' +
+      (pendingStage ? ' The dashed basin is the stage still to come.' : '') +
+      ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
+
+    return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
+      kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */

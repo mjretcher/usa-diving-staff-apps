@@ -1699,3 +1699,104 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
 .pm-career-detail summary:hover { background: rgba(0,154,199,.06); }
 .pm-career-detail[open] summary { border-bottom: 1px solid var(--line, #e2e5ef); }
 .pm-career-detail .pm-status-table { border-radius: 0; }
+
+
+/* ====================================================================
+   QUALIFICATION PIPELINE — alluvial flow ("the river")  [Section 1]
+   Namespaced pm-flow-* (collision-checked against shared/design.css).
+   Brand: navy #171f69, pool #009ac7, red #e31937. Red only on white.
+   ==================================================================== */
+
+/* new KPI accent variants (extend existing .pm-kpi) */
+.pm-kpi.sky::before     { background: #56a8da; }
+.pm-kpi.sky .pm-kpi-value     { color: #2f7fb8; }
+.pm-kpi.neutral::before { background: #5a6a7e; }
+.pm-kpi.neutral .pm-kpi-value { color: #2d3a4a; }
+
+/* "Viewing" context chip row */
+.pm-flow-viewing {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 2px 0 16px;
+}
+.pm-flow-viewing-key {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3, #5a6a7e);
+  margin-right: 2px;
+}
+.pm-flow-chip {
+  font-family: var(--font-ui);
+  font-size: 12px; font-weight: 700; color: #fff;
+  background: #171f69; border-radius: 999px;
+  padding: 4px 12px; line-height: 1.2;
+}
+.pm-flow-chip.all   { background: #eef1f8; color: #2d3a4a; }
+.pm-flow-chip.muted { background: #f0f2f8; color: #5a6a7e; font-weight: 600; }
+
+/* river canvas */
+.pm-flow-wrap {
+  background: linear-gradient(180deg, #fbfcfe 0%, #f5f8fc 100%);
+  border-radius: 14px;
+  padding: 20px 18px 18px;
+  border: 1px solid var(--line, #e2e5ef);
+  box-shadow: inset 0 1px 0 #fff;
+}
+.pm-flow-svg { width: 100%; height: auto; display: block; }
+
+/* gate headers */
+.pm-flow-stage {
+  font-family: var(--font-display);
+  font-size: 16px; font-weight: 800; fill: #171f69;
+  letter-spacing: .02em;
+}
+.pm-flow-stage.ghost { fill: #8294b4; }
+.pm-flow-count {
+  font-family: var(--font-display);
+  font-size: 38px; font-weight: 800; fill: #171f69; letter-spacing: 0;
+}
+.pm-flow-count-unit {
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 600; fill: var(--ink-3, #5a6a7e);
+}
+.pm-flow-fee {
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 600; fill: #8294b4;
+}
+.pm-flow-pending {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 800; fill: #8294b4; letter-spacing: .01em;
+}
+
+/* labels on the flows */
+.pm-flow-advlabel {
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: 700; fill: #fff;
+  paint-order: stroke; stroke: rgba(13,16,64,.22); stroke-width: 2px;
+}
+.pm-flow-exit-n {
+  font-family: var(--font-display);
+  font-size: 19px; font-weight: 800; fill: #e31937; letter-spacing: 0;
+}
+.pm-flow-exit-sub {
+  font-family: var(--font-ui);
+  font-size: 11.5px; font-weight: 600; fill: var(--ink-3, #5a6a7e);
+}
+.pm-flow-enter-n {
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 800; fill: #2f7fb8; letter-spacing: 0;
+}
+.pm-flow-enter-sub {
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 600; fill: var(--ink-3, #5a6a7e);
+}
+.pm-flow-rev {
+  font-family: var(--font-mono);
+  font-size: 12px; font-weight: 700; fill: #d97706;
+}
+
+/* legend */
+.pm-flow-legend {
+  display: flex; gap: 22px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--line, #e2e5ef);
+  font-size: 12.5px; color: var(--ink-2, #2d3a4a);
+}
