@@ -4,6 +4,273 @@
    Type: Barlow Condensed (display) + Inter (UI) + JetBrains Mono
    ============================================================ */
 
+/* ── Cohort Progression section ──────────────────────────── */
+.pm-cohort-era {
+  background: linear-gradient(90deg, rgba(23,31,105,.04) 0%, transparent 100%);
+  border-left: 3px solid #171f69;
+  border-radius: 0 6px 6px 0;
+  padding: 10px 16px;
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  color: var(--ink-2, #2d3a4a);
+  line-height: 1.5;
+}
+.pm-cohort-era strong { color: #171f69; font-weight: 700; }
+
+.pm-cohort-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line, #e2e5ef);
+}
+.pm-cohort-stage-picker {
+  display: inline-flex;
+  background: var(--surface-2, #f7f8fc);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 999px;
+  padding: 3px;
+}
+.pm-cohort-stage-btn {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2, #2d3a4a);
+  cursor: pointer;
+  transition: all .18s;
+  white-space: nowrap;
+}
+.pm-cohort-stage-btn:hover { color: #171f69; background: rgba(0,154,199,.08); }
+.pm-cohort-stage-btn.active {
+  background: #171f69;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(23,31,105,.25);
+}
+.pm-cohort-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--ink-2, #2d3a4a);
+}
+.pm-cohort-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pm-cohort-legend-item .sw {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+
+/* Cohort lanes — the stacked-bar visualization */
+.pm-cohort-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pm-cohort-lane {
+  background: #fff;
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 10px;
+  padding: 14px 18px 16px;
+  transition: box-shadow .15s, transform .15s;
+}
+.pm-cohort-lane:hover { box-shadow: 0 4px 12px rgba(13,16,64,.08); }
+.pm-cohort-lane.starting {
+  background: linear-gradient(180deg, rgba(23,31,105,.04) 0%, #fff 100%);
+  border-color: rgba(23,31,105,.20);
+}
+.pm-cohort-lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.pm-cohort-lane-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.pm-cohort-lane-start-tag {
+  display: inline-block;
+  background: #e31937;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.pm-cohort-lane-stage-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: #171f69;
+}
+.pm-cohort-lane-counts { text-align: right; min-width: 0; }
+.pm-cohort-lane-big {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: #171f69;
+  line-height: 1.1;
+}
+.pm-cohort-lane-big .lbl {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3, #5a6a7e);
+  text-transform: none;
+}
+.pm-cohort-lane-pct {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3, #5a6a7e);
+  margin-top: 2px;
+}
+.pm-cohort-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.pm-cohort-bar {
+  display: flex;
+  height: 30px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-grow: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+  transition: width .45s cubic-bezier(.2,.7,.4,1);
+  min-width: 4px;
+}
+.pm-cohort-tier {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: opacity .15s;
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pm-cohort-tier:hover { opacity: .82; }
+.pm-cohort-bar-scale {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4, #94a3b8);
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.pm-cohort-drop-arrow {
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-3, #5a6a7e);
+  font-style: italic;
+  padding: 6px 0;
+  margin: 2px 0;
+}
+
+/* Nationals round-by-round breakdown */
+.pm-cohort-nat-rounds {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line, #e2e5ef);
+}
+.pm-cohort-nat-rounds-head {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #e31937;
+  margin-bottom: 10px;
+}
+.pm-cohort-nat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 760px) { .pm-cohort-nat-row { grid-template-columns: 1fr; } }
+.pm-cohort-nat-cell {
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--surface-2, #f7f8fc);
+  border-left: 4px solid var(--line, #e2e5ef);
+}
+.pm-cohort-nat-cell.final { background: linear-gradient(135deg, rgba(227,25,55,.08) 0%, #fff 100%); border-left-color: #e31937; }
+.pm-cohort-nat-cell.semi  { background: linear-gradient(135deg, rgba(0,154,199,.08) 0%, #fff 100%); border-left-color: #009ac7; }
+.pm-cohort-nat-cell.prelim{ background: linear-gradient(135deg, rgba(148,163,184,.10) 0%, #fff 100%); border-left-color: #94a3b8; }
+.pm-cohort-nat-cell .lbl {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-3, #5a6a7e);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.pm-cohort-nat-cell .val {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  color: #171f69;
+  line-height: 1;
+}
+.pm-cohort-nat-cell.final .val { color: #e31937; }
+.pm-cohort-nat-cell.semi  .val { color: #009ac7; }
+.pm-cohort-nat-cell .sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3, #5a6a7e);
+  margin-top: 4px;
+}
+
+/* ── Rule era chips bar (for Retention Section) ─────────── */
+.pm-era-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 16px;
+  align-items: center;
+}
+.pm-era-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-2, #2d3a4a);
+  padding: 6px 12px;
+  background: var(--surface-2, #f7f8fc);
+  border: 1px solid var(--line, #e2e5ef);
+  border-radius: 999px;
+}
+.pm-era-chip.post { background: rgba(0,154,199,.08); border-color: rgba(0,154,199,.30); }
+.pm-era-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #5a6a7e;
+}
+.pm-era-dot.post { background: #009ac7; }
+
 /* ── Filter bar ──────────────────────────────────────────── */
 .pm-filter-bar {
   background: linear-gradient(180deg, #fff 0%, #f7f8fc 100%);

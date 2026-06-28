@@ -61,11 +61,17 @@
       gender:    '',
       discipline:'',
       zone:      '',
+      region:    '',
     },
+    // Cohort progression state — scoped to that section
+    cohortStartStage: 'Regionals',  // starting point of the traced cohort
+    cohortShowFinals: true,         // expose Nationals Prelim/Final split
     filterOptions: null,       // distinct values discovered from Neon
     funnelCache:    {},        // by year+filters key
     yoyCache:       null,      // by filters key
     demoCache:      {},        // by year+filters key
+    cohortCache:    {},        // by year+startStage+filters key
+    retentionCache: null,      // by filters key
     futureChampMeets: null,    // discovered list
     loading: false,
     error:   null,
@@ -78,7 +84,8 @@
       year || 'all',
       pmState.excludeAsterisked ? 'noast' : 'wast',
       pmState.excludeFutureChamps ? 'nofc' : 'wfc',
-      f.age_group || '*', f.gender || '*', f.discipline || '*', f.zone || '*'
+      f.age_group || '*', f.gender || '*', f.discipline || '*',
+      f.zone || '*', f.region || '*'
     ].join('|');
   }
 
@@ -117,6 +124,7 @@
     if (f.gender)     { parts.push('gender = $' + p);     params.push(f.gender);     p++; }
     if (f.discipline) { parts.push('discipline = $' + p); params.push(f.discipline); p++; }
     if (f.zone)       { parts.push('zone = $' + p);       params.push(f.zone);       p++; }
+    if (f.region)     { parts.push('region = $' + p);     params.push(String(f.region)); p++; }
 
     return {
       sql: parts.length ? ' AND ' + parts.join(' AND ') : '',
@@ -314,25 +322,165 @@
   async function loadFilterOptions(){
     if (pmState.filterOptions) return pmState.filterOptions;
     const sql =
-      "SELECT 'age_group' AS dim, age_group AS val FROM core.event_results " +
+      "SELECT 'age_group' AS dim, age_group::text AS val FROM core.event_results " +
       "  WHERE " + whereJrCircuit() + " AND age_group IS NOT NULL " +
       "UNION " +
-      "SELECT 'gender' AS dim, gender AS val FROM core.event_results " +
+      "SELECT 'gender' AS dim, gender::text AS val FROM core.event_results " +
       "  WHERE " + whereJrCircuit() + " AND gender IS NOT NULL " +
       "UNION " +
-      "SELECT 'discipline' AS dim, discipline AS val FROM core.event_results " +
+      "SELECT 'discipline' AS dim, discipline::text AS val FROM core.event_results " +
       "  WHERE " + whereJrCircuit() + " AND discipline IS NOT NULL " +
       "UNION " +
-      "SELECT 'zone' AS dim, zone AS val FROM core.event_results " +
+      "SELECT 'zone' AS dim, zone::text AS val FROM core.event_results " +
       "  WHERE " + whereJrCircuit() + " AND zone IS NOT NULL " +
+      "UNION " +
+      "SELECT 'region' AS dim, region::text AS val FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND region IS NOT NULL " +
       "ORDER BY dim, val";
     const r = await neonQ(sql);
-    const opts = { age_group: [], gender: [], discipline: [], zone: [] };
+    const opts = { age_group: [], gender: [], discipline: [], zone: [], region: [] };
     r.rows.forEach(row => {
       if (opts[row.dim] && row.val) opts[row.dim].push(row.val);
     });
+    // Sort regions numerically if they're numeric strings
+    if (opts.region.every(v => /^\d+$/.test(v))) {
+      opts.region.sort((a, b) => Number(a) - Number(b));
+    }
     pmState.filterOptions = opts;
     return opts;
+  }
+
+  /* === COHORT PROGRESSION ANALYSIS ============================================
+   * The headline analytical capability. Define a starting cohort (athletes who
+   * appeared at $startStage in $year), then trace every one of them through
+   * every subsequent stage in that same year. For each stage we compute:
+   *   - reached:          unique athletes who showed up at that stage
+   *   - top_3:            best place 1-3 (medals)
+   *   - top_4_10:         best place 4-10
+   *   - top_11_18:        best place 11-18 (the typical advance band)
+   *   - rest:             best place 19+
+   *   - had_final:        appeared in any 'Final' round at that stage
+   *   - had_semi:         appeared in any 'Semifinal' round
+   *   - had_prelim:       appeared in any 'Prelim' round
+   * For Nationals these round flags answer the killer question:
+   *   "Athletes who started at Regionals AND made the Finals at Junior Nationals"
+   * Pre-2026: Regionals → Zones → Nationals.  2026+: Regionals → Zones → EWC → Nationals.
+   * ========================================================================== */
+  async function loadCohortProgression(year, startStage){
+    const ck = cacheKey(year) + '|coh|' + startStage;
+    if (pmState.cohortCache[ck]) return pmState.cohortCache[ck];
+    const fb = buildFiltersSql(3);  // $1=year, $2=startStage, $3+=filters
+
+    const sql =
+      "WITH cohort AS ( " +
+      "  SELECT DISTINCT diver_id_dm FROM core.event_results " +
+      "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + " " +
+      "    AND diver_id_dm IS NOT NULL " +
+      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      fb.sql + " " +
+      "), " +
+      "journey AS ( " +
+      "  SELECT er.diver_id_dm, er.stage, " +
+      "    MIN(er.place) AS best_place, " +
+      "    BOOL_OR(er.round = 'Prelim')    AS had_prelim, " +
+      "    BOOL_OR(er.round = 'Semifinal') AS had_semi, " +
+      "    BOOL_OR(er.round = 'Final')     AS had_final " +
+      "  FROM core.event_results er " +
+      "  JOIN cohort c ON c.diver_id_dm = er.diver_id_dm " +
+      "  WHERE er.year = $1 AND " + whereJrCircuit() + " " +
+      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      fb.sql + " " +
+      "  GROUP BY er.diver_id_dm, er.stage " +
+      ") " +
+      "SELECT stage, " +
+      "  COUNT(DISTINCT diver_id_dm)::int                                                  AS reached, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE best_place BETWEEN 1 AND 3)::int        AS top_3, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE best_place BETWEEN 4 AND 10)::int       AS top_4_10, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE best_place BETWEEN 11 AND 18)::int      AS top_11_18, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE best_place >= 19)::int                  AS rest_place, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE best_place IS NULL)::int                AS no_place, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE had_final)::int                         AS in_final_round, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE had_semi)::int                          AS in_semi_round, " +
+      "  COUNT(DISTINCT diver_id_dm) FILTER (WHERE had_prelim)::int                        AS in_prelim_round " +
+      "FROM journey GROUP BY stage";
+
+    const params = [year, startStage].concat(fb.params);
+    const r = await neonQ(sql, params);
+
+    // Build output keyed by stage
+    const out = { year: year, startStage: startStage, stages: {} };
+    STAGE_ORDER.forEach(s => {
+      out.stages[s] = {
+        reached: 0, top_3: 0, top_4_10: 0, top_11_18: 0, rest_place: 0, no_place: 0,
+        in_final_round: 0, in_semi_round: 0, in_prelim_round: 0,
+      };
+    });
+    r.rows.forEach(row => {
+      if (!STAGE_ORDER.includes(row.stage)) return;
+      Object.keys(out.stages[row.stage]).forEach(k => {
+        out.stages[row.stage][k] = Number(row[k]) || 0;
+      });
+    });
+    // The "starting" cohort size is reached at startStage by definition
+    out.cohortSize = out.stages[startStage] ? out.stages[startStage].reached : 0;
+    pmState.cohortCache[ck] = out;
+    return out;
+  }
+
+  /* === RETENTION RATE TRENDS (replaces stacked-bar YoY) =======================
+   * For every year on record, compute the retention rate at each stage transition.
+   * Returns one row per (year, transition) so the renderer can draw a line per
+   * transition over time. Rule-era differences are reflected automatically: the
+   * EWC transitions only have data for 2026+, the Nationals-direct transitions
+   * only for 2021–2025.
+   * ========================================================================== */
+  async function loadRetentionRates(){
+    const ck = cacheKey('ret');
+    if (pmState.retentionCache && pmState.retentionCache.__ck === ck) return pmState.retentionCache;
+    const fb = buildFiltersSql(1);
+
+    const sql =
+      "WITH per_year_stage AS ( " +
+      "  SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n " +
+      "  FROM core.event_results " +
+      "  WHERE " + whereJrCircuit() + " AND diver_id_dm IS NOT NULL " +
+      (pmState.excludeFutureChamps ? "    AND (meet_name NOT ILIKE '%Future Champions%' AND event_name NOT ILIKE '%Future Champions%') " : '') +
+      fb.sql + " " +
+      "  GROUP BY year, stage " +
+      ") " +
+      "SELECT * FROM per_year_stage ORDER BY year, stage";
+    const r = await neonQ(sql, fb.params);
+
+    // Pivot: year -> stage -> n
+    const grid = {};
+    r.rows.forEach(row => {
+      if (!grid[row.year]) grid[row.year] = {};
+      grid[row.year][row.stage] = Number(row.n) || 0;
+    });
+    // Compute retention rates per year per transition
+    const years = Object.keys(grid).map(Number).sort();
+    const out = years.map(y => {
+      const s = grid[y];
+      const reg = s.Regionals || 0;
+      const zon = s.Zones     || 0;
+      const ewc = s.EWC       || 0;
+      const nat = s.Nationals || 0;
+      return {
+        year: y,
+        regionals: reg,
+        zones: zon,
+        ewc: ewc,
+        nationals: nat,
+        reg_to_zon: reg > 0 ? zon / reg : null,
+        zon_to_ewc: zon > 0 && ewc > 0 ? ewc / zon : null,
+        zon_to_nat: zon > 0 && nat > 0 && ewc === 0 ? nat / zon : null,   // pre-2026 direct
+        ewc_to_nat: ewc > 0 && nat > 0 ? nat / ewc : null,                // 2026+
+        reg_to_nat: reg > 0 && nat > 0 ? nat / reg : null,                // overall pipeline survival
+      };
+    });
+    out.__ck = ck;
+    pmState.retentionCache = out;
+    return out;
   }
 
   /* Demographics + composition: counts split by age_group × stage,        *
@@ -386,6 +534,8 @@
     pmState.funnelCache = {};
     pmState.yoyCache = null;
     pmState.demoCache = {};
+    pmState.cohortCache = {};
+    pmState.retentionCache = null;
   }
 
   /* ── Utility: format helpers ───────────────────────────── */
@@ -870,97 +1020,433 @@
       kpis + grid);
   }
 
-  /* ── SECTION 3: Year-over-Year ─────────────────────────── */
-  function renderYoYSection(rows){
+  /* ── SECTION 3: Cohort Progression Analysis ──────────────
+     The killer feature: trace a starting cohort (athletes who appeared at
+     [startStage] in [year]) through every subsequent stage in that same year.
+     Each stage shows the placement-tier breakdown (top 3 / 4–10 / 11–18 / 19+)
+     and — for Junior Nationals — whether the athlete made the Final round,
+     was cut after Prelim, or entered via Semifinal direct. This is what
+     answers questions like "of athletes who started at 2025 Regionals, how
+     many made the Junior Nationals Final round?"
+  ──────────────────────────────────────────────────────── */
+  function renderCohortSection(year, data){
+    if (!data) {
+      return sectionShell(3, 'Cohort Progression — Following the ' + year + ' ' + STAGE_SHORT[pmState.cohortStartStage] + ' cohort',
+        'Trace every athlete from a starting cohort through the entire pipeline that year. Placement-tier and Prelim/Semi/Final breakdowns at each stage.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Tracing cohort through the pipeline…</div></div>');
+    }
+
+    const startStage = pmState.cohortStartStage;
+    const startCount = data.cohortSize;
+
+    // Decide which subsequent stages to show based on rule era and data presence
+    const startIdx = STAGE_ORDER.indexOf(startStage);
+    const downstream = STAGE_ORDER.slice(startIdx).filter((s, i) => {
+      if (i === 0) return true;
+      // EWC only exists 2026+; for pre-2026 it's an empty stage to skip
+      if (s === 'EWC' && year < 2026) return false;
+      return true;
+    });
+
+    if (!startCount) {
+      const stageBtns = ['Regionals','Zones','EWC'].map(s =>
+        '<button class="pm-cohort-stage-btn ' + (s === startStage ? 'active' : '') + '" data-pm-cohort-stage="' + s + '">Starting at ' + STAGE_SHORT[s] + '</button>'
+      ).join('');
+      return sectionShell(3, 'Cohort Progression — ' + year,
+        'Trace every athlete from a starting cohort through the rest of the pipeline.',
+        '<div class="pm-cohort-controls"><div class="pm-cohort-stage-picker">' + stageBtns + '</div></div>' +
+        '<div class="pm-empty"><div class="pm-empty-title">No athletes in starting cohort</div>' +
+        '<div class="pm-empty-sub">No ' + year + ' ' + STAGE_SHORT[startStage] + ' athletes match the current filters. Try a different starting stage, clear filters, or change year.</div></div>');
+    }
+
+    // Tier colors — chosen to read top-down: red (medal) → orange → amber → gray
+    const tierColors = {
+      top_3:     '#e31937',   // brand red — medal contenders
+      top_4_10:  '#f59e0b',   // amber
+      top_11_18: '#fbbf24',   // light amber
+      rest:      '#94a3b8',   // gray
+      no_place:  '#cbd5e1',   // very light gray
+    };
+
+    // KPI strip — focused on the cohort + answer to the headline question
+    const finalStage = downstream[downstream.length - 1];
+    const finalStageData = data.stages[finalStage] || { reached: 0, in_final_round: 0 };
+    const reachedLast = finalStageData.reached;
+    const reachedFinalAtLast = finalStageData.in_final_round;
+    const retentionPct = startCount ? (reachedLast / startCount * 100).toFixed(1) : '—';
+    const madeFinalsPct = startCount ? (reachedFinalAtLast / startCount * 100).toFixed(1) : '—';
+
+    let kpis = '<div class="pm-kpi-strip">';
+    kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Starting cohort</div>' +
+            '<div class="pm-kpi-value">' + fmtNum(startCount) + '</div>' +
+            '<div class="pm-kpi-sub">' + year + ' ' + STAGE_SHORT[startStage] + ' athletes</div></div>';
+    kpis += '<div class="pm-kpi accent"><div class="pm-kpi-label">Reached ' + STAGE_SHORT[finalStage] + '</div>' +
+            '<div class="pm-kpi-value">' + fmtNum(reachedLast) + '</div>' +
+            '<div class="pm-kpi-sub">' + retentionPct + '% of starting cohort</div></div>';
+    if (finalStage === 'Nationals') {
+      kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Made the Final round at Nationals</div>' +
+              '<div class="pm-kpi-value">' + fmtNum(reachedFinalAtLast) + '</div>' +
+              '<div class="pm-kpi-sub">' + madeFinalsPct + '% of starting cohort</div></div>';
+      kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Medaled (Top 3) at Nationals</div>' +
+              '<div class="pm-kpi-value">' + fmtNum(finalStageData.top_3) + '</div>' +
+              '<div class="pm-kpi-sub">from the starting cohort</div></div>';
+    } else {
+      kpis += '<div class="pm-kpi pool"><div class="pm-kpi-label">Medaled (Top 3) at ' + STAGE_SHORT[finalStage] + '</div>' +
+              '<div class="pm-kpi-value">' + fmtNum(finalStageData.top_3) + '</div>' +
+              '<div class="pm-kpi-sub">from the starting cohort</div></div>';
+      kpis += '<div class="pm-kpi"><div class="pm-kpi-label">Last stage in ' + year + '</div>' +
+              '<div class="pm-kpi-value" style="font-size: 24px;">' + STAGE_SHORT[finalStage] + '</div>' +
+              '<div class="pm-kpi-sub">' + (year >= 2026 ? '4-meet rule era' : '3-meet rule era') + '</div></div>';
+    }
+    kpis += '</div>';
+
+    // Visualization: horizontal "lane chart". Each stage is a row with a
+    // stacked-segment bar showing tier breakdown. Width relative to startCount.
+    let lanes = '<div class="pm-cohort-lanes">';
+    downstream.forEach((s, i) => {
+      const sd = data.stages[s] || {};
+      const total = sd.reached || 0;
+      const widthPct = startCount ? (total / startCount * 100).toFixed(2) : 0;
+
+      // Tier segments (non-cumulative — they stack to total)
+      const tiers = [
+        { key: 'top_3',     label: 'Top 3 (medal)',  count: sd.top_3,     color: tierColors.top_3 },
+        { key: 'top_4_10',  label: 'Top 4–10',       count: sd.top_4_10,  color: tierColors.top_4_10 },
+        { key: 'top_11_18', label: 'Top 11–18',      count: sd.top_11_18, color: tierColors.top_11_18 },
+        { key: 'rest',      label: '19+ place',      count: sd.rest_place, color: tierColors.rest },
+        { key: 'no_place',  label: 'No place',       count: sd.no_place,  color: tierColors.no_place },
+      ];
+      const segHtml = tiers.filter(t => t.count > 0).map(t => {
+        const pct = total ? (t.count / total * 100).toFixed(1) : 0;
+        const tooltip = t.label + ': ' + fmtNum(t.count) + ' (' + pct + '% of stage)';
+        return '<div class="pm-cohort-tier" style="flex: ' + t.count + '; background: ' + t.color + '" title="' + escapeHtml(tooltip) + '">' +
+          (t.count >= 8 ? fmtNum(t.count) : '') +
+        '</div>';
+      }).join('');
+
+      // Pct retention vs starting cohort
+      const retentionThis = startCount ? (total / startCount * 100).toFixed(1) : '—';
+      const dropFromPrev = (i > 0) ? (data.stages[downstream[i-1]].reached - total) : null;
+
+      lanes += '<div class="pm-cohort-lane' + (i === 0 ? ' starting' : '') + '">' +
+        '<div class="pm-cohort-lane-head">' +
+          '<div class="pm-cohort-lane-stage">' +
+            (i === 0 ? '<span class="pm-cohort-lane-start-tag">START</span>' : '') +
+            '<span class="pm-cohort-lane-stage-name">' + escapeHtml(STAGE_LABELS[s]) + '</span>' +
+          '</div>' +
+          '<div class="pm-cohort-lane-counts">' +
+            '<div class="pm-cohort-lane-big">' + fmtNum(total) + ' <span class="lbl">athletes</span></div>' +
+            '<div class="pm-cohort-lane-pct">' + retentionThis + '% of starting cohort</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pm-cohort-bar-wrap">' +
+          '<div class="pm-cohort-bar" style="width: ' + widthPct + '%">' + segHtml + '</div>' +
+          '<div class="pm-cohort-bar-scale">' + (startCount ? fmtNum(startCount) : '—') + ' →</div>' +
+        '</div>';
+
+      // For Nationals: show Prelim/Semi/Final breakdown
+      if (s === 'Nationals' && total > 0) {
+        const inFinal = sd.in_final_round || 0;
+        const inSemi = sd.in_semi_round || 0;
+        const inPrelim = sd.in_prelim_round || 0;
+        const prelimCut = Math.max(0, inPrelim - inFinal - inSemi);
+        const semiDirect = Math.max(0, inSemi - inFinal);
+        const finalDirect = Math.max(0, inFinal - inSemi - inPrelim);
+        const finalFromPrelim = Math.min(inFinal, inPrelim);
+
+        lanes += '<div class="pm-cohort-nat-rounds">' +
+          '<div class="pm-cohort-nat-rounds-head">Round-by-round at Junior Nationals</div>' +
+          '<div class="pm-cohort-nat-row">' +
+            '<div class="pm-cohort-nat-cell final"><div class="lbl">Made the Final</div>' +
+              '<div class="val">' + fmtNum(inFinal) + '</div>' +
+              '<div class="sub">' + (total ? (inFinal/total*100).toFixed(1) : 0) + '% of attendees</div></div>' +
+            '<div class="pm-cohort-nat-cell semi"><div class="lbl">In Semifinal round</div>' +
+              '<div class="val">' + fmtNum(inSemi) + '</div>' +
+              '<div class="sub">' + (total ? (inSemi/total*100).toFixed(1) : 0) + '% of attendees</div></div>' +
+            '<div class="pm-cohort-nat-cell prelim"><div class="lbl">Prelim entry — cut</div>' +
+              '<div class="val">' + fmtNum(prelimCut) + '</div>' +
+              '<div class="sub">' + (total ? (prelimCut/total*100).toFixed(1) : 0) + '% of attendees</div></div>' +
+          '</div>' +
+        '</div>';
+      }
+
+      // Drop-off arrow between bars
+      if (i < downstream.length - 1 && dropFromPrev === null) {
+        const nextStage = downstream[i + 1];
+        const nextTotal = (data.stages[nextStage] || {}).reached || 0;
+        const dropped = total - nextTotal;
+        if (dropped > 0) {
+          lanes += '<div class="pm-cohort-drop-arrow">↓ ' + fmtNum(dropped) +
+            ' did not advance from ' + STAGE_SHORT[s] + ' to ' + STAGE_SHORT[nextStage] +
+            ' (' + (total ? (dropped/total*100).toFixed(1) : 0) + '% drop-off)</div>';
+        }
+      } else if (i > 0 && dropFromPrev > 0) {
+        // Show the drop-off note above the lane head instead (positioned below previous)
+      }
+
+      lanes += '</div>';
+    });
+    lanes += '</div>';
+
+    // Cohort starting-stage selector (within section)
+    const stageBtns = ['Regionals','Zones','EWC']
+      .filter(s => s !== 'EWC' || year >= 2026)
+      .map(s => '<button class="pm-cohort-stage-btn ' + (s === startStage ? 'active' : '') + '" data-pm-cohort-stage="' + s + '">Starting at ' + STAGE_SHORT[s] + '</button>')
+      .join('');
+    const controls =
+      '<div class="pm-cohort-controls">' +
+        '<div class="pm-cohort-stage-picker">' + stageBtns + '</div>' +
+        '<div class="pm-cohort-legend">' +
+          '<span class="pm-cohort-legend-item"><span class="sw" style="background:' + tierColors.top_3 + '"></span>Top 3 (medal)</span>' +
+          '<span class="pm-cohort-legend-item"><span class="sw" style="background:' + tierColors.top_4_10 + '"></span>Top 4–10</span>' +
+          '<span class="pm-cohort-legend-item"><span class="sw" style="background:' + tierColors.top_11_18 + '"></span>Top 11–18</span>' +
+          '<span class="pm-cohort-legend-item"><span class="sw" style="background:' + tierColors.rest + '"></span>19+ place</span>' +
+          '<span class="pm-cohort-legend-item"><span class="sw" style="background:' + tierColors.no_place + '"></span>No place recorded</span>' +
+        '</div>' +
+      '</div>';
+
+    // Era note
+    const eraNote = year >= 2026
+      ? '<div class="pm-cohort-era">This cohort runs under the <strong>2026+ four-meet system</strong> (Regionals → Zones → E/W/C → Junior Nationals). Counts within a stage are non-cumulative and stack to that stage\'s total.</div>'
+      : '<div class="pm-cohort-era">This cohort runs under the <strong>2021–2025 three-meet system</strong> (Regionals → Zones → Junior Nationals — no E/W/C). Counts within a stage are non-cumulative and stack to that stage\'s total.</div>';
+
+    return sectionShell(3, 'Cohort Progression — Following the ' + year + ' ' + STAGE_SHORT[startStage] + ' cohort',
+      'Every athlete in the starting cohort, traced through every subsequent stage of the ' + year + ' pipeline. The bar width is the share of the starting cohort that reached that stage; each color segment is a placement tier at that stage. For Junior Nationals, the round-by-round breakdown below shows who made the Final, who was in the Semifinal round, and who was cut after Prelim.',
+      kpis + eraNote + controls + lanes);
+  }
+
+  /* ── SECTION 4: Retention Rate Trends (replaces stacked YoY bars) ──
+     Industry-standard pipeline analytics: per-year retention rates at each
+     stage transition, drawn as lines so the eye sees trends, not just totals.
+     Shaded background bands distinguish the two rule eras (pre-2026 three-meet
+     vs 2026+ four-meet) so the reader knows which transitions are even possible
+     in each era. Below the lines, a small "absolute counts" companion shows
+     the underlying volume so retention rates can be read in context.
+  ──────────────────────────────────────────────────────── */
+  function renderRetentionSection(rows){
     if (!rows) {
-      return sectionShell(3, 'Year-Over-Year Comparison',
-        'How participation has changed across 2021–2026. Useful for the "is the circuit growing or shrinking?" conversation.',
-        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading multi-year data…</div></div>');
+      return sectionShell(4, 'Retention Rate Trends — Multi-Year Pipeline Survival',
+        'How well the pipeline retains athletes from stage to stage, year over year. Pipeline analytics, not just bars.',
+        '<div class="pm-loading"><div class="pm-loading-spinner"></div><div class="pm-loading-text">Loading retention curves…</div></div>');
     }
     if (!rows.length) {
-      return sectionShell(3, 'Year-Over-Year Comparison',
-        'How participation has changed across 2021–2026.',
+      return sectionShell(4, 'Retention Rate Trends',
+        'How retention has moved across years.',
         '<div class="pm-empty"><div class="pm-empty-title">No multi-year data found</div></div>');
     }
 
-    // Pivot data
-    const allYears = Array.from(new Set(rows.map(r => r.year))).sort();
-    const byYearStage = {};
-    rows.forEach(r => {
-      byYearStage[r.year] = byYearStage[r.year] || {};
-      byYearStage[r.year][r.stage] = r;
-    });
+    const years = rows.map(r => r.year);
+    const minY = Math.min.apply(null, years);
+    const maxY = Math.max.apply(null, years);
 
-    // KPI strip — overall trend
-    const yearTotals = allYears.map(y => {
-      const stagesObj = byYearStage[y] || {};
-      const ath = Math.max.apply(null, STAGE_ORDER.map(s => (stagesObj[s] && stagesObj[s].unique_athletes) || 0).concat([0]));
-      const entries = STAGE_ORDER.reduce((a, s) => a + ((stagesObj[s] && stagesObj[s].event_entries) || 0), 0);
-      const fees = ENTRY_FEES[y] || {};
-      // Aggregate revenue: sum across stages of athletes_at_stage * fee_at_stage
-      const revenue = STAGE_ORDER.reduce((a, s) => a + (((stagesObj[s] && stagesObj[s].unique_athletes) || 0) * (fees[s] || 0)), 0);
-      return { year: y, athletes: ath, entries, revenue };
-    });
-
-    const first = yearTotals[0];
-    const last = yearTotals[yearTotals.length - 1];
-    const athChange = last.athletes - first.athletes;
-    const athChangePct = first.athletes ? (athChange / first.athletes * 100).toFixed(1) : '—';
+    // Headline retention KPIs — latest year, with year-over-year delta
+    const last = rows[rows.length - 1];
+    const prev = rows[rows.length - 2] || last;
+    function pctFmt(v) { return v == null ? '—' : (v * 100).toFixed(1) + '%'; }
+    function deltaStr(curr, prior){
+      if (curr == null || prior == null) return '';
+      const delta = (curr - prior) * 100;
+      const arrow = delta >= 0 ? '▲' : '▼';
+      const sign = delta >= 0 ? '+' : '';
+      return arrow + ' ' + sign + delta.toFixed(1) + ' pts vs ' + prev.year;
+    }
 
     let kpiHtml = '<div class="pm-kpi-strip">';
-    kpiHtml +=
-      '<div class="pm-kpi">' +
-        '<div class="pm-kpi-label">Years in view</div>' +
-        '<div class="pm-kpi-value">' + allYears.length + '</div>' +
-        '<div class="pm-kpi-sub">' + first.year + ' – ' + last.year + '</div>' +
-      '</div>';
-    kpiHtml +=
-      '<div class="pm-kpi accent">' +
-        '<div class="pm-kpi-label">' + first.year + ' entry-point</div>' +
-        '<div class="pm-kpi-value">' + fmtNum(first.athletes) + '</div>' +
-        '<div class="pm-kpi-sub">athletes at first stage</div>' +
-      '</div>';
-    kpiHtml +=
-      '<div class="pm-kpi pool">' +
-        '<div class="pm-kpi-label">' + last.year + ' entry-point</div>' +
-        '<div class="pm-kpi-value">' + fmtNum(last.athletes) + '</div>' +
-        '<div class="pm-kpi-sub">' + (athChange >= 0 ? '+' : '') + athChangePct + '% vs ' + first.year + '</div>' +
-      '</div>';
-    if (pmState.showFinancials) {
-      kpiHtml +=
-        '<div class="pm-kpi financial">' +
-          '<div class="pm-kpi-label">' + last.year + ' aggregate entry-fee revenue</div>' +
-          '<div class="pm-kpi-value">' + fmtMoney(last.revenue) + '</div>' +
-          '<div class="pm-kpi-sub">across all junior stages</div>' +
-        '</div>';
+    kpiHtml += '<div class="pm-kpi"><div class="pm-kpi-label">Regionals → Zones</div>' +
+      '<div class="pm-kpi-value">' + pctFmt(last.reg_to_zon) + '</div>' +
+      '<div class="pm-kpi-sub">' + last.year + ' &nbsp;·&nbsp; ' + deltaStr(last.reg_to_zon, prev.reg_to_zon) + '</div></div>';
+    if (last.year >= 2026 || last.zon_to_ewc != null) {
+      kpiHtml += '<div class="pm-kpi pool"><div class="pm-kpi-label">Zones → E/W/C</div>' +
+        '<div class="pm-kpi-value">' + pctFmt(last.zon_to_ewc) + '</div>' +
+        '<div class="pm-kpi-sub">' + last.year + ' &nbsp;·&nbsp; 2026+ rule era</div></div>';
+    } else {
+      kpiHtml += '<div class="pm-kpi pool"><div class="pm-kpi-label">Zones → Junior Nationals</div>' +
+        '<div class="pm-kpi-value">' + pctFmt(last.zon_to_nat) + '</div>' +
+        '<div class="pm-kpi-sub">' + last.year + ' &nbsp;·&nbsp; pre-2026 rule era</div></div>';
     }
+    // Overall pipeline survival
+    const overall = last.reg_to_nat != null ? last.reg_to_nat : (last.reg_to_zon && (last.zon_to_ewc || last.zon_to_nat) ? last.reg_to_zon * (last.zon_to_ewc || last.zon_to_nat) : null);
+    kpiHtml += '<div class="pm-kpi accent"><div class="pm-kpi-label">Overall pipeline survival</div>' +
+      '<div class="pm-kpi-value">' + pctFmt(overall) + '</div>' +
+      '<div class="pm-kpi-sub">Regionals → Nationals (' + last.year + ')</div></div>';
+    kpiHtml += '<div class="pm-kpi"><div class="pm-kpi-label">' + last.year + ' Regionals base</div>' +
+      '<div class="pm-kpi-value">' + fmtNum(last.regionals) + '</div>' +
+      '<div class="pm-kpi-sub">starting athletes that year</div></div>';
     kpiHtml += '</div>';
 
-    // Chart 1: stacked bars (athletes per stage per year)
-    const chart1 = renderYoYStackedChart(allYears, byYearStage, 'unique_athletes', 'Unique athletes per stage, by year');
+    // Build the retention lines chart
+    const lineSvg = buildRetentionLines(rows, minY, maxY);
+    // Build the absolute counts companion chart
+    const absSvg = buildAbsoluteCountsChart(rows, minY, maxY);
 
-    // Chart 2: total entries trend line (or stacked: event_entries)
-    const chart2 = pmState.showFinancials
-      ? renderYoYRevenueChart(yearTotals)
-      : renderYoYStackedChart(allYears, byYearStage, 'event_entries', 'Total event entries per stage, by year');
+    const era1 = '<span class="pm-era-chip pre"><span class="pm-era-dot"></span>2021–2025 · Three-meet system (Reg → Zones → Nationals)</span>';
+    const era2 = '<span class="pm-era-chip post"><span class="pm-era-dot post"></span>2026+ · Four-meet system (Reg → Zones → E/W/C → Nationals)</span>';
+    const eraBar = '<div class="pm-era-bar">' + era1 + era2 + '</div>';
 
-    return sectionShell(3, 'Year-Over-Year Comparison',
-      'How participation and revenue have moved across ' + first.year + '–' + last.year + '. The left chart shows unique athletes per stage; the right chart shows total event entries — these tell different stories because one athlete typically enters multiple events.' +
-      (pmState.showFinancials ? ' With the financial overlay on, the right chart switches to aggregate entry-fee revenue per year.' : ''),
-      kpiHtml +
+    return sectionShell(4, 'Retention Rate Trends — Multi-Year Pipeline Survival',
+      'How well the pipeline retains athletes from stage to stage, year over year. Each line is a stage transition; the y-axis is the percent of athletes from the prior stage who advanced. The shaded background marks where the rule system changed in 2026 (E/W/C added as an intermediate stage), so you can see which transitions are even possible in each era.',
+      kpiHtml + eraBar +
       '<div class="pm-yoy-grid">' +
         '<div class="pm-yoy-chart">' +
-          '<div class="pm-yoy-chart-title">' + chart1.title + '</div>' +
-          '<div class="pm-yoy-chart-sub">' + chart1.sub + '</div>' +
-          chart1.svg +
+          '<div class="pm-yoy-chart-title">Stage-to-stage retention, by year</div>' +
+          '<div class="pm-yoy-chart-sub">Pipeline survival rates. Higher = more athletes from the prior stage advanced. Gaps indicate transitions that don\'t apply in that rule era.</div>' +
+          lineSvg +
         '</div>' +
         '<div class="pm-yoy-chart">' +
-          '<div class="pm-yoy-chart-title">' + chart2.title + '</div>' +
-          '<div class="pm-yoy-chart-sub">' + chart2.sub + '</div>' +
-          chart2.svg +
+          '<div class="pm-yoy-chart-title">Absolute athlete counts, by year and stage</div>' +
+          '<div class="pm-yoy-chart-sub">Underlying volume. Retention rates above should be read against these counts — high retention with shrinking volume tells a different story than steady volume.</div>' +
+          absSvg +
         '</div>' +
       '</div>'
     );
+  }
+
+  /* Retention lines SVG — one polyline per stage transition over time */
+  function buildRetentionLines(rows, minY, maxY){
+    const W = 540, H = 360;
+    const padL = 60, padR = 16, padT = 18, padB = 60;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const yearSpan = Math.max(1, maxY - minY);
+
+    function xOf(y){ return padL + (y - minY) / yearSpan * innerW; }
+    function yOf(rate){ return padT + innerH - (rate * innerH); }  // rate ∈ [0,1]
+
+    let svg = '<svg class="pm-yoy-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
+
+    // Era backdrop — shaded region for 2026+ (4-meet era)
+    if (maxY >= 2026) {
+      const eraStart = xOf(2026 - 0.5);
+      const eraEnd = padL + innerW;
+      svg += '<rect x="' + eraStart + '" y="' + padT + '" width="' + (eraEnd - eraStart) + '" height="' + innerH +
+             '" fill="rgba(0,154,199,0.06)"/>';
+      svg += '<text x="' + ((eraStart + eraEnd) / 2) + '" y="' + (padT + 14) + '" text-anchor="middle" ' +
+             'style="font-family: var(--font-ui); font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; fill: #009ac7; opacity: .75;">4-MEET ERA</text>';
+    }
+    if (minY < 2026) {
+      const eraStart = padL;
+      const eraEnd = xOf(2025.5);
+      svg += '<text x="' + ((eraStart + eraEnd) / 2) + '" y="' + (padT + 14) + '" text-anchor="middle" ' +
+             'style="font-family: var(--font-ui); font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; fill: #5a6a7e; opacity: .65;">3-MEET ERA</text>';
+    }
+
+    // Gridlines & y-axis (0%, 25%, 50%, 75%, 100%)
+    for (let i = 0; i <= 4; i++) {
+      const rate = i / 4;
+      const yp = yOf(rate);
+      svg += '<line class="pm-grid-line" x1="' + padL + '" y1="' + yp + '" x2="' + (padL + innerW) + '" y2="' + yp + '"/>';
+      svg += '<text class="pm-axis-tick" x="' + (padL - 6) + '" y="' + (yp + 3) + '" text-anchor="end">' + Math.round(rate * 100) + '%</text>';
+    }
+    // X-axis years
+    for (let y = minY; y <= maxY; y++) {
+      const xp = xOf(y);
+      svg += '<text class="pm-bar-year" x="' + xp + '" y="' + (padT + innerH + 18) + '" text-anchor="middle">' + y + '</text>';
+    }
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + innerH) + '"/>';
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (padL + innerW) + '" y2="' + (padT + innerH) + '"/>';
+
+    // Define the four transitions to plot
+    const series = [
+      { key: 'reg_to_zon', label: 'Regionals → Zones', color: '#171f69', dash: '' },
+      { key: 'zon_to_nat', label: 'Zones → Nationals (pre-2026)', color: '#e31937', dash: '4,3' },
+      { key: 'zon_to_ewc', label: 'Zones → E/W/C (2026+)', color: '#009ac7', dash: '' },
+      { key: 'ewc_to_nat', label: 'E/W/C → Nationals (2026+)', color: '#d97706', dash: '' },
+      { key: 'reg_to_nat', label: 'Overall: Regionals → Nationals', color: '#0d1040', dash: '8,4' },
+    ];
+
+    series.forEach(ser => {
+      // Build path from points with valid (non-null) data
+      const pts = rows.filter(r => r[ser.key] != null).map(r => xOf(r.year) + ',' + yOf(r[ser.key]));
+      if (pts.length >= 2) {
+        svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + ser.color +
+               '" stroke-width="2.5" ' + (ser.dash ? 'stroke-dasharray="' + ser.dash + '" ' : '') +
+               'stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+      // Points + value labels at each year
+      rows.filter(r => r[ser.key] != null).forEach(r => {
+        const cx = xOf(r.year), cy = yOf(r[ser.key]);
+        svg += '<circle cx="' + cx + '" cy="' + cy + '" r="4" fill="' + ser.color + '" stroke="#fff" stroke-width="2"><title>' +
+          ser.label + ' — ' + r.year + ': ' + (r[ser.key] * 100).toFixed(1) + '%</title></circle>';
+      });
+    });
+
+    // Legend at the bottom
+    const legendY = H - 6;
+    let lx = padL;
+    series.forEach(ser => {
+      const w = 8 + ser.label.length * 5;
+      svg += '<line x1="' + lx + '" y1="' + (legendY - 4) + '" x2="' + (lx + 14) + '" y2="' + (legendY - 4) +
+             '" stroke="' + ser.color + '" stroke-width="2.5" ' + (ser.dash ? 'stroke-dasharray="' + ser.dash + '"' : '') + '/>';
+      svg += '<text class="pm-bar-label" x="' + (lx + 18) + '" y="' + (legendY - 1) + '">' + escapeHtml(ser.label) + '</text>';
+      lx += w + 14;
+    });
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  /* Absolute athlete-count chart — small stacked-area for context */
+  function buildAbsoluteCountsChart(rows, minY, maxY){
+    const W = 540, H = 360;
+    const padL = 60, padR = 16, padT = 18, padB = 60;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const yearSpan = Math.max(1, maxY - minY);
+
+    function xOf(y){ return padL + (y - minY) / yearSpan * innerW; }
+
+    // Find max athletes across all years/stages for y-axis
+    const maxVal = Math.max.apply(null, rows.flatMap(r => [r.regionals, r.zones, r.ewc, r.nationals]).concat([1]));
+    const niceMax = niceCeiling(maxVal);
+
+    function yOf(v){ return padT + innerH - (v / niceMax * innerH); }
+
+    let svg = '<svg class="pm-yoy-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">';
+
+    // Gridlines
+    for (let i = 0; i <= 4; i++) {
+      const v = niceMax * i / 4;
+      const yp = yOf(v);
+      svg += '<line class="pm-grid-line" x1="' + padL + '" y1="' + yp + '" x2="' + (padL + innerW) + '" y2="' + yp + '"/>';
+      svg += '<text class="pm-axis-tick" x="' + (padL - 6) + '" y="' + (yp + 3) + '" text-anchor="end">' + fmtNum(Math.round(v)) + '</text>';
+    }
+    for (let y = minY; y <= maxY; y++) {
+      svg += '<text class="pm-bar-year" x="' + xOf(y) + '" y="' + (padT + innerH + 18) + '" text-anchor="middle">' + y + '</text>';
+    }
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + innerH) + '"/>';
+    svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (padL + innerW) + '" y2="' + (padT + innerH) + '"/>';
+
+    const series = [
+      { key: 'regionals', label: 'Regionals', color: '#171f69' },
+      { key: 'zones',     label: 'Zones',     color: '#1e2d8a' },
+      { key: 'ewc',       label: 'E/W/C',     color: '#009ac7' },
+      { key: 'nationals', label: 'Nationals', color: '#e31937' },
+    ];
+
+    series.forEach(ser => {
+      const pts = rows.filter(r => r[ser.key] > 0).map(r => xOf(r.year) + ',' + yOf(r[ser.key]));
+      if (pts.length >= 2) {
+        svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + ser.color +
+               '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
+      rows.filter(r => r[ser.key] > 0).forEach(r => {
+        svg += '<circle cx="' + xOf(r.year) + '" cy="' + yOf(r[ser.key]) + '" r="4" fill="' + ser.color +
+               '" stroke="#fff" stroke-width="2"><title>' + ser.label + ' ' + r.year + ': ' + fmtNum(r[ser.key]) + ' athletes</title></circle>';
+      });
+    });
+
+    // Legend
+    const legendY = H - 6;
+    let lx = padL;
+    series.forEach(ser => {
+      const w = 8 + ser.label.length * 6;
+      svg += '<rect x="' + lx + '" y="' + (legendY - 9) + '" width="10" height="10" fill="' + ser.color + '"/>';
+      svg += '<text class="pm-bar-label" x="' + (lx + 14) + '" y="' + (legendY - 1) + '">' + escapeHtml(ser.label) + '</text>';
+      lx += w + 14;
+    });
+
+    svg += '</svg>';
+    return svg;
   }
 
   /* Build a stacked-bar chart: years × stages */
@@ -1182,7 +1668,7 @@
       '</div>' +
       feeTable + hist;
 
-    return sectionShell(4, 'Financial Breakdown — ' + year,
+    return sectionShell(5, 'Financial Breakdown — ' + year,
       'What families paid and what the NGB collected in entry fees. The headline number ' +
       'people often quote is the "full-circuit cost" — what one athlete would pay to compete at every meet — ' +
       'but most athletes only paid for the meets they actually qualified into. This section shows both.',
@@ -1263,9 +1749,20 @@
     // Clear all filters
     const clearBtn = document.getElementById('pmFilterClear');
     if (clearBtn) clearBtn.addEventListener('click', function(){
-      pmState.filters = { age_group: '', gender: '', discipline: '', zone: '' };
+      pmState.filters = { age_group: '', gender: '', discipline: '', zone: '', region: '' };
       invalidateCache();
       renderPipeline();
+    });
+    // Cohort starting-stage buttons (within section)
+    document.querySelectorAll('[data-pm-cohort-stage]').forEach(el => {
+      el.addEventListener('click', function(){
+        const s = this.getAttribute('data-pm-cohort-stage');
+        if (s && s !== pmState.cohortStartStage) {
+          pmState.cohortStartStage = s;
+          pmState.cohortCache = {};  // invalidate just this section's cache
+          renderPipeline();
+        }
+      });
     });
     // Print
     const pb = document.getElementById('pmPrintBtn');
@@ -1354,11 +1851,12 @@
       }
 
       // Load all needed data in parallel
-      const [filterOpts, funnel, yoy, demo] = await Promise.all([
+      const [filterOpts, funnel, demo, cohort, retention] = await Promise.all([
         loadFilterOptions(),
         loadFunnelData(pmState.selectedYear),
-        loadYoYData(),
         loadDemographicsData(pmState.selectedYear),
+        loadCohortProgression(pmState.selectedYear, pmState.cohortStartStage),
+        loadRetentionRates(),
       ]);
 
       // Render skeleton with controls
@@ -1368,7 +1866,8 @@
           renderControls() +
           renderFunnelSection(pmState.selectedYear, funnel) +
           renderDemographicsSection(pmState.selectedYear, demo) +
-          renderYoYSection(yoy) +
+          renderCohortSection(pmState.selectedYear, cohort) +
+          renderRetentionSection(retention) +
           '<div id="pmFinSlot"></div>' +
         '</div>';
 
