@@ -1604,8 +1604,113 @@ function renderSensitivity() {
     : '<div class="source-impact-empty">Set a score standard or DD minimum to see how the count changes.</div>');
 }
 
+// ── Threshold Explorer ─────────────────────────────────────────────────────
+function pctl(sorted, p) {
+  if (!sorted.length) return null;
+  const i = (sorted.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+  return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+}
+function niceStep(x) {
+  if (x <= 1) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+}
+function worldBenchmarks(gender, discipline) {
+  const g = normaliseGender(gender), d = normaliseDiscipline(discipline);
+  const rows = ((state.data && state.data.results) || []).filter(r =>
+    r.competition_family === 'World Aquatics' && !r.is_synchronized &&
+    r.gender === g && r.discipline === d &&
+    String(r.round_stage).toLowerCase().includes('final'));
+  const finals = rows.map(scoreForRow).filter(isNum).sort((a, b) => a - b);
+  if (finals.length < 6) return null;
+  const podium = rows.filter(r => isNum(r.place) && r.place <= 3).map(scoreForRow).filter(isNum).sort((a, b) => a - b);
+  return { n: finals.length, finalist: pctl(finals, 0.5), medal: podium.length >= 3 ? pctl(podium, 0.5) : pctl(finals, 0.85) };
+}
+function explorerCurrentStd() {
+  const v = num(els.scoreThreshold.value);
+  if (isNum(v)) return v;
+  return scoreThresholdForSelection(els.genderFilter.value, els.disciplineFilter.value, 'usa');
+}
+function updateInverse() {
+  const out = $('explorerInvOut'), tEl = $('explorerTarget');
+  if (!out || !state._sweep) return;
+  const tgt = tEl ? num(tEl.value) : null;
+  if (!isNum(tgt)) { out.innerHTML = 'type a number and I’ll find the standard that lands there.'; return; }
+  const { sweep, yMax } = state._sweep;
+  let found = null;
+  for (const s of sweep) { if (s.n >= tgt) found = s.x; }   // toughest bar still yielding >= tgt
+  out.innerHTML = (found == null)
+    ? `no standard in range yields ${tgt}+ (the field tops out at ${yMax}).`
+    : `set the standard near <b>${Math.round(found)}</b>.`;
+}
+function renderThresholdExplorer() {
+  const host = $('explorerBody');
+  if (!host) return;
+  if (els.ruleMode.value === 'topNOnly') {
+    host.innerHTML = '<div class="source-impact-empty">This preset qualifies by placement, not score — the score standard doesn’t change the count. Switch the rule to “Score” or “Placement or score” to explore thresholds.</div>';
+    state._sweep = null; updateInverse(); return;
+  }
+  const rows = state.filtered || [];
+  const scores = rows.map(scoreForRow).filter(isNum).sort((a, b) => a - b);
+  if (scores.length < 3) {
+    host.innerHTML = '<div class="source-impact-empty">Not enough scored results in the current scope to sweep thresholds.</div>';
+    state._sweep = null; updateInverse(); return;
+  }
+  const curDd = num(els.ddThreshold.value);
+  const curStd = explorerCurrentStd();
+  const wb = worldBenchmarks(els.genderFilter.value, els.disciplineFilter.value);
+  const d = normaliseDiscipline(els.disciplineFilter.value);
+
+  let lo = scores[0], hi = scores[scores.length - 1];
+  [curStd, wb && wb.finalist, wb && wb.medal].forEach(v => { if (isNum(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+  const pad = (hi - lo) * 0.04 || 5; lo -= pad; hi += pad;
+
+  const STEPS = 80, sweep = [];
+  for (let i = 0; i <= STEPS; i++) { const x = lo + (hi - lo) * i / STEPS; sweep.push({ x, n: qualCountWith(x, curDd) }); }
+  const yMax = Math.max(1, ...sweep.map(s => s.n));
+  state._sweep = { sweep, yMax };
+
+  const W = 760, H = 340, ml = 48, mr = 18, mt = 22, mb = 44, pw = W - ml - mr, ph = H - mt - mb;
+  const X = x => ml + (x - lo) / (hi - lo) * pw;
+  const Y = n => mt + ph - (n / yMax) * ph;
+  let line = '', area = `M ${X(sweep[0].x).toFixed(1)} ${Y(0).toFixed(1)}`;
+  sweep.forEach((s, i) => { const px = X(s.x).toFixed(1), py = Y(s.n).toFixed(1); line += (i ? ' L ' : 'M ') + px + ' ' + py; area += ' L ' + px + ' ' + py; });
+  area += ` L ${X(sweep[sweep.length - 1].x).toFixed(1)} ${Y(0).toFixed(1)} Z`;
+
+  const yStep = niceStep(yMax / 4), yt = [];
+  for (let v = 0; v <= yMax + 0.001; v += yStep) yt.push(v);
+  const xt = []; for (let i = 0; i <= 5; i++) xt.push(lo + (hi - lo) * i / 5);
+  const vline = (x, color, dash, label, count) => {
+    if (!isNum(x) || x < lo || x > hi) return '';
+    const px = X(x).toFixed(1), lbl = `${label}${count != null ? ' · ' + count : ''}`;
+    return `<line x1="${px}" y1="${mt}" x2="${px}" y2="${mt + ph}" stroke="${color}" stroke-width="2"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`
+      + `<text x="${px}" y="${mt - 6}" text-anchor="middle" class="cs2-ex-vlab" fill="${color}">${esc(lbl)}</text>`;
+  };
+  const curN = isNum(curStd) ? qualCountWith(curStd, curDd) : null;
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by score standard">`
+    + yt.map(v => `<line x1="${ml}" y1="${Y(v).toFixed(1)}" x2="${W - mr}" y2="${Y(v).toFixed(1)}" class="cs2-ex-grid"/><text x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${Math.round(v)}</text>`).join('')
+    + `<path d="${area}" class="cs2-ex-area"/><path d="${line}" class="cs2-ex-line"/>`
+    + (wb ? vline(wb.medal, '#8a6d1a', '5 4', 'World medal', null) : '')
+    + (wb ? vline(wb.finalist, '#c39a3e', '5 4', 'World finalist', null) : '')
+    + vline(curStd, '#171f69', null, 'Your standard', curN)
+    + xt.map(x => `<text x="${X(x).toFixed(1)}" y="${(mt + ph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${Math.round(x)}</text>`).join('')
+    + `<text x="${W - mr}" y="${H - 6}" text-anchor="end" class="cs2-ex-axis">score standard →</text>`
+    + `</svg>`;
+
+  const curNote = isNum(curStd)
+    ? `<b>${curN}</b> athletes clear your current standard of <b>${Math.round(curStd)}</b> in this scope.`
+    : 'Set a score standard to mark it on the curve.';
+  const wbNote = wb
+    ? `Gold lines: a median World finalist sits at <b>${Math.round(wb.finalist)}</b> and a median medalist at <b>${Math.round(wb.medal)}</b> (${wb.n} World Aquatics ${d} finals).`
+    : `No World Aquatics ${d} finals available for an international overlay.`;
+  host.innerHTML = `<div class="cs2-ex-head">${curNote}</div>${svg}<div class="cs2-ex-foot">${wbNote}</div>`;
+  updateInverse();
+}
+
 function renderEnhancements() {
   try { renderTrustStrip(); } catch (e) {}
+  try { renderThresholdExplorer(); } catch (e) {}
   try { renderSensitivity(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
@@ -1618,6 +1723,8 @@ function initEnhancements() {
     if (el) el.addEventListener('input', renderWhatIf);
     if (el) el.addEventListener('change', renderWhatIf);
   });
+  const tgt = $('explorerTarget');
+  if (tgt) tgt.addEventListener('input', updateInverse);
   const pr = $('btnPrintReport');
   if (pr) pr.addEventListener('click', printReport);
   const rb = $('scenarioRefresh');

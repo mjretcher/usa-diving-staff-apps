@@ -786,3 +786,21 @@ details.panel > summary p {
 .cs2-sens-d.up   { color: #1f7a4d; }
 .cs2-sens-d.down { color: var(--brand-red, #e31937); }
 .cs2-sens-d.flat, .cs2-sens-d.cur { color: var(--ink-4, #94a3b8); }
+
+/* Threshold Explorer */
+.cs2-explorer { border-top: 3px solid var(--brand-pool, #009ac7); }
+.cs2-ex-head { font-size: 14px; color: var(--ink-2, #2d3a4a); margin-bottom: 6px; }
+.cs2-ex-head b { color: var(--brand-blue, #171f69); font-weight: 700; }
+.cs2-ex-svg { width: 100%; height: auto; display: block; }
+.cs2-ex-grid { stroke: rgba(23,31,105,.08); stroke-width: 1; }
+.cs2-ex-area { fill: rgba(0,154,199,.14); stroke: none; }
+.cs2-ex-line { fill: none; stroke: var(--brand-blue, #171f69); stroke-width: 2.5; }
+.cs2-ex-ylab, .cs2-ex-xlab { font-size: 11px; fill: var(--ink-3, #5a6a7e); }
+.cs2-ex-vlab { font-size: 11px; font-weight: 600; }
+.cs2-ex-axis { font-size: 11px; fill: var(--ink-4, #94a3b8); }
+.cs2-ex-foot { font-size: 12px; color: var(--ink-3, #5a6a7e); margin-top: 8px; }
+.cs2-ex-foot b { color: #8a6d1a; }
+.cs2-ex-inv { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(23,31,105,.08); font-size: 14px; color: var(--ink-2, #2d3a4a); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cs2-ex-tin { width: 84px; }
+.cs2-ex-invout { font-size: 14px; color: var(--brand-blue, #171f69); }
+.cs2-ex-invout b { font-weight: 700; }

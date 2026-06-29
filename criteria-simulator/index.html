@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=20260627" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
-  <link rel="stylesheet" href="styles.css?v=202606290130" />
+  <link rel="stylesheet" href="styles.css?v=202606290330" />
 </head>
 <body>
 
@@ -246,6 +246,19 @@
         </div>
       </section>
 
+      <!-- Threshold Explorer — the centerpiece: qualifiers across every standard -->
+      <section class="panel cs2-explorer" id="explorer">
+        <header class="panel-head">
+          <h2>Threshold Explorer — qualifiers across every standard</h2>
+          <p>The whole curve: how many athletes clear the bar at each possible score standard, with the international benchmark on the same axis.</p>
+        </header>
+        <div id="explorerBody"></div>
+        <div class="cs2-ex-inv">
+          <label>If I want about <input id="explorerTarget" type="number" min="0" step="1" class="sidebar-input cs2-ex-tin" placeholder="24" /> qualifiers,</label>
+          <span id="explorerInvOut" class="cs2-ex-invout">type a number and I’ll find the standard that lands there.</span>
+        </div>
+      </section>
+
       <!-- What-if simulator — the namesake feature -->
       <section class="panel cs2-whatif" id="whatIf">
         <header class="panel-head">
@@ -452,8 +465,8 @@
 <script src="../shared/usad-data.js?v=20260627"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="scenario-sync.js?v=202606290130"></script>
-<script src="main.js?v=202606290130"></script>
+<script src="scenario-sync.js?v=202606290330"></script>
+<script src="main.js?v=202606290330"></script>
 
 </body>
 </html>
