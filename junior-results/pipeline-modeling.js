@@ -92,6 +92,7 @@
     excludeAsterisked: false,  // hide platform@Regionals etc (default: show with *)
     excludeFutureChamps: true, // default exclude FC events
     showFinancials: false,     // financial overlay toggle
+    lens: 'divers',            // pipeline metric: 'divers' (unique athletes) | 'entries' (event qualifications) — a SEPARATE evaluation, never blended
     // Master filters — apply to ALL data pulls
     filters: {
       age_group: '',           // '' = all
@@ -299,11 +300,32 @@
       "GROUP BY a.stage, b.stage";
     const transR = await neonQ(transSql, [year].concat(transFb.params));
 
+    // 3b) ENTRY-level transitions: an *entry* (diver in a specific event) that
+    //     appears at both stage N and N+1. This is the entries-lens analogue of
+    //     (3): a diver who advances in two events counts as two advancing entries,
+    //     and an event a diver picks up only at the later stage is a fresh entry.
+    //     Computed independently so the entries lens never borrows athlete math.
+    const entFb = buildFiltersSql(2);
+    const entTransSql =
+      "WITH per_entry AS ( " +
+      "  SELECT stage, diver_id_dm, event_key FROM core.event_results " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + entFb.sql + " " +
+      "  GROUP BY stage, diver_id_dm, event_key " +
+      ") " +
+      "SELECT a.stage AS from_stage, b.stage AS to_stage, " +
+      "  COUNT(*)::int AS advanced " +
+      "FROM per_entry a JOIN per_entry b " +
+      "  ON a.diver_id_dm = b.diver_id_dm AND a.event_key = b.event_key " +
+      "WHERE a.stage <> b.stage " +
+      "GROUP BY a.stage, b.stage";
+    const entTransR = await neonQ(entTransSql, [year].concat(entFb.params));
+
     const out = {
       year,
-      stages: {},      // stage -> { unique_athletes, event_entries }
-      asterisked: {},  // stage -> { reason: { unique_athletes, event_entries } }
-      transitions: {}, // "from->to" -> advanced count
+      stages: {},           // stage -> { unique_athletes, event_entries }
+      asterisked: {},       // stage -> { reason: { unique_athletes, event_entries } }
+      transitions: {},      // "from->to" -> advanced DIVERS (athlete lens)
+      entryTransitions: {}, // "from->to" -> advanced ENTRIES (entries lens)
     };
     STAGE_ORDER.forEach(s => { out.stages[s] = { unique_athletes: 0, event_entries: 0 }; });
     stagesR.rows.forEach(r => {
@@ -323,6 +345,9 @@
     });
     transR.rows.forEach(r => {
       out.transitions[r.from_stage + '->' + r.to_stage] = Number(r.advanced) || 0;
+    });
+    entTransR.rows.forEach(r => {
+      out.entryTransitions[r.from_stage + '->' + r.to_stage] = Number(r.advanced) || 0;
     });
 
     pmState.funnelCache[ck] = out;
@@ -1004,16 +1029,28 @@
       pendingStage = STAGE_ORDER[lastRealIdx + 1];
     }
 
-    /* ---- per-stage counts ---- */
-    const N = {}, EN = {};
-    realStages.forEach(function(s){ N[s] = data.stages[s].unique_athletes; EN[s] = data.stages[s].event_entries; });
-    const maxN = N[realStages[0]] || 1;
+    /* ---- per-stage counts ----
+       Unique divers and event entries are computed as TWO separate evaluations
+       and never blended into one figure. The active lens decides which one
+       drives the river; the other lives only in its own clearly-labeled places
+       (the cross-reference KPI and the dedicated "Two lenses" comparison). */
+    const ATH = {}, ENT = {};
+    realStages.forEach(function(s){ ATH[s] = data.stages[s].unique_athletes; ENT[s] = data.stages[s].event_entries; });
+    const isEntries = (pmState.lens === 'entries');
+    const N  = isEntries ? ENT : ATH;   // active-lens per-stage count (drives the river)
+    const EN = ENT;                     // entries always available (separate readout)
+    const UNIT      = isEntries ? 'entries' : 'divers';
+    const UNIT_ONE  = isEntries ? 'entry'   : 'diver';
+    const transSrc  = isEntries ? (data.entryTransitions || {}) : (data.transitions || {});
+    const maxN = realStages.reduce(function(m,s){ return Math.max(m, N[s]); }, 1);
 
-    /* ---- TRUE transitions: advanced / exited / entered-fresh ---- */
+    /* ---- TRUE transitions for the ACTIVE lens: advanced / exited / entered-fresh.
+       Entries-lens advancement counts (diver, event) pairs that recur at the next
+       stage — it borrows none of the athlete math. ---- */
     const A = [], EXIT = [], ENTER = [];
     ENTER[0] = 0;
     for (let i = 0; i < realStages.length - 1; i++){
-      const advRaw = data.transitions[realStages[i] + '->' + realStages[i+1]];
+      const advRaw = transSrc[realStages[i] + '->' + realStages[i+1]];
       const adv = (advRaw != null) ? advRaw : Math.min(N[realStages[i]], N[realStages[i+1]]);
       A[i] = adv;
       EXIT[i] = Math.max(0, N[realStages[i]] - adv);
@@ -1046,15 +1083,15 @@
     let kpiHtml = '<div class="pm-kpi-strip">';
     kpiHtml +=
       '<div class="pm-kpi">' +
-        '<div class="pm-kpi-label">Entry-point divers</div>' +
+        '<div class="pm-kpi-label">Entry-point ' + UNIT + '</div>' +
         '<div class="pm-kpi-value">' + fmtNum(N[entryStage]) + '</div>' +
-        '<div class="pm-kpi-sub">unique divers at ' + STAGE_SHORT[entryStage] + '</div>' +
+        '<div class="pm-kpi-sub">' + (isEntries ? 'event entries' : 'unique divers') + ' at ' + STAGE_SHORT[entryStage] + '</div>' +
       '</div>';
     kpiHtml +=
       '<div class="pm-kpi pool">' +
         '<div class="pm-kpi-label">Reached ' + STAGE_SHORT[deepStage] + (deepInProgress ? ' (so far)' : '') + '</div>' +
         '<div class="pm-kpi-value">' + fmtNum(N[deepStage]) + '</div>' +
-        '<div class="pm-kpi-sub">' + (deepInProgress ? 'in progress \u00b7 results still arriving' : (pendingStage ? 'deepest stage completed so far' : 'the championship field')) + '</div>' +
+        '<div class="pm-kpi-sub">' + (deepInProgress ? 'in progress \u00b7 results still arriving' : (pendingStage ? 'deepest stage completed so far' : (isEntries ? 'championship event entries' : 'the championship field'))) + '</div>' +
       '</div>';
     if (bigIdx >= 0 && bigVal > 0) {
       kpiHtml +=
@@ -1070,14 +1107,20 @@
         '<div class="pm-kpi sky">' +
           '<div class="pm-kpi-label">Joined at ' + STAGE_SHORT[realStages[entIdx]] + '</div>' +
           '<div class="pm-kpi-value">' + fmtNum(entVal) + '</div>' +
-          '<div class="pm-kpi-sub">competed with no ' + STAGE_SHORT[realStages[entIdx-1]] + ' result \u00b7 byes / new entrants</div>' +
+          '<div class="pm-kpi-sub">' + (isEntries
+            ? 'events first entered here \u00b7 no matching ' + STAGE_SHORT[realStages[entIdx-1]] + ' entry'
+            : 'competed with no ' + STAGE_SHORT[realStages[entIdx-1]] + ' result \u00b7 byes / new entrants') + '</div>' +
         '</div>';
     }
+    // Cross-reference KPI — the OTHER lens at the championship stage, shown as
+    // its own clearly-labeled figure (never fused into the active-lens numbers).
+    const otherAtDeep = isEntries ? ATH[deepStage] : ENT[deepStage];
+    const otherUnit   = isEntries ? 'unique divers' : 'event entries';
     kpiHtml +=
       '<div class="pm-kpi neutral">' +
-        '<div class="pm-kpi-label">Total event entries</div>' +
-        '<div class="pm-kpi-value">' + fmtNum(totalEntries) + '</div>' +
-        '<div class="pm-kpi-sub">across ' + realStages.length + ' stage' + (realStages.length>1?'s':'') + ' (entries \u2260 divers)</div>' +
+        '<div class="pm-kpi-label">' + (isEntries ? 'Divers behind them' : 'Entries among them') + '</div>' +
+        '<div class="pm-kpi-value">' + fmtNum(otherAtDeep) + '</div>' +
+        '<div class="pm-kpi-sub">' + otherUnit + ' at ' + STAGE_SHORT[deepStage] + ' \u00b7 separate count, entries \u2260 divers</div>' +
       '</div>';
     if (pmState.showFinancials) {
       kpiHtml +=
@@ -1226,7 +1269,7 @@
       svg += '<rect x="' + (srcX) + '" y="' + ySrc + '" width="' + srcW + '" height="' + he + '" rx="3" fill="#56a8da" opacity="0.95"/>';
       const ly = ySrc + Math.max(he / 2, 9);
       svg += '<text class="pm-flow-enter-n" x="' + (srcX - 9) + '" y="' + (ly - 2) + '" text-anchor="end">\u2191 ' + fmtNum(ENTER[i]) + ' joined</text>';
-      svg += '<text class="pm-flow-enter-sub" x="' + (srcX - 9) + '" y="' + (ly + 15) + '" text-anchor="end">entered at ' + STAGE_SHORT[realStages[i]] + ' \u00b7 no prior result</text>';
+      svg += '<text class="pm-flow-enter-sub" x="' + (srcX - 9) + '" y="' + (ly + 15) + '" text-anchor="end">' + (isEntries ? 'event not entered at ' + STAGE_SHORT[realStages[i-1]] : 'entered at ' + STAGE_SHORT[realStages[i]] + ' \u00b7 no prior result') + '</text>';
     }
 
     /* ---- gate posts (navy) + headers ---- */
@@ -1246,7 +1289,7 @@
       if (tl[0]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tl[0]) + '</text>';
       if (tl[1]) svg += '<text class="pm-flow-stage" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tl[1]) + '</text>';
       svg += '<text class="pm-flow-count" x="' + cx + '" y="94" text-anchor="middle">' + fmtNum(N[s]) + '</text>';
-      svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">divers' + (isIP ? ' so far' : '') + ' \u00b7 ' + fmtNum(EN[s]) + ' entries</text>';
+      svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">' + UNIT + (isIP ? ' so far' : '') + '</text>';
       if (isIP) {
         svg += '<text x="' + cx + '" y="133" text-anchor="middle" font-family="Inter,sans-serif" font-size="12" font-weight="700" fill="#0d7fa6">\u25cf in progress</text>';
       } else {
@@ -1255,8 +1298,10 @@
           : '';
         if (feeTxt) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">' + feeTxt + '</text>';
         if (pmState.showFinancials && fees[s]) {
+          // Entry fees are charged per EVENT ENTRY, so revenue is always entries × fee
+          // (independent of the display lens) — never athletes × fee.
           svg += '<text class="pm-flow-rev" x="' + cx + '" y="150" text-anchor="middle">' +
-                 fmtMoney(N[s] * fees[s]) + ' collected</text>';
+                 fmtMoney(EN[s] * fees[s]) + ' collected</text>';
         }
       }
     });
@@ -1282,9 +1327,9 @@
     /* ============================ legend ============================ */
     const legend =
       '<div class="pm-flow-legend">' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6)"></span>Advancing current \u2014 divers who competed at the next stage too</span>' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 competed at this stage but not the next</span>' +
-        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 first appeared at this stage (byes / new entrants)</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6)"></span>Advancing current \u2014 ' + (isEntries ? 'entries that continued to the next stage' : 'divers who competed at the next stage too') + '</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 ' + (isEntries ? 'entered this stage but not the next' : 'competed at this stage but not the next') + '</span>' +
+        '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 ' + (isEntries ? 'event first entered at this stage' : 'first appeared at this stage (byes / new entrants)') + '</span>' +
         (deepInProgress ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6);opacity:0.5;box-shadow:inset 0 0 0 1.5px #009ac7"></span>In progress \u2014 results still arriving</span>' : '') +
         (pendingStage ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>' : '') +
         (pmState.showFinancials ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#d97706"></span>Entry-fee revenue collected</span>' : '') +
@@ -1296,8 +1341,9 @@
     for (let i = 1; i < realStages.length; i++){
       if (deepInProgress && i === realStages.length - 1) continue;  // inflow to a still-running stage isn't final yet
       if (ENTER[i] > 0 && (ENTER[i] < 8 || hOf(ENTER[i]) < 6)) {
-        notes.push(fmtNum(ENTER[i]) + ' diver' + (ENTER[i]>1?'s':'') + ' entered at ' + STAGE_SHORT[realStages[i]] +
-          ' without a ' + STAGE_SHORT[realStages[i-1]] + ' result (too few to draw)');
+        notes.push(fmtNum(ENTER[i]) + ' ' + (ENTER[i]>1 ? UNIT : UNIT_ONE) + (isEntries
+            ? ' first entered at ' + STAGE_SHORT[realStages[i]] + ' (no matching ' + STAGE_SHORT[realStages[i-1]] + ' entry, too few to draw)'
+            : ' entered at ' + STAGE_SHORT[realStages[i]] + ' without a ' + STAGE_SHORT[realStages[i-1]] + ' result (too few to draw)'));
       }
     }
     // asterisk (non-qualifying) note — preserved from prior behavior
@@ -1331,15 +1377,75 @@
       footnote = '<div class="pm-footnote"><strong>Notes</strong> \u2014 ' + notes.join('; ') + '.</div>';
     }
 
-    const explainer =
-      'Read it left to right as the ' + year + ' season unfolds. Each navy post is a stage; its height is how many unique divers competed there. ' +
-      'The blue current carries divers who advanced (competed at the next stage too); red streams peeling off are divers who stopped; ' +
-      'a pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide.' +
-      (pendingStage ? ' The dashed basin is the stage still to come.' : '') +
-      ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
+    const explainer = isEntries
+      ? ('Read it left to right as the ' + year + ' season unfolds, counting EVENT ENTRIES (one diver in one event). '
+        + 'Each navy post is a stage; its height is how many event entries were contested there. '
+        + 'The blue current carries entries that recurred at the next stage; red streams are entries that stopped; '
+        + 'a pale stream joining from below is an event a diver first picked up at that stage. '
+        + 'This is the entries lens \u2014 a diver in three events counts three times. Switch to Unique divers to count people instead.')
+      : ('Read it left to right as the ' + year + ' season unfolds, counting UNIQUE DIVERS (each person once). '
+        + 'Each navy post is a stage; its height is how many unique divers competed there. '
+        + 'The blue current carries divers who advanced (competed at the next stage too); red streams peeling off are divers who stopped; '
+        + 'a pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide. '
+        + 'This is the divers lens \u2014 a diver in three events still counts once. Switch to Event entries to count event-qualifications instead.')
+      + (pendingStage ? ' The dashed basin is the stage still to come.' : '')
+      + ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
+
+    /* ===== lens toggle: divers vs entries are two SEPARATE evaluations ===== */
+    const lensToggle =
+      '<div class="pm-lens-toggle" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px">' +
+        '<span style="font-family:Inter,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#5f6062">Count by</span>' +
+        '<div class="pm-cohort-stage-picker" style="background:#eef1f8;border-radius:999px;padding:3px;display:inline-flex;gap:2px">' +
+          '<button class="pm-cohort-stage-btn ' + (isEntries ? '' : 'active') + '" data-pm-lens="divers">Unique divers</button>' +
+          '<button class="pm-cohort-stage-btn ' + (isEntries ? 'active' : '') + '" data-pm-lens="entries">Event entries</button>' +
+        '</div>' +
+        '<span style="font-family:Inter,sans-serif;font-size:12px;color:#5f6062">' +
+          (isEntries ? 'Counting every event a diver entered \u2014 a diver in 3 events = 3 entries.'
+                     : 'Counting people \u2014 a diver in 3 events still = 1 diver.') +
+        '</span>' +
+      '</div>';
+
+    /* ===== "Two lenses" comparison — the divers/entries gap, made the point.
+       Both measures shown together ONLY here, as an explicit side-by-side of two
+       separate counts, with the events-per-diver ratio that the gap represents. */
+    let twoLens = '';
+    (function(){
+      const stages = realStages;
+      const maxEnt = stages.reduce(function(m,s){ return Math.max(m, ENT[s]); }, 1);
+      const rowH = 58, top = 16, labelW = 150, barX = labelW + 16, barMax = 560, ratioX = barX + barMax + 90;
+      const VW = ratioX + 150, VH = top + stages.length * rowH + 18;
+      let s2 = '<svg viewBox="0 0 ' + VW + ' ' + VH + '" preserveAspectRatio="xMidYMid meet" class="pm-twolens-svg" style="width:100%;height:auto;display:block" role="img" aria-label="Unique divers versus event entries by stage">';
+      stages.forEach(function(s, i){
+        const y = top + i * rowH;
+        const dW = (ATH[s] / maxEnt) * barMax;
+        const eW = (ENT[s] / maxEnt) * barMax;
+        const ratio = ATH[s] ? (ENT[s] / ATH[s]) : 0;
+        s2 += '<text x="' + labelW + '" y="' + (y + 22) + '" text-anchor="end" font-family="Inter,sans-serif" font-size="13.5" font-weight="700" fill="#171f69">' + escapeHtml(STAGE_SHORT[s]) + '</text>';
+        // divers bar (navy)
+        s2 += '<rect x="' + barX + '" y="' + (y + 4) + '" width="' + Math.max(dW,2) + '" height="15" rx="3.5" fill="#171f69"/>';
+        s2 += '<text x="' + (barX + Math.max(dW,2) + 8) + '" y="' + (y + 16) + '" font-family="Inter,sans-serif" font-size="12" font-weight="700" fill="#171f69">' + fmtNum(ATH[s]) + ' divers</text>';
+        // entries bar (pool blue)
+        s2 += '<rect x="' + barX + '" y="' + (y + 24) + '" width="' + Math.max(eW,2) + '" height="15" rx="3.5" fill="#009ac7"/>';
+        s2 += '<text x="' + (barX + Math.max(eW,2) + 8) + '" y="' + (y + 36) + '" font-family="Inter,sans-serif" font-size="12" font-weight="700" fill="#0d7fa6">' + fmtNum(ENT[s]) + ' entries</text>';
+        // ratio badge
+        s2 += '<rect x="' + ratioX + '" y="' + (y + 6) + '" width="132" height="30" rx="15" fill="#eef1f8"/>';
+        s2 += '<text x="' + (ratioX + 66) + '" y="' + (y + 25) + '" text-anchor="middle" font-family="Inter,sans-serif" font-size="12.5" font-weight="700" fill="#171f69">' + (ratio ? ratio.toFixed(2) : '\u2014') + ' events/diver</text>';
+      });
+      s2 += '</svg>';
+      const ratios = stages.map(function(s){ return ATH[s] ? ENT[s]/ATH[s] : 0; }).filter(function(r){ return r > 0; });
+      const trend = (ratios.length >= 2 && ratios[ratios.length-1] > ratios[0])
+        ? ' Divers take on more events as they advance \u2014 from about ' + ratios[0].toFixed(1) + ' to ' + ratios[ratios.length-1].toFixed(1) + ' events each by ' + STAGE_SHORT[stages[stages.length-1]] + '.'
+        : '';
+      twoLens =
+        '<div class="pm-flow-wrap" style="margin-top:18px">' +
+          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#2d3a4a;margin:0 0 10px;line-height:1.5">' +
+            '<strong style="color:#171f69">Two lenses, kept separate.</strong> Unique divers (navy) counts each person once; event entries (blue) counts every event they entered. They are measured independently and never combined into a single figure.' + trend +
+          '</div>' + s2 +
+        '</div>';
+    })();
 
     return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
-      banner + kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote);
+      banner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote + twoLens);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */
@@ -2547,6 +2653,17 @@
     if (cmpClear) cmpClear.addEventListener('click', function(){
       pmState.cohortCompareYears = [];
       renderPipeline();
+    });
+    // Pipeline lens: unique divers vs event entries (render-only — both metrics
+    // are already in the loaded data; switching never refetches or blends them).
+    document.querySelectorAll('[data-pm-lens]').forEach(el => {
+      el.addEventListener('click', function(){
+        const v = this.getAttribute('data-pm-lens');
+        if (v && v !== pmState.lens) {
+          pmState.lens = v;
+          renderPipeline();
+        }
+      });
     });
     // Score & placement stage picker (#1)
     document.querySelectorAll('[data-pm-score-stage]').forEach(el => {
