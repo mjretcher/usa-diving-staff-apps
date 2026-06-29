@@ -49,10 +49,20 @@
       default: return null;
     }
   }
+  /* Explicit "officially concluded & finalized" overrides. The date check
+     below is only a fallback for telling whether a stage with partial results
+     is still being contested. When USA Diving has certified a stage's results
+     as final — including when a meet wraps ahead of its nominal calendar
+     window — list it here so the app treats it as complete regardless of the
+     viewer's current date. Key format: `${year}:${stage}`. */
+  const STAGE_FINALIZED = {
+    '2026:EWC': true,   // East/Central/West Championships — results final
+  };
   // 'not_started' (no results yet) | 'in_progress' (some results, still being
-  // contested) | 'complete' (window has passed).
+  // contested) | 'complete' (finalized, or the calendar window has passed).
   function stageStatus(year, stage, hasData){
     if (!hasData) return 'not_started';
+    if (STAGE_FINALIZED[Number(year) + ':' + stage]) return 'complete';
     const end = stageEndDate(year, stage);
     if (!end) return 'complete';
     return (Date.now() <= end.getTime()) ? 'in_progress' : 'complete';
