@@ -263,7 +263,7 @@ async function loadProgression(yMin, yMax) {
 async function loadJudges(yMin, yMax) {
   // Parses judges_scores strings client-side after fetch for flexibility
   const r = await nq(
-    `SELECT gender, discipline,
+    `SELECT r.gender, r.discipline,
             AVG(CASE WHEN judges_scores IS NOT NULL AND judges_scores <> '' THEN 1.0 ELSE 0 END) * 100 AS parse_rate,
             COUNT(*) AS total_dives,
             COUNT(CASE WHEN judges_scores IS NOT NULL AND judges_scores <> '' THEN 1 END) AS parsed_dives
@@ -275,8 +275,8 @@ async function loadJudges(yMin, yMax) {
        AND r.discipline IN ('3m','Platform')
        AND r.gender IN ('Female','Male')
        AND d.meet_year BETWEEN $1 AND $2
-     GROUP BY gender, discipline
-     ORDER BY gender, discipline`,
+     GROUP BY r.gender, r.discipline
+     ORDER BY r.gender, r.discipline`,
     [yMin, yMax]
   );
   // Also get spread stats where parseable
