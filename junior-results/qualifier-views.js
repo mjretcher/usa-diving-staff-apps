@@ -148,6 +148,10 @@
     expanded:    new Set(),
     panelRow:    null,
     panelStage:  null,
+    // Computed E/W/C → Nationals (from Neon) — cached after first load
+    computedEWCNat:        null,
+    computedEWCNatLoading: false,
+    computedEWCNatError:   null,
   };
 
   const EWC_GROUPS = ['East', 'Central', 'West'];
@@ -948,6 +952,158 @@
     wireRowClicks(wrap, 'EWC');
   }
 
+  /* ── Computed E/W/C → Junior Nationals (sourced from Neon) ──────
+     The official list predates E/W/C, so this section computes the E/W/C
+     qualifiers directly from the finalized results: top 3 by FINAL placement
+     in each event, at each E/W/C meet (East / West / Central). It is preliminary
+     by design — placement only — and cannot apply the registration-dependent
+     pieces (non-displacing foreign finishers, average-score / replacement /
+     declined adjustments), which is stated plainly in the section. */
+  const EWC_NAT_SEASON = 2026;  // matches the loaded official list's season
+
+  function cmpEventKey(a, b) {
+    const grpOrd = { A:0, B:1, C:2, D:3, AQUA:4 };
+    const dOrd   = { '1M':0, '3M':1, 'Platform':2 };
+    const ag = a.match(/Group ([A-D])/)?.[1] || (a.includes('AQUA') ? 'AQUA' : 'Z');
+    const bg = b.match(/Group ([A-D])/)?.[1] || (b.includes('AQUA') ? 'AQUA' : 'Z');
+    const ad = a.includes('1M') ? '1M' : a.includes('3M') ? '3M' : 'Platform';
+    const bd = b.includes('1M') ? '1M' : b.includes('3M') ? '3M' : 'Platform';
+    return (grpOrd[ag] ?? 9) - (grpOrd[bg] ?? 9)
+        || (a.includes('Girls') ? 0 : 1) - (b.includes('Girls') ? 0 : 1)
+        || (dOrd[ad] ?? 9) - (dOrd[bd] ?? 9);
+  }
+
+  function loadComputedEWCNat() {
+    // Deciding round per (event, meet) = Final if any final rows exist, else Prelim.
+    // Top-3 by place on that round are the E/W/C qualifiers to Junior Nationals.
+    const sql =
+      "WITH ewc AS (" +
+      "  SELECT event_key, ewc_meet, age_group, gender, discipline, round," +
+      "         diver_id_dm, diver_first, diver_last, team_name, team_code, zone, place, score" +
+      "  FROM core.event_results" +
+      "  WHERE year = $1 AND stage = 'EWC' AND is_junior_circuit AND place IS NOT NULL" +
+      ")," +
+      "decider AS (" +
+      "  SELECT event_key, ewc_meet," +
+      "         CASE WHEN bool_or(round = 'Final') THEN 'Final' ELSE 'Prelim' END AS dr" +
+      "  FROM ewc GROUP BY event_key, ewc_meet" +
+      ")" +
+      "SELECT e.event_key, e.ewc_meet, e.age_group, e.gender, e.discipline," +
+      "       e.diver_id_dm, e.diver_first, e.diver_last, e.team_name, e.team_code, e.zone, e.place, e.score" +
+      "  FROM ewc e" +
+      "  JOIN decider d ON d.event_key = e.event_key AND d.ewc_meet = e.ewc_meet AND e.round = d.dr" +
+      "  WHERE e.place <= 3" +                         // top-3 direct (Art.303(b)(3)(i))
+      "  ORDER BY e.event_key, e.ewc_meet, e.place";
+    return window.NEON.query(sql, [EWC_NAT_SEASON]).then(function (res) {
+      const rows = res.rows || [];
+      const byEvent = new Map();
+      let totalSlots = 0, newSlots = 0; const newDivers = new Set();
+      rows.forEach(function (r) {
+        const ek = r.event_key;
+        if (!byEvent.has(ek)) byEvent.set(ek, { eventKey: ek, meets: {} });
+        const ev = byEvent.get(ek);
+        const m = r.ewc_meet || '?';
+        (ev.meets[m] = ev.meets[m] || []).push(r);
+        totalSlots++;
+        r._onOfficialList = isNatQualified(r.diver_id_dm, ek);
+        if (!r._onOfficialList) { newSlots++; newDivers.add(String(r.diver_id_dm)); }
+      });
+      return { byEvent: byEvent, totalSlots: totalSlots, newSlots: newSlots, newDivers: newDivers.size, season: EWC_NAT_SEASON };
+    });
+  }
+
+  function computedLoadingHTML() {
+    return `<div class="qv-computed-wrap"><div class="qv-computed-loading">
+      <span class="qv-spin"></span> Computing E/W/C qualifiers from the finalized results…
+    </div></div>`;
+  }
+  function computedErrorHTML(msg) {
+    return `<div class="qv-computed-wrap"><div class="qv-computed-error">
+      Could not reach the results database to compute E/W/C qualifiers${msg ? ' (' + esc(msg) + ')' : ''}.
+      The official list above is unaffected.
+    </div></div>`;
+  }
+
+  function renderComputedEWCNatHTML(data) {
+    if (!data || !data.totalSlots) {
+      return `<div class="qv-computed-wrap"><div class="qv-computed-note">
+        No finalized E/W/C results found for ${data ? data.season : EWC_NAT_SEASON} to compute qualifiers from.
+      </div></div>`;
+    }
+    const events = [...data.byEvent.values()].sort(function (a, b) { return cmpEventKey(a.eventKey, b.eventKey); });
+    const meetsOrder = ['East', 'Central', 'West'];
+    let html = `<div class="qv-computed-wrap">
+      <div class="qv-computed-head">
+        <div class="qv-computed-title">
+          <i class="ti ti-calculator" aria-hidden="true"></i>
+          <div>
+            <strong>E/W/C → Junior Nationals — computed from results</strong>
+            <span>Top 3 by final placement in each event, at each E/W/C meet · ${data.season}</span>
+          </div>
+        </div>
+        <div class="qv-computed-stats">
+          <span class="qv-cstat"><strong>${data.totalSlots}</strong> qualifying places</span>
+          <span class="qv-cstat new"><strong>${data.newSlots}</strong> not yet on official list</span>
+          <span class="qv-cstat"><strong>${data.newDivers}</strong> athletes to add</span>
+        </div>
+      </div>
+      <div class="qv-computed-note">
+        <strong>Preliminary — by placement only.</strong> This does not remove non-displacing (foreign) finishers
+        or apply the average-score, replacement, or declined adjustments, which require the registration file.
+        Verify against the official list before publishing.
+      </div>
+      <div class="qv-event-grid">`;
+    events.forEach(function (ev) {
+      const meets = meetsOrder.filter(function (m) { return ev.meets[m]; })
+        .concat(Object.keys(ev.meets).filter(function (m) { return meetsOrder.indexOf(m) < 0; }));
+      const total = meets.reduce(function (a, m) { return a + ev.meets[m].length; }, 0);
+      const evNew = meets.reduce(function (a, m) { return a + ev.meets[m].filter(function (r) { return !r._onOfficialList; }).length; }, 0);
+      html += `<div class="qv-event-card">
+        <div class="qv-event-header">
+          <span class="qv-event-name">${esc(ev.eventKey)}</span>
+          <span class="qv-event-meta">${evNew > 0 ? evNew + ' new ·' : ''}</span>
+          <span class="qv-event-count">${total}</span>
+        </div>
+        <div class="qv-meet-cols">`;
+      meets.forEach(function (m) {
+        const list = ev.meets[m].slice().sort(function (a, b) { return Number(a.place) - Number(b.place); });
+        html += `<div class="qv-meet-col">
+          <div class="qv-meet-col-head">${esc(m)}</div>
+          ${list.map(function (r) {
+            const nm = `${r.diver_first || ''} ${r.diver_last || ''}`.trim();
+            return `<div class="qv-comp-row${r._onOfficialList ? '' : ' is-new'}">
+              <span class="qv-comp-place">${esc(String(r.place))}</span>
+              <span class="qv-comp-name">${esc(nm)}${r.team_code ? `<span class="qv-comp-team">${esc(r.team_code)}</span>` : ''}</span>
+              ${r._onOfficialList ? `<span class="qvb qvb-onlist" title="Already on the official list">on list</span>` : `<span class="qvb qvb-new" title="Not yet on the official list">NEW</span>`}
+            </div>`;
+          }).join('')}
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    html += `</div></div>`;
+    return html;
+  }
+
+  function mountComputedEWCNat() {
+    const host = $('qvComputedEWCNat');
+    if (!host) return;
+    if (!(window.NEON && window.NEON.query)) { host.innerHTML = ''; return; }  // offline → official list still shown
+    if (qv.computedEWCNat) { host.innerHTML = renderComputedEWCNatHTML(qv.computedEWCNat); return; }
+    if (qv.computedEWCNatError) { host.innerHTML = computedErrorHTML(qv.computedEWCNatError); return; }
+    host.innerHTML = computedLoadingHTML();
+    if (qv.computedEWCNatLoading) return;
+    qv.computedEWCNatLoading = true;
+    loadComputedEWCNat().then(function (data) {
+      qv.computedEWCNat = data; qv.computedEWCNatLoading = false;
+      const h = $('qvComputedEWCNat'); if (h) h.innerHTML = renderComputedEWCNatHTML(data);
+    }).catch(function (err) {
+      qv.computedEWCNatLoading = false;
+      qv.computedEWCNatError = String((err && err.message) || err);
+      const h = $('qvComputedEWCNat'); if (h) h.innerHTML = computedErrorHTML(qv.computedEWCNatError);
+    });
+  }
+
   /* ── Nationals View ────────────────────────────────────────── */
   /* Data-state banner: if the loaded official qualifier list was generated
      BEFORE E/W/C was scored, it cannot contain the E/W/C top-3 qualifiers.
@@ -997,6 +1153,10 @@
     } else {
       renderNatFromComputed(tableWrap);
     }
+
+    // Computed E/W/C → Nationals layer (from Neon), appended below either path.
+    tableWrap.insertAdjacentHTML('beforeend', '<div id="qvComputedEWCNat"></div>');
+    mountComputedEWCNat();
   }
 
   function renderNatSidebar() {
@@ -1196,6 +1356,36 @@
   font-size:13.5px;line-height:1.5;color:#3a2e16}
 .qv-data-banner .ti{color:#b26a00;font-size:20px;flex:0 0 auto;margin-top:1px}
 .qv-data-banner strong{color:#171f69}
+/* ── Computed E/W/C → Nationals section ───────────────── */
+.qv-computed-wrap{margin:18px 16px 8px;border-top:2px solid #e7e9f2;padding-top:16px}
+.qv-computed-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+.qv-computed-title{display:flex;gap:10px;align-items:flex-start}
+.qv-computed-title .ti{font-size:22px;color:#009ac7;flex:0 0 auto;margin-top:2px}
+.qv-computed-title strong{display:block;font-size:15px;color:#171f69}
+.qv-computed-title span{display:block;font-size:12px;color:var(--ink-3,#5f6b7a);margin-top:1px}
+.qv-computed-stats{display:flex;gap:8px;flex-wrap:wrap}
+.qv-cstat{background:#eef1f8;border-radius:8px;padding:6px 12px;font-size:12px;color:#2d3a4a}
+.qv-cstat strong{color:#171f69;font-size:15px;margin-right:3px}
+.qv-cstat.new{background:#e6f5fb}
+.qv-cstat.new strong{color:#0d7fa6}
+.qv-computed-note{background:#fff8ec;border:1px solid #f0d9a8;border-left:4px solid #b26a00;border-radius:8px;
+  padding:10px 14px;font-size:12.5px;line-height:1.5;color:#3a2e16;margin-bottom:14px}
+.qv-computed-note strong{color:#171f69}
+.qv-meet-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:10px}
+.qv-meet-col{background:var(--surface-2,#f7f8fc);border-radius:8px;padding:8px}
+.qv-meet-col-head{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#171f69;font-weight:700;
+  margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #e3e6f0}
+.qv-comp-row{display:flex;align-items:center;gap:7px;padding:4px 2px;font-size:12.5px}
+.qv-comp-row.is-new{background:#e6f5fb;border-radius:5px;padding:4px 5px}
+.qv-comp-place{font-variant-numeric:tabular-nums;font-weight:700;color:#171f69;width:16px;flex:0 0 auto}
+.qv-comp-name{flex:1;color:#1c2430;display:flex;flex-direction:column;line-height:1.2}
+.qv-comp-team{font-size:10px;color:var(--ink-4,#8a93a3)}
+.qvb-new{background:#009ac7;color:#fff;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.03em}
+.qvb-onlist{background:#e3e6f0;color:#5f6b7a;font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:4px}
+.qv-computed-loading{padding:16px;color:var(--ink-3,#5f6b7a);font-size:13.5px;display:flex;align-items:center;gap:10px}
+.qv-computed-error{padding:14px 16px;background:#fff8ec;border:1px solid #f0d9a8;border-radius:8px;font-size:13px;color:#3a2e16}
+.qv-spin{width:16px;height:16px;border:2px solid #cdd3e6;border-top-color:#009ac7;border-radius:50%;display:inline-block;animation:qvspin .7s linear infinite}
+@keyframes qvspin{to{transform:rotate(360deg)}}
 /* ── Panel slide-in ────────────────────────────────────── */
 #qv-panel{position:fixed;top:var(--bar-h,52px);right:-420px;width:400px;bottom:0;
   background:var(--surface);border-left:1px solid var(--line);
