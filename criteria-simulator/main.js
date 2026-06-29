@@ -1532,8 +1532,81 @@ function printReport() {
   setTimeout(() => win.print(), 350);
 }
 
+function qualCountWith(scoreThr, ddMin) {
+  const rule = els.ruleMode.value;
+  const topN = num(els.topN.value) ?? 0;
+  const ddMode = els.ddMode.value;
+  const seen = new Set();
+  for (const r of (state.filtered || [])) {
+    const score = scoreForRow(r);
+    const scorePass = isNum(scoreThr) && isNum(score) && score >= scoreThr;
+    const topPass = topN > 0 && isNum(r.place) && r.place <= topN;
+    let rulePass = false;
+    if (rule === 'scoreOnly') rulePass = scorePass;
+    else if (rule === 'topNOnly') rulePass = topPass;
+    else if (rule === 'topNOrScore') rulePass = topPass || scorePass;
+    let ddPass;
+    const total = r.phase_dd_sum;
+    if (ddMode === 'ignore' || !isNum(ddMin)) ddPass = true;
+    else if (!isNum(total)) ddPass = (ddMode === 'requireKnown') ? false : true;
+    else ddPass = total >= ddMin;
+    if (rulePass && ddPass) seen.add(athleteKey(r));
+  }
+  return seen.size;
+}
+
+function sensLadderHtml(title, rows) {
+  const maxC = Math.max(1, ...rows.map(r => r.count));
+  const body = rows.map(r => {
+    const deltaTxt = r.current ? 'current'
+      : (r.delta > 0 ? `+${r.delta}` : r.delta < 0 ? `${r.delta}` : '0');
+    const dCls = r.current ? 'cur' : (r.delta > 0 ? 'up' : r.delta < 0 ? 'down' : 'flat');
+    return `<div class="cs2-sens-row ${r.current ? 'is-current' : ''}">
+      <span class="cs2-sens-th">${esc(r.label)}</span>
+      <span class="cs2-sens-bar"><span class="cs2-sens-fill" style="width:${Math.round(r.count / maxC * 100)}%"></span></span>
+      <span class="cs2-sens-n">${r.count}</span>
+      <span class="cs2-sens-d ${dCls}">${deltaTxt}</span>
+    </div>`;
+  }).join('');
+  return `<div class="cs2-sens-ladder"><div class="cs2-sens-title">${esc(title)}</div>${body}</div>`;
+}
+
+function renderSensitivity() {
+  const body = $('sensitivityBody');
+  if (!body) return;
+  const curScore = num(els.scoreThreshold.value);
+  const curDd    = num(els.ddThreshold.value);
+  const rule     = els.ruleMode.value;
+  const ddMode   = els.ddMode.value;
+  const baseline = qualCountWith(curScore, curDd);
+  const blocks = [];
+
+  if ((rule === 'scoreOnly' || rule === 'topNOrScore') && isNum(curScore)) {
+    const rows = [-5, -2.5, 0, 2.5, 5].map(step => {
+      const thr = Math.round((curScore + step) * 100) / 100;
+      const count = qualCountWith(thr, curDd);
+      return { label: `${step > 0 ? '+' : ''}${step} → ${thr}`, count, delta: count - baseline, current: step === 0 };
+    });
+    blocks.push(sensLadderHtml('If the score standard changes', rows));
+  }
+  if (ddMode !== 'ignore' && isNum(curDd)) {
+    const rows = [-0.2, -0.1, 0, 0.1, 0.2, 0.3].map(step => {
+      const m = Math.round((curDd + step) * 100) / 100;
+      const count = qualCountWith(curScore, m);
+      return { label: `${step > 0 ? '+' : ''}${step.toFixed(1)} → ${m.toFixed(1)}`, count, delta: count - baseline, current: Math.abs(step) < 1e-9 };
+    });
+    blocks.push(sensLadderHtml('If the DD minimum changes', rows));
+  }
+
+  const head = `<div class="cs2-sens-baseline"><b>${baseline}</b> athletes qualify at the current standard. Each step shows how the count moves.</div>`;
+  body.innerHTML = head + (blocks.length
+    ? `<div class="cs2-sens-ladders">${blocks.join('')}</div>`
+    : '<div class="source-impact-empty">Set a score standard or DD minimum to see how the count changes.</div>');
+}
+
 function renderEnhancements() {
   try { renderTrustStrip(); } catch (e) {}
+  try { renderSensitivity(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
   try { renderStandardsPanel(); } catch (e) {}

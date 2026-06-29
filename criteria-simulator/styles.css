@@ -768,3 +768,21 @@ details.panel > summary p {
 .cs2-path-no { background: rgba(0,154,199,.08); color: #0a5e78; }
 
 .sidebar-help.sync-error { color: var(--brand-red, #e31937); }
+
+/* Sensitivity ladders */
+.cs2-sensitivity { border-top: 3px solid var(--brand-blue, #171f69); }
+.cs2-sens-baseline { font-size: 13px; color: var(--ink-2, #2d3a4a); margin-bottom: 14px; }
+.cs2-sens-baseline b { color: var(--brand-blue, #171f69); font-size: 18px; font-weight: 700; }
+.cs2-sens-ladders { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+.cs2-sens-title { font-size: 12px; font-weight: 600; color: var(--ink-2, #2d3a4a); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 9px; }
+.cs2-sens-row { display: grid; grid-template-columns: 86px 1fr 30px 56px; align-items: center; gap: 9px; margin-bottom: 6px; font-size: 12px; }
+.cs2-sens-row.is-current { background: rgba(23,31,105,.06); border-radius: 6px; padding: 3px 6px; margin: 0 -6px 6px; }
+.cs2-sens-th { color: var(--ink-3, #5a6a7e); font-variant-numeric: tabular-nums; }
+.cs2-sens-bar { background: rgba(23,31,105,.08); border-radius: 5px; height: 14px; overflow: hidden; }
+.cs2-sens-fill { display: block; height: 100%; background: var(--brand-pool, #009ac7); border-radius: 5px; }
+.cs2-sens-row.is-current .cs2-sens-fill { background: var(--brand-blue, #171f69); }
+.cs2-sens-n { text-align: right; font-weight: 600; color: var(--ink, #0d1117); font-variant-numeric: tabular-nums; }
+.cs2-sens-d { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cs2-sens-d.up   { color: #1f7a4d; }
+.cs2-sens-d.down { color: var(--brand-red, #e31937); }
+.cs2-sens-d.flat, .cs2-sens-d.cur { color: var(--ink-4, #94a3b8); }
