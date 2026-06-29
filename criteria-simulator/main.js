@@ -878,6 +878,74 @@ function loadScenarios() {
   refreshScenarioSelect();
 }
 function persistScenarios() { localSet(SCENARIO_STORE_KEY, state.scenarios); }
+
+// ── Shared sync (GitHub-backed, offline-first) ────────────────────────────
+function setScenarioStatus(msg, isError) {
+  const el = $('scenarioSyncStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('sync-error', !!isError);
+}
+function scenarioById(id) { return state.scenarios.find(s => s.id === id); }
+
+async function pushScenario(sc) {
+  if (!sc) return;
+  const Sync = window.CriteriaScenarioSync;
+  if (!Sync || !Sync.hasToken()) {
+    sc.pendingSync = true; persistScenarios(); refreshScenarioSelect();
+    setScenarioStatus('Saved on this device — sharing is not configured.', true);
+    return;
+  }
+  try {
+    setScenarioStatus('Sharing scenario with all staff…');
+    await Sync.save(sc);
+    sc.pendingSync = false;
+    persistScenarios(); refreshScenarioSelect();
+    setScenarioStatus(`Shared "${sc.name}" with all staff.`);
+  } catch (e) {
+    sc.pendingSync = true;
+    persistScenarios(); refreshScenarioSelect();
+    setScenarioStatus('Saved on this device — could not reach the shared library. Will retry.', true);
+  }
+}
+
+let _scenarioSyncing = false;
+async function syncScenarios(opts) {
+  opts = opts || {};
+  const Sync = window.CriteriaScenarioSync;
+  if (!Sync || _scenarioSyncing) return;
+  _scenarioSyncing = true;
+  setScenarioStatus(opts.manual ? 'Checking shared library…' : 'Syncing shared scenarios…');
+  try {
+    const remote = await Sync.loadAll();
+    const remoteIds = new Set((remote || []).map(r => r && r.id).filter(Boolean));
+    const byId = new Map();
+    state.scenarios.forEach(s => { if (s && s.id) byId.set(s.id, s); });
+    let added = 0, updated = 0;
+    (remote || []).forEach(r => {
+      if (!r || !r.id) return;
+      const local = byId.get(r.id);
+      if (!local) { byId.set(r.id, r); added++; }
+      else if (!local.pendingSync && String(r.updated_at || '') > String(local.updated_at || '')) {
+        byId.set(r.id, r); updated++;
+      }
+    });
+    state.scenarios = [...byId.values()];
+    persistScenarios();
+    refreshScenarioSelect();
+    // Share anything that exists only locally or is awaiting push (reconnect case)
+    const toPush = state.scenarios.filter(s => s.pendingSync || !remoteIds.has(s.id));
+    for (const sc of toPush) { try { await Sync.save(sc); sc.pendingSync = false; } catch (e) {} }
+    if (toPush.length) { persistScenarios(); refreshScenarioSelect(); }
+    const shared = (remote || []).length;
+    if (added || updated) setScenarioStatus(`Shared library updated: ${added} added, ${updated} updated.`);
+    else setScenarioStatus(`Shared with all staff${shared ? ` · ${shared} saved` : ''}. Auto-syncs every 45s.`);
+  } catch (e) {
+    setScenarioStatus('Could not reach the shared library. Showing scenarios saved on this device.', true);
+  } finally {
+    _scenarioSyncing = false;
+  }
+}
 function refreshScenarioSelect() {
   const sel = els.scenarioSelect;
   sel.innerHTML =
@@ -885,7 +953,7 @@ function refreshScenarioSelect() {
     state.scenarios
       .slice()
       .sort((a,b) => sortByName(a.name, b.name))
-      .map(s => `<option value="${esc(s.id)}" ${s.id === state.activeScenarioId ? 'selected' : ''}>${esc(s.name)}</option>`)
+      .map(s => `<option value="${esc(s.id)}" ${s.id === state.activeScenarioId ? 'selected' : ''}>${esc(s.name)}${s.pendingSync ? ' • not synced' : ''}</option>`)
       .join('');
 }
 async function scenarioCreate() {
@@ -904,6 +972,7 @@ async function scenarioCreate() {
   els.scenarioName.value = name;
   USAD.toast(`Created "${name}"`, { kind: 'success' });
   renderScenarioStrip();
+  await pushScenario(scenarioById(id));
 }
 async function scenarioSave() {
   if (!state.activeScenarioId) return scenarioCreate();
@@ -916,6 +985,7 @@ async function scenarioSave() {
   refreshScenarioSelect();
   USAD.toast(`Saved "${sc.name}"`, { kind: 'success' });
   renderScenarioStrip();
+  await pushScenario(sc);
 }
 async function scenarioDuplicate() {
   if (!state.activeScenarioId) { USAD.toast('Nothing to duplicate yet.', { kind: 'warn' }); return; }
@@ -939,6 +1009,7 @@ async function scenarioDuplicate() {
   refreshScenarioSelect();
   els.scenarioName.value = name;
   USAD.toast(`Created "${name}"`, { kind: 'success' });
+  await pushScenario(scenarioById(id));
 }
 async function scenarioRename() {
   if (!state.activeScenarioId) return;
@@ -951,10 +1022,12 @@ async function scenarioRename() {
   });
   if (!name) return;
   sc.name = name;
+  sc.updated_at = new Date().toISOString();
   persistScenarios();
   refreshScenarioSelect();
   els.scenarioName.value = name;
   renderScenarioStrip();
+  await pushScenario(sc);
 }
 function scenarioLoad() {
   const id = els.scenarioSelect.value;
@@ -978,6 +1051,7 @@ async function scenarioDelete() {
     danger: true,
   });
   if (!ok) return;
+  const delId = state.activeScenarioId;
   state.scenarios = state.scenarios.filter(s => s.id !== state.activeScenarioId);
   state.activeScenarioId = null;
   els.scenarioName.value = '';
@@ -985,6 +1059,10 @@ async function scenarioDelete() {
   refreshScenarioSelect();
   USAD.toast('Scenario deleted', { kind: 'success' });
   renderScenarioStrip();
+  if (window.CriteriaScenarioSync && window.CriteriaScenarioSync.hasToken()) {
+    try { await window.CriteriaScenarioSync.remove(delId); setScenarioStatus('Removed from the shared library.'); }
+    catch (e) { setScenarioStatus('Deleted locally — could not update the shared library.', true); }
+  }
 }
 function scenarioExport() {
   const payload = JSON.stringify({
@@ -1469,6 +1547,14 @@ function initEnhancements() {
   });
   const pr = $('btnPrintReport');
   if (pr) pr.addEventListener('click', printReport);
+  const rb = $('scenarioRefresh');
+  if (rb) rb.addEventListener('click', () => syncScenarios({ manual: true }));
+  if (window.CriteriaScenarioSync) {
+    setTimeout(() => syncScenarios({ manual: false }), 800);
+    setInterval(() => syncScenarios({ manual: false }), 45000);
+  } else {
+    setScenarioStatus('Sharing is not available in this view.', true);
+  }
   // Mirror sidebar event selection into the what-if for convenience on first load.
   if ($('wifGender') && els.genderFilter.value) $('wifGender').value = els.genderFilter.value === 'Male' ? 'Male' : 'Female';
   if ($('wifEvent') && ['1m','3m','Platform'].includes(els.disciplineFilter.value)) $('wifEvent').value = els.disciplineFilter.value;

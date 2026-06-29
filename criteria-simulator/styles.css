@@ -766,3 +766,5 @@ details.panel > summary p {
 .cs2-path { margin-top: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13px; }
 .cs2-path-ok { background: rgba(31,122,77,.08); color: #1f6e47; }
 .cs2-path-no { background: rgba(0,154,199,.08); color: #0a5e78; }
+
+.sidebar-help.sync-error { color: var(--brand-red, #e31937); }

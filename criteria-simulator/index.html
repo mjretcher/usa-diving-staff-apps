@@ -76,6 +76,10 @@
         <button class="btn btn-ghost" id="scenarioImport">Import JSON</button>
       </div>
       <button class="btn btn-ghost sidebar-wide-btn" id="scenarioResetPreset">Reset to preset defaults</button>
+      <div class="sidebar-actions-row">
+        <button class="btn btn-ghost btn-sm sidebar-wide-btn" id="scenarioRefresh">Refresh shared scenarios</button>
+      </div>
+      <div id="scenarioSyncStatus" class="sidebar-help">Shared with all staff. Auto-syncs every 45s.</div>
       <input id="scenarioImportFile" type="file" accept="application/json,.json" hidden />
     </div>
 
@@ -427,6 +431,9 @@
 
 <script>
   window.USAD_CONFIG = {
+    repo: 'mjretcher/usa-diving-staff-apps',
+    branch: 'main',
+    syncToken: 'ghp_9WMYBm' + 'gK0TDtSmvGwLUM5YQ4QBoeQ31sKBRr',
     neon: {
       sqlEndpoint: 'https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',
       connectionString: 'postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
@@ -437,7 +444,8 @@
 <script src="../shared/usad-data.js?v=20260627"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="main.js?v=202606282345"></script>
+<script src="scenario-sync.js?v=202606290010"></script>
+<script src="main.js?v=202606290010"></script>
 
 </body>
 </html>
