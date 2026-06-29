@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
-<meta name="app-version" content="2026-06-25-2035"/>
+<meta name="app-version" content="2026-06-29-2118"/>
 <title>Schedule Builder — USA Diving</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -1201,6 +1201,16 @@ setInterval(()=>{if(S?.meet){saveS();if(saveTimer){clearTimeout(saveTimer);saveT
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S?.meet)saveS()});
 window.addEventListener('beforeunload',()=>{if(S?.meet){saveS();if(S.currentLibraryId&&saveTimer){clearTimeout(saveTimer);saveTimer=null;doSave();}}});
 
+// Logo → apps home. Forces same-tab navigation on a normal left-click (the bar
+// is JS-rendered and the logo img is otherwise draggable, which can swallow the
+// click), while still allowing cmd/ctrl/shift/middle-click to open a new tab.
+function goHome(e){
+  if(e&&(e.metaKey||e.ctrlKey||e.shiftKey||e.button===1))return;
+  if(e&&e.preventDefault)e.preventDefault();
+  try{if(typeof S!=='undefined'&&S&&S.meet){saveS();if(S.currentLibraryId&&saveTimer){clearTimeout(saveTimer);saveTimer=null;doSave();}}}catch(_){}
+  window.location.assign('../');
+}
+
 // ── TIMING ────────────────────────────────────────────────────────────
 function calcEvDur(ev){
   if(Number(ev.customDurationMinutes||0)>0)return{evMin:Number(ev.customDurationMinutes),rawMin:Number(ev.customDurationMinutes)};
@@ -1908,7 +1918,7 @@ function renderBar(timed){
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
   return`<header class="bar">
-    <a class="bar-logo" href="../" title="Back to apps home"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving"/></a>
+    <a class="bar-logo" href="../" title="Back to apps home" onclick="goHome(event)"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false"/></a>
     <div class="bar-meet" onclick="UI.modal='meet';render()">
       <div class="bar-meet-name">${esc(S.meet.name||'New Schedule')}</div>
       <div class="bar-meet-meta">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${tz?' · '+tz.s:''} · ${MEET_TYPES[S.meet.meetType]?.l||'Custom'}</div>
