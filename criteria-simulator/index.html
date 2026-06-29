@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=20260627" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
-  <link rel="stylesheet" href="styles.css?v=20260627" />
+  <link rel="stylesheet" href="styles.css?v=202606282345" />
 </head>
 <body>
 
@@ -46,6 +46,7 @@
     <span><b>Bubble</b> <em id="stripBubble">0</em></span>
   </div>
   <div class="scenario-strip-actions">
+    <button class="btn btn-ghost" id="btnPrintReport">Print report</button>
     <button class="btn btn-ghost" id="btnCopySummary">Copy summary</button>
   </div>
 </nav>
@@ -189,6 +190,14 @@
 
     <div id="mainContent" hidden>
 
+      <section class="cs2-trust" id="trustStrip" aria-label="Data trust and coverage">
+        <div class="cs2-trust-tile"><span class="cs2-trust-l">Results in scope</span><b id="trustScope">—</b><span class="cs2-trust-f" id="trustScopeFoot"></span></div>
+        <div class="cs2-trust-tile"><span class="cs2-trust-l">Placement known</span><b id="trustPlace">—</b><span class="cs2-trust-f">of results in scope</span></div>
+        <div class="cs2-trust-tile"><span class="cs2-trust-l">Score basis</span><b id="trustBasis">—</b><span class="cs2-trust-f" id="trustBasisFoot"></span></div>
+        <div class="cs2-trust-tile"><span class="cs2-trust-l">DD known</span><b id="trustDd">—</b><span class="cs2-trust-f">needed for DD checks</span></div>
+        <div class="cs2-trust-tile cs2-trust-standards"><span class="cs2-trust-l">Standards</span><b id="trustStandards">2025–26</b><span class="cs2-trust-f cs2-confirm">confirm vs published</span></div>
+      </section>
+
       <!-- Filter chip strip: shows current scope, click any chip to reset that filter -->
       <nav class="filter-strip" aria-label="Active filter summary">
         <span class="filter-chip active"><b>Model</b> <em id="chipPreset">—</em></span>
@@ -232,6 +241,57 @@
           <div class="kpi-foot">When DD is known</div>
         </div>
       </section>
+
+      <!-- What-if simulator — the namesake feature -->
+      <section class="panel cs2-whatif" id="whatIf">
+        <header class="panel-head">
+          <h2>What-if simulator</h2>
+          <p>Type a hypothetical result and see instantly whether it meets the active standard.</p>
+        </header>
+        <div class="cs2-wif-grid">
+          <label class="cs2-wif-field"><span>Gender</span>
+            <select id="wifGender" class="sidebar-select">
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+            </select>
+          </label>
+          <label class="cs2-wif-field"><span>Event</span>
+            <select id="wifEvent" class="sidebar-select">
+              <option value="1m">1m</option>
+              <option value="3m" selected>3m</option>
+              <option value="Platform">Platform</option>
+            </select>
+          </label>
+          <label class="cs2-wif-field"><span>Score</span>
+            <input id="wifScore" class="sidebar-input" type="number" min="0" step="0.05" placeholder="e.g. 258" />
+          </label>
+          <label class="cs2-wif-field"><span>DD total <em>(optional)</em></span>
+            <input id="wifDd" class="sidebar-input" type="number" min="0" step="0.1" placeholder="e.g. 13.5" />
+          </label>
+          <label class="cs2-wif-field"><span>Place <em>(optional)</em></span>
+            <input id="wifPlace" class="sidebar-input" type="number" min="1" step="1" placeholder="e.g. 4" />
+          </label>
+        </div>
+        <div class="cs2-wif-result" id="wifResult">Enter a score to simulate against the active model.</div>
+      </section>
+
+      <div class="dual-grid">
+        <section class="panel" id="standardAchievementPanel">
+          <header class="panel-head">
+            <h2>Standard achievement</h2>
+            <p>Share of evaluated results that clear the score standard.</p>
+          </header>
+          <div id="standardAchievement" class="source-impact"></div>
+        </section>
+
+        <section class="panel" id="bubbleWatchPanel">
+          <header class="panel-head">
+            <h2>Bubble watch</h2>
+            <p>How close the field sits to the standard — no names, names are in the detail below.</p>
+          </header>
+          <div id="bubbleWatch" class="source-impact"></div>
+        </section>
+      </div>
 
       <!-- Qualification Pipeline funnel -->
       <section id="pipeline" class="panel">
@@ -340,6 +400,14 @@
         </div>
       </details>
 
+      <details id="standardsInUse" class="panel">
+        <summary>
+          <h2>Standards in use — 2025–26 season (confirm)</h2>
+          <p>The exact score standards and DD minimums this tool applies. Confirm they match the current published criteria before relying on results.</p>
+        </summary>
+        <div id="standardsBody" class="table-wrap"></div>
+      </details>
+
     </div>
 
   </main>
@@ -369,7 +437,7 @@
 <script src="../shared/usad-data.js?v=20260627"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="main.js?v=20260627"></script>
+<script src="main.js?v=202606282345"></script>
 
 </body>
 </html>

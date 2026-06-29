@@ -699,3 +699,70 @@ details.panel > summary p {
   .kpi-row { grid-template-columns: 1fr; }
   .scenario-strip { flex-direction: column; align-items: flex-start; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   v2 overhaul — trust strip, what-if simulator, criteria views
+   Brand: blue #171f69, red #e31937 (white bg only), pool #009ac7, sky #8fc3ea
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Data-trust strip */
+.cs2-trust { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+  background: var(--line, #e4e7ee); border: 1px solid var(--line, #e4e7ee);
+  border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+.cs2-trust-tile { background: var(--card, #fff); padding: 10px 14px; }
+.cs2-trust-l { display: block; font-size: 11px; color: var(--ink-3, #5a6a7e); text-transform: uppercase; letter-spacing: .04em; }
+.cs2-trust-tile b { display: block; font-size: 21px; font-weight: 700; color: var(--brand-blue, #171f69); letter-spacing: -.01em; line-height: 1.2; }
+.cs2-trust-f { display: block; font-size: 11px; color: var(--ink-4, #94a3b8); }
+.cs2-trust-standards b { color: var(--brand-blue, #171f69); }
+.cs2-confirm { color: var(--brand-red, #e31937) !important; font-weight: 600; }
+
+/* What-if simulator */
+.cs2-whatif { border-top: 3px solid var(--brand-pool, #009ac7); }
+.cs2-wif-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cs2-wif-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-3, #5a6a7e); }
+.cs2-wif-field span em { color: var(--ink-4, #94a3b8); font-style: normal; }
+.cs2-wif-result { border-radius: 10px; padding: 14px 16px; background: #f4f5f9; border: 1px solid var(--line, #e4e7ee); font-size: 13px; color: var(--ink-3, #5a6a7e); }
+.cs2-wif-result.cs2-wif-yes { background: rgba(31,122,77,.08); border-color: rgba(31,122,77,.3); }
+.cs2-wif-result.cs2-wif-no  { background: rgba(227,25,55,.06); border-color: rgba(227,25,55,.28); }
+.cs2-wif-verdict { font-size: 16px; font-weight: 700; margin-bottom: 10px; color: var(--ink, #0d1117); }
+.cs2-wif-verdict i { font-style: normal; }
+.cs2-wif-yes .cs2-wif-verdict { color: #1f7a4d; }
+.cs2-wif-no  .cs2-wif-verdict { color: var(--brand-red, #e31937); }
+.cs2-wif-detail { display: grid; gap: 4px; }
+.cs2-wif-line { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2, #2d3a4a); }
+.cs2-wif-line b { color: var(--ink, #0d1117); }
+.cs2-wif-line b.ok { color: #1f7a4d; }
+.cs2-wif-line b.no { color: var(--brand-red, #e31937); }
+
+/* Standard achievement */
+.cs2-ach-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.cs2-ach-big { font-size: 30px; font-weight: 700; color: var(--brand-blue, #171f69); letter-spacing: -.02em; }
+.cs2-ach-sub { font-size: 12px; color: var(--ink-3, #5a6a7e); }
+.cs2-ach-row { display: grid; grid-template-columns: 130px 1fr auto; align-items: center; gap: 10px; margin-bottom: 7px; font-size: 12px; }
+.cs2-ach-name { color: var(--ink-2, #2d3a4a); }
+.cs2-ach-bar { background: rgba(23,31,105,.08); border-radius: 5px; height: 14px; overflow: hidden; }
+.cs2-ach-fill { display: block; height: 100%; background: var(--brand-blue, #171f69); border-radius: 5px; }
+.cs2-ach-val { color: var(--ink-3, #5a6a7e); white-space: nowrap; }
+
+/* Bubble watch bands */
+.cs2-band-caption { font-size: 12px; color: var(--ink-3, #5a6a7e); margin-bottom: 10px; }
+.cs2-band-row { display: grid; grid-template-columns: 90px 1fr auto; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.cs2-band-name { color: var(--ink-2, #2d3a4a); }
+.cs2-band-bar { background: #eef0f7; border-radius: 5px; height: 16px; overflow: hidden; }
+.cs2-band-fill { display: block; height: 100%; border-radius: 5px; }
+.cs2-band-fill.b-hot  { background: var(--brand-blue, #171f69); }
+.cs2-band-fill.b-warm { background: var(--brand-pool, #009ac7); }
+.cs2-band-fill.b-cool { background: var(--brand-sky, #8fc3ea); }
+.cs2-band-fill.b-far  { background: #b4b7c2; }
+.cs2-band-val { font-weight: 600; color: var(--ink-2, #2d3a4a); }
+.cs2-band-foot { font-size: 12px; color: var(--ink-3, #5a6a7e); margin-top: 10px; }
+
+/* Standards table */
+.cs2-std-note { font-size: 12px; color: var(--ink-3, #5a6a7e); margin: 0 0 10px; }
+.cs2-std-table { margin-bottom: 16px; }
+.cs2-std-table th:first-child { color: var(--brand-blue, #171f69); }
+
+/* Path to qualification (drilldown) */
+.cs2-path { margin-top: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13px; }
+.cs2-path-ok { background: rgba(31,122,77,.08); color: #1f6e47; }
+.cs2-path-no { background: rgba(0,154,199,.08); color: #0a5e78; }

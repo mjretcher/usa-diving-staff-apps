@@ -350,6 +350,7 @@ function render() {
   renderQualifiedTable();
   renderBubbleTable();
   renderScenarioStrip();
+  renderEnhancements();
 }
 
 function renderFunnel() {
@@ -835,6 +836,7 @@ function openDrilldown(row) {
       <div class="drilldown-row"><dt>Qualified</dt><dd>${row.qualified ? '<strong style="color:var(--status-direct)">Yes</strong>' : '<strong style="color:var(--status-flag)">No</strong>'}</dd></div>
     </dl>
     <div class="drilldown-reason"><strong>Reason:</strong> ${esc(row.reason)}</div>
+    ${pathToQualificationHtml(row)}
   `;
   $('drilldownOverlay').hidden = false;
   $('drilldownPanel').hidden = false;
@@ -1098,6 +1100,7 @@ async function bootstrap() {
 
   // Wire events
   wireEvents();
+  initEnhancements();
 
   // Initial render
   recompute();
@@ -1213,6 +1216,263 @@ function wireEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('drilldownPanel').hidden) closeDrilldown();
   });
+}
+
+// ── Enhancement layer (v2 overhaul) ───────────────────────────────────────
+// Self-contained additions that reuse the existing scoring engine so nothing
+// can drift from the real evaluation. Hooked from render(), openDrilldown(),
+// and bootstrap().
+
+function pct(n, d) { return d > 0 ? n / d : null; }
+
+function renderTrustStrip() {
+  const inScope = state.filtered || [];
+  const total   = state.data ? state.data.results.length : 0;
+  $('trustScope').textContent = fmtInt(inScope.length);
+  $('trustScopeFoot').textContent = `of ${fmtInt(total)} total`;
+
+  const placeKnown = inScope.filter(r => isNum(r.place)).length;
+  $('trustPlace').textContent = fmtPct(pct(placeKnown, inScope.length));
+
+  const basisLabels = {
+    ncaaWomen5Category: 'NCAA 5-cat',
+    posted: 'Posted', phasePreferred: 'Phase', phaseOrStandalone: 'Non-cumulative',
+  };
+  $('trustBasis').textContent = basisLabels[els.scoreMode.value] || '—';
+  const scored = inScope.filter(r => isNum(scoreForRow(r))).length;
+  const cumul  = inScope.filter(r => isNum(r.posted_score) && isNum(r.phase_score) && r.posted_score !== r.phase_score).length;
+  $('trustBasisFoot').textContent =
+    `${fmtPct(pct(scored, inScope.length))} scored · ${fmtInt(cumul)} cumulative handled`;
+
+  const ddKnown = inScope.filter(r => isNum(r.phase_dd_sum)).length;
+  $('trustDd').textContent = fmtPct(pct(ddKnown, inScope.length));
+}
+
+function activeStandardFor(gender, discipline) {
+  // Mirror how the engine resolves the active standard for an event.
+  const usa = scoreThresholdForSelection(gender, discipline, 'usa');
+  return usa;
+}
+
+function renderStandardAchievement() {
+  const target = $('standardAchievement');
+  const rows = (state.evaluated || []).filter(r => isNum(r.analysis_score) && isNum(r.threshold_used));
+  if (!rows.length) {
+    target.innerHTML = '<div class="source-impact-empty">No evaluated scores with a standard set.</div>';
+    return;
+  }
+  const meet = rows.filter(r => r.analysis_score >= r.threshold_used).length;
+  const rate = pct(meet, rows.length);
+  // Breakdown by competition family
+  const fam = new Map();
+  for (const r of rows) {
+    const k = r.competition_family || 'Other';
+    const o = fam.get(k) || { meet: 0, total: 0 };
+    o.total++; if (r.analysis_score >= r.threshold_used) o.meet++;
+    fam.set(k, o);
+  }
+  const famRows = [...fam.entries()].sort((a,b) => b[1].total - a[1].total).map(([k,o]) => {
+    const w = Math.round((o.meet / o.total) * 100);
+    return `<div class="cs2-ach-row">
+      <span class="cs2-ach-name">${esc(k)}</span>
+      <span class="cs2-ach-bar"><span class="cs2-ach-fill" style="width:${w}%"></span></span>
+      <span class="cs2-ach-val">${o.meet}/${o.total} · ${w}%</span>
+    </div>`;
+  }).join('');
+  target.innerHTML = `
+    <div class="cs2-ach-head">
+      <div class="cs2-ach-big">${fmtPct(rate)}</div>
+      <div class="cs2-ach-sub">${fmtInt(meet)} of ${fmtInt(rows.length)} evaluated results clear the standard</div>
+    </div>
+    ${famRows}`;
+}
+
+function renderBubbleWatch() {
+  const target = $('bubbleWatch');
+  const bub = state.bubble || [];
+  if (!bub.length) {
+    target.innerHTML = '<div class="source-impact-empty">No athletes below the standard in scope.</div>';
+    return;
+  }
+  const bands = [
+    { label: 'Within 2.0', test: g => g <= 2,  cls: 'b-hot' },
+    { label: '2.0 – 5.0',  test: g => g > 2 && g <= 5, cls: 'b-warm' },
+    { label: '5.0 – 10.0', test: g => g > 5 && g <= 10, cls: 'b-cool' },
+    { label: 'Over 10.0',  test: g => g > 10, cls: 'b-far' },
+  ];
+  const counts = bands.map(b => bub.filter(r => b.test(r.threshold_gap)).length);
+  const max = Math.max(1, ...counts);
+  const rowsHtml = bands.map((b, i) => `
+    <div class="cs2-band-row">
+      <span class="cs2-band-name">${b.label}</span>
+      <span class="cs2-band-bar"><span class="cs2-band-fill ${b.cls}" style="width:${Math.round((counts[i]/max)*100)}%"></span></span>
+      <span class="cs2-band-val">${counts[i]}</span>
+    </div>`).join('');
+  const closest = bub[0];
+  const closeNote = closest
+    ? `Closest is <strong>${fmtScore(closest.threshold_gap)}</strong> below — one strong meet away.`
+    : '';
+  target.innerHTML = `
+    <div class="cs2-band-caption">Athletes by gap to the score standard</div>
+    ${rowsHtml}
+    <div class="cs2-band-foot">${closeNote} Names in the bubble detail below.</div>`;
+}
+
+function renderWhatIf() {
+  const g = $('wifGender').value;
+  const d = $('wifEvent').value;
+  const score = num($('wifScore').value);
+  const dd    = num($('wifDd').value);
+  const place = num($('wifPlace').value);
+  const preset = els.criteriaPreset.value;
+  const rule   = els.ruleMode.value;
+  const topN   = num(els.topN.value) ?? 0;
+
+  const standard = activeStandardFor(g, d);
+  const ddMin    = ddMinimumForSelection(g, d, preset);
+  const out = $('wifResult');
+
+  if (!isNum(score) && !isNum(place)) {
+    out.className = 'cs2-wif-result';
+    out.innerHTML = 'Enter a score to simulate against the active model.';
+    return;
+  }
+
+  const scorePass = isNum(standard) && isNum(score) && score >= standard;
+  const topPass   = topN > 0 && isNum(place) && place <= topN;
+  let rulePass = false;
+  if (rule === 'scoreOnly')   rulePass = scorePass;
+  if (rule === 'topNOnly')    rulePass = topPass;
+  if (rule === 'topNOrScore') rulePass = topPass || scorePass;
+
+  // DD only blocks if provided and a minimum exists; unknown DD does not fail here.
+  const ddPass = !isNum(ddMin) || !isNum(dd) ? true : dd >= ddMin;
+  const qualifies = rulePass && ddPass;
+
+  const lines = [];
+  if (isNum(standard)) {
+    const gap = score - standard;
+    lines.push(`<div class="cs2-wif-line"><span>Score standard (${g} ${d})</span><b>${fmtScore(standard)}</b></div>`);
+    lines.push(`<div class="cs2-wif-line"><span>Your score</span><b class="${scorePass ? 'ok' : 'no'}">${fmtScore(score)} ${isNum(score) ? (gap >= 0 ? `(+${fmtScore(gap)})` : `(${fmtScore(gap)})`) : ''}</b></div>`);
+  } else {
+    lines.push(`<div class="cs2-wif-line"><span>Score standard</span><b>— none set for this event</b></div>`);
+  }
+  if (topN > 0) {
+    lines.push(`<div class="cs2-wif-line"><span>Placement cutoff</span><b>top ${topN}</b></div>`);
+    if (isNum(place)) lines.push(`<div class="cs2-wif-line"><span>Your place</span><b class="${topPass ? 'ok' : 'no'}">${place}</b></div>`);
+  }
+  if (isNum(ddMin)) {
+    lines.push(`<div class="cs2-wif-line"><span>DD minimum</span><b>${fmtDd(ddMin)}</b></div>`);
+    if (isNum(dd)) {
+      const dgap = dd - ddMin;
+      lines.push(`<div class="cs2-wif-line"><span>Your DD</span><b class="${ddPass ? 'ok' : 'no'}">${fmtDd(dd)} ${dgap >= 0 ? `(+${fmtDd(dgap)})` : `(${fmtDd(dgap)})`}</b></div>`);
+    } else {
+      lines.push(`<div class="cs2-wif-line"><span>Your DD</span><b>not entered (not blocking)</b></div>`);
+    }
+  }
+
+  out.className = 'cs2-wif-result ' + (qualifies ? 'cs2-wif-yes' : 'cs2-wif-no');
+  out.innerHTML = `
+    <div class="cs2-wif-verdict">${qualifies ? '<i>✓</i> Meets the standard' : '<i>✕</i> Does not meet the standard yet'}</div>
+    <div class="cs2-wif-detail">${lines.join('')}</div>`;
+}
+
+function standardsTableHtml(title, table, fmt) {
+  const events = ['1m','3m','Platform'];
+  const head = `<tr><th>${esc(title)}</th>${events.map(e => `<th class="num">${e}</th>`).join('')}</tr>`;
+  const body = ['Female','Male'].map(g => {
+    const row = table[g] || {};
+    return `<tr><td>${g}</td>${events.map(e => `<td class="num">${fmt(row[e])}</td>`).join('')}</tr>`;
+  }).join('');
+  return `<table class="data-table cs2-std-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function renderStandardsPanel() {
+  const body = $('standardsBody');
+  if (!body || body.dataset.rendered) return;
+  const f = (v) => isNum(v) ? v : '—';
+  body.innerHTML = `
+    <p class="cs2-std-note">Source: USA Diving published selection criteria. Confirm these match the current season before use.</p>
+    ${standardsTableHtml('Score standard · USA', { Female: WINTER_SCORE_STANDARDS.Female.usa, Male: WINTER_SCORE_STANDARDS.Male.usa }, f)}
+    ${standardsTableHtml('Score standard · NCAA', { Female: WINTER_SCORE_STANDARDS.Female.ncaa, Male: WINTER_SCORE_STANDARDS.Male.ncaa }, f)}
+    ${standardsTableHtml('DD minimum · Winter', WINTER_DD_MINIMUMS, f)}
+    ${standardsTableHtml('DD minimum · Nationals', NATIONAL_DD_MINIMUMS, f)}`;
+  body.dataset.rendered = '1';
+}
+
+function pathToQualificationHtml(row) {
+  if (row.qualified) {
+    const margin = isNum(row.threshold_gap) ? -row.threshold_gap : null;
+    return `<div class="cs2-path cs2-path-ok"><strong>Path:</strong> Qualified${isNum(margin) ? ` with ${fmtScore(margin)} to spare on score` : ''}.</div>`;
+  }
+  const needs = [];
+  if (isNum(row.threshold_gap) && row.threshold_gap > 0)
+    needs.push(`+${fmtScore(row.threshold_gap)} on score (to reach ${fmtScore(row.threshold_used)})`);
+  if (row.dd_status === 'fail' && isNum(row.dd_minimum_used) && isNum(row.dd_total_used))
+    needs.push(`+${fmtDd(row.dd_minimum_used - row.dd_total_used)} DD (to reach ${fmtDd(row.dd_minimum_used)})`);
+  const txt = needs.length ? `Needs ${needs.join(' and ')}.` : 'Did not meet the rule on placement.';
+  return `<div class="cs2-path cs2-path-no"><strong>Path to qualification:</strong> ${esc(txt)}</div>`;
+}
+
+function printReport() {
+  const sc = state.scenarios.find(s => s.id === state.activeScenarioId);
+  const name = (sc && sc.name) || els.scenarioName.value || 'Criteria report';
+  const presetText = els.criteriaPreset.options[els.criteriaPreset.selectedIndex].text;
+  const q = state.qualified || [];
+  const b = state.bubble || [];
+  const win = window.open('', '_blank');
+  if (!win) { USAD.toast('Allow pop-ups to print the report.', { kind: 'warn' }); return; }
+  const rowHtml = (r) => `<tr><td>${esc(r.diver_name)}</td><td>${esc(r.team_name || r.nat || '')}</td><td>${esc(r.meet_name)}</td><td>${esc(r.round_stage)}</td><td class="n">${isNum(r.place) ? r.place : ''}</td><td class="n">${fmtScore(r.analysis_score)}</td><td class="n">${fmtScore(r.threshold_used)}</td><td>${esc(r.reason)}</td></tr>`;
+  const bubHtml = (r) => `<tr><td>${esc(r.diver_name)}</td><td>${esc(r.team_name || r.nat || '')}</td><td class="n">${fmtScore(r.analysis_score)}</td><td class="n">${fmtScore(r.threshold_used)}</td><td class="n">${fmtScore(r.threshold_gap)}</td></tr>`;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(name)}</title>
+    <style>
+      body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#0d1117;margin:32px;}
+      h1{color:#171f69;font-size:22px;margin:0 0 2px;} h2{color:#171f69;font-size:15px;margin:24px 0 8px;border-bottom:2px solid #171f69;padding-bottom:4px;}
+      .meta{color:#5a6a7e;font-size:13px;margin-bottom:16px;}
+      .pills span{display:inline-block;background:#eef0f7;border-radius:6px;padding:3px 9px;margin:0 6px 6px 0;font-size:12px;}
+      table{border-collapse:collapse;width:100%;font-size:12px;} th,td{border-bottom:1px solid #e4e7ee;padding:5px 8px;text-align:left;} th{color:#171f69;font-weight:600;} td.n,th.n{text-align:right;}
+      .foot{margin-top:28px;color:#94a3b8;font-size:11px;}
+    </style></head><body>
+    <h1>USA Diving — Criteria Report</h1>
+    <div class="meta">${esc(name)} · generated ${new Date().toLocaleString()}</div>
+    <div class="pills">
+      <span>Model: ${esc(presetText)}</span>
+      <span>Event: ${esc(els.genderFilter.value)} ${esc(els.disciplineFilter.value)}</span>
+      <span>Round: ${esc(els.roundFilter.value)}</span>
+      <span>Score standard: ${esc(els.scoreThreshold.value || '—')}</span>
+      <span>DD minimum: ${esc(els.ddThreshold.value || '—')} (${esc(els.ddMode.value)})</span>
+      <span>Placement: ${esc(els.topN.value || '—')} (${esc(els.ruleMode.value)})</span>
+    </div>
+    <h2>Qualified (${q.length})</h2>
+    <table><thead><tr><th>Name</th><th>Team</th><th>Meet</th><th>Round</th><th class="n">Place</th><th class="n">Score</th><th class="n">Standard</th><th>Reason</th></tr></thead><tbody>${q.map(rowHtml).join('') || '<tr><td colspan="8">None</td></tr>'}</tbody></table>
+    <h2>Bubble — closest below the standard (${b.length})</h2>
+    <table><thead><tr><th>Name</th><th>Team</th><th class="n">Score</th><th class="n">Standard</th><th class="n">Gap</th></tr></thead><tbody>${b.slice(0,25).map(bubHtml).join('') || '<tr><td colspan="5">None</td></tr>'}</tbody></table>
+    <div class="foot">Standards applied are subject to confirmation against current published USA Diving criteria. Data coverage in scope: ${fmtInt((state.filtered||[]).length)} results.</div>
+    </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 350);
+}
+
+function renderEnhancements() {
+  try { renderTrustStrip(); } catch (e) {}
+  try { renderStandardAchievement(); } catch (e) {}
+  try { renderBubbleWatch(); } catch (e) {}
+  try { renderStandardsPanel(); } catch (e) {}
+}
+
+function initEnhancements() {
+  ['wifGender','wifEvent','wifScore','wifDd','wifPlace'].forEach(id => {
+    const el = $(id);
+    if (el) el.addEventListener('input', renderWhatIf);
+    if (el) el.addEventListener('change', renderWhatIf);
+  });
+  const pr = $('btnPrintReport');
+  if (pr) pr.addEventListener('click', printReport);
+  // Mirror sidebar event selection into the what-if for convenience on first load.
+  if ($('wifGender') && els.genderFilter.value) $('wifGender').value = els.genderFilter.value === 'Male' ? 'Male' : 'Female';
+  if ($('wifEvent') && ['1m','3m','Platform'].includes(els.disciplineFilter.value)) $('wifEvent').value = els.disciplineFilter.value;
+  renderWhatIf();
 }
 
 // ── Go! ────────────────────────────────────────────────────────────────────
