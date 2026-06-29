@@ -6,9 +6,9 @@
   <title>HP Analytics — USA Diving Staff</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="../shared/design.css?v=20260627" />
-  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
-  <link rel="stylesheet" href="styles.css?v=20260627" />
+  <link rel="stylesheet" href="../shared/design.css?v=20260628" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260628" />
+  <link rel="stylesheet" href="styles.css?v=20260628" />
 </head>
 <body>
 
@@ -19,279 +19,239 @@
   <div class="topbar-divider"></div>
   <div class="topbar-identity">
     <div class="topbar-eyebrow">High Performance Analytics</div>
-    <div class="topbar-title">Athlete Performance</div>
+    <div class="topbar-title">Field &amp; Athlete Evaluation</div>
   </div>
   <div class="topbar-spacer"></div>
+  <div class="hp-year-controls" role="group" aria-label="Year scope">
+    <button class="hp-year-btn active" id="btnRecent" data-min="2024" data-max="2026">2024–26</button>
+    <button class="hp-year-btn" id="btnFive"   data-min="2022" data-max="2026">5-year</button>
+    <button class="hp-year-btn" id="btnAllYrs" data-min="2018" data-max="2026">All years</button>
+  </div>
   <div class="topbar-metrics">
-    <span class="topbar-pill"><b id="kpiMeets">—</b> meets</span>
-    <span class="topbar-pill"><b id="kpiEvents">—</b> events</span>
+    <span class="topbar-pill"><b id="kpiPhases">—</b> phases</span>
     <span class="topbar-pill"><b id="kpiAthletes">—</b> athletes</span>
-    <span class="topbar-pill"><b id="kpiDives">—</b> dives</span>
-    <span class="topbar-pill topbar-source" id="kpiSource">—</span>
+    <span class="topbar-pill topbar-source" id="kpiSource">Neon</span>
   </div>
 </header>
 
-<div class="app-body">
-
-  <aside class="control-sidebar" aria-label="Dashboard filters">
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Dataset</div>
-      <span class="sidebar-label">Focus scope</span>
-      <select class="sidebar-select" id="scopePreset">
-        <option value="hpd" selected>HPD focus (Junior + Senior National)</option>
-        <option value="senior">Senior events only</option>
-        <option value="junior">Junior events only</option>
-        <option value="national">National / Championship only</option>
-        <option value="all">All levels</option>
-      </select>
-      <div id="scopeSummary" class="sidebar-help"></div>
-
-      <span class="sidebar-label">Year scope</span>
-      <input class="sidebar-input" id="yearSearch" type="search" placeholder="Filter years…" />
-      <div class="sidebar-actions-row">
-        <button class="btn btn-ghost btn-sm" id="yearUseAll">Use all</button>
-        <button class="btn btn-ghost btn-sm" id="yearRecent">2024–2026</button>
-        <button class="btn btn-ghost btn-sm" id="yearClear">Clear</button>
-      </div>
-      <div id="yearPicker" class="multi-picker"></div>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Event Filters</div>
-      <span class="sidebar-label">Event level</span>
-      <select class="sidebar-select" id="eventLevelFilter"></select>
-
-      <span class="sidebar-label">Age group</span>
-      <select class="sidebar-select" id="ageGroupFilter"></select>
-
-      <span class="sidebar-label">Meets</span>
-      <input class="sidebar-input" id="meetSearch" type="search" placeholder="Filter meets…" />
-      <div class="sidebar-actions-row">
-        <button class="btn btn-ghost btn-sm" id="meetUseAll">Use all</button>
-        <button class="btn btn-ghost btn-sm" id="meetClear">Clear</button>
-      </div>
-      <div id="meetPicker" class="multi-picker"></div>
-
-      <span class="sidebar-label">Athlete search</span>
-      <input class="sidebar-input" id="athleteSearch" type="search" placeholder="Search by name…" list="athleteOptions" />
-      <datalist id="athleteOptions"></datalist>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Event Controls</div>
-      <div class="sidebar-grid-2">
-        <div>
-          <span class="sidebar-label">Gender</span>
-          <select class="sidebar-select" id="genderFilter">
-            <option value="all">All</option>
-            <option value="Female">Female</option>
-            <option value="Male">Male</option>
-          </select>
-        </div>
-        <div>
-          <span class="sidebar-label">Board</span>
-          <select class="sidebar-select" id="boardFilter">
-            <option value="all">All</option>
-            <option value="1m">1M</option>
-            <option value="3m">3M</option>
-            <option value="Platform">10M / Platform</option>
-          </select>
-        </div>
-      </div>
-      <div class="sidebar-grid-2">
-        <div>
-          <span class="sidebar-label">Dive group</span>
-          <select class="sidebar-select" id="groupFilter">
-            <option value="all">All</option>
-            <option value="1">Front</option>
-            <option value="2">Back</option>
-            <option value="3">Reverse</option>
-            <option value="4">Inward</option>
-            <option value="5">Twister</option>
-            <option value="6">Armstand</option>
-          </select>
-        </div>
-        <div>
-          <span class="sidebar-label">Placement cutoff</span>
-          <input class="sidebar-input" id="placementCutoff" type="number" min="0" max="200" step="1" value="0" />
-        </div>
-      </div>
-      <div class="sidebar-help">Placement cutoff filters to top N finishers per event (0 = all).</div>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Visualization</div>
-      <span class="sidebar-label">Heatmap metric</span>
-      <select class="sidebar-select" id="heatmapMetric">
-        <option value="avgScore">Average dive score</option>
-        <option value="avgDd">Average DD</option>
-        <option value="diveCount">Dive count</option>
-        <option value="successRate">Success rate (score ≥ 7)</option>
-      </select>
-    </div>
-
-  </aside>
-
-  <main class="app-workspace" id="workspace">
-
-    <div id="loadingPanel" class="loading-panel">
-      <div class="spinner"></div>
-      <div class="loading-text" id="loadingText">Loading data…</div>
-    </div>
-
-    <div id="mainContent" hidden>
-
-      <nav class="filter-strip" aria-label="Active filter summary">
-        <span class="filter-chip active"><b>Scope</b> <em id="chipScope">—</em></span>
-        <span class="filter-chip"><b>Years</b> <em id="chipYears">—</em></span>
-        <span class="filter-chip"><b>Gender</b> <em id="chipGender">All</em></span>
-        <span class="filter-chip"><b>Board</b> <em id="chipBoard">All</em></span>
-        <span class="filter-chip" id="chipLevelWrap"><b>Level</b> <em id="chipLevel">All</em></span>
-        <span class="filter-chip" id="chipAgeWrap"><b>Age</b> <em id="chipAge">All</em></span>
-        <span class="filter-chip" id="chipGroupWrap"><b>Dive group</b> <em id="chipGroup">All</em></span>
-        <span class="filter-chip" id="chipPlacementWrap"><b>Top</b> <em id="chipPlacement">—</em></span>
-        <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeetsCount">All</em></span>
-        <div class="section-nav">
-          <a href="#hero">Summary</a>
-          <a href="#heatmap-section">Heatmap</a>
-          <a href="#breakdown-section">Activity</a>
-          <a href="#distribution-section">Distribution</a>
-          <a href="#matrix-section">Matrix</a>
-          <a href="#leaderboard">Detail</a>
-        </div>
-      </nav>
-
-      <section id="hero" class="kpi-row" aria-label="Dataset summary">
-        <div class="kpi-card kpi-accent-blue">
-          <div class="kpi-label">Athletes in scope</div>
-          <div class="kpi-value" id="heroAthletes">0</div>
-          <div class="kpi-foot" id="heroAthletesFoot">After all filters</div>
-        </div>
-        <div class="kpi-card kpi-accent-green">
-          <div class="kpi-label">Dives analyzed</div>
-          <div class="kpi-value" id="heroDives">0</div>
-          <div class="kpi-foot">Per-dive scoring rows</div>
-        </div>
-        <div class="kpi-card kpi-accent-amber">
-          <div class="kpi-label">Average dive score</div>
-          <div class="kpi-value" id="heroAvgScore">—</div>
-          <div class="kpi-foot">Across selected dives</div>
-        </div>
-        <div class="kpi-card kpi-accent-red">
-          <div class="kpi-label">Average DD</div>
-          <div class="kpi-value" id="heroAvgDd">—</div>
-          <div class="kpi-foot">Across selected dives</div>
-        </div>
-      </section>
-
-      <div class="dual-grid">
-        <section id="heatmap-section" class="panel">
-          <header class="panel-head">
-            <h2>Dive Category Heatmap</h2>
-            <p>Athletes × dive groups, coloured by the selected metric.</p>
-          </header>
-          <div id="heatmap" class="heatmap"></div>
-        </section>
-
-        <section id="breakdown-section" class="panel">
-          <header class="panel-head">
-            <h2>Activity Breakdown</h2>
-            <p>Event entries by year and board.</p>
-          </header>
-          <div id="breakdownContent" class="source-impact"></div>
-        </section>
-      </div>
-
-      <!-- Score Distribution + Year × Discipline matrix -->
-      <div class="dual-grid">
-        <section id="distribution-section" class="panel">
-          <header class="panel-head">
-            <h2>Score Distribution</h2>
-            <p>Per-dive scores in the current scope, by board.</p>
-          </header>
-          <div id="scoreHistogram" class="histo"></div>
-          <div class="histo-legend" id="scoreHistoLegend"></div>
-        </section>
-
-        <section id="matrix-section" class="panel">
-          <header class="panel-head">
-            <h2>Activity Matrix</h2>
-            <p>Event entries by year × board.</p>
-          </header>
-          <div id="activityMatrix" class="cs-heatmap"></div>
-        </section>
-      </div>
-
-      <!-- Detail tables — collapsed by default -->
-      <details id="leaderboard" class="panel">
-        <summary>
-          <h2>Athlete Leaderboard Detail</h2>
-          <p id="leaderboardSubtitle">Expand to see top athletes by total score in the current scope.</p>
-        </summary>
-        <div class="table-wrap">
-          <table class="data-table" id="leaderboardTable">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th class="sortable" data-sort="name">Athlete</th>
-                <th class="sortable" data-sort="team">Team</th>
-                <th class="sortable" data-sort="gender">Gender</th>
-                <th class="num sortable" data-sort="events">Events</th>
-                <th class="num sortable" data-sort="dives">Dives</th>
-                <th class="num sortable" data-sort="avgScore">Avg score</th>
-                <th class="num sortable" data-sort="avgDd">Avg DD</th>
-                <th class="num sortable sort-desc" data-sort="bestTotal">Best total</th>
-                <th class="num sortable" data-sort="bestPlace">Best place</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboardRows"></tbody>
-          </table>
-        </div>
-      </details>
-
-      <details id="topdives" class="panel">
-        <summary>
-          <h2>Top Dives Detail</h2>
-          <p>Highest-scoring dive performances. Expand for names.</p>
-        </summary>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Athlete</th>
-                <th>Meet</th>
-                <th>Event</th>
-                <th>Dive</th>
-                <th>Position</th>
-                <th class="num">DD</th>
-                <th class="num">Avg judge</th>
-                <th class="num">Score</th>
-              </tr>
-            </thead>
-            <tbody id="topDivesRows"></tbody>
-          </table>
-        </div>
-      </details>
-
-    </div>
-
-  </main>
+<!-- Data Trust Strip -->
+<div class="hp-trust-strip" id="trustStrip" aria-label="Data coverage summary">
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Phases analyzed</div>
+    <div class="hp-trust-val" id="tPhases">—</div>
+    <div class="hp-trust-note" id="tPlaceNote">place known —%</div>
+  </div>
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Cumulative scores</div>
+    <div class="hp-trust-val" id="tCumul">~11%</div>
+    <div class="hp-trust-note hp-trust-ok">✓ handled correctly</div>
+  </div>
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Intl benchmark</div>
+    <div class="hp-trust-val" id="tIntl">—</div>
+    <div class="hp-trust-note hp-trust-warn">partial · World meets only</div>
+  </div>
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Judge detail</div>
+    <div class="hp-trust-val" id="tJudge">~25%</div>
+    <div class="hp-trust-note hp-trust-warn">intl meets only</div>
+  </div>
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Year span</div>
+    <div class="hp-trust-val" id="tYears">2018–2026</div>
+    <div class="hp-trust-note" id="tMeets">— meets</div>
+  </div>
+  <div class="hp-trust-cell">
+    <div class="hp-trust-label">Athletes</div>
+    <div class="hp-trust-val" id="tAthletes">—</div>
+    <div class="hp-trust-note" id="tTeams">— teams</div>
+  </div>
 </div>
 
+<div class="hp-workspace" id="workspace">
+
+  <div id="loadingPanel" class="hp-loading">
+    <div class="hp-spinner"></div>
+    <div class="hp-loading-text" id="loadingText">Loading HP Analytics…</div>
+  </div>
+
+  <div id="mainContent" hidden>
+
+    <!-- ── 1. Road to the Podium ─────────────────────────────────── -->
+    <section class="hp-section" id="sec-medal-gap">
+      <div class="hp-section-hd">
+        <div class="hp-section-hd-left">
+          <h2>Road to the Podium</h2>
+          <p>Best US senior score vs the World final cut and gold medal, by Olympic event.
+            <span class="hp-partial-tag">World Aquatics · partial coverage (~28%)</span></p>
+        </div>
+        <button class="hp-print-btn" id="printMedalGap" aria-label="Print medal gap report">⎙ Print report</button>
+      </div>
+      <div class="hp-medal-grid" id="medalGapGrid"><!-- JS --></div>
+    </section>
+
+    <!-- ── 2. Score Bands ─────────────────────────────────────────── -->
+    <section class="hp-section" id="sec-score-bands">
+      <div class="hp-section-hd">
+        <h2>What It Takes to Make a US Senior Final</h2>
+        <p>Score distribution in US Senior Finals — gold, podium (top 3), upper quartile, median, and floor.</p>
+      </div>
+      <div class="hp-bands-grid" id="scoreBandsGrid"><!-- JS --></div>
+    </section>
+
+    <!-- ── 3. DD Comparison + Dive-Group Heatmap (two-column) ─────── -->
+    <div class="hp-dual-row">
+
+      <section class="hp-section hp-section-card" id="sec-dd">
+        <div class="hp-section-hd">
+          <h2>US vs World — Difficulty (DD)</h2>
+          <p>Average DD per dive in Finals. Difficulty caps the score.
+            <span class="hp-partial-tag">World · partial</span></p>
+        </div>
+        <div class="hp-dd-body" id="ddContent"><!-- JS --></div>
+      </section>
+
+      <section class="hp-section hp-section-card" id="sec-heatmap">
+        <div class="hp-section-hd">
+          <h2>Dive-Group Strength &amp; Weakness</h2>
+          <p>Average execution score by dive group (1–6), US vs World Finals.
+            <span class="hp-partial-tag">World · partial</span></p>
+        </div>
+        <div class="hp-heatmap-body" id="heatmapContent"><!-- JS --></div>
+      </section>
+
+    </div>
+
+    <!-- ── 4. Multi-Year Gap Trend ────────────────────────────────── -->
+    <section class="hp-section" id="sec-trends">
+      <div class="hp-section-hd">
+        <h2>Multi-Year Gap Trend</h2>
+        <p>Is the US closing or widening the gap to World gold? Full history 2018–2026.
+          <span class="hp-partial-tag">World · partial</span></p>
+      </div>
+      <div class="hp-trend-body" id="trendsContent"><!-- JS --></div>
+    </section>
+
+    <!-- ── 5. Round Progression ───────────────────────────────────── -->
+    <section class="hp-section" id="sec-progression">
+      <div class="hp-section-hd">
+        <div class="hp-section-hd-left">
+          <h2>Prelim → Semi → Final Progression</h2>
+          <p>Who climbs and who fades across rounds. US athletes in senior Olympic-discipline finals.</p>
+        </div>
+        <div class="hp-prog-controls">
+          <select class="hp-select" id="progGender">
+            <option value="all">Both genders</option>
+            <option value="Female">Women</option>
+            <option value="Male">Men</option>
+          </select>
+          <select class="hp-select" id="progBoard">
+            <option value="all">All boards</option>
+            <option value="3m">3m</option>
+            <option value="Platform">Platform</option>
+          </select>
+        </div>
+      </div>
+      <div class="hp-prog-body" id="progressionContent"><!-- JS --></div>
+    </section>
+
+    <!-- ── 6. Judge Execution Detail ─────────────────────────────── -->
+    <section class="hp-section" id="sec-judges">
+      <div class="hp-section-hd">
+        <h2>Judge Execution Detail</h2>
+        <p>Score spread and judge agreement across international competitions.
+          <span class="hp-partial-tag">International meets only (~25% of dives)</span></p>
+      </div>
+      <div class="hp-judge-body" id="judgeContent"><!-- JS --></div>
+    </section>
+
+    <!-- ── 7. Synchro (collapsible) ───────────────────────────────── -->
+    <details class="hp-section hp-details" id="sec-synchro">
+      <summary class="hp-details-summary">
+        <span class="hp-details-label">Synchronized Diving</span>
+        <span class="hp-details-sub">Medal gap and score bands for synchro events — click to expand</span>
+        <span class="hp-details-chev">▾</span>
+      </summary>
+      <div class="hp-synchro-body" id="synchroContent"><!-- JS --></div>
+    </details>
+
+    <!-- ── 8. Athlete Deep-Dive (collapsed, search-driven) ────────── -->
+    <section class="hp-section hp-section-spotlight" id="sec-spotlight">
+      <div class="hp-section-hd">
+        <div class="hp-section-hd-left">
+          <h2>Athlete Deep-Dive</h2>
+          <p>Search any athlete for trajectory, percentile ranking, consistency, dive-by-dive analysis, and DD profile.</p>
+        </div>
+        <button class="hp-print-btn" id="printSpotlight" aria-label="Print athlete report" hidden>⎙ Print athlete card</button>
+      </div>
+      <div class="hp-spotlight-search">
+        <input type="search" class="hp-spotlight-input" id="spotlightSearch"
+               placeholder="Type athlete name…" autocomplete="off"
+               list="spotlightOptions" />
+        <button class="hp-spotlight-btn" id="spotlightBtn">Search</button>
+      </div>
+      <datalist id="spotlightOptions"></datalist>
+      <div id="spotlightContent" class="hp-spotlight-content" hidden><!-- JS --></div>
+    </section>
+
+    <!-- ── 9. Athlete Leaderboard (collapsed detail table) ────────── -->
+    <details class="hp-section hp-details" id="sec-leaderboard">
+      <summary class="hp-details-summary">
+        <span class="hp-details-label">Athlete Leaderboard</span>
+        <span class="hp-details-sub">Top athletes by best final score — click to expand</span>
+        <span class="hp-details-chev">▾</span>
+      </summary>
+      <div class="hp-lb-controls">
+        <select class="hp-select" id="lbGender">
+          <option value="all">Both genders</option>
+          <option value="Female">Women</option>
+          <option value="Male">Men</option>
+        </select>
+        <select class="hp-select" id="lbBoard">
+          <option value="all">All boards</option>
+          <option value="3m">3m</option>
+          <option value="Platform">Platform</option>
+          <option value="1m">1m</option>
+        </select>
+        <select class="hp-select" id="lbFamily">
+          <option value="USA Diving">US athletes only</option>
+          <option value="all">All athletes</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="leaderboardTable">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Athlete</th>
+              <th>Team</th>
+              <th>Gender</th>
+              <th>Board</th>
+              <th class="num">Best Final Score</th>
+              <th class="num">Events</th>
+              <th class="num">Best Place</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardRows"></tbody>
+        </table>
+      </div>
+    </details>
+
+  </div><!-- /mainContent -->
+</div><!-- /hp-workspace -->
+
 <script>
-  window.USAD_CONFIG = {
-    neon: {
-      sqlEndpoint: 'https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',
-      connectionString: 'postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
-    }
-  };
+window.USAD_CONFIG = {
+  neon: {
+    sqlEndpoint: 'https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',
+    connectionString: 'postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+  }
+};
 </script>
-<script src="../shared/neon-client.js?v=20260627"></script>
-<script src="../shared/usad-data.js?v=20260627"></script>
-<script src="../shared/usad-modal.js?v=20260627"></script>
-<script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="main.js?v=20260627"></script>
+<script src="../shared/neon-client.js?v=20260628"></script>
+<script src="../shared/usad-modal.js?v=20260628"></script>
+<script src="../shared/usad-toast.js?v=20260628"></script>
+<script src="main.js?v=20260628"></script>
 
 </body>
 </html>
