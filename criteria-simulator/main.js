@@ -1399,9 +1399,10 @@ function renderBubbleWatch() {
 function renderWhatIf() {
   const g = $('wifGender').value;
   const d = $('wifEvent').value;
-  const score = num($('wifScore').value);
-  const dd    = num($('wifDd').value);
-  const place = num($('wifPlace').value);
+  const rawV = id => { const v = (($(id) && $(id).value) || '').trim(); return v === '' ? null : num(v); };
+  const score = rawV('wifScore');
+  const dd    = rawV('wifDd');
+  const place = rawV('wifPlace');
   const preset = els.criteriaPreset.value;
   const rule   = els.ruleMode.value;
   const topN   = num(els.topN.value) ?? 0;
@@ -1634,7 +1635,7 @@ function explorerCurrentStd() {
 function updateInverse() {
   const out = $('explorerInvOut'), tEl = $('explorerTarget');
   if (!out || !state._sweep) return;
-  const tgt = tEl ? num(tEl.value) : null;
+  const tgt = (tEl && (tEl.value || '').trim() !== '') ? num(tEl.value) : null;
   if (!isNum(tgt)) { out.innerHTML = 'type a number and I’ll find the standard that lands there.'; return; }
   const { sweep, yMax } = state._sweep;
   let found = null;
@@ -1680,20 +1681,28 @@ function renderThresholdExplorer() {
   const yStep = niceStep(yMax / 4), yt = [];
   for (let v = 0; v <= yMax + 0.001; v += yStep) yt.push(v);
   const xt = []; for (let i = 0; i <= 5; i++) xt.push(lo + (hi - lo) * i / 5);
-  const vline = (x, color, dash, label, count) => {
-    if (!isNum(x) || x < lo || x > hi) return '';
-    const px = X(x).toFixed(1), lbl = `${label}${count != null ? ' · ' + count : ''}`;
-    return `<line x1="${px}" y1="${mt}" x2="${px}" y2="${mt + ph}" stroke="${color}" stroke-width="2"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`
-      + `<text x="${px}" y="${mt - 6}" text-anchor="middle" class="cs2-ex-vlab" fill="${color}">${esc(lbl)}</text>`;
-  };
   const curN = isNum(curStd) ? qualCountWith(curStd, curDd) : null;
+  const marks = [];
+  if (isNum(curStd)) marks.push({ x: curStd, color: '#171f69', dash: '', text: `Your standard (${Math.round(curStd)})` });
+  if (wb) {
+    marks.push({ x: wb.finalist, color: '#c39a3e', dash: '5 4', text: `World finalist (${Math.round(wb.finalist)})` });
+    marks.push({ x: wb.medal, color: '#8a6d1a', dash: '5 4', text: `World medal (${Math.round(wb.medal)})` });
+  }
+  const inRange = marks.filter(m => isNum(m.x) && m.x >= lo && m.x <= hi)
+    .map(m => Object.assign({}, m, { px: X(m.x) })).sort((a, b) => a.px - b.px);
+  const markLines = inRange.map(m => `<line x1="${m.px.toFixed(1)}" y1="${mt}" x2="${m.px.toFixed(1)}" y2="${mt + ph}" stroke="${m.color}" stroke-width="2"${m.dash ? ` stroke-dasharray="${m.dash}"` : ''}/>`).join('');
+  let _lvl = 0, _prev = -999;
+  const markLabels = inRange.map(m => {
+    if (m.px - _prev < 130) _lvl = Math.min(_lvl + 1, 2); else _lvl = 0;
+    _prev = m.px;
+    const ly = mt - 7 + _lvl * 15;
+    return `<text x="${m.px.toFixed(1)}" y="${ly}" text-anchor="middle" class="cs2-ex-vlab" fill="${m.color}">${esc(m.text)}</text>`;
+  }).join('');
 
   const svg = `<svg viewBox="0 0 ${W} ${H}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by score standard">`
     + yt.map(v => `<line x1="${ml}" y1="${Y(v).toFixed(1)}" x2="${W - mr}" y2="${Y(v).toFixed(1)}" class="cs2-ex-grid"/><text x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${Math.round(v)}</text>`).join('')
     + `<path d="${area}" class="cs2-ex-area"/><path d="${line}" class="cs2-ex-line"/>`
-    + (wb ? vline(wb.medal, '#8a6d1a', '5 4', 'World medal', null) : '')
-    + (wb ? vline(wb.finalist, '#c39a3e', '5 4', 'World finalist', null) : '')
-    + vline(curStd, '#171f69', null, 'Your standard', curN)
+    + markLines + markLabels
     + xt.map(x => `<text x="${X(x).toFixed(1)}" y="${(mt + ph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${Math.round(x)}</text>`).join('')
     + `<text x="${W - mr}" y="${H - 6}" text-anchor="end" class="cs2-ex-axis">score standard →</text>`
     + `</svg>`;
