@@ -804,3 +804,11 @@ details.panel > summary p {
 .cs2-ex-tin { width: 84px; }
 .cs2-ex-invout { font-size: 14px; color: var(--brand-blue, #171f69); }
 .cs2-ex-invout b { font-weight: 700; }
+
+/* Decision surface (DD sweep + score×DD grid) */
+.cs2-surface { border-top: 3px solid var(--brand-pool, #009ac7); }
+.cs2-ex-area2 { fill: rgba(0,154,199,.16); }
+.cs2-ex-line2 { stroke: var(--brand-pool, #009ac7); }
+.cs2-surf-sub { font-size: 13px; font-weight: 600; color: var(--ink-2, #2d3a4a); margin: 16px 0 6px; }
+.cs2-ex-legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-3, #5a6a7e); margin-top: 8px; }
+.cs2-ex-legsw { display: inline-block; width: 26px; height: 12px; border-radius: 2px; }

@@ -1532,10 +1532,10 @@ function printReport() {
   setTimeout(() => win.print(), 350);
 }
 
-function qualCountWith(scoreThr, ddMin) {
+function qualCountWith(scoreThr, ddMin, ddModeOverride) {
   const rule = els.ruleMode.value;
   const topN = num(els.topN.value) ?? 0;
-  const ddMode = els.ddMode.value;
+  const ddMode = ddModeOverride || els.ddMode.value;
   const seen = new Set();
   for (const r of (state.filtered || [])) {
     const score = scoreForRow(r);
@@ -1708,9 +1708,122 @@ function renderThresholdExplorer() {
   updateInverse();
 }
 
+function heatColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const stops = [[0, [232, 238, 246]], [0.4, [143, 195, 234]], [0.7, [0, 154, 199]], [1, [23, 31, 105]]];
+  for (let i = 1; i < stops.length; i++) {
+    if (t <= stops[i][0]) {
+      const a = stops[i - 1][0], ca = stops[i - 1][1], b = stops[i][0], cb = stops[i][1];
+      const f = (t - a) / (b - a || 1);
+      return `rgb(${ca.map((v, j) => Math.round(v + (cb[j] - v) * f)).join(',')})`;
+    }
+  }
+  return 'rgb(23,31,105)';
+}
+function renderDecisionSurface() {
+  const host = $('surfaceBody');
+  if (!host) return;
+  const rows = state.filtered || [];
+  const curStd = explorerCurrentStd();
+  const curDd = num(els.ddThreshold.value) ?? ddMinimumForSelection(els.genderFilter.value, els.disciplineFilter.value, els.criteriaPreset.value);
+  const d = normaliseDiscipline(els.disciplineFilter.value);
+
+  const ddKnown = rows.map(r => r.phase_dd_sum).filter(isNum).sort((a, b) => a - b);
+  const cov = rows.length ? ddKnown.length / rows.length : 0;
+  const covNote = `DD is recorded for <b>${ddKnown.length.toLocaleString()}</b> of ${rows.length.toLocaleString()} results in scope (${Math.round(cov * 100)}%). The DD lever only moves athletes whose DD we know — it’s checked where known.`;
+  if (ddKnown.length < 6) {
+    host.innerHTML = `<div class="cs2-ex-foot">${covNote}</div><div class="source-impact-empty">Too few known-DD results here to explore the DD lever — DD detail exists for 2024–26 events. Narrow the scope (event + recent meets) to use this view.</div>`;
+    return;
+  }
+
+  let dlo = ddKnown[0], dhi = ddKnown[ddKnown.length - 1];
+  if (isNum(curDd)) { dlo = Math.min(dlo, curDd); dhi = Math.max(dhi, curDd); }
+  const dpad = (dhi - dlo) * 0.06 || 0.3; dlo -= dpad; dhi += dpad;
+
+  const scores = rows.map(scoreForRow).filter(isNum).sort((a, b) => a - b);
+  let slo = scores[0], shi = scores[scores.length - 1];
+  const wb = worldBenchmarks(els.genderFilter.value, els.disciplineFilter.value);
+  [curStd, wb && wb.finalist].forEach(v => { if (isNum(v)) { slo = Math.min(slo, v); shi = Math.max(shi, v); } });
+  const spad = (shi - slo) * 0.04 || 5; slo -= spad; shi += spad;
+
+  const topOnly = els.ruleMode.value === 'topNOnly';
+
+  // ── DD sweep curve (hold score at current standard) ──
+  const DS = 70, dsweep = [];
+  for (let i = 0; i <= DS; i++) { const dd = dlo + (dhi - dlo) * i / DS; dsweep.push({ dd, n: qualCountWith(curStd, dd, 'knownOnly') }); }
+  const dyMax = Math.max(1, ...dsweep.map(s => s.n));
+  const cW = 760, cH = 200, cml = 48, cmr = 18, cmt = 18, cmb = 36, cpw = cW - cml - cmr, cph = cH - cmt - cmb;
+  const cX = dd => cml + (dd - dlo) / (dhi - dlo) * cpw;
+  const cY = n => cmt + cph - (n / dyMax) * cph;
+  let cl = '', ca = `M ${cX(dsweep[0].dd).toFixed(1)} ${cY(0).toFixed(1)}`;
+  dsweep.forEach((s, i) => { const px = cX(s.dd).toFixed(1), py = cY(s.n).toFixed(1); cl += (i ? ' L ' : 'M ') + px + ' ' + py; ca += ' L ' + px + ' ' + py; });
+  ca += ` L ${cX(dsweep[DS].dd).toFixed(1)} ${cY(0).toFixed(1)} Z`;
+  const cyStep = niceStep(dyMax / 3), cyt = []; for (let v = 0; v <= dyMax + 0.001; v += cyStep) cyt.push(v);
+  const cxt = []; for (let i = 0; i <= 5; i++) cxt.push(dlo + (dhi - dlo) * i / 5);
+  const curDdN = isNum(curDd) ? qualCountWith(curStd, curDd, 'knownOnly') : null;
+  const ddMark = (isNum(curDd) && curDd >= dlo && curDd <= dhi)
+    ? `<line x1="${cX(curDd).toFixed(1)}" y1="${cmt}" x2="${cX(curDd).toFixed(1)}" y2="${cmt + cph}" stroke="#171f69" stroke-width="2"/><text x="${cX(curDd).toFixed(1)}" y="${cmt - 6}" text-anchor="middle" class="cs2-ex-vlab" fill="#171f69">DD ${curDd.toFixed(1)}${curDdN != null ? ' · ' + curDdN : ''}</text>` : '';
+  const ddCurve = `<svg viewBox="0 0 ${cW} ${cH}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by DD minimum">`
+    + cyt.map(v => `<line x1="${cml}" y1="${cY(v).toFixed(1)}" x2="${cW - cmr}" y2="${cY(v).toFixed(1)}" class="cs2-ex-grid"/><text x="${cml - 8}" y="${(cY(v) + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${Math.round(v)}</text>`).join('')
+    + `<path d="${ca}" class="cs2-ex-area cs2-ex-area2"/><path d="${cl}" class="cs2-ex-line cs2-ex-line2"/>${ddMark}`
+    + cxt.map(dd => `<text x="${cX(dd).toFixed(1)}" y="${(cmt + cph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${dd.toFixed(1)}</text>`).join('')
+    + `<text x="${cW - cmr}" y="${cH - 4}" text-anchor="end" class="cs2-ex-axis">DD minimum →</text></svg>`;
+
+  // ── score × DD grid ──
+  const COLS = 18, ROWS = 12;
+  const grid = [], colS = [], rowD = [];
+  let gMax = 0;
+  for (let c = 0; c < COLS; c++) colS.push(slo + (c + 0.5) / COLS * (shi - slo));
+  for (let r = 0; r < ROWS; r++) rowD.push(dlo + (r + 0.5) / ROWS * (dhi - dlo));
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) { const n = topOnly ? qualCountWith(0, rowD[r], 'knownOnly') : qualCountWith(colS[c], rowD[r], 'knownOnly'); grid[r][c] = n; if (n > gMax) gMax = n; }
+  }
+  const gW = 760, gH = 360, gml = 56, gmr = 16, gmt = 14, gmb = 40, gpw = gW - gml - gmr, gph = gH - gmt - gmb;
+  const cw = gpw / COLS, ch = gph / ROWS;
+  const cellX = c => gml + c * cw;
+  const cellY = r => gmt + (ROWS - 1 - r) * ch;   // higher DD at top
+  let cells = '';
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    cells += `<rect x="${cellX(c).toFixed(1)}" y="${cellY(r).toFixed(1)}" width="${(cw + 0.6).toFixed(1)}" height="${(ch + 0.6).toFixed(1)}" fill="${heatColor(gMax ? grid[r][c] / gMax : 0)}"/>`;
+  }
+  // current cell outline
+  let curCell = '';
+  if (isNum(curStd) && isNum(curDd)) {
+    const ci = Math.round((curStd - slo) / (shi - slo) * COLS - 0.5);
+    const ri = Math.round((curDd - dlo) / (dhi - dlo) * ROWS - 0.5);
+    if (ci >= 0 && ci < COLS && ri >= 0 && ri < ROWS) {
+      curCell = `<rect x="${cellX(ci).toFixed(1)}" y="${cellY(ri).toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="none" stroke="#fff" stroke-width="2.5"/><rect x="${(cellX(ci) + 1.2).toFixed(1)}" y="${(cellY(ri) + 1.2).toFixed(1)}" width="${(cw - 2.4).toFixed(1)}" height="${(ch - 2.4).toFixed(1)}" fill="none" stroke="#0d1117" stroke-width="1"/>`;
+    }
+  }
+  // world finalist vertical reference
+  let wbLine = '';
+  if (wb && !topOnly && wb.finalist >= slo && wb.finalist <= shi) {
+    const wx = (gml + (wb.finalist - slo) / (shi - slo) * gpw).toFixed(1);
+    wbLine = `<line x1="${wx}" y1="${gmt}" x2="${wx}" y2="${gmt + gph}" stroke="#c39a3e" stroke-width="2" stroke-dasharray="5 4"/><text x="${wx}" y="${gmt - 3}" text-anchor="middle" class="cs2-ex-vlab" fill="#c39a3e">World finalist</text>`;
+  }
+  const gx = []; for (let i = 0; i <= 5; i++) { const c = Math.round(i / 5 * (COLS - 1)); gx.push(c); }
+  const gy = [0, Math.round(ROWS / 2), ROWS - 1];
+  const gridSvg = `<svg viewBox="0 0 ${gW} ${gH}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by score and DD">`
+    + cells + curCell + wbLine
+    + gx.map(c => `<text x="${(cellX(c) + cw / 2).toFixed(1)}" y="${(gmt + gph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${topOnly ? '' : Math.round(colS[c])}</text>`).join('')
+    + gy.map(r => `<text x="${gml - 8}" y="${(cellY(r) + ch / 2 + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${rowD[r].toFixed(1)}</text>`).join('')
+    + `<text x="${gml}" y="${gH - 4}" class="cs2-ex-axis">${topOnly ? 'score does not gate (placement rule)' : 'score standard →'}</text>`
+    + `<text x="${gml - 48}" y="${gmt - 2}" class="cs2-ex-axis">DD min</text></svg>`;
+
+  // legend
+  const legStops = [0, 0.25, 0.5, 0.75, 1].map(t => `<span class="cs2-ex-legsw" style="background:${heatColor(t)}"></span>`).join('');
+  const legend = `<div class="cs2-ex-legend"><span>fewer qualify</span>${legStops}<span>more (${gMax})</span></div>`;
+
+  host.innerHTML = `<div class="cs2-ex-foot">${covNote}</div>`
+    + `<div class="cs2-surf-sub">The DD lever alone — qualifiers as the DD minimum rises (score held at ${isNum(curStd) ? Math.round(curStd) : '—'}):</div>${ddCurve}`
+    + `<div class="cs2-surf-sub">Both levers together — every score × DD combination. The outlined cell is your current standard.</div>${gridSvg}${legend}`;
+}
+
 function renderEnhancements() {
   try { renderTrustStrip(); } catch (e) {}
   try { renderThresholdExplorer(); } catch (e) {}
+  try { renderDecisionSurface(); } catch (e) {}
   try { renderSensitivity(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
