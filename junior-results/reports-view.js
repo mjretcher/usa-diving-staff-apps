@@ -280,22 +280,67 @@
     const filtered = activeFilterCount() > 0;
     const desc = activeFilterDescription();
 
-    function stage(title, icon, color, stats){
-      return `<div class="fnl-card fnl-${color}">
-        <div class="fnl-head">
-          <span class="fnl-icon">${esc(icon)}</span>
-          <span class="fnl-title">${esc(title)}</span>
-        </div>
-        <div class="fnl-stats">
-          ${stats.map(s => `
-            <div class="fnl-stat ${s.accent ? 'fnl-acc-'+s.accent : ''}">
-              <span class="fnl-val">${typeof s.val === 'number' ? fmtNum(s.val) : esc(String(s.val))}</span>
-              <span class="fnl-lbl">${esc(s.label)}</span>
-              ${s.note ? `<span class="fnl-note">${esc(s.note)}</span>` : ''}
-            </div>`).join('')}
-        </div>
-      </div>`;
-    }
+    const statChips = (stats) => `<div class="pf-detail">${stats.map(s => `
+        <div class="pf-stat ${s.accent ? 'pf-acc-'+s.accent : ''}">
+          <span class="pf-stat-v">${typeof s.val === 'number' ? fmtNum(s.val) : esc(String(s.val))}</span>
+          <span class="pf-stat-l">${esc(s.label)}</span>
+          ${s.note ? `<span class="pf-stat-n">${esc(s.note)}</span>` : ''}
+        </div>`).join('')}</div>`;
+
+    const FLOW = [
+      { cls:'s0', icon:'R', title:'Region Championships', sub:'Groups A/B entry point', kpiLabel:'Region entries', val:d.regionals.entries, tag:'entries', stats:[
+        {label:'Entries', val: d.regionals.entries, note: GROUPS_REQ_REG.has(rptState.ageGroup) || !rptState.ageGroup ? 'Groups A/B path' : 'Filtered group does not pass through Regionals' },
+        {label:'Unique athletes', val: d.regionals.athletes},
+        {label:'Qualified to Zones', val: d.regionals.qualifying, accent:'green'},
+        {label:'Bumps · spot shifts', val: `${d.regionals.bumps} · ${d.regionals.shifts}`},
+        {label:'Qualified — did not compete at Zones', val: d.regionals.noshows.length, accent: d.regionals.noshows.length > 0 ? 'amber' : ''},
+      ]},
+      { cls:'s1', icon:'Z', title:'Zone Championships', sub:'Four zone sites', kpiLabel:'Zone entries', val:d.zones.entries, tag:'divers', stats:[
+        {label:'Entries', val: d.zones.entries},
+        {label:'Unique athletes', val: d.zones.athletes},
+        {label:'Groups C/D direct entrants', val: d.zones.cdDirect, note:'Skip Regionals'},
+        {label:'→ Nationals (direct)', val: d.zones.toNationals, accent:'green', note:`${d.zones.toNationalsEnt} entry slots`},
+        {label:'→ E/W/C', val: d.zones.toEWC, accent:'blue', note:`${d.zones.toEWCEnt} entry slots`},
+        {label:'Bumps · spot shifts', val: `${d.zones.bumps} · ${d.zones.shifts}`},
+        {label:'EWC qual — did not register', val: d.zones.ewcNoshow, accent: d.zones.ewcNoshow > 0 ? 'amber' : ''},
+      ]},
+      { cls:'s2', icon:'E', title:'East / West / Central', sub:'Three regional finals', kpiLabel:'E/W/C registered', val:d.ewc.registered, tag:'registered', stats:[
+        {label:'Registered athletes', val: d.ewc.registered, accent:'blue', note: filtered ? `of ${d.ewc.totalAll} total` : ''},
+        {label:'Total event entries', val: d.ewc.entries || '—', note:'Across all 3 meets'},
+        {label:'HPS pre-qualified', val: ewcHps().length, note:'Bypass E/W/C — direct to Nat prelims'},
+        {label:'Foreign at E/W/C', val: ewcForeign().length, note:'Non-displacing'},
+      ]},
+      { cls:'s3', icon:'N', title:'Junior Nationals', sub:'National championship', kpiLabel:'On National list', val:d.nationals.qualified, tag:'qualified', stats:[
+        {label:'Qualified athletes', val: d.nationals.qualified, accent:'green', note: filtered ? `of ${d.nationals.totalAll} total` : ''},
+        {label:'Direct from Zones', val: d.zones.toNationals, note:'Top 3 per zone event'},
+        {label:'Via E/W/C', val: 'Pending', note:'Results not yet loaded'},
+      ]},
+    ];
+    const _vals = FLOW.map(f => Number(f.val) || 0);
+    const _denom = Math.max(1, ..._vals);
+    const _first = _vals[0] || 0;
+    const kpiHtml = FLOW.map((f,i) => {
+      const v = _vals[i];
+      const delta = i === 0
+        ? '<span class="pf-kpi-d flat">Starting field</span>'
+        : `<span class="pf-kpi-d up">${_vals[i-1] ? Math.round(v / _vals[i-1] * 100) : 0}% of prev stage</span>`;
+      return `<div class="pf-kpi k${i}"><div class="pf-kpi-n">${fmtNum(v)}</div><div class="pf-kpi-l">${esc(f.kpiLabel)}</div>${delta}</div>`;
+    }).join('');
+    const funnelHtml = FLOW.map((f,i) => {
+      const v = _vals[i];
+      const w = Math.max(7, Math.round(v / _denom * 100));
+      const pctField = _first ? Math.round(v / _first * 100) : 0;
+      let conn = '';
+      if (i < FLOW.length - 1){
+        const nv = _vals[i+1], conv = v ? Math.round(nv / v * 100) : 0, drop = Math.max(0, v - nv);
+        conn = `<div class="pf-connector"><div class="pf-connector-rail"><i></i></div><div class="pf-conv"><span class="pf-conv-chip">▲ ${conv}% advanced</span>${drop > 0 ? `<span class="pf-drop-chip">−${fmtNum(drop)} did not continue</span>` : ''}</div></div>`;
+      }
+      return `<div class="pf-stage ${f.cls}">
+          <div class="pf-stage-id"><span class="pf-step">${esc(f.icon)}</span><div><div class="pf-stage-name">${esc(f.title)}</div><div class="pf-stage-sub">${esc(f.sub)}</div></div></div>
+          <div class="pf-track"><div class="pf-fill" style="width:${w}%"><span class="pf-fill-n">${fmtNum(v)}</span><span class="pf-fill-tag">${esc(f.tag)}</span></div></div>
+          <div class="pf-pct">${pctField}%<small>of field</small></div>
+        </div>${statChips(f.stats)}${conn}`;
+    }).join('');
 
     wrap.innerHTML = `
       ${filtered ? `<div class="rpt-filter-note">
@@ -308,44 +353,8 @@
           <button class="rpt-export-btn" onclick="window._rptExportFlow()">Download CSV</button>
         </div>
 
-        <div class="rpt-funnel">
-          ${stage('Region Championships', 'R', 'navy', [
-            {label:'Entries', val: d.regionals.entries, note: GROUPS_REQ_REG.has(rptState.ageGroup) || !rptState.ageGroup ? 'Groups A/B path' : 'Filtered group does not pass through Regionals' },
-            {label:'Unique athletes', val: d.regionals.athletes},
-            {label:'Qualified to Zones', val: d.regionals.qualifying, accent:'green'},
-            {label:'Bumps · spot shifts', val: `${d.regionals.bumps} · ${d.regionals.shifts}`},
-            {label:'Qualified — did not compete at Zones', val: d.regionals.noshows.length, accent: d.regionals.noshows.length > 0 ? 'amber' : ''},
-          ])}
-
-          <div class="fnl-arrow">▼</div>
-
-          ${stage('Zone Championships', 'Z', 'pool', [
-            {label:'Entries', val: d.zones.entries},
-            {label:'Unique athletes', val: d.zones.athletes},
-            {label:'Groups C/D direct entrants', val: d.zones.cdDirect, note:'Skip Regionals'},
-            {label:'→ Nationals (direct)', val: d.zones.toNationals, accent:'green', note:`${d.zones.toNationalsEnt} entry slots`},
-            {label:'→ E/W/C', val: d.zones.toEWC, accent:'blue', note:`${d.zones.toEWCEnt} entry slots`},
-            {label:'Bumps · spot shifts', val: `${d.zones.bumps} · ${d.zones.shifts}`},
-            {label:'EWC qual — did not register', val: d.zones.ewcNoshow, accent: d.zones.ewcNoshow > 0 ? 'amber' : ''},
-          ])}
-
-          <div class="fnl-arrow">▼</div>
-
-          ${stage('East / West / Central', 'E', 'sky', [
-            {label:'Registered athletes', val: d.ewc.registered, accent:'blue', note: filtered ? `of ${d.ewc.totalAll} total` : ''},
-            {label:'Total event entries', val: d.ewc.entries || '—', note:'Across all 3 meets'},
-            {label:'HPS pre-qualified', val: ewcHps().length, note:'Bypass E/W/C — direct to Nat prelims'},
-            {label:'Foreign at E/W/C', val: ewcForeign().length, note:'Non-displacing'},
-          ])}
-
-          <div class="fnl-arrow">▼</div>
-
-          ${stage('Junior Nationals', 'N', 'navy', [
-            {label:'Qualified athletes', val: d.nationals.qualified, accent:'green', note: filtered ? `of ${d.nationals.totalAll} total` : ''},
-            {label:'Direct from Zones', val: d.zones.toNationals, note:'Top 3 per zone event'},
-            {label:'Via E/W/C', val: 'Pending', note:'Results not yet loaded'},
-          ])}
-        </div>
+        <div class="pf-kpis">${kpiHtml}</div>
+        <div class="pf-funnel">${funnelHtml}</div>
 
         ${d.regionals.noshows.length > 0 ? `
         <div class="rpt-subsection">
@@ -2314,10 +2323,13 @@
   ];
 
   function buildTopHeader(){
-    const tabs = PANELS.map(([k,l,ic]) =>
+    const mkTab = ([k,l,ic]) =>
       `<button class="rpt-toptab ${rptState.panel===k?'is-active':''}" onclick="window._rptPanel('${k}')">
          <span class="rpt-toptab-ic">${ic}</span><span>${esc(l)}</span>
-       </button>`).join('');
+       </button>`;
+    const _half = Math.ceil(PANELS.length / 2);
+    const tabsRowA = PANELS.slice(0, _half).map(mkTab).join('');
+    const tabsRowB = PANELS.slice(_half).map(mkTab).join('');
 
     return `<div class="rpt-top">
       <div class="rpt-top-row1">
@@ -2329,7 +2341,7 @@
           <button class="rpt-export-btn" onclick="window._rptGenerateReport()" title="Open a print-friendly version of this panel">📄 Generate report</button>
         </span>
       </div>
-      <div class="rpt-top-row2">${tabs}</div>
+      <div class="rpt-top-row2"><div class="rpt-toptab-row">${tabsRowB}</div><div class="rpt-toptab-row">${tabsRowA}</div></div>
       <div class="rpt-top-row3">${buildFilterChips()}</div>
     </div>`;
   }
@@ -2858,7 +2870,7 @@
 
 /* === Section frame === */
 .rpt-section{padding:16px 20px 60px}
-.rpt-section-title{font-size:16px;font-weight:600;font-family:var(--f-display);letter-spacing:.01em;color:var(--navy);margin-bottom:12px;display:flex;align-items:center;gap:12px;text-transform:uppercase}
+.rpt-section-title{font-size:18px;font-weight:700;font-family:var(--f-display);letter-spacing:.03em;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:12px;text-transform:uppercase}
 .rpt-section-sub{font-size:11px;font-weight:400;color:var(--ink-3);font-family:var(--f-ui);text-transform:none;letter-spacing:0}
 .rpt-subsection{margin-top:22px}
 .rpt-subsection-title{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -2867,29 +2879,64 @@
 .rpt-note{font-size:12px;color:var(--ink-2);background:var(--surface-2);border-left:3px solid var(--pool);border-radius:var(--radius);padding:9px 14px;margin-bottom:12px;line-height:1.55}
 .rpt-filter-note{font-size:12px;color:var(--ink-2);background:#FEF3C7;border-left:3px solid #d97706;border-radius:var(--radius);padding:9px 14px;margin:0 20px 0}
 .rpt-empty{padding:30px 20px;color:var(--ink-3);text-align:center;font-size:13px;background:var(--surface-2);border-radius:var(--radius);border:1px dashed var(--line)}
-.rpt-export-btn{margin-left:auto;padding:5px 11px;font-size:11px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-family:var(--f-ui)}
-.rpt-export-btn:hover{background:var(--surface-2);border-color:var(--navy);color:var(--navy)}
+.rpt-export-btn{margin-left:auto;padding:7px 13px;font-size:11.5px;font-weight:600;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-family:var(--f-ui);box-shadow:var(--sh-xs);transition:transform .14s,box-shadow .14s,border-color .14s,color .14s}
+.rpt-export-btn:hover{background:var(--surface);border-color:var(--navy);color:var(--navy);transform:translateY(-1px);box-shadow:var(--sh-sm)}
 
-/* === Pipeline funnel === */
-.rpt-funnel{display:flex;flex-direction:column;gap:0;margin-bottom:16px}
-.fnl-card{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface);padding:14px 16px;box-shadow:var(--sh-xs)}
-.fnl-card.fnl-navy{border-top:3px solid var(--navy)}
-.fnl-card.fnl-pool{border-top:3px solid var(--pool)}
-.fnl-card.fnl-sky{border-top:3px solid var(--sky)}
-.fnl-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.fnl-icon{width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:var(--f-display);flex-shrink:0}
-.fnl-pool .fnl-icon{background:var(--pool)}
-.fnl-sky .fnl-icon{background:var(--sky);color:var(--navy)}
-.fnl-title{font-size:14px;font-weight:600;font-family:var(--f-display);color:var(--navy);text-transform:uppercase;letter-spacing:.03em}
-.fnl-stats{display:flex;flex-wrap:wrap;gap:8px}
-.fnl-stat{flex:1;min-width:160px;background:var(--surface-2);border-radius:var(--radius);padding:9px 13px}
-.fnl-stat.fnl-acc-green .fnl-val{color:var(--q-direct)}
-.fnl-stat.fnl-acc-blue .fnl-val{color:var(--q-ewc)}
-.fnl-stat.fnl-acc-amber .fnl-val{color:var(--q-repl)}
-.fnl-val{display:block;font-size:22px;font-weight:600;font-family:var(--f-mono);color:var(--ink);line-height:1.1}
-.fnl-lbl{display:block;font-size:11px;color:var(--ink-2);margin-top:3px;font-weight:500}
-.fnl-note{display:block;font-size:10px;color:var(--ink-3);margin-top:2px;font-style:italic}
-.fnl-arrow{text-align:center;padding:6px 0;color:var(--ink-4);font-size:18px}
+/* === Pipeline funnel (v2 — proportional flow) === */
+.pf-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin:6px 0 20px}
+.pf-kpi{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:15px 16px 14px;box-shadow:var(--sh-xs);overflow:hidden;transition:transform .14s,box-shadow .14s}
+.pf-kpi:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+.pf-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.pf-kpi.k0::before{background:linear-gradient(90deg,var(--navy),#2640b0)}
+.pf-kpi.k1::before{background:linear-gradient(90deg,var(--pool),#00b6e8)}
+.pf-kpi.k2::before{background:linear-gradient(90deg,#6daed8,var(--sky))}
+.pf-kpi.k3::before{background:linear-gradient(90deg,var(--q-direct),#2ab86a)}
+.pf-kpi-n{font-family:var(--f-mono);font-size:29px;font-weight:700;color:var(--ink);line-height:1;letter-spacing:-.02em}
+.pf-kpi-l{font-size:11.5px;font-weight:600;color:var(--ink-2);margin-top:7px}
+.pf-kpi-d{display:inline-flex;align-items:center;margin-top:8px;font-family:var(--f-mono);font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px}
+.pf-kpi-d.up{background:var(--q-direct-bg);color:var(--q-direct)}
+.pf-kpi-d.flat{background:var(--surface-3);color:var(--ink-3)}
+.pf-funnel{display:flex;flex-direction:column;gap:0;margin-bottom:8px}
+.pf-stage{display:grid;grid-template-columns:220px 1fr 64px;gap:18px;align-items:center;padding:10px 12px;border-radius:var(--radius-lg);border:1px solid transparent;transition:.15s}
+.pf-stage:hover{background:var(--surface-2);border-color:var(--line)}
+.pf-stage-id{display:flex;align-items:center;gap:12px}
+.pf-step{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:17px;color:#fff;flex-shrink:0;box-shadow:var(--sh-sm)}
+.s0 .pf-step{background:linear-gradient(135deg,var(--navy),#2640b0)}
+.s1 .pf-step{background:linear-gradient(135deg,var(--pool),#00b6e8)}
+.s2 .pf-step{background:linear-gradient(135deg,#6daed8,var(--sky));color:var(--navy)}
+.s3 .pf-step{background:linear-gradient(135deg,var(--q-direct),#2ab86a)}
+.pf-stage-name{font-family:var(--f-display);font-size:16px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.02em;line-height:1.05}
+.pf-stage-sub{font-size:10.5px;color:var(--ink-4);margin-top:2px}
+.pf-track{position:relative;height:44px;background:repeating-linear-gradient(135deg,var(--surface-2) 0 10px,#eef0f7 10px 20px);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line-2)}
+.pf-fill{position:absolute;top:0;left:0;bottom:0;border-radius:var(--radius);display:flex;align-items:center;padding:0 15px;gap:9px;min-width:92px;box-shadow:var(--sh-sm);transition:width .5s cubic-bezier(.22,1,.36,1)}
+.s0 .pf-fill{background:linear-gradient(90deg,var(--navy),#2640b0)}
+.s1 .pf-fill{background:linear-gradient(90deg,var(--pool),#00b6e8)}
+.s2 .pf-fill{background:linear-gradient(90deg,#6daed8,var(--sky))}
+.s3 .pf-fill{background:linear-gradient(90deg,var(--q-direct),#2ab86a)}
+.pf-fill-n{font-family:var(--f-mono);font-size:19px;font-weight:700;color:#fff;line-height:1}
+.s2 .pf-fill-n{color:var(--navy)}
+.pf-fill-tag{font-size:10px;font-weight:600;color:rgba(255,255,255,.82);text-transform:uppercase;letter-spacing:.04em}
+.s2 .pf-fill-tag{color:rgba(23,31,105,.7)}
+.pf-pct{font-family:var(--f-mono);font-size:17px;font-weight:700;color:var(--navy);text-align:right}
+.pf-pct small{display:block;font-size:8.5px;color:var(--ink-4);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.pf-detail{display:flex;flex-wrap:wrap;gap:8px;padding:2px 12px 8px 244px}
+.pf-stat{flex:1;min-width:148px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--radius);padding:9px 13px}
+.pf-stat.pf-acc-green{border-left:3px solid var(--q-direct)}
+.pf-stat.pf-acc-blue{border-left:3px solid var(--q-ewc)}
+.pf-stat.pf-acc-amber{border-left:3px solid var(--q-repl)}
+.pf-stat-v{display:block;font-size:19px;font-weight:600;font-family:var(--f-mono);color:var(--ink);line-height:1.1}
+.pf-acc-green .pf-stat-v{color:var(--q-direct)}
+.pf-acc-blue .pf-stat-v{color:var(--q-ewc)}
+.pf-acc-amber .pf-stat-v{color:var(--q-repl)}
+.pf-stat-l{display:block;font-size:11px;color:var(--ink-2);margin-top:3px;font-weight:500}
+.pf-stat-n{display:block;font-size:10px;color:var(--ink-3);margin-top:2px;font-style:italic}
+.pf-connector{display:grid;grid-template-columns:220px 1fr;gap:18px;padding:0 12px;height:30px;align-items:center}
+.pf-connector-rail{display:flex;justify-content:flex-start;padding-left:18px}
+.pf-connector-rail i{display:block;width:2px;height:30px;background:linear-gradient(180deg,var(--line),var(--ink-4))}
+.pf-conv{display:inline-flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pf-conv-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:11.5px;font-weight:700;color:var(--q-direct);background:var(--q-direct-bg);border:1px solid var(--q-direct-b);padding:3px 10px;border-radius:999px}
+.pf-drop-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--q-repl);background:var(--q-repl-bg);border:1px solid var(--q-repl-b);padding:3px 10px;border-radius:999px}
+@media(max-width:860px){.pf-kpis{grid-template-columns:repeat(2,1fr)}.pf-stage{grid-template-columns:130px 1fr 52px;gap:10px}.pf-detail{padding-left:12px}.pf-connector{grid-template-columns:130px 1fr}}
 
 /* === Cohort cards === */
 .cohort-summary{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
@@ -2942,9 +2989,7 @@
 /* === Tables === */
 .rpt-table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
 .rpt-table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--f-ui)}
-.rpt-table th{background:var(--surface-2);padding:7px 11px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:var(--bar-h,52px);z-index:1}
-/* tables inside a height-capped scroll box stick to the box top, not the page topbar */
-.rpt-table-scroll .rpt-table th{top:0}
+.rpt-table th{background:linear-gradient(180deg,#1e2d8a,var(--navy));padding:9px 12px;text-align:left;font-size:10.5px;font-weight:700;font-family:var(--f-display);text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.92);border-bottom:0;white-space:nowrap;position:sticky;top:0;z-index:1}
 .rpt-table td{padding:8px 11px;border-bottom:1px solid var(--line-2);vertical-align:middle;color:var(--ink-2)}
 .rpt-table tr:last-child td{border-bottom:none}
 .rpt-table tr:hover td{background:var(--surface-2)}
@@ -2985,33 +3030,32 @@ body.rpt-stage-active .results-context { padding: 0 !important; margin: 0 !impor
 body.rpt-stage-active .table-wrap { padding: 0 !important; background: transparent !important; }
 
 /* === Top header (panel tabs + filter chips) === */
-/* Scrolls away with the page so the content below (long tables, etc.) gets the
-   full viewport. (Previously position:sticky, which kept this ~200px tall header
-   pinned and cut off the tables underneath.) */
-.rpt-top { padding: 7px 22px 0 22px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.rpt-top-row1 { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; }
-.rpt-top-eyebrow { font-family: var(--f-display); font-size: 13px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .04em; }
-.rpt-top-meta { font-size: 11px; color: var(--ink-3); font-style: italic; }
+.rpt-top { padding: 14px 24px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.rpt-top-row1 { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.rpt-top-eyebrow { font-family: var(--f-display); font-size: 20px; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: .03em; }
+.rpt-top-meta { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
 
-.rpt-top-row2 { display: flex; gap: 1px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 -22px; padding: 0 22px; }
-.rpt-toptab { background: transparent; border: 0; padding: 6px 10px; font-size: 12px; font-family: var(--f-ui); color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; display: inline-flex; gap: 5px; align-items: center; transition: all .12s; white-space: nowrap; }
-.rpt-toptab:hover { color: var(--navy); background: var(--surface-2); }
-.rpt-toptab.is-active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 700; background: linear-gradient(180deg, transparent 50%, var(--surface-2) 100%); }
-.rpt-toptab-ic { font-size: 13px; }
+.rpt-top-row2 { display: flex; flex-direction: column; gap: 8px; border-bottom: 0; margin: 6px 0 2px; padding: 0; }
+.rpt-toptab-row { display: flex; flex-wrap: nowrap; justify-content: center; gap: 6px; }
+.rpt-toptab { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px; font-size: 12.5px; font-family: var(--f-ui); color: var(--ink-2); cursor: pointer; margin-bottom: 0; font-weight: 600; display: inline-flex; gap: 7px; align-items: center; justify-content: center; transition: all .14s; white-space: nowrap; box-shadow: var(--sh-xs); flex: 0 1 auto; min-width: 0; }
+.rpt-toptab > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.rpt-toptab:hover { color: var(--navy); background: var(--surface-2); border-color: var(--ink-4); transform: translateY(-1px); box-shadow: var(--sh-sm); }
+.rpt-toptab.is-active { color: #fff; border-color: var(--navy); font-weight: 700; background: linear-gradient(135deg, var(--navy), #2640b0); box-shadow: 0 6px 16px rgba(23,31,105,.26); }
+.rpt-toptab-ic { font-size: 15px; flex-shrink: 0; line-height: 1; }
 
-.rpt-top-row3 { display: flex; gap: 5px; flex-wrap: wrap; padding: 7px 0 8px; align-items: center; }
-.rpt-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 3px 1px 9px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); transition: all .12s; }
+.rpt-top-row3 { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 0 14px; align-items: center; }
+.rpt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 11px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); transition: all .12s; }
 .rpt-chip:hover { border-color: var(--ink-3); }
 .rpt-chip.is-active { border-color: var(--navy); background: var(--surface-2); box-shadow: 0 0 0 1px var(--navy) inset; }
-.rpt-chip-l { color: var(--ink-3); font-weight: 600; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; }
+.rpt-chip-l { color: var(--ink-3); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
 .rpt-chip.is-active .rpt-chip-l { color: var(--navy); }
-.rpt-chip-s { border: 0; background: transparent; font-size: 12px; color: var(--ink); padding: 3px 19px 3px 4px; font-family: var(--f-ui); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
+.rpt-chip-s { border: 0; background: transparent; font-size: 12.5px; color: var(--ink); padding: 4px 22px 4px 4px; font-family: var(--f-ui); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 6px center; }
 .rpt-chip-s:focus { outline: none; }
-.rpt-chip-x { background: var(--ink-3); color: #fff; border: 0; width: 16px; height: 16px; border-radius: 50%; font-size: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; margin-left: 1px; }
+.rpt-chip-x { background: var(--ink-3); color: #fff; border: 0; width: 18px; height: 18px; border-radius: 50%; font-size: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; margin-left: 1px; }
 .rpt-chip-x:hover { background: var(--red); }
-.rpt-chip-clear { margin-left: 6px; padding: 4px 11px; font-size: 11px; border-radius: 13px; border: 1px solid var(--red); background: var(--surface); color: var(--red); cursor: pointer; font-weight: 600; font-family: var(--f-ui); }
+.rpt-chip-clear { margin-left: 8px; padding: 6px 13px; font-size: 11.5px; border-radius: 14px; border: 1px solid var(--red); background: var(--surface); color: var(--red); cursor: pointer; font-weight: 600; font-family: var(--f-ui); }
 .rpt-chip-clear:hover { background: var(--red); color: #fff; }
-.rpt-chip-hint { font-size: 11px; color: var(--ink-4); font-style: italic; margin-left: 6px; }
+.rpt-chip-hint { font-size: 11.5px; color: var(--ink-4); font-style: italic; margin-left: 6px; }
 
 /* === Section wrap padding adjust under sticky header === */
 body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
@@ -3327,6 +3371,61 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 .rb-filter-summary { display: flex; align-items: center; margin-top: 10px; padding: 8px 12px; background: #f0f3fa; border-radius: 6px; font-size: 12px; color: var(--navy); }
 .rb-bands-list { display: flex; flex-direction: column; gap: 6px; }
 .rb-band-row { display: flex; align-items: center; gap: 8px; }
+
+/* ============================================================
+   REPORTS v2 — component polish (cards · controls · callouts)
+   Lifts Cohort · Scoring · Participation · Displacement · Special Status
+   ============================================================ */
+/* Summary cards (Displacement) → KPI-grade treatment */
+.rpt-summary-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:11px;margin-bottom:16px}
+.rpt-summary-card{position:relative;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface);padding:14px 16px 13px;box-shadow:var(--sh-xs);overflow:hidden;transition:transform .14s,box-shadow .14s}
+.rpt-summary-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--navy),#2640b0)}
+.rpt-summary-card:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+.rsc-count{font-size:25px;font-weight:700;color:var(--ink);font-family:var(--f-mono);line-height:1;letter-spacing:-.02em}
+.rsc-label{font-size:12px;font-weight:600;color:var(--ink-2);margin-top:6px}
+.rsc-sub{font-size:10.5px;color:var(--ink-3);margin-top:2px}
+
+/* Breakdown cards (Participation) → gradient accent + lift */
+.bd-card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:11px;margin-bottom:16px}
+.bd-card{position:relative;background:var(--surface);border:1px solid var(--line);border-top:1px solid var(--line);border-radius:var(--radius-md);padding:14px 16px;box-shadow:var(--sh-xs);overflow:hidden;transition:transform .14s,box-shadow .14s}
+.bd-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--ink-4)}
+.bd-card.bd-card-1::before{background:linear-gradient(90deg,var(--ink-4),#aab4c3)}
+.bd-card.bd-card-2::before{background:linear-gradient(90deg,var(--pool),#00b6e8)}
+.bd-card.bd-card-3::before{background:linear-gradient(90deg,var(--q-direct),#2ab86a)}
+.bd-card:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+.bd-card-n{font-size:27px;font-weight:700;font-family:var(--f-mono);color:var(--ink);line-height:1;letter-spacing:-.02em}
+.bd-card-l{font-size:12px;font-weight:600;color:var(--ink-2);margin-top:6px}
+.bd-bar{border-radius:999px;height:7px}
+
+/* Cohort summary blocks → light lift (panel already modern) */
+.cohort-summary-block{transition:transform .14s,box-shadow .14s}
+.cohort-summary-block:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+
+/* Scoring controls → custom chevron + pool focus ring */
+.scoring-control select{appearance:none;-webkit-appearance:none;padding:8px 30px 8px 11px;border-radius:var(--radius-sm);border:1px solid var(--line);background-color:var(--surface);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%23566170' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 10px center;transition:border-color .14s,box-shadow .14s}
+.scoring-control select:focus{outline:none;border-color:var(--pool);box-shadow:0 0 0 3px rgba(0,154,199,.16)}
+
+/* Breakdown subtabs → polished */
+.bd-tabs{gap:2px}
+.bd-tab{border-radius:8px 8px 0 0;transition:.14s}
+.bd-tab:hover{background:var(--surface-2);color:var(--navy)}
+.bd-tab.active{border-bottom-width:2.5px}
+
+/* Slicer + breakdown active states → brand gradient */
+.cf-slicer-btn.is-active{background:linear-gradient(135deg,var(--navy),#2640b0);border-color:var(--navy)}
+
+/* Gender mix bars → rounded */
+.gm-bar{height:16px;border-radius:999px}
+
+/* Callouts → modern */
+.rpt-note{border-left-width:3px;border-radius:var(--radius-md);box-shadow:var(--sh-xs)}
+.rpt-filter-note{border-radius:var(--radius-md);box-shadow:var(--sh-xs)}
+.rpt-empty{border-radius:var(--radius-md)}
+
+/* Badges + pills → fully rounded, crisp (Special Status, tables) */
+.badge{border-radius:999px;font-weight:700;padding:3px 9px}
+.rpt-pill{border-radius:999px;font-weight:700}
+.rpt-subsection-title{font-weight:700}
 `;
     document.head.appendChild(s);
   }

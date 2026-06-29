@@ -542,3 +542,75 @@ body { font-family: var(--font-ui); background: var(--bg); color: var(--ink); -w
   .event-panel { max-height: 260px; }
   .topbar-nav { display: none; }
 }
+
+/* ============================================================
+   v2.1 VISUAL REFRESH — premium polish layer
+   Token + shared-component upgrades only. No selectors renamed,
+   no layout/grid changes — every app stays functionally intact.
+   ============================================================ */
+:root {
+  /* Softer, navy-tinted elevation */
+  --shadow-xs: 0 1px 2px rgba(13,28,68,.06);
+  --shadow-sm: 0 1px 2px rgba(13,28,68,.06), 0 1px 3px rgba(13,28,68,.05);
+  --shadow:    0 6px 22px rgba(13,28,68,.08);
+  --shadow-md: 0 12px 34px rgba(13,28,68,.11);
+  --shadow-lg: 0 24px 64px rgba(7,16,48,.20);
+  /* Slightly cooler, calmer surfaces */
+  --bg:        #eaeff7;
+  --surface-2: #f5f8fc;
+  --line:      #e2e8f3;
+  --line-2:    #eef2f9;
+  --focus-ring: 0 0 0 3px rgba(0,154,199,.18);
+}
+
+/* Page background — faint pool-blue light source */
+body {
+  background:
+    radial-gradient(1200px 460px at 88% -8%, rgba(0,154,199,.06), transparent 62%),
+    var(--bg);
+}
+
+/* Dark nav surfaces — richer vertical gradient + crisper edge */
+.app-topbar { background: linear-gradient(180deg,#11164e,#0b0f38); box-shadow: 0 1px 0 rgba(255,255,255,.05), 0 6px 22px rgba(5,12,40,.20); }
+.control-sidebar { background: linear-gradient(180deg,#0f1450,#0a0e36); }
+
+/* Inputs — consistent pool focus ring + smooth transitions */
+.filter-field select, .filter-field input[type="search"],
+.event-search, .form-field input, .form-field select {
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.filter-field select:focus, .filter-field input:focus,
+.event-search:focus, .form-field input:focus, .form-field select:focus {
+  box-shadow: var(--focus-ring);
+}
+
+/* Buttons — subtle hover lift + cohesive elevation */
+.btn-primary, .btn-sm, .topbar-btn, .btn-ghost {
+  transition: transform .12s, box-shadow .15s, background .15s, border-color .15s, color .15s;
+}
+.btn-primary { box-shadow: var(--shadow-sm); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow); background: var(--brand-blue-700); }
+.btn-primary:active { transform: translateY(0); }
+.btn-sm:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.topbar-btn.primary:hover { box-shadow: 0 5px 16px rgba(227,25,55,.38); }
+
+/* KPI cards — softer rounding, lift on hover */
+.kpi-card { border-radius: var(--radius-lg); transition: box-shadow .15s, transform .12s, border-color .15s; }
+.kpi-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+
+/* Table + panel headers — navy gradient depth */
+.results-table thead th { background: linear-gradient(180deg,#1e2d8a,#171f69); }
+.panel-head { background: linear-gradient(180deg,#1e2d8a,#171f69); }
+.drawer-header { background: linear-gradient(180deg,#1e2d8a,#171f69); }
+
+/* Event-list active state — gradient instead of flat */
+.event-item.active { background: linear-gradient(180deg,#1e2d8a,#171f69); }
+
+/* Tabs — slightly bolder active underline */
+.tab-btn.active { border-bottom-width: 2.5px; }
+
+/* Status + flag chips — fully pill-rounded for a cleaner read */
+.status-badge { border-radius: 999px; }
+
+/* Threshold badge + context strip polish */
+.threshold-badge { box-shadow: var(--shadow-xs); }

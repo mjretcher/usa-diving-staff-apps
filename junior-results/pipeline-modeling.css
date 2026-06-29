@@ -4,6 +4,13 @@
    Type: Barlow Condensed (display) + Inter (UI) + JetBrains Mono
    ============================================================ */
 
+/* Chart legends — rendered as wrapping HTML below each SVG chart
+   (replaces the old in-SVG single-row legend that overlapped labels) */
+.pm-chart-legend{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:7px 16px;margin-top:10px;padding:0 8px}
+.pm-legend-item{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;color:var(--ink-2,#263248);white-space:nowrap;font-family:var(--f-ui,'Inter',system-ui,sans-serif)}
+.pm-legend-line{display:inline-block;width:18px;height:0;flex-shrink:0;vertical-align:middle}
+.pm-legend-box{display:inline-block;width:11px;height:11px;border-radius:2px;flex-shrink:0;vertical-align:middle}
+
 /* ── Cohort Progression section ──────────────────────────── */
 .pm-cohort-era {
   background: linear-gradient(90deg, rgba(23,31,105,.04) 0%, transparent 100%);
