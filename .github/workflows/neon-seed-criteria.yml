@@ -112,6 +112,12 @@ jobs:
                   updated_at         = now();
           SQL
 
+      - name: Bump criteria data version (invalidate client caches)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO app_meta.config(key,value,description) VALUES('criteria_simulator_data_version', to_char(now(),'YYYYMMDDHH24MISS'), 'Criteria sim phases (2018-2026 all-in-one) + dive sheets in core') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, description=EXCLUDED.description, updated_at=now();"
+
       - name: Report load stats
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
