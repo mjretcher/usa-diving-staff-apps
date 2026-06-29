@@ -168,8 +168,11 @@
 
   function ewcQualifiers(group) {
     const zones = EWC_ZONES[group] || [];
+    // The E/W/C field is Zone places 4–18 only. Places 1–3 (and replacement
+    // bump-ins) advance DIRECT to Junior Nationals and do not compete at E/W/C,
+    // so they are excluded here — matching the Zones view's E/W/C count.
     return allResults().filter(r =>
-      r.stage === 'Zones' && (r.advancesToEWC || r.advancesToNationals) && zones.includes(r.zone)
+      r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals && zones.includes(r.zone)
     );
   }
 
@@ -768,14 +771,16 @@
     const ctx       = $('resultsContext');
     if (!tableWrap) return;
 
-    // Context
-    const allEwcRows = allResults().filter(r => r.stage === 'Zones' && r.advancesToEWC);
+    // Context — this view shows the field that QUALIFIED INTO E/W/C from the
+    // Zone Championships (Zone places 4–18), i.e. the projected entry list.
+    // Final E/W/C placement results are not loaded into this view.
+    const allEwcRows = allResults().filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals);
     if (ctx) ctx.innerHTML = `
       <div class="context-title-block">
-        <strong>E/W/C Championships — ${qv.ewcMode==='meet'?'Browse by meet':'Browse by event'}</strong>
-        <span>Prelims → Finals format · Junior Nationals qualifiers from finals</span>
+        <strong>E/W/C — Qualified Field (from Zones) · ${qv.ewcMode==='meet'?'Browse by meet':'Browse by event'}</strong>
+        <span>Zone places 4–18 entering East / West / Central · final E/W/C results are not shown here</span>
       </div>
-      <div class="context-stat"><strong>${allEwcRows.length}</strong> total E/W/C qualifiers</div>
+      <div class="context-stat"><strong>${allEwcRows.length}</strong> qualified into E/W/C</div>
       <div class="context-stat"><strong>${allEwcRows.filter(r=>r.nonDisplacing||r._nonDispAtEWC).length}</strong> non-displacing</div>`;
 
     renderEWCSidebar();
@@ -807,7 +812,6 @@
     qv.ewcGroup = null;
     renderEWCView();
   };
-  window._qvSetEWCMode = window._qvSetEWCMode;
 
   window._qvScrollTo = function(id) {
     document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -894,7 +898,7 @@
 
   function renderEWCByEvent(wrap) {
     const allRows = allResults()
-      .filter(r => r.stage === 'Zones' && (r.advancesToEWC || r.advancesToNationals))
+      .filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals)
       .map(enrichRow);
     const grouped = groupByEvent(allRows);
 
@@ -945,6 +949,29 @@
   }
 
   /* ── Nationals View ────────────────────────────────────────── */
+  /* Data-state banner: if the loaded official qualifier list was generated
+     BEFORE E/W/C was scored, it cannot contain the E/W/C top-3 qualifiers.
+     Detected from the data itself (list date vs E/W/C results date) so it
+     disappears automatically once a refreshed post-E/W/C list is loaded. */
+  function natStalenessBanner() {
+    const ewcRes  = (window.EWC_2026_RESULTS && window.EWC_2026_RESULTS.results) || [];
+    const ewcMeta = (window.EWC_2026_RESULTS && window.EWC_2026_RESULTS.meta)    || null;
+    const natDate = (NAT && NAT.meta) ? NAT.meta.generatedAt : null;
+    const ewcDate = ewcMeta ? ewcMeta.generatedAt : null;
+    if (!ewcRes.length || !natDate || !ewcDate) return '';
+    if (new Date(natDate) >= new Date(ewcDate)) return '';   // list already current
+    return `<div class="qv-data-banner">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div>
+        <strong>This official list predates E/W/C.</strong>
+        It was generated ${esc(String(natDate).slice(0,10))}, before the East / West / Central
+        championships were scored, so the <strong>E/W/C top-3 qualifiers to Junior Nationals are not yet included</strong>.
+        It currently reflects Zone direct qualifiers (places 1–3) and pre-qualified athletes only.
+        Load the refreshed post-E/W/C qualifier file to complete it.
+      </div>
+    </div>`;
+  }
+
   function renderNationalsView() {
     const tableWrap = $('tableWrap');
     const ctx       = $('resultsContext');
@@ -1015,7 +1042,7 @@
     // HPS athletes not yet in official list
     const hpsSection = renderHPSSection();
 
-    let html = `<div class="qv-event-grid">`;
+    let html = natStalenessBanner() + `<div class="qv-event-grid">`;
     evKeys.forEach(ek => {
       const athletes = byEvent.get(ek).sort((a,b)=>a.name.localeCompare(b.name));
       const alreadyNat = athletes.filter(a => {
@@ -1096,7 +1123,7 @@
       return;
     }
     const grouped = groupByEvent(quals);
-    let html = `<div class="qv-event-grid">`;
+    let html = natStalenessBanner() + `<div class="qv-event-grid">`;
     grouped.forEach(([eventKey, rows]) => {
       const sorted = sortRows(rows, qv.natSort);
       html += `<div class="qv-event-card">
@@ -1163,6 +1190,12 @@
   function injectCSS() {
     const s = document.createElement('style');
     s.textContent = `
+/* ── Data-state banner (stale list warning) ───────────── */
+.qv-data-banner{display:flex;gap:12px;align-items:flex-start;margin:12px 16px;padding:12px 16px;
+  background:#fff8ec;border:1px solid #f0d9a8;border-left:4px solid #b26a00;border-radius:8px;
+  font-size:13.5px;line-height:1.5;color:#3a2e16}
+.qv-data-banner .ti{color:#b26a00;font-size:20px;flex:0 0 auto;margin-top:1px}
+.qv-data-banner strong{color:#171f69}
 /* ── Panel slide-in ────────────────────────────────────── */
 #qv-panel{position:fixed;top:var(--bar-h,52px);right:-420px;width:400px;bottom:0;
   background:var(--surface);border-left:1px solid var(--line);
