@@ -1134,7 +1134,7 @@
      Replaces the old vertical funnel. Shows TRUE cohort flow using the
      transition data: advancing current, real exits, and late entrants.
      Brand-locked, ADA-safe (red only ever sits on white), zero deps.    */
-  function renderFunnelSection(year, data){
+  function renderFunnelSection(year, data, printMode){
     if (!data) {
       return sectionShell(1, 'Qualification Pipeline — ' + year,
         'How the season\u2019s divers move from one stage to the next \u2014 the blue current carries everyone who advanced, red streams peel off where divers stopped, and a pale stream joining from below marks divers who entered straight at that stage.',
@@ -1164,7 +1164,7 @@
        (the cross-reference KPI and the dedicated "Two lenses" comparison). */
     const ATH = {}, ENT = {};
     realStages.forEach(function(s){ ATH[s] = data.stages[s].unique_athletes; ENT[s] = data.stages[s].event_entries; });
-    const isEntries = (pmState.lens === 'entries');
+    const isEntries = printMode ? false : (pmState.lens === 'entries');
     const N  = isEntries ? ENT : ATH;   // active-lens per-stage count (drives the river)
     const EN = ENT;                     // entries always available (separate readout)
     const UNIT      = isEntries ? 'entries' : 'divers';
@@ -1641,7 +1641,9 @@
       + ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
 
     /* ===== lens toggle: divers vs entries are two SEPARATE evaluations ===== */
-    const lensToggle =
+    const lensToggle = printMode
+      ? '<div style="font-family:Inter,sans-serif;font-size:12.5px;color:#5f6062;margin:0 0 14px"><strong style="color:#171f69">Counting unique divers</strong> \u2014 a diver in 3 events still = 1 diver.</div>'
+      :
       '<div class="pm-lens-toggle" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px">' +
         '<span style="font-family:Inter,sans-serif;font-size:12.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#5f6062">Count by</span>' +
         '<div class="pm-cohort-stage-picker" style="background:#eef1f8;border-radius:999px;padding:3px;display:inline-flex;gap:2px">' +
@@ -3190,6 +3192,24 @@
 
   /* ── Public hook ───────────────────────────────────────── */
   window._pmRender = renderPipeline;
+
+  /* Static river render for the report builder. Produces the exact river flow
+     map (caveat banner + KPIs + SVG + legend + by-age-group breakdown) for a
+     given year, in the divers lens with no master filters, and with the
+     interactive lens toggle replaced by a static label. Restores live state. */
+  window.PM_riverReport = async function(year){
+    const saved = { lens: pmState.lens, filters: pmState.filters, selectedYear: pmState.selectedYear };
+    try {
+      pmState.lens = 'divers';
+      pmState.filters = { age_group:'', gender:'', discipline:'', zone:'', region:'' };
+      const data = await loadFunnelData(year);
+      return renderFunnelSection(year, data, true);
+    } finally {
+      pmState.lens = saved.lens;
+      pmState.filters = saved.filters;
+      pmState.selectedYear = saved.selectedYear;
+    }
+  };
 
   /* ── Auto-init: if Pipeline stage is selected on page load ─ */
   if (document.readyState === 'loading') {

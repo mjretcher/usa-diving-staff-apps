@@ -4916,6 +4916,26 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       },
     },
 
+    pipeline_river: {
+      label: 'Pipeline River Flow Map',
+      desc: 'The exact qualification river — advance/exit flows, the by-age-group drop-off breakdown, and (2026) the projected Junior Nationals field',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        if (typeof window.PM_riverReport !== 'function') {
+          return '<section class="rb-section"><h2 class="rb-h2">Pipeline River Flow Map</h2><p class="rb-p">The pipeline module is not loaded on this page.</p></section>';
+        }
+        const fit = '<style>.rb-river .pm-flow-scroll{overflow:visible !important}.rb-river .pm-section{box-shadow:none;border:none;padding:0;margin:0}.rb-river .pm-section-head{display:none}.rb-river svg{width:100%;height:auto;max-width:100%}</style>';
+        const parts = [];
+        for (const y of yrs) {
+          let body;
+          try { body = await window.PM_riverReport(y); }
+          catch(e){ body = '<p class="rb-p" style="color:#E31937">Failed to build river for '+esc(String(y))+': '+esc(String((e&&e.message)||e))+'</p>'; }
+          parts.push('<section class="rb-section rb-river"><h2 class="rb-h2">Qualification River — '+esc(String(y))+'</h2>'+body+'</section>');
+        }
+        return fit + parts.join('');
+      },
+    },
+
     pipeline_funnel: {
       label: 'Pipeline Funnel',
       desc: 'Stage-by-stage athlete counts as a visual funnel for selected year(s)',
