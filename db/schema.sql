@@ -77,6 +77,38 @@ CREATE TABLE IF NOT EXISTS junior_results.scrape_log (
     ran_at       TIMESTAMPTZ DEFAULT now()
 );
 
+-- Athlete status / eligibility metadata (foreign, dual, HPS, YMCA, already-qualified).
+-- Single consolidated source, merged from the former junior-athlete-status.js and
+-- ewc-data.js roster files. Seeded by neon-seed-athlete-status.yml.
+CREATE TABLE IF NOT EXISTS junior_results.athlete_status (
+    id                     BIGSERIAL PRIMARY KEY,
+    dive_meets_id          TEXT,
+    usa_diving_id          TEXT,
+    name                   TEXT,
+    first_name             TEXT,
+    last_name              TEXT,
+    gender                 TEXT,
+    age_group              TEXT,
+    region                 TEXT,
+    zone                   TEXT,
+    ewc_meet               TEXT,
+    team                   TEXT,
+    category               TEXT,
+    athlete_type           TEXT,
+    status_source          TEXT,
+    hps                    BOOLEAN DEFAULT false,
+    ymca                   BOOLEAN DEFAULT false,
+    foreign_declared       BOOLEAN DEFAULT false,
+    dual_declared          BOOLEAN DEFAULT false,
+    dual_other_country     BOOLEAN DEFAULT false,
+    federation_represented TEXT,
+    already_nat_qual       BOOLEAN DEFAULT false,
+    sources                TEXT,
+    updated_at             TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jas_dmid ON junior_results.athlete_status(dive_meets_id);
+CREATE INDEX IF NOT EXISTS idx_jas_name ON junior_results.athlete_status(lower(name));
+
 
 -- SCHEMA 3: hp_analytics
 CREATE SCHEMA IF NOT EXISTS hp_analytics;

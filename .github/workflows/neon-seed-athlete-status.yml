@@ -1,0 +1,74 @@
+name: Neon seed — junior_results.athlete_status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/seeds/junior_athlete_status.csv'
+  workflow_dispatch:
+
+jobs:
+  seed:
+    name: Load junior_results.athlete_status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Ensure table exists
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+            CREATE SCHEMA IF NOT EXISTS junior_results;
+            CREATE TABLE IF NOT EXISTS junior_results.athlete_status (
+              id                     BIGSERIAL PRIMARY KEY,
+              dive_meets_id          TEXT,
+              usa_diving_id          TEXT,
+              name                   TEXT,
+              first_name             TEXT,
+              last_name              TEXT,
+              gender                 TEXT,
+              age_group              TEXT,
+              region                 TEXT,
+              zone                   TEXT,
+              ewc_meet               TEXT,
+              team                   TEXT,
+              category               TEXT,
+              athlete_type           TEXT,
+              status_source          TEXT,
+              hps                    BOOLEAN DEFAULT false,
+              ymca                   BOOLEAN DEFAULT false,
+              foreign_declared       BOOLEAN DEFAULT false,
+              dual_declared          BOOLEAN DEFAULT false,
+              dual_other_country     BOOLEAN DEFAULT false,
+              federation_represented TEXT,
+              already_nat_qual       BOOLEAN DEFAULT false,
+              sources                TEXT,
+              updated_at             TIMESTAMPTZ DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_jas_dmid ON junior_results.athlete_status(dive_meets_id);
+            CREATE INDEX IF NOT EXISTS idx_jas_name ON junior_results.athlete_status(lower(name));
+          SQL
+
+      - name: Truncate table (idempotent reload)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "TRUNCATE junior_results.athlete_status RESTART IDENTITY;"
+
+      - name: Bulk load via \copy
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy junior_results.athlete_status(dive_meets_id,usa_diving_id,name,first_name,last_name,gender,age_group,region,zone,ewc_meet,team,category,athlete_type,status_source,hps,ymca,foreign_declared,dual_declared,dual_other_country,federation_represented,already_nat_qual,sources) FROM 'db/seeds/junior_athlete_status.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+
+      - name: Report load stats
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS rows_loaded FROM junior_results.athlete_status;"
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) FILTER (WHERE hps) AS hps, COUNT(*) FILTER (WHERE ymca) AS ymca, COUNT(*) FILTER (WHERE foreign_declared) AS foreign_declared, COUNT(*) FILTER (WHERE dual_declared) AS dual, COUNT(*) FILTER (WHERE already_nat_qual) AS already_nat_qual, COUNT(*) FILTER (WHERE dive_meets_id <> '') AS with_dmid FROM junior_results.athlete_status;"

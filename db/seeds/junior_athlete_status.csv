@@ -1,0 +1,85 @@
+dive_meets_id,usa_diving_id,name,first_name,last_name,gender,age_group,region,zone,ewc_meet,team,category,athlete_type,status_source,hps,ymca,foreign_declared,dual_declared,dual_other_country,federation_represented,already_nat_qual,sources
+,,Avery Cowan,Avery,Cowan,F,Group C Girls,Region 5,C,Central,Unattached,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Raine Rutter,Raine,Rutter,F,Group C Girls,Region 10,E,West,Stanford Diving,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Alden Charette,Alden,Charette,Girls,14-15,Region 1,A; B; C; D; E; F,East,Marlins Diving Club,YMCA,YMCA Champion,Current National YMCA Champion,true,true,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Victoria Li,Victoria,Li,F,Group B Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Hannah McLaughlin,Hannah,McLaughlin,F,Group B Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Lindyn Johnson,Lindyn,Johnson,F,Group B Girls,Region 11,F; A; B; C; D; E,West,City of Midland,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Noah Lieberman,Noah,Lieberman,M,Group B Boys,Region 2,A; B; C; D; E; F,East,Montgomery Dive Club,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Katie Parker,Katie,Parker,F,Group A Girls,,,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Olivia Astrologes,Olivia,Astrologes,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Callie Fox,Callie,Fox,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Ella Guo,Ella,Guo,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Emma Guo,Emma,Guo,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Sophia Hoffman,Sophia,Hoffman,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Kayla Jensen,Kayla,Jensen,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Ava Jolley,Ava,Jolley,F,Group A Girls,Region 2,A; B; C; D; E; F,East,Carolina Diving Academy,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Sophia Narbut,Sophia,Narbut,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Juliet Radich,Juliet,Radich,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Evelyn Wang,Evelyn,Wang,F,Group A Girls,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Leyton Dean,Leyton,Dean,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Cristiano Garcia,Cristiano,Garcia,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Evan Kerim,Evan,Kerim,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Thibault Lede,Thibault,Lede,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Jacob Mannarino,Jacob,Mannarino,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Jackson Monus,Jackson,Monus,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Colby Novick,Colby,Novick,M,Group A Boys,Region 2,A; B; C; D; E; F,East,Carolina Diving Academy,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Rydan Russell,Rydan,Russell,M,Group A Boys,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Mikolas Schwickert,Mikolas,Schwickert,M,Group A Boys,Region 11,F; A; B; C; D; E,West,Clavadistas del Sol,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Gage Sprintz,Gage,Sprintz,M,Group A Boys,Region 11,F; A; B; C; D; E,West,East Valley Dive Club,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Quintilia Fidanza,Quintilia,Fidanza,F,AQUA 19 Female,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status
+,,Molly Gray,Molly,Gray,F,AQUA 19 Female,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status
+,,Gianna Kenrick,Gianna,Kenrick,F,AQUA 19 Female,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Ivor Brown,Ivor,Brown,M,AQUA 19 Male,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Nathaniel Grannis,Nathaniel,Grannis,M,AQUA 19 Male,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status
+,,Noah Horwitz,Noah,Horwitz,M,AQUA 19 Male,,A; B; C; D; E; F,,,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Mason Mankey,Mason,Mankey,M,AQUA 19 Male,Region 5,C; A; B; D; E; F,Central,The Indiana International School of Diving,HPS,HPS Athlete,Tier 3 Jr - By score,true,false,false,false,false,,false,junior_athlete_status|ewc_hps
+,,Alex Birrer,Alex,Birrer,Girls,11-U,,,,,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+93695,98925,Jeslynn Fang,Jeslynn,Fang,Girls,Group D,Region 1,Region 1,East,Marlins Diving Club,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+,,Diya Firtel,Diya,Firtel,Girls,11-U,Region 3,B,East,Ft Lauderdale Diving Team,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Aidan Turner,Aidan,Turner,Boys,11-U,Region 1,A,East,Marlins Diving Club,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Jhoset Quintero,Jhoset,Quintero,Boys,11-U,Region 3,B,East,Ft Lauderdale Diving Team,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,true,junior_athlete_status|ewc_anq
+,,Katerina Akimov,Katerina,Akimov,Girls,12-13,Region 1,A,East,Marlins Diving Club,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Sadie Marks,Sadie,Marks,Girls,12-13,Region 1,A,East,Marlins Diving Club,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Levi Berlyn,Levi,Berlyn,Boys,12-13,,,,,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Haskell Fagan,Haskell,Fagan,Boys,12-13,,,,,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Arthur Palladino,Arthur,Palladino,Boys,14-15,Region 1,A; B; C; D; E; F,East,Long Island Divers,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+,,Avaleigh Westfall,Avaleigh,Westfall,Girls,16-18,Region 5,C; A; B; D; E; F,Central,Sunshine Dive Club,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+80207,94278,Andres Winterman,Andres,Winterman,Boys,Group A,Regional 3; Region 3,Regional 3,East,Ft Lauderdale Diving Team,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+,,Ezekiel Raybourn,Ezekiel,Raybourn,Boys,16-18,Region 11,F; A; B; C; D; E,West,YMCA Silver Fins,YMCA,YMCA Champion,Current National YMCA Champion,false,true,false,false,false,,false,junior_athlete_status
+106589,98850,Sofiya Karaliova,Sofiya,Karaliova,Girls,Group D,3; Region 3; Region 3,3; B,East,Moss Farms Diving,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+96168,96168,Andrei Riumshin,Andrei,Riumshin,Man,Group D Boys,Region 3,E; B,East,Coral springs diving,Foreign,Foreign Athlete,Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+100938,95379,Sarah Gao,Sarah,Gao,Girls,Group C,Regional 5; Region 5,Regional 5,Central,Unattached,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+170121,103221,Aidan Cameron,Aidan,Cameron,Boys,Group C,USA Diving Region 2 - Lynchburg; Region 2,A,East,Montgomery Dive Club,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+162277,98342,Ivan Kliminov,Ivan,Kliminov,Man,Group C Boys,USA Diving Junior Circuit,A; E; E,,Mission Viejo Nadadores Diving; Mission Viejo nadodorrs,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+74288,90463,Zeming Lu,Zeming,Lu,Man,Group C Boys,"Zone F ( He is C group, will not compete in the regional)",E,,Trojan dive club,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+80154,96105,Kenay Prieto,Kenay,Prieto,Man,Group C Boys,,F,West,City of Midland,Foreign,Foreign Athlete,Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+76903,92235,Elen NAVASARDYAN,Elen,NAVASARDYAN,Girls,Group B,11; Region 11; Region 11,11; E; F,West,Rose Bowl Aquatics,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+83430,96519,Amanda Wang,Amanda,Wang,Girls,Group B,8; Region 8,8,Central,Minnesota Diving Academy,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+175544,103129,Paola Hernandez,Paola,Hernandez,Girls,Group B,Region 8,Region 8,Central,BYU COUGAR DIVE CLUB; Unattached,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+64598,82408,Ermione Branciamore,Ermione,Branciamore,Girls,Group B,Regional 12; Region 12,Regional 12,West,Mission Viejo Nadadores Dive,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+76851,91046,Yarin Hugenmatter,Yarin,Hugenmatter,Boys,Group B,Region 10,Region 10; E,West,Stanford Diving,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+73171,86895,Jiaqi Lu,Jiaqi,Lu,Girls,Group A,"Region 12, Zone F; Region 12; Region 12",E; E; F,West,Trojan Dive Club,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+172441,101217,Tongyi Jin,Tongyi,Jin,Girls,Group A,Regional 12; Region 12; Region 12,Regional 12; F,West,Arrow Dive Club,Foreign,Foreign Athlete,Original foreign declaration list; Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+83428,96520,Anthony Wang,Anthony,Wang,Boys,Group A,8; Region 8,8,Central,Minnesota Diving Academy,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+56775,72112,Johnathan Gullick,Johnathan,Gullick,Man,Group A Boys,Region 10,E,West,Stanford Diving Club; Stanford Diving,Foreign,Foreign Athlete,Updated Zone foreign declaration form,false,false,true,false,false,,false,junior_athlete_status
+171640,99440,Jiahui(Kathy) Ding,Jiahui(Kathy),Ding,,,Zone E,E,,,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status
+83110,95916,Oleksandra Minakova,Oleksandra,Minakova,Girls,Group C,Zone F,E,West,,Foreign,Foreign Athlete,Original foreign declaration list,false,false,true,false,false,,false,junior_athlete_status|ewc_foreign
+64837,95034,Amanda Lucile Brightsmith,Amanda Lucile,Brightsmith,Girls,Group B,Region 4,B,East,Woodlands Diving,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,,false,junior_athlete_status
+77089,92424,Jennifer Juhasz,Jennifer,Juhasz,Girls,Group A,Region 2,A,East,Dive RVA Team,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,,false,junior_athlete_status
+60298,77476,Barbara Chen,Barbara,Chen,Girls,Group A,Region 12,F,West,Arrow Dive Club,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,Chinese Taipei,false,junior_athlete_status|ewc_dual
+60297,76232,Jacqueline Chen,Jacqueline,Chen,Girls,Group A,Region 12,F,West,Arrow Dive Club,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,Chinese TaiPei,false,junior_athlete_status|ewc_dual
+52683,69138,Karolina Polizos,Karolina,Polizos,Girls,Group A,Region 12,F,West,Mission Viejo Nadadores Dive,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,Brazil,false,junior_athlete_status|ewc_dual
+68012,89276,Beaumanoir Amprey,Beaumanoir,Amprey,Boys,Group A,Region 2,A,East,Dominion Dive Club,DualOther,Dual Citizen / Declared Other Country,Declared other country,false,false,false,true,true,,false,junior_athlete_status
+,,ElliReese Niday,ElliReese,Niday,F,Group B Girls,,,,,,,,true,false,false,false,false,,false,ewc_hps
+,,Mason Lawson,,,,,,,Central,,,,,false,false,false,false,false,,true,ewc_anq
+,,Emberlyn Britton,,,,,,,Central,,,,,false,false,false,false,false,,true,ewc_anq
+,,Karter Thompson,,,,,,,Central,,,,,false,false,false,false,false,,true,ewc_anq
+,,Adelyn Flessner,,,,,,,Central,,,,,false,false,false,false,false,,true,ewc_anq
+,,Anne Haider,,,,,,,Central,,,,,false,false,false,false,false,,true,ewc_anq
+,,Nelle Wallace,,,,,,,East,,,,,false,false,false,false,false,,true,ewc_anq
+,,Anna Krasnopolskiy,,,,,,,East,,,,,false,false,false,false,false,,true,ewc_anq
+,,Elizabeth Blackwood,,,,,,,East,,,,,false,false,false,false,false,,true,ewc_anq
+,,David Randolph,,,,,,,East,,,,,false,false,false,false,false,,true,ewc_anq
+,,Paxtyn Gould,,,,,,,West,,,,,false,false,false,false,false,,true,ewc_anq
+,,Kinley May,,,,,,,West,,,,,false,false,false,false,false,,true,ewc_anq
