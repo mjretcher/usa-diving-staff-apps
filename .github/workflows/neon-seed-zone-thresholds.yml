@@ -1,0 +1,59 @@
+name: Neon seed — junior_results.zone_thresholds
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'db/seeds/zone_thresholds.csv'
+  workflow_dispatch:
+
+jobs:
+  seed:
+    name: Load junior_results.zone_thresholds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Ensure table exists
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+            CREATE SCHEMA IF NOT EXISTS junior_results;
+            CREATE TABLE IF NOT EXISTS junior_results.zone_thresholds (
+              id              BIGSERIAL PRIMARY KEY,
+              year            SMALLINT,
+              zone            TEXT,
+              meet_id         TEXT,
+              event_id        TEXT,
+              event_name      TEXT,
+              event_key       TEXT,
+              threshold_score NUMERIC,
+              event_sort      INT,
+              source_url      TEXT,
+              updated_at      TIMESTAMPTZ DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_jzt_year_event ON junior_results.zone_thresholds(year, zone, event_key);
+          SQL
+
+      - name: Truncate table (idempotent reload)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "TRUNCATE junior_results.zone_thresholds RESTART IDENTITY;"
+
+      - name: Bulk load via \copy
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy junior_results.zone_thresholds(year,zone,meet_id,event_id,event_name,event_key,threshold_score,event_sort,source_url) FROM 'db/seeds/zone_thresholds.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+
+      - name: Report load stats
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS rows_loaded, COUNT(DISTINCT zone) AS zones, COUNT(DISTINCT event_key) AS events FROM junior_results.zone_thresholds;"

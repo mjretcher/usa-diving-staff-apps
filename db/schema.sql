@@ -109,6 +109,23 @@ CREATE TABLE IF NOT EXISTS junior_results.athlete_status (
 CREATE INDEX IF NOT EXISTS idx_jas_dmid ON junior_results.athlete_status(dive_meets_id);
 CREATE INDEX IF NOT EXISTS idx_jas_name ON junior_results.athlete_status(lower(name));
 
+-- Official Zone qualifying thresholds (average-score bar per zone per event).
+-- Seeded by neon-seed-zone-thresholds.yml from the former junior-data.js officialThresholds.
+CREATE TABLE IF NOT EXISTS junior_results.zone_thresholds (
+    id              BIGSERIAL PRIMARY KEY,
+    year            SMALLINT,
+    zone            TEXT,
+    meet_id         TEXT,
+    event_id        TEXT,
+    event_name      TEXT,
+    event_key       TEXT,
+    threshold_score NUMERIC,
+    event_sort      INT,
+    source_url      TEXT,
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jzt_year_event ON junior_results.zone_thresholds(year, zone, event_key);
+
 
 -- SCHEMA 3: hp_analytics
 CREATE SCHEMA IF NOT EXISTS hp_analytics;
