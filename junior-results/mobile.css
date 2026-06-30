@@ -1,99 +1,188 @@
-/* ============================================================================
-   MOBILE.CSS — Junior Results Audit
-   Purely additive. Every rule lives inside a max-width media query, so the
-   desktop experience (anything wider than 820px) is never affected. Loaded
-   last so these rules win any same-specificity ties on small screens.
-   ============================================================================ */
+/* ================================================================
+   USA DIVING — JUNIOR CIRCUIT · MOBILE LAYER
+   Loaded LAST. Every rule is wrapped in a phone/tablet media query,
+   so desktop layout (>820px) is never affected.
+   Goal: full functionality on a phone — readable, tappable, no
+   horizontal overflow, filters reachable, every table scrollable.
+   ================================================================ */
 
-/* ─── Tablet / large-phone landscape and below (≤ 820px) ─────────────────── */
+/* The filter funnel button lives in the top bar but only shows on mobile */
+.mobile-filter-toggle { display: none; }
+.mobile-backdrop { display: none; }
+
+/* ───────────────────────────────────────────────────────────────
+   TABLET & PHONE  (≤ 820px)
+   ─────────────────────────────────────────────────────────────── */
 @media (max-width: 820px) {
 
-  /* Never let the page scroll sideways on a phone */
-  html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
-
-  /* ── Top bar becomes TWO rows so the stage tabs are always reachable ──
-        Row 1: brand + actions (Overrides).  Row 2: full-width scrolling tabs.
-        Achieved with flex-wrap + order so the tabs drop to their own line
-        instead of being crushed between the brand and the Overrides button. */
-  .app-topbar {
-    height: auto;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .topbar-brand {
-    order: 1;
-    flex: 1 1 auto; min-width: 0;
-    padding: 0 12px;
-    overflow: hidden;          /* let the brand shrink instead of shoving actions off-screen */
-  }
-  .topbar-actions {
-    order: 2;
-    flex: 0 0 auto;
-    margin-left: auto;
-  }
+  /* Top bar: let the stage tabs scroll horizontally instead of crushing */
   .stage-nav {
-    order: 3;
-    flex: 0 0 100%; width: 100%;
-    height: 46px; padding: 0 8px;
-    border-top: 1px solid var(--nav-border);
-    flex-wrap: nowrap;
-    overflow-x: auto; overflow-y: hidden;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    padding: 0 6px;
   }
   .stage-nav::-webkit-scrollbar { display: none; }
-  .stage-btn { flex-shrink: 0; height: 36px; }
 
-  /* The fixed bar is now ~52 (row 1) + 46 (row 2) tall — push content clear */
-  .app-body { grid-template-columns: 1fr; padding-top: 98px; }
-
-  /* ── Filter sidebar stacks on top: stays visible (per standard) but is
-        kept compact with its own scroll so it never buries the data ── */
-  .control-sidebar {
-    position: static; top: auto;
-    height: auto; max-height: 42vh;
-    overflow-y: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--nav-border);
-  }
-
-  /* ── KPI cards shrink their minimum so more fit per row ── */
-  .kpi-row { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
-
-  /* ── Event list + results table stack vertically ── */
-  .workspace { grid-template-columns: 1fr; gap: 10px; padding: 10px 12px 16px; }
-  .event-panel { position: static; max-height: 240px; }
-  .results-panel { max-height: none; min-height: 360px; }
-
-  /* ── Wide data tables scroll inside their own wrapper, not the page ── */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-
-  /* ── Results toolbar + view tabs may wrap / scroll instead of overflowing ── */
-  .results-toolbar { flex-wrap: wrap; }
-  .view-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .view-tabs::-webkit-scrollbar { display: none; }
-
-  /* ── Override drawer becomes a full-width sheet, below the two-row bar ── */
-  .override-drawer { width: 100%; max-width: 100%; top: 98px; }
+  /* Right-side actions stay compact and never wrap off-screen */
+  .topbar-actions { padding: 0 8px; gap: 5px; }
 }
 
-/* ─── Phone (≤ 480px): tighten spacing and grow tap targets ───────────────── */
-@media (max-width: 480px) {
-  .topbar-brand { padding: 0 10px; }
-  .stage-nav { padding: 0 4px; gap: 2px; }
+/* ───────────────────────────────────────────────────────────────
+   PHONE  (≤ 760px)  — primary mobile layout
+   ─────────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
 
-  /* Comfortable tap targets on the primary controls (Apple/Google guidance) */
-  .stage-btn { min-height: 40px; padding: 0 10px; font-size: 12px; }
-  .results-toolbar button,
-  .toolbar-actions button,
-  .view-tabs button,
-  .drawer-header-actions button { min-height: 38px; }
+  /* ----- Top bar ------------------------------------------------ */
+  .topbar-brand { min-width: 0; padding: 0 10px; border-right: none; }
+  .topbar-app-label { display: none; }            /* keep just the logo */
+  .topbar-logo { height: 26px; }
+
+  /* Show the Filters button (injected by mobile-nav.js) */
+  .mobile-filter-toggle {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 10px; margin-left: 4px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 12px; font-weight: 600; color: var(--nav-ink, #d4dcf5);
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.14);
+    flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+  }
+  .mobile-filter-toggle svg { width: 13px; height: 13px; }
+  .mobile-filter-toggle.active {
+    background: var(--nav-active, rgba(143,195,234,.16));
+    border-color: rgba(143,195,234,.4);
+    color: var(--nav-active-ink, #a8d4f0);
+  }
+  .mobile-filter-toggle .mft-count {
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+    background: var(--red, #e31937); color: #fff;
+    font-size: 10px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* Action buttons → comfortable tap size; trim labels to icons if tight */
+  .topbar-btn { height: 34px; padding: 0 10px; }
+
+  /* ----- Body becomes single column; sidebar becomes a drawer ---- */
+  .app-body { grid-template-columns: 1fr; }
+
+  .control-sidebar {
+    position: fixed;
+    top: var(--bar-h); left: 0; bottom: 0;
+    width: min(84vw, 320px);
+    height: auto; max-height: none;
+    transform: translateX(-100%);
+    transition: transform .26s cubic-bezier(.32,.72,0,1);
+    z-index: 360;
+    box-shadow: 10px 0 40px rgba(0,0,0,.4);
+    overscroll-behavior: contain;
+  }
+  body.filters-open .control-sidebar { transform: none; }
+
+  .mobile-backdrop {
+    display: block;
+    position: fixed; inset: var(--bar-h) 0 0 0;
+    background: rgba(6,9,32,.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+    z-index: 350;
+  }
+  body.filters-open .mobile-backdrop { opacity: 1; pointer-events: auto; }
+  body.filters-open { overflow: hidden; }
+
+  /* Bigger filter controls inside the drawer for touch */
+  .control-sidebar .sidebar-section { padding: 16px 14px; }
   .control-sidebar input,
   .control-sidebar select,
-  .filter-flags button { min-height: 36px; }
+  .control-sidebar button { min-height: 38px; }
 
-  .kpi-row { grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 6px; padding: 8px 10px 0; }
-  .sidebar-section { padding: 11px 11px; }
-  .control-sidebar { max-height: 38vh; }
-  .event-panel { max-height: 200px; }
+  /* ----- KPI cards: two-up grid -------------------------------- */
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px; padding: 12px 12px 0;
+  }
+
+  /* ----- Workspace stacks: events strip on top, results below --- */
+  .workspace {
+    grid-template-columns: 1fr !important;
+    gap: 10px; padding: 12px 12px 18px;
+  }
+  .event-panel {
+    position: static; max-height: 220px;
+  }
+  .event-search { min-height: 38px; font-size: 16px; }  /* 16px = no iOS zoom */
+  .results-panel { max-height: none; min-height: 320px; }
+
+  /* ----- Results toolbar: allow wrap so tabs + actions both fit -- */
+  .results-toolbar { flex-wrap: wrap; }
+  .view-tabs {
+    flex: 1 1 100%;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .view-tabs::-webkit-scrollbar { display: none; }
+  .toolbar-actions {
+    flex: 1 1 100%;
+    border-left: none; border-top: 1px solid var(--line);
+    justify-content: flex-end;
+  }
+  .toolbar-actions .btn-sm { min-height: 34px; }
+
+  /* ----- Every data table scrolls sideways, never overflows page - */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .table-wrap table { min-width: max-content; }
+
+  /* ----- Override drawer → full-screen sheet -------------------- */
+  .override-drawer {
+    width: 100% !important;
+    inset: var(--bar-h) 0 0 0 !important;
+    max-width: none;
+  }
+  .drawer-form {
+    grid-template-columns: 1fr !important;
+    display: grid; gap: 10px;
+  }
+  .drawer-form .form-field,
+  .drawer-form .form-field-wide { width: 100%; }
+  .drawer-form input,
+  .drawer-form select { min-height: 40px; font-size: 16px; }
+  .drawer-header-actions { flex-wrap: wrap; gap: 6px; }
+
+  /* ----- Pipeline & Modeling tab: collapse any residual grids ---- */
+  .pm-demo-grid,
+  .pm-yoy-grid,
+  .pm-fin-summary,
+  .pm-cohort-nat-row,
+  .pm-hero { grid-template-columns: 1fr !important; }
+
+  /* Charts / flow diagrams scale to width instead of clipping */
+  .pm-chart svg,
+  .pm-flow svg,
+  .stage-content svg.pm-scalable { max-width: 100%; height: auto; }
+
+  /* Pipeline tables get the same horizontal-scroll treatment */
+  .pm-table-wrap, .pm-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   SMALL PHONE  (≤ 440px)  — final tightening
+   ─────────────────────────────────────────────────────────────── */
+@media (max-width: 440px) {
+  :root { --bar-h: 48px; }
+  .kpi-row { grid-template-columns: 1fr 1fr !important; gap: 6px; }
+  /* Collapse action button labels to icons to save the last few px */
+  .topbar-btn { padding: 0 9px; font-size: 0; gap: 0; }
+  .topbar-btn svg { width: 15px; height: 15px; }
+  .topbar-btn .override-badge { font-size: 10px; }
+  .control-sidebar { width: 88vw; }
 }
