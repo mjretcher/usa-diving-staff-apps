@@ -4924,7 +4924,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         if (typeof window.PM_riverReport !== 'function') {
           return '<section class="rb-section"><h2 class="rb-h2">Pipeline River Flow Map</h2><p class="rb-p">The pipeline module is not loaded on this page.</p></section>';
         }
-        const fit = '<style>.rb-river .pm-flow-scroll{overflow:visible !important}.rb-river .pm-section{box-shadow:none;border:none;padding:0;margin:0}.rb-river .pm-section-head{display:none}.rb-river svg{width:100%;height:auto;max-width:100%}</style>';
+        const fit = '<style>.rb-river .pm-flow-scroll{overflow:visible !important}.rb-river .pm-section{box-shadow:none;border:none;padding:0;margin:0}.rb-river .pm-section-head{display:none}.rb-river svg{width:100%;height:auto;max-width:100%}@media print{.rb-river,.rb-river *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}}</style>';
         const parts = [];
         for (const y of yrs) {
           let body;

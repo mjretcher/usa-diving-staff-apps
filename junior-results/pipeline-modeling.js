@@ -1108,6 +1108,13 @@
             '<span class="pm-toggle-help" title="Layers entry-fee data on every section: what families actually paid per athlete and what each meet collected in aggregate.">?</span>' +
           '</label>' +
         '</div>' +
+
+        '<div class="pm-ctl-divider"></div>' +
+
+        '<div class="pm-ctl-group">' +
+          '<button data-pm-print onclick="window.PM_printRiver()" title="Print the river flow map, or save it as a clean landscape PDF" ' +
+            'style="font-family:Inter,sans-serif;font-size:12.5px;font-weight:600;color:#fff;background:#171F69;border:none;border-radius:7px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px">&#128424; Print / Save PDF</button>' +
+        '</div>' +
       '</div>' +
 
       // Filter bar — separate row, scoped to all data pulls
@@ -3209,6 +3216,67 @@
       pmState.filters = saved.filters;
       pmState.selectedYear = saved.selectedYear;
     }
+  };
+
+  /* Dedicated, gold-standard print of the river: a clean landscape page with a
+     USA Diving header, the full-bleed colour-preserved flow map, the by-age
+     breakdown, and a footer. Built as a print-only overlay so the page's own
+     styles apply but only this prints. */
+  window.PM_printRiver = async function(year){
+    year = year || pmState.selectedYear ||
+           (pmState.yearsAvailable && pmState.yearsAvailable.length ? Math.max.apply(null, pmState.yearsAvailable) : 2026);
+    const btn = document.querySelector('[data-pm-print]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+    let body;
+    try { body = await window.PM_riverReport(year); }
+    catch(e){ if (btn){ btn.disabled=false; btn.innerHTML='&#128424; Print / Save PDF'; } alert('Could not build the river for printing: ' + ((e && e.message) || e)); return; }
+
+    const prev = document.getElementById('pm-print-root'); if (prev) prev.remove();
+    const isNew = Number(year) >= 2026;
+    const path = isNew
+      ? 'Regionals \u2192 Zones \u2192 East / West / Central \u2192 Junior Nationals'
+      : 'Regionals \u2192 Zones \u2192 Junior Nationals';
+    const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+    const root = document.createElement('div');
+    root.id = 'pm-print-root';
+    root.innerHTML =
+      '<style>' +
+        '#pm-print-root{display:none}' +
+        '@media print{' +
+          'html,body{background:#fff !important;margin:0 !important;padding:0 !important}' +
+          'body > *:not(#pm-print-root){display:none !important}' +
+          '#pm-print-root{display:block !important;position:static !important;padding:0 !important}' +
+          '@page{size:landscape;margin:11mm}' +
+          '*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}' +
+          '#pm-print-root .pm-section{box-shadow:none !important;border:0 !important;padding:0 !important;margin:0 !important;background:#fff !important}' +
+          '#pm-print-root .pm-section-head{display:none !important}' +
+          '#pm-print-root .pm-flow-scroll{overflow:visible !important;margin:0 !important}' +
+          '#pm-print-root .pm-flow-wrap{padding:0 !important}' +
+          '#pm-print-root svg{width:100% !important;height:auto !important;max-width:100% !important}' +
+          '#pm-print-root .pm-adv-breakdown,#pm-print-root .pm-twolens,#pm-print-root .pm-kpi-strip{page-break-inside:avoid}' +
+          '#pm-print-root .pmp-head{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #E31937;padding-bottom:9px;margin-bottom:14px}' +
+          '#pm-print-root .pmp-title{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:29px;color:#171F69;line-height:1;text-transform:uppercase;letter-spacing:.01em}' +
+          '#pm-print-root .pmp-sub{font-family:Inter,sans-serif;font-size:11px;color:#5f6062;margin-top:4px}' +
+          '#pm-print-root .pmp-mark{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:16px;color:#171F69;text-align:right;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}' +
+          '#pm-print-root .pmp-mark b{color:#E31937;font-weight:700}' +
+          '#pm-print-root .pmp-foot{margin-top:14px;border-top:1px solid #d7dcea;padding-top:7px;font-family:Inter,sans-serif;font-size:9.5px;color:#8a93a6}' +
+        '}' +
+      '</style>' +
+      '<div class="pmp-head">' +
+        '<div>' +
+          '<div class="pmp-title">Junior Qualification Pipeline \u2014 ' + year + '</div>' +
+          '<div class="pmp-sub">' + path + '</div>' +
+        '</div>' +
+        '<div class="pmp-mark">USA <b>Diving</b></div>' +
+      '</div>' +
+      body +
+      '<div class="pmp-foot">Generated ' + today + ' \u00b7 USA Diving Junior Results Audit \u00b7 Projected fields are computed from current results and can change with declines and registration.</div>';
+
+    document.body.appendChild(root);
+    const cleanup = function(){ try { root.remove(); } catch(e){} if (btn){ btn.disabled=false; btn.innerHTML='&#128424; Print / Save PDF'; } window.removeEventListener('afterprint', cleanup); };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(function(){ window.print(); setTimeout(cleanup, 1500); }, 80);
   };
 
   /* ── Auto-init: if Pipeline stage is selected on page load ─ */
