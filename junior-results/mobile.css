@@ -1,0 +1,81 @@
+/* ============================================================================
+   MOBILE.CSS — Junior Results Audit
+   Purely additive. Every rule lives inside a max-width media query, so the
+   desktop experience (anything wider than 820px) is never affected. Loaded
+   last so these rules win any same-specificity ties on small screens.
+   ============================================================================ */
+
+/* ─── Tablet / large-phone landscape and below (≤ 820px) ─────────────────── */
+@media (max-width: 820px) {
+
+  /* Never let the page scroll sideways on a phone */
+  html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+
+  /* ── Top bar: keep it one row, let the stage tabs scroll horizontally ── */
+  .topbar-brand { min-width: 0; padding: 0 12px; flex-shrink: 0; }
+  .stage-nav {
+    flex: 1 1 auto; min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .stage-nav::-webkit-scrollbar { display: none; }
+  .stage-btn { flex-shrink: 0; }
+  .topbar-actions { flex-shrink: 0; }
+
+  /* ── Body collapses to a single column ── */
+  .app-body { grid-template-columns: 1fr; }
+
+  /* ── Filter sidebar stacks on top: stays visible (per standard) but is
+        kept compact with its own scroll so it never buries the data ── */
+  .control-sidebar {
+    position: static; top: auto;
+    height: auto; max-height: 42vh;
+    overflow-y: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--nav-border);
+  }
+
+  /* ── KPI cards shrink their minimum so more fit per row ── */
+  .kpi-row { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
+
+  /* ── Event list + results table stack vertically ── */
+  .workspace { grid-template-columns: 1fr; gap: 10px; padding: 10px 12px 16px; }
+  .event-panel { position: static; max-height: 240px; }
+  .results-panel { max-height: none; min-height: 360px; }
+
+  /* ── Wide data tables scroll inside their own wrapper, not the page ── */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Results toolbar + view tabs may wrap / scroll instead of overflowing ── */
+  .results-toolbar { flex-wrap: wrap; }
+  .view-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .view-tabs::-webkit-scrollbar { display: none; }
+
+  /* ── Override drawer becomes a full-width sheet ── */
+  .override-drawer { width: 100%; max-width: 100%; }
+}
+
+/* ─── Phone (≤ 480px): tighten spacing and grow tap targets ───────────────── */
+@media (max-width: 480px) {
+  :root { --bar-h: 48px; }
+
+  .topbar-brand { padding: 0 10px; }
+  .stage-nav { padding: 0 4px; gap: 2px; }
+
+  /* Comfortable tap targets on the primary controls (Apple/Google guidance) */
+  .stage-btn { min-height: 40px; padding: 0 10px; font-size: 12px; }
+  .results-toolbar button,
+  .toolbar-actions button,
+  .view-tabs button,
+  .drawer-header-actions button { min-height: 38px; }
+  .control-sidebar input,
+  .control-sidebar select,
+  .filter-flags button { min-height: 36px; }
+
+  .kpi-row { grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 6px; padding: 8px 10px 0; }
+  .sidebar-section { padding: 11px 11px; }
+  .control-sidebar { max-height: 38vh; }
+  .event-panel { max-height: 200px; }
+}
