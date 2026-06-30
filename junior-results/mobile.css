@@ -177,10 +177,29 @@
   .drawer-form select { min-height: 40px; font-size: 16px; }
   .drawer-header-actions { flex-wrap: wrap; gap: 6px; }
 
-  /* ----- Pipeline & Modeling: collapse residual grids / scale art - */
+  /* ----- Pipeline & Modeling ----------------------------------- */
   .pm-demo-grid, .pm-yoy-grid, .pm-fin-summary,
   .pm-cohort-nat-row, .pm-hero { grid-template-columns: 1fr !important; }
-  .pm-chart svg, .pm-flow svg, .stage-content svg.pm-scalable { max-width: 100%; height: auto; }
+
+  /* Qualification-flow Sankey is a wide (1400-unit) diagram. Instead of
+     shrinking it to phone width until every label is unreadable, render
+     it at a legible size and let just the diagram pan horizontally. The
+     legend sits outside the scroller so it never runs off-screen. */
+  .pm-flow-wrap { padding: 14px 12px; }
+  .pm-flow-scroll {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .pm-flow-svg { width: 1120px; min-width: 1120px; max-width: none; height: auto; }
+
+  /* Legend: stack the items and let each one wrap (was clipping at the
+     right edge because the rows were forced onto a single line). */
+  .pm-flow-legend { flex-direction: column; gap: 10px; }
+  .pm-legend-item { white-space: normal; align-items: flex-start; line-height: 1.35; }
+  .pm-legend-sw { margin-top: 2px; flex-shrink: 0; }
+
+  /* Secondary pipeline charts simply fit the width */
+  .pm-score-svg { max-width: 100%; height: auto; }
   .pm-table-wrap, .pm-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 

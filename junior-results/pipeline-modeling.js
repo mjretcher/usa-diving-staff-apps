@@ -1445,7 +1445,7 @@
     })();
 
     return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
-      banner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap">' + svg + legend + '</div>' + footnote + twoLens);
+      banner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap"><div class="pm-flow-scroll">' + svg + '</div>' + legend + '</div>' + footnote + twoLens);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */
