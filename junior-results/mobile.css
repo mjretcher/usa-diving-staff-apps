@@ -6,9 +6,10 @@
    horizontal overflow, filters reachable, every table scrollable.
    ================================================================ */
 
-/* The filter funnel button lives in the top bar but only shows on mobile */
+/* Mobile-only injected elements — hidden by default, shown in media queries */
 .mobile-filter-toggle { display: none; }
 .mobile-backdrop { display: none; }
+.mobile-stage-nav { display: none; }
 
 /* ───────────────────────────────────────────────────────────────
    TABLET & PHONE  (≤ 820px)
@@ -171,6 +172,69 @@
   /* Pipeline tables get the same horizontal-scroll treatment */
   .pm-table-wrap, .pm-scroll {
     overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+
+  /* ----- Stage navigation moves to a bottom bar ----------------- *
+     The top-bar tab strip is unusable when crushed into a sliver, so
+     on phones we hide it and present the six stages as a native-style
+     bottom navigation bar (injected by mobile-nav.js). It proxies to
+     the real (hidden) buttons, so all existing logic still runs.      */
+  #stageNav { display: none !important; }
+
+  .mobile-stage-nav {
+    display: flex;
+    position: fixed; left: 0; right: 0; bottom: 0;
+    z-index: 300;
+    background: #fff;
+    border-top: 1px solid rgba(15, 23, 42, .10);
+    box-shadow: 0 -4px 22px rgba(15, 23, 42, .12);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .mobile-stage-nav::-webkit-scrollbar { display: none; }
+
+  .msn-item {
+    flex: 1 0 auto; min-width: 60px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 8px 6px 7px;
+    border: none; background: none;
+    color: #5b6478;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 9.5px; font-weight: 600; letter-spacing: -.01em; line-height: 1;
+    position: relative; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    scroll-snap-align: center;
+    transition: color .14s ease;
+  }
+  .msn-item svg { width: 22px; height: 22px; }
+  .msn-item .msn-label { white-space: nowrap; }
+  .msn-item.active { color: var(--navy, #171F69); }
+  .msn-item.active::before {
+    content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px;
+    background: var(--red, #E31937); border-radius: 0 0 3px 3px;
+  }
+  .msn-item:active { color: var(--navy, #171F69); }
+  .msn-sep {
+    flex: 0 0 1px; align-self: center; height: 28px;
+    background: rgba(15, 23, 42, .12); margin: 0 3px;
+  }
+
+  /* Reserve room so the bottom bar never covers the last of the content */
+  body { padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Full-screen sheets must sit ABOVE the bottom bar */
+  .override-drawer { z-index: 380 !important; }
+
+  /* ----- Results context strip: stack title over the stat row ---- *
+     (Previously the title + four stats fought for one narrow row and
+      overlapped — the broken strip in the bug report.)               */
+  .results-context { flex-wrap: wrap; height: auto; align-items: stretch; }
+  .context-title-block { flex: 1 1 100%; min-width: 0; padding: 10px 14px 6px; }
+  .context-stat {
+    flex: 1 1 0; min-width: 0; padding: 8px 6px 10px;
+    border-top: 1px solid var(--line, rgba(255,255,255,.08));
   }
 }
 
