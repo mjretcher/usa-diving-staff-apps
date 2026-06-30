@@ -414,6 +414,70 @@
       }
     }
 
+    /* ── Zones → E/W/C advancement breakdown, by age group ────────────────
+       Splits the Zones field into four mutually-exclusive outcomes so the
+       "did not advance" number stops conflating very different situations:
+         • direct    — Zones top-3, advanced DIRECTLY to Junior Nationals
+                       (these bypass E/W/C, so co-occurrence wrongly reads them
+                        as "stopped" — this is what inflates the raw exit number)
+         • ewc_reg   — qualified to E/W/C (Zones 4–18) AND registered/competed
+         • ewc_noreg — qualified to E/W/C (Zones 4–18) but did NOT register
+         • not_qual  — did not place high enough to qualify (Zones 19+)
+       Placement is the deciding-round place per event/zone; non-displacing
+       (127) entries are excluded. Returned at BOTH the entry (event-
+       qualification) and diver (best-outcome) levels, per age group. 2026+
+       only (the era with the Zones-direct / E/W/C structure). */
+    out.advBreakdown = null;
+    if (Number(year) >= 2026
+        && out.stages.Zones.unique_athletes > 0
+        && out.stages.EWC.unique_athletes > 0) {
+      try {
+        const abFb = buildFiltersSql(2);
+        const flt = (pmState.excludeFutureChamps ? nonQualSql() : '') + abFb.sql;
+        const abSql =
+          "WITH z AS (" +
+          "  SELECT diver_id_dm, age_group, event_key, zone, place, " +
+          "    CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2 " +
+          "         WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr " +
+          "  FROM core.event_results " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + flt +
+          "    AND stage = 'Zones' AND place IS NOT NULL AND place <> 127" +
+          "), " +
+          "zd AS (SELECT diver_id_dm, age_group, event_key, place FROM (" +
+          "  SELECT diver_id_dm, age_group, event_key, place, rr, " +
+          "    MAX(rr) OVER (PARTITION BY event_key, zone) AS mrr FROM z) t WHERE rr = mrr), " +
+          "ereg AS (SELECT DISTINCT diver_id_dm, event_key FROM core.event_results " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'EWC'), " +
+          "ent AS (SELECT zd.age_group, zd.diver_id_dm, " +
+          "    CASE WHEN zd.place BETWEEN 1 AND 3 THEN 'direct' " +
+          "         WHEN zd.place BETWEEN 4 AND 18 AND er.diver_id_dm IS NOT NULL THEN 'ewc_reg' " +
+          "         WHEN zd.place BETWEEN 4 AND 18 THEN 'ewc_noreg' " +
+          "         ELSE 'not_qual' END AS bucket " +
+          "  FROM zd LEFT JOIN ereg er ON er.diver_id_dm = zd.diver_id_dm AND er.event_key = zd.event_key), " +
+          "divr AS (SELECT diver_id_dm, MAX(age_group) AS age_group, " +
+          "    CASE WHEN bool_or(bucket='direct') THEN 'direct' " +
+          "         WHEN bool_or(bucket='ewc_reg') THEN 'ewc_reg' " +
+          "         WHEN bool_or(bucket='ewc_noreg') THEN 'ewc_noreg' " +
+          "         ELSE 'not_qual' END AS bucket FROM ent GROUP BY diver_id_dm) " +
+          "SELECT 'ent' AS lvl, age_group, bucket, COUNT(*)::int AS n FROM ent GROUP BY age_group, bucket " +
+          "UNION ALL " +
+          "SELECT 'div' AS lvl, age_group, bucket, COUNT(*)::int AS n FROM divr GROUP BY age_group, bucket";
+        const ab = await neonQ(abSql, [year].concat(abFb.params));
+        const div = {}, ent = {}, ageSet = {};
+        (ab.rows || []).forEach(function(r){
+          const tgt = (r.lvl === 'div') ? div : ent;
+          const ag = r.age_group || 'Unspecified';
+          ageSet[ag] = true;
+          if (!tgt[ag]) tgt[ag] = { direct:0, ewc_reg:0, ewc_noreg:0, not_qual:0 };
+          if (tgt[ag][r.bucket] !== undefined) tgt[ag][r.bucket] = Number(r.n) || 0;
+        });
+        const ageOrder = Object.keys(ageSet).sort();
+        out.advBreakdown = { div: div, ent: ent, ageOrder: ageOrder };
+      } catch (e) {
+        out.advBreakdown = null;
+      }
+    }
+
     pmState.funnelCache[ck] = out;
     return out;
   }
@@ -1134,6 +1198,36 @@
     const projEwc    = proj ? (isEntries ? proj.ewcSlots  : proj.ewcDivers)  : 0;
     const projZon    = proj ? (isEntries ? proj.zonSlots  : proj.zonDivers)  : 0;
 
+    /* ── Zones → E/W/C advancement breakdown in the ACTIVE lens ──────────
+       Used to (a) split the "did not advance" number into its two real
+       reasons and (b) correct the Zones exit so divers who advanced DIRECT
+       to Junior Nationals (Zones top-3, bypassing E/W/C) are no longer
+       miscounted as "stopped". abByAge powers the dedicated breakdown card. */
+    const abSrc = data.advBreakdown ? (isEntries ? data.advBreakdown.ent : data.advBreakdown.div) : null;
+    const abOrder = data.advBreakdown ? data.advBreakdown.ageOrder : [];
+    let abTot = null;
+    if (abSrc) {
+      abTot = { direct:0, ewc_reg:0, ewc_noreg:0, not_qual:0 };
+      abOrder.forEach(function(ag){
+        const r = abSrc[ag] || {};
+        abTot.direct    += r.direct    || 0;
+        abTot.ewc_reg   += r.ewc_reg   || 0;
+        abTot.ewc_noreg += r.ewc_noreg || 0;
+        abTot.not_qual  += r.not_qual  || 0;
+      });
+    }
+    // Correct the Zones-gate exit: genuine non-advancers only (qualified-but-
+    // unregistered + did-not-qualify). The direct-to-Nationals top-3 are shown
+    // flowing into the projected basin instead, so they must leave the exit.
+    const exitSplit = {};   // gate index -> { noreg, notqual } for the relabeled tributary
+    if (abTot) {
+      const zi = realStages.indexOf('Zones');
+      if (zi >= 0 && zi < realStages.length - 1) {
+        EXIT[zi] = abTot.ewc_noreg + abTot.not_qual;
+        exitSplit[zi] = { noreg: abTot.ewc_noreg, notqual: abTot.not_qual };
+      }
+    }
+
     /* ---- is the deepest stage still being contested? (e.g. E/W/C mid-meet) ---- */
     const deepStageName = realStages[realStages.length - 1];
     const deepInProgress = stageStatus(year, deepStageName, true) === 'in_progress';
@@ -1325,19 +1419,19 @@
         if (hEwc >= 18) svg += '<text class="pm-flow-advlabel" x="' + midx + '" y="' + (Y0 + Math.min(hEwc/2 + 5, hEwc - 6)) +
                '" text-anchor="middle" fill="#0d7fa6">\u2248 ' + fmtNum(projEwc) + ' top-3</text>';
       }
-      // (b) Zones top-3 direct — rises from a lower lane into the basin (bypasses E/W/C)
+      // (b) Zones top-3 direct — leaves the Zones post and arcs into the basin,
+      //     passing BEHIND the E/W/C node (drawn before the posts) = a true bypass.
       if (projZon > 0) {
         const hz = hOf(projZon);
-        const srcX = x2 - step * 0.30;
-        const srcW = 12;
-        const ySrc = yEnter;
-        const yIn = Y0 + hEwc;                      // stacks below the E/W/C inflow inside the basin
-        svg += '<path d="' + ribbon(srcX + srcW, ySrc, ySrc + hz, x2, yIn, yIn + hz) +
-               '" fill="url(#pmFlowEnter)" opacity="0.6" stroke="#56a8da" stroke-width="1" stroke-dasharray="3 4"/>';
-        svg += '<rect x="' + srcX + '" y="' + ySrc + '" width="' + srcW + '" height="' + hz + '" rx="3" fill="#8fc3ea" opacity="0.9"/>';
-        const ly = ySrc + Math.max(hz/2, 9);
-        svg += '<text class="pm-flow-enter-n" x="' + (srcX - 9) + '" y="' + (ly - 2) + '" text-anchor="end">\u2191 \u2248 ' + fmtNum(projZon) + ' direct</text>';
-        svg += '<text class="pm-flow-enter-sub" x="' + (srcX - 9) + '" y="' + (ly + 15) + '" text-anchor="end">Zones top-3 \u00b7 bypass E/W/C</text>';
+        const zi = realStages.indexOf('Zones');
+        const xZr  = (zi >= 0 ? gateLeft(zi) + wNode : x1);
+        const yStub = (zi >= 0 ? Y0 + hOf(A[zi]) + hOf(EXIT[zi]) : Y0 + hEwc);
+        const xBasin = gateLeft(realStages.length);
+        const yIn = Y0 + hEwc;                       // stacks below the E/W/C inflow in the basin
+        svg += '<path d="' + ribbon(xZr, yStub, yStub + hz, xBasin, yIn, yIn + hz) +
+               '" fill="url(#pmFlowEnter)" opacity="0.5" stroke="#56a8da" stroke-width="1" stroke-dasharray="3 4"/>';
+        svg += '<text class="pm-flow-enter-n" x="' + (xBasin - 8) + '" y="' + (yIn + hz + 14) + '" text-anchor="end">\u2248 ' + fmtNum(projZon) + ' direct</text>';
+        svg += '<text class="pm-flow-enter-sub" x="' + (xBasin - 8) + '" y="' + (yIn + hz + 30) + '" text-anchor="end">Zones top-3 \u00b7 bypass E/W/C</text>';
       }
     } else if (pendingStage) {
       const li = realStages.length - 1;
@@ -1363,9 +1457,19 @@
              '" rx="3" fill="#e31937" opacity="0.92"/>';
       // labels (always on white, ADA-safe)
       const ly = yExit + Math.max(he / 2, 9);
-      svg += '<text class="pm-flow-exit-n" x="' + (sinkX + sinkW + 9) + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' divers</text>';
-      svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">stopped after ' + STAGE_SHORT[realStages[i]] +
-             ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + '</text>';
+      svg += '<text class="pm-flow-exit-n" x="' + (sinkX + sinkW + 9) + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' ' + UNIT + '</text>';
+      if (exitSplit[i]) {
+        // corrected Zones exit — direct-to-Nationals removed; split by reason
+        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">did not advance to ' + STAGE_SHORT['EWC'] +
+               ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + ' of Zones</text>';
+        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 31) + '" style="fill:#b45309">' +
+               fmtNum(exitSplit[i].noreg) + ' qualified, didn\u2019t register</text>';
+        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 47) + '" style="fill:#5f6062">' +
+               fmtNum(exitSplit[i].notqual) + ' didn\u2019t place high enough</text>';
+      } else {
+        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">stopped after ' + STAGE_SHORT[realStages[i]] +
+               ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + '</text>';
+      }
     }
 
     /* ---- late-entry inflows (pale blue), rising from a lower lane into the next post ---- */
@@ -1589,8 +1693,56 @@
         '</div>';
     })();
 
+    /* ===== Advancement breakdown by age group (Zones → E/W/C) =====
+       The committee-facing answer to "why didn't they advance": qualified-but-
+       didn't-register vs didn't-place-high-enough, per age group. Active lens. */
+    let advCard = '';
+    if (abSrc && abTot && (abTot.direct + abTot.ewc_reg + abTot.ewc_noreg + abTot.not_qual) > 0) {
+      const BK = [
+        { key:'direct',    short:'Direct to Nationals',        label:'Advanced direct to Jr Nationals (Zones top-3)', color:'#171f69' },
+        { key:'ewc_reg',   short:'Advanced to E/W/C',          label:'Advanced to E/W/C \u2014 registered',           color:'#009ac7' },
+        { key:'ewc_noreg', short:'Qualified, didn\u2019t register', label:'Qualified to E/W/C \u2014 did NOT register',     color:'#d97706' },
+        { key:'not_qual',  short:'Didn\u2019t qualify',             label:'Did not place high enough to qualify',          color:'#9aa3b2' },
+      ];
+      const rowHtml = function(name, r, isTotal){
+        const tot = (r.direct||0)+(r.ewc_reg||0)+(r.ewc_noreg||0)+(r.not_qual||0);
+        if (!tot) return '';
+        let bar = '<div style="display:flex;height:20px;border-radius:5px;overflow:hidden;background:#eef1f8">';
+        BK.forEach(function(b){ const v=r[b.key]||0; if(!v) return; bar += '<div title="' + escapeHtml(b.short+': '+v) + '" style="width:' + (v/tot*100) + '%;background:' + b.color + '"></div>'; });
+        bar += '</div>';
+        const cells = BK.map(function(b){ const v=r[b.key]||0; return '<td style="text-align:center;font-family:JetBrains Mono,monospace;font-size:13px;color:' + (v?b.color:'#b7bdc9') + ';font-weight:' + (v?'700':'400') + '">' + fmtNum(v) + '</td>'; }).join('');
+        const tdTop = isTotal ? 'border-top:2px solid #171f69;' : 'border-top:1px solid #eef1f8;';
+        return '<tr>' +
+          '<td style="' + tdTop + 'font-family:Inter,sans-serif;font-weight:700;color:#171f69;font-size:13.5px;white-space:nowrap;padding:8px 12px 8px 0">' + escapeHtml(name) + '</td>' +
+          '<td style="' + tdTop + 'width:42%;padding:8px 14px 8px 0">' + bar + '</td>' +
+          BK.map(function(b){ const v=r[b.key]||0; return '<td style="' + tdTop + 'text-align:center;font-family:JetBrains Mono,monospace;font-size:13px;color:' + (v?b.color:'#b7bdc9') + ';font-weight:' + (v?'700':'400') + '">' + fmtNum(v) + '</td>'; }).join('') +
+          '<td style="' + tdTop + 'text-align:center;font-family:JetBrains Mono,monospace;font-size:13px;color:#5f6062;font-weight:700">' + fmtNum(tot) + '</td>' +
+        '</tr>';
+      };
+      let rows = '';
+      abOrder.forEach(function(ag){ rows += rowHtml(ag, abSrc[ag] || {}, false); });
+      rows += rowHtml('All age groups', abTot, true);
+      const legendHtml = BK.map(function(b){ return '<span style="display:inline-flex;align-items:center;gap:6px;font-family:Inter,sans-serif;font-size:12px;color:#2d3a4a;margin-right:16px"><span style="width:11px;height:11px;border-radius:3px;background:' + b.color + '"></span>' + escapeHtml(b.label) + '</span>'; }).join('');
+      const noregTot = abTot.ewc_noreg, notqualTot = abTot.not_qual, stoppedTot = noregTot + notqualTot;
+      advCard =
+        '<div style="margin:18px 0 6px;border:1px solid #e2e5ef;border-radius:12px;padding:18px 20px;background:#fff">' +
+          '<div style="font-family:Barlow Condensed,Inter,sans-serif;font-weight:700;font-size:20px;letter-spacing:.01em;color:#171f69;text-transform:uppercase">Where the Zones field went \u2014 by age group</div>' +
+          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 14px;line-height:1.5">Of the divers who stopped after Zones, <strong style="color:#b45309">' + fmtNum(noregTot) + ' qualified to E/W/C but did not register</strong> (recoverable \u2014 they earned the spot) and <strong style="color:#5f6062">' + fmtNum(notqualTot) + ' did not place high enough to qualify</strong> (a competitive cutoff) \u2014 ' + fmtNum(stoppedTot) + ' total. Divers who placed top-3 advanced <em>directly</em> to Junior Nationals and are not "stopped." Counting ' + (isEntries ? 'event-qualifications' : 'unique divers') + ' \u00b7 ' + year + ' \u00b7 non-displacing exhibition entries excluded.</div>' +
+          '<div style="overflow-x:auto">' +
+          '<table style="width:100%;border-collapse:collapse;min-width:640px">' +
+            '<thead><tr>' +
+              '<th style="text-align:left;font-family:Inter,sans-serif;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#5f6062;padding-bottom:8px">Age group</th>' +
+              '<th style="padding-bottom:8px"></th>' +
+              BK.map(function(b){ return '<th style="text-align:center;font-family:Inter,sans-serif;font-size:11px;color:' + b.color + ';padding:0 4px 8px;font-weight:700">' + escapeHtml(b.short) + '</th>'; }).join('') +
+              '<th style="text-align:center;font-family:Inter,sans-serif;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#5f6062;padding-bottom:8px">Total</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody>' +
+          '</table></div>' +
+          '<div style="margin-top:14px">' + legendHtml + '</div>' +
+        '</div>';
+    }
+
     return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
-      banner + projBanner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap"><div class="pm-flow-scroll">' + svg + '</div>' + legend + '</div>' + footnote + twoLens);
+      banner + projBanner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap"><div class="pm-flow-scroll">' + svg + '</div>' + legend + '</div>' + footnote + advCard + twoLens);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */
