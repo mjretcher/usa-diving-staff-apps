@@ -11,21 +11,41 @@
   /* Never let the page scroll sideways on a phone */
   html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
 
-  /* ── Top bar: keep it one row, let the stage tabs scroll horizontally ── */
-  .topbar-brand { min-width: 0; padding: 0 12px; flex-shrink: 0; }
-  .stage-nav {
+  /* ── Top bar becomes TWO rows so the stage tabs are always reachable ──
+        Row 1: brand + actions (Overrides).  Row 2: full-width scrolling tabs.
+        Achieved with flex-wrap + order so the tabs drop to their own line
+        instead of being crushed between the brand and the Overrides button. */
+  .app-topbar {
+    height: auto;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .topbar-brand {
+    order: 1;
     flex: 1 1 auto; min-width: 0;
+    padding: 0 12px;
+    overflow: hidden;          /* let the brand shrink instead of shoving actions off-screen */
+  }
+  .topbar-actions {
+    order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .stage-nav {
+    order: 3;
+    flex: 0 0 100%; width: 100%;
+    height: 46px; padding: 0 8px;
+    border-top: 1px solid var(--nav-border);
     flex-wrap: nowrap;
     overflow-x: auto; overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
   .stage-nav::-webkit-scrollbar { display: none; }
-  .stage-btn { flex-shrink: 0; }
-  .topbar-actions { flex-shrink: 0; }
+  .stage-btn { flex-shrink: 0; height: 36px; }
 
-  /* ── Body collapses to a single column ── */
-  .app-body { grid-template-columns: 1fr; }
+  /* The fixed bar is now ~52 (row 1) + 46 (row 2) tall — push content clear */
+  .app-body { grid-template-columns: 1fr; padding-top: 98px; }
 
   /* ── Filter sidebar stacks on top: stays visible (per standard) but is
         kept compact with its own scroll so it never buries the data ── */
@@ -53,14 +73,12 @@
   .view-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .view-tabs::-webkit-scrollbar { display: none; }
 
-  /* ── Override drawer becomes a full-width sheet ── */
-  .override-drawer { width: 100%; max-width: 100%; }
+  /* ── Override drawer becomes a full-width sheet, below the two-row bar ── */
+  .override-drawer { width: 100%; max-width: 100%; top: 98px; }
 }
 
 /* ─── Phone (≤ 480px): tighten spacing and grow tap targets ───────────────── */
 @media (max-width: 480px) {
-  :root { --bar-h: 48px; }
-
   .topbar-brand { padding: 0 10px; }
   .stage-nav { padding: 0 4px; gap: 2px; }
 
