@@ -4,7 +4,42 @@ window.EWC_2026_RESULTS = {"meta":{"stage":"E/W/C","meetsLoaded":["East","West",
 (function(){
   if (!window.JUNIOR_RESULTS_DATA) return;
   var D = window.JUNIOR_RESULTS_DATA;
-  D.results = (D.results || []).concat(window.EWC_2026_RESULTS.results);
+  var rows = (window.EWC_2026_RESULTS.results) || [];
+  var ED = window.USAD_EWC_DATA || {};
+  var norm = function(s){ return String(s||'').toLowerCase().replace(/[^a-z]/g,''); };
+  var already = {};
+  (ED.alreadyNatQual || []).forEach(function(a){ already[norm(a.name)] = true; });
+
+  // Normalize stage to the engine's canonical 'EWC' (the file ships 'E/W/C',
+  // which the recalc dispatch and stage filter do not recognise) and flag the
+  // already-qualified athletes so they compete non-displacing (do not consume
+  // an E/W/C → Nationals slot). Foreign athletes already carry place 127, which
+  // the engine auto-detects as non-displacing.
+  rows.forEach(function(r){
+    r.stage = 'EWC';
+    if (already[norm((r.first||'') + (r.last||''))]) r.alreadyNatQualEWC = true;
+  });
+
+  // Average-score qualifying bar (Art.303(b)(3)(ii)): a 4th–6th finisher also
+  // qualifies if their score meets the average of the top-3 across the three
+  // meets. Computed per event (eventKey) by pooling each meet's top-3 ELIGIBLE
+  // (non-displacing excluded) deciding-round scores, then averaging.
+  var byKey = {};
+  rows.forEach(function(r){ (byKey[r.eventKey] = byKey[r.eventKey] || []).push(r); });
+  Object.keys(byKey).forEach(function(k){
+    var byMeet = {};
+    byKey[k].forEach(function(r){ (byMeet[r.ewcMeet] = byMeet[r.ewcMeet] || []).push(r); });
+    var pooled = [];
+    Object.keys(byMeet).forEach(function(m){
+      var elig = byMeet[m].filter(function(r){ return Number(r.placeNumber) !== 127 && !r.alreadyNatQualEWC && r.score != null; })
+                          .sort(function(a,b){ return (a.placeNumber||9999) - (b.placeNumber||9999); });
+      elig.slice(0,3).forEach(function(r){ pooled.push(Number(r.score) || 0); });
+    });
+    var thr = pooled.length ? (pooled.reduce(function(a,b){ return a+b; }, 0) / pooled.length) : null;
+    byKey[k].forEach(function(r){ r.officialThresholdScore = thr; });
+  });
+
+  D.results = (D.results || []).concat(rows);
   if (D.meta && Array.isArray(D.meta.stageStatus)) {
     var entry = D.meta.stageStatus.find(function(s){ return s.stage === 'E/W/C'; });
     if (entry) {
@@ -12,5 +47,5 @@ window.EWC_2026_RESULTS = {"meta":{"stage":"E/W/C","meetsLoaded":["East","West",
       entry.description = 'East/West/Central loaded (' + window.EWC_2026_RESULTS.meta.rows + ' rows, ' + window.EWC_2026_RESULTS.meta.athletes + ' athletes)';
     }
   }
-  console.log('[ewc-2026] merged', window.EWC_2026_RESULTS.results.length, 'rows from East/West/Central into JUNIOR_RESULTS_DATA');
+  console.log('[ewc-2026] merged', rows.length, 'rows from East/West/Central into JUNIOR_RESULTS_DATA (stage normalized to EWC)');
 })();

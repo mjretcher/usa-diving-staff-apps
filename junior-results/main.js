@@ -674,6 +674,7 @@ function applyOverrides(row, lookup) {
   if (r.foreignDeclared)  ndReasons.push('Foreign athlete');
   if (r.webpointNonUsEffective && !r.foreignDeclared) ndReasons.push('Webpoint non-US');
   if (r.dualOtherCountry) ndReasons.push('Dual — competed for another federation');
+  if (r.alreadyNatQualEWC) ndReasons.push('Already qualified to Junior Nationals');
 
   r.ghostAdvances = Boolean(r.foreignDeclared || r.webpointNonUsEffective || r.hps || r.dualOtherCountry);
 

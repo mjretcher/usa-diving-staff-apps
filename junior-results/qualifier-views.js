@@ -171,14 +171,17 @@
   }
 
   function ewcQualifiers(group) {
+    // Prefer the actual E/W/C RESULTS for the meet (now loaded and processed by
+    // recalcEWC). Fall back to the projected entry field (Zone places 4–18) only
+    // when results aren't present (e.g. pre-championship).
+    const results = allResults().filter(r => r.stage === 'EWC' && r.ewcMeet === group);
+    if (results.length) return results;
     const zones = EWC_ZONES[group] || [];
-    // The E/W/C field is Zone places 4–18 only. Places 1–3 (and replacement
-    // bump-ins) advance DIRECT to Junior Nationals and do not compete at E/W/C,
-    // so they are excluded here — matching the Zones view's E/W/C count.
     return allResults().filter(r =>
       r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals && zones.includes(r.zone)
     );
   }
+  function ewcHasResults() { return allResults().some(r => r.stage === 'EWC'); }
 
   function nationalQualifiers() {
     return allResults().filter(r => r.advancesToNationals);
@@ -775,17 +778,30 @@
     const ctx       = $('resultsContext');
     if (!tableWrap) return;
 
-    // Context — this view shows the field that QUALIFIED INTO E/W/C from the
-    // Zone Championships (Zone places 4–18), i.e. the projected entry list.
-    // Final E/W/C placement results are not loaded into this view.
-    const allEwcRows = allResults().filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals);
-    if (ctx) ctx.innerHTML = `
-      <div class="context-title-block">
-        <strong>E/W/C — Qualified Field (from Zones) · ${qv.ewcMode==='meet'?'Browse by meet':'Browse by event'}</strong>
-        <span>Zone places 4–18 entering East / West / Central · final E/W/C results are not shown here</span>
-      </div>
-      <div class="context-stat"><strong>${allEwcRows.length}</strong> qualified into E/W/C</div>
-      <div class="context-stat"><strong>${allEwcRows.filter(r=>r.nonDisplacing||r._nonDispAtEWC).length}</strong> non-displacing</div>`;
+    const hasResults = ewcHasResults();
+    if (hasResults) {
+      const ewcAll = allResults().filter(r => r.stage === 'EWC');
+      const natl   = ewcAll.filter(r => r.advancesToNationals).length;
+      const nd     = ewcAll.filter(r => r.nonDisplacing || r._nonDispAtEWC).length;
+      const decl   = ewcAll.filter(r => r.declaredNotAttending).length;
+      if (ctx) ctx.innerHTML = `
+        <div class="context-title-block">
+          <strong>E/W/C — Results & Qualifiers · ${qv.ewcMode==='meet'?'Browse by meet':'Browse by event'}</strong>
+          <span>Top-3 per event advance direct; 4th–6th also advance if they meet the average-score bar; a top-3 decline invites the next up</span>
+        </div>
+        <div class="context-stat"><strong>${natl}</strong> → Junior Nationals</div>
+        <div class="context-stat"><strong>${decl}</strong> declared not attending</div>
+        <div class="context-stat"><strong>${nd}</strong> non-displacing</div>`;
+    } else {
+      const allEwcRows = allResults().filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals);
+      if (ctx) ctx.innerHTML = `
+        <div class="context-title-block">
+          <strong>E/W/C — Qualified Field (from Zones) · ${qv.ewcMode==='meet'?'Browse by meet':'Browse by event'}</strong>
+          <span>Zone places 4–18 entering East / West / Central · final E/W/C results are not shown here</span>
+        </div>
+        <div class="context-stat"><strong>${allEwcRows.length}</strong> qualified into E/W/C</div>
+        <div class="context-stat"><strong>${allEwcRows.filter(r=>r.nonDisplacing||r._nonDispAtEWC).length}</strong> non-displacing</div>`;
+    }
 
     renderEWCSidebar();
     renderEWCBody(tableWrap);
