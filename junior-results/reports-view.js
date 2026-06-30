@@ -3489,25 +3489,43 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     const fb = rptFiltersToSQL(2);
     // ── 1) Stage-level reconciliation ─────────────────────────────
     try {
-      // Qualified (Neon-computed):
-      //   To Zones from Regionals: athletes with place ≤ 16 at Regionals (approximate — actual rule varies by age group)
-      //   To E/W/C (2026+): athletes with place 4-18 at Zones OR top-3 at Zones (top-3 = direct to Nationals path)
-      //   To Nationals (2021-25): athletes with place 1-3 at Zones (top-3 direct)
-      //   To Nationals (2026+): athletes with top placement at E/W/C (best estimate: place ≤ 3 at E/W/C, varies by event)
+      // Qualified (Neon-computed). Placement is taken on the DECIDING ROUND of
+      // each event at each meet (Final if held, otherwise the latest round
+      // contested) — NOT the best place across all rounds — so these match the
+      // official qualifier rule and the Pipeline projection.
+      //   To E/W/C (2026+): place 4-18 at Zones; top-3 at Zones = direct to Nationals
+      //   To Nationals (2021-25): place 1-3 at Zones (top-3 direct)
+      //   To Nationals (2026+): top-3 by deciding-round placement at E/W/C (per event, per meet)
       const isNewSystem = y >= 2026;
 
       const qualifiedQ = await neonQuery(`
-        WITH zone_best AS (
-          SELECT diver_id_dm, event_key, MIN(place) AS p
+        WITH zone_dec AS (
+          SELECT diver_id_dm, event_key, place,
+            CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
+                 WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results
           WHERE year = $1 AND is_junior_circuit AND stage = 'Zones' AND place IS NOT NULL${fb.sql}
-          GROUP BY diver_id_dm, event_key
         ),
-        ewc_best AS (
-          SELECT diver_id_dm, event_key, MIN(place) AS p
+        zone_best AS (
+          SELECT diver_id_dm, event_key, place AS p
+          FROM (SELECT diver_id_dm, event_key, place, rr,
+                       MAX(rr) OVER (PARTITION BY event_key, zone) AS mrr
+                FROM zone_dec) z
+          WHERE rr = mrr
+        ),
+        ewc_dec AS (
+          SELECT diver_id_dm, event_key, place,
+            CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
+                 WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results
           WHERE year = $1 AND is_junior_circuit AND stage = 'EWC' AND place IS NOT NULL${fb.sql}
-          GROUP BY diver_id_dm, event_key
+        ),
+        ewc_best AS (
+          SELECT diver_id_dm, event_key, place AS p
+          FROM (SELECT diver_id_dm, event_key, place, rr,
+                       MAX(rr) OVER (PARTITION BY event_key, ewc_meet) AS mrr
+                FROM ewc_dec) e
+          WHERE rr = mrr
         )
         SELECT
           (SELECT COUNT(DISTINCT diver_id_dm)::int FROM zone_best) AS qualified_for_ewc_or_nat,

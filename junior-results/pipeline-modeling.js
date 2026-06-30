@@ -350,6 +350,70 @@
       out.entryTransitions[r.from_stage + '->' + r.to_stage] = Number(r.advanced) || 0;
     });
 
+    /* ── Projected Junior Nationals (computed by placement) ───────────────
+       When the championship has not been scored yet — a new-system season
+       (2026+) where E/W/C is complete but Nationals has no results — the
+       qualifier field is still KNOWABLE from the finalized upstream results.
+       We compute it with the SAME rule the Nationals tab / official computed
+       list uses: top-3 by placement on the DECIDING round (the latest round
+       contested for that event at that meet — Final if held, otherwise the
+       highest round present) per event, per meet, at E/W/C, plus the Zones
+       top-3 that advance DIRECTLY (bypassing E/W/C). Filters mirror the river
+       bars exactly so the projection is a true subset of the E/W/C field.
+       Preliminary by design — placement only; no registration-dependent
+       adjustments and no pre-qualified / skip-stage adds. Null on any failure
+       so the section falls back to the plain "results pending" ghost. */
+    out.projectedNationals = null;
+    if (Number(year) >= 2026
+        && out.stages.Nationals.unique_athletes === 0
+        && out.stages.EWC.unique_athletes > 0) {
+      try {
+        const pjFb = buildFiltersSql(2);
+        const baseWhere =
+          "year = $1 AND " + whereJrCircuit() +
+          (pmState.excludeFutureChamps ? nonQualSql() : '') + pjFb.sql +
+          " AND place IS NOT NULL";
+        const projSql =
+          "WITH base AS (" +
+          "  SELECT stage, event_key, ewc_meet, zone, diver_id_dm, place, " +
+          "    CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2 " +
+          "         WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr " +
+          "  FROM core.event_results WHERE " + baseWhere +
+          "), " +
+          "ewc_r AS (SELECT diver_id_dm, event_key, place, rr, " +
+          "    MAX(rr) OVER (PARTITION BY event_key, ewc_meet) AS mrr " +
+          "  FROM base WHERE stage = 'EWC'), " +
+          "ewc_q AS (SELECT DISTINCT diver_id_dm, event_key FROM ewc_r " +
+          "  WHERE rr = mrr AND place BETWEEN 1 AND 3), " +
+          "zon_r AS (SELECT diver_id_dm, event_key, place, rr, " +
+          "    MAX(rr) OVER (PARTITION BY event_key, zone) AS mrr " +
+          "  FROM base WHERE stage = 'Zones'), " +
+          "zon_q AS (SELECT DISTINCT diver_id_dm, event_key FROM zon_r " +
+          "  WHERE rr = mrr AND place BETWEEN 1 AND 3) " +
+          "SELECT " +
+          "  (SELECT COUNT(*)::int FROM ewc_q) AS ewc_slots, " +
+          "  (SELECT COUNT(DISTINCT diver_id_dm)::int FROM ewc_q) AS ewc_divers, " +
+          "  (SELECT COUNT(*)::int FROM zon_q) AS zon_slots, " +
+          "  (SELECT COUNT(DISTINCT diver_id_dm)::int FROM zon_q) AS zon_divers, " +
+          "  (SELECT COUNT(*)::int FROM (SELECT diver_id_dm, event_key FROM ewc_q " +
+          "    UNION SELECT diver_id_dm, event_key FROM zon_q) u) AS proj_slots, " +
+          "  (SELECT COUNT(DISTINCT diver_id_dm)::int FROM (SELECT diver_id_dm FROM ewc_q " +
+          "    UNION SELECT diver_id_dm FROM zon_q) v) AS proj_divers";
+        const pj = await neonQ(projSql, [year].concat(pjFb.params));
+        const pr = (pj.rows && pj.rows[0]) || {};
+        out.projectedNationals = {
+          ewcSlots:   Number(pr.ewc_slots)  || 0,
+          ewcDivers:  Number(pr.ewc_divers) || 0,
+          zonSlots:   Number(pr.zon_slots)  || 0,
+          zonDivers:  Number(pr.zon_divers) || 0,
+          projSlots:  Number(pr.proj_slots) || 0,
+          projDivers: Number(pr.proj_divers)|| 0,
+        };
+      } catch (e) {
+        out.projectedNationals = null;
+      }
+    }
+
     pmState.funnelCache[ck] = out;
     return out;
   }
@@ -1061,6 +1125,15 @@
     const fullCircuitCost = STAGE_ORDER.reduce(function(a,s){ return a + (fees[s] || 0); }, 0);
     const nationalsHasData = has('Nationals');
 
+    /* Projected Junior Nationals field (only when 'Nationals' is the pending
+       stage and the placement-derived projection was computed). projActive is
+       the DISTINCT union in the active lens; projEwc / projZon are the two
+       feeder paths (E/W/C top-3 and Zones direct top-3) used to size ribbons. */
+    const proj = (pendingStage === 'Nationals') ? (data.projectedNationals || null) : null;
+    const projActive = proj ? (isEntries ? proj.projSlots : proj.projDivers) : 0;
+    const projEwc    = proj ? (isEntries ? proj.ewcSlots  : proj.ewcDivers)  : 0;
+    const projZon    = proj ? (isEntries ? proj.zonSlots  : proj.zonDivers)  : 0;
+
     /* ---- is the deepest stage still being contested? (e.g. E/W/C mid-meet) ---- */
     const deepStageName = realStages[realStages.length - 1];
     const deepInProgress = stageStatus(year, deepStageName, true) === 'in_progress';
@@ -1093,6 +1166,14 @@
         '<div class="pm-kpi-value">' + fmtNum(N[deepStage]) + '</div>' +
         '<div class="pm-kpi-sub">' + (deepInProgress ? 'in progress \u00b7 results still arriving' : (pendingStage ? 'deepest stage completed so far' : (isEntries ? 'championship event entries' : 'the championship field'))) + '</div>' +
       '</div>';
+    if (proj && projActive > 0) {
+      kpiHtml +=
+        '<div class="pm-kpi pool">' +
+          '<div class="pm-kpi-label">Projected to Jr Nationals</div>' +
+          '<div class="pm-kpi-value">\u2248 ' + fmtNum(projActive) + '</div>' +
+          '<div class="pm-kpi-sub">by placement \u00b7 ' + fmtNum(projEwc) + ' E/W/C top-3 + ' + fmtNum(projZon) + ' Zones direct \u00b7 not final</div>' +
+        '</div>';
+    }
     if (bigIdx >= 0 && bigVal > 0) {
       kpiHtml +=
         '<div class="pm-kpi accent">' +
@@ -1225,8 +1306,40 @@
       }
     }
 
-    /* ---- projected (pending) flow into the ghost basin ---- */
-    if (pendingStage) {
+    /* ---- projected (pending) flow into the ghost basin ----
+       Two feeder paths, both dashed/ghost to signal "projected, not final":
+       (a) E/W/C top-3 advancing from the deepest real stage, and
+       (b) Zones top-3 that go DIRECT, bypassing E/W/C (a stream into the basin).
+       Sized to the real placement-derived projection — never a cosmetic guess.
+       Falls back to the original faint ghost ribbon when no projection exists. */
+    if (pendingStage && proj && (projEwc > 0 || projZon > 0)) {
+      const li = realStages.length - 1;            // deepest real stage (E/W/C)
+      const x1 = gateLeft(li) + wNode;
+      const x2 = gateLeft(li + 1);
+      const hEwc = projEwc > 0 ? hOf(projEwc) : 0;
+      // (a) E/W/C top-3 advancing current (ghost)
+      if (projEwc > 0) {
+        svg += '<path d="' + ribbon(x1, Y0, Y0 + hEwc, x2, Y0, Y0 + hEwc) +
+               '" fill="url(#pmFlowCurrent)" opacity="0.32" stroke="#0d7fa6" stroke-width="1" stroke-dasharray="3 4"/>';
+        const midx = (x1 + x2) / 2;
+        if (hEwc >= 18) svg += '<text class="pm-flow-advlabel" x="' + midx + '" y="' + (Y0 + Math.min(hEwc/2 + 5, hEwc - 6)) +
+               '" text-anchor="middle" fill="#0d7fa6">\u2248 ' + fmtNum(projEwc) + ' top-3</text>';
+      }
+      // (b) Zones top-3 direct — rises from a lower lane into the basin (bypasses E/W/C)
+      if (projZon > 0) {
+        const hz = hOf(projZon);
+        const srcX = x2 - step * 0.30;
+        const srcW = 12;
+        const ySrc = yEnter;
+        const yIn = Y0 + hEwc;                      // stacks below the E/W/C inflow inside the basin
+        svg += '<path d="' + ribbon(srcX + srcW, ySrc, ySrc + hz, x2, yIn, yIn + hz) +
+               '" fill="url(#pmFlowEnter)" opacity="0.6" stroke="#56a8da" stroke-width="1" stroke-dasharray="3 4"/>';
+        svg += '<rect x="' + srcX + '" y="' + ySrc + '" width="' + srcW + '" height="' + hz + '" rx="3" fill="#8fc3ea" opacity="0.9"/>';
+        const ly = ySrc + Math.max(hz/2, 9);
+        svg += '<text class="pm-flow-enter-n" x="' + (srcX - 9) + '" y="' + (ly - 2) + '" text-anchor="end">\u2191 \u2248 ' + fmtNum(projZon) + ' direct</text>';
+        svg += '<text class="pm-flow-enter-sub" x="' + (srcX - 9) + '" y="' + (ly + 15) + '" text-anchor="end">Zones top-3 \u00b7 bypass E/W/C</text>';
+      }
+    } else if (pendingStage) {
       const li = realStages.length - 1;
       const x1 = gateLeft(li) + wNode;
       const x2 = gateLeft(li + 1);
@@ -1311,15 +1424,28 @@
       const i = realStages.length;
       const x = gateLeft(i);
       const cx = cxOf(i);
-      const gh = 132;
-      svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + gh + '" rx="6" fill="#eef1f8" stroke="#9db8d6" stroke-width="1.5" stroke-dasharray="4 5"/>';
       const tlp = titleLines(pendingStage);
-      if (tlp[0]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tlp[0]) + '</text>';
-      if (tlp[1]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tlp[1]) + '</text>';
-      svg += '<text class="pm-flow-pending" x="' + cx + '" y="94" text-anchor="middle">Results</text>';
-      svg += '<text class="pm-flow-pending" x="' + cx + '" y="114" text-anchor="middle">pending</text>';
+      if (proj && projActive > 0) {
+        // Sized to the two feeder paths so the dashed inflows fill it; labeled
+        // with the DISTINCT projected field in the active lens.
+        const gh = Math.max(Math.min(hOf(projEwc + projZon), RIVER_H), 100);
+        svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + gh + '" rx="6" fill="#eef3fb" stroke="#009ac7" stroke-width="1.5" stroke-dasharray="4 5"/>';
+        svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="4" rx="2" fill="#009ac7" opacity="0.65"/>';
+        if (tlp[0]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tlp[0]) + '</text>';
+        if (tlp[1]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tlp[1]) + '</text>';
+        svg += '<text class="pm-flow-count" x="' + cx + '" y="94" text-anchor="middle" fill="#0d7fa6">\u2248 ' + fmtNum(projActive) + '</text>';
+        svg += '<text class="pm-flow-count-unit" x="' + cx + '" y="114" text-anchor="middle">projected ' + UNIT + '</text>';
+        svg += '<text x="' + cx + '" y="133" text-anchor="middle" font-family="Inter,sans-serif" font-size="11" font-weight="700" fill="#0d7fa6">by placement \u00b7 not final</text>';
+      } else {
+        const gh = 132;
+        svg += '<rect x="' + x + '" y="' + Y0 + '" width="' + wNode + '" height="' + gh + '" rx="6" fill="#eef1f8" stroke="#9db8d6" stroke-width="1.5" stroke-dasharray="4 5"/>';
+        if (tlp[0]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="34" text-anchor="middle">' + escapeHtml(tlp[0]) + '</text>';
+        if (tlp[1]) svg += '<text class="pm-flow-stage ghost" x="' + cx + '" y="54" text-anchor="middle">' + escapeHtml(tlp[1]) + '</text>';
+        svg += '<text class="pm-flow-pending" x="' + cx + '" y="94" text-anchor="middle">Results</text>';
+        svg += '<text class="pm-flow-pending" x="' + cx + '" y="114" text-anchor="middle">pending</text>';
+      }
       const pf = fees[pendingStage];
-      if (pf) svg += '<text class="pm-flow-fee" x="' + cx + '" y="132" text-anchor="middle">$' + pf + ' entry fee</text>';
+      if (pf) svg += '<text class="pm-flow-fee" x="' + cx + '" y="' + ((proj && projActive>0) ? 150 : 132) + '" text-anchor="middle">$' + pf + ' entry fee</text>';
     }
 
     svg += '</svg>';
@@ -1331,7 +1457,9 @@
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#e31937"></span>Stopped here \u2014 ' + (isEntries ? 'entered this stage but not the next' : 'competed at this stage but not the next') + '</span>' +
         '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#56a8da"></span>Joined late \u2014 ' + (isEntries ? 'event first entered at this stage' : 'first appeared at this stage (byes / new entrants)') + '</span>' +
         (deepInProgress ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:linear-gradient(90deg,#0d7fa6,#33b4d6);opacity:0.5;box-shadow:inset 0 0 0 1.5px #009ac7"></span>In progress \u2014 results still arriving</span>' : '') +
-        (pendingStage ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>' : '') +
+        (pendingStage ? ((proj && projActive > 0)
+          ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef3fb;box-shadow:inset 0 0 0 1.5px #009ac7"></span>Projected \u2014 not yet contested (top-3 by placement)</span>'
+          : '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#eef1f8;box-shadow:inset 0 0 0 1.5px #9db8d6"></span>Stage not yet contested</span>') : '') +
         (pmState.showFinancials ? '<span class="pm-legend-item"><span class="pm-legend-sw" style="background:#d97706"></span>Entry-fee revenue collected</span>' : '') +
       '</div>';
 
@@ -1377,6 +1505,21 @@
       footnote = '<div class="pm-footnote"><strong>Notes</strong> \u2014 ' + notes.join('; ') + '.</div>';
     }
 
+    /* Projected-Nationals caveat — shown whenever the dashed basin carries a
+       placement-derived projection. States plainly that the championship has
+       not happened, what the projection includes, and what it cannot. */
+    let projBanner = '';
+    if (proj && projActive > 0) {
+      projBanner =
+        '<div style="display:flex;gap:10px;align-items:flex-start;background:#eef3fb;border-left:4px solid #009ac7;border-radius:8px;padding:12px 16px;margin:0 0 14px;font-family:Inter,sans-serif;font-size:14px;line-height:1.5;color:#0d2230">' +
+          '<span style="flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#009ac7;margin-top:5px;box-shadow:0 0 0 3px rgba(0,154,199,0.25)"></span>' +
+          '<span><strong>Junior Nationals has not been contested yet</strong> \u2014 results and registrations arrive at the end of July. ' +
+          'The dashed basin is the <strong>projected qualifier field by placement</strong>: \u2248' + fmtNum(projActive) + ' ' + UNIT +
+          ' (\u2248' + fmtNum(projEwc) + ' from E/W/C top-3 + \u2248' + fmtNum(projZon) + ' direct from Zones top-3), computed from the finalized Zone &amp; E/W/C results, applying the same top-3-by-final-placement rule as the official qualifier list. ' +
+          'It is <strong>preliminary</strong>: it does not remove non-displacing (foreign) finishers, apply average-score / replacement / declined adjustments, or add pre-qualified &amp; skip-stage athletes (Alaska/Hawaii, YMCA national champions, military dependents) \u2014 all of which need the registration file. Verify against the official list before publishing.</span>' +
+        '</div>';
+    }
+
     const explainer = isEntries
       ? ('Read it left to right as the ' + year + ' season unfolds, counting EVENT ENTRIES (one diver in one event). '
         + 'Each navy post is a stage; its height is how many event entries were contested there. '
@@ -1388,7 +1531,9 @@
         + 'The blue current carries divers who advanced (competed at the next stage too); red streams peeling off are divers who stopped; '
         + 'a pale stream joining from below is divers who first appeared at that stage \u2014 byes or new entrants a simple drop-off count would hide. '
         + 'This is the divers lens \u2014 a diver in three events still counts once. Switch to Event entries to count event-qualifications instead.')
-      + (pendingStage ? ' The dashed basin is the stage still to come.' : '')
+      + (pendingStage ? ((proj && projActive > 0)
+          ? ' The dashed basin is the projected Junior Nationals field (top-3 by placement) \u2014 the championship is still to come.'
+          : ' The dashed basin is the stage still to come.') : '')
       + ' Use the Financial overlay toggle to add what families paid and what each meet collected.';
 
     /* ===== lens toggle: divers vs entries are two SEPARATE evaluations ===== */
@@ -1445,7 +1590,7 @@
     })();
 
     return sectionShell(1, 'Qualification Pipeline — ' + year, explainer,
-      banner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap"><div class="pm-flow-scroll">' + svg + '</div>' + legend + '</div>' + footnote + twoLens);
+      banner + projBanner + lensToggle + kpiHtml + viewingHtml + '<div class="pm-flow-wrap"><div class="pm-flow-scroll">' + svg + '</div>' + legend + '</div>' + footnote + twoLens);
   }
 
   /* ── SECTION 2: Demographics & Composition ─────────────── */
