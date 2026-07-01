@@ -87,6 +87,47 @@
     }
   }
 
+  /* ── Duplicate resolution ──────────────────────────────────
+     Two staff on different computers can independently record the SAME
+     fact (e.g. both mark the same athlete "Not Attending") before either
+     has synced. The merge below only prevents literal data loss (by
+     object id); it does not recognize that two different objects mean
+     the same thing. Left alone, both entries persist in the shared log
+     forever — cluttering the audit trail and creating ambiguity about
+     which one is "the" record.
+     dedupeOverrides groups ACTIVE overrides by a semantic key — type +
+     athlete + event scope + value — and where more than one entry shares
+     a key, keeps only the most recent active, deactivating the rest.
+     Nothing is deleted (full history stays inspectable in the log; an
+     inactive entry can still be toggled back on deliberately), and a
+     genuine disagreement (same athlete, DIFFERENT value) is NOT touched,
+     since collapsing that would silently pick a side on a real conflict
+     rather than just removing a redundant duplicate. Runs at the single
+     choke point every save path funnels through (pushToGitHub), so it
+     covers direct saves, the init-time local/remote merge, and conflict
+     resolution uniformly. Mutates in place and returns whether anything
+     changed. */
+  function dedupeOverrides(overrides) {
+    const groups = new Map();
+    (overrides || []).forEach(function(o){
+      if (!o || !o.active) return;
+      const athlete = String(o.athleteId || o.athleteName || '').trim().toLowerCase();
+      if (!athlete) return;
+      const key = o.type + '|' + athlete + '|' + (o.eventId || '') + '|' + Boolean(o.value);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    });
+    let changed = false;
+    groups.forEach(function(list){
+      if (list.length < 2) return;
+      list.sort(function(a, b){
+        return (b.createdAt || '').localeCompare(a.createdAt || '') || (b.id || '').localeCompare(a.id || '');
+      });
+      list.slice(1).forEach(function(o){ if (o.active) { o.active = false; changed = true; } });
+    });
+    return changed;
+  }
+
   /* ── GitHub API helpers ────────────────────────────────── */
   async function ghFetch(method, path, body) {
     const opts = {
@@ -124,6 +165,10 @@
 
   /* ── Push to GitHub ────────────────────────────────────── */
   async function pushToGitHub(overrides) {
+    // Resolve any semantic duplicates before persisting — see
+    // dedupeOverrides above. Covers every path (direct save, init-time
+    // merge, conflict-resolution merge) since they all call this function.
+    dedupeOverrides(overrides);
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(overrides, null, 2))));
     const body = {
       message: `Override update · ${new Date().toISOString().slice(0,16).replace('T',' ')} UTC`,
@@ -214,6 +259,7 @@
 
       // Load from GitHub, fall back to localStorage
       let overrides = [];
+      let conflictHandled = false;
       try {
         overrides = await loadFromGitHub();
         // If local has newer entries not on GitHub, merge them up
@@ -224,7 +270,8 @@
           const localOnly = local.filter(o => !remoteIds.has(o.id));
           if (localOnly.length > 0) {
             overrides = [...overrides, ...localOnly];
-            await pushToGitHub(overrides); // push merged immediately
+            const pushedDirectly = await pushToGitHub(overrides); // push merged immediately
+            conflictHandled = !pushedDirectly;
           }
         }
         setIndicator('synced', `Overrides loaded`);
@@ -235,8 +282,11 @@
         setIndicator('offline');
       }
 
-      // Patch state — this is called before init() but after state is declared
-      if (typeof state !== 'undefined') {
+      // Patch state — this is called before init() but after state is declared.
+      // Skip if the merge-push above hit a conflict: handleConflict already
+      // set state.overrides to the authoritative merged+deduped result, and
+      // writing this stale pre-conflict array here would clobber that.
+      if (typeof state !== 'undefined' && !conflictHandled) {
         state.overrides = overrides;
         localStorage.setItem(LOCAL_KEY, JSON.stringify(overrides));
       }
@@ -258,7 +308,17 @@
       _syncPending = false;
 
       try {
-        await pushToGitHub(overrides);
+        const pushedDirectly = await pushToGitHub(overrides);
+        if (pushedDirectly) {
+          // No conflict: dedupeOverrides (inside pushToGitHub) mutated
+          // these same objects in place, so re-sync localStorage to match
+          // whatever it resolved.
+          localStorage.setItem(LOCAL_KEY, JSON.stringify(overrides));
+        }
+        // On conflict, pushToGitHub already routed through handleConflict,
+        // which reassigns state.overrides / localStorage / re-renders
+        // itself from the merged+deduped result — don't overwrite that
+        // here with this stale pre-conflict array.
         setIndicator('synced');
       } catch (e) {
         console.warn('[overrides-sync] push failed:', e);

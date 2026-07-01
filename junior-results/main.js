@@ -54,6 +54,13 @@ const STAGES = [
 ];
 
 const OVERRIDE_KEY = 'usad.juniorResults.overrides.v2';
+// Generated once per page load. Stamped onto every override this browser
+// session creates, so Undo/Redo — which operate on "the last thing done" —
+// can never reverse a colleague's change on a shared, multi-user override
+// log. A fresh session ID on reload is intentional: undoing a decision from
+// a previous visit should go through the explicit per-entry toggle in the
+// override log (click the specific entry), not a blind "undo last" button.
+const SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 /* ── Application state ────────────────────────────────────────── */
 const state = {
@@ -1105,8 +1112,11 @@ function renderOverrideBadge() {
 
 function renderOverrideDrawer() {
   const active = state.overrides.filter(o => o.active);
-  $('undoOverrideButton').disabled = !active.length;
-  $('redoOverrideButton').disabled = !state.overrides.some(o => !o.active);
+  // Undo/Redo are session-scoped (see SESSION_ID) — only enable them when
+  // THIS session has something of its own to reverse, so the button is
+  // never clickable-but-inert because a colleague made the only eligible change.
+  $('undoOverrideButton').disabled = !state.overrides.some(o => o.active && o.sessionId === SESSION_ID);
+  $('redoOverrideButton').disabled = !state.overrides.some(o => !o.active && o.sessionId === SESSION_ID);
   $('clearOverridesButton').disabled = !state.overrides.length;
   $('exportOverridesButton').disabled = !state.overrides.length;
 
@@ -1707,6 +1717,7 @@ function addOverride(input) {
   state.overrides.push({
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     createdAt: new Date().toISOString(),
+    sessionId: SESSION_ID,
     active: true,
     type:           input.type,
     value:          Boolean(input.value),
@@ -1735,13 +1746,15 @@ function addOverrideFromForm() {
 }
 
 function undoOverride() {
-  const t = [...state.overrides].reverse().find(o => o.active);
+  // Session-scoped: only ever reverses an override THIS browser session
+  // created, never a colleague's concurrent change on the shared log.
+  const t = [...state.overrides].reverse().find(o => o.active && o.sessionId === SESSION_ID);
   if (!t) return;
   t.active = false; saveOverrides(); recompute(); renderAll();
 }
 
 function redoOverride() {
-  const t = [...state.overrides].reverse().find(o => !o.active);
+  const t = [...state.overrides].reverse().find(o => !o.active && o.sessionId === SESSION_ID);
   if (!t) return;
   t.active = true; saveOverrides(); recompute(); renderAll();
 }

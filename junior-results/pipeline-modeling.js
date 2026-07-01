@@ -2258,6 +2258,14 @@
     svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT+innerH) + '"/>';
     svg += '<line class="pm-axis-line" x1="' + padL + '" y1="' + (padT+innerH) + '" x2="' + (padL+innerW) + '" y2="' + (padT+innerH) + '"/>';
 
+    // Right-edge year labels are collected here rather than drawn inline,
+    // so their y-positions can be de-collided below: when two years finish
+    // at nearly the same retention %, their raw label positions land on
+    // top of each other (e.g. "2024 (1,679)" over "2025 (1,643)"). A short
+    // leader tick is drawn from each series' actual last point to its
+    // (possibly nudged) label, so a repositioned label still reads
+    // unambiguously back to its own line.
+    const pendingLabels = [];
     comparison.forEach((c, ci) => {
       const color = colors[ci % colors.length];
       const base = c.data.cohortSize || (c.data.stages[startStage] ? c.data.stages[startStage].reached : 0);
@@ -2275,11 +2283,40 @@
         svg += '<circle cx="' + p.x + '" cy="' + p.y + '" r="4" fill="' + color + '" stroke="#fff" stroke-width="2"><title>' +
           c.year + ' — ' + STAGE_SHORT[p.stage] + ': ' + (p.rate*100).toFixed(1) + '% (' + fmtNum(p.reached) + ')</title></circle>';
       });
-      // Right-edge year label
+      // Right-edge year label — queued, not drawn yet (see de-collision pass below)
       const lastPt = pts[pts.length - 1];
       if (lastPt) {
-        svg += '<text x="' + (padL + innerW + 8) + '" y="' + (lastPt.y + 4) + '" class="pm-bar-value" fill="' + color + '">' + c.year + ' (' + fmtNum(base) + ')</text>';
+        pendingLabels.push({ naturalY: lastPt.y, y: lastPt.y, anchorX: padL + innerW, color: color, text: c.year + ' (' + fmtNum(base) + ')' });
       }
+    });
+
+    // De-collide: sort by natural y, then sweep forward enforcing a minimum
+    // gap (roughly one line-height at 11.5px bold), then sweep backward if
+    // that pushed the bottom label past the chart edge, so the whole stack
+    // stays inside the plot area while never overlapping.
+    const LABEL_MIN_GAP = 14, labelTop = padT, labelBottom = padT + innerH + 4;
+    pendingLabels.sort((a, b) => a.naturalY - b.naturalY);
+    for (let i = 1; i < pendingLabels.length; i++) {
+      if (pendingLabels[i].y - pendingLabels[i-1].y < LABEL_MIN_GAP) {
+        pendingLabels[i].y = pendingLabels[i-1].y + LABEL_MIN_GAP;
+      }
+    }
+    if (pendingLabels.length && pendingLabels[pendingLabels.length-1].y > labelBottom) {
+      pendingLabels[pendingLabels.length-1].y = labelBottom;
+      for (let i = pendingLabels.length - 2; i >= 0; i--) {
+        if (pendingLabels[i+1].y - pendingLabels[i].y < LABEL_MIN_GAP) {
+          pendingLabels[i].y = pendingLabels[i+1].y - LABEL_MIN_GAP;
+        }
+      }
+    }
+    pendingLabels.forEach(l => { if (l.y < labelTop) l.y = labelTop; });
+
+    pendingLabels.forEach(l => {
+      // Leader tick only when the label actually moved off its natural spot
+      if (Math.abs(l.y - l.naturalY) > 1) {
+        svg += '<line x1="' + (l.anchorX + 2) + '" y1="' + l.naturalY + '" x2="' + (l.anchorX + 7) + '" y2="' + l.y + '" stroke="' + l.color + '" stroke-width="1" opacity="0.5"/>';
+      }
+      svg += '<text x="' + (l.anchorX + 8) + '" y="' + (l.y + 4) + '" class="pm-bar-value" fill="' + l.color + '">' + l.text + '</text>';
     });
     svg += '</svg>';
 
