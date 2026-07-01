@@ -11,6 +11,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<!-- Shared config: sets window.USAD_CONFIG. On GitHub Pages this loads the real
+     data/config.js (unused by anything else in this file — safe no-op here).
+     On the Vercel read-only deployment, vercel.json rewrites this request to
+     the sanitized data/config.vercel.js instead, which sets neon.proxy = true
+     so the nq() function below (see "NEON" section) routes through the
+     server-side read-only proxy at /api/neon instead of the credential
+     hardcoded further down in this file. -->
+<script src="../data/config.js?v=202607011200"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1035,7 +1043,18 @@ const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)retu
 let sync={ok:false,saving:false,err:null},saveTimer=null,lastSynced=null;
 async function nq(sql,params=[]){
   let r;
+  const _proxy = window.USAD_CONFIG && window.USAD_CONFIG.neon && window.USAD_CONFIG.neon.proxy === true;
   try{
+    if (_proxy) {
+      // Vercel read-only deployment: route through the server-side proxy —
+      // no database credential ever reaches this browser. The proxy itself
+      // enforces read-only (rejects anything but a single SELECT/WITH).
+      r=await fetch('/api/neon',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query:sql,params:(params||[]).map(p=>p===null||p===undefined?null:String(p))})
+      });
+    } else {
     // NOTE: We do NOT send Content-Type header. Neon's CORS preflight rejects
     // content-type: application/json — it only allows specific Neon-* headers.
     // Without Content-Type, browser defaults to text/plain (simple CORS), which
@@ -1051,6 +1070,7 @@ async function nq(sql,params=[]){
       },
       body:JSON.stringify({query:sql,params:(params||[]).map(p=>p===null||p===undefined?null:String(p))})
     });
+    }
   }catch(netErr){
     const e=new Error('Network: '+(netErr.message||'fetch failed'));e._kind='network';
     console.error('[Neon] network error:',netErr);throw e;

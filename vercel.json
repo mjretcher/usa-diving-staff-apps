@@ -5,7 +5,6 @@
     { "source": "/data/config.js", "destination": "/data/config.vercel.js" }
   ],
   "redirects": [
-    { "source": "/schedule-builder/:path*", "destination": "/junior-results/", "permanent": false },
     { "source": "/criteria-simulator/:path*", "destination": "/junior-results/", "permanent": false },
     { "source": "/athlete-evaluation/:path*", "destination": "/junior-results/", "permanent": false },
     { "source": "/season-calendar/:path*", "destination": "/junior-results/", "permanent": false }
