@@ -8,33 +8,11 @@
   'use strict';
 
   /* ── helpers ───────────────────────────────────────────────── */
-  function esc(v) {
-    return String(v == null ? '' : v)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-  // For free-text values (athlete names, team names, notes) embedded as a
-  // single-quoted JS string ARGUMENT inside an onclick="..." attribute.
-  // esc() alone is wrong here: it turns an apostrophe into the HTML entity
-  // &#39;, but the browser decodes HTML entities in attribute values BEFORE
-  // handing the string to the JS parser — so &#39; becomes a literal '
-  // again right when the onclick fires, prematurely closing the JS string
-  // (breaking every button for any name containing an apostrophe, e.g.
-  // "O'Brien"). The fix: emit a literal backslash+quote as raw text (never
-  // HTML-entity-encoded), which passes through HTML decoding unchanged and
-  // is then read by the JS parser as a correctly-escaped apostrophe.
-  function escJsAttr(v) {
-    return String(v == null ? '' : v)
-      .replace(/&/g,'&amp;')
-      .replace(/"/g,'&quot;')
-      .replace(/\\/g,'\\\\')
-      .replace(/'/g,"\\'");
-  }
+  // esc(), escJsAttr(), and norm() are defined globally in main.js (which
+  // always loads first — see index.html's load order) and reused here
+  // rather than kept as separate local copies, so a fix to any of them
+  // (e.g. the escJsAttr apostrophe-in-onclick fix) reaches every file.
   function $(id) { return document.getElementById(id); }
-  function norm(v) {
-    return String(v||'').toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
-  }
   function initials(name) {
     return String(name||'').split(' ').filter(Boolean)
       .map(w=>w[0].toUpperCase()).slice(0,2).join('');

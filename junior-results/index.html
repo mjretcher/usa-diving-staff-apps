@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../shared/design.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=202607010448">
     <link rel="stylesheet" href="ui-fixes.css">
     <link rel="stylesheet" href="pipeline-modeling.css?v=202606290314">
     <link rel="stylesheet" href="mobile.css?v=202606301130">
@@ -97,6 +97,12 @@
       <aside class="control-sidebar" aria-label="Filters">
         <div class="sidebar-section" id="filterFields"></div>
         <div class="sidebar-section">
+          <label class="synchro-toggle">
+            <input type="checkbox" id="showSynchroToggle">
+            <span>Show synchro results</span>
+          </label>
+        </div>
+        <div class="sidebar-section">
           <div class="sidebar-section-title">Filter by flag</div>
           <div class="filter-flags" id="filterFlags"></div>
         </div>
@@ -167,11 +173,11 @@
   <script src="../data/ewc-results-2026.js?v=202606301830"></script>
     <script src="../data/junior-athlete-status.js?v=202606282030"></script>
     <script src="status-merge.js?v=202606282030"></script>
-    <script src="main.js?v=202607010117"></script>
-    <script src="qualifier-views.js?v=202607010417"></script>
-    <script src="analytics.js?v=202607010417"></script>
-    <script src="reports-view.js?v=202607010417"></script>
-    <script src="override-athlete-search.js?v=202606282030"></script>
+    <script src="main.js?v=202607010448"></script>
+    <script src="qualifier-views.js?v=202607010448"></script>
+    <script src="analytics.js?v=202607010448"></script>
+    <script src="reports-view.js?v=202607010448"></script>
+    <script src="override-athlete-search.js?v=202607010448"></script>
     <script src="athlete-lookup.js?v=202606282030"></script>
     <script src="pipeline-modeling.js?v=202607010134"></script>
     <script src="mobile-nav.js?v=202606300515"></script>

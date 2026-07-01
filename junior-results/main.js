@@ -82,6 +82,13 @@ const state = {
   drawerOpen: false,
   kpiDrill:  null,
   kpiDrillFilter: null,
+  // Synchronized diving (pairs) is a separate discipline that never counts
+  // toward individual qualification — non-qualifying everywhere it appears
+  // in the results, and at Junior Nationals it's a parallel event for
+  // divers who already qualified individually. Hidden from the main
+  // results tables by default; toggle on to review it (mainly relevant at
+  // the Nationals stage).
+  showSynchro: false,
 };
 
 let effectiveResults = [];
@@ -437,6 +444,15 @@ function buildFlagChips() {
 
 /* ── Global listeners ─────────────────────────────────────────── */
 function attachGlobalListeners() {
+  const synchroToggle = $('showSynchroToggle');
+  if (synchroToggle) {
+    synchroToggle.checked = state.showSynchro;
+    synchroToggle.addEventListener('change', () => {
+      state.showSynchro = synchroToggle.checked;
+      renderAll();
+    });
+  }
+
   $('overrideToggle').addEventListener('click', () => {
     state.drawerOpen = !state.drawerOpen;
     $('overrideDrawer').hidden = !state.drawerOpen;
@@ -1625,6 +1641,7 @@ function filteredRows(opts = {}) {
   const q = state.search.toLowerCase();
   return effectiveResults.filter(r => {
     if (!stageMatch(r, state.stage)) return false;
+    if (!state.showSynchro && r.isSynchro) return false;
     if (!opts.ignoreKpi && state.kpiDrillFilter && !state.kpiDrillFilter(r)) return false;
     if (!ignoreEvent && state.selectedEventId && r.eventId !== state.selectedEventId) return false;
     if (state.meetName      && r.meetName      !== state.meetName)      return false;
@@ -1932,6 +1949,35 @@ function esc(v) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function escAttr(v) { return esc(v).replace(/`/g,'&#96;'); }
+
+// For free-text values (athlete names, team names, notes) embedded as a
+// single-quoted JS string ARGUMENT inside an onclick="..." attribute.
+// esc() is wrong there: it turns an apostrophe into &#39;, but the browser
+// decodes HTML entities in attribute values BEFORE the JS parser ever sees
+// them — so &#39; becomes a literal ' again right as the onclick fires,
+// prematurely closing the JS string (breaking the button for any name
+// containing an apostrophe, e.g. "O'Brien"). Emitting a literal
+// backslash+quote as raw text (never HTML-entity-encoded) survives HTML
+// decoding unchanged and is read correctly by the JS parser. Canonical
+// version — qualifier-views.js and reports-view.js use this one instead
+// of keeping their own copy, so a future fix here reaches every caller.
+function escJsAttr(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'");
+}
+
+// Diacritic-insensitive, case-insensitive, punctuation-collapsed name key —
+// used everywhere athlete/team names need to be matched loosely (e.g. "José"
+// vs "Jose", or comparing a name typed in a search box against roster data).
+// Canonical version shared by qualifier-views.js, analytics.js,
+// reports-view.js, and override-athlete-search.js.
+function norm(v) {
+  return String(v == null ? '' : v).toLowerCase().normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
 
 function fmtScore(v) {
   if (v == null || v === '') return '';

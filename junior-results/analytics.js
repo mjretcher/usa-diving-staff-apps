@@ -9,15 +9,9 @@
 (function () {
   'use strict';
 
-  function esc(v) {
-    return String(v==null?'':v)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-  function norm(v) {
-    return String(v||'').toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
-  }
+  // esc() and norm() are defined globally in main.js (loads first — see
+  // index.html's load order) and reused here rather than kept as separate
+  // local copies.
   function pct(n,d) { return d?Math.round(100*n/d):0; }
   function fmt(v)   { const n=Number(v); return Number.isFinite(n)&&n>0?n.toFixed(2):'—'; }
 
@@ -45,6 +39,17 @@
     if (typeof sr==='string'&&sr.startsWith('synthetic')) return false;
     if (r.gender==='Women'||r.gender==='Men') return false;
     if (!r.ageGroup) return false;
+    // Synchronized diving is a separate discipline (pairs, not individual) that
+    // never counts toward the individual Region->Zone->E/W/C->Nationals pipeline
+    // this dashboard measures — non-qualifying everywhere it appears, and at
+    // Junior Nationals it's a parallel event for divers who already qualified
+    // individually, not part of the funnel itself. Checked narrowly on
+    // isSynchro specifically — NOT the broader eventCategory/"Non-Qualifying
+    // Event" flag, which also legitimately covers Group C/D springboard at
+    // Regionals (auto-advance in 2026, still real individual competitors) and
+    // Platform at Regionals (exhibition-status only) — both of which must stay
+    // visible here per established convention.
+    if (r.isSynchro) return false;
     return true;
   }
   function allJunior() { return getRaw().filter(isJunior); }

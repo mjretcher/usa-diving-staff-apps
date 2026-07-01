@@ -8,8 +8,11 @@
 (function installOverrideAthleteSearch(){
   function byId(id){ return document.getElementById(id); }
   function safe(v){ return String(v == null ? '' : v); }
-  function html(v){ return safe(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-  function norm(v){ return safe(v).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+  // html() is this file's name for HTML-escaping; delegates to the shared
+  // esc() in main.js (loads first) rather than keeping its own copy, so a
+  // future fix to the escaping logic reaches this file too. norm() is used
+  // as-is from main.js's global — same reason.
+  function html(v){ return esc(v); }
   function isQualified(r){ return Boolean(r.advancesToNationals || r.advancesToEWC || r.advancesToZone || r.officialQualified); }
 
   let selected = null;

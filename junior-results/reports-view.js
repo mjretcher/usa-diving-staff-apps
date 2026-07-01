@@ -22,33 +22,10 @@
   'use strict';
 
   /* ── Generic helpers ─────────────────────────────────────────── */
-  function esc(v){
-    return String(v == null ? '' : v)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-  // For free-text values (e.g. team names) embedded as a single-quoted JS
-  // string ARGUMENT inside an onclick="..." attribute. esc() is wrong here:
-  // it turns an apostrophe into &#39;, but the browser decodes HTML entities
-  // in attribute values before the JS parser ever sees them — so &#39;
-  // becomes a literal ' again right as the onclick fires, prematurely
-  // closing the JS string (e.g. breaking the team filter for any team name
-  // containing an apostrophe, like "O'Fallon Dive Club"). Emitting a literal
-  // backslash+quote as raw text (never HTML-entity-encoded) survives HTML
-  // decoding unchanged and is read correctly by the JS parser.
-  function escJsAttr(v){
-    return String(v == null ? '' : v)
-      .replace(/&/g,'&amp;')
-      .replace(/"/g,'&quot;')
-      .replace(/\\/g,'\\\\')
-      .replace(/'/g,"\\'");
-  }
+  // esc(), escJsAttr(), and norm() are defined globally in main.js (loads
+  // first — see index.html's load order) and reused here rather than kept
+  // as separate local copies, so a fix to any of them reaches every file.
   function $(id){ return document.getElementById(id); }
-  function norm(v){
-    return String(v||'').toLowerCase().normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g,'')
-      .replace(/[^a-z0-9]+/g,' ').trim();
-  }
   function pct(n,d){ return d ? Math.round(100 * n / d) + '%' : '—'; }
   function fmtScore(v){ const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—'; }
   function fmtNum(n){ return Number.isFinite(n) ? n.toLocaleString() : '—'; }
@@ -5939,7 +5916,16 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     let done = 0;
     const results = await Promise.all(promises.map(p => p.then(html => { done++; const el=document.getElementById('rb-progress'); if (el) el.textContent = done+' / '+sectionIds.length; return html; })));
     const body = document.getElementById('rb-doc-body');
-    if (body) body.innerHTML = results.join('');
+    if (body) {
+      // Consistent branded footer across all three print/report paths in
+      // this app (this one, Pipeline's full-dashboard print, and Pipeline's
+      // river-only print) — same attribution phrase each carries.
+      const footerDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+      body.innerHTML = results.join('') +
+        `<div class="rb-soft" style="margin-top:18px;padding-top:10px;border-top:1px solid #e5e9f2;font-size:10px">` +
+        `Generated ${footerDate} \u00b7 USA Diving Junior Results Audit \u00b7 Reflects filters and data active at time of generation.` +
+        `</div>`;
+    }
   };
 
   function generateReport(){ openReportBuilder(); }
