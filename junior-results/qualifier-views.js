@@ -862,7 +862,26 @@
     const grouped = groupByEvent(quals);
     const [za, zb] = EWC_ZONES[qv.ewcGroup];
 
-    let html = pickerHTML + sortBarHTML(qv.ewcSort,'ewc',['elig','score','zone','name']);
+    // Surface events that other E/W/C meets have but this meet's results feed
+    // does not, so a gap in the DiveMeets scrape is visible instead of the meet
+    // just looking "complete" with fewer events.
+    let missingBanner = '';
+    if (ewcHasResults()) {
+      const allKeys  = new Set(allResults().filter(r => r.stage === 'EWC').map(r => r.eventKey));
+      const hereKeys = new Set(quals.map(r => r.eventKey));
+      const missing  = [...allKeys].filter(k => !hereKeys.has(k)).sort(cmpEventKey);
+      if (missing.length) {
+        missingBanner = `<div class="qv-data-banner">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+          <div><strong>${missing.length} event${missing.length>1?'s':''} not in the ${esc(qv.ewcGroup)} results feed:</strong>
+            ${missing.map(esc).join(' · ')}.
+            <br>These are absent from the loaded DiveMeets results for this meet — not hidden by the app.
+            They need to be re-scraped and reloaded before divers can be marked here.</div>
+        </div>`;
+      }
+    }
+
+    let html = pickerHTML + missingBanner + sortBarHTML(qv.ewcSort,'ewc',['elig','score','zone','name']);
     html += `<div class="qv-event-grid">`;
     grouped.forEach(([eventKey, rows]) => {
       const sorted = sortRows(rows, qv.ewcSort);
@@ -911,9 +930,14 @@
   };
 
   function renderEWCByEvent(wrap) {
-    const allRows = allResults()
-      .filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals)
-      .map(enrichRow);
+    // Prefer the actual E/W/C RESULTS (now loaded from Neon and grouped by the
+    // meet each diver competed at). Fall back to the projected entry field
+    // (Zone places 4-18) only when results aren't present yet.
+    const useResults = ewcHasResults();
+    const allRows = (useResults
+      ? allResults().filter(r => r.stage === 'EWC')
+      : allResults().filter(r => r.stage === 'Zones' && r.advancesToEWC && !r.advancesToNationals)
+    ).map(enrichRow);
     const grouped = groupByEvent(allRows);
 
     let html = sortBarHTML(qv.ewcSort,'ewc-event',['elig','score','zone','name']);
@@ -922,8 +946,9 @@
       const sorted = sortRows(rows, qv.ewcSort);
       const byGroup = {};
       EWC_GROUPS.forEach(g => {
-        const zones = EWC_ZONES[g];
-        byGroup[g] = rows.filter(r => zones.includes(r.zone));
+        byGroup[g] = useResults
+          ? rows.filter(r => (r.ewcMeet || r.ewc) === g)
+          : rows.filter(r => (EWC_ZONES[g] || []).includes(r.zone));
       });
       html += `<div class="qv-event-card">
         <div class="qv-event-header">
