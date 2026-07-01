@@ -472,7 +472,78 @@
           if (tgt[ag][r.bucket] !== undefined) tgt[ag][r.bucket] = Number(r.n) || 0;
         });
         const ageOrder = Object.keys(ageSet).sort();
-        out.advBreakdown = { div: div, ent: ent, ageOrder: ageOrder };
+        out.advBreakdown = { mode: 'ewc', div: div, ent: ent, ageOrder: ageOrder };
+      } catch (e) {
+        out.advBreakdown = null;
+      }
+    }
+
+    /* ── Pre-2026 (old system) advancement breakdown, by age group ────────
+       The pre-2026 circuit had NO E/W/C tier: the gate is Zones → Junior
+       Nationals directly. Qualification is discipline-dependent on the
+       deciding-round placement — springboard (1M/3M) top 10, platform top 7
+       — matching qualifiedAt() and the pipeline river convention. Splits the
+       Zones field into three mutually-exclusive outcomes so the "did not
+       advance" number stops conflating two very different facts:
+         • nat_reg   — reached Junior Nationals (competed there)
+         • nat_noreg — qualified (top 10 / top 7) but did NOT compete
+         • not_qual  — did not place high enough to qualify
+       Non-displacing exhibition entries (place 127) are excluded, exactly as
+       the 2026 path and every other pipeline computation treat them. The
+       DIVER level is attendance-based (did the diver reach Nationals at all),
+       so it reconciles exactly to the funnel's Zones-exit number; the ENTRY
+       level is per event-spot (was this specific qualified spot used). Only
+       runs for years with both Zones and Nationals results, so a year missing
+       Nationals data can never mislabel everyone as a no-show. */
+    if (out.advBreakdown === null
+        && Number(year) < 2026
+        && out.stages.Zones.unique_athletes > 0
+        && out.stages.Nationals.unique_athletes > 0) {
+      try {
+        const pbFb = buildFiltersSql(2);
+        const flt = (pmState.excludeFutureChamps ? nonQualSql() : '') + pbFb.sql;
+        const pbSql =
+          "WITH z AS (" +
+          "  SELECT diver_id_dm, age_group, event_key, discipline, zone, place, " +
+          "    CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2 " +
+          "         WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr " +
+          "  FROM core.event_results " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + flt +
+          "    AND stage = 'Zones' AND place IS NOT NULL AND place <> 127" +
+          "), " +
+          "zd AS (SELECT diver_id_dm, age_group, event_key, discipline, place, " +
+          "    ((discipline IN ('1M','3M') AND place <= 10) OR (discipline = 'Platform' AND place <= 7)) AS qualified " +
+          "  FROM (SELECT z.*, MAX(rr) OVER (PARTITION BY event_key, zone, diver_id_dm) AS mrr FROM z) t " +
+          "  WHERE rr = mrr), " +
+          "natE AS (SELECT DISTINCT diver_id_dm, event_key FROM core.event_results " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'Nationals'), " +
+          "natD AS (SELECT DISTINCT diver_id_dm FROM core.event_results " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'Nationals'), " +
+          "ent AS (SELECT zd.age_group, " +
+          "    CASE WHEN zd.qualified AND ne.diver_id_dm IS NOT NULL THEN 'nat_reg' " +
+          "         WHEN zd.qualified THEN 'nat_noreg' " +
+          "         ELSE 'not_qual' END AS bucket " +
+          "  FROM zd LEFT JOIN natE ne ON ne.diver_id_dm = zd.diver_id_dm AND ne.event_key = zd.event_key), " +
+          "zdiv AS (SELECT diver_id_dm, MAX(age_group) AS age_group, bool_or(qualified) AS qualified FROM zd GROUP BY diver_id_dm), " +
+          "divr AS (SELECT zdiv.age_group, " +
+          "    CASE WHEN nd.diver_id_dm IS NOT NULL THEN 'nat_reg' " +
+          "         WHEN zdiv.qualified THEN 'nat_noreg' " +
+          "         ELSE 'not_qual' END AS bucket " +
+          "  FROM zdiv LEFT JOIN natD nd ON nd.diver_id_dm = zdiv.diver_id_dm) " +
+          "SELECT 'ent' AS lvl, age_group, bucket, COUNT(*)::int AS n FROM ent GROUP BY age_group, bucket " +
+          "UNION ALL " +
+          "SELECT 'div' AS lvl, age_group, bucket, COUNT(*)::int AS n FROM divr GROUP BY age_group, bucket";
+        const pb = await neonQ(pbSql, [year].concat(pbFb.params));
+        const div = {}, ent = {}, ageSet = {};
+        (pb.rows || []).forEach(function(r){
+          const tgt = (r.lvl === 'div') ? div : ent;
+          const ag = r.age_group || 'Unspecified';
+          ageSet[ag] = true;
+          if (!tgt[ag]) tgt[ag] = { nat_reg:0, nat_noreg:0, not_qual:0 };
+          if (tgt[ag][r.bucket] !== undefined) tgt[ag][r.bucket] = Number(r.n) || 0;
+        });
+        const ageOrder = Object.keys(ageSet).sort();
+        out.advBreakdown = { mode: 'nats', div: div, ent: ent, ageOrder: ageOrder };
       } catch (e) {
         out.advBreakdown = null;
       }
@@ -1213,25 +1284,27 @@
     const abSrc = data.advBreakdown ? (isEntries ? data.advBreakdown.ent : data.advBreakdown.div) : null;
     const abOrder = data.advBreakdown ? data.advBreakdown.ageOrder : [];
     let abTot = null;
+    const abMode = data.advBreakdown ? data.advBreakdown.mode : null;
     if (abSrc) {
-      abTot = { direct:0, ewc_reg:0, ewc_noreg:0, not_qual:0 };
+      // Init every possible bucket to 0 so either era aggregates cleanly.
+      abTot = { direct:0, ewc_reg:0, ewc_noreg:0, not_qual:0, nat_reg:0, nat_noreg:0 };
       abOrder.forEach(function(ag){
         const r = abSrc[ag] || {};
-        abTot.direct    += r.direct    || 0;
-        abTot.ewc_reg   += r.ewc_reg   || 0;
-        abTot.ewc_noreg += r.ewc_noreg || 0;
-        abTot.not_qual  += r.not_qual  || 0;
+        Object.keys(abTot).forEach(function(k){ abTot[k] += r[k] || 0; });
       });
     }
-    // Correct the Zones-gate exit: genuine non-advancers only (qualified-but-
-    // unregistered + did-not-qualify). The direct-to-Nationals top-3 are shown
-    // flowing into the projected basin instead, so they must leave the exit.
+    // Correct the Zones-gate exit so the funnel's exit number equals the split
+    // sum exactly (genuine non-advancers only). 2026: qualified-but-unregistered
+    // + did-not-qualify, with the Zones top-3 direct-to-Nationals shown flowing
+    // into the projected basin instead. Pre-2026: qualified-but-didn't-compete
+    // + did-not-qualify, straight into Junior Nationals (no direct-bypass tier).
     const exitSplit = {};   // gate index -> { noreg, notqual } for the relabeled tributary
     if (abTot) {
       const zi = realStages.indexOf('Zones');
       if (zi >= 0 && zi < realStages.length - 1) {
-        EXIT[zi] = abTot.ewc_noreg + abTot.not_qual;
-        exitSplit[zi] = { noreg: abTot.ewc_noreg, notqual: abTot.not_qual };
+        const noreg = (abMode === 'nats') ? abTot.nat_noreg : abTot.ewc_noreg;
+        EXIT[zi] = noreg + abTot.not_qual;
+        exitSplit[zi] = { noreg: noreg, notqual: abTot.not_qual };
       }
     }
 
@@ -1467,7 +1540,7 @@
       svg += '<text class="pm-flow-exit-n" x="' + (sinkX + sinkW + 9) + '" y="' + (ly - 2) + '">\u2193 ' + fmtNum(EXIT[i]) + ' ' + UNIT + '</text>';
       if (exitSplit[i]) {
         // corrected Zones exit — direct-to-Nationals removed; split by reason
-        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">did not advance to ' + STAGE_SHORT['EWC'] +
+        svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 15) + '">did not advance to ' + STAGE_SHORT[realStages[i+1]] +
                ' \u00b7 ' + pct(EXIT[i], N[realStages[i]]) + ' of Zones</text>';
         svg += '<text class="pm-flow-exit-sub" x="' + (sinkX + sinkW + 9) + '" y="' + (ly + 31) + '" style="fill:#b45309">' +
                fmtNum(exitSplit[i].noreg) + ' qualified, didn\u2019t register</text>';
@@ -1702,24 +1775,32 @@
         '</div>';
     })();
 
-    /* ===== Advancement breakdown by age group (Zones → E/W/C) =====
+    /* ===== Advancement breakdown by age group =====
        The committee-facing answer to "why didn't they advance": qualified-but-
-       didn't-register vs didn't-place-high-enough, per age group. Active lens. */
+       didn't-continue vs didn't-place-high-enough, per age group. Active lens.
+       Wording adapts to era — 2026 gates Zones → E/W/C, pre-2026 gates
+       Zones → Junior Nationals directly (no E/W/C tier). */
     let advCard = '';
-    if (abSrc && abTot && (abTot.direct + abTot.ewc_reg + abTot.ewc_noreg + abTot.not_qual) > 0) {
-      const BK = [
-        { key:'direct',    short:'Direct to Nationals',        label:'Advanced direct to Jr Nationals (Zones top-3)', color:'#171f69' },
-        { key:'ewc_reg',   short:'Advanced to E/W/C',          label:'Advanced to E/W/C \u2014 registered',           color:'#009ac7' },
-        { key:'ewc_noreg', short:'Qualified, didn\u2019t register', label:'Qualified to E/W/C \u2014 did NOT register',     color:'#d97706' },
-        { key:'not_qual',  short:'Didn\u2019t qualify',             label:'Did not place high enough to qualify',          color:'#9aa3b2' },
+    const BK = (abMode === 'nats')
+      ? [
+        { key:'nat_reg',   short:'Reached Jr Nationals',            label:'Reached Junior Nationals (competed)',                color:'#009ac7' },
+        { key:'nat_noreg', short:'Qualified, didn\u2019t compete',  label:'Qualified to Jr Nationals \u2014 did NOT compete',    color:'#d97706' },
+        { key:'not_qual',  short:'Didn\u2019t qualify',             label:'Did not place high enough to qualify',               color:'#9aa3b2' },
+      ]
+      : [
+        { key:'direct',    short:'Direct to Nationals',             label:'Advanced direct to Jr Nationals (Zones top-3)',      color:'#171f69' },
+        { key:'ewc_reg',   short:'Advanced to E/W/C',               label:'Advanced to E/W/C \u2014 registered',                color:'#009ac7' },
+        { key:'ewc_noreg', short:'Qualified, didn\u2019t register', label:'Qualified to E/W/C \u2014 did NOT register',          color:'#d97706' },
+        { key:'not_qual',  short:'Didn\u2019t qualify',             label:'Did not place high enough to qualify',               color:'#9aa3b2' },
       ];
+    const sumBK = function(r){ return BK.reduce(function(a,b){ return a + (r[b.key]||0); }, 0); };
+    if (abSrc && abTot && sumBK(abTot) > 0) {
       const rowHtml = function(name, r, isTotal){
-        const tot = (r.direct||0)+(r.ewc_reg||0)+(r.ewc_noreg||0)+(r.not_qual||0);
+        const tot = sumBK(r);
         if (!tot) return '';
         let bar = '<div style="display:flex;height:20px;border-radius:5px;overflow:hidden;background:#eef1f8">';
         BK.forEach(function(b){ const v=r[b.key]||0; if(!v) return; bar += '<div title="' + escapeHtml(b.short+': '+v) + '" style="width:' + (v/tot*100) + '%;background:' + b.color + '"></div>'; });
         bar += '</div>';
-        const cells = BK.map(function(b){ const v=r[b.key]||0; return '<td style="text-align:center;font-family:JetBrains Mono,monospace;font-size:13px;color:' + (v?b.color:'#b7bdc9') + ';font-weight:' + (v?'700':'400') + '">' + fmtNum(v) + '</td>'; }).join('');
         const tdTop = isTotal ? 'border-top:2px solid #171f69;' : 'border-top:1px solid #eef1f8;';
         return '<tr>' +
           '<td style="' + tdTop + 'font-family:Inter,sans-serif;font-weight:700;color:#171f69;font-size:13.5px;white-space:nowrap;padding:8px 12px 8px 0">' + escapeHtml(name) + '</td>' +
@@ -1732,11 +1813,16 @@
       abOrder.forEach(function(ag){ rows += rowHtml(ag, abSrc[ag] || {}, false); });
       rows += rowHtml('All age groups', abTot, true);
       const legendHtml = BK.map(function(b){ return '<span style="display:inline-flex;align-items:center;gap:6px;font-family:Inter,sans-serif;font-size:12px;color:#2d3a4a;margin-right:16px"><span style="width:11px;height:11px;border-radius:3px;background:' + b.color + '"></span>' + escapeHtml(b.label) + '</span>'; }).join('');
-      const noregTot = abTot.ewc_noreg, notqualTot = abTot.not_qual, stoppedTot = noregTot + notqualTot;
+      const noregTot = (abMode === 'nats') ? abTot.nat_noreg : abTot.ewc_noreg;
+      const notqualTot = abTot.not_qual, stoppedTot = noregTot + notqualTot;
+      const unitWord = isEntries ? 'event-qualifications' : 'unique divers';
+      const descHtml = (abMode === 'nats')
+        ? ('Of the ' + unitWord + ' who stopped after Zones, <strong style="color:#b45309">' + fmtNum(noregTot) + ' qualified to Junior Nationals but did not compete</strong> (they earned the spot \u2014 placed top 10 on springboard or top 7 on platform) and <strong style="color:#5f6062">' + fmtNum(notqualTot) + ' did not place high enough to qualify</strong> (a competitive cutoff) \u2014 ' + fmtNum(stoppedTot) + ' total. Counting ' + unitWord + ' \u00b7 ' + year + ' \u00b7 non-displacing exhibition entries excluded.')
+        : ('Of the divers who stopped after Zones, <strong style="color:#b45309">' + fmtNum(noregTot) + ' qualified to E/W/C but did not register</strong> (recoverable \u2014 they earned the spot) and <strong style="color:#5f6062">' + fmtNum(notqualTot) + ' did not place high enough to qualify</strong> (a competitive cutoff) \u2014 ' + fmtNum(stoppedTot) + ' total. Divers who placed top-3 advanced <em>directly</em> to Junior Nationals and are not "stopped." Counting ' + unitWord + ' \u00b7 ' + year + ' \u00b7 non-displacing exhibition entries excluded.');
       advCard =
         '<div style="margin:18px 0 6px;border:1px solid #e2e5ef;border-radius:12px;padding:18px 20px;background:#fff">' +
           '<div style="font-family:Barlow Condensed,Inter,sans-serif;font-weight:700;font-size:20px;letter-spacing:.01em;color:#171f69;text-transform:uppercase">Where the Zones field went \u2014 by age group</div>' +
-          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 14px;line-height:1.5">Of the divers who stopped after Zones, <strong style="color:#b45309">' + fmtNum(noregTot) + ' qualified to E/W/C but did not register</strong> (recoverable \u2014 they earned the spot) and <strong style="color:#5f6062">' + fmtNum(notqualTot) + ' did not place high enough to qualify</strong> (a competitive cutoff) \u2014 ' + fmtNum(stoppedTot) + ' total. Divers who placed top-3 advanced <em>directly</em> to Junior Nationals and are not "stopped." Counting ' + (isEntries ? 'event-qualifications' : 'unique divers') + ' \u00b7 ' + year + ' \u00b7 non-displacing exhibition entries excluded.</div>' +
+          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 14px;line-height:1.5">' + descHtml + '</div>' +
           '<div style="overflow-x:auto">' +
           '<table style="width:100%;border-collapse:collapse;min-width:640px">' +
             '<thead><tr>' +
