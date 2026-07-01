@@ -3183,35 +3183,97 @@
     });
   }
 
-  /* ── Print-ready report (separate window) ──────────────── */
+  /* ── Print-ready report (separate window) ──────────────────
+     Full-dashboard print/PDF export — every section, current filters
+     applied. Rebuilt to close three real gaps found in the earlier
+     version: (1) it linked stylesheets by hardcoded absolute path, which
+     silently produces an unstyled report if the app is ever served from
+     a different path — now it clones whatever <link>/<style> tags the
+     live page is actually using, so it can never drift out of sync;
+     (2) it had no print-color-adjust, so brand fills/backgrounds could
+     be stripped to white by the browser's print pipeline on a real
+     printer even though they looked fine in the on-screen preview;
+     (3) every interactive control (filter dropdowns, toggles, pickers,
+     search box) printed as live-looking UI instead of being hidden —
+     a report should read as a report, not a screenshot of the app. */
   function openPrintReport(){
     const root = document.getElementById('stageContent');
     if (!root) return;
     const node = root.querySelector('.pm-root');
     if (!node) return;
+    // Guard against capturing a half-loaded snapshot — if any section is
+    // still showing its loading spinner, the static popup would freeze
+    // that spinner forever with no way to update.
+    if (node.querySelector('.pm-loading')) {
+      alert('Still loading data — please wait for the dashboard to finish loading, then try again.');
+      return;
+    }
     const w = window.open('', '_blank', 'width=1200,height=900');
     if (!w) return alert('Pop-up blocked — please allow pop-ups to generate the report.');
     const year = pmState.selectedYear;
-    const title = 'USA Diving Junior Circuit — Pipeline &amp; Modeling Report (' + year + ')';
+
+    // Athlete Career Trace is a search-first tool: with no athlete actively
+    // selected it has nothing but a search box, which the print stylesheet
+    // below hides — leaving a numbered section heading floating over an
+    // empty body. Strip that section entirely from the print clone in that
+    // case (it stays untouched on the live page; this only affects the copy
+    // going to the print window).
+    const printClone = node.cloneNode(true);
+    const careerSearchBox = printClone.querySelector('.pm-career-search');
+    if (careerSearchBox) {
+      const careerSection = careerSearchBox.closest('.pm-section');
+      if (careerSection && !careerSection.querySelector('.pm-career-header')) {
+        careerSection.remove();
+      }
+    }
+
+    // Clone the live page's own stylesheets rather than hardcoding a path —
+    // this can never go stale if the deploy location or asset structure changes.
+    const styleLinks = Array.prototype.slice.call(
+      document.querySelectorAll('link[rel="stylesheet"], style')
+    ).map(function(el){ return el.outerHTML; }).join('\n');
+
     w.document.write(
       '<!doctype html><html><head><meta charset="utf-8"><title>USA Diving Junior Circuit ' + year + ' Report</title>' +
-      '<link rel="stylesheet" href="' + location.origin + '/usa-diving-staff-apps/shared/design.css">' +
-      '<link rel="stylesheet" href="' + location.origin + '/usa-diving-staff-apps/junior-results/pipeline-modeling.css">' +
-      '<style>body{background:#fff;padding:0;margin:0}.pm-hero-actions,.pm-controls{display:none !important}' +
-      '.print-header{padding:16px 24px;border-bottom:3px solid #171f69;display:flex;justify-content:space-between;align-items:end;margin-bottom:12px}' +
-      '.print-header-title{font-family:Barlow Condensed,sans-serif;font-weight:800;font-size:24px;color:#171f69;text-transform:uppercase}' +
-      '.print-header-sub{font-size:12px;color:#5a6a7e;margin-top:4px}' +
-      '.print-meta{font-size:11px;color:#5a6a7e;text-align:right}' +
-      '@media print{.print-noprint{display:none}}' +
+      styleLinks +
+      '<style>' +
+        'body{background:#fff;padding:0;margin:0}' +
+        // Hide every interactive control by element type first (the
+        // broadest, most future-proof net: buttons/inputs/selects inside
+        // the dashboard are never legitimate static report content), then
+        // named picker/toggle/filter widgets that use styled divs or labels
+        // rather than a bare <button>. Scoped to .pm-root specifically —
+        // NOT the whole document — so this never touches the popup's own
+        // "Print this page" button below, which lives outside .pm-root.
+        '.pm-root button,.pm-root input,.pm-root select,' +
+        '.pm-root .pm-loading,.pm-root .pm-error,' +
+        '.pm-hero-actions,.pm-controls,.pm-filter-bar,' +
+        '.pm-cohort-stage-picker,.pm-cohort-controls,.pm-lens-toggle,' +
+        '.pm-career-search,.pm-toggle,.pm-filter-clear' +
+        '{display:none !important}' +
+        '.print-header{padding:16px 24px;border-bottom:3px solid #E31937;display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px}' +
+        '.print-header-title{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:26px;color:#171F69;text-transform:uppercase;letter-spacing:.01em}' +
+        '.print-header-sub{font-family:Inter,sans-serif;font-size:12px;color:#5f6062;margin-top:4px}' +
+        '.print-mark{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:15px;color:#171F69;text-align:right;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}' +
+        '.print-mark b{color:#E31937;font-weight:700}' +
+        '.print-footer{margin-top:16px;padding:10px 24px;border-top:1px solid #d7dcea;font-family:Inter,sans-serif;font-size:10px;color:#8a93a6}' +
+        '@media print{' +
+          '.print-noprint{display:none !important}' +
+          '@page{size:landscape;margin:11mm}' +
+          '*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}' +
+          '.pm-section{page-break-inside:avoid}' +
+          '.pm-kpi-strip,.pm-adv-breakdown,.pm-fee-table-wrap,.pm-flow-wrap{page-break-inside:avoid}' +
+        '}' +
       '</style></head><body>' +
       '<div class="print-header">' +
-        '<div><div class="print-header-title">Pipeline &amp; Modeling — ' + year + ' Junior Circuit</div>' +
-        '<div class="print-header-sub">USA Diving Staff Platform · Generated ' + new Date().toLocaleString() + '</div></div>' +
-        '<div class="print-meta">USA Diving — National Governing Body<br>For internal staff review</div>' +
+        '<div><div class="print-header-title">Pipeline &amp; Modeling &mdash; ' + year + ' Junior Circuit</div>' +
+        '<div class="print-header-sub">USA Diving Staff Platform &middot; Generated ' + new Date().toLocaleString() + '</div></div>' +
+        '<div class="print-mark">USA <b>Diving</b><br><span style="font-weight:400;font-size:10px;letter-spacing:0;text-transform:none;color:#5f6062">National Governing Body &middot; internal staff review</span></div>' +
       '</div>' +
-      node.outerHTML +
+      printClone.outerHTML +
+      '<div class="print-footer">Generated ' + new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) + ' &middot; USA Diving Junior Results Audit &middot; Reflects filters active at time of generation.</div>' +
       '<div class="print-noprint" style="position:fixed;bottom:18px;right:18px">' +
-        '<button onclick="window.print()" style="background:#171f69;color:#fff;border:none;padding:10px 18px;border-radius:6px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif">Print this page</button>' +
+        '<button onclick="window.print()" style="background:#171F69;color:#fff;border:none;padding:10px 18px;border-radius:6px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif">Print this page</button>' +
       '</div>' +
       '</body></html>'
     );

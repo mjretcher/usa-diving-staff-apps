@@ -3967,15 +3967,15 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         r.rows.forEach(x => m[x.stage] = x.n);
         const reg = m['Regionals']||0, zon = m['Zones']||0, ewc = m['EWC']||0, nat = m['Nationals']||0;
         const stages = [
-          {k:'Regionals', n:reg, col:'var(--navy)'},
-          {k:'Zones',     n:zon, col:'var(--pool)'},
+          {k:'Regionals', n:reg, col:'var(--navy)', txt:'#fff'},
+          {k:'Zones',     n:zon, col:'var(--pool)', txt:'var(--navy)'},
         ];
-        if (ewc) stages.push({k:'E/W/C', n:ewc, col:'var(--sky)'});
-        if (nat) stages.push({k:'Nationals', n:nat, col:'var(--q-direct)'});
+        if (ewc) stages.push({k:'E/W/C', n:ewc, col:'var(--sky)', txt:'var(--navy)'});
+        if (nat) stages.push({k:'Nationals', n:nat, col:'var(--q-direct)', txt:'#fff'});
         const max = Math.max.apply(null, stages.map(s => s.n));
         const html = stages.map(s => `
           <div class="cf-mini-row">
-            <div class="cf-mini-bar" style="width:${max?Math.max(2, 100*s.n/max):0}%;background:${s.col};height:22px;line-height:22px;border-radius:4px;color:#fff;padding:0 10px;min-width:50px;display:flex;align-items:center"><span style="font-family:var(--f-mono);font-size:12px;font-weight:700">${fmt(s.n)}</span></div>
+            <div class="cf-mini-bar" style="width:${max?Math.max(2, 100*s.n/max):0}%;background:${s.col};height:22px;line-height:22px;border-radius:4px;color:${s.txt};padding:0 10px;min-width:50px;display:flex;align-items:center"><span style="font-family:var(--f-mono);font-size:12px;font-weight:700">${fmt(s.n)}</span></div>
             <div class="cf-mini-lbl" style="font-size:11px;color:var(--ink-3);margin:1px 0 6px">${s.k}</div>
           </div>`).join('');
         const cell = document.getElementById('hf-'+y);
@@ -4953,17 +4953,22 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <h2 class="rb-h2">Pipeline Funnel ${yrs.length===1?'('+yrs[0]+')':'('+yrs.length+' years)'}</h2>
           <div class="rb-funnels">
             ${yrs.map(y => {
-              const stages = [['Regionals', grid[y+'|Regionals']||0, '#171F69']];
-              stages.push(['Zones', grid[y+'|Zones']||0, '#3F5BAA']);
-              const ewc = grid[y+'|EWC']||0; if (ewc) stages.push(['E/W/C', ewc, '#7BA4DB']);
-              const nat = grid[y+'|Nationals']||0; if (nat) stages.push(['Nationals', nat, '#22893E']);
+              // Text color is per-background: white reads fine on the dark
+              // navy/green fills, but fails badly on the light Sky fill
+              // (1.88:1 contrast — essentially unreadable) and is only
+              // borderline on Cyan (3.26:1). Navy text on those two instead
+              // gives 7.77:1 and 4.49:1 — both comfortably legible.
+              const stages = [['Regionals', grid[y+'|Regionals']||0, '#171F69', '#fff']];
+              stages.push(['Zones', grid[y+'|Zones']||0, '#009AC7', '#171F69']);
+              const ewc = grid[y+'|EWC']||0; if (ewc) stages.push(['E/W/C', ewc, '#8FC3EA', '#171F69']);
+              const nat = grid[y+'|Nationals']||0; if (nat) stages.push(['Nationals', nat, '#22893E', '#fff']);
               const max = Math.max.apply(null, stages.map(s => s[1]));
               return `<div class="rb-funnel-card">
                 <div class="rb-funnel-yr">${y}</div>
-                ${stages.map(([lbl,n,col]) => `
+                ${stages.map(([lbl,n,col,txt]) => `
                   <div class="rb-funnel-row">
                     <div class="rb-funnel-lbl">${lbl}</div>
-                    <div class="rb-funnel-bar" style="width:${max?Math.max(8,100*n/max):0}%;background:${col}">${fmt(n)}</div>
+                    <div class="rb-funnel-bar" style="width:${max?Math.max(8,100*n/max):0}%;background:${col};color:${txt}">${fmt(n)}</div>
                   </div>
                 `).join('')}
               </div>`;
@@ -5164,7 +5169,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
         const eras = [
           { lbl: '2021–2022', years: [2021,2022], desc: 'Old system + foreign Regionals-only', color: '#171F69' },
-          { lbl: '2023–2025', years: [2023,2024,2025], desc: 'Old system + foreign non-displacing', color: '#3F5BAA' },
+          { lbl: '2023–2025', years: [2023,2024,2025], desc: 'Old system + foreign non-displacing', color: '#009AC7' },
           { lbl: '2026+',     years: [2026], desc: 'New system + E/W/C tier', color: '#22893E' },
         ];
         const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
@@ -5863,29 +5868,30 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           #rb-output, #rb-output * { visibility: visible !important; }
           #rb-output { position: absolute; left: 0; top: 0; width: 100%; background: white; }
           #rb-output .rb-toolbar { display: none !important; }
+          #rb-output, #rb-output * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
           @page { margin: 0.6in; }
         }
-        #rb-output { position: fixed; inset: 0; background: #fafbfd; z-index: 99999; overflow: auto; font-family: var(--f-ui, system-ui); color: #171F69; }
+        #rb-output { position: fixed; inset: 0; background: #fafbfd; z-index: 99999; overflow: auto; font-family: var(--f-ui, 'Inter', system-ui, sans-serif); color: #171F69; }
         #rb-output .rb-toolbar { position: sticky; top: 0; background: white; border-bottom: 1px solid #e5e9f2; padding: 10px 18px; display: flex; align-items: center; gap: 8px; z-index: 1; }
         #rb-output .rb-doc { max-width: 900px; margin: 24px auto; padding: 32px 44px; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
         #rb-output .rb-doc-head { border-bottom: 4px solid #E31937; padding-bottom: 14px; margin-bottom: 22px; }
-        #rb-output .rb-doc-head h1 { font-size: 26px; margin: 0; color: #171F69; }
+        #rb-output .rb-doc-head h1 { font-family: var(--f-display, 'Barlow Condensed', sans-serif); font-weight: 700; font-size: 28px; margin: 0; color: #171F69; text-transform: uppercase; letter-spacing: .01em; }
         #rb-output .rb-doc-head .rb-doc-sub { font-size: 12px; color: #5a6480; margin-top: 8px; }
         #rb-output .rb-section { margin: 26px 0; page-break-inside: avoid; }
-        #rb-output .rb-h2 { font-size: 16px; color: #171F69; border-bottom: 2px solid #171F69; padding-bottom: 4px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.04em; }
-        #rb-output .rb-h3 { font-size: 13px; color: #171F69; margin: 16px 0 6px; }
+        #rb-output .rb-h2 { font-family: var(--f-display, 'Barlow Condensed', sans-serif); font-weight: 700; font-size: 18px; color: #171F69; border-bottom: 2px solid #171F69; padding-bottom: 4px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+        #rb-output .rb-h3 { font-family: var(--f-display, 'Barlow Condensed', sans-serif); font-weight: 700; font-size: 14px; color: #171F69; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.03em; }
         #rb-output .rb-p { font-size: 12px; color: #2d3450; margin: 0 0 8px; }
-        #rb-output .rb-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+        #rb-output .rb-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
         #rb-output .rb-table th { background: #eef1f7; color: #171F69; text-align: left; padding: 5px 8px; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; border-bottom: 1px solid #c5cce0; }
         #rb-output .rb-table td { padding: 5px 8px; border-bottom: 1px solid #e5e9f2; font-variant-numeric: tabular-nums; }
         #rb-output .rb-table-sm { font-size: 10px; }
         #rb-output .rb-soft { color: #6b7390; font-size: 11px; }
         #rb-output .rb-funnels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
         #rb-output .rb-funnel-card { background: #f6f8fc; border-radius: 6px; padding: 10px; }
-        #rb-output .rb-funnel-yr { font-weight: 700; color: #171F69; margin-bottom: 6px; }
+        #rb-output .rb-funnel-yr { font-family: var(--f-display, 'Barlow Condensed', sans-serif); font-weight: 700; font-size: 15px; color: #171F69; margin-bottom: 6px; }
         #rb-output .rb-funnel-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 10px; }
         #rb-output .rb-funnel-lbl { width: 70px; color: #5a6480; }
-        #rb-output .rb-funnel-bar { color: white; padding: 3px 8px; border-radius: 2px; font-weight: 700; }
+        #rb-output .rb-funnel-bar { font-family: var(--f-mono, 'JetBrains Mono', monospace); color: white; padding: 3px 8px; border-radius: 2px; font-weight: 700; }
         #rb-output .rb-toolbar button { padding: 6px 12px; border-radius: 4px; border: 1px solid #c5cce0; background: white; cursor: pointer; font-family: inherit; font-size: 12px; }
         #rb-output .rb-toolbar .rb-print-btn { background: #171F69; color: white; border-color: #171F69; font-weight: 600; }
       </style>
