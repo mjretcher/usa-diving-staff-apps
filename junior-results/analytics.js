@@ -130,9 +130,16 @@
     ewcOnly.forEach(r=>{ const n=norm(r.athlete||''); if(!ewcAthMap.has(n)) ewcAthMap.set(n,r); });
     const ewcReg   =[...ewcAthMap.keys()].filter(n=>isEWCReg(n)).length;
     const ewcNotReg=ewcAthMap.size-ewcReg;
+    // isEWCReg() is a pure function of (normalized) athlete name, so every row
+    // for a given athlete agrees on registered/not-registered — these raw,
+    // non-deduped row arrays are the entries-mode equivalent of ewcReg/
+    // ewcNotReg above (uniq() on them reproduces the exact same athlete-level
+    // numbers, so nothing that already reads ewcReg/ewcNotReg is affected).
+    const ewcRegRows   = ewcOnly.filter(r=>isEWCReg(r.athlete||''));
+    const ewcNotRegRows= ewcOnly.filter(r=>!isEWCReg(r.athlete||''));
     return { stageRows, nd, foreign, dual, hps, ymca, bumped, notAtt,
              qual:[], noShow:[], natDirect:natD, ewcQual:ewcOnly,
-             ewcQualAths:ewcAthMap.size, ewcReg, ewcNotReg,
+             ewcQualAths:ewcAthMap.size, ewcReg, ewcNotReg, ewcRegRows, ewcNotRegRows,
              noShowRows:[...ewcAthMap.values()].filter(r=>!isEWCReg(r.athlete||'')) };
   }
 
@@ -335,8 +342,8 @@
     const total   =cnt(d.stageRows);
     const natD    =cm==='athletes'?uniq(d.natDirect||[]):( d.natDirect||[]).length;
     const ewcQ    =cm==='athletes'?d.ewcQualAths:(d.ewcQual||[]).length;
-    const ewcR    =d.ewcReg;
-    const ewcNR   =d.ewcNotReg;
+    const ewcR    =cm==='athletes'?d.ewcReg:(d.ewcRegRows||[]).length;
+    const ewcNR   =cm==='athletes'?d.ewcNotReg:(d.ewcNotRegRows||[]).length;
     rows=[
       {label:'Competed at Zones',      n:total,fill:'#E6F1FB',ink:'#0C447C',note:''},
       {label:'→ Nationals direct',     n:natD,fill:'#EAF3DE',ink:'#27500A',note:'top 3 per zone per event'},
@@ -416,7 +423,7 @@
   /* ── category strip ──────────────────────────────────────────── */
   function renderCatStrip(d) {
     const cm=F.countMode;
-    const noShowN = F.stage==='Regionals' ? cnt(d.noShow) : d.ewcNotReg;
+    const noShowN = F.stage==='Regionals' ? cnt(d.noShow) : cnt(d.ewcNotRegRows||[]);
     const noShowSub= F.stage==='Regionals' ? 'qualified, skipped Zones' : 'qualified, didn\'t register';
     const cats=[
       {key:'foreign',     icon:'ti-flag',           label:'Foreign',        n:cnt(d.foreign), sub:subCnt(d.foreign),  bc:'#E24B4A',bg:'#FCEBEB',ic:'#A32D2D'},
@@ -445,18 +452,20 @@
   /* ── detail panel ────────────────────────────────────────────── */
   function renderDetail(d) {
     const cat=F.openCat;
+    const cm=F.countMode;
+    const unit=cm==='athletes'?'athletes':'entries';
     const all=allJunior();
     let rows=[],title='',note='',hBg='var(--surface-2)',hInk='var(--ink)';
 
     if (cat==='foreign')     { rows=d.foreign; title=`Foreign athletes — ${cnt(d.foreign)} athletes · ${d.foreign.length} entries`; note='Non-displacing · Art. 102(b) · shown at ghost score rank (*) when place=127'; hBg='#FCEBEB'; hInk='#791F1F'; }
-    if (cat==='dual')        { rows=d.dual;    title=`Dual citizens — ${cnt(d.dual)} athletes`; note='Competed for another federation · non-displacing'; hBg='#E6F1FB'; hInk='#0C447C'; }
-    if (cat==='hps')         { rows=d.hps;     title=`HPS athletes — ${cnt(d.hps)} athletes`; note='Tier 3 High Performance Squad · pre-qualified to Nationals'; hBg='#FAEEDA'; hInk='#633806'; }
-    if (cat==='ymca')        { rows=d.ymca||[];title=`YMCA champions — ${cnt(d.ymca||[])} athletes`; note='YMCA event champions · pre-qualified to E/W/C'; hBg='#E1F5EE'; hInk='#085041'; }
-    if (cat==='displacement'){ rows=d.bumped;  title=`Displacement bump-ins — ${cnt(d.bumped)} athletes`; note='Athletes who moved up because a non-displacing athlete placed ahead'; hBg='#EEEDFE'; hInk='#3C3489'; }
+    if (cat==='dual')        { rows=d.dual;    title=`Dual citizens — ${cnt(d.dual)} ${unit}`; note='Competed for another federation · non-displacing'; hBg='#E6F1FB'; hInk='#0C447C'; }
+    if (cat==='hps')         { rows=d.hps;     title=`HPS athletes — ${cnt(d.hps)} ${unit}`; note='Tier 3 High Performance Squad · pre-qualified to Nationals'; hBg='#FAEEDA'; hInk='#633806'; }
+    if (cat==='ymca')        { rows=d.ymca||[];title=`YMCA champions — ${cnt(d.ymca||[])} ${unit}`; note='YMCA event champions · pre-qualified to E/W/C'; hBg='#E1F5EE'; hInk='#085041'; }
+    if (cat==='displacement'){ rows=d.bumped;  title=`Displacement bump-ins — ${cnt(d.bumped)} ${unit}`; note='Athletes who moved up because a non-displacing athlete placed ahead'; hBg='#EEEDFE'; hInk='#3C3489'; }
     if (cat==='noshow') {
       rows=d.noShowRows||[];
-      const n=F.stage==='Regionals'?cnt(d.noShow):d.ewcNotReg;
-      title=`Did not compete — ${n} athletes`;
+      const n=F.stage==='Regionals'?cnt(d.noShow):cnt(d.ewcNotRegRows||[]);
+      title=`Did not compete — ${n} ${unit}`;
       note=F.stage==='Regionals'?'Qualified at Regionals but did not appear at Zones':'Qualified at Zones (places 4–18) but did not register for E/W/C';
     }
 
@@ -669,7 +678,6 @@
       sidebar.style.width = sidebar._origWidth || '';
       sidebar.style.minWidth = sidebar._origMinWidth || '';
       sidebar.style.overflow = sidebar._origOverflow || '';
-      sidebar.querySelectorAll('[data-sb-hidden]').forEach(el=>{ el.style.display=el._origDisplay||''; });
       sidebar.querySelectorAll('.event-item, .filter-section, .control-label, .filter-label, .filter-field, select, input, .flag-list, .filter-pills, .panel-head-title, #clearEventButton, #eventSearch, #filterFlags').forEach(el=>{
         el.style.display = el._origDisplay || '';
       });

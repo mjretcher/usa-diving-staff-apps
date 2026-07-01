@@ -27,6 +27,22 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  // For free-text values (e.g. team names) embedded as a single-quoted JS
+  // string ARGUMENT inside an onclick="..." attribute. esc() is wrong here:
+  // it turns an apostrophe into &#39;, but the browser decodes HTML entities
+  // in attribute values before the JS parser ever sees them — so &#39;
+  // becomes a literal ' again right as the onclick fires, prematurely
+  // closing the JS string (e.g. breaking the team filter for any team name
+  // containing an apostrophe, like "O'Fallon Dive Club"). Emitting a literal
+  // backslash+quote as raw text (never HTML-entity-encoded) survives HTML
+  // decoding unchanged and is read correctly by the JS parser.
+  function escJsAttr(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;')
+      .replace(/"/g,'&quot;')
+      .replace(/\\/g,'\\\\')
+      .replace(/'/g,"\\'");
+  }
   function $(id){ return document.getElementById(id); }
   function norm(v){
     return String(v||'').toLowerCase().normalize('NFKD')
@@ -636,7 +652,7 @@
       const rawValue = sliceKey === 'region' ? String(s.value).replace(/^Region\s+/, '') :
                        sliceKey === 'zone'   ? String(s.value).replace(/^Zone\s+/, '') :
                        s.value;
-      return `<tr class="cf-slice-row" onclick="window._rptFilter('${sliceFilterKey}', '${esc(rawValue)}')">
+      return `<tr class="cf-slice-row" onclick="window._rptFilter('${sliceFilterKey}', '${escJsAttr(rawValue)}')">
         <td class="r-name"><strong>${esc(s.value)}</strong></td>
         <td class="mono"><strong>${fmtNum(s.total)}</strong></td>
         <td class="mono">${fmtNum(s.reachedZones)} <span class="cf-slice-pct">${ratio(s.reachedZones)}%</span></td>
@@ -657,7 +673,7 @@
       const rawValue = sliceKey === 'region' ? String(s.value).replace(/^Region\s+/, '') :
                        sliceKey === 'zone'   ? String(s.value).replace(/^Zone\s+/, '') :
                        s.value;
-      return `<div class="cf-mini" onclick="window._rptFilter('${sliceFilterKey}', '${esc(rawValue)}')">
+      return `<div class="cf-mini" onclick="window._rptFilter('${sliceFilterKey}', '${escJsAttr(rawValue)}')">
         <div class="cf-mini-head">
           <span class="cf-mini-label">${esc(s.value)}</span>
           <span class="cf-mini-conv">${conv}% → Nat</span>

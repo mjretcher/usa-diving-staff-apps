@@ -13,6 +13,23 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
+  // For free-text values (athlete names, team names, notes) embedded as a
+  // single-quoted JS string ARGUMENT inside an onclick="..." attribute.
+  // esc() alone is wrong here: it turns an apostrophe into the HTML entity
+  // &#39;, but the browser decodes HTML entities in attribute values BEFORE
+  // handing the string to the JS parser — so &#39; becomes a literal '
+  // again right when the onclick fires, prematurely closing the JS string
+  // (breaking every button for any name containing an apostrophe, e.g.
+  // "O'Brien"). The fix: emit a literal backslash+quote as raw text (never
+  // HTML-entity-encoded), which passes through HTML decoding unchanged and
+  // is then read by the JS parser as a correctly-escaped apostrophe.
+  function escJsAttr(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;')
+      .replace(/"/g,'&quot;')
+      .replace(/\\/g,'\\\\')
+      .replace(/'/g,"\\'");
+  }
   function $(id) { return document.getElementById(id); }
   function norm(v) {
     return String(v||'').toLowerCase().normalize('NFKD')
@@ -438,10 +455,9 @@
 
   function renderReviewSection(r) {
     const dm   = String(r.diveMeetsId || '').trim();
-    const name = esc(r.athlete || '');
+    const name = escJsAttr(r.athlete || '');
     const def  = getReviewActions(r.reviewFlags);
     if (!def) return '';
-    const safeNote = def.reason.replace(/'/g, "\\'");
     return `<div class="rv-section">
       <div class="rv-header">
         <i class="ti ti-alert-triangle rv-icon" aria-hidden="true"></i>
@@ -452,7 +468,7 @@
       <div class="rv-actions">
         ${def.actions.map(a => `
           <button class="rv-btn rv-btn-${a.type==='review'?'dismiss':a.type}"
-            onclick="window._qvReviewAction('${esc(dm)}','${name}','${esc(a.type)}',${a.value},'${esc(a.note || '').replace(/'/g,'\\&apos;')}')">
+            onclick="window._qvReviewAction('${esc(dm)}','${name}','${esc(a.type)}',${a.value},'${escJsAttr(a.note || '')}')">
             ${esc(a.label)}
           </button>`).join('')}
       </div>
@@ -606,13 +622,13 @@
       <div class="panel-section">
         <div class="panel-section-label">Quick override</div>
         <div class="panel-override-row">
-          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${esc(r.athlete)}','foreign','${!r.foreignDeclared}')">
+          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${escJsAttr(r.athlete)}','foreign','${!r.foreignDeclared}')">
             ${r.foreignDeclared ? 'Remove foreign flag' : 'Mark as foreign'}
           </button>
-          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${esc(r.athlete)}','notAttending','${!r.declaredNotAttending}')">
+          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${escJsAttr(r.athlete)}','notAttending','${!r.declaredNotAttending}')">
             ${r.declaredNotAttending ? 'Mark attending' : 'Not attending'}
           </button>
-          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${esc(r.athlete)}','hps','${!r.hps}')">
+          <button class="panel-act-btn" onclick="window._qvOverride('${esc(dm)}','${escJsAttr(r.athlete)}','hps','${!r.hps}')">
             ${r.hps ? 'Remove HPS' : 'Mark as HPS'}
           </button>
         </div>
@@ -1246,7 +1262,7 @@
             return `<tr>
               <td><div class="ath-name">${esc(a.name)}</div></td>
               <td><a class="dm-ext-link" href="https://www.divemeets.com/profile.php?id=${esc(a.diveMeetsId)}" target="_blank" rel="noopener"><i class="ti ti-external-link" aria-hidden="true"></i> ${esc(a.diveMeetsId)}</a></td>
-              <td style="font-size:11px">${a.qualifiedEvents.join(', ')}</td>
+              <td style="font-size:11px">${a.qualifiedEvents.map(e=>esc(e)).join(', ')}</td>
               <td>${ewcEvts?`<span class="qvb qvb-nd">Competing EWC (non-disp.)</span>`:`<span class="qvb qvb-direct">Direct qualifier</span>`}</td>
               <td class="reg-col">
                 ${hps ? `<button class="hps-attend-btn" onclick="window._qvToggleHPS('${esc(a.diveMeetsId)}')" title="${confirmed?'Confirmed':'Unconfirmed'}">
@@ -1695,7 +1711,7 @@
       const cards = athletes.map(a => {
         const def = getReviewActions([a.primaryFlag]);
         return `<div class="rq-card">
-          <div class="rq-card-header" onclick="window._qvOpenPanelByName('${esc(a.name)}')">
+          <div class="rq-card-header" onclick="window._qvOpenPanelByName('${escJsAttr(a.name)}')">
             <div>
               <div class="rq-ath-name">${esc(a.name)}</div>
               ${a.dm?`<div class="rq-ath-meta">DM ${esc(a.dm)}</div>`:''}
@@ -1707,7 +1723,7 @@
           <div class="rq-acts">
             ${(def?.actions||[]).map(act=>`
               <button class="rv-btn rv-btn-${act.type==='review'?'dismiss':act.type}"
-                onclick="window._qvReviewAction('${esc(a.dm)}','${esc(a.name)}','${esc(act.type)}',${act.value},'${esc(act.note||'')}')">
+                onclick="window._qvReviewAction('${esc(a.dm)}','${escJsAttr(a.name)}','${esc(act.type)}',${act.value},'${escJsAttr(act.note||'')}')">
                 ${esc(act.label)}
               </button>`).join('')}
           </div>

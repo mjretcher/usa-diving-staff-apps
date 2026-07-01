@@ -135,21 +135,28 @@
     </div>
 
     <!--
-      LOAD ORDER:
-      1. config.js         — shared config (sync token)
-      2. overrides-sync.js — GitHub override sync (needs config)
-      3. junior-data.js    — results data
-      4. junior-athlete-status.js — HPS/foreign/dual roster
-      5. status-merge.js   — merges roster into data rows
-      6. main.js           — app core (includes zone normalization,
-                             YMCA logic, qual impact, all formerly
-                             separate patch files consolidated)
-      7. qualifier-views.js — E/W/C and Nationals view overlays
-      8. override-athlete-search.js — drawer athlete search
-      9. analytics.js     — pipeline analytics overlay
-     10. reports-view.js  — comprehensive reports & cohort panels
-     11. override-athlete-search.js — drawer athlete search
-     12. athlete-lookup.js — future athlete lookup stub
+      LOAD ORDER (must match the <script> tags below exactly):
+      1. config.js              — shared config (sync token)
+      2. neon-client.js         — window.NEON.query() for direct Neon access
+      3. overrides-sync.js      — GitHub override sync API (defines window.OverridesSync;
+                                   not actually invoked until main.js's init() calls it,
+                                   by which point `state` already exists)
+      4. junior-data.js         — results data
+      5. jo-nat-qualifiers.js   — official Junior Nationals qualifier list
+      6. ewc-data.js            — E/W/C registration, foreign/dual/HPS lists
+      7. ewc-results-2026.js    — E/W/C meet results
+      8. junior-athlete-status.js — HPS/foreign/dual roster
+      9. status-merge.js        — merges roster into data rows
+     10. main.js                — app core (zone normalization, YMCA logic,
+                                   qual impact, all formerly separate patch
+                                   files consolidated; defines `state`)
+     11. qualifier-views.js     — E/W/C and Nationals view overlays
+     12. analytics.js           — pipeline analytics overlay
+     13. reports-view.js        — comprehensive reports & cohort panels
+     14. override-athlete-search.js — drawer athlete search
+     15. athlete-lookup.js      — future athlete lookup stub
+     16. pipeline-modeling.js   — multi-year funnels, cohort progression, financial overlay
+     17. mobile-nav.js          — off-canvas filters drawer on phones
     -->
     <script src="../data/config.js?v=202606282030"></script>
   <script src="../shared/neon-client.js?v=202606282030"></script>
@@ -161,9 +168,9 @@
     <script src="../data/junior-athlete-status.js?v=202606282030"></script>
     <script src="status-merge.js?v=202606282030"></script>
     <script src="main.js?v=202607010117"></script>
-    <script src="qualifier-views.js?v=202606301830"></script>
-    <script src="analytics.js?v=202606282030"></script>
-    <script src="reports-view.js?v=202607010134"></script>
+    <script src="qualifier-views.js?v=202607010417"></script>
+    <script src="analytics.js?v=202607010417"></script>
+    <script src="reports-view.js?v=202607010417"></script>
     <script src="override-athlete-search.js?v=202606282030"></script>
     <script src="athlete-lookup.js?v=202606282030"></script>
     <script src="pipeline-modeling.js?v=202607010134"></script>
