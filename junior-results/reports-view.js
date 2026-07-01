@@ -3431,6 +3431,24 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
      attend? are there phantom attendees with no qualification?). */
   const reconcileState = { year: null };
 
+  // Same predicate the Pipeline tab always applies to its per-stage counts:
+  // drop synchro entries (a separate discipline that never advances through
+  // the individual Region->Zone->E/W/C->Nationals pipeline) and, by default,
+  // Future Champions / Non-Qualifier / Intermediate / Novice / host-added
+  // Senior events. Applied here too so "attended"/"qualified" counts in this
+  // panel describe the SAME population as the Pipeline river for the same
+  // stage — without it, this panel silently included a few extra divers
+  // Pipeline excludes (e.g. Zones showed 1,070 here vs. 1,063 on Pipeline).
+  const RECON_INDIV_NONQUAL_SQL =
+    " AND discipline IN ('1M','3M','Platform')" +
+    " AND (meet_name NOT ILIKE '%Future Champions%'" +
+    " AND event_name NOT ILIKE '%Future Champions%'" +
+    " AND event_name NOT ILIKE 'FC %'" +
+    " AND event_name NOT ILIKE 'Senior %'" +
+    " AND event_name NOT ILIKE '%Non Qualifier%'" +
+    " AND event_name NOT ILIKE '%Intermediate%'" +
+    " AND event_name NOT ILIKE '%Novice%')";
+
   function renderReconcilePanel(wrap){
     if (!reconcileState.year) reconcileState.year = _currentSeason || 2026;
     const filterSummary = activeRptFilterSummary();
@@ -3497,7 +3515,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
                  WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results
-          WHERE year = $1 AND is_junior_circuit AND stage = 'Zones' AND place IS NOT NULL${fb.sql}
+          WHERE year = $1 AND is_junior_circuit AND stage = 'Zones' AND place IS NOT NULL${fb.sql}${RECON_INDIV_NONQUAL_SQL}
         ),
         zone_best AS (
           SELECT diver_id_dm, event_key, place AS p
@@ -3511,7 +3529,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
                  WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results
-          WHERE year = $1 AND is_junior_circuit AND stage = 'EWC' AND place IS NOT NULL${fb.sql}
+          WHERE year = $1 AND is_junior_circuit AND stage = 'EWC' AND place IS NOT NULL${fb.sql}${RECON_INDIV_NONQUAL_SQL}
         ),
         ewc_best AS (
           SELECT diver_id_dm, event_key, place AS p
@@ -3531,7 +3549,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const attendedQ = await neonQuery(`
         SELECT stage, COUNT(DISTINCT diver_id_dm)::int AS n
         FROM core.event_results
-        WHERE year = $1 AND is_junior_circuit${fb.sql}
+        WHERE year = $1 AND is_junior_circuit${fb.sql}${RECON_INDIV_NONQUAL_SQL}
         GROUP BY stage
       `, [y, ...fb.params]);
 
