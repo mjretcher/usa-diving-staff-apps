@@ -207,6 +207,17 @@
            "AND event_name NOT ILIKE '%Novice%')";
   }
 
+  // SQL predicate restricting to the INDIVIDUAL qualifying disciplines
+  // (1m / 3m / platform). Synchronized events carry their own discipline
+  // values (Synchro-3M, Synchro-Platform) and a handful are unparsed (NULL);
+  // none of those advance through the individual Region -> Zone -> E/W/C ->
+  // Junior Nationals pipeline, so they must never inflate individual athlete
+  // counts, event-entry counts, transitions, or placement tiers. Always on:
+  // synchro is a separate discipline, not a "non-qualifying" toggle choice.
+  function indivSql(){
+    return " AND discipline IN ('1M','3M','Platform')";
+  }
+
   /* ── Discovery queries ─────────────────────────────────── */
   async function loadAvailableYears(){
     if (pmState.yearsAvailable !== null) return pmState.yearsAvailable;
@@ -254,7 +265,7 @@
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
-      "WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + fb.sql + " " +
+      "WHERE year = $1 AND " + whereJrCircuit() + indivSql() + (pmState.excludeFutureChamps ? nonQualSql() : '') + fb.sql + " " +
       "GROUP BY stage";
     const stagesR = await neonQ(stagesSql, [year].concat(fb.params));
 
@@ -272,14 +283,14 @@
     const astSql =
       "SELECT stage, " +
       "  CASE " +
-      "    WHEN stage = 'Regionals' AND discipline ILIKE '%platform%' THEN 'platform_at_regionals' " +
+      "    WHEN stage = 'Regionals' AND discipline = 'Platform' THEN 'platform_at_regionals' " +
       "    WHEN stage = 'Regionals' AND year = 2026 AND age_group IN ('Group C','Group D') THEN 'group_cd_at_regionals_2026' " +
       "    ELSE 'other' END AS reason, " +
       "  COUNT(DISTINCT diver_id_dm)::int AS unique_athletes, " +
       "  COUNT(*)::int AS event_entries " +
       "FROM core.event_results " +
       "WHERE year = $1 AND " + whereJrCircuit() + astFb.sql + " " +
-      "AND ((stage = 'Regionals' AND discipline ILIKE '%platform%') " +
+      "AND ((stage = 'Regionals' AND discipline = 'Platform') " +
       "  OR (stage = 'Regionals' AND year = 2026 AND age_group IN ('Group C','Group D'))) " +
       "GROUP BY stage, reason";
     const astR = await neonQ(astSql, [year].concat(astFb.params));
@@ -290,7 +301,7 @@
     const transSql =
       "WITH per_stage AS ( " +
       "  SELECT stage, diver_id_dm FROM core.event_results " +
-      "  WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + transFb.sql + " " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + (pmState.excludeFutureChamps ? nonQualSql() : '') + transFb.sql + " " +
       "  GROUP BY stage, diver_id_dm " +
       ") " +
       "SELECT a.stage AS from_stage, b.stage AS to_stage, " +
@@ -309,7 +320,7 @@
     const entTransSql =
       "WITH per_entry AS ( " +
       "  SELECT stage, diver_id_dm, event_key FROM core.event_results " +
-      "  WHERE year = $1 AND " + whereJrCircuit() + (pmState.excludeFutureChamps ? nonQualSql() : '') + entFb.sql + " " +
+      "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + (pmState.excludeFutureChamps ? nonQualSql() : '') + entFb.sql + " " +
       "  GROUP BY stage, diver_id_dm, event_key " +
       ") " +
       "SELECT a.stage AS from_stage, b.stage AS to_stage, " +
@@ -370,7 +381,7 @@
       try {
         const pjFb = buildFiltersSql(2);
         const baseWhere =
-          "year = $1 AND " + whereJrCircuit() +
+          "year = $1 AND " + whereJrCircuit() + indivSql() +
           (pmState.excludeFutureChamps ? nonQualSql() : '') + pjFb.sql +
           " AND place IS NOT NULL";
         const projSql =
@@ -440,14 +451,14 @@
           "    CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2 " +
           "         WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr " +
           "  FROM core.event_results " +
-          "  WHERE year = $1 AND " + whereJrCircuit() + flt +
+          "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + flt +
           "    AND stage = 'Zones' AND place IS NOT NULL AND place <> 127" +
           "), " +
           "zd AS (SELECT diver_id_dm, age_group, event_key, place FROM (" +
           "  SELECT diver_id_dm, age_group, event_key, place, rr, " +
           "    MAX(rr) OVER (PARTITION BY event_key, zone) AS mrr FROM z) t WHERE rr = mrr), " +
           "ereg AS (SELECT DISTINCT diver_id_dm, event_key FROM core.event_results " +
-          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'EWC'), " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + flt + " AND stage = 'EWC'), " +
           "ent AS (SELECT zd.age_group, zd.diver_id_dm, " +
           "    CASE WHEN zd.place BETWEEN 1 AND 3 THEN 'direct' " +
           "         WHEN zd.place BETWEEN 4 AND 18 AND er.diver_id_dm IS NOT NULL THEN 'ewc_reg' " +
@@ -508,7 +519,7 @@
           "    CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2 " +
           "         WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr " +
           "  FROM core.event_results " +
-          "  WHERE year = $1 AND " + whereJrCircuit() + flt +
+          "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + flt +
           "    AND stage = 'Zones' AND place IS NOT NULL AND place <> 127" +
           "), " +
           "zd AS (SELECT diver_id_dm, age_group, event_key, discipline, place, " +
@@ -516,9 +527,9 @@
           "  FROM (SELECT z.*, MAX(rr) OVER (PARTITION BY event_key, zone, diver_id_dm) AS mrr FROM z) t " +
           "  WHERE rr = mrr), " +
           "natE AS (SELECT DISTINCT diver_id_dm, event_key FROM core.event_results " +
-          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'Nationals'), " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + flt + " AND stage = 'Nationals'), " +
           "natD AS (SELECT DISTINCT diver_id_dm FROM core.event_results " +
-          "  WHERE year = $1 AND " + whereJrCircuit() + flt + " AND stage = 'Nationals'), " +
+          "  WHERE year = $1 AND " + whereJrCircuit() + indivSql() + flt + " AND stage = 'Nationals'), " +
           "ent AS (SELECT zd.age_group, " +
           "    CASE WHEN zd.qualified AND ne.diver_id_dm IS NOT NULL THEN 'nat_reg' " +
           "         WHEN zd.qualified THEN 'nat_noreg' " +
@@ -641,20 +652,20 @@
     const sql =
       "WITH cohort AS ( " +
       "  SELECT DISTINCT diver_id_dm FROM core.event_results " +
-      "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + " " +
+      "  WHERE year = $1 AND stage = $2 AND " + whereJrCircuit() + indivSql() + " " +
       "    AND diver_id_dm IS NOT NULL " +
       (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "), " +
       "journey AS ( " +
       "  SELECT er.diver_id_dm, er.stage, " +
-      "    MIN(er.place) AS best_place, " +
+      "    MIN(er.place) FILTER (WHERE er.place <> 127) AS best_place, " +
       "    BOOL_OR(er.round = 'Prelim')    AS had_prelim, " +
       "    BOOL_OR(er.round = 'Semifinal') AS had_semi, " +
       "    BOOL_OR(er.round = 'Final')     AS had_final " +
       "  FROM core.event_results er " +
       "  JOIN cohort c ON c.diver_id_dm = er.diver_id_dm " +
-      "  WHERE er.year = $1 AND " + whereJrCircuit() + " " +
+      "  WHERE er.year = $1 AND " + whereJrCircuit() + indivSql() + " " +
       (pmState.excludeFutureChamps ? nonQualSql() : '') +
       fb.sql + " " +
       "  GROUP BY er.diver_id_dm, er.stage " +
