@@ -3493,7 +3493,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
       const qualifiedQ = await neonQuery(`
         WITH zone_dec AS (
-          SELECT diver_id_dm, event_key, place,
+          SELECT diver_id_dm, event_key, place, zone,
             CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
                  WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results
@@ -3507,7 +3507,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           WHERE rr = mrr
         ),
         ewc_dec AS (
-          SELECT diver_id_dm, event_key, place,
+          SELECT diver_id_dm, event_key, place, ewc_meet,
             CASE WHEN round ILIKE 'final%' THEN 3 WHEN round ILIKE 'semi%' THEN 2
                  WHEN round ILIKE 'prelim%' THEN 1 ELSE 0 END AS rr
           FROM core.event_results

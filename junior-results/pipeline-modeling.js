@@ -1431,7 +1431,21 @@
     const yExit = Y0 + RIVER_H + 34;   // red exit pools sit on this line
     let maxExitH = 0;  EXIT.forEach(function(v){ maxExitH = Math.max(maxExitH, hOf(v)); });
     let maxEnterH = 0; ENTER.forEach(function(v){ if (v >= 8) maxEnterH = Math.max(maxEnterH, hOf(v)); });
-    const yEnter = yExit + Math.max(maxExitH * 0.6, 72);   // pale "joined late" pools on a lower lane
+    // The red exit labels hang BELOW their pool cap — up to four text lines when
+    // the Zones tributary is split by reason (did-not-advance / didn't-register /
+    // didn't-place). The pale "joined late" lane and its labels share the SAME
+    // horizontal gap between two posts, so the lane must start below the lowest
+    // exit label or a tall split label collides with the "N joined" text.
+    let exitLabelReach = 0;
+    for (let i = 0; i < realStages.length - 1; i++) {
+      if (EXIT[i] <= 0) continue;
+      if (deepInProgress && i === lastGate) continue;
+      const heE = hOf(EXIT[i]);
+      const lyRel = Math.max(heE / 2, 9);          // label center, relative to yExit
+      const lastLine = exitSplit[i] ? 47 : 15;     // y-offset of the last text line from center
+      exitLabelReach = Math.max(exitLabelReach, lyRel + lastLine + 10);   // + font descent
+    }
+    const yEnter = yExit + Math.max(maxExitH * 0.6, 72, exitLabelReach + 20);   // pale "joined late" lane, clear of the exit labels
     const H = Math.max(yExit + maxExitH, yEnter + maxEnterH) + 56;
 
     /* two-line stage titles keep the long official names inside the canvas */

@@ -835,6 +835,36 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 }
 
 /* ════════════════════════════════════════════════════════════════
+   MEDIUM DESKTOP (821–1180px) — bar reflow only.
+   On narrower desktops the single-row top bar can't fit the day tabs
+   AND every action button, so it clipped controls off-screen. Here we
+   give the day tabs and the action cluster their own full-width rows
+   (each horizontally scrollable, nothing hidden) — the same proven
+   layout used on phones — WITHOUT the touch / full-screen-panel changes
+   that belong to the ≤820px mobile layer.
+   ════════════════════════════════════════════════════════════════ */
+@media (min-width: 821px) and (max-width: 1180px) {
+  #app { grid-template-rows: auto 1fr; }
+  .bar { flex-wrap: wrap; height: auto; min-height: 52px; row-gap: 0; }
+  .bar-meet { order: 2; flex: 1 1 auto; min-width: 0; }
+  .bar-sync { order: 3; flex-shrink: 0; }
+  .bar-days {
+    order: 4; flex: 0 0 100%; width: 100%; max-width: 100%;
+    border-left: none; border-top: 1px solid rgba(255,255,255,.08);
+    padding: 6px 8px; overflow-x: auto; scrollbar-width: none;
+  }
+  .bar-days::-webkit-scrollbar { display: none; }
+  .bar-right {
+    order: 5; flex: 0 0 100%; width: 100%; max-width: 100%;
+    justify-content: flex-start; flex-wrap: nowrap;
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 6px 8px; overflow-x: auto; scrollbar-width: none;
+  }
+  .bar-right::-webkit-scrollbar { display: none; }
+  .bar-right .bb, .bar-right .bar-status, .bar-right .bar-sep { flex-shrink: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════
    MOBILE LAYER — phones & small tablets.
    Everything below is inside a max-width query, so the desktop app
    (>820px) is completely unaffected. Goal: full functionality on a
