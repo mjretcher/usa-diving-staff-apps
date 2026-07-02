@@ -1204,10 +1204,11 @@
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-4);margin-bottom:6px">Events</div>
         ${events.map(ek => {
           const count = NAT.qualifiers.filter(q => q.qualifiedEventKeys.includes(ek)).length;
-          return `<div class="event-item">
+          const anchorId = `qv-nat-${ek.replace(/\W+/g,'-')}`;
+          return `<button type="button" class="event-item" onclick="window._qvScrollTo('${esc(anchorId)}')">
             <span class="event-item-name">${esc(ek)}</span>
             <span class="event-item-meta">${count}</span>
-          </div>`;
+          </button>`;
         }).join('')}
       </div>`;
   }
@@ -1245,7 +1246,8 @@
         return Object.keys(NAT.ewcAlreadyNatQual||{}).some(k=>norm(k)===norm(n));
       }).length;
 
-      html += `<div class="qv-event-card">
+      const anchorId = `qv-nat-${ek.replace(/\W+/g,'-')}`;
+      html += `<div class="qv-event-card" id="${esc(anchorId)}">
         <div class="qv-event-header">
           <span class="qv-event-name">${esc(ek)}</span>
           <span class="qv-event-meta">${alreadyNat>0?alreadyNat+' already qualified ·':''}</span>
