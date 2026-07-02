@@ -106,6 +106,19 @@
           existing "computed → Nationals" section. The 3 avg-score qualifiers can
           be layered in once the official per-event bar is supplied. */
 
+    /* 3b) Backfill missing zone: Neon's core.event_results doesn't always
+          carry the zone column on the EWC-stage row (seen for athletes who
+          have a perfectly good Zones-stage record with a zone already, e.g.
+          YMCA/prequalified direct-Nationals qualifiers). Rather than show
+          "Zone ?" for divers whose zone is knowable, look it up from their
+          own Zones-stage row already sitting in DATA.results. */
+    var zoneByAthleteEvent = {};
+    (DATA.results || []).forEach(function (r) {
+      if (r.stage === 'Zones' && r.zone && r.diveMeetsId && r.eventKey) {
+        zoneByAthleteEvent[r.diveMeetsId + '||' + r.eventKey] = r.zone;
+      }
+    });
+
     /* 4) Build engine rows in the exact shape recalcEWC / the views expect. */
     var rows = kept.map(function (r) {
       var first    = (r.diver_first || '').trim();
@@ -116,13 +129,14 @@
       var sentinel = placeNum === 127;                 // DiveMeets exhibition / non-displacing marker
       var already  = alreadyNat.has(nm(athlete));
       var nonDisp  = foreign || sentinel;
+      var zone     = r.zone || zoneByAthleteEvent[String(r.diver_id_dm || '') + '||' + r.event_key] || '';
       return {
         id: 'EWC|' + r.ewc_meet + '|' + r.event_key + '|' + (r.diver_id_dm || '') + '|' + r.place,
         stage: 'EWC',
         meetName: r.meet_name || ('2026 USA Diving ' + r.ewc_meet + ' Championship'),
         meetIdDivemeets: r.meet_id_dm || '',
         region: null,
-        zone: r.zone || '',
+        zone: zone,
         ewc: r.ewc_meet,
         ewcMeet: r.ewc_meet,
         eventName: r.event_name || r.event_key,
