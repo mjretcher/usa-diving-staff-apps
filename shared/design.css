@@ -530,12 +530,12 @@ body { font-family: var(--font-ui); background: var(--bg); color: var(--ink); -w
 .btn-primary:hover { background: var(--brand-blue-700); }
 
 /* ── Responsive ──────────────────────────────────────────── */
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   :root { --sidebar-w: 200px; }
   .kpi-row { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .workspace { grid-template-columns: 220px 1fr; gap: 8px; padding: 8px 10px 12px; }
 }
-@media (max-width: 680px) {
+@media screen and (max-width: 680px) {
   .app-body { grid-template-columns: 1fr; }
   .control-sidebar { position: relative; top: auto; height: auto; max-height: none; }
   .workspace { grid-template-columns: 1fr; }

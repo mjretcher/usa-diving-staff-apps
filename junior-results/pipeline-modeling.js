@@ -3275,8 +3275,16 @@
           '.print-noprint{display:none !important}' +
           '@page{size:landscape;margin:11mm}' +
           '*{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important}' +
-          '.pm-section{page-break-inside:avoid}' +
-          '.pm-kpi-strip,.pm-adv-breakdown,.pm-fee-table-wrap,.pm-flow-wrap{page-break-inside:avoid}' +
+          '.pm-kpi{break-inside:avoid;page-break-inside:avoid}' +
+          '.pm-section,.pm-kpi-strip,.pm-adv-breakdown,.pm-fee-table-wrap,.pm-flow-wrap,.pm-twolens{break-inside:avoid;page-break-inside:avoid}' +
+          // Belt-and-suspenders: some browsers evaluate max-width media
+          // features against the printable page box rather than the
+          // screen, which could otherwise re-trigger mobile.css's fixed
+          // 1120px Sankey width and push the diagram off-page into blank
+          // space. mobile.css is now gated to `screen and (...)` so this
+          // shouldn't fire, but these overrides make it harmless either way.
+          '.pm-flow-scroll{overflow:visible !important;margin:0 !important}' +
+          '.pm-flow-svg{width:100% !important;min-width:0 !important;max-width:100% !important;height:auto !important}' +
         '}' +
       '</style></head><body>' +
       '<div class="print-header">' +
@@ -3463,8 +3471,16 @@
           '#pm-print-root .pm-section-head{display:none !important}' +
           '#pm-print-root .pm-flow-scroll{overflow:visible !important;margin:0 !important}' +
           '#pm-print-root .pm-flow-wrap{padding:0 !important}' +
-          '#pm-print-root svg{width:100% !important;height:auto !important;max-width:100% !important}' +
-          '#pm-print-root .pm-adv-breakdown,#pm-print-root .pm-twolens,#pm-print-root .pm-kpi-strip{page-break-inside:avoid}' +
+          // width AND min-width both need the !important override — mobile.css
+          // sets a fixed min-width:1120px on .pm-flow-svg for the phone
+          // horizontal-pan Sankey, and min-width wins over width when they
+          // conflict, which was pushing the whole diagram off the printable
+          // page into blank space. mobile.css is now gated to `screen and
+          // (...)` so it shouldn't apply during print at all, but this stays
+          // as a second line of defense.
+          '#pm-print-root svg{width:100% !important;min-width:0 !important;height:auto !important;max-width:100% !important}' +
+          '#pm-print-root .pm-kpi{break-inside:avoid;page-break-inside:avoid}' +
+          '#pm-print-root .pm-adv-breakdown,#pm-print-root .pm-twolens,#pm-print-root .pm-kpi-strip{page-break-inside:avoid;break-inside:avoid}' +
           '#pm-print-root .pmp-head{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #E31937;padding-bottom:9px;margin-bottom:14px}' +
           '#pm-print-root .pmp-title{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:29px;color:#171F69;line-height:1;text-transform:uppercase;letter-spacing:.01em}' +
           '#pm-print-root .pmp-sub{font-family:Inter,sans-serif;font-size:11px;color:#5f6062;margin-top:4px}' +

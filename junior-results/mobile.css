@@ -17,7 +17,7 @@
 /* ───────────────────────────────────────────────────────────────
    TABLET & PHONE  (≤ 820px)  — sticky top bar + stage pill grid
    ─────────────────────────────────────────────────────────────── */
-@media (max-width: 820px) {
+@media screen and (max-width: 820px) {
 
   html, body { max-width: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
 
@@ -73,7 +73,7 @@
 /* ───────────────────────────────────────────────────────────────
    PHONE  (≤ 760px)  — primary mobile layout
    ─────────────────────────────────────────────────────────────── */
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
 
   /* Brand collapses to just the logo */
   .topbar-app-label { display: none; }
@@ -206,7 +206,7 @@
 /* ───────────────────────────────────────────────────────────────
    SMALL PHONE  (≤ 440px)  — final tightening
    ─────────────────────────────────────────────────────────────── */
-@media (max-width: 440px) {
+@media screen and (max-width: 440px) {
   .kpi-row { grid-template-columns: 1fr 1fr !important; gap: 6px; }
   #stageNav { grid-template-columns: repeat(3, 1fr); }   /* keep a clean 3 × 2 grid */
   .stage-btn { font-size: 12px; padding: 8px 6px; }

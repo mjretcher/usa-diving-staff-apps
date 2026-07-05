@@ -217,7 +217,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
-@media (max-width: 760px) { .pm-cohort-nat-row { grid-template-columns: 1fr; } }
+@media screen and (max-width: 760px) { .pm-cohort-nat-row { grid-template-columns: 1fr; } }
 .pm-cohort-nat-cell {
   border-radius: 8px;
   padding: 12px 14px;
@@ -375,8 +375,8 @@
   gap: 16px;
   margin-bottom: 16px;
 }
-@media (max-width: 1100px) { .pm-demo-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px)  { .pm-demo-grid { grid-template-columns: 1fr; } }
+@media screen and (max-width: 1100px) { .pm-demo-grid { grid-template-columns: 1fr 1fr; } }
+@media screen and (max-width: 760px)  { .pm-demo-grid { grid-template-columns: 1fr; } }
 
 .pm-demo-card {
   background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
@@ -466,7 +466,7 @@
   padding: 6px 0;
   font-size: 12.5px;
 }
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   .pm-zone-row { grid-template-columns: 70px 1fr; }
   .pm-zone-trail { grid-column: 1 / -1; padding-left: 84px; }
 }
@@ -547,7 +547,7 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   color: var(--ink, #0d1117);
   box-sizing: border-box;
 }
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .pm-root { padding: 14px 14px 60px; }
 }
 
@@ -646,7 +646,7 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   box-shadow: 0 4px 14px rgba(227,25,55,.30);
 }
 .pm-hero-btn.primary:hover { background: #c41530; border-color: #c41530; }
-@media (max-width: 800px) {
+@media screen and (max-width: 800px) {
   .pm-hero { grid-template-columns: 1fr; padding: 22px 22px 24px; }
   .pm-hero-title { font-size: 30px; }
   .pm-hero-actions { justify-content: flex-start; }
@@ -978,7 +978,7 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   grid-template-columns: 1fr 1fr;
   gap: 18px;
 }
-@media (max-width: 1100px) { .pm-yoy-grid { grid-template-columns: 1fr; } }
+@media screen and (max-width: 1100px) { .pm-yoy-grid { grid-template-columns: 1fr; } }
 .pm-yoy-chart {
   background: linear-gradient(180deg, #fafbfd 0%, #f7f8fc 100%);
   border: 1px solid var(--line, #e2e5ef);
@@ -1191,7 +1191,7 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
 }
-@media (max-width: 760px) { .pm-fin-summary { grid-template-columns: 1fr; } }
+@media screen and (max-width: 760px) { .pm-fin-summary { grid-template-columns: 1fr; } }
 .pm-fin-summary-item .label {
   font-size: 10.5px;
   text-transform: uppercase;
@@ -1316,12 +1316,24 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
     box-shadow: none;
     border-color: #ccc;
   }
+  .pm-kpi { break-inside: avoid; page-break-inside: avoid; }
+  .pm-kpi-strip, .pm-adv-breakdown, .pm-fee-table-wrap, .pm-flow-wrap, .pm-twolens {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
   .pm-hero {
     box-shadow: none;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
   .pm-section:hover { box-shadow: none; }
+  /* Safety net: mobile.css is gated to `screen and (...)` so it should never
+     apply while printing, but if a browser ever evaluates a max-width media
+     feature against the print page box instead of the screen, this stops
+     the phone-only fixed 1120px Sankey width (and its min-width, which wins
+     over width when the two conflict) from pushing the diagram off-page. */
+  .pm-flow-scroll { overflow: visible !important; margin: 0 !important; }
+  .pm-flow-svg { width: 100% !important; min-width: 0 !important; max-width: 100% !important; height: auto !important; }
 }
 
 /* ============================================================
