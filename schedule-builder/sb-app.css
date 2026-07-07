@@ -70,18 +70,29 @@ button{cursor:pointer;border:none;background:none}
 
 /* ════ TIMELINE ════ */
 .tl-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
-.tl-bar{display:flex;align-items:center;gap:8px;padding:0 18px;height:42px;min-height:42px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;box-shadow:var(--sh-xs)}
-.tl-title{font-size:12px;font-weight:700;color:var(--tx);letter-spacing:-.01em}
+.tl-bar{display:flex;align-items:center;gap:8px;padding:0 18px;height:42px;min-height:42px;background:var(--surf);border-bottom:1px solid var(--bd);flex-shrink:0;box-shadow:var(--sh-xs);container-type:inline-size}
+.tl-title{font-size:12px;font-weight:700;color:var(--tx);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:40px}
 .tl-spacer{flex:1}
-.tl-day-info{font-size:11px;color:var(--tx3);font-weight:500;display:flex;align-items:center;gap:5px}
+.tl-day-info{font-size:11px;color:var(--tx3);font-weight:500;display:flex;align-items:center;gap:5px;flex-shrink:0}
 .tl-day-info b{color:var(--tx2);font-weight:600}
-.tl-iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:.12s}
+.tl-iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);display:flex;align-items:center;justify-content:center;transition:.12s;flex-shrink:0}
 .tl-iconbtn:hover{background:var(--surf2);border-color:var(--bd3)}
 .tl-iconbtn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 .tl-iconbtn svg{width:16px;height:16px}
-.tl-addbtn{height:30px;padding:0 14px;border-radius:8px;background:var(--navy);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;transition:.12s}
+.tl-addbtn{height:30px;padding:0 14px;border-radius:8px;background:var(--navy);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;transition:.12s;flex-shrink:0;white-space:nowrap}
 .tl-addbtn:hover{background:var(--navy-700)}
 .tl-addbtn svg{width:14px;height:14px}
+
+/* Container query, not viewport: this bar's real available width depends on
+   the day column, which shrinks when a sidebar/edit panel is open — a
+   viewport media query can't see that. The day-info summary ("N sessions ·
+   time range") is the least essential piece here (title and action buttons
+   are load-bearing), so it's what gives way first, and it's simply hidden
+   rather than made to scroll — nothing about this bar should ever need
+   horizontal scroll to read. */
+@container (max-width: 620px) {
+  .tl-day-info{display:none}
+}
 
 .tl-body{flex:1;overflow-y:auto;overflow-x:auto;padding:16px 18px 60px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
 .tl-body::-webkit-scrollbar{width:8px}
@@ -569,9 +580,10 @@ button{cursor:pointer;border:none;background:none}
 .enp-inp.final.filled-f{background:var(--final-bg);border-color:var(--final);color:var(--final);font-weight:700}
 .enp-inp.final.matches{background:var(--prac-bg);border-color:var(--prac);color:var(--prac)}
 .enp-inp.small{width:46px;border-width:1px}
-.ep-head{display:flex;align-items:flex-start;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--bd);flex-shrink:0}
-.ep-title{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:-.01em}
-.ep-sub{font-size:11px;color:var(--tx3);margin-top:2px;font-weight:500}
+.ep-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.ep-head>div:first-child{min-width:0;flex:1}
+.ep-title{font-size:14px;font-weight:700;color:var(--tx);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ep-sub{font-size:11px;color:var(--tx3);margin-top:2px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ep-body{flex:1;overflow-y:auto;padding:14px 16px}
 .ep-body::-webkit-scrollbar{width:5px}
 .ep-body::-webkit-scrollbar-thumb{background:var(--bd3);border-radius:3px}
