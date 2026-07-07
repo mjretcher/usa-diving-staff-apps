@@ -4890,6 +4890,78 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     { label: '19+ (below cut)', min: 19, max: 99 },
   ];
 
+  /* ── Qualifying-score cutoff table helpers ───────────────────────
+     Shared by the three cutoff sections below (Region→Zone,
+     Zone→Nationals/E-W-C, E/W/C→Nationals). Each raw SQL row carries
+     year, age_group, gender, discipline, a breakdown dimension
+     (region / zone / ewc_meet), n, avg_score, min_score, max_score. */
+  function rbEventKey(x){ return `${x.age_group} ${x.gender} ${x.discipline}`; }
+
+  function rbCombineWeighted(rows){
+    const n = rows.reduce((a,r)=>a + (r.n||0), 0);
+    if (!n) return { n: 0, avg_score: NaN, min_score: NaN, max_score: NaN };
+    const avg = rows.reduce((a,r)=>a + (r.n||0) * Number(r.avg_score), 0) / n;
+    const mins = rows.map(r=>Number(r.min_score)).filter(Number.isFinite);
+    const maxs = rows.map(r=>Number(r.max_score)).filter(Number.isFinite);
+    return { n, avg_score: avg, min_score: mins.length?Math.min(...mins):NaN, max_score: maxs.length?Math.max(...maxs):NaN };
+  }
+
+  /* Pooled event × year table — one row per event, one column per year. */
+  function rbEventYearTable(rawRows, yrs, dimField, noDataNote){
+    const byEvent = new Map();
+    rawRows.forEach(x => {
+      const key = rbEventKey(x);
+      if (!byEvent.has(key)) byEvent.set(key, {});
+      const byYear = byEvent.get(key);
+      if (!byYear[x.year]) byYear[x.year] = [];
+      byYear[x.year].push(x);
+    });
+    const eventKeys = [...byEvent.keys()].sort();
+    if (!eventKeys.length) return `<p class="rb-p rb-soft">${esc(noDataNote || 'No qualifying data for the selected year(s)/filters.')}</p>`;
+    return `<table class="rb-table">
+      <thead><tr><th>Event</th>${yrs.map(y=>`<th>${y}<br><span class="rb-soft">avg (range) &middot; n</span></th>`).join('')}</tr></thead>
+      <tbody>
+      ${eventKeys.map(ek => `<tr><td><strong>${esc(ek)}</strong></td>${yrs.map(y => {
+        const grp = byEvent.get(ek)[y];
+        if (!grp || !grp.length) return `<td class="rb-soft">—</td>`;
+        const c = rbCombineWeighted(grp);
+        if (!c.n) return `<td class="rb-soft">—</td>`;
+        return `<td>${fmtScore(c.avg_score)} <span class="rb-soft">(${fmtScore(c.min_score)}&ndash;${fmtScore(c.max_score)})</span><br><span class="rb-soft">n=${c.n}</span></td>`;
+      }).join('')}</tr>`).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  /* By-dimension breakdown — one small table per event, rows = dimension
+     value (region / zone / E-W-C site), columns = year. */
+  function rbDimBreakdownTables(rawRows, yrs, dimField, dimLabel){
+    const byEvent = new Map();
+    rawRows.forEach(x => {
+      const key = rbEventKey(x);
+      if (!byEvent.has(key)) byEvent.set(key, []);
+      byEvent.get(key).push(x);
+    });
+    const eventKeys = [...byEvent.keys()].sort();
+    if (!eventKeys.length) return '';
+    return eventKeys.map(ek => {
+      const evRows = byEvent.get(ek);
+      const dimValues = [...new Set(evRows.map(x => x[dimField]))].filter(v => v != null).sort();
+      const grid = {};
+      evRows.forEach(x => { grid[x[dimField]+'|'+x.year] = x; });
+      return `<h3 class="rb-h3">${esc(ek)} — by ${esc(dimLabel)}</h3>
+      <table class="rb-table rb-table-sm">
+        <thead><tr><th>${esc(dimLabel)}</th>${yrs.map(y=>`<th>${y}</th>`).join('')}</tr></thead>
+        <tbody>
+        ${dimValues.map(dv => `<tr><td><strong>${esc(String(dv))}</strong></td>${yrs.map(y => {
+          const x = grid[dv+'|'+y];
+          if (!x || !x.n) return `<td class="rb-soft">—</td>`;
+          return `<td>${fmtScore(x.avg_score)} <span class="rb-soft">(n=${x.n})</span></td>`;
+        }).join('')}</tr>`).join('')}
+        </tbody>
+      </table>`;
+    }).join('');
+  }
+
   const REPORT_SECTIONS = {
     exec_summary: {
       label: 'Executive Summary',
@@ -4928,13 +5000,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     },
 
     zone_qualifying_scores: {
-      label: 'Zone-Qualifying Score Averages',
-      desc: 'Average score of the Regional finishers who advanced to Zones (top 15 per Art.305(a)(1)), per event and age group, compared across years — answers "what score got you into Zones?"',
+      label: 'Zone-Qualifying Score Averages (Region → Zone)',
+      desc: 'Average score of the Regional finishers who advanced to Zones (top 15 per Art.305(a)(1)), per event and age group, compared across years and broken down by region — answers "what score got you into Zones?"',
       async build(opts){
         const yrs = opts.years && opts.years.length ? opts.years : [2024, 2025, _currentSeason];
         const fb = buildFilterSQL(opts.filters);
         const r = await neonQuery(`
-          SELECT year, age_group, gender, discipline,
+          SELECT year, age_group, gender, discipline, region,
                  COUNT(*)::int AS n,
                  AVG(score)::numeric AS avg_score,
                  MIN(score)::numeric AS min_score,
@@ -4946,45 +5018,144 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             AND score IS NOT NULL
             AND NOT (year = 2026 AND age_group IN ('Group C','Group D'))
             AND year = ANY($1::int[])${fb.sql}
-          GROUP BY year, age_group, gender, discipline
-          ORDER BY age_group, gender, discipline, year
+          GROUP BY year, age_group, gender, discipline, region
+          ORDER BY age_group, gender, discipline, year, region
         `, ['{'+yrs.join(',')+'}', ...fb.params]);
 
-        // Group by event (age group + gender + board) so each row of the
-        // table is one comparable event across years.
-        const byEvent = new Map();
-        r.rows.forEach(x => {
-          const key = `${x.age_group} ${x.gender} ${x.discipline}`;
-          if (!byEvent.has(key)) byEvent.set(key, {});
-          byEvent.get(key)[x.year] = x;
-        });
-        const eventKeys = [...byEvent.keys()].sort();
-
-        if (!eventKeys.length) {
+        if (!r.rows.length) {
           return `<section class="rb-section">
-            <h2 class="rb-h2">Zone-Qualifying Score Averages</h2>
+            <h2 class="rb-h2">Zone-Qualifying Score Averages (Region → Zone)</h2>
             <p class="rb-p">No qualifying Regional results found for the selected year(s)/filters.</p>
           </section>`;
         }
 
         return `<section class="rb-section">
-          <h2 class="rb-h2">Zone-Qualifying Score Averages</h2>
+          <h2 class="rb-h2">Zone-Qualifying Score Averages (Region → Zone)</h2>
           <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
           <p class="rb-p">Average score (range in parentheses) of the athletes who placed 1st&ndash;15th at Regionals — the group that advanced to Zones under Art.305(a)(1). Platform is exhibition/non-qualifying at Regionals in every year, so it has no Zone-qualifying cutoff and isn't included here. In 2026, Groups C and D skip Regionals entirely (they auto-advance to Zones), so no qualifying average applies to them that year — those cells show &mdash;.</p>
-          <table class="rb-table">
-            <thead><tr><th>Event</th>${yrs.map(y=>`<th>${y}<br><span class="rb-soft">avg (range) &middot; n</span></th>`).join('')}</tr></thead>
-            <tbody>
-            ${eventKeys.map(ek => `
-              <tr><td><strong>${esc(ek)}</strong></td>
-              ${yrs.map(y => {
-                const x = byEvent.get(ek)[y];
-                if (!x) return `<td class="rb-soft">—</td>`;
-                return `<td>${fmtScore(x.avg_score)} <span class="rb-soft">(${fmtScore(x.min_score)}&ndash;${fmtScore(x.max_score)})</span><br><span class="rb-soft">n=${x.n}</span></td>`;
-              }).join('')}
-              </tr>
-            `).join('')}
-            </tbody>
-          </table>
+          <h3 class="rb-h3">All regions pooled</h3>
+          ${rbEventYearTable(r.rows, yrs)}
+          <h3 class="rb-h3">By region</h3>
+          <p class="rb-p rb-soft">Each region runs its own Regional meet, so a region's top-15 average reflects the depth of that specific region for that event.</p>
+          ${rbDimBreakdownTables(r.rows, yrs, 'region', 'Region')}
+        </section>`;
+      },
+    },
+
+    zone_to_next_scores: {
+      label: 'Zone-Qualifying Score Averages (Zone → Nationals / E-W-C)',
+      desc: 'Average score of the Zone finishers who advanced further — direct-to-Nationals cutoff (top 10 springboard / top 7 platform pre-2026; top 3 in 2026) plus the 2026 Zone→E/W/C band (ranks 4–18) — per event and age group, broken down by zone and across years.',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [2024, 2025, _currentSeason];
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          SELECT year, age_group, gender, discipline, zone,
+                 CASE
+                   WHEN year < 2026 THEN 'direct'
+                   WHEN year >= 2026 AND place BETWEEN 1 AND 3 THEN 'direct'
+                   WHEN year >= 2026 AND place BETWEEN 4 AND 18 THEN 'ewc_band'
+                 END AS qual_type,
+                 COUNT(*)::int AS n,
+                 AVG(score)::numeric AS avg_score,
+                 MIN(score)::numeric AS min_score,
+                 MAX(score)::numeric AS max_score
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage = 'Zones' AND NOT is_synchro
+            AND score IS NOT NULL AND place IS NOT NULL
+            AND (
+              (year < 2026 AND discipline IN ('1M','3M') AND place BETWEEN 1 AND 10) OR
+              (year < 2026 AND discipline = 'Platform' AND place BETWEEN 1 AND 7) OR
+              (year >= 2026 AND place BETWEEN 1 AND 18)
+            )
+            AND year = ANY($1::int[])${fb.sql}
+          GROUP BY year, age_group, gender, discipline, zone, qual_type
+          ORDER BY age_group, gender, discipline, year, zone
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
+
+        const directRows = r.rows.filter(x => x.qual_type === 'direct');
+        const ewcBandRows = r.rows.filter(x => x.qual_type === 'ewc_band');
+
+        if (!r.rows.length) {
+          return `<section class="rb-section">
+            <h2 class="rb-h2">Zone-Qualifying Score Averages (Zone → Nationals / E-W-C)</h2>
+            <p class="rb-p">No qualifying Zone results found for the selected year(s)/filters.</p>
+          </section>`;
+        }
+
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Zone-Qualifying Score Averages (Zone → Nationals / E-W-C)</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+
+          <h3 class="rb-h3">Direct-to-Nationals cutoff</h3>
+          <p class="rb-p">Average score of the athletes who advanced directly out of Zones. <strong>Pre-2026:</strong> top 10 per springboard event, top 7 for platform (no E/W/C tier existed). <strong>2026:</strong> top 3 per event (Art.303(b)(2)(i)) — the rest of the qualifying field moved to E/W/C instead, so the 2026 number reflects a much smaller, tougher direct cutoff and isn't directly comparable in scale to the pre-2026 top-10/top-7 numbers.</p>
+          <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px">All zones pooled</h4>
+          ${rbEventYearTable(directRows, yrs, null, 'No direct-to-Nationals qualifiers found for the selected year(s)/filters.')}
+          <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:14px 0 4px">By zone</h4>
+          ${rbDimBreakdownTables(directRows, yrs, 'zone', 'Zone')}
+
+          <h3 class="rb-h3" style="margin-top:22px">Zone → E/W/C band (ranks 4–18, 2026 only)</h3>
+          <p class="rb-p">New in 2026 (Art.304(a)(2)): ranks 4&ndash;18 at Zones advance to the East/West/Central meet rather than directly to Nationals. No equivalent existed before 2026, so pre-2026 years show &mdash;.</p>
+          <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px">All zones pooled</h4>
+          ${rbEventYearTable(ewcBandRows, yrs, null, 'No Zone→E/W/C qualifiers found for the selected year(s)/filters (this band only exists 2026+).')}
+          <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:14px 0 4px">By zone</h4>
+          ${rbDimBreakdownTables(ewcBandRows, yrs, 'zone', 'Zone')}
+        </section>`;
+      },
+    },
+
+    ewc_nationals_scores: {
+      label: 'Zone-Qualifying Score Averages (E/W/C → Nationals, 2026+)',
+      desc: 'Average score of the E/W/C finishers who advanced to Nationals — top 3 direct (Art.303(b)(3)(i)) plus 4th–6th if their score meets the cross-meet average of the top 3 (Art.303(b)(3)(ii)) — per event and age group, broken down by East/West/Central.',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [2024, 2025, _currentSeason];
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          WITH top3 AS (
+            SELECT year, age_group, gender, discipline, score
+            FROM core.event_results
+            WHERE is_junior_circuit AND stage = 'EWC' AND NOT is_synchro
+              AND place BETWEEN 1 AND 3 AND score IS NOT NULL
+              AND year = ANY($1::int[])${fb.sql}
+          ),
+          thresh AS (
+            SELECT year, age_group, gender, discipline, AVG(score) AS avg_top3
+            FROM top3 GROUP BY year, age_group, gender, discipline
+          ),
+          cand AS (
+            SELECT e.year, e.age_group, e.gender, e.discipline, e.ewc_meet, e.place, e.score,
+                   (e.place <= 3 OR (e.place BETWEEN 4 AND 6 AND e.score >= t.avg_top3)) AS qualifies
+            FROM core.event_results e
+            JOIN thresh t USING (year, age_group, gender, discipline)
+            WHERE e.is_junior_circuit AND e.stage = 'EWC' AND NOT e.is_synchro
+              AND e.place BETWEEN 1 AND 6 AND e.score IS NOT NULL
+              AND e.year = ANY($1::int[])${fb.sql.replace(/(age_group|gender|discipline|region|zone)/g, 'e.$1')}
+          )
+          SELECT year, age_group, gender, discipline, ewc_meet,
+                 COUNT(*) FILTER (WHERE qualifies)::int AS n,
+                 AVG(score) FILTER (WHERE qualifies)::numeric AS avg_score,
+                 MIN(score) FILTER (WHERE qualifies)::numeric AS min_score,
+                 MAX(score) FILTER (WHERE qualifies)::numeric AS max_score
+          FROM cand
+          GROUP BY year, age_group, gender, discipline, ewc_meet
+          HAVING COUNT(*) FILTER (WHERE qualifies) > 0
+          ORDER BY age_group, gender, discipline, year, ewc_meet
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
+
+        if (!r.rows.length) {
+          return `<section class="rb-section">
+            <h2 class="rb-h2">Zone-Qualifying Score Averages (E/W/C → Nationals, 2026+)</h2>
+            <p class="rb-p">No qualifying E/W/C results found for the selected year(s)/filters. E/W/C didn't exist before 2026, so years prior to 2026 will always be empty here.</p>
+          </section>`;
+        }
+
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Zone-Qualifying Score Averages (E/W/C → Nationals, 2026+)</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          <p class="rb-p">Average score of the athletes who advanced from E/W/C to Nationals: top 3 at their site, plus 4th&ndash;6th if their score met the average of the top 3 scores across all three E/W/C sites for that event. This tier didn't exist before 2026, so earlier years are empty.</p>
+          <h3 class="rb-h3">All sites pooled</h3>
+          ${rbEventYearTable(r.rows, yrs)}
+          <h3 class="rb-h3">By E/W/C site</h3>
+          ${rbDimBreakdownTables(r.rows, yrs, 'ewc_meet', 'Site')}
         </section>`;
       },
     },
@@ -5624,9 +5795,9 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
   // Templates — curated section sequences for common deliverables
   const REPORT_TEMPLATES = [
-    { id: 'zone_qualifying_scores', label: 'Zone-Qualifying Score Comparison',
-      desc: 'Average score that got athletes into Zones (top 15 at Regionals), per event and age group, side by side across 2024–2026.',
-      sections: ['zone_qualifying_scores'],
+    { id: 'zone_qualifying_scores', label: 'Qualifying Score Cutoffs — All Stages',
+      desc: 'Average score needed at every cutoff — Region→Zone, Zone→Nationals/E-W-C, and E/W/C→Nationals — per event and age group, broken down by region/zone/site, side by side across 2024–2026.',
+      sections: ['zone_qualifying_scores','zone_to_next_scores','ewc_nationals_scores'],
       defaultYears: [2024, 2025, 2026] },
     { id: 'cce_band_question', label: 'CCE Band Question',
       desc: 'Directly answers "how many 1–3 / 4–10 / 11–18 Zone divers attended E/W/C vs qualified?" — Mike\'s specific CCE/Board ask.',
