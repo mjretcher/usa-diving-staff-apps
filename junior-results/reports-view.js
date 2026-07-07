@@ -4962,6 +4962,19 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     }).join('');
   }
 
+  /* Jan 1, 2024 rule change: required dive counts per age group shifted to
+     align with World Aquatics/Pan American Aquatics standards (previously a
+     USA-specific graduated system, unchanged since at least the 2018
+     rulebook). Fewer/more required dives changes the total possible score,
+     so raw score comparisons that straddle this boundary need a flag. Only
+     show the note when the selected years actually span the boundary. */
+  function rbDiveCountNote(yrs){
+    if (!(yrs.some(y => y < 2024) && yrs.some(y => y >= 2024))) return '';
+    return `<p class="rb-p" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px">
+      <strong>⚠ Dive-count rule change, Jan 1 2024:</strong> Required dive counts per age group shifted to align with World Aquatics/Pan American Aquatics standards. Group A dropped one dive across the board (both genders, both boards — e.g. Girls 1M/3M 10→9, Boys 1M/3M 11→10). Group C girls' springboard dropped one optional dive (8→7); the rest of Group C and all of Group B were unchanged. The youngest bracket (Group D, 11-and-under) was consolidated from the old separate "9-and-under" (5 dives) and "10-11" (6 dives) lists into one Group D list requiring 6 dives — effectively one more dive for 9-and-under athletes than before. Because dive count changes the total possible score, raw score comparisons spanning the 2023→2024 boundary for the affected groups reflect this rule change as well as any shift in competitiveness.
+    </p>`;
+  }
+
   const REPORT_SECTIONS = {
     exec_summary: {
       label: 'Executive Summary',
@@ -5032,6 +5045,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">Zone-Qualifying Score Averages (Region → Zone)</h2>
           <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          ${rbDiveCountNote(yrs)}
           <p class="rb-p">Average score (range in parentheses) of the athletes who placed 1st&ndash;15th at Regionals — the group that advanced to Zones under Art.305(a)(1). Platform is exhibition/non-qualifying at Regionals in every year, so it has no Zone-qualifying cutoff and isn't included here. In 2026, Groups C and D skip Regionals entirely (they auto-advance to Zones), so no qualifying average applies to them that year — those cells show &mdash;.</p>
           <h3 class="rb-h3">All regions pooled</h3>
           ${rbEventYearTable(r.rows, yrs)}
@@ -5085,6 +5099,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">Zone-Qualifying Score Averages (Zone → Nationals / E-W-C)</h2>
           <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          ${rbDiveCountNote(yrs)}
 
           <h3 class="rb-h3">Direct-to-Nationals cutoff</h3>
           <p class="rb-p">Average score of the athletes who advanced directly out of Zones. <strong>Pre-2026:</strong> top 10 per springboard event, top 7 for platform (no E/W/C tier existed). <strong>2026:</strong> top 3 per event (Art.303(b)(2)(i)) — the rest of the qualifying field moved to E/W/C instead, so the 2026 number reflects a much smaller, tougher direct cutoff and isn't directly comparable in scale to the pre-2026 top-10/top-7 numbers.</p>
@@ -5151,6 +5166,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">Zone-Qualifying Score Averages (E/W/C → Nationals, 2026+)</h2>
           <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          ${rbDiveCountNote(yrs)}
           <p class="rb-p">Average score of the athletes who advanced from E/W/C to Nationals: top 3 at their site, plus 4th&ndash;6th if their score met the average of the top 3 scores across all three E/W/C sites for that event. This tier didn't exist before 2026, so earlier years are empty.</p>
           <h3 class="rb-h3">All sites pooled</h3>
           ${rbEventYearTable(r.rows, yrs)}
