@@ -115,7 +115,7 @@ button{cursor:pointer;border:none;background:none}
 .tl-dayhead::after{content:'';flex:1;height:1px;background:var(--bd)}
 
 /* ════ SESSION CARD ════ */
-.sc{background:var(--surf);border-radius:var(--r-lg);box-shadow:var(--sh);overflow:hidden;transition:box-shadow .16s,transform .16s;position:relative;border:1px solid var(--bd);flex-shrink:0}
+.sc{background:var(--surf);border-radius:var(--r-lg);box-shadow:var(--sh);overflow:hidden;transition:box-shadow .16s,transform .16s;position:relative;border:1px solid var(--bd);flex-shrink:0;container-type:inline-size}
 .sc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:var(--r-lg) 0 0 var(--r-lg)}
 .sc.prac::before{background:var(--prac)}
 .sc.train::before{background:var(--train)}
@@ -174,10 +174,31 @@ button{cursor:pointer;border:none;background:none}
 .sc-flight-dur{font-size:11px;color:var(--tx3);white-space:nowrap}
 
 /* Event rows */
-.sc-events{padding:2px 0 4px}
+/* overflow-x:auto is a safety net: if a row ever still doesn't fit (very
+   long event name, narrow card, etc.), it becomes scrollable-into-view
+   instead of being silently clipped by .sc's overflow:hidden — nothing
+   should ever be rendered somewhere the person can't get to. */
+.sc-events{padding:2px 0 4px;overflow-x:auto}
 .sc-ev{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 14px;border-top:1px solid var(--bd);transition:background .1s;min-width:0}
 .sc-ev:hover{background:var(--surf2)}
 .sc-ev.dragging{opacity:.4}
+
+/* Container queries: compact the row based on the CARD's actual rendered
+   width, not the browser window's width. The viewport @media rules further
+   down still help on genuinely narrow windows/phones, but they can't see
+   a sidebar or edit panel eating into the card's real estate — this can,
+   so the row proactively compacts instead of relying on the scrollbar
+   above as the first line of defense. */
+@container (max-width: 660px) {
+  .ev-time{min-width:80px;font-size:10.5px}
+  .ev-stat-lbl{display:none}
+}
+@container (max-width: 540px) {
+  .ev-handle{display:none}
+  .ev-time{min-width:68px}
+  .sc-ev{gap:6px;padding:9px 10px 9px 12px}
+  .ev-splitbtn{padding:0 6px;font-size:9px}
+}
 .ev-handle{color:var(--tx3);font-size:13px;flex-shrink:0;opacity:.4;cursor:grab;line-height:1;letter-spacing:-2px}
 .ev-handle:hover{opacity:.75}
 .ev-info{flex:1;min-width:0}
