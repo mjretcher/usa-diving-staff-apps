@@ -4927,6 +4927,68 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       },
     },
 
+    zone_qualifying_scores: {
+      label: 'Zone-Qualifying Score Averages',
+      desc: 'Average score of the Regional finishers who advanced to Zones (top 15 per Art.305(a)(1)), per event and age group, compared across years — answers "what score got you into Zones?"',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [2024, 2025, _currentSeason];
+        const fb = buildFilterSQL(opts.filters);
+        const r = await neonQuery(`
+          SELECT year, age_group, gender, discipline,
+                 COUNT(*)::int AS n,
+                 AVG(score)::numeric AS avg_score,
+                 MIN(score)::numeric AS min_score,
+                 MAX(score)::numeric AS max_score
+          FROM core.event_results
+          WHERE is_junior_circuit AND stage = 'Regionals'
+            AND discipline IN ('1M','3M') AND NOT is_synchro
+            AND place IS NOT NULL AND place BETWEEN 1 AND 15
+            AND score IS NOT NULL
+            AND NOT (year = 2026 AND age_group IN ('Group C','Group D'))
+            AND year = ANY($1::int[])${fb.sql}
+          GROUP BY year, age_group, gender, discipline
+          ORDER BY age_group, gender, discipline, year
+        `, ['{'+yrs.join(',')+'}', ...fb.params]);
+
+        // Group by event (age group + gender + board) so each row of the
+        // table is one comparable event across years.
+        const byEvent = new Map();
+        r.rows.forEach(x => {
+          const key = `${x.age_group} ${x.gender} ${x.discipline}`;
+          if (!byEvent.has(key)) byEvent.set(key, {});
+          byEvent.get(key)[x.year] = x;
+        });
+        const eventKeys = [...byEvent.keys()].sort();
+
+        if (!eventKeys.length) {
+          return `<section class="rb-section">
+            <h2 class="rb-h2">Zone-Qualifying Score Averages</h2>
+            <p class="rb-p">No qualifying Regional results found for the selected year(s)/filters.</p>
+          </section>`;
+        }
+
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Zone-Qualifying Score Averages</h2>
+          <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
+          <p class="rb-p">Average score (range in parentheses) of the athletes who placed 1st&ndash;15th at Regionals — the group that advanced to Zones under Art.305(a)(1). Platform is exhibition/non-qualifying at Regionals in every year, so it has no Zone-qualifying cutoff and isn't included here. In 2026, Groups C and D skip Regionals entirely (they auto-advance to Zones), so no qualifying average applies to them that year — those cells show &mdash;.</p>
+          <table class="rb-table">
+            <thead><tr><th>Event</th>${yrs.map(y=>`<th>${y}<br><span class="rb-soft">avg (range) &middot; n</span></th>`).join('')}</tr></thead>
+            <tbody>
+            ${eventKeys.map(ek => `
+              <tr><td><strong>${esc(ek)}</strong></td>
+              ${yrs.map(y => {
+                const x = byEvent.get(ek)[y];
+                if (!x) return `<td class="rb-soft">—</td>`;
+                return `<td>${fmtScore(x.avg_score)} <span class="rb-soft">(${fmtScore(x.min_score)}&ndash;${fmtScore(x.max_score)})</span><br><span class="rb-soft">n=${x.n}</span></td>`;
+              }).join('')}
+              </tr>
+            `).join('')}
+            </tbody>
+          </table>
+        </section>`;
+      },
+    },
+
     pipeline_river: {
       label: 'Pipeline River Flow Map',
       desc: 'The exact qualification river — advance/exit flows, the by-age-group drop-off breakdown, and (2026) the projected Junior Nationals field',
@@ -5562,6 +5624,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
   // Templates — curated section sequences for common deliverables
   const REPORT_TEMPLATES = [
+    { id: 'zone_qualifying_scores', label: 'Zone-Qualifying Score Comparison',
+      desc: 'Average score that got athletes into Zones (top 15 at Regionals), per event and age group, side by side across 2024–2026.',
+      sections: ['zone_qualifying_scores'],
+      defaultYears: [2024, 2025, 2026] },
     { id: 'cce_band_question', label: 'CCE Band Question',
       desc: 'Directly answers "how many 1–3 / 4–10 / 11–18 Zone divers attended E/W/C vs qualified?" — Mike\'s specific CCE/Board ask.',
       sections: ['qualifier_rates','band_conversion','band_demographic','band_athlete_list'],
