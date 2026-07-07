@@ -2666,9 +2666,14 @@
     });
     svg += '</svg>';
 
+    const scoreDiveEra = Number(year) < 2024
+      ? 'This chart reflects the <strong>pre-2024</strong> required dive counts (in effect through 2023).'
+      : 'This chart reflects required dive counts in effect since <strong>Jan 1, 2024</strong> (aligned to World Aquatics/Pan American Aquatics standards).';
+
     return sectionShell(5, 'Score & Placement Distribution — ' + year + ' ' + STAGE_SHORT[stage],
       'How scores spread within each event at ' + STAGE_SHORT[stage] + '. Each row is one event. The box covers the middle 50% of athletes (Q1 to Q3); the dark line is the median and the faint dot is the mean. The whiskers reach the lowest and highest scores.' +
-      (showCutoff ? ' The red dashed line marks the 18th-place score — the cutoff to advance to the E/W/C Championships (places 4–18). Places 1–3 in each event advance directly to Junior Nationals, and divers near the 18th-place score may also qualify on the average-score rule, so treat the line as the primary cutoff rather than an exact one.' : ''),
+      (showCutoff ? ' The red dashed line marks the 18th-place score — the cutoff to advance to the E/W/C Championships (places 4–18). Places 1–3 in each event advance directly to Junior Nationals, and divers near the 18th-place score may also qualify on the average-score rule, so treat the line as the primary cutoff rather than an exact one.' : '') +
+      ' ' + scoreDiveEra + ' Group A, Group C girls\' springboard, and Group D required dive counts changed at that boundary (see the Jan 2024 dive-count rule note), so comparing this chart against the other side of that boundary for those groups isn\'t a like-for-like score comparison.',
       kpis + picker + '<div class="pm-score-wrap">' + svg + '</div>');
   }
 
@@ -2853,6 +2858,13 @@
               '<div class="pm-kpi-sub">' + (teams.length > 1 ? '+' + (teams.length-1) + ' more' : 'club affiliation') + '</div></div>';
       kpis += '</div>';
 
+      const careerSpansDiveChange = years.some(y => y < 2024) && years.some(y => y >= 2024);
+      const diveChangeNote = careerSpansDiveChange
+        ? '<div class="pm-note" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px;margin:10px 0;font-size:12px">' +
+          '<strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (\u22121 dive, all events), Group C girls\u2019 springboard (\u22121 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023\u21922024 may partly reflect that rule change rather than pure performance change \u2014 check which group applied each year in the detail table below.' +
+          '</div>'
+        : '';
+
       // Timeline
       let timeline = '<div class="pm-career-timeline">';
       years.forEach(y => {
@@ -2896,7 +2908,7 @@
           '<div class="pm-career-name">' + escapeHtml(c.name) + '</div>' +
           '<button class="pm-career-clear" id="pmCareerClear">← New search</button>' +
         '</div>' +
-        kpis + timeline + detail;
+        kpis + diveChangeNote + timeline + detail;
     }
 
     return sectionShell(7, 'Athlete Career Trace',

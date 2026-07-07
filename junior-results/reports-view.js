@@ -1208,6 +1208,10 @@
     }).filter(es => es.totalSamples > 0);
 
     const drillStats = drill ? eventStats.find(e => e.eventKey === drill) : null;
+    const scoringCurYear = (_yearOverrideRows ? rptState.selectedYear : _currentSeason);
+    const scoringDiveEra = scoringCurYear < 2024
+      ? 'This view reflects the <strong>pre-2024</strong> required dive counts (in effect through 2023).'
+      : 'This view reflects required dive counts in effect since <strong>Jan 1, 2024</strong> (aligned to World Aquatics/Pan American Aquatics standards).';
 
     wrap.innerHTML = `<div class="rpt-section">
 
@@ -1219,6 +1223,10 @@
         different scoring scales (different dive lists, DDs, board heights), so an
         overall &ldquo;average score for 1st place&rdquo; would mix incomparable numbers.
         Each row below is one event type — those numbers are meaningful.
+        ${scoringDiveEra} Group A, Group C girls' springboard, and Group D required
+        dive counts changed at that boundary, so switching the year above for those
+        groups isn't a like-for-like score comparison — see the Jan 2024 dive-count
+        rule change for details.
         ${filtered ? `<br><strong>Active filter:</strong> ${esc(desc)}` : ''}
       </div>
 
@@ -4578,6 +4586,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const top3s = r.rows.filter(x => x.place != null && x.place <= 3 && (x.round==='Final'||x.round==='')).length;
       const stages = {};
       r.rows.forEach(x => { stages[x.stage||'?'] = (stages[x.stage||'?']||0)+1; });
+      const careerSpansDiveChange = years.some(y => Number(y) < 2024) && years.some(y => Number(y) >= 2024);
 
       out.innerHTML = `
         <div class="rpt-card">
@@ -4591,6 +4600,9 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div style="margin-top:10px">
             <strong>Stages competed:</strong> ${Object.keys(stages).map(s => esc(s)+' ('+stages[s]+')').join(', ')}
           </div>
+          ${careerSpansDiveChange ? `<div class="rpt-note" style="margin-top:10px;background:#fef3c7;border-left:3px solid #d97706">
+            <strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (−1 dive, all events), Group C girls' springboard (−1 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023→2024 for this athlete may partly reflect that rule change rather than pure performance change — check which group they competed in each year below.
+          </div>` : ''}
         </div>
         ${years.map(y => {
           const rows = byYear[y];
@@ -5790,9 +5802,12 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         const name = first.rows[0] ? (first.rows[0].first_name||'')+' '+(first.rows[0].last_name||'') : 'DM '+opts.dmId;
         const byYear = {};
         r.rows.forEach(x => (byYear[x.year]=byYear[x.year]||[]).push(x));
+        const careerYears = Object.keys(byYear).map(Number);
+        const careerSpansDiveChange = careerYears.some(y => y < 2024) && careerYears.some(y => y >= 2024);
         return `<section class="rb-section">
           <h2 class="rb-h2">${esc(name)} — Career Trace</h2>
           <p class="rb-soft">DM ${esc(opts.dmId)} · ${fmt(r.rows.length)} result rows · ${Object.keys(byYear).length} year${Object.keys(byYear).length===1?'':'s'}</p>
+          ${careerSpansDiveChange ? `<p class="rb-p" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px"><strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (−1 dive, all events), Group C girls' springboard (−1 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023→2024 may partly reflect that rule change rather than pure performance change — check which group applied each year in the Event column below.</p>` : ''}
           ${Object.keys(byYear).sort().map(y => `
             <h3 class="rb-h3">${y}</h3>
             <table class="rb-table rb-table-sm">
