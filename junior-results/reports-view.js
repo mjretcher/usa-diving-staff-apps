@@ -1241,7 +1241,7 @@
             <tr>
               <th>Event</th>
               ${placesSorted.map(p => `<th class="mono sc-place-col">${ordinal(p)} place</th>`).join('')}
-              <th class="mono" title="Total scored results in the selected place range">Total n</th>
+              <th class="mono" title="Total scored results across the place ranges shown">Total scored</th>
             </tr>
           </thead>
           <tbody>
@@ -1256,7 +1256,10 @@
                       <div class="sc-cell-n">n=${pp.n}</div>
                     ` : '<span class="sc-cell-na">—</span>'}
                   </td>`).join('')}
-                <td class="mono sc-event-n"><strong>${es.totalSamples}</strong></td>
+                <td class="mono sc-cell-td sc-event-n">
+                  <div class="sc-cell-mean"><strong>${fmt(es.totalSamples)}</strong></div>
+                  <div class="sc-cell-n">athletes scored</div>
+                </td>
               </tr>
             `).join('')}
           </tbody>
