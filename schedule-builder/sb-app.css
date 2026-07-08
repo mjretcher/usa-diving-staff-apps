@@ -131,7 +131,7 @@ button{cursor:pointer;border:none;background:none}
 .badge.qualifier{background:var(--qual);color:#fff}
 .badge.semifinal{background:#7C3AED;color:#fff}
 
-.sc-titles{flex:1;min-width:0}
+.sc-titles{flex:0 1 auto;max-width:440px;min-width:0}
 .sc-name{font-size:14.5px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25;letter-spacing:-.01em}
 .sc-sub{font-size:11.5px;color:var(--tx3);margin-top:2px;font-weight:500}
 .sc-time{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end}
