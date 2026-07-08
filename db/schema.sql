@@ -126,6 +126,30 @@ CREATE TABLE IF NOT EXISTS junior_results.zone_thresholds (
 );
 CREATE INDEX IF NOT EXISTS idx_jzt_year_event ON junior_results.zone_thresholds(year, zone, event_key);
 
+-- Snapshot of the "possible/projected" Junior Nationals field, published on demand from the
+-- Junior Results Audit qualifier engine (advancesToNationals, after all merges/overrides) plus
+-- the full HPS roster (athlete_status). Consumed read-only by Schedule Builder to pre-fill
+-- projected entries and show athlete-load breakdowns by age group / gender / zone / E-W-C
+-- while building a schedule. This is a point-in-time snapshot, replaced wholesale on each
+-- publish — not a live feed. discipline is NULL for HPS roster members who have not yet
+-- competed in a tracked event this cycle (apparatus not yet knowable).
+CREATE TABLE IF NOT EXISTS junior_results.projected_nationals_field (
+    id                  BIGSERIAL PRIMARY KEY,
+    season              SMALLINT NOT NULL,
+    diver_key           TEXT NOT NULL,
+    athlete_name        TEXT NOT NULL,
+    age_group           TEXT NOT NULL,
+    gender              TEXT NOT NULL,
+    discipline          TEXT,
+    zone                TEXT,
+    ewc_meet            TEXT,
+    team                TEXT,
+    qualification_path  TEXT NOT NULL,
+    published_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pnf_season ON junior_results.projected_nationals_field(season);
+CREATE INDEX IF NOT EXISTS idx_pnf_lookup ON junior_results.projected_nationals_field(season, age_group, gender, discipline);
+
 
 -- SCHEMA 3: hp_analytics
 CREATE SCHEMA IF NOT EXISTS hp_analytics;
