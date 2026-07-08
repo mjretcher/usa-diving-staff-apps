@@ -26,10 +26,17 @@ button,input,select,textarea{font-family:inherit}
 button{cursor:pointer;border:none;background:none}
 ::selection{background:rgba(23,31,105,.15)}
 
-#app{display:grid;grid-template-rows:52px 1fr;height:100vh}
+#app{display:grid;grid-template-rows:auto 1fr;height:100vh}
 
 /* ════ TOP BAR ════ */
-.bar{background:var(--navy);display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25)}
+/* flex-wrap: the fixed-width button cluster (.bar-right) is the piece most
+   likely to not fit — undo/redo/conflicts/status/Entries/Library/history/
+   Save/Generate is a lot of fixed-width buttons with nothing shrinkable
+   about them. Rather than clip whatever doesn't fit (there was no overflow
+   handling here at all, and nothing to scroll to reach it), it now wraps
+   to a second line. #app's row above was changed from a fixed 52px to
+   auto so that second line has room instead of being clipped by the grid. */
+.bar{background:var(--navy);display:flex;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25);min-height:52px}
 .bar-logo{display:flex;align-items:center;padding:0 18px;height:52px;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;text-decoration:none;transition:background .15s}
 .bar-logo:hover{background:rgba(255,255,255,.05)}
 .bar-logo img{height:26px;width:auto;display:block}
