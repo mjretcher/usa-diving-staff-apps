@@ -657,6 +657,22 @@ function addSession(dayId,isPractice){
   const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
+// Standard practice/meeting block presets — quick-pick chips instead of always defaulting to a
+// generic "Open Training" block that then needs manual retitling. Technical Meeting is included
+// as a standard preset since every meet needs at least one and it's easy to forget.
+const PRACTICE_PRESETS={
+  open:{title:'Open Training',label:'Open practice block.',duration:90},
+  flighted:{title:'Flighted Warm-Ups',label:'Flighted warm-up block.',duration:120},
+  restricted:{title:'Restricted Training',label:'Restricted Training',duration:30},
+  technical:{title:'Technical Meeting',label:'Technical Meeting',duration:60},
+};
+function addPracticeBlock(dayId,presetKey){
+  const preset=PRACTICE_PRESETS[presetKey];
+  if(!preset){addSession(dayId,true);return;} // 'custom' falls back to the generic block for full manual control
+  const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
+  upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
+}
 function deleteSession(id){
   const sess=S.sessions.find(x=>x.id===id);
   const label=sess&&sess.isPractice?(sess.title||'Open Training'):'this session';
@@ -872,6 +888,26 @@ function ensureFinalsSession(state,prelimSess){
   const ns={id:uid(),dayId,warmupStartMinutes:ru(lastEnd+5,5),warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:5,awardsEnabled:false,isPractice:false,title:'',flights:[],events:[]};
   state.sessions.push(ns);
   return ns;
+}
+// When a Prelim event with a linked Final moves to a different session, the Final should
+// follow it so the pairing stays together for scheduling purposes. Same-day moves relocate
+// the Final into the correct finals session for the (possibly new) day; the Final is left
+// alone if the Prelim just moves within the same day into a session that already has a
+// finals session in place. Cross-day moves of the Prelim are not auto-followed — awards/
+// finals structure across different meet days isn't assumed to carry over automatically.
+function relocateLinkedFinal(state,prelimEv,newDayId){
+  let finalEv=null,finalSess=null;
+  for(const sess of state.sessions){
+    const fe=sess.events.find(e=>e.linkedPrelimId===prelimEv.id);
+    if(fe){finalEv=fe;finalSess=sess;break;}
+  }
+  if(!finalEv||!finalSess)return;
+  if(finalSess.dayId===newDayId)return; // already tracking the right day — leave its session placement as-is
+  finalSess.events=finalSess.events.filter(e=>e.id!==finalEv.id);
+  const destSess=ensureFinalsSession(state,{dayId:newDayId});
+  destSess.events.push(finalEv);
+  cascadeSession(state,finalSess.id);
+  cascadeSession(state,destSess.id);
 }
 function addEvToSess(sessId,presetId,round){
   const cat=buildCatalog(S.meet.meetType);const p=cat.find(e=>e.id===presetId);if(!p)return;
@@ -1802,6 +1838,7 @@ function bindDrag(){
           if(ti<0)toS.events.push(ev);else toS.events.splice(ti,0,ev);
           cascadeSession(s,fromSess);
           cascadeSession(s,toSess);
+          if(ev.round==='Prelim')relocateLinkedFinal(s,ev,toS.dayId);
         });
         toast('Event moved');
       }
@@ -1828,6 +1865,7 @@ function bindDrag(){
         toS.events.push(ev);
         cascadeSession(s,fromSess);
         cascadeSession(s,sessId);
+        if(ev.round==='Prelim')relocateLinkedFinal(s,ev,toS.dayId);
       });
       toast('Event moved to session');
     });
@@ -2063,6 +2101,7 @@ function renderModal(timed){
 
 // Add-block chooser — proper modal, NO browser confirm()
 function renderAddBlockModal(){
+  const chip=(key,label)=>`<button class="chip" onclick="closeModal();addPracticeBlock(UI.dayId,'${key}')">${esc(label)}</button>`;
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Add to schedule</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -2072,10 +2111,17 @@ function renderAddBlockModal(){
           <div class="choose-name">Competition Session</div>
           <div class="choose-desc">Warm-up plus events with rounds, divers, and timing</div>
         </div>
-        <div class="choose-card" onclick="closeModal();addSession(UI.dayId,true)">
+        <div class="choose-card" style="cursor:default" onclick="event.stopPropagation()">
           <div class="choose-icon prac"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:26px;height:26px"><path d="M2 12h20M2 12c0-3 2-5 5-5s5 2 5 5M12 12c0-3 2-5 5-5s5 2 5 5"/></svg></div>
-          <div class="choose-name">Open Training</div>
-          <div class="choose-desc">Open pool block — optionally split into named flights</div>
+          <div class="choose-name">Practice / Meeting Block</div>
+          <div class="choose-desc" style="margin-bottom:10px">Pick a type — timing and title fill in automatically</div>
+          <div class="chiprow">
+            ${chip('open','Open Training')}
+            ${chip('flighted','Flighted Warm-Ups')}
+            ${chip('restricted','Restricted Training')}
+            ${chip('technical','Technical Meeting')}
+            ${chip('custom','Custom')}
+          </div>
         </div>
       </div>
     </div>
