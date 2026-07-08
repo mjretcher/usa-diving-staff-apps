@@ -1275,7 +1275,7 @@ function renderPreviewPanel(timed){
         const t=sess.timing;
         if(sess.isPractice){
           const ft=t.flightTimes||[];const isTrain=sess.title==='Open Training';
-          return`<div class="mini-prac" style="${isTrain?'background:var(--train-bg);color:var(--train)':''}"><img src="../shared/images/diver-mark.svg?v=202606250120" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle" /> ${esc(sess.title||'Open Training')} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}</div>${ft.map(f=>`<div style="font-size:10px;color:var(--tx3);padding:2px 0 2px 11px;border-left:2px solid ${f.color||'#ccc'};margin:2px 0 2px 4px">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)}</div>`).join('')}`;
+          return`<div class="mini-prac" style="${isTrain?'background:var(--train-bg);color:var(--train)':''}"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle" /> ${esc(sess.title||'Open Training')} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}</div>${ft.map(f=>`<div style="font-size:10px;color:var(--tx3);padding:2px 0 2px 11px;border-left:2px solid ${f.color||'#ccc'};margin:2px 0 2px 4px">${esc(f.name)} · ${f12(f.startMinutes)}–${f12(f.endMinutes)}</div>`).join('')}`;
         }
         const n=getSessNum(sess,timed);const hasF=sess.events.some(e=>e.round==='Final');
         return`<div class="mini-sess">
@@ -1348,7 +1348,7 @@ function renderTimeline(timed){
   if(!day)return`<div class="tl-body"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No days yet</div><div class="empty-sub">Click + in the day bar to add a competition day</div></div></div>`;
   const sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
-  if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202606250120" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
+  if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
   return`<div class="tl-body">
     ${sessions.map(s=>renderCard(s,timed,warns)).join('')}
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
@@ -1368,7 +1368,7 @@ function renderCard(sess,timed,warns){
     const typeColor=isTraining?'var(--train)':'var(--prac)';
     const typeBg=isTraining?'var(--train-bg)':'var(--prac-bg)';
     const typeLabel='Open Training';
-    const icon=`<img src="../shared/images/diver-mark.svg?v=202606250120" alt="" style="width:100%;height:100%;object-fit:contain" />`;
+    const icon=`<img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:100%;height:100%;object-fit:contain" />`;
     return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-icon" style="color:${typeColor}">${icon}</div>
