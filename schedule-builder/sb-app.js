@@ -79,7 +79,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -1074,14 +1074,30 @@ async function openLibrary(){
 // reads what's already been published, matching how everywhere else in this codebase
 // treats the qualifier engine as the single source of truth for who's qualified.
 const PROJ_SEASON='2026';
+async function loadProjRows(){
+  const r=await nq(`SELECT diver_key,athlete_name,age_group,gender,discipline,zone,ewc_meet,team,qualification_path,published_at FROM junior_results.projected_nationals_field WHERE season=$1 ORDER BY age_group,gender,discipline`,[PROJ_SEASON]);
+  return(r.rows||[]).map(row=>({diverKey:row[0],athlete:row[1],ageGroup:row[2],gender:row[3],discipline:row[4],zone:row[5],ewcMeet:row[6],team:row[7],path:row[8],publishedAt:row[9]}));
+}
+// Background loader used wherever projection counts are needed (flight tagging, print) but the
+// Projections panel itself hasn't been opened yet this session. Guarded so it only fires once.
+function ensureProjDataLoaded(){
+  if(UI.projRows!=null||UI._projBgLoading)return;
+  UI._projBgLoading=true;
+  loadProjRows().then(rows=>{UI.projRows=rows}).catch(()=>{UI.projRows=[]}).finally(()=>{UI._projBgLoading=false;render()});
+}
+// Distinct athlete count for a flight's zone/E-W-C tag. Zone is more specific than E-W-C
+// and takes priority when both are set (every zone belongs to exactly one E-W-C group).
+function athleteCountForFlight(f){
+  if(!UI.projRows)return null;
+  if(!f.zone&&!f.ewcMeet)return null;
+  const rows=UI.projRows.filter(r=>f.zone?r.zone===f.zone:r.ewcMeet===f.ewcMeet);
+  return new Set(rows.map(r=>r.diverKey)).size;
+}
 async function openProjections(){
   UI.modal='projections';
   if(UI.projRows==null){
     UI.projLoading=true;UI.projError=null;render();
-    try{
-      const r=await nq(`SELECT diver_key,athlete_name,age_group,gender,discipline,zone,ewc_meet,team,qualification_path,published_at FROM junior_results.projected_nationals_field WHERE season=$1 ORDER BY age_group,gender,discipline`,[PROJ_SEASON]);
-      UI.projRows=(r.rows||[]).map(row=>({diverKey:row[0],athlete:row[1],ageGroup:row[2],gender:row[3],discipline:row[4],zone:row[5],ewcMeet:row[6],team:row[7],path:row[8],publishedAt:row[9]}));
-    }catch(e){UI.projError=e.message||'Could not load projections';UI.projRows=[];}
+    try{UI.projRows=await loadProjRows();}catch(e){UI.projError=e.message||'Could not load projections';UI.projRows=[];}
     UI.projLoading=false;
   }
   render();
@@ -1448,6 +1464,9 @@ function renderEditPanel(timed){
 }
 
 function renderEditPrac(sess,t,flights){
+  if(flights.length)ensureProjDataLoaded();
+  const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlight('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
+  const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlight('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
   return`
     <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2">
@@ -1467,13 +1486,20 @@ function renderEditPrac(sess,t,flights){
     <div class="fdiv"></div>
     <div class="fsec">Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></div>
     <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min"</p>
-    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};return`<div class="flight-row">
+    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cnt=athleteCountForFlight(f);const cntLbl=cnt==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):cnt+' athlete'+(cnt===1?'':'s');return`<div class="flight-row">
       <div class="flight-bar" style="background:${f.color||'#171F69'}"></div>
       <input class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
       <input class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
       <span style="font-size:10px;color:var(--tx3)">min</span>
       <div class="flight-time-lbl">${ft.startMinutes!==undefined?`${f12(ft.startMinutes)}–${f12(ft.endMinutes)}`:''}</div>
       <button class="flight-rm" onclick="removeFlight('${sess.id}','${f.id}')">×</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:3px 0 10px 20px">
+      <span style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Zone</span>
+      ${['A','B','C','D','E','F'].map(v=>zoneChip(f,v)).join('')}
+      <span style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-left:8px">E/W/C</span>
+      ${ewcChip(f,'East')}${ewcChip(f,'Central')}${ewcChip(f,'West')}
+      <span style="font-size:11px;font-weight:600;color:var(--navy);margin-left:auto;white-space:nowrap">${esc(cntLbl)}</span>
     </div>`}).join('')}
     <div style="font-size:11px;color:var(--tx3);margin-top:4px;text-align:right">Total: ${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>
     </div>`:''}
@@ -2530,6 +2556,7 @@ function renderSaveDialogModal(){
 function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabels!==false);saveS();render();}
 
 function renderGenerateModal(timed){
+  ensureProjDataLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
   const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
@@ -2548,6 +2575,7 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
           </div>
         </div>
@@ -2735,7 +2763,10 @@ function renderPP(timed,cfg){
     const closeNote=sess.fitToClose?'  •  until facility close':'';
     return`<div class="pp-prac">
       <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
-      ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}</span></div>`).join('')}</div>`:''}
+      ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
+        const cnt=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
+        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cnt!=null?` · ${cnt} athlete${cnt===1?'':'s'}`:''}</span></div>`;
+      }).join('')}</div>`:''}
     </div>`;
   }
   function sessBlock(sess){
