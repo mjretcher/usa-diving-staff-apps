@@ -651,7 +651,10 @@ function toggleEntriesSess(id){const i=UI.entriesExpanded.indexOf(id);if(i>=0)UI
 function addDay(){const days=S.meet.days;const last=days[days.length-1];const next=last?(()=>{const d=new Date(`${last.date}T00:00:00`);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)})():new Date().toISOString().slice(0,10);upd(s=>{const day={id:uid(),date:next,openMinutes:390,closeMinutes:1200};s.meet.days.push(day);UI.dayId=day.id})}
 function addSession(dayId,isPractice){
   const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
+  // Practice/training blocks (Open Training, Flighted Warm-Ups, etc.) default to NO buffer —
+  // these blocks routinely run back-to-back with no gap needed. Competition sessions keep
+  // the standard 5-minute buffer default.
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 function deleteSession(id){
@@ -764,6 +767,25 @@ function normalizeAllDays(stateSnap){
   const st=stateSnap||S;
   if(!st||!st.meet||!Array.isArray(st.meet.days))return;
   st.meet.days.forEach(d=>reflowDay(st,d.id));
+}
+// Zero out the buffer on every session for a given day and pack them back-to-back.
+// For days that are all (or mostly) Open Training / Flighted Warm-Up blocks with no
+// gaps needed between them, rather than clicking the buffer chip to "0" one session at a time.
+function zeroBuffersForDay(dayId){
+  const count=S.sessions.filter(x=>x.dayId===dayId).length;
+  if(count<2){toast('Nothing to pack — this day only has one session');return;}
+  askConfirm({
+    title:'Remove buffers for this day?',
+    message:'Every session on this day will be packed back-to-back with no gap in between. You can undo with Cmd+Z.',
+    confirmText:'Remove buffers',
+    onConfirm:()=>{
+      upd(s=>{
+        s.sessions.filter(x=>x.dayId===dayId).forEach(x=>{x.bufferMinutes=0;});
+        reflowDay(s,dayId);
+      });
+      toast('Buffers cleared — sessions packed back-to-back');
+    }
+  });
 }
 function cascadeSession(stateSnap,changedId){
   const all=stateSnap.sessions;
@@ -1151,6 +1173,7 @@ function renderTlBar(timed){
     <span class="tl-title">${day?fullDate(day.date):'Schedule'}</span>
     <div class="tl-spacer"></div>
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
+    ${daySess.length>1?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
     <button class="tl-iconbtn ${UI.previewOpen?'active':''}" onclick="UI.previewOpen=!UI.previewOpen;if(UI.previewOpen){UI.editSessId=null;UI.entriesOpen=false}render()" title="Quick preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="tl-addbtn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Add block</button>
   </div>`;
@@ -1935,20 +1958,24 @@ function executeMoveSession(){
     // Compute new warmupStart based on position
     const sameDay=s.sessions.filter(x=>x.dayId===targetDay&&x.id!==sessId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
     if(pos==='start'){
-      // Place at start: 7 AM or earlier than first
+      // Place at start: uses this session's OWN buffer to leave the correct gap before
+      // whatever follows it (0 buffer = back-to-back, e.g. practice blocks).
       const firstStart=sameDay.length?Number(sameDay[0].warmupStartMinutes):420;
       const sessDur=calcSessTiming(sess).sessionEndMinutes-calcSessTiming(sess).warmupStartMinutes;
-      sess.warmupStartMinutes=Math.max(420,firstStart-sessDur-5);
+      sess.warmupStartMinutes=Math.max(420,firstStart-sessDur-Number(sess.bufferMinutes||0));
       cascadeSession(s,sessId);
     } else if(pos==='end'){
-      const lastEnd=sameDay.reduce((m,x)=>Math.max(m,calcSessTiming(x).sessionEndMinutes),420);
-      sess.warmupStartMinutes=ru(lastEnd+5,5);
+      // Place at end: uses the CURRENT last session's buffer to leave the correct gap
+      // before this one starts (0 buffer = back-to-back, e.g. practice blocks).
+      let lastEnd=420,lastBuffer=0;
+      sameDay.forEach(x=>{const end=calcSessTiming(x).sessionEndMinutes;if(end>=lastEnd){lastEnd=end;lastBuffer=Number(x.bufferMinutes||0);}});
+      sess.warmupStartMinutes=ru(lastEnd+lastBuffer,5);
     } else if(typeof pos==='string'&&pos.startsWith('after-')){
       const afterId=pos.replace('after-','');
       const afterSess=sameDay.find(x=>x.id===afterId);
       if(afterSess){
         const afterT=calcSessTiming(afterSess);
-        sess.warmupStartMinutes=ru(afterT.sessionEndMinutes+Number(afterSess.bufferMinutes||5),5);
+        sess.warmupStartMinutes=ru(afterT.sessionEndMinutes+Number(afterSess.bufferMinutes||0),5);
         cascadeSession(s,sessId);
       }
     }
