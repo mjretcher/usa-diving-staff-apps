@@ -210,15 +210,25 @@ setInterval(checkForUpdate,300000);
 function scheduleSave(){clearTimeout(saveTimer);setSyncDot('saving');saveTimer=setTimeout(doSave,3000)}
 async function doSave(){
   if(!S.currentLibraryId)return;
-  try{await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;setSyncDot('ok');}catch(e){sync.err=e.message;setSyncDot('error')}
+  try{
+    const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
+    // Use the DATABASE's own timestamp for updated_at, not the client clock.
+    // Comparing a client-clock lastSynced against a server-clock updated_at
+    // is exactly the kind of thing clock skew / network latency breaks —
+    // this was intermittently making the poll below mistake this save for
+    // someone else's edit and silently reload mid-keystroke.
+    lastSynced=r.rows?.[0]?.[0]?new Date(r.rows[0][0]).toISOString():new Date().toISOString();
+    sync.ok=true;sync.err=null;setSyncDot('ok');
+  }catch(e){sync.err=e.message;setSyncDot('error')}
 }
 async function saveToNeon(name,folder){
   const id=S.currentLibraryId||uid();S.currentLibraryId=id;
   if(folder)S.libraryFolder=folder;
   setSyncDot('saving');
   try{
-    await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now()`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
-    lastSynced=new Date().toISOString();sync.ok=true;sync.err=null;saveS();setSyncDot('ok');startSync();saveVersion('Manual save');
+    const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
+    lastSynced=r.rows?.[0]?.[0]?new Date(r.rows[0][0]).toISOString():new Date().toISOString();
+    sync.ok=true;sync.err=null;saveS();setSyncDot('ok');startSync();saveVersion('Manual save');
     return true;
   }catch(e){
     sync.err=e.message;setSyncDot('error');
@@ -291,8 +301,15 @@ async function startSync(){
     if(!S.currentLibraryId)return;
     try{
       const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);
-      if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced)
-        await loadFromNeon(S.currentLibraryId,{silent:true});
+      if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced){
+        // Safety net: never silently reload (and blow away in-progress,
+        // not-yet-committed typing) while someone's actively in a text
+        // field. If they are, skip this cycle — the next poll 8s later
+        // will pick up the remote change once they've paused or blurred.
+        const active=document.activeElement;
+        const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+        if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
+      }
       sync.ok=true;sync.err=null;setSyncDot('ok');
       // Came back online: also push any pending local changes
       if(_pollFailures>0&&S.currentLibraryId){_pollFailures=0;doSave().catch(()=>{});}
