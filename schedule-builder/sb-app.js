@@ -616,6 +616,7 @@ let UI={
   pickerSessId:'',pickerSearch:'',pickerPreset:'',pickerRound:'',
   moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
   draggedSessId:null,draggedEvFrom:null,
+  projRows:null,projLoading:false,projError:null,projFilterEwc:null,projFilterZone:null,
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
@@ -1066,6 +1067,83 @@ async function openLibrary(){
   render();
 }
 
+// ── ATHLETE PROJECTIONS (from Junior Results Audit's published snapshot) ──────
+// Reads junior_results.projected_nationals_field — a point-in-time snapshot Junior
+// Results Audit publishes on demand (its qualifier engine's advancesToNationals flag
+// plus the full HPS roster). This app never recomputes qualification itself; it only
+// reads what's already been published, matching how everywhere else in this codebase
+// treats the qualifier engine as the single source of truth for who's qualified.
+const PROJ_SEASON='2026';
+async function openProjections(){
+  UI.modal='projections';
+  if(UI.projRows==null){
+    UI.projLoading=true;UI.projError=null;render();
+    try{
+      const r=await nq(`SELECT diver_key,athlete_name,age_group,gender,discipline,zone,ewc_meet,team,qualification_path,published_at FROM junior_results.projected_nationals_field WHERE season=$1 ORDER BY age_group,gender,discipline`,[PROJ_SEASON]);
+      UI.projRows=(r.rows||[]).map(row=>({diverKey:row[0],athlete:row[1],ageGroup:row[2],gender:row[3],discipline:row[4],zone:row[5],ewcMeet:row[6],team:row[7],path:row[8],publishedAt:row[9]}));
+    }catch(e){UI.projError=e.message||'Could not load projections';UI.projRows=[];}
+    UI.projLoading=false;
+  }
+  render();
+}
+function closeProjections(){UI.modal=null;render()}
+function refreshProjectionsData(){UI.projRows=null;openProjections()}
+function setProjFilterEwc(v){UI.projFilterEwc=(UI.projFilterEwc===v?null:v);render()}
+function setProjFilterZone(v){UI.projFilterZone=(UI.projFilterZone===v?null:v);render()}
+function filteredProjRows(){
+  return(UI.projRows||[]).filter(r=>
+    (!UI.projFilterEwc||r.ewcMeet===UI.projFilterEwc)&&
+    (!UI.projFilterZone||r.zone===UI.projFilterZone)
+  );
+}
+// Distinct-athlete counts by age group + gender — this is the board-loading breakdown.
+// Counts every athlete once even if they appear on multiple apparatus rows.
+function projBreakdown(){
+  const byKey=new Map();
+  filteredProjRows().forEach(r=>{
+    const k=r.ageGroup+'|'+r.gender;
+    if(!byKey.has(k))byKey.set(k,new Set());
+    byKey.get(k).add(r.diverKey);
+  });
+  return['Group A','Group B','Group C','Group D'].map(g=>({
+    group:g,girls:(byKey.get(g+'|Girls')||new Set()).size,boys:(byKey.get(g+'|Boys')||new Set()).size,
+  }));
+}
+// Distinct-athlete counts by age group + gender + apparatus — drives the pre-fill.
+// Only rows with a known apparatus count here (HPS-not-yet-competed rows have no
+// apparatus and are intentionally excluded from this specific breakdown).
+function projByEvent(){
+  const map=new Map();
+  filteredProjRows().filter(r=>r.discipline).forEach(r=>{
+    const k=r.ageGroup+'|'+r.gender+'|'+r.discipline;
+    if(!map.has(k))map.set(k,new Set());
+    map.get(k).add(r.diverKey);
+  });
+  const out={};map.forEach((set,k)=>{out[k]=set.size});
+  return out;
+}
+function prefillProjections(){
+  const byEvent=projByEvent();
+  let filled=0,skipped=0;
+  upd(s=>{
+    s.sessions.forEach(sess=>{
+      if(sess.isPractice)return;
+      sess.events.forEach(ev=>{
+        if(ev.round!=='Prelim'&&ev.round!=='Qualifier')return;
+        const k=ev.level+'|'+ev.gender+'|'+ev.apparatus;
+        const count=byEvent[k];
+        if(count==null)return;
+        if(ev.projectedDivers!=null&&ev.projectedDivers!==''){skipped++;return;}
+        ev.projectedDivers=count;ev.numberOfDivers=entryValue(ev);filled++;
+      });
+    });
+    const touchedDays=new Set();
+    s.sessions.forEach(sess=>{if(!sess.isPractice)touchedDays.add(sess.dayId)});
+    touchedDays.forEach(dayId=>reflowDay(s,dayId));
+  });
+  toast(`Pre-filled ${filled} event${filled===1?'':'s'}`+(skipped?` — ${skipped} already had a value, left untouched`:''));
+}
+
 // ── RENDER CORE ───────────────────────────────────────────────────────
 function render(){
   initUI();
@@ -1189,6 +1267,7 @@ function renderBar(timed){
       <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
       <div class="bar-sep"></div>
       <button class="bb" onclick="openEntries()">Entries</button>
+      <button class="bb" onclick="openProjections()">Projections</button>
       <button class="bb" onclick="openLibrary()">Library</button>
       <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
       <button class="bb" onclick="saveSchedule()">Save</button>
@@ -2094,12 +2173,72 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
 
 // Add-block chooser — proper modal, NO browser confirm()
+function renderProjectionsModal(){
+  if(UI.projLoading){
+    return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading projections…</div>
+    </div>`;
+  }
+  if(UI.projError){
+    return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-body">
+        <div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load projections: ${esc(UI.projError)}</div>
+        <button class="btn btn-p" onclick="refreshProjectionsData()">Retry</button>
+      </div>
+    </div>`;
+  }
+  const rows=UI.projRows||[];
+  if(!rows.length){
+    return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-body" style="text-align:center;color:var(--tx3);padding:30px 22px">
+        No projections published yet.<br/>Open Junior Results Audit and click "Publish to Schedule Builder," then refresh here.
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="refreshProjectionsData()">Refresh</button></div>
+    </div>`;
+  }
+  const publishedAt=rows[0].publishedAt?new Date(rows[0].publishedAt).toLocaleString():'';
+  const filtered=filteredProjRows();
+  const totalAthletes=new Set(filtered.map(r=>r.diverKey)).size;
+  const unknownDisc=new Set(filtered.filter(r=>!r.discipline).map(r=>r.diverKey)).size;
+  const ewcChip=v=>`<button class="chip ${UI.projFilterEwc===v?'on':''}" onclick="setProjFilterEwc('${v}')">${v}</button>`;
+  const zoneChip=v=>`<button class="chip ${UI.projFilterZone===v?'on':''}" onclick="setProjFilterZone('${v}')">${v}</button>`;
+  const bd=projBreakdown();
+  const totGirls=bd.reduce((a,r)=>a+r.girls,0),totBoys=bd.reduce((a,r)=>a+r.boys,0);
+  return`<div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-hd"><span class="modal-title">Athlete Projections — Junior Nationals</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+        <span>${totalAthletes} athletes (Zone-direct + E/W/C + HPS) · published ${esc(publishedAt)}</span>
+        <button class="btn btn-sm" onclick="refreshProjectionsData()">Refresh</button>
+      </div>
+      <div class="fg"><label class="fl">East / West / Central</label><div class="chiprow">${ewcChip('East')}${ewcChip('Central')}${ewcChip('West')}</div></div>
+      <div class="fg"><label class="fl">Zone (optional, narrower filter)</label><div class="chiprow">${['A','B','C','D','E','F'].map(zoneChip).join('')}</div></div>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px">
+        <thead><tr style="text-align:left;color:var(--tx3);font-size:10px;text-transform:uppercase;letter-spacing:.04em">
+          <th style="padding:6px 8px">Age Group</th><th style="padding:6px 8px;text-align:right">Girls</th><th style="padding:6px 8px;text-align:right">Boys</th><th style="padding:6px 8px;text-align:right">Total</th>
+        </tr></thead>
+        <tbody>
+          ${bd.map(r=>`<tr style="border-top:1px solid var(--bd2)"><td style="padding:6px 8px;font-weight:600">${r.group}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums">${r.girls}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums">${r.boys}</td><td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${r.girls+r.boys}</td></tr>`).join('')}
+          <tr style="border-top:2px solid var(--bd2)"><td style="padding:6px 8px;font-weight:700">Total</td><td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${totGirls}</td><td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${totBoys}</td><td style="padding:6px 8px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${totGirls+totBoys}</td></tr>
+        </tbody>
+      </table>
+      ${unknownDisc?`<div style="font-size:11px;color:var(--tx3);margin-top:10px">Includes ${unknownDisc} HPS athlete${unknownDisc===1?'':'s'} not yet competed this cycle — counted in the totals above, but not assignable to a specific apparatus below.</div>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeProjections()">Close</button>
+      <button class="btn btn-p" onclick="prefillProjections()">Pre-fill projected entries in this schedule</button>
+    </div>
+  </div>`;
+}
 function renderAddBlockModal(){
   const chip=(key,label)=>`<button class="chip" onclick="closeModal();addPracticeBlock(UI.dayId,'${key}')">${esc(label)}</button>`;
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
