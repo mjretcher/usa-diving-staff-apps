@@ -617,6 +617,7 @@ let UI={
   moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
   draggedSessId:null,draggedEvFrom:null,
   projRows:null,projLoading:false,projError:null,projFilterEwc:null,projFilterZone:null,
+  showFlightCounts:true,
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
@@ -859,7 +860,38 @@ function reorderSessionWithinDay(draggedId,targetId,placeAbove){
 }
 
 function addFlight(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;if(!sess.flights)sess.flights=[];const colors=['#171F69','#009AC7','#E31937','#16A34A','#D97706','#7C3AED'];sess.flights.push({id:uid(),name:`Flight ${sess.flights.length+1}`,durationMinutes:45,color:colors[sess.flights.length%colors.length]});const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot})}
-function updFlight(sessId,fid,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;const f=sess.flights.find(x=>x.id===fid);if(!f)return;f[field]=field==='durationMinutes'?Number(value):value;const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
+function updFlight(sessId,fid,field,value){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;const f=sess.flights.find(x=>x.id===fid);if(!f)return;f[field]=field==='durationMinutes'?Number(value):value;if(field==='name')f._customName=true;const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
+// Zone/E-W-C tag clicks — separate from updFlight() above because these fire rapidly (tagging
+// several flights in a row) and don't affect timing at all, so a full app re-render on every
+// click is both wasteful and causes a visible scroll/focus disturbance. This path patches just
+// the edit modal's body in place, preserving its scroll position exactly.
+function updFlightTag(sessId,fid,field,value){
+  pushUndo();
+  const sess=S.sessions.find(x=>x.id===sessId);
+  if(!sess?.flights)return;
+  const f=sess.flights.find(x=>x.id===fid);
+  if(!f)return;
+  f[field]=value;
+  // Auto-name from the tag just picked, unless the user has typed a custom name themselves.
+  // Only auto-names on SET (not on clearing a tag back to '') so clearing never blanks a title.
+  if(value&&!f._customName){
+    f.name=field==='zone'?('Zone '+value):value;
+  }
+  saveS();
+  if(S.currentLibraryId)scheduleSave();
+  patchPracEditModal();
+}
+// Re-renders just the practice-edit modal body in place (used by tag clicks above). Falls back
+// to a full render() if the modal isn't in the expected state, so this can never leave the UI stuck.
+function patchPracEditModal(){
+  const sess=S.sessions.find(s=>s.id===UI.editSessId);
+  const body=document.querySelector('[data-edit-body="1"]');
+  if(!sess||!sess.isPractice||!body){render();return;}
+  const t=sess.timing||calcSessTiming(sess);
+  const scrollTop=body.scrollTop;
+  body.innerHTML=renderEditPrac(sess,t,sess.flights||[]);
+  body.scrollTop=scrollTop;
+}
 function removeFlight(sessId,fid){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;sess.flights=sess.flights.filter(f=>f.id!==fid);const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function makeEvent(p,round){
   const isFinal=round==='Final';
@@ -1218,7 +1250,7 @@ function renderEditModal(timed){
   return`<div class="modal-bg" onclick="if(event.target===this)closeEdit()">
     <div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
       <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" onclick="closeEdit()">×</button></div>
-      <div class="modal-body">${body}</div>
+      <div class="modal-body" data-edit-body="1">${body}</div>
       <div class="modal-foot">
         <button class="btn btn-sm btn-gh" style="color:var(--red)" onclick="deleteSession('${sess.id}')">Delete session</button>
         <div style="flex:1"></div>
@@ -1465,8 +1497,9 @@ function renderEditPanel(timed){
 
 function renderEditPrac(sess,t,flights){
   if(flights.length)ensureProjDataLoaded();
-  const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlight('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
-  const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlight('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
+  const showCnt=UI.showFlightCounts!==false;
+  const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlightTag('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
+  const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
   return`
     <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2">
@@ -1484,12 +1517,15 @@ function renderEditPrac(sess,t,flights){
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
     <div class="fdiv"></div>
-    <div class="fsec">Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></div>
-    <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min"</p>
+    <div class="fsec" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></span>
+      ${flights.length?`<label style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--tx3);cursor:pointer"><input type="checkbox" ${showCnt?'checked':''} onchange="UI.showFlightCounts=this.checked;patchPracEditModal()"/> Show athlete counts</label>`:''}
+    </div>
+    <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min" — tag a flight below and its count fills in automatically</p>
     ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cnt=athleteCountForFlight(f);const cntLbl=cnt==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):cnt+' athlete'+(cnt===1?'':'s');return`<div class="flight-row">
       <div class="flight-bar" style="background:${f.color||'#171F69'}"></div>
-      <input class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
-      <input class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
+      <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
+      <input id="flight-dur-${f.id}" class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
       <span style="font-size:10px;color:var(--tx3)">min</span>
       <div class="flight-time-lbl">${ft.startMinutes!==undefined?`${f12(ft.startMinutes)}–${f12(ft.endMinutes)}`:''}</div>
       <button class="flight-rm" onclick="removeFlight('${sess.id}','${f.id}')">×</button>
@@ -1499,7 +1535,7 @@ function renderEditPrac(sess,t,flights){
       ${['A','B','C','D','E','F'].map(v=>zoneChip(f,v)).join('')}
       <span style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-left:8px">E/W/C</span>
       ${ewcChip(f,'East')}${ewcChip(f,'Central')}${ewcChip(f,'West')}
-      <span style="font-size:11px;font-weight:600;color:var(--navy);margin-left:auto;white-space:nowrap">${esc(cntLbl)}</span>
+      ${showCnt?`<span style="font-size:11px;font-weight:600;color:var(--navy);margin-left:auto;white-space:nowrap">${esc(cntLbl)}</span>`:''}
     </div>`}).join('')}
     <div style="font-size:11px;color:var(--tx3);margin-top:4px;text-align:right">Total: ${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>
     </div>`:''}
