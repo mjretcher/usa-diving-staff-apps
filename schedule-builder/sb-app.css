@@ -369,9 +369,9 @@ button{cursor:pointer;border:none;background:none}
 .enp-finalsbtn:hover{background:#CC1530}
 
 /* ════ MODALS (real, in-app, centered) ════ */
-.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:600;display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeIn .15s ease}
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:600;display:flex;align-items:center;justify-content:center;padding:24px}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.modal{background:var(--surf);border-radius:var(--r-xl);width:500px;max-width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:var(--sh-lg);animation:modalIn .2s var(--ease)}
+.modal{background:var(--surf);border-radius:var(--r-xl);width:500px;max-width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:var(--sh-lg)}
 @keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .modal-sm{width:420px}
 .modal-lg{width:680px}
