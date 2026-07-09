@@ -621,9 +621,12 @@ let UI={
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
-  // Force-off awards on every session load — awards never default on.
-  // User can toggle on per-session if needed for a specific meet.
-  S.sessions.forEach(sess=>{if(sess.awardsEnabled){sess.awardsEnabled=false;}});
+  // NOTE: there used to be a force-off loop here that set awardsEnabled=false
+  // on every session. Because initUI() runs at the top of EVERY render(), that
+  // made the per-session Awards toggle impossible to turn on — the very next
+  // render (triggered by the toggle click itself) wiped it back off. Removed:
+  // awards default off on new sessions anyway (see addSession/addBlock), and a
+  // user's explicit per-session choice must stick and persist.
   // Re-lock rulebook dive counts + normalize legacy titles on load
   if(!UI._divesRelocked){
     let changed=false;
