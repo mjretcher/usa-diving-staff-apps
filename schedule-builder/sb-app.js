@@ -1234,12 +1234,14 @@ function render(){
   `;
   bindDrag();
   if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
-  // Restore scroll for every matched surface
+  // Restore scroll for every matched surface — force instant restore (scrollBehavior
+  // 'auto') so no CSS smooth-scroll setting can animate from 0, which reads as a
+  // "jump to top" flash on every re-render.
   const sel=document.querySelectorAll('.tl-body,.enp-body,.modal-body,.rp-body,.lib-body');
   sel.forEach((el,i)=>{
     const cls=el.className.split(' ')[0];
     const v=_scroll[cls+':'+i];
-    if(v)el.scrollTop=v;
+    if(v!=null){const prev=el.style.scrollBehavior;el.style.scrollBehavior='auto';el.scrollTop=v;el.style.scrollBehavior=prev;}
   });
   // Restore focus + caret
   if(_actId){const el=document.getElementById(_actId);if(el){try{el.focus({preventScroll:true});if(_selStart!=null&&el.setSelectionRange)el.setSelectionRange(_selStart,_selStart);}catch(e){}}}
@@ -1387,7 +1389,9 @@ function renderCard(sess,timed,warns){
           <div class="pcard-time-dur">${sess.fitToClose?'fits to close':fdur(dur)}</div>
         </div>
         <div class="sc-actions">
-          <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
+          <button class="sc-act" onclick="event.stopPropagation();nudgeSession('${sess.id}',-1)" title="Move earlier in day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg></button>
+          <button class="sc-act" onclick="event.stopPropagation();nudgeSession('${sess.id}',1)" title="Move later in day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move to another day or spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
           <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         </div>
       </div>
@@ -1425,7 +1429,9 @@ function renderCard(sess,timed,warns){
         <div class="sc-time-sub">${fdur(t.sessionEndMinutes-t.warmupStartMinutes)} · ${sess.events.reduce((a,e)=>a+Number(e.finalDivers||e.projectedDivers||e.numberOfDivers||0),0)} athletes</div>
       </div>
       <div class="sc-actions">
-        <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
+        <button class="sc-act" onclick="event.stopPropagation();nudgeSession('${sess.id}',-1)" title="Move earlier in day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button class="sc-act" onclick="event.stopPropagation();nudgeSession('${sess.id}',1)" title="Move later in day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button class="sc-act drag-handle" onclick="event.stopPropagation();openMoveDialog('${sess.id}')" title="Move to another day or spot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg></button>
         <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </div>
     </div>
@@ -2084,10 +2090,9 @@ function bindDrag(){
       if(!data.startsWith('SESS::'))return;
       e.preventDefault();
       const sessId=data.replace('SESS::','');
-      UI.moveSessionId=sessId;
-      UI.moveTargetDayId=dayId;
-      UI.moveTargetPos='end';
-      render();
+      // Direct manipulation: dropping on a day pill moves it there immediately
+      // (end of that day), with a toast + Ctrl+Z undo. No dialog to click through.
+      moveSessionToDay(sessId,dayId);
     });
   });
 }
@@ -2135,6 +2140,57 @@ async function openHistory(){
   UI.historyVersions=await loadVersions();UI.historyLoading=false;render();
 }
 // ── MOVE SESSION (cross-day or reposition) ────────────────────────────
+// Pure helper: what warmupStartMinutes would `sess` get if placed at `pos` on
+// `targetDayId`? Single source of truth shared by the Move dialog's live
+// previews and the actual move execution, so what you see is what you get.
+function computeMoveStartMinutes(sessions,sess,targetDayId,pos){
+  const sameDay=sessions.filter(x=>x.dayId===targetDayId&&x.id!==sess.id).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  if(pos==='start'){
+    const firstStart=sameDay.length?Number(sameDay[0].warmupStartMinutes):420;
+    const t=calcSessTiming(sess);
+    const sessDur=t.sessionEndMinutes-t.warmupStartMinutes;
+    return Math.max(420,firstStart-sessDur-Number(sess.bufferMinutes||0));
+  }
+  if(pos==='end'){
+    if(!sameDay.length)return 420;
+    let lastEnd=420,lastBuffer=0;
+    sameDay.forEach(x=>{const end=calcSessTiming(x).sessionEndMinutes;if(end>=lastEnd){lastEnd=end;lastBuffer=Number(x.bufferMinutes||0);}});
+    return ru(lastEnd+lastBuffer,5);
+  }
+  if(typeof pos==='string'&&pos.startsWith('after-')){
+    const afterId=pos.replace('after-','');
+    const afterSess=sameDay.find(x=>x.id===afterId);
+    if(afterSess){
+      const afterT=calcSessTiming(afterSess);
+      return ru(afterT.sessionEndMinutes+Number(afterSess.bufferMinutes||0),5);
+    }
+  }
+  return null;
+}
+// One-click nudge: swap this session with its neighbor above/below in the day.
+// This is the fast path for the most common move — no dialog, no drag.
+function nudgeSession(sessId,dir){
+  const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
+  const dayS=S.sessions.filter(x=>x.dayId===sess.dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  const i=dayS.findIndex(x=>x.id===sessId);
+  const j=i+dir;
+  if(j<0||j>=dayS.length){toast(dir<0?'Already first in the day':'Already last in the day');return;}
+  reorderSessionWithinDay(sessId,dayS[j].id,dir<0);
+}
+// Direct move: drop a session on a day pill and it lands at the end of that
+// day immediately — no dialog to click through. Undo (Ctrl+Z) reverses it.
+function moveSessionToDay(sessId,dayId){
+  const day=S.meet.days.find(d=>d.id===dayId);
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    sess.dayId=dayId;
+    const start=computeMoveStartMinutes(s.sessions,sess,dayId,'end');
+    if(start!=null)sess.warmupStartMinutes=start;
+  });
+  UI.dayId=dayId;
+  toast(`Moved to ${day?shortDate(day.date):'day'} — end of day (Ctrl+Z to undo)`);
+  render();
+}
 function openMoveDialog(sessId){
   UI.moveSessionId=sessId;
   const sess=S.sessions.find(s=>s.id===sessId);
@@ -2149,29 +2205,10 @@ function executeMoveSession(){
   upd(s=>{
     const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
     sess.dayId=targetDay;
-    // Compute new warmupStart based on position
-    const sameDay=s.sessions.filter(x=>x.dayId===targetDay&&x.id!==sessId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
-    if(pos==='start'){
-      // Place at start: uses this session's OWN buffer to leave the correct gap before
-      // whatever follows it (0 buffer = back-to-back, e.g. practice blocks).
-      const firstStart=sameDay.length?Number(sameDay[0].warmupStartMinutes):420;
-      const sessDur=calcSessTiming(sess).sessionEndMinutes-calcSessTiming(sess).warmupStartMinutes;
-      sess.warmupStartMinutes=Math.max(420,firstStart-sessDur-Number(sess.bufferMinutes||0));
-      cascadeSession(s,sessId);
-    } else if(pos==='end'){
-      // Place at end: uses the CURRENT last session's buffer to leave the correct gap
-      // before this one starts (0 buffer = back-to-back, e.g. practice blocks).
-      let lastEnd=420,lastBuffer=0;
-      sameDay.forEach(x=>{const end=calcSessTiming(x).sessionEndMinutes;if(end>=lastEnd){lastEnd=end;lastBuffer=Number(x.bufferMinutes||0);}});
-      sess.warmupStartMinutes=ru(lastEnd+lastBuffer,5);
-    } else if(typeof pos==='string'&&pos.startsWith('after-')){
-      const afterId=pos.replace('after-','');
-      const afterSess=sameDay.find(x=>x.id===afterId);
-      if(afterSess){
-        const afterT=calcSessTiming(afterSess);
-        sess.warmupStartMinutes=ru(afterT.sessionEndMinutes+Number(afterSess.bufferMinutes||0),5);
-        cascadeSession(s,sessId);
-      }
+    const start=computeMoveStartMinutes(s.sessions,sess,targetDay,pos);
+    if(start!=null){
+      sess.warmupStartMinutes=start;
+      if(pos!=='end')cascadeSession(s,sessId);
     }
   });
   UI.dayId=targetDay;
@@ -2183,22 +2220,43 @@ function renderMoveDialog(){
   if(!UI.moveSessionId)return'';
   const sess=S.sessions.find(s=>s.id===UI.moveSessionId);if(!sess)return'';
   const n=getSessNum(sess,allTimed());
+  const moveLbl=sess.isPractice?(sess.title||'Practice'):`Session ${n}`;
   const targetDay=UI.moveTargetDayId;
   const targetDaySessions=S.sessions.filter(s=>s.dayId===targetDay&&s.id!==UI.moveSessionId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
-  const dayBtns=S.meet.days.map(d=>`<button class="move-btn ${d.id===targetDay?'active':''}" onclick="UI.moveTargetDayId='${d.id}';UI.moveTargetPos='end';render()">${shortDate(d.date)}${d.id===sess.dayId?' <span class="move-meta">current</span>':''}</button>`).join('');
-  const posBtns=`<button class="move-btn ${UI.moveTargetPos==='start'?'active':''}" onclick="UI.moveTargetPos='start';render()">▲ Start of day</button>`+
-    targetDaySessions.map(s=>{const t=calcSessTiming(s);const sn=getSessNum(s,allTimed());const lbl=s.isPractice?(s.title||'Practice'):`Session ${sn}`;return`<button class="move-btn ${UI.moveTargetPos==='after-'+s.id?'active':''}" onclick="UI.moveTargetPos='after-${s.id}';render()">After ${esc(lbl)} <span class="move-meta">ends ${f12(t.sessionEndMinutes)}</span></button>`}).join('')+
-    `<button class="move-btn ${UI.moveTargetPos==='end'?'active':''}" onclick="UI.moveTargetPos='end';render()">▼ End of day</button>`;
+  const dayChips=S.meet.days.map(d=>`<button class="move-day-chip ${d.id===targetDay?'active':''}" onclick="UI.moveTargetDayId='${d.id}';UI.moveTargetPos='end';render()">${shortDate(d.date)}${d.id===sess.dayId?'<span class="move-day-cur">current</span>':''}</button>`).join('');
+  // Visual timeline of the target day: each existing session is an info row,
+  // and every gap around them is a clickable insertion slot showing the exact
+  // start time the moved session would get if dropped there.
+  const slot=(pos,label)=>{
+    const st=computeMoveStartMinutes(S.sessions,sess,targetDay,pos);
+    const on=UI.moveTargetPos===pos;
+    return`<button class="move-slot ${on?'active':''}" onclick="UI.moveTargetPos='${pos}';render()">
+      <span class="move-slot-dot"></span>
+      <span class="move-slot-lbl">${label}</span>
+      <span class="move-slot-time">${st!=null?`starts ${f12(st)}`:''}</span>
+    </button>`;
+  };
+  let timeline=slot('start','Place first');
+  targetDaySessions.forEach((s2,i)=>{
+    const t2=calcSessTiming(s2);
+    const sn=getSessNum(s2,allTimed());
+    const lbl=s2.isPractice?(s2.title||'Practice'):`Session ${sn}`;
+    timeline+=`<div class="move-sess-row"><span class="move-sess-name">${esc(lbl)}</span><span class="move-sess-time">${f12(t2.warmupStartMinutes)} – ${f12(t2.sessionEndMinutes)}</span></div>`;
+    const isLast=i===targetDaySessions.length-1;
+    timeline+=slot(isLast?'end':'after-'+s2.id,isLast?'Place last':'Place here');
+  });
+  if(!targetDaySessions.length)timeline=`<div class="move-empty">Nothing scheduled this day yet</div>`+slot('end','Place here');
+  const previewStart=computeMoveStartMinutes(S.sessions,sess,targetDay,UI.moveTargetPos);
   return`<div class="modal-bg" onclick="if(event.target===this)closeMoveDialog()" style="z-index:650">
     <div class="modal modal-sm" onclick="event.stopPropagation()">
-      <div class="modal-hd"><div><span class="modal-title">Move ${sess.isPractice?esc(sess.title||'Practice'):`Session ${n}`}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${shortDate(S.meet.days.find(d=>d.id===sess.dayId)?.date||'')}</div></div><button class="modal-close" onclick="closeMoveDialog()">×</button></div>
+      <div class="modal-hd"><div><span class="modal-title">Move ${esc(moveLbl)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${shortDate(S.meet.days.find(d=>d.id===sess.dayId)?.date||'')} · pick a day, then tap where it should go</div></div><button class="modal-close" onclick="closeMoveDialog()">×</button></div>
       <div class="modal-body">
-        <label class="fl">Move to day</label>
-        <div class="move-day-list" style="margin-bottom:14px">${dayBtns}</div>
-        <label class="fl">Position</label>
-        <div class="move-pos-list">${posBtns}</div>
+        <label class="fl">Day</label>
+        <div class="move-day-row">${dayChips}</div>
+        <label class="fl" style="margin-top:14px">Where in the day</label>
+        <div class="move-timeline">${timeline}</div>
       </div>
-      <div class="modal-foot"><button class="btn btn-sm" onclick="closeMoveDialog()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeMoveSession()">Move session</button></div>
+      <div class="modal-foot"><button class="btn btn-sm" onclick="closeMoveDialog()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeMoveSession()">Move — starts ${previewStart!=null?f12(previewStart):'…'}</button></div>
     </div>
   </div>`;
 }
