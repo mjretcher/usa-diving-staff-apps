@@ -23,6 +23,45 @@
   var SEASON   = 2026;
   var injected = false;
 
+  /* Official 3rd-place-average thresholds (2026 Art.303(b)(3)(ii)), supplied
+     by Mike. This is the cross-meet score bar that admits 4th-6th place E/W/C
+     finishers to Junior Nationals alongside the top-3 direct qualifiers.
+     Keyed "Group X|Boys/Girls|1M/3M/Platform" to match the age_group/gender/
+     discipline columns coming back from core.event_results. */
+  var EWC_AVG_THRESHOLD = {
+    'Group A|Boys|1M':       403.85,
+    'Group A|Boys|3M':       425.85,
+    'Group A|Boys|Platform': 356.517,
+    'Group A|Girls|1M':      340.65,
+    'Group A|Girls|3M':      376.9,
+    'Group A|Girls|Platform':318.1,
+
+    'Group B|Boys|1M':       303.85,
+    'Group B|Boys|3M':       333.467,
+    'Group B|Boys|Platform': 273,
+    'Group B|Girls|1M':      278.383,
+    'Group B|Girls|3M':      294.083,
+    'Group B|Girls|Platform':245.883,
+
+    'Group C|Boys|1M':       236.883,
+    'Group C|Boys|3M':       236,
+    'Group C|Boys|Platform': 169.217,
+    'Group C|Girls|1M':      234,
+    'Group C|Girls|3M':      243.317,
+    'Group C|Girls|Platform':185.667,
+
+    'Group D|Boys|1M':       146.95,
+    'Group D|Boys|3M':       147.95,
+    'Group D|Boys|Platform': 155.85,
+    'Group D|Girls|1M':      164.233,
+    'Group D|Girls|3M':      170.533,
+    'Group D|Girls|Platform':143.983
+  };
+  function ewcAvgThreshold(ageGroup, gender, discipline) {
+    var key = String(ageGroup || '') + '|' + String(gender || '') + '|' + String(discipline || '');
+    return Object.prototype.hasOwnProperty.call(EWC_AVG_THRESHOLD, key) ? EWC_AVG_THRESHOLD[key] : null;
+  }
+
   /* Poll until main.js + neon-client are ready (main defines the globals
      DATA / recompute / renderAll; neon-client defines window.NEON). */
   function ready() {
@@ -96,15 +135,13 @@
     var kept = Object.keys(best).map(function (k) { return best[k]; });
 
     /* 3) Avg-score bar (2026 Art.303(b)(3)(ii), which admits 4th-6th finishers
-          whose score clears a cross-meet bar): DELIBERATELY NOT computed here.
-          USA Diving's published E/W/C bar produced exactly 3 avg-score qualifiers
-          in 2026; no authoritative threshold is stored in the data, and every
-          reasonable re-derivation from the raw scores misses that count (over- or
-          under-shooting). Rather than fabricate advancement, we leave
-          officialThresholdScore null so recalcEWC applies top-3 direct + the
-          decline/backfill logic only — matching the placement-only stance of the
-          existing "computed → Nationals" section. The 3 avg-score qualifiers can
-          be layered in once the official per-event bar is supplied. */
+          whose score clears a cross-meet bar): now sourced from EWC_AVG_THRESHOLD
+          above (Mike's official 3rd-place-average data, keyed by group/gender/
+          discipline). Previously this was left null, which meant recalcEWC could
+          never satisfy the avg-score branch — only the 3 direct qualifiers per
+          E/W/C meet (East/Central/West) ever advanced, i.e. exactly 9 per event.
+          That 9-athlete undercount was propagating downstream into Schedule
+          Builder's prelim pre-fill via projected_nationals_field. Fixed 2026-07-09. */
 
     /* 3b) Backfill missing zone: Neon's core.event_results doesn't always
           carry the zone column on the EWC-stage row (seen for athletes who
@@ -186,7 +223,7 @@
         advancesToZone: false,
         advancesToNationals: false,
         advancesToEWC: false,
-        officialThresholdScore: null,
+        officialThresholdScore: ewcAvgThreshold(r.age_group, r.gender, r.discipline),
         bumpIn: false, openedSpot: false, spotShifted: false,
         bumpedBy: [], openedFor: [], flags: [], reviewFlags: [],
         _ewcNeonInjected: true
