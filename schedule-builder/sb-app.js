@@ -1181,15 +1181,23 @@ function prefillProjections(){
         const k=ev.level+'|'+ev.gender+'|'+ev.apparatus;
         const count=byEvent[k];
         if(count==null)return;
-        if(ev.projectedDivers!=null&&ev.projectedDivers!==''){skipped++;return;}
-        ev.projectedDivers=count;ev.numberOfDivers=entryValue(ev);filled++;
+        // A value is protected from overwrite only if it was a genuine manual
+        // staff entry (autoProjected===false, set by setEntry()). A value left
+        // over from an earlier prefill run (autoProjected===true, or unset for
+        // schedules saved before this flag existed) is safe to refresh — this
+        // is what lets re-publishing corrected projections in Junior Results
+        // Audit actually flow through on a second "Pre-fill" click instead of
+        // silently no-opping on every event that was already filled once.
+        const isManualOverride=ev.projectedDivers!=null&&ev.projectedDivers!==''&&ev.autoProjected===false;
+        if(isManualOverride){skipped++;return;}
+        ev.projectedDivers=count;ev.autoProjected=true;ev.numberOfDivers=entryValue(ev);filled++;
       });
     });
     const touchedDays=new Set();
     s.sessions.forEach(sess=>{if(!sess.isPractice)touchedDays.add(sess.dayId)});
     touchedDays.forEach(dayId=>reflowDay(s,dayId));
   });
-  toast(`Pre-filled ${filled} event${filled===1?'':'s'}`+(skipped?` — ${skipped} already had a value, left untouched`:''));
+  toast(`Pre-filled ${filled} event${filled===1?'':'s'}`+(skipped?` — ${skipped} manually-entered value${skipped===1?'':'s'} left untouched`:''));
 }
 
 // ── RENDER CORE ───────────────────────────────────────────────────────
@@ -1757,6 +1765,12 @@ function setEntry(sessId,evId,field,value){
   // Empty string = unset (null); any number including 0 is a real value
   const v=(value===''||value==null)?null:Number(value);
   ev[field]=(v==null||isNaN(v))?null:Math.max(0,v);
+  if(field==='projectedDivers'){
+    // A real, typed-in value is a manual override — protect it from being
+    // silently overwritten the next time "Pre-fill projected entries" runs.
+    // Clearing the field (v==null) releases the protection again.
+    ev.autoProjected=(v==null)?null:false;
+  }
   // Timeline divers: final takes precedence IF entered (incl 0); else projected IF entered; else 0
   ev.numberOfDivers=entryValue(ev);
   if(ev.round==='Final'&&(field==='finalDivers'||field==='projectedDivers')){
