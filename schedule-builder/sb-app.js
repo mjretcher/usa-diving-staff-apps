@@ -1754,6 +1754,7 @@ function renderEditPrac(sess,t,flights,buf){
       <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
       <input id="flight-dur-${f.id}" class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
       <span style="font-size:10px;color:var(--tx3)">min</span>
+      ${[45,60,90].map(v=>`<button class="fdur-chip ${Number(f.durationMinutes)===v?'on':''}" onclick="updFlight('${sess.id}','${f.id}','durationMinutes',${v})">${v}</button>`).join('')}
       <div class="flight-time-lbl">${ft.startMinutes!==undefined?`${f12(ft.startMinutes)}–${f12(ft.endMinutes)}`:''}</div>
       <button class="flight-rm" onclick="removeFlight('${sess.id}','${f.id}')">×</button>
     </div>
