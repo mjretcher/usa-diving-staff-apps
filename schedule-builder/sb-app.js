@@ -650,7 +650,60 @@ function selectDay(id){UI.dayId=id;UI.editSessId=null;render()}
 function toggleEntriesSess(id){const i=UI.entriesExpanded.indexOf(id);if(i>=0)UI.entriesExpanded.splice(i,1);else UI.entriesExpanded.push(id);render()}
 
 // ── MUTATIONS ─────────────────────────────────────────────────────────
-function addDay(){const days=S.meet.days;const last=days[days.length-1];const next=last?(()=>{const d=new Date(`${last.date}T00:00:00`);d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)})():new Date().toISOString().slice(0,10);upd(s=>{const day={id:uid(),date:next,openMinutes:390,closeMinutes:1200};s.meet.days.push(day);UI.dayId=day.id})}
+// Add-day flow: instead of blindly appending a day at the end, open a small
+// dialog to choose WHERE the day goes (start or end of the meet) and WHICH
+// date it is — e.g. adding a practice day before the meet begins. The date
+// pre-fills sensibly (day before the first / day after the last) and stays
+// editable for gaps or non-adjacent dates. Days are kept in date order.
+function addDay(){
+  UI.addDayPos='end';
+  UI.addDayDate=suggestedAddDayDate('end');
+  UI.modal='add-day';
+  render();
+}
+function suggestedAddDayDate(pos){
+  const days=S.meet.days;
+  if(!days.length)return new Date().toISOString().slice(0,10);
+  const ref=pos==='start'?days[0]:days[days.length-1];
+  const d=new Date(`${ref.date}T00:00:00`);
+  d.setDate(d.getDate()+(pos==='start'?-1:1));
+  return d.toISOString().slice(0,10);
+}
+function setAddDayPos(pos){UI.addDayPos=pos;UI.addDayDate=suggestedAddDayDate(pos);render();}
+function executeAddDay(){
+  const pos=UI.addDayPos||'end';
+  const inp=document.getElementById('add-day-date');
+  const date=(inp&&inp.value)||UI.addDayDate||suggestedAddDayDate(pos);
+  upd(s=>{
+    const day={id:uid(),date,openMinutes:390,closeMinutes:1200};
+    if(pos==='start')s.meet.days.unshift(day);else s.meet.days.push(day);
+    // Keep the day bar chronological no matter what date was picked
+    s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    UI.dayId=day.id;
+  });
+  UI.modal=null;
+  toast('Day added — now building '+shortDate(date));
+}
+function renderAddDayModal(){
+  const days=S.meet.days;
+  const first=days[0],last=days[days.length-1];
+  const pos=UI.addDayPos||'end';
+  const date=UI.addDayDate||suggestedAddDayDate(pos);
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-body">
+      <label class="fl">Where</label>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+        <button class="move-btn ${pos==='start'?'active':''}" onclick="setAddDayPos('start')">Before the first day${first?` <span class="move-meta">currently ${shortDate(first.date)}</span>`:''}</button>
+        <button class="move-btn ${pos==='end'?'active':''}" onclick="setAddDayPos('end')">After the last day${last?` <span class="move-meta">currently ${shortDate(last.date)}</span>`:''}</button>
+      </div>
+      <label class="fl">Date</label>
+      <input id="add-day-date" class="fi" type="date" value="${date}" onchange="UI.addDayDate=this.value"/>
+      <p style="font-size:11px;color:var(--tx3);margin-top:8px">Pre-filled with the ${pos==='start'?'day before':'day after'} — change it if you need a gap.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeAddDay()">Add day</button></div>
+  </div>`;
+}
 function addSession(dayId,isPractice){
   const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
   // Practice/training blocks (Open Training, Flighted Warm-Ups, etc.) default to NO buffer —
@@ -2308,7 +2361,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
