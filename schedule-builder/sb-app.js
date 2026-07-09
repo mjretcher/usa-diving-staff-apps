@@ -617,7 +617,7 @@ let UI={
   moveSessionId:null,moveTargetDayId:null,moveTargetPos:'end',
   draggedSessId:null,draggedEvFrom:null,
   projRows:null,projLoading:false,projError:null,projFilterEwc:null,projFilterZone:null,
-  showFlightCounts:true,
+  showFlightCounts:true,timeScale:false,addDayTemplateId:null,
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
@@ -677,23 +677,32 @@ function executeAddDay(){
   const pos=UI.addDayPos||'end';
   const inp=document.getElementById('add-day-date');
   const date=(inp&&inp.value)||UI.addDayDate||suggestedAddDayDate(pos);
+  const tpl=UI.addDayTemplateId?loadDayTemplates().find(t=>t.id===UI.addDayTemplateId):null;
   upd(s=>{
     const day={id:uid(),date,openMinutes:390,closeMinutes:1200};
     if(pos==='start')s.meet.days.unshift(day);else s.meet.days.push(day);
     // Keep the day bar chronological no matter what date was picked
     s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    if(tpl)stampTemplateOntoDay(s,tpl,day.id);
     UI.dayId=day.id;
   });
-  UI.modal=null;
-  toast('Day added — now building '+shortDate(date));
+  UI.modal=null;UI.addDayTemplateId=null;
+  toast(tpl?`Day added from "${tpl.name}" — ${tpl.sessions.length} block${tpl.sessions.length===1?'':'s'} stamped in`:'Day added — now building '+shortDate(date));
 }
 function renderAddDayModal(){
   const days=S.meet.days;
   const first=days[0],last=days[days.length-1];
   const pos=UI.addDayPos||'end';
   const date=UI.addDayDate||suggestedAddDayDate(pos);
+  const tpls=loadDayTemplates();
+  const tplChips=tpls.length?`
+      <label class="fl" style="margin-top:14px">Start from a template <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(optional)</span></label>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <button class="move-btn ${!UI.addDayTemplateId?'active':''}" onclick="UI.addDayTemplateId=null;render()">Empty day</button>
+        ${tpls.map(t=>`<div style="display:flex;gap:5px;align-items:stretch"><button class="move-btn ${UI.addDayTemplateId===t.id?'active':''}" style="flex:1" onclick="UI.addDayTemplateId='${t.id}';render()">${esc(t.name)} <span class="move-meta">${t.sessions.length} block${t.sessions.length===1?'':'s'}</span></button><button class="tl-iconbtn" style="height:auto" title="Delete template" onclick="deleteDayTemplate('${t.id}')">×</button></div>`).join('')}
+      </div>`:'';
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;UI.addDayTemplateId=null;render()">×</button></div>
     <div class="modal-body">
       <label class="fl">Where</label>
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
@@ -703,8 +712,9 @@ function renderAddDayModal(){
       <label class="fl">Date</label>
       <input id="add-day-date" class="fi" type="date" value="${date}" onchange="UI.addDayDate=this.value"/>
       <p style="font-size:11px;color:var(--tx3);margin-top:8px">Pre-filled with the ${pos==='start'?'day before':'day after'} — change it if you need a gap.</p>
+      ${tplChips}
     </div>
-    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeAddDay()">Add day</button></div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;UI.addDayTemplateId=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeAddDay()">Add day</button></div>
   </div>`;
 }
 function addSession(dayId,isPractice){
@@ -1375,6 +1385,7 @@ function renderBar(timed){
       <button class="bb icon-only" onclick="undo()" title="Undo (Cmd+Z)" ${undoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg></button>
       <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
       <div class="bar-sep"></div>
+      <button class="bb icon-only" onclick="UI.modal='overview';render()" title="Meet overview — all days at a glance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg></button>
       <button class="bb icon-only" onclick="UI.modal='conflicts';render()" title="Issues &amp; conflicts" style="position:relative">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9l-8 14A2 2 0 004 21h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z"/></svg>
         ${conflictBadge}
@@ -1403,6 +1414,8 @@ function renderTlBar(timed){
     <span class="tl-title">${day?fullDate(day.date):'Schedule'}</span>
     <div class="tl-spacer"></div>
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
+    ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
+    ${daySess.length?`<button class="tl-iconbtn" onclick="openCoachHandout('${UI.dayId}')" title="Print coach handout — one page for the pool door"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCopyDay('${UI.dayId}')" title="Copy this day's schedule to another day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`:''}
     ${daySess.length>1?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
     <button class="tl-iconbtn ${UI.previewOpen?'active':''}" onclick="UI.previewOpen=!UI.previewOpen;if(UI.previewOpen){UI.editSessId=null;UI.entriesOpen=false}render()" title="Quick preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -1417,6 +1430,7 @@ function renderTimeline(timed){
   const sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
+  if(UI.timeScale)return renderTimelineScale(sessions,timed);
   const parts=[];
   sessions.forEach((sess2,i)=>{
     parts.push(renderCard(sess2,timed,warns));
@@ -1429,6 +1443,107 @@ function renderTimeline(timed){
     ${parts.join('')}
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
   </div>`;
+}
+
+// Time-scale view: block heights are proportional to real durations against an
+// hour ruler, so a 4-hour warm-up literally towers over a 1-hour meeting and
+// dead time appears as visible empty space. Click any block to open it.
+function renderTimelineScale(sessions,timed){
+  const PX=1.1; // pixels per minute
+  const rangeStart=Math.floor(Math.min(...sessions.map(s=>s.timing.warmupStartMinutes))/60)*60;
+  const rangeEnd=Math.ceil(Math.max(...sessions.map(s=>s.timing.sessionEndMinutes))/60)*60;
+  const H=(rangeEnd-rangeStart)*PX;
+  let hours='';
+  for(let m=rangeStart;m<=rangeEnd;m+=60){
+    const y=(m-rangeStart)*PX;
+    hours+=`<div class="ts-hour" style="top:${y}px"><span class="ts-hour-lbl">${f12(m)}</span><div class="ts-hour-line"></div></div>`;
+    if(m+30<=rangeEnd)hours+=`<div class="ts-half" style="top:${(m+30-rangeStart)*PX}px"></div>`;
+  }
+  const cards=sessions.map((sess,i)=>{
+    const t=sess.timing;
+    const top=(t.warmupStartMinutes-rangeStart)*PX;
+    const h=Math.max(30,(t.sessionEndMinutes-t.warmupStartMinutes)*PX);
+    const isPrac=sess.isPractice;
+    const isTrain=isPrac&&sess.title==='Open Training';
+    const n=getSessNum(sess,timed);
+    const name=isPrac?(sess.title||'Practice'):`Session ${n}`;
+    const detail=isPrac?'':sess.events.map(ev=>evName(ev)).join(' · ');
+    const overlaps=i>0&&t.warmupStartMinutes<sessions[i-1].timing.sessionEndMinutes;
+    const cls=`ts-card ${isPrac?(isTrain?'train':'prac'):'comp'}${overlaps?' overlap':''}`;
+    const dur=t.sessionEndMinutes-t.warmupStartMinutes;
+    return`<div class="${cls}" style="top:${top}px;height:${h}px" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)} · click to open">
+      <div class="ts-card-name">${esc(name)}${overlaps?' <span class="ts-overlap-flag">⚠ overlaps</span>':''}</div>
+      ${h>=52&&detail?`<div class="ts-card-detail">${esc(detail)}</div>`:''}
+      <div class="ts-card-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(dur)}</div>
+    </div>`;
+  }).join('');
+  return`<div class="tl-body">
+    <div class="ts-wrap" style="height:${H+20}px">${hours}<div class="ts-cards">${cards}</div></div>
+    <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
+  </div>`;
+}
+
+// ── COACH HANDOUT ─────────────────────────────────────────────────────
+// One print-perfect page per day: big times, blocks, events, flights. Built
+// for taping to a pool door — large type, brand header, auto print dialog.
+function openCoachHandout(dayId){
+  const day=S.meet.days.find(d=>d.id===dayId);if(!day)return;
+  const timed=allTimed();
+  const sessions=timed.filter(s=>s.dayId===dayId);
+  if(!sessions.length){toast('Nothing on this day yet');return;}
+  const os=S.outputSettings||{};
+  const rows=sessions.map(sess=>{
+    const t=sess.timing;
+    if(sess.isPractice){
+      const ft=t.flightTimes||[];
+      const flights=ft.length?`<div class="hd-flights">${ft.map(f=>`<div class="hd-flight"><span class="hd-flight-bar" style="background:${f.color||'#171F69'}"></span>${esc(f.name)} <span class="hd-flight-time">${f12(f.startMinutes)}–${f12(f.endMinutes)}</span></div>`).join('')}</div>`:'';
+      const note=(sess.events&&sess.events[0]&&sess.events[0].notes)||'';
+      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
+    }
+    const n=getSessNum(sess,timed);
+    const evs=(t.events||[]).map(ev=>`<div class="hd-ev"><span>${esc(evName(ev))}</span><span class="hd-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('');
+    const wu=os.showWarmup!==false?`<div class="hd-wu">Warm-up ${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)}</div>`:'';
+    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
+  }).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(S.meet.name||'Schedule')} — ${shortDate(day.date)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',Arial,sans-serif;color:#0F172A;padding:28px 34px}
+  .hd-head{background:#171F69;color:#fff;padding:16px 22px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .hd-meet{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em;line-height:1.1}
+  .hd-venue{font-size:11px;opacity:.75;margin-top:3px}
+  .hd-date{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:26px;text-align:right;line-height:1.05}
+  .hd-accent{height:4px;border-radius:2px;background:linear-gradient(90deg,#E31937 0 33%,#fff 33% 66%,#009AC7 66% 100%);margin-bottom:14px}
+  table{width:100%;border-collapse:collapse}
+  td{padding:9px 10px;border-bottom:1.5px solid #E5E9F2;vertical-align:top}
+  .hd-time{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:22px;color:#171F69;white-space:nowrap;width:130px;line-height:1.1}
+  .hd-time-end{display:block;font-size:13px;color:#94A3B8;font-weight:600}
+  .hd-name{font-weight:700;font-size:15px;margin-bottom:2px}
+  .hd-prac .hd-name{color:#15803D}
+  .hd-wu{font-size:11px;color:#009AC7;font-weight:600;margin-bottom:3px}
+  .hd-ev{display:flex;justify-content:space-between;font-size:12.5px;padding:1.5px 0}
+  .hd-ev-time{color:#64748B;font-variant-numeric:tabular-nums;font-weight:600}
+  .hd-flights{margin-top:3px}
+  .hd-flight{font-size:12px;padding:1.5px 0;display:flex;align-items:center;gap:6px}
+  .hd-flight-bar{display:inline-block;width:3px;height:12px;border-radius:2px}
+  .hd-flight-time{color:#64748B;font-weight:600;margin-left:auto;font-variant-numeric:tabular-nums}
+  .hd-note{font-size:11px;color:#64748B;margin-top:2px;font-style:italic}
+  .hd-awards{color:#E31937;font-size:11px;font-weight:700;text-transform:uppercase}
+  .hd-foot{margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#94A3B8}
+  .hd-print{position:fixed;top:12px;right:12px;background:#171F69;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
+  @media print{.hd-print{display:none}body{padding:0}@page{margin:12mm}}
+</style></head><body>
+<button class="hd-print" onclick="window.print()">Print</button>
+<div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
+<div class="hd-accent"></div>
+<table>${rows}</table>
+<div class="hd-foot"><span>${os.showSubjectToChange!==false?'All times subject to change':''}</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Pop-up blocked — allow pop-ups for this site to print handouts');return;}
+  w.document.write(html);w.document.close();
 }
 
 // Gap chip: makes the invisible time between two sessions visible and editable
@@ -2218,7 +2333,100 @@ async function openHistory(){
   UI.modal='history';UI.historyLoading=true;UI.historyVersions=[];render();
   UI.historyVersions=await loadVersions();UI.historyLoading=false;render();
 }
-// ── MOVE SESSION (cross-day or reposition) ────────────────────────────
+// ── MEET OVERVIEW BOARD ───────────────────────────────────────────────
+// Every day side-by-side as columns. Drag a block card onto another column to
+// move it there (lands at end of that day, times recomputed). Click a card to
+// jump to that day and open the block. The whole meet's shape at a glance.
+function ovDragStart(e,sessId){e.dataTransfer.setData('text/plain','OVSESS::'+sessId);e.dataTransfer.effectAllowed='move';}
+function ovDragOver(e,el){e.preventDefault();e.dataTransfer.dropEffect='move';el.classList.add('ov-drop');}
+function ovDragLeave(el){el.classList.remove('ov-drop');}
+function ovDrop(e,el,dayId){
+  el.classList.remove('ov-drop');
+  const data=e.dataTransfer.getData('text/plain');
+  if(!data.startsWith('OVSESS::'))return;
+  e.preventDefault();
+  const sessId=data.replace('OVSESS::','');
+  const sess=S.sessions.find(x=>x.id===sessId);
+  if(!sess||sess.dayId===dayId)return;
+  moveSessionToDay(sessId,dayId);
+  UI.modal='overview'; // keep the board open after the move
+  render();
+}
+function ovOpenSess(sessId){
+  const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
+  UI.modal=null;UI.dayId=sess.dayId;UI.editSessId=sessId;render();
+}
+function renderOverviewModal(){
+  const timed=allTimed();
+  const cols=S.meet.days.map(day=>{
+    const daySess=timed.filter(s=>s.dayId===day.id);
+    const dayStart=daySess.length?Math.min(...daySess.map(s=>s.timing.warmupStartMinutes)):null;
+    const dayEnd=daySess.length?Math.max(...daySess.map(s=>s.timing.sessionEndMinutes)):null;
+    const cards=daySess.map(sess=>{
+      const t=sess.timing;
+      const isPrac=sess.isPractice;
+      const isTrain=isPrac&&sess.title==='Open Training';
+      const n=getSessNum(sess,timed);
+      const name=isPrac?(sess.title||'Practice'):`Session ${n}`;
+      const detail=isPrac?'':sess.events.map(ev=>evName(ev)).join(' · ');
+      const cls=isPrac?(isTrain?'ov-card train':'ov-card prac'):'ov-card comp';
+      return`<div class="${cls}" draggable="true" ondragstart="ovDragStart(event,'${sess.id}')" onclick="ovOpenSess('${sess.id}')" title="Click to open · drag to another day to move">
+        <div class="ov-card-name">${esc(name)}</div>
+        ${detail?`<div class="ov-card-detail">${esc(detail)}</div>`:''}
+        <div class="ov-card-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}</div>
+      </div>`;
+    }).join('');
+    return`<div class="ov-col" ondragover="ovDragOver(event,this)" ondragleave="ovDragLeave(this)" ondrop="ovDrop(event,this,'${day.id}')">
+      <button class="ov-col-hd ${day.id===UI.dayId?'active':''}" onclick="UI.modal=null;selectDay('${day.id}')" title="Go to this day">
+        <span class="ov-col-date">${shortDate(day.date)}</span>
+        <span class="ov-col-meta">${daySess.length?`${daySess.length} block${daySess.length===1?'':'s'} · ${f12(dayStart)}–${f12(dayEnd)}`:'empty'}</span>
+      </button>
+      <div class="ov-col-body">${cards||`<div class="ov-empty">Drop a block here</div>`}</div>
+    </div>`;
+  }).join('');
+  return`<div class="modal modal-xl" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Meet overview</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Drag blocks between days · click a block to open it · click a day header to go there</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-body ov-body-wrap"><div class="ov-board">${cols}</div></div>
+  </div>`;
+}
+
+// ── DAY TEMPLATES ─────────────────────────────────────────────────────
+// Save a day's structure as a named, reusable pattern; stamp it onto new days
+// from the Add-a-day dialog. Stored locally in this browser.
+function loadDayTemplates(){try{return JSON.parse(localStorage.getItem('sbDayTemplates')||'[]')}catch(e){return[]}}
+function persistDayTemplates(list){try{localStorage.setItem('sbDayTemplates',JSON.stringify(list))}catch(e){toast('Could not save template — browser storage full?')}}
+function saveDayTemplate(dayId){
+  const inp=document.getElementById('copy-day-tpl-name');
+  const name=(inp&&inp.value.trim())||'';
+  if(!name){toast('Give the template a name first');return;}
+  const sessions=S.sessions.filter(x=>x.dayId===dayId).map(s=>{
+    const c=JSON.parse(JSON.stringify(s));delete c.dayId;return c;
+  });
+  if(!sessions.length){toast('Nothing on this day to save');return;}
+  const list=loadDayTemplates();
+  list.push({id:uid(),name,savedAt:new Date().toISOString(),sessions});
+  persistDayTemplates(list);
+  UI.modal=null;
+  toast(`Template "${name}" saved — find it when adding a day`);
+  render();
+}
+function deleteDayTemplate(tplId){
+  askConfirm({title:'Delete this template?',message:'This only removes the saved pattern — no schedules are affected.',confirmText:'Delete',onConfirm:()=>{
+    persistDayTemplates(loadDayTemplates().filter(t=>t.id!==tplId));
+    if(UI.addDayTemplateId===tplId)UI.addDayTemplateId=null;
+    render();
+  }});
+}
+function stampTemplateOntoDay(stateSnap,tpl,dayId){
+  tpl.sessions.forEach(src=>{
+    const copy=JSON.parse(JSON.stringify(src));
+    copy.id=uid();copy.dayId=dayId;
+    (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
+    (copy.flights||[]).forEach(f=>{f.id=uid();});
+    stateSnap.sessions.push(copy);
+  });
+}
+
 // Pure helper: what warmupStartMinutes would `sess` get if placed at `pos` on
 // `targetDayId`? Single source of truth shared by the Move dialog's live
 // previews and the actual move execution, so what you see is what you get.
@@ -2320,6 +2528,13 @@ function renderCopyDayModal(){
         ${chip('__new__','+ A brand-new day','added after the last day')}
       </div>
       ${UI.copyDayTargetId&&UI.copyDayTargetId!=='__new__'&&S.sessions.some(x=>x.dayId===UI.copyDayTargetId)?`<p style="font-size:11px;color:var(--tx3);margin-top:10px">The copied blocks will be added alongside what's already there — nothing gets replaced. Watch for overlap chips on the timeline afterward.</p>`:''}
+      <div class="fdiv" style="margin:16px 0 12px"></div>
+      <label class="fl">Or save this day as a reusable template</label>
+      <p style="font-size:11px;color:var(--tx3);margin:2px 0 8px">Name it (e.g. "Standard prelims day") and stamp it onto any new day later, in this or a future meet.</p>
+      <div style="display:flex;gap:6px">
+        <input id="copy-day-tpl-name" class="fi" style="flex:1" placeholder="Template name" onkeydown="if(event.key==='Enter')saveDayTemplate('${src.id}')"/>
+        <button class="btn btn-sm" onclick="saveDayTemplate('${src.id}')">Save template</button>
+      </div>
     </div>
     <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button><button class="btn btn-sm btn-p" ${UI.copyDayTargetId?'':'disabled'} onclick="executeCopyDay()">Copy day</button></div>
   </div>`;
@@ -2462,7 +2677,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
