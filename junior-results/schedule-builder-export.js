@@ -65,6 +65,34 @@
   }
   var VALID_GROUPS = ['Group A', 'Group B', 'Group C', 'Group D'];
 
+  /* junior_results.athlete_status is fed by multiple upstream sources (see its
+     `sources` column: junior_athlete_status, ewc_hps) that were never normalized
+     to the Group A-D / Boys-Girls taxonomy used everywhere else. Observed formats:
+     "Group A", "Group A Boys", "Group A Girls" (gender folded into age_group),
+     age-range strings "11-U"/"12-13"/"14-15"/"16-18" (confirmed 1:1 with D/C/B/A —
+     e.g. Alden Charette is hardcoded ageGroup:'Group B' in main.js and shows
+     age_group:'14-15' here), and "AQUA 19 Female"/"AQUA 19 Male" which are NOT
+     Junior Circuit Groups A-D and are deliberately excluded (no confirmed mapping).
+     Without this normalization every HPS row failed the VALID_GROUPS check and
+     the roster silently contributed zero rows — see addHpsRosterRows() below. */
+  var AGE_RANGE_TO_GROUP = { '16-18': 'Group A', '14-15': 'Group B', '12-13': 'Group C', '11-U': 'Group D' };
+  function normalizeHpsAgeGroup(raw) {
+    var s = String(raw || '').trim();
+    if (VALID_GROUPS.indexOf(s) >= 0) return s;
+    var m = s.match(/^(Group [A-D])\s+(Boys|Girls)$/i);
+    if (m) return m[1];
+    if (AGE_RANGE_TO_GROUP[s]) return AGE_RANGE_TO_GROUP[s];
+    return null; // AQUA..., blank, or anything unrecognized — not Junior Circuit
+  }
+  function normalizeHpsGender(rawGender, rawAgeGroup) {
+    var s = String(rawGender || '').trim();
+    if (s === 'Boys' || s === 'Girls') return s;
+    if (s === 'F') return 'Girls';
+    if (s === 'M') return 'Boys';
+    var m = String(rawAgeGroup || '').match(/(Boys|Girls)$/i);
+    return m ? m[1] : null; // e.g. rawGender was 'Man' or blank — not recognized
+  }
+
   function buildRows() {
     var results = currentResults();
     var rows = new Map();
@@ -101,9 +129,11 @@
       var alreadyHas = false;
       rows.forEach(function (v) { if (v.diver_key === dm) alreadyHas = true; });
       if (alreadyHas) return; // already have a real result row for this athlete — don't add a phantom one
-      if (VALID_GROUPS.indexOf(a.age_group) < 0) return;
+      var ag = normalizeHpsAgeGroup(a.age_group);
+      var gd = normalizeHpsGender(a.gender, a.age_group);
+      if (!ag || !gd) return;
       rows.set(dm + '|__hps_unknown__', {
-        diver_key: dm, athlete_name: a.name || '', age_group: a.age_group || '', gender: a.gender || '',
+        diver_key: dm, athlete_name: a.name || '', age_group: ag, gender: gd,
         discipline: null, zone: a.zone || null, ewc_meet: a.ewc_meet || null, team: a.team || null,
         qualification_path: 'HPS (not yet competed)'
       });
