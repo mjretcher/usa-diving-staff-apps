@@ -1254,7 +1254,7 @@ function renderEditModal(timed){
   const intro=Number(sess.introMinutes||0);const buf=Number(sess.bufferMinutes||0);
   const cat=buildCatalog(S.meet.meetType);
   const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
-  const body=isPrac?renderEditPrac(sess,t,flights):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
+  const body=isPrac?renderEditPrac(sess,t,flights,buf):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
   return`<div class="modal-bg" onclick="if(event.target===this)closeEdit()">
     <div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
       <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" onclick="closeEdit()">×</button></div>
@@ -1486,7 +1486,7 @@ function renderEditPanel(timed){
   const buf=Number(sess.bufferMinutes||0);
   const cat=buildCatalog(S.meet.meetType);
   const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
-  const body=isPrac?renderEditPrac(sess,t,flights):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
+  const body=isPrac?renderEditPrac(sess,t,flights,buf):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
   return`<div class="edit-panel open">
     <div class="ep-head">
       <div><div class="ep-title">${esc(title)}</div><div class="ep-sub">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div>
@@ -1501,11 +1501,13 @@ function renderEditPanel(timed){
   </div>`;
 }
 
-function renderEditPrac(sess,t,flights){
+function renderEditPrac(sess,t,flights,buf){
+  buf=Number(buf!=null?buf:(sess.bufferMinutes||0));
   if(flights.length)ensureProjDataLoaded();
   const showCnt=UI.showFlightCounts!==false;
   const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlightTag('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
   const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
+  const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
   return`
     <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2">
@@ -1522,6 +1524,7 @@ function renderEditPrac(sess,t,flights){
       </div>
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
+    <div class="fg"><label class="fl">Buffer after this block</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after this block (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fdiv"></div>
     <div class="fsec" style="display:flex;align-items:center;justify-content:space-between">
       <span>Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></span>
