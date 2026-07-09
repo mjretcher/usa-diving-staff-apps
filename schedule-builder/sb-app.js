@@ -1316,6 +1316,7 @@ function renderEditModal(timed){
       <div class="modal-body" data-edit-body="1">${body}</div>
       <div class="modal-foot">
         <button class="btn btn-sm btn-gh" style="color:var(--red)" onclick="deleteSession('${sess.id}')">Delete session</button>
+        <button class="btn btn-sm btn-gh" onclick="duplicateSession('${sess.id}')" title="Make a copy right below this one">Duplicate</button>
         <div style="flex:1"></div>
         <button class="btn btn-sm" onclick="openMoveDialog('${sess.id}')">Move…</button>
         <button class="btn btn-sm btn-p" onclick="closeEdit()">Done</button>
@@ -1399,6 +1400,7 @@ function renderTlBar(timed){
     <span class="tl-title">${day?fullDate(day.date):'Schedule'}</span>
     <div class="tl-spacer"></div>
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
+    ${daySess.length?`<button class="tl-iconbtn" onclick="openCopyDay('${UI.dayId}')" title="Copy this day's schedule to another day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`:''}
     ${daySess.length>1?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
     <button class="tl-iconbtn ${UI.previewOpen?'active':''}" onclick="UI.previewOpen=!UI.previewOpen;if(UI.previewOpen){UI.editSessId=null;UI.entriesOpen=false}render()" title="Quick preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="tl-addbtn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Add block</button>
@@ -1412,10 +1414,30 @@ function renderTimeline(timed){
   const sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
+  const parts=[];
+  sessions.forEach((sess2,i)=>{
+    parts.push(renderCard(sess2,timed,warns));
+    if(i<sessions.length-1){
+      const gap=sessions[i+1].timing.warmupStartMinutes-sess2.timing.sessionEndMinutes;
+      parts.push(renderGapChip(sess2,gap));
+    }
+  });
   return`<div class="tl-body">
-    ${sessions.map(s=>renderCard(s,timed,warns)).join('')}
+    ${parts.join('')}
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
   </div>`;
+}
+
+// Gap chip: makes the invisible time between two sessions visible and editable
+// right where it lives on the timeline. Clicking sets the PRECEDING session's
+// buffer (updSess reflows the day, so following sessions shift accordingly).
+function renderGapChip(prevSess,gap){
+  if(gap<0)return`<div class="gap-chip overlap" onclick="askGapChange('${prevSess.id}',${gap})" title="These sessions overlap — click to fix"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9l-8 14A2 2 0 004 21h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z"/></svg> Overlapping by ${fdur(-gap)} — click to fix</div>`;
+  if(gap===0)return`<div class="gap-chip zero" onclick="askGapChange('${prevSess.id}',0)" title="Back-to-back — click to add a gap">back-to-back</div>`;
+  return`<div class="gap-chip" onclick="askGapChange('${prevSess.id}',${gap})" title="Click to change this gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ${fdur(gap)} gap</div>`;
+}
+function askGapChange(prevSessId,currentGap){
+  askPrompt({title:'Gap before the next session',message:'Minutes of open time between these two sessions. 0 = back-to-back.',inputType:'number',defaultValue:Math.max(0,currentGap),confirmText:'Set gap',onConfirm:(v)=>{if(v!=='')setBuffer(prevSessId,Math.max(0,Number(v)||0))}});
 }
 
 function renderCard(sess,timed,warns){
@@ -1554,6 +1576,7 @@ function renderEditPanel(timed){
     <div class="ep-body">${body}</div>
     <div class="ep-foot">
       <button class="btn btn-d btn-sm btn-gh" onclick="deleteSession('${sess.id}')">Delete</button>
+      <button class="btn btn-sm btn-gh" onclick="duplicateSession('${sess.id}')" title="Make a copy right below this one">Duplicate</button>
       <div style="flex:1"></div>
       <button class="btn btn-sm" onclick="closeEdit()">Done</button>
     </div>
@@ -2244,6 +2267,81 @@ function moveSessionToDay(sessId,dayId){
   toast(`Moved to ${day?shortDate(day.date):'day'} — end of day (Ctrl+Z to undo)`);
   render();
 }
+// Copy day: clone every session on a day (fresh ids, same clock times) onto a
+// target day — either an existing day or a brand-new day appended after the
+// last. Repeated day structures (identical warm-up/practice patterns) become
+// one click instead of rebuilding block by block.
+function openCopyDay(dayId){
+  UI.copyDaySourceId=dayId;
+  UI.copyDayTargetId=null;
+  UI.modal='copy-day';
+  render();
+}
+function executeCopyDay(){
+  const srcId=UI.copyDaySourceId;
+  let targetId=UI.copyDayTargetId;
+  if(!srcId||!targetId)return;
+  upd(s=>{
+    if(targetId==='__new__'){
+      const last=s.meet.days[s.meet.days.length-1];
+      const d=new Date(`${last.date}T00:00:00`);d.setDate(d.getDate()+1);
+      const day={id:uid(),date:d.toISOString().slice(0,10),openMinutes:390,closeMinutes:1200};
+      s.meet.days.push(day);
+      targetId=day.id;
+    }
+    s.sessions.filter(x=>x.dayId===srcId).forEach(src=>{
+      const copy=JSON.parse(JSON.stringify(src));
+      copy.id=uid();copy.dayId=targetId;
+      (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
+      (copy.flights||[]).forEach(f=>{f.id=uid();});
+      s.sessions.push(copy);
+    });
+    UI.dayId=targetId;
+  });
+  UI.modal=null;
+  toast('Day copied — same blocks, same times');
+  render();
+}
+function renderCopyDayModal(){
+  const src=S.meet.days.find(d=>d.id===UI.copyDaySourceId);
+  if(!src)return'';
+  const srcCount=S.sessions.filter(x=>x.dayId===src.id).length;
+  const targets=S.meet.days.filter(d=>d.id!==src.id);
+  const chip=(id,label,sub)=>`<button class="move-btn ${UI.copyDayTargetId===id?'active':''}" onclick="UI.copyDayTargetId='${id}';render()">${label}${sub?` <span class="move-meta">${sub}</span>`:''}</button>`;
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Copy ${shortDate(src.date)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${srcCount} block${srcCount===1?'':'s'} will be copied with the same times</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-body">
+      <label class="fl">Copy to</label>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${targets.map(d=>{const n=S.sessions.filter(x=>x.dayId===d.id).length;return chip(d.id,shortDate(d.date),n?`${n} block${n===1?'':'s'} already`:'empty')}).join('')}
+        ${chip('__new__','+ A brand-new day','added after the last day')}
+      </div>
+      ${UI.copyDayTargetId&&UI.copyDayTargetId!=='__new__'&&S.sessions.some(x=>x.dayId===UI.copyDayTargetId)?`<p style="font-size:11px;color:var(--tx3);margin-top:10px">The copied blocks will be added alongside what's already there — nothing gets replaced. Watch for overlap chips on the timeline afterward.</p>`:''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button><button class="btn btn-sm btn-p" ${UI.copyDayTargetId?'':'disabled'} onclick="executeCopyDay()">Copy day</button></div>
+  </div>`;
+}
+
+// Duplicate: deep-clone a session (fresh ids for the session, its events, and
+// flights) and slot the copy immediately after the original with the same
+// buffer. Big time-saver for repeated warm-up/practice patterns.
+function duplicateSession(sessId){
+  let newId=null;
+  upd(s=>{
+    const src=s.sessions.find(x=>x.id===sessId);if(!src)return;
+    const copy=JSON.parse(JSON.stringify(src));
+    copy.id=uid();newId=copy.id;
+    (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
+    (copy.flights||[]).forEach(f=>{f.id=uid();});
+    const t=calcSessTiming(src);
+    copy.warmupStartMinutes=ru(t.sessionEndMinutes+Number(src.bufferMinutes||0),5);
+    s.sessions.push(copy);
+    reflowDay(s,copy.dayId);
+  });
+  UI.editSessId=null;
+  toast('Duplicated — the copy is right below the original');
+  render();
+}
 function openMoveDialog(sessId){
   UI.moveSessionId=sessId;
   const sess=S.sessions.find(s=>s.id===sessId);
@@ -2361,7 +2459,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
