@@ -954,9 +954,14 @@ function patchPracEditModal(){
   const body=document.querySelector('[data-edit-body="1"]');
   if(!sess||!sess.isPractice||!body){render();return;}
   const t=sess.timing||calcSessTiming(sess);
+  // The .modal ancestor is the real scroll container (overflow-y:auto), not the
+  // body div — preserve both to cover either layout.
+  const modal=body.closest('.modal');
+  const modalScroll=modal?modal.scrollTop:0;
   const scrollTop=body.scrollTop;
   body.innerHTML=renderEditPrac(sess,t,sess.flights||[]);
   body.scrollTop=scrollTop;
+  if(modal)modal.scrollTop=modalScroll;
 }
 function removeFlight(sessId,fid){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess?.flights)return;sess.flights=sess.flights.filter(f=>f.id!==fid);const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot||90})}
 function makeEvent(p,round){
@@ -1074,6 +1079,16 @@ function toggleSplit(sessId,evId){
   // Finals are never split — ignore any attempt
   {const _s=S.sessions.find(x=>x.id===sessId);const _e=_s&&_s.events.find(x=>x.id===evId);if(_e&&_e.round==='Final')return;}upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
+// End-time entry for practice/custom blocks: "open 7–11" should be typed as
+// 7:00 and 11:00, not 7:00 and 240 minutes of mental math. Duration is derived.
+function setPracEndTime(sessId,endMin){
+  const sess=S.sessions.find(x=>x.id===sessId);if(!sess||!sess.events[0])return;
+  const start=Number(sess.warmupStartMinutes||0);
+  const dur=Number(endMin)-start;
+  if(isNaN(dur))return;
+  if(dur<5){toast('End time must be after the start time');render();return;}
+  updEv(sessId,sess.events[0].id,'customDurationMinutes',dur);
+}
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
 function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
@@ -1272,8 +1287,10 @@ function render(){
   UI.draggedSessId=UI.draggedSessId||null;
   // Capture scroll positions of EVERY scrollable surface by a stable selector,
   // so nothing jumps when the DOM is rebuilt (timeline, entries, edit modal, etc).
+  // NOTE: .modal is in this list because it — not .modal-body — is the actual
+  // scroll container (overflow-y:auto lives on .modal in the CSS).
   const _scroll={};
-  document.querySelectorAll('.tl-body,.enp-body,.modal-body,.rp-body,.lib-body').forEach((el,i)=>{
+  document.querySelectorAll('.modal,.tl-body,.enp-body,.modal-body,.rp-body,.lib-body').forEach((el,i)=>{
     // key by class + index so we can match the same element after re-render
     const cls=el.className.split(' ')[0];
     _scroll[cls+':'+i]=el.scrollTop;
@@ -1303,7 +1320,7 @@ function render(){
   // Restore scroll for every matched surface — force instant restore (scrollBehavior
   // 'auto') so no CSS smooth-scroll setting can animate from 0, which reads as a
   // "jump to top" flash on every re-render.
-  const sel=document.querySelectorAll('.tl-body,.enp-body,.modal-body,.rp-body,.lib-body');
+  const sel=document.querySelectorAll('.modal,.tl-body,.enp-body,.modal-body,.rp-body,.lib-body');
   sel.forEach((el,i)=>{
     const cls=el.className.split(' ')[0];
     const v=_scroll[cls+':'+i];
@@ -1710,9 +1727,10 @@ function renderEditPrac(sess,t,flights,buf){
   const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
   return`
     <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
-    <div class="fg2">
+    <div class="fg2" style="grid-template-columns:1.1fr .8fr 1.1fr">
       <div class="fg"><label class="fl">Start time</label><input class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
-      <div class="fg"><label class="fl">Duration (min) ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)} (auto)</div>`:`<input class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" ${flights.length?'disabled':''} onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
+      <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
+      <div class="fg"><label class="fl">End time ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Fixed at facility close">${f12(dayCloseFor(sess.dayId))}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${f12(t.sessionEndMinutes)}</div>`:`<input class="fi" type="time" value="${f24(t.sessionEndMinutes)}" onchange="setPracEndTime('${sess.id}',pt(this.value))" title="Type when it should end — duration adjusts automatically"/>`}</div>
     </div>
     <div class="fitclose-box">
       <div class="fitclose-toggle-row">
