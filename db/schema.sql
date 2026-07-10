@@ -476,3 +476,21 @@ CREATE INDEX IF NOT EXISTS idx_ds_optional     ON core.dive_sheets(meet_year, di
 INSERT INTO app_meta.config (key, value, description) VALUES
   ('criteria_simulator_data_version', '1', 'Criteria sim phases + dive sheets in core')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+
+-- DiveMeets live entry counts, refreshed by .github/workflows/divemeets-entries.yml.
+-- One row per (meet, DiveMeets event id); the workflow upserts on every run so
+-- fetched_at always reflects the latest scrape. Read by Schedule Builder's
+-- "Sync actual entries" feature.
+CREATE TABLE IF NOT EXISTS junior_results.meet_entries (
+    meet_id_dm   TEXT NOT NULL,
+    event_id_dm  TEXT NOT NULL,
+    event_name   TEXT NOT NULL,
+    age_group    TEXT,
+    gender       TEXT,
+    discipline   TEXT,
+    round        TEXT,
+    entries      INTEGER NOT NULL DEFAULT 0,
+    fetched_at   TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (meet_id_dm, event_id_dm)
+);
+CREATE INDEX IF NOT EXISTS idx_meet_entries_meet ON junior_results.meet_entries(meet_id_dm);

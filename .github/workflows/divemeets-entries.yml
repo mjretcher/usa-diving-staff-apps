@@ -1,0 +1,35 @@
+name: DiveMeets entries sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      meet_id:
+        description: "DiveMeets meet number"
+        required: true
+        default: "12923"
+  schedule:
+    # Daily at 10:05 UTC (~6 AM ET) while registration is open / meet approaches.
+    # Harmless after the meet — remove or comment out when no longer needed.
+    - cron: "5 10 * * *"
+
+jobs:
+  sync:
+    name: Fetch entry counts into Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Fetch and upsert entries
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MEET_ID: ${{ github.event.inputs.meet_id || '12923' }}
+        run: python db/scripts/fetch_divemeets_entries.py
