@@ -29,28 +29,32 @@ button{cursor:pointer;border:none;background:none}
 #app{display:grid;grid-template-rows:auto 1fr;height:100vh}
 
 /* ════ TOP BAR ════ */
-/* flex-wrap: the fixed-width button cluster (.bar-right) is the piece most
-   likely to not fit — undo/redo/conflicts/status/Entries/Library/history/
-   Save/Generate is a lot of fixed-width buttons with nothing shrinkable
-   about them. Rather than clip whatever doesn't fit (there was no overflow
-   handling here at all, and nothing to scroll to reach it), it now wraps
-   to a second line. #app's row above was changed from a fixed 52px to
-   auto so that second line has room instead of being clipped by the grid. */
-.bar{background:var(--navy);display:flex;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25);min-height:52px}
+/* Two-tier structure. .bar-top holds identity (logo + meet name, which keeps
+   flex room and stays readable) and the action cluster. .bar-days-row is a
+   dedicated full-width strip for day pills + add-day + undo/redo — day tabs
+   no longer compete with action buttons for the same row, so neither gets
+   crushed no matter how many days a master schedule spans. */
+.bar{background:var(--navy);display:flex;flex-direction:column;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25)}
+.bar-top{display:flex;flex-wrap:wrap;align-items:center;min-height:52px;width:100%}
 .bar-logo{display:flex;align-items:center;padding:0 18px;height:52px;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;text-decoration:none;transition:background .15s}
 .bar-logo:hover{background:rgba(255,255,255,.05)}
 .bar-logo img{height:26px;width:auto;display:block}
-.bar-meet{flex:1;padding:0 16px;cursor:pointer;min-width:0;overflow:hidden;transition:background .12s}
+.bar-meet{flex:1;padding:0 16px;cursor:pointer;min-width:120px;overflow:hidden;transition:background .12s}
 .bar-meet:hover{background:rgba(255,255,255,.04)}
-.bar-meet-name{font-size:13px;font-weight:600;color:rgba(255,255,255,.95);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;letter-spacing:-.01em}
+.bar-meet-name{font-size:13.5px;font-weight:600;color:rgba(255,255,255,.95);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;letter-spacing:-.01em}
 .bar-meet-meta{font-size:11px;color:rgba(255,255,255,.4);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar-days{display:flex;align-items:center;gap:2px;padding:0 8px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;overflow-x:auto;max-width:36vw}
+.bar-days-row{display:flex;align-items:center;width:100%;border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.14);min-height:42px}
+.bar-days{display:flex;align-items:center;gap:3px;padding:5px 10px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
 .bar-days::-webkit-scrollbar{display:none}
-.dp{height:30px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.55);transition:.14s;white-space:nowrap;flex-shrink:0;position:relative}
-.dp-tag-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.bar-days-right{display:flex;align-items:center;gap:4px;padding:0 10px;flex-shrink:0;border-left:1px solid rgba(255,255,255,.07)}
+.dp{height:32px;padding:0 13px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.55);transition:.14s;white-space:nowrap;flex-shrink:0;position:relative;display:flex;align-items:center;gap:5px}
+.dp-wd{font-weight:500}
+.dp-num{font-size:11px;font-weight:700;opacity:.75}
+.dp.active .dp-num{opacity:1}
+.dp-tag-dot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .dp:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.9)}
 .dp.active{background:#fff;color:var(--navy);font-weight:600}
-.dp-add{width:30px;height:30px;border-radius:8px;font-size:16px;color:rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;transition:.14s}
+.dp-add{width:32px;height:32px;border-radius:8px;font-size:16px;color:rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;transition:.14s;flex-shrink:0}
 .dp-add:hover{background:rgba(255,255,255,.1);color:#fff}
 .dp.drop-active{background:rgba(74,222,128,.3);box-shadow:inset 0 0 0 2px #4ADE80}
 .bar-right{display:flex;align-items:center;gap:4px;padding:0 8px;flex-shrink:0}
@@ -927,12 +931,10 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 
 /* ════ RESPONSIVE: tighten for narrow viewports ════ */
 @media (max-width: 1400px) {
-  .bar-days { max-width: 32vw }
   .bb { padding: 0 9px; font-size: 11.5px }
   .ev-stat-lbl { font-size: 8.5px }
 }
 @media (max-width: 1280px) {
-  .bar-days { max-width: 28vw }
   .bb { padding: 0 8px; font-size: 11px }
   .bar-meet-meta { font-size: 10.5px }
   .sync-lbl { display: none }
@@ -946,7 +948,6 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 }
 @media (max-width: 1100px) {
   .bar-meet-meta { display: none }
-  .bar-days { max-width: 30vw }
   .ev-handle { display: none }
   .sc-ev { gap: 6px; padding: 9px 10px 9px 12px }
   .ev-time { min-width: 84px }
@@ -954,24 +955,17 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 
 /* ════════════════════════════════════════════════════════════════
    MEDIUM DESKTOP (821–1180px) — bar reflow only.
-   On narrower desktops the single-row top bar can't fit the day tabs
-   AND every action button, so it clipped controls off-screen. Here we
-   give the day tabs and the action cluster their own full-width rows
-   (each horizontally scrollable, nothing hidden) — the same proven
-   layout used on phones — WITHOUT the touch / full-screen-panel changes
-   that belong to the ≤820px mobile layer.
+   The day strip already has its own full-width row at every size now;
+   on narrower desktops the remaining risk is the ACTION cluster in
+   .bar-top not fitting beside the meet name, so the cluster gets its
+   own full-width scrollable row (nothing hidden), same as phones —
+   WITHOUT the touch / full-screen-panel changes of the ≤820px layer.
    ════════════════════════════════════════════════════════════════ */
 @media (min-width: 821px) and (max-width: 1180px) {
   #app { grid-template-rows: auto 1fr; }
-  .bar { flex-wrap: wrap; height: auto; min-height: 52px; row-gap: 0; }
+  .bar-top { flex-wrap: wrap; height: auto; min-height: 52px; row-gap: 0; }
   .bar-meet { order: 2; flex: 1 1 auto; min-width: 0; }
   .bar-sync { order: 3; flex-shrink: 0; }
-  .bar-days {
-    order: 4; flex: 0 0 100%; width: 100%; max-width: 100%;
-    border-left: none; border-top: 1px solid rgba(255,255,255,.08);
-    padding: 6px 8px; overflow-x: auto; scrollbar-width: none;
-  }
-  .bar-days::-webkit-scrollbar { display: none; }
   .bar-right {
     order: 5; flex: 0 0 100%; width: 100%; max-width: 100%;
     justify-content: flex-start; flex-wrap: nowrap;
@@ -993,8 +987,9 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   /* Shell: let the top bar grow to the rows it needs; use dynamic vh */
   #app { grid-template-rows: auto 1fr; height: 100dvh; }
 
-  /* ----- TOP BAR reflow: identity row + scrollable day & action rows */
-  .bar { flex-wrap: wrap; height: auto; min-height: 48px; row-gap: 0; }
+  /* ----- TOP BAR reflow: identity row + scrollable action row.
+     The day strip (.bar-days-row) already has its own row at every size. */
+  .bar-top { flex-wrap: wrap; height: auto; min-height: 48px; row-gap: 0; }
   .bar-logo { height: 46px; padding: 0 12px; }
   .bar-logo img { height: 22px; }
   .bar-meet { order: 2; flex: 1 1 auto; min-width: 0; padding: 0 10px; }
@@ -1002,14 +997,12 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   .bar-sync { order: 3; padding: 0 10px; flex-shrink: 0; }
   .sync-lbl { display: none; }
 
-  /* Day pills get their own full-width scrolling row */
+  /* Day strip: bigger touch targets, momentum scroll */
   .bar-days {
-    order: 4; flex: 0 0 100%; width: 100%; max-width: 100%;
-    border-left: none; border-top: 1px solid rgba(255,255,255,.08);
     padding: 6px 8px; gap: 4px;
-    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
-  .bar-days::-webkit-scrollbar { display: none; }
+  .bar-days-right .bb { height: 34px; width: 34px; }
 
   /* Action buttons get their own full-width scrolling row — nothing hidden */
   .bar-right {

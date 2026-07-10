@@ -1603,46 +1603,58 @@ function renderPreviewPanel(timed){
 }
 
 // ── TOP BAR ───────────────────────────────────────────────────────────
+// Two tiers. Tier 1: identity (logo + full meet name) and the action cluster —
+// the meet name gets flex room and is never crushed to an ellipsis by day tabs.
+// Tier 2: a dedicated full-width day strip — day pills show weekday + date
+// number (a master schedule spans multiple weeks, so bare weekday names repeat
+// and become ambiguous), plus add-day and undo/redo, which pair naturally with
+// day-level editing.
 function renderBar(timed){
   const tz=TZS.find(t=>t.v===S.meet.timezone)||TZS[0];
   const st=S.publishStatus||'draft';
-  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);return`<button class="dp ${d.id===UI.dayId?'active':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${dt?dt.l:'Shared'}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}${shortDate(d.date).replace(/,.*/,'')}</button>`}).join('');
+  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'});const dn=isNaN(dd)?'':dd.getDate();return`<button class="dp ${d.id===UI.dayId?'active':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span></button>`}).join('');
   const conflicts=detectConflicts();
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
   return`<header class="bar">
-    <a class="bar-logo" href="../" title="Back to apps home" onclick="goHome(event)"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false"/></a>
-    <div class="bar-meet" onclick="UI.modal='meet';render()">
-      <div class="bar-meet-name">${esc(S.meet.name||'New Schedule')}</div>
-      <div class="bar-meet-meta">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${tz?' · '+tz.s:''} · ${MEET_TYPES[S.meet.meetType]?.l||'Custom'}</div>
-    </div>
-    <div class="bar-days">${days}<button class="dp-add" onclick="addDay()" title="Add day">+</button></div>
-    <div class="bar-right">
-      <button class="bb icon-only" onclick="undo()" title="Undo (Cmd+Z)" ${undoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg></button>
-      <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
-      <div class="bar-sep"></div>
-      <div class="bar-menu-wrap">
-        <button class="bb icon-only ${UI.barMenu?'active':''}" onclick="UI.barMenu=!UI.barMenu;render()" title="Menu — overview, export, presentation, deck mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg></button>
-        ${UI.barMenu?`<div class="bar-menu" onclick="event.stopPropagation()">
-          <button class="bm-item" onclick="UI.barMenu=false;UI.modal='overview';render()">Meet overview board</button>
-          <button class="bm-item" onclick="UI.barMenu=false;UI.modal='export';render()">Export…</button>
-          <button class="bm-item" onclick="UI.barMenu=false;render();openPresentation()">Presentation mode</button>
-          <button class="bm-item" onclick="UI.barMenu=false;openImportBlocks()">Import blocks from another schedule…</button>
-          <button class="bm-item" onclick="UI.barMenu=false;render();toggleTheme()">${document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'}</button>
-          <div class="bm-hint">Tip: Ctrl+K opens the command palette</div>
-        </div>`:''}
+    <div class="bar-top">
+      <a class="bar-logo" href="../" title="Back to apps home" onclick="goHome(event)"><img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false"/></a>
+      <div class="bar-meet" onclick="UI.modal='meet';render()">
+        <div class="bar-meet-name">${esc(S.meet.name||'New Schedule')}</div>
+        <div class="bar-meet-meta">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${tz?' · '+tz.s:''} · ${MEET_TYPES[S.meet.meetType]?.l||'Custom'}</div>
       </div>
-      ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
-      <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
-      <div class="bar-sep"></div>
-      <button class="bb" onclick="openEntries()">Entries</button>
-      <button class="bb" onclick="openProjections()">Projections</button>
-      <button class="bb" onclick="openLibrary()">Library</button>
-      <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
-      <button class="bb" onclick="saveSchedule()">Save</button>
-      <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
+      <div class="bar-right">
+        <div class="bar-menu-wrap">
+          <button class="bb icon-only ${UI.barMenu?'active':''}" onclick="UI.barMenu=!UI.barMenu;render()" title="Menu — overview, export, presentation, deck mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg></button>
+          ${UI.barMenu?`<div class="bar-menu" onclick="event.stopPropagation()">
+            <button class="bm-item" onclick="UI.barMenu=false;UI.modal='overview';render()">Meet overview board</button>
+            <button class="bm-item" onclick="UI.barMenu=false;UI.modal='export';render()">Export…</button>
+            <button class="bm-item" onclick="UI.barMenu=false;render();openPresentation()">Presentation mode</button>
+            <button class="bm-item" onclick="UI.barMenu=false;openImportBlocks()">Import blocks from another schedule…</button>
+            <button class="bm-item" onclick="UI.barMenu=false;render();toggleTheme()">${document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'}</button>
+            <div class="bm-hint">Tip: Ctrl+K opens the command palette</div>
+          </div>`:''}
+        </div>
+        ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
+        <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
+        <div class="bar-sep"></div>
+        <button class="bb" onclick="openEntries()">Entries</button>
+        <button class="bb" onclick="openProjections()">Projections</button>
+        <button class="bb" onclick="openLibrary()">Library</button>
+        <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
+        <div class="bar-sep"></div>
+        <button class="bb" onclick="saveSchedule()">Save</button>
+        <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
+      </div>
+      <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
     </div>
-    <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
+    <div class="bar-days-row">
+      <div class="bar-days">${days}<button class="dp-add" onclick="addDay()" title="Add day">+</button></div>
+      <div class="bar-days-right">
+        <button class="bb icon-only" onclick="undo()" title="Undo (Cmd+Z)" ${undoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg></button>
+        <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
+      </div>
+    </div>
   </header>`;
 }
 
