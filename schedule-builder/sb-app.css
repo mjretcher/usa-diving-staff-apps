@@ -572,6 +572,8 @@ button{cursor:pointer;border:none;background:none}
 .fdur-chip{height:26px;padding:0 9px;border-radius:7px;font-size:10.5px;font-weight:700;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);cursor:pointer;transition:.1s;font-variant-numeric:tabular-nums}
 .fdur-chip:hover{border-color:var(--navy);color:var(--navy)}
 .fdur-chip.on{background:var(--navy);border-color:var(--navy);color:#fff}
+/* Version history diff panel */
+.hist-diff{background:var(--surf2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:14px;max-height:300px;overflow-y:auto}
 /* Gap chips between session cards on the timeline */
 .gap-chip{align-self:center;display:flex;align-items:center;gap:5px;margin:-4px 0;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:600;color:var(--tx3);background:var(--surf3);border:1px solid var(--bd);cursor:pointer;transition:.12s;z-index:1;font-variant-numeric:tabular-nums}
 .gap-chip:hover{color:var(--navy);border-color:var(--navy);background:var(--surf)}

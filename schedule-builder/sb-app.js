@@ -84,6 +84,10 @@ const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEnt
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// For values interpolated inside single-quoted JS string literals within
+// onclick attributes — apostrophes in user text (e.g. "Coach's copy") would
+// otherwise terminate the string and break the handler.
+const escJsAttr=v=>esc(String(v??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
 const ru=(n,inc)=>inc<=0?n:Math.ceil(n/inc)*inc;
 function ruUp(v,n){n=n||5;return Math.ceil(Number(v)/n)*n;}
@@ -2485,9 +2489,68 @@ async function _doRestoreVersion(vid){
   }catch(e){toast('Could not restore version')}
 }
 async function openHistory(){
-  UI.modal='history';UI.historyLoading=true;UI.historyVersions=[];render();
+  UI.modal='history';UI.historyLoading=true;UI.historyVersions=[];UI.historyDiff=null;render();
   UI.historyVersions=await loadVersions();UI.historyLoading=false;render();
 }
+function snapshotNow(){
+  askPrompt({title:'Name this snapshot',message:'e.g. "Sent to HP Director 7/9" — a name you\'ll recognize later.',defaultValue:'',confirmText:'Save snapshot',onConfirm:(v)=>{
+    const label=(v||'').trim()||('Snapshot '+new Date().toLocaleString());
+    saveVersion(label).then(()=>{toast('Snapshot saved');openHistory()});
+  }});
+}
+// ── VERSION DIFF ──────────────────────────────────────────────────────
+// Human-readable comparison between a saved version and the current state:
+// sessions added / removed / moved to another day / retimed / renamed, plus
+// day-level adds/removes. Matched by session id.
+function _diffLabel(state,sess){
+  if(sess.isPractice)return sess.title||'Practice block';
+  const evs=(sess.events||[]).map(ev=>evName(ev));
+  if(!evs.length)return'Empty session';
+  return evs.length<=2?evs.join(' + '):evs[0]+' + '+(evs.length-1)+' more';
+}
+function _diffDayDate(state,dayId){const d=(state.meet?.days||[]).find(x=>x.id===dayId);return d?shortDate(d.date):'unknown day'}
+function diffSchedules(oldS,newS){
+  const out={added:[],removed:[],moved:[],retimed:[],renamed:[],changed:[],daysAdded:[],daysRemoved:[]};
+  const oldDays=new Set((oldS.meet?.days||[]).map(d=>d.date));
+  const newDays=new Set((newS.meet?.days||[]).map(d=>d.date));
+  newDays.forEach(d=>{if(!oldDays.has(d))out.daysAdded.push(shortDate(d))});
+  oldDays.forEach(d=>{if(!newDays.has(d))out.daysRemoved.push(shortDate(d))});
+  const oldMap=new Map((oldS.sessions||[]).map(s=>[s.id,s]));
+  const newMap=new Map((newS.sessions||[]).map(s=>[s.id,s]));
+  newMap.forEach((ns,id)=>{
+    const os=oldMap.get(id);
+    if(!os){out.added.push(`${_diffLabel(newS,ns)} — ${_diffDayDate(newS,ns.dayId)} ${f12(ns.warmupStartMinutes)}`);return;}
+    if(os.dayId!==ns.dayId)out.moved.push(`${_diffLabel(newS,ns)}: ${_diffDayDate(oldS,os.dayId)} → ${_diffDayDate(newS,ns.dayId)}`);
+    else{
+      const ot=calcSessTiming(os),nt=calcSessTiming(ns);
+      if(Number(os.warmupStartMinutes)!==Number(ns.warmupStartMinutes))
+        out.retimed.push(`${_diffLabel(newS,ns)} (${_diffDayDate(newS,ns.dayId)}): ${f12(os.warmupStartMinutes)} → ${f12(ns.warmupStartMinutes)}`);
+      else if((ot.sessionEndMinutes-ot.warmupStartMinutes)!==(nt.sessionEndMinutes-nt.warmupStartMinutes))
+        out.retimed.push(`${_diffLabel(newS,ns)} (${_diffDayDate(newS,ns.dayId)}): now runs ${fdur(nt.sessionEndMinutes-nt.warmupStartMinutes)} (was ${fdur(ot.sessionEndMinutes-ot.warmupStartMinutes)})`);
+    }
+    if((os.title||'')!==(ns.title||'')&&(os.title||ns.title))out.renamed.push(`"${os.title||'(untitled)'}" → "${ns.title||'(untitled)'}"`);
+    const oe=(os.events||[]),ne=(ns.events||[]);
+    const oSum=oe.reduce((s,e)=>s+Number(e.numberOfDivers||0),0),nSum=ne.reduce((s,e)=>s+Number(e.numberOfDivers||0),0);
+    if(oe.length!==ne.length)out.changed.push(`${_diffLabel(newS,ns)} (${_diffDayDate(newS,ns.dayId)}): ${oe.length} → ${ne.length} events`);
+    else if(oSum!==nSum)out.changed.push(`${_diffLabel(newS,ns)} (${_diffDayDate(newS,ns.dayId)}): entry counts ${oSum} → ${nSum}`);
+  });
+  oldMap.forEach((os,id)=>{
+    if(!newMap.has(id))out.removed.push(`${_diffLabel(oldS,os)} — was ${_diffDayDate(oldS,os.dayId)} ${f12(os.warmupStartMinutes)}`);
+  });
+  out.empty=!out.added.length&&!out.removed.length&&!out.moved.length&&!out.retimed.length&&!out.renamed.length&&!out.changed.length&&!out.daysAdded.length&&!out.daysRemoved.length;
+  return out;
+}
+async function compareVersion(vid,label){
+  UI.historyDiff={loading:true,vid,label};render();
+  try{
+    const r=await nq(`SELECT data FROM schedule_builder.schedule_versions WHERE id=$1`,[vid]);
+    if(!r.rows?.length)throw new Error('Version not found');
+    const data=typeof r.rows[0][0]==='string'?JSON.parse(r.rows[0][0]):r.rows[0][0];
+    UI.historyDiff={loading:false,vid,label,diff:diffSchedules(data,S)};
+  }catch(e){UI.historyDiff={loading:false,vid,label,error:e.message||'Could not load'}}
+  render();
+}
+
 // ── MEET OVERVIEW BOARD ───────────────────────────────────────────────
 // Every day side-by-side as columns. Drag a block card onto another column to
 // move it there (lands at end of that day, times recomputed). Click a card to
@@ -2952,18 +3015,41 @@ function renderConflictsModal(){
 
 // History modal
 function renderHistoryModal(){
+  const d=UI.historyDiff;
+  const diffSection=(()=>{
+    if(!d)return'';
+    if(d.loading)return`<div style="padding:14px;color:var(--tx3);font-size:12px;text-align:center">Comparing…</div>`;
+    if(d.error)return`<div style="padding:14px;color:var(--red);font-size:12px">${esc(d.error)}</div>`;
+    const g=(title,items,color)=>items.length?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${color};margin-bottom:4px">${title} (${items.length})</div>${items.map(x=>`<div style="font-size:12px;padding:3px 0 3px 10px;border-left:2px solid ${color}">${esc(x)}</div>`).join('')}</div>`:'';
+    const diff=d.diff;
+    return`<div class="hist-diff">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700">Changes since "${esc(d.label)}"</div>
+        <button class="btn btn-sm btn-gh" onclick="UI.historyDiff=null;render()">Hide</button>
+      </div>
+      ${diff.empty?`<div style="font-size:12px;color:var(--tx3)">No differences — the current schedule matches this version.</div>`:
+        g('Days added',diff.daysAdded,'var(--prac)')+
+        g('Days removed',diff.daysRemoved,'var(--red)')+
+        g('Blocks added',diff.added,'var(--prac)')+
+        g('Blocks removed',diff.removed,'var(--red)')+
+        g('Moved to another day',diff.moved,'var(--cyan)')+
+        g('Retimed',diff.retimed,'var(--navy)')+
+        g('Renamed',diff.renamed,'var(--tx2)')+
+        g('Events / entries changed',diff.changed,'var(--warn,#B45309)')}
+    </div>`;
+  })();
   return`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Version history</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Version history</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Every cloud save is a restore point · snapshots are named markers you create</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${!S.currentLibraryId?`<div class="empty"><div class="empty-title">Save to cloud first</div><div class="empty-sub">Version history starts once you save this schedule to the cloud.</div></div>`:
         UI.historyLoading?`<div style="text-align:center;padding:24px;color:var(--tx3);font-size:13px">Loading history…</div>`:
-        (UI.historyVersions&&UI.historyVersions.length)?`<div class="hist-list">
+        (UI.historyVersions&&UI.historyVersions.length)?`${diffSection}<div class="hist-list">
           <div class="hist-item"><div class="hist-dot current"></div><div class="hist-info"><div class="hist-label">Current version</div><div class="hist-time">Working copy · ${fmtRelativeTime(S.updatedAt)}</div></div></div>
-          ${UI.historyVersions.map(v=>`<div class="hist-item"><div class="hist-dot"></div><div class="hist-info"><div class="hist-label">${esc(v.label)}</div><div class="hist-time">${new Date(v.createdAt).toLocaleString()}</div></div><button class="hist-restore" onclick="restoreVersion(${v.id})">Restore</button></div>`).join('')}
+          ${UI.historyVersions.map(v=>`<div class="hist-item"><div class="hist-dot"></div><div class="hist-info"><div class="hist-label">${esc(v.label)}</div><div class="hist-time">${new Date(v.createdAt).toLocaleString()}</div></div><button class="hist-restore" style="margin-right:6px" onclick="compareVersion(${v.id},'${escJsAttr(v.label)}')">Compare</button><button class="hist-restore" onclick="restoreVersion(${v.id})">Restore</button></div>`).join('')}
         </div>`:`<div class="empty"><div class="empty-title">No versions yet</div><div class="empty-sub">Each cloud save creates a restore point. Save now to start tracking.</div></div>`}
     </div>
     <div class="modal-foot">
-      ${S.currentLibraryId?`<button class="btn btn-sm" onclick="saveVersion('Manual snapshot').then(()=>{openHistory()})">Snapshot now</button>`:''}
+      ${S.currentLibraryId?`<button class="btn btn-sm" onclick="snapshotNow()" title="Save a named marker you can compare against or restore later">Snapshot now…</button>`:''}
       <div style="flex:1"></div>
       <button class="btn btn-p" onclick="closeModal()">Close</button>
     </div>
