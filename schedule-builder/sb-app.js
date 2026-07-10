@@ -562,9 +562,61 @@ function detectConflicts(){
             }
           }
         });
+        // DIVING-SMART: same group/gender needed on two boards at once. Different
+        // apparatus running in parallel is normal — but not when it's the SAME
+        // athletes. (Same-apparatus overlap is already caught above.)
+        const evsAll=s.timing.events||[];
+        for(let i=0;i<evsAll.length-1;i++){
+          for(let j=i+1;j<evsAll.length;j++){
+            const a2=evsAll[i],b2=evsAll[j];
+            if(a2.level!==b2.level||a2.gender!==b2.gender)continue;
+            if(lk(a2.apparatus)===lk(b2.apparatus))continue; // already flagged above
+            if(a2.eventStartMinutes<b2.eventEndMinutes&&b2.eventStartMinutes<a2.eventEndMinutes){
+              issues.push({sev:'err',title:'Same divers on two boards',detail:`${sn}: ${evName(a2)} and ${evName(b2)} overlap — ${a2.level} ${a2.gender} can't compete on two boards at once`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
+            }
+          }
+        }
+        // DIVING-SMART: warm-up window vs field size. Below ~30 seconds of board
+        // time per diver the warm-up is genuinely tight; only flag real fields.
+        const totalDivers=s.events.reduce((n2,e2)=>n2+entryValue(e2),0);
+        const wu=Number(s.warmupMinutes||0);
+        if(totalDivers>=20&&wu>0&&wu/totalDivers<0.5){
+          const secEach=Math.round(wu*60/totalDivers);
+          const suggest=Math.ceil((totalDivers*0.5)/5)*5;
+          issues.push({sev:'warn',title:'Warm-up may be tight',detail:`${sn}: ${totalDivers} divers share ${wu} min of warm-up — about ${secEach} sec each. Consider ${suggest} min or splitting the session.`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
+        }
       }
     });
   });
+  // DIVING-SMART: a Final scheduled before its Prelim has finished (meet-wide,
+  // cross-day aware). Finalists can't warm up for a final while the prelim
+  // that decides the field is still running — or worse, hasn't happened yet.
+  {
+    const dayOrder={};S.meet.days.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0).forEach((d,i)=>dayOrder[d.id]=i);
+    const finals=[],prelims=[];
+    timed.forEach(s=>{
+      if(s.isPractice)return;
+      (s.timing.events||[]).forEach(ev=>{
+        const rec={key:`${ev.level}|${ev.gender}|${ev.apparatus}`,ev,s};
+        if(ev.round==='Final')finals.push(rec);
+        else if(ev.round==='Prelim'||ev.round==='Semifinal')prelims.push(rec);
+      });
+    });
+    finals.forEach(f=>{
+      const matches=prelims.filter(p=>p.key===f.key);
+      if(!matches.length)return;
+      // Compare against the LATEST qualifying round for that event
+      const abs=(sess,min)=>dayOrder[sess.dayId]*10000+min;
+      const latest=matches.reduce((m,p)=>abs(p.s,p.ev.eventEndMinutes)>abs(m.s,m.ev.eventEndMinutes)?p:m,matches[0]);
+      const fStart=abs(f.s,f.s.timing.warmupStartMinutes);
+      const pEnd=abs(latest.s,latest.ev.eventEndMinutes);
+      if(fStart<pEnd){
+        const fn=`Session ${getSessNum(f.s,timed)}`;
+        const sameDay=f.s.dayId===latest.s.dayId;
+        issues.push({sev:'err',title:'Final starts before its prelim ends',detail:`${evName(f.ev)} Final (${fn}) warm-up starts ${sameDay?f12(f.s.timing.warmupStartMinutes):shortDate(S.meet.days.find(d=>d.id===f.s.dayId)?.date)+' '+f12(f.s.timing.warmupStartMinutes)}, but the ${latest.ev.round.toLowerCase()} doesn't finish until ${sameDay?f12(latest.ev.eventEndMinutes):shortDate(S.meet.days.find(d=>d.id===latest.s.dayId)?.date)+' '+f12(latest.ev.eventEndMinutes)}`,loc:shortDate(S.meet.days.find(d=>d.id===f.s.dayId)?.date||''),fixSessId:f.s.id,dayId:f.s.dayId,fixHint:'edit'});
+      }
+    });
+  }
   return issues;
 }
 // Open the right place to fix a given conflict, then act
