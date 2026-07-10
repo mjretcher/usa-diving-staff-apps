@@ -9,17 +9,26 @@ Each Prelim/Quarterfinal event row on that page links its entry count to
 Finals rows carry no counts (the field isn't set yet) and are skipped, as
 are Synchro events (excluded from individual-entry planning by policy).
 
-Event-name normalization matches the Schedule Builder taxonomy exactly:
-  "Group B Boys 1m (14-15) (Prelim/Quarterfinal)"
-    -> level="Group B", gender="Boys", discipline="1-Meter", round="Prelim"
+Parsing strategy: anchor on each DiveSheets link in the RAW html (dedup by
+event id), then de-tag the preceding window and match the event name in
+plain text — the site interleaves <br/> and spans inside names, so any
+regex that runs against raw html for the name is one markup tweak away
+from silently matching nothing.
+
+Diagnostics: success or failure, a summary is upserted into
+app_meta.config under key 'divemeets_sync_last_run' so the outcome is
+inspectable straight from Neon (Actions log downloads are not always
+reachable). On failure the table junior_results.meet_entries is NOT touched.
 
 Run by .github/workflows/divemeets-entries.yml (manual dispatch + daily cron).
 Env: DATABASE_URL (Neon), MEET_ID (default 12923).
 """
+import json
 import os
 import re
 import sys
 import urllib.request
+import urllib.error
 
 MEET_ID = os.environ.get("MEET_ID", "12923").strip()
 DB_URL = os.environ.get("DATABASE_URL")
@@ -27,65 +36,103 @@ if not DB_URL:
     sys.exit("DATABASE_URL not set")
 
 URL = f"https://new.divemeets.com/MeetInfo/{MEET_ID}"
-
 APPARATUS = {"1m": "1-Meter", "3m": "3-Meter", "platform": "Platform"}
 
+def write_diag(payload):
+    """Best-effort diagnostic upsert into app_meta.config (never raises)."""
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DB_URL)
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO app_meta.config (key, value, description)
+               VALUES ('divemeets_sync_last_run', %s, 'Last DiveMeets entries sync outcome')
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""",
+            (json.dumps(payload)[:8000],))
+        conn.commit(); cur.close(); conn.close()
+    except Exception as e:
+        print(f"  (diagnostic write failed: {e})", file=sys.stderr)
+
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "USA-Diving-Staff-Apps/1.0 (schedule sync)"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 USA-Diving-Staff-Apps/1.0",
+        "Accept": "text/html,application/xhtml+xml",
+    })
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8", errors="replace")
 
+DETAG = re.compile(r'<[^>]+>')
+NAME_RX = re.compile(
+    r'Group\s+([A-D])(/[A-D])?\s*(Synchro[\w.]*)?\s*(Boys|Girls)?\s*'
+    r'(1m|3m|Platform)\b[^()]*\(([^)]*)\)\s*\((Prelim/Quarterfinal|Semifinal|Final)\)',
+    re.I)
+
 def parse(html):
-    """Yield dicts for every individual Prelim event row carrying an entries link."""
-    rows = []
-    # Every entry-count link points at /DiveSheets/{meet}/{event}/1. Grab each link
-    # plus a window of preceding HTML to find the event name in the same table row.
-    for m in re.finditer(r'DiveSheets/%s/(\d+)/1' % re.escape(MEET_ID), html):
+    """Return (rows, diag) for every individual Prelim event carrying an entries link."""
+    rows, seen = [], set()
+    link_rx = re.compile(r'DiveSheets/%s/(\d+)/1' % re.escape(MEET_ID))
+    links = list(link_rx.finditer(html))
+    unparsed = []
+    for m in links:
         event_id = m.group(1)
-        if any(r_["event_id_dm"] == event_id for r_ in rows):
+        if event_id in seen:
             continue  # page repeats each link (count + "N entries") — dedupe
-        window = html[max(0, m.start() - 1500):m.start()]
-        # Last "Group ... (Prelim/Quarterfinal)" mention before the link is this row's event
-        names = re.findall(
-            r'(Group\s+[A-D](?:/[A-D])?\s*(?:Synchro(?:nized)?\.?\s*)?\s*(?:Boys|Girls)?[^<>()]*?\((?:11 & Under|1[2-8]-1[3-8]|11 &amp; Under)\)[^<>()]*?\((Prelim/Quarterfinal|Semifinal|Final)\)',
-            window)
+        seen.add(event_id)
+        # De-tag the preceding window; the LAST event name in it is this row's.
+        window = DETAG.sub(' ', html[max(0, m.start() - 2500):m.start()])
+        window = window.replace('&amp;', '&')
+        names = list(NAME_RX.finditer(window))
         if not names:
+            unparsed.append(event_id)
             continue
-        full, round_raw = names[-1]
-        if "Synchro" in full:
-            continue  # synchro excluded from individual entry counts
-        level_m = re.search(r'Group\s+([A-D])\b', full)
-        gender_m = re.search(r'\b(Boys|Girls)\b', full)
-        app_m = re.search(r'\b(1m|3m|Platform)\b', full, re.I)
-        if not (level_m and gender_m and app_m):
-            print(f"  !! could not normalize event name: {full!r} — skipped", file=sys.stderr)
+        n = names[-1]
+        grp, combo, synchro, gender, app, bracket, round_raw = n.groups()
+        if synchro or combo:
+            continue  # synchro / combined-group events excluded
+        if not gender:
+            unparsed.append(event_id)
             continue
-        # Count: the visible text right after the link opening tag, e.g. >8< or >8 entries<
-        after = html[m.end():m.end() + 200]
+        # Count: visible text right after the anchor open tag, e.g. >8< or >8 entries<
+        after = html[m.end():m.end() + 250]
         cnt_m = re.search(r'>\s*(\d+)\s*(?:entries)?\s*<', after)
         entries = int(cnt_m.group(1)) if cnt_m else 0
         rows.append({
             "event_id_dm": event_id,
-            "event_name": re.sub(r'\s+', ' ', full).strip() + f" ({round_raw})",
-            "age_group": f"Group {level_m.group(1)}",
-            "gender": gender_m.group(1),
-            "discipline": APPARATUS[app_m.group(1).lower()],
+            "event_name": f"Group {grp.upper()} {gender.title()} {app} ({bracket.strip()}) ({round_raw})",
+            "age_group": f"Group {grp.upper()}",
+            "gender": gender.title(),
+            "discipline": APPARATUS[app.lower()],
             "round": "Prelim" if round_raw == "Prelim/Quarterfinal" else round_raw,
             "entries": entries,
         })
-    return rows
+    diag = {"meet_id": MEET_ID, "links_found": len(links),
+            "distinct_events": len(seen), "rows_parsed": len(rows),
+            "unparsed_event_ids": unparsed[:10]}
+    return rows, diag
 
 def main():
     print(f"Fetching {URL}")
-    html = fetch(URL)
-    rows = parse(html)
+    try:
+        html = fetch(URL)
+    except urllib.error.HTTPError as e:
+        write_diag({"ok": False, "stage": "fetch", "http_status": e.code, "meet_id": MEET_ID})
+        sys.exit(f"HTTP {e.code} fetching MeetInfo page")
+    except Exception as e:
+        write_diag({"ok": False, "stage": "fetch", "error": str(e)[:400], "meet_id": MEET_ID})
+        sys.exit(f"Fetch failed: {e}")
+
+    rows, diag = parse(html)
     if not rows:
+        diag.update({"ok": False, "stage": "parse", "html_len": len(html),
+                     "sample": DETAG.sub(' ', html[:1200])[:600]})
+        write_diag(diag)
         sys.exit("No event rows parsed — DiveMeets page structure may have changed. NOT touching the table.")
+
     print(f"Parsed {len(rows)} individual prelim events:")
     for r in rows:
         print(f"  {r['age_group']} {r['gender']} {r['discipline']} ({r['round']}): {r['entries']} entries [ev {r['event_id_dm']}]")
 
-    import psycopg2  # installed by the workflow
+    import psycopg2
     conn = psycopg2.connect(DB_URL)
     cur = conn.cursor()
     for r in rows:
@@ -101,6 +148,8 @@ def main():
              r["gender"], r["discipline"], r["round"], r["entries"]))
     conn.commit()
     cur.close(); conn.close()
+    diag.update({"ok": True, "total_entries": sum(r["entries"] for r in rows)})
+    write_diag(diag)
     print(f"Upserted {len(rows)} rows into junior_results.meet_entries (meet {MEET_ID}).")
 
 if __name__ == "__main__":
