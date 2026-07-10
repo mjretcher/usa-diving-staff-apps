@@ -735,6 +735,9 @@ function closeEdit(){UI.editSessId=null;render()}
 // Guards: skip empty/partial values (a half-typed time would otherwise fling
 // the block to midnight); focus + caret restore in render() keeps typing
 // uninterrupted for inputs with ids.
+document.addEventListener('click',e=>{
+  if(UI.barMenu&&!e.target.closest('.bar-menu-wrap')){UI.barMenu=false;render();}
+});
 let _liveTimer=null;
 document.addEventListener('input',e=>{
   const el=e.target;
@@ -1508,7 +1511,6 @@ function render(){
   else if(UI.previewOpen)rightPanel=renderPreviewPanel(timed);
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
-    ${renderRhythmBar(timed)}
     <div class="workspace">
       <div class="tl-wrap">${renderTlBar(timed)}${renderTimeline(timed)}</div>
       ${rightPanel}
@@ -1609,9 +1611,17 @@ function renderBar(timed){
       <button class="bb icon-only" onclick="undo()" title="Undo (Cmd+Z)" ${undoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg></button>
       <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
       <div class="bar-sep"></div>
-      <button class="bb icon-only" onclick="UI.modal='overview';render()" title="Meet overview — all days at a glance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg></button>
-      <button class="bb icon-only" onclick="UI.modal='export';render()" title="Export — full meet handout or Excel workbook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
-      <button class="bb icon-only" onclick="toggleTheme()" title="Deck mode — dark theme for poolside glare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
+      <div class="bar-menu-wrap">
+        <button class="bb icon-only ${UI.barMenu?'active':''}" onclick="UI.barMenu=!UI.barMenu;render()" title="Menu — overview, export, presentation, deck mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg></button>
+        ${UI.barMenu?`<div class="bar-menu" onclick="event.stopPropagation()">
+          <button class="bm-item" onclick="UI.barMenu=false;UI.modal='overview';render()">Meet overview board</button>
+          <button class="bm-item" onclick="UI.barMenu=false;UI.modal='export';render()">Export…</button>
+          <button class="bm-item" onclick="UI.barMenu=false;render();openPresentation()">Presentation mode</button>
+          <button class="bm-item" onclick="UI.barMenu=false;openImportBlocks()">Import blocks from another schedule…</button>
+          <button class="bm-item" onclick="UI.barMenu=false;render();toggleTheme()">${document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'}</button>
+          <div class="bm-hint">Tip: Ctrl+K opens the command palette</div>
+        </div>`:''}
+      </div>
       ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
       <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
       <div class="bar-sep"></div>
@@ -1635,6 +1645,11 @@ function renderTlBar(timed){
   const comp=daySess.filter(s=>!s.isPractice).length;
   return`<div class="tl-bar">
     <span class="tl-title">${day?fullDate(day.date):'Schedule'}</span>
+    ${anyEventTags()?`<div class="evf-row">
+      <button class="evf-chip ${!UI.eventFilter?'on':''}" onclick="UI.eventFilter=null;render()">All</button>
+      ${EVENT_TAGS.map(t=>`<button class="evf-chip ${UI.eventFilter===t.k?'on':''}" style="--tagc:${t.c}" onclick="UI.eventFilter='${t.k}';render()">${t.s}</button>`).join('')}
+      <button class="evf-chip ${UI.eventFilter==='shared'?'on':''}" onclick="UI.eventFilter='shared';render()">Shared</button>
+    </div>`:''}
     <div class="tl-spacer"></div>
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
     ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
@@ -1653,6 +1668,8 @@ function renderTimeline(timed){
   const sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
+  sessions=filterByEvent(sessions);
+  if(!sessions.length&&UI.eventFilter)return`<div class="tl-body"><div class="empty" style="margin-top:40px"><div class="empty-title">No ${esc(eventFilterLabel())} blocks this day</div><div class="empty-sub">Switch the event filter to All, or tag blocks via the editor ("Part of").</div></div></div>`;
   if(UI.timeScale)return renderTimelineScale(sessions,timed);
   const parts=[];
   sessions.forEach((sess2,i)=>{
@@ -1744,7 +1761,7 @@ const HANDOUT_CSS=`
   .hd-print{position:fixed;top:12px;right:12px;background:#171F69;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
   @media print{.hd-print{display:none}body{padding:0}@page{margin:12mm}}`;
 function buildHandoutDayHTML(day,timed,os){
-  const sessions=timed.filter(s=>s.dayId===day.id);
+  const sessions=filterByEvent(timed.filter(s=>s.dayId===day.id));
   if(!sessions.length)return'';
   const rows=sessions.map(sess=>{
     const t=sess.timing;
@@ -1760,7 +1777,7 @@ function buildHandoutDayHTML(day,timed,os){
     return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
   }).join('');
   return`<div class="hd-page">
-<div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
+<div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
 <div class="hd-accent"></div>
 <table>${rows}</table>
 <div class="hd-foot"><span>${os.showSubjectToChange!==false?'All times subject to change':''}</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
@@ -1802,7 +1819,7 @@ function openClubItineraries(){
   // diverKey -> {row, apps:[{dayId,...}]} across all days
   const byDiver=new Map();
   S.meet.days.forEach(day=>{
-    diverAppearancesForDay(day.id,timed).forEach((d,k)=>{
+    diverAppearancesForDay(day.id,filterByEvent(timed)).forEach((d,k)=>{
       if(!byDiver.has(k))byDiver.set(k,{row:d.row,apps:[]});
       d.apps.forEach(a=>byDiver.get(k).apps.push({...a,dayId:day.id}));
     });
@@ -1880,7 +1897,7 @@ async function exportMeetExcel(){
   // Summary sheet
   const sum=[[S.meet.name||'Schedule'],[S.meet.venue?`${S.meet.venue}${S.meet.city?' · '+S.meet.city:''}`:''],[],['Day','First start','Last end','Blocks','Competition sessions','Practice blocks']];
   S.meet.days.forEach(day=>{
-    const ds=timed.filter(s=>s.dayId===day.id);
+    const ds=filterByEvent(timed.filter(s=>s.dayId===day.id));
     if(!ds.length){sum.push([fullDate(day.date),'—','—',0,0,0]);return;}
     const first=Math.min(...ds.map(s=>s.timing.warmupStartMinutes));
     const last=Math.max(...ds.map(s=>s.timing.sessionEndMinutes));
@@ -1892,8 +1909,8 @@ async function exportMeetExcel(){
   XLSX.utils.book_append_sheet(wb,wsSum,'Summary');
   // One sheet per day
   S.meet.days.forEach(day=>{
-    const ds=timed.filter(s=>s.dayId===day.id);
-    const aoa=[[`${S.meet.name||'Schedule'} — ${fullDate(day.date)}`],[],['Start','End','Block','Detail','Duration','Notes']];
+    const ds=filterByEvent(timed.filter(s=>s.dayId===day.id));
+    const aoa=[[`${S.meet.name||'Schedule'}${eventFilterLabel()?' — '+eventFilterLabel():''} — ${fullDate(day.date)}`],[],['Start','End','Block','Detail','Duration','Notes']];
     ds.forEach(sess=>{
       const t=sess.timing;
       if(sess.isPractice){
@@ -1926,6 +1943,7 @@ function renderExportModal(){
         <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
         <button class="move-btn" onclick="closeModal();openClubItineraries()"><span><strong>Club itineraries (print)</strong><br><span style="font-size:11px;color:var(--tx3)">One page per club — every diver's personal report times and events, whole meet</span></span></button>
         <button class="move-btn" onclick="closeModal();openPresentation()"><span><strong>Presentation mode</strong><br><span style="font-size:11px;color:var(--tx3)">Full-screen scoreboard walkthrough — one day per screen, arrow keys to move</span></span></button>
+        ${anyEventTags()?`<button class="move-btn" onclick="closeModal();splitByEvent()"><span><strong>Split into per-event schedules</strong><br><span style="font-size:11px;color:var(--tx3)">Creates a separate saved schedule for each tagged event (Junior / Senior / Qualifier) — this master stays untouched</span></span></button>`:''}
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Close</button></div>
@@ -1960,7 +1978,7 @@ function renderCard(sess,timed,warns){
     return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-main">
-          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}</div>
+          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${(()=>{const t=eventTagOf(sess);return t?`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`:''})()}</div>
           <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
@@ -2000,7 +2018,7 @@ function renderCard(sess,timed,warns){
     <div class="sc-hd" onclick="openEdit('${sess.id}')">
       <span class="badge ${badgeClass}">${badgeTxt}</span>
       <div class="sc-titles">
-        <div class="sc-name">Session ${n}</div>
+        <div class="sc-name">Session ${n}${(()=>{const t=eventTagOf(sess);return t?`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`:''})()}</div>
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
@@ -2113,6 +2131,7 @@ function renderEditPrac(sess,t,flights,buf){
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
     <div class="fg"><label class="fl">Buffer after this block</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after this block (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
+    <div class="fg"><label class="fl">Part of</label><div class="chiprow"><button class="chip ${!sess.eventTag?'on':''}" onclick="updSess('${sess.id}','eventTag','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sess.eventTag===t.k?'on':''}" onclick="updSess('${sess.id}','eventTag','${t.k}')">${t.l}</button>`).join('')}</div></div>
     <div class="fdiv"></div>
     <div class="fsec" style="display:flex;align-items:center;justify-content:space-between">
       <span>Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></span>
@@ -2236,6 +2255,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Intro / ceremony before events</label><div class="chiprow">${introChips}<button class="chip" onclick="askPrompt({title:'Intro / parade (min)',message:'Minutes for intro before the first event.',inputType:'number',defaultValue:sess.introMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')updSess('${sess.id}','introMinutes',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after session (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
+    <div class="fg"><label class="fl">Part of</label><div class="chiprow"><button class="chip ${!sess.eventTag?'on':''}" onclick="updSess('${sess.id}','eventTag','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sess.eventTag===t.k?'on':''}" onclick="updSess('${sess.id}','eventTag','${t.k}')">${t.l}</button>`).join('')}</div></div>
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
     ${sess.events.length>1?renderCombinePanel(sess,t):''}
@@ -2951,6 +2971,12 @@ function paletteCommands(){
   cmds.push({label:'Version history',hint:'safety',run:()=>{UI.palette=null;openHistory()}});
   cmds.push({label:'Snapshot now…',hint:'safety',run:()=>{UI.palette=null;render();snapshotNow()}});
   cmds.push({label:'Copy this day…',hint:'edit',run:()=>{UI.palette=null;openCopyDay(UI.dayId)}});
+  cmds.push({label:'Import blocks from another schedule…',hint:'multi-event',run:()=>{UI.palette=null;openImportBlocks()}});
+  if(anyEventTags()){
+    cmds.push({label:'Split into per-event schedules',hint:'multi-event',run:()=>{UI.palette=null;render();splitByEvent()}});
+    EVENT_TAGS.forEach(t=>cmds.push({label:'Filter view: '+t.l,hint:'multi-event',run:()=>{UI.palette=null;UI.eventFilter=t.k;render()}}));
+    cmds.push({label:'Filter view: everything',hint:'multi-event',run:()=>{UI.palette=null;UI.eventFilter=null;render()}});
+  }
   cmds.push({label:'Add a day…',hint:'edit',run:()=>{UI.palette=null;addDay()}});
   cmds.push({label:(document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'),hint:'view',run:()=>{UI.palette=null;render();toggleTheme()}});
   return cmds;
@@ -2989,7 +3015,7 @@ function renderPresentation(timed){
   const days=S.meet.days;if(!days.length){UI.present=null;return''}
   const i=Math.min(UI.present.i,days.length-1);
   const day=days[i];
-  const ds=timed.filter(s=>s.dayId===day.id);
+  const ds=filterByEvent(timed.filter(s=>s.dayId===day.id));
   const rows=ds.map(sess=>{
     const t=sess.timing;
     const isPrac=sess.isPractice;
@@ -3026,29 +3052,6 @@ try{document.documentElement.dataset.theme=localStorage.getItem('sbTheme')||''}c
 // Ambient mini-map: every day as a slim strip from venue open to close, with
 // a colored segment per block and red bleed where the day overruns. The whole
 // meet's shape stays visible at all times; click a segment to jump to it.
-function renderRhythmBar(timed){
-  if(!S.meet.days.length)return'';
-  const strips=S.meet.days.map(day=>{
-    const openM=Number(day.openMinutes||390),closeM=Number(day.closeMinutes||1200);
-    const span=Math.max(60,closeM-openM);
-    const ds=timed.filter(s=>s.dayId===day.id);
-    const segs=ds.map(sess=>{
-      const t=sess.timing;
-      const l=Math.max(0,(t.warmupStartMinutes-openM)/span*100);
-      const r=Math.min(100,(t.sessionEndMinutes-openM)/span*100);
-      const w=Math.max(1.2,r-l);
-      const over=t.sessionEndMinutes>closeM;
-      const cls=sess.isPractice?(sess.title==='Open Training'?'train':'prac'):'comp';
-      const name=sess.isPractice?(sess.title||'Practice'):'Session '+getSessNum(sess,timed);
-      return`<div class="rh-seg ${cls}${over?' over':''}" style="left:${l}%;width:${w}%" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}${over?' — runs past close':''}" onclick="event.stopPropagation();UI.dayId='${day.id}';openEdit('${sess.id}')"></div>`;
-    }).join('');
-    return`<div class="rh-strip ${day.id===UI.dayId?'active':''}" onclick="selectDay('${day.id}')" title="${fullDate(day.date)} — click to open">
-      <span class="rh-lbl">${shortDate(day.date).replace(/^\w+ /,'')}</span>
-      <div class="rh-track">${segs||''}</div>
-    </div>`;
-  }).join('');
-  return`<div class="rhythm-row">${strips}</div>`;
-}
 // ── SCHEDULE HEALTH ───────────────────────────────────────────────────
 // One number that grades the whole meet against the validation rules:
 // 100 minus weighted penalties (errors 10, warnings 4, info 1), floor 25.
@@ -3133,6 +3136,133 @@ function computeAthleteImpact(timed){
     });
   });
   return{tightTurnarounds,tripleDayDivers,longestDay,tightDetails,totalDivers:new Set(UI.projRows.map(r=>r.diverKey)).size};
+}
+
+// ── MULTI-EVENT MASTER SCHEDULE ──────────────────────────────────────
+// One facility, overlapping championships, ONE master calendar. Every block
+// can be tagged with the event it belongs to; untagged blocks are "shared"
+// (facility-wide: open training, technical meetings) and belong to every
+// event. The filter is a VIEW — timing always computes from the full master
+// so the facility reality never lies. Splitting writes per-event copies to
+// the cloud library; the master stays the single source of truth.
+const EVENT_TAGS=[
+  {k:'junior',l:'Junior Nationals',s:'JR',c:'#171F69'},
+  {k:'senior',l:'Senior Nationals',s:'SR',c:'#E31937'},
+  {k:'qualifier',l:'National Qualifier',s:'NQ',c:'#009AC7'},
+];
+function eventTagOf(sess){return EVENT_TAGS.find(t=>t.k===sess.eventTag)||null}
+function anyEventTags(){return S.sessions.some(s=>s.eventTag)}
+// View filter: a tag shows its own blocks + shared; 'shared' shows untagged only.
+function passesEventFilter(sess){
+  const f=UI.eventFilter;
+  if(!f)return true;
+  if(f==='shared')return!sess.eventTag;
+  return sess.eventTag===f||!sess.eventTag;
+}
+function filterByEvent(sessions){return sessions.filter(passesEventFilter)}
+function eventFilterLabel(){
+  if(!UI.eventFilter)return'';
+  if(UI.eventFilter==='shared')return'Shared blocks';
+  const t=EVENT_TAGS.find(t=>t.k===UI.eventFilter);
+  return t?t.l:'';
+}
+// ── IMPORT BLOCKS FROM ANOTHER SAVED SCHEDULE ────────────────────────
+// Solves the stale-combined-template problem: pull a finished schedule's
+// blocks into this master, tagged, matching days by DATE (creating missing
+// days), optionally replacing this master's existing blocks with that tag.
+function openImportBlocks(){
+  UI.modal='import-blocks';
+  UI.importState={loading:true,list:null,sourceId:null,tag:EVENT_TAGS[0].k,replace:true,error:null};
+  render();
+  nq(`SELECT id,name,updated_at::text FROM schedule_builder.schedules WHERE id<>$1 ORDER BY updated_at DESC LIMIT 25`,[S.currentLibraryId||''])
+    .then(r=>{UI.importState.list=(r.rows||[]).map(row=>({id:row[0],name:row[1],updatedAt:row[2]}));UI.importState.loading=false;})
+    .catch(e=>{UI.importState.error=e.message||'Could not load library';UI.importState.loading=false;})
+    .finally(()=>render());
+}
+async function executeImportBlocks(){
+  const st=UI.importState;
+  if(!st||!st.sourceId){toast('Pick a schedule to import from');return;}
+  toast('Importing…');
+  let data;
+  try{
+    const r=await nq(`SELECT data FROM schedule_builder.schedules WHERE id=$1`,[st.sourceId]);
+    if(!r.rows?.length)throw new Error('Schedule not found');
+    data=typeof r.rows[0][0]==='string'?JSON.parse(r.rows[0][0]):r.rows[0][0];
+  }catch(e){toast('Import failed: '+(e.message||'could not load'));return;}
+  const srcSessions=(data.sessions||[]);
+  const srcDays=(data.meet?.days||[]);
+  if(!srcSessions.length){toast('That schedule has no blocks');return;}
+  let added=0,removed=0,daysCreated=0;
+  upd(s=>{
+    if(st.replace){
+      const before=s.sessions.length;
+      s.sessions=s.sessions.filter(x=>x.eventTag!==st.tag);
+      removed=before-s.sessions.length;
+    }
+    const dayByDate={};s.meet.days.forEach(d=>dayByDate[d.date]=d.id);
+    srcSessions.forEach(src=>{
+      const srcDay=srcDays.find(d=>d.id===src.dayId);
+      if(!srcDay)return;
+      let targetDayId=dayByDate[srcDay.date];
+      if(!targetDayId){
+        const nd={id:uid(),date:srcDay.date,openMinutes:srcDay.openMinutes||390,closeMinutes:srcDay.closeMinutes||1200};
+        s.meet.days.push(nd);dayByDate[nd.date]=nd.id;targetDayId=nd.id;daysCreated++;
+      }
+      const copy=JSON.parse(JSON.stringify(src));
+      copy.id=uid();copy.dayId=targetDayId;copy.eventTag=st.tag;
+      (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
+      (copy.flights||[]).forEach(f=>{f.id=uid();});
+      s.sessions.push(copy);added++;
+    });
+    s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  });
+  UI.modal=null;
+  const tagL=EVENT_TAGS.find(t=>t.k===st.tag)?.l||st.tag;
+  toast(`Imported ${added} block${added===1?'':'s'} as ${tagL}`+(removed?` (replaced ${removed})`:'')+(daysCreated?` · ${daysCreated} day${daysCreated===1?'':'s'} added`:''));
+  render();
+}
+function renderImportBlocksModal(){
+  const st=UI.importState||{};
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Import blocks from another schedule</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Days are matched by date · missing days get created · nothing here is deleted unless you say so</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-body">
+      ${st.loading?`<div style="text-align:center;color:var(--tx3);padding:20px">Loading your cloud library…</div>`:
+       st.error?`<div style="color:var(--red);font-size:12px">${esc(st.error)}</div>`:`
+      <label class="fl">From</label>
+      <div style="display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;margin-bottom:14px">
+        ${(st.list||[]).map(x=>`<button class="move-btn ${st.sourceId===x.id?'active':''}" onclick="UI.importState.sourceId='${x.id}';render()">${esc(x.name||'(untitled)')} <span class="move-meta">${new Date(x.updatedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></button>`).join('')||'<div style="font-size:12px;color:var(--tx3)">No other schedules in the cloud library</div>'}
+      </div>
+      <label class="fl">Tag the imported blocks as</label>
+      <div class="chiprow" style="margin-bottom:14px">${EVENT_TAGS.map(t=>`<button class="chip ${st.tag===t.k?'on':''}" onclick="UI.importState.tag='${t.k}';render()">${t.l}</button>`).join('')}</div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);cursor:pointer"><input type="checkbox" ${st.replace?'checked':''} onchange="UI.importState.replace=this.checked;render()"/> Replace this schedule's existing <b>${esc(EVENT_TAGS.find(t=>t.k===st.tag)?.l||'')}</b> blocks first (clean re-import)</label>
+    `}
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button><button class="btn btn-sm btn-p" ${st.sourceId?'':'disabled'} onclick="executeImportBlocks()">Import</button></div>
+  </div>`;
+}
+// ── SPLIT MASTER INTO PER-EVENT SCHEDULES ────────────────────────────
+async function splitByEvent(){
+  const tagsInUse=EVENT_TAGS.filter(t=>S.sessions.some(s=>s.eventTag===t.k));
+  if(!tagsInUse.length){toast('Tag blocks with their event first (open a block → "Part of")');return;}
+  askConfirm({title:'Split into per-event schedules?',message:`Creates ${tagsInUse.length} new cloud schedule${tagsInUse.length===1?'':'s'} (${tagsInUse.map(t=>t.l).join(', ')}), each containing that event's blocks plus all shared blocks. This master is not changed.`,confirmText:'Create '+tagsInUse.length,onConfirm:async()=>{
+    toast('Splitting…');
+    let made=0;
+    for(const t of tagsInUse){
+      const clone=JSON.parse(JSON.stringify(S));
+      clone.sessions=clone.sessions.filter(x=>x.eventTag===t.k||!x.eventTag);
+      const usedDays=new Set(clone.sessions.map(x=>x.dayId));
+      clone.meet.days=clone.meet.days.filter(d=>usedDays.has(d.id));
+      clone.meet.name=`${S.meet.name||'Schedule'} — ${t.l}`;
+      clone.currentLibraryId=uid();
+      clone.publishStatus='draft';
+      try{
+        await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,'draft',$5,$6::jsonb,now())ON CONFLICT(id)DO UPDATE SET data=EXCLUDED.data,updated_at=now()`,
+          [clone.currentLibraryId,clone.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.libraryFolder||null,JSON.stringify(clone)]);
+        made++;
+      }catch(e){toast(`Split failed on ${t.l}: ${e.message||'error'}`);return;}
+    }
+    toast(`Created ${made} per-event schedule${made===1?'':'s'} in the cloud library — the master is untouched`);
+  }});
 }
 
 // ── DAY TEMPLATES ─────────────────────────────────────────────────────
@@ -3422,7 +3552,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
