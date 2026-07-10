@@ -381,6 +381,10 @@ button{cursor:pointer;border:none;background:none}
 
 /* ════ MODALS (real, in-app, centered) ════ */
 .modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:600;display:flex;align-items:center;justify-content:center;padding:24px}
+/* Edit dialog: keep the schedule readable behind it — light, unblurred veil
+   and the dialog offset right of center, so live reflows are visible while
+   you type. */
+.modal-bg.edit-bg{background:rgba(15,23,42,.18);backdrop-filter:none;justify-content:flex-end;padding-right:5vw}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal{background:var(--surf);border-radius:var(--r-xl);width:500px;max-width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:var(--sh-lg)}
 @keyframes modalIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}

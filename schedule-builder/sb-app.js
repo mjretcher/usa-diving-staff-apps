@@ -707,15 +707,15 @@ function initUI(){
 }
 function openEdit(sessId){UI.editSessId=sessId;UI.entriesOpen=false;UI.previewOpen=false;render()}
 function closeEdit(){UI.editSessId=null;render()}
-// Live editing: while typing in the docked inspector, changes apply after a
-// short pause (debounced) so the timeline reflows in real time beside you.
+// Live editing: while typing in the block editor, changes apply after a short
+// pause (debounced) so the timeline reflows in real time behind the dialog.
 // Guards: skip empty/partial values (a half-typed time would otherwise fling
 // the block to midnight); focus + caret restore in render() keeps typing
 // uninterrupted for inputs with ids.
 let _liveTimer=null;
 document.addEventListener('input',e=>{
   const el=e.target;
-  if(!el||!el.matches||!el.matches('.edit-panel input'))return;
+  if(!el||!el.matches||!el.matches('[data-edit-body] input'))return;
   if(!el.id)return; // no id → focus can't be restored after render; wait for change/blur
   if(el.type==='time'&&!el.value)return;
   if(el.type==='number'&&(el.value===''||isNaN(Number(el.value))))return;
@@ -1460,11 +1460,7 @@ function render(){
   const _selStart=_act&&_act.selectionStart!=null?_act.selectionStart:null;
   const timed=allTimed();
   let rightPanel='';
-  // Inspector-first: editing a block docks the editor beside the timeline so
-  // the schedule stays visible and reflows live while you type — no modal
-  // covering the thing you're editing.
-  if(UI.editSessId)rightPanel=renderEditPanel(timed);
-  else if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
+  if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
   else if(UI.previewOpen)rightPanel=renderPreviewPanel(timed);
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
@@ -1473,6 +1469,7 @@ function render(){
       <div class="tl-wrap">${renderTlBar(timed)}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
+    ${UI.editSessId?renderEditModal(timed):''}
     ${UI.modal?renderModal(timed):''}
     ${UI.moveSessionId?renderMoveDialog():''}
     ${UI.present?renderPresentation(timed):''}
@@ -1506,7 +1503,7 @@ function renderEditModal(timed){
   const cat=buildCatalog(S.meet.meetType);
   const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
   const body=isPrac?renderEditPrac(sess,t,flights,buf):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
-  return`<div class="modal-bg" onclick="if(event.target===this)closeEdit()">
+  return`<div class="modal-bg edit-bg" onclick="if(event.target===this)closeEdit()">
     <div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
       <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" onclick="closeEdit()">×</button></div>
       <div class="modal-body" data-edit-body="1">${body}</div>
