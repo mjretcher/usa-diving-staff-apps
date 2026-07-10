@@ -1292,13 +1292,19 @@ async function loadMeetEntries(){
   const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[DIVEMEETS_MEET_ID]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
 }
+async function loadMeetEntrants(){
+  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[DIVEMEETS_MEET_ID]);
+  return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],name:row[3],team:row[4],diverKey:row[5]}));
+}
 // ── SYNC ACTUAL ENTRIES (DiveMeets registrations → schedule) ─────────
 function openEntrySync(){
-  UI.entrySync={loading:true,rows:null,error:null};
+  UI.entrySync={loading:true,rows:null,entrants:null,error:null};
+  UI.entrySyncExpand={};
   UI.modal='entry-sync';
   render();
-  loadMeetEntries().then(rows=>{UI.entrySync={loading:false,rows,error:null}})
-    .catch(e=>{UI.entrySync={loading:false,rows:null,error:e.message||'Could not load entries'}})
+  Promise.all([loadMeetEntries(),loadMeetEntrants().catch(()=>[])])
+    .then(([rows,entrants])=>{UI.entrySync={loading:false,rows,entrants,error:null}})
+    .catch(e=>{UI.entrySync={loading:false,rows:null,entrants:null,error:e.message||'Could not load entries'}})
     .finally(()=>render());
 }
 function entrySyncDeltas(){
@@ -1345,11 +1351,26 @@ function renderEntrySyncModal(){
   const fetchedAt=es.rows&&es.rows.length?es.rows[0].fetchedAt:null;
   const fetchedLbl=fetchedAt?new Date(fetchedAt.replace(' ','T')).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
   const deltas=entrySyncDeltas();
-  const rows=deltas.map(d=>{
+  const entrantsByEvent={};
+  (es.entrants||[]).forEach(en=>{
+    const k=en.ageGroup+'|'+en.gender+'|'+en.discipline;
+    (entrantsByEvent[k]=entrantsByEvent[k]||[]).push(en);
+  });
+  const projKeys=new Set((UI.projRows||[]).map(r=>r.diverKey));
+  const rows=deltas.map((d,di)=>{
     const proj=d.projected==null||d.projected===''?null:Number(d.projected);
     const diff=proj==null?null:d.registered-proj;
     const badge=diff==null?`<span style="color:var(--tx3)">new</span>`:diff===0?`<span style="color:var(--tx3)">same</span>`:diff>0?`<span style="color:var(--prac);font-weight:700">+${diff}</span>`:`<span style="color:var(--red);font-weight:700">${diff}</span>`;
-    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>`;
+    const sess=S.sessions.find(x=>x.id===d.sessId);
+    const ev=sess&&sess.events.find(e=>e.id===d.evId);
+    const k=ev?ev.level+'|'+ev.gender+'|'+ev.apparatus:'';
+    const who=entrantsByEvent[k]||[];
+    const open=!!(UI.entrySyncExpand&&UI.entrySyncExpand[di]);
+    const whoRows=open&&who.length?`<tr><td colspan="4" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
+      const known=projKeys.size?projKeys.has(en.diverKey):true;
+      return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
+    }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
+    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
   }).join('');
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
     <div class="modal-body">
