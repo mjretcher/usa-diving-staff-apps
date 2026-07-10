@@ -1665,7 +1665,7 @@ function renderTlBar(timed){
 function renderTimeline(timed){
   const day=S.meet.days.find(d=>d.id===UI.dayId);
   if(!day)return`<div class="tl-body"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No days yet</div><div class="empty-sub">Click + in the day bar to add a competition day</div></div></div>`;
-  const sessions=timedForDay(UI.dayId);
+  let sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
   sessions=filterByEvent(sessions);
