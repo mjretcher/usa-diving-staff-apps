@@ -7,6 +7,10 @@ on:
         description: "DiveMeets meet number"
         required: true
         default: "12923"
+      recon_event_id:
+        description: "If set, ONLY capture a raw DiveSheets page sample for this event id (parser design aid)"
+        required: false
+        default: ""
   schedule:
     # Daily at 10:05 UTC (~6 AM ET) while registration is open / meet approaches.
     # Harmless after the meet — remove or comment out when no longer needed.
@@ -28,7 +32,16 @@ jobs:
       - name: Install psycopg2
         run: pip install psycopg2-binary
 
+      - name: Recon DiveSheets sample (only when recon_event_id set)
+        if: ${{ github.event.inputs.recon_event_id != '' }}
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MEET_ID: ${{ github.event.inputs.meet_id || '12923' }}
+          EVENT_ID: ${{ github.event.inputs.recon_event_id }}
+        run: python db/scripts/recon_divesheet.py
+
       - name: Fetch and upsert entries
+        if: ${{ github.event.inputs.recon_event_id == '' }}
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id || '12923' }}
