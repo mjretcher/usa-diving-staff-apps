@@ -53,11 +53,18 @@ def write_diag(payload):
     except Exception as e:
         print(f"  (diagnostic write failed: {e})", file=sys.stderr)
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 USA-Diving-Staff-Apps/1.0",
-        "Accept": "text/html,application/xhtml+xml",
-    })
+def fetch(url, referer=None):
+    headers = {
+        # Recon-verified header set: the DiveSheets pages 403 the previous
+        # custom-suffixed UA / minimal headers, but accept this browser-grade
+        # set (proven by the successful recon capture of the same page type).
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if referer:
+        headers["Referer"] = referer
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read().decode("utf-8", errors="replace")
 
@@ -163,10 +170,21 @@ def main():
     ent_mismatches = []
     for r in rows:
         ev_url = f"https://new.divemeets.com/DiveSheets/{MEET_ID}/{r['event_id_dm']}/1"
-        try:
-            ev_html = fetch(ev_url)
-        except Exception as e:
-            ent_failures.append({"event": r["event_id_dm"], "error": str(e)[:120]})
+        ev_html = None
+        for attempt in (1, 2):
+            try:
+                ev_html = fetch(ev_url, referer=URL)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 403 and attempt == 1:
+                    time.sleep(6)  # back off once — burst rate limiting
+                    continue
+                ent_failures.append({"event": r["event_id_dm"], "error": f"HTTP {e.code}"})
+                break
+            except Exception as e:
+                ent_failures.append({"event": r["event_id_dm"], "error": str(e)[:120]})
+                break
+        if ev_html is None:
             continue
         found = entrant_rx.findall(ev_html)
         entrants = []
@@ -208,7 +226,7 @@ def main():
         ent_total += len(entrants)
         ent_events_ok += 1
         print(f"  entrants: {r['age_group']} {r['gender']} {r['discipline']}: {len(entrants)}")
-        time.sleep(0.6)  # politeness between page fetches
+        time.sleep(2.0)  # politeness between page fetches — 0.6s burst triggered 403s
 
     cur.close(); conn.close()
     diag.update({"ok": True, "total_entries": sum(r["entries"] for r in rows),
