@@ -386,8 +386,12 @@ document.addEventListener('keydown',e=>{
   if(mod&&e.key==='z'&&!e.shiftKey){if(!inField){e.preventDefault();undo()}}
   else if(mod&&(e.key==='z'&&e.shiftKey||e.key==='y')){if(!inField){e.preventDefault();redo()}}
   else if(mod&&e.key==='s'){e.preventDefault();saveSchedule()}
+  else if(mod&&(e.key==='k'||e.key==='K')){e.preventDefault();UI.palette?closePalette():openPalette()}
+  else if(UI.present&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){e.preventDefault();const n=S.meet.days.length;UI.present.i=Math.max(0,Math.min(n-1,UI.present.i+(e.key==='ArrowRight'?1:-1)));render()}
   else if(e.key==='Escape'){
-    if(el&&inField){el.blur()}
+    if(UI.palette){closePalette()}
+    else if(UI.present){UI.present=null;render()}
+    else if(el&&inField){el.blur()}
     else if(UI.modal){UI.modal=null;render()}
     else if(UI.moveSessionId){closeMoveDialog()}
     else if(UI.editSessId){closeEdit()}
@@ -701,8 +705,23 @@ function initUI(){
     if(changed)saveS();
   }
 }
-function openEdit(sessId){UI.editSessId=sessId;render()}
+function openEdit(sessId){UI.editSessId=sessId;UI.entriesOpen=false;UI.previewOpen=false;render()}
 function closeEdit(){UI.editSessId=null;render()}
+// Live editing: while typing in the docked inspector, changes apply after a
+// short pause (debounced) so the timeline reflows in real time beside you.
+// Guards: skip empty/partial values (a half-typed time would otherwise fling
+// the block to midnight); focus + caret restore in render() keeps typing
+// uninterrupted for inputs with ids.
+let _liveTimer=null;
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(!el||!el.matches||!el.matches('.edit-panel input'))return;
+  if(!el.id)return; // no id → focus can't be restored after render; wait for change/blur
+  if(el.type==='time'&&!el.value)return;
+  if(el.type==='number'&&(el.value===''||isNaN(Number(el.value))))return;
+  clearTimeout(_liveTimer);
+  _liveTimer=setTimeout(()=>{try{el.dispatchEvent(new Event('change'))}catch(err){}},650);
+});
 function openEntries(){UI.entriesOpen=true;UI.editSessId=null;UI.entriesDayId=UI.dayId;UI.entriesExpanded=[];render()}
 function closeEntries(){if(_entryDirty)commitEntries();UI.entriesOpen=false;render()}
 function selectDay(id){UI.dayId=id;UI.editSessId=null;render()}
@@ -1441,22 +1460,29 @@ function render(){
   const _selStart=_act&&_act.selectionStart!=null?_act.selectionStart:null;
   const timed=allTimed();
   let rightPanel='';
-  if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
+  // Inspector-first: editing a block docks the editor beside the timeline so
+  // the schedule stays visible and reflows live while you type — no modal
+  // covering the thing you're editing.
+  if(UI.editSessId)rightPanel=renderEditPanel(timed);
+  else if(UI.entriesOpen)rightPanel=renderEntriesPanel(timed);
   else if(UI.previewOpen)rightPanel=renderPreviewPanel(timed);
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
+    ${renderRhythmBar(timed)}
     <div class="workspace">
       <div class="tl-wrap">${renderTlBar(timed)}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
-    ${UI.editSessId?renderEditModal(timed):''}
     ${UI.modal?renderModal(timed):''}
     ${UI.moveSessionId?renderMoveDialog():''}
+    ${UI.present?renderPresentation(timed):''}
+    ${UI.palette?renderPalette():''}
     ${UI.dialog?renderDialog():''}
     ${UI.combinePicker?renderCombinePickerModal():''}
   `;
   bindDrag();
   if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
+  if(UI.palette){const pi=document.getElementById('palette-input');if(pi&&document.activeElement!==pi){pi.focus();const L=pi.value.length;try{pi.setSelectionRange(L,L)}catch(e){}}}
   // Restore scroll for every matched surface — force instant restore (scrollBehavior
   // 'auto') so no CSS smooth-scroll setting can animate from 0, which reads as a
   // "jump to top" flash on every re-render.
@@ -1544,10 +1570,8 @@ function renderBar(timed){
       <div class="bar-sep"></div>
       <button class="bb icon-only" onclick="UI.modal='overview';render()" title="Meet overview — all days at a glance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg></button>
       <button class="bb icon-only" onclick="UI.modal='export';render()" title="Export — full meet handout or Excel workbook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
-      <button class="bb icon-only" onclick="UI.modal='conflicts';render()" title="Issues &amp; conflicts" style="position:relative">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9l-8 14A2 2 0 004 21h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z"/></svg>
-        ${conflictBadge}
-      </button>
+      <button class="bb icon-only" onclick="toggleTheme()" title="Deck mode — dark theme for poolside glare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></button>
+      ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
       <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
       <div class="bar-sep"></div>
       <button class="bb" onclick="openEntries()">Entries</button>
@@ -1629,14 +1653,16 @@ function renderTimelineScale(sessions,timed){
     const overlaps=i>0&&t.warmupStartMinutes<sessions[i-1].timing.sessionEndMinutes;
     const cls=`ts-card ${isPrac?(isTrain?'train':'prac'):'comp'}${overlaps?' overlap':''}`;
     const dur=t.sessionEndMinutes-t.warmupStartMinutes;
-    return`<div class="${cls}" style="top:${top}px;height:${h}px" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)} · click to open">
+    const resizable=isPrac&&!(sess.flights||[]).length&&!sess.fitToClose;
+    return`<div class="${cls}" style="top:${top}px;height:${h}px" data-ts-sess="${sess.id}" data-ts-dur="${dur}" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)} · click to open">
       <div class="ts-card-name">${esc(name)}${overlaps?' <span class="ts-overlap-flag">⚠ overlaps</span>':''}</div>
       ${h>=52&&detail?`<div class="ts-card-detail">${esc(detail)}</div>`:''}
       <div class="ts-card-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(dur)}</div>
+      ${resizable?`<div class="ts-resize" title="Drag to change duration"></div>`:''}
     </div>`;
   }).join('');
   return`<div class="tl-body">
-    <div class="ts-wrap" style="height:${H+20}px">${hours}<div class="ts-cards">${cards}</div></div>
+    <div class="ts-wrap" data-px="${PX}" style="height:${H+20}px">${hours}<div class="ts-cards">${cards}</div></div>
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
   </div>`;
 }
@@ -1796,6 +1822,7 @@ function renderExportModal(){
         <button class="move-btn" onclick="closeModal();openMeetHandout()"><span><strong>Full meet handout</strong><br><span style="font-size:11px;color:var(--tx3)">Every day as a one-page sheet — use the print dialog's "Save as PDF" for a file</span></span></button>
         <button class="move-btn" onclick="closeModal();exportMeetExcel()"><span><strong>Excel workbook (.xlsx)</strong><br><span style="font-size:11px;color:var(--tx3)">One sheet per day plus a meet summary — for ops staff who live in spreadsheets</span></span></button>
         <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
+        <button class="move-btn" onclick="closeModal();openPresentation()"><span><strong>Presentation mode</strong><br><span style="font-size:11px;color:var(--tx3)">Full-screen scoreboard walkthrough — one day per screen, arrow keys to move</span></span></button>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Close</button></div>
@@ -1947,10 +1974,11 @@ function renderEditPanel(timed){
       <div><div class="ep-title">${esc(title)}</div><div class="ep-sub">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div>
       <button class="ep-close" onclick="closeEdit()">×</button>
     </div>
-    <div class="ep-body">${body}</div>
+    <div class="ep-body" data-edit-body="1">${body}</div>
     <div class="ep-foot">
       <button class="btn btn-d btn-sm btn-gh" onclick="deleteSession('${sess.id}')">Delete</button>
       <button class="btn btn-sm btn-gh" onclick="duplicateSession('${sess.id}')" title="Make a copy right below this one">Duplicate</button>
+      <button class="btn btn-sm btn-gh" onclick="openMoveDialog('${sess.id}')">Move…</button>
       <div style="flex:1"></div>
       <button class="btn btn-sm" onclick="closeEdit()">Done</button>
     </div>
@@ -1965,11 +1993,11 @@ function renderEditPrac(sess,t,flights,buf){
   const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
   const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
   return`
-    <div class="fg"><label class="fl">Block name</label><input class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
+    <div class="fg"><label class="fl">Block name</label><input id="ep-title-${sess.id}" class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2" style="grid-template-columns:1.1fr .8fr 1.1fr">
-      <div class="fg"><label class="fl">Start time</label><input class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
-      <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
-      <div class="fg"><label class="fl">End time ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Fixed at facility close">${f12(dayCloseFor(sess.dayId))}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${f12(t.sessionEndMinutes)}</div>`:`<input class="fi" type="time" value="${f24(t.sessionEndMinutes)}" onchange="setPracEndTime('${sess.id}',pt(this.value))" title="Type when it should end — duration adjusts automatically"/>`}</div>
+      <div class="fg"><label class="fl">Start time</label><input id="ep-start-${sess.id}" class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
+      <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input id="ep-dur-${sess.id}" class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
+      <div class="fg"><label class="fl">End time ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Fixed at facility close">${f12(dayCloseFor(sess.dayId))}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${f12(t.sessionEndMinutes)}</div>`:`<input id="ep-end-${sess.id}" class="fi" type="time" value="${f24(t.sessionEndMinutes)}" onchange="setPracEndTime('${sess.id}',pt(this.value))" title="Type when it should end — duration adjusts automatically"/>`}</div>
     </div>
     <div class="fitclose-box">
       <div class="fitclose-toggle-row">
@@ -2419,6 +2447,41 @@ function showAddMenu(){
 
 // ── DRAG & DROP ───────────────────────────────────────────────────────
 function bindDrag(){
+  // Time-scale resize: grab a block's bottom edge and drag to change its
+  // duration — live height while dragging, snapped to 5 min on release.
+  document.querySelectorAll('.ts-resize').forEach(handle=>{
+    handle.addEventListener('mousedown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const cardEl=handle.closest('.ts-card');if(!cardEl)return;
+      const wrap=cardEl.closest('.ts-wrap');
+      const PX=Number(wrap?.dataset.px)||1.1;
+      const sessId=cardEl.dataset.tsSess;
+      const origDur=Number(cardEl.dataset.tsDur)||60;
+      const startY=e.clientY;
+      const origH=cardEl.offsetHeight;
+      cardEl.classList.add('ts-resizing');
+      const timeLbl=cardEl.querySelector('.ts-card-time');
+      const origLbl=timeLbl?timeLbl.textContent:'';
+      let liveDur=origDur;
+      const onMove=ev=>{
+        const dy=ev.clientY-startY;
+        liveDur=Math.max(15,Math.round((origDur+dy/PX)/5)*5);
+        cardEl.style.height=Math.max(30,origH+(liveDur-origDur)*PX)+'px';
+        if(timeLbl)timeLbl.textContent=origLbl.replace(/·.*$/,'· '+fdur(liveDur));
+      };
+      const onUp=()=>{
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+        cardEl.classList.remove('ts-resizing');
+        if(liveDur!==origDur){
+          const sess=S.sessions.find(x=>x.id===sessId);
+          if(sess&&sess.events[0])updEv(sessId,sess.events[0].id,'customDurationMinutes',liveDur);
+        }
+      };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+  });
   // Event rows: drag within or across sessions
   document.querySelectorAll('[data-ev][draggable]').forEach(el=>{
     el.addEventListener('dragstart',e=>{
@@ -2512,6 +2575,12 @@ function bindDrag(){
       const above=e.clientY<rect.top+rect.height/2;
       card.classList.toggle('sess-drop-above',above);
       card.classList.toggle('sess-drop-below',!above);
+      // Live preview: exact start time the dragged block would get here
+      const dayS=S.sessions.filter(x=>x.dayId===target.dayId&&x.id!==dragged.id).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+      const ti=dayS.findIndex(x=>x.id===targetId);
+      const pos=above?(ti<=0?'start':'after-'+dayS[ti-1].id):'after-'+targetId;
+      const st=computeMoveStartMinutes(S.sessions,dragged,target.dayId,pos);
+      card.setAttribute('data-drop-time',st!=null?('starts '+f12(st)):'');
     });
     card.addEventListener('dragleave',()=>card.classList.remove('sess-drop-above','sess-drop-below'));
     card.addEventListener('drop',e=>{
@@ -2705,6 +2774,186 @@ function renderOverviewModal(){
     <div class="modal-hd"><div><span class="modal-title">Meet overview</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Drag blocks between days · click a block to open it · click a day header to go there</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
     <div class="modal-body ov-body-wrap"><div class="ov-board">${cols}</div></div>
   </div>`;
+}
+
+// ── COMMAND PALETTE (Cmd/Ctrl+K) + NATURAL-LANGUAGE QUICK ADD ────────
+// One input for everything: fuzzy commands ("overview", "export excel",
+// "go to thursday") and plain-English block creation ("Open training 7-11am
+// friday", "Warm-ups 1pm-3pm, 3 flights East/Central/West 45 min").
+function openPalette(){UI.palette={q:''};render()}
+function closePalette(){UI.palette=null;render()}
+function _parseTimeToken(numStr,ap){
+  if(!numStr)return null;
+  const m=numStr.match(/^(\d{1,2})(?::(\d{2}))?$/);if(!m)return null;
+  let h=Number(m[1]);const mm=Number(m[2]||0);
+  if(h>23||mm>59)return null;
+  if(ap){ap=ap.toLowerCase();if(ap==='pm'&&h<12)h+=12;if(ap==='am'&&h===12)h=0;}
+  return h*60+mm;
+}
+function parseQuickAdd(q){
+  const tr=q.match(/(\d{1,2}(?::\d{2})?)\s*(am|pm)?\s*(?:-|–|—|to)\s*(\d{1,2}(?::\d{2})?)\s*(am|pm)?/i);
+  if(!tr)return null;
+  let start=_parseTimeToken(tr[1],tr[2]||tr[4]);   // "7-11am" → both am
+  let end=_parseTimeToken(tr[3],tr[4]||tr[2]);
+  if(start==null||end==null)return null;
+  if(end<=start&&end+720>start)end+=720;            // "11-1pm" → 1pm not 1am
+  if(end<=start)return null;
+  // Day: match a weekday word to a meet day
+  let dayId=UI.dayId;
+  const dm=q.match(/\b(?:on\s+)?(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/i);
+  if(dm){
+    const target={sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6}[dm[1].toLowerCase()];
+    const hit=S.meet.days.find(d=>new Date(d.date+'T00:00:00').getDay()===target);
+    if(hit)dayId=hit.id;
+  }
+  // Flights: "3 flights East/Central/West 45 min" or "3 flights 60 min"
+  let flights=[];
+  const fm=q.match(/(\d+)\s*flights?(?:\s+([A-Za-z][A-Za-z\/,&\s]*?))?(?:\s+(\d+)\s*min)?(?=$|,|\.)/i);
+  if(fm){
+    const n=Math.min(12,Number(fm[1])||0);
+    const names=(fm[2]||'').split(/[\/,&]| and /i).map(s=>s.trim()).filter(Boolean);
+    const per=Number(fm[3])||Math.max(5,Math.round((end-start)/Math.max(1,n)/5)*5);
+    for(let i=0;i<n;i++)flights.push({name:names[i]||('Flight '+(i+1)),durationMinutes:per});
+  }
+  // Title: text before the time range, cleaned
+  let title=q.slice(0,tr.index).replace(/^\s*add\s+/i,'').replace(/[,\s]+$/,'').trim();
+  if(!title)title='Open Training';
+  title=title.replace(/\b\w/g,c=>c.toUpperCase());
+  return{title,dayId,start,end,flights};
+}
+function executeQuickAdd(parsedJson){
+  const p=typeof parsedJson==='string'?JSON.parse(parsedJson):parsedJson;
+  const FLIGHT_COLORS=['#171F69','#009AC7','#E31937','#15803D','#B45309','#6D28D9'];
+  const sess={id:uid(),dayId:p.dayId,warmupStartMinutes:p.start,warmupMinutes:0,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:p.title,
+    flights:(p.flights||[]).map((f,i)=>({id:uid(),name:f.name,durationMinutes:f.durationMinutes,color:FLIGHT_COLORS[i%FLIGHT_COLORS.length]})),
+    events:[{id:uid(),style:'Custom Block',customLabel:p.title,customDurationMinutes:p.end-p.start,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]};
+  upd(s=>{s.sessions.push(sess)});
+  UI.palette=null;UI.dayId=p.dayId;UI.editSessId=sess.id;
+  toast(`Added ${p.title} · ${f12(p.start)}–${f12(p.end)}`);
+  render();
+}
+function paletteCommands(){
+  const cmds=[];
+  S.meet.days.forEach(d=>cmds.push({label:'Go to '+fullDate(d.date),hint:'day',run:()=>{UI.palette=null;selectDay(d.id)}}));
+  cmds.push({label:'Meet overview board',hint:'view',run:()=>{UI.palette=null;UI.modal='overview';render()}});
+  cmds.push({label:(UI.timeScale?'Switch to list view':'Switch to time-scale view'),hint:'view',run:()=>{UI.palette=null;UI.timeScale=!UI.timeScale;render()}});
+  cmds.push({label:'Presentation mode',hint:'view',run:()=>{UI.palette=null;openPresentation()}});
+  cmds.push({label:'Schedule health',hint:'check',run:()=>{UI.palette=null;UI.modal='conflicts';render()}});
+  cmds.push({label:'Export — full meet handout',hint:'export',run:()=>{UI.palette=null;render();openMeetHandout()}});
+  cmds.push({label:'Export — Excel workbook',hint:'export',run:()=>{UI.palette=null;render();exportMeetExcel()}});
+  cmds.push({label:'Print this day (coach handout)',hint:'export',run:()=>{UI.palette=null;render();openCoachHandout(UI.dayId)}});
+  cmds.push({label:'Sync actual entries (DiveMeets)',hint:'data',run:()=>{UI.palette=null;openEntrySync()}});
+  cmds.push({label:'Projections',hint:'data',run:()=>{UI.palette=null;openProjections()}});
+  cmds.push({label:'Version history',hint:'safety',run:()=>{UI.palette=null;openHistory()}});
+  cmds.push({label:'Snapshot now…',hint:'safety',run:()=>{UI.palette=null;render();snapshotNow()}});
+  cmds.push({label:'Copy this day…',hint:'edit',run:()=>{UI.palette=null;openCopyDay(UI.dayId)}});
+  cmds.push({label:'Add a day…',hint:'edit',run:()=>{UI.palette=null;addDay()}});
+  cmds.push({label:(document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'),hint:'view',run:()=>{UI.palette=null;render();toggleTheme()}});
+  return cmds;
+}
+function renderPalette(){
+  const q=(UI.palette.q||'').trim();
+  const parsed=q?parseQuickAdd(q):null;
+  const ql=q.toLowerCase();
+  const matches=q?paletteCommands().filter(c=>c.label.toLowerCase().includes(ql)):paletteCommands().slice(0,9);
+  window._paletteRun=matches.map(m=>m.run);
+  const dayFor=parsed?S.meet.days.find(d=>d.id===parsed.dayId):null;
+  const rows=[
+    parsed?`<button class="pal-row pal-create" onclick='executeQuickAdd(${esc(JSON.stringify(JSON.stringify(parsed))).replace(/'/g,'&#39;')})'>
+      <span class="pal-plus">+</span>
+      <span><strong>Create: ${esc(parsed.title)}</strong><span class="pal-sub">${dayFor?shortDate(dayFor.date):''} · ${f12(parsed.start)} – ${f12(parsed.end)}${parsed.flights.length?` · ${parsed.flights.length} flights`:''}</span></span>
+      <span class="pal-kbd">↵</span>
+    </button>`:'',
+    ...matches.map((m,i)=>`<button class="pal-row" onclick="window._paletteRun[${i}]()"><span>${esc(m.label)}</span><span class="pal-hint">${m.hint}</span></button>`)
+  ].join('');
+  return`<div class="pal-bg" onclick="if(event.target===this)closePalette()">
+    <div class="pal">
+      <input id="palette-input" class="pal-input" placeholder='Type a command, or "Open training 7-11am friday"…' value="${esc(UI.palette.q||'')}" oninput="UI.palette.q=this.value;render()" onkeydown="if(event.key==='Enter'){event.preventDefault();const f=document.querySelector('.pal-row');if(f)f.click();}"/>
+      <div class="pal-list">${rows||`<div class="pal-empty">No matches — try "overview", "export", or a block like "Warm-ups 1-3pm"</div>`}</div>
+      <div class="pal-foot">↵ runs the first result · Esc closes</div>
+    </div>
+  </div>`;
+}
+// ── PRESENTATION MODE ─────────────────────────────────────────────────
+// Full-screen, read-only, scoreboard-typography walkthrough — one day per
+// screen, arrow keys to move, for reviewing the meet on a shared display.
+function openPresentation(){
+  const i=Math.max(0,S.meet.days.findIndex(d=>d.id===UI.dayId));
+  UI.present={i:i<0?0:i};render();
+}
+function renderPresentation(timed){
+  const days=S.meet.days;if(!days.length){UI.present=null;return''}
+  const i=Math.min(UI.present.i,days.length-1);
+  const day=days[i];
+  const ds=timed.filter(s=>s.dayId===day.id);
+  const rows=ds.map(sess=>{
+    const t=sess.timing;
+    const isPrac=sess.isPractice;
+    const name=isPrac?(sess.title||'Practice'):'Session '+getSessNum(sess,timed);
+    const detail=isPrac
+      ?((t.flightTimes||[]).map(f=>`${esc(f.name)} ${f12(f.startMinutes)}–${f12(f.endMinutes)}`).join('  ·  '))
+      :(t.events||[]).map(ev=>esc(evName(ev))).join('  ·  ');
+    return`<div class="pr-row ${isPrac?'prac':''}">
+      <div class="pr-time">${f12(isPrac?t.warmupStartMinutes:t.eventStartMinutes)}<span class="pr-end">– ${f12(t.sessionEndMinutes)}</span></div>
+      <div class="pr-body"><div class="pr-name">${esc(name)}${sess.awardsEnabled?' <span class="pr-awards">+ AWARDS</span>':''}</div>${detail?`<div class="pr-detail">${detail}</div>`:''}</div>
+    </div>`;
+  }).join('');
+  return`<div class="present">
+    <div class="pr-hd"><div class="pr-meet">${esc(S.meet.name||'Schedule')}</div><div class="pr-date">${fullDate(day.date)}</div></div>
+    <div class="pr-accent"></div>
+    <div class="pr-list">${rows||'<div class="pr-empty">Nothing scheduled this day</div>'}</div>
+    <div class="pr-foot">
+      <button class="pr-nav" onclick="UI.present.i=Math.max(0,UI.present.i-1);render()" ${i===0?'disabled':''}>←</button>
+      <span>Day ${i+1} of ${days.length} · ← → to move · Esc to exit</span>
+      <button class="pr-nav" onclick="UI.present.i=Math.min(${days.length-1},UI.present.i+1);render()" ${i===days.length-1?'disabled':''}>→</button>
+    </div>
+    <button class="pr-close" onclick="UI.present=null;render()">×</button>
+  </div>`;
+}
+// ── DECK MODE (dark theme) ────────────────────────────────────────────
+function toggleTheme(){
+  const cur=document.documentElement.dataset.theme==='deck'?'':'deck';
+  document.documentElement.dataset.theme=cur;
+  try{localStorage.setItem('sbTheme',cur)}catch(e){}
+  render();
+}
+try{document.documentElement.dataset.theme=localStorage.getItem('sbTheme')||''}catch(e){}
+
+// Ambient mini-map: every day as a slim strip from venue open to close, with
+// a colored segment per block and red bleed where the day overruns. The whole
+// meet's shape stays visible at all times; click a segment to jump to it.
+function renderRhythmBar(timed){
+  if(!S.meet.days.length)return'';
+  const strips=S.meet.days.map(day=>{
+    const openM=Number(day.openMinutes||390),closeM=Number(day.closeMinutes||1200);
+    const span=Math.max(60,closeM-openM);
+    const ds=timed.filter(s=>s.dayId===day.id);
+    const segs=ds.map(sess=>{
+      const t=sess.timing;
+      const l=Math.max(0,(t.warmupStartMinutes-openM)/span*100);
+      const r=Math.min(100,(t.sessionEndMinutes-openM)/span*100);
+      const w=Math.max(1.2,r-l);
+      const over=t.sessionEndMinutes>closeM;
+      const cls=sess.isPractice?(sess.title==='Open Training'?'train':'prac'):'comp';
+      const name=sess.isPractice?(sess.title||'Practice'):'Session '+getSessNum(sess,timed);
+      return`<div class="rh-seg ${cls}${over?' over':''}" style="left:${l}%;width:${w}%" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}${over?' — runs past close':''}" onclick="event.stopPropagation();UI.dayId='${day.id}';openEdit('${sess.id}')"></div>`;
+    }).join('');
+    return`<div class="rh-strip ${day.id===UI.dayId?'active':''}" onclick="selectDay('${day.id}')" title="${fullDate(day.date)} — click to open">
+      <span class="rh-lbl">${shortDate(day.date).replace(/^\w+ /,'')}</span>
+      <div class="rh-track">${segs||''}</div>
+    </div>`;
+  }).join('');
+  return`<div class="rhythm-row">${strips}</div>`;
+}
+// ── SCHEDULE HEALTH ───────────────────────────────────────────────────
+// One number that grades the whole meet against the validation rules:
+// 100 minus weighted penalties (errors 10, warnings 4, info 1), floor 25.
+function computeHealth(){
+  const issues=detectConflicts();
+  let score=100;
+  issues.forEach(i=>{score-=i.sev==='err'?10:i.sev==='warn'?4:1});
+  score=Math.max(25,score);
+  return{score,issues,errs:issues.filter(i=>i.sev==='err').length,warns:issues.filter(i=>i.sev==='warn').length};
 }
 
 // ── DAY TEMPLATES ─────────────────────────────────────────────────────
@@ -3091,13 +3340,15 @@ function renderAddBlockModal(){
 
 // Conflicts modal
 function renderConflictsModal(){
-  const conflicts=detectConflicts();
+  const h=computeHealth();
+  const conflicts=h.issues;
   const errs=conflicts.filter(c=>c.sev==='err');
   const warns=conflicts.filter(c=>c.sev==='warn');
   const infos=conflicts.filter(c=>c.sev==='info');
   const ordered=[...errs,...warns,...infos];
+  const scoreCls=h.score>=90?'var(--ok)':h.score>=70?'var(--warn)':'var(--red)';
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Issues & conflicts ${conflicts.length?`<span style="color:var(--tx3);font-weight:500">(${conflicts.length})</span>`:''}</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--font-display,inherit);font-size:30px;font-weight:700;color:${scoreCls};line-height:1">${h.score}</span><div><span class="modal-title">Schedule health</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${conflicts.length?`${errs.length} error${errs.length===1?'':'s'} · ${warns.length} warning${warns.length===1?'':'s'} · ${infos.length} note${infos.length===1?'':'s'}`:'No issues — gold-medal shape'}</div></div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${conflicts.length?`<div class="conflicts-list">${ordered.map((c)=>{
         const realIdx=conflicts.indexOf(c);
