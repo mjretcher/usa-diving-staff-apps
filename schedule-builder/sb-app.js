@@ -534,6 +534,7 @@ function buildWarnings(dayId){
 // ── CONFLICT DETECTION (comprehensive) ────────────────────────────────
 function detectConflicts(){
   const issues=[];
+  ensureProjDataLoaded(); // athlete-aware checks activate once the projected field arrives
   const timed=allTimed();
   S.meet.days.forEach(day=>{
     const sessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
@@ -545,7 +546,29 @@ function detectConflicts(){
       if(a.timing.sessionEndMinutes>b.timing.warmupStartMinutes){
         const an=a.isPractice?(a.title||'Open Training'):'Session '+getSessNum(a,timed);
         const bn=b.isPractice?(b.title||'Open Training'):'Session '+getSessNum(b,timed);
-        issues.push({sev:'err',title:'Sessions overlap',detail:`${an} ends ${f12(a.timing.sessionEndMinutes)} but ${bn} starts ${f12(b.timing.warmupStartMinutes)}`,loc:dayLabel,fixSessId:b.id,dayId:day.id,fixHint:'autoSpace',autoData:{prevId:a.id,nextId:b.id}});
+        // Athlete-aware enrichment (advisory): name the actual divers caught in both
+        let athleteNote='';
+        if(UI.projRows&&!a.isPractice&&!b.isPractice){
+          const shared=sharedAthletes(a,b);
+          if(shared.length)athleteNote=` — ${shared.length} of the same projected divers are in both (${nameList(shared,4)})`;
+        }
+        issues.push({sev:'err',title:'Sessions overlap',detail:`${an} ends ${f12(a.timing.sessionEndMinutes)} but ${bn} starts ${f12(b.timing.warmupStartMinutes)}${athleteNote}`,loc:dayLabel,fixSessId:b.id,dayId:day.id,fixHint:'autoSpace',autoData:{prevId:a.id,nextId:b.id}});
+      }
+    }
+    // Athlete rest windows (advisory, projected field): consecutive competition
+    // sessions whose gap is under REST_MIN and which share actual divers.
+    if(UI.projRows){
+      const comp=sessions.filter(s=>!s.isPractice);
+      for(let i=0;i<comp.length-1;i++){
+        const a=comp[i],b=comp[i+1];
+        const rest=b.timing.warmupStartMinutes-a.timing.sessionEndMinutes;
+        if(rest>=0&&rest<REST_MIN_DEFAULT){
+          const shared=sharedAthletes(a,b);
+          if(shared.length){
+            const an='Session '+getSessNum(a,timed),bn='Session '+getSessNum(b,timed);
+            issues.push({sev:'warn',title:'Tight turnaround for divers in back-to-back sessions',detail:`${shared.length} projected diver${shared.length===1?'':'s'} finish ${an} and start ${bn} warm-up only ${fdur(Math.max(0,rest))} later (${nameList(shared,4)})`,loc:dayLabel,fixSessId:b.id,dayId:day.id,fixHint:'edit'});
+          }
+        }
       }
     }
     sessions.forEach(s=>{
@@ -1748,6 +1771,67 @@ function openMeetHandout(){
   if(!pages){toast('Nothing scheduled yet');return;}
   _openHandoutWindow(`${S.meet.name||'Schedule'} — full meet`,pages);
 }
+// ── CLUB ITINERARIES (per-team personal schedules) ───────────────────
+// One print pack: each club's divers with their personal meet schedule —
+// report (warm-up) time, approximate dive time, and event, chronologically
+// across the whole meet. Built from the projected field + current timings.
+function openClubItineraries(){
+  if(!UI.projRows||!UI.projRows.length){toast('Projected field not loaded yet — try again in a moment');ensureProjDataLoaded();return;}
+  const timed=allTimed();
+  // diverKey -> {row, apps:[{dayId,...}]} across all days
+  const byDiver=new Map();
+  S.meet.days.forEach(day=>{
+    diverAppearancesForDay(day.id,timed).forEach((d,k)=>{
+      if(!byDiver.has(k))byDiver.set(k,{row:d.row,apps:[]});
+      d.apps.forEach(a=>byDiver.get(k).apps.push({...a,dayId:day.id}));
+    });
+  });
+  if(!byDiver.size){toast('No competition events matched the projected field yet');return;}
+  // Group by team
+  const byTeam=new Map();
+  byDiver.forEach(d=>{
+    const team=d.row.team||'Unaffiliated';
+    if(!byTeam.has(team))byTeam.set(team,[]);
+    byTeam.get(team).push(d);
+  });
+  const dayName=id=>{const d=S.meet.days.find(x=>x.id===id);return d?shortDate(d.date):''};
+  const teams=[...byTeam.keys()].sort((a,b)=>a.localeCompare(b));
+  const pages=teams.map(team=>{
+    const divers=byTeam.get(team).sort((a,b)=>(a.row.athlete||'').localeCompare(b.row.athlete||''));
+    const rows=divers.map(d=>{
+      const apps=d.apps.sort((a,b)=>{const da=S.meet.days.findIndex(x=>x.id===a.dayId),db=S.meet.days.findIndex(x=>x.id===b.dayId);return da!==db?da-db:a.evStart-b.evStart});
+      const lines=apps.map(a=>`<div class="it-line"><span class="it-day">${dayName(a.dayId)}</span><span class="it-report">report ${f12(a.warmupStart)}</span><span class="it-ev">${esc(a.evName)} <span class="it-sess">(${a.sessLabel} · dives ~${f12(a.evStart)})</span></span></div>`).join('');
+      return`<div class="it-diver"><div class="it-name">${esc(d.row.athlete||'Unknown')}</div>${lines}</div>`;
+    }).join('');
+    return`<div class="hd-page">
+<div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div><div class="hd-venue">Club itinerary — projected field · times subject to change</div></div><div class="hd-date" style="font-size:20px">${esc(team)}</div></div>
+<div class="hd-accent"></div>
+${rows}
+<div class="hd-foot"><span>Report time = session warm-up start · dive times are estimates</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+</div>`;
+  }).join('');
+  const extraCss=`
+  .it-diver{padding:8px 2px;border-bottom:1.5px solid #E5E9F2;page-break-inside:avoid}
+  .it-name{font-weight:800;font-size:14px;margin-bottom:3px}
+  .it-line{display:flex;gap:14px;font-size:12px;padding:2px 0;align-items:baseline}
+  .it-day{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:14px;color:#171F69;min-width:72px}
+  .it-report{color:#009AC7;font-weight:700;min-width:110px;font-variant-numeric:tabular-nums}
+  .it-ev{color:#0F172A}
+  .it-sess{color:#94A3B8;font-size:11px}`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(S.meet.name||'Schedule')} — Club itineraries</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>${HANDOUT_CSS}${extraCss}</style></head><body>
+<button class="hd-print" onclick="window.print()">Print</button>
+${pages}
+<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},600)})<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Pop-up blocked — allow pop-ups for this site to print itineraries');return;}
+  w.document.write(html);w.document.close();
+}
+
+// ── CLUB ITINERARIES END ─────────────────────────────────────────────
+
 // ── EXCEL WORKBOOK EXPORT (one sheet per day + summary) ──────────────
 let _sheetJsLoading=null;
 function loadSheetJS(){
@@ -1819,6 +1903,7 @@ function renderExportModal(){
         <button class="move-btn" onclick="closeModal();openMeetHandout()"><span><strong>Full meet handout</strong><br><span style="font-size:11px;color:var(--tx3)">Every day as a one-page sheet — use the print dialog's "Save as PDF" for a file</span></span></button>
         <button class="move-btn" onclick="closeModal();exportMeetExcel()"><span><strong>Excel workbook (.xlsx)</strong><br><span style="font-size:11px;color:var(--tx3)">One sheet per day plus a meet summary — for ops staff who live in spreadsheets</span></span></button>
         <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
+        <button class="move-btn" onclick="closeModal();openClubItineraries()"><span><strong>Club itineraries (print)</strong><br><span style="font-size:11px;color:var(--tx3)">One page per club — every diver's personal report times and events, whole meet</span></span></button>
         <button class="move-btn" onclick="closeModal();openPresentation()"><span><strong>Presentation mode</strong><br><span style="font-size:11px;color:var(--tx3)">Full-screen scoreboard walkthrough — one day per screen, arrow keys to move</span></span></button>
       </div>
     </div>
@@ -2839,6 +2924,7 @@ function paletteCommands(){
   cmds.push({label:'Export — full meet handout',hint:'export',run:()=>{UI.palette=null;render();openMeetHandout()}});
   cmds.push({label:'Export — Excel workbook',hint:'export',run:()=>{UI.palette=null;render();exportMeetExcel()}});
   cmds.push({label:'Print this day (coach handout)',hint:'export',run:()=>{UI.palette=null;render();openCoachHandout(UI.dayId)}});
+  cmds.push({label:'Club itineraries (print)',hint:'export',run:()=>{UI.palette=null;render();openClubItineraries()}});
   cmds.push({label:'Sync actual entries (DiveMeets)',hint:'data',run:()=>{UI.palette=null;openEntrySync()}});
   cmds.push({label:'Projections',hint:'data',run:()=>{UI.palette=null;openProjections()}});
   cmds.push({label:'Version history',hint:'safety',run:()=>{UI.palette=null;openHistory()}});
@@ -2951,6 +3037,81 @@ function computeHealth(){
   issues.forEach(i=>{score-=i.sev==='err'?10:i.sev==='warn'?4:1});
   score=Math.max(25,score);
   return{score,issues,errs:issues.filter(i=>i.sev==='err').length,warns:issues.filter(i=>i.sev==='warn').length};
+}
+
+// ── ATHLETE INTELLIGENCE (advisory only) ─────────────────────────────
+// The schedule knows WHO is in it: the projected nationals field (per-diver,
+// already loaded for projections) is joined to the timeline to surface
+// person-level consequences of scheduling choices. Everything here is a lens —
+// it never moves, locks, or auto-adjusts anything. Mike schedules; this warns.
+const REST_MIN_DEFAULT=45; // minutes between one event's end and the next warm-up considered "tight"
+function athletesForEvent(ev){
+  if(!UI.projRows)return[];
+  return UI.projRows.filter(r=>r.ageGroup===ev.level&&r.gender===ev.gender&&r.discipline===ev.apparatus);
+}
+function sessionAthletes(sess){
+  const map=new Map();
+  if(sess.isPractice)return map;
+  (sess.events||[]).forEach(ev=>{
+    if(ev.round==='Final')return; // finals fields are subsets of prelims; counting them double-books phantom athletes
+    athletesForEvent(ev).forEach(r=>{if(!map.has(r.diverKey))map.set(r.diverKey,r)});
+  });
+  return map;
+}
+function sharedAthletes(sessA,sessB){
+  const a=sessionAthletes(sessA),b=sessionAthletes(sessB);
+  const shared=[];
+  a.forEach((r,k)=>{if(b.has(k))shared.push(r)});
+  return shared;
+}
+function nameList(rows,max){
+  const names=rows.map(r=>r.athlete).filter(Boolean);
+  if(names.length<=max)return names.join(', ');
+  return names.slice(0,max).join(', ')+` +${names.length-max} more`;
+}
+// Per-diver chronological appearances for one day: [{diverKey,row,warmupStart,evStart,evEnd,sessLabel}]
+function diverAppearancesForDay(dayId,timed){
+  const out=new Map(); // diverKey -> {row, apps:[...]}
+  timed.filter(s=>s.dayId===dayId&&!s.isPractice).forEach(sess=>{
+    const t=sess.timing;
+    const label='Session '+getSessNum(sess,timed);
+    (sess.events||[]).forEach(ev=>{
+      if(ev.round==='Final')return;
+      const tev=(t.events||[]).find(x=>x.id===ev.id)||{};
+      const evStart=tev.eventStartMinutes!=null?tev.eventStartMinutes:t.eventStartMinutes;
+      const evEnd=tev.eventEndMinutes!=null?tev.eventEndMinutes:(tev.eventEnd!=null?tev.eventEnd:t.sessionEndMinutes);
+      athletesForEvent(ev).forEach(r=>{
+        if(!out.has(r.diverKey))out.set(r.diverKey,{row:r,apps:[]});
+        out.get(r.diverKey).apps.push({warmupStart:t.warmupStartMinutes,evStart,evEnd,sessLabel:label,evName:evName(ev)});
+      });
+    });
+  });
+  out.forEach(d=>d.apps.sort((a,b)=>a.evStart-b.evStart));
+  return out;
+}
+// Meet-wide advisory metrics for the Health panel
+function computeAthleteImpact(timed){
+  if(!UI.projRows||!UI.projRows.length)return null;
+  let tightTurnarounds=0,tripleDayDivers=0,longestDay=null;
+  const tightDetails=[];
+  S.meet.days.forEach(day=>{
+    const divers=diverAppearancesForDay(day.id,timed);
+    divers.forEach(d=>{
+      if(d.apps.length>=3)tripleDayDivers++;
+      for(let i=0;i<d.apps.length-1;i++){
+        const rest=d.apps[i+1].warmupStart-d.apps[i].evEnd;
+        if(rest<REST_MIN_DEFAULT&&rest>-600){ // ignore absurd negatives from data holes
+          tightTurnarounds++;
+          if(tightDetails.length<40)tightDetails.push({day:day.id,row:d.row,rest,from:d.apps[i],to:d.apps[i+1]});
+        }
+      }
+      if(d.apps.length){
+        const span=d.apps[d.apps.length-1].evEnd-d.apps[0].warmupStart;
+        if(!longestDay||span>longestDay.span)longestDay={span,name:d.row.athlete,team:d.row.team,day:day.id};
+      }
+    });
+  });
+  return{tightTurnarounds,tripleDayDivers,longestDay,tightDetails,totalDivers:new Set(UI.projRows.map(r=>r.diverKey)).size};
 }
 
 // ── DAY TEMPLATES ─────────────────────────────────────────────────────
@@ -3344,9 +3505,18 @@ function renderConflictsModal(){
   const infos=conflicts.filter(c=>c.sev==='info');
   const ordered=[...errs,...warns,...infos];
   const scoreCls=h.score>=90?'var(--ok)':h.score>=70?'var(--warn)':'var(--red)';
+  const impact=computeAthleteImpact(allTimed());
+  const impactSection=impact?`<div class="ai-grid">
+      <div class="ai-stat"><div class="ai-num">${impact.totalDivers}</div><div class="ai-lbl">projected divers in the field</div></div>
+      <div class="ai-stat ${impact.tightTurnarounds?'warn':''}"><div class="ai-num">${impact.tightTurnarounds}</div><div class="ai-lbl">tight turnarounds (&lt;${REST_MIN_DEFAULT}m rest)</div></div>
+      <div class="ai-stat ${impact.tripleDayDivers?'warn':''}"><div class="ai-num">${impact.tripleDayDivers}</div><div class="ai-lbl">divers with 3+ events in one day</div></div>
+      <div class="ai-stat"><div class="ai-num">${impact.longestDay?fdur(impact.longestDay.span):'—'}</div><div class="ai-lbl">longest athlete day${impact.longestDay?` (${esc(impact.longestDay.name||'')})`:''}</div></div>
+    </div>
+    <p style="font-size:10.5px;color:var(--tx3);margin:6px 0 14px">Athlete impact is advisory, computed from the projected nationals field — it flags human cost, never changes your schedule.</p>`:'';
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--font-display,inherit);font-size:30px;font-weight:700;color:${scoreCls};line-height:1">${h.score}</span><div><span class="modal-title">Schedule health</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${conflicts.length?`${errs.length} error${errs.length===1?'':'s'} · ${warns.length} warning${warns.length===1?'':'s'} · ${infos.length} note${infos.length===1?'':'s'}`:'No issues — gold-medal shape'}</div></div></div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
+      ${impactSection}
       ${conflicts.length?`<div class="conflicts-list">${ordered.map((c)=>{
         const realIdx=conflicts.indexOf(c);
         const fixLabel=c.fixHint==='autoSpace'?'Auto-fix spacing':c.fixHint==='entries'?'Enter counts':'Open & fix';
