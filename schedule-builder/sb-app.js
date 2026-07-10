@@ -1239,6 +1239,90 @@ async function openLibrary(){
 // reads what's already been published, matching how everywhere else in this codebase
 // treats the qualifier engine as the single source of truth for who's qualified.
 const PROJ_SEASON='2026';
+// DiveMeets meet whose live entry counts feed "Sync actual entries". Updated
+// nightly (10:05 UTC cron) + on-demand via the divemeets-entries workflow.
+const DIVEMEETS_MEET_ID='12923';
+async function loadMeetEntries(){
+  const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[DIVEMEETS_MEET_ID]);
+  return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
+}
+// ── SYNC ACTUAL ENTRIES (DiveMeets registrations → schedule) ─────────
+function openEntrySync(){
+  UI.entrySync={loading:true,rows:null,error:null};
+  UI.modal='entry-sync';
+  render();
+  loadMeetEntries().then(rows=>{UI.entrySync={loading:false,rows,error:null}})
+    .catch(e=>{UI.entrySync={loading:false,rows:null,error:e.message||'Could not load entries'}})
+    .finally(()=>render());
+}
+function entrySyncDeltas(){
+  const byKey={};
+  (UI.entrySync?.rows||[]).forEach(r=>{byKey[r.ageGroup+'|'+r.gender+'|'+r.discipline]=r.entries});
+  const out=[];
+  S.sessions.forEach(sess=>{
+    if(sess.isPractice)return;
+    sess.events.forEach(ev=>{
+      if(ev.round!=='Prelim'&&ev.round!=='Qualifier')return;
+      const k=ev.level+'|'+ev.gender+'|'+ev.apparatus;
+      if(!(k in byKey))return;
+      out.push({sessId:sess.id,evId:ev.id,name:evName(ev),projected:ev.projectedDivers,registered:byKey[k]});
+    });
+  });
+  return out;
+}
+function applyEntrySync(){
+  const deltas=entrySyncDeltas();
+  if(!deltas.length){toast('No matching events to update');return;}
+  let applied=0;
+  upd(s=>{
+    const touched=new Set();
+    deltas.forEach(d=>{
+      const sess=s.sessions.find(x=>x.id===d.sessId);if(!sess)return;
+      const ev=sess.events.find(e=>e.id===d.evId);if(!ev)return;
+      ev.projectedDivers=d.registered;
+      // Real registrations are authoritative — mark as a manual-grade value so
+      // a later "Pre-fill projected entries" (projection data) can't overwrite.
+      ev.autoProjected=false;
+      ev.numberOfDivers=entryValue(ev);
+      touched.add(sess.dayId);applied++;
+    });
+    touched.forEach(dayId=>reflowDay(s,dayId));
+  });
+  UI.modal=null;
+  toast(`Synced ${applied} event${applied===1?'':'s'} to registered DiveMeets entries`);
+}
+function renderEntrySyncModal(){
+  const es=UI.entrySync||{};
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Live registrations from DiveMeets meet ${DIVEMEETS_MEET_ID} (2026 Junior Nationals)</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
+  if(es.loading)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading registered entries…</div></div>`;
+  if(es.error)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body"><div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load entries: ${esc(es.error)}</div><button class="btn btn-p" onclick="openEntrySync()">Retry</button></div></div>`;
+  const fetchedAt=es.rows&&es.rows.length?es.rows[0].fetchedAt:null;
+  const fetchedLbl=fetchedAt?new Date(fetchedAt.replace(' ','T')).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+  const deltas=entrySyncDeltas();
+  const rows=deltas.map(d=>{
+    const proj=d.projected==null||d.projected===''?null:Number(d.projected);
+    const diff=proj==null?null:d.registered-proj;
+    const badge=diff==null?`<span style="color:var(--tx3)">new</span>`:diff===0?`<span style="color:var(--tx3)">same</span>`:diff>0?`<span style="color:var(--prac);font-weight:700">+${diff}</span>`:`<span style="color:var(--red);font-weight:700">${diff}</span>`;
+    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>`;
+  }).join('');
+  return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:rgba(0,154,199,.08);border:1px solid rgba(0,154,199,.25);font-size:12px;color:var(--tx);margin-bottom:14px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span><strong>Registration is still open</strong> — late fee starts July 16, sign-ups close July 28 at 5 PM. These counts will keep growing; re-sync any time.${fetchedLbl?` <span style="color:var(--tx3)">Counts pulled ${fetchedLbl}.</span>`:''}</span>
+      </div>
+      ${deltas.length?`<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th><th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match the DiveMeets entry list.</div>`}
+      <p style="font-size:11px;color:var(--tx3);margin-top:12px">Applying sets each event's entry count to the registered number and protects it — the projections pre-fill won't overwrite synced values.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button>
+      <button class="btn btn-sm btn-p" ${deltas.length?'':'disabled'} onclick="applyEntrySync()">Apply registered counts</button>
+    </div>
+  </div>`;
+}
 async function loadProjRows(){
   const r=await nq(`SELECT diver_key,athlete_name,age_group,gender,discipline,zone,ewc_meet,team,qualification_path,published_at FROM junior_results.projected_nationals_field WHERE season=$1 ORDER BY age_group,gender,discipline`,[PROJ_SEASON]);
   return(r.rows||[]).map(row=>({diverKey:row[0],athlete:row[1],ageGroup:row[2],gender:row[3],discipline:row[4],zone:row[5],ewcMeet:row[6],team:row[7],path:row[8],publishedAt:row[9]}));
@@ -2748,7 +2832,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -2810,6 +2894,7 @@ function renderProjectionsModal(){
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeProjections()">Close</button>
+      <button class="btn" onclick="openEntrySync()" title="Pull live registered entry counts from DiveMeets">Sync actual entries (DiveMeets)</button>
       <button class="btn btn-p" onclick="prefillProjections()">Pre-fill projected entries in this schedule</button>
     </div>
   </div>`;
