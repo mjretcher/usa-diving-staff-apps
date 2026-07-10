@@ -494,3 +494,24 @@ CREATE TABLE IF NOT EXISTS junior_results.meet_entries (
     PRIMARY KEY (meet_id_dm, event_id_dm)
 );
 CREATE INDEX IF NOT EXISTS idx_meet_entries_meet ON junior_results.meet_entries(meet_id_dm);
+
+-- Per-diver registered entrants from DiveSheets pages, refreshed alongside
+-- meet_entries by the same workflow. diver_key uses the projected-field
+-- convention ('nm:' + lowercased whitespace-collapsed name) so registered
+-- entrants JOIN directly to junior_results.projected_nationals_field.
+CREATE TABLE IF NOT EXISTS junior_results.meet_entrants (
+    meet_id_dm     TEXT NOT NULL,
+    event_id_dm    TEXT NOT NULL,
+    dm_profile_id  TEXT NOT NULL,
+    diver_name     TEXT NOT NULL,
+    team_id_dm     TEXT,
+    team           TEXT,
+    diver_key      TEXT NOT NULL,
+    age_group      TEXT,
+    gender         TEXT,
+    discipline     TEXT,
+    fetched_at     TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (meet_id_dm, event_id_dm, dm_profile_id)
+);
+CREATE INDEX IF NOT EXISTS idx_meet_entrants_meet  ON junior_results.meet_entrants(meet_id_dm);
+CREATE INDEX IF NOT EXISTS idx_meet_entrants_key   ON junior_results.meet_entrants(diver_key);

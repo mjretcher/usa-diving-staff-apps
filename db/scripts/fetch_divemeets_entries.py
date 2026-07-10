@@ -147,10 +147,76 @@ def main():
             (MEET_ID, r["event_id_dm"], r["event_name"], r["age_group"],
              r["gender"], r["discipline"], r["round"], r["entries"]))
     conn.commit()
+
+    # ── Per-diver entrants from each event's DiveSheets page ────────────
+    # Structure (verified against a captured real page 2026-07-10):
+    #   <h5><a href=".../Profile/{id}">Name</a> -- <a href=".../TeamProfile/{tid}">Team</a></h5>
+    # Fail-soft per event: a failed page fetch/parse records a diagnostic and
+    # leaves that event's existing entrant rows untouched. Successful events
+    # are replaced wholesale (delete+insert) so scratches disappear correctly.
+    import time
+    entrant_rx = re.compile(
+        r'/Profile/(\d+)"[^>]*>([^<]+)</a>\s*--\s*<a[^>]*?/TeamProfile/(\d+)"[^>]*>([^<]+)</a>')
+    ent_total = 0
+    ent_events_ok = 0
+    ent_failures = []
+    ent_mismatches = []
+    for r in rows:
+        ev_url = f"https://new.divemeets.com/DiveSheets/{MEET_ID}/{r['event_id_dm']}/1"
+        try:
+            ev_html = fetch(ev_url)
+        except Exception as e:
+            ent_failures.append({"event": r["event_id_dm"], "error": str(e)[:120]})
+            continue
+        found = entrant_rx.findall(ev_html)
+        entrants = []
+        seen_ids = set()
+        for pid, name, tid, team in found:
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            clean = " ".join(name.replace("&amp;", "&").split())
+            entrants.append({
+                "pid": pid, "name": clean,
+                "tid": tid, "team": " ".join(team.replace("&amp;", "&").split()),
+                "key": "nm:" + clean.lower(),
+            })
+        if not entrants and r["entries"] > 0:
+            # Page fetched but nothing parsed while the count says entrants exist:
+            # treat as parse failure — do NOT wipe this event's rows.
+            ent_failures.append({"event": r["event_id_dm"], "error": "0 parsed vs count " + str(r["entries"])})
+            continue
+        # Cross-validation: registrations move live, so allow small drift but record it.
+        if abs(len(entrants) - r["entries"]) > 2:
+            ent_mismatches.append({"event": r["event_id_dm"], "count": r["entries"], "names": len(entrants)})
+        cur.execute("DELETE FROM junior_results.meet_entrants WHERE meet_id_dm=%s AND event_id_dm=%s",
+                    (MEET_ID, r["event_id_dm"]))
+        for e in entrants:
+            cur.execute(
+                """INSERT INTO junior_results.meet_entrants
+                     (meet_id_dm,event_id_dm,dm_profile_id,diver_name,team_id_dm,team,diver_key,
+                      age_group,gender,discipline,fetched_at)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                   ON CONFLICT (meet_id_dm,event_id_dm,dm_profile_id) DO UPDATE SET
+                     diver_name=EXCLUDED.diver_name, team_id_dm=EXCLUDED.team_id_dm,
+                     team=EXCLUDED.team, diver_key=EXCLUDED.diver_key,
+                     age_group=EXCLUDED.age_group, gender=EXCLUDED.gender,
+                     discipline=EXCLUDED.discipline, fetched_at=now()""",
+                (MEET_ID, r["event_id_dm"], e["pid"], e["name"], e["tid"], e["team"], e["key"],
+                 r["age_group"], r["gender"], r["discipline"]))
+        conn.commit()  # per-event commit: one bad event can't roll back the good ones
+        ent_total += len(entrants)
+        ent_events_ok += 1
+        print(f"  entrants: {r['age_group']} {r['gender']} {r['discipline']}: {len(entrants)}")
+        time.sleep(0.6)  # politeness between page fetches
+
     cur.close(); conn.close()
-    diag.update({"ok": True, "total_entries": sum(r["entries"] for r in rows)})
+    diag.update({"ok": True, "total_entries": sum(r["entries"] for r in rows),
+                 "entrants_total": ent_total, "entrant_events_ok": ent_events_ok,
+                 "entrant_failures": ent_failures[:8], "entrant_count_mismatches": ent_mismatches[:8]})
     write_diag(diag)
     print(f"Upserted {len(rows)} rows into junior_results.meet_entries (meet {MEET_ID}).")
+    print(f"Entrants: {ent_total} across {ent_events_ok}/{len(rows)} events; failures={len(ent_failures)}")
 
 if __name__ == "__main__":
     main()
