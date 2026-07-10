@@ -1543,6 +1543,7 @@ function renderBar(timed){
       <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
       <div class="bar-sep"></div>
       <button class="bb icon-only" onclick="UI.modal='overview';render()" title="Meet overview — all days at a glance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="5" height="15" rx="1"/></svg></button>
+      <button class="bb icon-only" onclick="UI.modal='export';render()" title="Export — full meet handout or Excel workbook"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></button>
       <button class="bb icon-only" onclick="UI.modal='conflicts';render()" title="Issues &amp; conflicts" style="position:relative">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9l-8 14A2 2 0 004 21h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z"/></svg>
         ${conflictBadge}
@@ -1643,30 +1644,15 @@ function renderTimelineScale(sessions,timed){
 // ── COACH HANDOUT ─────────────────────────────────────────────────────
 // One print-perfect page per day: big times, blocks, events, flights. Built
 // for taping to a pool door — large type, brand header, auto print dialog.
-function openCoachHandout(dayId){
-  const day=S.meet.days.find(d=>d.id===dayId);if(!day)return;
-  const timed=allTimed();
-  const sessions=timed.filter(s=>s.dayId===dayId);
-  if(!sessions.length){toast('Nothing on this day yet');return;}
-  const os=S.outputSettings||{};
-  const rows=sessions.map(sess=>{
-    const t=sess.timing;
-    if(sess.isPractice){
-      const ft=t.flightTimes||[];
-      const flights=ft.length?`<div class="hd-flights">${ft.map(f=>`<div class="hd-flight"><span class="hd-flight-bar" style="background:${f.color||'#171F69'}"></span>${esc(f.name)} <span class="hd-flight-time">${f12(f.startMinutes)}–${f12(f.endMinutes)}</span></div>`).join('')}</div>`:'';
-      const note=(sess.events&&sess.events[0]&&sess.events[0].notes)||'';
-      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
-    }
-    const n=getSessNum(sess,timed);
-    const evs=(t.events||[]).map(ev=>`<div class="hd-ev"><span>${esc(evName(ev))}</span><span class="hd-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('');
-    const wu=os.showWarmup!==false?`<div class="hd-wu">Warm-up ${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)}</div>`:'';
-    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
-  }).join('');
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(S.meet.name||'Schedule')} — ${shortDate(day.date)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
+// ── COACH HANDOUT + MEET EXPORT PACK ─────────────────────────────────
+// Shared per-day HTML builder used by both the single-day handout and the
+// full-meet pack (one page per day, page-break between days → Save as PDF).
+const HANDOUT_CSS=`
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Inter',Arial,sans-serif;color:#0F172A;padding:28px 34px}
+  .hd-page{page-break-after:always}
+  .hd-page:last-child{page-break-after:auto}
+  .hd-page+.hd-page{margin-top:40px}
   .hd-head{background:#171F69;color:#fff;padding:16px 22px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
   .hd-meet{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.02em;line-height:1.1}
   .hd-venue{font-size:11px;opacity:.75;margin-top:3px}
@@ -1689,18 +1675,131 @@ function openCoachHandout(dayId){
   .hd-awards{color:#E31937;font-size:11px;font-weight:700;text-transform:uppercase}
   .hd-foot{margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#94A3B8}
   .hd-print{position:fixed;top:12px;right:12px;background:#171F69;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
-  @media print{.hd-print{display:none}body{padding:0}@page{margin:12mm}}
-</style></head><body>
-<button class="hd-print" onclick="window.print()">Print</button>
+  @media print{.hd-print{display:none}body{padding:0}@page{margin:12mm}}`;
+function buildHandoutDayHTML(day,timed,os){
+  const sessions=timed.filter(s=>s.dayId===day.id);
+  if(!sessions.length)return'';
+  const rows=sessions.map(sess=>{
+    const t=sess.timing;
+    if(sess.isPractice){
+      const ft=t.flightTimes||[];
+      const flights=ft.length?`<div class="hd-flights">${ft.map(f=>`<div class="hd-flight"><span class="hd-flight-bar" style="background:${f.color||'#171F69'}"></span>${esc(f.name)} <span class="hd-flight-time">${f12(f.startMinutes)}–${f12(f.endMinutes)}</span></div>`).join('')}</div>`:'';
+      const note=(sess.events&&sess.events[0]&&sess.events[0].notes)||'';
+      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
+    }
+    const n=getSessNum(sess,timed);
+    const evs=(t.events||[]).map(ev=>`<div class="hd-ev"><span>${esc(evName(ev))}</span><span class="hd-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('');
+    const wu=os.showWarmup!==false?`<div class="hd-wu">Warm-up ${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)}</div>`:'';
+    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
+  }).join('');
+  return`<div class="hd-page">
 <div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
 <div class="hd-accent"></div>
 <table>${rows}</table>
 <div class="hd-foot"><span>${os.showSubjectToChange!==false?'All times subject to change':''}</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+</div>`;
+}
+function _openHandoutWindow(title,pagesHTML){
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>${HANDOUT_CSS}</style></head><body>
+<button class="hd-print" onclick="window.print()">Print</button>
+${pagesHTML}
 <script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})<\/script>
 </body></html>`;
   const w=window.open('','_blank');
   if(!w){toast('Pop-up blocked — allow pop-ups for this site to print handouts');return;}
   w.document.write(html);w.document.close();
+}
+function openCoachHandout(dayId){
+  const day=S.meet.days.find(d=>d.id===dayId);if(!day)return;
+  const timed=allTimed();
+  const page=buildHandoutDayHTML(day,timed,S.outputSettings||{});
+  if(!page){toast('Nothing on this day yet');return;}
+  _openHandoutWindow(`${S.meet.name||'Schedule'} — ${shortDate(day.date)}`,page);
+}
+function openMeetHandout(){
+  const timed=allTimed();
+  const os=S.outputSettings||{};
+  const pages=S.meet.days.map(d=>buildHandoutDayHTML(d,timed,os)).filter(Boolean).join('');
+  if(!pages){toast('Nothing scheduled yet');return;}
+  _openHandoutWindow(`${S.meet.name||'Schedule'} — full meet`,pages);
+}
+// ── EXCEL WORKBOOK EXPORT (one sheet per day + summary) ──────────────
+let _sheetJsLoading=null;
+function loadSheetJS(){
+  if(window.XLSX)return Promise.resolve();
+  if(_sheetJsLoading)return _sheetJsLoading;
+  _sheetJsLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>res();
+    s.onerror=()=>{_sheetJsLoading=null;rej(new Error('Could not load the Excel library — check your internet connection'))};
+    document.head.appendChild(s);
+  });
+  return _sheetJsLoading;
+}
+function _sheetNameFor(date){
+  // Excel sheet names: max 31 chars, no : \ / ? * [ ]
+  return shortDate(date).replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31);
+}
+async function exportMeetExcel(){
+  toast('Building Excel workbook…');
+  try{await loadSheetJS();}catch(e){toast(e.message);return;}
+  const timed=allTimed();
+  const os=S.outputSettings||{};
+  const wb=XLSX.utils.book_new();
+  // Summary sheet
+  const sum=[[S.meet.name||'Schedule'],[S.meet.venue?`${S.meet.venue}${S.meet.city?' · '+S.meet.city:''}`:''],[],['Day','First start','Last end','Blocks','Competition sessions','Practice blocks']];
+  S.meet.days.forEach(day=>{
+    const ds=timed.filter(s=>s.dayId===day.id);
+    if(!ds.length){sum.push([fullDate(day.date),'—','—',0,0,0]);return;}
+    const first=Math.min(...ds.map(s=>s.timing.warmupStartMinutes));
+    const last=Math.max(...ds.map(s=>s.timing.sessionEndMinutes));
+    sum.push([fullDate(day.date),f12(first),f12(last),ds.length,ds.filter(s=>!s.isPractice).length,ds.filter(s=>s.isPractice).length]);
+  });
+  sum.push([]);sum.push([os.showSubjectToChange!==false?'All times subject to change':'']);
+  const wsSum=XLSX.utils.aoa_to_sheet(sum);
+  wsSum['!cols']=[{wch:26},{wch:12},{wch:12},{wch:8},{wch:20},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,wsSum,'Summary');
+  // One sheet per day
+  S.meet.days.forEach(day=>{
+    const ds=timed.filter(s=>s.dayId===day.id);
+    const aoa=[[`${S.meet.name||'Schedule'} — ${fullDate(day.date)}`],[],['Start','End','Block','Detail','Duration','Notes']];
+    ds.forEach(sess=>{
+      const t=sess.timing;
+      if(sess.isPractice){
+        aoa.push([f12(t.warmupStartMinutes),f12(t.sessionEndMinutes),sess.title||'Practice','',fdur(t.sessionEndMinutes-t.warmupStartMinutes),(sess.events?.[0]?.notes&&sess.events[0].notes!==sess.title)?sess.events[0].notes:'']);
+        (t.flightTimes||[]).forEach(f=>aoa.push([f12(f.startMinutes),f12(f.endMinutes),'','  '+f.name,fdur(f.endMinutes-f.startMinutes),'']));
+      }else{
+        const n=getSessNum(sess,timed);
+        aoa.push([f12(t.eventStartMinutes),f12(t.sessionEndMinutes),`Session ${n}${sess.awardsEnabled?' (+ Awards)':''}`,os.showWarmup!==false?`Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}`:'',fdur(t.sessionEndMinutes-t.warmupStartMinutes),'']);
+        (t.events||[]).forEach(ev=>aoa.push([f12(ev.eventStartMinutes),'','','  '+evName(ev)+(Number(ev.numberOfDivers)?` — ${ev.numberOfDivers} divers`:''),'','']));
+      }
+    });
+    if(!ds.length)aoa.push(['(nothing scheduled)']);
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:10},{wch:10},{wch:24},{wch:44},{wch:10},{wch:30}];
+    XLSX.utils.book_append_sheet(wb,ws,_sheetNameFor(day.date));
+  });
+  const fname=`${(S.meet.name||'Schedule').replace(/[\\\/\?\*\[\]:]/g,'')} schedule.xlsx`;
+  XLSX.writeFile(wb,fname);
+  toast('Excel workbook downloaded');
+}
+function renderExportModal(){
+  const dayCount=S.meet.days.length;
+  const blockCount=S.sessions.length;
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Export the meet</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${dayCount} day${dayCount===1?'':'s'} · ${blockCount} block${blockCount===1?'':'s'}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="move-btn" onclick="closeModal();openMeetHandout()"><span><strong>Full meet handout</strong><br><span style="font-size:11px;color:var(--tx3)">Every day as a one-page sheet — use the print dialog's "Save as PDF" for a file</span></span></button>
+        <button class="move-btn" onclick="closeModal();exportMeetExcel()"><span><strong>Excel workbook (.xlsx)</strong><br><span style="font-size:11px;color:var(--tx3)">One sheet per day plus a meet summary — for ops staff who live in spreadsheets</span></span></button>
+        <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Close</button></div>
+  </div>`;
 }
 
 // Gap chip: makes the invisible time between two sessions visible and editable
@@ -2895,7 +2994,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
