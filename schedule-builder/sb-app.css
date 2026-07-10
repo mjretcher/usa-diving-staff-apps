@@ -47,6 +47,7 @@ button{cursor:pointer;border:none;background:none}
 .bar-days{display:flex;align-items:center;gap:2px;padding:0 8px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;overflow-x:auto;max-width:36vw}
 .bar-days::-webkit-scrollbar{display:none}
 .dp{height:30px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;color:rgba(255,255,255,.55);transition:.14s;white-space:nowrap;flex-shrink:0;position:relative}
+.dp-tag-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .dp:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.9)}
 .dp.active{background:#fff;color:var(--navy);font-weight:600}
 .dp-add{width:30px;height:30px;border-radius:8px;font-size:16px;color:rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;transition:.14s}

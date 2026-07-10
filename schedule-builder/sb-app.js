@@ -762,6 +762,7 @@ function toggleEntriesSess(id){const i=UI.entriesExpanded.indexOf(id);if(i>=0)UI
 function addDay(){
   UI.addDayPos='end';
   UI.addDayDate=suggestedAddDayDate('end');
+  UI.addDayEventTag=UI.addDayEventTag||'';
   UI.modal='add-day';
   render();
 }
@@ -779,15 +780,17 @@ function executeAddDay(){
   const inp=document.getElementById('add-day-date');
   const date=(inp&&inp.value)||UI.addDayDate||suggestedAddDayDate(pos);
   const tpl=UI.addDayTemplateId?loadDayTemplates().find(t=>t.id===UI.addDayTemplateId):null;
+  const eventTag=UI.addDayEventTag||'';
   upd(s=>{
-    const day={id:uid(),date,openMinutes:390,closeMinutes:1200};
+    const day={id:uid(),date,openMinutes:390,closeMinutes:1200,eventTag};
     if(pos==='start')s.meet.days.unshift(day);else s.meet.days.push(day);
     // Keep the day bar chronological no matter what date was picked
     s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     if(tpl)stampTemplateOntoDay(s,tpl,day.id);
+    if(eventTag)s.sessions.forEach(x=>{if(x.dayId===day.id&&!x.eventTag)x.eventTag=eventTag;});
     UI.dayId=day.id;
   });
-  UI.modal=null;UI.addDayTemplateId=null;
+  UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;
   toast(tpl?`Day added from "${tpl.name}" — ${tpl.sessions.length} block${tpl.sessions.length===1?'':'s'} stamped in`:'Day added — now building '+shortDate(date));
 }
 function renderAddDayModal(){
@@ -796,6 +799,10 @@ function renderAddDayModal(){
   const pos=UI.addDayPos||'end';
   const date=UI.addDayDate||suggestedAddDayDate(pos);
   const tpls=loadDayTemplates();
+  const tag=UI.addDayEventTag||'';
+  const eventChips=`
+      <label class="fl" style="margin-top:14px">Which event? <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(new blocks on this day default to it — still editable per block)</span></label>
+      <div class="chiprow" style="margin-bottom:14px"><button class="chip ${!tag?'on':''}" onclick="UI.addDayEventTag='';render()" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${tag===t.k?'on':''}" onclick="UI.addDayEventTag='${t.k}';render()">${t.l}</button>`).join('')}</div>`;
   const tplChips=tpls.length?`
       <label class="fl" style="margin-top:14px">Start from a template <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(optional)</span></label>
       <div style="display:flex;flex-direction:column;gap:5px">
@@ -803,7 +810,7 @@ function renderAddDayModal(){
         ${tpls.map(t=>`<div style="display:flex;gap:5px;align-items:stretch"><button class="move-btn ${UI.addDayTemplateId===t.id?'active':''}" style="flex:1" onclick="UI.addDayTemplateId='${t.id}';render()">${esc(t.name)} <span class="move-meta">${t.sessions.length} block${t.sessions.length===1?'':'s'}</span></button><button class="tl-iconbtn" style="height:auto" title="Delete template" onclick="deleteDayTemplate('${t.id}')">×</button></div>`).join('')}
       </div>`:'';
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;UI.addDayTemplateId=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;render()">×</button></div>
     <div class="modal-body">
       <label class="fl">Where</label>
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
@@ -813,9 +820,10 @@ function renderAddDayModal(){
       <label class="fl">Date</label>
       <input id="add-day-date" class="fi" type="date" value="${date}" onchange="UI.addDayDate=this.value"/>
       <p style="font-size:11px;color:var(--tx3);margin-top:8px">Pre-filled with the ${pos==='start'?'day before':'day after'} — change it if you need a gap.</p>
+      ${eventChips}
       ${tplChips}
     </div>
-    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;UI.addDayTemplateId=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeAddDay()">Add day</button></div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="executeAddDay()">Add day</button></div>
   </div>`;
 }
 function addSession(dayId,isPractice){
@@ -823,7 +831,8 @@ function addSession(dayId,isPractice){
   // Practice/training blocks (Open Training, Flighted Warm-Ups, etc.) default to NO buffer —
   // these blocks routinely run back-to-back with no gap needed. Competition sessions keep
   // the standard 5-minute buffer default.
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
+  const day=S.meet.days.find(d=>d.id===dayId);
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',eventTag:day&&day.eventTag?day.eventTag:'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 // Standard practice/meeting block presets — quick-pick chips instead of always defaulting to a
@@ -839,7 +848,8 @@ function addPracticeBlock(dayId,presetKey){
   const preset=PRACTICE_PRESETS[presetKey];
   if(!preset){addSession(dayId,true);return;} // 'custom' falls back to the generic block for full manual control
   const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
+  const day=S.meet.days.find(d=>d.id===dayId);
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,eventTag:day&&day.eventTag?day.eventTag:'',flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 function deleteSession(id){
@@ -1596,7 +1606,7 @@ function renderPreviewPanel(timed){
 function renderBar(timed){
   const tz=TZS.find(t=>t.v===S.meet.timezone)||TZS[0];
   const st=S.publishStatus||'draft';
-  const days=S.meet.days.map(d=>`<button class="dp ${d.id===UI.dayId?'active':''}" onclick="selectDay('${d.id}')" data-day="${d.id}">${shortDate(d.date).replace(/,.*/,'')}</button>`).join('');
+  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);return`<button class="dp ${d.id===UI.dayId?'active':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${dt?dt.l:'Shared'}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}${shortDate(d.date).replace(/,.*/,'')}</button>`}).join('');
   const conflicts=detectConflicts();
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
@@ -3151,7 +3161,23 @@ const EVENT_TAGS=[
   {k:'qualifier',l:'National Qualifier',s:'NQ',c:'#009AC7'},
 ];
 function eventTagOf(sess){return EVENT_TAGS.find(t=>t.k===sess.eventTag)||null}
-function anyEventTags(){return S.sessions.some(s=>s.eventTag)}
+function dayEventTagOf(day){return EVENT_TAGS.find(t=>t.k===day.eventTag)||null}
+// Sets a day's default event — new blocks added to this day pick it up automatically
+// (see addSession/addPracticeBlock). Existing blocks are never silently retagged; if the
+// day already has untagged blocks, offer to tag those too rather than doing it invisibly.
+function setDayEventTag(dayId,tag){
+  const day=S.meet.days.find(d=>d.id===dayId);if(!day)return;
+  const untagged=S.sessions.filter(s=>s.dayId===dayId&&!s.eventTag);
+  upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d)d.eventTag=tag||'';});
+  if(tag&&untagged.length){
+    const tagL=EVENT_TAGS.find(t=>t.k===tag)?.l||tag;
+    askConfirm({title:'Tag existing blocks too?',message:`This day already has ${untagged.length} untagged block${untagged.length===1?'':'s'}. Tag ${untagged.length===1?'it':'them'} as ${tagL} as well? (New blocks you add from now on will use this automatically either way.)`,confirmText:'Tag them',onConfirm:()=>{
+      upd(s=>{s.sessions.forEach(x=>{if(x.dayId===dayId&&!x.eventTag)x.eventTag=tag;});});
+      render();toast(`Tagged ${untagged.length} block${untagged.length===1?'':'s'} as ${tagL}`);
+    }});
+  } // upd() above already re-rendered; nothing else to do when there's no bulk-apply prompt
+}
+function anyEventTags(){return S.sessions.some(s=>s.eventTag)||S.meet.days.some(d=>d.eventTag)}
 // View filter: a tag shows its own blocks + shared; 'shared' shows untagged only.
 function passesEventFilter(sess){
   const f=UI.eventFilter;
@@ -3746,7 +3772,10 @@ function renderMeetModal(){
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
       <div class="fg2"><div class="fg"><label class="fl">Venue</label><input class="fi" value="${esc(S.meet.venue)}" onchange="upd(s=>s.meet.venue=this.value)"/></div><div class="fg"><label class="fl">City / state</label><input class="fi" value="${esc(S.meet.city||'')}" onchange="upd(s=>s.meet.city=this.value)"/></div></div>
       <div class="fg2"><div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.meetType=this.value)">${typeOpts}</select></div><div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.timezone=this.value)">${tzOpts}</select></div></div>
-      <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>`<div style="display:flex;align-items:center;gap:4px"><input class="fi" type="date" style="width:160px;padding:6px 8px" value="${d.date}" onchange="upd(s=>s.meet.days[${i}].date=this.value)"/><button class="btn btn-sm btn-gh" onclick="upd(s=>s.meet.days.splice(${i},1))">×</button></div>`).join('')}</div><button class="btn btn-sm" onclick="addDay()">+ Add day</button></div>
+      <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:4px"><input class="fi" type="date" style="width:160px;padding:6px 8px" value="${d.date}" onchange="upd(s=>s.meet.days[${i}].date=this.value)"/><button class="btn btn-sm btn-gh" onclick="upd(s=>s.meet.days.splice(${i},1))">×</button></div>
+        <div class="chiprow"><button class="chip ${!d.eventTag?'on':''}" onclick="setDayEventTag('${d.id}','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${d.eventTag===t.k?'on':''}" style="${d.eventTag===t.k?`background:${t.c};border-color:${t.c};color:#fff`:''}" onclick="setDayEventTag('${d.id}','${t.k}')">${t.s}</button>`).join('')}</div>
+      </div>`}).join('')}</div><button class="btn btn-sm" onclick="addDay()">+ Add day</button></div>
     </div>
     <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Done</button></div>
   </div>`;
