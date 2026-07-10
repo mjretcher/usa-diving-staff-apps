@@ -6,3 +6,4 @@ desktop.ini
 *.bat
 Instructions/
 Mike - Release Admin/
+db/scripts/__pycache__/
