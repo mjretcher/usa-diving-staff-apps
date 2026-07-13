@@ -51,11 +51,68 @@ const PRESET_SOURCES = {
 
 const SCENARIO_STORE_KEY = 'usad.criteriaSimulator.scenarios.v2';
 
+// ── Pools ──────────────────────────────────────────────────────────────────
+// A "pool" is one internally-consistent scoring universe. Score standards,
+// score bases, and DD minimums are only comparable *within* a pool — mixing
+// e.g. NCAA 5-category scores with USA posted scores under one threshold
+// produces a meaningless number. Every scenario is scoped to exactly one
+// pool at a time; comparing pools means switching pools, not summing them.
+const POOLS = {
+  seniorUsa: {
+    id: 'seniorUsa',
+    label: 'USA Diving Senior (Nationals / Winter Nationals / Olympic Trials)',
+    shortLabel: 'Senior USA',
+    family: 'usa',
+    presets: ['winterEligibility', 'winterQualifier', 'nationalQualifier', 'custom'],
+    match: (r) => r.competition_family === 'USA Diving' && [
+      'USA Diving Nationals', 'USA Diving Nationals Qualifier',
+      'USA Diving Winter Nationals', 'USA Diving Winter Nationals Qualifier',
+      'USA Diving Olympic Trials', 'USA Diving Olympic Trials Qualifier',
+    ].includes(r.competition_group),
+  },
+  ncaa: {
+    id: 'ncaa',
+    label: 'NCAA Championships',
+    shortLabel: 'NCAA',
+    family: 'ncaa',
+    presets: ['custom'],
+    match: (r) => r.competition_family === 'NCAA',
+  },
+  juniorAB: {
+    id: 'juniorAB',
+    label: 'Junior Circuit — Group A/B (Junior Nationals)',
+    shortLabel: 'Junior A/B',
+    family: null, // no encoded standard yet — HPD sets a custom bar
+    presets: ['custom'],
+    // 2025+ rows carry age_group tags ('Group A'/'Group B'). 2018–2024 rows
+    // have age_group = null but encode the bracket in the event name:
+    // "16-18" = Group A, "14-15" = Group B (verified against Neon, all years).
+    // Synchro and high-diving events don't match either pattern and are
+    // excluded, which is correct for this individual-events pool.
+    match: (r) => {
+      if (r.competition_family !== 'USA Diving') return false;
+      if (r.competition_group !== 'USA Diving Junior Nationals') return false;
+      if (r.is_synchronized) return false;
+      if (r.age_group === 'Group A' || r.age_group === 'Group B') return true;
+      if (r.age_group) return false; // tagged C/D
+      const en = String(r.event_round || r.event_name || '');
+      return /\b16-18\b/.test(en) || /\b14-15\b/.test(en);
+    },
+  },
+};
+const POOL_ORDER = ['seniorUsa', 'ncaa', 'juniorAB'];
+
+function activePool() { return POOLS[state.pool] || POOLS.seniorUsa; }
+function poolFamily() { return activePool().family; }
+
 // ── State ──────────────────────────────────────────────────────────────────
 const state = {
   data: null,           // { results: [...], _source }
   meetsById: new Map(), // meet_id -> { meet_id, name, source, count }
   selectedMeetIds: new Set(),
+  pool: 'seniorUsa',
+  year: null,           // single year in scope for the live evaluation
+  availableYears: [],   // years with data in the active pool
   scenarios: [],
   activeScenarioId: null,
   filtered: [],
@@ -182,6 +239,10 @@ function scoreBasisLabel(row) {
   return isNum(row.phase_score) ? 'Phase' : 'Posted';
 }
 function ddMinimumForSelection(gender, discipline, preset) {
+  // These DD tables were published for the Senior USA pool specifically.
+  // Don't apply them to NCAA or Junior pools — no minimum is set there
+  // until the HPD provides one, so leave it blank rather than guess.
+  if (poolFamily() !== 'usa') return null;
   const g = normaliseGender(gender);
   const d = normaliseDiscipline(discipline);
   if (preset === 'nationalQualifier') return NATIONAL_DD_MINIMUMS[g]?.[d] ?? null;
@@ -300,6 +361,8 @@ function bubbleCandidates(rows, qualified) {
 // ── Filter pipeline ────────────────────────────────────────────────────────
 function rowsForCurrentFilters() {
   if (!state.data) return [];
+  const pool       = activePool();
+  const year       = state.year;
   const gender     = els.genderFilter.value;
   const discipline = els.disciplineFilter.value;
   const round      = els.roundFilter.value;
@@ -308,6 +371,8 @@ function rowsForCurrentFilters() {
   const meetsActive = meets.size > 0;
 
   return state.data.results.filter(r => {
+    if (!pool.match(r)) return false;
+    if (year && r.meet_year !== year) return false;
     if (gender     && normaliseGender(r.gender) !== gender) return false;
     if (discipline && r.discipline !== discipline) return false;
     if (round !== 'any' && r.round_stage !== round) return false;
@@ -542,6 +607,8 @@ function renderFilterStrip() {
     nationalQualifier: 'Nationals Qualifier',
     custom:            'Custom',
   };
+  $('chipPool').textContent       = activePool().shortLabel;
+  $('chipYear').textContent       = state.year ?? '—';
   $('chipPreset').textContent     = presetLabels[els.criteriaPreset.value] || '—';
   $('chipGender').textContent     = els.genderFilter.value || '—';
   $('chipDiscipline').textContent = els.disciplineFilter.value || '—';
@@ -721,10 +788,64 @@ function populateFilters() {
   els.disciplineFilter.innerHTML = disciplines
     .map(d => `<option value="${esc(d)}">${d === 'Platform' ? 'Platform' : d}</option>`).join('');
 
-  // Build meet lookup
+  populatePoolSelect();
+  refreshPoolScope();
+}
+
+// Populate the Pool dropdown once (options don't change at runtime).
+function populatePoolSelect() {
+  if (!els.poolSelect || els.poolSelect.dataset.populated) return;
+  els.poolSelect.innerHTML = POOL_ORDER
+    .map(id => `<option value="${esc(id)}">${esc(POOLS[id].label)}</option>`).join('');
+  els.poolSelect.value = state.pool;
+  els.poolSelect.dataset.populated = '1';
+}
+
+// Recompute everything that depends on which pool is active: available
+// years (and the default single year), the meet lookup scoped to that
+// pool, and which presets are offered.
+function refreshPoolScope() {
+  const pool = activePool();
+
+  // Years with data in this pool, most recent first.
+  const years = [...new Set(
+    state.data.results.filter(pool.match).map(r => r.meet_year).filter(isNum)
+  )].sort((a, b) => b - a);
+  state.availableYears = years;
+  if (!state.year || !years.includes(state.year)) state.year = years[0] ?? null;
+  if (els.yearSelect) {
+    els.yearSelect.innerHTML = years.length
+      ? years.map(y => `<option value="${y}">${y}</option>`).join('')
+      : '<option value="">No data</option>';
+    els.yearSelect.value = state.year ?? '';
+  }
+
+  // Presets valid for this pool; force a valid selection.
+  if (els.criteriaPreset) {
+    const allowed = pool.presets;
+    const labels = {
+      winterEligibility: 'Winter Nationals eligibility',
+      winterQualifier:   'Winter Qualifier advancement',
+      nationalQualifier: 'USA Nationals qualifier top 12',
+      custom:            'Custom model',
+    };
+    els.criteriaPreset.innerHTML = allowed.map(p => `<option value="${p}">${esc(labels[p])}</option>`).join('');
+    if (!allowed.includes(els.criteriaPreset.value)) els.criteriaPreset.value = allowed[allowed.length - 1];
+  }
+
+  rebuildMeetsForScope();
+}
+
+// Meet lookup scoped to pool + year — this is the refinement layer under
+// the primary pool/year scope, not an independent way to mix pools.
+function rebuildMeetsForScope() {
+  const pool = activePool();
+  const year = state.year;
   state.meetsById = new Map();
   for (const r of state.data.results) {
     if (!r.meet_id) continue;
+    if (!pool.match(r)) continue;
+    if (year && r.meet_year !== year) continue;
     const cur = state.meetsById.get(r.meet_id);
     if (cur) cur.count++;
     else state.meetsById.set(r.meet_id, {
@@ -733,6 +854,10 @@ function populateFilters() {
       source:  r.source_name || '',
       count:   1,
     });
+  }
+  // Selected meets that fell out of scope no longer apply.
+  for (const id of [...state.selectedMeetIds]) {
+    if (!state.meetsById.has(id)) state.selectedMeetIds.delete(id);
   }
   renderMeetPicker();
 }
@@ -807,12 +932,17 @@ function applyEventDefaults() {
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
   } else if (preset === 'winterQualifier') {
     els.topN.value = discipline === 'Platform' ? 5 : 3;
-    els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, 'usa') || '';
+    els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, poolFamily()) || '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
   } else if (preset === 'winterEligibility') {
     els.topN.value = 0;
-    els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, 'usa') || '';
+    els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, poolFamily()) || '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
+  } else if (preset === 'custom') {
+    els.scoreThreshold.value = state.thresholdEdited ? els.scoreThreshold.value
+      : (scoreThresholdForSelection(gender, discipline, poolFamily()) || '');
+    els.ddThreshold.value = state.ddThresholdEdited ? els.ddThreshold.value
+      : (ddMinimumForSelection(gender, discipline, preset) || '');
   }
   state.thresholdEdited   = false;
   state.ddThresholdEdited = false;
@@ -849,6 +979,8 @@ function closeDrilldown() {
 // ── Scenarios (localStorage) ──────────────────────────────────────────────
 function snapshotScenario() {
   return {
+    pool:      state.pool,
+    year:      state.year,
     preset:    els.criteriaPreset.value,
     gender:    els.genderFilter.value,
     discipline: els.disciplineFilter.value,
@@ -865,12 +997,25 @@ function snapshotScenario() {
 }
 function applyScenario(snapshot) {
   if (!snapshot) return;
+  // Scenarios saved before pool/year scoping existed default to Senior USA
+  // at its most recent year — the closest match to the old "everything" scope.
+  const isLegacy = !snapshot.pool;
+  state.pool = POOLS[snapshot.pool] ? snapshot.pool : 'seniorUsa';
+  els.poolSelect.value = state.pool;
+  refreshPoolScope(); // repopulates year options + presets for this pool
+  state.year = (isNum(snapshot.year) && state.availableYears.includes(snapshot.year))
+    ? snapshot.year : state.availableYears[0] ?? null;
+  els.yearSelect.value = state.year ?? '';
+  rebuildMeetsForScope();
+
   for (const [k, v] of Object.entries(snapshot)) {
     if (k === 'meetIds') { state.selectedMeetIds = new Set(v); continue; }
+    if (k === 'pool' || k === 'year') continue;
     if (els[k]) els[k].value = v;
   }
   $('presetNote').textContent = PRESET_NOTES[els.criteriaPreset.value] || '';
   renderMeetPicker();
+  if (isLegacy) USAD.toast('Older scenario — verify pool, year, and standard against current criteria.', { kind: 'warn', duration: 6000 });
 }
 
 function loadScenarios() {
@@ -1109,6 +1254,7 @@ function scenarioImport(file) {
 async function bootstrap() {
   // Gather element refs
   for (const id of [
+    'poolSelect','yearSelect',
     'criteriaPreset','genderFilter','disciplineFilter','roundFilter','scoreMode',
     'athleteScope','scoreThreshold','ddThreshold','topN','ruleMode','ddMode',
     'scenarioSelect','scenarioName','scenarioStatus','scenarioImportFile'
@@ -1185,6 +1331,23 @@ async function bootstrap() {
 }
 
 function wireEvents() {
+  // Pool — the primary scope decision. Changing it re-derives everything
+  // downstream: available years, the meet list, and which presets apply.
+  els.poolSelect.addEventListener('change', () => {
+    state.pool = els.poolSelect.value;
+    refreshPoolScope();
+    applyPresetDefaults(true);
+    recompute();
+  });
+  // Year — the second scope decision. One year at a time for the live
+  // number; use the backtest panel to see other years without mixing them in.
+  els.yearSelect.addEventListener('change', () => {
+    const v = num(els.yearSelect.value);
+    state.year = isNum(v) ? v : null;
+    rebuildMeetsForScope();
+    recompute();
+  });
+
   // Filters & thresholds — recompute on change
   ['criteriaPreset'].forEach(id =>
     els[id].addEventListener('change', () => { applyPresetDefaults(false); recompute(); })
@@ -1324,12 +1487,15 @@ function renderTrustStrip() {
 
   const ddKnown = inScope.filter(r => isNum(r.phase_dd_sum)).length;
   $('trustDd').textContent = fmtPct(pct(ddKnown, inScope.length));
+
+  const ts = $('trustStandards');
+  if (ts) ts.textContent = `${activePool().shortLabel} · ${state.year ?? '—'}`;
 }
 
 function activeStandardFor(gender, discipline) {
-  // Mirror how the engine resolves the active standard for an event.
-  const usa = scoreThresholdForSelection(gender, discipline, 'usa');
-  return usa;
+  // Mirror how the engine resolves the active standard for an event,
+  // scoped to whichever pool is currently active.
+  return scoreThresholdForSelection(gender, discipline, poolFamily());
 }
 
 function renderStandardAchievement() {
@@ -1617,6 +1783,10 @@ function niceStep(x) {
   return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
 }
 function worldBenchmarks(gender, discipline) {
+  // World Aquatics posted scores are only on the same scale as the Senior
+  // USA pool's "usa" scoring basis — not NCAA 5-category, not an unset
+  // Junior custom bar. Don't overlay a benchmark that isn't comparable.
+  if (poolFamily() !== 'usa') return null;
   const g = normaliseGender(gender), d = normaliseDiscipline(discipline);
   const rows = ((state.data && state.data.results) || []).filter(r =>
     r.competition_family === 'World Aquatics' && !r.is_synchronized &&
@@ -1630,7 +1800,7 @@ function worldBenchmarks(gender, discipline) {
 function explorerCurrentStd() {
   const v = num(els.scoreThreshold.value);
   if (isNum(v)) return v;
-  return scoreThresholdForSelection(els.genderFilter.value, els.disciplineFilter.value, 'usa');
+  return scoreThresholdForSelection(els.genderFilter.value, els.disciplineFilter.value, poolFamily());
 }
 function updateInverse() {
   const out = $('explorerInvOut'), tEl = $('explorerTarget');
@@ -1829,11 +1999,90 @@ function renderDecisionSurface() {
     + `<div class="cs2-surf-sub">Both levers together — every score × DD combination. The outlined cell is your current standard.</div>${gridSvg}${legend}`;
 }
 
+// ── Multi-year backtest ────────────────────────────────────────────────────
+// Deliberately separate from the live number: shows what the CURRENT
+// standard would have produced in each past season, one year at a time,
+// within the same pool. Never blended into a single cross-year count.
+function rowsForYear(year) {
+  const pool       = activePool();
+  const gender     = els.genderFilter.value;
+  const discipline = els.disciplineFilter.value;
+  const round      = els.roundFilter.value;
+  const scope      = els.athleteScope.value;
+  return state.data.results.filter(r => {
+    if (!pool.match(r)) return false;
+    if (r.meet_year !== year) return false;
+    if (gender     && normaliseGender(r.gender) !== gender) return false;
+    if (discipline && r.discipline !== discipline) return false;
+    if (round !== 'any' && r.round_stage !== round) return false;
+    if (scope === 'usaDomestic') {
+      if (r.is_usa === false || (r.nat && r.nat !== 'USA' && r.nat !== 'US')) return false;
+    } else if (scope === 'knownUsa') {
+      if (r.is_usa !== true && r.nat !== 'USA' && r.nat !== 'US') return false;
+    } else if (scope === 'knownInternational') {
+      if (r.is_usa === true || (r.nat === 'USA' || r.nat === 'US' || !r.nat)) return false;
+    }
+    return true;
+  });
+}
+function qualCountForYear(year, scoreThr, ddMin) {
+  const rule   = els.ruleMode.value;
+  const topN   = num(els.topN.value) ?? 0;
+  const ddMode = els.ddMode.value;
+  const seen = new Set();
+  for (const r of rowsForYear(year)) {
+    const score = scoreForRow(r);
+    const scorePass = isNum(scoreThr) && isNum(score) && score >= scoreThr;
+    const topPass   = topN > 0 && isNum(r.place) && r.place <= topN;
+    let rulePass = false;
+    if (rule === 'scoreOnly') rulePass = scorePass;
+    else if (rule === 'topNOnly') rulePass = topPass;
+    else if (rule === 'topNOrScore') rulePass = topPass || scorePass;
+    let ddPass;
+    const total = r.phase_dd_sum;
+    if (ddMode === 'ignore' || !isNum(ddMin)) ddPass = true;
+    else if (!isNum(total)) ddPass = (ddMode === 'requireKnown') ? false : true;
+    else ddPass = total >= ddMin;
+    if (rulePass && ddPass) seen.add(athleteKey(r));
+  }
+  return seen.size;
+}
+function renderBacktest() {
+  const host = $('backtestBody');
+  if (!host) return;
+  if (els.ruleMode.value === 'topNOnly' && !isNum(num(els.topN.value))) {
+    host.innerHTML = '<div class="source-impact-empty">Set a placement cutoff or score standard to backtest.</div>';
+    return;
+  }
+  const years = (state.availableYears || []).slice().sort((a, b) => b - a);
+  if (years.length < 2) {
+    host.innerHTML = `<div class="source-impact-empty">Only one year of data in the ${esc(activePool().shortLabel)} pool right now — nothing to backtest against yet.</div>`;
+    return;
+  }
+  const curScore = num(els.scoreThreshold.value);
+  const curDd    = num(els.ddThreshold.value);
+  const rows = years.map(y => ({ year: y, count: qualCountForYear(y, curScore, curDd), isCurrent: y === state.year }));
+  const max  = Math.max(1, ...rows.map(r => r.count));
+  const body = rows.map(r => `
+    <div class="cs2-sens-row ${r.isCurrent ? 'is-current' : ''}">
+      <span class="cs2-sens-th">${r.year}${r.isCurrent ? ' · active' : ''}</span>
+      <span class="cs2-sens-bar"><span class="cs2-sens-fill" style="width:${Math.round(r.count / max * 100)}%"></span></span>
+      <span class="cs2-sens-n">${r.count}</span>
+    </div>`).join('');
+  const stdTxt = [
+    isNum(curScore) ? `score ${fmtScore(curScore)}` : null,
+    isNum(curDd) ? `DD ${fmtDd(curDd)}` : null,
+    (num(els.topN.value) > 0) ? `top ${els.topN.value}` : null,
+  ].filter(Boolean).join(' · ') || 'the current rule';
+  host.innerHTML = `<div class="cs2-sens-baseline">If <b>${esc(stdTxt)}</b> had been the bar in each season (${esc(activePool().shortLabel)} pool, same event/round filters as now):</div><div class="cs2-sens-ladders">${body}</div>`;
+}
+
 function renderEnhancements() {
   try { renderTrustStrip(); } catch (e) {}
   try { renderThresholdExplorer(); } catch (e) {}
   try { renderDecisionSurface(); } catch (e) {}
   try { renderSensitivity(); } catch (e) {}
+  try { renderBacktest(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
   try { renderStandardsPanel(); } catch (e) {}

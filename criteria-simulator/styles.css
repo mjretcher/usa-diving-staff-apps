@@ -75,6 +75,9 @@ html { overflow-x: hidden; }
 .filter-chip b { color: var(--ink-3); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; margin-right: 2px; }
 .filter-chip em { font-style: normal; color: var(--brand-blue); font-weight: 700; }
 .filter-chip.active   { background: rgba(23,31,105,.07); border-color: rgba(23,31,105,.18); }
+.cs2-chip-pool { background: var(--brand-blue); border-color: var(--brand-blue); }
+.cs2-chip-pool b { color: rgba(255,255,255,.75); }
+.cs2-chip-pool em { color: #fff; }
 .filter-chip-reset {
   background: transparent; border: 1px solid var(--line); color: var(--ink-3);
   padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer;
@@ -198,6 +201,12 @@ html { overflow-x: hidden; }
 .scenario-strip-actions { display: flex; gap: 8px; }
 
 /* ── Sidebar additions ──────────────────────────────────────── */
+.cs2-scope-section {
+  background: rgba(0,154,199,.08);
+  border-left: 3px solid var(--brand-pool, #009AC7);
+}
+.cs2-scope-section .sidebar-section-title { color: rgba(255,255,255,.85); }
+.cs2-scope-note { margin-top: 0; }
 .control-sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;

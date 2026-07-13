@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=20260627" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
-  <link rel="stylesheet" href="styles.css?v=202606290630" />
+  <link rel="stylesheet" href="styles.css?v=202607132101" />
 </head>
 <body>
 
@@ -55,6 +55,15 @@
 <div class="app-body">
 
   <aside class="control-sidebar" aria-label="Criteria controls">
+
+    <div class="sidebar-section cs2-scope-section">
+      <div class="sidebar-section-title">Authoring Scope</div>
+      <p class="sidebar-help cs2-scope-note">Pick one pool and one year. Standards, score bases, and DD minimums are only comparable within a single pool — this is what keeps every number on this page meaningful.</p>
+      <span class="sidebar-label">Pool</span>
+      <select id="poolSelect" class="sidebar-select"></select>
+      <span class="sidebar-label">Year</span>
+      <select id="yearSelect" class="sidebar-select"></select>
+    </div>
 
     <div class="sidebar-section">
       <div class="sidebar-section-title">Scenario Manager</div>
@@ -204,6 +213,8 @@
 
       <!-- Filter chip strip: shows current scope, click any chip to reset that filter -->
       <nav class="filter-strip" aria-label="Active filter summary">
+        <span class="filter-chip active cs2-chip-pool"><b>Pool</b> <em id="chipPool">—</em></span>
+        <span class="filter-chip active cs2-chip-pool"><b>Year</b> <em id="chipYear">—</em></span>
         <span class="filter-chip active"><b>Model</b> <em id="chipPreset">—</em></span>
         <span class="filter-chip active"><b>Gender</b> <em id="chipGender">—</em></span>
         <span class="filter-chip active"><b>Event</b> <em id="chipDiscipline">—</em></span>
@@ -307,6 +318,14 @@
           <p>How many athletes qualify if you nudge the standard up or down.</p>
         </header>
         <div id="sensitivityBody"></div>
+      </section>
+
+      <section class="panel cs2-sensitivity" id="backtest">
+        <header class="panel-head">
+          <h2>Multi-Year Backtest</h2>
+          <p>The current standard applied to each past season, one year at a time — never summed across years.</p>
+        </header>
+        <div id="backtestBody"></div>
       </section>
 
       <div class="dual-grid">
@@ -474,8 +493,8 @@
 <script src="../shared/usad-data.js?v=20260627"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="scenario-sync.js?v=202606290630"></script>
-<script src="main.js?v=202606290630"></script>
+<script src="scenario-sync.js?v=202607132101"></script>
+<script src="main.js?v=202607132101"></script>
 
 </body>
 </html>
