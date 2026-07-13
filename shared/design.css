@@ -614,3 +614,33 @@ body {
 
 /* Threshold badge + context strip polish */
 .threshold-badge { box-shadow: var(--shadow-xs); }
+
+/* ── High Performance two-view switcher (Standards Studio ⇄ Athlete Evaluation) ── */
+.hp-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 18px;
+  padding: 3px;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+}
+.hp-view-tab {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: rgba(255,255,255,.72);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.hp-view-tab:hover { color: #fff; background: rgba(255,255,255,.08); }
+.hp-view-tab.active {
+  background: var(--brand-pool, #009AC7);
+  color: #fff;
+}
+@media (max-width: 900px) { .hp-view-switch { display: none; } }

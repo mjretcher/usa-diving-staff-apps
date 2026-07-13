@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Criteria Simulator — USA Diving Staff</title>
+  <title>Standards Studio — USA Diving Staff</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="../shared/design.css?v=20260627" />
-  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260627" />
-  <link rel="stylesheet" href="styles.css?v=202607132101" />
+  <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
+  <link rel="stylesheet" href="styles.css?v=202607132128" />
 </head>
 <body>
 
@@ -19,9 +19,13 @@
   </a>
   <div class="topbar-divider"></div>
   <div class="topbar-identity">
-    <div class="topbar-eyebrow">Qualification Tool</div>
-    <div class="topbar-title">Criteria Simulator</div>
+    <div class="topbar-eyebrow">High Performance</div>
+    <div class="topbar-title">Standards Studio</div>
   </div>
+  <nav class="hp-view-switch" aria-label="High Performance views">
+    <a class="hp-view-tab active" href="./" aria-current="page">Standards Studio</a>
+    <a class="hp-view-tab" href="../athlete-evaluation/">Athlete Evaluation</a>
+  </nav>
   <div class="topbar-spacer"></div>
   <div class="topbar-metrics" id="topbarMetrics">
     <span class="topbar-pill"><b id="kpiMeets">—</b> meets</span>
@@ -46,6 +50,7 @@
     <span><b>Bubble</b> <em id="stripBubble">0</em></span>
   </div>
   <div class="scenario-strip-actions">
+    <button class="btn btn-primary" id="btnExportWord">Export criteria draft (Word)</button>
     <button class="btn btn-ghost" id="btnPrintReport">Print report</button>
     <button class="btn btn-ghost" id="btnCopySummary">Copy summary</button>
   </div>
@@ -493,8 +498,8 @@
 <script src="../shared/usad-data.js?v=20260627"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="scenario-sync.js?v=202607132101"></script>
-<script src="main.js?v=202607132101"></script>
+<script src="scenario-sync.js?v=202607132128"></script>
+<script src="main.js?v=202607132128"></script>
 
 </body>
 </html>

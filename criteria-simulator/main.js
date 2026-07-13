@@ -1573,8 +1573,14 @@ function renderWhatIf() {
   const rule   = els.ruleMode.value;
   const topN   = num(els.topN.value) ?? 0;
 
-  const standard = activeStandardFor(g, d);
-  const ddMin    = ddMinimumForSelection(g, d, preset);
+  // Published standard for the active pool if one exists; otherwise the
+  // custom bar the HPD has typed (this is what makes the what-if work in
+  // the Junior pool, where no standard is published).
+  let standard = activeStandardFor(g, d);
+  if (!isNum(standard)) standard = num(els.scoreThreshold.value);
+  const ddMin    = isNum(num(els.ddThreshold.value)) && els.ddMode.value !== 'ignore'
+    ? num(els.ddThreshold.value)
+    : ddMinimumForSelection(g, d, preset);
   const out = $('wifResult');
 
   if (!isNum(score) && !isNum(place)) {
@@ -1634,15 +1640,26 @@ function standardsTableHtml(title, table, fmt) {
 
 function renderStandardsPanel() {
   const body = $('standardsBody');
-  if (!body || body.dataset.rendered) return;
+  if (!body) return;
+  // Re-render whenever the pool changes (was previously cached once).
+  if (body.dataset.renderedPool === state.pool) return;
+  body.dataset.renderedPool = state.pool;
   const f = (v) => isNum(v) ? v : '—';
-  body.innerHTML = `
-    <p class="cs2-std-note">Source: USA Diving published selection criteria. Confirm these match the current season before use.</p>
-    ${standardsTableHtml('Score standard · USA', { Female: WINTER_SCORE_STANDARDS.Female.usa, Male: WINTER_SCORE_STANDARDS.Male.usa }, f)}
-    ${standardsTableHtml('Score standard · NCAA', { Female: WINTER_SCORE_STANDARDS.Female.ncaa, Male: WINTER_SCORE_STANDARDS.Male.ncaa }, f)}
-    ${standardsTableHtml('DD minimum · Winter', WINTER_DD_MINIMUMS, f)}
-    ${standardsTableHtml('DD minimum · Nationals', NATIONAL_DD_MINIMUMS, f)}`;
-  body.dataset.rendered = '1';
+  const pool = activePool();
+  if (pool.id === 'seniorUsa') {
+    body.innerHTML = `
+      <p class="cs2-std-note">Source: USA Diving published selection criteria for the Senior pool. Confirm these match the current season before use.</p>
+      ${standardsTableHtml('Score standard · USA', { Female: WINTER_SCORE_STANDARDS.Female.usa, Male: WINTER_SCORE_STANDARDS.Male.usa }, f)}
+      ${standardsTableHtml('DD minimum · Winter', WINTER_DD_MINIMUMS, f)}
+      ${standardsTableHtml('DD minimum · Nationals', NATIONAL_DD_MINIMUMS, f)}`;
+  } else if (pool.id === 'ncaa') {
+    body.innerHTML = `
+      <p class="cs2-std-note">Source: USA Diving published selection criteria — NCAA score standards. Confirm these match the current season before use. No DD minimum is published for the NCAA pool in this tool.</p>
+      ${standardsTableHtml('Score standard · NCAA', { Female: WINTER_SCORE_STANDARDS.Female.ncaa, Male: WINTER_SCORE_STANDARDS.Male.ncaa }, f)}`;
+  } else {
+    body.innerHTML = `
+      <p class="cs2-std-note">No published score standard or DD minimum is encoded for the Junior A/B pool. The bar here is authored fresh each season — set your own Score and DD values in the sidebar and this tool evaluates the field against them. Nothing is pre-filled, so nothing can be silently wrong.</p>`;
+  }
 }
 
 function pathToQualificationHtml(row) {
@@ -1681,6 +1698,8 @@ function printReport() {
     <h1>USA Diving — Criteria Report</h1>
     <div class="meta">${esc(name)} · generated ${new Date().toLocaleString()}</div>
     <div class="pills">
+      <span>Pool: ${esc(activePool().shortLabel)}</span>
+      <span>Year: ${esc(String(state.year ?? '—'))}</span>
       <span>Model: ${esc(presetText)}</span>
       <span>Event: ${esc(els.genderFilter.value)} ${esc(els.disciplineFilter.value)}</span>
       <span>Round: ${esc(els.roundFilter.value)}</span>
@@ -1697,6 +1716,170 @@ function printReport() {
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 350);
+}
+
+// ── Word export — official criteria-document format ────────────────────────
+// Structure verified against the published "2026 World Junior Diving
+// Championships Trials Eligibility Criteria" (usadiving.org): title block
+// with dates + location, intro paragraph, Contested Events, lettered
+// eligibility clauses with roman-numeral sub-clauses, then standards.
+// Everything the scenario knows is filled in; everything that is policy
+// language the HPD must author is marked [CONFIRM] so nothing ships by
+// accident. Output is Word-processing HTML saved as .doc, which opens
+// directly in Microsoft Word for editing.
+function criteriaDocEventScope() {
+  const pool = activePool();
+  const d = els.disciplineFilter.value;
+  const g = els.genderFilter.value;
+  const discLabel = { '1m': '1-meter', '3m': '3-meter', 'Platform': 'platform' }[d] || d;
+  if (pool.id === 'juniorAB') {
+    return `Individual ${discLabel} (${g === 'Male' ? 'Boys' : 'Girls'}, Groups A and B)`;
+  }
+  return `${g === 'Male' ? 'Men' : 'Women'}'s ${discLabel}`;
+}
+function criteriaDocRuleSentence() {
+  const rule = els.ruleMode.value;
+  const topN = num(els.topN.value) ?? 0;
+  const score = num(els.scoreThreshold.value);
+  const d = els.disciplineFilter.value;
+  const discLabel = { '1m': '1-meter', '3m': '3-meter', 'Platform': 'platform' }[d] || d;
+  if (rule === 'topNOnly' && topN > 0)
+    return `The top ${topN} finishers in each ${discLabel} event will qualify.`;
+  if (rule === 'scoreOnly' && isNum(score))
+    return `Divers must achieve a score of ${fmtScore(score)} or higher in a ${discLabel} event at an approved qualifying competition.`;
+  if (rule === 'topNOrScore' && topN > 0 && isNum(score))
+    return `The top ${topN} finishers in each ${discLabel} event will qualify, OR divers may qualify by achieving a score of ${fmtScore(score)} or higher.`;
+  return '[CONFIRM — advancement rule: set placement cutoff and/or score standard in the tool before exporting]';
+}
+function criteriaDocStandardsTable() {
+  const pool = activePool();
+  const evCols = ['1m', '3m', 'Platform'];
+  const th = (t) => `<td style="border:1pt solid #171F69;background:#171F69;color:#FFFFFF;padding:4pt 8pt;font-weight:bold;">${t}</td>`;
+  const td = (t) => `<td style="border:1pt solid #9AA3C0;padding:4pt 8pt;">${t}</td>`;
+  const scoreRow = (gLabel, table) =>
+    `<tr>${td(`<b>${gLabel}</b>`)}${evCols.map(e => td(isNum(table?.[e]) ? table[e] : '[CONFIRM]')).join('')}</tr>`;
+  const family = pool.family;
+  let scoreTable = '';
+  if (family) {
+    const src = family === 'ncaa'
+      ? { Female: WINTER_SCORE_STANDARDS.Female.ncaa, Male: WINTER_SCORE_STANDARDS.Male.ncaa }
+      : { Female: WINTER_SCORE_STANDARDS.Female.usa, Male: WINTER_SCORE_STANDARDS.Male.usa };
+    scoreTable = `
+      <p style="font-weight:bold;margin:10pt 0 4pt;">Score Standards (${family === 'ncaa' ? 'NCAA' : 'USA Diving'})</p>
+      <table style="border-collapse:collapse;font-size:10pt;">
+        <tr>${th('')}${evCols.map(e => th(e === 'Platform' ? 'Platform' : e)).join('')}</tr>
+        ${scoreRow('Women', src.Female)}
+        ${scoreRow('Men', src.Male)}
+      </table>`;
+  } else {
+    const g = els.genderFilter.value, d = els.disciplineFilter.value;
+    const score = num(els.scoreThreshold.value);
+    scoreTable = `
+      <p style="font-weight:bold;margin:10pt 0 4pt;">Score Standard</p>
+      <table style="border-collapse:collapse;font-size:10pt;">
+        <tr>${th('Event')}${th('Standard')}</tr>
+        <tr>${td(`${g === 'Male' ? 'Boys' : 'Girls'} ${d}`)}${td(isNum(score) ? fmtScore(score) : '[CONFIRM]')}</tr>
+      </table>
+      <p style="font-size:9pt;color:#5A6A7E;margin:4pt 0;">[CONFIRM — extend this table to every group/gender/event this document covers; the tool exports the event currently in scope]</p>`;
+  }
+  let ddTable = '';
+  const ddVal = num(els.ddThreshold.value);
+  if (family === 'usa') {
+    const src = els.criteriaPreset.value === 'nationalQualifier' ? NATIONAL_DD_MINIMUMS : WINTER_DD_MINIMUMS;
+    ddTable = `
+      <p style="font-weight:bold;margin:10pt 0 4pt;">Degree of Difficulty Minimums</p>
+      <table style="border-collapse:collapse;font-size:10pt;">
+        <tr>${th('')}${evCols.map(e => th(e === 'Platform' ? 'Platform' : e)).join('')}</tr>
+        ${scoreRow('Women', src.Female)}
+        ${scoreRow('Men', src.Male)}
+      </table>`;
+  } else if (isNum(ddVal) && els.ddMode.value !== 'ignore') {
+    ddTable = `
+      <p style="font-weight:bold;margin:10pt 0 4pt;">Degree of Difficulty Minimum</p>
+      <p style="font-size:10pt;">Divers must present a dive list with a total degree of difficulty of ${fmtDd(ddVal)} or higher. [CONFIRM — per-event DD minimums if this document covers multiple events]</p>`;
+  }
+  return scoreTable + ddTable;
+}
+function exportCriteriaDoc() {
+  const pool = activePool();
+  const year = state.year ?? new Date().getFullYear();
+  const sc = state.scenarios.find(s => s.id === state.activeScenarioId);
+  const docTitle = (sc && sc.name) || els.scenarioName.value || `${year} [CONFIRM — Event Name] Qualification Criteria`;
+
+  // Approved qualifying events — the meets actually in scope right now.
+  const meetsInScope = state.selectedMeetIds.size
+    ? [...state.selectedMeetIds].map(id => state.meetsById.get(id)).filter(Boolean)
+    : [...state.meetsById.values()];
+  const meetItems = meetsInScope
+    .sort((a, b) => sortByName(a.name, b.name))
+    .map(m => `<li style="margin:2pt 0;">${esc(m.name)}</li>`).join('')
+    || '<li>[CONFIRM — list approved qualifying competitions]</li>';
+
+  const qualifiedCount = state.qualified.length;
+  const html = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(docTitle)}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 1in; }
+  h1 { font-size: 16pt; color: #171F69; margin: 0 0 2pt; }
+  h2 { font-size: 12pt; color: #171F69; margin: 14pt 0 4pt; }
+  .sub { font-size: 11pt; color: #1a1a1a; margin: 0 0 12pt; }
+  .confirm { background: #FFF3CD; }
+  ol.alpha { list-style-type: upper-alpha; padding-left: 22pt; }
+  ol.roman { list-style-type: lower-roman; padding-left: 22pt; }
+  li { margin: 4pt 0; }
+</style></head>
+<body>
+  <h1>${esc(docTitle)}</h1>
+  <p class="sub">[CONFIRM — competition dates]<br>[CONFIRM — city, state]</p>
+
+  <p>USA Diving will host the ${esc(docTitle)}. <span class="confirm">[CONFIRM — one-paragraph purpose statement: what this event determines, and any downstream event it selects for.]</span></p>
+
+  <h2>Contested Events</h2>
+  <p>${esc(criteriaDocEventScope())} <span class="confirm">[CONFIRM — full contested-events list if broader than the event currently in scope]</span></p>
+
+  <h2>Eligibility to Compete</h2>
+  <ol class="alpha">
+    <li><span class="confirm">[CONFIRM — citizenship / federation clause, e.g. "Must be a U.S. citizen and not have competed for another Federation after {date}."]</span></li>
+    <li>Must be a competition athlete member in good standing with USA Diving.</li>
+    <li><span class="confirm">[CONFIRM — birth-year / age-group clause if applicable]</span></li>
+    <li>Must meet at least one of the following qualification criteria:
+      <ol class="roman">
+        <li>${esc(criteriaDocRuleSentence())}</li>
+        <li><span class="confirm">[CONFIRM — pre-qualified pools: HP Squad tiers, prior champions, National Team, prior international team members, as applicable]</span></li>
+        <li><span class="confirm">[CONFIRM — non-displacement language for international athletes / athletes not meeting DD, if applicable]</span></li>
+      </ol>
+    </li>
+    <li><span class="confirm">[CONFIRM — petition policy]</span></li>
+  </ol>
+
+  <h2>Qualification Standards</h2>
+  ${criteriaDocStandardsTable()}
+
+  <h2>Approved Qualifying Competitions</h2>
+  <p style="font-size:10pt;color:#5A6A7E;">As scoped in the authoring tool (${esc(pool.shortLabel)} pool, ${esc(String(year))}):</p>
+  <ul>${meetItems}</ul>
+
+  <h2>Additional Information</h2>
+  <p><span class="confirm">[CONFIRM — entry deadlines, selection-procedures publication, contact]</span></p>
+
+  <p style="margin-top:22pt;font-size:9pt;color:#5A6A7E;border-top:1pt solid #9AA3C0;padding-top:6pt;">
+    DRAFT generated from the USA Diving Standards Studio on ${new Date().toLocaleDateString()} ·
+    Scope: ${esc(pool.shortLabel)} pool, ${esc(String(year))} · Under the standards in this draft,
+    ${qualifiedCount} athlete${qualifiedCount === 1 ? '' : 's'} in the evaluated ${esc(String(year))} field would have qualified.
+    Every highlighted [CONFIRM] item requires High Performance review before publication. This footer should be deleted from the final document.
+  </p>
+</body></html>`;
+
+  const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${docTitle.replace(/[^\w\- ]+/g, '').replace(/\s+/g, '_')}_DRAFT.doc`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  USAD.toast('Criteria draft downloaded — opens in Word. Review every [CONFIRM] item.', { kind: 'success', duration: 6000 });
 }
 
 function qualCountWith(scoreThr, ddMin, ddModeOverride) {
@@ -2098,6 +2281,8 @@ function initEnhancements() {
   if (tgt) tgt.addEventListener('input', updateInverse);
   const pr = $('btnPrintReport');
   if (pr) pr.addEventListener('click', printReport);
+  const wd = $('btnExportWord');
+  if (wd) wd.addEventListener('click', exportCriteriaDoc);
   const rb = $('scenarioRefresh');
   if (rb) rb.addEventListener('click', () => syncScenarios({ manual: true }));
   if (window.CriteriaScenarioSync) {
