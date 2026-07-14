@@ -2763,6 +2763,7 @@
       ['career',       'Athlete career',        '🧬'],
       ['tier_entry',   'Tier entry (old sys)',  '🪜'],
       ['rule_era',     'Rule era comparison',   '⚖️'],
+      ['trials_split', 'Trials Voluntary/Optional', '🤿'],
       ['saved',        'Saved views',           '⭐'],
     ];
 
@@ -2852,6 +2853,7 @@
     else if (rptState.panel === 'rule_era')     renderRuleEraPanel(panelWrap);
     else if (rptState.panel === 'saved')        renderSavedViewsPanel(panelWrap);
     else if (rptState.panel === 'status')       renderStatusPanel(panelWrap);
+    else if (rptState.panel === 'trials_split') window.renderTrialsSplitPanel(panelWrap);
   }
 
   /* ── CSS injection ──────────────────────────────────────────── */

@@ -103,27 +103,32 @@ def fetch(url, referer=None, attempts=3):
             raise
     raise last_err
 
-ENTRANT_RX = re.compile(
-    r'/Profile/(\d+)"[^>]*>([^<]+)</a>\s*--\s*<a[^>]*?/TeamProfile/(\d+)"[^>]*>([^<]+)</a>')
+PROFILE_RX = re.compile(r'/Profile/(\d+)"[^>]*>([^<]+)</a>')
+TEAM_RX = re.compile(r'/TeamProfile/(\d+)"[^>]*>([^<]+)</a>')
 SHEET_LINK_RX_TMPL = r'DiveSheetResults/{meet}/{event}/{rnd}/(\d+)/(\d+)'
+ROW_MARKER = '<div class="row rowback border">'
 
 def parse_event_results(html, meet, event, rnd):
-    """Return list of {profile_id, name, team, sheet_key} for every diver in this round."""
-    link_rx = re.compile(SHEET_LINK_RX_TMPL.format(meet=re.escape(meet), event=re.escape(event), rnd=re.escape(rnd)))
+    """Return list of {profile_id, name, team, sheet_key} for every diver in this round.
+    EventResults rows are self-contained blocks (name link, team link, place, then the
+    DiveSheetResults-linked score) — split on the row marker and extract each field from
+    its own chunk rather than window-searching, which silently matched zero names against
+    the DiveSheets entrant-list markup (different page, "name -- team" joined on one line;
+    EventResults keeps them in separate divs)."""
+    sheet_rx = re.compile(SHEET_LINK_RX_TMPL.format(meet=re.escape(meet), event=re.escape(event), rnd=re.escape(rnd)))
     out, seen = [], set()
-    for m in link_rx.finditer(html):
-        pid, key = m.group(1), m.group(2)
+    for chunk in html.split(ROW_MARKER)[1:]:
+        sm = sheet_rx.search(chunk)
+        if not sm:
+            continue
+        pid, key = sm.group(1), sm.group(2)
         if pid in seen:
             continue
         seen.add(pid)
-        # Find nearest preceding entrant name/team block
-        window = html[max(0, m.start() - 900):m.start()]
-        names = list(ENTRANT_RX.finditer(window))
-        name, team = ("", "")
-        if names:
-            n = names[-1]
-            name = " ".join(n.group(2).replace("&amp;", "&").split())
-            team = " ".join(n.group(4).replace("&amp;", "&").split())
+        pm = PROFILE_RX.search(chunk)
+        tm = TEAM_RX.search(chunk)
+        name = " ".join(pm.group(2).replace("&amp;", "&").split()) if pm else ""
+        team = " ".join(tm.group(2).replace("&amp;", "&").split()) if tm else ""
         out.append({"profile_id": pid, "sheet_key": key, "name": name, "team": team})
     return out
 
