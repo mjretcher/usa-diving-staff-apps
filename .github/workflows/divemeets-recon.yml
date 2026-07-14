@@ -1,0 +1,40 @@
+name: DiveMeets generic recon
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Full new.divemeets.com URL to fetch"
+        required: true
+      key:
+        description: "app_meta.config key to store the sample under"
+        required: true
+        default: "recon_sample"
+      referer:
+        description: "Optional Referer header"
+        required: false
+        default: ""
+
+jobs:
+  recon:
+    name: Fetch a raw page sample into Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Fetch and store
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          RECON_URL: ${{ github.event.inputs.url }}
+          RECON_KEY: ${{ github.event.inputs.key }}
+          RECON_REFERER: ${{ github.event.inputs.referer }}
+        run: python db/scripts/recon_url.py
