@@ -1,0 +1,37 @@
+name: Trials dive sheets (Group A/B voluntary-optional split)
+
+on:
+  workflow_dispatch:
+    inputs:
+      event_filter:
+        description: "Comma-separated event ids to (re)scrape, blank = all 12"
+        required: false
+        default: ""
+      round_filter:
+        description: "Rounds to scrape: 1 (Prelim), 9 (Final), or 1,9"
+        required: false
+        default: "1,9"
+
+jobs:
+  scrape:
+    name: Scrape Trials Group A/B dive sheets into core.dive_sheets
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Scrape and upsert
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          TRIALS_EVENT_FILTER: ${{ github.event.inputs.event_filter }}
+          TRIALS_ROUND_FILTER: ${{ github.event.inputs.round_filter || '1,9' }}
+        run: python db/scripts/fetch_trials_dive_sheets.py
