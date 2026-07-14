@@ -515,3 +515,33 @@ CREATE TABLE IF NOT EXISTS junior_results.meet_entrants (
 );
 CREATE INDEX IF NOT EXISTS idx_meet_entrants_meet  ON junior_results.meet_entrants(meet_id_dm);
 CREATE INDEX IF NOT EXISTS idx_meet_entrants_key   ON junior_results.meet_entrants(diver_key);
+
+
+-- ============================================================
+-- SCHEMA: season_calendar — cloud sync for the Season Calendar Planner
+-- Single shared document (one row, id='main') holding the whole
+-- events + versions payload as JSONB, so all staff see the same
+-- working draft instead of separate per-device localStorage copies.
+-- ============================================================
+CREATE SCHEMA IF NOT EXISTS season_calendar;
+
+CREATE TABLE IF NOT EXISTS season_calendar.calendar (
+    id          TEXT PRIMARY KEY DEFAULT 'main',
+    data        JSONB NOT NULL,
+    updated_by  TEXT,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- Self-heal: an earlier version of this table existed without updated_by
+-- and without the 'main' default on id. Idempotent guards fix either state.
+ALTER TABLE season_calendar.calendar ADD COLUMN IF NOT EXISTS updated_by TEXT;
+ALTER TABLE season_calendar.calendar ALTER COLUMN id SET DEFAULT 'main';
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_season_calendar BEFORE UPDATE ON season_calendar.calendar
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+INSERT INTO app_meta.config (key, value, description) VALUES
+  ('season_calendar_version', '1', 'Season Calendar Planner data schema version')
+ON CONFLICT (key) DO NOTHING;
