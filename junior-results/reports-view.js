@@ -2323,6 +2323,7 @@
     ['career',       'Athlete career',     '🧬'],
     ['tier_entry',   'Tier entry (old sys)', '🪜'],
     ['rule_era',     'Rule era comparison', '⚖️'],
+    ['trials_split', 'Trials Voluntary/Optional', '🤿'],
     ['saved',        'Saved views',        '⭐'],
   ];
 
@@ -2331,7 +2332,10 @@
       `<button class="rpt-toptab ${rptState.panel===k?'is-active':''}" onclick="window._rptPanel('${k}')">
          <span class="rpt-toptab-ic">${ic}</span><span>${esc(l)}</span>
        </button>`;
-    const _half = Math.ceil(PANELS.length / 2);
+    // Fixed split (not Math.ceil(PANELS.length/2)) so growing the "reports" group
+    // (row B) never bleeds an item into the "view mode" group (row A) — the first
+    // 7 entries are the canonical view-mode tabs and must stay together.
+    const _half = 7;
     const tabsRowA = PANELS.slice(0, _half).map(mkTab).join('');
     const tabsRowB = PANELS.slice(_half).map(mkTab).join('');
 
