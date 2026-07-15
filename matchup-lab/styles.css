@@ -37,3 +37,77 @@
 .ml-pair-math b { color: var(--brand-navy,#171F69); font-size: 14px; }
 .ml-pairs-foot { margin-top: 10px; font-size: 11.5px; color: var(--ink-3,#8891a8); }
 @media (max-width: 860px) { .ml-pair { grid-template-columns: 34px 1fr; } .ml-pair-math { grid-column: 2; } }
+
+
+/* ── Shared-look components (self-contained copy — ML doesn't load the Standards stylesheet) ── */
+.sidebar-select {
+  width: 100%;
+  background: rgba(255,255,255,.04);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.sidebar-select:focus {
+  border-color: var(--brand-sky);
+  background: rgba(255,255,255,.08);
+}
+.sidebar-select option { background: var(--brand-blue-950); color: #fff; }
+.loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 320px;
+  color: var(--ink-3);
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--line);
+  border-top-color: var(--brand-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.table-wrap { overflow-x: auto; }
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.data-table thead th {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  user-select: none;
+}
+.data-table tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--ink);
+}
+.loading-text { font-size: 14px; color: var(--ink-2); }
+
+/* ML controls sit on light panels, not the dark sidebar — override the copied dark styling */
+.ml-controls .sidebar-select {
+  background: #fff;
+  color: var(--ink-1, #20283f);
+  border: 1px solid var(--line, #cdd5e4);
+}
+.ml-controls .sidebar-select:focus { border-color: var(--brand-pool, #009AC7); background: #fff; }
+.ml-controls .sidebar-select option { background: #fff; color: var(--ink-1, #20283f); }
