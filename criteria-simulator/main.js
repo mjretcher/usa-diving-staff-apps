@@ -1956,10 +1956,12 @@ function renderDecisionZone() {
   const curStd = num(els.scoreThreshold.value) ?? scoreThresholdForSelection(gender, discipline, family);
   const curDd = num(els.ddThreshold.value) ?? ddMinimumForSelection(gender, discipline, els.criteriaPreset.value);
   if (!isNum(curStd)) {
-    ladEl.innerHTML = '<div class="dz-ladder-empty">Set a score standard (sidebar or What-if custom bar) to see who each change adds or drops.</div>';
+    ladEl.innerHTML = '<div class="dz-ladder-empty">Drag the bar above (or set a score standard in the sidebar) to see who each change adds or drops.</div>';
+    updateBarSlider(scores, avg, median, wb, null, 0);
     return;
   }
   const baseSet = qualSetWith(curStd, curDd);
+  updateBarSlider(scores, avg, median, wb, curStd, baseSet.size);
   const steps = [-15, -10, -5, +5, +10, +15];
   const rows = steps.map(d => {
     const thr = Math.round((curStd + d) * 100) / 100;
@@ -1985,6 +1987,73 @@ function renderDecisionZone() {
         <span class="dz-lad-names">${r.d < 0 ? nameChips(r.changed, 'add') : nameChips(r.changed, 'drop')}</span>
       </div>`).join('')}
     <div class="dz-lad-foot">Below the bar = athletes <b>added</b> if you lower it. Above = athletes <b>dropped</b> if you raise it. DD standard held at ${isNum(curDd) ? fmt1(curDd) : 'n/a'}.</div>`;
+}
+
+// ── Drag-the-bar slider: direct manipulation of the score standard ────────
+// Writes into els.scoreThreshold and dispatches 'input', so the slider drives
+// the exact same pipeline as typing (recompute, chips, scenario dirty state).
+let _dzBarWired = false;
+let _dzBarDragging = false;
+function updateBarSlider(scores, avg, median, wb, curStd, qualCount) {
+  const panel = document.getElementById('dzBarPanel');
+  const bar = document.getElementById('dzBar');
+  if (!panel || !bar) return;
+  if (!scores.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+
+  // Bounds: pad the field, and make room for benchmarks so their ticks fit
+  let lo = Math.min(...scores), hi = Math.max(...scores);
+  if (wb && isNum(wb.finalist)) hi = Math.max(hi, wb.finalist);
+  if (wb && isNum(wb.medalist)) hi = Math.max(hi, wb.medalist);
+  lo = Math.floor((lo - 10) / 5) * 5;
+  hi = Math.ceil((hi + 10) / 5) * 5;
+  bar.min = lo; bar.max = hi;
+
+  const val = isNum(curStd) ? curStd : median;
+  if (!_dzBarDragging) bar.value = val;
+  const pct = ((val - lo) / (hi - lo)) * 100;
+  bar.style.background = `linear-gradient(90deg, var(--brand-pool) ${pct}%, var(--line) ${pct}%)`;
+
+  document.getElementById('dzBarValue').textContent = isNum(curStd) ? fmt1(curStd) : 'drag to set';
+  document.getElementById('dzBarCount').textContent = isNum(curStd) ? String(qualCount) : '—';
+
+  // Reference ticks on the track
+  const ticks = [
+    { label: 'Field avg', v: avg },
+    { label: 'Median', v: median },
+    wb && isNum(wb.finalist) ? { label: 'WA finalist', v: wb.finalist, intl: true } : null,
+    wb && isNum(wb.medalist) ? { label: 'WA medalist', v: wb.medalist, intl: true } : null,
+  ].filter(t => t && isNum(t.v) && t.v >= lo && t.v <= hi).sort((a, b) => a.v - b.v);
+  let lastPct = -100, row = 0;
+  document.getElementById('dzBarTicks').innerHTML = ticks.map(t => {
+    const p = ((t.v - lo) / (hi - lo)) * 100;
+    row = (p - lastPct < 9) ? 1 - row : 0; // stagger labels that would collide
+    lastPct = p;
+    return `<div class="dz-tick ${t.intl ? 'dz-tick-intl' : ''} ${row ? 'dz-tick-row2' : ''}" style="left:${p}%">
+      <span class="dz-tick-mark"></span><span class="dz-tick-label">${esc(t.label)} ${fmt1(t.v)}</span></div>`;
+  }).join('');
+
+  if (!_dzBarWired) {
+    _dzBarWired = true;
+    const raf = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : (f) => setTimeout(f, 16);
+    let pending = null;
+    const flush = () => {
+      if (pending === null) return;
+      const v = pending; pending = null;
+      els.scoreThreshold.value = String(Math.round(v * 10) / 10);
+      els.scoreThreshold.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    bar.addEventListener('input', () => {
+      _dzBarDragging = true;
+      const had = pending !== null;
+      pending = Number(bar.value);
+      if (!had) raf(flush);
+    });
+    const release = () => { _dzBarDragging = false; };
+    bar.addEventListener('change', release);
+    bar.addEventListener('pointerup', release);
+    bar.addEventListener('keyup', release);
+  }
 }
 
 function qualCountWith(scoreThr, ddMin, ddModeOverride) {

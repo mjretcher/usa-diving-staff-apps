@@ -848,3 +848,39 @@ details.panel > summary p {
 .dz-analytics-divider { display:flex; align-items:center; gap:12px; margin:26px 0 14px; color:var(--ink-3); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
 .dz-analytics-divider::before, .dz-analytics-divider::after { content:''; flex:1; height:1px; background:var(--line); }
 .dz-who summary h2 { color: var(--brand-blue); }
+
+/* ── Drag-the-bar slider ─────────────────────────────────────────────── */
+.dz-bar-panel { padding: 16px 20px 34px; }
+.dz-bar-row { display: flex; align-items: center; gap: 22px; }
+.dz-bar-readout { display: flex; flex-direction: column; gap: 1px; min-width: 148px; }
+.dz-bar-label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.dz-bar-value { font-family: var(--font-mono); font-size: 26px; color: var(--brand-blue); line-height: 1.15; }
+.dz-bar-count { font-size: 12.5px; color: var(--ink-2); }
+.dz-bar-count b { font-family: var(--font-mono); color: var(--brand-pool); font-size: 15px; }
+.dz-bar-track-wrap { position: relative; flex: 1; padding-top: 4px; }
+#dzBar {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 6px; border-radius: 999px;
+  background: var(--line); outline: none; cursor: ew-resize;
+}
+#dzBar::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--brand-blue); border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(13,17,23,.35); cursor: grab;
+}
+#dzBar:active::-webkit-slider-thumb { cursor: grabbing; box-shadow: 0 0 0 5px rgba(0,154,199,.18); }
+#dzBar::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--brand-blue); border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(13,17,23,.35); cursor: grab;
+}
+#dzBar:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
+.dz-bar-ticks { position: absolute; left: 0; right: 0; top: 14px; height: 30px; pointer-events: none; }
+.dz-tick { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+.dz-tick-mark { width: 2px; height: 8px; background: var(--ink-3); border-radius: 1px; }
+.dz-tick-intl .dz-tick-mark { background: var(--brand-pool); }
+.dz-tick-label { font-size: 10px; color: var(--ink-3); white-space: nowrap; margin-top: 1px; }
+.dz-tick-intl .dz-tick-label { color: var(--brand-pool); font-weight: 600; }
+.dz-tick-row2 .dz-tick-label { margin-top: 12px; }
+@media (max-width: 820px) { .dz-bar-row { flex-direction: column; align-items: stretch; gap: 10px; } .dz-bar-readout { flex-direction: row; align-items: baseline; gap: 10px; min-width: 0; } }

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202607152210" />
+  <link rel="stylesheet" href="styles.css?v=202607152351" />
 </head>
 <body>
 
@@ -265,6 +265,19 @@
       <!-- Threshold Explorer — the centerpiece: qualifiers across every standard -->
 
       <!-- ── DECISION ZONE: the answer + the context to judge it ─────────── -->
+      <section class="panel dz-bar-panel" id="dzBarPanel" hidden>
+        <div class="dz-bar-row">
+          <div class="dz-bar-readout">
+            <span class="dz-bar-label">Score standard</span>
+            <b id="dzBarValue" class="dz-bar-value">—</b>
+            <span class="dz-bar-count"><b id="dzBarCount">—</b> qualify</span>
+          </div>
+          <div class="dz-bar-track-wrap">
+            <input type="range" id="dzBar" min="0" max="600" step="0.5" aria-label="Drag to set the score standard" />
+            <div class="dz-bar-ticks" id="dzBarTicks"></div>
+          </div>
+        </div>
+      </section>
       <div class="dz-grid">
         <section class="panel dz-context" id="dzContextPanel">
           <header class="panel-head">
@@ -521,7 +534,7 @@
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202607132128"></script>
-<script src="main.js?v=202607151955"></script>
+<script src="main.js?v=202607152351"></script>
 
 </body>
 </html>
