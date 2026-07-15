@@ -2,40 +2,40 @@
 .ml-wrap { max-width: 1240px; margin: 0 auto; padding: 20px 22px 60px; display: flex; flex-direction: column; gap: 16px; }
 .ml-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
 .ml-field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
-.ml-field > span { font-size: 11.5px; font-weight: 600; color: var(--ink-2,#4b5570); text-transform: uppercase; letter-spacing: .03em; }
-.ml-coverage { margin-top: 14px; font-size: 12.5px; color: var(--ink-2,#4b5570); background: #eef8fc; border: 1px solid var(--brand-sky,#8FC3EA); border-radius: 10px; padding: 10px 14px; }
-.ml-empty { text-align: center; color: var(--ink-3,#8891a8); padding: 40px 0; font-size: 14px; }
-.ml-empty-inline { color: var(--ink-3,#8891a8); font-size: 13px; padding: 8px 0; }
-.ml-name { font-weight: 600; color: var(--brand-navy,#171F69); }
+.ml-field > span { font-size: 11.5px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .03em; }
+.ml-coverage { margin-top: 14px; font-size: 12.5px; color: var(--ink-2); background: #eef8fc; border: 1px solid var(--brand-sky); border-radius: 10px; padding: 10px 14px; }
+.ml-empty { text-align: center; color: var(--ink-3); padding: 40px 0; font-size: 14px; }
+.ml-empty-inline { color: var(--ink-3); font-size: 13px; padding: 8px 0; }
+.ml-name { font-weight: 600; color: var(--brand-blue); }
 .ml-g { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; vertical-align: middle; }
-.ml-g-m { background: var(--brand-navy,#171F69); color: #fff; }
-.ml-g-f { background: var(--brand-pool,#009AC7); color: #fff; }
+.ml-g-m { background: var(--brand-blue); color: #fff; }
+.ml-g-f { background: var(--brand-pool); color: #fff; }
 
 .ml-compare-grid { display: grid; grid-template-columns: repeat(var(--cols,2), minmax(220px,1fr)); gap: 14px; overflow-x: auto; }
-.ml-compare-card { background: var(--surface-2,#f5f7fb); border: 1px solid var(--line,#e3e7f0); border-radius: 12px; padding: 12px 14px; }
+.ml-compare-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 .ml-cc-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
-.ml-cc-head b { color: var(--brand-navy,#171F69); font-size: 15px; }
-.ml-cc-head span { font-size: 12px; color: var(--ink-3,#8891a8); }
-.ml-cc-kpis b { color: var(--brand-navy,#171F69); }
+.ml-cc-head b { color: var(--brand-blue); font-size: 15px; }
+.ml-cc-head span { font-size: 12px; color: var(--ink-3); }
+.ml-cc-kpis b { color: var(--brand-blue); }
 .ml-cc-dives { display: flex; flex-direction: column; gap: 4px; }
 .ml-cc-dive { display: grid; grid-template-columns: 1fr 60px 40px; gap: 8px; padding: 4px 8px; border-radius: 7px; border: 1px solid transparent; font-size: 12.5px; }
-.ml-cc-dive.is-shared { background: #eef8fc; border-color: var(--brand-pool,#009AC7); }
-.ml-cc-foot { margin-top: 10px; font-size: 11.5px; color: var(--ink-3,#8891a8); display: flex; align-items: center; gap: 6px; }
-.ml-cc-shared-swatch { width: 14px; height: 14px; border-radius: 4px; background: #eef8fc; border: 1px solid var(--brand-pool,#009AC7); display: inline-block; }
+.ml-cc-dive.is-shared { background: #eef8fc; border-color: var(--brand-pool); }
+.ml-cc-foot { margin-top: 10px; font-size: 11.5px; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
+.ml-cc-shared-swatch { width: 14px; height: 14px; border-radius: 4px; background: #eef8fc; border: 1px solid var(--brand-pool); display: inline-block; }
 
 .ml-pairs { display: flex; flex-direction: column; }
-.ml-pair { display: grid; grid-template-columns: 44px 1.2fr 1.4fr; gap: 12px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--line,#e3e7f0); }
+.ml-pair { display: grid; grid-template-columns: 44px 1.2fr 1.4fr; gap: 12px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--line); }
 .ml-pair:first-child { border-top: 0; }
-.ml-pair-rank { font-family: var(--f-mono,monospace); font-weight: 700; color: var(--brand-pool,#009AC7); }
+.ml-pair-rank { font-family: var(--font-mono); font-weight: 700; color: var(--brand-pool); }
 .ml-pair-names { display: flex; flex-direction: column; }
-.ml-pair-names b { color: var(--brand-navy,#171F69); }
-.ml-pair-names em { font-style: normal; font-size: 11.5px; color: var(--ink-3,#8891a8); }
-.ml-pair-math { font-family: var(--f-mono,monospace); font-size: 12px; color: var(--ink-2,#4b5570); }
+.ml-pair-names b { color: var(--brand-blue); }
+.ml-pair-names em { font-style: normal; font-size: 11.5px; color: var(--ink-3); }
+.ml-pair-math { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
 .ml-pair-math em { font-style: normal; margin: 0 4px; }
 .ml-pair-math em.up { color: #16a34a; }
-.ml-pair-math em.down { color: var(--brand-red,#E31937); }
-.ml-pair-math b { color: var(--brand-navy,#171F69); font-size: 14px; }
-.ml-pairs-foot { margin-top: 10px; font-size: 11.5px; color: var(--ink-3,#8891a8); }
+.ml-pair-math em.down { color: var(--brand-red); }
+.ml-pair-math b { color: var(--brand-blue); font-size: 14px; }
+.ml-pairs-foot { margin-top: 10px; font-size: 11.5px; color: var(--ink-3); }
 @media (max-width: 860px) { .ml-pair { grid-template-columns: 34px 1fr; } .ml-pair-math { grid-column: 2; } }
 
 
@@ -106,8 +106,56 @@
 /* ML controls sit on light panels, not the dark sidebar — override the copied dark styling */
 .ml-controls .sidebar-select {
   background: #fff;
-  color: var(--ink-1, #20283f);
-  border: 1px solid var(--line, #cdd5e4);
+  color: var(--ink);
+  border: 1px solid var(--line);
 }
-.ml-controls .sidebar-select:focus { border-color: var(--brand-pool, #009AC7); background: #fff; }
-.ml-controls .sidebar-select option { background: #fff; color: var(--ink-1, #20283f); }
+.ml-controls .sidebar-select:focus { border-color: var(--brand-pool); background: #fff; }
+.ml-controls .sidebar-select option { background: #fff; color: var(--ink); }
+
+/* ── Native shell alignment (fixes: content under fixed topbar, unstyled topbar
+      pieces, missing .panel card base, design.css's navy-gradient .panel-head
+      variant bleeding in) ─────────────────────────────────────────────────── */
+.ml-wrap { padding-top: calc(var(--topbar-h) + 20px); }
+
+/* Topbar content — same treatment as the sibling HP views */
+.topbar-logo { height: 30px; width: auto; }
+.topbar-divider { width: 1px; height: 26px; background: rgba(255,255,255,.18); margin: 0 4px; }
+.topbar-identity { line-height: 1.2; padding-left: 12px; }
+.topbar-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.6); }
+.topbar-title { font-size: 16px; font-weight: 700; color: #fff; font-family: var(--font-display); letter-spacing: .02em; }
+.topbar-spacer { flex: 1; }
+
+/* Panel card base + the LIGHT panel-head (scoped above design.css's gradient variant) */
+.ml-wrap .panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 0; /* .ml-wrap flex gap handles rhythm */
+  overflow: hidden;
+}
+.ml-wrap .panel-head {
+  display: block;
+  background: var(--surface);
+  padding: 14px 18px 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+.ml-wrap .panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 2px;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.ml-wrap .panel-head p { font-size: 12px; color: var(--ink-3); margin: 0; }
+.ml-wrap .panel > *:not(.panel-head) { padding-left: 18px; padding-right: 18px; }
+.ml-wrap .panel > .table-wrap { padding: 0 18px 14px; }
+.ml-wrap .panel > .ml-controls { padding-top: 14px; }
+.ml-wrap .panel > .ml-coverage { margin: 14px 18px 16px; }
+.ml-wrap .panel > #mlCompareBody, .ml-wrap .panel > #mlPairsBody { padding-bottom: 16px; padding-top: 12px; }
+
+/* Utility classes the table markup relies on (mirrors Standards Studio) */
+.data-table th.num, .data-table td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.small, .data-table td.small { font-size: 11.5px; color: var(--ink-3); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
