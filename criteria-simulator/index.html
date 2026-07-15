@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202607132128" />
+  <link rel="stylesheet" href="styles.css?v=202607151955" />
 </head>
 <body>
 
@@ -231,11 +231,10 @@
         <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeets">All</em></span>
         <div class="section-nav">
           <a href="#hero">Summary</a>
-          <a href="#pipeline">Pipeline</a>
-          <a href="#strength">Strength</a>
-          <a href="#distribution">Distribution</a>
-          <a href="#sources">Sources</a>
-          <a href="#qualified">Detail</a>
+          <a href="#qualified">Who qualifies</a>
+          <a href="#bubble">Bubble</a>
+          <a href="#dzLadderPanel">Move the bar</a>
+          <a href="#explorer">Field analytics</a>
         </div>
       </nav>
 
@@ -263,6 +262,83 @@
       </section>
 
       <!-- Threshold Explorer — the centerpiece: qualifiers across every standard -->
+
+      <!-- ── DECISION ZONE: the answer + the context to judge it ─────────── -->
+      <div class="dz-grid">
+        <section class="panel dz-context" id="dzContextPanel">
+          <header class="panel-head">
+            <h2>The field, for context</h2>
+            <p id="dzContextSub">Scores of the evaluated field in this scope, plus international reference points.</p>
+          </header>
+          <div id="dzContext" class="dz-tiles"></div>
+        </section>
+        <section class="panel dz-ladder" id="dzLadderPanel">
+          <header class="panel-head">
+            <h2>Move the bar — who it adds or drops</h2>
+            <p>Each step shows the qualifier count at that standard and exactly which athletes change.</p>
+          </header>
+          <div id="dzLadder"></div>
+        </section>
+      </div>
+
+      <!-- WHO panels — the answer, names first, open by default -->
+      <details id="qualified" class="panel dz-who" open>
+        <summary>
+          <h2>Who qualifies under this standard</h2>
+          <p id="qualifiedSubtitle">Best qualifying result per athlete — updates live as you change the standard.</p>
+        </summary>
+        <div class="table-wrap">
+          <table class="data-table" id="qualifiedTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="diver_name">Name</th>
+                <th class="sortable" data-sort="team_name">Team</th>
+                <th class="sortable" data-sort="meet_name">Meet</th>
+                <th class="sortable" data-sort="round_stage">Round</th>
+                <th class="num sortable" data-sort="place">Place</th>
+                <th class="num sortable sort-desc" data-sort="analysis_score">Score</th>
+                <th class="num sortable" data-sort="threshold_used">Standard</th>
+                <th>Basis</th>
+                <th class="num sortable" data-sort="dd_total_used">DD</th>
+                <th class="num sortable" data-sort="dd_minimum_used">DD min</th>
+                <th>DD status</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="qualifiedRows"></tbody>
+          </table>
+        </div>
+      </details>
+
+      <details id="bubble" class="panel dz-who" open>
+        <summary>
+          <h2>Who just misses — the bubble</h2>
+          <p>Closest athletes below the score standard — the ones a small drop in the bar would add.</p>
+        </summary>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Team</th>
+                <th>Meet</th>
+                <th>Round</th>
+                <th class="num">Score</th>
+                <th class="num">Standard</th>
+                <th class="num">Gap</th>
+                <th class="num">DD</th>
+                <th class="num">DD min</th>
+                <th>DD status</th>
+              </tr>
+            </thead>
+            <tbody id="bubbleRows"></tbody>
+          </table>
+        </div>
+      </details>
+
+
+      <div class="dz-analytics-divider"><span>Field analytics — the evidence behind the decision</span></div>
+
       <section class="panel cs2-explorer" id="explorer">
         <header class="panel-head">
           <h2>Threshold Explorer — qualifiers across every standard</h2>
@@ -403,61 +479,6 @@
         </section>
       </div>
 
-      <!-- Detail tables — collapsed by default, expand for individual names -->
-      <details id="qualified" class="panel">
-        <summary>
-          <h2>Qualifying Detail</h2>
-          <p id="qualifiedSubtitle">Best qualifying result per athlete. Expand to see individual names.</p>
-        </summary>
-        <div class="table-wrap">
-          <table class="data-table" id="qualifiedTable">
-            <thead>
-              <tr>
-                <th class="sortable" data-sort="diver_name">Name</th>
-                <th class="sortable" data-sort="team_name">Team</th>
-                <th class="sortable" data-sort="meet_name">Meet</th>
-                <th class="sortable" data-sort="round_stage">Round</th>
-                <th class="num sortable" data-sort="place">Place</th>
-                <th class="num sortable sort-desc" data-sort="analysis_score">Score</th>
-                <th class="num sortable" data-sort="threshold_used">Standard</th>
-                <th>Basis</th>
-                <th class="num sortable" data-sort="dd_total_used">DD</th>
-                <th class="num sortable" data-sort="dd_minimum_used">DD min</th>
-                <th>DD status</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody id="qualifiedRows"></tbody>
-          </table>
-        </div>
-      </details>
-
-      <details id="bubble" class="panel">
-        <summary>
-          <h2>Bubble Detail</h2>
-          <p>Closest athletes below the score threshold. Expand for names.</p>
-        </summary>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Team</th>
-                <th>Meet</th>
-                <th>Round</th>
-                <th class="num">Score</th>
-                <th class="num">Standard</th>
-                <th class="num">Gap</th>
-                <th class="num">DD</th>
-                <th class="num">DD min</th>
-                <th>DD status</th>
-              </tr>
-            </thead>
-            <tbody id="bubbleRows"></tbody>
-          </table>
-        </div>
-      </details>
-
       <details id="standardsInUse" class="panel">
         <summary>
           <h2>Standards in use — 2025–26 season (confirm)</h2>
@@ -499,7 +520,7 @@
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202607132128"></script>
-<script src="main.js?v=202607132128"></script>
+<script src="main.js?v=202607151955"></script>
 
 </body>
 </html>

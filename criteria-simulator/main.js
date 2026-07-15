@@ -414,6 +414,7 @@ function render() {
   renderBreakdown();
   renderQualifiedTable();
   renderBubbleTable();
+  renderDecisionZone();
   renderScenarioStrip();
   renderEnhancements();
 }
@@ -1880,6 +1881,110 @@ function exportCriteriaDoc() {
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   USAD.toast('Criteria draft downloaded — opens in Word. Review every [CONFIRM] item.', { kind: 'success', duration: 6000 });
+}
+
+// ── Decision zone: field context + move-the-bar ladder with names ─────────
+// Same qualification semantics as qualCountWith, but returns Map(athleteKey →
+// {name, best score}) so the ladder can show WHO changes, not just how many.
+function qualSetWith(scoreThr, ddMin) {
+  const rule = els.ruleMode.value;
+  const topN = num(els.topN.value) ?? 0;
+  const ddMode = els.ddMode.value;
+  const out = new Map();
+  for (const r of (state.filtered || [])) {
+    const score = scoreForRow(r);
+    const scorePass = isNum(scoreThr) && isNum(score) && score >= scoreThr;
+    const topPass = topN > 0 && isNum(r.place) && r.place <= topN;
+    let rulePass = false;
+    if (rule === 'scoreOnly') rulePass = scorePass;
+    else if (rule === 'topNOnly') rulePass = topPass;
+    else if (rule === 'topNOrScore') rulePass = topPass || scorePass;
+    let ddPass;
+    const total = r.phase_dd_sum;
+    if (ddMode === 'ignore' || !isNum(ddMin)) ddPass = true;
+    else if (!isNum(total)) ddPass = (ddMode === 'requireKnown') ? false : true;
+    else ddPass = total >= ddMin;
+    if (rulePass && ddPass) {
+      const k = athleteKey(r);
+      const prev = out.get(k);
+      if (!prev || (isNum(score) && score > prev.score)) {
+        out.set(k, { name: r.diver_name || 'Unknown', score: isNum(score) ? score : -Infinity });
+      }
+    }
+  }
+  return out;
+}
+
+function fmt1(n) { return isNum(n) ? n.toFixed(1) : '—'; }
+
+function renderDecisionZone() {
+  const ctxEl = document.getElementById('dzContext');
+  const ladEl = document.getElementById('dzLadder');
+  if (!ctxEl || !ladEl) return;
+
+  // Field context: best score per athlete in the evaluated scope
+  const best = new Map();
+  for (const r of (state.filtered || [])) {
+    const s = scoreForRow(r);
+    if (!isNum(s)) continue;
+    const k = athleteKey(r);
+    if (!best.has(k) || s > best.get(k)) best.set(k, s);
+  }
+  const scores = [...best.values()].sort((a, b) => b - a);
+  const n = scores.length;
+  const avg = n ? scores.reduce((a, b) => a + b, 0) / n : null;
+  const median = n ? (n % 2 ? scores[(n - 1) / 2] : (scores[n / 2 - 1] + scores[n / 2]) / 2) : null;
+  const topAvg = (k) => scores.length >= 1 ? scores.slice(0, Math.min(k, scores.length)).reduce((a, b) => a + b, 0) / Math.min(k, scores.length) : null;
+  const wb = worldBenchmarks(els.genderFilter.value, els.disciplineFilter.value);
+
+  const tiles = [
+    { l: 'Athletes in field', v: String(n), f: 'best score per athlete' },
+    { l: 'Field average', v: fmt1(avg), f: 'of best scores' },
+    { l: 'Field median', v: fmt1(median), f: 'middle of the field' },
+    { l: 'Top-8 average', v: fmt1(topAvg(8)), f: 'a finals-strength read' },
+    { l: 'Top-12 average', v: fmt1(topAvg(12)), f: 'a semis-strength read' },
+  ];
+  if (wb && isNum(wb.finalist)) tiles.push({ l: 'World Aquatics finalist', v: fmt1(wb.finalist), f: 'median finalist score', intl: true });
+  if (wb && isNum(wb.medalist)) tiles.push({ l: 'World Aquatics medalist', v: fmt1(wb.medalist), f: 'median medalist score', intl: true });
+  ctxEl.innerHTML = tiles.map(t =>
+    `<div class="dz-tile ${t.intl ? 'dz-tile-intl' : ''}"><span class="dz-tile-l">${esc(t.l)}</span><b class="dz-tile-v">${esc(t.v)}</b><span class="dz-tile-f">${esc(t.f)}</span></div>`
+  ).join('');
+
+  // Move-the-bar ladder: names added (drop) / dropped (raise) vs current standard
+  const gender = els.genderFilter.value, discipline = els.disciplineFilter.value;
+  const family = poolFamily();
+  const curStd = num(els.scoreThreshold.value) ?? scoreThresholdForSelection(gender, discipline, family);
+  const curDd = num(els.ddThreshold.value) ?? ddMinimumForSelection(gender, discipline, els.criteriaPreset.value);
+  if (!isNum(curStd)) {
+    ladEl.innerHTML = '<div class="dz-ladder-empty">Set a score standard (sidebar or What-if custom bar) to see who each change adds or drops.</div>';
+    return;
+  }
+  const baseSet = qualSetWith(curStd, curDd);
+  const steps = [-15, -10, -5, +5, +10, +15];
+  const rows = steps.map(d => {
+    const thr = Math.round((curStd + d) * 100) / 100;
+    const set = qualSetWith(thr, curDd);
+    const changed = [];
+    if (d < 0) { for (const [k, v] of set) if (!baseSet.has(k)) changed.push(v); }
+    else { for (const [k, v] of baseSet) if (!set.has(k)) changed.push(v); }
+    changed.sort((a, b) => b.score - a.score);
+    return { d, thr, count: set.size, changed };
+  });
+  const nameChips = (list, cls) => {
+    if (!list.length) return '<span class="dz-noone">no change</span>';
+    const shown = list.slice(0, 4).map(v => `<span class="dz-name ${cls}">${esc(v.name)} <em>${fmt1(v.score)}</em></span>`).join('');
+    const more = list.length > 4 ? `<span class="dz-more">+${list.length - 4} more</span>` : '';
+    return shown + more;
+  };
+  ladEl.innerHTML = `
+    <div class="dz-lad-current">Current standard <b>${fmt1(curStd)}</b> → <b>${baseSet.size}</b> qualify</div>
+    ${rows.map(r => `
+      <div class="dz-lad-row">
+        <span class="dz-lad-thr">${r.d > 0 ? '+' : ''}${r.d} → <b>${fmt1(r.thr)}</b></span>
+        <span class="dz-lad-count">${r.count} <em class="${r.count > baseSet.size ? 'up' : r.count < baseSet.size ? 'down' : ''}">${r.count === baseSet.size ? '±0' : (r.count > baseSet.size ? '+' : '') + (r.count - baseSet.size)}</em></span>
+        <span class="dz-lad-names">${r.d < 0 ? nameChips(r.changed, 'add') : nameChips(r.changed, 'drop')}</span>
+      </div>`).join('')}
+    <div class="dz-lad-foot">Below the bar = athletes <b>added</b> if you lower it. Above = athletes <b>dropped</b> if you raise it. DD standard held at ${isNum(curDd) ? fmt1(curDd) : 'n/a'}.</div>`;
 }
 
 function qualCountWith(scoreThr, ddMin, ddModeOverride) {
