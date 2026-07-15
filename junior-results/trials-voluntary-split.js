@@ -75,10 +75,21 @@
       const ev = EV_BY_ID[rec.event_id] || {};
       const prelimsTotal = (rec.vol_prelim != null && rec.opt_prelim != null) ? rec.vol_prelim + rec.opt_prelim : null;
       const madeFinals = rec.opt_final != null;
-      const officialTotal = (rec.vol_prelim != null && rec.opt_final != null) ? rec.vol_prelim + rec.opt_final : null;
+      // finalsTotal: Finals is Optional-dives-only (confirmed both empirically and in
+      // the official Meet Information Packet), so the Optional(Finals) score IS the
+      // Finals round total — no separate Voluntary component to add.
+      const finalsTotal = rec.opt_final;
+      // Real Trials result, per the Meet Information Packet's Competition Format section:
+      // "Final rankings will be determined by the cumulative total of all preliminary
+      // scores (voluntary and optional) and final scores (optional only)." This is the
+      // athlete's actual score/rank at the meet — matches DiveMeets' own cumulative total.
+      const actualTotal = (prelimsTotal != null && finalsTotal != null) ? prelimsTotal + finalsTotal : null;
+      // Hypothetical Junior-Nationals-style reconstruction (what the HP Director asked
+      // for) — NOT the real Trials result, so it must never be labeled "Official."
+      const nationalsEquivTotal = (rec.vol_prelim != null && rec.opt_final != null) ? rec.vol_prelim + rec.opt_final : null;
       return {
         ...rec, ...ev,
-        prelimsTotal, madeFinals, officialTotal,
+        prelimsTotal, madeFinals, finalsTotal, actualTotal, nationalsEquivTotal,
         // Flag only a genuine scored Voluntary dive in a Final round — DiveMeets carries
         // zero-score placeholder rows for the declared-but-unused voluntary list on some
         // finalists (e.g. a scratch), which don't affect any total computed above.
@@ -160,27 +171,44 @@
 
   function athleteTable(rows, eventId){
     const filtered = rows.filter(r => r.event_id === eventId)
-      .sort((a,b) => (b.prelimsTotal||0) - (a.prelimsTotal||0));
+      // Real competition order: finalists ranked by their actual cumulative total
+      // (prelims + finals, per the Meet Info Packet's stated rule), then everyone
+      // who didn't advance ranked by their prelim total underneath.
+      .sort((a, b) => {
+        if (a.madeFinals !== b.madeFinals) return a.madeFinals ? -1 : 1;
+        const av = a.madeFinals ? a.actualTotal : a.prelimsTotal;
+        const bv = b.madeFinals ? b.actualTotal : b.prelimsTotal;
+        return (bv || 0) - (av || 0);
+      });
     if (!filtered.length) return '<div class="rpt-empty">No divers scraped yet for this event.</div>';
     return `<div class="rpt-table-scroll"><table class="rpt-table">
       <thead><tr>
-        <th>Diver</th><th>Team</th>
+        <th>Rank</th><th>Diver</th><th>Team</th>
         <th>Voluntary<br>(Prelims)</th><th>Optional<br>(Prelims)</th><th>Prelims Total</th>
-        <th>Optional<br>(Finals)</th><th>Official Total<sup>†</sup></th>
+        <th>Optional<br>(Finals)</th><th>Actual Trials Total<sup>†</sup></th>
+        <th>Nationals-Equivalent Total<sup>‡</sup></th>
       </tr></thead>
       <tbody>
-        ${filtered.map(r => `<tr>
+        ${filtered.map((r, i) => `<tr>
+          <td class="mono">${i + 1}${r.madeFinals ? '' : '<span class="small"> (prelim)</span>'}</td>
           <td class="r-name">${esc(r.diver_name)}</td>
           <td class="small">${esc(r.team_name)}</td>
           <td class="mono">${fmt(r.vol_prelim)}</td>
           <td class="mono">${fmt(r.opt_prelim)}</td>
           <td class="mono"><strong>${fmt(r.prelimsTotal)}</strong></td>
-          <td class="mono">${r.madeFinals ? fmt(r.opt_final) : '<span class="small">—</span>'}</td>
-          <td class="mono">${r.madeFinals ? `<strong>${fmt(r.officialTotal)}</strong>` : '<span class="small">—</span>'}</td>
+          <td class="mono">${r.madeFinals ? fmt(r.finalsTotal) : '<span class="small">—</span>'}</td>
+          <td class="mono">${r.madeFinals ? `<strong>${fmt(r.actualTotal)}</strong>` : '<span class="small">—</span>'}</td>
+          <td class="mono">${r.madeFinals ? fmt(r.nationalsEquivTotal) : '<span class="small">—</span>'}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>
-    <div class="rpt-pill-note" style="margin-top:6px">† Official Total = Voluntary (Prelims) + Optional (Finals) — the Junior-Nationals-equivalent reconstruction. Only scored for divers who made the Final.</div>`;
+    <div class="rpt-pill-note" style="margin-top:6px">
+      † Actual Trials Total = Prelims Total + Finals Total — the athlete's real score and the basis
+      for the meet's actual final rankings, per the official Meet Information Packet.<br>
+      ‡ Nationals-Equivalent Total = Voluntary (Prelims) + Optional (Finals) — a hypothetical
+      reconstruction of what the score would be under Junior Nationals' format. This is <em>not</em>
+      the athlete's real Trials result.
+    </div>`;
   }
 
   window.renderTrialsSplitPanel = async function(wrap){
@@ -190,11 +218,12 @@
         <div class="rpt-soft">Live from Neon: <code>core.dive_sheets</code> · meet 12838 · Groups A/B individual events</div>
       </div>
       <div class="rpt-note">
-        <strong>2026 USA Diving Junior World Championships Trials</strong> — Coral Springs, May 6&ndash;10, 2026.
-        Prelims combine Voluntary + Optional dives into one round; Finals are Optional-dives-only —
-        confirmed against the scraped dive sheets themselves (same mechanic as Junior Nationals, not a
-        second Voluntary/Optional split in Finals). <strong>Official Total</strong> below reconstructs the
-        Junior-Nationals-equivalent score: Voluntary (Prelims) + Optional (Finals).
+        <strong>2026 World Aquatics Junior Diving Championships Team Trials</strong> — Coral Springs, May 6&ndash;10, 2026.
+        Per the official Meet Information Packet: Individual-event Prelims combine Voluntary + Optional
+        dives; the top 12 advance to a Finals round of Optional dives only; real rankings are the
+        cumulative total of both rounds. <strong>Nationals-Equivalent Total</strong> below is a separate,
+        hypothetical reconstruction (Voluntary Prelims + Optional Finals) for comparing against Junior
+        Nationals scoring — it is not the athlete's actual Trials result.
       </div>
       <div id="trials-split-body"><div class="rpt-loading">Loading Trials dive sheets…</div></div>
     `;
