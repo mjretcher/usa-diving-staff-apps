@@ -1,18 +1,22 @@
 /* ============================================================
-   Trials Voluntary / Optional Split — 2026 Junior World
-   Championships Trials (meet 12838), Groups A & B individual
-   events. Reads core.dive_sheets (populated by
+   Trials Voluntary / Optional Split — 2026 World Aquatics Junior
+   Diving Championships Team Trials (meet 12838), Groups A & B
+   individual events. Reads core.dive_sheets (populated by
    db/scripts/fetch_trials_dive_sheets.py) via the shared Neon
-   client and reconstructs the Junior-Nationals-equivalent score:
-     Official Total = Voluntary(Prelims) + Optional(Finals)
+   client. Shows two totals per finalist — don't conflate them:
+     Actual Trials Total      = Prelims Total + Finals Total
+                                 (the athlete's real result/rank)
+     Nationals-Equivalent Total = Voluntary(Prelims) + Optional(Finals)
+                                 (hypothetical, NOT the real result)
 
-   Mechanic (confirmed against live scraped data 2026-07-14, not
-   assumed): Prelims mix Voluntary + Optional dives into one
-   round; Finals at Trials are Optional-dives-only — the SAME
-   mechanic as Junior Nationals, not a second V/O mix. So there
-   are three raw fields (not four): Voluntary(Prelims),
-   Optional(Prelims), Optional(Finals) — plus the derived
-   Prelims Total and the reconstructed Official Total.
+   Mechanic confirmed two ways: empirically against the scraped
+   dive sheets (2026-07-14), and in writing in the official Meet
+   Information Packet's "Competition Format" section — Prelims mix
+   Voluntary + Optional dives into one round, top 12 advance, Finals
+   are Optional-dives-only, and real rankings are the cumulative
+   total of both rounds. So there are three raw fields (not four):
+   Voluntary(Prelims), Optional(Prelims), Optional(Finals) — plus
+   the two derived totals above.
    ============================================================ */
 (function(){
   const MEET_ID = '12838';
@@ -242,9 +246,10 @@
           ${chartSVG(agg)}
         </div>
         ${anyFinalVolWarning ? `<div class="rpt-note" style="border-left-color:#d97706;background:#FEF3C7">
-          Heads up: at least one Final-round dive was scraped with a Voluntary flag, which breaks the
-          "Finals are Optional-only" assumption for that diver/event. Flagged rows are excluded from the
-          Official Total above — check <code>core.dive_sheets</code> for that diver before trusting their number.
+          Heads up: at least one Final-round dive was scraped with a genuine non-zero Voluntary score,
+          which breaks the "Finals are Optional-only" rule this report relies on for that diver/event.
+          That diver's Actual Trials Total and Nationals-Equivalent Total above are excluded — check
+          <code>core.dive_sheets</code> for that diver before trusting either number.
         </div>` : ''}
         <div class="rpt-subsection">
           <div class="rpt-subsection-title">Per-athlete breakdown</div>
