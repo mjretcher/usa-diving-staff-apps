@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matchup Lab — USA Diving Staff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../shared/design.css?v=20260715" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260715" />
+  <link rel="stylesheet" href="styles.css?v=20260715" />
+</head>
+<body>
+
+<header class="app-topbar">
+  <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
+    <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" class="topbar-logo" />
+  </a>
+  <div class="topbar-divider"></div>
+  <div class="topbar-identity">
+    <div class="topbar-eyebrow">High Performance</div>
+    <div class="topbar-title">Synchro &amp; Mixed Matchup Lab</div>
+  </div>
+  <nav class="hp-view-switch" aria-label="High Performance views">
+    <a class="hp-view-tab" href="../criteria-simulator/">Standards Studio</a>
+    <a class="hp-view-tab" href="../athlete-evaluation/">Athlete Evaluation</a>
+    <a class="hp-view-tab active" href="./" aria-current="page">Matchup Lab</a>
+  </nav>
+  <div class="topbar-spacer"></div>
+</header>
+
+<main class="ml-wrap">
+
+  <section class="panel ml-controls-panel">
+    <header class="panel-head">
+      <h2>Build a matchup pool</h2>
+      <p>Voluntary dives are the shared ground of a synchro list — assigned DD means the score is pure execution. Pick a discipline and mode, and every athlete's voluntary record loads from the scraped dive sheets.</p>
+    </header>
+    <div class="ml-controls">
+      <label class="ml-field"><span>Discipline</span>
+        <select id="mlDiscipline" class="sidebar-select">
+          <option value="3m" selected>3-meter</option>
+          <option value="Platform">Platform</option>
+          <option value="1m">1-meter</option>
+        </select>
+      </label>
+      <label class="ml-field"><span>Mode</span>
+        <select id="mlMode" class="sidebar-select">
+          <option value="Female" selected>Girls pairs</option>
+          <option value="Male">Boys pairs</option>
+          <option value="Mixed">Mixed pairs (one boy + one girl)</option>
+        </select>
+      </label>
+      <label class="ml-field"><span>Age group</span>
+        <select id="mlGroup" class="sidebar-select">
+          <option value="all" selected>All junior (14–18 synchro age)</option>
+          <option value="A">Group A only (16–18)</option>
+          <option value="B">Group B only (14–15)</option>
+        </select>
+      </label>
+      <label class="ml-field"><span>Meets</span>
+        <select id="mlMeets" class="sidebar-select">
+          <option value="both" selected>2025 Jr Nationals + 2026 Trials</option>
+          <option value="12838">2026 World Junior Trials only</option>
+          <option value="11609">2025 Junior Nationals only</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" id="mlLoad">Load field</button>
+    </div>
+    <div class="ml-coverage" id="mlCoverage">
+      Coverage is honest and limited: per-dive Voluntary/Optional data exists for the
+      <b>2025 Junior Nationals</b> and the <b>2026 World Junior Trials</b> (and will include the
+      2026 Junior Nationals once results post). Older meets have no dive-level data, so an athlete
+      who skipped both meets won't appear here.
+    </div>
+  </section>
+
+  <div id="mlLoading" class="loading-panel" hidden>
+    <div class="spinner"></div>
+    <div class="loading-text" id="mlLoadingText">Loading voluntary records…</div>
+  </div>
+
+  <div id="mlResults" hidden>
+
+    <section class="panel">
+      <header class="panel-head">
+        <h2>Voluntary execution profiles</h2>
+        <p id="mlProfilesSub">Each athlete's record on voluntary dives in scope. Check two or more athletes to compare them side by side.</p>
+      </header>
+      <div class="table-wrap">
+        <table class="data-table" id="mlProfileTable">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="sortable" data-sort="name">Athlete</th>
+              <th class="sortable" data-sort="team">Team</th>
+              <th>Group</th>
+              <th class="num sortable" data-sort="dives">Vol dives</th>
+              <th class="num sortable sort-desc" data-sort="avg">Avg / dive</th>
+              <th class="num sortable" data-sort="bestTotal">Best vol total</th>
+              <th class="num sortable" data-sort="consistency">Spread (σ)</th>
+              <th>Meets</th>
+            </tr>
+          </thead>
+          <tbody id="mlProfileRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="mlComparePanel" hidden>
+      <header class="panel-head">
+        <h2>Side-by-side</h2>
+        <p>The checked athletes, dive by dive — shared voluntary dives are highlighted, because a synchro pair dives the same list.</p>
+      </header>
+      <div id="mlCompareBody"></div>
+    </section>
+
+    <section class="panel">
+      <header class="panel-head">
+        <h2>Suggested pairings</h2>
+        <p id="mlPairsSub">Ranked by combined voluntary execution, with a bonus for shared voluntary dives. Advisory only — a starting point for the conversation, not a decision.</p>
+      </header>
+      <div id="mlPairsBody"></div>
+    </section>
+
+  </div>
+
+  <div id="mlEmpty" class="ml-empty">Pick a discipline and mode, then <b>Load field</b>.</div>
+
+</main>
+
+<script>
+window.USAD_CONFIG = {
+  neon: {
+    sqlEndpoint: 'https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',
+    connectionString: 'postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+  }
+};
+</script>
+<script src="../shared/neon-client.js?v=20260715"></script>
+<script src="../shared/usad-toast.js?v=20260715"></script>
+<script src="main.js?v=20260715"></script>
+
+</body>
+</html>
