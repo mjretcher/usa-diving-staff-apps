@@ -1530,15 +1530,24 @@ function applyBaselineProjections(){
   if(!deltas.length){toast('No baseline projections to apply');return;}
   let applied=0;
   upd(s=>{
+    const touched=new Set();
     deltas.forEach(d=>{
       const sess=s.sessions.find(x=>x.id===d.sessId);if(!sess)return;
       const ev=sess.events.find(e=>e.id===d.evId);if(!ev)return;
       ev.projectedDivers=d.baseline;
-      applied++;
+      // A baseline is a deliberate stand-in for a real signup count (e.g. last
+      // cycle's Winter Nationals sizing this year's Qualifier/Nationals before
+      // registration exists) — once applied it should behave exactly like a
+      // real "Apply registered counts": it sizes the actual schedule and is
+      // protected from later pre-fills, not just a hint sitting in one column.
+      ev.autoProjected=false;
+      ev.numberOfDivers=entryValue(ev);
+      touched.add(sess.dayId);applied++;
     });
+    touched.forEach(dayId=>reflowDay(s,dayId));
   });
   UI.modal=null;
-  toast(`Set ${applied} event${applied===1?'':'s'} projected count from baseline meet(s)`);
+  toast(`Synced ${applied} event${applied===1?'':'s'} to baseline meet counts`);
 }
 function renderEntrySyncModal(){
   const es=UI.entrySync||{};
@@ -1577,7 +1586,7 @@ function renderEntrySyncModal(){
         <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th>${hasBaseline?'<th style="text-align:right;padding:4px 8px">Baseline</th>':''}<th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match any configured DiveMeets source.</div>`}
-      <p style="font-size:11px;color:var(--tx3);margin-top:12px">"Apply registered counts" sets each event's entry count to the registered number and protects it from later pre-fills.${hasBaseline?' "Apply baseline" only fills the Projected column as an estimate — it never touches the scheduled headcount.':''}</p>
+      <p style="font-size:11px;color:var(--tx3);margin-top:12px">Both "Apply" buttons set the event's entry count and protect it from later pre-fills — "Registered" uses live signups, "Baseline" uses the projection-baseline meet(s). ${hasBaseline?'Only events with a configured baseline source are affected by "Apply baseline" — for events that have both, whichever you click last wins.':''}</p>
     </div>
     <div class="modal-foot">
       <button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button>
