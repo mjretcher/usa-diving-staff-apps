@@ -358,7 +358,7 @@ setInterval(()=>{
 
 // ── STATE ─────────────────────────────────────────────────────────────
 function mkDay(off=0){const d=new Date();d.setDate(d.getDate()+off);return{id:uid(),date:d.toISOString().slice(0,10),openMinutes:390,closeMinutes:1200}}
-function mkInitial(){return{updatedAt:new Date().toISOString(),meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',divemeetsId:'',days:[mkDay(0),mkDay(1),mkDay(2),mkDay(3)]},sessions:[],publishStatus:'draft',currentLibraryId:'',acknowledgedWarnings:[],outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true}}}
+function mkInitial(){return{updatedAt:new Date().toISOString(),meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',divemeetsId:'',divemeetsSources:[],days:[mkDay(0),mkDay(1),mkDay(2),mkDay(3)]},sessions:[],publishStatus:'draft',currentLibraryId:'',acknowledgedWarnings:[],outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true}}}
 function loadS(){try{const r=JSON.parse(localStorage.getItem(SK)||'');if(r?.meet&&Array.isArray(r.sessions))return r}catch{}return mkInitial()}
 function saveS(){S.updatedAt=new Date().toISOString();lastSavedAt=S.updatedAt;try{localStorage.setItem(SK,JSON.stringify(S))}catch{}}
 let S=loadS();
@@ -1307,6 +1307,37 @@ function getDivemeetsMeetId(){
   const id=S.meet&&S.meet.divemeetsId?String(S.meet.divemeetsId).trim():'';
   return id||DEFAULT_DIVEMEETS_MEET_ID;
 }
+// Additional DiveMeets sources beyond the single default above — lets one
+// schedule pull from several meets at once (e.g. a Combined schedule with
+// separate Qualifier + Nationals meets), each scoped to specific event
+// levels, and each tagged 'registered' (live signups) or 'projected'
+// (a past meet used as a planning-baseline estimate, since DiveMeets has no
+// "expected turnout" concept of its own). The default source always keeps
+// its old behavior: match by whatever level the row itself was parsed
+// with (levels:null), which is how the multi-age-group Junior meet has
+// always worked. Extra sources instead force-map every row they return
+// onto specific levels (levels:[...]), since e.g. USA Diving's own Senior
+// meets all say "Senior" in the event name regardless of whether the
+// meet itself is the Qualifier or Nationals — only the meet ID tells them
+// apart, so the level has to come from configuration, not the page text.
+function getAllDivemeetsSources(){
+  const legacy={id:getDivemeetsMeetId(),role:'registered',levels:null};
+  const extra=(S.meet&&Array.isArray(S.meet.divemeetsSources))?S.meet.divemeetsSources:[];
+  return [legacy,...extra.filter(s=>s&&s.id)];
+}
+function addDivemeetsSource(){
+  upd(s=>{s.meet.divemeetsSources=s.meet.divemeetsSources||[];s.meet.divemeetsSources.push({id:'',role:'registered',levels:[]})});
+}
+function removeDivemeetsSource(i){
+  upd(s=>{(s.meet.divemeetsSources||[]).splice(i,1)});
+}
+function updateDivemeetsSource(i,field,value){
+  upd(s=>{
+    const src=(s.meet.divemeetsSources||[])[i];if(!src)return;
+    if(field==='levels')src.levels=String(value).split(',').map(x=>x.trim()).filter(Boolean);
+    else src[field]=value;
+  });
+}
 // Postgres timestamptz::text casts return 6-digit microsecond precision
 // (e.g. "2026-07-16 11:49:08.636458+00"). JS Date() only supports 3-digit
 // milliseconds and rejects the bare 2-digit "+00" offset, so a naive
@@ -1317,30 +1348,41 @@ function parseNeonTimestamp(raw){
   const iso=raw.replace(' ','T').replace(/(\.\d{3})\d+/,'$1').replace(/([+-]\d{2})$/,'$1:00');
   return new Date(iso);
 }
-async function loadMeetEntries(){
-  const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[getDivemeetsMeetId()]);
+async function loadMeetEntriesForId(meetId){
+  const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[meetId]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
 }
-async function loadMeetEntrants(){
-  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[getDivemeetsMeetId()]);
+async function loadMeetEntrantsForId(meetId){
+  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[meetId]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],name:row[3],team:row[4],diverKey:row[5]}));
+}
+async function loadAllDivemeetsSources(){
+  const configs=getAllDivemeetsSources();
+  const uniqueIds=[...new Set(configs.map(c=>c.id))];
+  const rowsById={},entrantsById={};
+  await Promise.all(uniqueIds.map(async id=>{
+    rowsById[id]=await loadMeetEntriesForId(id).catch(()=>[]);
+    entrantsById[id]=await loadMeetEntrantsForId(id).catch(()=>[]);
+  }));
+  return configs.map(c=>({...c,rows:rowsById[c.id]||[],entrants:entrantsById[c.id]||[]}));
 }
 // ── SYNC ACTUAL ENTRIES (DiveMeets registrations → schedule) ─────────
 function openEntrySync(){
-  UI.entrySync={loading:true,rows:null,entrants:null,error:null,pulling:false,pullMsg:null};
+  UI.entrySync={loading:true,sources:null,error:null,pulling:false,pullMsg:null};
   UI.entrySyncExpand={};
   UI.modal='entry-sync';
   render();
-  Promise.all([loadMeetEntries(),loadMeetEntrants().catch(()=>[])])
-    .then(([rows,entrants])=>{UI.entrySync={loading:false,rows,entrants,error:null,pulling:false,pullMsg:null}})
-    .catch(e=>{UI.entrySync={loading:false,rows:null,entrants:null,error:e.message||'Could not load entries',pulling:false,pullMsg:null}})
+  loadAllDivemeetsSources()
+    .then(sources=>{UI.entrySync={loading:false,sources,error:null,pulling:false,pullMsg:null}})
+    .catch(e=>{UI.entrySync={loading:false,sources:null,error:e.message||'Could not load entries',pulling:false,pullMsg:null}})
     .finally(()=>render());
 }
 // Live "pull now" — dispatches the divemeets-entries GitHub Actions workflow
 // directly from the browser (same token/pattern overrides-sync.js already
-// uses for the Contents API), polls it to completion, then reloads rows
-// from Neon so the modal reflects a genuinely fresh DiveMeets fetch rather
-// than whatever the last nightly cron happened to leave behind.
+// uses for the Contents API), once per distinct configured meet ID in
+// sequence, polling each to completion, then reloads rows from Neon so the
+// modal reflects a genuinely fresh DiveMeets fetch rather than whatever the
+// last nightly cron happened to leave behind.
 const GH_API='https://api.github.com';
 const GH_REPO=(window.USAD_CONFIG&&window.USAD_CONFIG.repo)||'mjretcher/usa-diving-staff-apps';
 function ghToken(){return (window.USAD_CONFIG&&window.USAD_CONFIG.syncToken)||'';}
@@ -1354,34 +1396,38 @@ async function pullDivemeetsNow(){
   if(UI.entrySync&&UI.entrySync.pulling)return;
   UI.entrySync=UI.entrySync||{};
   UI.entrySync.pulling=true;
-  UI.entrySync.pullMsg='Requesting a fresh pull from DiveMeets…';
   render();
-  const dispatchedAt=Date.now();
+  const meetIds=[...new Set(getAllDivemeetsSources().map(c=>c.id))];
   try{
-    await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
-      method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:getDivemeetsMeetId()}})
-    });
-    // GitHub doesn't hand back a run id on dispatch — find the new run by
-    // polling the workflow's run list for one created after we dispatched.
-    let run=null;
-    for(let i=0;i<15&&!run;i++){
-      await sleep(4000);
-      const data=await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/runs?per_page=5`);
-      run=(data.workflow_runs||[]).find(r=>new Date(r.created_at).getTime()>=dispatchedAt-5000);
+    for(let i=0;i<meetIds.length;i++){
+      const meetId=meetIds[i];
+      const tag=meetIds.length>1?` (meet ${meetId}, ${i+1}/${meetIds.length})`:'';
+      UI.entrySync.pullMsg=`Requesting a fresh pull from DiveMeets${tag}…`;
+      render();
+      const dispatchedAt=Date.now();
+      await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
+        method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:meetId}})
+      });
+      let run=null;
+      for(let j=0;j<15&&!run;j++){
+        await sleep(4000);
+        const data=await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/runs?per_page=5`);
+        run=(data.workflow_runs||[]).find(r=>new Date(r.created_at).getTime()>=dispatchedAt-5000);
+      }
+      if(!run)throw new Error(`Could not find the triggered run for meet ${meetId} — check the Actions tab`);
+      UI.entrySync.pullMsg=`Pulling live entries from DiveMeets${tag} — usually 1–2 minutes…`;
+      render();
+      const started=Date.now();
+      while(run.status!=='completed'){
+        if(Date.now()-started>5*60*1000)throw new Error(`Meet ${meetId} still running after 5 minutes — it'll finish in the background; re-open this to check later`);
+        await sleep(5000);
+        run=await ghFetch(`/repos/${GH_REPO}/actions/runs/${run.id}`);
+      }
+      if(run.conclusion!=='success')throw new Error(`Pull for meet ${meetId} finished but failed (${run.conclusion}) — DiveMeets page structure may have changed`);
     }
-    if(!run)throw new Error('Could not find the triggered run — check the Actions tab');
-    UI.entrySync.pullMsg='Pulling live entries from DiveMeets — usually 1–2 minutes…';
-    render();
-    const started=Date.now();
-    while(run.status!=='completed'){
-      if(Date.now()-started>5*60*1000)throw new Error('Still running after 5 minutes — it will finish in the background; re-open this to check later');
-      await sleep(5000);
-      run=await ghFetch(`/repos/${GH_REPO}/actions/runs/${run.id}`);
-    }
-    if(run.conclusion!=='success')throw new Error(`Pull finished but failed (${run.conclusion}) — DiveMeets page structure may have changed`);
-    const[rows,entrants]=await Promise.all([loadMeetEntries(),loadMeetEntrants().catch(()=>[])]);
-    UI.entrySync={loading:false,rows,entrants,error:null,pulling:false,pullMsg:null};
-    toast('Pulled fresh entries from DiveMeets');
+    const sources=await loadAllDivemeetsSources();
+    UI.entrySync={loading:false,sources,error:null,pulling:false,pullMsg:null};
+    toast(`Pulled fresh entries from ${meetIds.length} DiveMeets meet${meetIds.length===1?'':'s'}`);
   }catch(e){
     UI.entrySync.pulling=false;
     UI.entrySync.pullMsg=null;
@@ -1389,24 +1435,48 @@ async function pullDivemeetsNow(){
   }
   render();
 }
+// Finds the first configured source (in declared order) of the given role
+// that covers this event, matching either by its explicit level override
+// (extra sources) or by the row's own parsed level (the default source).
+function findDivemeetsMatch(sources,ev,role){
+  for(const s of sources){
+    if(s.role!==role)continue;
+    let row;
+    if(s.levels&&s.levels.length){
+      if(!s.levels.includes(ev.level))continue;
+      row=(s.rows||[]).find(r=>r.gender===ev.gender&&r.discipline===ev.apparatus);
+    }else{
+      row=(s.rows||[]).find(r=>r.ageGroup===ev.level&&r.gender===ev.gender&&r.discipline===ev.apparatus);
+    }
+    if(row)return{entries:row.entries,sourceId:s.id};
+  }
+  return null;
+}
+function findDivemeetsEntrants(sources,ev,sourceId){
+  const s=sources.find(x=>x.id===sourceId);if(!s)return[];
+  if(s.levels&&s.levels.length)return(s.entrants||[]).filter(e=>e.gender===ev.gender&&e.discipline===ev.apparatus);
+  return(s.entrants||[]).filter(e=>e.ageGroup===ev.level&&e.gender===ev.gender&&e.discipline===ev.apparatus);
+}
 function entrySyncDeltas(){
-  const byKey={};
-  (UI.entrySync?.rows||[]).forEach(r=>{byKey[r.ageGroup+'|'+r.gender+'|'+r.discipline]=r.entries});
+  const sources=UI.entrySync?.sources||[];
   const out=[];
   S.sessions.forEach(sess=>{
     if(sess.isPractice)return;
     sess.events.forEach(ev=>{
       if(ev.round!=='Prelim'&&ev.round!=='Qualifier')return;
-      const k=ev.level+'|'+ev.gender+'|'+ev.apparatus;
-      if(!(k in byKey))return;
-      out.push({sessId:sess.id,evId:ev.id,name:evName(ev),projected:ev.projectedDivers,registered:byKey[k]});
+      const reg=findDivemeetsMatch(sources,ev,'registered');
+      const base=findDivemeetsMatch(sources,ev,'projected');
+      if(!reg&&!base)return;
+      out.push({sessId:sess.id,evId:ev.id,name:evName(ev),projected:ev.projectedDivers,
+        registered:reg?reg.entries:null,registeredSourceId:reg?reg.sourceId:null,
+        baseline:base?base.entries:null,baselineSourceId:base?base.sourceId:null});
     });
   });
   return out;
 }
 function applyEntrySync(){
-  const deltas=entrySyncDeltas();
-  if(!deltas.length){toast('No matching events to update');return;}
+  const deltas=entrySyncDeltas().filter(d=>d.registered!=null);
+  if(!deltas.length){toast('No registered entries to apply');return;}
   let applied=0;
   upd(s=>{
     const touched=new Set();
@@ -1425,52 +1495,69 @@ function applyEntrySync(){
   UI.modal=null;
   toast(`Synced ${applied} event${applied===1?'':'s'} to registered DiveMeets entries`);
 }
+// A "projected baseline" source (e.g. last cycle's Winter Nationals turnout
+// standing in for this year's Qualifier/Nationals estimate before real
+// registration exists) only ever fills the Projected column — it never
+// touches the actual scheduled headcount, since it's an estimate the person
+// should still review before committing to it.
+function applyBaselineProjections(){
+  const deltas=entrySyncDeltas().filter(d=>d.baseline!=null);
+  if(!deltas.length){toast('No baseline projections to apply');return;}
+  let applied=0;
+  upd(s=>{
+    deltas.forEach(d=>{
+      const sess=s.sessions.find(x=>x.id===d.sessId);if(!sess)return;
+      const ev=sess.events.find(e=>e.id===d.evId);if(!ev)return;
+      ev.projectedDivers=d.baseline;
+      applied++;
+    });
+  });
+  UI.modal=null;
+  toast(`Set ${applied} event${applied===1?'':'s'} projected count from baseline meet(s)`);
+}
 function renderEntrySyncModal(){
   const es=UI.entrySync||{};
-  const meetId=getDivemeetsMeetId();
-  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Live registrations from DiveMeets meet ${esc(meetId)}${meetId===DEFAULT_DIVEMEETS_MEET_ID?' (2026 Junior Nationals)':''} <a href="#" onclick="event.preventDefault();UI.modal='meet';render()" style="color:var(--cyan)">change</a></div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
+  const configuredSources=getAllDivemeetsSources();
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${configuredSources.length} DiveMeets source${configuredSources.length===1?'':'s'} configured <a href="#" onclick="event.preventDefault();UI.modal='meet';render()" style="color:var(--cyan)">manage</a></div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
   if(es.loading)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading registered entries…</div></div>`;
   if(es.error)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body"><div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load entries: ${esc(es.error)}</div><button class="btn btn-p" onclick="openEntrySync()">Retry</button></div></div>`;
-  const fetchedAt=es.rows&&es.rows.length?es.rows[0].fetchedAt:null;
-  const fetchedLbl=fetchedAt?parseNeonTimestamp(fetchedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+  const sources=es.sources||[];
+  const fetchedTimes=sources.map(s=>s.rows&&s.rows.length?parseNeonTimestamp(s.rows[0].fetchedAt):null).filter(d=>d&&!isNaN(d.getTime()));
+  const fetchedLbl=fetchedTimes.length?new Date(Math.min(...fetchedTimes.map(d=>d.getTime()))).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+  const hasBaseline=sources.some(s=>s.role==='projected');
   const deltas=entrySyncDeltas();
-  const entrantsByEvent={};
-  (es.entrants||[]).forEach(en=>{
-    const k=en.ageGroup+'|'+en.gender+'|'+en.discipline;
-    (entrantsByEvent[k]=entrantsByEvent[k]||[]).push(en);
-  });
   const projKeys=new Set((UI.projRows||[]).map(r=>r.diverKey));
   const rows=deltas.map((d,di)=>{
     const proj=d.projected==null||d.projected===''?null:Number(d.projected);
-    const diff=proj==null?null:d.registered-proj;
-    const badge=diff==null?`<span style="color:var(--tx3)">new</span>`:diff===0?`<span style="color:var(--tx3)">same</span>`:diff>0?`<span style="color:var(--prac);font-weight:700">+${diff}</span>`:`<span style="color:var(--red);font-weight:700">${diff}</span>`;
+    const diff=(proj==null||d.registered==null)?null:d.registered-proj;
+    const badge=diff==null?`<span style="color:var(--tx3)">—</span>`:diff===0?`<span style="color:var(--tx3)">same</span>`:diff>0?`<span style="color:var(--prac);font-weight:700">+${diff}</span>`:`<span style="color:var(--red);font-weight:700">${diff}</span>`;
     const sess=S.sessions.find(x=>x.id===d.sessId);
     const ev=sess&&sess.events.find(e=>e.id===d.evId);
-    const k=ev?ev.level+'|'+ev.gender+'|'+ev.apparatus:'';
-    const who=entrantsByEvent[k]||[];
+    const who=ev&&d.registeredSourceId?findDivemeetsEntrants(sources,ev,d.registeredSourceId):[];
     const open=!!(UI.entrySyncExpand&&UI.entrySyncExpand[di]);
-    const whoRows=open&&who.length?`<tr><td colspan="4" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
+    const whoRows=open&&who.length?`<tr><td colspan="${hasBaseline?5:4}" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
       const known=projKeys.size?projKeys.has(en.diverKey):true;
       return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
     }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
-    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
+    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
   }).join('');
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:rgba(0,154,199,.08);border:1px solid rgba(0,154,199,.25);font-size:12px;color:var(--tx);margin-bottom:14px">
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span style="flex:1"><strong>Registration is still open</strong> — late fee starts July 16, sign-ups close July 28 at 5 PM. These counts will keep growing.${fetchedLbl?` <span style="color:var(--tx3)">Counts pulled ${fetchedLbl}.</span>`:''}${es.pulling?` <span style="color:var(--cyan);font-weight:600">${esc(es.pullMsg||'Pulling…')}</span>`:''}</span>
+        <span style="flex:1">Pulling from ${configuredSources.map(s=>esc(s.id)+(s.role==='projected'?' (baseline)':'')).join(', ')}.${fetchedLbl?` <span style="color:var(--tx3)">Oldest pull: ${fetchedLbl}.</span>`:''}${es.pulling?` <span style="color:var(--cyan);font-weight:600">${esc(es.pullMsg||'Pulling…')}</span>`:''}</span>
         <button class="btn btn-sm" ${es.pulling?'disabled':''} onclick="pullDivemeetsNow()" style="flex-shrink:0">${es.pulling?'Pulling…':'Pull fresh from DiveMeets'}</button>
       </div>
       ${deltas.length?`<table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th><th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
+        <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th>${hasBaseline?'<th style="text-align:right;padding:4px 8px">Baseline</th>':''}<th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match the DiveMeets entry list.</div>`}
-      <p style="font-size:11px;color:var(--tx3);margin-top:12px">Applying sets each event's entry count to the registered number and protects it — the projections pre-fill won't overwrite synced values.</p>
+      </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match any configured DiveMeets source.</div>`}
+      <p style="font-size:11px;color:var(--tx3);margin-top:12px">"Apply registered counts" sets each event's entry count to the registered number and protects it from later pre-fills.${hasBaseline?' "Apply baseline" only fills the Projected column as an estimate — it never touches the scheduled headcount.':''}</p>
     </div>
     <div class="modal-foot">
       <button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button>
-      <button class="btn btn-sm btn-p" ${deltas.length?'':'disabled'} onclick="applyEntrySync()">Apply registered counts</button>
+      ${hasBaseline?`<button class="btn btn-sm" ${deltas.some(d=>d.baseline!=null)?'':'disabled'} onclick="applyBaselineProjections()">Apply baseline as projected</button>`:''}
+      <button class="btn btn-sm btn-p" ${deltas.some(d=>d.registered!=null)?'':'disabled'} onclick="applyEntrySync()">Apply registered counts</button>
     </div>
   </div>`;
 }
@@ -3854,6 +3941,20 @@ function renderMeetModal(){
     <div class="modal-body">
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
       <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
+      <div class="fg"><label class="fl">Additional DiveMeets sources <span style="font-weight:400;color:var(--tx3)">— pull entries from other meets into specific event levels (e.g. a separate Qualifier + Nationals meet in a combined schedule, or a past meet used as a projection baseline). Levels must match this schedule's own level names exactly (e.g. "Senior", "National Qualifier") — comma-separate for more than one.</span></label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${(S.meet.divemeetsSources||[]).map((src,i)=>`
+          <div style="display:flex;gap:6px;align-items:center;padding:8px;border:1px solid var(--bd);border-radius:8px">
+            <input class="fi" style="width:90px;flex-shrink:0" placeholder="Meet ID" value="${esc(src.id||'')}" onchange="updateDivemeetsSource(${i},'id',this.value.trim())"/>
+            <select class="fi" style="width:150px;flex-shrink:0;cursor:pointer" onchange="updateDivemeetsSource(${i},'role',this.value)">
+              <option value="registered" ${src.role==='registered'?'selected':''}>Registered (live)</option>
+              <option value="projected" ${src.role==='projected'?'selected':''}>Projected baseline</option>
+            </select>
+            <input class="fi" style="flex:1" placeholder="Levels, e.g. Senior, National Qualifier" value="${esc((src.levels||[]).join(', '))}" onchange="updateDivemeetsSource(${i},'levels',this.value)"/>
+            <button class="btn btn-sm btn-gh" onclick="removeDivemeetsSource(${i})">×</button>
+          </div>`).join('')||'<div style="font-size:12px;color:var(--tx3)">No additional sources — this schedule uses only the DiveMeets meet ID above.</div>'}
+        </div>
+        <button class="btn btn-sm" onclick="addDivemeetsSource()">+ Add source</button>
+      </div>
       <div class="fg2"><div class="fg"><label class="fl">Venue</label><input class="fi" value="${esc(S.meet.venue)}" onchange="upd(s=>s.meet.venue=this.value)"/></div><div class="fg"><label class="fl">City / state</label><input class="fi" value="${esc(S.meet.city||'')}" onchange="upd(s=>s.meet.city=this.value)"/></div></div>
       <div class="fg2"><div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.meetType=this.value)">${typeOpts}</select></div><div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.timezone=this.value)">${tzOpts}</select></div></div>
       <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
