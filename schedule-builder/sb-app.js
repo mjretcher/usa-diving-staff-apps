@@ -358,7 +358,7 @@ setInterval(()=>{
 
 // ── STATE ─────────────────────────────────────────────────────────────
 function mkDay(off=0){const d=new Date();d.setDate(d.getDate()+off);return{id:uid(),date:d.toISOString().slice(0,10),openMinutes:390,closeMinutes:1200}}
-function mkInitial(){return{updatedAt:new Date().toISOString(),meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',days:[mkDay(0),mkDay(1),mkDay(2),mkDay(3)]},sessions:[],publishStatus:'draft',currentLibraryId:'',acknowledgedWarnings:[],outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true}}}
+function mkInitial(){return{updatedAt:new Date().toISOString(),meet:{name:'New Schedule',venue:'Competition Pool',city:'',timezone:'America/New_York',meetType:'zone',divemeetsId:'',days:[mkDay(0),mkDay(1),mkDay(2),mkDay(3)]},sessions:[],publishStatus:'draft',currentLibraryId:'',acknowledgedWarnings:[],outputSettings:{showWarmup:true,showEndTimes:true,showSubjectToChange:true}}}
 function loadS(){try{const r=JSON.parse(localStorage.getItem(SK)||'');if(r?.meet&&Array.isArray(r.sessions))return r}catch{}return mkInitial()}
 function saveS(){S.updatedAt=new Date().toISOString();lastSavedAt=S.updatedAt;try{localStorage.setItem(SK,JSON.stringify(S))}catch{}}
 let S=loadS();
@@ -1298,9 +1298,15 @@ async function openLibrary(){
 // reads what's already been published, matching how everywhere else in this codebase
 // treats the qualifier engine as the single source of truth for who's qualified.
 const PROJ_SEASON='2026';
-// DiveMeets meet whose live entry counts feed "Sync actual entries". Updated
-// nightly (10:05 UTC cron) + on-demand via the divemeets-entries workflow.
-const DIVEMEETS_MEET_ID='12923';
+// DiveMeets meet whose live entry counts feed "Sync actual entries". Each
+// schedule can set its own meet ID (Meet Setup → DiveMeets meet ID); this
+// falls back to the original 2026 Junior Nationals meet for schedules
+// saved before that field existed, so nothing already in use breaks.
+const DEFAULT_DIVEMEETS_MEET_ID='12923';
+function getDivemeetsMeetId(){
+  const id=S.meet&&S.meet.divemeetsId?String(S.meet.divemeetsId).trim():'';
+  return id||DEFAULT_DIVEMEETS_MEET_ID;
+}
 // Postgres timestamptz::text casts return 6-digit microsecond precision
 // (e.g. "2026-07-16 11:49:08.636458+00"). JS Date() only supports 3-digit
 // milliseconds and rejects the bare 2-digit "+00" offset, so a naive
@@ -1312,11 +1318,11 @@ function parseNeonTimestamp(raw){
   return new Date(iso);
 }
 async function loadMeetEntries(){
-  const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[DIVEMEETS_MEET_ID]);
+  const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[getDivemeetsMeetId()]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
 }
 async function loadMeetEntrants(){
-  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[DIVEMEETS_MEET_ID]);
+  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[getDivemeetsMeetId()]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],name:row[3],team:row[4],diverKey:row[5]}));
 }
 // ── SYNC ACTUAL ENTRIES (DiveMeets registrations → schedule) ─────────
@@ -1353,7 +1359,7 @@ async function pullDivemeetsNow(){
   const dispatchedAt=Date.now();
   try{
     await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
-      method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:DIVEMEETS_MEET_ID}})
+      method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:getDivemeetsMeetId()}})
     });
     // GitHub doesn't hand back a run id on dispatch — find the new run by
     // polling the workflow's run list for one created after we dispatched.
@@ -1421,7 +1427,8 @@ function applyEntrySync(){
 }
 function renderEntrySyncModal(){
   const es=UI.entrySync||{};
-  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Live registrations from DiveMeets meet ${DIVEMEETS_MEET_ID} (2026 Junior Nationals)</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
+  const meetId=getDivemeetsMeetId();
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Live registrations from DiveMeets meet ${esc(meetId)}${meetId===DEFAULT_DIVEMEETS_MEET_ID?' (2026 Junior Nationals)':''} <a href="#" onclick="event.preventDefault();UI.modal='meet';render()" style="color:var(--cyan)">change</a></div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
   if(es.loading)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading registered entries…</div></div>`;
   if(es.error)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body"><div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load entries: ${esc(es.error)}</div><button class="btn btn-p" onclick="openEntrySync()">Retry</button></div></div>`;
   const fetchedAt=es.rows&&es.rows.length?es.rows[0].fetchedAt:null;
@@ -3846,6 +3853,7 @@ function renderMeetModal(){
     <div class="modal-hd"><span class="modal-title">Meet setup</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
+      <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
       <div class="fg2"><div class="fg"><label class="fl">Venue</label><input class="fi" value="${esc(S.meet.venue)}" onchange="upd(s=>s.meet.venue=this.value)"/></div><div class="fg"><label class="fl">City / state</label><input class="fi" value="${esc(S.meet.city||'')}" onchange="upd(s=>s.meet.city=this.value)"/></div></div>
       <div class="fg2"><div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.meetType=this.value)">${typeOpts}</select></div><div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.timezone=this.value)">${tzOpts}</select></div></div>
       <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
