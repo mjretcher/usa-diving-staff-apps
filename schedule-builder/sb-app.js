@@ -1321,14 +1321,67 @@ async function loadMeetEntrants(){
 }
 // ── SYNC ACTUAL ENTRIES (DiveMeets registrations → schedule) ─────────
 function openEntrySync(){
-  UI.entrySync={loading:true,rows:null,entrants:null,error:null};
+  UI.entrySync={loading:true,rows:null,entrants:null,error:null,pulling:false,pullMsg:null};
   UI.entrySyncExpand={};
   UI.modal='entry-sync';
   render();
   Promise.all([loadMeetEntries(),loadMeetEntrants().catch(()=>[])])
-    .then(([rows,entrants])=>{UI.entrySync={loading:false,rows,entrants,error:null}})
-    .catch(e=>{UI.entrySync={loading:false,rows:null,entrants:null,error:e.message||'Could not load entries'}})
+    .then(([rows,entrants])=>{UI.entrySync={loading:false,rows,entrants,error:null,pulling:false,pullMsg:null}})
+    .catch(e=>{UI.entrySync={loading:false,rows:null,entrants:null,error:e.message||'Could not load entries',pulling:false,pullMsg:null}})
     .finally(()=>render());
+}
+// Live "pull now" — dispatches the divemeets-entries GitHub Actions workflow
+// directly from the browser (same token/pattern overrides-sync.js already
+// uses for the Contents API), polls it to completion, then reloads rows
+// from Neon so the modal reflects a genuinely fresh DiveMeets fetch rather
+// than whatever the last nightly cron happened to leave behind.
+const GH_API='https://api.github.com';
+const GH_REPO=(window.USAD_CONFIG&&window.USAD_CONFIG.repo)||'mjretcher/usa-diving-staff-apps';
+function ghToken(){return (window.USAD_CONFIG&&window.USAD_CONFIG.syncToken)||'';}
+async function ghFetch(path,opts={}){
+  const res=await fetch(GH_API+path,{...opts,headers:{'Authorization':`Bearer ${ghToken()}`,'Accept':'application/vnd.github+json','Content-Type':'application/json',...(opts.headers||{})}});
+  if(!res.ok&&res.status!==204)throw new Error(`GitHub API ${res.status}`);
+  return res.status===204?null:res.json();
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+async function pullDivemeetsNow(){
+  if(UI.entrySync&&UI.entrySync.pulling)return;
+  UI.entrySync=UI.entrySync||{};
+  UI.entrySync.pulling=true;
+  UI.entrySync.pullMsg='Requesting a fresh pull from DiveMeets…';
+  render();
+  const dispatchedAt=Date.now();
+  try{
+    await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
+      method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:DIVEMEETS_MEET_ID}})
+    });
+    // GitHub doesn't hand back a run id on dispatch — find the new run by
+    // polling the workflow's run list for one created after we dispatched.
+    let run=null;
+    for(let i=0;i<15&&!run;i++){
+      await sleep(4000);
+      const data=await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/runs?per_page=5`);
+      run=(data.workflow_runs||[]).find(r=>new Date(r.created_at).getTime()>=dispatchedAt-5000);
+    }
+    if(!run)throw new Error('Could not find the triggered run — check the Actions tab');
+    UI.entrySync.pullMsg='Pulling live entries from DiveMeets — usually 1–2 minutes…';
+    render();
+    const started=Date.now();
+    while(run.status!=='completed'){
+      if(Date.now()-started>5*60*1000)throw new Error('Still running after 5 minutes — it will finish in the background; re-open this to check later');
+      await sleep(5000);
+      run=await ghFetch(`/repos/${GH_REPO}/actions/runs/${run.id}`);
+    }
+    if(run.conclusion!=='success')throw new Error(`Pull finished but failed (${run.conclusion}) — DiveMeets page structure may have changed`);
+    const[rows,entrants]=await Promise.all([loadMeetEntries(),loadMeetEntrants().catch(()=>[])]);
+    UI.entrySync={loading:false,rows,entrants,error:null,pulling:false,pullMsg:null};
+    toast('Pulled fresh entries from DiveMeets');
+  }catch(e){
+    UI.entrySync.pulling=false;
+    UI.entrySync.pullMsg=null;
+    toast(e.message||'Live pull failed');
+  }
+  render();
 }
 function entrySyncDeltas(){
   const byKey={};
@@ -1399,7 +1452,8 @@ function renderEntrySyncModal(){
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:rgba(0,154,199,.08);border:1px solid rgba(0,154,199,.25);font-size:12px;color:var(--tx);margin-bottom:14px">
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" style="width:15px;height:15px;flex-shrink:0"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span><strong>Registration is still open</strong> — late fee starts July 16, sign-ups close July 28 at 5 PM. These counts will keep growing; re-sync any time.${fetchedLbl?` <span style="color:var(--tx3)">Counts pulled ${fetchedLbl}.</span>`:''}</span>
+        <span style="flex:1"><strong>Registration is still open</strong> — late fee starts July 16, sign-ups close July 28 at 5 PM. These counts will keep growing.${fetchedLbl?` <span style="color:var(--tx3)">Counts pulled ${fetchedLbl}.</span>`:''}${es.pulling?` <span style="color:var(--cyan);font-weight:600">${esc(es.pullMsg||'Pulling…')}</span>`:''}</span>
+        <button class="btn btn-sm" ${es.pulling?'disabled':''} onclick="pullDivemeetsNow()" style="flex-shrink:0">${es.pulling?'Pulling…':'Pull fresh from DiveMeets'}</button>
       </div>
       ${deltas.length?`<table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th><th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
