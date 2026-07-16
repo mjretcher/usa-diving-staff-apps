@@ -1301,6 +1301,16 @@ const PROJ_SEASON='2026';
 // DiveMeets meet whose live entry counts feed "Sync actual entries". Updated
 // nightly (10:05 UTC cron) + on-demand via the divemeets-entries workflow.
 const DIVEMEETS_MEET_ID='12923';
+// Postgres timestamptz::text casts return 6-digit microsecond precision
+// (e.g. "2026-07-16 11:49:08.636458+00"). JS Date() only supports 3-digit
+// milliseconds and rejects the bare 2-digit "+00" offset, so a naive
+// .replace(' ','T') silently produces Invalid Date. Truncate the fractional
+// seconds and pad the offset before parsing.
+function parseNeonTimestamp(raw){
+  if(!raw)return null;
+  const iso=raw.replace(' ','T').replace(/(\.\d{3})\d+/,'$1').replace(/([+-]\d{2})$/,'$1:00');
+  return new Date(iso);
+}
 async function loadMeetEntries(){
   const r=await nq(`SELECT age_group,gender,discipline,entries,fetched_at::text FROM junior_results.meet_entries WHERE meet_id_dm=$1 AND round='Prelim' ORDER BY age_group,gender,discipline`,[DIVEMEETS_MEET_ID]);
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
@@ -1362,7 +1372,7 @@ function renderEntrySyncModal(){
   if(es.loading)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading registered entries…</div></div>`;
   if(es.error)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body"><div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load entries: ${esc(es.error)}</div><button class="btn btn-p" onclick="openEntrySync()">Retry</button></div></div>`;
   const fetchedAt=es.rows&&es.rows.length?es.rows[0].fetchedAt:null;
-  const fetchedLbl=fetchedAt?new Date(fetchedAt.replace(' ','T')).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+  const fetchedLbl=fetchedAt?parseNeonTimestamp(fetchedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
   const deltas=entrySyncDeltas();
   const entrantsByEvent={};
   (es.entrants||[]).forEach(en=>{
