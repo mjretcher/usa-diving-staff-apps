@@ -1334,9 +1334,25 @@ function removeDivemeetsSource(i){
 function updateDivemeetsSource(i,field,value){
   upd(s=>{
     const src=(s.meet.divemeetsSources||[])[i];if(!src)return;
-    if(field==='levels')src.levels=String(value).split(',').map(x=>x.trim()).filter(Boolean);
-    else src[field]=value;
+    src[field]=value;
   });
+}
+// Levels can ONLY be toggled from the schedule's own actual event levels
+// (chips built from distinctScheduleLevels()) — never freehand-typed. A
+// hand-typed level string that doesn't exactly match an event's level
+// silently matches nothing, which is exactly the failure mode this closes off.
+function toggleDivemeetsSourceLevel(i,level){
+  upd(s=>{
+    const src=(s.meet.divemeetsSources||[])[i];if(!src)return;
+    src.levels=src.levels||[];
+    const idx=src.levels.indexOf(level);
+    if(idx>=0)src.levels.splice(idx,1);else src.levels.push(level);
+  });
+}
+function distinctScheduleLevels(){
+  const set=new Set();
+  S.sessions.forEach(sess=>{if(sess.isPractice)return;sess.events.forEach(ev=>{if(ev.level)set.add(ev.level)})});
+  return[...set].sort();
 }
 // Postgres timestamptz::text casts return 6-digit microsecond precision
 // (e.g. "2026-07-16 11:49:08.636458+00"). JS Date() only supports 3-digit
@@ -3941,17 +3957,26 @@ function renderMeetModal(){
     <div class="modal-body">
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
       <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
-      <div class="fg"><label class="fl">Additional DiveMeets sources <span style="font-weight:400;color:var(--tx3)">— pull entries from other meets into specific event levels (e.g. a separate Qualifier + Nationals meet in a combined schedule, or a past meet used as a projection baseline). Levels must match this schedule's own level names exactly (e.g. "Senior", "National Qualifier") — comma-separate for more than one.</span></label>
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${(S.meet.divemeetsSources||[]).map((src,i)=>`
-          <div style="display:flex;gap:6px;align-items:center;padding:8px;border:1px solid var(--bd);border-radius:8px">
-            <input class="fi" style="width:90px;flex-shrink:0" placeholder="Meet ID" value="${esc(src.id||'')}" onchange="updateDivemeetsSource(${i},'id',this.value.trim())"/>
-            <select class="fi" style="width:150px;flex-shrink:0;cursor:pointer" onchange="updateDivemeetsSource(${i},'role',this.value)">
-              <option value="registered" ${src.role==='registered'?'selected':''}>Registered (live)</option>
-              <option value="projected" ${src.role==='projected'?'selected':''}>Projected baseline</option>
-            </select>
-            <input class="fi" style="flex:1" placeholder="Levels, e.g. Senior, National Qualifier" value="${esc((src.levels||[]).join(', '))}" onchange="updateDivemeetsSource(${i},'levels',this.value)"/>
-            <button class="btn btn-sm btn-gh" onclick="removeDivemeetsSource(${i})">×</button>
-          </div>`).join('')||'<div style="font-size:12px;color:var(--tx3)">No additional sources — this schedule uses only the DiveMeets meet ID above.</div>'}
+      <div class="fg"><label class="fl">Additional DiveMeets sources <span style="font-weight:400;color:var(--tx3)">— pull entries from other meets into specific event levels (e.g. a separate Qualifier + Nationals meet in a combined schedule, or a past meet used as a projection baseline).</span></label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">${(S.meet.divemeetsSources||[]).map((src,i)=>{
+          const scheduleLevels=distinctScheduleLevels();
+          const active=new Set(src.levels||[]);
+          const unknown=(src.levels||[]).filter(l=>!scheduleLevels.includes(l));
+          return`
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--bd);border-radius:8px">
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="fi" style="width:90px;flex-shrink:0" placeholder="Meet ID" value="${esc(src.id||'')}" onchange="updateDivemeetsSource(${i},'id',this.value.trim())"/>
+              <select class="fi" style="width:150px;flex-shrink:0;cursor:pointer" onchange="updateDivemeetsSource(${i},'role',this.value)">
+                <option value="registered" ${src.role==='registered'?'selected':''}>Registered (live)</option>
+                <option value="projected" ${src.role==='projected'?'selected':''}>Projected baseline</option>
+              </select>
+              <button class="btn btn-sm btn-gh" style="margin-left:auto" onclick="removeDivemeetsSource(${i})">×</button>
+            </div>
+            <div style="font-size:11px;color:var(--tx3)">Applies to these event levels — click to toggle:</div>
+            <div class="chiprow">${scheduleLevels.length?scheduleLevels.map(lvl=>`<button class="chip ${active.has(lvl)?'on':''}" onclick="toggleDivemeetsSourceLevel(${i},'${esc(lvl).replace(/'/g,"\\'")}')" type="button">${esc(lvl)}</button>`).join(''):'<span style="font-size:12px;color:var(--tx3)">No event levels in this schedule yet — add sessions first.</span>'}</div>
+            ${unknown.length?`<div style="font-size:11px;color:var(--red)">⚠ Doesn't match any current level, so it matches nothing: ${unknown.map(esc).join(', ')} — click a chip above to fix.</div>`:''}
+          </div>`;
+        }).join('')||'<div style="font-size:12px;color:var(--tx3)">No additional sources — this schedule uses only the DiveMeets meet ID above.</div>'}
         </div>
         <button class="btn btn-sm" onclick="addDivemeetsSource()">+ Add source</button>
       </div>
