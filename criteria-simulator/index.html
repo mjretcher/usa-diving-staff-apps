@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202607152351" />
+  <link rel="stylesheet" href="styles.css?v=202607161603" />
 </head>
 <body>
 
@@ -350,6 +350,20 @@
         </div>
       </details>
 
+      <details id="scenarioCompare" class="panel dz-who">
+        <summary>
+          <h2>Compare two scenarios — who swings</h2>
+          <p>Pick two saved scenarios and see the qualifier counts side by side, plus exactly which athletes differ.</p>
+        </summary>
+        <div class="cmp-controls">
+          <label class="cmp-field"><span>Scenario A</span><select id="cmpA"></select></label>
+          <span class="cmp-vs">vs</span>
+          <label class="cmp-field"><span>Scenario B</span><select id="cmpB"></select></label>
+          <button class="btn btn-primary" id="cmpRun" type="button">Compare</button>
+        </div>
+        <div id="cmpResult" class="cmp-result"></div>
+      </details>
+
 
       <div class="dz-analytics-divider"><span>Field analytics — the evidence behind the decision</span></div>
 
@@ -534,7 +548,7 @@
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202607132128"></script>
-<script src="main.js?v=202607152351"></script>
+<script src="main.js?v=202607161603"></script>
 
 </body>
 </html>

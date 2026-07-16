@@ -996,7 +996,7 @@ function snapshotScenario() {
     meetIds:       [...state.selectedMeetIds],
   };
 }
-function applyScenario(snapshot) {
+function applyScenario(snapshot, opts = {}) {
   if (!snapshot) return;
   // Scenarios saved before pool/year scoping existed default to Senior USA
   // at its most recent year — the closest match to the old "everything" scope.
@@ -1016,7 +1016,96 @@ function applyScenario(snapshot) {
   }
   $('presetNote').textContent = PRESET_NOTES[els.criteriaPreset.value] || '';
   renderMeetPicker();
-  if (isLegacy) USAD.toast('Older scenario — verify pool, year, and standard against current criteria.', { kind: 'warn', duration: 6000 });
+  if (isLegacy && !opts.quiet) USAD.toast('Older scenario — verify pool, year, and standard against current criteria.', { kind: 'warn', duration: 6000 });
+}
+
+// ── Scenario A/B compare: who swings between two saved standards ──────────
+// Evaluates each scenario by snapshot-swap (same engine, zero duplicated
+// logic), then restores the workspace exactly as it was.
+function evalScenarioHeadless(snapshot) {
+  applyScenario(snapshot, { quiet: true });
+  const filtered = rowsForCurrentFilters();
+  const qualified = bestQualified(filtered.map(evaluateRow));
+  const athletes = new Map(qualified.map(r => [athleteKey(r), { name: r.diver_name || 'Unknown', score: scoreForRow(r) }]));
+  return {
+    count: qualified.length,
+    athletes,
+    scope: {
+      pool: state.pool, poolLabel: (POOLS[state.pool] || {}).label || state.pool, year: state.year,
+      gender: els.genderFilter.value, discipline: els.disciplineFilter.value,
+      score: els.scoreThreshold.value || '—', dd: els.ddThreshold.value || '—',
+      rule: els.ruleMode.value, topN: els.topN.value || '—',
+    },
+  };
+}
+
+// Pure diff — unit-tested. Returns names sorted by score, best first.
+function compareQualifiedSets(mapA, mapB) {
+  const onlyA = [], onlyB = []; let both = 0;
+  for (const [k, v] of mapA) { if (mapB.has(k)) both++; else onlyA.push(v); }
+  for (const [k, v] of mapB) { if (!mapA.has(k)) onlyB.push(v); }
+  const byScore = (a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity);
+  onlyA.sort(byScore); onlyB.sort(byScore);
+  return { onlyA, onlyB, both };
+}
+
+function populateComparePickers() {
+  const a = $('cmpA'), b = $('cmpB');
+  if (!a || !b) return;
+  const opts = state.scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  const keepA = a.value, keepB = b.value;
+  a.innerHTML = opts; b.innerHTML = opts;
+  if (state.scenarios.length >= 2) {
+    a.value = state.scenarios.some(s => s.id === keepA) ? keepA : (state.activeScenarioId || state.scenarios[0].id);
+    b.value = state.scenarios.some(s => s.id === keepB) && keepB !== a.value ? keepB
+      : (state.scenarios.find(s => s.id !== a.value) || state.scenarios[0]).id;
+  }
+  if (state.scenarios.length < 2) {
+    $('cmpResult').innerHTML = '<div class="cmp-note">Save at least two scenarios (sidebar → Scenario Manager) to compare them here.</div>';
+  }
+}
+
+function cmpChips(list, cls) {
+  if (!list.length) return '<span class="cmp-none">none</span>';
+  const shown = list.slice(0, 30).map(v => `<span class="dz-name ${cls}">${esc(v.name)} <em>${fmt1(v.score)}</em></span>`).join('');
+  return shown + (list.length > 30 ? `<span class="dz-more">+${list.length - 30} more</span>` : '');
+}
+
+function runScenarioCompare() {
+  const out = $('cmpResult');
+  const a = scenarioById($('cmpA').value), b = scenarioById($('cmpB').value);
+  if (!a || !b) { out.innerHTML = '<div class="cmp-note">Pick two saved scenarios first.</div>'; return; }
+  if (a.id === b.id) { out.innerHTML = '<div class="cmp-note">Pick two different scenarios.</div>'; return; }
+  const original = snapshotScenario();
+  let ra, rb;
+  try {
+    ra = evalScenarioHeadless(a.snapshot);
+    rb = evalScenarioHeadless(b.snapshot);
+  } finally {
+    applyScenario(original, { quiet: true });
+    recompute();
+  }
+  const diff = compareQualifiedSets(ra.athletes, rb.athletes);
+  const crossScope = ra.scope.pool !== rb.scope.pool || ra.scope.year !== rb.scope.year;
+  const scopeLine = (s) => `${esc(s.poolLabel)} · ${esc(String(s.year ?? '—'))} · ${esc(s.gender)} ${esc(s.discipline)} · score ≥ ${esc(s.score)} · DD ≥ ${esc(s.dd)}`;
+  out.innerHTML = `
+    ${crossScope ? '<div class="cmp-warn">These scenarios use different pools or years — athlete lists come from different fields and the counts are not directly comparable.</div>' : ''}
+    <div class="cmp-grid">
+      <div class="cmp-side cmp-side-a">
+        <div class="cmp-side-name">A · ${esc(a.name)}</div>
+        <div class="cmp-side-scope">${scopeLine(ra.scope)}</div>
+        <div class="cmp-side-count">${ra.count} <span>qualify</span></div>
+      </div>
+      <div class="cmp-side cmp-side-b">
+        <div class="cmp-side-name">B · ${esc(b.name)}</div>
+        <div class="cmp-side-scope">${scopeLine(rb.scope)}</div>
+        <div class="cmp-side-count">${rb.count} <span>qualify</span></div>
+      </div>
+    </div>
+    <div class="cmp-both">In both: <b>${diff.both}</b> athlete${diff.both === 1 ? '' : 's'}</div>
+    <div class="cmp-only"><div class="cmp-only-h cmp-only-h-a">Only under A (${diff.onlyA.length})</div><div class="cmp-chipwrap">${cmpChips(diff.onlyA, 'cmp-a')}</div></div>
+    <div class="cmp-only"><div class="cmp-only-h cmp-only-h-b">Only under B (${diff.onlyB.length})</div><div class="cmp-chipwrap">${cmpChips(diff.onlyB, 'cmp-b')}</div></div>
+    <div class="cmp-foot">Each chip shows the athlete's best score under that scenario's settings. The workspace above is untouched — comparing never changes your current setup.</div>`;
 }
 
 function loadScenarios() {
@@ -1386,6 +1475,10 @@ function wireEvents() {
   });
 
   // Scenario buttons
+  const cmpDetails = $('scenarioCompare');
+  if (cmpDetails) cmpDetails.addEventListener('toggle', () => { if (cmpDetails.open) populateComparePickers(); });
+  const cmpRun = $('cmpRun');
+  if (cmpRun) cmpRun.addEventListener('click', runScenarioCompare);
   $('scenarioCreate').addEventListener('click', scenarioCreate);
   $('scenarioSave').addEventListener('click', scenarioSave);
   $('scenarioDuplicate').addEventListener('click', scenarioDuplicate);

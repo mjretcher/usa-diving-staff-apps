@@ -884,3 +884,34 @@ details.panel > summary p {
 .dz-tick-intl .dz-tick-label { color: var(--brand-pool); font-weight: 600; }
 .dz-tick-row2 .dz-tick-label { margin-top: 12px; }
 @media (max-width: 820px) { .dz-bar-row { flex-direction: column; align-items: stretch; gap: 10px; } .dz-bar-readout { flex-direction: row; align-items: baseline; gap: 10px; min-width: 0; } }
+
+/* ── Scenario A/B compare ────────────────────────────────────────────── */
+.cmp-controls { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; padding: 4px 0 14px; }
+.cmp-field { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+.cmp-field > span { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.cmp-field select { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-size: 13px; }
+.cmp-field select:focus { outline: none; border-color: var(--brand-pool); }
+.cmp-vs { font-size: 12px; font-weight: 700; color: var(--ink-3); padding-bottom: 9px; }
+.cmp-note, .cmp-none { font-size: 12.5px; color: var(--ink-3); }
+.cmp-warn { font-size: 12.5px; background: #FEF3C7; border-left: 3px solid #d97706; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; color: #7c4a03; }
+.cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 760px) { .cmp-grid { grid-template-columns: 1fr; } }
+.cmp-side { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+.cmp-side-a { border-top: 3px solid var(--brand-blue); }
+.cmp-side-b { border-top: 3px solid var(--brand-pool); }
+.cmp-side-name { font-weight: 700; color: var(--ink); font-size: 13.5px; }
+.cmp-side-scope { font-size: 11.5px; color: var(--ink-3); margin: 2px 0 8px; }
+.cmp-side-count { font-family: var(--font-mono); font-size: 26px; color: var(--brand-blue); }
+.cmp-side-b .cmp-side-count { color: var(--brand-pool); }
+.cmp-side-count span { font-family: var(--font-ui); font-size: 12px; color: var(--ink-3); }
+.cmp-both { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.cmp-both b { font-family: var(--font-mono); }
+.cmp-only { margin-bottom: 10px; }
+.cmp-only-h { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
+.cmp-only-h-a { color: var(--brand-blue); }
+.cmp-only-h-b { color: var(--brand-pool); }
+.cmp-chipwrap { display: flex; flex-wrap: wrap; gap: 5px; }
+.dz-name.cmp-a { border-color: var(--brand-blue); background: #eef0fa; }
+.dz-name.cmp-b { border-color: var(--brand-pool); background: #eef8fc; }
+.cmp-foot { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; padding-bottom: 12px; }
+#scenarioCompare .cmp-controls, #scenarioCompare .cmp-result { padding-left: 0; }
