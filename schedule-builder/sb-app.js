@@ -1454,24 +1454,33 @@ async function pullDivemeetsNow(){
 // Finds the first configured source (in declared order) of the given role
 // that covers this event, matching either by its explicit level override
 // (extra sources) or by the row's own parsed level (the default source).
+// levels===null means "unrestricted" (the legacy default source only,
+// which matches whatever level the row itself was parsed with). Any actual
+// array — including an EMPTY one, e.g. a newly added source with no level
+// chips clicked yet — must be treated as an explicit allow-list: empty
+// means "matches nothing" and must never silently fall back to
+// unrestricted matching, which would let a misconfigured source collide
+// with unrelated events.
 function findDivemeetsMatch(sources,ev,role){
+  if(ev.style==='Synchronized')return null; // synchro is never comparable to individual DiveMeets entries — excluded by policy, same as the parser
   for(const s of sources){
     if(s.role!==role)continue;
     let row;
-    if(s.levels&&s.levels.length){
-      if(!s.levels.includes(ev.level))continue;
-      row=(s.rows||[]).find(r=>r.gender===ev.gender&&r.discipline===ev.apparatus);
-    }else{
+    if(s.levels===null){
       row=(s.rows||[]).find(r=>r.ageGroup===ev.level&&r.gender===ev.gender&&r.discipline===ev.apparatus);
+    }else{
+      if(!(s.levels||[]).includes(ev.level))continue;
+      row=(s.rows||[]).find(r=>r.gender===ev.gender&&r.discipline===ev.apparatus);
     }
     if(row)return{entries:row.entries,sourceId:s.id};
   }
   return null;
 }
 function findDivemeetsEntrants(sources,ev,sourceId){
+  if(ev.style==='Synchronized')return[];
   const s=sources.find(x=>x.id===sourceId);if(!s)return[];
-  if(s.levels&&s.levels.length)return(s.entrants||[]).filter(e=>e.gender===ev.gender&&e.discipline===ev.apparatus);
-  return(s.entrants||[]).filter(e=>e.ageGroup===ev.level&&e.gender===ev.gender&&e.discipline===ev.apparatus);
+  if(s.levels===null)return(s.entrants||[]).filter(e=>e.ageGroup===ev.level&&e.gender===ev.gender&&e.discipline===ev.apparatus);
+  return(s.entrants||[]).filter(e=>e.gender===ev.gender&&e.discipline===ev.apparatus);
 }
 function entrySyncDeltas(){
   const sources=UI.entrySync?.sources||[];
