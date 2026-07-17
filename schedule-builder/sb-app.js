@@ -13,7 +13,7 @@ const NEON='postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-poo
 const STATUS=['draft','review','ready','published'];
 const STATUS_LBL={draft:'Draft',review:'In Review',ready:'Ready',published:'Published'};
 const TZS=[{v:'America/New_York',l:'Eastern (ET)',s:'ET'},{v:'America/Chicago',l:'Central (CT)',s:'CT'},{v:'America/Denver',l:'Mountain (MT)',s:'MT'},{v:'America/Los_Angeles',l:'Pacific (PT)',s:'PT'}];
-const MEET_TYPES={zone:{l:'Zone Championship',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier']},regional:{l:'Regional Championship',groups:['Group A','Group B'],plat:false,rounds:['Qualifier']},eastWestCentral:{l:'East/West/Central',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final']},juniorNationals:{l:'Junior Nationals',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final']},usaNationals:{l:'USA Nationals',groups:[],plat:true,rounds:['Qualifier','Prelim','Final'],senior:true},custom:{l:'Custom',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier','Prelim','Semifinal','Final'],senior:true}};
+const MEET_TYPES={zone:{l:'Zone Championship',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier']},regional:{l:'Regional Championship',groups:['Group A','Group B'],plat:false,rounds:['Qualifier']},eastWestCentral:{l:'East/West/Central',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final']},juniorNationals:{l:'Junior Nationals',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Prelim','Final'],jrSynchro:true},usaNationals:{l:'USA Nationals',groups:[],plat:true,rounds:['Qualifier','Prelim','Final'],senior:true,srSynchro:true},custom:{l:'Custom',groups:['Group A','Group B','Group C','Group D'],plat:true,rounds:['Qualifier','Prelim','Semifinal','Final'],senior:true,jrSynchro:true,srSynchro:true}};
 // ── USA DIVING 2026 RULEBOOK — DIVE COUNTS (Article 302) ──────────────
 // fullList = Prelim / Qualifier / "one list" dive count
 // finalsOptionals = Finals dive count (optional/without-limit dives only)
@@ -37,7 +37,10 @@ const RULEBOOK_DIVES={
 // Seconds-per-dive estimates by group/apparatus (timing only; not a rulebook value)
 const SPD_TABLE={
   'Group A':{board:32,plat:38},'Group B':{board:34,plat:42},
-  'Group C':{board:35,plat:45},'Group D':{board:35,plat:45},'Senior':{board:32,plat:38}};
+  'Group C':{board:35,plat:45},'Group D':{board:35,plat:45},'Senior':{board:32,plat:38},
+  // Synchro pairs move slower than individual rotation — matches the official
+  // 2026 Jr Nationals / USA Nationals seed timing (35s board, 45s platform)
+  'Junior 14-18':{board:35,plat:45},'Senior Synchro':{board:35,plat:45}};
 // Returns the locked dive count for an event given its round
 function rulebookDives(level,gender,apparatus,round){
   const app=isPlatform(apparatus)?'Platform':al(apparatus);
@@ -99,8 +102,8 @@ const fdur=m=>{m=Math.round(m);if(m<60)return`${m}m`;const h=Math.floor(m/60),r=
 const fd1=n=>Number(n||0).toFixed(1);
 const isPlatform=a=>['Platform','10m','10-Meter'].includes(a);
 const lk=a=>['1m','1-Meter'].includes(a)?'1m':['3m','3-Meter'].includes(a)?'3m':isPlatform(a)?'platform':'other';
-const al=a=>a==='1m'?'1-Meter':a==='3m'?'3-Meter':a;
-const evName=ev=>{if(ev.style==='Custom Block')return ev.customLabel||ev.title||'Custom block';return`${ev.level||''} ${ev.gender} ${al(ev.apparatus)}`.replace(/\s+/g,' ').trim()};
+const al=a=>a==='1m'?'1-Meter':a==='3m'?'3-Meter':a==='10m'?'10-Meter':a;
+const evName=ev=>{if(ev.style==='Custom Block')return ev.customLabel||ev.title||'Custom block';const syn=ev.style==='Synchronized'&&!/synchro/i.test(ev.level||'')?' Synchro':'';return(`${ev.level||''} ${ev.gender} ${al(ev.apparatus)}`+syn).replace(/\s+/g,' ').trim()};
 const shortDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})};
 const fullDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})};
 const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)};
@@ -735,6 +738,11 @@ function buildCatalog(meetType){
   const def=MEET_TYPES[meetType]||MEET_TYPES.custom;const evs=[];
   for(const grp of(def.groups||[])){for(const gender of['Girls','Boys']){for(const app of['1m','3m']){const nm=`${grp} ${gender} ${al(app)}`;const t=EV_TIMING[nm]||{};evs.push({id:`${grp}-${gender}-${app}`.toLowerCase().replace(/\s+/g,'-'),level:grp,gender,apparatus:app,style:'Individual',defaultDives:t.dives||6,defaultSpd:t.spd||35,rounds:def.rounds||['Qualifier']});}if(def.plat){const nm=`${grp} ${gender} Platform`;const t=EV_TIMING[nm]||{};evs.push({id:`${grp}-${gender}-platform`.toLowerCase().replace(/\s+/g,'-'),level:grp,gender,apparatus:'Platform',style:'Individual',defaultDives:t.dives||6,defaultSpd:t.spd||45,rounds:def.rounds||['Qualifier']});}}}
   if(def.senior){for(const gender of['Women','Men']){for(const app of['1m','3m','10m']){evs.push({id:`senior-${gender}-${app}`.toLowerCase(),level:'Senior',gender,apparatus:app,style:'Individual',defaultDives:gender==='Women'?5:6,defaultSpd:isPlatform(app)?38:32,rounds:def.rounds||['Qualifier']});}}}
+  // Junior synchro — Group A/B (14-18) combined bracket, contested on 3-Meter
+  // and Platform as straight finals at Junior Nationals
+  if(def.jrSynchro){for(const gender of['Girls','Boys']){for(const app of['3m','Platform']){evs.push({id:`junior-14-18-${gender}-${app}-synchro`.toLowerCase(),level:'Junior 14-18',gender,apparatus:app,style:'Synchronized',defaultDives:5,defaultSpd:isPlatform(app)?45:35,rounds:['Final'],alias:'Group A/B 14-18 Synchronized Synchro'});}}}
+  // Senior synchro — 3-Meter and 10-Meter, prelim + final
+  if(def.srSynchro){for(const gender of['Women','Men']){for(const app of['3m','10m']){evs.push({id:`senior-synchro-${gender}-${app}`.toLowerCase(),level:'Senior Synchro',gender,apparatus:app,style:'Synchronized',defaultDives:gender==='Women'?5:6,defaultSpd:isPlatform(app)?45:35,rounds:['Prelim','Final'],alias:'Synchronized'});}}}
   return evs;
 }
 
@@ -4142,7 +4150,7 @@ function renderPickerModal(timed){
   const sessUsed=new Set(sess.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}|${e.round}`));
   const allUsed=new Set(S.sessions.flatMap(s=>s.events.map(e=>`${e.level}|${e.gender}|${e.apparatus}`)));
   const search=(UI.pickerSearch||'').toLowerCase();
-  const filtered=search?cat.filter(e=>evName(e).toLowerCase().includes(search)):cat;
+  const filtered=search?cat.filter(e=>`${evName(e)} ${e.style||''} ${e.alias||''}`.toLowerCase().includes(search)):cat;
   const sel=cat.find(e=>e.id===UI.pickerPreset);
   const rounds=sel?sel.rounds:[];
   const selRound=UI.pickerRound||rounds[0]||'';
@@ -4151,7 +4159,7 @@ function renderPickerModal(timed){
     <div class="modal-hd"><span class="modal-title">Add event — Session ${n}</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <input class="ev-search-inp" placeholder="Search — Group A Girls, Platform, 3-Meter…" value="${esc(UI.pickerSearch)}" oninput="UI.pickerSearch=this.value;render()"/>
-      <div class="ev-grid">${filtered.map(ev=>{const inSched=allUsed.has(`${ev.level}|${ev.gender}|${ev.apparatus}`);return`<div class="ev-pick-card ${ev.id===UI.pickerPreset?'sel':''}" onclick="UI.pickerPreset='${ev.id}';UI.pickerRound='';render()"><div class="epc-name">${esc(evName(ev))}</div><div class="epc-meta">${ev.defaultDives} dives default</div><span class="epc-status ${inSched?'used':'avail'}">${inSched?'In schedule':'Available'}</span></div>`}).join('')}${!filtered.length?`<div style="grid-column:1/-1;padding:20px;text-align:center;font-size:12px;color:var(--tx3)">No events match</div>`:''}</div>
+      <div class="ev-grid">${filtered.map(ev=>{const inSched=allUsed.has(`${ev.level}|${ev.gender}|${ev.apparatus}`);return`<div class="ev-pick-card ${ev.id===UI.pickerPreset?'sel':''}" onclick="UI.pickerPreset='${ev.id}';UI.pickerRound='';render()"><div class="epc-name">${esc(evName(ev))}</div><div class="epc-meta">${ev.defaultDives} dives default${ev.style==='Synchronized'?' · synchro pairs':''}</div><span class="epc-status ${inSched?'used':'avail'}">${inSched?'In schedule':'Available'}</span></div>`}).join('')}${!filtered.length?`<div style="grid-column:1/-1;padding:20px;text-align:center;font-size:12px;color:var(--tx3)">No events match</div>`:''}</div>
       ${sel?`<div class="fg"><label class="fl">Round</label><div class="round-btns">${rounds.map(r=>{const used=sessUsed.has(`${sel.level}|${sel.gender}|${sel.apparatus}|${r}`);return`<button class="round-btn ${r===selRound?'active':''} ${used?'used':''}" ${used?'disabled':''} onclick="UI.pickerRound='${r}';render()">${r}${used?' ✓':''}</button>`}).join('')}</div></div>`:''}
     </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-p" ${!sel||!selRound?'disabled':''} onclick="addEvToSess('${UI.pickerSessId}','${UI.pickerPreset}','${selRound}');closeModal()">Add ${esc(selRound||'event')}</button></div>
