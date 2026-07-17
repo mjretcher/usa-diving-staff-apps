@@ -4418,7 +4418,7 @@ function renderGenerateModal(timed){
     <div class="modal-foot">
       <button class="btn btn-gh" onclick="closeModal()">Close</button>
       <div style="flex:1"></div>
-      <button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xls)</button>
+      <button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xlsx)</button>
       <button class="btn" onclick="exportExcel()">Excel</button>
       <button class="btn btn-p" onclick="printReport()">Print / PDF</button>
     </div>
@@ -4647,7 +4647,113 @@ function renderPP(timed,cfg,titleOverride){
 // ── EXPORTS ───────────────────────────────────────────────────────────
 function splitPanelRot(ev){const r=splitRotFor(ev);return r?`Panel A: ${r.pA} | Panel B: ${r.pB}`:'Review manually'}
 
-function exportOpsTimeline(){
+// True .xlsx workbook download (ExcelJS). The old exports wrote HTML with a
+// .xls extension, which made Excel show a "format and extension don't match /
+// file could be corrupted" warning on every open. Real .xlsx opens clean.
+async function xlsxSave(wb,filename,toastMsg){
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();URL.revokeObjectURL(a.href);
+  if(toastMsg)toast(toastMsg);
+}
+
+async function exportOpsTimeline(){
+  if(typeof ExcelJS==='undefined'){toast('Excel engine not loaded — using compatibility export');return exportOpsTimelineLegacy();}
+  try{
+  const timed=genTimedForPreview(allTimed());
+  const title=genTitle()||S.meet.name||'USA Diving Schedule';
+  const N='FF171F69',R='FFE31937',C='FF009AC7',LB='FFD6EBF8',PK='FFFFF0F4',W='FFFFFFFF',G='FFF0F2F6';
+  const roundBg=rd=>rd==='Final'?'FFFEF2F2':rd==='Prelim'?'FFF0FDF4':'FFEEF3FD';
+  const wb=new ExcelJS.Workbook();wb.creator='USA Diving';wb.created=new Date();
+  const ws=wb.addWorksheet('Ops Timeline',{views:[{state:'frozen',ySplit:3}]});
+  ws.columns=[{width:14},{width:10},{width:36},{width:9},{width:38},{width:8},{width:9},{width:9},{width:10},{width:11},{width:11},{width:8},{width:11},{width:11},{width:11},{width:11}];
+  const thin={style:'thin',color:{argb:'FF888888'}};
+  const BORD={top:thin,left:thin,bottom:thin,right:thin};
+  const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}});
+  // Title block
+  ws.mergeCells('A1:P1');
+  const t1=ws.getCell('A1');t1.value=title;t1.font={bold:true,size:16,color:{argb:N}};t1.alignment={vertical:'middle'};ws.getRow(1).height=26;
+  ws.mergeCells('A2:P2');
+  const t2=ws.getCell('A2');t2.value='Operations Timeline · USA Diving · '+new Date().toLocaleDateString();t2.font={size:10,color:{argb:'FF666666'}};ws.getRow(2).height=16;
+  // Header row
+  const headers=['Day/Session','Round','Event','Format','Panel Rotation','# Dives','# Divers','Sec/Dive','Event Min','Prac Start','Prac End','WU Min','WU Start','WU End','Ev Start','Ev End'];
+  const hr=ws.addRow(headers);hr.height=20;
+  hr.eachCell((c,i)=>{const bg=(i>=6&&i<=8)?C:(i>=15)?R:N;c.fill=fill(bg);c.font={bold:true,size:10,color:{argb:W}};c.alignment={horizontal:(i===3||i===5)?'left':'center',vertical:'middle',wrapText:true};c.border=BORD;});
+  // Row helpers
+  const bandRow=(text,bg,align)=>{const r=ws.addRow([text]);ws.mergeCells(`A${r.number}:P${r.number}`);const c=r.getCell(1);c.fill=fill(bg);c.font={bold:true,size:11,color:{argb:W}};c.alignment={horizontal:align,vertical:'middle'};c.border=BORD;r.height=18;};
+  const dataRow=(vals,bg,over)=>{while(vals.length<16)vals.push('');const r=ws.addRow(vals);for(let i=1;i<=16;i++){const c=r.getCell(i);c.border=BORD;c.font={size:10};c.alignment={horizontal:(i===3||i===5)?'left':'center',vertical:'middle'};if(bg)c.fill=fill(bg);const o=over&&over[i];if(o){if(o.bg)c.fill=fill(o.bg);if(o.font)c.font=Object.assign({size:10},o.font);}}};
+  const mins=v=>Math.round(Number(v||0)*10)/10;
+  const cyan={bg:C,font:{bold:true,color:{argb:W}}};
+  S.meet.days.forEach(day=>{
+    const ds=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.warmupStartMinutes-b.warmupStartMinutes);
+    if(!ds.length)return;
+    bandRow(String(fullDate(day.date)).toUpperCase(),R,'center');
+    ds.forEach((sess,si)=>{
+      const t=sess.timing;const n=getSessNum(sess,timed);const bg=si%2===0?LB:PK;
+      const label=sess.isPractice?(sess.title||'Open Training'):`Session ${n}`;
+      bandRow(label,N,'left');
+      if(sess.isPractice){
+        const ev=sess.events[0]||{};
+        const ft=t.flightTimes||[];
+        dataRow(['','Practice',ev.customLabel||label,'','','','','',mins(ev.customDurationMinutes),f12(t.eventStartMinutes),f12(t.sessionEndMinutes),'','','',f12(t.eventStartMinutes),f12(t.sessionEndMinutes)],bg,{15:cyan,16:cyan});
+        ft.forEach(f=>dataRow(['','Flight','↳ '+f.name,'','','','','',mins(f.durationMinutes),f12(f.startMinutes),f12(f.endMinutes),'','','',f12(f.startMinutes),f12(f.endMinutes)],bg,{15:cyan,16:cyan}));
+        return;
+      }
+      const intro=Number(sess.introMinutes||0);
+      if(intro>0)dataRow(['','Intro','Introductions','','','','','',mins(intro),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(t.warmupStartMinutes-intro),f12(t.warmupStartMinutes)],bg,{15:cyan,16:cyan});
+      (t.events||[]).forEach(ev=>{
+        const dur=calcEvDur(ev);const split=ev.manualSplit&&!isPlatform(ev.apparatus);
+        dataRow(['',ev.round||'',evName(ev)+(split?' (Split)':''),split?'Split':'',split?splitPanelRot(ev):'',Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.numberOfDivers||0),Number(ev.secondsPerDive||ev.defaultSpd||0),mins(dur.evMin),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)],bg,
+          {2:{bg:roundBg(ev.round),font:{bold:true,size:9}},6:{bg:G,font:{bold:true}},7:{bg:G,font:{bold:true}},8:{bg:G,font:{bold:true}},12:{font:{bold:true}},13:{font:{bold:true}},14:{font:{bold:true}},15:cyan,16:cyan});
+      });
+    });
+  });
+  const fr=ws.addRow(['USA Diving · '+title+' · '+new Date().toLocaleDateString()]);
+  ws.mergeCells(`A${fr.number}:P${fr.number}`);fr.getCell(1).font={size:9,color:{argb:'FF888888'}};
+  await xlsxSave(wb,`${title.replace(/[^a-z0-9]/gi,'-')}-ops-timeline.xlsx`,'Operations timeline downloaded');
+  }catch(e){console.error('[ops timeline xlsx]',e);toast('Excel export failed — using compatibility export');exportOpsTimelineLegacy();}
+}
+
+async function exportExcel(){
+  if(typeof ExcelJS==='undefined'){toast('Excel engine not loaded — using compatibility export');return exportExcelLegacy();}
+  try{
+  const timed=genTimedForPreview(allTimed());
+  const title=genTitle()||S.meet.name||'USA Diving Schedule';
+  const N='FF171F69',W='FFFFFFFF';
+  const wb=new ExcelJS.Workbook();wb.creator='USA Diving';wb.created=new Date();
+  const ws=wb.addWorksheet('Schedule',{views:[{state:'frozen',ySplit:2}]});
+  ws.columns=[{width:22},{width:14},{width:34},{width:11},{width:9},{width:8},{width:10},{width:8},{width:11},{width:11},{width:11}];
+  const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}});
+  const botBd={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
+  ws.mergeCells('A1:K1');
+  const t1=ws.getCell('A1');t1.value=title;t1.font={bold:true,size:15,color:{argb:N}};ws.getRow(1).height=24;
+  const hr=ws.addRow(['Day','Session','Event','Round','Divers','Dives','Sec/dive','Split','Warm-up','Start','End']);hr.height=18;
+  hr.eachCell(c=>{c.fill=fill(N);c.font={bold:true,size:10,color:{argb:W}};c.alignment={horizontal:'left',vertical:'middle'};});
+  S.meet.days.forEach(day=>{
+    const ds=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.warmupStartMinutes-b.warmupStartMinutes);
+    if(!ds.length)return;
+    const dr=ws.addRow([fullDate(day.date)]);ws.mergeCells(`A${dr.number}:K${dr.number}`);
+    dr.getCell(1).fill=fill('FFE8ECFF');dr.getCell(1).font={bold:true,size:11,color:{argb:N}};dr.height=17;
+    ds.forEach(sess=>{
+      const t=sess.timing;const n=getSessNum(sess,timed);
+      const lbl=sess.isPractice?(sess.title||'Practice'):`Session ${n}`;
+      const sr=ws.addRow(['',`${lbl} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}`]);
+      ws.mergeCells(`B${sr.number}:K${sr.number}`);
+      sr.getCell(2).fill=fill('FFF5F6FA');sr.getCell(2).font={bold:true,size:10};
+      (t.events||[]).forEach(ev=>{
+        const r=ws.addRow([fullDate(day.date),lbl,evName(ev),ev.round||'',Number(ev.numberOfDivers||0),Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.secondsPerDive||ev.defaultSpd||35),ev.manualSplit&&!isPlatform(ev.apparatus)?'Yes':'',f12(t.warmupStartMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)]);
+        r.eachCell({includeEmpty:true},c=>{c.font={size:10};c.border=botBd;});
+      });
+    });
+  });
+  await xlsxSave(wb,`${title.replace(/[^a-z0-9]/gi,'-')}-schedule.xlsx`,'Excel downloaded');
+  }catch(e){console.error('[schedule xlsx]',e);toast('Excel export failed — using compatibility export');exportExcelLegacy();}
+}
+
+// Legacy HTML-in-.xls exports — only used if the ExcelJS library fails to
+// load (e.g. no internet at the pool). Excel will show a format warning on
+// open; the content is safe.
+function exportOpsTimelineLegacy(){
   const timed=genTimedForPreview(allTimed());
   const title=genTitle()||S.meet.name||'USA Diving Schedule';
   const N='#171F69',R='#E31937',C='#009AC7',LB='#D6EBF8',PK='#FFF0F4',W='#FFFFFF',G='#F0F2F6';
@@ -4680,7 +4786,7 @@ function exportOpsTimeline(){
   toast('Operations timeline downloaded');
 }
 
-function exportExcel(){
+function exportExcelLegacy(){
   const timed=genTimedForPreview(allTimed());
   const title=genTitle()||S.meet.name||'USA Diving Schedule';
   let html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11pt}table{border-collapse:collapse;width:100%}th{background:#171F69;color:white;padding:6px 10px;text-align:left}td{padding:5px 10px;border-bottom:1px solid #ddd}.dh td{background:#E8ECFF;font-weight:bold;color:#171F69}.sh td{background:#F5F6FA;font-weight:bold}</style></head><body><h2 style="color:#171F69">${esc(title)}</h2><table><thead><tr><th>Day</th><th>Session</th><th>Event</th><th>Round</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Warm-up</th><th>Start</th><th>End</th></tr></thead><tbody>`;
