@@ -82,7 +82,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -902,13 +902,15 @@ const PRACTICE_PRESETS={
   flighted:{title:'Flighted Warm-Ups',label:'Flighted warm-up block.',duration:120},
   restricted:{title:'Restricted Training',label:'Restricted Training',duration:30},
   technical:{title:'Technical Meeting',label:'Technical Meeting',duration:60},
+  cce:{title:'CCE Meeting',label:'CCE Meeting',duration:60,internal:true}, // staff-only: never printed on public outputs
 };
 function addPracticeBlock(dayId,presetKey){
   const preset=PRACTICE_PRESETS[presetKey];
   if(!preset){addSession(dayId,true);return;} // 'custom' falls back to the generic block for full manual control
   const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
   const day=S.meet.days.find(d=>d.id===dayId);
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,eventTags:day&&day.eventTag?[day.eventTag]:[],flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
+  const isMeeting=presetKey==='technical'||presetKey==='cce';
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:isMeeting?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,hideFromPublic:Boolean(preset.internal),eventTags:day&&day.eventTag?[day.eventTag]:[],flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 function deleteSession(id){
@@ -941,6 +943,9 @@ function updSess(id,field,value){
 function dayCloseFor(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);return d&&d.closeMinutes!=null?Number(d.closeMinutes):1200;}
 function setDayClose(dayId,mins){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d){d.closeMinutes=Number(mins);}reflowDay(s,dayId);});}
 function toggleFitToClose(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess){sess.fitToClose=!sess.fitToClose;}reflowDay(s,sess.dayId);});}
+// Internal-only blocks stay on the working schedule and Operations output but are
+// excluded from Public / Athletes / Judges outputs (e.g. staff meetings like CCE).
+function toggleHideFromPublic(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess)sess.hideFromPublic=!sess.hideFromPublic;});toast(S.sessions.find(x=>x.id===sessId)?.hideFromPublic?'Internal only — this block will not appear on the public schedule':'This block will now appear on the public schedule');}
 
 
 // ── Combine / Simultaneous actions ──
@@ -2306,7 +2311,7 @@ function renderCard(sess,timed,warns){
     return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-main">
-          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
+          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${sess.hideFromPublic?`<span style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle" title="Internal only — will not appear on the public schedule">Internal</span>`:''}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
           <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
@@ -2456,6 +2461,9 @@ function renderEditPrac(sess,t,flights,buf){
           <span>Facility closes</span>
           <input class="fi-sm" type="time" value="${f24(dayCloseFor(sess.dayId))}" onchange="setDayClose('${sess.dayId}',pt(this.value))"/>
         </div>
+      </div>
+      <div class="fitclose-toggle-row" style="margin-top:6px">
+        <label class="fitclose-label" title="Keeps this block on your working schedule and the Operations output, but leaves it off the Public, Athletes, and Judges schedules"><input type="checkbox" ${sess.hideFromPublic?'checked':''} onchange="toggleHideFromPublic('${sess.id}')"/> Internal only — leave off the public schedule</label>
       </div>
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
@@ -4013,6 +4021,7 @@ function renderAddBlockModal(){
             ${chip('flighted','Flighted Warm-Ups')}
             ${chip('restricted','Restricted Training')}
             ${chip('technical','Technical Meeting')}
+            ${chip('cce','CCE Meeting')}
             ${chip('custom','Custom')}
           </div>
         </div>
@@ -4543,6 +4552,9 @@ window.addEventListener('load',function(){
 }
 
 function renderPP(timed,cfg,titleOverride){
+  // Internal-only blocks (e.g. staff meetings like a CCE meeting) never appear on
+  // public-facing outputs. Only the Operations audience includes them, marked "internal".
+  timed=timed.filter(s=>!s.hideFromPublic||cfg.showInternalBlocks);
   if(!S.meet.days.length||!timed.length){
     const msg=(UI.genEventFilter&&S.sessions.length)?`No blocks tagged for this scope yet — tag blocks via the editor ("Part of"), or switch scope.`:'No schedule to preview yet — add sessions and events first.';
     return`<div class="pp"><div class="pp-empty">${esc(msg)}</div></div>`;
@@ -4615,7 +4627,7 @@ function renderPP(timed,cfg,titleOverride){
     const t=sess.timing;const ft=t.flightTimes||[];
     const closeNote=sess.fitToClose?'  •  until facility close':'';
     return`<div class="pp-prac">
-      <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
+      <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}${sess.hideFromPublic?` <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;vertical-align:middle">Internal — not on public schedule</span>`:''}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
       ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
         const cr=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
         return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cr!=null?` · ${cr.total} athlete${cr.total===1?'':'s'}${cr.registered!=null?` (${cr.registered} registered)`:''}`:''}</span></div>`;
