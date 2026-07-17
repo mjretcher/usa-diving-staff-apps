@@ -260,5 +260,19 @@
     "eventName": "",
     "note": "Declared not attending - athlete-level",
     "resolvedReview": false
+  },
+  {
+    "id": "1784301148203-4f1fdb6d1593c8",
+    "createdAt": "2026-07-17T15:12:28.203Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Myles Huang",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
