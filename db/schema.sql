@@ -563,7 +563,10 @@ CREATE TABLE IF NOT EXISTS scoresandmore.meets (
 );
 
 CREATE TABLE IF NOT EXISTS scoresandmore.meet_events (
-  event_id    integer PRIMARY KEY,
+  id          bigserial PRIMARY KEY,
+  -- event_id can legitimately repeat in the source events list (observed:
+  -- event 37592 listed twice at meet 6925) — preserved verbatim, so NOT a PK.
+  event_id    integer NOT NULL,
   meet_id     integer NOT NULL,
   meet_name   text,
   event_date  date,
@@ -579,6 +582,26 @@ CREATE TABLE IF NOT EXISTS scoresandmore.meet_events (
   scraped_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sm_meet_events_meet ON scoresandmore.meet_events(meet_id);
+CREATE INDEX IF NOT EXISTS sm_meet_events_event ON scoresandmore.meet_events(event_id);
+-- Migration for tables created before the surrogate-PK change:
+ALTER TABLE scoresandmore.meet_events ADD COLUMN IF NOT EXISTS id bigserial;
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint c
+    WHERE c.conrelid = 'scoresandmore.meet_events'::regclass
+      AND c.contype = 'p'
+      AND (SELECT attname FROM pg_attribute
+           WHERE attrelid = c.conrelid AND attnum = c.conkey[1]) = 'event_id'
+  ) THEN
+    ALTER TABLE scoresandmore.meet_events DROP CONSTRAINT meet_events_pkey;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'scoresandmore.meet_events'::regclass AND contype = 'p'
+  ) THEN
+    ALTER TABLE scoresandmore.meet_events ADD PRIMARY KEY (id);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS scoresandmore.event_results (
   id          bigserial PRIMARY KEY,

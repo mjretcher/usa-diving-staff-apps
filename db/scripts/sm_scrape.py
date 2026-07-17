@@ -115,9 +115,19 @@ def scrape_meet(meet_id):
             r.get(c_gender), r.get(c_novice), r.get(c_synchro),
             url, json.dumps(r)))
 
-    # Per-event diver results
+    # Per-event diver results. The source events list can contain the same
+    # event_id twice (e.g. event 37592 at meet 6925); keep both meet_events
+    # rows verbatim but fetch/ingest each event's results exactly once.
+    seen_ids, uniq_ids = set(), []
+    for (event_id, *_rest) in ev_rows:
+        if event_id not in seen_ids:
+            seen_ids.add(event_id)
+            uniq_ids.append(event_id)
+    if len(uniq_ids) != len(ev_rows):
+        print(f"note: {len(ev_rows)} event rows, {len(uniq_ids)} unique event_ids "
+              f"(duplicates preserved in meet_events, results fetched once each)")
     all_res = []
-    for i, (event_id, *_rest) in enumerate(ev_rows, 1):
+    for i, event_id in enumerate(uniq_ids, 1):
         crit = f'"{res_table}"."event_id"={event_id}'
         rows, res_header = res_view.rows(crit)
         if i == 1:
@@ -143,8 +153,8 @@ def scrape_meet(meet_id):
                 parse_num(r.get(rc_vols)), parse_num(r.get(rc_opts)),
                 parse_num(r.get(rc_tpts)), diver_id, sheet_id,
                 r.get(rc_pdf), sheet_url, json.dumps(r)))
-        if i % 20 == 0 or i == len(ev_rows):
-            print(f"  results: {i}/{len(ev_rows)} events, {len(all_res)} diver rows so far")
+        if i % 20 == 0 or i == len(uniq_ids):
+            print(f"  results: {i}/{len(uniq_ids)} events, {len(all_res)} diver rows so far")
         time.sleep(SLEEP_S)
 
     # Team & coach points (chart-type views -> ZAChartView series)
@@ -191,7 +201,8 @@ def scrape_meet(meet_id):
                    FROM scoresandmore.event_results WHERE meet_id=%s""", (meet_id,))
     n, ndid, ndname = cur.fetchone()
     cur.close(); conn.close()
-    print(f"DONE meet {meet_id}: {len(ev_rows)} events, {n} result rows, "
+    print(f"DONE meet {meet_id}: {len(ev_rows)} event rows "
+          f"({len(uniq_ids)} unique), {n} result rows, "
           f"{ndid} distinct diver_ids, {ndname} distinct diver names, "
           f"{len(tp_ins)} team-point rows, {len(cp_ins)} coach-point rows")
 
