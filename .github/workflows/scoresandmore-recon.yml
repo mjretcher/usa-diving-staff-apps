@@ -1,0 +1,42 @@
+name: ScoresAndMore Playwright recon
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Full URL to load in headless Chromium"
+        required: true
+      key:
+        description: "app_meta.config key to store the capture under"
+        required: true
+        default: "sm_recon_pw"
+      wait_ms:
+        description: "Extra ms to wait after DOM load"
+        required: false
+        default: "12000"
+
+jobs:
+  recon:
+    name: Capture page XHR traffic into Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install psycopg2-binary playwright
+          playwright install --with-deps chromium
+
+      - name: Recon
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          RECON_URL: ${{ github.event.inputs.url }}
+          RECON_KEY: ${{ github.event.inputs.key }}
+          RECON_WAIT_MS: ${{ github.event.inputs.wait_ms }}
+        run: python db/scripts/sm_recon_playwright.py
