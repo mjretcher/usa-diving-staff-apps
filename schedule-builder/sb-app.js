@@ -415,6 +415,35 @@ function goHome(e){
   window.location.assign('../');
 }
 
+// ── SPLIT PANEL ROTATIONS ─────────────────────────────────────────────
+// Single source of truth for split-board judging panel rotations, by
+// apparatus type / gender / age group. Used two ways:
+//  1) splitPanelRot() prints the rotation text on the Operations report.
+//  2) autoPanelChanges() counts the actual Panel A ↔ Panel B hand-offs in
+//     that rotation, so toggling Split ON seeds a real panel-change count
+//     (A/B/C springboard rotations = 3 hand-offs, Group D = 2) instead of 0.
+const SPLIT_ROTS={sb:{Girls:{'Group A':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,3,7,8',pB:'Rounds 4,5,6,9,10'},'Group B':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}},plat:{Girls:{'Group A':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group C':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,5,6,7',pB:'Rounds 3,4,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}}};
+function splitRotFor(ev){const type=isPlatform(ev.apparatus)?'plat':'sb';return SPLIT_ROTS[type]?.[ev.gender]?.[ev.level]||null}
+// Count Panel A ↔ Panel B hand-offs in the event's published rotation.
+// Falls back to 3 (the standard springboard rotation) for levels not in
+// the table (Senior, National Qualifier, synchro, etc.).
+function autoPanelChanges(ev){
+  const r=splitRotFor(ev);
+  if(!r)return 3;
+  const seq=[];
+  const add=(txt,p)=>{(String(txt).match(/\d+/g)||[]).forEach(n=>seq.push([Number(n),p]))};
+  add(r.pA,'A');add(r.pB,'B');
+  seq.sort((a,b)=>a[0]-b[0]);
+  let changes=0;
+  for(let i=1;i<seq.length;i++)if(seq[i][1]!==seq[i-1][1])changes++;
+  return changes||3;
+}
+// Panel-change values to use when simulating (or turning on) a split, when
+// the event doesn't already carry real values. 3 min per change matches
+// every real USA Diving schedule seeded in this app.
+function effPanelChanges(ev){return Number(ev.numberOfPanelChanges)||autoPanelChanges(ev)}
+function effPanelMinutes(ev){return Number(ev.minutesPerPanelChange)||3}
+
 // ── TIMING ────────────────────────────────────────────────────────────
 function calcEvDur(ev){
   if(Number(ev.customDurationMinutes||0)>0)return{evMin:Number(ev.customDurationMinutes),rawMin:Number(ev.customDurationMinutes)};
@@ -438,7 +467,10 @@ function altSplitEvDur(ev){
   const spd=Math.max(0,Number(ev.secondsPerDive||ev.defaultSpd||35));
   const raw=(divers*dives*spd)/60;
   const willSplit=!Boolean(ev.manualSplit);
-  const panels=willSplit?Number(ev.numberOfPanelChanges||0)*Number(ev.minutesPerPanelChange||2.5):0;
+  // When simulating "if split", include the panel-change overhead the split
+  // would actually get (auto-derived from the rotation if not yet set) so the
+  // what-if number isn't optimistically low.
+  const panels=willSplit?effPanelChanges(ev)*effPanelMinutes(ev):0;
   return(willSplit?raw/2:raw)+panels;
 }
 function calcFlightTimes(sess){
@@ -1197,14 +1229,14 @@ function updEv(sessId,evId,field,value){
       }
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
-    if(['numberOfDivers','numberOfDives','secondsPerDive','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
+    if(['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
       reflowDay(s,sess.dayId);
     }
   });
 }
 function toggleSplit(sessId,evId){
   // Finals are never split — ignore any attempt
-  {const _s=S.sessions.find(x=>x.id===sessId);const _e=_s&&_s.events.find(x=>x.id===evId);if(_e&&_e.round==='Final')return;}upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
+  {const _s=S.sessions.find(x=>x.id===sessId);const _e=_s&&_s.events.find(x=>x.id===evId);if(_e&&_e.round==='Final')return;}upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);if(ev&&!isPlatform(ev.apparatus)){ev.manualSplit=!ev.manualSplit;if(ev.manualSplit){if(!Number(ev.numberOfPanelChanges))ev.numberOfPanelChanges=autoPanelChanges(ev);if(!Number(ev.minutesPerPanelChange))ev.minutesPerPanelChange=3;}reflowDay(s,S.sessions.find(x=>x.id===sessId).dayId);}})}
 function setBuffer(sessId,v){updSess(sessId,'bufferMinutes',v)}
 // End-time entry for practice/custom blocks: "open 7–11" should be typed as
 // 7:00 and 11:00, not 7:00 and 240 minutes of mental math. Duration is derived.
@@ -2334,7 +2366,8 @@ function renderCardEvents(sess,t){
     const split=ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final';
     const dur={evMin:ev.evMin,rawMin:ev.rawMin};
     const divers=ev._combined?ev._combinedDivers:entryValue(ev);
-    const needsSplit=(ev.rawMin>=3||divers>=40)&&ev.round!=='Final'&&!ev._combined;
+    // Split recommended when the event would run 2h30m+ unsplit, or has 40+ divers.
+    const needsSplit=(ev.rawMin>=150||divers>=40)&&ev.round!=='Final'&&!ev._combined;
     const roundCls=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
     const name=ev._combined?ev._combinedNames.join(' + '):evName(ev);
     const diveSub=ev._combined?`${ev._combinedMembers.length} events combined`:`${ev.numberOfDives||ev.defaultDives||0} dives · ${ev.secondsPerDive||ev.defaultSpd||35}s/dive`;
@@ -2546,7 +2579,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       // Split delta: compute both ways
       const evCopyUnsplit={...ev,manualSplit:false};
-      const evCopySplit={...ev,manualSplit:true};
+      const evCopySplit={...ev,manualSplit:true,numberOfPanelChanges:effPanelChanges(ev),minutesPerPanelChange:effPanelMinutes(ev)};
       const unsplitMin=calcEvDur(evCopyUnsplit).evMin;
       const splitMin=calcEvDur(evCopySplit).evMin;
       const saved=Math.round(unsplitMin-splitMin);
@@ -2562,6 +2595,8 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Dives ${ev.rulebookLocked?'🔒':''}</div>${ev.rulebookLocked?`<div class="ep-inp" style="background:var(--surf3);color:var(--tx2);cursor:default;display:flex;align-items:center;justify-content:center;font-weight:700" title="Locked to USA Diving rulebook (${ev.round})">${ev.numberOfDives||ev.defaultDives||0}</div>`:`<input class="ep-inp" type="number" min="1" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</div>
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Sec/dive</div><input class="ep-inp" type="number" min="5" step="1" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></div>
           ${canSplit?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split boards</div><button class="split-toggle ${split?'on':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')"><span class="split-toggle-dot"></span>${split?'ON':'OFF'}</button></div>`:'<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split</div><div style="font-size:11px;color:var(--tx3);padding:6px 0">Platform — N/A</div></div>'}
+          ${split?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px" title="Times the judging panel hands off between Panel A and Panel B during the split">Panel changes</div><input class="ep-inp" type="number" min="0" step="1" value="${Number(ev.numberOfPanelChanges)||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfPanelChanges',this.value)"/></div>
+          <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px" title="Minutes added to the event for each panel change">Min each</div><input class="ep-inp" type="number" min="0" step="0.5" value="${Number(ev.minutesPerPanelChange)||3}" onchange="updEv('${sess.id}','${ev.id}','minutesPerPanelChange',this.value)"/></div>`:''}
           <div style="flex:1;text-align:right"><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Runs</div><div style="font-size:12px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums">${tev.eventStartMinutes!==undefined?`${f12(tev.eventStartMinutes)}–${f12(tev.eventEndMinutes)}`:'—'}</div></div>
         </div>
         ${splitHint}
@@ -2606,7 +2641,8 @@ function renderEntriesPanel(timed){
       const proj=projSet?Number(ev.projectedDivers):null;
       const finl=finlSet?Number(ev.finalDivers):null;
       const effective=entryValue(ev);
-      const needsSplit=dur.rawMin>=3||effective>=40&&ev.round!=='Final';
+      // Split recommended when the event would run 2h30m+ unsplit, or has 40+ divers.
+      const needsSplit=(dur.rawMin>=150||effective>=40)&&ev.round!=='Final';
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       const usingFinal=finlSet;
       rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
@@ -4609,7 +4645,7 @@ function renderPP(timed,cfg,titleOverride){
 }
 
 // ── EXPORTS ───────────────────────────────────────────────────────────
-function splitPanelRot(ev){const rots={sb:{Girls:{'Group A':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,3,7,8',pB:'Rounds 4,5,6,9,10'},'Group B':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}},plat:{Girls:{'Group A':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group C':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,5,6,7',pB:'Rounds 3,4,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}}};const type=isPlatform(ev.apparatus)?'plat':'sb';const r=rots[type]?.[ev.gender]?.[ev.level];return r?`Panel A: ${r.pA} | Panel B: ${r.pB}`:'Review manually'}
+function splitPanelRot(ev){const r=splitRotFor(ev);return r?`Panel A: ${r.pA} | Panel B: ${r.pB}`:'Review manually'}
 
 function exportOpsTimeline(){
   const timed=genTimedForPreview(allTimed());
