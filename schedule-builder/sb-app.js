@@ -535,6 +535,7 @@ function buildWarnings(dayId){
 function detectConflicts(){
   const issues=[];
   ensureProjDataLoaded(); // athlete-aware checks activate once the projected field arrives
+  ensureEntrantsLoaded(); // real DiveMeets signups, for flight counts that need to match actual registrations
   const timed=allTimed();
   S.meet.days.forEach(day=>{
     const sessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
@@ -787,7 +788,7 @@ function executeAddDay(){
     // Keep the day bar chronological no matter what date was picked
     s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     if(tpl)stampTemplateOntoDay(s,tpl,day.id);
-    if(eventTag)s.sessions.forEach(x=>{if(x.dayId===day.id&&!x.eventTag)x.eventTag=eventTag;});
+    if(eventTag)s.sessions.forEach(x=>{if(x.dayId===day.id&&!sessTags(x).length){x.eventTags=[eventTag];delete x.eventTag;}});
     UI.dayId=day.id;
   });
   UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;
@@ -832,7 +833,7 @@ function addSession(dayId,isPractice){
   // these blocks routinely run back-to-back with no gap needed. Competition sessions keep
   // the standard 5-minute buffer default.
   const day=S.meet.days.find(d=>d.id===dayId);
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',eventTag:day&&day.eventTag?day.eventTag:'',flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:55,rounding:5,introMinutes:0,bufferMinutes:isPractice?0:5,awardsEnabled:false,isPractice:!!isPractice,title:isPractice?'Open Training':'',eventTags:day&&day.eventTag?[day.eventTag]:[],flights:[],events:isPractice?[{id:uid(),style:'Custom Block',customLabel:'Open Training',customDurationMinutes:90,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:''}]:[]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 // Standard practice/meeting block presets — quick-pick chips instead of always defaulting to a
@@ -849,7 +850,7 @@ function addPracticeBlock(dayId,presetKey){
   if(!preset){addSession(dayId,true);return;} // 'custom' falls back to the generic block for full manual control
   const existing=timedForDay(dayId);const lastEnd=existing.reduce((m,s)=>Math.max(m,s.timing?.sessionEndMinutes||Number(s.warmupStartMinutes)),390);const start=ru(lastEnd+(existing.length?5:0),5);
   const day=S.meet.days.find(d=>d.id===dayId);
-  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,eventTag:day&&day.eventTag?day.eventTag:'',flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
+  const sess={id:uid(),dayId,warmupStartMinutes:start,warmupMinutes:presetKey==='technical'?0:55,rounding:5,introMinutes:0,bufferMinutes:0,awardsEnabled:false,isPractice:true,title:preset.title,eventTags:day&&day.eventTag?[day.eventTag]:[],flights:[],events:[{id:uid(),style:'Custom Block',customLabel:preset.label,customDurationMinutes:preset.duration,apparatus:'Pool',gender:'Open',level:'Schedule',numberOfDivers:0,numberOfDives:0,secondsPerDive:0,defaultSpd:0,defaultDives:0,manualSplit:false,numberOfPanelChanges:0,minutesPerPanelChange:0,notes:preset.label}]};
   upd(s=>{s.sessions.push(sess)});UI.editSessId=sess.id;render();
 }
 function deleteSession(id){
@@ -1606,13 +1607,47 @@ function ensureProjDataLoaded(){
   UI._projBgLoading=true;
   loadProjRows().then(rows=>{UI.projRows=rows}).catch(()=>{UI.projRows=[]}).finally(()=>{UI._projBgLoading=false;render()});
 }
+// Background loader for the set of diver_keys who have ACTUALLY completed DiveMeets
+// registration for this schedule's configured meet(s) — as opposed to UI.projRows, which is
+// only the Junior Results Audit's projected/qualified field. Flighted-practice zone/E-W-C
+// athlete counts historically only used the projected field, so they showed who was expected
+// to qualify rather than who has actually signed up for Junior Nationals — those two numbers
+// routinely diverge (not everyone projected has registered yet; late additions may have
+// registered without yet appearing in the projection). This gives athleteCountForFlight() the
+// real signup list to intersect against. Only 'registered'-role sources count (a 'projected'
+// baseline source is an estimate, not a real signup list, so it's deliberately excluded here).
+function ensureEntrantsLoaded(){
+  if(UI.regEntrantKeys!=null||UI._entrantsBgLoading)return;
+  UI._entrantsBgLoading=true;
+  const regSources=getAllDivemeetsSources().filter(s=>s.role==='registered');
+  Promise.all(regSources.map(s=>loadMeetEntrantsForId(s.id).catch(()=>[])))
+    .then(lists=>{
+      const keys=new Set();
+      lists.forEach(list=>list.forEach(e=>{if(e.diverKey)keys.add(e.diverKey);}));
+      UI.regEntrantKeys=keys;
+    })
+    .catch(()=>{UI.regEntrantKeys=new Set()})
+    .finally(()=>{UI._entrantsBgLoading=false;render()});
+}
 // Distinct athlete count for a flight's zone/E-W-C tag. Zone is more specific than E-W-C
 // and takes priority when both are set (every zone belongs to exactly one E-W-C group).
+// Returns {count, source} — 'registered' uses real DiveMeets signups (preferred, once that
+// list has loaded) intersected against the projected field's zone/E-W-C mapping (DiveMeets
+// itself has no concept of zone or E/W/C, so that mapping can only come from the projected
+// field); 'projected' is the qualification-pipeline snapshot alone, used only until the
+// registered list arrives. Returns null if this flight has no zone/E-W-C tag, or before the
+// projected field itself has loaded at all.
 function athleteCountForFlight(f){
   if(!UI.projRows)return null;
   if(!f.zone&&!f.ewcMeet)return null;
   const rows=UI.projRows.filter(r=>f.zone?r.zone===f.zone:r.ewcMeet===f.ewcMeet);
-  return new Set(rows.map(r=>r.diverKey)).size;
+  const keys=new Set(rows.map(r=>r.diverKey));
+  if(UI.regEntrantKeys){
+    let registered=0;
+    keys.forEach(k=>{if(UI.regEntrantKeys.has(k))registered++;});
+    return{count:registered,source:'registered'};
+  }
+  return{count:keys.size,source:'projected'};
 }
 async function openProjections(){
   UI.modal='projections';
@@ -2192,7 +2227,7 @@ function renderCard(sess,timed,warns){
     return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-main">
-          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${(()=>{const t=eventTagOf(sess);return t?`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`:''})()}</div>
+          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
           <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
@@ -2232,7 +2267,7 @@ function renderCard(sess,timed,warns){
     <div class="sc-hd" onclick="openEdit('${sess.id}')">
       <span class="badge ${badgeClass}">${badgeTxt}</span>
       <div class="sc-titles">
-        <div class="sc-name">Session ${n}${(()=>{const t=eventTagOf(sess);return t?`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`:''})()}</div>
+        <div class="sc-name">Session ${n}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
@@ -2322,7 +2357,7 @@ function renderEditPanel(timed){
 
 function renderEditPrac(sess,t,flights,buf){
   buf=Number(buf!=null?buf:(sess.bufferMinutes||0));
-  if(flights.length)ensureProjDataLoaded();
+  if(flights.length){ensureProjDataLoaded();ensureEntrantsLoaded();}
   const showCnt=UI.showFlightCounts!==false;
   const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlightTag('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
   const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
@@ -2345,14 +2380,14 @@ function renderEditPrac(sess,t,flights,buf){
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
     <div class="fg"><label class="fl">Buffer after this block</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after this block (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
-    <div class="fg"><label class="fl">Part of</label><div class="chiprow"><button class="chip ${!sess.eventTag?'on':''}" onclick="updSess('${sess.id}','eventTag','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sess.eventTag===t.k?'on':''}" onclick="updSess('${sess.id}','eventTag','${t.k}')">${t.l}</button>`).join('')}</div></div>
+    <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     <div class="fdiv"></div>
     <div class="fsec" style="display:flex;align-items:center;justify-content:space-between">
       <span>Flights <span style="font-size:10px;font-weight:400;color:var(--tx3)">optional — times auto-stack</span></span>
       ${flights.length?`<label style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--tx3);cursor:pointer"><input type="checkbox" ${showCnt?'checked':''} onchange="UI.showFlightCounts=this.checked;patchPracEditModal()"/> Show athlete counts</label>`:''}
     </div>
     <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min" — tag a flight below and its count fills in automatically</p>
-    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cnt=athleteCountForFlight(f);const cntLbl=cnt==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):cnt+' athlete'+(cnt===1?'':'s');return`<div class="flight-row">
+    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cr=athleteCountForFlight(f);const cntLbl=cr==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):`${cr.count} athlete${cr.count===1?'':'s'}${cr.source==='projected'?' (projected — signups loading)':''}`;return`<div class="flight-row">
       <div class="flight-bar" style="background:${f.color||'#171F69'}"></div>
       <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
       <input id="flight-dur-${f.id}" class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
@@ -2469,7 +2504,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Intro / ceremony before events</label><div class="chiprow">${introChips}<button class="chip" onclick="askPrompt({title:'Intro / parade (min)',message:'Minutes for intro before the first event.',inputType:'number',defaultValue:sess.introMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')updSess('${sess.id}','introMinutes',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after session (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
-    <div class="fg"><label class="fl">Part of</label><div class="chiprow"><button class="chip ${!sess.eventTag?'on':''}" onclick="updSess('${sess.id}','eventTag','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sess.eventTag===t.k?'on':''}" onclick="updSess('${sess.id}','eventTag','${t.k}')">${t.l}</button>`).join('')}</div></div>
+    <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
     ${sess.events.length>1?renderCombinePanel(sess,t):''}
@@ -3364,30 +3399,52 @@ const EVENT_TAGS=[
   {k:'senior',l:'Senior Nationals',s:'SR',c:'#E31937'},
   {k:'qualifier',l:'National Qualifier',s:'NQ',c:'#009AC7'},
 ];
-function eventTagOf(sess){return EVENT_TAGS.find(t=>t.k===sess.eventTag)||null}
 function dayEventTagOf(day){return EVENT_TAGS.find(t=>t.k===day.eventTag)||null}
+// A session can now belong to more than one event (e.g. a Senior Nationals block
+// that's simultaneously a National Qualifier block). eventTags is the array of tag
+// keys; the legacy single-value eventTag (old saved schedules) is read as a
+// one-element array so nothing on disk needs to be migrated.
+function sessTags(sess){return Array.isArray(sess.eventTags)?sess.eventTags:(sess.eventTag?[sess.eventTag]:[]);}
+function eventTagsOf(sess){const tags=sessTags(sess);return EVENT_TAGS.filter(t=>tags.includes(t.k));}
+function toggleSessTag(id,k){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
+    const cur=sessTags(sess);
+    sess.eventTags=cur.includes(k)?cur.filter(x=>x!==k):[...cur,k];
+    delete sess.eventTag;
+  });
+}
+function clearSessTags(id){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
+    sess.eventTags=[];
+    delete sess.eventTag;
+  });
+}
 // Sets a day's default event — new blocks added to this day pick it up automatically
 // (see addSession/addPracticeBlock). Existing blocks are never silently retagged; if the
 // day already has untagged blocks, offer to tag those too rather than doing it invisibly.
 function setDayEventTag(dayId,tag){
   const day=S.meet.days.find(d=>d.id===dayId);if(!day)return;
-  const untagged=S.sessions.filter(s=>s.dayId===dayId&&!s.eventTag);
+  const untagged=S.sessions.filter(s=>s.dayId===dayId&&!sessTags(s).length);
   upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d)d.eventTag=tag||'';});
   if(tag&&untagged.length){
     const tagL=EVENT_TAGS.find(t=>t.k===tag)?.l||tag;
     askConfirm({title:'Tag existing blocks too?',message:`This day already has ${untagged.length} untagged block${untagged.length===1?'':'s'}. Tag ${untagged.length===1?'it':'them'} as ${tagL} as well? (New blocks you add from now on will use this automatically either way.)`,confirmText:'Tag them',onConfirm:()=>{
-      upd(s=>{s.sessions.forEach(x=>{if(x.dayId===dayId&&!x.eventTag)x.eventTag=tag;});});
+      upd(s=>{s.sessions.forEach(x=>{if(x.dayId===dayId&&!sessTags(x).length){x.eventTags=[tag];delete x.eventTag;}});});
       render();toast(`Tagged ${untagged.length} block${untagged.length===1?'':'s'} as ${tagL}`);
     }});
   } // upd() above already re-rendered; nothing else to do when there's no bulk-apply prompt
 }
-function anyEventTags(){return S.sessions.some(s=>s.eventTag)||S.meet.days.some(d=>d.eventTag)}
+function anyEventTags(){return S.sessions.some(s=>sessTags(s).length)||S.meet.days.some(d=>d.eventTag)}
 // View filter: a tag shows its own blocks + shared; 'shared' shows untagged only.
+// A session tagged with MULTIPLE events shows up under every one of its tags' filters.
 function passesEventFilter(sess){
   const f=UI.eventFilter;
   if(!f)return true;
-  if(f==='shared')return!sess.eventTag;
-  return sess.eventTag===f||!sess.eventTag;
+  const tags=sessTags(sess);
+  if(f==='shared')return!tags.length;
+  return tags.includes(f)||!tags.length;
 }
 function filterByEvent(sessions){return sessions.filter(passesEventFilter)}
 function eventFilterLabel(){
@@ -3426,7 +3483,7 @@ async function executeImportBlocks(){
   upd(s=>{
     if(st.replace){
       const before=s.sessions.length;
-      s.sessions=s.sessions.filter(x=>x.eventTag!==st.tag);
+      s.sessions=s.sessions.filter(x=>!sessTags(x).includes(st.tag));
       removed=before-s.sessions.length;
     }
     const dayByDate={};s.meet.days.forEach(d=>dayByDate[d.date]=d.id);
@@ -3439,7 +3496,7 @@ async function executeImportBlocks(){
         s.meet.days.push(nd);dayByDate[nd.date]=nd.id;targetDayId=nd.id;daysCreated++;
       }
       const copy=JSON.parse(JSON.stringify(src));
-      copy.id=uid();copy.dayId=targetDayId;copy.eventTag=st.tag;
+      copy.id=uid();copy.dayId=targetDayId;copy.eventTags=[st.tag];delete copy.eventTag;
       (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
       (copy.flights||[]).forEach(f=>{f.id=uid();});
       s.sessions.push(copy);added++;
@@ -3472,14 +3529,14 @@ function renderImportBlocksModal(){
 }
 // ── SPLIT MASTER INTO PER-EVENT SCHEDULES ────────────────────────────
 async function splitByEvent(){
-  const tagsInUse=EVENT_TAGS.filter(t=>S.sessions.some(s=>s.eventTag===t.k));
+  const tagsInUse=EVENT_TAGS.filter(t=>S.sessions.some(s=>sessTags(s).includes(t.k)));
   if(!tagsInUse.length){toast('Tag blocks with their event first (open a block → "Part of")');return;}
   askConfirm({title:'Split into per-event schedules?',message:`Creates ${tagsInUse.length} new cloud schedule${tagsInUse.length===1?'':'s'} (${tagsInUse.map(t=>t.l).join(', ')}), each containing that event's blocks plus all shared blocks. This master is not changed.`,confirmText:'Create '+tagsInUse.length,onConfirm:async()=>{
     toast('Splitting…');
     let made=0;
     for(const t of tagsInUse){
       const clone=JSON.parse(JSON.stringify(S));
-      clone.sessions=clone.sessions.filter(x=>x.eventTag===t.k||!x.eventTag);
+      clone.sessions=clone.sessions.filter(x=>sessTags(x).includes(t.k)||!sessTags(x).length);
       const usedDays=new Set(clone.sessions.map(x=>x.dayId));
       clone.meet.days=clone.meet.days.filter(d=>usedDays.has(d.id));
       clone.meet.name=`${S.meet.name||'Schedule'} — ${t.l}`;
@@ -4202,6 +4259,7 @@ function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabe
 
 function renderGenerateModal(timed){
   ensureProjDataLoaded();
+  ensureEntrantsLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
   const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
@@ -4409,8 +4467,8 @@ function renderPP(timed,cfg){
     return`<div class="pp-prac">
       <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
       ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
-        const cnt=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
-        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cnt!=null?` · ${cnt} athlete${cnt===1?'':'s'}`:''}</span></div>`;
+        const cr=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
+        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cr!=null?` · ${cr.count} athlete${cr.count===1?'':'s'}${cr.source==='projected'?' (projected)':''}`:''}</span></div>`;
       }).join('')}</div>`:''}
     </div>`;
   }
