@@ -79,7 +79,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -425,6 +425,21 @@ function calcEvDur(ev){
   const split=Boolean(ev.manualSplit)&&!isPlatform(ev.apparatus);
   const panels=split?Number(ev.numberOfPanelChanges||0)*Number(ev.minutesPerPanelChange||2.5):0;
   return{evMin:(split?raw/2:raw)+panels,rawMin:raw};
+}
+// Operational "what if" reference for the split-boards print toggles: the event's duration
+// under the OPPOSITE split setting from what's currently configured, using the same formula
+// as calcEvDur() above. Does not touch ev.manualSplit and does not reflow the rest of the
+// day — it's a side-by-side reference number for staff deciding whether to flip a board
+// split, not a full recalculated schedule. Meaningless for Platform (never splits) and
+// Finals (never split); callers gate on the same eligibility as the "Split boards" tag.
+function altSplitEvDur(ev){
+  const divers=Math.max(0,entryValue(ev));
+  const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
+  const spd=Math.max(0,Number(ev.secondsPerDive||ev.defaultSpd||35));
+  const raw=(divers*dives*spd)/60;
+  const willSplit=!Boolean(ev.manualSplit);
+  const panels=willSplit?Number(ev.numberOfPanelChanges||0)*Number(ev.minutesPerPanelChange||2.5):0;
+  return(willSplit?raw/2:raw)+panels;
 }
 function calcFlightTimes(sess){
   if(!sess.flights?.length)return[];
@@ -4283,8 +4298,11 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Split-board events: show unsplit time</span><span class="tog"><input type="checkbox" ${cfg.showUnsplitAlt?'checked':''} onchange="AUD['${aud}'].showUnsplitAlt=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Unsplit events: show split time</span><span class="tog"><input type="checkbox" ${cfg.showSplitAlt?'checked':''} onchange="AUD['${aud}'].showSplitAlt=this.checked;render()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
           </div>
+          <p style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
         </div>
         <div class="gen-preview">
           <div class="gen-sec-lbl">Preview <span class="pp-scrollhint">scroll to see full schedule</span></div>
@@ -4458,8 +4476,10 @@ function renderPP(timed,cfg){
   function evRow(ev,i){
     const divers=ev._combined?ev._combinedDivers:entryValue(ev);
     const nm=ev._combined?ev._combinedNames.join(' + '):evName(ev);
+    const splitEligible=!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined;
+    const splitNow=Boolean(ev.manualSplit)&&splitEligible;
     return`<tr class="pe ${i%2?'alt':''}">
-      <td class="pe-nm">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pe-tag combined">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pe-tag simul">Simultaneous</span>`:''}${(ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<span class="pe-tag split">Split boards</span>`:''}</td>
+      <td class="pe-nm">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pe-tag combined">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pe-tag simul">Simultaneous</span>`:''}${splitNow?`<span class="pe-tag split">Split boards</span>`:''}${(splitNow&&cfg.showUnsplitAlt)?`<span class="pe-tag altsplit">Unsplit: ${fdur(altSplitEvDur(ev))}</span>`:''}${(!splitNow&&splitEligible&&cfg.showSplitAlt)?`<span class="pe-tag altsplit">If split: ${fdur(altSplitEvDur(ev))}</span>`:''}</td>
       ${cfg.showEntries?`<td class="pe-div">${divers?divers+'<span class="pe-u">divers</span>':'<span class="pe-dash">—</span>'}</td>`:''}
       ${cfg.showSec?`<td class="pe-sec">${ev.secondsPerDive||ev.defaultSpd||35}<span class="pe-u">s/dive</span></td>`:''}
       ${cfg.showTimes?`<td class="pe-tm">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</td>`:''}

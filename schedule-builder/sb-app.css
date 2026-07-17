@@ -910,6 +910,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pe-tag.combined{background:var(--navy);color:#fff}
 .pe-tag.simul{background:#8FC3EA;color:var(--navy)}
 .pe-tag.split{background:#FFF1DC;color:#92400E}
+.pe-tag.altsplit{background:#F1F5F9;color:var(--navy)}
 .pe-div{font-size:13px;font-weight:800;color:var(--red);white-space:nowrap;text-align:right;padding-right:20px!important;font-variant-numeric:tabular-nums}
 .pe-sec{font-size:12px;font-weight:600;color:var(--gray);white-space:nowrap;text-align:right;padding-right:20px!important;font-variant-numeric:tabular-nums}
 .pe-tm{font-size:12.5px;font-weight:700;color:var(--navy);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
