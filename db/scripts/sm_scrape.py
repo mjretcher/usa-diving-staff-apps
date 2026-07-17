@@ -36,6 +36,33 @@ if not DB_URL:
     sys.exit("DATABASE_URL not set")
 
 
+
+# ---------------------------------------------------------------- run report
+_LOG = []
+_orig_print = print
+def print(*args, **kw):  # noqa: A001 - intentional shadow, tee to run report
+    _LOG.append(" ".join(str(a) for a in args))
+    _orig_print(*args, **kw)
+
+
+def store_report(ok, error=None):
+    try:
+        import psycopg2
+        from datetime import datetime, timezone
+        conn = psycopg2.connect(DB_URL); cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO app_meta.config (key, value, description)
+               VALUES (%s, %s, 'ScoresAndMore scrape run report (sm_scrape.py)')
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""",
+            ("sm_scrape_last_run", json.dumps({
+                "ok": ok, "mode": MODE, "meet_id": MEET_ID, "criteria": CRITERIA,
+                "at": datetime.now(timezone.utc).isoformat(),
+                "error": error, "log": _LOG[-400:]})))
+        conn.commit(); cur.close(); conn.close()
+    except Exception as e:
+        _orig_print(f"could not store run report: {e!r}")
+
+
 def db():
     import psycopg2
     return psycopg2.connect(DB_URL)
@@ -212,11 +239,19 @@ def scrape_catalog():
 
 
 if __name__ == "__main__":
-    if MODE == "meet":
-        if not MEET_ID.isdigit():
-            sys.exit("MEET_ID must be a number for MODE=meet")
-        scrape_meet(MEET_ID)
-    elif MODE == "catalog":
-        scrape_catalog()
-    else:
-        sys.exit(f"unknown MODE {MODE!r}")
+    try:
+        if MODE == "meet":
+            if not MEET_ID.isdigit():
+                sys.exit("MEET_ID must be a number for MODE=meet")
+            scrape_meet(MEET_ID)
+        elif MODE == "catalog":
+            scrape_catalog()
+        else:
+            sys.exit(f"unknown MODE {MODE!r}")
+        store_report(True)
+    except SystemExit:
+        raise
+    except Exception as e:
+        import traceback
+        store_report(False, error=traceback.format_exc()[-4000:])
+        raise
