@@ -274,5 +274,19 @@
     "eventName": "",
     "note": "Declared not attending - athlete-level",
     "resolvedReview": false
+  },
+  {
+    "id": "1784301220016-df7bd10a68b08",
+    "createdAt": "2026-07-17T15:13:40.016Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "81264",
+    "athleteName": "Eric Xiao",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
