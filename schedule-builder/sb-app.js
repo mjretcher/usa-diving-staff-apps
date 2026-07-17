@@ -535,7 +535,6 @@ function buildWarnings(dayId){
 function detectConflicts(){
   const issues=[];
   ensureProjDataLoaded(); // athlete-aware checks activate once the projected field arrives
-  ensureEntrantsLoaded(); // real DiveMeets signups, for flight counts that need to match actual registrations
   const timed=allTimed();
   S.meet.days.forEach(day=>{
     const sessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
@@ -1607,47 +1606,21 @@ function ensureProjDataLoaded(){
   UI._projBgLoading=true;
   loadProjRows().then(rows=>{UI.projRows=rows}).catch(()=>{UI.projRows=[]}).finally(()=>{UI._projBgLoading=false;render()});
 }
-// Background loader for the set of diver_keys who have ACTUALLY completed DiveMeets
-// registration for this schedule's configured meet(s) — as opposed to UI.projRows, which is
-// only the Junior Results Audit's projected/qualified field. Flighted-practice zone/E-W-C
-// athlete counts historically only used the projected field, so they showed who was expected
-// to qualify rather than who has actually signed up for Junior Nationals — those two numbers
-// routinely diverge (not everyone projected has registered yet; late additions may have
-// registered without yet appearing in the projection). This gives athleteCountForFlight() the
-// real signup list to intersect against. Only 'registered'-role sources count (a 'projected'
-// baseline source is an estimate, not a real signup list, so it's deliberately excluded here).
-function ensureEntrantsLoaded(){
-  if(UI.regEntrantKeys!=null||UI._entrantsBgLoading)return;
-  UI._entrantsBgLoading=true;
-  const regSources=getAllDivemeetsSources().filter(s=>s.role==='registered');
-  Promise.all(regSources.map(s=>loadMeetEntrantsForId(s.id).catch(()=>[])))
-    .then(lists=>{
-      const keys=new Set();
-      lists.forEach(list=>list.forEach(e=>{if(e.diverKey)keys.add(e.diverKey);}));
-      UI.regEntrantKeys=keys;
-    })
-    .catch(()=>{UI.regEntrantKeys=new Set()})
-    .finally(()=>{UI._entrantsBgLoading=false;render()});
-}
-// Distinct athlete count for a flight's zone/E-W-C tag. Zone is more specific than E-W-C
-// and takes priority when both are set (every zone belongs to exactly one E-W-C group).
-// Returns {count, source} — 'registered' uses real DiveMeets signups (preferred, once that
-// list has loaded) intersected against the projected field's zone/E-W-C mapping (DiveMeets
-// itself has no concept of zone or E/W/C, so that mapping can only come from the projected
-// field); 'projected' is the qualification-pipeline snapshot alone, used only until the
-// registered list arrives. Returns null if this flight has no zone/E-W-C tag, or before the
-// projected field itself has loaded at all.
+// Distinct athlete count for a flight's zone/E-W-C tag — the FULL qualification-pipeline
+// roster for that group (every diver in the projected field tagged with this zone or E/W/C
+// meet, across all qualification paths: Zone Direct, E/W/C, and HPS-not-yet-competed). This
+// is the real headcount to plan warm-up time for, since it reflects who is actually qualified
+// for that region regardless of how far along their DiveMeets registration paperwork is —
+// registration often lags well behind the qualification pipeline, so counting only current
+// DiveMeets signups understates the true number who will show up. Any athlete who attends
+// without having come through the pipeline at all (late add, discretionary invite, etc.) is
+// not reflected here and is handled manually. Zone is more specific than E-W-C and takes
+// priority when both are set (every zone belongs to exactly one E-W-C group).
 function athleteCountForFlight(f){
   if(!UI.projRows)return null;
   if(!f.zone&&!f.ewcMeet)return null;
   const rows=UI.projRows.filter(r=>f.zone?r.zone===f.zone:r.ewcMeet===f.ewcMeet);
-  const keys=new Set(rows.map(r=>r.diverKey));
-  if(UI.regEntrantKeys){
-    let registered=0;
-    keys.forEach(k=>{if(UI.regEntrantKeys.has(k))registered++;});
-    return{count:registered,source:'registered'};
-  }
-  return{count:keys.size,source:'projected'};
+  return new Set(rows.map(r=>r.diverKey)).size;
 }
 async function openProjections(){
   UI.modal='projections';
@@ -2357,7 +2330,7 @@ function renderEditPanel(timed){
 
 function renderEditPrac(sess,t,flights,buf){
   buf=Number(buf!=null?buf:(sess.bufferMinutes||0));
-  if(flights.length){ensureProjDataLoaded();ensureEntrantsLoaded();}
+  if(flights.length)ensureProjDataLoaded();
   const showCnt=UI.showFlightCounts!==false;
   const ewcChip=(f,v)=>`<button class="chip ${f.ewcMeet===v?'on':''}" onclick="updFlightTag('${sess.id}','${f.id}','ewcMeet','${f.ewcMeet===v?'':v}')">${v}</button>`;
   const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
@@ -2387,7 +2360,7 @@ function renderEditPrac(sess,t,flights,buf){
       ${flights.length?`<label style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--tx3);cursor:pointer"><input type="checkbox" ${showCnt?'checked':''} onchange="UI.showFlightCounts=this.checked;patchPracEditModal()"/> Show athlete counts</label>`:''}
     </div>
     <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min" — tag a flight below and its count fills in automatically</p>
-    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cr=athleteCountForFlight(f);const cntLbl=cr==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):`${cr.count} athlete${cr.count===1?'':'s'}${cr.source==='projected'?' (projected — signups loading)':''}`;return`<div class="flight-row">
+    ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cnt=athleteCountForFlight(f);const cntLbl=cnt==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):cnt+' athlete'+(cnt===1?'':'s');return`<div class="flight-row">
       <div class="flight-bar" style="background:${f.color||'#171F69'}"></div>
       <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
       <input id="flight-dur-${f.id}" class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
@@ -4259,7 +4232,6 @@ function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabe
 
 function renderGenerateModal(timed){
   ensureProjDataLoaded();
-  ensureEntrantsLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
   const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
@@ -4467,8 +4439,8 @@ function renderPP(timed,cfg){
     return`<div class="pp-prac">
       <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
       ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
-        const cr=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
-        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cr!=null?` · ${cr.count} athlete${cr.count===1?'':'s'}${cr.source==='projected'?' (projected)':''}`:''}</span></div>`;
+        const cnt=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
+        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cnt!=null?` · ${cnt} athlete${cnt===1?'':'s'}`:''}</span></div>`;
       }).join('')}</div>`:''}
     </div>`;
   }
