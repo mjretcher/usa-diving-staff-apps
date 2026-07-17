@@ -4289,7 +4289,27 @@ function renderSaveDialogModal(){
 }
 
 
-function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabels!==false);saveS();render();}
+function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabels!==false);saveS();genRender();}
+
+// Re-render while preserving scroll positions inside the Generate modal. A plain render()
+// rebuilds the whole DOM, which silently resets the controls column, the preview pane, and
+// (in the stacked mobile layout) the modal itself back to the top — so every toggle click
+// yanked the user to the top of the panel. Capture scrollTops before the rebuild and restore
+// them after. Outside the Generate modal the selectors match nothing and this is identical
+// to render().
+function genRender(){
+  const c=document.querySelector('.gen-controls');
+  const p=document.querySelector('.gen-preview .pp');
+  const m=document.querySelector('.gen-modal');
+  const cs=c?c.scrollTop:0, ps=p?p.scrollTop:0, ms=m?m.scrollTop:0;
+  render();
+  const c2=document.querySelector('.gen-controls');
+  const p2=document.querySelector('.gen-preview .pp');
+  const m2=document.querySelector('.gen-modal');
+  if(c2)c2.scrollTop=cs;
+  if(p2)p2.scrollTop=ps;
+  if(m2)m2.scrollTop=ms;
+}
 
 // ── GENERATE/PRINT SCOPE ─────────────────────────────────────────────
 // Separate from the on-screen day-view filter (UI.eventFilter): this lets Mike print the
@@ -4329,26 +4349,26 @@ function renderGenerateModal(timed){
         <div class="gen-controls">
           <div class="gen-sec-lbl">Print scope</div>
           <div class="chiprow">
-            <button class="chip ${!UI.genEventFilter?'on':''}" onclick="UI.genEventFilter=null;render()">All (combined)</button>
-            ${EVENT_TAGS.map(t=>`<button class="chip ${UI.genEventFilter===t.k?'on':''}" onclick="UI.genEventFilter='${t.k}';render()">${t.l}</button>`).join('')}
-            <button class="chip ${UI.genEventFilter==='shared'?'on':''}" onclick="UI.genEventFilter='shared';render()">Shared only</button>
+            <button class="chip ${!UI.genEventFilter?'on':''}" onclick="UI.genEventFilter=null;genRender()">All (combined)</button>
+            ${EVENT_TAGS.map(t=>`<button class="chip ${UI.genEventFilter===t.k?'on':''}" onclick="UI.genEventFilter='${t.k}';genRender()">${t.l}</button>`).join('')}
+            <button class="chip ${UI.genEventFilter==='shared'?'on':''}" onclick="UI.genEventFilter='shared';genRender()">Shared only</button>
           </div>
           <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4">Only blocks tagged for this scope (plus Shared blocks) are included — days with nothing in scope are skipped entirely. Each scope remembers its own title below, so switching back and forth doesn't lose what you typed.</p>
-          <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);render()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
+          <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);genRender()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
           <div class="fdiv"></div>
           <div class="gen-sec-lbl">Audience</div>
-          <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="audname">${a.l}</div></button>`).join('')}</div>
+          <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';genRender()"><div class="audname">${a.l}</div></button>`).join('')}</div>
           <p class="gen-aud-desc">${audDesc[aud]||''}</p>
           <div class="gen-sec-lbl">Show / hide</div>
           <div class="gen-toggles">
-            <label class="togrow"><span>Warm-up times</span><span class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Event start / end times</span><span class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Split-board events: show unsplit time</span><span class="tog"><input type="checkbox" ${cfg.showUnsplitAlt?'checked':''} onchange="AUD['${aud}'].showUnsplitAlt=this.checked;render()"><span class="togsl"></span></span></label>
-            <label class="togrow"><span>Unsplit events: show split time</span><span class="tog"><input type="checkbox" ${cfg.showSplitAlt?'checked':''} onchange="AUD['${aud}'].showSplitAlt=this.checked;render()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Warm-up times</span><span class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Event start / end times</span><span class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Split-board events: show unsplit time</span><span class="tog"><input type="checkbox" ${cfg.showUnsplitAlt?'checked':''} onchange="AUD['${aud}'].showUnsplitAlt=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Unsplit events: show split time</span><span class="tog"><input type="checkbox" ${cfg.showSplitAlt?'checked':''} onchange="AUD['${aud}'].showSplitAlt=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
           </div>
           <p style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
