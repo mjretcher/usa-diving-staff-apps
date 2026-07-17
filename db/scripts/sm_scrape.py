@@ -21,7 +21,7 @@ import os
 import re
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sm_zoho import view, parse_int, parse_num, parse_date
@@ -208,10 +208,61 @@ def scrape_meet(meet_id):
 
 
 # ------------------------------------------------------------------ catalog
+def _month_starts(d0, d1):
+    """First-of-month dates covering [d0, d1]."""
+    out, y, m = [], d0.year, d0.month
+    while date(y, m, 1) <= d1:
+        out.append(date(y, m, 1))
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+def _window_rows(m_view, m_table, lo, hi, extra):
+    """Fetch catalog rows with start_date in [lo, hi); split to days on cap."""
+    base = (f'"{m_table}"."start_date" >= \'{lo.isoformat()}\' AND '
+            f'"{m_table}"."start_date" < \'{hi.isoformat()}\'')
+    crit = f"({base}) AND ({extra})" if extra else base
+    try:
+        return m_view.rows(crit)
+    except RuntimeError as e:
+        if "GRID CAP" not in str(e) or (hi - lo).days <= 1:
+            raise
+        rows, header = [], None
+        d = lo
+        while d < hi:
+            nxt = min(d + timedelta(days=1), hi)
+            r, header = _window_rows(m_view, m_table, d, nxt, extra)
+            rows.extend(r)
+            d = nxt
+        return rows, header
+
 def scrape_catalog():
     m_view, m_table = view("meets")
-    crit = CRITERIA or f'"{m_table}"."start_date" <= \'{date.today().isoformat()}\''
-    rows, header = m_view.rows(crit)
+    # The Zoho grid silently caps any fetch at 200 rows, so pull the catalog
+    # in monthly start_date windows (auto-split to daily on cap). Range:
+    # CATALOG_START (default 2025-08-01) through today+18 months, plus one
+    # open-ended tail window for far-future/typo'd dates. Optional CRITERIA
+    # is ANDed into every window.
+    start = date.fromisoformat(os.environ.get("CATALOG_START", "2025-08-01").strip()
+                               or "2025-08-01")
+    horizon = date.today() + timedelta(days=548)
+    rows, header = [], None
+    months = _month_starts(start, horizon)
+    for i, mstart in enumerate(months):
+        mend = months[i + 1] if i + 1 < len(months) else horizon + timedelta(days=1)
+        r, h = _window_rows(m_view, m_table, mstart, mend, CRITERIA)
+        header = h or header
+        if r:
+            print(f"  window {mstart}..{mend}: {len(r)} meets")
+        rows.extend(r)
+        time.sleep(SLEEP_S)
+    tail = f'"{m_table}"."start_date" >= \'{(horizon + timedelta(days=1)).isoformat()}\''
+    if CRITERIA:
+        tail = f"({tail}) AND ({CRITERIA})"
+    r, h = m_view.rows(tail)
+    header = h or header
+    if r:
+        print(f"  tail window (> {horizon + timedelta(days=1)}): {len(r)} meets")
+    rows.extend(r)
     m_view.close()
     print(f"catalog: {len(rows)} meets | header: {header}")
 

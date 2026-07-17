@@ -278,6 +278,15 @@ class ZohoOpenView:
             raise RuntimeError(
                 f"PAGINATION NEEDED: fetched {fetched} of {total} rows for "
                 f"view {self.view_id} criteria {criteria!r} — refusing partial data")
+        # Zoho's grid caps a fetch at 200 rows AND reports navigInfo total==200
+        # in that case (observed on q_meets), so total==fetched cannot be
+        # trusted at the cap. Treat exactly-200 as likely truncation: callers
+        # must narrow criteria (e.g. date windows) until under the cap.
+        if len(rows) >= 200:
+            raise RuntimeError(
+                f"GRID CAP HIT: {len(rows)} rows (>=200) for view {self.view_id} "
+                f"criteria {criteria!r} — result may be truncated; narrow the "
+                f"criteria (navigInfo total is unreliable at the cap)")
         if total is not None and len(rows) != total:
             raise RuntimeError(
                 f"parsed {len(rows)} rows but navigInfo says {total} for "

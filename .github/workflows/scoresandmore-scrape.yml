@@ -12,7 +12,11 @@ on:
         required: false
         default: ""
       criteria:
-        description: "Optional ZOHO_CRITERIA override for mode=catalog"
+        description: "Optional extra ZOHO_CRITERIA (ANDed into catalog windows)"
+        required: false
+        default: ""
+      catalog_start:
+        description: "Catalog window start date (default 2025-08-01)"
         required: false
         default: ""
 
@@ -40,4 +44,5 @@ jobs:
           MODE: ${{ github.event.inputs.mode }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
           CRITERIA: ${{ github.event.inputs.criteria }}
+          CATALOG_START: ${{ github.event.inputs.catalog_start }}
         run: python db/scripts/sm_scrape.py
