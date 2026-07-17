@@ -3458,8 +3458,12 @@ function setDayEventTag(dayId,tag){
 function anyEventTags(){return S.sessions.some(s=>sessTags(s).length)||S.meet.days.some(d=>d.eventTag)}
 // View filter: a tag shows its own blocks + shared; 'shared' shows untagged only.
 // A session tagged with MULTIPLE events shows up under every one of its tags' filters.
-function passesEventFilter(sess){
-  const f=UI.eventFilter;
+// f defaults to the on-screen day-view filter (UI.eventFilter), but callers can pass an
+// explicit filter key instead — used by the Generate/print modal, which has its OWN
+// independent scope selector (UI.genEventFilter) so viewing "All" on screen doesn't force
+// printing "All" too, and vice versa.
+function passesEventFilter(sess,f){
+  if(f===undefined)f=UI.eventFilter;
   if(!f)return true;
   const tags=sessTags(sess);
   if(f==='shared')return!tags.length;
@@ -4276,17 +4280,51 @@ function renderSaveDialogModal(){
 
 function toggleCombineLabels(){S.meet.showCombineLabels=!(S.meet.showCombineLabels!==false);saveS();render();}
 
+// ── GENERATE/PRINT SCOPE ─────────────────────────────────────────────
+// Separate from the on-screen day-view filter (UI.eventFilter): this lets Mike print the
+// SAME schedule three different ways for the public (Junior only, Senior only, Combined),
+// each under its own correct official name, without permanently renaming the schedule or
+// losing the title he typed for one scope when he switches to another.
+function genTimedForPreview(timed){
+  return UI.genEventFilter?timed.filter(s=>passesEventFilter(s,UI.genEventFilter)):timed;
+}
+function genTitleKey(){return UI.genEventFilter||'all';}
+function genTitle(){
+  if(!UI.genTitles)UI.genTitles={};
+  const k=genTitleKey();
+  if(UI.genTitles[k]==null)UI.genTitles[k]=S.meet.name||'';
+  return UI.genTitles[k];
+}
+function setGenTitle(v){
+  if(!UI.genTitles)UI.genTitles={};
+  UI.genTitles[genTitleKey()]=v;
+}
+function genScopeLabel(){
+  if(!UI.genEventFilter)return'Combined';
+  if(UI.genEventFilter==='shared')return'Shared blocks';
+  return(EVENT_TAGS.find(t=>t.k===UI.genEventFilter)||{}).l||'';
+}
 function renderGenerateModal(timed){
   ensureProjDataLoaded();
   ensureEntrantsLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
   const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
+  const genTimed=genTimedForPreview(timed);
   return`<div class="modal modal-lg gen-modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="gen-layout">
         <div class="gen-controls">
+          <div class="gen-sec-lbl">Print scope</div>
+          <div class="chiprow">
+            <button class="chip ${!UI.genEventFilter?'on':''}" onclick="UI.genEventFilter=null;render()">All (combined)</button>
+            ${EVENT_TAGS.map(t=>`<button class="chip ${UI.genEventFilter===t.k?'on':''}" onclick="UI.genEventFilter='${t.k}';render()">${t.l}</button>`).join('')}
+            <button class="chip ${UI.genEventFilter==='shared'?'on':''}" onclick="UI.genEventFilter='shared';render()">Shared only</button>
+          </div>
+          <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4">Only blocks tagged for this scope (plus Shared blocks) are included — days with nothing in scope are skipped entirely. Each scope remembers its own title below, so switching back and forth doesn't lose what you typed.</p>
+          <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);render()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
+          <div class="fdiv"></div>
           <div class="gen-sec-lbl">Audience</div>
           <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';render()"><div class="audname">${a.l}</div></button>`).join('')}</div>
           <p class="gen-aud-desc">${audDesc[aud]||''}</p>
@@ -4305,8 +4343,8 @@ function renderGenerateModal(timed){
           <p style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
         </div>
         <div class="gen-preview">
-          <div class="gen-sec-lbl">Preview <span class="pp-scrollhint">scroll to see full schedule</span></div>
-          ${renderPP(timed,cfg)}
+          <div class="gen-sec-lbl">Preview — ${esc(genScopeLabel())} <span class="pp-scrollhint">scroll to see full schedule</span></div>
+          ${renderPP(genTimed,cfg,genTitle())}
         </div>
       </div>
     </div>
@@ -4322,11 +4360,12 @@ function renderGenerateModal(timed){
 
 
 function printReport(){
-  const timed=allTimed();
+  const timed=genTimedForPreview(allTimed());
   const aud=UI.genAud||'public';
   const cfg={...AUD[aud]};
-  const meetName=(S.meet.name||'USA Diving Schedule').replace(/[^\w\s\-\.]/g,'').trim();
-  const reportHTML=renderPP(timed,cfg);
+  const title=genTitle()||S.meet.name||'USA Diving Schedule';
+  const meetName=title.replace(/[^\w\s\-\.]/g,'').trim();
+  const reportHTML=renderPP(timed,cfg,title);
   const fontLink='<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">';
   const w=window.open('','_blank');
   if(!w){alert('Pop-up blocked — allow pop-ups for this site and try again');return;}
@@ -4419,10 +4458,13 @@ window.addEventListener('load',function(){
   w.document.close();
 }
 
-function renderPP(timed,cfg){
-  if(!S.meet.days.length||!timed.length)return`<div class="pp"><div class="pp-empty">No schedule to preview yet — add sessions and events first.</div></div>`;
+function renderPP(timed,cfg,titleOverride){
+  if(!S.meet.days.length||!timed.length){
+    const msg=(UI.genEventFilter&&S.sessions.length)?`No blocks tagged for this scope yet — tag blocks via the editor ("Part of"), or switch scope.`:'No schedule to preview yet — add sessions and events first.';
+    return`<div class="pp"><div class="pp-empty">${esc(msg)}</div></div>`;
+  }
   const showLbl=S.meet.showCombineLabels!==false;
-  const meetName=esc(S.meet.name||'Championship');
+  const meetName=esc(titleOverride!=null?titleOverride:(S.meet.name||'Championship'));
   const today=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
   const days=S.meet.days.map(day=>{
@@ -4539,7 +4581,8 @@ function renderPP(timed,cfg){
 function splitPanelRot(ev){const rots={sb:{Girls:{'Group A':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,3,7,8',pB:'Rounds 4,5,6,9,10'},'Group B':{pA:'Rounds 1,2,3,6,7',pB:'Rounds 4,5,8,9'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}},plat:{Girls:{'Group A':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group C':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}},Boys:{'Group A':{pA:'Rounds 1,2,5,6,7',pB:'Rounds 3,4,8,9'},'Group B':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7,8'},'Group C':{pA:'Rounds 1,2,5,6',pB:'Rounds 3,4,7'},'Group D':{pA:'Rounds 1,2,6',pB:'Rounds 3,4,5'}}}};const type=isPlatform(ev.apparatus)?'plat':'sb';const r=rots[type]?.[ev.gender]?.[ev.level];return r?`Panel A: ${r.pA} | Panel B: ${r.pB}`:'Review manually'}
 
 function exportOpsTimeline(){
-  const timed=allTimed();
+  const timed=genTimedForPreview(allTimed());
+  const title=genTitle()||S.meet.name||'USA Diving Schedule';
   const N='#171F69',R='#E31937',C='#009AC7',LB='#D6EBF8',PK='#FFF0F4',W='#FFFFFF',G='#F0F2F6';
   const th=(t,x='')=>`<th style="background:${N};color:${W};border:1px solid #000;padding:5px 6px;font-size:11px;text-align:center;${x}">${t}</th>`;
   const td=(t,x='')=>`<td style="border:1px solid #888;padding:4px 6px;font-size:11px;text-align:center;${x}">${esc(String(t??''))}</td>`;
@@ -4565,17 +4608,18 @@ function exportOpsTimeline(){
       (t.events||[]).forEach(ev=>{const dur=calcEvDur(ev);const split=ev.manualSplit&&!isPlatform(ev.apparatus);const rBg=ev.round==='Final'?'#FEF2F2':ev.round==='Prelim'?'#F0FDF4':'#EEF3FD';rows+=`<tr style="background:${bg}">${td('')}${td(ev.round||'',`background:${rBg};font-weight:700;font-size:10px`)}${tdL(evName(ev)+(split?' (Split)':''))}${td(split?'Split':'')}${tdL(split?splitPanelRot(ev):'')}${td(ev.numberOfDives||ev.defaultDives||0,`background:${G};font-weight:700`)}${td(ev.numberOfDivers||0,`background:${G};font-weight:700`)}${td(ev.secondsPerDive||ev.defaultSpd||0,`background:${G};font-weight:700`)}${td(fd1(dur.evMin))}${td('')}${td('')}${td(sess.warmupMinutes||0,'font-weight:700')}${td(f12(t.warmupStartMinutes),'font-weight:700')}${td(f12(t.warmupEndMinutes),'font-weight:700')}${td(f12(ev.eventStartMinutes),`font-weight:700;background:${C};color:${W}`)}${td(f12(ev.eventEndMinutes),`font-weight:700;background:${C};color:${W}`)}</tr>`});
     });
   });
-  const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11px}table{border-collapse:collapse;width:100%}</style></head><body><div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:3px solid ${N};margin-bottom:12px"><img src="../shared/images/logo-color-horizontal.png" style="height:40px"/><div><div style="font-size:18px;font-weight:700;color:${N}">${esc(S.meet.name)}</div><div style="font-size:12px;color:#666">Operations Timeline</div></div></div><table><thead><tr>${th('Day/Session')}${th('Round')}${th('Event','text-align:left')}${th('Format')}${th('Panel Rotation','text-align:left')}${th('# Dives',`background:${C}`)}${th('# Divers',`background:${C}`)}${th('Sec/Dive',`background:${C}`)}${th('Event Min')}${th('Prac Start')}${th('Prac End')}${th('WU Min')}${th('WU Start')}${th('WU End')}${th('Ev Start',`background:${R}`)}${th('Ev End',`background:${R}`)}</tr></thead><tbody>${rows}</tbody></table><div style="margin-top:12px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">USA Diving · ${esc(S.meet.name)} · ${new Date().toLocaleDateString()}</div></body></html>`;
-  dl(html,'application/vnd.ms-excel',`${S.meet.name.replace(/[^a-z0-9]/gi,'-')}-ops-timeline.xls`);
+  const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11px}table{border-collapse:collapse;width:100%}</style></head><body><div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:3px solid ${N};margin-bottom:12px"><img src="../shared/images/logo-color-horizontal.png" style="height:40px"/><div><div style="font-size:18px;font-weight:700;color:${N}">${esc(title)}</div><div style="font-size:12px;color:#666">Operations Timeline</div></div></div><table><thead><tr>${th('Day/Session')}${th('Round')}${th('Event','text-align:left')}${th('Format')}${th('Panel Rotation','text-align:left')}${th('# Dives',`background:${C}`)}${th('# Divers',`background:${C}`)}${th('Sec/Dive',`background:${C}`)}${th('Event Min')}${th('Prac Start')}${th('Prac End')}${th('WU Min')}${th('WU Start')}${th('WU End')}${th('Ev Start',`background:${R}`)}${th('Ev End',`background:${R}`)}</tr></thead><tbody>${rows}</tbody></table><div style="margin-top:12px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">USA Diving · ${esc(title)} · ${new Date().toLocaleDateString()}</div></body></html>`;
+  dl(html,'application/vnd.ms-excel',`${title.replace(/[^a-z0-9]/gi,'-')}-ops-timeline.xls`);
   toast('Operations timeline downloaded');
 }
 
 function exportExcel(){
-  const timed=allTimed();
-  let html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11pt}table{border-collapse:collapse;width:100%}th{background:#171F69;color:white;padding:6px 10px;text-align:left}td{padding:5px 10px;border-bottom:1px solid #ddd}.dh td{background:#E8ECFF;font-weight:bold;color:#171F69}.sh td{background:#F5F6FA;font-weight:bold}</style></head><body><h2 style="color:#171F69">${esc(S.meet.name)}</h2><table><thead><tr><th>Day</th><th>Session</th><th>Event</th><th>Round</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Warm-up</th><th>Start</th><th>End</th></tr></thead><tbody>`;
+  const timed=genTimedForPreview(allTimed());
+  const title=genTitle()||S.meet.name||'USA Diving Schedule';
+  let html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11pt}table{border-collapse:collapse;width:100%}th{background:#171F69;color:white;padding:6px 10px;text-align:left}td{padding:5px 10px;border-bottom:1px solid #ddd}.dh td{background:#E8ECFF;font-weight:bold;color:#171F69}.sh td{background:#F5F6FA;font-weight:bold}</style></head><body><h2 style="color:#171F69">${esc(title)}</h2><table><thead><tr><th>Day</th><th>Session</th><th>Event</th><th>Round</th><th>Divers</th><th>Dives</th><th>Sec/dive</th><th>Split</th><th>Warm-up</th><th>Start</th><th>End</th></tr></thead><tbody>`;
   S.meet.days.forEach(day=>{const ds=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.warmupStartMinutes-b.warmupStartMinutes);if(!ds.length)return;html+=`<tr class="dh"><td colspan="11">${fullDate(day.date)}</td></tr>`;ds.forEach(sess=>{const t=sess.timing;const n=getSessNum(sess,timed);const lbl=sess.isPractice?(sess.title||'Practice'):`Session ${n}`;html+=`<tr class="sh"><td></td><td colspan="10">${esc(lbl)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}</td></tr>`;(t.events||[]).forEach(ev=>{const dur=calcEvDur(ev);html+=`<tr><td>${fullDate(day.date)}</td><td>${esc(lbl)}</td><td>${esc(evName(ev))}</td><td>${esc(ev.round||'')}</td><td>${ev.numberOfDivers||0}</td><td>${ev.numberOfDives||ev.defaultDives||0}</td><td>${ev.secondsPerDive||ev.defaultSpd||35}</td><td>${ev.manualSplit&&!isPlatform(ev.apparatus)?'Yes':''}</td><td>${f12(t.warmupStartMinutes)}</td><td>${f12(ev.eventStartMinutes)}</td><td>${f12(ev.eventEndMinutes)}</td></tr>`});});});
   html+='</tbody></table></body></html>';
-  dl(html,'application/vnd.ms-excel',`${S.meet.name.replace(/[^a-z0-9]/gi,'-')}-schedule.xls`);
+  dl(html,'application/vnd.ms-excel',`${title.replace(/[^a-z0-9]/gi,'-')}-schedule.xls`);
   toast('Excel downloaded');
 }
 
