@@ -1,0 +1,43 @@
+name: ScoresAndMore scrape
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "meet (one meet fully) or catalog (meets list)"
+        required: true
+        default: "meet"
+      meet_id:
+        description: "ScoresAndMore meet_id (required for mode=meet)"
+        required: false
+        default: ""
+      criteria:
+        description: "Optional ZOHO_CRITERIA override for mode=catalog"
+        required: false
+        default: ""
+
+jobs:
+  scrape:
+    name: Scrape ScoresAndMore into Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install psycopg2-binary requests playwright
+          playwright install --with-deps chromium
+
+      - name: Scrape
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MODE: ${{ github.event.inputs.mode }}
+          MEET_ID: ${{ github.event.inputs.meet_id }}
+          CRITERIA: ${{ github.event.inputs.criteria }}
+        run: python db/scripts/sm_scrape.py

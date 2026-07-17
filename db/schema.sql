@@ -545,3 +545,81 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 INSERT INTO app_meta.config (key, value, description) VALUES
   ('season_calendar_version', '1', 'Season Calendar Planner data schema version')
 ON CONFLICT (key) DO NOTHING;
+
+-- ============================================================================
+-- scoresandmore: scraped data from scoresandmore.live (Dive Live / AAU Diving)
+-- Populated by db/scripts/sm_scrape.py via .github/workflows/scoresandmore-scrape.yml.
+-- Every table keeps the full parsed source row in `data` JSONB (zero data loss).
+-- ============================================================================
+CREATE SCHEMA IF NOT EXISTS scoresandmore;
+
+CREATE TABLE IF NOT EXISTS scoresandmore.meets (
+  meet_id     integer PRIMARY KEY,
+  meet_name   text,
+  start_date  date,
+  end_date    date,
+  data        jsonb NOT NULL,
+  scraped_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.meet_events (
+  event_id    integer PRIMARY KEY,
+  meet_id     integer NOT NULL,
+  meet_name   text,
+  event_date  date,
+  session     text,
+  event_title text,
+  rounds      integer,
+  num_dives   integer,
+  gender      text,
+  novice      text,
+  synchro     text,
+  results_url text,
+  data        jsonb NOT NULL,
+  scraped_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sm_meet_events_meet ON scoresandmore.meet_events(meet_id);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.event_results (
+  id          bigserial PRIMARY KEY,
+  meet_id     integer NOT NULL,
+  event_id    integer NOT NULL,
+  place       text,
+  diver_name  text,
+  grad_year   text,
+  team_name   text,
+  total       numeric,
+  vols_total  numeric,
+  opts_total  numeric,
+  team_points numeric,
+  diver_id    integer,   -- from Dive Live sheet URL /DiveList/{diver_id}-{sheet_id}
+  sheet_id    integer,
+  pdf_url     text,
+  sheet_url   text,
+  data        jsonb NOT NULL,
+  scraped_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sm_event_results_event ON scoresandmore.event_results(event_id);
+CREATE INDEX IF NOT EXISTS sm_event_results_meet  ON scoresandmore.event_results(meet_id);
+CREATE INDEX IF NOT EXISTS sm_event_results_diver ON scoresandmore.event_results(diver_id);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.team_points (
+  id         bigserial PRIMARY KEY,
+  meet_id    integer NOT NULL,
+  team_name  text,
+  points     numeric,
+  data       jsonb NOT NULL,
+  scraped_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sm_team_points_meet ON scoresandmore.team_points(meet_id);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.coach_points (
+  id         bigserial PRIMARY KEY,
+  meet_id    integer NOT NULL,
+  coach_name text,
+  team_name  text,
+  points     numeric,
+  data       jsonb NOT NULL,
+  scraped_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sm_coach_points_meet ON scoresandmore.coach_points(meet_id);
