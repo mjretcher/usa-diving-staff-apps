@@ -246,5 +246,19 @@
     "eventName": "",
     "note": "Declared not attending - athlete-level",
     "resolvedReview": false
+  },
+  {
+    "id": "1784301020702-bcb3a66a5ed878",
+    "createdAt": "2026-07-17T15:10:20.702Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "80562",
+    "athleteName": "Liam Vincent",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
