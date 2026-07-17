@@ -2312,7 +2312,7 @@ function renderCard(sess,timed,warns){
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-main">
           <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${sess.hideFromPublic?`<span style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle" title="Internal only — will not appear on the public schedule">Internal</span>`:''}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
-          <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:`Open pool · ${fdur(dur)}`}</div>
+          <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:/meeting/i.test(sess.title||'')?fdur(dur):`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
           <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${sess.fitToClose?' 🔒':''}</div>
