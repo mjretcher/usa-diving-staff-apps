@@ -133,7 +133,7 @@ class ZohoOpenView:
         responses the client makes. Slow but exactly mirrors the browser."""
         ctx = self._pw_context()
         page = ctx.new_page()
-        out = {"view": None, "report": None}
+        out = {"view": None, "report": None, "chart": None}
 
         def on_response(resp):
             u = resp.request.url
@@ -142,6 +142,8 @@ class ZohoOpenView:
                     out["view"] = resp.json()
                 elif "ZDBACTION=SHOWREPORT" in u:
                     out["report"] = resp.json()
+                elif "ZAChartView.ve" in u:
+                    out["chart"] = resp.json()
             except Exception:
                 pass
 
@@ -149,12 +151,12 @@ class ZohoOpenView:
         page.goto(self.open_view_url(criteria),
                   wait_until="domcontentloaded", timeout=60000)
         for _ in range(40):  # up to 20s
-            if out["report"] is not None and out["view"] is not None:
+            if out["view"] is not None and (out["report"] is not None or out["chart"] is not None):
                 break
             page.wait_for_timeout(500)
         page.close()
-        if out["report"] is None:
-            raise RuntimeError(f"Playwright capture got no SHOWREPORT for view {self.view_id}")
+        if out["report"] is None and out["chart"] is None:
+            raise RuntimeError(f"Playwright capture got no SHOWREPORT/ZAChartView for view {self.view_id}")
         return out
 
     def close(self):
@@ -163,6 +165,51 @@ class ZohoOpenView:
             browser.close()
             p.stop()
             self._pw = None
+
+
+    def chart_rows(self, criteria, dispname=""):
+        """Fetch a chart-type open view (e.g. team/coach points pies) via
+        ZAChartView.ve. Returns list of (label, value, raw_row) tuples from
+        seriesdata.chartdata[0].data[0]."""
+        crit_xml = criteria.replace("&", "&amp;").replace('"', "&quot;").replace("'", "&apos;")
+        q = (f"CHARTVIEWACTION=CHARTVIEW&height=567&width=1278&legend=true"
+             f"&OBJID={self.view_id}")
+        if self.key:
+            q += f"&privatelink={self.key}"
+        q += ("&STANDALONE=true&EDITMODE=false&LP=LEFT&CHANGESLIDERBOUNDS=true"
+              "&ISAXISDRILL=false&RESETSORT=true&FIELDSCHANGED=false"
+              "&SUBREQUEST=XMLHTTP&_ZVER_=101")
+        url = f"{BASE}/ZAChartView.ve?{q}"
+        body = (f"<zadata  zoho_criteria='{crit_xml}' >\n"
+                f"<dbobj   dispname='{dispname}'  desc=''  type='AnalysisView' >"
+                "<zaav  gt='PIE'  sgt='DEF'  title=''  merge='true'  lp='LEFT'  "
+                "lt=''  ltm='false'  lf='true'  cinfo='false'  jt='1' >"
+                "<zavrfv  currentSelValue='{}'  currentChildSelValue='{}' />\n\n"
+                "</zaav>\n <zataginfo >\n</zataginfo>\n \n</dbobj>\n \n</zadata>\n ")
+        data = None
+        if not self._requests_dead:
+            try:
+                self._req_session(criteria)
+                data = self._fetch_requests(url, body, "text/plain; charset=UTF-8")
+            except Exception as e:
+                print(f"[sm_zoho] requests path failed for ZAChartView "
+                      f"({e!r}); falling back to Playwright")
+                self._requests_dead = True
+        if data is None:
+            data = self._fetch_playwright(criteria)["chart"]
+            if data is None:
+                raise RuntimeError(f"no ZAChartView captured for view {self.view_id}")
+        series = data["chartJSON"]["seriesdata"]["chartdata"]
+        if not series:
+            return []
+        rows = series[0].get("data") or []
+        flat = rows[0] if rows and isinstance(rows[0], list) and rows[0] and isinstance(rows[0][0], list) else rows
+        out = []
+        for r in flat:
+            label = clean(r[0]) if r else None
+            value = r[1] if len(r) > 1 else None
+            out.append((label, value, r))
+        return out
 
     # ----------------------------------------------------------- public API
     def columns(self, criteria):

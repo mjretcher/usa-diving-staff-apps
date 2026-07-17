@@ -147,21 +147,18 @@ def scrape_meet(meet_id):
             print(f"  results: {i}/{len(ev_rows)} events, {len(all_res)} diver rows so far")
         time.sleep(SLEEP_S)
 
-    # Team & coach points
-    tp_rows, tp_header = tp_view.rows(f'"{tp_table}"."meet_id"={meet_id}')
-    print(f"team points: {len(tp_rows)} rows | header: {tp_header}")
-    t_team = find_col(tp_header, "team", exclude=("point",)) or find_col(tp_header, "team")
-    t_pts = find_col(tp_header, "point")
-    tp_ins = [(int(meet_id), r.get(t_team), parse_num(r.get(t_pts)), json.dumps(r))
-              for r in tp_rows]
+    # Team & coach points (chart-type views -> ZAChartView series)
+    tp_pairs = tp_view.chart_rows(f'"{tp_table}"."meet_id"={meet_id}',
+                                  dispname="Team points by Team")
+    print(f"team points: {len(tp_pairs)} teams")
+    tp_ins = [(int(meet_id), label, parse_num(val), json.dumps({"row": raw}))
+              for (label, val, raw) in tp_pairs]
 
-    cp_rows, cp_header = cp_view.rows(f'"{cp_table}"."meet_id"={meet_id}')
-    print(f"coach points: {len(cp_rows)} rows | header: {cp_header}")
-    ccoach = find_col(cp_header, "coach")
-    cteam = find_col(cp_header, "team", exclude=("point",))
-    cpts = find_col(cp_header, "point")
-    cp_ins = [(int(meet_id), r.get(ccoach), r.get(cteam),
-               parse_num(r.get(cpts)), json.dumps(r)) for r in cp_rows]
+    cp_pairs = cp_view.chart_rows(f'"{cp_table}"."meet_id"={meet_id}',
+                                  dispname="Team points by Coach")
+    print(f"coach points: {len(cp_pairs)} coaches")
+    cp_ins = [(int(meet_id), label, None, parse_num(val), json.dumps({"row": raw}))
+              for (label, val, raw) in cp_pairs]
 
     ev_view.close(); res_view.close(); tp_view.close(); cp_view.close()
 
