@@ -1202,3 +1202,28 @@ html[data-theme="deck"] .pal{box-shadow:0 24px 70px rgba(0,0,0,.7)}
 .bm-hint{margin-left:auto;font-size:10px;color:var(--tx3)}
 html[data-theme="deck"] .evf-chip.on{color:#0B1220}
 html[data-theme="deck"] .tag-pill{color:#0B1220}
+
+/* ── Add-event picker (modal) ─────────────────────────────────────────
+   Cards in a responsive grid; selected card gets a navy ring + check mark.
+   Statuses: green "Available" pill vs neutral "In schedule" pill. */
+.ev-search-inp{width:100%;height:40px;padding:0 14px;border:1px solid var(--bd2);border-radius:var(--r);font-size:14px;font-family:inherit;color:var(--tx);background:var(--surf2);margin-bottom:12px;transition:border-color .15s,box-shadow .15s,background .15s}
+.ev-search-inp::placeholder{color:var(--tx3)}
+.ev-search-inp:focus{outline:none;border-color:var(--cyan);background:var(--surf);box-shadow:0 0 0 3px rgba(0,154,199,.14)}
+.ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(186px,1fr));gap:8px;max-height:46vh;overflow-y:auto;padding:3px;margin-bottom:12px}
+.ev-pick-card{position:relative;background:var(--surf);border:1px solid var(--bd2);border-radius:var(--r-lg);padding:12px 34px 10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:border-color .12s var(--ease),box-shadow .12s var(--ease),transform .12s var(--ease)}
+.ev-pick-card:hover{border-color:var(--bd3);box-shadow:var(--sh-md);transform:translateY(-1px)}
+.ev-pick-card.sel{border-color:var(--navy);box-shadow:0 0 0 1.5px var(--navy),var(--sh-md);background:var(--navy-soft)}
+/* Selection indicator: empty circle → navy check when chosen */
+.ev-pick-card::after{content:"";position:absolute;top:10px;right:10px;width:18px;height:18px;border:2px solid var(--bd3);border-radius:50%;background:var(--surf);box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;transition:background .12s,border-color .12s}
+.ev-pick-card.sel::after{content:"✓";color:#fff;background:var(--navy);border-color:var(--navy)}
+.epc-name{font-size:13px;font-weight:700;color:var(--tx);line-height:1.3}
+.epc-meta{font-size:11px;color:var(--tx3)}
+.epc-status{align-self:flex-start;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:99px;margin-top:3px}
+.epc-status.avail{background:var(--prelim-bg);color:var(--prelim);border:1px solid var(--prelim-bd)}
+.epc-status.used{background:var(--surf3);color:var(--tx2);border:1px solid var(--bd2)}
+/* Round picker pills */
+.round-btns{display:flex;gap:8px;flex-wrap:wrap}
+.round-btn{height:34px;padding:0 16px;border-radius:99px;border:1px solid var(--bd2);background:var(--surf);font-size:12.5px;font-weight:600;color:var(--tx);cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
+.round-btn:hover:not(:disabled){border-color:var(--bd3);background:var(--surf2)}
+.round-btn.active{background:var(--navy);border-color:var(--navy);color:#fff}
+.round-btn.used{opacity:.45;cursor:not-allowed;text-decoration:line-through}
