@@ -162,5 +162,19 @@
     "eventName": "",
     "note": "Confirmed dual declared, no effect on diving results",
     "resolvedReview": true
+  },
+  {
+    "id": "1784300676295-b73a6b1c6b4a78",
+    "createdAt": "2026-07-17T15:04:36.295Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Eli Hotchkin",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
