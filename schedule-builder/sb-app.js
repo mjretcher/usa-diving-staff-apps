@@ -1385,8 +1385,8 @@ async function loadMeetEntriesForId(meetId){
   return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],entries:Number(row[3]),fetchedAt:row[4]}));
 }
 async function loadMeetEntrantsForId(meetId){
-  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[meetId]);
-  return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],name:row[3],team:row[4],diverKey:row[5]}));
+  const r=await nq(`SELECT age_group,gender,discipline,diver_name,team,diver_key,dm_profile_id FROM junior_results.meet_entrants WHERE meet_id_dm=$1 ORDER BY age_group,gender,discipline,diver_name`,[meetId]);
+  return(r.rows||[]).map(row=>({ageGroup:row[0],gender:row[1],discipline:row[2],name:row[3],team:row[4],diverKey:row[5],dmProfileId:row[6]}));
 }
 async function loadAllDivemeetsSources(){
   const configs=getAllDivemeetsSources();
@@ -1636,8 +1636,19 @@ function ensureEntrantsLoaded(){
   const regSources=getAllDivemeetsSources().filter(s=>s.role==='registered');
   Promise.all(regSources.map(s=>loadMeetEntrantsForId(s.id).catch(()=>[])))
     .then(lists=>{
+      // KEY-FORMAT BRIDGE: meet_entrants keys divers by normalized name ("nm:jane doe"),
+      // while projected_nationals_field prefers DiveMeets profile IDs ("dm:12345") and only
+      // falls back to name keys when no profile is known. The same athlete therefore often
+      // carries DIFFERENT keys in the two tables, and a raw key intersection silently drops
+      // everyone keyed one way here and the other way there (observed: 123 matches out of
+      // 330 real registrants). Adding BOTH the name key and the dm:profile key for every
+      // entrant lets the intersection connect regardless of which style the projected field
+      // used for that athlete.
       const keys=new Set();
-      lists.forEach(list=>list.forEach(e=>{if(e.diverKey)keys.add(e.diverKey);}));
+      lists.forEach(list=>list.forEach(e=>{
+        if(e.diverKey)keys.add(e.diverKey);
+        if(e.dmProfileId)keys.add('dm:'+e.dmProfileId);
+      }));
       UI.regEntrantKeys=keys;
     })
     .catch(()=>{UI.regEntrantKeys=new Set()})
