@@ -190,5 +190,19 @@
     "eventName": "",
     "note": "Declared not attending - athlete-level",
     "resolvedReview": false
+  },
+  {
+    "id": "1784300786211-97b3dc99cc56f8",
+    "createdAt": "2026-07-17T15:06:26.211Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "",
+    "athleteName": "Liam Tuttle",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
