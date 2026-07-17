@@ -302,5 +302,19 @@
     "eventName": "",
     "note": "Declared not attending - athlete-level",
     "resolvedReview": false
+  },
+  {
+    "id": "1784301233149-80a927d231152",
+    "createdAt": "2026-07-17T15:13:53.149Z",
+    "sessionId": "1784300572178-3b03c2430520b8",
+    "active": true,
+    "type": "notAttending",
+    "value": true,
+    "athleteId": "74333",
+    "athleteName": "Jeffrey Guo",
+    "eventId": "",
+    "eventName": "",
+    "note": "Declared not attending - athlete-level",
+    "resolvedReview": false
   }
 ]
