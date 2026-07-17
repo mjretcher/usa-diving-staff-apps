@@ -167,7 +167,7 @@
     "id": "1784300676295-b73a6b1c6b4a78",
     "createdAt": "2026-07-17T15:04:36.295Z",
     "sessionId": "1784300572178-3b03c2430520b8",
-    "active": true,
+    "active": false,
     "type": "notAttending",
     "value": true,
     "athleteId": "",
