@@ -3480,7 +3480,7 @@ function passesEventFilter(sess,f){
   if(f==='shared')return!tags.length;
   return tags.includes(f)||!tags.length;
 }
-function filterByEvent(sessions){return sessions.filter(passesEventFilter)}
+function filterByEvent(sessions){return sessions.filter(s=>passesEventFilter(s))}
 function eventFilterLabel(){
   if(!UI.eventFilter)return'';
   if(UI.eventFilter==='shared')return'Shared blocks';
