@@ -52,13 +52,19 @@ def log(msg):
     LOG.append(str(msg))
 
 def fetch(url):
-    """Return (status, html_text). 404 -> (404, ''). Retries transient errors."""
+    """Return (status, html_text).
+
+    404 -> (404, '') immediately. 500 -> retried once (guards transient
+    server errors), then returned as (500, '') because DiveMeets answers
+    500 for nonexistent MeetInfo ids. Other errors retried with backoff.
+    """
     req = urllib.request.Request(url, headers={
         "User-Agent": UA,
         "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     })
     last = None
+    seen_500 = False
     for attempt in range(4):
         try:
             with urllib.request.urlopen(req, timeout=45) as resp:
@@ -66,6 +72,12 @@ def fetch(url):
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return 404, ""
+            if e.code == 500:
+                if seen_500:
+                    return 500, ""
+                seen_500 = True
+                time.sleep(2)
+                continue
             last = e
             if e.code in (403, 429, 503):
                 # potential Cloudflare / rate limiting — back off hard
@@ -148,7 +160,7 @@ def main():
         status, h = fetch(f"https://new.divemeets.com/MeetInfo/{meet_id}")
         parsed = {"meet_name": None, "venue": None, "dates_raw": None,
                   "start_date": None, "end_date": None, "info": {}}
-        if status == 404:
+        if status in (404, 500):
             # some meets hide info but show results — try the fallback page
             status2, h2 = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
             if status2 == 200 and "MeetInfo/" in h2:
