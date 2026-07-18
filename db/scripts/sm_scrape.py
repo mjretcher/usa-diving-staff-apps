@@ -147,8 +147,10 @@ def scrape_meet(meet_id):
             dm = re.search(r"/DiveList/(\d+)-(\d+)", sheet_url or "")
             diver_id = int(dm.group(1)) if dm else None
             sheet_id = int(dm.group(2)) if dm else None
+            name = r.get(rc_diver)
+            is_ex = bool(name) and name.lstrip().lower().startswith("(ex.)")
             all_res.append((
-                int(meet_id), event_id, r.get(rc_place), r.get(rc_diver),
+                int(meet_id), event_id, r.get(rc_place), name, is_ex,
                 r.get(rc_grad), r.get(rc_team), parse_num(r.get(rc_total)),
                 parse_num(r.get(rc_vols)), parse_num(r.get(rc_opts)),
                 parse_num(r.get(rc_tpts)), diver_id, sheet_id,
@@ -185,10 +187,10 @@ def scrape_meet(meet_id):
            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", ev_rows)
     cur.executemany(
         """INSERT INTO scoresandmore.event_results
-           (meet_id, event_id, place, diver_name, grad_year, team_name, total,
-            vols_total, opts_total, team_points, diver_id, sheet_id, pdf_url,
-            sheet_url, data)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", all_res)
+           (meet_id, event_id, place, diver_name, is_exhibition, grad_year,
+            team_name, total, vols_total, opts_total, team_points, diver_id,
+            sheet_id, pdf_url, sheet_url, data)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", all_res)
     cur.executemany(
         """INSERT INTO scoresandmore.team_points (meet_id, team_name, points, data)
            VALUES (%s,%s,%s,%s)""", tp_ins)

@@ -608,7 +608,10 @@ CREATE TABLE IF NOT EXISTS scoresandmore.event_results (
   meet_id     integer NOT NULL,
   event_id    integer NOT NULL,
   place       text,
-  diver_name  text,
+  diver_name  text,      -- verbatim from source, incl. any "(Ex.)" prefix
+  -- true when the source lists the diver as exhibition ("(Ex.)" name prefix);
+  -- exhibition divers carry their own place numbers within an event
+  is_exhibition boolean NOT NULL DEFAULT false,
   grad_year   text,
   team_name   text,
   total       numeric,
@@ -625,6 +628,9 @@ CREATE TABLE IF NOT EXISTS scoresandmore.event_results (
 CREATE INDEX IF NOT EXISTS sm_event_results_event ON scoresandmore.event_results(event_id);
 CREATE INDEX IF NOT EXISTS sm_event_results_meet  ON scoresandmore.event_results(meet_id);
 CREATE INDEX IF NOT EXISTS sm_event_results_diver ON scoresandmore.event_results(diver_id);
+-- Migration for tables created before the exhibition flag:
+ALTER TABLE scoresandmore.event_results
+  ADD COLUMN IF NOT EXISTS is_exhibition boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS scoresandmore.team_points (
   id         bigserial PRIMARY KEY,
