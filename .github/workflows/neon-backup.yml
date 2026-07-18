@@ -29,26 +29,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-18
 
+      - name: Check client version
+        run: pg_dump --version && psql --version
+
+      - name: Check connectivity (direct endpoint)
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          DIRECT_URL="${DATABASE_URL/-pooler/}"
+          psql "$DIRECT_URL" -c "SELECT version()"
+
       - name: Dump database
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          set +e
           STAMP=$(date -u +%Y-%m-%d)
-          # pg_dump needs the direct endpoint, not the connection pooler
           DIRECT_URL="${DATABASE_URL/-pooler/}"
-          ERR=$(pg_dump "$DIRECT_URL" \
+          pg_dump "$DIRECT_URL" \
             --format=custom --compress=9 --no-owner --no-privileges \
-            --file="neon_backup_${STAMP}.dump" 2>&1)
-          RC=$?
-          if [ $RC -ne 0 ]; then
-            echo "pg_dump failed (rc=$RC): $ERR"
-            psql "$DATABASE_URL" -v e="pg_dump rc=$RC: $ERR" -c \
-              "INSERT INTO app_meta.config (key, value, description)
-               VALUES ('neon_backup_last_error', to_jsonb((:'e')::text)::text, 'neon-backup.yml')
-               ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()"
-            exit $RC
-          fi
+            --file="neon_backup_${STAMP}.dump" 2> dump_err.txt || {
+              RC=$?
+              cat dump_err.txt
+              psql "$DATABASE_URL" -v e="$(head -c 3000 dump_err.txt)" -c \
+                "INSERT INTO app_meta.config (key, value, description) VALUES ('neon_backup_last_error', to_jsonb((:'e')::text)::text, 'neon-backup.yml') ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()"
+              exit $RC
+            }
           ls -lh neon_backup_*.dump
 
       - name: Upload backup artifact
