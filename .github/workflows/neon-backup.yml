@@ -1,0 +1,48 @@
+name: Neon full backup (download)
+
+# One-click full backup of the entire Neon database.
+# Run it from the Actions tab ("Run workflow"), wait for the green check,
+# then open the run and download the "neon-backup" artifact — a single
+# compressed .dump file you can copy to a flash drive or any storage.
+#
+# Restoring later (any Postgres, including a fresh Neon project):
+#   pg_restore --no-owner --dbname="<connection string>" neon_backup_<date>.dump
+
+on:
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          STAMP=$(date -u +%Y-%m-%d)
+          pg_dump "$DATABASE_URL" \
+            --format=custom --compress=9 --no-owner --no-privileges \
+            --file="neon_backup_${STAMP}.dump"
+          ls -lh neon_backup_*.dump
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-backup
+          path: neon_backup_*.dump
+          retention-days: 14
+          compression-level: 0
