@@ -652,3 +652,30 @@ CREATE TABLE IF NOT EXISTS scoresandmore.coach_points (
   scraped_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sm_coach_points_meet ON scoresandmore.coach_points(meet_id);
+
+-- ============================================================
+-- DiveMeets crawl registry (divemeets schema)
+-- Catalog of every new.divemeets.com meet id, crawled newest-first.
+-- Status flags let results/dive-sheet crawlers drain work by year
+-- (2026 -> 2016) without re-scraping anything already in core.*.
+-- ============================================================
+CREATE SCHEMA IF NOT EXISTS divemeets;
+
+CREATE TABLE IF NOT EXISTS divemeets.meets (
+  meet_id      integer PRIMARY KEY,
+  http_status  integer,              -- 200 = page exists, 404 = dead id
+  meet_name    text,
+  venue        text,
+  start_date   date,
+  end_date     date,
+  dates_raw    text,
+  address      text,
+  sanction     text,                 -- "Sanctioning Body" from MeetInfo
+  meet_type    text,
+  info         jsonb,                -- all labeled MeetInfo fields, verbatim
+  results_done boolean NOT NULL DEFAULT false,
+  sheets_done  boolean NOT NULL DEFAULT false,
+  crawled_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS dm_meets_year     ON divemeets.meets(start_date);
+CREATE INDEX IF NOT EXISTS dm_meets_sanction ON divemeets.meets(sanction);

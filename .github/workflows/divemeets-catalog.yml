@@ -1,0 +1,48 @@
+name: DiveMeets catalog crawl
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_id:
+        description: "Explicit starting meet id (default: resume from lowest crawled)"
+        required: false
+        default: ""
+      floor_id:
+        description: "Lowest meet id to crawl"
+        required: false
+        default: "1"
+      batch:
+        description: "Max ids this run"
+        required: false
+        default: "500"
+  schedule:
+    # every 20 minutes; exits in seconds once dm_catalog_done flag is set
+    - cron: "*/20 * * * *"
+
+concurrency:
+  group: divemeets-catalog
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Crawl catalog batch
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          START_ID: ${{ github.event.inputs.start_id }}
+          FLOOR_ID: ${{ github.event.inputs.floor_id }}
+          BATCH: ${{ github.event.inputs.batch }}
+        run: python db/scripts/dm_catalog.py
