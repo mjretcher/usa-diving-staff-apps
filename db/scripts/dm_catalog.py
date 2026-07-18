@@ -103,7 +103,7 @@ def parse_dm_date(s):
     return date(int(m.group(3)), MONTHS[m.group(1)], int(m.group(2)))
 
 HEAD_RX = re.compile(
-    r"<h2>\s*<a href=\"https://new\.divemeets\.com/MeetInfo/\d+\"[^>]*>(.*?)</a>\s*</h2>"
+    r"<h2>\s*<a href=\"https://new\.divemeets\.com/Meet(?:Info|Results)/\d+\"[^>]*>(.*?)</a>\s*</h2>"
     r"\s*<h5>\s*(.*?)\s*</h5>\s*<h5>\s*(.*?)\s*</h5>", re.S)
 # labeled rows: bold label div (fullsize) ... next text-start value div (fullsize)
 LABEL_RX = re.compile(
