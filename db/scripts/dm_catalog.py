@@ -134,29 +134,12 @@ def main():
     conn.autocommit = False
     cur = conn.cursor()
 
-    # done flag short-circuit (for scheduled runs after the crawl finishes)
-    cur.execute("SELECT value FROM app_meta.config WHERE key='dm_catalog_done'")
-    r = cur.fetchone()
-    if r and "true" in str(r[0]) and not os.environ.get("START_ID"):
-        log("dm_catalog_done flag set — nothing to do (pass START_ID to override)")
-        return
-
-    start_env = (os.environ.get("START_ID") or "").strip()
-    if start_env:
-        start_id = int(start_env)
-    else:
-        cur.execute("SELECT min(meet_id) FROM divemeets.meets")
-        r = cur.fetchone()
-        start_id = (r[0] - 1) if r and r[0] else CEILING_DEFAULT
-    if start_id < FLOOR_ID:
-        log(f"start id {start_id} below floor {FLOOR_ID} — done")
-        _set_config(cur, "dm_catalog_done", json.dumps(True)); conn.commit()
-        return
-
-    log(f"crawling ids {start_id} down to >= {max(FLOOR_ID, start_id - BATCH + 1)}")
+    budget = BATCH
     n_ok = n_404 = 0
     newest_seen = None
-    for meet_id in range(start_id, max(FLOOR_ID, start_id - BATCH + 1) - 1, -1):
+
+    def crawl_one(meet_id):
+        nonlocal n_ok, n_404, newest_seen
         status, h = fetch(f"https://new.divemeets.com/MeetInfo/{meet_id}")
         parsed = {"meet_name": None, "venue": None, "dates_raw": None,
                   "start_date": None, "end_date": None, "info": {}}
@@ -171,9 +154,9 @@ def main():
             parsed = parse_meet_page(h)
         if status == 200:
             n_ok += 1
-            if parsed["start_date"]:
-                if newest_seen is None or parsed["start_date"] > newest_seen:
-                    newest_seen = parsed["start_date"]
+            sd = parsed["start_date"]
+            if sd and (newest_seen is None or sd > newest_seen):
+                newest_seen = sd
         info = parsed["info"]
         cur.execute(
             """INSERT INTO divemeets.meets
@@ -191,18 +174,94 @@ def main():
              parsed["start_date"], parsed["end_date"], parsed["dates_raw"],
              info.get("Location"), info.get("Sanctioning Body"),
              info.get("Type"), json.dumps(info)))
-        if (start_id - meet_id + 1) % 50 == 0:
-            conn.commit()
-            log(f"  ...{meet_id}: {n_ok} pages, {n_404} dead ids so far")
         time.sleep(SLEEP_S)
-    conn.commit()
-    log(f"batch done: {n_ok} meets, {n_404} dead ids, "
-        f"newest start_date this batch: {newest_seen}")
+        return status, parsed["start_date"]
 
-    if AUTO_STOP_YEAR and newest_seen and newest_seen.year < AUTO_STOP_YEAR:
-        log(f"entire batch older than {AUTO_STOP_YEAR} — setting done flag")
-        _set_config(cur, "dm_catalog_done", json.dumps(True))
+    start_env = (os.environ.get("START_ID") or "").strip()
+    if start_env:
+        # explicit range run (testing / repair) — no upward phase
+        start_id = int(start_env)
+        lo = max(FLOOR_ID, start_id - budget + 1)
+        log(f"explicit crawl {start_id} down to {lo}")
+        for i, meet_id in enumerate(range(start_id, lo - 1, -1), 1):
+            crawl_one(meet_id)
+            if i % 50 == 0:
+                conn.commit()
+                log(f"  ...{meet_id}: {n_ok} pages, {n_404} dead ids so far")
         conn.commit()
+        log(f"batch done: {n_ok} meets, {n_404} dead ids, newest: {newest_seen}")
+        cur.close(); conn.close()
+        return
+
+    # ---- Phase 1: upward top-up (newest meets have the highest ids) ----
+    # Walk up from the highest live id until several consecutive dead ids.
+    # Re-probes previously-dead top ids too, since DiveMeets assigns new ids
+    # over time. Cheap no-op (a few fetches) once at the true top.
+    cur.execute("SELECT max(meet_id) FROM divemeets.meets WHERE http_status=200")
+    r = cur.fetchone()
+    top = r[0] if r and r[0] else CEILING_DEFAULT - 1
+    dead_streak = 0
+    up_id = top + 1
+    up_count = 0
+    while budget > 0 and dead_streak < 3:
+        status, _sd = crawl_one(up_id)
+        dead_streak = 0 if status == 200 else dead_streak + 1
+        up_id += 1
+        up_count += 1
+        budget -= 1
+        if up_count % 50 == 0:
+            conn.commit()
+            log(f"  ...upward at {up_id}: {n_ok} pages so far")
+    conn.commit()
+    if up_count:
+        log(f"upward phase: probed {up_count} ids above {top}, "
+            f"{n_ok} live so far")
+
+    # ---- Phase 2: descending backfill (gap-safe resume) ----
+    cur.execute("SELECT value FROM app_meta.config WHERE key='dm_catalog_done'")
+    r = cur.fetchone()
+    if r and "true" in str(r[0]):
+        log("downward backfill already complete (dm_catalog_done)")
+        conn.commit(); cur.close(); conn.close()
+        return
+    while budget > 0:
+        cur.execute(
+            """SELECT m.meet_id - 1 FROM divemeets.meets m
+               WHERE m.meet_id - 1 >= %s
+                 AND NOT EXISTS (SELECT 1 FROM divemeets.meets x
+                                 WHERE x.meet_id = m.meet_id - 1)
+               ORDER BY m.meet_id DESC LIMIT 1""", (FLOOR_ID,))
+        r = cur.fetchone()
+        if not r:
+            log(f"no uncrawled ids >= floor {FLOOR_ID} — backfill complete")
+            _set_config(cur, "dm_catalog_done", json.dumps(True))
+            conn.commit()
+            break
+        meet_id = r[0]
+        batch_newest = None
+        chunk = 0
+        while budget > 0 and meet_id >= FLOOR_ID:
+            # stop this inner walk if we run into an already-crawled id
+            cur.execute("SELECT 1 FROM divemeets.meets WHERE meet_id=%s", (meet_id,))
+            if cur.fetchone():
+                break
+            _status, sd = crawl_one(meet_id)
+            if sd and (batch_newest is None or sd > batch_newest):
+                batch_newest = sd
+            meet_id -= 1
+            budget -= 1
+            chunk += 1
+            if chunk % 50 == 0:
+                conn.commit()
+                log(f"  ...{meet_id}: {n_ok} pages, {n_404} dead ids so far")
+        conn.commit()
+        if AUTO_STOP_YEAR and batch_newest and batch_newest.year < AUTO_STOP_YEAR \
+                and chunk >= 100:
+            log(f"batch entirely older than {AUTO_STOP_YEAR} — setting done flag")
+            _set_config(cur, "dm_catalog_done", json.dumps(True))
+            conn.commit()
+            break
+    log(f"run done: {n_ok} meets, {n_404} dead ids, newest seen: {newest_seen}")
     cur.close(); conn.close()
 
 def _set_config(cur, key, value):
