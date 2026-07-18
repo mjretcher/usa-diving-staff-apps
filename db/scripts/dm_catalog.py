@@ -38,7 +38,7 @@ from datetime import date, datetime, timezone
 import psycopg2
 
 DB_URL = os.environ["DATABASE_URL"]
-CEILING_DEFAULT = 13200  # comfortably above the highest known meet id (~12.9k)
+CEILING_DEFAULT = 12924  # just above highest known real meet (12923); upward phase finds the live edge
 FLOOR_ID = int(os.environ.get("FLOOR_ID") or 1)
 BATCH = int(os.environ.get("BATCH") or 500)
 AUTO_STOP_YEAR = int(os.environ.get("AUTO_STOP_YEAR") or 2015)
@@ -143,15 +143,20 @@ def main():
         status, h = fetch(f"https://new.divemeets.com/MeetInfo/{meet_id}")
         parsed = {"meet_name": None, "venue": None, "dates_raw": None,
                   "start_date": None, "end_date": None, "info": {}}
-        if status in (404, 500):
-            # some meets hide info but show results — try the fallback page
-            status2, h2 = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
-            if status2 == 200 and "MeetInfo/" in h2:
-                status, parsed = 200, parse_meet_page(h2)
-            else:
-                n_404 += 1
         if status == 200 and h:
             parsed = parse_meet_page(h)
+        if status in (404, 500) or (status == 200 and not parsed["meet_name"]):
+            # dead id, or an empty 200 template (unpublished id) — DiveMeets
+            # serves a headerless 200 page for ids with no meet. Some meets
+            # hide info but show results, so try the fallback page.
+            status2, h2 = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
+            p2 = parse_meet_page(h2) if status2 == 200 else None
+            if p2 and p2["meet_name"]:
+                status, parsed = 200, p2
+            else:
+                if status == 200:
+                    status = 204  # synthetic: page exists but holds no meet
+                n_404 += 1
         if status == 200:
             n_ok += 1
             sd = parsed["start_date"]
@@ -197,13 +202,16 @@ def main():
     # Walk up from the highest live id until several consecutive dead ids.
     # Re-probes previously-dead top ids too, since DiveMeets assigns new ids
     # over time. Cheap no-op (a few fetches) once at the true top.
-    cur.execute("SELECT max(meet_id) FROM divemeets.meets WHERE http_status=200")
+    cur.execute("""SELECT max(meet_id) FROM divemeets.meets
+                   WHERE http_status=200 AND meet_name IS NOT NULL""")
     r = cur.fetchone()
     top = r[0] if r and r[0] else CEILING_DEFAULT - 1
+    # unpublished ids can sit between real meets near the live edge, so only
+    # a long run of consecutive empty/dead ids means we're past the top
     dead_streak = 0
     up_id = top + 1
     up_count = 0
-    while budget > 0 and dead_streak < 3:
+    while budget > 0 and dead_streak < 25:
         status, _sd = crawl_one(up_id)
         dead_streak = 0 if status == 200 else dead_streak + 1
         up_id += 1
