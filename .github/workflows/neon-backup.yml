@@ -33,12 +33,22 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
+          set +e
           STAMP=$(date -u +%Y-%m-%d)
           # pg_dump needs the direct endpoint, not the connection pooler
           DIRECT_URL="${DATABASE_URL/-pooler/}"
-          pg_dump "$DIRECT_URL" \
+          ERR=$(pg_dump "$DIRECT_URL" \
             --format=custom --compress=9 --no-owner --no-privileges \
-            --file="neon_backup_${STAMP}.dump"
+            --file="neon_backup_${STAMP}.dump" 2>&1)
+          RC=$?
+          if [ $RC -ne 0 ]; then
+            echo "pg_dump failed (rc=$RC): $ERR"
+            psql "$DATABASE_URL" -v e="pg_dump rc=$RC: $ERR" -c \
+              "INSERT INTO app_meta.config (key, value, description)
+               VALUES ('neon_backup_last_error', to_jsonb((:'e')::text)::text, 'neon-backup.yml')
+               ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()"
+            exit $RC
+          fi
           ls -lh neon_backup_*.dump
 
       - name: Upload backup artifact
