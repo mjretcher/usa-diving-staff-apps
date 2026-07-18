@@ -30,7 +30,7 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-18
 
       - name: Check client version
-        run: pg_dump --version && psql --version
+        run: /usr/lib/postgresql/18/bin/pg_dump --version && psql --version
 
       - name: Check connectivity (direct endpoint)
         env:
@@ -54,7 +54,7 @@ jobs:
           out = f"neon_backup_{stamp}.dump"
 
           p = subprocess.run(
-              ["pg_dump", direct, "--format=custom", "--compress=9",
+              ["/usr/lib/postgresql/18/bin/pg_dump", direct, "--format=custom", "--compress=9",
                "--no-owner", "--no-privileges", f"--file={out}"],
               capture_output=True, text=True)
 
