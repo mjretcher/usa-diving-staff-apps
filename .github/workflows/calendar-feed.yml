@@ -38,13 +38,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git diff --quiet -- data/feeds/season-calendar.ics; then
+          git add data/feeds/season-calendar.ics
+          if git diff --cached --quiet; then
             echo "Feed unchanged — nothing to publish."
             exit 0
           fi
           git config user.name "calendar-feed-bot"
           git config user.email "actions@github.com"
-          git add data/feeds/season-calendar.ics
           git commit -m "Update season calendar feed"
           git push
           # GITHUB_TOKEN pushes don't trigger push workflows; dispatch the deploy explicitly
