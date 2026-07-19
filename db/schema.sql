@@ -714,3 +714,22 @@ CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, even
 -- crawl bookkeeping on the registry
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- season_calendar.meet_deadlines — DiveMeets MeetInfo deadline pulls
+-- Populated by db/scripts/fetch_meet_deadlines.py
+-- (.github/workflows/divemeets-deadlines.yml — weekly cron + on-demand).
+-- One row per DiveMeets meet id referenced by a Season Calendar event.
+-- ═══════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS season_calendar.meet_deadlines (
+  dm_id      text PRIMARY KEY,      -- DiveMeets meet id (verbatim string)
+  meet_name  text,                  -- meet name as shown on MeetInfo page
+  meet_dates text,                  -- raw date-range line from MeetInfo page
+  deadlines  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  -- deadlines shape:
+  -- { "signupCloses": {"raw": "...", "date": "YYYY-MM-DD"|null, "time": "HH:MM"|null},
+  --   "lateFee":      {"raw": "...", "date": "YYYY-MM-DD"|null, "time": "HH:MM"|null},
+  --   "feePerEvent":  "$115.00" | null,
+  --   "error":        "..." (present only when the fetch/parse failed) }
+  fetched_at timestamptz NOT NULL DEFAULT now()
+);

@@ -1,0 +1,33 @@
+name: DiveMeets deadline pull
+
+on:
+  workflow_dispatch:
+    inputs:
+      meet_ids:
+        description: "Optional comma-separated DiveMeets meet ids (blank = every dmId on the Season Calendar)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 10 * * 1" # Mondays 10:00 UTC (early Monday morning US)
+
+jobs:
+  pull:
+    name: Pull MeetInfo deadlines into Neon
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Fetch and store deadlines
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MEET_IDS: ${{ github.event.inputs.meet_ids }}
+        run: python db/scripts/fetch_meet_deadlines.py
