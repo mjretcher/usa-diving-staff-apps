@@ -4837,3 +4837,15 @@ normalizeAllDays(S);saveS();
 if(S.currentLibraryId)startSync();
 render();
 
+
+// ── Deep link: ?load=<cloud schedule id> ──────────────────────────────
+// Used by Season Calendar Planner linked events ("Open linked schedule").
+(function(){
+  try{
+    const p=new URLSearchParams(location.search).get('load');
+    if(!p)return;
+    loadFromNeon(p).then(loaded=>{
+      if(!loaded)toast('Linked schedule not found on cloud');
+    }).catch(()=>toast('Could not load linked schedule'));
+  }catch(e){}
+})();
