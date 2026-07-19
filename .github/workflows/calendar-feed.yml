@@ -1,0 +1,60 @@
+name: Publish calendar feed
+
+on:
+  workflow_dispatch: # dispatched by the Season Calendar app after cloud saves
+  schedule:
+    - cron: "0 */4 * * *" # backstop refresh every 4 hours
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: calendar-feed
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Regenerate season-calendar.ics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Generate feed
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/publish_calendar_feed.py
+
+      - name: Commit and republish if changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- data/feeds/season-calendar.ics; then
+            echo "Feed unchanged — nothing to publish."
+            exit 0
+          fi
+          git config user.name "calendar-feed-bot"
+          git config user.email "actions@github.com"
+          git add data/feeds/season-calendar.ics
+          git commit -m "Update season calendar feed"
+          git push
+          # GITHUB_TOKEN pushes don't trigger push workflows; dispatch the deploy explicitly
+          curl -s -o /dev/null -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/pages-deploy.yml/dispatches" \
+            -d '{"ref":"main"}'
+          curl -s -o /dev/null -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/builds"
+          echo "Feed updated and site redeploy dispatched."
