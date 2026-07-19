@@ -1,0 +1,49 @@
+name: DiveMeets results crawl
+
+on:
+  workflow_dispatch:
+    inputs:
+      meet_id:
+        description: "Crawl exactly this meet id (bypasses queue)"
+        required: false
+        default: ""
+      sanction:
+        description: "Registry sanction filter for auto mode"
+        required: false
+        default: "USA Diving"
+      fetch_budget:
+        description: "Approx max page fetches this run"
+        required: false
+        default: "700"
+  schedule:
+    # every 25 minutes, offset from the catalog crawl; exits fast once the
+    # queue for the sanction filter is drained
+    - cron: "5/25 * * * *"
+
+concurrency:
+  group: divemeets-results
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Crawl results batch
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MEET_ID: ${{ github.event.inputs.meet_id }}
+          SANCTION: ${{ github.event.inputs.sanction }}
+          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
+        run: python db/scripts/dm_results.py

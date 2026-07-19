@@ -679,3 +679,38 @@ CREATE TABLE IF NOT EXISTS divemeets.meets (
 );
 CREATE INDEX IF NOT EXISTS dm_meets_year     ON divemeets.meets(start_date);
 CREATE INDEX IF NOT EXISTS dm_meets_sanction ON divemeets.meets(sanction);
+
+-- DiveMeets results layer (phase 2): every event + placement row per meet,
+-- crawled from the divemeets.meets registry newest-first.
+CREATE TABLE IF NOT EXISTS divemeets.events (
+  id         bigserial PRIMARY KEY,
+  meet_id    integer NOT NULL,
+  event_id   integer NOT NULL,
+  round      text NOT NULL,      -- "1"=Prelim/Quarterfinal, "9"=Final, etc.
+  title      text,
+  entries    integer,
+  event_date date,
+  UNIQUE (meet_id, event_id, round)
+);
+CREATE INDEX IF NOT EXISTS dm_events_meet ON divemeets.events(meet_id);
+
+CREATE TABLE IF NOT EXISTS divemeets.results (
+  id         bigserial PRIMARY KEY,
+  meet_id    integer NOT NULL,
+  event_id   integer NOT NULL,
+  round      text NOT NULL,
+  place      text,               -- verbatim (can be non-numeric for Ex./DQ)
+  diver_name text,
+  profile_id integer,            -- stable DiveMeets athlete id
+  team_name  text,
+  team_id    integer,
+  score      numeric,
+  diff_first numeric,
+  sheet_key  bigint              -- key for the DiveSheetResults page (phase 3)
+);
+CREATE INDEX IF NOT EXISTS dm_results_meet    ON divemeets.results(meet_id);
+CREATE INDEX IF NOT EXISTS dm_results_profile ON divemeets.results(profile_id);
+CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, event_id, round);
+-- crawl bookkeeping on the registry
+ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
+ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
