@@ -513,6 +513,112 @@ async function renderMap(){
   bind('mapPins',()=>{mapState.pins=!mapState.pins;});
 }
 
+
+/* ---------- Types & Clubs ---------- */
+let TC = { loaded:false, types:null, clubs:null, sort:{col:'m26', dir:-1}, q:'' };
+
+async function renderTypes(){
+  const el = document.getElementById('viewTypes');
+  if (!TC.loaded){
+    el.innerHTML = '<div class="loading">Loading&hellip;</div>';
+    try {
+      const [types, clubs] = await Promise.all([
+        NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n FROM membership.members GROUP BY 1,2`),
+        NEON.query(`SELECT COALESCE(NULLIF(club,''),'(no club listed)') club,
+          mode() WITHIN GROUP (ORDER BY association) assoc,
+          mode() WITHIN GROUP (ORDER BY zip5 || '|' || COALESCE(city,'') || '|' || COALESCE(state,'')) zcs,
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2024) m24,
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2025) m25,
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2026) m26,
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Athlete%') a26,
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Coach%') c26
+          FROM membership.members GROUP BY 1`),
+      ]);
+      TC.types = types.rows; TC.clubs = clubs.rows; TC.loaded = true;
+    } catch(e){ el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Load failed.</b> ${esc(e.message||e)}</div></div></div>`; return; }
+  }
+  const tm = {}; TC.types.forEach(r => (tm[r.t] = tm[r.t] || {})[r.y] = +r.n);
+  const g = (types, y) => types.reduce((s,t)=>s+((tm[t]||{})[y]||0), 0);
+  const row = (label, types, cls, indent) => {
+    const v = y => g(types, y);
+    return `<tr class="${cls||''}"><td class="${indent||''}">${label}</td>
+      <td class="num">${fmt(v(2024))}</td><td class="num">${fmt(v(2025))}</td><td class="num">${fmt(v(2026))}</td>
+      <td class="num">${deltaHtml(v(2026), v(2025))}</td></tr>`;
+  };
+  const T = {
+    ath17:'Athlete (17U)', ath18:'Athlete (AQUA Age 18+)',
+    c17:'Competition Athlete (17U)', c18:'Competition Athlete (AQUA Age 18+)',
+    i17:'Introductory Athlete 17U', i18:'Introductory Athlete AQUA Age 18+',
+    co:'Coach', cco:'Competition Coach', lco:'Lifetime Coach',
+    j:'Judge', vo:'Volunteer/Official', af:'Alumni / Fan', lt:'Lifetime', mc:'Medical/Consultant', st:'Staff',
+  };
+  const allAth = [T.ath17,T.ath18,T.c17,T.c18,T.i17,T.i18];
+  const allCoach = [T.co,T.cco,T.lco];
+  const other = [T.j,T.vo,T.af,T.lt,T.mc,T.st];
+  const typesTable = `
+  <div class="card"><div class="card-h"><h2>Membership Types</h2><span class="note">Distinct members &middot; 2026 is YTD</span></div>
+  <div class="card-b"><table class="tc-table"><thead><tr>
+    <th>Type</th><th class="num">2024</th><th class="num">2025</th><th class="num">2026 YTD</th><th class="num">&Delta; 25&rarr;26</th>
+  </tr></thead><tbody>
+    ${row('<b>ALL ATHLETES</b> (combined)', allAth, 'grand')}
+    ${row('Standard Athletes (combined)', [T.ath17,T.ath18], 'sub', 'indent1')}
+    ${row(esc(T.ath17), [T.ath17], '', 'indent2')}
+    ${row(esc(T.ath18), [T.ath18], '', 'indent2')}
+    ${row('Competition Athletes (combined)', [T.c17,T.c18], 'sub', 'indent1')}
+    ${row(esc(T.c17), [T.c17], '', 'indent2')}
+    ${row(esc(T.c18), [T.c18], '', 'indent2')}
+    ${row('Introductory Athletes (combined)', [T.i17,T.i18], 'sub', 'indent1')}
+    ${row(esc(T.i17), [T.i17], '', 'indent2')}
+    ${row(esc(T.i18), [T.i18], '', 'indent2')}
+    ${row('<b>ALL COACHES</b> (combined)', allCoach, 'grand')}
+    ${row(esc(T.co), [T.co], '', 'indent2')}
+    ${row(esc(T.cco), [T.cco], '', 'indent2')}
+    ${row(esc(T.lco), [T.lco], '', 'indent2')}
+    ${row('<b>OFFICIALS &amp; OTHER</b> (combined)', other, 'grand')}
+    ${other.map(t=>row(esc(t), [t], '', 'indent2')).join('')}
+  </tbody></table></div></div>`;
+
+  const clubsCard = `
+  <div class="card"><div class="card-h"><h2>Clubs</h2>
+    <input class="search" id="tcQ" placeholder="Search club / city / state&hellip;" value="${esc(TC.q)}"></div>
+  <div class="card-b"><div class="clubs-wrap"><table class="clubs-table" id="tcClubs"></table></div>
+  <div class="note" style="margin-top:6px">Location = each club&rsquo;s most common member zip code. Click any column to sort.</div></div></div>`;
+
+  el.innerHTML = typesTable + clubsCard;
+  document.getElementById('tcQ').addEventListener('input', e=>{ TC.q = e.target.value; renderClubTable(); });
+  renderClubTable();
+}
+
+function renderClubTable(){
+  const cols = [
+    ['club','Club'],['assoc','Association'],['loc','Location (modal zip)'],
+    ['m24','2024'],['m25','2025'],['m26','2026 YTD'],['a26','Athletes \u201926'],['c26','Coaches \u201926'],['d','\u0394 25\u219226'],
+  ];
+  let rows = TC.clubs.map(r => {
+    const [zip, city, st] = (r.zcs||'||').split('|');
+    return ({
+    club:r.club, assoc:r.assoc||'', zip, city, st,
+    loc: r.club==='(no club listed)' ? '—' : (city?city+', ':'')+(st||'')+(zip?' '+zip:''),
+    m24:+r.m24, m25:+r.m25, m26:+r.m26, a26:+r.a26, c26:+r.c26, d:+r.m26-+r.m25,
+  });});
+  const q = TC.q.trim().toLowerCase();
+  if (q) rows = rows.filter(r => (r.club+' '+r.assoc+' '+r.loc).toLowerCase().includes(q));
+  const {col, dir} = TC.sort;
+  rows.sort((a,b)=>{ const x=a[col], y=b[col]; return (typeof x==='string' ? x.localeCompare(y) : x-y) * dir; });
+  const head = cols.map(([k,l])=>`<th data-col="${k}" class="${typeof rows[0]?.[k]==='number'?'num':''}">${l} ${TC.sort.col===k?`<span class="arr">${dir<0?'\u25BC':'\u25B2'}</span>`:''}</th>`).join('');
+  const body = rows.map(r=>`<tr>
+    <td><b>${esc(r.club)}</b></td><td>${esc(r.assoc)}</td><td>${esc(r.loc)}</td>
+    <td class="num">${fmt(r.m24)}</td><td class="num">${fmt(r.m25)}</td><td class="num">${fmt(r.m26)}</td>
+    <td class="num">${fmt(r.a26)}</td><td class="num">${fmt(r.c26)}</td><td class="num">${deltaHtml(r.m26,r.m25)}</td></tr>`).join('');
+  const t = document.getElementById('tcClubs');
+  t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  t.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{
+    const c = th.dataset.col;
+    TC.sort = { col:c, dir: TC.sort.col===c ? -TC.sort.dir : (['club','assoc','loc'].includes(c)?1:-1) };
+    renderClubTable();
+  }));
+}
+
 /* ---------- boot ---------- */
 function wireTabs(){
   document.querySelectorAll('#tabs .tab').forEach(t=>t.addEventListener('click',()=>{
@@ -521,6 +627,7 @@ function wireTabs(){
     document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
     document.getElementById('view'+v[0].toUpperCase()+v.slice(1)).classList.add('active');
     if (v==='boundary' && window.renderBoundary) window.renderBoundary();
+    if (v==='types') renderTypes();
   }));
 }
 
