@@ -99,13 +99,22 @@ def parse_dive_sheet(h):
                      num(clean[7]), (clean[8].strip()[:1].upper() or None)))
     return rows
 
-def crawl_meet(cur, meet_id):
+def db():
+    return psycopg2.connect(DB_URL, keepalives=1, keepalives_idle=30,
+                            keepalives_interval=10, keepalives_count=5)
+
+def crawl_meet(meet_id):
+    """Fetch phase holds NO db connection (sheet crawls run for many minutes
+    and Neon closes idle connections); a fresh connection is opened only for
+    the final single write transaction."""
+    conn = db(); cur = conn.cursor()
     cur.execute(
         """SELECT event_id, round, profile_id, sheet_key
            FROM divemeets.results
            WHERE meet_id=%s AND sheet_key IS NOT NULL
            ORDER BY event_id, round, place NULLS LAST""", (meet_id,))
     targets = cur.fetchall()
+    cur.close(); conn.close()
     all_rows, empties, failures = [], 0, []
     for (event_id, rnd, profile_id, sheet_key) in targets:
         url = (f"https://new.divemeets.com/DiveSheetResults/{meet_id}/"
@@ -130,6 +139,7 @@ def crawl_meet(cur, meet_id):
             f"meet {meet_id}: {len(failures)} sheet fetches failed; "
             f"first: {failures[0]}")
     note = f"{empties} sheets with no dive rows" if empties else None
+    conn = db(); conn.autocommit = False; cur = conn.cursor()
     cur.execute("DELETE FROM divemeets.sheet_dives WHERE meet_id=%s", (meet_id,))
     if all_rows:
         cur.executemany(
@@ -143,12 +153,10 @@ def crawl_meet(cur, meet_id):
     cur.execute(
         """UPDATE divemeets.meets SET sheets_done=true, sheets_note=%s,
            sheets_crawled_at=now() WHERE meet_id=%s""", (note, meet_id))
+    conn.commit(); cur.close(); conn.close()
     return len(targets), len(all_rows), note
 
 def main():
-    conn = psycopg2.connect(DB_URL)
-    conn.autocommit = False
-    cur = conn.cursor()
     meets_done = 0
     while fetches < FETCH_BUDGET:
         if ONLY_MEET:
@@ -159,6 +167,7 @@ def main():
             # skip meets whose remaining sheets would blow the budget — a
             # meet must fit in one run since the transaction is per-meet
             remaining = FETCH_BUDGET - fetches
+            conn = db(); cur = conn.cursor()
             cur.execute(
                 """SELECT m.meet_id, m.meet_name,
                           (SELECT count(*) FROM divemeets.results r
@@ -172,17 +181,16 @@ def main():
                 if nsheets <= remaining:
                     pick = (mid, mname)
                     break
+            cur.close(); conn.close()
             if not pick:
                 log("no queued meet fits remaining budget — done for this run")
                 break
             meet_id, name = pick
-        n_t, n_d, note = crawl_meet(cur, meet_id)
-        conn.commit()
+        n_t, n_d, note = crawl_meet(meet_id)
         meets_done += 1
         log(f"meet {meet_id} {name!r}: {n_t} sheets -> {n_d} dives"
             f"{' [' + note + ']' if note else ''}")
     log(f"run done: {meets_done} meets, {fetches} fetches")
-    cur.close(); conn.close()
 
 def report(ok, err=None):
     try:
