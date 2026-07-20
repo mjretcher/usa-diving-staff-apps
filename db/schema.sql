@@ -801,3 +801,12 @@ CREATE TABLE IF NOT EXISTS membership.ingest_log (
     loaded_at TIMESTAMPTZ DEFAULT now(),
     notes TEXT
 );
+
+-- Boundary Studio scenarios (Membership Analytics)
+CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
