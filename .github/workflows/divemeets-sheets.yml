@@ -1,0 +1,49 @@
+name: DiveMeets dive-sheet crawl
+
+on:
+  workflow_dispatch:
+    inputs:
+      meet_id:
+        description: "Crawl sheets for exactly this meet id (bypasses queue)"
+        required: false
+        default: ""
+      sanction:
+        description: "Registry sanction filter for auto mode"
+        required: false
+        default: "USA Diving"
+      fetch_budget:
+        description: "Approx max page fetches this run"
+        required: false
+        default: "1100"
+  schedule:
+    # offset from catalog (*/20) and results (5/25) crons; exits fast when
+    # no results-complete meet is awaiting sheets
+    - cron: "12/30 * * * *"
+
+concurrency:
+  group: divemeets-sheets
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Crawl dive sheets batch
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          MEET_ID: ${{ github.event.inputs.meet_id }}
+          SANCTION: ${{ github.event.inputs.sanction }}
+          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
+        run: python db/scripts/dm_sheets.py

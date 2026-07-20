@@ -733,3 +733,28 @@ CREATE TABLE IF NOT EXISTS season_calendar.meet_deadlines (
   --   "error":        "..." (present only when the fetch/parse failed) }
   fetched_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- DiveMeets dive-sheet layer (phase 3): every individual dive for every
+-- placement row in divemeets.results, keyed by the sheet_key captured there.
+CREATE TABLE IF NOT EXISTS divemeets.sheet_dives (
+  id          bigserial PRIMARY KEY,
+  meet_id     integer NOT NULL,
+  event_id    integer NOT NULL,
+  round       text NOT NULL,
+  profile_id  integer NOT NULL,
+  sheet_key   bigint NOT NULL,
+  dive_order  integer NOT NULL,
+  dive_number text,
+  height      text,
+  description text,
+  net_score   numeric,
+  dd          numeric,
+  score       numeric,
+  round_place numeric,
+  opt_vol     text,              -- DiveMeets' own V/O flag per dive
+  UNIQUE (meet_id, event_id, round, profile_id, dive_order)
+);
+CREATE INDEX IF NOT EXISTS dm_sheet_dives_meet    ON divemeets.sheet_dives(meet_id);
+CREATE INDEX IF NOT EXISTS dm_sheet_dives_profile ON divemeets.sheet_dives(profile_id);
+ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_note text;
+ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_crawled_at timestamptz;
