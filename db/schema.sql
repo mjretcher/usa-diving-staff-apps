@@ -810,3 +810,13 @@ CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Accounting same-period membership sales ledger (source: accountant xlsx, Dec-Jun windows)
+CREATE TABLE IF NOT EXISTS membership.sales_ledger (
+    year INT NOT NULL,
+    month INT NOT NULL,
+    item TEXT NOT NULL,
+    cnt INT NOT NULL,
+    total NUMERIC(12,2),
+    PRIMARY KEY (year, month, item)
+);

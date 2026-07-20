@@ -111,9 +111,10 @@ async function loadAll(){
                 count(DISTINCT member_id) FILTER (WHERE membership_type ILIKE '%Athlete%') ath
                 FROM membership.members GROUP BY 1,2`),
     NEON.query(`SELECT COALESCE(state,'??') st, membership_year y, count(DISTINCT member_id) n FROM membership.members GROUP BY 1,2`),
-    NEON.query(`SELECT membership_year y, count(DISTINCT member_id) n FROM membership.members
-                WHERE start_date IS NOT NULL AND start_date <= make_date(membership_year, ${new Date().getMonth()+1}, ${new Date().getDate()})
-                GROUP BY 1 ORDER BY 1`),
+    NEON.query(`SELECT year y,
+                sum(cnt) FILTER (WHERE item NOT IN ('Background Fee','Donations','Processing Fee','Sanction Fee')) n,
+                sum(cnt) FILTER (WHERE item LIKE '%Athlete%') ath
+                FROM membership.sales_ledger GROUP BY 1 ORDER BY 1`),
     NEON.query(`
       SELECT 'r2425' k, count(DISTINCT a.member_id) n FROM membership.members a WHERE a.membership_year=2025 AND EXISTS (SELECT 1 FROM membership.members b WHERE b.member_id=a.member_id AND b.membership_year=2024)
       UNION ALL SELECT 'new25', count(DISTINCT a.member_id) FROM membership.members a WHERE a.membership_year=2025 AND NOT EXISTS (SELECT 1 FROM membership.members b WHERE b.member_id=a.member_id AND b.membership_year=2024)
@@ -159,7 +160,7 @@ function yearMap(rows, keyF, valF){
 /* ---------- views ---------- */
 function renderOverview(){
   const tot = {}; D.byYear.forEach(r => tot[r.y] = +r.n);
-  const paceM = {}; D.pace.forEach(r => paceM[r.y] = +r.n);
+  const paceM = {}, paceA = {}; D.pace.forEach(r => { paceM[r.y] = +r.n; paceA[r.y] = +r.ath; });
   const catM = yearMap(D.byCat, r=>r.cat, r=>r.n);
   const grpM = yearMap(D.byGrp, r=>r.grp, r=>r.n);
   const ath26 = (catM.Athlete||{})[2026]||0, ath25 = (catM.Athlete||{})[2025]||0;
@@ -174,8 +175,8 @@ function renderOverview(){
     </div>
     <div class="kpi red">
       <div class="big">${fmt(paceM[2026]||0)}</div>
-      <span class="chip">Registered by ${D.paceDate.replace('-','/')}</span>
-      <div class="sub">Same-date pace &mdash; 2025: ${fmt(paceM[2025]||0)} &middot; 2024: ${fmt(paceM[2024]||0)}<br>${deltaHtml(paceM[2026]||0, paceM[2025]||0)} vs 2025 pace</div>
+      <span class="chip">Same-Period Memberships Sold (Dec&ndash;Jun)</span>
+      <div class="sub">2025 same period: ${fmt(paceM[2025]||0)} &middot; ${deltaHtml(paceM[2026]||0, paceM[2025]||0)}<br>Athletes: ${fmt(paceA[2026]||0)} vs ${fmt(paceA[2025]||0)} ${deltaHtml(paceA[2026]||0, paceA[2025]||0)}<br><span style="opacity:.75">Source: accounting sales ledger (net of refunds, incl. clubs)</span></div>
     </div>
     <div class="kpi pool">
       <div class="big">${fmt(ath26)}</div>
@@ -213,7 +214,7 @@ function renderOverview(){
 
 function renderTrends(){
   const tot = {}; D.byYear.forEach(r => tot[r.y] = +r.n);
-  const paceM = {}; D.pace.forEach(r => paceM[r.y] = +r.n);
+  const paceM = {}, paceA = {}; D.pace.forEach(r => { paceM[r.y] = +r.n; paceA[r.y] = +r.ath; });
   const catM = yearMap(D.byCat, r=>r.cat, r=>r.n);
   const grpM = yearMap(D.byGrp, r=>r.grp, r=>r.n);
 
