@@ -758,3 +758,46 @@ CREATE INDEX IF NOT EXISTS dm_sheet_dives_meet    ON divemeets.sheet_dives(meet_
 CREATE INDEX IF NOT EXISTS dm_sheet_dives_profile ON divemeets.sheet_dives(profile_id);
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_crawled_at timestamptz;
+
+
+-- SCHEMA 10: membership — Membership Analytics app
+-- PII POLICY (agreed 2026-07-20): NEVER load street addresses, emails,
+-- phone numbers, or parent contact info into this schema. Analytical
+-- fields only: identity (id/name), geography (city/state/zip), birth date
+-- (needed for age-group analysis + DiveMeets matching), membership metadata.
+CREATE SCHEMA IF NOT EXISTS membership;
+
+CREATE TABLE IF NOT EXISTS membership.members (
+    member_id       TEXT NOT NULL,
+    membership_year SMALLINT NOT NULL,
+    membership_type TEXT NOT NULL DEFAULT '',
+    first_name      TEXT,
+    last_name       TEXT,
+    city            TEXT,
+    state           TEXT,
+    zip             TEXT,
+    zip5            TEXT,
+    country         TEXT,
+    birth_date      DATE,
+    start_date      DATE,
+    exp_date        DATE,
+    association     TEXT,
+    club            TEXT,
+    member_status   TEXT,
+    loaded_at       TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (member_id, membership_year, membership_type)
+);
+CREATE INDEX IF NOT EXISTS idx_mem_year   ON membership.members(membership_year);
+CREATE INDEX IF NOT EXISTS idx_mem_assoc  ON membership.members(association);
+CREATE INDEX IF NOT EXISTS idx_mem_state  ON membership.members(state);
+CREATE INDEX IF NOT EXISTS idx_mem_zip5   ON membership.members(zip5);
+CREATE INDEX IF NOT EXISTS idx_mem_id     ON membership.members(member_id);
+
+CREATE TABLE IF NOT EXISTS membership.ingest_log (
+    id SERIAL PRIMARY KEY,
+    membership_year SMALLINT,
+    source_file TEXT,
+    row_count INT,
+    loaded_at TIMESTAMPTZ DEFAULT now(),
+    notes TEXT
+);
