@@ -9,6 +9,16 @@
 
 const PALETTE = ['#171F69','#E31937','#009AC7','#15803d','#b45309','#7c3aed','#0f766e','#be185d','#8FC3EA','#a16207','#64748b','#92400e','#1d4ed8','#ca8a04','#0891b2','#9f1239'];
 const UNASSIGNED_BASE = '#eef1f6';
+// Distinct, brand-aligned color ramps for the Zone and E/W/C map views.
+const ZONE_RAMP = ['#171F69','#009AC7','#15803d','#b45309','#7c3aed','#E31937','#0891b2','#be185d','#a16207','#4f46e5'];
+const EWC_RAMP  = ['#171F69','#009AC7','#E31937','#15803d','#b45309','#7c3aed'];
+// Color for a group index in the CURRENT tier view (region / zone / E-W-C).
+function groupColor(gi){
+  if (gi==null || gi<0) return UNASSIGNED_BASE;
+  if (S.tierView===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
+  const ramp = S.tierView===1 ? ZONE_RAMP : EWC_RAMP;
+  return ramp[gi % ramp.length];
+}
 
 const S = {
   geo: null,            // boundary-data.json
@@ -119,7 +129,10 @@ function regionZips(gi){
 /* ---------- rendering ---------- */
 function fillFor(fips, maxM){
   const ri = S.assign[fips];
-  if (ri!=null && ri>=0 && ri<S.regions.length) return S.regions[ri].color;
+  if (ri!=null && ri>=0 && ri<S.regions.length){
+    const of = S._of || (S._of = tierGroups().of);
+    return groupColor(of[ri]);
+  }
   const st = S.geo.stats[fips];
   return heatTint(st ? st[S.year].m : 0, maxM);
 }
@@ -132,6 +145,7 @@ function paintCountyEl(fips){
 function renderMapOnce(){
   const geo = S.geo;
   S._maxM = Math.max(1, ...Object.values(geo.stats).map(s=>s[S.year].m));
+  S._of = tierGroups().of;
   const paths = geo.counties.map(c=>
     `<path class="bcty" data-f="${c.f}" d="${c.d}" fill="${fillFor(c.f, S._maxM)}"/>`).join('');
   document.getElementById('bsSvgG').innerHTML = paths +
@@ -142,6 +156,7 @@ function renderMapOnce(){
 
 function repaintAll(){
   S._maxM = Math.max(1, ...Object.values(S.geo.stats).map(s=>s[S.year].m));
+  S._of = tierGroups().of;
   document.querySelectorAll('path.bcty').forEach(el=>{
     el.setAttribute('fill', fillFor(el.dataset.f, S._maxM));
   });
@@ -173,7 +188,7 @@ function renderPanel(){
   const swatches = cols => cols.map(c=>`<span class="sw sw-multi" style="background:${c}"></span>`).join('');
   const rowsHtml = t.rows.map((r,i)=>`
     <tr class="${S.detailRegion===i?'sel':''}" data-drill="${i}">
-      <td>${swatches(t.TG.groups[i].colors)}<b>${esc(t.TG.groups[i].name)}</b></td>
+      <td><span class="sw" style="background:${groupColor(i)}"></span><b>${esc(t.TG.groups[i].name)}</b></td>
       <td class="num">${fmt(r.m)}</td><td class="num">${fmt(r.a)}</td><td class="num">${fmt(r.c)}</td>
       <td class="num">${fmt(r.cl.size)}</td><td class="num">${fmt(r.zips)}</td><td class="num">${fmt(r.countiesAssigned)}</td>
       <td class="num">${mappableTotal>0 ? (100*r.m/mappableTotal).toFixed(1)+'%' : '—'}</td>
@@ -189,7 +204,7 @@ function renderPanel(){
     const zips = regionZips(S.detailRegion);
     const g = TGnow.groups[S.detailRegion];
     drill = `<div class="bs-drill">
-      <div class="bs-drill-h">${swatches(g.colors)}<b>${esc(g.name)}</b> — ${fmt(zips.length)} zip codes pooled (${yLabel}) <button class="tab" id="bsDrillClose" style="padding:3px 10px;font-size:11px">close</button></div>
+      <div class="bs-drill-h"><span class="sw" style="background:${groupColor(S.detailRegion)}"></span><b>${esc(g.name)}</b> — ${fmt(zips.length)} zip codes pooled (${yLabel}) <button class="tab" id="bsDrillClose" style="padding:3px 10px;font-size:11px">close</button></div>
       <div class="bs-zips">${zips.map(z=>`<span class="bs-zip" title="${esc(z.county)} County, ${esc(z.st)}"><b>${z.zip}</b> ${z.m}</span>`).join('') || '<span class="note">No members in this region yet.</span>'}</div>
     </div>`;
   }
@@ -250,8 +265,31 @@ function renderPanel(){
     </div>
     <div class="note" id="bsMsg"></div>`;
 
+  renderLegend(t, mappableTotal, yLabel);
   wirePanel();
   loadScenarioList();
+}
+
+// Front-and-center stat band under the map: one card per group in the active tier.
+function renderLegend(t, mappableTotal, yLabel){
+  const lgEl = document.getElementById('bsLegend');
+  if (!lgEl) return;
+  const tierLabel = S.tierView===0 ? 'Regions' : (S.tierView===1 ? 'Zones' : 'East · Central · West');
+  const share = m => mappableTotal>0 ? (100*m/mappableTotal).toFixed(1)+'%' : '—';
+  const cards = t.rows.map((r,i)=>`
+    <button class="bs-lg-card ${S.detailRegion===i?'sel':''}" data-drill2="${i}" style="--c:${groupColor(i)}">
+      <span class="bs-lg-nm"><span class="bs-lg-sw"></span>${esc(t.TG.groups[i].name)}</span>
+      <span class="bs-lg-big">${fmt(r.m)}</span>
+      <span class="bs-lg-sub">${share(r.m)} share · ${fmt(r.a)} ath · ${fmt(r.cl.size)} clubs</span>
+    </button>`).join('');
+  const un = t.un.m>0 ? `<div class="bs-lg-card un">
+      <span class="bs-lg-nm"><span class="bs-lg-sw" style="background:${UNASSIGNED_BASE};border:1px solid #d8e0ec"></span>Unassigned</span>
+      <span class="bs-lg-big">${fmt(t.un.m)}</span>
+      <span class="bs-lg-sub">${share(t.un.m)} share</span></div>` : '';
+  const hint = S.detailRegion!=null ? 'tap the highlighted card to close the zip drill-down'
+                                    : 'tap a card to pool its zip codes';
+  lgEl.innerHTML = `<div class="bs-lg-head"><b>${tierLabel}</b> &mdash; members by area · ${yLabel} · <span class="bs-lg-hint">${hint}</span></div>
+    <div class="bs-lg-cards">${cards}${un}</div>`;
 }
 
 /* ---------- interactions ---------- */
@@ -297,12 +335,19 @@ function wireMap(){
       const st = S.geo.stats[t.dataset.f];
       const v = st ? st[S.year] : null;
       const ri = S.assign[t.dataset.f];
+      let grpHtml = '<br><i>Unassigned</i>';
+      if (ri!=null && S.regions[ri]){
+        const TG = tierGroups(); const gi = TG.of[ri];
+        const gc = groupColor(gi);
+        const gname = (TG.groups[gi] && TG.groups[gi].name) || S.regions[ri].name;
+        grpHtml = `<br><span style="color:${gc==='#171F69'?'#8FC3EA':gc}">&#9632;</span> ${esc(gname)}` +
+          (S.tierView>0 ? ` <span style="opacity:.65">· ${esc(S.regions[ri].name)}</span>` : '');
+      }
       tip.style.display='block';
       tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY+14)+'px';
       tip.innerHTML = `<b>${esc(c.n)} County, ${esc(c.st)}</b><br>` +
         (v ? `${fmt(v.m)} members · ${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips`
-           : 'No members') +
-        (ri!=null && S.regions[ri] ? `<br><span style="color:${S.regions[ri].color==='#171F69'?'#8FC3EA':S.regions[ri].color}">&#9632;</span> ${esc(S.regions[ri].name)}` : '<br><i>Unassigned</i>');
+           : 'No members') + grpHtml;
     } else tip.style.display='none';
   });
   const stop = ()=>{ S.painting=false; panStart=null; };
@@ -334,19 +379,22 @@ function wirePanel(){
   bind('bsZoomIn', ()=>{S.zoom.k=Math.min(14,S.zoom.k*1.4); applyZoom();});
   bind('bsZoomOut', ()=>{S.zoom.k=Math.max(1,S.zoom.k/1.4); if(S.zoom.k===1){S.zoom.x=0;S.zoom.y=0;} applyZoom();});
   bind('bsZoomReset', ()=>{S.zoom={k:1,x:0,y:0}; applyZoom();});
-  bind('bsTier0', ()=>{S.tierView=0; S.detailRegion=null; renderPanel();});
-  bind('bsTier1', ()=>{S.tierView=1; S.detailRegion=null; renderPanel();});
-  bind('bsTier2', ()=>{S.tierView=2; S.detailRegion=null; renderPanel();});
+  bind('bsTier0', ()=>{S.tierView=0; S.detailRegion=null; repaintAll(); renderPanel();});
+  bind('bsTier1', ()=>{S.tierView=1; S.detailRegion=null; repaintAll(); renderPanel();});
+  bind('bsTier2', ()=>{S.tierView=2; S.detailRegion=null; repaintAll(); renderPanel();});
   P.querySelectorAll('.bs-zsel').forEach(sel=>sel.addEventListener('change',()=>{
-    S.tiers.zoneOf[+sel.dataset.ri] = +sel.value; S.dirty=true; renderPanel();
+    S.tiers.zoneOf[+sel.dataset.ri] = +sel.value; S.dirty=true; repaintAll(); renderPanel();
   }));
   P.querySelectorAll('.bs-esel').forEach(sel=>sel.addEventListener('change',()=>{
-    S.tiers.ewcOf[+sel.dataset.zi] = +sel.value; S.dirty=true; renderPanel();
+    S.tiers.ewcOf[+sel.dataset.zi] = +sel.value; S.dirty=true; repaintAll(); renderPanel();
   }));
-  bind('bsAddZone', ()=>{ S.tiers.zones.push({name:'Zone '+String.fromCharCode(65+S.tiers.zones.length)}); syncTiers(); S.dirty=true; renderPanel(); });
-  bind('bsRemZone', ()=>{ if(S.tiers.zones.length<=1)return; S.tiers.zones.pop(); S.tiers.zoneOf=S.tiers.zoneOf.map(z=>Math.min(z,S.tiers.zones.length-1)); syncTiers(); S.dirty=true; renderPanel(); });
-  bind('bsAddEwc', ()=>{ S.tiers.ewc.push({name:'Group '+(S.tiers.ewc.length+1)}); syncTiers(); S.dirty=true; renderPanel(); });
-  bind('bsRemEwc', ()=>{ if(S.tiers.ewc.length<=1)return; S.tiers.ewc.pop(); S.tiers.ewcOf=S.tiers.ewcOf.map(e=>Math.min(e,S.tiers.ewc.length-1)); syncTiers(); S.dirty=true; renderPanel(); });
+  bind('bsAddZone', ()=>{ S.tiers.zones.push({name:'Zone '+String.fromCharCode(65+S.tiers.zones.length)}); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  bind('bsRemZone', ()=>{ if(S.tiers.zones.length<=1)return; S.tiers.zones.pop(); S.tiers.zoneOf=S.tiers.zoneOf.map(z=>Math.min(z,S.tiers.zones.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  bind('bsAddEwc', ()=>{ S.tiers.ewc.push({name:'Group '+(S.tiers.ewc.length+1)}); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  bind('bsRemEwc', ()=>{ if(S.tiers.ewc.length<=1)return; S.tiers.ewc.pop(); S.tiers.ewcOf=S.tiers.ewcOf.map(e=>Math.min(e,S.tiers.ewc.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  document.querySelectorAll('#bsLegend [data-drill2]').forEach(el=>el.addEventListener('click',()=>{
+    const i=+el.dataset.drill2; S.detailRegion=(S.detailRegion===i)?null:i; renderPanel();
+  }));
   P.querySelectorAll('.bs-chip[data-ri]').forEach(ch=>ch.addEventListener('click',()=>{
     S.active = +ch.dataset.ri; renderPanel();
   }));
@@ -467,6 +515,7 @@ window.renderBoundary = async function(){
     <div class="bs-layout">
       <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
         <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
+        <div id="bsLegend" class="bs-legend"></div>
       </div></div>
       <div class="card" style="margin-bottom:0"><div class="card-b" id="bsPanel"></div></div>
     </div>
