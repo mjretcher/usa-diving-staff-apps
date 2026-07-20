@@ -12,6 +12,14 @@ const UNASSIGNED_BASE = '#eef1f6';
 // Distinct, brand-aligned color ramps for the Zone and E/W/C map views.
 const ZONE_RAMP = ['#171F69','#009AC7','#15803d','#b45309','#7c3aed','#E31937','#0891b2','#be185d','#a16207','#4f46e5'];
 const EWC_RAMP  = ['#171F69','#009AC7','#E31937','#15803d','#b45309','#7c3aed'];
+// Junior age groups (age as of Dec 31) + adult bucket, young->old color ramp.
+const AGE_GROUPS = [
+  {k:'D',   label:'11 & under', color:'#8FC3EA'},
+  {k:'C',   label:'12–13',      color:'#009AC7'},
+  {k:'B',   label:'14–15',      color:'#2456B8'},
+  {k:'A',   label:'16–18',      color:'#171F69'},
+  {k:'19+', label:'adult',      color:'#94a3b8'},
+];
 // Color for a group index in the CURRENT tier view (region / zone / E-W-C).
 function groupColor(gi){
   if (gi==null || gi<0) return UNASSIGNED_BASE;
@@ -32,6 +40,8 @@ const S = {
   detailRegion: null,   // group index (in current tier view) for zip drill-down
   tiers: null,          // {zones:[{name}], zoneOf:[zi per region], ewc:[{name}], ewcOf:[ei per zone]}
   tierView: 0,          // 0=regions 1=zones 2=ewc
+  age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
+  ageBreak: false,      // show athlete age-group breakdown
   scenarioId: null,
   scenarioName: '',
   dirty: false,
@@ -91,8 +101,8 @@ function heatTint(m, maxM){
 function computeTallies(){
   const y = S.year;
   const TG = tierGroups();
-  const rows = TG.groups.map(()=>({m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,countiesAssigned:0}));
-  const un = {m:0,a:0,c:0,cl:new Set(),zips:0,counties:0};
+  const rows = TG.groups.map(()=>({m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,countiesAssigned:0,ag:[0,0,0,0,0]}));
+  const un = {m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,ag:[0,0,0,0,0]};
   for (const [fips, st] of Object.entries(S.geo.stats)){
     const v = st[y]; if (!v) continue;
     const ri = S.assign[fips];
@@ -102,6 +112,8 @@ function computeTallies(){
     v.cl.forEach(i=>tgt.cl.add(i));
     tgt.zips += Object.keys(st.z).filter(z => st.z[z][y==='y25'?0:1] > 0).length;
     if (v.m>0) tgt.counties++;
+    const ag = S.age && S.age[fips] ? S.age[fips][y] : null;
+    if (ag) for (let j=0;j<5;j++) tgt.ag[j] += (ag[j]||0);
   }
   Object.values(S.assign).forEach(ri => {
     if (ri>=0 && ri<S.regions.length) rows[TG.of[ri]].countiesAssigned++;
@@ -179,6 +191,7 @@ function renderPanel(){
         <button id="bsTier1" class="${S.tierView===1?'on':''}">Zones</button>
         <button id="bsTier2" class="${S.tierView===2?'on':''}">E / W / C</button>
       </div>`;
+  const ageCtl = `<div class="seg"><button id="bsAgeToggle" class="${S.ageBreak?'on':''}">Age groups: ${S.ageBreak?'on':'off'}</button></div>`;
 
   const chips = S.regions.map((r,i)=>`
     <button class="bs-chip ${S.active===i?'on':''}" data-ri="${i}" style="--c:${r.color}">
@@ -225,7 +238,7 @@ function renderPanel(){
       <div class="seg">
         <button id="bsZoomIn">+</button><button id="bsZoomOut">&minus;</button><button id="bsZoomReset">Reset view</button>
       </div>
-      ${tierCtl}
+      ${tierCtl}${ageCtl}
     </div>
     <div class="bs-chips">${chips}
       <button class="bs-chip add" id="bsAddRegion">+ Add region</button>
@@ -276,6 +289,27 @@ function renderLegend(t, mappableTotal, yLabel){
   if (!lgEl) return;
   const tierLabel = S.tierView===0 ? 'Regions' : (S.tierView===1 ? 'Zones' : 'East · Central · West');
   const share = m => mappableTotal>0 ? (100*m/mappableTotal).toFixed(1)+'%' : '—';
+
+  if (S.ageBreak){
+    const key = `<div class="bs-age-key">${AGE_GROUPS.map(g=>
+      `<span><i style="background:${g.color}"></i><b>${g.k}</b> <span class="k-lbl">${g.label}</span></span>`).join('')}</div>`;
+    const cards = t.rows.map((r,i)=>{
+      const ag = r.ag, ath = ag.reduce((s,x)=>s+x,0);
+      const seg = ag.map((v,j)=> v>0
+        ? `<span style="flex:${v};background:${AGE_GROUPS[j].color}" title="${AGE_GROUPS[j].k} (${AGE_GROUPS[j].label}): ${fmt(v)}"></span>` : '').join('');
+      const nums = AGE_GROUPS.map((g,j)=>
+        `<span class="ag-n"><b style="color:${g.color==='#8FC3EA'?'#0b6ea0':g.color}">${g.k}</b>${fmt(ag[j])}</span>`).join('');
+      return `<button class="bs-lg-card ${S.detailRegion===i?'sel':''}" data-drill2="${i}" style="--c:${groupColor(i)}">
+        <span class="bs-lg-nm"><span class="bs-lg-sw"></span>${esc(t.TG.groups[i].name)}</span>
+        <span class="bs-lg-big">${fmt(ath)}<span class="bs-lg-athlbl"> athletes</span></span>
+        <span class="ag-bar">${seg || '<span style="flex:1;background:#eef1f6"></span>'}</span>
+        <span class="ag-nums">${nums}</span>
+      </button>`;
+    }).join('');
+    lgEl.innerHTML = `<div class="bs-lg-head"><b>${tierLabel}</b> &mdash; athletes by age group · ${yLabel} · <span class="bs-lg-hint">age as of Dec 31 · tap a card to pool its zips</span></div>${key}<div class="bs-lg-cards age">${cards}</div>`;
+    return;
+  }
+
   const cards = t.rows.map((r,i)=>`
     <button class="bs-lg-card ${S.detailRegion===i?'sel':''}" data-drill2="${i}" style="--c:${groupColor(i)}">
       <span class="bs-lg-nm"><span class="bs-lg-sw"></span>${esc(t.TG.groups[i].name)}</span>
@@ -392,6 +426,7 @@ function wirePanel(){
   bind('bsRemZone', ()=>{ if(S.tiers.zones.length<=1)return; S.tiers.zones.pop(); S.tiers.zoneOf=S.tiers.zoneOf.map(z=>Math.min(z,S.tiers.zones.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
   bind('bsAddEwc', ()=>{ S.tiers.ewc.push({name:'Group '+(S.tiers.ewc.length+1)}); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
   bind('bsRemEwc', ()=>{ if(S.tiers.ewc.length<=1)return; S.tiers.ewc.pop(); S.tiers.ewcOf=S.tiers.ewcOf.map(e=>Math.min(e,S.tiers.ewc.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  bind('bsAgeToggle', ()=>{S.ageBreak=!S.ageBreak; renderPanel();});
   document.querySelectorAll('#bsLegend [data-drill2]').forEach(el=>el.addEventListener('click',()=>{
     const i=+el.dataset.drill2; S.detailRegion=(S.detailRegion===i)?null:i; renderPanel();
   }));
@@ -508,6 +543,8 @@ window.renderBoundary = async function(){
     el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Boundary data failed to load.</b> ${esc(e.message||e)}</div></div></div>`;
     return;
   }
+  try { S.age = await (await fetch('age-data.json?v=202607210030')).json(); }
+  catch(e){ S.age = {}; }
   S.regions = defaultRegions(12);
   syncTiers();
   el.innerHTML = `
