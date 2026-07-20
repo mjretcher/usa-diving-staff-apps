@@ -404,6 +404,114 @@ function renderAau(){
   </div>`;
 }
 
+
+/* ---------- Membership Map (SafeSport-poster style) ---------- */
+let mapState = { mode:'trend', pins:true, geo:null };
+
+function heatColor(v, maxV){
+  // white -> navy ramp
+  const t = maxV>0 ? Math.pow(v/maxV, 0.5) : 0; // sqrt for visual spread
+  const mix = (a,b)=>Math.round(a+(b-a)*t);
+  return `rgb(${mix(238,23)},${mix(243,31)},${mix(249,105)})`;
+}
+
+async function renderMap(){
+  const el = document.getElementById('viewMap');
+  if (!mapState.geo){
+    try { mapState.geo = await (await fetch('map-data.json?v=202607201900')).json(); }
+    catch(e){ el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Map data failed to load.</b> ${esc(e.message||e)}</div></div></div>`; return; }
+  }
+  const geo = mapState.geo;
+  const stM = yearMap(D.byState, r=>r.st, r=>r.n);
+  const tot = y => Object.values(stM).reduce((s,v)=>s+(v[y]||0),0);
+  const clubsTotal = geo.clubs.length;
+
+  let growing=0, declining=0, flat=0, none=0;
+  const fills = {};
+  const max26 = Math.max(1, ...Object.values(stM).map(v=>v[2026]||0));
+  geo.states.forEach(s=>{
+    const v = stM[s.abbr] || {};
+    const a = v[2024]||0, b = v[2025]||0, c = v[2026]||0;
+    if (mapState.mode === 'trend'){
+      if (a===0 && b===0){ fills[s.abbr] = '#e6ebf2'; none++; }
+      else {
+        const chg = b - a;
+        const thresh = Math.max(2, a*0.03); // ±3% (min 2 people) = flat
+        if (chg > thresh){ fills[s.abbr] = NAVY; growing++; }
+        else if (chg < -thresh){ fills[s.abbr] = RED; declining++; }
+        else { fills[s.abbr] = '#b9c3d4'; flat++; }
+      }
+    } else {
+      const val = mapState.mode === 'heat26' ? c : c; // heat26 only heat mode for now
+      fills[s.abbr] = val>0 ? heatColor(val, max26) : '#e6ebf2';
+    }
+  });
+
+  const paths = geo.states.map(s=>{
+    const v = stM[s.abbr]||{};
+    const tip = `${s.name} — 2024: ${fmt(v[2024]||0)} · 2025: ${fmt(v[2025]||0)} · 2026 YTD: ${fmt(v[2026]||0)}`;
+    return `<path class="st" d="${s.d}" fill="${fills[s.abbr]}"><title>${esc(tip)}</title></path>`;
+  }).join('');
+
+  const pins = mapState.pins ? geo.clubs.map(c=>`
+    <g class="pin"><title>${esc(c.name)} — ${esc(c.city)}, ${esc(c.state)} · ${fmt(c.members)} members (${fmt(c.athletes)} athletes)</title>
+      <line x1="${c.x}" y1="${c.y}" x2="${c.x}" y2="${c.y-11}" stroke="#fff" stroke-width="3.4"/>
+      <line x1="${c.x}" y1="${c.y}" x2="${c.x}" y2="${c.y-11}" stroke="${RED}" stroke-width="1.8"/>
+      <circle cx="${c.x}" cy="${c.y-13}" r="4.6" fill="${RED}" stroke="#fff" stroke-width="1.6"/>
+    </g>`).join('') : '';
+
+  const monthStamp = new Date().toLocaleString('en-US',{month:'long', year:'numeric'}).toUpperCase();
+  const stats = mapState.mode==='trend' ? `
+    <div class="big-stat"><div class="n">${growing}</div><span class="lbl navy">States Growing</span><div class="under"></div></div>
+    <div class="big-stat"><div class="n">${declining}</div><span class="lbl">States Declining</span><div class="under"></div></div>` : `
+    <div class="big-stat"><div class="n">${fmt(tot(2026))}</div><span class="lbl navy">2026 Members</span><div class="under"></div></div>
+    <div class="big-stat"><div class="n">${clubsTotal}</div><span class="lbl">Largest Clubs Pinned</span><div class="under"></div></div>`;
+
+  const legend = mapState.mode==='trend'
+    ? `<span><span class="sw" style="background:${NAVY}"></span>Growing (2024&rarr;2025)</span>
+       <span><span class="sw" style="background:${RED}"></span>Declining</span>
+       <span><span class="sw" style="background:#b9c3d4"></span>Steady (&plusmn;3%)</span>
+       <span><span class="sw" style="background:#e6ebf2;border:1px solid #d8e0ec"></span>No members</span>
+       <span><span class="sw" style="background:${RED};border-radius:50%;width:10px;height:10px"></span>Top-30 club (2026 members)</span>`
+    : `<span><span class="sw" style="background:${heatColor(1,10)}"></span>Fewer</span>
+       <span><span class="sw" style="background:${heatColor(5,10)}"></span>&rarr;</span>
+       <span><span class="sw" style="background:${NAVY}"></span>More 2026 members</span>`;
+
+  const clubList = geo.clubs.map(c=>`<div><b>${fmt(c.members)}</b> &nbsp;${esc(c.name)} <span style="color:#94a3b8">(${esc(c.state)})</span></div>`).join('');
+
+  el.innerHTML = `
+  <div class="controls-row" style="margin-bottom:10px">
+    <div class="seg">
+      <button id="mapTrend" class="${mapState.mode==='trend'?'on':''}">Growth / Decline</button>
+      <button id="mapHeat" class="${mapState.mode==='heat26'?'on':''}">2026 Members Heat</button>
+    </div>
+    <div class="seg"><button id="mapPins" class="${mapState.pins?'on':''}">${mapState.pins?'Pins: On':'Pins: Off'}</button></div>
+    <span class="note">Hover any state or pin for details. Trend compares complete years 2024 vs 2025.</span>
+  </div>
+  <div class="map-board">
+    <div class="map-head">
+      <div class="wordmark">USA<br>Diving<span>Membership</span></div>
+      <div class="map-title">Membership Map</div>
+      <div style="width:110px"></div>
+    </div>
+    <div class="map-body">
+      <div class="map-svg-wrap"><svg viewBox="${geo.viewBox}" xmlns="http://www.w3.org/2000/svg">${paths}${pins}</svg></div>
+      <div class="big-stats">${stats}</div>
+    </div>
+    <div class="map-legend">${legend}</div>
+    <div class="map-foot">
+      <div class="stamp">${monthStamp} &middot; Top 30 Clubs by 2026 Membership</div>
+      <div class="club-cols">${clubList}</div>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:14px"><b>Coming next — Boundary Studio:</b> this same map gains Region / Zone / East-West-Central overlays and a redraw mode: move geography between regions (down to the county level for the I&#8209;35, Southern&nbsp;Pacific, and Clark&nbsp;County splits), test any structure &mdash; 12&nbsp;regions or 9, four tiers or three &mdash; and instantly see the membership and meet-field numbers for every proposed alignment, with saved scenarios to compare side by side.</div>`;
+
+  const bind=(id,f)=>{const b=document.getElementById(id); if(b) b.addEventListener('click',()=>{f();renderMap();});};
+  bind('mapTrend',()=>{mapState.mode='trend';});
+  bind('mapHeat',()=>{mapState.mode='heat26';});
+  bind('mapPins',()=>{mapState.pins=!mapState.pins;});
+}
+
 /* ---------- boot ---------- */
 function wireTabs(){
   document.querySelectorAll('#tabs .tab').forEach(t=>t.addEventListener('click',()=>{
@@ -421,7 +529,7 @@ async function boot(){
     const tot = {}; D.byYear.forEach(r => tot[r.y] = +r.n);
     document.getElementById('topMeta').innerHTML =
       `Data: ${fmt(tot[2024]||0)} / ${fmt(tot[2025]||0)} / ${fmt(tot[2026]||0)} members (2024 / 2025 / 2026 YTD)<br>Source: Webpoint exports &middot; PII-stripped`;
-    renderOverview(); renderTrends(); renderGeography(); renderRetention(); renderAau();
+    renderOverview(); renderTrends(); renderGeography(); renderRetention(); renderAau(); renderMap();
   } catch (err) {
     console.error(err);
     document.getElementById('topMeta').textContent = 'Data load failed';
