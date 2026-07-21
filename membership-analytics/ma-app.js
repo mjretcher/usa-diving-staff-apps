@@ -176,7 +176,7 @@ function renderOverview(){
     <div class="kpi navy">
       <div class="big">${fmt(tot[2026]||0)}</div>
       <span class="chip navy">2026 Members (YTD)</span>
-      <div class="sub">Full-year 2025: ${fmt(tot[2025]||0)} &middot; 2024: ${fmt(tot[2024]||0)}</div>
+      <div class="sub">Full-year 2025: ${fmt(tot[2025]||0)} &middot; 2024: ${fmt(tot[2024]||0)}<br><span class="scope-tag all">All membership types</span></div>
     </div>
     <div class="kpi red">
       <div class="big">${fmt(paceM[2026]||0)}</div>
@@ -186,12 +186,12 @@ function renderOverview(){
     <div class="kpi pool">
       <div class="big">${fmt(ath26)}</div>
       <span class="chip pool">2026 Athletes (YTD)</span>
-      <div class="sub">2025 full-year: ${fmt(ath25)} &middot; ${deltaHtml(ath26, ath25)}</div>
+      <div class="sub">2025 full-year: ${fmt(ath25)} &middot; ${deltaHtml(ath26, ath25)}<br><span class="scope-tag ath">Athletes only &middot; subset</span></div>
     </div>
     <div class="kpi sky">
       <div class="big">${fmt(D.ret.r2526||0)}</div>
       <span class="chip navy">2025 Members Renewed for 2026</span>
-      <div class="sub">${fmt(D.ret.lost2526||0)} not yet renewed &middot; ${fmt(D.ret.new26||0)} brand-new in 2026</div>
+      <div class="sub">${fmt(D.ret.lost2526||0)} not yet renewed &middot; ${fmt(D.ret.new26||0)} brand-new in 2026<br><span class="scope-tag all">All membership types</span></div>
     </div>
   </div>`;
 
@@ -207,6 +207,7 @@ function renderOverview(){
   });
 
   document.getElementById('viewOverview').innerHTML = kpis + `
+  <div class="coverage-note"><b>Coverage:</b> member totals and renewal above &mdash; and the <b>Retention</b>, Trends &ldquo;By Role,&rdquo; Geography, and Clubs views &mdash; count <b>every membership type</b>: athletes (including adult / AQUA&nbsp;18+), coaches, officials, and other. Only panels labeled &ldquo;by age group&rdquo; are athletes&#8209;only, since age groups apply only to athletes.</div>
   <div class="callout warn"><b>Reading these numbers:</b> 2026 is a season in progress (data through the latest export), so raw 2026 totals will keep growing. For a fair year-over-year read, use the <b>&ldquo;Registered by ${D.paceDate.replace('-','/')}&rdquo;</b> pace figure, which counts only members who had joined by this same date in each year.</div>
   <div class="grid-2">
     <div class="card"><div class="card-h"><h2>Membership Mix by Year</h2><span class="sub">Distinct members per category</span></div>
@@ -326,11 +327,11 @@ function renderRetention(){
   const kpis = `
   <div class="kpi-band">
     <div class="kpi navy"><div class="big">${fmt(r.r2425)}</div><span class="chip navy">2024 &rarr; 2025 Retained</span>
-      <div class="sub">${fmt(r.lost2425)} lost (${pct(r.lost2425, +D.byYear.find(x=>+x.y===2024).n).toFixed(1)}% churn) &middot; ${fmt(r.new25)} new in 2025</div></div>
+      <div class="sub">${fmt(r.lost2425)} lost (${pct(r.lost2425, +D.byYear.find(x=>+x.y===2024).n).toFixed(1)}% churn) &middot; ${fmt(r.new25)} new in 2025<br><span class="scope-tag all">All membership types</span></div></div>
     <div class="kpi pool"><div class="big">${fmt(r.r2526)}</div><span class="chip pool">2025 &rarr; 2026 Renewed So Far</span>
-      <div class="sub">${fmt(r.lost2526)} not yet renewed &middot; ${fmt(r.new26)} new in 2026</div></div>
+      <div class="sub">${fmt(r.lost2526)} not yet renewed &middot; ${fmt(r.new26)} new in 2026<br><span class="scope-tag all">All membership types</span></div></div>
     <div class="kpi red"><div class="big">${pct(r.r2526, +D.byYear.find(x=>+x.y===2025).n).toFixed(0)}%</div><span class="chip">2026 Renewal Rate (YTD)</span>
-      <div class="sub">Share of 2025 members who have a 2026 membership so far. Will rise through the season.</div></div>
+      <div class="sub">Share of all 2025 members who have a 2026 membership so far. Will rise through the season.<br><span class="scope-tag all">All membership types</span></div></div>
   </div>`;
 
   const grpRows = D.lostByGrp.slice().sort((a,b)=>GROUP_ORDER.indexOf(a.grp)-GROUP_ORDER.indexOf(b.grp)).map(g=>{
@@ -360,6 +361,7 @@ function renderRetention(){
     <td>${esc(x.club)}</td><td>${esc(x.assoc)}</td><td>${esc(x.state||'')}</td></tr>`).join('');
 
   el.innerHTML = kpis + `
+  <div class="coverage-note"><b>Coverage:</b> every figure on this tab &mdash; retained, not-yet-renewed, the renewal rate, and the win-back list &mdash; counts <b>all membership types</b> (athletes, coaches, officials, and other). The one exception is the <b>&ldquo;by age group&rdquo;</b> table below, which is athletes-only by definition.</div>
   <div class="callout"><b>How to read churn mid-season:</b> &ldquo;Not yet renewed&rdquo; 2025 members may still register for 2026 &mdash; especially athletes whose competition season starts later. The 2024&rarr;2025 numbers compare two complete years and are the true churn benchmark.</div>
   <div class="grid-2">
     <div class="card"><div class="card-h"><h2>Not-Yet-Renewed by Age Group</h2><span class="sub">2025 athletes without a 2026 membership</span></div>
