@@ -6,8 +6,9 @@
    client. Shows two totals per finalist — don't conflate them:
      Actual Trials Total      = Prelims Total + Finals Total
                                  (the athlete's real result/rank)
-     Nationals-Equivalent Total = Voluntary(Prelims) + Optional(Finals)
-                                 (hypothetical, NOT the real result)
+     Prelim Vol + Final Op    = Voluntary(Prelims) + Optional(Finals)
+                                 (a.k.a. "Nationals-equivalent";
+                                  hypothetical, NOT the real result)
 
    Mechanic confirmed two ways: empirically against the scraped
    dive sheets (2026-07-14), and in writing in the official Meet
@@ -190,7 +191,7 @@
         <th>Rank</th><th>Diver</th><th>Team</th>
         <th>Voluntary<br>(Prelims)</th><th>Optional<br>(Prelims)</th><th>Prelims Total</th>
         <th>Optional<br>(Finals)</th><th>Actual Trials Total<sup>†</sup></th>
-        <th>Nationals-Equivalent Total<sup>‡</sup></th>
+        <th>Prelim Vol<br>+ Final Op<sup>‡</sup></th>
       </tr></thead>
       <tbody>
         ${filtered.map((r, i) => `<tr>
@@ -209,9 +210,9 @@
     <div class="rpt-pill-note" style="margin-top:6px">
       † Actual Trials Total = Prelims Total + Finals Total — the athlete's real score and the basis
       for the meet's actual final rankings, per the official Meet Information Packet.<br>
-      ‡ Nationals-Equivalent Total = Voluntary (Prelims) + Optional (Finals) — a hypothetical
-      reconstruction of what the score would be under Junior Nationals' format. This is <em>not</em>
-      the athlete's real Trials result.
+      ‡ Prelim Vol + Final Op = Voluntary (Prelims) + Optional (Finals) — a hypothetical
+      reconstruction of what the score would be under Junior Nationals' format (the
+      &ldquo;Nationals-equivalent&rdquo; total). This is <em>not</em> the athlete's real Trials result.
     </div>`;
   }
 
@@ -225,7 +226,7 @@
         <strong>2026 World Aquatics Junior Diving Championships Team Trials</strong> — Coral Springs, May 6&ndash;10, 2026.
         Per the official Meet Information Packet: Individual-event Prelims combine Voluntary + Optional
         dives; the top 12 advance to a Finals round of Optional dives only; real rankings are the
-        cumulative total of both rounds. <strong>Nationals-Equivalent Total</strong> below is a separate,
+        cumulative total of both rounds. The <strong>Prelim Vol + Final Op</strong> column below is a separate,
         hypothetical reconstruction (Voluntary Prelims + Optional Finals) for comparing against Junior
         Nationals scoring — it is not the athlete's actual Trials result.
       </div>
@@ -248,7 +249,7 @@
         ${anyFinalVolWarning ? `<div class="rpt-note" style="border-left-color:#d97706;background:#FEF3C7">
           Heads up: at least one Final-round dive was scraped with a genuine non-zero Voluntary score,
           which breaks the "Finals are Optional-only" rule this report relies on for that diver/event.
-          That diver's Actual Trials Total and Nationals-Equivalent Total above are excluded — check
+          That diver's Actual Trials Total and Prelim Vol + Final Op above are excluded — check
           <code>core.dive_sheets</code> for that diver before trusting either number.
         </div>` : ''}
         <div class="rpt-subsection">
