@@ -17,6 +17,11 @@ const NAVY='#171F69', RED='#E31937', POOL='#009AC7', SKY='#8FC3EA', GREEN='#1580
 const YEAR_COLORS = {2024: SKY, 2025: POOL, 2026: NAVY};
 const GROUP_ORDER = ['D','C','B','A','19+'];
 const GROUP_LABEL = {D:'Group D (11 & under)', C:'Group C (12–13)', B:'Group B (14–15)', A:'Group A (16–18)', '19+':'19 & over'};
+// Shared age palette (young→old) so the club table matches Boundary Studio & Trends.
+const AGE_COLORS = ['#8FC3EA','#009AC7','#2456B8','#171F69','#94a3b8'];
+const AGE_KEYS = ['D','C','B','A','19+'];
+// AQUA-age buckets for per-club SQL: alias, low, high (inclusive).
+const AGE_BUCKETS = [['gd',0,11],['gc',12,13],['gb',14,15],['ga',16,18],['gx',19,200]];
 
 const CAT_SQL = `CASE
   WHEN membership_type ILIKE '%Athlete%' THEN 'Athlete'
@@ -235,7 +240,7 @@ function renderTrends(){
   });
   const grpLine = lineChart({
     xs: YEARS.map(String),
-    series: GROUP_ORDER.map((g,i)=>({label:GROUP_LABEL[g], color:[SKY,POOL,RED,NAVY,GRAY][i], values:YEARS.map(y=>(grpM[g]||{})[y]||0)})),
+    series: GROUP_ORDER.map((g,i)=>({label:GROUP_LABEL[g], color:AGE_COLORS[i], values:YEARS.map(y=>(grpM[g]||{})[y]||0)})),
     height: 260,
   });
 
@@ -250,7 +255,7 @@ function renderTrends(){
     <div class="card-b">${totalLine}${legendHtml([{label:'Year total',color:NAVY},{label:`Registered by ${D.paceDate.replace('-','/')}`,color:RED}])}</div></div>
   <div class="grid-2">
     <div class="card"><div class="card-h"><h2>By Role</h2></div><div class="card-b">${catLine}${legendHtml([{label:'Athletes',color:POOL},{label:'Coaches',color:NAVY},{label:'Officials/Judges',color:GRAY}])}</div></div>
-    <div class="card"><div class="card-h"><h2>Athletes by Age Group</h2></div><div class="card-b">${grpLine}${legendHtml(GROUP_ORDER.map((g,i)=>({label:GROUP_LABEL[g],color:[SKY,POOL,RED,NAVY,GRAY][i]})))}</div></div>
+    <div class="card"><div class="card-h"><h2>Athletes by Age Group</h2></div><div class="card-b">${grpLine}${legendHtml(GROUP_ORDER.map((g,i)=>({label:GROUP_LABEL[g],color:AGE_COLORS[i]})))}</div></div>
   </div>
   <div class="card"><div class="card-h"><h2>Age-Group Scorecard</h2><span class="sub">2026 is YTD &mdash; deltas vs 2025 will improve as the season fills in</span></div>
     <div class="card-b"><table><thead><tr><th>Age group</th><th class="num">2024</th><th class="num">2025</th><th>&Delta; 24&rarr;25</th><th class="num">2026 YTD</th><th>&Delta; 25&rarr;26 YTD</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
@@ -515,12 +520,15 @@ async function renderMap(){
 
 
 /* ---------- Types & Clubs ---------- */
-let TC = { loaded:false, types:null, clubs:null, sort:{col:'m26', dir:-1}, q:'' };
+let TC = { loaded:false, types:null, clubs:null, sort:{col:'m26', dir:-1}, q:'', ageOn:false, ageYear:2026 };
 
 async function renderTypes(){
   const el = document.getElementById('viewTypes');
   if (!TC.loaded){
     el.innerHTML = '<div class="loading">Loading&hellip;</div>';
+    const ageSql = [2025,2026].flatMap(Y => AGE_BUCKETS.map(([k,lo,hi]) =>
+      `count(DISTINCT member_id) FILTER (WHERE membership_year=${Y} AND membership_type ILIKE '%Athlete%' AND birth_date IS NOT NULL AND (${Y}-EXTRACT(YEAR FROM birth_date)) BETWEEN ${lo} AND ${hi}) ${k}${Y%100}`
+    )).join(',\n          ');
     try {
       const [types, clubs] = await Promise.all([
         NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n FROM membership.members GROUP BY 1,2`),
@@ -531,7 +539,8 @@ async function renderTypes(){
           count(DISTINCT member_id) FILTER (WHERE membership_year=2025) m25,
           count(DISTINCT member_id) FILTER (WHERE membership_year=2026) m26,
           count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Athlete%') a26,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Coach%') c26
+          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Coach%') c26,
+          ${ageSql}
           FROM membership.members GROUP BY 1`),
       ]);
       TC.types = types.rows; TC.clubs = clubs.rows; TC.loaded = true;
@@ -580,36 +589,66 @@ async function renderTypes(){
 
   const clubsCard = `
   <div class="card"><div class="card-h"><h2>Clubs</h2>
-    <input class="search" id="tcQ" placeholder="Search club / city / state&hellip;" value="${esc(TC.q)}"></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto">
+      <div class="seg"><button id="tcAge" class="${TC.ageOn?'on':''}">Age groups: ${TC.ageOn?'on':'off'}</button></div>
+      ${TC.ageOn ? `<div class="seg"><button id="tcY25" class="${TC.ageYear===2025?'on':''}">2025</button><button id="tcY26" class="${TC.ageYear===2026?'on':''}">2026 YTD</button></div>` : ''}
+      <input class="search" id="tcQ" placeholder="Search club / city / state&hellip;" value="${esc(TC.q)}">
+    </div></div>
   <div class="card-b"><div class="clubs-wrap"><table class="clubs-table" id="tcClubs"></table></div>
-  <div class="note" style="margin-top:6px">Location = each club&rsquo;s most common member zip code. Click any column to sort.</div></div></div>`;
+  <div class="note" style="margin-top:6px">Location = each club&rsquo;s most common member zip code. Click any column to sort.${TC.ageOn?` <b>Age groups</b> = AQUA age (Dec 31) of ${TC.ageYear} athletes: <span style="color:#0b6ea0">D</span> 11&amp;under · <span style="color:#009AC7">C</span> 12&ndash;13 · <span style="color:#2456B8">B</span> 14&ndash;15 · <span style="color:#171F69">A</span> 16&ndash;18 · <span style="color:#64748b">19+</span>.`:''}</div></div></div>`;
 
   el.innerHTML = typesTable + clubsCard;
   document.getElementById('tcQ').addEventListener('input', e=>{ TC.q = e.target.value; renderClubTable(); });
+  const ageBtn = document.getElementById('tcAge');
+  if (ageBtn) ageBtn.addEventListener('click', ()=>{ TC.ageOn=!TC.ageOn; renderTypes(); });
+  const y25 = document.getElementById('tcY25'); if (y25) y25.addEventListener('click', ()=>{ TC.ageYear=2025; renderTypes(); });
+  const y26 = document.getElementById('tcY26'); if (y26) y26.addEventListener('click', ()=>{ TC.ageYear=2026; renderTypes(); });
   renderClubTable();
 }
 
 function renderClubTable(){
+  const yy = TC.ageYear % 100; // 25 | 26
+  const AGE_COLS = [['agebar','Age mix'],['gD','D'],['gC','C'],['gB','B'],['gA','A'],['gX','19+']];
+  const AGE_DOT = {gD:0,gC:1,gB:2,gA:3,gX:4};
   const cols = [
     ['club','Club'],['assoc','Association'],['loc','Location (modal zip)'],
     ['m24','2024'],['m25','2025'],['m26','2026 YTD'],['a26','Athletes \u201926'],['c26','Coaches \u201926'],['d','\u0394 25\u219226'],
-  ];
+  ].concat(TC.ageOn ? AGE_COLS : []);
+  const numCols = new Set(['m24','m25','m26','a26','c26','d','gD','gC','gB','gA','gX']);
+  // If age columns are hidden, don't leave the sort pointing at one.
+  if (!TC.ageOn && (TC.sort.col in AGE_DOT || TC.sort.col==='agebar')) TC.sort = {col:'m26', dir:-1};
+
   let rows = TC.clubs.map(r => {
     const [zip, city, st] = (r.zcs||'||').split('|');
     return ({
     club:r.club, assoc:r.assoc||'', zip, city, st,
     loc: r.club==='(no club listed)' ? '—' : (city?city+', ':'')+(st||'')+(zip?' '+zip:''),
     m24:+r.m24, m25:+r.m25, m26:+r.m26, a26:+r.a26, c26:+r.c26, d:+r.m26-+r.m25,
+    gD:+r['gd'+yy], gC:+r['gc'+yy], gB:+r['gb'+yy], gA:+r['ga'+yy], gX:+r['gx'+yy],
   });});
   const q = TC.q.trim().toLowerCase();
   if (q) rows = rows.filter(r => (r.club+' '+r.assoc+' '+r.loc).toLowerCase().includes(q));
   const {col, dir} = TC.sort;
-  rows.sort((a,b)=>{ const x=a[col], y=b[col]; return (typeof x==='string' ? x.localeCompare(y) : x-y) * dir; });
-  const head = cols.map(([k,l])=>`<th data-col="${k}" class="${typeof rows[0]?.[k]==='number'?'num':''}">${l} ${TC.sort.col===k?`<span class="arr">${dir<0?'\u25BC':'\u25B2'}</span>`:''}</th>`).join('');
+  const sortVal = (r) => col==='agebar' ? (r.gD+r.gC+r.gB+r.gA+r.gX) : r[col];
+  rows.sort((a,b)=>{ const x=sortVal(a), y=sortVal(b); return (typeof x==='string' ? x.localeCompare(y) : x-y) * dir; });
+
+  const head = cols.map(([k,l])=>{
+    const dot = k in AGE_DOT ? `<span class="agdot" style="background:${AGE_COLORS[AGE_DOT[k]]}"></span>` : '';
+    return `<th data-col="${k}" class="${numCols.has(k)?'num':''}">${dot}${l} ${TC.sort.col===k?`<span class="arr">${dir<0?'\u25BC':'\u25B2'}</span>`:''}</th>`;
+  }).join('');
+
+  const ageCells = (r) => {
+    if (!TC.ageOn) return '';
+    const vals=[r.gD,r.gC,r.gB,r.gA,r.gX], tot=vals.reduce((s,x)=>s+x,0);
+    const seg = vals.map((v,j)=> v>0 ? `<span style="flex:${v};background:${AGE_COLORS[j]}" title="${AGE_KEYS[j]}: ${fmt(v)}"></span>` : '').join('');
+    const bar = `<td><span class="ag-bar clubbar" title="${tot} athletes">${seg||'<span style="flex:1;background:#eef1f6"></span>'}</span></td>`;
+    const nums = vals.map(v=>`<td class="num">${v?fmt(v):'<span class="z0">0</span>'}</td>`).join('');
+    return bar + nums;
+  };
   const body = rows.map(r=>`<tr>
     <td><b>${esc(r.club)}</b></td><td>${esc(r.assoc)}</td><td>${esc(r.loc)}</td>
     <td class="num">${fmt(r.m24)}</td><td class="num">${fmt(r.m25)}</td><td class="num">${fmt(r.m26)}</td>
-    <td class="num">${fmt(r.a26)}</td><td class="num">${fmt(r.c26)}</td><td class="num">${deltaHtml(r.m26,r.m25)}</td></tr>`).join('');
+    <td class="num">${fmt(r.a26)}</td><td class="num">${fmt(r.c26)}</td><td class="num">${deltaHtml(r.m26,r.m25)}</td>${ageCells(r)}</tr>`).join('');
   const t = document.getElementById('tcClubs');
   t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
   t.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{
