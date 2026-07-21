@@ -306,7 +306,7 @@ function renderLegend(t, mappableTotal, yLabel){
         <span class="ag-nums">${nums}</span>
       </button>`;
     }).join('');
-    lgEl.innerHTML = `<div class="bs-lg-head"><b>${tierLabel}</b> &mdash; athletes by age group · ${yLabel} · <span class="bs-lg-hint">age as of Dec 31 · tap a card to pool its zips</span></div>${key}<div class="bs-lg-cards age">${cards}</div>`;
+    lgEl.innerHTML = `<div class="bs-lg-head"><b>${tierLabel}</b> &mdash; athletes by age group · ${yLabel} · <span class="bs-lg-hint">AQUA age (as of Dec 31) · tap a card to pool its zips</span></div>${key}<div class="bs-lg-cards age">${cards}</div>`;
     return;
   }
 
