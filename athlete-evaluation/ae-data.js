@@ -250,6 +250,50 @@
     return r.rows;
   }
 
+  /* ---------- medal-track corridor ---------- */
+  async function corridor(gender, discipline) {
+    const r = await q(
+      `SELECT tier, age_group, n_athletes, p10, p25, p50, p75, p90
+       FROM analytics.corridor WHERE gender = $1 AND discipline = $2`, [gender, discipline]);
+    r.rows.forEach((x) => ['n_athletes','p10','p25','p50','p75','p90'].forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+  async function corridorMarks(gender, discipline) {
+    const r = await q(
+      `SELECT tier, canonical_id, display_name, age_group, best_score, best_year
+       FROM analytics.corridor_marks WHERE gender = $1 AND discipline = $2`, [gender, discipline]);
+    r.rows.forEach((x) => { x.best_score = num(x.best_score); x.best_year = num(x.best_year); });
+    return r.rows;
+  }
+  // Selected athlete's own Junior Nationals results for the overlay.
+  // Official Final totals preferred; best any-round mark kept for juniors who
+  // haven't made a final yet (rendered hollow + labeled).
+  async function juniorMarks(dmId) {
+    if (!dmId) return [];
+    const r = await q(
+      `SELECT age_group,
+              CASE discipline WHEN '1M' THEN '1m' WHEN '3M' THEN '3m' ELSE discipline END AS discipline,
+              MAX(score) FILTER (WHERE round = 'Final') AS final_best,
+              MAX(score) AS any_best,
+              MAX(year) AS last_year
+       FROM core.event_results
+       WHERE diver_id_dm = $1 AND stage = 'Nationals'
+         AND COALESCE(is_synchro,false) = false
+         AND age_group IN ('Group A','Group B','Group C','Group D')
+         AND score IS NOT NULL AND (place IS NULL OR place < 100)
+       GROUP BY age_group, 2`, [dmId]);
+    r.rows.forEach((x) => { x.final_best = num(x.final_best); x.any_best = num(x.any_best); x.last_year = num(x.last_year); });
+    return r.rows;
+  }
+  async function judgeSpreadRef(gender, discipline) {
+    const r = await q(
+      `SELECT n, avg_range, p50_range, p75_range FROM analytics.field_judge_spread
+       WHERE gender = $1 AND discipline = $2`, [gender, discipline]);
+    const x = r.rows[0];
+    if (x) Object.keys(x).forEach((k) => { x[k] = num(x[k]); });
+    return x || null;
+  }
+
   window.AE = {
     esc, escJsAttr, num, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES,
@@ -257,6 +301,7 @@
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldListDD, buildMeta,
     sheetMeets, meetEvents, eventSheets,
+    corridor, corridorMarks, juniorMarks, judgeSpreadRef,
     state: { athleteId: null, bundle: null },
   };
 })();

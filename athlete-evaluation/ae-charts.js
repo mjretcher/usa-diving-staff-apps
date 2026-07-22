@@ -253,5 +253,61 @@
     return s;
   }
 
-  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
+  /* ── Medal-Track corridor: bands per age group + cohort dots + athlete ── */
+  function corridorBands(groups, opts) {
+    // groups: [{label, senior:{n,p10,p25,p50,p75,p90}|null, intl:{...}|null,
+    //           dots:[{y,name,year,tier}], athlete:{y,hollow,label}|null }]
+    const w = (opts && opts.w) || 880, h = (opts && opts.h) || 340;
+    const padL = 56, padR = 16, padT = 18, padB = 34;
+    const ys = [];
+    groups.forEach((g) => {
+      ['senior', 'intl'].forEach((t) => { if (g[t]) ys.push(g[t].p10, g[t].p90); });
+      g.dots.forEach((d) => ys.push(d.y));
+      if (g.athlete) ys.push(g.athlete.y);
+    });
+    if (!ys.length) return '<div class="ae-empty">No corridor data for this event yet.</div>';
+    let mn = Math.min(...ys), mx = Math.max(...ys);
+    const pad = (mx - mn || 60) * 0.07; mn -= pad; mx += pad;
+    const Y = (v) => padT + (1 - (v - mn) / (mx - mn)) * (h - padT - padB);
+    const gw = (w - padL - padR) / groups.length;
+    let s = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg" role="img">`;
+    niceTicks(mn, mx, 6).forEach((t) => {
+      s += `<line x1="${padL}" y1="${Y(t)}" x2="${w - padR}" y2="${Y(t)}" stroke="${GRID}"/>` +
+           `<text x="${padL - 7}" y="${Y(t) + 4}" text-anchor="end" class="ae-tick">${Math.round(t)}</text>`;
+    });
+    const athletePts = [];
+    groups.forEach((g, i) => {
+      const cx = padL + i * gw + gw / 2;
+      s += `<text x="${cx}" y="${h - 10}" text-anchor="middle" class="ae-tick" font-weight="800">${esc(g.label)}</text>`;
+      const band = (b, x0, bw, fill, stroke, faded) => {
+        if (!b) return '';
+        let o = '';
+        o += `<line x1="${x0 + bw / 2}" y1="${Y(b.p10)}" x2="${x0 + bw / 2}" y2="${Y(b.p90)}" stroke="${stroke}" stroke-width="1.6" opacity="${faded ? 0.4 : 0.8}"/>`;
+        o += `<rect x="${x0}" y="${Y(b.p75)}" width="${bw}" height="${Math.max(3, Y(b.p25) - Y(b.p75))}" rx="4" fill="${fill}" stroke="${stroke}" opacity="${faded ? 0.35 : 0.85}"><title>n=${b.n} athletes · middle half ${b.p25.toFixed(0)}–${b.p75.toFixed(0)} · typical ${b.p50.toFixed(0)}</title></rect>`;
+        o += `<line x1="${x0}" y1="${Y(b.p50)}" x2="${x0 + bw}" y2="${Y(b.p50)}" stroke="${NAVY}" stroke-width="2.4" opacity="${faded ? 0.5 : 1}"/>`;
+        return o;
+      };
+      if (g.senior && g.senior.n >= 3) s += band(g.senior, cx - gw * 0.30, gw * 0.36, SKY, POOL, g.senior.n < 5);
+      if (g.intl && g.intl.n >= 3)     s += band(g.intl,   cx + gw * 0.02, gw * 0.24, '#FBD9DE', RED, g.intl.n < 5);
+      g.dots.forEach((d) => {
+        const dx = cx + (d.tier === 'intl' ? gw * 0.14 : -gw * 0.12) + (Math.random() - 0.5) * gw * 0.10;
+        s += `<circle cx="${dx.toFixed(1)}" cy="${Y(d.y).toFixed(1)}" r="2.6" fill="${d.tier === 'intl' ? RED : POOL}" opacity="0.45"><title>${esc(d.name)} — ${d.y.toFixed(1)} (${d.year})${d.tier === 'intl' ? ' · went international' : ' · reached a senior final'}</title></circle>`;
+      });
+      if (g.athlete) {
+        athletePts.push([cx, Y(g.athlete.y), g.athlete]);
+      }
+    });
+    if (athletePts.length > 1) {
+      s += `<path d="${'M' + athletePts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L')}" fill="none" stroke="${GOLD}" stroke-width="2.6" stroke-dasharray="${athletePts.some((p) => p[2].hollow) ? '5 4' : ''}"/>`;
+    }
+    athletePts.forEach(([x, y, a]) => {
+      s += a.hollow
+        ? `<circle cx="${x}" cy="${y}" r="6" fill="#fff" stroke="${GOLD}" stroke-width="2.6"><title>${esc(a.label)}</title></circle>`
+        : `<circle cx="${x}" cy="${y}" r="6.4" fill="${GOLD}" stroke="#fff" stroke-width="1.6"><title>${esc(a.label)}</title></circle>`;
+    });
+    s += `</svg>`;
+    return s;
+  }
+
+  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, corridorBands, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
 })();

@@ -105,6 +105,8 @@
         <div id="aeDna"></div>
       </div>
 
+      <div id="aeJudgeCard"></div>
+
       <div class="ae-card">
         <div class="ae-card-h"><div><h3>Meet history</h3></div></div>
         <div class="table-wrap"><table class="data-table">
@@ -116,6 +118,12 @@
     renderPBs(b, discs);
     renderTraj(b, latestBench);
     renderDNA(b);
+    if (window.AEJudge) {
+      window.AEJudge.card(b, st.disc, gender).then((html) => {
+        const el = document.getElementById('aeJudgeCard');
+        if (el) el.innerHTML = html;
+      }).catch(() => {});
+    }
   }
 
   function renderPBs(b, discs) {

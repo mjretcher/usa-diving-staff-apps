@@ -15,6 +15,7 @@
     { id: 'pressure', label: 'Pressure',         el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
     { id: 'podium',   label: 'Podium Gap',       el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
     { id: 'race',     label: 'Race Replay',      el: 'view-race',     athlete: false, mod: () => window.AERace },
+    { id: 'medaltrack', label: 'Medal Track',    el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
   ];
   const state = { view: 'field', fieldBooted: false, searching: null };
 

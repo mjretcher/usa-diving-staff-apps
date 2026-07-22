@@ -321,9 +321,103 @@ GROUP BY 1,2,3,4""")
 sql("CREATE INDEX idx_fld ON analytics.field_list_dd (competition_family, gender, discipline, meet_year DESC)")
 log("field profiles built")
 
+
+# --------------------------------------------------------- medal-track corridor
+# Cohort: athletes who later "made it" — tier 'intl' = competed at a World
+# Aquatics senior event; tier 'senior' = reached a US senior-championships
+# Final (includes intl athletes). Their best Junior Nationals score per age
+# group (core.event_results, 2021+) forms the corridor bands current juniors
+# are judged against. Exhibition sentinel places (>=100) excluded.
+sql("DROP TABLE IF EXISTS analytics.cohort_seniors")
+sql("""CREATE TABLE analytics.cohort_seniors AS
+WITH intl AS (
+  SELECT DISTINCT m.canonical_id
+  FROM core.result_phases r
+  JOIN analytics.id_map m ON r.diver_id = m.source_id
+  WHERE r.competition_family = 'World Aquatics'
+    AND COALESCE(r.is_synchronized,false) = false
+),
+sr AS (
+  SELECT DISTINCT m.canonical_id
+  FROM core.result_phases r
+  JOIN analytics.id_map m ON r.diver_id = m.source_id
+  WHERE r.competition_family = 'USA Diving'
+    AND r.round_stage = 'Final'
+    AND r.meet_name ILIKE '%National%'
+    AND r.meet_name NOT ILIKE '%Junior%'
+    AND r.event_level <> 'Junior'
+)
+SELECT canonical_id, 'intl' AS tier FROM intl
+UNION
+SELECT canonical_id, 'senior' AS tier FROM sr
+UNION
+SELECT canonical_id, 'senior' AS tier FROM intl""")
+sql("CREATE INDEX idx_cs ON analytics.cohort_seniors (canonical_id, tier)")
+
+sql("DROP TABLE IF EXISTS analytics.corridor_marks")
+sql("""CREATE TABLE analytics.corridor_marks AS
+WITH jr AS (
+  -- Official Junior Nationals FINAL totals only (cumulative format is
+  -- consistent 2021+: voluntary total carried + finals optionals), so bands
+  -- mean "the Nationals result people quote". Disciplines/genders normalized
+  -- to app standards (3M -> 3m, Boys -> Male).
+  SELECT e.diver_id_dm::text AS canonical_id,
+         MAX(e.diver_first || ' ' || e.diver_last) AS display_name,
+         CASE e.gender WHEN 'Boys' THEN 'Male' WHEN 'Girls' THEN 'Female' END AS gender,
+         CASE e.discipline WHEN '1M' THEN '1m' WHEN '3M' THEN '3m' ELSE e.discipline END AS discipline,
+         e.age_group,
+         MAX(e.score) AS best_score,
+         (ARRAY_AGG(e.year ORDER BY e.score DESC))[1] AS best_year
+  FROM core.event_results e
+  WHERE e.stage = 'Nationals' AND e.round = 'Final'
+    AND COALESCE(e.is_synchro,false) = false
+    AND e.age_group IN ('Group A','Group B','Group C','Group D')
+    AND e.gender IN ('Boys','Girls')
+    AND e.score IS NOT NULL AND (e.place IS NULL OR e.place < 100)
+  GROUP BY e.diver_id_dm, 3, 4, e.age_group
+)
+SELECT c.tier, jr.* FROM jr
+JOIN analytics.cohort_seniors c ON c.canonical_id = jr.canonical_id""")
+
+sql("DROP TABLE IF EXISTS analytics.corridor")
+sql("""CREATE TABLE analytics.corridor AS
+SELECT tier, gender, discipline, age_group,
+       COUNT(*) AS n_athletes,
+       ROUND((PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY best_score))::numeric,2) AS p10,
+       ROUND((PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY best_score))::numeric,2) AS p25,
+       ROUND((PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY best_score))::numeric,2) AS p50,
+       ROUND((PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY best_score))::numeric,2) AS p75,
+       ROUND((PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY best_score))::numeric,2) AS p90
+FROM analytics.corridor_marks
+GROUP BY tier, gender, discipline, age_group""")
+log("medal-track corridor built")
+
+# --------------------------------------------------------- field judge spread
+# Judge-by-judge detail exists only on World Aquatics meets. Per-dive judge
+# range (max-min award) parsed in SQL; field reference for the Judge Lens.
+sql("DROP TABLE IF EXISTS analytics.field_judge_spread")
+sql("""CREATE TABLE analytics.field_judge_spread AS
+WITH per_dive AS (
+  SELECT gender, discipline,
+         (SELECT MAX(v) - MIN(v) FROM (
+            SELECT NULLIF(TRIM(split_part(tok, ':', 2)), '')::numeric AS v
+            FROM unnest(string_to_array(judges_scores, ';')) tok
+          ) jv WHERE v IS NOT NULL) AS jrange
+  FROM core.dive_sheets
+  WHERE judges_scores IS NOT NULL AND judges_scores <> ''
+    AND discipline IN ('1m','3m','Platform')
+)
+SELECT gender, discipline, COUNT(*) AS n,
+       ROUND(AVG(jrange)::numeric,2) AS avg_range,
+       ROUND((PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY jrange))::numeric,2) AS p50_range,
+       ROUND((PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY jrange))::numeric,2) AS p75_range
+FROM per_dive WHERE jrange IS NOT NULL
+GROUP BY gender, discipline""")
+log("field judge spread built")
+
 # ---------------------------------------------------------------- meta
 counts = {}
-for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_list_dd"]:
+for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_list_dd","cohort_seniors","corridor_marks","corridor","field_judge_spread"]:
     counts[t] = rows(sql(f"SELECT COUNT(*) AS n FROM analytics.{t}"))[0]["n"]
 sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
 sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])

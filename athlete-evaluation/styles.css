@@ -650,3 +650,13 @@ html { overflow-x: hidden; }
 .ae-race-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .ae-bump-name{font:600 11px Inter,sans-serif}
 .ae-wf-val{font:800 12.5px 'JetBrains Mono',monospace;fill:#171F69}
+
+/* ── Judge Lens ── */
+.ae-h4{font:800 15px 'Barlow Condensed',sans-serif;text-transform:uppercase;
+  color:var(--brand-navy,#171F69);margin:0 0 8px;letter-spacing:.03em}
+.ae-judgechips{display:flex;gap:7px;flex-wrap:wrap}
+.ae-jchip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;
+  background:#F2F4F9;border-radius:10px;padding:6px 11px;font:600 9.5px Inter,sans-serif;color:#5A6072}
+.ae-jchip b{font:800 16px 'JetBrains Mono',monospace;color:var(--brand-navy,#171F69)}
+.ae-jchip.hi{background:#D5ECD9}.ae-jchip.hi b{color:#1F6B33}
+.ae-jchip.lo{background:#FBE3E7}.ae-jchip.lo b{color:#A3122A}
