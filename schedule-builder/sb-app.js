@@ -975,8 +975,37 @@ function updSess(id,field,value){
 // (we never auto-move a session to an EARLIER time).
 
 // Day facility close time (minutes); default 8:00 PM (1200)
+// ── FACILITY HOURS ────────────────────────────────────────────────────
+// When the pool actually opens and closes on a given day. Three things read it:
+// the auto-stacker won't start a block before opening time, "fit to facility
+// close" blocks end exactly at closing time, and the health check flags anything
+// scheduled outside the window. Defaults are 6:30 AM - 8:00 PM.
+function dayOpenFor(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);return d&&d.openMinutes!=null?Number(d.openMinutes):390;}
 function dayCloseFor(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);return d&&d.closeMinutes!=null?Number(d.closeMinutes):1200;}
+function setDayOpen(dayId,mins){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d){d.openMinutes=Number(mins);}reflowDay(s,dayId);});}
 function setDayClose(dayId,mins){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d){d.closeMinutes=Number(mins);}reflowDay(s,dayId);});}
+// How many blocks on this day sit outside the facility window right now.
+function blocksOutsideHours(dayId){
+  const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
+  return timedForDay(dayId).filter(s=>s.timing.warmupStartMinutes<open||s.timing.sessionEndMinutes>close).length;
+}
+function openFacilityHours(dayId){UI.modal='facility-hours';UI.hoursDayId=dayId||UI.dayId;render();}
+// Copy this day's hours onto every other day — venues rarely change their hours
+// mid-meet, so setting them once and stamping them across is the common case.
+function applyHoursToAllDays(dayId){
+  const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
+  const others=(S.meet.days||[]).filter(d=>d.id!==dayId).length;
+  if(!others){toast('This is the only day');return;}
+  askConfirm({
+    title:'Use these hours every day?',
+    message:`All ${others} other day${others===1?'':'s'} will be set to ${f12(open)} - ${f12(close)}. You can undo with Cmd+Z.`,
+    confirmText:'Apply to all days',
+    onConfirm:()=>{
+      upd(s=>{s.meet.days.forEach(d=>{d.openMinutes=open;d.closeMinutes=close;reflowDay(s,d.id);});});
+      toast(`Facility hours set on all ${others+1} days`);
+    }
+  });
+}
 function toggleFitToClose(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(sess){sess.fitToClose=!sess.fitToClose;}reflowDay(s,sess.dayId);});}
 // Internal-only blocks stay on the working schedule and Operations output but are
 // excluded from Public / Athletes / Judges outputs (e.g. staff meetings like CCE).
@@ -2142,6 +2171,7 @@ function renderTlBar(timed){
       <button class="evf-chip ${UI.eventFilter==='shared'?'on':''}" onclick="UI.eventFilter='shared';render()">Shared</button>
     </div>`:''}
     <div class="tl-spacer"></div>
+    ${day?`<button class="tl-hours ${blocksOutsideHours(UI.dayId)?'warn':''}" onclick="openFacilityHours('${UI.dayId}')" title="Set when the pool opens and closes on this day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pool ${f12(dayOpenFor(UI.dayId))} – ${f12(dayCloseFor(UI.dayId))}</button>`:''}
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
     ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCoachHandout('${UI.dayId}')" title="Print coach handout — one page for the pool door"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>`:''}
@@ -4215,8 +4245,36 @@ function renderDialog(){
   </div>`;
 }
 
+// Plain-English editor for the day's facility window. Reached from the "Pool"
+// chip in the day bar, and from the Days list in meet settings.
+function renderFacilityHoursModal(){
+  const dayId=UI.hoursDayId||UI.dayId;
+  const day=(S.meet.days||[]).find(d=>d.id===dayId);
+  if(!day)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Facility hours</span><button class="modal-close" onclick="closeModal()">&times;</button></div><div class="modal-body">No day selected.</div></div>`;
+  const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
+  const bad=close<=open;
+  const outside=blocksOutsideHours(dayId);
+  const others=(S.meet.days||[]).length-1;
+  return`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Facility hours</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(fullDate(day.date))}</div></div><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="hours-grid">
+        <div class="fg"><label class="fl">Pool opens</label><input class="fi" type="time" value="${f24(open)}" onchange="setDayOpen('${dayId}',pt(this.value))"/></div>
+        <div class="fg"><label class="fl">Pool closes</label><input class="fi" type="time" value="${f24(close)}" onchange="setDayClose('${dayId}',pt(this.value))"/></div>
+      </div>
+      ${bad
+        ?`<div class="hours-note bad">Closing time is before opening time — fix one of them or blocks won't lay out correctly.</div>`
+        :`<div class="hours-note">Open for <b>${fdur(close-open)}</b> on this day.</div>`}
+      ${outside?`<div class="hours-note warn">${outside} block${outside===1?'':'s'} on this day fall${outside===1?'s':''} outside these hours. Nothing was moved — check the health panel to see which.</div>`:''}
+      <p class="hours-help">These hours don't move any blocks on their own. They set the earliest time the auto-stacker will start a block, they're what "fit to facility close" ends at, and anything scheduled outside them gets flagged in the health check.</p>
+      ${others>0?`<button class="btn btn-sm" onclick="applyHoursToAllDays('${dayId}')">Use these hours on all ${others+1} days</button>`:''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Done</button></div>
+  </div>`;
+}
+
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -4437,6 +4495,12 @@ function renderMeetModal(){
       <div class="fg2"><div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.meetType=this.value)">${typeOpts}</select></div><div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.timezone=this.value)">${tzOpts}</select></div></div>
       <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
         <div style="display:flex;align-items:center;gap:4px"><input class="fi" type="date" style="width:160px;padding:6px 8px" value="${d.date}" onchange="upd(s=>s.meet.days[${i}].date=this.value)"/><button class="btn btn-sm btn-gh" onclick="upd(s=>s.meet.days.splice(${i},1))">×</button></div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tx3)">
+          <span>Pool open</span>
+          <input class="fi-sm" type="time" value="${f24(dayOpenFor(d.id))}" onchange="setDayOpen('${d.id}',pt(this.value))"/>
+          <span>to</span>
+          <input class="fi-sm" type="time" value="${f24(dayCloseFor(d.id))}" onchange="setDayClose('${d.id}',pt(this.value))"/>
+        </div>
         <div class="chiprow"><button class="chip ${!d.eventTag?'on':''}" onclick="setDayEventTag('${d.id}','')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${d.eventTag===t.k?'on':''}" style="${d.eventTag===t.k?`background:${t.c};border-color:${t.c};color:#fff`:''}" onclick="setDayEventTag('${d.id}','${t.k}')">${t.s}</button>`).join('')}</div>
       </div>`}).join('')}</div><button class="btn btn-sm" onclick="addDay()">+ Add day</button></div>
     </div>

@@ -1349,3 +1349,21 @@ html[data-theme="deck"] .along-box.on{border-color:rgba(143,195,234,.3);backgrou
 html[data-theme="deck"] .along-note{background:var(--surf);border-color:rgba(143,195,234,.24)}
 html[data-theme="deck"] .along-warn{color:#FBBF24}
 html[data-theme="deck"] .ts-card.along{background:rgba(0,154,199,.13)}
+
+/* ── FACILITY HOURS ───────────────────────────────────────────────────
+   The "Pool 6:30 AM – 8:00 PM" chip in the day bar, and the editor behind
+   it. Turns amber when something on the day sits outside the window. */
+.tl-hours{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;transition:.12s;flex-shrink:0;white-space:nowrap}
+.tl-hours:hover{background:var(--surf2);border-color:var(--bd3);color:var(--tx)}
+.tl-hours svg{width:14px;height:14px;color:var(--cyan);flex-shrink:0}
+.tl-hours.warn{border-color:#FDE68A;background:#FFFBEB;color:#92400E}
+.tl-hours.warn svg{color:var(--warn)}
+.tl-hours.warn:hover{background:#FEF3C7;border-color:#FCD34D}
+.hours-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px}
+.hours-note{font-size:12px;color:var(--tx2);background:var(--surf2);border:1px solid var(--bd);border-radius:8px;padding:9px 12px;margin-bottom:10px;line-height:1.45}
+.hours-note b{color:var(--navy);font-weight:700}
+.hours-note.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E}
+.hours-note.bad{background:#FEF2F2;border-color:#FECACA;color:#991B1B;font-weight:600}
+.hours-help{font-size:11px;color:var(--tx3);line-height:1.5;margin:0 0 14px}
+html[data-theme="deck"] .tl-hours{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+html[data-theme="deck"] .hours-note{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
