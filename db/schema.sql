@@ -472,6 +472,58 @@ CREATE INDEX IF NOT EXISTS idx_ds_dd           ON core.dive_sheets(dd);
 CREATE INDEX IF NOT EXISTS idx_ds_category     ON core.dive_sheets(dive_category_code);
 CREATE INDEX IF NOT EXISTS idx_ds_optional     ON core.dive_sheets(meet_year, discipline) WHERE optional_voluntary = 'O';
 
+-- ---------------------------------------------------------------------------
+-- core.zone_qualifier_lists — the OFFICIAL Zone->Nationals qualifier lists that
+-- DiveMeets publishes at /QualificationLists/USADivingJOZones_{year}/ShowQualifiers/{meet}_{event}
+-- These are NOT event results. They are the adjudicated top-N-per-event lists
+-- USA Diving publishes as the authoritative Zone qualifiers, and they include
+-- entries that never appear in a single event's result table (a diver can
+-- qualify from a higher-scoring performance elsewhere). junior-data.js carries
+-- these as `officialZoneQualifiers` / synthetic `sourceRow='synthetic_from_oqz'`
+-- rows; this table is their durable home in Neon so the qualification pipeline
+-- can be rebuilt from the database instead of a scraped SQLite file.
+--
+-- Row grain: one qualifier line (rank) per (meet_id, event_id). The optional
+-- "*Nth Place Qualifying Score" average-score marker line each list carries is
+-- stored with is_avg_score_marker = true and rank = NULL.
+CREATE TABLE IF NOT EXISTS core.zone_qualifier_lists (
+    id                   BIGSERIAL PRIMARY KEY,
+    year                 SMALLINT NOT NULL,
+    zone                 TEXT     NOT NULL,          -- 'A'..'F'
+    meet_id_dm           TEXT     NOT NULL,          -- Zone meet id, e.g. '12878'
+    event_id_dm          TEXT     NOT NULL,          -- DiveMeets event id, e.g. '30520'
+    event_name           TEXT,                       -- 'Group A Girls 1m (16-18) - Final'
+    event_key            TEXT,                       -- normalized 'Group A Girls 1M'
+    age_group            TEXT,                       -- 'Group A' / 'Group B'
+    gender               TEXT,                       -- 'Boys' / 'Girls'
+    discipline           TEXT,                       -- '1M' / '3M'
+    rank                 SMALLINT,                   -- qualifier rank (NULL for the marker row)
+    diver_id_dm          TEXT,                       -- /Profile/{id}
+    diver_name           TEXT,
+    team_name            TEXT,
+    team_id_dm           TEXT,                       -- /TeamProfile/{id}
+    region_label         TEXT,                       -- 'Region 1'
+    region_meet_id_dm    TEXT,                       -- /MeetResults/{id} the score came from
+    score                NUMERIC,
+    score_text           TEXT,                       -- verbatim '387.70'
+    sheet_url            TEXT,                       -- DiveSheetResults link, verbatim
+    is_avg_score_marker  BOOLEAN NOT NULL DEFAULT false,
+    source_url           TEXT,
+    imported_at          TIMESTAMPTZ DEFAULT now()
+);
+-- One row per qualifier line. rank is NULL only for the marker row, so the
+-- marker is keyed separately (a partial unique index per event for it).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_zql_natural
+    ON core.zone_qualifier_lists(year, meet_id_dm, event_id_dm, rank)
+    WHERE rank IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_zql_marker
+    ON core.zone_qualifier_lists(year, meet_id_dm, event_id_dm)
+    WHERE is_avg_score_marker;
+CREATE INDEX IF NOT EXISTS idx_zql_year   ON core.zone_qualifier_lists(year);
+CREATE INDEX IF NOT EXISTS idx_zql_event  ON core.zone_qualifier_lists(year, event_key);
+CREATE INDEX IF NOT EXISTS idx_zql_diver  ON core.zone_qualifier_lists(diver_id_dm);
+CREATE INDEX IF NOT EXISTS idx_zql_zone   ON core.zone_qualifier_lists(year, zone);
+
 -- Bump version
 INSERT INTO app_meta.config (key, value, description) VALUES
   ('criteria_simulator_data_version', '1', 'Criteria sim phases + dive sheets in core')
