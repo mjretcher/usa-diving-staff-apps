@@ -82,7 +82,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true,showCues:true}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -498,6 +498,12 @@ function calcSessTiming(sess){
     else dur=Number(sess.events[0]?.customDurationMinutes||90);
     return{warmupStartMinutes:s,warmupEndMinutes:s,eventStartMinutes:s,sessionEndMinutes:s+dur,competitiveEnd:s+dur,events:[],flightTimes:ft,fitToClose:Boolean(sess.fitToClose),fitDur:dur};
   }
+  // BROADCAST CLOCK — authoritative. When a Senior finals session is switched to
+  // broadcast timing, its run-of-show (intros, named commercial breaks, 45–60s per
+  // diver, flash, ceremonies) IS the schedule. Everything downstream — this day's
+  // later sessions, exports, the published schedule — reflows around it.
+  if(typeof bcastTiming==='function'){const bt=bcastTiming(sess);if(bt)return bt;}
+
   const wu=Number(sess.warmupStartMinutes);
   const wuEnd=wu+Number(sess.warmupMinutes||55);
   const intro=Number(sess.introMinutes||0);
@@ -2593,6 +2599,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after session (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
+    ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
     ${sess.events.length>1?renderCombinePanel(sess,t):''}
@@ -2625,6 +2632,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
           <div style="flex:1;text-align:right"><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Runs</div><div style="font-size:12px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums">${tev.eventStartMinutes!==undefined?`${f12(tev.eventStartMinutes)}–${f12(tev.eventEndMinutes)}`:'—'}</div></div>
         </div>
         ${splitHint}
+        ${typeof renderBcastEvPanel==='function'?renderBcastEvPanel(sess,ev):''}
       </div>`;
     }).join('')}</div>`:`<p style="font-size:12px;color:var(--tx3);margin-bottom:12px">No events yet.</p>`}
     <button class="btn btn-sm" onclick="UI.modal='add-event';UI.pickerSessId='${sess.id}';UI.pickerSearch='';UI.pickerPreset='';UI.pickerRound='';render()">+ Add event</button>`;
@@ -3934,7 +3942,7 @@ function renderDialog(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal};
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }
@@ -4402,7 +4410,7 @@ function renderGenerateModal(timed){
   ensureEntrantsLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
-  const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.'};
+  const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.',broadcast:'Second-by-second run-of-show for the streaming partner and the arena announcer — Senior finals only.'};
   const genTimed=genTimedForPreview(timed);
   return`<div class="modal modal-lg gen-modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
@@ -4421,6 +4429,15 @@ function renderGenerateModal(timed){
           <div class="gen-sec-lbl">Audience</div>
           <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';genRender()"><div class="audname">${a.l}</div></button>`).join('')}</div>
           <p class="gen-aud-desc">${audDesc[aud]||''}</p>
+          ${aud==='broadcast'?`
+          <div class="gen-sec-lbl">Run-of-show options</div>
+          <div class="gen-toggles">
+            <label class="togrow"><span>PA announcement column</span><span class="tog"><input type="checkbox" ${cfg.showCues!==false?'checked':''} onchange="AUD['broadcast'].showCues=this.checked;genRender()"><span class="togsl"></span></span></label>
+          </div>
+          <p style="font-size:10px;color:var(--tx3);margin:6px 0 10px;line-height:1.4">Leave the PA column on for the arena announcer's copy. Switch it off for the clean version you hand the streaming partner.</p>
+          <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
+          <p style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.4">Only Senior finals sessions with broadcast timing switched on appear here. Turn it on from the session editor.</p>
+          `:`
           <div class="gen-sec-lbl">Show / hide</div>
           <div class="gen-toggles">
             <label class="togrow"><span>Warm-up times</span><span class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;genRender()"><span class="togsl"></span></span></label>
@@ -4434,19 +4451,25 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
           </div>
           <p style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
+          `}
         </div>
         <div class="gen-preview">
           <div class="gen-sec-lbl">Preview — ${esc(genScopeLabel())} <span class="pp-scrollhint">scroll to see full schedule</span></div>
-          ${renderPP(genTimed,cfg,genTitle())}
+          ${aud==='broadcast'
+            ?renderBcastSheet(genTimed.filter(s=>bcastOn(s)&&s.timing&&s.timing.bcastRows),{title:genTitle(),showCues:cfg.showCues!==false})
+            :renderPP(genTimed,cfg,genTitle())}
         </div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-gh" onclick="closeModal()">Close</button>
       <div style="flex:1"></div>
-      <button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xlsx)</button>
-      <button class="btn" onclick="exportExcel()">Excel</button>
-      <button class="btn btn-p" onclick="printReport()">Print / PDF</button>
+      ${aud==='broadcast'
+        ?`<button class="btn" onclick="UI.bcastSessId=null;exportBroadcast()">Run-of-show (.xlsx)</button>
+           <button class="btn btn-p" onclick="UI.bcastSessId=null;printBroadcast()">Print / PDF</button>`
+        :`<button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xlsx)</button>
+           <button class="btn" onclick="exportExcel()">Excel</button>
+           <button class="btn btn-p" onclick="printReport()">Print / PDF</button>`}
     </div>
   </div>`;
 }
@@ -4619,7 +4642,7 @@ function renderPP(timed,cfg,titleOverride){
     return`<tr class="pe ${i%2?'alt':''}">
       <td class="pe-nm">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pe-tag combined">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pe-tag simul">Simultaneous</span>`:''}${splitNow?`<span class="pe-tag split">Split boards</span>`:''}${(splitNow&&cfg.showUnsplitAlt)?`<span class="pe-tag altsplit">Unsplit: ${fdur(altSplitEvDur(ev))}</span>`:''}${(!splitNow&&splitEligible&&cfg.showSplitAlt)?`<span class="pe-tag altsplit">If split: ${fdur(altSplitEvDur(ev))}</span>`:''}</td>
       ${cfg.showEntries?`<td class="pe-div">${divers?divers+'<span class="pe-u">divers</span>':'<span class="pe-dash">—</span>'}</td>`:''}
-      ${cfg.showSec?`<td class="pe-sec">${ev.secondsPerDive||ev.defaultSpd||35}<span class="pe-u">s/dive</span></td>`:''}
+      ${cfg.showSec?`<td class="pe-sec">${ev._bcast?bcastEvSpd(ev):(ev.secondsPerDive||ev.defaultSpd||35)}<span class="pe-u">s/dive</span></td>`:''}
       ${cfg.showTimes?`<td class="pe-tm">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</td>`:''}
     </tr>`;
   }
@@ -4640,7 +4663,7 @@ function renderPP(timed,cfg,titleOverride){
     const kind=hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Preliminaries':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session';
     return`<div class="pp-sess">
       <div class="pp-sess-hd">
-        <span class="pp-sess-badge ${hasFinals?'finals':''}">${kind}</span>
+        <span class="pp-sess-badge ${hasFinals?'finals':''}">${kind}</span>${(sess.timing&&sess.timing.bcastRows)?`<span class="pp-sess-badge" style="background:#009AC7">On air</span>`:''}
         <span class="pp-sess-n">Session ${n}</span>
         <span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
         ${cfg.showWU?`<span class="pp-sess-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</span>`:''}
@@ -4732,7 +4755,8 @@ async function exportOpsTimeline(){
       if(intro>0)dataRow(['','Intro','Introductions','','','','','',mins(intro),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(t.warmupStartMinutes-intro),f12(t.warmupStartMinutes)],bg,{15:cyan,16:cyan});
       (t.events||[]).forEach(ev=>{
         const dur=calcEvDur(ev);const split=ev.manualSplit&&!isPlatform(ev.apparatus);
-        dataRow(['',evRound(ev),evName(ev)+(split?' (Split)':''),split?'Split':'',split?splitPanelRot(ev):'',Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.numberOfDivers||0),Number(ev.secondsPerDive||ev.defaultSpd||0),mins(dur.evMin),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)],bg,
+        const onAir=Boolean(ev._bcast);const spdShown=onAir?bcastEvSpd(ev):Number(ev.secondsPerDive||ev.defaultSpd||0);const minShown=onAir?Number(ev.evMin||0):dur.evMin;
+        dataRow(['',evRound(ev),evName(ev)+(split?' (Split)':'')+(onAir?' [BROADCAST]':''),split?'Split':'',split?splitPanelRot(ev):'',Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.numberOfDivers||0),spdShown,mins(minShown),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)],bg,
           {2:{bg:roundBg(ev.round),font:{bold:true,size:9}},6:{bg:G,font:{bold:true}},7:{bg:G,font:{bold:true}},8:{bg:G,font:{bold:true}},12:{font:{bold:true}},13:{font:{bold:true}},14:{font:{bold:true}},15:cyan,16:cyan});
       });
     });
