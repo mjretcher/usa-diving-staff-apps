@@ -10,6 +10,7 @@
 
   const VIEWS = [
     { id: 'field',    label: 'Field Intel',      el: 'view-field',    athlete: false },
+    { id: 'la28',     label: 'LA28 Watch',       el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
     { id: 'passport', label: 'Athlete Passport', el: 'view-passport', athlete: true, mod: () => window.AEPassport },
     { id: 'listlab',  label: 'List Lab',         el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
     { id: 'pressure', label: 'Pressure',         el: 'view-pressure', athlete: true, mod: () => window.AEPressure },

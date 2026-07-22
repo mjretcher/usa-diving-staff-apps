@@ -26,7 +26,7 @@
   // HTML entities before the JS parser sees them (house rule).
   const escJsAttr = (s) => esc(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
 
-  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const num = (v) => { if (v == null || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
   function q(sql, params) {
     return window.NEON.query(sql, (params || []).map((p) => p == null ? null : String(p)));

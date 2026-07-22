@@ -178,12 +178,10 @@
   function shortMeet(name, year) {
     const n = String(name || '');
     if (/Championships/i.test(n) && /World Aquatics/i.test(n)) return ['Worlds', String(year)];
-    if (/Super Final/i.test(n)) return ['WC Super Final', String(year)];
-    if (/World Cup/i.test(n)) {
-      const city = n.replace(/.*World Cup\s*(\d{4})?\s*[-–]?\s*/i, '').replace(/\d{4}/, '').trim();
-      return ['WC ' + (city.split(/[,(]/)[0].trim().slice(0, 10) || ''), String(year)];
-    }
-    return [n.slice(0, 12), String(year)];
+    if (/Super Final/i.test(n)) return ['Super Final', String(year)];
+    if (/American Cup/i.test(n)) return ['Am Cup', String(year)];
+    if (/World Cup/i.test(n)) return ['World Cup', String(year)];
+    return [n.slice(0, 10), String(year)];
   }
 
   function movingBarHtml(bench) {

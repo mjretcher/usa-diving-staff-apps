@@ -371,7 +371,12 @@
       s += `<line x1="${padL}" y1="${Y(t)}" x2="${w - padR}" y2="${Y(t)}" stroke="${GRID}"/>` +
            `<text x="${padL - 6}" y="${Y(t) + 4}" text-anchor="end" class="ae-tick">${Math.round(t)}</text>`;
     });
+    const step = Math.max(1, Math.ceil(n / 6));
     o.labels.forEach((lb, i) => {
+      if (n > 6 && i % step !== 0 && i !== n - 1) {
+        s += `<line x1="${X(i)}" y1="${h - padB + 3}" x2="${X(i)}" y2="${h - padB + 8}" stroke="${GRID}"/>`;
+        return;
+      }
       s += `<text x="${X(i)}" y="${h - 26}" text-anchor="middle" class="ae-tick">${esc(lb[0])}</text>` +
            `<text x="${X(i)}" y="${h - 13}" text-anchor="middle" class="ae-tick" opacity="0.65">${esc(lb[1] || '')}</text>`;
     });
