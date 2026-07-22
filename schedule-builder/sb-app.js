@@ -787,6 +787,7 @@ let UI={
   draggedSessId:null,draggedEvFrom:null,
   projRows:null,projLoading:false,projError:null,projFilterEwc:null,projFilterZone:null,
   showFlightCounts:true,timeScale:false,addDayTemplateId:null,
+  genScopes:[],
 };
 function initUI(){
   if(S.meet.days.length&&!UI.dayId)UI.dayId=S.meet.days[0].id;
@@ -3778,8 +3779,8 @@ function anyEventTags(){return S.sessions.some(s=>sessTags(s).length)||S.meet.da
 // A session tagged with MULTIPLE events shows up under every one of its tags' filters.
 // f defaults to the on-screen day-view filter (UI.eventFilter), but callers can pass an
 // explicit filter key instead — used by the Generate/print modal, which has its OWN
-// independent scope selector (UI.genEventFilter) so viewing "All" on screen doesn't force
-// printing "All" too, and vice versa.
+// independent, multi-select scope selector (UI.genScopes / passesGenScope) so viewing
+// "All" on screen doesn't force printing "All" too, and vice versa.
 function passesEventFilter(sess,f){
   if(f===undefined)f=UI.eventFilter;
   if(!f)return true;
@@ -4659,10 +4660,43 @@ function genRender(){
 // SAME schedule three different ways for the public (Junior only, Senior only, Combined),
 // each under its own correct official name, without permanently renaming the schedule or
 // losing the title he typed for one scope when he switches to another.
-function genTimedForPreview(timed){
-  return UI.genEventFilter?timed.filter(s=>passesEventFilter(s,UI.genEventFilter)):timed;
+// Scope is MULTI-SELECT across the three event tags. Senior Nationals and the
+// National Qualifier run as one meet on the deck, so they routinely need to print
+// as a single document — picking both is a normal thing to want, not an edge case.
+//   []                      → All (combined): every block
+//   ['senior','qualifier']  → blocks tagged with EITHER, plus untagged (shared) blocks
+//   ['shared']              → untagged blocks only. Exclusive: "shared only" narrows
+//                             the printout, so it can't be added on top of a tag.
+// Kept in EVENT_TAGS order (not click order) so the label and the remembered title
+// key are stable however you tap them.
+function genScopes(){return Array.isArray(UI.genScopes)?UI.genScopes:[];}
+function genScopesOrdered(){
+  const sc=genScopes();
+  if(sc.includes('shared'))return['shared'];
+  return EVENT_TAGS.map(t=>t.k).filter(k=>sc.includes(k));
 }
-function genTitleKey(){return UI.genEventFilter||'all';}
+function genScopeOn(k){return genScopes().includes(k);}
+function toggleGenScope(k){
+  const cur=genScopes();
+  if(k==='shared'){UI.genScopes=(cur.length===1&&cur[0]==='shared')?[]:['shared'];genRender();return;}
+  const base=cur.filter(x=>x!=='shared');
+  UI.genScopes=base.includes(k)?base.filter(x=>x!==k):[...base,k];
+  genRender();
+}
+function clearGenScope(){UI.genScopes=[];genRender();}
+// A block is in scope if it carries ANY of the selected tags, or is untagged
+// (shared blocks — warm-ups, meetings, open training — belong to every printout).
+function passesGenScope(sess){
+  const sc=genScopes();
+  if(!sc.length)return true;
+  const tags=sessTags(sess);
+  if(sc.length===1&&sc[0]==='shared')return!tags.length;
+  return !tags.length||tags.some(t=>sc.includes(t));
+}
+function genTimedForPreview(timed){
+  return genScopes().length?timed.filter(passesGenScope):timed;
+}
+function genTitleKey(){const sc=genScopesOrdered();return sc.length?sc.join('+'):'all';}
 function genTitle(){
   if(!UI.genTitles)UI.genTitles={};
   const k=genTitleKey();
@@ -4674,9 +4708,10 @@ function setGenTitle(v){
   UI.genTitles[genTitleKey()]=v;
 }
 function genScopeLabel(){
-  if(!UI.genEventFilter)return'Combined';
-  if(UI.genEventFilter==='shared')return'Shared blocks';
-  return(EVENT_TAGS.find(t=>t.k===UI.genEventFilter)||{}).l||'';
+  const sc=genScopesOrdered();
+  if(!sc.length)return'Combined';
+  if(sc.length===1&&sc[0]==='shared')return'Shared blocks';
+  return sc.map(k=>(EVENT_TAGS.find(t=>t.k===k)||{}).l||k).join(' + ');
 }
 function renderGenerateModal(timed){
   ensureProjDataLoaded();
@@ -4692,11 +4727,11 @@ function renderGenerateModal(timed){
         <div class="gen-controls">
           <div class="gen-sec-lbl">Print scope</div>
           <div class="chiprow">
-            <button class="chip ${!UI.genEventFilter?'on':''}" onclick="UI.genEventFilter=null;genRender()">All (combined)</button>
-            ${EVENT_TAGS.map(t=>`<button class="chip ${UI.genEventFilter===t.k?'on':''}" onclick="UI.genEventFilter='${t.k}';genRender()">${t.l}</button>`).join('')}
-            <button class="chip ${UI.genEventFilter==='shared'?'on':''}" onclick="UI.genEventFilter='shared';genRender()">Shared only</button>
+            <button class="chip ${!genScopes().length?'on':''}" onclick="clearGenScope()">All (combined)</button>
+            ${EVENT_TAGS.map(t=>`<button class="chip ${genScopeOn(t.k)?'on':''}" onclick="toggleGenScope('${t.k}')">${t.l}</button>`).join('')}
+            <button class="chip ${genScopeOn('shared')?'on':''}" onclick="toggleGenScope('shared')">Shared only</button>
           </div>
-          <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4">Only blocks tagged for this scope (plus Shared blocks) are included — days with nothing in scope are skipped entirely. Each scope remembers its own title below, so switching back and forth doesn't lose what you typed.</p>
+          <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4"><b>Tap more than one to print them together</b> — e.g. Senior Nationals + National Qualifier comes out as one document. Only blocks tagged for the scopes you pick (plus Shared blocks) are included, and days with nothing in scope are skipped entirely. Every combination remembers its own title below, so switching back and forth doesn't lose what you typed.${genScopesOrdered().length>1?`<br/><b style="color:var(--cyan)">Printing ${esc(genScopeLabel())} together.</b>`:''}</p>
           <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);genRender()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
           <div class="fdiv"></div>
           <div class="gen-sec-lbl">Audience</div>
@@ -4852,7 +4887,7 @@ function renderPP(timed,cfg,titleOverride){
   // public-facing outputs. Only the Operations audience includes them, marked "internal".
   timed=timed.filter(s=>!s.hideFromPublic||cfg.showInternalBlocks);
   if(!S.meet.days.length||!timed.length){
-    const msg=(UI.genEventFilter&&S.sessions.length)?`No blocks tagged for this scope yet — tag blocks via the editor ("Part of"), or switch scope.`:'No schedule to preview yet — add sessions and events first.';
+    const msg=(genScopes().length&&S.sessions.length)?`No blocks tagged for this scope yet — tag blocks via the editor ("Part of"), or switch scope.`:'No schedule to preview yet — add sessions and events first.';
     return`<div class="pp"><div class="pp-empty">${esc(msg)}</div></div>`;
   }
   const showLbl=S.meet.showCombineLabels!==false;
