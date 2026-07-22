@@ -1310,3 +1310,42 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bcr.k-finish{background:var(--navy)}
 .bcr.k-finish td{color:#fff;font-weight:800}
 .bcs-pft{display:flex;justify-content:space-between;padding:8px 16px;border-top:2px solid var(--navy);font-size:9px;color:#5F6062}
+
+/* ── BLOCKS THAT RUN AT THE SAME TIME ────────────────────────────────
+   A side-by-side block is drawn indented under its partner, joined by a pool
+   rail, so a schedule reader instantly sees "these two share the window"
+   instead of reading it as a stacking mistake. Pool cyan throughout —
+   never red on the navy cards (ADA). */
+.tl-row{display:flex;flex-direction:column;gap:0;flex-shrink:0}
+.tl-along{display:flex;align-items:stretch;gap:0;padding-left:22px;margin-top:-2px;position:relative}
+.along-rail{width:3px;border-radius:0 0 0 3px;background:linear-gradient(180deg,var(--cyan) 0%,rgba(0,154,199,.35) 100%);flex-shrink:0}
+.along-rail::before{content:'';position:absolute;left:0;top:0;width:22px;height:3px;background:var(--cyan);border-radius:0 2px 2px 0;opacity:.55}
+.along-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;padding:8px 0 0 12px}
+.along-chip{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;letter-spacing:.01em;color:#0A6E8C;background:#E3F4FA;border:1px solid #B9E2F0;cursor:pointer;transition:.12s;font-variant-numeric:tabular-nums}
+.along-chip:hover{background:#D2ECF6;border-color:#8FC3EA}
+.along-pill{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#0A6E8C;background:#E3F4FA;border:1px solid #B9E2F0;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle}
+.sc.is-along{box-shadow:0 1px 3px rgba(15,23,42,.07)}
+.sc.is-along::before{background:repeating-linear-gradient(180deg,var(--cyan) 0 6px,rgba(0,154,199,.3) 6px 12px)}
+.ts-card.along{border-left-color:var(--cyan);border-style:dashed;background:#F2FAFD}
+.ts-along-flag{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0A6E8C;background:#E3F4FA;border:1px solid #B9E2F0;border-radius:4px;padding:0 4px;margin-left:5px;vertical-align:middle}
+.along-box{border:1px solid var(--bd);border-radius:var(--r);padding:11px 13px;margin-bottom:14px;background:var(--surf2)}
+.along-box.on{border-color:#B9E2F0;background:#F2FAFD}
+.along-toggle{display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:12.5px;color:var(--tx)}
+.along-toggle input{margin-top:2px;flex-shrink:0}
+.along-toggle strong{font-weight:700;display:block}
+.along-hint{display:block;font-size:11px;color:var(--tx3);margin-top:3px;font-weight:400;line-height:1.45}
+.along-cfg{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;margin-top:11px}
+.along-off{display:flex;align-items:center;gap:7px}
+.along-off input{max-width:74px}
+.along-off span{font-size:10.5px;color:var(--tx3);line-height:1.3}
+.along-note{margin-top:10px;padding:8px 10px;border-radius:var(--r);background:#fff;border:1px solid #D2ECF6;font-size:11.5px;color:var(--tx2);line-height:1.5}
+.along-note strong{color:var(--navy);font-variant-numeric:tabular-nums}
+.along-warn{margin-top:5px;font-size:11px;font-weight:600;color:#B45309}
+@media(max-width:720px){.along-cfg{grid-template-columns:1fr}.tl-along{padding-left:12px}.along-body{padding-left:9px}}
+html[data-theme="deck"] .along-chip{color:#8FC3EA;background:rgba(0,154,199,.16);border-color:rgba(143,195,234,.32)}
+html[data-theme="deck"] .along-chip:hover{background:rgba(0,154,199,.26);border-color:#8FC3EA}
+html[data-theme="deck"] .along-pill,html[data-theme="deck"] .ts-along-flag{color:#8FC3EA;background:rgba(0,154,199,.16);border-color:rgba(143,195,234,.3)}
+html[data-theme="deck"] .along-box.on{border-color:rgba(143,195,234,.3);background:rgba(0,154,199,.08)}
+html[data-theme="deck"] .along-note{background:var(--surf);border-color:rgba(143,195,234,.24)}
+html[data-theme="deck"] .along-warn{color:#FBBF24}
+html[data-theme="deck"] .ts-card.along{background:rgba(0,154,199,.13)}

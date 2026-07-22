@@ -580,12 +580,17 @@ function calcSessTiming(sess){
   const awards=sess.awardsEnabled?15:0;
   return{warmupStartMinutes:wu,warmupEndMinutes:wuEnd,eventStartMinutes:first,competitiveEnd:compEnd,sessionEndMinutes:compEnd+awards,events:tevs,flightTimes:[]};
 }
-function allTimed(){return S.meet.days.flatMap(day=>S.sessions.filter(s=>s.dayId===day.id).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes)).map(s=>({...s,timing:calcSessTiming(s)})))}
-function sessForDay(dayId){return S.sessions.filter(s=>s.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes))}
+// Blocks sort by start time. When two start at the same minute the one that RUNS
+// ALONGSIDE comes second, so it always reads as attached to its partner above it.
+function sessSortCmp(a,b){const d=Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes);if(d)return d;return (a.parallel?1:0)-(b.parallel?1:0);}
+function allTimed(){return S.meet.days.flatMap(day=>S.sessions.filter(s=>s.dayId===day.id).sort(sessSortCmp).map(s=>({...s,timing:calcSessTiming(s)})))}
+function sessForDay(dayId){return S.sessions.filter(s=>s.dayId===dayId).sort(sessSortCmp)}
 function timedForDay(dayId){return allTimed().filter(s=>s.dayId===dayId)}
 function getSessNum(sess,timed){if(sess.isPractice)return null;let n=1;for(const s of timed){if(s.isPractice)continue;if(s.id===sess.id)return n;n++;}return n}
 function buildWarnings(dayId){
-  const sessions=timedForDay(dayId).filter(s=>!s.isPractice);const warns=[];
+  // Blocks deliberately set to run at the same time are excluded — their overlap
+  // is the point, not a mistake.
+  const sessions=timedForDay(dayId).filter(s=>!s.isPractice&&!isParallel(s));const warns=[];
   for(let i=0;i<sessions.length-1;i++){const a=sessions[i],b=sessions[i+1];if(a.timing.sessionEndMinutes>b.timing.warmupStartMinutes){warns.push({key:`ov-${a.id}-${b.id}`,sessId:a.id,msg:`Session ends at ${f12(a.timing.sessionEndMinutes)} but next warm-up starts ${f12(b.timing.warmupStartMinutes)}`});}}
   return warns.filter(w=>!(S.acknowledgedWarnings||[]).includes(w.key));
 }
@@ -598,11 +603,27 @@ function detectConflicts(){
   const timed=allTimed();
   S.meet.days.forEach(day=>{
     const sessions=timed.filter(s=>s.dayId===day.id).sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
+    // The day's straight stack, with side-by-side blocks removed. Those overlap on
+    // purpose, so they must not be reported as scheduling errors.
+    const stack=sessions.filter(s=>!isParallel(s));
     const dayLabel=shortDate(day.date);
     const openM=Number(day.openMinutes||420),closeM=Number(day.closeMinutes||1200);
+    // Blocks running at the same time: listed for visibility, plus a real warning
+    // if one runs past the block it is supposed to be sharing the facility with.
+    sessions.filter(s=>isParallel(s)).forEach(p=>{
+      const pn=sessLabelOf(p,timed);
+      const anchor=p.parallelWith?sessions.find(x=>x.id===p.parallelWith):null;
+      if(anchor){
+        issues.push({sev:'info',title:'Runs at the same time (on purpose)',detail:`${pn} (${f12(p.timing.warmupStartMinutes)}–${f12(p.timing.sessionEndMinutes)}) shares the facility with ${sessLabelOf(anchor,timed)} — it does not take its own time in the day`,loc:dayLabel,fixSessId:p.id,dayId:day.id,fixHint:'edit'});
+        if(p.timing.sessionEndMinutes>anchor.timing.sessionEndMinutes)
+          issues.push({sev:'warn',title:'Side-by-side block runs longer than its partner',detail:`${pn} ends ${f12(p.timing.sessionEndMinutes)} but ${sessLabelOf(anchor,timed)} ends ${f12(anchor.timing.sessionEndMinutes)} — it will spill into whatever comes next`,loc:dayLabel,fixSessId:p.id,dayId:day.id,fixHint:'edit'});
+      }else{
+        issues.push({sev:'info',title:'Runs alongside at a fixed time',detail:`${pn} (${f12(p.timing.warmupStartMinutes)}–${f12(p.timing.sessionEndMinutes)}) is not paired with another block — it stays at this exact time no matter how the day shifts`,loc:dayLabel,fixSessId:p.id,dayId:day.id,fixHint:'edit'});
+      }
+    });
     // Overlaps between sessions — fix points at the LATER session (adjust its start/buffer)
-    for(let i=0;i<sessions.length-1;i++){
-      const a=sessions[i],b=sessions[i+1];
+    for(let i=0;i<stack.length-1;i++){
+      const a=stack[i],b=stack[i+1];
       if(a.timing.sessionEndMinutes>b.timing.warmupStartMinutes){
         const an=a.isPractice?(a.title||'Open Training'):'Session '+getSessNum(a,timed);
         const bn=b.isPractice?(b.title||'Open Training'):'Session '+getSessNum(b,timed);
@@ -618,7 +639,7 @@ function detectConflicts(){
     // Athlete rest windows (advisory, projected field): consecutive competition
     // sessions whose gap is under REST_MIN and which share actual divers.
     if(UI.projRows){
-      const comp=sessions.filter(s=>!s.isPractice);
+      const comp=stack.filter(s=>!s.isPractice);
       for(let i=0;i<comp.length-1;i++){
         const a=comp[i],b=comp[i+1];
         const rest=b.timing.warmupStartMinutes-a.timing.sessionEndMinutes;
@@ -934,6 +955,13 @@ function updSess(id,field,value){
     const nums=['warmupStartMinutes','warmupMinutes','rounding','introMinutes','bufferMinutes'];
     const old=sess[field];
     sess[field]=nums.includes(field)?Number(value):value;
+    // On a block that runs at the same time as another, typing a start time means
+    // "start this many minutes into my partner" — store it as an offset so the two
+    // keep their relationship when the day shifts.
+    if(field==='warmupStartMinutes'&&isParallel(sess)){
+      const a=parallelAnchorOf(s,sess);
+      if(a)sess.parallelOffset=Math.max(0,Number(value)-Number(a.warmupStartMinutes||0));
+    }
     // Re-flow the whole day for time-affecting fields so downstream auto-adjusts
     if(['warmupStartMinutes','warmupMinutes','introMinutes','bufferMinutes','awardsEnabled'].includes(field)){
       reflowDay(s,sess.dayId);
@@ -1012,18 +1040,125 @@ function clearSimultaneous(sessId,evId){
   toast('Simultaneous cleared');
 }
 
+// ── BLOCKS THAT RUN AT THE SAME TIME (side-by-side blocks) ──────────────
+// Normally a day is one straight stack: every block starts when the one above
+// it ends. Some things genuinely share the facility, though — an NCAA coaches
+// meeting on the deck while open training keeps running in the pool. Marking a
+// block "runs at the same time" lifts it OUT of that stack: it no longer pushes
+// anything later, and nothing pushes it. Instead it is pinned to a partner block
+// at a fixed offset, so if the day shifts the two travel together.
+//
+//   sess.parallel        true  → this block runs alongside, doesn't take a slot
+//   sess.parallelWith    id of the partner block it is pinned to (same day)
+//   sess.parallelOffset  minutes after the partner starts (0 = same moment)
+//
+// A block with parallel:true but no valid partner simply floats at its own
+// fixed clock time — still outside the stack, just not following anything.
+function isParallel(sess){return Boolean(sess&&sess.parallel);}
+function parallelAnchorOf(stateSnap,sess){
+  if(!isParallel(sess)||!sess.parallelWith)return null;
+  const a=(stateSnap.sessions||[]).find(x=>x.id===sess.parallelWith);
+  if(!a||a.id===sess.id||a.dayId!==sess.dayId)return null;
+  return a;
+}
+// Would pinning `sess` to `candidate` create a loop (A follows B follows A)?
+function parallelWouldLoop(stateSnap,sessId,candidateId){
+  let cur=(stateSnap.sessions||[]).find(x=>x.id===candidateId);
+  for(let hops=0;cur&&hops<50;hops++){
+    if(cur.id===sessId)return true;
+    if(!cur.parallel||!cur.parallelWith)return false;
+    cur=(stateSnap.sessions||[]).find(x=>x.id===cur.parallelWith);
+  }
+  return false;
+}
+// Snap every alongside block on a day to partnerStart + offset. Resolved in
+// repeated passes so a block pinned to another alongside block still lands right;
+// the pass cap keeps any accidental loop from spinning.
+function positionParallels(stateSnap,dayId){
+  const par=(stateSnap.sessions||[]).filter(s=>s.dayId===dayId&&isParallel(s));
+  if(!par.length)return;
+  // A partner that was deleted or moved to another day is dropped, and the block
+  // floats at its own time rather than silently jumping back into the stack.
+  par.forEach(p=>{if(p.parallelWith&&!parallelAnchorOf(stateSnap,p))p.parallelWith=null;});
+  for(let pass=0;pass<=par.length;pass++){
+    let moved=false;
+    par.forEach(p=>{
+      const a=parallelAnchorOf(stateSnap,p);
+      if(!a)return;
+      const want=Number(a.warmupStartMinutes||0)+Number(p.parallelOffset||0);
+      if(Number(p.warmupStartMinutes)!==want){p.warmupStartMinutes=want;moved=true;}
+    });
+    if(!moved)break;
+  }
+}
+// Human label for a block, used in the "same time as ..." wording everywhere.
+function sessLabelOf(sess,timed){
+  if(!sess)return 'another block';
+  if(sess.isPractice)return sess.title||'Open Training';
+  const n=getSessNum(sess,timed||allTimed());
+  return 'Session '+(n||'');
+}
+// Turn "runs at the same time" on or off for one block.
+// Turning it ON pairs the block with whatever WOULD have come next in the day —
+// that is the block it was stealing time from — so the day closes up and the two
+// overlap immediately. Mike can pick a different partner in the editor.
+function toggleParallel(sessId){
+  let msg='';
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    if(isParallel(sess)){
+      sess.parallel=false;sess.parallelWith=null;sess.parallelOffset=0;
+      msg='Back in the day\u2019s normal order \u2014 this block takes its own time again';
+    }else{
+      const start=Number(sess.warmupStartMinutes||0);
+      const stack=s.sessions.filter(x=>x.dayId===sess.dayId&&x.id!==sess.id&&!isParallel(x))
+        .sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+      const next=stack.find(x=>Number(x.warmupStartMinutes)>=start);
+      const prev=stack.slice().reverse().find(x=>Number(x.warmupStartMinutes)<start);
+      const anchor=next||prev||null;
+      sess.parallel=true;
+      sess.parallelWith=anchor?anchor.id:null;
+      sess.parallelOffset=0;
+      msg=anchor?`Now runs at the same time as \u201C${sessLabelOf(anchor,null)}\u201D \u2014 the rest of the day closed up`
+                :'Now runs alongside the day at its own fixed time';
+    }
+    reflowDay(s,sess.dayId);
+  });
+  if(msg)toast(msg);
+}
+function setParallelPartner(sessId,partnerId){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    if(partnerId&&parallelWouldLoop(s,sessId,partnerId))return;
+    sess.parallel=true;
+    sess.parallelWith=partnerId||null;
+    if(!sess.parallelOffset)sess.parallelOffset=0;
+    reflowDay(s,sess.dayId);
+  });
+}
+function setParallelOffset(sessId,mins){
+  upd(s=>{
+    const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
+    sess.parallelOffset=Math.max(0,Number(mins)||0);
+    reflowDay(s,sess.dayId);
+  });
+}
+
 // Re-flow an entire day: keep the first session's start, snap every later session to
 // the previous session's end + buffer (rounded up to 5). Fully automatic sequencing.
 function reflowDay(stateSnap,dayId){
   const day=stateSnap.meet.days.find(x=>x.id===dayId);
   const dayOpen=day&&day.openMinutes!=null?Number(day.openMinutes):0;
-  const sameDay=stateSnap.sessions.filter(s=>s.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  // Blocks marked "runs at the same time" are not part of the stack — they are
+  // skipped here and placed against their partner afterwards.
+  const sameDay=stateSnap.sessions.filter(s=>s.dayId===dayId&&!isParallel(s)).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
   for(let i=1;i<sameDay.length;i++){
     const prev=sameDay[i-1];
     const t=calcSessTimingFromObj(prev);
     const want=ruUp(t.sessionEndMinutes+Number(prev.bufferMinutes||0),5);
     sameDay[i].warmupStartMinutes=Math.max(want,dayOpen);
   }
+  positionParallels(stateSnap,dayId);
 }
 // Reflow every day at once. Used after loading a schedule, undo/redo, or anywhere
 // a bulk import could leave gaps between sessions (e.g. Open Training → next session).
@@ -1062,7 +1197,9 @@ function cascadeSession(stateSnap,changedId){
   const all=stateSnap.sessions;
   const sess=all.find(x=>x.id===changedId);
   if(!sess)return;
-  const sameDay=all.filter(s=>s.dayId===sess.dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  // An alongside block never pushes the day — reposition it and stop.
+  if(isParallel(sess)){positionParallels(stateSnap,sess.dayId);return;}
+  const sameDay=all.filter(s=>s.dayId===sess.dayId&&!isParallel(s)).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
   const idx=sameDay.findIndex(s=>s.id===changedId);
   if(idx<0)return;
   // Each later session starts the moment the previous one's LONGEST event (its session end)
@@ -1079,6 +1216,7 @@ function cascadeSession(stateSnap,changedId){
     curr.warmupStartMinutes=Math.max(want,dayOpen);
     prev=curr;
   }
+  positionParallels(stateSnap,sess.dayId);
 }
 // Pure timing calc that doesn't read from S (used in cascade)
 function calcSessTimingFromObj(sess){return calcSessTiming(sess)}
@@ -1086,13 +1224,25 @@ function calcSessTimingFromObj(sess){return calcSessTiming(sess)}
 // Reorder a session within its day by dropping above/below another session.
 // Re-times the whole day sequentially from the earliest start, then cascades.
 function reorderSessionWithinDay(draggedId,targetId,placeAbove){
+  let msg='Session reordered \u2014 times adjusted';
   upd(s=>{
     const dragged=s.sessions.find(x=>x.id===draggedId);
     const target=s.sessions.find(x=>x.id===targetId);
     if(!dragged||!target||dragged.dayId!==target.dayId)return;
     const dayId=dragged.dayId;
-    // Build ordered list by current start time
-    let dayS=s.sessions.filter(x=>x.dayId===dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+    // A block that runs at the same time isn't in the stack, so "moving" it means
+    // re-pairing it: drop it on a block and it now runs alongside THAT block.
+    if(isParallel(dragged)){
+      const newPartner=isParallel(target)?(parallelAnchorOf(s,target)||null):target;
+      if(newPartner&&!parallelWouldLoop(s,dragged.id,newPartner.id)){
+        dragged.parallelWith=newPartner.id;dragged.parallelOffset=0;
+        msg=`Now runs at the same time as \u201C${sessLabelOf(newPartner,null)}\u201D`;
+      }
+      reflowDay(s,dayId);
+      return;
+    }
+    // Build ordered list by current start time (alongside blocks follow their partner)
+    let dayS=s.sessions.filter(x=>x.dayId===dayId&&!isParallel(x)).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
     // Remove dragged
     dayS=dayS.filter(x=>x.id!==draggedId);
     // Insert relative to target
@@ -1108,8 +1258,9 @@ function reorderSessionWithinDay(draggedId,targetId,placeAbove){
       const dur=t.sessionEndMinutes-t.warmupStartMinutes;
       cursor=ru(sess.warmupStartMinutes+dur+Number(sess.bufferMinutes||0),5);
     });
+    positionParallels(s,dayId);
   });
-  toast('Session reordered — times adjusted');
+  toast(msg);
 }
 
 function addFlight(sessId){upd(s=>{const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;if(!sess.flights)sess.flights=[];const colors=['#171F69','#009AC7','#E31937','#16A34A','#D97706','#7C3AED'];sess.flights.push({id:uid(),name:`Flight ${sess.flights.length+1}`,durationMinutes:45,color:colors[sess.flights.length%colors.length]});const tot=sess.flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0);if(sess.events[0])sess.events[0].customDurationMinutes=tot})}
@@ -2011,12 +2162,26 @@ function renderTimeline(timed){
   if(!sessions.length&&UI.eventFilter)return`<div class="tl-body"><div class="empty" style="margin-top:40px"><div class="empty-title">No ${esc(eventFilterLabel())} blocks this day</div><div class="empty-sub">Switch the event filter to All, or tag blocks via the editor ("Part of").</div></div></div>`;
   if(UI.timeScale)return renderTimelineScale(sessions,timed);
   const parts=[];
-  sessions.forEach((sess2,i)=>{
-    parts.push(renderCard(sess2,timed,warns));
-    if(i<sessions.length-1){
-      const gap=sessions[i+1].timing.warmupStartMinutes-sess2.timing.sessionEndMinutes;
-      parts.push(renderGapChip(sess2,gap));
+  // Group the day into rows: each block in the straight stack, plus any blocks
+  // pinned to run at the same time as it, nested underneath. Gap chips only ever
+  // measure stack-to-stack, so a side-by-side block never distorts them.
+  const byId=new Map(sessions.map(s=>[s.id,s]));
+  const attached=new Map();
+  sessions.forEach(s=>{
+    if(isParallel(s)&&s.parallelWith&&byId.has(s.parallelWith)){
+      const l=attached.get(s.parallelWith)||[];l.push(s);attached.set(s.parallelWith,l);
     }
+  });
+  let prevStack=null;
+  sessions.forEach(sess2=>{
+    if(isParallel(sess2)&&sess2.parallelWith&&byId.has(sess2.parallelWith))return; // drawn under its partner
+    if(!isParallel(sess2)&&prevStack){
+      const gap=sess2.timing.warmupStartMinutes-prevStack.timing.sessionEndMinutes;
+      parts.push(renderGapChip(prevStack,gap));
+    }
+    const along=(attached.get(sess2.id)||[]).map(p=>renderAlongsideBlock(p,timed,warns,sess2)).join('');
+    parts.push(along?`<div class="tl-row">${renderCard(sess2,timed,warns)}${along}</div>`:renderCard(sess2,timed,warns));
+    if(!isParallel(sess2))prevStack=sess2;
   });
   return`<div class="tl-body">
     ${parts.join('')}
@@ -2047,12 +2212,16 @@ function renderTimelineScale(sessions,timed){
     const n=getSessNum(sess,timed);
     const name=isPrac?(sess.title||'Practice'):`Session ${n}`;
     const detail=isPrac?'':sess.events.map(ev=>evName(ev)).join(' · ');
-    const overlaps=i>0&&t.warmupStartMinutes<sessions[i-1].timing.sessionEndMinutes;
-    const cls=`ts-card ${isPrac?(isTrain?'train':'prac'):'comp'}${overlaps?' overlap':''}`;
+    // Blocks set to run at the same time get their own right-hand lane so the two
+    // read as genuinely simultaneous instead of as a collision.
+    const along=isParallel(sess);
+    const overlaps=!along&&i>0&&!isParallel(sessions[i-1])&&t.warmupStartMinutes<sessions[i-1].timing.sessionEndMinutes;
+    const cls=`ts-card ${isPrac?(isTrain?'train':'prac'):'comp'}${overlaps?' overlap':''}${along?' along':''}`;
+    const lane=along?'left:52%;right:0;':'';
     const dur=t.sessionEndMinutes-t.warmupStartMinutes;
     const resizable=isPrac&&!(sess.flights||[]).length&&!sess.fitToClose;
-    return`<div class="${cls}" style="top:${top}px;height:${h}px" data-ts-sess="${sess.id}" data-ts-dur="${dur}" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)} · click to open">
-      <div class="ts-card-name">${esc(name)}${overlaps?' <span class="ts-overlap-flag">⚠ overlaps</span>':''}</div>
+    return`<div class="${cls}" style="top:${top}px;height:${h}px;${lane}" data-ts-sess="${sess.id}" data-ts-dur="${dur}" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}${along?' · runs at the same time as another block':''} · click to open">
+      <div class="ts-card-name">${esc(name)}${along?' <span class="ts-along-flag">same time</span>':''}${overlaps?' <span class="ts-overlap-flag">⚠ overlaps</span>':''}</div>
       ${h>=52&&detail?`<div class="ts-card-detail">${esc(detail)}</div>`:''}
       <div class="ts-card-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(dur)}</div>
       ${resizable?`<div class="ts-resize" title="Drag to change duration"></div>`:''}
@@ -2096,9 +2265,17 @@ const HANDOUT_CSS=`
   .hd-flight-time{color:#64748B;font-weight:600;margin-left:auto;font-variant-numeric:tabular-nums}
   .hd-note{font-size:11px;color:#64748B;margin-top:2px;font-style:italic}
   .hd-awards{color:#E31937;font-size:11px;font-weight:700;text-transform:uppercase}
+  .hd-along{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#0A6E8C;background:#E3F4FA;border:1px solid #B9E2F0;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:middle}
   .hd-foot{margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#94A3B8}
   .hd-print{position:fixed;top:12px;right:12px;background:#171F69;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif}
   @media print{.hd-print{display:none}body{padding:0}@page{margin:12mm}}`;
+// Printed schedules must say out loud that two things share the window, or a
+// coach reading the page assumes the pool closed for the meeting.
+function handoutAlongTag(sess,timed){
+  if(!isParallel(sess))return'';
+  const a=sess.parallelWith?(timed||[]).find(x=>x.id===sess.parallelWith):null;
+  return` <span class="hd-along">${a?`at the same time as ${esc(sessLabelOf(a,timed))}`:'runs at the same time'}</span>`;
+}
 function buildHandoutDayHTML(day,timed,os){
   const sessions=filterByEvent(timed.filter(s=>s.dayId===day.id));
   if(!sessions.length)return'';
@@ -2108,12 +2285,12 @@ function buildHandoutDayHTML(day,timed,os){
       const ft=t.flightTimes||[];
       const flights=ft.length?`<div class="hd-flights">${ft.map(f=>`<div class="hd-flight"><span class="hd-flight-bar" style="background:${f.color||'#171F69'}"></span>${esc(f.name)} <span class="hd-flight-time">${f12(f.startMinutes)}–${f12(f.endMinutes)}</span></div>`).join('')}</div>`:'';
       const note=(sess.events&&sess.events[0]&&sess.events[0].notes)||'';
-      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
+      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}${handoutAlongTag(sess,timed)}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
     }
     const n=getSessNum(sess,timed);
     const evs=(t.events||[]).map(ev=>`<div class="hd-ev"><span>${esc(evName(ev))}</span><span class="hd-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('');
     const wu=os.showWarmup!==false?`<div class="hd-wu">Warm-up ${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)}</div>`:'';
-    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
+    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${handoutAlongTag(sess,timed)}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
   }).join('');
   return`<div class="hd-page">
 <div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
@@ -2292,6 +2469,22 @@ function renderExportModal(){
 // Gap chip: makes the invisible time between two sessions visible and editable
 // right where it lives on the timeline. Clicking sets the PRECEDING session's
 // buffer (updSess reflows the day, so following sessions shift accordingly).
+// A block that runs at the same time as another, drawn indented beneath its
+// partner with a rail joining the two so the shared window is obvious at a glance.
+function renderAlongsideBlock(p,timed,warns,anchor){
+  const t=p.timing;
+  const label=anchor?`Same time as ${esc(sessLabelOf(anchor,timed))}`:'Runs alongside \u2014 fixed time';
+  return`<div class="tl-along">
+    <div class="along-rail"></div>
+    <div class="along-body">
+      <div class="along-chip" onclick="openEdit('${p.id}')" title="Both blocks run together \u2014 this one does not take its own slot in the day. Click to change.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><path d="M4 7h7M4 17h7M17 4v6M17 14v6"/><path d="M13 7h7M13 17h7"/></svg>
+        ${label} · ${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}
+      </div>
+      ${renderCard(p,timed,warns)}
+    </div>
+  </div>`;
+}
 function renderGapChip(prevSess,gap){
   if(gap<0)return`<div class="gap-chip overlap" onclick="askGapChange('${prevSess.id}',${gap})" title="These sessions overlap — click to fix"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9l-8 14A2 2 0 004 21h16a2 2 0 001.7-3l-8-14a2 2 0 00-3.4 0z"/></svg> Overlapping by ${fdur(-gap)} — click to fix</div>`;
   if(gap===0)return`<div class="gap-chip zero" onclick="askGapChange('${prevSess.id}',0)" title="Back-to-back — click to add a gap">back-to-back</div>`;
@@ -2306,6 +2499,8 @@ function renderCard(sess,timed,warns){
   const isEditing=UI.editSessId===sess.id;
   const n=getSessNum(sess,timed);
   const isTraining=isPrac&&sess.title==='Open Training';
+  const along=isParallel(sess);
+  const alongPill=along?`<span class="along-pill" title="Runs at the same time as another block \u2014 it does not take its own slot in the day">Same time</span>`:'';
 
   // ── PRACTICE / TRAINING CARDS — distinct, informative layout ──
   if(isPrac){
@@ -2314,10 +2509,10 @@ function renderCard(sess,timed,warns){
     const typeColor=isTraining?'var(--train)':'var(--prac)';
     const typeBg=isTraining?'var(--train-bg)':'var(--prac-bg)';
     const typeLabel='Open Training';
-    return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''}" id="sc-${sess.id}">
+    return`<div class="sc ${isTraining?'train':'prac'} pcard ${isEditing?'editing':''} ${along?'is-along':''}" id="sc-${sess.id}">
       <div class="pcard-hd" onclick="openEdit('${sess.id}')" style="background:${typeBg}">
         <div class="pcard-main">
-          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${sess.hideFromPublic?`<span style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle" title="Internal only — will not appear on the public schedule">Internal</span>`:''}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
+          <div class="pcard-name" style="color:${typeColor}">${esc(sess.title||typeLabel)}${alongPill}${sess.hideFromPublic?`<span style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:1px 6px;margin-left:8px;vertical-align:middle" title="Internal only — will not appear on the public schedule">Internal</span>`:''}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
           <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:/meeting/i.test(sess.title||'')?fdur(dur):`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
@@ -2353,11 +2548,11 @@ function renderCard(sess,timed,warns){
   const sub=sess.events.length?evNames:'No events yet';
   const bufChips=[0,5,10,15].map(v=>`<button class="bufchip ${buf===v?'on':''}" onclick="event.stopPropagation();setBuffer('${sess.id}',${v})">${v===0?'0':v+'m'}</button>`).join('');
 
-  return`<div class="sc ${cardClass} ${isEditing?'editing':''}" id="sc-${sess.id}">
+  return`<div class="sc ${cardClass} ${isEditing?'editing':''} ${along?'is-along':''}" id="sc-${sess.id}">
     <div class="sc-hd" onclick="openEdit('${sess.id}')">
       <span class="badge ${badgeClass}">${badgeTxt}</span>
       <div class="sc-titles">
-        <div class="sc-name">Session ${n}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
+        <div class="sc-name">Session ${n}${alongPill}${eventTagsOf(sess).map(t=>`<span class="tag-pill" style="--tagc:${t.c}">${t.s}</span>`).join('')}</div>
         <div class="sc-sub">${esc(sub)}</div>
       </div>
       <div class="sc-time">
@@ -2446,6 +2641,47 @@ function renderEditPanel(timed){
   </div>`;
 }
 
+// ── "RUNS AT THE SAME TIME" CONTROL ───────────────────────────────────
+// Plain-English editor control shared by practice blocks and competition
+// sessions. Off by default: the day behaves exactly as it always has. Switch it
+// on and the block steps out of the stack and shares a window with a partner —
+// e.g. the NCAA coaches meeting on the deck while open training keeps running.
+function renderParallelBox(sess){
+  const timed=allTimed();
+  const on=isParallel(sess);
+  const me=timed.find(x=>x.id===sess.id);
+  const anchor=parallelAnchorOf(S,sess);
+  // Any other block on the same day is a valid partner, minus anything that would
+  // make two blocks chase each other in a circle.
+  const choices=timed.filter(x=>x.dayId===sess.dayId&&x.id!==sess.id&&!parallelWouldLoop(S,sess.id,x.id));
+  const opts=[`<option value="">Fixed time — not paired with a block</option>`].concat(
+    choices.map(o=>`<option value="${o.id}" ${anchor&&anchor.id===o.id?'selected':''}>${esc(sessLabelOf(o,timed))} · ${f12(o.timing.warmupStartMinutes)}–${f12(o.timing.sessionEndMinutes)}</option>`)
+  ).join('');
+  const offset=Number(sess.parallelOffset||0);
+  let detail='';
+  if(on&&me){
+    const partner=anchor?timed.find(x=>x.id===anchor.id):null;
+    const spills=partner&&me.timing.sessionEndMinutes>partner.timing.sessionEndMinutes;
+    detail=`<div class="along-note">
+      Runs <strong>${f12(me.timing.warmupStartMinutes)} – ${f12(me.timing.sessionEndMinutes)}</strong>${partner?` alongside <strong>${esc(sessLabelOf(partner,timed))}</strong> (${f12(partner.timing.warmupStartMinutes)} – ${f12(partner.timing.sessionEndMinutes)})`:''}.
+      It does not push anything later, so the buffer setting has no effect while this is on.
+      ${spills?`<div class="along-warn">⚠ This block ends after ${esc(sessLabelOf(partner,timed))} does — it will overlap whatever comes next.</div>`:''}
+    </div>`;
+  }
+  return`<div class="along-box ${on?'on':''}">
+    <label class="along-toggle"><input type="checkbox" ${on?'checked':''} onchange="toggleParallel('${sess.id}')"/>
+      <span><strong>Run this at the same time as another block</strong><span class="along-hint">For things that genuinely share the facility — a meeting on the deck while the pool stays open. The rest of the day closes up as if this block weren't there.</span></span></label>
+    ${on?`<div class="along-cfg">
+      <div class="fg"><label class="fl">Same time as</label>
+        <select class="fi" onchange="setParallelPartner('${sess.id}',this.value)">${opts}</select></div>
+      <div class="fg"><label class="fl">Starts</label>
+        <div class="along-off">
+          <input class="fi" type="number" min="0" step="5" value="${offset}" ${anchor?'':'disabled'} onchange="setParallelOffset('${sess.id}',this.value)"/>
+          <span>${anchor?'min after that block begins (0 = together)':'set the start time above'}</span>
+        </div></div>
+    </div>${detail}`:''}
+  </div>`;
+}
 function renderEditPrac(sess,t,flights,buf){
   buf=Number(buf!=null?buf:(sess.bufferMinutes||0));
   if(flights.length){ensureProjDataLoaded();ensureEntrantsLoaded();}
@@ -2473,6 +2709,7 @@ function renderEditPrac(sess,t,flights,buf){
       </div>
       ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
+    ${renderParallelBox(sess)}
     <div class="fg"><label class="fl">Buffer after this block</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after this block (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     <div class="fdiv"></div>
@@ -2597,6 +2834,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     </div>
     <div class="fg"><label class="fl">Intro / ceremony before events</label><div class="chiprow">${introChips}<button class="chip" onclick="askPrompt({title:'Intro / parade (min)',message:'Minutes for intro before the first event.',inputType:'number',defaultValue:sess.introMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')updSess('${sess.id}','introMinutes',Number(v)||0)}})">Custom</button></div></div>
     <div class="fg"><label class="fl">Buffer after session</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after session (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
+    ${renderParallelBox(sess)}
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
@@ -3373,7 +3611,7 @@ function renderPresentation(timed){
       :(t.events||[]).map(ev=>esc(evName(ev))).join('  ·  ');
     return`<div class="pr-row ${isPrac?'prac':''}">
       <div class="pr-time">${f12(isPrac?t.warmupStartMinutes:t.eventStartMinutes)}<span class="pr-end">– ${f12(t.sessionEndMinutes)}</span></div>
-      <div class="pr-body"><div class="pr-name">${esc(name)}${sess.awardsEnabled?' <span class="pr-awards">+ AWARDS</span>':''}</div>${detail?`<div class="pr-detail">${detail}</div>`:''}</div>
+      <div class="pr-body"><div class="pr-name">${esc(name)}${isParallel(sess)?' <span class="pr-along">SAME TIME</span>':''}${sess.awardsEnabled?' <span class="pr-awards">+ AWARDS</span>':''}</div>${detail?`<div class="pr-detail">${detail}</div>`:''}</div>
     </div>`;
   }).join('');
   return`<div class="present">
@@ -3590,6 +3828,7 @@ async function executeImportBlocks(){
       removed=before-s.sessions.length;
     }
     const dayByDate={};s.meet.days.forEach(d=>dayByDate[d.date]=d.id);
+    const impIdMap={},impMade=[];
     srcSessions.forEach(src=>{
       const srcDay=srcDays.find(d=>d.id===src.dayId);
       if(!srcDay)return;
@@ -3599,11 +3838,14 @@ async function executeImportBlocks(){
         s.meet.days.push(nd);dayByDate[nd.date]=nd.id;targetDayId=nd.id;daysCreated++;
       }
       const copy=JSON.parse(JSON.stringify(src));
+      const oldId=src.id;
       copy.id=uid();copy.dayId=targetDayId;copy.eventTags=[st.tag];delete copy.eventTag;
+      impIdMap[oldId]=copy.id;
       (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
       (copy.flights||[]).forEach(f=>{f.id=uid();});
-      s.sessions.push(copy);added++;
+      s.sessions.push(copy);impMade.push(copy);added++;
     });
+    remapParallelRefs(impMade,impIdMap);
     s.meet.days.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   });
   UI.modal=null;
@@ -3682,14 +3924,29 @@ function deleteDayTemplate(tplId){
     render();
   }});
 }
+// When a set of blocks is cloned together (copy day, import blocks, template
+// stamp), any "runs at the same time as" pairing must be re-pointed at the NEW
+// copies. Without this the copies would still reference the originals on another
+// day, silently losing the pairing.
+function remapParallelRefs(copies,idMap){
+  copies.forEach(c=>{
+    if(!c.parallel)return;
+    if(c.parallelWith&&idMap[c.parallelWith])c.parallelWith=idMap[c.parallelWith];
+    else c.parallelWith=null;
+  });
+}
 function stampTemplateOntoDay(stateSnap,tpl,dayId){
+  const idMap={},made=[];
   tpl.sessions.forEach(src=>{
     const copy=JSON.parse(JSON.stringify(src));
+    const oldId=src.id;
     copy.id=uid();copy.dayId=dayId;
+    if(oldId)idMap[oldId]=copy.id;
     (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
     (copy.flights||[]).forEach(f=>{f.id=uid();});
-    stateSnap.sessions.push(copy);
+    stateSnap.sessions.push(copy);made.push(copy);
   });
+  remapParallelRefs(made,idMap);
 }
 
 // Pure helper: what warmupStartMinutes would `sess` get if placed at `pos` on
@@ -3723,11 +3980,23 @@ function computeMoveStartMinutes(sessions,sess,targetDayId,pos){
 // This is the fast path for the most common move — no dialog, no drag.
 function nudgeSession(sessId,dir){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
-  const dayS=S.sessions.filter(x=>x.dayId===sess.dayId).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
-  const i=dayS.findIndex(x=>x.id===sessId);
+  const stack=S.sessions.filter(x=>x.dayId===sess.dayId&&!isParallel(x)).sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  // For an alongside block, up/down walks it to the block before or after its
+  // current partner — it never re-enters the stack by accident.
+  if(isParallel(sess)){
+    if(!stack.length){toast('Nothing on this day for it to run alongside');return;}
+    const anchor=parallelAnchorOf(S,sess);
+    const ai=anchor?stack.findIndex(x=>x.id===anchor.id):-1;
+    const nj=ai<0?(dir<0?stack.length-1:0):ai+dir;
+    if(nj<0||nj>=stack.length){toast(dir<0?'Already paired with the first block of the day':'Already paired with the last block of the day');return;}
+    setParallelPartner(sessId,stack[nj].id);
+    toast(`Now runs at the same time as \u201C${sessLabelOf(stack[nj],null)}\u201D`);
+    return;
+  }
+  const i=stack.findIndex(x=>x.id===sessId);
   const j=i+dir;
-  if(j<0||j>=dayS.length){toast(dir<0?'Already first in the day':'Already last in the day');return;}
-  reorderSessionWithinDay(sessId,dayS[j].id,dir<0);
+  if(j<0||j>=stack.length){toast(dir<0?'Already first in the day':'Already last in the day');return;}
+  reorderSessionWithinDay(sessId,stack[j].id,dir<0);
 }
 // Direct move: drop a session on a day pill and it lands at the end of that
 // day immediately — no dialog to click through. Undo (Ctrl+Z) reverses it.
@@ -3765,13 +4034,17 @@ function executeCopyDay(){
       s.meet.days.push(day);
       targetId=day.id;
     }
+    const _idMap={},_made=[];
     s.sessions.filter(x=>x.dayId===srcId).forEach(src=>{
       const copy=JSON.parse(JSON.stringify(src));
+      const oldId=src.id;
       copy.id=uid();copy.dayId=targetId;
+      _idMap[oldId]=copy.id;
       (copy.events||[]).forEach(ev=>{ev.id=uid();delete ev.linkedPrelimId;});
       (copy.flights||[]).forEach(f=>{f.id=uid();});
-      s.sessions.push(copy);
+      s.sessions.push(copy);_made.push(copy);
     });
+    remapParallelRefs(_made,_idMap);
     UI.dayId=targetId;
   });
   UI.modal=null;
