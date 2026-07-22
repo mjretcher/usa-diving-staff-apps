@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HP Analytics — USA Diving Staff</title>
+  <title>Athlete Evaluation — USA Diving Staff</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260628" />
-  <link rel="stylesheet" href="styles.css?v=202607152114" />
+  <link rel="stylesheet" href="styles.css?v=202607212330" />
 </head>
 <body>
 
@@ -73,7 +73,20 @@
   </div>
 </div>
 
+<!-- ── Athlete context bar: search + view tabs ─────────────── -->
+<div class="ae-ctxbar">
+  <div class="ae-search">
+    <input type="search" id="aeSearchInput" class="ae-search-input" placeholder="Search any athlete — US or international…" autocomplete="off"/>
+    <div id="aeSearchResults" class="ae-search-results" hidden></div>
+  </div>
+  <div id="aeAthleteChip" class="ae-athlete-chip"></div>
+  <nav id="aeTabs" class="ae-tabs" aria-label="Evaluation views"></nav>
+  <span id="aeFreshness" class="ae-freshness" hidden></span>
+</div>
+
 <div class="hp-workspace" id="workspace">
+
+<div id="view-field">
 
   <div id="loadingPanel" class="hp-loading">
     <div class="hp-spinner"></div>
@@ -244,6 +257,14 @@
     </details>
 
   </div><!-- /mainContent -->
+</div><!-- /view-field -->
+
+<div id="view-passport" class="ae-view" hidden></div>
+<div id="view-listlab"  class="ae-view" hidden></div>
+<div id="view-pressure" class="ae-view" hidden></div>
+<div id="view-podium"   class="ae-view" hidden></div>
+<div id="view-race"     class="ae-view" hidden></div>
+
 </div><!-- /hp-workspace -->
 
 <script>
@@ -257,7 +278,15 @@ window.USAD_CONFIG = {
 <script src="../shared/neon-client.js?v=20260628"></script>
 <script src="../shared/usad-modal.js?v=20260628"></script>
 <script src="../shared/usad-toast.js?v=20260628"></script>
-<script src="main.js?v=202606282315"></script>
+<script src="ae-data.js?v=202607212330"></script>
+<script src="ae-charts.js?v=202607212330"></script>
+<script src="ae-passport.js?v=202607212330"></script>
+<script src="ae-listlab.js?v=202607212330"></script>
+<script src="ae-pressure.js?v=202607212330"></script>
+<script src="ae-podium.js?v=202607212330"></script>
+<script src="ae-race.js?v=202607212330"></script>
+<script src="main.js?v=202607212330"></script>
+<script src="app.js?v=202607212330"></script>
 
 </body>
 </html>

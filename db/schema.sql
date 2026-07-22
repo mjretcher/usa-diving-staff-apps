@@ -820,3 +820,10 @@ CREATE TABLE IF NOT EXISTS membership.sales_ledger (
     total NUMERIC(12,2),
     PRIMARY KEY (year, month, item)
 );
+
+-- ── analytics schema ──────────────────────────────────────────────
+-- Materialized analytics for the Athlete Evaluation app. Tables are
+-- OWNED and rebuilt by db/scripts/build_analytics.py (daily via
+-- analytics-refresh.yml, safe to re-run while the dive-sheet scraper
+-- back-fills toward 2015). Only the schema itself is created here.
+CREATE SCHEMA IF NOT EXISTS analytics;

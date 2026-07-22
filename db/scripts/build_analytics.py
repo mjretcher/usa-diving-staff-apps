@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""
+build_analytics.py — materializes the `analytics` schema for the Athlete
+Evaluation app. Idempotent: drops and rebuilds every analytics table on each
+run, so it can be re-run daily while the dive-sheet scraper is still
+back-filling meets (currently working toward 2015 and earlier).
+
+Tables built:
+  analytics.athlete_identity   DiveMeets <-> World Aquatics crosswalk
+  analytics.athlete_directory  search/browse directory with coverage counts
+  analytics.benchmarks         what-it-takes lines per meet x event
+  analytics.field_group_exec   execution by dive category (field context)
+  analytics.field_list_dd      finalists' list-DD profile (field context)
+  analytics.build_meta         build timestamp + row counts
+
+Identity rules (agreed with Mike 2026-07-21):
+  - Exact normalized-name matches between DiveMeets numeric ids and WA-<uuid>
+    ids are auto-accepted ("they would be the same thing").
+  - Normalization: strip diacritics, lowercase, alphabetic tokens, sorted.
+    Handles "HEDBERG Joshua" (WA) == "Joshua Hedberg" (DiveMeets).
+  - Ambiguous keys (same key on >1 athlete on either side) are NEVER linked;
+    they stay as separate identities with a note.
+  - WA synchro pair entities (names like "A / B", compound uuids) are excluded
+    from individual identity entirely.
+
+Execution normalization used downstream (validated 2026-07-21):
+  5-judge (drop 1+1) and 7-judge (drop 2+2) panels both reduce to
+  score = (sum of 3 middle judges) x DD, so per-judge execution
+  = score / (3*DD), clamped to 10. Synchro scoring differs -> synchro rows are
+  excluded from all execution analytics.
+"""
+import os, sys, json, time, unicodedata, urllib.request, urllib.error
+
+CONN = os.environ.get("NEON_DATABASE_URL") or ""
+if not CONN:
+    sys.exit("NEON_DATABASE_URL not set")
+
+# HTTP SQL endpoint must hit the DIRECT host (no -pooler); header conn string may be either.
+_host = CONN.split("@", 1)[1].split("/", 1)[0]
+ENDPOINT = "https://" + _host.replace("-pooler", "") + "/sql"
+
+def sql(query, params=None, retries=3):
+    body = json.dumps({"query": query, "params": [None if p is None else str(p) for p in (params or [])]}).encode()
+    req = urllib.request.Request(ENDPOINT, data=body, headers={
+        "Neon-Connection-String": CONN,
+        "Content-Type": "application/json",
+        "Neon-Raw-Text-Output": "false",
+        "Neon-Array-Mode": "true",
+    })
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode()[:800]
+            raise RuntimeError(f"SQL error {e.code}: {detail}\n-- query: {query[:300]}")
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            time.sleep(2 * (attempt + 1))
+
+def rows(res):
+    fields = [f["name"] for f in res.get("fields", [])]
+    return [dict(zip(fields, r)) for r in res.get("rows", [])]
+
+def name_key(name):
+    if not name:
+        return ""
+    s = unicodedata.normalize("NFKD", name)
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    toks = "".join(c if c.isalpha() else " " for c in s).split()
+    return " ".join(sorted(toks))
+
+def esc(v):
+    if v is None:
+        return "NULL"
+    return "'" + str(v).replace("'", "''") + "'"
+
+def log(msg):
+    print(f"[build_analytics] {msg}", flush=True)
+
+# ---------------------------------------------------------------- DDL
+log(f"endpoint: {ENDPOINT}")
+sql("CREATE SCHEMA IF NOT EXISTS analytics")
+
+sql("DROP TABLE IF EXISTS analytics.athlete_identity")
+sql("""CREATE TABLE analytics.athlete_identity (
+  canonical_id text PRIMARY KEY,
+  dm_id        text,
+  wa_id        text,
+  display_name text NOT NULL,
+  name_key     text NOT NULL,
+  nat          text,
+  match_method text NOT NULL,
+  first_year   smallint,
+  last_year    smallint,
+  families     text,
+  note         text
+)""")
+
+# --------------------------------------------------- fetch DM-side athletes
+# Keyset-paginated so response sizes stay modest while the dataset grows.
+def fetch_side(where_clause):
+    out, last = [], ""
+    while True:
+        res = sql(f"""
+          SELECT diver_id,
+                 MAX(diver_name)                                        AS diver_name,
+                 (ARRAY_AGG(nat ORDER BY meet_year DESC))[1]            AS nat,
+                 MIN(meet_year)                                         AS first_year,
+                 MAX(meet_year)                                         AS last_year,
+                 STRING_AGG(DISTINCT competition_family, '+')           AS families
+          FROM core.result_phases
+          WHERE {where_clause} AND diver_id > $1
+          GROUP BY diver_id ORDER BY diver_id LIMIT 4000""", [last])
+        batch = rows(res)
+        if not batch:
+            break
+        out.extend(batch)
+        last = batch[-1]["diver_id"]
+        if len(batch) < 4000:
+            break
+    return out
+
+dm = fetch_side("diver_id NOT LIKE 'WA-%'")
+wa = fetch_side("diver_id LIKE 'WA-%' AND POSITION(' / ' IN diver_name) = 0 AND diver_id NOT LIKE '%-USA-%' AND LENGTH(diver_id) <= 40")
+log(f"fetched {len(dm)} DiveMeets athletes, {len(wa)} WA individual athletes")
+
+# ------------------------------------------------------------- match by key
+def index_by_key(side):
+    byk = {}
+    for a in side:
+        k = name_key(a["diver_name"])
+        a["_key"] = k
+        byk.setdefault(k, []).append(a)
+    return byk
+
+dm_byk, wa_byk = index_by_key(dm), index_by_key(wa)
+identities, linked = [], 0
+wa_linked_ids = set()
+
+for a in dm:
+    k = a["_key"]
+    wa_match, method, note = None, "dm_only", None
+    if k and len(dm_byk.get(k, [])) == 1 and len(wa_byk.get(k, [])) == 1:
+        wa_match = wa_byk[k][0]
+        method = "name_token_exact"
+        wa_linked_ids.add(wa_match["diver_id"])
+        linked += 1
+    elif k and k in wa_byk and (len(dm_byk[k]) > 1 or len(wa_byk[k]) > 1):
+        note = "ambiguous name key - not linked"
+    fy = [y for y in [a["first_year"], wa_match and wa_match["first_year"]] if y is not None]
+    ly = [y for y in [a["last_year"], wa_match and wa_match["last_year"]] if y is not None]
+    fams = set((a["families"] or "").split("+"))
+    if wa_match:
+        fams |= set((wa_match["families"] or "").split("+"))
+    identities.append({
+        "canonical_id": a["diver_id"], "dm_id": a["diver_id"],
+        "wa_id": wa_match["diver_id"] if wa_match else None,
+        "display_name": a["diver_name"], "name_key": k,
+        "nat": (wa_match and wa_match["nat"]) or a["nat"],
+        "match_method": method,
+        "first_year": min(fy) if fy else None, "last_year": max(ly) if ly else None,
+        "families": "+".join(sorted(f for f in fams if f)), "note": note,
+    })
+
+for a in wa:
+    if a["diver_id"] in wa_linked_ids:
+        continue
+    identities.append({
+        "canonical_id": a["diver_id"], "dm_id": None, "wa_id": a["diver_id"],
+        "display_name": a["diver_name"], "name_key": a["_key"], "nat": a["nat"],
+        "match_method": "wa_only", "first_year": a["first_year"], "last_year": a["last_year"],
+        "families": a["families"], "note": None,
+    })
+
+log(f"identities: {len(identities)} total, {linked} DM<->WA links auto-accepted")
+
+cols = ["canonical_id","dm_id","wa_id","display_name","name_key","nat","match_method","first_year","last_year","families","note"]
+for i in range(0, len(identities), 400):
+    chunk = identities[i:i+400]
+    values = ",".join("(" + ",".join(esc(r[c]) for c in cols) + ")" for r in chunk)
+    sql(f"INSERT INTO analytics.athlete_identity ({','.join(cols)}) VALUES {values}")
+log("athlete_identity inserted")
+
+# ------------------------------------------------------------- directory
+# id_map: one row per raw diver_id -> canonical, so joins are plain hash joins
+# (an OR-join here nested-loops over 124k x 10k rows and never finishes).
+sql("DROP TABLE IF EXISTS analytics.id_map")
+sql("""CREATE TABLE analytics.id_map AS
+SELECT canonical_id AS source_id, canonical_id FROM analytics.athlete_identity
+UNION
+SELECT wa_id, canonical_id FROM analytics.athlete_identity WHERE wa_id IS NOT NULL""")
+sql("ALTER TABLE analytics.id_map ADD PRIMARY KEY (source_id)")
+
+sql("DROP TABLE IF EXISTS analytics.athlete_directory")
+sql("""CREATE TABLE analytics.athlete_directory AS
+WITH ph AS (
+  SELECT m.canonical_id,
+         COUNT(DISTINCT r.meet_id)                       AS n_phase_meets,
+         COUNT(*)                                        AS n_phases,
+         STRING_AGG(DISTINCT r.discipline, '/')          AS disciplines,
+         (ARRAY_AGG(r.team_name ORDER BY r.meet_year DESC))[1] AS team_name,
+         MAX(r.meet_year) FILTER (WHERE r.competition_family='World Aquatics') AS last_wa_year
+  FROM core.result_phases r
+  JOIN analytics.id_map m ON r.diver_id = m.source_id
+  GROUP BY 1
+),
+ds AS (
+  SELECT m.canonical_id,
+         COUNT(DISTINCT d.meet_id) AS n_sheet_meets,
+         COUNT(*)                  AS n_dives,
+         MIN(d.meet_year)          AS first_sheet_year,
+         MAX(d.meet_year)          AS last_sheet_year,
+         COUNT(*) FILTER (WHERE d.judges_scores IS NOT NULL AND d.judges_scores <> '') AS n_judge_dives
+  FROM core.dive_sheets d
+  JOIN analytics.id_map m ON d.diver_id = m.source_id
+  GROUP BY 1
+)
+SELECT i.canonical_id, i.dm_id, i.wa_id, i.display_name, i.name_key, i.nat,
+       i.families, i.first_year, i.last_year, i.match_method,
+       COALESCE(ph.n_phase_meets,0) AS n_phase_meets,
+       COALESCE(ph.n_phases,0)      AS n_phases,
+       ph.disciplines, ph.team_name, ph.last_wa_year,
+       COALESCE(ds.n_sheet_meets,0) AS n_sheet_meets,
+       COALESCE(ds.n_dives,0)       AS n_dives,
+       ds.first_sheet_year, ds.last_sheet_year,
+       COALESCE(ds.n_judge_dives,0) AS n_judge_dives
+FROM analytics.athlete_identity i
+LEFT JOIN ph ON ph.canonical_id = i.canonical_id
+LEFT JOIN ds ON ds.canonical_id = i.canonical_id""")
+sql("ALTER TABLE analytics.athlete_directory ADD PRIMARY KEY (canonical_id)")
+sql("CREATE INDEX idx_dir_namekey ON analytics.athlete_directory (name_key)")
+sql("CREATE INDEX idx_dir_dives   ON analytics.athlete_directory (n_dives DESC)")
+log("athlete_directory built")
+
+# ------------------------------------------------------------- benchmarks
+# "What it takes" lines per meet x individual event. Cut logic is structural:
+# final_cut = score, in the round BEFORE the Final, of the place equal to the
+# number of Final participants; semi_cut likewise for Prelim -> Semifinal.
+# Exhibition sentinel places (>=100, e.g. DiveMeets 127) are excluded.
+sql("DROP TABLE IF EXISTS analytics.benchmarks")
+sql("DROP TABLE IF EXISTS analytics._bm_ev")
+sql("""CREATE TABLE analytics._bm_ev AS
+SELECT meet_id, MAX(meet_name) AS meet_name, meet_year, competition_family,
+       gender, discipline, event_id,
+       MAX(age_group)  AS age_group,
+       MAX(event_level) AS event_level,
+       round_stage, place, MAX(posted_score) AS posted_score
+FROM core.result_phases
+WHERE COALESCE(is_synchronized, false) = false
+  AND discipline IN ('1m','3m','Platform')
+  AND posted_score IS NOT NULL AND place IS NOT NULL AND place < 100
+GROUP BY meet_id, meet_year, competition_family, gender, discipline,
+         event_id, round_stage, place""")
+sql("""CREATE TABLE analytics.benchmarks AS
+WITH grain AS (
+  SELECT meet_id, event_id, MAX(meet_name) AS meet_name, meet_year,
+         competition_family, gender, discipline,
+         MAX(age_group) AS age_group, MAX(event_level) AS event_level,
+         COUNT(*) FILTER (WHERE round_stage='Final')     AS n_final,
+         COUNT(*) FILTER (WHERE round_stage='Semifinal') AS n_semi,
+         COUNT(*) FILTER (WHERE round_stage='Prelim')    AS n_prelim
+  FROM analytics._bm_ev
+  GROUP BY meet_id, event_id, meet_year, competition_family, gender, discipline
+)
+SELECT g.*,
+       f1.posted_score AS win_score,
+       f3.posted_score AS medal_score,
+       COALESCE(sc.posted_score, pc.posted_score) AS final_cut,
+       ps.posted_score AS semi_cut
+FROM grain g
+LEFT JOIN analytics._bm_ev f1 ON f1.meet_id=g.meet_id AND f1.event_id=g.event_id
+       AND f1.round_stage='Final' AND f1.place=1
+LEFT JOIN analytics._bm_ev f3 ON f3.meet_id=g.meet_id AND f3.event_id=g.event_id
+       AND f3.round_stage='Final' AND f3.place=3
+LEFT JOIN analytics._bm_ev sc ON g.n_semi>0 AND sc.meet_id=g.meet_id AND sc.event_id=g.event_id
+       AND sc.round_stage='Semifinal' AND sc.place=g.n_final
+LEFT JOIN analytics._bm_ev pc ON g.n_semi=0 AND pc.meet_id=g.meet_id AND pc.event_id=g.event_id
+       AND pc.round_stage='Prelim' AND pc.place=g.n_final
+LEFT JOIN analytics._bm_ev ps ON g.n_semi>0 AND ps.meet_id=g.meet_id AND ps.event_id=g.event_id
+       AND ps.round_stage='Prelim' AND ps.place=g.n_semi""")
+sql("DROP TABLE analytics._bm_ev")
+sql("CREATE INDEX idx_bm_lookup ON analytics.benchmarks (competition_family, gender, discipline, meet_year DESC)")
+log("benchmarks built")
+
+# --------------------------------------------------------- field profiles
+sql("DROP TABLE IF EXISTS analytics.field_group_exec")
+sql("""CREATE TABLE analytics.field_group_exec AS
+SELECT competition_family, meet_year, gender, discipline,
+       COALESCE(NULLIF(dive_category_code,''), LEFT(dive_number,1)) AS category_code,
+       COUNT(*) AS n,
+       ROUND(AVG(LEAST(score/(3*dd),10))::numeric, 3)  AS avg_exec,
+       ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p50_exec,
+       ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p90_exec,
+       ROUND(AVG(CASE WHEN score/(3*dd) < 4.5 THEN 1 ELSE 0 END)::numeric,4) AS fail_rate
+FROM core.dive_sheets
+WHERE discipline IN ('1m','3m','Platform')
+  AND score IS NOT NULL AND dd > 0
+GROUP BY 1,2,3,4,5""")
+sql("CREATE INDEX idx_fge ON analytics.field_group_exec (competition_family, gender, discipline, meet_year DESC)")
+
+sql("DROP TABLE IF EXISTS analytics.field_list_dd")
+sql("""CREATE TABLE analytics.field_list_dd AS
+WITH lists AS (
+  SELECT competition_family, meet_year, gender, discipline, meet_id, event_id, diver_id,
+         SUM(dd) AS list_dd, COUNT(*) AS n_dives, SUM(score) AS list_score
+  FROM core.dive_sheets
+  WHERE discipline IN ('1m','3m','Platform')
+    AND round_stage = 'Final' AND score IS NOT NULL AND dd > 0
+  GROUP BY 1,2,3,4,5,6,7
+)
+SELECT competition_family, meet_year, gender, discipline,
+       COUNT(*) AS n_lists,
+       ROUND(AVG(list_dd)::numeric,2)  AS avg_list_dd,
+       ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY list_dd))::numeric,2) AS p50_list_dd,
+       ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY list_dd))::numeric,2) AS p90_list_dd,
+       ROUND(AVG(n_dives)::numeric,1)  AS avg_n_dives
+FROM lists
+GROUP BY 1,2,3,4""")
+sql("CREATE INDEX idx_fld ON analytics.field_list_dd (competition_family, gender, discipline, meet_year DESC)")
+log("field profiles built")
+
+# ---------------------------------------------------------------- meta
+counts = {}
+for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_list_dd"]:
+    counts[t] = rows(sql(f"SELECT COUNT(*) AS n FROM analytics.{t}"))[0]["n"]
+sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
+sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])
+log(f"done: {counts}")

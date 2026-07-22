@@ -1,0 +1,32 @@
+name: Analytics Refresh
+
+# Rebuilds the analytics schema (identity crosswalk, directory, benchmarks,
+# field profiles) from core tables. Runs daily because the dive-sheet scraper
+# is still back-filling meets toward 2015; safe to re-run any time.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 9 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'db/scripts/build_analytics.py'
+
+concurrency:
+  group: analytics-refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build analytics tables
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/build_analytics.py

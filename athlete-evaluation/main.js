@@ -1324,11 +1324,7 @@ async function bootstrap(yMin, yMax) {
   }
 }
 
-/* ── Go ──────────────────────────────────────────────────── */
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => bootstrap());
-} else {
-  bootstrap();
-}
+/* ── Exposed as the Field Intel view; booted lazily by app.js ── */
+window.AEField = { bootstrap };
 
 })();
