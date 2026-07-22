@@ -114,16 +114,14 @@
 
         <div class="ae-lab-grid">
           <div class="ae-lab-pool">
-            <div class="ae-dna-hd ae-lab-hd"><span></span><span>Dive</span><span class="num">DD</span><span class="num">Typical exec</span><span class="num">Expected</span><span class="num">Bad-day</span><span class="num">n</span></div>
             ${pool.map((p) => `
-              <label class="ae-lab-row ${st.picked.has(p.key) ? 'on' : ''}">
+              <label class="ae-lab2-row ${st.picked.has(p.key) ? 'on' : ''}">
                 <input type="checkbox" ${st.picked.has(p.key) ? 'checked' : ''} onchange="AEListLab.toggle('${escJsAttr(p.key)}')"/>
-                <span><b>${esc(p.dive)}</b> <em>${esc(p.height)}</em>${p.n < 5 ? ' <i class="ae-thin" title="fewer than 5 competition attempts — simulation blends in this athlete\u2019s dive-group average">thin history</i>' : ''}</span>
-                <span class="num">${f1(p.dd)}</span>
-                <span class="num">${p.p50 == null ? '—' : p.p50.toFixed(2)}</span>
-                <span class="num"><b>${f1(p.evPts)}</b></span>
-                <span class="num">${f1(p.floorPts)}</span>
-                <span class="num">${p.n}</span>
+                <span class="ae-lab2-main">
+                  <span class="ae-lab2-dive"><b>${esc(p.dive)}</b><em>${esc(p.height)}</em>${p.n < 5 ? ' <i class="ae-thin" title="fewer than 5 competition attempts — simulation blends in this athlete\u2019s dive-group average">thin</i>' : ''}</span>
+                  <span class="ae-lab2-chips">DD ${f1(p.dd)} · exec ${p.p50 == null ? '—' : p.p50.toFixed(2)} · bad-day ${f1(p.floorPts)} · ${p.n}×</span>
+                </span>
+                <span class="ae-lab2-ev"><b>${f1(p.evPts)}</b><i>exp pts</i></span>
               </label>`).join('')}
           </div>
 

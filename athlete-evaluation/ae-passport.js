@@ -40,8 +40,16 @@
     if (!st.disc || !discs.includes(st.disc)) st.disc = defaultDisc(b, discs) || '3m';
     const gender = (b.phases.find((p) => p.gender === 'Male' || p.gender === 'Female') || {}).gender || null;
 
-    let bench = [];
-    if (gender) { try { bench = await window.AE.benchmarks(gender, st.disc, 'World Aquatics'); } catch (e) { bench = []; } }
+    let bench = [], worldExec = [];
+    if (gender) {
+      try {
+        [bench, worldExec] = await Promise.all([
+          window.AE.benchmarks(gender, st.disc, 'World Aquatics'),
+          window.AE.fieldGroupExec(gender, st.disc),
+        ]);
+      } catch (e) { bench = []; worldExec = []; }
+    }
+    st._worldExec = worldExec;
     const latestBench = bench.find((x) => x.final_cut != null || x.medal_score != null);
 
     const iv = b.ident;
@@ -180,6 +188,20 @@
       (st.dnaYears === 'all' || r.meet_year > maxYear - Number(st.dnaYears)));
   }
 
+  function worldRef(cat) {
+    const rows = (st._worldExec || []).filter((x) => x.category_code === cat && x.n >= 25)
+      .sort((a, b2) => b2.meet_year - a.meet_year).slice(0, 2);
+    if (!rows.length) return null;
+    return { p50: mean(rows.map((r) => r.p50_exec)), p90: mean(rows.map((r) => r.p90_exec)) };
+  }
+  function worldTag(sEl) {
+    const ref = sEl.cat ? worldRef(sEl.cat) : null;
+    if (!ref || sEl.n < 3) return '';
+    if (sEl.avgExec >= ref.p90) return '<span class="ae-wtag ae-wtag-top">🌍 world top-10% level</span>';
+    if (sEl.avgExec >= ref.p50) return '<span class="ae-wtag ae-wtag-up">🌍 above world median</span>';
+    return '<span class="ae-wtag ae-wtag-dn">🌍 below world median</span>';
+  }
+
   function renderDNA(b) {
     const el = document.getElementById('aeDna');
     const rows = dnaRows(b);
@@ -188,26 +210,32 @@
       return;
     }
     const stats = window.AE.diveStats(rows);
-    const scaleMin = Math.max(0, Math.min(...stats.map((s) => s.minExec)) - 0.4);
+    const scaleMin = Math.max(0, Math.min(...stats.map((x) => x.minExec)) - 0.4);
     el.innerHTML = `
-      <div class="ae-dna-grid">
-        <div class="ae-dna-hd"><span>Dive</span><span>Execution range (0–10)</span><span class="num">Typical</span><span class="num">DD</span><span class="num">Expected pts</span><span class="num">Bad-day pts</span><span class="num">Attempts</span><span>Read</span></div>
-        ${stats.map((s) => `
-          <div class="ae-dna-row">
-            <div class="ae-dna-dive"><b>${esc(s.dive)}</b><span>${esc(s.height)}</span><em title="${esc(s.desc || '')}">${esc((s.desc || '').slice(0, 26))}</em></div>
-            <div>${C.candleRow(s, scaleMin, 10, 340)}</div>
-            <div class="num"><b>${f2(s.p50)}</b>${s.sdExec != null ? `<span class="ae-soft"> ±${f2(s.sdExec)}</span>` : ''}</div>
-            <div class="num">${f1(s.dd)}</div>
-            <div class="num"><b>${f1(s.evPts)}</b></div>
-            <div class="num">${f1(s.floorPts)}</div>
-            <div class="num">${s.n}${s.failRate > 0 ? `<span class="ae-fail" title="attempts below 4.5 execution"> · ${Math.round(s.failRate * 100)}% miss</span>` : ''}</div>
-            <div><span class="ae-verdict ae-v-${s.verdict.cls}" title="${esc(s.verdict.why)}">${esc(s.verdict.tag)}</span></div>
+      <div class="ae-dna2">
+        ${stats.map((x) => `
+          <div class="ae-dna2-card">
+            <div class="ae-dna2-hd">
+              <div class="ae-dna2-dive"><b>${esc(x.dive)}</b><span>${esc(x.height)}</span></div>
+              <span class="ae-verdict ae-v-${x.verdict.cls}" title="${esc(x.verdict.why)}">${esc(x.verdict.tag)}</span>
+            </div>
+            <div class="ae-dna2-desc">${esc((x.desc || '').slice(0, 44))}</div>
+            <div class="ae-dna2-candle">${C.candleRow(x, scaleMin, 10, 460)}</div>
+            <div class="ae-dna2-chips">
+              <span class="ae-stat"><b>${f2(x.p50)}</b><i>typical${x.sdExec != null ? ' ±' + f2(x.sdExec) : ''}</i></span>
+              <span class="ae-stat"><b>${f1(x.dd)}</b><i>DD</i></span>
+              <span class="ae-stat"><b>${f1(x.evPts)}</b><i>expected pts</i></span>
+              <span class="ae-stat"><b>${f1(x.floorPts)}</b><i>bad-day pts</i></span>
+              <span class="ae-stat"><b>${x.n}</b><i>attempts</i></span>
+              ${x.failRate > 0 ? `<span class="ae-stat ae-stat-bad"><b>${Math.round(x.failRate * 100)}%</b><i>missed</i></span>` : ''}
+              ${worldTag(x)}
+            </div>
           </div>`).join('')}
       </div>
-      <p class="ae-soft ae-footnote">Expected pts = 3 × DD × average execution. Bad-day pts = 3 × DD × 10th-percentile execution — what this dive pays out roughly one bad attempt in ten. Hover a verdict for the reasoning; hover dots for individual attempts. Synchro dives excluded.</p>`;
+      <p class="ae-soft ae-footnote">Box = middle half of attempts, thick tick = typical, whisker ends = best and worst; dots are individual attempts (hover). Expected pts = 3 × DD × average execution; bad-day = the 10th-percentile payout. World tags compare this athlete's average to the world field in the same dive group. Synchro excluded.</p>`;
   }
 
-  function meetRows(b) {
+    function meetRows(b) {
     const rows = b.phases.slice().sort((a, b2) => (b2.meet_year - a.meet_year) || String(b2.meet_id).localeCompare(String(a.meet_id)));
     return rows.slice(0, 200).map((r) => `
       <tr><td>${esc(r.meet_year)}</td><td>${esc(r.meet_name)}</td>

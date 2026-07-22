@@ -47,6 +47,7 @@
     const worlds = bench.find((b) => /Championships/i.test(b.meet_name || '') && b.medal_score != null) || bench.find((b) => b.medal_score != null);
     const medal = worlds ? worlds.medal_score : null;
     const cut = worlds ? worlds.final_cut : null;
+    const semi = worlds ? worlds.semi_cut : null;
     const wdd = ldd.filter((x) => x.n_lists >= 5).sort((a, b) => b.meet_year - a.meet_year)[0] || null;
 
     rows.forEach((r) => project(r, wdd));
@@ -68,28 +69,53 @@
 
       <div class="ae-card ae-fi-sec">
         <div class="ae-card-h"><div><h3>The full board — ${esc(ev.label)}</h3>
-        <p class="ae-soft">Every active US athlete with at least one qualifying list since 2025, ranked by projected 2028 capability at world-average difficulty. Tap a row for the full passport.</p></div></div>
-        <div class="table-wrap"><table class="data-table ae-la-table">
-          <thead><tr><th></th><th>Athlete</th><th>Stage</th><th class="num">Now</th><th class="num">Engine (exec)</th><th class="num">Trend/yr</th><th class="num">DD now</th><th class="num">2028 proj*</th><th class="num">vs medal</th></tr></thead>
-          <tbody>
+        <p class="ae-soft">Every active US athlete with a qualifying list since 2025, ranked by <b>Podium Index</b> — projected 2028 capability as a percentage of the world medal bar (100 = at the medal line). Tap anyone for their full passport.</p></div></div>
+        ${boardStory(ranked, medal, cut, semi)}
+        <div class="ae-board">
           ${ranked.map((r, i) => {
+            const tier = tierOf(r, medal, cut, semi);
+            const pi = podiumIndex(r, medal);
             const gap = medal != null && r.proj_world != null ? r.proj_world - medal : null;
-            return `<tr class="ae-la-row" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
-              <td class="ae-la-rank">${i + 1}</td>
-              <td><b>${esc(r.display_name)}</b><em class="ae-la-team">${esc(r.team_name || '')}</em></td>
-              <td>${stageChip(r)}</td>
-              <td class="num"><b>${f1(r.last_tot)}</b></td>
-              <td class="num">${f2(r.last_ehat)}</td>
-              <td class="num">${slopeChip(r)}</td>
-              <td class="num">${f1(r.last_dd)}${wdd && r.last_dd != null && wdd.avg_list_dd - r.last_dd > 0.5 ? `<span class="ae-la-head2">+${f1(wdd.avg_list_dd - r.last_dd)} avail</span>` : ''}</td>
-              <td class="num"><b>${f1(r.proj_world)}</b><em class="ae-la-team">${f1(r.proj_own)} own DD</em></td>
-              <td class="num">${gap == null ? '—' : `<span class="ae-la-gap ${gap >= 0 ? 'good' : gap >= -25 ? 'close' : ''}">${gap >= 0 ? '+' : ''}${f1(gap)}</span>`}</td>
-            </tr>`;
+            const sparkVals = (r.yearlyArr || []).map((y) => y.tot);
+            return `<button class="ae-brow ae-brow-${tier.cls}" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
+              <span class="ae-brow-rank">${i + 1}</span>
+              <span class="ae-brow-id">
+                <b>${esc(r.display_name)}</b>
+                <span class="ae-brow-meta">${esc(r.team_name || '')}${r.latest_group && r.group_year >= 2025 ? ` · ${esc(r.latest_group)}` : ' · Senior'}</span>
+                <span class="ae-tier ae-tier-${tier.cls}">${esc(tier.tag)}</span>
+              </span>
+              <span class="ae-brow-spark">${C.spark(sparkVals, { w: 84, h: 26, color: r.ehat_slope > 0.03 ? '#1F6B33' : r.ehat_slope < -0.03 ? '#E31937' : '#5A6072' })}
+                <em>${slopeText(r)}</em></span>
+              <span class="ae-brow-stats">
+                <span><b>${f1(r.last_tot)}</b><i>now</i></span>
+                <span><b>${f2(r.last_ehat)}</b><i>engine</i></span>
+                <span><b>${f1(r.proj_world)}</b><i>'28 proj</i></span>
+              </span>
+              <span class="ae-brow-pi">
+                <b>${pi == null ? '—' : pi}</b><i>Podium<br>Index</i>
+                ${gap == null ? '' : `<span class="ae-la-gap ${gap >= 0 ? 'good' : gap >= -25 ? 'close' : ''}">${gap >= 0 ? '+' : ''}${f1(gap)}</span>`}
+              </span>
+            </button>`;
           }).join('')}
-          </tbody>
-        </table></div>
-        <p class="ae-soft ae-footnote">*2028 projection at world-finalist-average difficulty, execution trend held. "Own DD" = same trend on the list they carry today. Athletes with one season show no trend and project flat. Optional dives only — voluntaries excluded so junior and senior lists sit on one scale.</p>
+        </div>
+        <p class="ae-soft ae-footnote">Projection = the athlete's own execution trend carried to 2028 on a world-finalist-average list${wdd ? ` (DD ${f1(wdd.avg_list_dd)})` : ''}. Tiers: clears the medal bar → Medal Track; clears the Worlds final cut → World Finalist Track; clears the semi cut → World Semi Track. One-season athletes project flat. Optional dives only, so junior and senior lists sit on one scale. Trends rest on 2–3 seasons today and sharpen automatically as the scraper lands 2015–2023.</p>
       </div>`;
+  }
+
+  function boardStory(ranked, medal, cut, semi) {
+    if (!ranked.length || medal == null) return '';
+    const nMedal = ranked.filter((r) => r.proj_world >= medal).length;
+    const nFinal = ranked.filter((r) => cut != null && r.proj_world >= cut && r.proj_world < medal).length;
+    const rising = ranked.filter((r) => r.n_years >= 2 && r.ehat_slope > 0.15).length;
+    const bits = [];
+    bits.push(nMedal ? `${nMedal} athlete${nMedal > 1 ? 's' : ''} project${nMedal > 1 ? '' : 's'} at or above the medal bar` : 'No one projects above the medal bar yet');
+    if (nFinal) bits.push(`${nFinal} more inside world-finalist range`);
+    if (rising) bits.push(`${rising} climbing at +0.15/yr or better`);
+    return `<div class="ae-narrate">${esc(bits.join(' · ') + '.')}</div>`;
+  }
+  function slopeText(r) {
+    if (r.n_years < 2 || r.ehat_slope == null) return '1 season';
+    return (r.ehat_slope >= 0 ? '▲ +' : '▼ ') + r.ehat_slope.toFixed(2) + '/yr';
   }
 
   function coerce(r) {
@@ -107,6 +133,18 @@
     r.proj_exec = pe;
     r.proj_own = 3 * r.last_dd * pe;
     r.proj_world = wdd && wdd.avg_list_dd ? 3 * wdd.avg_list_dd * pe : r.proj_own;
+  }
+
+  function tierOf(r, medal, cut, semi) {
+    if (r.proj_world == null || medal == null) return { tag: 'DEVELOPING', cls: 'dev' };
+    if (r.proj_world >= medal) return { tag: 'MEDAL TRACK', cls: 'medal' };
+    if (cut != null && r.proj_world >= cut) return { tag: 'WORLD FINALIST TRACK', cls: 'final' };
+    if (semi != null && r.proj_world >= semi) return { tag: 'WORLD SEMI TRACK', cls: 'semi' };
+    return { tag: 'BUILDING', cls: 'dev' };
+  }
+  function podiumIndex(r, medal) {
+    if (r.proj_world == null || !medal) return null;
+    return Math.round(100 * r.proj_world / medal);
   }
 
   function stageChip(r) {

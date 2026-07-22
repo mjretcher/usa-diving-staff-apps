@@ -429,5 +429,21 @@
     return s;
   }
 
-  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, corridorBands, ladder, areaTrend, dumbbell, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
+  /* ── inline sparkline ── */
+  function spark(values, opts) {
+    const vals = values.filter((v) => v != null);
+    if (vals.length < 2) return '';
+    const w = (opts && opts.w) || 84, h = (opts && opts.h) || 26, color = (opts && opts.color) || POOL;
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    if (mx - mn < 1e-9) { mx = mn + 1; }
+    const pts = values.map((v, i) => v == null ? null :
+      [(2 + i / (values.length - 1) * (w - 8)), (3 + (1 - (v - mn) / (mx - mn)) * (h - 8))]).filter(Boolean);
+    const d = 'M' + pts.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L');
+    const last = pts[pts.length - 1];
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="ae-spark" role="img">' +
+      '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="2.6" fill="' + color + '"/></svg>';
+  }
+
+  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, corridorBands, ladder, areaTrend, dumbbell, spark, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
 })();

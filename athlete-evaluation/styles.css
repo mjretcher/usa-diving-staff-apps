@@ -834,3 +834,78 @@ html,body{overflow-x:hidden;max-width:100vw}
 .ae-la-gap{font:800 12.5px 'JetBrains Mono',monospace;border-radius:8px;padding:3px 8px;background:#FBE3E7;color:#A3122A}
 .ae-la-gap.close{background:#FFF1D6;color:#8A6210}
 .ae-la-gap.good{background:#1F6B33;color:#fff}
+
+/* ── LA28 board: responsive ranked rows (replaces wide table) ── */
+.ae-board{display:flex;flex-direction:column;gap:9px}
+.ae-brow{display:grid;grid-template-columns:34px minmax(150px,1.25fr) 108px 1fr auto;
+  gap:12px;align-items:center;width:100%;text-align:left;background:#FAFBFE;
+  border:1px solid #EEF0F7;border-radius:14px;padding:11px 14px;cursor:pointer;transition:all .13s}
+.ae-brow:hover{border-color:var(--brand-pool,#009AC7);background:#F0F8FC;transform:translateX(2px)}
+.ae-brow-medal{border-left:4px solid #C9A227}
+.ae-brow-final{border-left:4px solid #009AC7}
+.ae-brow-semi{border-left:4px solid #8FC3EA}
+.ae-brow-rank{font:800 17px 'Barlow Condensed',sans-serif;color:#B7BCCB;text-align:center}
+.ae-brow:nth-child(-n+3) .ae-brow-rank{color:#C9A227}
+.ae-brow-id{min-width:0}
+.ae-brow-id b{display:block;font:800 15px Inter,sans-serif;color:var(--brand-navy,#171F69);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ae-brow-meta{display:block;font:500 10.5px Inter,sans-serif;color:#8A90A3;margin:1px 0 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ae-tier{display:inline-block;font:800 8.5px Inter,sans-serif;letter-spacing:.07em;border-radius:6px;padding:3px 7px}
+.ae-tier-medal{background:#C9A227;color:#171F69}
+.ae-tier-final{background:#009AC7;color:#fff}
+.ae-tier-semi{background:#DCEEFA;color:#00708F}
+.ae-tier-dev{background:#EFF1F8;color:#5A6072}
+.ae-brow-spark{display:flex;flex-direction:column;align-items:center;gap:2px}
+.ae-brow-spark em{font:700 9.5px 'JetBrains Mono',monospace;color:#5A6072;font-style:normal}
+.ae-spark{width:84px;height:26px}
+.ae-brow-stats{display:flex;gap:14px;justify-content:flex-end}
+.ae-brow-stats span{text-align:right}
+.ae-brow-stats b{display:block;font:800 16px 'JetBrains Mono',monospace;color:var(--brand-navy,#171F69)}
+.ae-brow-stats i{font:600 8.5px Inter,sans-serif;color:#8A90A3;text-transform:uppercase;letter-spacing:.05em;font-style:normal}
+.ae-brow-pi{display:flex;align-items:center;gap:9px;justify-self:end}
+.ae-brow-pi>b{font:800 30px 'Barlow Condensed',sans-serif;color:var(--brand-navy,#171F69);line-height:.9}
+.ae-brow-pi>i{font:700 8px Inter,sans-serif;color:#8A90A3;text-transform:uppercase;letter-spacing:.06em;font-style:normal;line-height:1.2}
+@media(max-width:860px){
+  .ae-brow{grid-template-columns:26px 1fr auto;grid-template-areas:"rank id pi" "rank spark stats";row-gap:8px;padding:11px 12px}
+  .ae-brow-rank{grid-area:rank}.ae-brow-id{grid-area:id}.ae-brow-pi{grid-area:pi}
+  .ae-brow-spark{grid-area:spark;flex-direction:row;gap:8px;justify-content:flex-start}
+  .ae-brow-stats{grid-area:stats;gap:12px}
+  .ae-brow-stats b{font-size:14px}
+  .ae-brow-pi>b{font-size:26px}
+  .ae-brow-pi .ae-la-gap{display:none}
+}
+
+/* ── Dive DNA cards ── */
+.ae-dna2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.ae-dna2{grid-template-columns:1fr}}
+.ae-dna2-card{background:#FAFBFE;border:1px solid #EEF0F7;border-radius:14px;padding:13px 14px 11px}
+.ae-dna2-hd{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ae-dna2-dive b{font:800 22px 'JetBrains Mono',monospace;color:var(--brand-navy,#171F69)}
+.ae-dna2-dive span{font:700 11px Inter,sans-serif;color:#5A6072;margin-left:7px}
+.ae-dna2-desc{font:500 10.5px Inter,sans-serif;color:#8A90A3;margin:1px 0 7px}
+.ae-dna2-candle .ae-candle{height:30px;border-radius:8px;overflow:hidden}
+.ae-dna2-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;align-items:center}
+.ae-stat{background:#fff;border:1px solid #EEF0F7;border-radius:10px;padding:5px 10px;text-align:center}
+.ae-stat b{display:block;font:800 14px 'JetBrains Mono',monospace;color:var(--brand-navy,#171F69)}
+.ae-stat i{font:600 8.5px Inter,sans-serif;color:#8A90A3;text-transform:uppercase;letter-spacing:.04em;font-style:normal}
+.ae-stat-bad b{color:var(--brand-red,#E31937)}
+.ae-wtag{font:700 10px Inter,sans-serif;border-radius:9px;padding:5px 9px}
+.ae-wtag-top{background:#1F6B33;color:#fff}
+.ae-wtag-up{background:#D5ECD9;color:#1F6B33}
+.ae-wtag-dn{background:#FBE3E7;color:#A3122A}
+
+/* ── List Lab compact rows ── */
+.ae-lab2-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid #EEF0F7;
+  border-radius:12px;margin-bottom:7px;cursor:pointer;background:#FAFBFE;transition:all .12s}
+.ae-lab2-row:hover{border-color:var(--brand-pool,#009AC7)}
+.ae-lab2-row.on{background:#F0F8FC;border-color:var(--brand-pool,#009AC7)}
+.ae-lab2-row input{width:17px;height:17px;accent-color:var(--brand-pool,#009AC7);flex:0 0 auto}
+.ae-lab2-main{flex:1;min-width:0}
+.ae-lab2-dive b{font:800 16px 'JetBrains Mono',monospace;color:var(--brand-navy,#171F69)}
+.ae-lab2-dive em{font:600 10.5px Inter,sans-serif;color:#5A6072;font-style:normal;margin-left:5px}
+.ae-lab2-chips{display:block;font:600 10.5px 'JetBrains Mono',monospace;color:#8A90A3;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ae-lab2-ev{text-align:right;flex:0 0 auto}
+.ae-lab2-ev b{display:block;font:800 18px 'Barlow Condensed',sans-serif;color:var(--brand-navy,#171F69)}
+.ae-lab2-ev i{font:600 8.5px Inter,sans-serif;color:#8A90A3;text-transform:uppercase;font-style:normal}
