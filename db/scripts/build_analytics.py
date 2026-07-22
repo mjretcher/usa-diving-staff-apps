@@ -288,6 +288,11 @@ log("benchmarks built")
 sql("DROP TABLE IF EXISTS analytics.field_group_exec")
 sql("""CREATE TABLE analytics.field_group_exec AS
 SELECT competition_family, meet_year, gender, discipline,
+       CASE WHEN competition_family='World Aquatics' THEN 'world'
+            WHEN competition_family='NCAA' THEN 'ncaa'
+            WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+            WHEN event_name ILIKE 'group%' THEN 'us-junior'
+            ELSE 'us-open' END AS scope,
        COALESCE(NULLIF(dive_category_code,''), LEFT(dive_number,1)) AS category_code,
        COUNT(*) AS n,
        ROUND(AVG(LEAST(score/(3*dd),10))::numeric, 3)  AS avg_exec,
@@ -297,27 +302,33 @@ SELECT competition_family, meet_year, gender, discipline,
 FROM core.dive_sheets
 WHERE discipline IN ('1m','3m','Platform')
   AND score IS NOT NULL AND dd > 0
-GROUP BY 1,2,3,4,5""")
+GROUP BY 1,2,3,4,5,6""")
 sql("CREATE INDEX idx_fge ON analytics.field_group_exec (competition_family, gender, discipline, meet_year DESC)")
 
 sql("DROP TABLE IF EXISTS analytics.field_list_dd")
 sql("""CREATE TABLE analytics.field_list_dd AS
 WITH lists AS (
-  SELECT competition_family, meet_year, gender, discipline, meet_id, event_id, diver_id,
+  SELECT competition_family, meet_year, gender, discipline,
+         CASE WHEN competition_family='World Aquatics' THEN 'world'
+              WHEN competition_family='NCAA' THEN 'ncaa'
+              WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+              WHEN event_name ILIKE 'group%' THEN 'us-junior'
+              ELSE 'us-open' END AS scope,
+         meet_id, event_id, diver_id,
          SUM(dd) AS list_dd, COUNT(*) AS n_dives, SUM(score) AS list_score
   FROM core.dive_sheets
   WHERE discipline IN ('1m','3m','Platform')
     AND round_stage = 'Final' AND score IS NOT NULL AND dd > 0
-  GROUP BY 1,2,3,4,5,6,7
+  GROUP BY 1,2,3,4,5,6,7,8
 )
-SELECT competition_family, meet_year, gender, discipline,
+SELECT competition_family, meet_year, gender, discipline, scope,
        COUNT(*) AS n_lists,
        ROUND(AVG(list_dd)::numeric,2)  AS avg_list_dd,
        ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY list_dd))::numeric,2) AS p50_list_dd,
        ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY list_dd))::numeric,2) AS p90_list_dd,
        ROUND(AVG(n_dives)::numeric,1)  AS avg_n_dives
 FROM lists
-GROUP BY 1,2,3,4""")
+GROUP BY 1,2,3,4,5""")
 sql("CREATE INDEX idx_fld ON analytics.field_list_dd (competition_family, gender, discipline, meet_year DESC)")
 log("field profiles built")
 

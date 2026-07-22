@@ -8,18 +8,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260628" />
-  <link rel="stylesheet" href="styles.css?v=202607220015" />
+  <link rel="stylesheet" href="styles.css?v=202607220130" />
 </head>
 <body>
 
-<header class="app-topbar">
+<header class="app-topbar ae-topbar">
   <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
     <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" class="topbar-logo" />
   </a>
   <div class="topbar-divider"></div>
   <div class="topbar-identity">
     <div class="topbar-eyebrow">High Performance</div>
-    <div class="topbar-title">Field &amp; Athlete Evaluation</div>
+    <div class="topbar-title">Athlete Evaluation</div>
   </div>
   <nav class="hp-view-switch" aria-label="High Performance views">
     <a class="hp-view-tab" href="../criteria-simulator/">Standards Studio</a>
@@ -27,51 +27,8 @@
     <a class="hp-view-tab" href="../matchup-lab/">Matchup Lab</a>
   </nav>
   <div class="topbar-spacer"></div>
-  <div class="hp-year-controls" role="group" aria-label="Year scope">
-    <button class="hp-year-btn active" id="btnRecent" data-min="2024" data-max="2026">2024–26</button>
-    <button class="hp-year-btn" id="btnFive"   data-min="2022" data-max="2026">5-year</button>
-    <button class="hp-year-btn" id="btnAllYrs" data-min="2018" data-max="2026">All years</button>
-  </div>
-  <div class="topbar-metrics">
-    <span class="topbar-pill"><b id="kpiPhases">—</b> phases</span>
-    <span class="topbar-pill"><b id="kpiAthletes">—</b> athletes</span>
-    <span class="topbar-pill topbar-source" id="kpiSource">Neon</span>
-  </div>
+  <span id="aeFreshness" class="ae-freshness" hidden></span>
 </header>
-
-<!-- Data Trust Strip -->
-<div class="hp-trust-strip" id="trustStrip" aria-label="Data coverage summary">
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Phases analyzed</div>
-    <div class="hp-trust-val" id="tPhases">—</div>
-    <div class="hp-trust-note" id="tPlaceNote">place known —%</div>
-  </div>
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Cumulative scores</div>
-    <div class="hp-trust-val" id="tCumul">~11%</div>
-    <div class="hp-trust-note hp-trust-ok">✓ handled correctly</div>
-  </div>
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Intl benchmark</div>
-    <div class="hp-trust-val" id="tIntl">—</div>
-    <div class="hp-trust-note hp-trust-warn">partial · World meets only</div>
-  </div>
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Judge detail</div>
-    <div class="hp-trust-val" id="tJudge">~25%</div>
-    <div class="hp-trust-note hp-trust-warn">intl meets only</div>
-  </div>
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Year span</div>
-    <div class="hp-trust-val" id="tYears">2018–2026</div>
-    <div class="hp-trust-note" id="tMeets">— meets</div>
-  </div>
-  <div class="hp-trust-cell">
-    <div class="hp-trust-label">Athletes</div>
-    <div class="hp-trust-val" id="tAthletes">—</div>
-    <div class="hp-trust-note" id="tTeams">— teams</div>
-  </div>
-</div>
 
 <!-- ── Athlete context bar: search + view tabs ─────────────── -->
 <div class="ae-ctxbar">
@@ -81,183 +38,11 @@
   </div>
   <div id="aeAthleteChip" class="ae-athlete-chip"></div>
   <nav id="aeTabs" class="ae-tabs" aria-label="Evaluation views"></nav>
-  <span id="aeFreshness" class="ae-freshness" hidden></span>
 </div>
 
-<div class="hp-workspace" id="workspace">
+<div class="hp-workspace ae-workspace" id="workspace">
 
-<div id="view-field">
-
-  <div id="loadingPanel" class="hp-loading">
-    <div class="hp-spinner"></div>
-    <div class="hp-loading-text" id="loadingText">Loading HP Analytics…</div>
-  </div>
-
-  <div id="mainContent" hidden>
-
-    <!-- ── 1. Road to the Podium ─────────────────────────────────── -->
-    <section class="hp-section" id="sec-medal-gap">
-      <div class="hp-section-hd">
-        <div class="hp-section-hd-left">
-          <h2>Road to the Podium</h2>
-          <p>Best US senior score vs the World final cut and gold medal, by Olympic event.
-            <span class="hp-partial-tag">World Aquatics · partial coverage (~28%)</span></p>
-        </div>
-        <button class="hp-print-btn" id="printMedalGap" aria-label="Print medal gap report">⎙ Print report</button>
-      </div>
-      <div class="hp-medal-grid" id="medalGapGrid"><!-- JS --></div>
-    </section>
-
-    <!-- ── 2. Score Bands ─────────────────────────────────────────── -->
-    <section class="hp-section" id="sec-score-bands">
-      <div class="hp-section-hd">
-        <h2>What It Takes to Make a US Senior Final</h2>
-        <p>Score distribution in US Senior Finals — gold, podium (top 3), upper quartile, median, and floor.</p>
-      </div>
-      <div class="hp-bands-grid" id="scoreBandsGrid"><!-- JS --></div>
-    </section>
-
-    <!-- ── 3. DD Comparison + Dive-Group Heatmap (two-column) ─────── -->
-    <div class="hp-dual-row">
-
-      <section class="hp-section hp-section-card" id="sec-dd">
-        <div class="hp-section-hd">
-          <h2>US vs World — Difficulty (DD)</h2>
-          <p>Average DD per dive in Finals. Difficulty caps the score.
-            <span class="hp-partial-tag">World · partial</span></p>
-        </div>
-        <div class="hp-dd-body" id="ddContent"><!-- JS --></div>
-      </section>
-
-      <section class="hp-section hp-section-card" id="sec-heatmap">
-        <div class="hp-section-hd">
-          <h2>Dive-Group Strength &amp; Weakness</h2>
-          <p>Average execution score by dive group (1–6), US vs World Finals.
-            <span class="hp-partial-tag">World · partial</span></p>
-        </div>
-        <div class="hp-heatmap-body" id="heatmapContent"><!-- JS --></div>
-      </section>
-
-    </div>
-
-    <!-- ── 4. Multi-Year Gap Trend ────────────────────────────────── -->
-    <section class="hp-section" id="sec-trends">
-      <div class="hp-section-hd">
-        <h2>Multi-Year Gap Trend</h2>
-        <p>Is the US closing or widening the gap to World gold? Full history 2018–2026.
-          <span class="hp-partial-tag">World · partial</span></p>
-      </div>
-      <div class="hp-trend-body" id="trendsContent"><!-- JS --></div>
-    </section>
-
-    <!-- ── 5. Round Progression ───────────────────────────────────── -->
-    <section class="hp-section" id="sec-progression">
-      <div class="hp-section-hd">
-        <div class="hp-section-hd-left">
-          <h2>Prelim → Semi → Final Progression</h2>
-          <p>Who climbs and who fades across rounds. US athletes in senior Olympic-discipline finals.</p>
-        </div>
-        <div class="hp-prog-controls">
-          <select class="hp-select" id="progGender">
-            <option value="all">Both genders</option>
-            <option value="Female">Women</option>
-            <option value="Male">Men</option>
-          </select>
-          <select class="hp-select" id="progBoard">
-            <option value="all">All boards</option>
-            <option value="3m">3m</option>
-            <option value="Platform">Platform</option>
-          </select>
-        </div>
-      </div>
-      <div class="hp-prog-body" id="progressionContent"><!-- JS --></div>
-    </section>
-
-    <!-- ── 6. Judge Execution Detail ─────────────────────────────── -->
-    <section class="hp-section" id="sec-judges">
-      <div class="hp-section-hd">
-        <h2>Judge Execution Detail</h2>
-        <p>Score spread and judge agreement across international competitions.
-          <span class="hp-partial-tag">International meets only (~25% of dives)</span></p>
-      </div>
-      <div class="hp-judge-body" id="judgeContent"><!-- JS --></div>
-    </section>
-
-    <!-- ── 7. Synchro (collapsible) ───────────────────────────────── -->
-    <details class="hp-section hp-details" id="sec-synchro">
-      <summary class="hp-details-summary">
-        <span class="hp-details-label">Synchronized Diving</span>
-        <span class="hp-details-sub">Medal gap and score bands for synchro events — click to expand</span>
-        <span class="hp-details-chev">▾</span>
-      </summary>
-      <div class="hp-synchro-note">Looking for <b>who to pair</b>, not just the medal gap? The <a href="../matchup-lab/">Matchup Lab</a> ranks synchro and mixed pairings from voluntary-dive execution.</div>
-      <div class="hp-synchro-body" id="synchroContent"><!-- JS --></div>
-    </details>
-
-    <!-- ── 8. Athlete Deep-Dive (collapsed, search-driven) ────────── -->
-    <section class="hp-section hp-section-spotlight" id="sec-spotlight">
-      <div class="hp-section-hd">
-        <div class="hp-section-hd-left">
-          <h2>Athlete Deep-Dive</h2>
-          <p>Search any athlete for trajectory, percentile ranking, consistency, dive-by-dive analysis, and DD profile.</p>
-        </div>
-        <button class="hp-print-btn" id="printSpotlight" aria-label="Print athlete report" hidden>⎙ Print athlete card</button>
-      </div>
-      <div class="hp-spotlight-search">
-        <input type="search" class="hp-spotlight-input" id="spotlightSearch"
-               placeholder="Type athlete name…" autocomplete="off"
-               list="spotlightOptions" />
-        <button class="hp-spotlight-btn" id="spotlightBtn">Search</button>
-      </div>
-      <datalist id="spotlightOptions"></datalist>
-      <div id="spotlightContent" class="hp-spotlight-content" hidden><!-- JS --></div>
-    </section>
-
-    <!-- ── 9. Athlete Leaderboard (collapsed detail table) ────────── -->
-    <details class="hp-section hp-details" id="sec-leaderboard">
-      <summary class="hp-details-summary">
-        <span class="hp-details-label">Athlete Leaderboard</span>
-        <span class="hp-details-sub">Top athletes by best final score — click to expand</span>
-        <span class="hp-details-chev">▾</span>
-      </summary>
-      <div class="hp-lb-controls">
-        <select class="hp-select" id="lbGender">
-          <option value="all">Both genders</option>
-          <option value="Female">Women</option>
-          <option value="Male">Men</option>
-        </select>
-        <select class="hp-select" id="lbBoard">
-          <option value="all">All boards</option>
-          <option value="3m">3m</option>
-          <option value="Platform">Platform</option>
-          <option value="1m">1m</option>
-        </select>
-        <select class="hp-select" id="lbFamily">
-          <option value="USA Diving">US athletes only</option>
-          <option value="all">All athletes</option>
-        </select>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table" id="leaderboardTable">
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Athlete</th>
-              <th>Team</th>
-              <th>Gender</th>
-              <th>Board</th>
-              <th class="num">Best Final Score</th>
-              <th class="num">Events</th>
-              <th class="num">Best Place</th>
-            </tr>
-          </thead>
-          <tbody id="leaderboardRows"></tbody>
-        </table>
-      </div>
-    </details>
-
-  </div><!-- /mainContent -->
-</div><!-- /view-field -->
+<div id="view-field"><div id="fieldRoot"></div></div>
 
 <div id="view-passport" class="ae-view" hidden></div>
 <div id="view-listlab"  class="ae-view" hidden></div>
@@ -279,17 +64,17 @@ window.USAD_CONFIG = {
 <script src="../shared/neon-client.js?v=20260628"></script>
 <script src="../shared/usad-modal.js?v=20260628"></script>
 <script src="../shared/usad-toast.js?v=20260628"></script>
-<script src="ae-data.js?v=202607220015"></script>
-<script src="ae-charts.js?v=202607220015"></script>
-<script src="ae-passport.js?v=202607220015"></script>
-<script src="ae-listlab.js?v=202607220015"></script>
-<script src="ae-pressure.js?v=202607220015"></script>
-<script src="ae-podium.js?v=202607220015"></script>
-<script src="ae-race.js?v=202607220015"></script>
-<script src="ae-judge.js?v=202607220015"></script>
-<script src="ae-corridor.js?v=202607220015"></script>
-<script src="main.js?v=202607220015"></script>
-<script src="app.js?v=202607220015"></script>
+<script src="ae-data.js?v=202607220130"></script>
+<script src="ae-charts.js?v=202607220130"></script>
+<script src="ae-passport.js?v=202607220130"></script>
+<script src="ae-listlab.js?v=202607220130"></script>
+<script src="ae-pressure.js?v=202607220130"></script>
+<script src="ae-podium.js?v=202607220130"></script>
+<script src="ae-race.js?v=202607220130"></script>
+<script src="ae-judge.js?v=202607220130"></script>
+<script src="ae-corridor.js?v=202607220130"></script>
+<script src="ae-field.js?v=202607220130"></script>
+<script src="app.js?v=202607220130"></script>
 
 </body>
 </html>

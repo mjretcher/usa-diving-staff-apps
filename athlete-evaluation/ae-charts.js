@@ -309,5 +309,120 @@
     return s;
   }
 
-  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, corridorBands, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
+  /* ── World Stage ladder: vertical scale, gold/medal/cut lines + US marker ── */
+  function ladder(o) {
+    // o: {win, medal, cut, us:{v,name}, h}
+    const w = 300, h = o.h || 250, padT = 26, padB = 18, L = 108, R = w - 22;
+    const vals = [o.win, o.medal, o.cut, o.us && o.us.v].filter((v) => v != null);
+    if (!vals.length) return '<div class="ae-empty">No data</div>';
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    const pad = (mx - mn || 40) * 0.14; mn -= pad; mx += pad * 0.6;
+    const Y = (v) => padT + (1 - (v - mn) / (mx - mn)) * (h - padT - padB);
+    let s = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg" role="img">
+      <defs>
+        <filter id="ldGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <linearGradient id="ldRail" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#C9A227"/><stop offset="0.5" stop-color="#8FC3EA"/><stop offset="1" stop-color="rgba(143,195,234,0.15)"/>
+        </linearGradient>
+      </defs>
+      <line x1="${L}" y1="${padT - 6}" x2="${L}" y2="${h - padB}" stroke="url(#ldRail)" stroke-width="3" stroke-linecap="round"/>`;
+    const rung = (v, color, label, dash) => {
+      if (v == null) return '';
+      return `<line x1="${L - 7}" y1="${Y(v)}" x2="${R}" y2="${Y(v)}" stroke="${color}" stroke-width="2.2" ${dash ? 'stroke-dasharray="6 5"' : ''} stroke-linecap="round" opacity="0.95"/>` +
+        `<text x="${L - 14}" y="${Y(v) + 4}" text-anchor="end" class="ae-lad-lab" fill="${color}">${esc(label)}</text>` +
+        `<text x="${L - 14}" y="${Y(v) + 16}" text-anchor="end" class="ae-lad-val" fill="${color}">${v.toFixed(1)}</text>`;
+    };
+    s += rung(o.win, GOLD, 'GOLD', false);
+    s += rung(o.medal, '#FF7A8C', 'MEDAL', false);
+    s += rung(o.cut, SKY, 'FINAL CUT', true);
+    if (o.us && o.us.v != null) {
+      const y = Y(o.us.v);
+      s += `<circle cx="${L}" cy="${y}" r="7" fill="${GOLD}" filter="url(#ldGlow)"/>` +
+           `<circle cx="${L}" cy="${y}" r="7" fill="none" stroke="#fff" stroke-width="1.6"/>` +
+           `<text x="${L + 16}" y="${y - 4}" class="ae-lad-us">${esc(o.us.name)}</text>` +
+           `<text x="${L + 16}" y="${y + 13}" class="ae-lad-usv">${o.us.v.toFixed(1)}</text>`;
+    }
+    s += `</svg>`;
+    return s;
+  }
+
+  /* ── Moving-bar trend: categorical meets on x, gradient area per series ── */
+  function areaTrend(o) {
+    // o: {labels:[meet short labels], series:[{name,color,values[],area}], w,h}
+    const w = o.w || 430, h = o.h || 220, padL = 46, padR = 12, padT = 12, padB = 42;
+    const all = o.series.flatMap((sr) => sr.values.filter((v) => v != null));
+    if (!all.length) return '<div class="ae-empty">Awaiting data</div>';
+    let mn = Math.min(...all), mx = Math.max(...all);
+    const pad = (mx - mn || 40) * 0.12; mn -= pad; mx += pad;
+    const n = o.labels.length;
+    const X = (i) => padL + (n === 1 ? 0.5 : i / (n - 1)) * (w - padL - padR);
+    const Y = (v) => padT + (1 - (v - mn) / (mx - mn)) * (h - padT - padB);
+    const gid = 'ag' + Math.floor(Math.random() * 1e6);
+    let s = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg" role="img"><defs>`;
+    o.series.forEach((sr, si) => {
+      s += `<linearGradient id="${gid}${si}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${sr.color}" stop-opacity="0.30"/>
+        <stop offset="1" stop-color="${sr.color}" stop-opacity="0.02"/></linearGradient>`;
+    });
+    s += `</defs>`;
+    niceTicks(mn, mx, 4).forEach((t) => {
+      s += `<line x1="${padL}" y1="${Y(t)}" x2="${w - padR}" y2="${Y(t)}" stroke="${GRID}"/>` +
+           `<text x="${padL - 6}" y="${Y(t) + 4}" text-anchor="end" class="ae-tick">${Math.round(t)}</text>`;
+    });
+    o.labels.forEach((lb, i) => {
+      s += `<text x="${X(i)}" y="${h - 26}" text-anchor="middle" class="ae-tick">${esc(lb[0])}</text>` +
+           `<text x="${X(i)}" y="${h - 13}" text-anchor="middle" class="ae-tick" opacity="0.65">${esc(lb[1] || '')}</text>`;
+    });
+    o.series.forEach((sr, si) => {
+      const pts = sr.values.map((v, i) => v != null ? [X(i), Y(v), v, i] : null).filter(Boolean);
+      if (!pts.length) return;
+      const line = 'M' + pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join('L');
+      if (sr.area && pts.length > 1) {
+        s += `<path d="${line}L${pts[pts.length - 1][0].toFixed(1)},${Y(mn)}L${pts[0][0].toFixed(1)},${Y(mn)}Z" fill="url(#${gid}${si})"/>`;
+      }
+      s += `<path d="${line}" fill="none" stroke="${sr.color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" ${sr.dash ? 'stroke-dasharray="6 5"' : ''}/>`;
+      pts.forEach((p) => {
+        s += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.6" fill="${sr.color}" stroke="#fff" stroke-width="1.2"><title>${esc(sr.name)} — ${esc(o.labels[p[3]].join(' '))}: ${p[2].toFixed(1)}</title></circle>`;
+      });
+    });
+    s += `</svg>`;
+    return s;
+  }
+
+  /* ── Difficulty dumbbell: US vs World finalist list DD per event ── */
+  function dumbbell(rows, o) {
+    // rows: [{label, us, world, worldP90}]
+    const w = (o && o.w) || 760, rowH = 52, padT = 30, padB = 10, padL = 130, padR = 96;
+    const h = padT + padB + rows.length * rowH;
+    const vals = rows.flatMap((r) => [r.us, r.world, r.worldP90]).filter((v) => v != null);
+    if (!vals.length) return '<div class="ae-empty">No list-DD data yet.</div>';
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    const pad = (mx - mn || 3) * 0.14; mn -= pad; mx += pad;
+    const X = (v) => padL + (v - mn) / (mx - mn) * (w - padL - padR);
+    let s = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg" role="img">`;
+    niceTicks(mn, mx, 6).forEach((t) => {
+      s += `<line x1="${X(t)}" y1="${padT - 10}" x2="${X(t)}" y2="${h - padB}" stroke="${GRID}"/>` +
+           `<text x="${X(t)}" y="${padT - 14}" text-anchor="middle" class="ae-tick">${t.toFixed(1)}</text>`;
+    });
+    rows.forEach((r, i) => {
+      const y = padT + i * rowH + rowH / 2;
+      s += `<text x="8" y="${y + 4}" class="ae-db-lab">${esc(r.label)}</text>`;
+      if (r.us != null && r.world != null) {
+        s += `<line x1="${X(Math.min(r.us, r.world))}" y1="${y}" x2="${X(Math.max(r.us, r.world))}" y2="${y}" stroke="#D6DAE6" stroke-width="6" stroke-linecap="round"/>`;
+      }
+      if (r.worldP90 != null) s += `<line x1="${X(r.worldP90)}" y1="${y - 11}" x2="${X(r.worldP90)}" y2="${y + 11}" stroke="${RED}" stroke-width="2" stroke-dasharray="3 3" opacity="0.7"><title>World top-decile: ${r.worldP90.toFixed(1)}</title></line>`;
+      if (r.world != null) s += `<circle cx="${X(r.world)}" cy="${y}" r="8" fill="${RED}" stroke="#fff" stroke-width="2"><title>World finalist avg: ${r.world.toFixed(1)}</title></circle>`;
+      if (r.us != null) s += `<circle cx="${X(r.us)}" cy="${y}" r="8" fill="${NAVY}" stroke="#fff" stroke-width="2"><title>US senior finalist avg: ${r.us.toFixed(1)}</title></circle>`;
+      if (r.us != null && r.world != null) {
+        const d = r.world - r.us;
+        s += `<text x="${w - padR + 10}" y="${y + 4}" class="ae-db-delta" fill="${d > 0.15 ? RED : '#1F6B33'}">${d >= 0 ? '+' : ''}${d.toFixed(1)}</text>`;
+      }
+    });
+    s += `</svg>`;
+    return s;
+  }
+
+  window.AECharts = { trajectory, candleRow, density, waterfall, radar, bump, slotBars, corridorBands, ladder, areaTrend, dumbbell, niceTicks, COLORS: { NAVY, RED, POOL, SKY, GOLD, INK2 } };
 })();
