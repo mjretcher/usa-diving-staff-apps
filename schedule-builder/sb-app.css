@@ -1284,6 +1284,10 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bc-dur-ms{display:inline-flex;align-items:center;gap:4px}
 .bc-dur-ms em{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-right:4px}
 .bc-dur-i{width:52px;text-align:center}
+.bc-pos{margin-top:8px}
+.bc-pos-l{display:block;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3);margin-bottom:5px}
+.bc-pos .chiprow{margin-bottom:5px}
+.bc-split{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:var(--tx2);flex-wrap:wrap}
 .bc-br-v{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--navy);min-width:56px;text-align:right}
 .bc-br.off .bc-br-v{color:var(--tx3);font-weight:500}
 /* PA cue editor */

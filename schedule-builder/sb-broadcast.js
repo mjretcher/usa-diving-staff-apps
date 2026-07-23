@@ -59,8 +59,10 @@ const BCAST_DEFAULTS = {
   introSecPer: 20,         // seconds per athlete during introductions
   introFlatMin: 0,         // >0 overrides the per-athlete calculation
   resetMin: 3,             // legacy minutes mirror of resetSec
-  resetSec: 180,           // the "get ready" break after intros
+  resetSec: 180,           // the "get ready" break around the introductions
   resetName: 'Commercial break',
+  resetPos: 'afterIntros', // inBoards | beforeIntros | midIntros | afterIntros
+  resetSplitAfter: 0,      // midIntros only — athlete number to break after (0 = halfway)
   interleave: true,        // two finals in one session alternate round by round
   awardsMode: 'end',       // 'after' = ceremony follows each event | 'end' = both at the end
   flashMin: 5,
@@ -118,6 +120,38 @@ function bcastResetSec(c) {
   return clampSec(Number(c.resetMin || 0) * 60);
 }
 
+// ── WHERE THE RESET / COMMERCIAL BREAK SITS ───────────────────────────
+// Producers place the opening commercial differently depending on how the
+// window is built. All four positions are legitimate run-of-show:
+//   inBoards     — runs while the deck clears. Comes OUT of the boards-close
+//                  gap, so the show does not get any longer.
+//   beforeIntros — deck is clear, break, then the finalists walk out. Adds time.
+//   midIntros    — introductions split around the break. Adds time.
+//   afterIntros  — finalists introduced, break, round 1. Adds time. (default)
+const BCAST_RESET_POS = ['inBoards', 'beforeIntros', 'midIntros', 'afterIntros'];
+const BCAST_RESET_POS_LABEL = {
+  inBoards: 'In the boards-close gap',
+  beforeIntros: 'Before intros',
+  midIntros: 'Middle of intros',
+  afterIntros: 'After intros',
+};
+const BCAST_RESET_POS_HINT = {
+  inBoards: 'Runs while the deck clears and the judges seat. It comes out of the boards-close gap, so the show does not get any longer.',
+  beforeIntros: 'Deck is clear, break, then the finalists are introduced. This adds to the length of the show.',
+  midIntros: 'Introductions split around the break — some finalists, break, the rest. This adds to the length of the show.',
+  afterIntros: 'Finalists are introduced, then the break, then round one. This adds to the length of the show.',
+};
+function bcastResetPos(c) {
+  const p = c && c.resetPos;
+  return BCAST_RESET_POS.includes(p) ? p : 'afterIntros';
+}
+// Athlete number the introductions break after. 0 / out of range = halfway.
+function bcastResetSplit(c, total) {
+  const v = Math.round(Number(c && c.resetSplitAfter) || 0);
+  if (v >= 1 && v <= total - 1) return v;
+  return Math.max(1, Math.ceil(total / 2));
+}
+
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
 const bsec = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
 const bmmss = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60), x = s % 60; return `${m}:${String(x).padStart(2, '0')}`; };
@@ -131,6 +165,7 @@ const bclockShort = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(
 const PA_CUE_DEFAULTS = {
   boardsClose: 'Boards are now closed. Athletes, please clear the boards and towers and report to the marshalling area.',
   presentation: 'Ladies and gentlemen, please welcome your finalists for the {event}.',
+  presentationCont: 'Continuing with the introduction of your finalists for the {event}.',
   reset: 'Our finalists have {break} to prepare. Diving begins in just a few minutes.',
   round: 'Round {round} of {rounds} — {event}.',
   break: '{break}. We return with round {round} of the {event}.',
@@ -142,8 +177,19 @@ const PA_CUE_DEFAULTS = {
 function paCues() {
   return Object.assign({}, PA_CUE_DEFAULTS, (S.meet && S.meet.paCues) || {});
 }
+// The standard reset line reads differently depending on where the break sits.
+// A producer who has written their own line always wins — this only swaps the
+// wording when the cue is still the stock one.
+const RESET_CUE_BY_POS = {
+  inBoards: 'Boards are closed. We are going to a short break — your finalists will be introduced in just a few minutes.',
+  beforeIntros: 'We return in {break} with the introduction of your finalists for the {event}.',
+  midIntros: 'We continue with the introduction of your finalists in just a moment.',
+  afterIntros: PA_CUE_DEFAULTS.reset,
+};
 function paCueFor(row, cues) {
-  const tpl = cues[row.cueKey] || '';
+  let tpl = cues[row.cueKey] || '';
+  const userSet = S.meet && S.meet.paCues && S.meet.paCues.reset;
+  if (row.cueKey === 'reset' && row.resetPos && !userSet) tpl = RESET_CUE_BY_POS[row.resetPos] || tpl;
   if (!tpl) return '';
   return tpl
     .replace(/\{event\}/g, row.evName || 'this event')
@@ -176,13 +222,45 @@ function bcastRows(sess) {
   const evLabel = evs.map(e => evName(e)).join(' & ');
 
   // ── Front of show ───────────────────────────────────────────────────
-  push('boardsclose', 'boardsClose', 'CLOSE BOARDS', c.boardsCloseMin * 60, { evName: evLabel, note: 'Warm-up ends — deck clears, judges seat, broadcast opens' });
-
   const totalDivers = evs.reduce((a, e) => a + entryValue(e), 0);
   const introSec = Number(c.introFlatMin) > 0 ? Number(c.introFlatMin) * 60 : totalDivers * Number(c.introSecPer || 0);
-  push('presentation', 'presentation', 'ATHLETE PRESENTATION', introSec, { evName: evLabel, divers: totalDivers, perSec: Number(c.introSecPer || 0) });
+  const introPer = Number(c.introSecPer || 0);
+  const resetSec = bcastResetSec(c);
+  const resetPos = bcastResetPos(c);
+  const resetName = c.resetName || 'Commercial break';
+  const boardsSec = Math.max(0, Number(c.boardsCloseMin || 0) * 60);
 
-  push('reset', 'reset', (c.resetName || 'Commercial break').toUpperCase(), bcastResetSec(c), { evName: evLabel, breakLabel: c.resetName || 'Commercial break' });
+  // A break placed inside the boards-close gap is absorbed by it rather than
+  // added to it — the deck-clear row shrinks by exactly the length of the break.
+  const inBoards = resetPos === 'inBoards' && resetSec > 0;
+  const closeSec = inBoards ? Math.max(0, boardsSec - resetSec) : boardsSec;
+
+  const pushReset = () => {
+    if (resetSec <= 0) return;
+    push('reset', 'reset', resetName.toUpperCase(), resetSec, { evName: evLabel, breakLabel: resetName, resetPos });
+  };
+  const pushIntro = (label, divers, sec, cueKey, extra) =>
+    push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: evLabel, divers, perSec: introPer }, extra || {}));
+
+  push('boardsclose', 'boardsClose', 'CLOSE BOARDS', closeSec, {
+    evName: evLabel,
+    note: inBoards ? 'Warm-up ends — deck clears and judges seat, then we go to break' : 'Warm-up ends — deck clears, judges seat, broadcast opens',
+  });
+
+  if (inBoards || resetPos === 'beforeIntros') pushReset();
+
+  if (resetPos === 'midIntros' && resetSec > 0 && totalDivers > 1) {
+    // Introductions split around the break: first block of athletes, break,
+    // the rest. Time is apportioned by how many athletes are in each block.
+    const cut = bcastResetSplit(c, totalDivers);
+    const sec1 = Math.round(introSec * (cut / totalDivers));
+    pushIntro(`ATHLETE PRESENTATION (1–${cut})`, cut, sec1);
+    pushReset();
+    pushIntro(`ATHLETE PRESENTATION (${cut + 1}–${totalDivers})`, totalDivers - cut, introSec - sec1, 'presentationCont');
+  } else {
+    pushIntro('ATHLETE PRESENTATION', totalDivers, introSec);
+    if (resetPos === 'afterIntros' || (resetPos === 'midIntros' && resetSec > 0)) pushReset();
+  }
 
   // ── Competition segments ────────────────────────────────────────────
   const interleaved = Boolean(c.interleave) && evs.length > 1;
@@ -356,10 +434,30 @@ function renderBcastSessPanel(sess) {
       ${num('Intro seconds per athlete', 'introSecPer', c.introSecPer, 5, c.introFlatMin > 0 ? 'Overridden below' : 'Auto from entries')}
       ${num('Fixed intro length (min)', 'introFlatMin', c.introFlatMin, 1, '0 = use per-athlete')}
     </div>
-    <div class="bc-f wide"><label>Reset break after introductions</label>
+    <div class="bc-f wide"><label>Reset break around introductions</label>
       <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
       ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
-      <span class="bc-hint">Athletes get ready — set it to the second if the broadcast partner needs it that way.</span></div>
+      ${(() => {
+    const pos = bcastResetPos(c);
+    const rSec = bcastResetSec(c);
+    const nAth = evs.reduce((a, e) => a + entryValue(e), 0);
+    const cut = bcastResetSplit(c, nAth);
+    const bSec = Math.max(0, Number(c.boardsCloseMin || 0) * 60);
+    const chips = BCAST_RESET_POS.map(k =>
+      `<button type="button" class="chip ${pos === k ? 'on' : ''}" onclick="setBcast('${sess.id}','resetPos','${k}')">${BCAST_RESET_POS_LABEL[k]}</button>`).join('');
+    const over = pos === 'inBoards' && rSec > bSec;
+    return `<div class="bc-pos">
+        <span class="bc-pos-l">Where it goes</span>
+        <div class="chiprow">${chips}</div>
+        <span class="bc-hint">${BCAST_RESET_POS_HINT[pos]}</span>
+        ${over ? `<span class="bc-hint warn">The break is longer than the ${bmmss(bSec)} boards-close gap, so the gap is used up and the show still gets ${bmmss(rSec - bSec)} longer.</span>` : ''}
+        ${pos === 'midIntros' ? `<div class="bc-split"><span>Break after athlete</span>
+          <input class="ep-inp bc-dur-i" type="number" min="1" max="${Math.max(1, nAth - 1)}" step="1" value="${cut}" onchange="setBcast('${sess.id}','resetSplitAfter',this.value)"/>
+          <span>of ${nAth}</span>
+          <button type="button" class="bc-dp ghost" onclick="setBcast('${sess.id}','resetSplitAfter',0)">Halfway</button></div>` : ''}
+      </div>`;
+  })()}
+      ${bcastResetSec(c) === 0 ? `<span class="bc-hint">Set to None — no break will appear on the run-of-show.</span>` : ''}</div>
 
     ${multi ? `<div class="bc-f wide"><label>Two finals in this session</label>
       <div class="chiprow">
@@ -436,7 +534,7 @@ function renderBcastEvPanel(sess, ev) {
 }
 
 // ── STATE SETTERS ─────────────────────────────────────────────────────
-const BCAST_NUM_FIELDS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetMin', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin'];
+const BCAST_NUM_FIELDS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetMin', 'resetSplitAfter', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin'];
 function setBcast(sessId, field, value) {
   upd(s => {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
@@ -548,7 +646,9 @@ function resetPaCues() {
 const PA_CUE_LABELS = {
   boardsClose: ['Boards close', 'Read when warm-up ends and the deck clears.'],
   presentation: ['Athlete introductions', 'Read as the finalists are presented.'],
-  reset: ['Reset / commercial break', 'Read once intros finish and athletes prepare.'],
+
+  presentationCont: ['Introductions after a mid-intro break', 'Only used when the break splits the introductions.'],
+  reset: ['Reset / commercial break', 'Standard wording follows where you place the break. Edit it here to lock in your own line everywhere.'],
   round: ['Start of each round', 'Read at the top of every round.'],
   break: ['During a break', 'Read at each named break between rounds.'],
   flash: ['Flash interviews', 'Read after the final dive.'],
