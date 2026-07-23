@@ -246,6 +246,22 @@ function bcastAwardsRows(sess, evs, startSec) {
   return rows;
 }
 
+// Friendly text for the handoff marker. Safe to call from renderers, NOT from
+// anything reached by calcSessTiming() — sessLabelOf() times the whole meet.
+function bcastHandoffLabel(r) {
+  const nx = r && r.nextSessId ? (S.sessions || []).find(x => x.id === r.nextSessId) : null;
+  const where = nx && typeof sessLabelOf === 'function' ? sessLabelOf(nx, null) : 'the next block';
+  return { label: 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(), where };
+}
+function bcastRowLabel(r) {
+  return r && r.kind === 'handoff' ? bcastHandoffLabel(r).label : (r ? r.label : '');
+}
+function bcastRowNote(r) {
+  if (!r) return '';
+  if (r.kind !== 'handoff') return r.note || '';
+  return 'Medals for ' + (r.handoffOf || r.evName || 'this event') + ' are presented at the end of ' + bcastHandoffLabel(r).where + ', not here';
+}
+
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
 const bsec = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
 const bmmss = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60), x = s % 60; return `${m}:${String(x).padStart(2, '0')}`; };
@@ -416,9 +432,9 @@ function bcastRows(sess) {
   if (awardsToNext) {
     // Interviews here; the medals are read onto the next block's sheet.
     deferred.forEach(pushFlash);
-    const where = (typeof sessLabelOf === 'function' ? sessLabelOf(nextBlock, null) : 'the next block');
-    push('handoff', 'awardsMoved', 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(), 0, {
-      evName: evLabel, note: 'Medals for ' + evLabel + ' are presented at the end of ' + where + ', not here',
+    // NOTE: no session label here on purpose — see bcastHandoffLabel().
+    push('handoff', 'awardsMoved', 'AWARDS HELD — CEREMONY RUNS AFTER THE NEXT BLOCK', 0, {
+      evName: evLabel, nextSessId: nextBlock.id, handoffOf: evLabel,
     });
   } else {
     deferred.forEach(pushCeremony);
@@ -432,8 +448,17 @@ function bcastRows(sess) {
 // Shaped exactly like calcSessTiming()'s return so every existing consumer —
 // timeline, entries grid, conflict detection, Ops export, print preview —
 // keeps working with no changes.
+// Belt and braces. Anything reached from here that ends up asking for the
+// meet's timing again would recurse forever and lock the browser tab. If that
+// ever happens the session degrades to the standard clock instead of freezing.
+const _bcastInFlight = Object.create(null);
 function bcastTiming(sess) {
   if (!bcastOn(sess)) return null;
+  if (_bcastInFlight[sess.id]) { console.warn('[broadcast] re-entrant timing for', sess.id); return null; }
+  _bcastInFlight[sess.id] = 1;
+  try { return bcastTimingInner(sess); } finally { delete _bcastInFlight[sess.id]; }
+}
+function bcastTimingInner(sess) {
   const rows = bcastRows(sess);
   if (!rows || !rows.length) return null;
 
@@ -1070,7 +1095,7 @@ function renderBcastSheet(timedSessions, opts) {
       return `<tr class="bcr k-${r.kind}">
         <td class="bcr-t">${bclock(r.startSec)}</td>
         <td class="bcr-k">${BC_KIND_LABEL[r.kind] || ''}</td>
-        <td class="bcr-l">${esc(r.label)}${r.note ? `<span class="bcr-note">${esc(r.note)}</span>` : ''}</td>
+        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcastRowNote(r) ? `<span class="bcr-note">${esc(bcastRowNote(r))}</span>` : ''}</td>
         <td class="bcr-p">${per}</td>
         <td class="bcr-d">${r.durSec ? bsec(r.durSec) : ''}</td>
         ${showCues ? `<td class="bcr-c">${esc(cue)}</td>` : ''}
@@ -1227,7 +1252,7 @@ async function exportBroadcast() {
           : (r.kind === 'ceremony' || r.kind === 'ceremonyprep' || r.kind === 'flash') ? LAV
             : r.kind === 'finish' ? N : GR;
         const per = r.kind === 'round' || (r.kind === 'presentation' && r.perSec) ? `${r.divers} × ${bmmss(r.perSec)}` : '';
-        const row = ws.addRow([bclock(r.startSec), BC_KIND_LABEL[r.kind] || '', r.label, per, r.durSec ? bsec(r.durSec) : '', paCueFor(r, cues)]);
+        const row = ws.addRow([bclock(r.startSec), BC_KIND_LABEL[r.kind] || '', bcastRowLabel(r), per, r.durSec ? bsec(r.durSec) : '', paCueFor(r, cues)]);
         row.eachCell({ includeEmpty: true }, (c, i) => {
           c.border = BORD; c.fill = fill(bg);
           c.font = { size: 10, bold: i === 1 || i === 3, color: { argb: r.kind === 'finish' ? W : 'FF1A1C2E' } };
