@@ -58,7 +58,8 @@ const BCAST_DEFAULTS = {
   boardsCloseMin: 10,      // gap from boards closing to athlete presentation
   introSecPer: 20,         // seconds per athlete during introductions
   introFlatMin: 0,         // >0 overrides the per-athlete calculation
-  resetMin: 3,             // the "get ready" break after intros
+  resetMin: 3,             // legacy minutes mirror of resetSec
+  resetSec: 180,           // the "get ready" break after intros
   resetName: 'Commercial break',
   interleave: true,        // two finals in one session alternate round by round
   awardsMode: 'end',       // 'after' = ceremony follows each event | 'end' = both at the end
@@ -76,6 +77,27 @@ function bcastEvSpd(ev) {
 function bcastDives(ev) {
   return Math.max(1, Number(ev.numberOfDives || ev.defaultDives || 0) || 1);
 }
+// ── BREAK LENGTHS ─────────────────────────────────────────────────────
+// Breaks are stored in SECONDS. A television break is not always a round
+// number of minutes — it can be a 30-second reset between rounds, a 90-second
+// sponsor read, or a full 3-minute national commercial after round 2 and 4.
+// Older schedules stored whole/half minutes in `min`; those are read and
+// converted on the fly, and every write mirrors `min` back out so a schedule
+// saved here still reads correctly in an older cached copy of the app.
+const BCAST_BREAK_DEFAULT_SEC = 120;
+const BCAST_BREAK_PICKS = [0, 30, 60, 120, 180];   // None · 0:30 · 1:00 · 2:00 · 3:00
+const BCAST_BREAK_MAX_SEC = 3600;
+
+function brkSec(b, dflt) {
+  if (!b) return dflt;
+  if (b.sec != null && b.sec !== '') return clampSec(Number(b.sec));
+  if (b.min != null && b.min !== '') return clampSec(Number(b.min) * 60);
+  return dflt;
+}
+function clampSec(v) {
+  v = Math.round(Number(v) || 0);
+  return Math.min(BCAST_BREAK_MAX_SEC, Math.max(0, v));
+}
 // One break slot after each round. Slots are seeded on demand and preserved by
 // index when a dive count changes, so a producer's naming/timing survives edits.
 function bcastBreaks(ev) {
@@ -84,12 +106,16 @@ function bcastBreaks(ev) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const b = cur[i] || {};
-    out.push({
-      name: b.name != null ? b.name : (i === 0 ? 'Break' : 'Break'),
-      min: b.min != null ? Number(b.min) : 2,
-    });
+    const sec = brkSec(b, BCAST_BREAK_DEFAULT_SEC);
+    out.push({ name: b.name != null ? b.name : 'Break', sec, min: sec / 60 });
   }
   return out;
+}
+// The reset break after introductions is the same kind of thing, so it takes
+// the same seconds-accurate control.
+function bcastResetSec(c) {
+  if (c.resetSec != null && c.resetSec !== '') return clampSec(Number(c.resetSec));
+  return clampSec(Number(c.resetMin || 0) * 60);
 }
 
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
@@ -156,7 +182,7 @@ function bcastRows(sess) {
   const introSec = Number(c.introFlatMin) > 0 ? Number(c.introFlatMin) * 60 : totalDivers * Number(c.introSecPer || 0);
   push('presentation', 'presentation', 'ATHLETE PRESENTATION', introSec, { evName: evLabel, divers: totalDivers, perSec: Number(c.introSecPer || 0) });
 
-  push('reset', 'reset', (c.resetName || 'Commercial break').toUpperCase(), Number(c.resetMin || 0) * 60, { evName: evLabel, breakLabel: c.resetName || 'Commercial break' });
+  push('reset', 'reset', (c.resetName || 'Commercial break').toUpperCase(), bcastResetSec(c), { evName: evLabel, breakLabel: c.resetName || 'Commercial break' });
 
   // ── Competition segments ────────────────────────────────────────────
   const interleaved = Boolean(c.interleave) && evs.length > 1;
@@ -198,9 +224,10 @@ function bcastRows(sess) {
     if (isLastSeg) return; // nothing follows the last segment except the back of show
 
     const br = bcastBreaks(ev)[sg.round - 1];
-    if (br && Number(br.min) > 0) {
+    const brSec = br ? brkSec(br, 0) : 0;
+    if (brSec > 0) {
       const nextSeg = segs[i + 1];
-      push('break', 'break', (br.name || 'Break').toUpperCase(), Number(br.min) * 60, {
+      push('break', 'break', (br.name || 'Break').toUpperCase(), brSec, {
         evId: ev.id, evName: nextSeg ? evName(nextSeg.ev) : evName(ev),
         round: nextSeg ? nextSeg.round : sg.round, rounds: nRounds, breakLabel: br.name || 'Break',
       });
@@ -267,6 +294,27 @@ function bcastTiming(sess) {
   };
 }
 
+// ── DURATION CONTROL (shared by the reset break and every round break) ─
+// Quick-pick buttons for the lengths a producer actually calls, plus an
+// explicit minutes + seconds pair for anything else. Two separate boxes on
+// purpose: a single "90" in one box is ambiguous, "1 min 30 sec" never is.
+//   pickPfx : call prefix taking the value, e.g. "setBcastBreakSec('s','e',0,"
+//   partPfx : call prefix taking a part,    e.g. "setBcastBreakPart('s','e',0,"
+function bcDurCtl(sec, pickPfx, partPfx) {
+  sec = clampSec(sec);
+  const m = Math.floor(sec / 60), s = sec % 60;
+  const picks = BCAST_BREAK_PICKS.map(v =>
+    `<button type="button" class="bc-dp ${sec === v ? 'on' : ''}" onclick="${pickPfx}${v})">${v === 0 ? 'None' : bmmss(v)}</button>`
+  ).join('');
+  return `<div class="bc-dur">
+    <div class="bc-dp-row">${picks}</div>
+    <span class="bc-dur-ms">
+      <input class="ep-inp bc-dur-i" type="number" min="0" max="60" step="1" value="${m}" aria-label="minutes" onchange="${partPfx}'m',this.value)"/><em>min</em>
+      <input class="ep-inp bc-dur-i" type="number" min="0" max="59" step="5" value="${s}" aria-label="seconds" onchange="${partPfx}'s',this.value)"/><em>sec</em>
+    </span>
+  </div>`;
+}
+
 // ── EDITOR: SESSION PANEL ─────────────────────────────────────────────
 function renderBcastSessPanel(sess) {
   if (!sessHasBcastEvents(sess)) return '';
@@ -307,9 +355,11 @@ function renderBcastSessPanel(sess) {
       ${num('Boards close → intros (min)', 'boardsCloseMin', c.boardsCloseMin, 1, 'Deck clears, judges seat')}
       ${num('Intro seconds per athlete', 'introSecPer', c.introSecPer, 5, c.introFlatMin > 0 ? 'Overridden below' : 'Auto from entries')}
       ${num('Fixed intro length (min)', 'introFlatMin', c.introFlatMin, 1, '0 = use per-athlete')}
-      ${num('Reset break (min)', 'resetMin', c.resetMin, 1, 'Athletes get ready')}
     </div>
-    <div class="bc-f wide"><label>Reset break name</label><input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/></div>
+    <div class="bc-f wide"><label>Reset break after introductions</label>
+      <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
+      ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
+      <span class="bc-hint">Athletes get ready — set it to the second if the broadcast partner needs it that way.</span></div>
 
     ${multi ? `<div class="bc-f wide"><label>Two finals in this session</label>
       <div class="chiprow">
@@ -352,14 +402,23 @@ function renderBcastEvPanel(sess, ev) {
 
   const brRows = breaks.map((b, i) => {
     const last = i === n - 1;
-    return `<div class="bc-br ${last ? 'last' : ''}">
+    const sec = brkSec(b, 0);
+    return `<div class="bc-br ${last ? 'last' : ''} ${sec === 0 ? 'off' : ''}">
       <span class="bc-br-n">After round ${i + 1}</span>
       <input class="fi bc-br-name" value="${esc(b.name)}" placeholder="Break name" onchange="setBcastBreak('${sess.id}','${ev.id}',${i},'name',this.value)"/>
-      <input class="ep-inp bc-br-min" type="number" min="0" step="0.5" value="${b.min}" onchange="setBcastBreak('${sess.id}','${ev.id}',${i},'min',this.value)"/>
-      <span class="bc-br-u">min</span>
+      ${bcDurCtl(sec, `setBcastBreakSec('${sess.id}','${ev.id}',${i},`, `setBcastBreakPart('${sess.id}','${ev.id}',${i},`)}
+      <span class="bc-br-v">${sec === 0 ? 'no break' : bmmss(sec)}</span>
       ${last ? `<span class="bc-br-note">last round — only used if another event follows</span>` : ''}
     </div>`;
   }).join('');
+
+  // Between-rounds total is what always applies: the slot after the final round
+  // only runs if a second event follows it, so it is reported separately.
+  const betweenSec = breaks.slice(0, Math.max(0, n - 1)).reduce((a, b) => a + brkSec(b, 0), 0);
+  const betweenCt = breaks.slice(0, Math.max(0, n - 1)).filter(b => brkSec(b, 0) > 0).length;
+  const allRow = BCAST_BREAK_PICKS.map(v =>
+    `<button type="button" class="bc-dp ghost" onclick="setBcastBreaksAll('${sess.id}','${ev.id}',${v})">${v === 0 ? 'None' : bmmss(v)}</button>`
+  ).join('');
 
   return `<div class="bc-ev">
     <div class="bc-ev-hd"><span class="bc-dot on"></span>Broadcast clock</div>
@@ -367,7 +426,11 @@ function renderBcastEvPanel(sess, ev) {
       <div><div class="bc-ev-l">Seconds per diver</div><div class="bc-spdrow">${chips}</div></div>
       <div class="bc-ev-calc">${divers} divers × ${n} rounds × ${spd}s = <strong>${bsec(diveSec)}</strong> of diving</div>
     </div>
-    <div class="bc-ev-l" style="margin-top:10px">Breaks — name each one so the producer and PA read the same sheet</div>
+    <div class="bc-br-hd">
+      <span class="bc-ev-l" style="margin:0">Breaks — name each one so the producer and PA read the same sheet</span>
+      <span class="bc-br-tot">${betweenCt} break${betweenCt === 1 ? '' : 's'} between rounds · <strong>${bmmss(betweenSec)}</strong></span>
+    </div>
+    <div class="bc-br-all"><span>Set every round:</span>${allRow}</div>
     <div class="bc-brs">${brRows}</div>
   </div>`;
 }
@@ -379,6 +442,9 @@ function setBcast(sessId, field, value) {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
     if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
     sess.bcast[field] = BCAST_NUM_FIELDS.includes(field) ? (Number(value) || 0) : value;
+    // resetMin and resetSec are two views of one number — keep them in step.
+    if (field === 'resetMin') sess.bcast.resetSec = clampSec(Number(value) * 60);
+    if (field === 'resetSec') { sess.bcast.resetSec = clampSec(value); sess.bcast.resetMin = sess.bcast.resetSec / 60; }
     if (field === 'on' && value === true) {
       // Seed sensible broadcast values on every eligible event the first time on.
       (sess.events || []).forEach(ev => {
@@ -407,8 +473,67 @@ function setBcastBreak(sessId, evId, idx, field, value) {
     if (!ev.bcast) ev.bcast = {};
     const cur = bcastBreaks(ev);
     if (!cur[idx]) return;
-    cur[idx][field] = field === 'min' ? (Number(value) || 0) : value;
+    if (field === 'min') { cur[idx].sec = clampSec(Number(value) * 60); cur[idx].min = cur[idx].sec / 60; }
+    else if (field === 'sec') { cur[idx].sec = clampSec(value); cur[idx].min = cur[idx].sec / 60; }
+    else cur[idx][field] = value;
     ev.bcast.breaks = cur;
+    cascadeSession(s, sess.id);
+  });
+}
+// Quick-pick / typed break length, in seconds.
+function setBcastBreakSec(sessId, evId, idx, sec) {
+  setBcastBreak(sessId, evId, idx, 'sec', sec);
+}
+// Minutes box and seconds box edit the same stored value. Entering 90 in the
+// seconds box gives 1:30, not an invalid state.
+function setBcastBreakPart(sessId, evId, idx, part, value) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    const ev = sess.events.find(e => e.id === evId); if (!ev) return;
+    if (!ev.bcast) ev.bcast = {};
+    const cur = bcastBreaks(ev);
+    if (!cur[idx]) return;
+    const now = brkSec(cur[idx], 0);
+    const m = part === 'm' ? (Number(value) || 0) : Math.floor(now / 60);
+    const x = part === 's' ? (Number(value) || 0) : now % 60;
+    cur[idx].sec = clampSec(m * 60 + x);
+    cur[idx].min = cur[idx].sec / 60;
+    ev.bcast.breaks = cur;
+    cascadeSession(s, sess.id);
+  });
+}
+// One click to put every round on the same length — then override the rounds
+// that carry a longer commercial.
+function setBcastBreaksAll(sessId, evId, sec) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    const ev = sess.events.find(e => e.id === evId); if (!ev) return;
+    if (!ev.bcast) ev.bcast = {};
+    const cur = bcastBreaks(ev);
+    const v = clampSec(sec);
+    cur.forEach(b => { b.sec = v; b.min = v / 60; });
+    ev.bcast.breaks = cur;
+    cascadeSession(s, sess.id);
+  });
+}
+function setBcastResetSec(sessId, sec) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+    sess.bcast.resetSec = clampSec(sec);
+    sess.bcast.resetMin = sess.bcast.resetSec / 60;
+    cascadeSession(s, sess.id);
+  });
+}
+function setBcastResetPart(sessId, part, value) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+    const now = bcastResetSec(bcastCfg(sess));
+    const m = part === 'm' ? (Number(value) || 0) : Math.floor(now / 60);
+    const x = part === 's' ? (Number(value) || 0) : now % 60;
+    sess.bcast.resetSec = clampSec(m * 60 + x);
+    sess.bcast.resetMin = sess.bcast.resetSec / 60;
     cascadeSession(s, sess.id);
   });
 }
