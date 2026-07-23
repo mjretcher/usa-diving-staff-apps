@@ -1038,7 +1038,11 @@ window.renderBoundary = async function(){
   S.adv = defaultAdv();
   syncTiers();
   el.innerHTML = `
-    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever &mdash; and rename everything under <b>Names &amp; structure</b>. Switch to <b>Who moves up</b> to type in how many advance per age group and event. Or start from today's map: <button class="tab" id="bsLoadSeed" style="font-weight:800">Load Current 2026 Alignment</button></div>
+    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever &mdash; and rename everything under <b>Names &amp; structure</b>. Switch to <b>Who moves up</b> to type in how many advance per age group and event.
+    <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
+      <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
+    <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
+      <span class="note">The older draft, built from which Regional meet each club actually attended. Useful for comparison, but it is not the published alignment.</span></div></div>
     <div class="bs-layout">
       <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
         <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
@@ -1050,6 +1054,8 @@ window.renderBoundary = async function(){
   renderMapOnce();
   wireMap();
   renderPanel();
+  const offBtn = document.getElementById('bsLoadOfficial');
+  if (offBtn) offBtn.addEventListener('click', ()=>loadScenario('seed-2026-official'));
   const seedBtn = document.getElementById('bsLoadSeed');
   if (seedBtn) seedBtn.addEventListener('click', ()=>loadScenario('seed-2026-alignment'));
   S.booted = true;
