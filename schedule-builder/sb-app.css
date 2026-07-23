@@ -915,6 +915,12 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pp-sess-wu{margin-left:auto;font-size:11px;font-weight:600;color:var(--gray);font-variant-numeric:tabular-nums;background:#F2F4F8;padding:3px 8px;border-radius:5px}
 /* Event table — clear rows with subtle banding + dividers */
 .pp-tbl{width:100%;border-collapse:collapse}
+.pp-x{display:flex;align-items:baseline;gap:8px;padding:4px 8px;margin:4px 0;border-radius:6px;font-size:11.5px;border-left:3px solid transparent}
+.pp-x-nm{font-weight:700}
+.pp-x-ev{font-size:10.5px;opacity:.8}
+.pp-x-tm{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.pp-x.intro{background:#EEF6FB;border-left-color:#009AC7;color:#0A5E7A}
+.pp-x.awards{background:#FDF0F2;border-left-color:#E31937;color:#8E1223}
 .pe td{padding:8px 0;vertical-align:middle}
 .pe.alt{background:#F7F8FB}
 .pe td:first-child{padding-left:10px;border-radius:6px 0 0 6px}

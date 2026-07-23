@@ -82,7 +82,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showInternalBlocks:true,showCues:true}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true,showCues:true}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -4823,6 +4823,8 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>Event start / end times</span><span class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Athlete introduction times</span><span class="tog"><input type="checkbox" ${cfg.showIntros!==false?'checked':''} onchange="AUD['${aud}'].showIntros=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow"><span>Awards ceremony times</span><span class="tog"><input type="checkbox" ${cfg.showAwards!==false?'checked':''} onchange="AUD['${aud}'].showAwards=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Split-board events: show unsplit time</span><span class="tog"><input type="checkbox" ${cfg.showUnsplitAlt?'checked':''} onchange="AUD['${aud}'].showUnsplitAlt=this.checked;genRender()"><span class="togsl"></span></span></label>
@@ -4906,6 +4908,13 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .pe-tm{font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;text-align:right}
 .pe-u{font-size:8px;font-weight:600;color:var(--gray);margin-left:2px;text-transform:lowercase}
 .pe-dash{color:#C8CCD6}
+/* Introductions + awards — the two windows athletes and coaches plan around */
+.pp-x{display:flex;align-items:baseline;gap:8px;padding:4px 9px;margin:4px 0;border-radius:6px;font-size:11px;border-left:3px solid transparent;break-inside:avoid}
+.pp-x-nm{font-weight:700}
+.pp-x-ev{font-size:9.5px;opacity:.85}
+.pp-x-tm{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pp-x.intro{background:#EEF6FB;border-left-color:#009AC7;color:#0A5E7A}
+.pp-x.awards{background:#FDF0F2;border-left-color:#E31937;color:#8E1223}
 /* Open Training */
 .pp-prac{background:#F5F7FB;border-left:3px solid var(--navy);border-radius:0 6px 6px 0;padding:6px 12px;margin-bottom:8px;break-inside:avoid}
 .pp-prac-t{display:flex;align-items:center;gap:9px}
@@ -4951,6 +4960,44 @@ window.addEventListener('load',function(){
 <\/script>
 </body></html>`);
   w.document.close();
+}
+
+// Athlete introductions and medal ceremonies are the two things a diver or a
+// coach plans the day around, and until now they were invisible on the printed
+// sheet — folded silently into the session's start and end times. This reads the
+// windows back out, from the broadcast run-of-show when there is one, otherwise
+// from the session's own intro minutes and awards flag.
+function sessCeremonyWindows(sess){
+  const t = (sess && sess.timing) || {};
+  const out = {intro:null, awards:null};
+  const rows = t.bcastRows;
+  if (rows && rows.length){
+    const pres = rows.filter(r => r.kind === 'presentation');
+    if (pres.length){
+      out.intro = {start: pres[0].startSec/60, end: pres[pres.length-1].endSec/60,
+                   label: 'Athlete introductions'};
+    } else if (rows.some(r => r.kind === 'introsdone')){
+      out.intro = {moved: true, label: 'Finalists are introduced in the block before this one'};
+    }
+    const cer = rows.filter(r => r.kind === 'ceremony');
+    if (cer.length){
+      const prep = rows.find(r => r.kind === 'ceremonyprep');
+      const names = [];
+      cer.forEach(r => { if (r.evName && names.indexOf(r.evName) < 0) names.push(r.evName); });
+      out.awards = {start: (prep ? prep.startSec : cer[0].startSec)/60,
+                    end: cer[cer.length-1].endSec/60,
+                    label: 'Awards ceremony', evNames: names};
+    } else if (rows.some(r => r.kind === 'handoff')){
+      out.awards = {moved: true, label: 'Awards are presented after the next block'};
+    }
+    return out;
+  }
+  const intro = Number(sess.introMinutes || 0);
+  if (intro > 0 && t.warmupEndMinutes != null && t.eventStartMinutes > t.warmupEndMinutes)
+    out.intro = {start: t.warmupEndMinutes, end: t.eventStartMinutes, label: 'Introductions'};
+  if (sess.awardsEnabled && t.competitiveEnd != null && t.sessionEndMinutes > t.competitiveEnd)
+    out.awards = {start: t.competitiveEnd, end: t.sessionEndMinutes, label: 'Awards ceremony'};
+  return out;
 }
 
 function renderPP(timed,cfg,titleOverride){
@@ -5036,10 +5083,17 @@ function renderPP(timed,cfg,titleOverride){
       }).join('')}</div>`:''}
     </div>`;
   }
+  function ceremonyRow(o,cls){
+    if(!o)return'';
+    const ev=(o.evNames&&o.evNames.length)?`<span class="pp-x-ev">${esc(o.evNames.join(' · '))}</span>`:'';
+    const tm=o.moved?'':`<span class="pp-x-tm">${f12(o.start)} – ${f12(o.end)}</span>`;
+    return`<div class="pp-x ${cls}"><span class="pp-x-nm">${esc(o.label)}</span>${ev}${tm}</div>`;
+  }
   function sessBlock(sess){
     const t=sess.timing;const n=getSessNum(sess,timed);
     const hasFinals=sess.events.some(e=>e.round==='Final');
     const kind=hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Preliminaries':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session';
+    const cw=sessCeremonyWindows(sess);
     return`<div class="pp-sess">
       <div class="pp-sess-hd">
         <span class="pp-sess-badge ${hasFinals?'finals':''}">${kind}</span>${(sess.timing&&sess.timing.bcastRows)?`<span class="pp-sess-badge" style="background:#009AC7">On air</span>`:''}
@@ -5047,7 +5101,9 @@ function renderPP(timed,cfg,titleOverride){
         <span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
         ${cfg.showWU?`<span class="pp-sess-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</span>`:''}
       </div>
+      ${cfg.showIntros!==false?ceremonyRow(cw.intro,'intro'):''}
       <table class="pp-tbl"><tbody>${(t.events||[]).map(evRow).join('')}</tbody></table>
+      ${cfg.showAwards!==false?ceremonyRow(cw.awards,'awards'):''}
     </div>`;
   }
   function dayBlock(d){
