@@ -83,6 +83,14 @@ function bcastEvSpd(ev) {
 function bcastDives(ev) {
   return Math.max(1, Number(ev.numberOfDives || ev.defaultDives || 0) || 1);
 }
+// Dive order for a combined-finals session: biggest field first, ties keep the
+// order the events already sit in on the session so it stays predictable.
+function bcastDiveOrder(evs) {
+  return evs.map((e, i) => ({ e, i }))
+    .sort((a, b) => (entryValue(b.e) - entryValue(a.e)) || (a.i - b.i))
+    .map(x => x.e);
+}
+
 // ── BREAK LENGTHS ─────────────────────────────────────────────────────
 // Breaks are stored in SECONDS. A television break is not always a round
 // number of minutes — it can be a 30-second reset between rounds, a 90-second
@@ -483,8 +491,13 @@ function bcastRows(sess) {
   const interleaved = Boolean(c.interleave) && evs.length > 1;
   const segs = [];
   if (interleaved) {
-    const maxR = Math.max.apply(null, evs.map(bcastDives));
-    for (let r = 1; r <= maxR; r++) evs.forEach(e => { if (r <= bcastDives(e)) segs.push({ ev: e, round: r }); });
+    // Combined finals alternate by round, and within each round the event with
+    // the bigger field dives first: round 1 of the larger event, round 1 of the
+    // other, round 2 of the larger, and so on. When one event has more rounds
+    // than the other (men's 6 against women's 5) the longer one finishes alone.
+    const order = bcastDiveOrder(evs);
+    const maxR = Math.max.apply(null, order.map(bcastDives));
+    for (let r = 1; r <= maxR; r++) order.forEach(e => { if (r <= bcastDives(e)) segs.push({ ev: e, round: r }); });
   } else {
     evs.forEach(e => { const n = bcastDives(e); for (let r = 1; r <= n; r++) segs.push({ ev: e, round: r }); });
   }
@@ -742,11 +755,20 @@ function renderBcastSessPanel(sess) {
   })()}
       ${bcastResetSec(c) === 0 ? `<span class="bc-hint">Set to None — no break will appear on the run-of-show.</span>` : ''}</div>
 
-    ${multi ? `<div class="bc-f wide"><label>Two finals in this session</label>
+    ${multi ? (() => {
+    const ord = bcastDiveOrder(evs);
+    const lead = ord[0], follow = ord[1];
+    const leadN = entryValue(lead), followN = entryValue(follow);
+    const tied = leadN === followN;
+    return `<div class="bc-f wide"><label>Two finals in this session</label>
       <div class="chiprow">
         <button class="chip ${c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',true)">Alternate rounds</button>
         <button class="chip ${!c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',false)">One event, then the other</button>
-      </div><span class="bc-hint">Alternating keeps the broadcast moving — round 1 of both, then round 2 of both.</span></div>` : ''}
+      </div>
+      ${c.interleave
+        ? `<span class="bc-hint">Round 1 of <strong>${esc(evName(lead))}</strong>${tied ? '' : ` (the bigger field, ${leadN})`}, then round 1 of <strong>${esc(evName(follow))}</strong>${tied ? '' : ` (${followN})`}, then round 2 of each, and so on.${bcastDives(lead) !== bcastDives(follow) ? ` ${esc(evName(bcastDives(lead) > bcastDives(follow) ? lead : follow))} has the extra round and finishes on its own.` : ''}</span>`
+        : `<span class="bc-hint warn">This runs <strong>${esc(evName(evs[0]))}</strong> start to finish and only then starts <strong>${esc(evName(evs[1]))}</strong>. Combined finals normally alternate — round 1 of the bigger field, round 1 of the other, then round 2 of each. Choose <strong>Alternate rounds</strong> for that.</span>`}</div>`;
+  })() : ''}
 
     <div class="bc-f wide"><label>Athlete introductions</label>
       ${(() => {
@@ -779,7 +801,7 @@ function renderBcastSessPanel(sess) {
         <button class="chip ${c.awardsMode === 'end' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','end')">${multi ? 'Both at the end' : 'At the end of this block'}</button>
         <button class="chip ${c.awardsMode === 'next' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','next')">After the next block</button>
       </div>
-      ${(multi && c.interleave && c.awardsMode === 'after') ? `<span class="bc-hint warn">Rounds are alternating, so there is no gap mid-show — both ceremonies will run at the end, in event order.</span>` : ''}
+      ${(multi && c.interleave && c.awardsMode === 'after') ? `<span class="bc-hint warn">Rounds are alternating, so there is no gap mid-show — both ceremonies will run at the end, in the order the events finish.</span>` : ''}
       ${(() => {
     if (c.awardsMode !== 'next') return '';
     const nx = bcastNextBlockOf(sess);
