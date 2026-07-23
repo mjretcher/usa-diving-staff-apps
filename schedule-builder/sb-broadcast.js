@@ -63,6 +63,7 @@ const BCAST_DEFAULTS = {
   resetName: 'Commercial break',
   resetPos: 'afterIntros', // inBoards | beforeIntros | midIntros | afterIntros
   resetSplitAfter: 0,      // midIntros only — athlete number to break after (0 = halfway)
+  introMode: 'own',        // own | withNext — introduce the next block's finalists here too
   interleave: true,        // two finals in one session alternate round by round
   awardsMode: 'end',       // 'after' = ceremony follows each event | 'end' = both at the end
   flashMin: 5,
@@ -208,6 +209,35 @@ function bcastAwardsSourceFor(sess) {
   return bcastDefersAwards(prev) ? prev : null;
 }
 
+// ── ONE SET OF INTRODUCTIONS ACROSS TWO BLOCKS ────────────────────────
+// Two finals running back to back are one television show. The finalists for
+// both walk out once, at the top of the first block, and the second block goes
+// straight to diving. The introduction time moves with them: the first block
+// gets longer by exactly what the second block gives up.
+function bcastFinalsOf(sess) {
+  return ((sess && sess.events) || []).filter(e => isBcastEv(sess, e));
+}
+// The block whose finalists are introduced here, if this block covers one.
+function bcastIntrosCoverNext(sess) {
+  if (!bcastOn(sess) || bcastCfg(sess).introMode !== 'withNext') return null;
+  const nx = bcastNextBlockOf(sess);
+  return (nx && bcastFinalsOf(nx).length) ? nx : null;
+}
+// The earlier block that already introduced this block's finalists, if any.
+function bcastIntrosCoveredBy(sess) {
+  if (!sess || !sess.dayId) return null;
+  const par = (x) => (typeof isParallel === 'function' ? isParallel(x) : false);
+  if (par(sess)) return null;
+  const day = (S.sessions || [])
+    .filter(x => x.dayId === sess.dayId && !par(x))
+    .sort((a, b) => (Number(a.warmupStartMinutes) || 0) - (Number(b.warmupStartMinutes) || 0));
+  const i = day.findIndex(x => x.id === sess.id);
+  if (i <= 0) return null;
+  const prev = day[i - 1];
+  const covers = bcastIntrosCoverNext(prev);
+  return covers && covers.id === sess.id ? prev : null;
+}
+
 function bcastAwardsSec(c) { return clampSec(Number(c && c.awardsBreakSec) || 0); }
 function bcastAwardsPos(c) {
   const p = c && c.awardsBreakPos;
@@ -248,18 +278,29 @@ function bcastAwardsRows(sess, evs, startSec) {
 
 // Friendly text for the handoff marker. Safe to call from renderers, NOT from
 // anything reached by calcSessTiming() — sessLabelOf() times the whole meet.
+function bcastBlockLabelById(id, fallback) {
+  const b = id ? (S.sessions || []).find(x => x.id === id) : null;
+  return (b && typeof sessLabelOf === 'function') ? sessLabelOf(b, null) : (fallback || 'the next block');
+}
 function bcastHandoffLabel(r) {
-  const nx = r && r.nextSessId ? (S.sessions || []).find(x => x.id === r.nextSessId) : null;
-  const where = nx && typeof sessLabelOf === 'function' ? sessLabelOf(nx, null) : 'the next block';
+  const where = bcastBlockLabelById(r && r.nextSessId, 'the next block');
   return { label: 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(), where };
 }
+function bcastIntrosDoneLabel(r) {
+  const where = bcastBlockLabelById(r && r.prevSessId, 'the previous block');
+  return { label: 'FINALISTS ALREADY INTRODUCED — SEE ' + String(where).toUpperCase(), where };
+}
 function bcastRowLabel(r) {
-  return r && r.kind === 'handoff' ? bcastHandoffLabel(r).label : (r ? r.label : '');
+  if (!r) return '';
+  if (r.kind === 'handoff') return bcastHandoffLabel(r).label;
+  if (r.kind === 'introsdone') return bcastIntrosDoneLabel(r).label;
+  return r.label;
 }
 function bcastRowNote(r) {
   if (!r) return '';
-  if (r.kind !== 'handoff') return r.note || '';
-  return 'Medals for ' + (r.handoffOf || r.evName || 'this event') + ' are presented at the end of ' + bcastHandoffLabel(r).where + ', not here';
+  if (r.kind === 'handoff') return 'Medals for ' + (r.handoffOf || r.evName || 'this event') + ' are presented at the end of ' + bcastHandoffLabel(r).where + ', not here';
+  if (r.kind === 'introsdone') return 'Introduced with the rest of the finalists in ' + bcastIntrosDoneLabel(r).where + ' — this block goes straight to diving';
+  return r.note || '';
 }
 
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
@@ -333,11 +374,22 @@ function bcastRows(sess) {
   const evLabel = evs.map(e => evName(e)).join(' & ');
 
   // ── Front of show ───────────────────────────────────────────────────
-  const totalDivers = evs.reduce((a, e) => a + entryValue(e), 0);
-  const introSec = Number(c.introFlatMin) > 0 ? Number(c.introFlatMin) * 60 : totalDivers * Number(c.introSecPer || 0);
+  // The roster being introduced here: this block's finalists, plus the next
+  // block's if this block is doing the introductions for both.
+  const coverNext = bcastIntrosCoverNext(sess);
+  const coveredBy = bcastIntrosCoveredBy(sess);
+  const introEvs = evs.concat(coverNext ? bcastFinalsOf(coverNext) : []);
+  const introLabel = introEvs.map(e => evName(e)).join(' & ');
+  const totalDivers = introEvs.reduce((a, e) => a + entryValue(e), 0);
+  const introSec = coveredBy ? 0
+    : (Number(c.introFlatMin) > 0 ? Number(c.introFlatMin) * 60 : totalDivers * Number(c.introSecPer || 0));
   const introPer = Number(c.introSecPer || 0);
   const resetSec = bcastResetSec(c);
-  const resetPos = bcastResetPos(c);
+  // With no introductions in this block there is nothing to sit before, after
+  // or in the middle of, so the break simply runs ahead of round one.
+  const resetPos = coveredBy
+    ? (bcastResetPos(c) === 'inBoards' ? 'inBoards' : 'beforeIntros')
+    : bcastResetPos(c);
   const resetName = c.resetName || 'Commercial break';
   const boardsSec = Math.max(0, Number(c.boardsCloseMin || 0) * 60);
 
@@ -351,7 +403,7 @@ function bcastRows(sess) {
     push('reset', 'reset', resetName.toUpperCase(), resetSec, { evName: evLabel, breakLabel: resetName, resetPos });
   };
   const pushIntro = (label, divers, sec, cueKey, extra) =>
-    push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: evLabel, divers, perSec: introPer }, extra || {}));
+    push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: introLabel || evLabel, divers, perSec: introPer }, extra || {}));
 
   push('boardsclose', 'boardsClose', 'CLOSE BOARDS', closeSec, {
     evName: evLabel,
@@ -360,16 +412,20 @@ function bcastRows(sess) {
 
   if (inBoards || resetPos === 'beforeIntros') pushReset();
 
-  if (resetPos === 'midIntros' && resetSec > 0 && totalDivers > 1) {
+  if (coveredBy) {
+    // Marker only — no time. Label resolved at render time (see bcastRowLabel).
+    push('introsdone', 'introsMoved', 'FINALISTS ALREADY INTRODUCED', 0, { evName: evLabel, prevSessId: coveredBy.id });
+  } else if (resetPos === 'midIntros' && resetSec > 0 && totalDivers > 1) {
     // Introductions split around the break: first block of athletes, break,
     // the rest. Time is apportioned by how many athletes are in each block.
     const cut = bcastResetSplit(c, totalDivers);
     const sec1 = Math.round(introSec * (cut / totalDivers));
-    pushIntro(`ATHLETE PRESENTATION (1–${cut})`, cut, sec1);
+    pushIntro(`ATHLETE PRESENTATION (1–${cut})`, cut, sec1, null, { note: coverNext ? introLabel + ' — introduced together' : '' });
     pushReset();
     pushIntro(`ATHLETE PRESENTATION (${cut + 1}–${totalDivers})`, totalDivers - cut, introSec - sec1, 'presentationCont');
   } else {
-    pushIntro('ATHLETE PRESENTATION', totalDivers, introSec);
+    pushIntro(coverNext ? 'ATHLETE PRESENTATION — ALL FINALISTS' : 'ATHLETE PRESENTATION', totalDivers, introSec, null,
+      { note: coverNext ? introLabel + ' — introduced together, once' : '' });
     if (resetPos === 'afterIntros' || (resetPos === 'midIntros' && resetSec > 0)) pushReset();
   }
 
@@ -636,6 +692,31 @@ function renderBcastSessPanel(sess) {
         <button class="chip ${!c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',false)">One event, then the other</button>
       </div><span class="bc-hint">Alternating keeps the broadcast moving — round 1 of both, then round 2 of both.</span></div>` : ''}
 
+    <div class="bc-f wide"><label>Athlete introductions</label>
+      ${(() => {
+    const cov = bcastIntrosCoveredBy(sess);
+    if (cov) {
+      const lbl = typeof sessLabelOf === 'function' ? sessLabelOf(cov, null) : 'the block before';
+      const n = bcastFinalsOf(sess).reduce((a, e) => a + entryValue(e), 0);
+      return `<div class="bc-covered"><span class="bc-covered-i">✓</span><span>These ${n} finalists are introduced in <strong>${esc(lbl)}</strong>, with that block's finalists. This block opens the boards and goes straight to diving.<em>Change it back in ${esc(lbl)} if you want separate introductions.</em></span></div>`;
+    }
+    const nx = bcastNextBlockOf(sess);
+    const nxFinals = nx ? bcastFinalsOf(nx) : [];
+    const mine = evs.reduce((a, e) => a + entryValue(e), 0);
+    const theirs = nxFinals.reduce((a, e) => a + entryValue(e), 0);
+    const lbl = nx && typeof sessLabelOf === 'function' ? sessLabelOf(nx, null) : 'the next block';
+    return `<div class="chiprow">
+        <button class="chip ${c.introMode !== 'withNext' ? 'on' : ''}" onclick="setBcast('${sess.id}','introMode','own')">This block only</button>
+        <button class="chip ${c.introMode === 'withNext' ? 'on' : ''}" onclick="setBcast('${sess.id}','introMode','withNext')">Also introduce the next block</button>
+      </div>
+      ${c.introMode === 'withNext'
+        ? (nxFinals.length
+          ? `<span class="bc-hint">All ${mine + theirs} finalists — ${esc(evs.concat(nxFinals).map(evName).join(' & '))} — walk out once here, about ${bmmss((mine + theirs) * Number(c.introSecPer || 0))} at ${c.introSecPer}s each. <strong>${esc(lbl)}</strong> skips its own introductions and that time moves here.</span>`
+          : `<span class="bc-hint warn">${nx ? `${esc(lbl)} has no finals in it, so there is nobody extra to introduce.` : "There is no block after this one on this day, so only this block's finalists are introduced."} This block introduces its own ${mine} finalists as normal.</span>`)
+        : `<span class="bc-hint">${mine} finalists, about ${bmmss(mine * Number(c.introSecPer || 0))} at ${c.introSecPer}s each.${nxFinals.length ? ` ${esc(lbl)} introduces its own separately.` : ''}</span>`}`;
+  })()}
+    </div>
+
     <div class="bc-f wide"><label>Awards</label>
       <div class="chiprow">
         <button class="chip ${c.awardsMode === 'after' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','after')">After each event</button>
@@ -870,7 +951,7 @@ function resetPaCues() {
 // the whole setup onto any other finals you pick, in the same order the meet
 // runs, so nothing has to be retyped.
 const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetSec', 'resetMin',
-  'resetName', 'resetPos', 'resetSplitAfter', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin',
+  'resetName', 'resetPos', 'resetSplitAfter', 'introMode', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin',
   'awardsBreakSec', 'awardsBreakName', 'awardsBreakPos'];
 
 // Every senior final in the meet, in running order.
@@ -1068,7 +1149,7 @@ function renderPaCueModal() {
 // ── RUN-OF-SHOW RENDERER (screen preview + print) ─────────────────────
 const BC_KIND_LABEL = {
   boardsclose: 'Boards', presentation: 'Intros', reset: 'Break', round: 'Round',
-  break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End', handoff: 'Awards',
+  break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End', handoff: 'Awards', introsdone: 'Intros',
 };
 function renderBcastSheet(timedSessions, opts) {
   opts = opts || {};
@@ -1205,6 +1286,7 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .bcr.k-finish td{color:#fff;font-weight:800}
 .bcs-pft{display:flex;justify-content:space-between;padding:8px 18px;border-top:2px solid var(--navy);font-size:9px;color:var(--gray);margin-top:6px}
 .bcr.k-handoff td{background:#F5F2FA;color:var(--navy);font-style:italic}
+.bcr.k-introsdone td{background:#EAF6FB;color:var(--navy);font-style:italic}
 .bcs-plus{font-weight:600;color:var(--pool);font-size:11px}
 .pp-empty{padding:40px;text-align:center;color:var(--gray)}
 `;

@@ -1304,6 +1304,11 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bcc-chk em{font-style:normal;font-size:10.5px;color:var(--tx3);line-height:1.4}
 .bcs .bcr.k-handoff td{background:#F5F2FA;color:var(--navy);font-style:italic}
 .bcs-plus{font-weight:600;color:var(--pool,#009AC7);font-size:11px}
+.bc-covered{display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-radius:8px;background:rgba(0,154,199,.08);border:1px solid rgba(0,154,199,.28)}
+.bc-covered-i{flex:0 0 16px;height:16px;border-radius:50%;background:var(--pool,#009AC7);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.bc-covered>span:last-child{font-size:11.5px;color:var(--tx2);line-height:1.5}
+.bc-covered em{display:block;font-style:normal;font-size:10.5px;color:var(--tx3);margin-top:3px}
+.bcs .bcr.k-introsdone td{background:#EAF6FB;color:var(--navy);font-style:italic}
 .bc-opt{font-size:8.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);background:#eef0f5;border-radius:4px;padding:1px 5px;margin-left:5px}
 .bc-pos{margin-top:8px}
 .bc-pos-l{display:block;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3);margin-bottom:5px}
