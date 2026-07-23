@@ -293,13 +293,43 @@ function bcastBlockLabelById(id, fallback) {
   const b = id ? (S.sessions || []).find(x => x.id === id) : null;
   return (b && typeof sessLabelOf === 'function') ? sessLabelOf(b, null) : (fallback || 'the next block');
 }
+// Look up a row in ANOTHER block's clock. Render-time only: it asks for that
+// block's timing, which must never happen from inside a timing calculation —
+// hence the in-flight check, which is belt and braces on top of the audit.
+function bcastRowsOfBlock(id) {
+  if (!id) return [];
+  for (const k in _bcastInFlight) return [];   // a timing pass is running — don't nest
+  const b = (S.sessions || []).find(x => x.id === id);
+  if (!b || typeof calcSessTiming !== 'function') return [];
+  try {
+    const t = calcSessTiming(b);
+    if (t && t.bcastRows && t.bcastRows.length) return t.bcastRows;
+    if (t && t.deferredAwards && t.deferredAwards.rows) return t.deferredAwards.rows;
+  } catch (e) { /* fall through to no time */ }
+  return [];
+}
 function bcastHandoffLabel(r) {
   const where = bcastBlockLabelById(r && r.nextSessId, 'the next block');
-  return { label: 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(), where };
+  // The medals are on the next block's clock, so read the actual time off it.
+  const ids = (r && r.handoffEvIds) || [];
+  const cer = bcastRowsOfBlock(r && r.nextSessId)
+    .find(x => x.kind === 'ceremony' && (!ids.length || ids.indexOf(x.evId) >= 0));
+  const when = cer ? bclockShort(cer.startSec) : '';
+  return {
+    where, when,
+    label: when
+      ? 'AWARDS HELD — CEREMONY AT ' + when + ', AFTER ' + String(where).toUpperCase()
+      : 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(),
+  };
 }
 function bcastIntrosDoneLabel(r) {
   const where = bcastBlockLabelById(r && r.prevSessId, 'the previous block');
-  return { label: 'FINALISTS ALREADY INTRODUCED — SEE ' + String(where).toUpperCase(), where };
+  const pres = bcastRowsOfBlock(r && r.prevSessId).find(x => x.kind === 'presentation');
+  const when = pres ? bclockShort(pres.startSec) : '';
+  return {
+    where, when,
+    label: 'FINALISTS ALREADY INTRODUCED — SEE ' + String(where).toUpperCase() + (when ? ', ' + when : ''),
+  };
 }
 function bcastRowLabel(r) {
   if (!r) return '';
@@ -309,8 +339,16 @@ function bcastRowLabel(r) {
 }
 function bcastRowNote(r) {
   if (!r) return '';
-  if (r.kind === 'handoff') return 'Medals for ' + (r.handoffOf || r.evName || 'this event') + ' are presented at the end of ' + bcastHandoffLabel(r).where + ', not here';
-  if (r.kind === 'introsdone') return 'Introduced with the rest of the finalists in ' + bcastIntrosDoneLabel(r).where + ' — this block goes straight to diving';
+  if (r.kind === 'handoff') {
+    const h = bcastHandoffLabel(r);
+    return 'Medals for ' + (r.handoffOf || r.evName || 'this event') + ' are presented'
+      + (h.when ? ' at ' + h.when + ',' : '') + ' at the end of ' + h.where + ' — not here';
+  }
+  if (r.kind === 'introsdone') {
+    const iv = bcastIntrosDoneLabel(r);
+    return 'Introduced with the rest of the finalists in ' + iv.where + (iv.when ? ' at ' + iv.when : '')
+      + ' — this block goes straight to diving';
+  }
   return r.note || '';
 }
 
@@ -426,6 +464,7 @@ function bcastRows(sess) {
   if (coveredBy) {
     // Marker only — no time. Label resolved at render time (see bcastRowLabel).
     push('introsdone', 'introsMoved', 'FINALISTS ALREADY INTRODUCED', 0, { evName: evLabel, prevSessId: coveredBy.id });
+    // (time of those introductions is resolved at render time — see bcastIntrosDoneLabel)
   } else if (resetPos === 'midIntros' && resetSec > 0 && totalDivers > 1) {
     // Introductions split around the break: first block of athletes, break,
     // the rest. Time is apportioned by how many athletes are in each block.
@@ -509,6 +548,7 @@ function bcastRows(sess) {
     // NOTE: no session label here on purpose — see bcastHandoffLabel().
     push('handoff', 'awardsMoved', 'AWARDS HELD — CEREMONY RUNS AFTER THE NEXT BLOCK', 0, {
       evName: evLabel, nextSessId: nextBlock.id, handoffOf: evLabel,
+      handoffEvIds: deferred.map(e => e.id),
     });
     // We can still be presenting medals handed to US by the block before.
     if (incomingEvs.length) pushAwardsRun(incomingEvs);
