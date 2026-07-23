@@ -66,6 +66,10 @@ const S = {
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
   scenarioId: null,
   scenarioName: '',
+  undo: [], redo: [],   // full scenario snapshots
+  compare: null,        // {id, name, assign, regions} loaded for side-by-side churn
+  palOpen: null,        // area index whose colour picker is open
+  mergeFrom: 0, mergeTo: 1,
   dirty: false,
   booted: false,
   totals: {y25: 5881, y26: 4755},
@@ -156,6 +160,78 @@ function heatTint(m, maxM){
   const t = Math.pow(Math.min(1, m/maxM), 0.45);
   const mix=(a,b)=>Math.round(a+(b-a)*t*0.55); // cap at 55% toward navy so it reads as "unassigned but populated"
   return `rgb(${mix(238,23)},${mix(241,31)},${mix(246,105)})`;
+}
+
+/* ---------- undo / redo ---------- */
+const SEED_IDS = ['seed-2026-official','seed-2026-alignment'];
+const isSeed = id => SEED_IDS.includes(id);
+
+function snapshot(){
+  return {assign:Object.assign({}, S.assign),
+          regions:JSON.parse(JSON.stringify(S.regions)),
+          levels:JSON.parse(JSON.stringify(S.levels)),
+          finalName:S.finalName};
+}
+function sameAssign(a, b){
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) if (a[k] !== b[k]) return false;
+  return true;
+}
+// `key` coalesces rapid edits to the same control (typing a name) into one step.
+function pushUndo(key){
+  const now = Date.now();
+  if (key && S._uKey === key && now - S._uAt < 1500){ S._uAt = now; return; }
+  S.undo.push(snapshot());
+  if (S.undo.length > 50) S.undo.shift();
+  S.redo.length = 0;
+  S._uKey = key || null; S._uAt = now;
+}
+function applySnap(sn){
+  S.assign = sn.assign; S.regions = sn.regions; S.levels = sn.levels; S.finalName = sn.finalName;
+  syncLevels();
+  if (S.active >= S.regions.length) S.active = S.regions.length - 1;
+  S.detailRegion = null; S.palOpen = null;
+}
+// Toggle the history buttons without rebuilding the panel — a full re-render
+// would blow away whatever input the user is typing in.
+function refreshHistoryButtons(){
+  const u = document.getElementById('bsUndo'), r = document.getElementById('bsRedo');
+  if (u) u.disabled = !S.undo.length;
+  if (r) r.disabled = !S.redo.length;
+}
+function doUndo(){
+  if (!S.undo.length) return;
+  S.redo.push(snapshot()); applySnap(S.undo.pop());
+  S._uKey = null; S.dirty = true; repaintAll(); renderPanel();
+}
+function doRedo(){
+  if (!S.redo.length) return;
+  S.undo.push(snapshot()); applySnap(S.redo.pop());
+  S._uKey = null; S.dirty = true; repaintAll(); renderPanel();
+}
+
+/* ---------- area surgery ---------- */
+// Remove area `i`. Its counties go unassigned, or into `into` when given.
+function removeArea(i, into){
+  if (S.regions.length <= 1) return;
+  pushUndo();
+  const shift = j => (j < i ? j : j - 1);
+  const dest = (into==null || into===i) ? null : shift(into);
+  const next = {};
+  for (const [f, ri] of Object.entries(S.assign)){
+    if (ri === i){ if (dest!=null) next[f] = dest; }
+    else if (ri >= 0 && ri < S.regions.length) next[f] = shift(ri);
+  }
+  S.assign = next;
+  S.regions.splice(i, 1);
+  if (S.levels.length > 1) S.levels[1].of.splice(i, 1);
+  if (S.active >= S.regions.length) S.active = S.regions.length - 1;
+  if (S.detailRegion != null) S.detailRegion = null;
+  S.palOpen = null;
+  S.mergeFrom = Math.min(S.mergeFrom, S.regions.length-1);
+  S.mergeTo = Math.min(S.mergeTo, S.regions.length-1);
+  syncLevels(); S.dirty = true; repaintAll(); renderPanel();
 }
 
 /* ---------- tallies ---------- */
@@ -330,6 +406,10 @@ function renderPanel(){
       <div class="seg">
         <button id="bsZoomIn">+</button><button id="bsZoomOut">&minus;</button><button id="bsZoomReset">Reset view</button>
       </div>
+      <div class="seg">
+        <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Ctrl+Z">&#8630; Undo</button>
+        <button id="bsRedo" ${S.redo.length?'':'disabled'} title="Ctrl+Shift+Z">Redo &#8631;</button>
+      </div>
       <div class="seg" id="bsTierSeg">${tierBtns}</div>
       <div class="seg">
         <button id="bsLgMembers" class="${S.legendMode==='members'?'on':''}">Members</button>
@@ -339,7 +419,14 @@ function renderPanel(){
     </div>
     <div class="bs-chips">${chips}
       <button class="bs-chip add" id="bsAddRegion">+ Add area</button>
-      <button class="bs-chip add" id="bsRemRegion" ${S.regions.length<=1?'disabled':''}>&minus; Remove last</button>
+    </div>
+    <div class="bs-row bs-mergebar">
+      <span class="bs-lvl">Combine</span>
+      <select class="sel" id="bsMergeFrom">${S.regions.map((r,i)=>`<option value="${i}" ${S.mergeFrom===i?'selected':''}>${esc(r.name)}</option>`).join('')}</select>
+      <span class="bs-lvl">into</span>
+      <select class="sel" id="bsMergeTo">${S.regions.map((r,i)=>`<option value="${i}" ${S.mergeTo===i?'selected':''}>${esc(r.name)}</option>`).join('')}</select>
+      <button class="tab bs-mini" id="bsMergeGo" ${S.regions.length<=1?'disabled':''}>Combine them</button>
+      <span class="note">Hands every county in the first area to the second, then deletes the first.</span>
     </div>
     <div class="seg bs-modeseg">
       <button id="bsModeTally" class="${S.panelMode==='tally'?'on':''}">Who lives here</button>
@@ -350,11 +437,19 @@ function renderPanel(){
     <div class="bs-row" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
       <input class="search" id="bsName" placeholder="Scenario name&hellip;" value="${esc(S.scenarioName)}" style="min-width:180px">
       <button class="tab" id="bsSave">${S.dirty?'Save*':'Save'}</button>
+      <button class="tab" id="bsSaveNew">Save as a new one</button>
       <select class="sel" id="bsLoad"><option value="">Load scenario&hellip;</option></select>
       <button class="tab" id="bsNew">New / Clear</button>
+      <button class="tab" id="bsDelete" ${(!S.scenarioId||isSeed(S.scenarioId))?'disabled':''}>Delete this one</button>
+    </div>
+    <div class="bs-row">
+      <span class="bs-lvl">Compare with</span>
+      <select class="sel" id="bsCompare"><option value="">nothing&hellip;</option></select>
+      ${S.compare?`<button class="tab bs-mini" id="bsCompareOff">Stop comparing</button>`:''}
       <button class="tab" id="bsCsv">Export zips CSV</button>
       <button class="tab" id="bsCsvAdv">Export advancement CSV</button>
     </div>
+    ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="note" style="margin-top:6px"><b>${esc(S.scenarioName)}</b> is a reference map. Saving will create a copy so the original stays intact.</div>` : ''}
     <div class="note" id="bsMsg"></div>`;
 
   if (S.panelMode==='advance') renderAdvShell();
@@ -410,7 +505,53 @@ function renderTallyTable(t, mappableTotal, yLabel){
       <th class="num">Clubs</th><th class="num">Zips</th><th class="num">Counties</th><th class="num">Share</th>
     </tr></thead><tbody>${rowsHtml}${unRow}</tbody></table>
     <div class="note" style="margin-top:6px">Tallies: ${yLabel}. Click a row to pool its zip codes. ${unmappable>0?`<b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded from the map.`:''}</div>
-    ${drill}`;
+    ${drill}
+    ${renderCompare()}`;
+}
+
+/* ---------- comparison ---------- */
+function compareChurn(){
+  if (!S.compare) return null;
+  const y = S.year;
+  const nameCur = ri => (ri==null || ri<0 || !S.regions[ri]) ? '\u2014 unassigned \u2014' : S.regions[ri].name;
+  const nameOth = ri => (ri==null || ri<0 || !S.compare.regions[ri]) ? '\u2014 unassigned \u2014' : S.compare.regions[ri].name;
+  const rows = new Map();
+  let moved = 0, movedM = 0, totM = 0;
+  for (const c of S.geo.counties){
+    const f = c.f;
+    const an = nameCur(S.assign[f]), bn = nameOth(S.compare.assign[f]);
+    const m = S.geo.stats[f] ? S.geo.stats[f][y].m : 0;
+    totM += m;
+    if (an !== bn){ moved++; movedM += m; }
+    if (!rows.has(an)) rows.set(an, new Map());
+    const inner = rows.get(an);
+    const rec = inner.get(bn) || {c:0, m:0};
+    rec.c++; rec.m += m; inner.set(bn, rec);
+  }
+  return {rows, moved, movedM, totM};
+}
+
+function renderCompare(){
+  const ch = compareChurn();
+  if (!ch) return '';
+  const body = [...ch.rows.entries()].map(([an, inner])=>{
+    const src = [...inner.entries()].sort((a,b)=>b[1].m-a[1].m || b[1].c-a[1].c);
+    const same = src.filter(([bn])=>bn===an).reduce((s,[,v])=>s+v.m, 0);
+    const from = src.filter(([bn])=>bn!==an).slice(0,4)
+      .map(([bn,v])=>`<span class="bs-src">${esc(bn)} <b>${fmt(v.m)}</b></span>`).join('');
+    return `<tr><td><b>${esc(an)}</b></td><td class="num">${fmt(same)}</td>
+      <td>${from || '<span class="note">nothing new</span>'}</td></tr>`;
+  }).join('');
+  return `<div class="bs-cmp">
+    <div class="bs-balhead" style="margin-top:0;border-top:0;padding-top:0">
+      <b>Against ${esc(S.compare.name)}</b>
+      <span class="bs-spread ${ch.movedM/Math.max(1,ch.totM) < 0.05 ? 'ok' : (ch.movedM/Math.max(1,ch.totM) < 0.2 ? 'over' : 'under')}">${fmt(ch.moved)} counties &middot; ${fmt(ch.movedM)} members change area</span>
+    </div>
+    <table class="bs-table"><thead><tr>
+      <th>Area now</th><th class="num">Members it keeps</th><th>Members it takes from</th>
+    </tr></thead><tbody>${body}</tbody></table>
+    <div class="note" style="margin-top:6px">Matched by area name. Rename areas to match the other scenario if you want a like-for-like read.</div>
+  </div>`;
 }
 
 /* ---------- names & structure panel ---------- */
@@ -427,12 +568,15 @@ function renderNamesPanel(){
         <button class="tab bs-mini bs-addgrp" data-lvl="${k}">+ add</button>
         <button class="tab bs-mini bs-remgrp" data-lvl="${k}" ${L.groups.length<=1?'disabled':''}>&minus; remove</button></div>
       ${Array.from({length:groupCountAt(k-1)}, (_,gi)=>{
-        const sw = k===1 ? `<span class="sw" style="background:${S.regions[gi].color}"></span>` : '';
+        const sw = k===1 ? `<button class="sw bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '';
         const nm = k===1 ? S.regions[gi].name : S.levels[k-1].groups[gi].name;
-        return `<label class="bs-tier-row">${sw}
+        const del = k===1 ? `<button class="bs-x" data-delarea="${gi}" title="Delete this area" ${S.regions.length<=1?'disabled':''}>&times;</button>` : '';
+        return `<div class="bs-tier-row">${sw}
           <input class="bs-name-in bs-gname" data-lvl="${k-1}" data-gi="${gi}" value="${esc(nm)}">
           <select class="sel bs-psel" data-lvl="${k}" data-gi="${gi}">${L.groups.map((g,j)=>
-            `<option value="${j}" ${L.of[gi]===j?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>`;
+            `<option value="${j}" ${L.of[gi]===j?'selected':''}>${esc(g.name)}</option>`).join('')}</select>${del}</div>
+          ${(k===1 && S.palOpen===gi) ? `<div class="bs-pal">${PALETTE.map(c=>
+            `<button class="bs-pal-c" data-setcol="${gi}" data-col="${esc(c)}" style="background:${c}"></button>`).join('')}</div>` : ''}`;
       }).join('')}
     </div>`);
   }
@@ -441,10 +585,13 @@ function renderNamesPanel(){
   cols.push(`<div>
     <div class="bs-tier-h">${esc(tierName(top))} names</div>
     ${Array.from({length:groupCountAt(top)}, (_,gi)=>{
-      const sw = top===0 ? `<span class="sw" style="background:${S.regions[gi].color}"></span>` : '';
+      const sw = top===0 ? `<button class="sw bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '';
       const nm = top===0 ? S.regions[gi].name : S.levels[top].groups[gi].name;
-      return `<label class="bs-tier-row">${sw}
-        <input class="bs-name-in bs-gname" data-lvl="${top}" data-gi="${gi}" value="${esc(nm)}"></label>`;
+      const del = top===0 ? `<button class="bs-x" data-delarea="${gi}" title="Delete this area" ${S.regions.length<=1?'disabled':''}>&times;</button>` : '';
+      return `<div class="bs-tier-row">${sw}
+        <input class="bs-name-in bs-gname" data-lvl="${top}" data-gi="${gi}" value="${esc(nm)}">${del}</div>
+        ${(top===0 && S.palOpen===gi) ? `<div class="bs-pal">${PALETTE.map(c=>
+          `<button class="bs-pal-c" data-setcol="${gi}" data-col="${esc(c)}" style="background:${c}"></button>`).join('')}</div>` : ''}`;
     }).join('')}
   </div>`);
 
@@ -726,6 +873,7 @@ function wireMap(){
   svg.addEventListener('pointerdown', e=>{
     if (S.tool==='pan'){ panStart = {x:e.clientX, y:e.clientY, zx:S.zoom.x, zy:S.zoom.y}; svg.setPointerCapture(e.pointerId); return; }
     const t = e.target.closest('path.bcty'); if (!t) return;
+    S._pre = snapshot();           // one undo step per stroke, not per county
     S.painting = true;
     if (S.tool==='state') assignState(t.dataset.f && S.geo.counties.find(c=>c.f===t.dataset.f).st);
     else assignCounty(t.dataset.f);
@@ -759,7 +907,17 @@ function wireMap(){
            : 'No members') + grpHtml;
     } else tip.style.display='none';
   });
-  const stop = ()=>{ S.painting=false; panStart=null; };
+  const stop = ()=>{
+    if (S.painting && S._pre){
+      if (!sameAssign(S._pre.assign, S.assign)){
+        S.undo.push(S._pre); if (S.undo.length>50) S.undo.shift();
+        S.redo.length = 0; S._uKey = null;
+        refreshHistoryButtons();
+      }
+      S._pre = null;
+    }
+    S.painting=false; panStart=null;
+  };
   svg.addEventListener('pointerup', stop);
   svg.addEventListener('pointerleave', e=>{ stop(); tip.style.display='none'; });
   svg.addEventListener('wheel', e=>{
@@ -844,6 +1002,7 @@ function wirePanel(){
   }));
   bind('bsAddLevel', ()=>{
     if (levelCount() >= MAX_LEVELS) return;
+    pushUndo();
     const below = groupCountAt(levelCount()-1);
     const n = Math.max(1, Math.ceil(below/2));
     S.levels.push({name:'Level '+(levelCount()+1),
@@ -854,6 +1013,7 @@ function wirePanel(){
   });
   bind('bsRemLevel', ()=>{
     if (levelCount() <= 1) return;
+    pushUndo();
     S.levels.pop();
     if (S.tierView >= levelCount()) S.tierView = levelCount()-1;
     if ((S.adv.step||0) >= levelCount()) S.adv.step = levelCount()-1;
@@ -876,6 +1036,8 @@ function wirePanel(){
   // --- renaming: live, never re-renders the input you are typing in ---
   const nameBind = (sel, apply)=>{
     P.querySelectorAll(sel).forEach(inp=>inp.addEventListener('input', ()=>{
+      pushUndo(sel + (inp.dataset.lvl||'') + ':' + (inp.dataset.gi||''));
+      refreshHistoryButtons();
       apply(inp);
       S.dirty = true;
       clearTimeout(S._nameT);
@@ -903,15 +1065,19 @@ function wirePanel(){
   });
   const fin = document.getElementById('bsFinalName');
   if (fin) fin.addEventListener('input', ()=>{
+    pushUndo('finalName');
+    refreshHistoryButtons();
     S.finalName = fin.value; S.dirty=true;
     clearTimeout(S._nameT); S._nameT = setTimeout(renderNumbers, 200);
   });
 
   P.querySelectorAll('.bs-psel').forEach(sel=>sel.addEventListener('change',()=>{
+    pushUndo();
     S.levels[+sel.dataset.lvl].of[+sel.dataset.gi] = +sel.value;
     S.dirty=true; repaintAll(); renderPanel();
   }));
   P.querySelectorAll('.bs-addgrp').forEach(b=>b.addEventListener('click',()=>{
+    pushUndo();
     const k = +b.dataset.lvl;
     S.levels[k].groups.push({name:'Group '+(S.levels[k].groups.length+1)});
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
@@ -919,6 +1085,7 @@ function wirePanel(){
   P.querySelectorAll('.bs-remgrp').forEach(b=>b.addEventListener('click',()=>{
     const k = +b.dataset.lvl;
     if (S.levels[k].groups.length<=1) return;
+    pushUndo();
     S.levels[k].groups.pop();
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   }));
@@ -928,25 +1095,52 @@ function wirePanel(){
     P.querySelectorAll('.bs-chip[data-ri]').forEach(x=>x.classList.toggle('on', +x.dataset.ri===S.active));
   }));
   bind('bsAddRegion', ()=>{
+    pushUndo();
     S.regions.push({name:'Region '+(S.regions.length+1), color:PALETTE[S.regions.length%PALETTE.length]});
     syncLevels(); S.dirty=true; renderPanel();
   });
-  bind('bsRemRegion', ()=>{
+  bind('bsUndo', doUndo);
+  bind('bsRedo', doRedo);
+  P.querySelectorAll('[data-delarea]').forEach(b=>b.addEventListener('click', e=>{
+    e.preventDefault();
+    removeArea(+b.dataset.delarea, null);
+  }));
+  P.querySelectorAll('[data-pal]').forEach(b=>b.addEventListener('click', e=>{
+    e.preventDefault();
+    const i = +b.dataset.pal;
+    S.palOpen = (S.palOpen===i) ? null : i;
+    renderPanel();
+  }));
+  P.querySelectorAll('[data-setcol]').forEach(b=>b.addEventListener('click', e=>{
+    e.preventDefault();
+    pushUndo();
+    S.regions[+b.dataset.setcol].color = b.dataset.col;
+    S.palOpen = null; S.dirty=true; repaintAll(); renderPanel();
+  }));
+  const mf = document.getElementById('bsMergeFrom'), mt = document.getElementById('bsMergeTo');
+  if (mf) mf.addEventListener('change', ()=>{ S.mergeFrom = +mf.value; });
+  if (mt) mt.addEventListener('change', ()=>{ S.mergeTo = +mt.value; });
+  bind('bsMergeGo', ()=>{
     if (S.regions.length<=1) return;
-    const gone = S.regions.length-1;
-    S.regions.pop();
-    Object.keys(S.assign).forEach(f=>{ if (S.assign[f]===gone) delete S.assign[f]; });
-    if (S.active>=S.regions.length) S.active=S.regions.length-1;
-    if (S.detailRegion===gone) S.detailRegion=null;
-    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
+    if (S.mergeFrom === S.mergeTo){ msg('Pick two different areas to combine.'); return; }
+    const a = S.regions[S.mergeFrom] && S.regions[S.mergeFrom].name;
+    const b = S.regions[S.mergeTo] && S.regions[S.mergeTo].name;
+    removeArea(S.mergeFrom, S.mergeTo);
+    msg(`Combined ${a} into ${b}.`);
   });
   const nameI = document.getElementById('bsName');
   nameI.addEventListener('input', ()=>{ S.scenarioName = nameI.value; S.dirty=true; });
-  bind('bsSave', saveScenario);
+  bind('bsSave', ()=>saveScenario(false));
+  bind('bsSaveNew', ()=>saveScenario(true));
+  bind('bsDelete', deleteScenario);
+  const cmp = document.getElementById('bsCompare');
+  if (cmp) cmp.addEventListener('change', ()=>{ if (cmp.value) loadCompare(cmp.value); });
+  bind('bsCompareOff', ()=>{ S.compare=null; renderPanel(); });
   bind('bsNew', ()=>{
     if (S.dirty && !confirm('Discard unsaved changes and start a new scenario?')) return;
+    pushUndo();
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
-    S.finalName='Junior Nationals';
+    S.finalName='Junior Nationals'; S.compare=null;
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
   });
@@ -959,9 +1153,22 @@ function wirePanel(){
 /* ---------- persistence ---------- */
 function msg(t){ const m=document.getElementById('bsMsg'); if(m){ m.textContent=t; setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, 4000);} }
 
-async function saveScenario(){
+function newScenarioId(){
+  return 'bs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
+}
+
+async function saveScenario(asNew){
   if (!S.scenarioName.trim()){ msg('Give the scenario a name first.'); return; }
-  if (!S.scenarioId) S.scenarioId = 'bs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
+  // Reference maps are never overwritten — saving one forks it instead.
+  const forking = asNew || !S.scenarioId || isSeed(S.scenarioId);
+  if (forking){
+    S.scenarioId = newScenarioId();
+    if (isSeed(S.scenarioId)) S.scenarioId = newScenarioId();
+    const base = S.scenarioName.trim();
+    if (asNew || /^(Official 2026 Alignment|Current 2026 Alignment)/.test(base)){
+      S.scenarioName = base.replace(/ \(copy( \d+)?\)$/, '') + ' (copy)';
+    }
+  }
   syncLevels();
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
@@ -971,9 +1178,33 @@ async function saveScenario(){
        ON CONFLICT (id) DO UPDATE SET name=$2, data=$3::jsonb, updated_at=now()`,
       [S.scenarioId, S.scenarioName.trim(), data]);
     S.dirty = false;
-    msg('Saved "' + S.scenarioName.trim() + '" to cloud.');
+    scenarioListCache = null;
+    msg((forking ? 'Saved a new scenario "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
   } catch(e){ console.error(e); msg('Save failed: ' + (e.message||e)); }
+}
+
+async function deleteScenario(){
+  if (!S.scenarioId || isSeed(S.scenarioId)){ msg('Reference maps cannot be deleted.'); return; }
+  if (!confirm('Delete "' + S.scenarioName + '" permanently?')) return;
+  try {
+    await NEON.query('DELETE FROM membership.boundary_scenarios WHERE id=$1', [S.scenarioId]);
+    scenarioListCache = null;
+    msg('Deleted "' + S.scenarioName + '".');
+    S.scenarioId = null; S.scenarioName = ''; S.dirty = true;
+    renderPanel();
+  } catch(e){ console.error(e); msg('Delete failed: ' + (e.message||e)); }
+}
+
+async function loadCompare(id){
+  try {
+    const res = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id]);
+    if (!res.rows.length){ msg('Scenario not found.'); return; }
+    const row = res.rows[0];
+    const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    S.compare = {id, name: row.name, assign: d.assign || {}, regions: d.regions || []};
+    renderPanel();
+  } catch(e){ console.error(e); msg('Compare failed: ' + (e.message||e)); }
 }
 
 let scenarioListCache = null;
@@ -984,11 +1215,18 @@ async function loadScenarioList(){
       scenarioListCache = {t: Date.now(), rows: res.rows};
     }
     const sel = document.getElementById('bsLoad');
-    if (!sel) return;
-    const cur = sel.value;
-    sel.innerHTML = '<option value="">Load scenario&hellip;</option>' +
-      scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})</option>`).join('');
-    if (cur && !S.scenarioId) sel.value = cur;
+    if (sel){
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">Load scenario&hellip;</option>' +
+        scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})</option>`).join('');
+      if (cur && !S.scenarioId) sel.value = cur;
+    }
+    const csel = document.getElementById('bsCompare');
+    if (csel){
+      csel.innerHTML = '<option value="">nothing&hellip;</option>' +
+        scenarioListCache.rows.filter(r=>r.id!==S.scenarioId)
+          .map(r=>`<option value="${esc(r.id)}" ${S.compare&&S.compare.id===r.id?'selected':''}>${esc(r.name)}</option>`).join('');
+    }
   } catch(e){ /* silent */ }
 }
 
@@ -1026,6 +1264,8 @@ async function loadScenario(id){
     if (!S.adv.pool) S.adv.pool = '2026|Zones';
     syncLevels();
     S.scenarioId = id; S.scenarioName = row.name; S.active = 0; S.detailRegion = null; S.dirty = false;
+    S.undo.length = 0; S.redo.length = 0; S.palOpen = null;
+    if (S.compare && S.compare.id === id) S.compare = null;
     repaintAll(); renderPanel();
     msg('Loaded "' + row.name + '".');
   } catch(e){ console.error(e); msg('Load failed: ' + (e.message||e)); }
@@ -1109,6 +1349,15 @@ window.renderBoundary = async function(){
   renderMapOnce();
   wireMap();
   renderPanel();
+  document.addEventListener('keydown', e=>{
+    if (!(e.ctrlKey || e.metaKey) || (e.key||'').toLowerCase() !== 'z') return;
+    const view = document.getElementById('viewBoundary');
+    if (!view || view.offsetParent === null) return;          // Boundary tab not showing
+    const t = e.target;
+    if (t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)) return;
+    e.preventDefault();
+    if (e.shiftKey) doRedo(); else doUndo();
+  });
   const offBtn = document.getElementById('bsLoadOfficial');
   if (offBtn) offBtn.addEventListener('click', ()=>loadScenario('seed-2026-official'));
   const seedBtn = document.getElementById('bsLoadSeed');

@@ -213,6 +213,19 @@ tr:hover td{background:#f7fafd}
 .bs-table td.under{color:#b3122b;font-weight:700}
 .bs-seedrow{display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;margin-top:8px}
 .bs-seedrow .note{flex:1;min-width:220px}
+.bs-mergebar{margin:-4px 0 12px}
+.bs-mergebar .sel{max-width:150px}
+.bs-mergebar .note{flex:1;min-width:200px}
+.bs-swbtn{border:1px solid rgba(0,0,0,.15);padding:0;cursor:pointer;flex-shrink:0}
+.bs-x{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:6px;width:22px;height:22px;line-height:1;font-size:15px;font-weight:700;flex-shrink:0;cursor:pointer}
+.bs-x:hover:not(:disabled){border-color:var(--red);color:var(--red)}
+.bs-x:disabled{opacity:.3;cursor:default}
+.bs-pal{display:flex;flex-wrap:wrap;gap:4px;padding:5px 0 7px 20px}
+.bs-pal-c{width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.15);cursor:pointer;padding:0}
+.bs-pal-c:hover{outline:2px solid var(--pool);outline-offset:1px}
+.bs-cmp{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.bs-src{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px 3px 2px 0;font-size:10.5px;color:var(--muted);background:#fff}
+.bs-src b{font-family:var(--mono);color:var(--navy)}
 
 /* --- Types & Clubs --- */
 .tc-table td.indent1{padding-left:26px}
@@ -274,6 +287,6 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/neon-client.js?v=202607202300"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202607210130"></script>
-<script src="boundary.js?v=202607231745"></script>
+<script src="boundary.js?v=202607231830"></script>
 </body>
 </html>
