@@ -172,10 +172,78 @@ const BCAST_AWARDS_POS_HINT = {
   beforePrep: 'Straight after the flash interviews, then the awards area is set. This adds to the length of the show.',
   beforeCeremony: 'The awards area is set first, then the break, then the medals. This adds to the length of the show.',
 };
+// ── AWARDS ON A LATER BLOCK ───────────────────────────────────────────
+// Sometimes the medals do not follow the diving. The TV window closes, or the
+// next block is already in the water, so the ceremony is held and run at the
+// end of the block that comes next. The awards then belong to THAT block's
+// clock — this session ends earlier, the next one ends later, and the day
+// reflows around both. Flash interviews stay put: they happen on the deck the
+// moment the last dive is scored.
+function bcastNextBlockOf(sess) {
+  if (!sess || !sess.dayId) return null;
+  const par = (x) => (typeof isParallel === 'function' ? isParallel(x) : false);
+  if (par(sess)) return null;                       // an alongside block pushes nothing
+  const day = (S.sessions || [])
+    .filter(x => x.dayId === sess.dayId && !par(x))
+    .sort((a, b) => (Number(a.warmupStartMinutes) || 0) - (Number(b.warmupStartMinutes) || 0));
+  const i = day.findIndex(x => x.id === sess.id);
+  return (i < 0 || i + 1 >= day.length) ? null : day[i + 1];
+}
+// True only when the move can actually happen. With no block after this one
+// the awards stay where they are rather than falling off the schedule.
+function bcastDefersAwards(sess) {
+  return bcastOn(sess) && bcastCfg(sess).awardsMode === 'next' && Boolean(bcastNextBlockOf(sess));
+}
+// The block whose awards land on this one, if any.
+function bcastAwardsSourceFor(sess) {
+  if (!sess || !sess.dayId) return null;
+  const par = (x) => (typeof isParallel === 'function' ? isParallel(x) : false);
+  if (par(sess)) return null;
+  const day = (S.sessions || [])
+    .filter(x => x.dayId === sess.dayId && !par(x))
+    .sort((a, b) => (Number(a.warmupStartMinutes) || 0) - (Number(b.warmupStartMinutes) || 0));
+  const i = day.findIndex(x => x.id === sess.id);
+  if (i <= 0) return null;
+  const prev = day[i - 1];
+  return bcastDefersAwards(prev) ? prev : null;
+}
+
 function bcastAwardsSec(c) { return clampSec(Number(c && c.awardsBreakSec) || 0); }
 function bcastAwardsPos(c) {
   const p = c && c.awardsBreakPos;
   return BCAST_AWARDS_POS.includes(p) ? p : 'inPrep';
+}
+
+// The awards block for one or more events — prep, the optional break, medals.
+// Built standalone so it can run at the end of THIS session or be handed to
+// the next block without the two ever drifting apart.
+function bcastAwardsRows(sess, evs, startSec) {
+  const c = bcastCfg(sess);
+  const awSec = bcastAwardsSec(c);
+  const awPos = bcastAwardsPos(c);
+  const awName = c.awardsBreakName || 'Commercial break';
+  const prepSec = Math.max(0, Number(c.ceremonyPrepMin || 0) * 60);
+  const inPrep = awPos === 'inPrep' && awSec > 0;
+  const prepShown = inPrep ? Math.max(0, prepSec - awSec) : prepSec;
+
+  let t = Math.max(0, Math.round(startSec));
+  const rows = [];
+  const push = (kind, cueKey, label, durSec, extra) => {
+    const d = Math.max(0, Math.round(durSec));
+    rows.push(Object.assign({ kind, cueKey, label, startSec: t, durSec: d, endSec: t + d }, extra || {}));
+    t += d;
+  };
+  (evs || []).forEach(ev => {
+    const nm = evName(ev);
+    const meta = { evName: nm, evId: ev.id };
+    const pushBreak = () => { if (awSec > 0) push('break', 'awardsBreak', awName.toUpperCase(), awSec, Object.assign({ breakLabel: awName, awardsBreak: true }, meta)); };
+    if (awPos === 'beforePrep') pushBreak();
+    if (prepShown > 0) push('ceremonyprep', 'ceremonyPrep', 'CEREMONY PREP', prepShown,
+      Object.assign({ note: inPrep ? 'Awards area is set, then we go to break' : '' }, meta));
+    if (awPos === 'inPrep' || awPos === 'beforeCeremony') pushBreak();
+    if (Number(c.ceremonyMin) > 0) push('ceremony', 'ceremony', 'CEREMONY — ' + nm.toUpperCase(), Number(c.ceremonyMin) * 60, meta);
+  });
+  return rows;
 }
 
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
@@ -302,34 +370,21 @@ function bcastRows(sess) {
   // Ceremonies immediately after each event only make sense when events run
   // start-to-finish. If the two finals alternate rounds there is no gap to put
   // a ceremony in, so they always collect at the end.
-  const ceremonyAfterEach = c.awardsMode === 'after' && !interleaved;
+  const ceremonyAfterEach = c.awardsMode === 'after' && !interleaved && !awardsToNext;
   const deferred = [];
 
-  // Every ceremony carries its own prep window, so an awards break placed in
-  // that window belongs to each ceremony — including when two events collect
-  // their medals back to back at the end of the show.
-  const awSec = bcastAwardsSec(c);
-  const awPos = bcastAwardsPos(c);
-  const awName = c.awardsBreakName || 'Commercial break';
-  const pushCeremony = (ev) => {
-    const nm = evName(ev);
-    const prepSec = Math.max(0, Number(c.ceremonyPrepMin || 0) * 60);
-    const inPrep = awPos === 'inPrep' && awSec > 0;
-    const prepShown = inPrep ? Math.max(0, prepSec - awSec) : prepSec;
-    const pushAwardsBreak = () => {
-      if (awSec <= 0) return;
-      push('break', 'awardsBreak', awName.toUpperCase(), awSec, { evName: nm, evId: ev.id, breakLabel: awName, awardsBreak: true });
-    };
-
-    if (Number(c.flashMin) > 0) push('flash', 'flash', 'FLASH INTERVIEWS', Number(c.flashMin) * 60, { evName: nm, evId: ev.id });
-    if (awPos === 'beforePrep') pushAwardsBreak();
-    if (prepShown > 0) push('ceremonyprep', 'ceremonyPrep', 'CEREMONY PREP', prepShown, {
-      evName: nm, evId: ev.id,
-      note: inPrep ? 'Awards area is set, then we go to break' : '',
-    });
-    if (awPos === 'inPrep' || awPos === 'beforeCeremony') pushAwardsBreak();
-    if (Number(c.ceremonyMin) > 0) push('ceremony', 'ceremony', 'CEREMONY — ' + nm.toUpperCase(), Number(c.ceremonyMin) * 60, { evName: nm, evId: ev.id });
+  // Flash interviews happen on the deck the moment the last dive is scored, so
+  // they never travel. The awards block is built by bcastAwardsRows() and can
+  // run here or be handed to the next block on the day.
+  const nextBlock = c.awardsMode === 'next' ? bcastNextBlockOf(sess) : null;
+  const awardsToNext = Boolean(nextBlock);
+  const pushFlash = (ev) => {
+    if (Number(c.flashMin) > 0) push('flash', 'flash', 'FLASH INTERVIEWS', Number(c.flashMin) * 60, { evName: evName(ev), evId: ev.id });
   };
+  const pushAwards = (ev) => {
+    bcastAwardsRows(sess, [ev], t).forEach(r => { rows.push(r); t = r.endSec; });
+  };
+  const pushCeremony = (ev) => { pushFlash(ev); pushAwards(ev); };
 
   segs.forEach((sg, i) => {
     const ev = sg.ev;
@@ -358,7 +413,16 @@ function bcastRows(sess) {
     }
   });
 
-  deferred.forEach(pushCeremony);
+  if (awardsToNext) {
+    // Interviews here; the medals are read onto the next block's sheet.
+    deferred.forEach(pushFlash);
+    const where = (typeof sessLabelOf === 'function' ? sessLabelOf(nextBlock, null) : 'the next block');
+    push('handoff', 'awardsMoved', 'AWARDS HELD — CEREMONY RUNS AFTER ' + String(where).toUpperCase(), 0, {
+      evName: evLabel, note: 'Medals for ' + evLabel + ' are presented at the end of ' + where + ', not here',
+    });
+  } else {
+    deferred.forEach(pushCeremony);
+  }
   push('finish', 'finish', 'FINISH', 0, { evName: evLabel });
 
   return rows;
@@ -439,6 +503,42 @@ function bcDurCtl(sec, pickPfx, partPfx) {
   </div>`;
 }
 
+// Called for EVERY session by calcSessTiming(). Almost always a no-op; when the
+// previous block handed its awards over, this appends them to the end of this
+// block's clock and pushes its end time out accordingly.
+function bcastAppendDeferredAwards(sess, t) {
+  if (!t || !sess) return t;
+  let src = null;
+  try { src = bcastAwardsSourceFor(sess); } catch (e) { return t; }
+  if (!src) return t;
+  const evs = (src.events || []).filter(e => isBcastEv(src, e));
+  if (!evs.length) return t;
+
+  const own = t.bcastRows || null;
+  // A broadcast block's own FINISH marker stays last, so the handed-over awards
+  // slot in just ahead of it.
+  const tail = own && own.length && own[own.length - 1].kind === 'finish' ? own[own.length - 1] : null;
+  const startSec = tail ? tail.startSec : Math.round(Number(t.sessionEndMinutes || 0) * 60);
+  const rows = bcastAwardsRows(src, evs, startSec);
+  if (!rows.length) return t;
+  const endSec = rows[rows.length - 1].endSec;
+
+  const out = Object.assign({}, t, {
+    sessionEndMinutes: Math.max(Number(t.sessionEndMinutes || 0), endSec / 60),
+    deferredAwards: {
+      fromSessId: src.id,
+      evNames: evs.map(evName).join(' & '),
+      rows,
+    },
+  });
+  if (own) {
+    const head = tail ? own.slice(0, -1) : own.slice();
+    const fin = tail ? Object.assign({}, tail, { startSec: endSec, endSec }) : null;
+    out.bcastRows = head.concat(rows, fin ? [fin] : []);
+  }
+  return out;
+}
+
 // ── EDITOR: SESSION PANEL ─────────────────────────────────────────────
 function renderBcastSessPanel(sess) {
   if (!sessHasBcastEvents(sess)) return '';
@@ -514,9 +614,18 @@ function renderBcastSessPanel(sess) {
     <div class="bc-f wide"><label>Awards</label>
       <div class="chiprow">
         <button class="chip ${c.awardsMode === 'after' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','after')">After each event</button>
-        <button class="chip ${c.awardsMode === 'end' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','end')">Both at the end</button>
+        <button class="chip ${c.awardsMode === 'end' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','end')">${multi ? 'Both at the end' : 'At the end of this block'}</button>
+        <button class="chip ${c.awardsMode === 'next' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','next')">After the next block</button>
       </div>
       ${(multi && c.interleave && c.awardsMode === 'after') ? `<span class="bc-hint warn">Rounds are alternating, so there is no gap mid-show — both ceremonies will run at the end, in event order.</span>` : ''}
+      ${(() => {
+    if (c.awardsMode !== 'next') return '';
+    const nx = bcastNextBlockOf(sess);
+    if (!nx) return `<span class="bc-hint warn">There is no block after this one on this day, so the medals stay at the end of this session. Add a block after it, or move this one up, and they will follow it automatically.</span>`;
+    const lbl = typeof sessLabelOf === 'function' ? sessLabelOf(nx, null) : 'the next block';
+    const mins = Math.round((bcastAwardsRows(sess, (sess.events || []).filter(e => isBcastEv(sess, e)), 0).reduce((a, r) => a + r.durSec, 0)) / 60);
+    return `<span class="bc-hint">Flash interviews stay on the deck here. Prep, any awards break and the medals — about ${mins} min — move to the end of <strong>${esc(lbl)}</strong>${nx.isPractice ? ' (a training block)' : ''}, and the day reflows around both.</span>`;
+  })()}
     </div>
 
     <div class="bc-grid">
@@ -934,7 +1043,7 @@ function renderPaCueModal() {
 // ── RUN-OF-SHOW RENDERER (screen preview + print) ─────────────────────
 const BC_KIND_LABEL = {
   boardsclose: 'Boards', presentation: 'Intros', reset: 'Break', round: 'Round',
-  break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End',
+  break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End', handoff: 'Awards',
 };
 function renderBcastSheet(timedSessions, opts) {
   opts = opts || {};
@@ -944,10 +1053,15 @@ function renderBcastSheet(timedSessions, opts) {
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   const blocks = timedSessions.map(sess => {
-    const rows = (sess.timing && sess.timing.bcastRows) || [];
+    const da = (sess.timing && sess.timing.deferredAwards) || null;
+    // A block can appear here for two reasons: it runs on the broadcast clock,
+    // or it is simply where an earlier block's medals are presented.
+    const rows = ((sess.timing && sess.timing.bcastRows) || []).length
+      ? sess.timing.bcastRows : (da ? da.rows : []);
     if (!rows.length) return '';
     const day = S.meet.days.find(d => d.id === sess.dayId);
     const evs = (sess.events || []).filter(e => isBcastEv(sess, e));
+    const awardsOnly = !evs.length && da;
     const total = rows[rows.length - 1].endSec - rows[0].startSec;
     const body = rows.map(r => {
       const cue = showCues ? paCueFor(r, cues) : '';
@@ -964,8 +1078,10 @@ function renderBcastSheet(timedSessions, opts) {
     }).join('');
     return `<div class="bcs-sess">
       <div class="bcs-hd">
-        <span class="bcs-badge">Broadcast</span>
-        <span class="bcs-nm">${esc(evs.map(evName).join('  &  '))}</span>
+        <span class="bcs-badge">${awardsOnly ? 'Awards' : 'Broadcast'}</span>
+        <span class="bcs-nm">${awardsOnly
+      ? esc((typeof sessLabelOf === 'function' ? sessLabelOf(sess, null) : 'Next block') + ' — awards for ' + da.evNames)
+      : esc(evs.map(evName).join('  &  ')) + (da ? ` <span class="bcs-plus">+ awards for ${esc(da.evNames)}</span>` : '')}</span>
         <span class="bcs-day">${day ? esc(fullDate(day.date)) : ''}</span>
         <span class="bcs-win">${bclockShort(rows[0].startSec)} – ${bclockShort(rows[rows.length - 1].endSec)} · ${bsec(total)}</span>
       </div>
@@ -992,7 +1108,7 @@ function renderBcastSheet(timedSessions, opts) {
 function renderBcastPreviewModal() {
   const sess = S.sessions.find(x => x.id === UI.bcastSessId);
   if (!sess) return '';
-  const timed = allTimed().filter(s => s.id === sess.id);
+  const timed = bcastSessScope(allTimed(), sess.id);
   return `<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Run-of-show</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">${renderBcastSheet(timed, { showCues: true })}</div>
@@ -1005,10 +1121,16 @@ function renderBcastPreviewModal() {
 // ── PRINT ─────────────────────────────────────────────────────────────
 function bcastScopeSessions() {
   const timed = genTimedForPreview(allTimed());
-  return timed.filter(s => bcastOn(s) && s.timing && s.timing.bcastRows);
+  return timed.filter(s => s.timing && ((bcastOn(s) && s.timing.bcastRows) || s.timing.deferredAwards));
+}
+// Previewing or printing one session must also pick up the block its awards
+// were handed to, or the medals would be missing from the sheet.
+function bcastSessScope(list, sessId) {
+  return list.filter(s => s.id === sessId ||
+    (s.timing && s.timing.deferredAwards && s.timing.deferredAwards.fromSessId === sessId));
 }
 function printBroadcast() {
-  const list = UI.bcastSessId ? allTimed().filter(s => s.id === UI.bcastSessId) : bcastScopeSessions();
+  const list = UI.bcastSessId ? bcastSessScope(allTimed(), UI.bcastSessId) : bcastScopeSessions();
   const title = (typeof genTitle === 'function' && genTitle()) || S.meet.name || 'USA Diving';
   const showCues = !(AUD.broadcast && AUD.broadcast.showCues === false);
   const html = renderBcastSheet(list, { title, showCues });
@@ -1057,12 +1179,14 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .bcr.k-finish{background:var(--navy)}
 .bcr.k-finish td{color:#fff;font-weight:800}
 .bcs-pft{display:flex;justify-content:space-between;padding:8px 18px;border-top:2px solid var(--navy);font-size:9px;color:var(--gray);margin-top:6px}
+.bcr.k-handoff td{background:#F5F2FA;color:var(--navy);font-style:italic}
+.bcs-plus{font-weight:600;color:var(--pool);font-size:11px}
 .pp-empty{padding:40px;text-align:center;color:var(--gray)}
 `;
 
 // ── XLSX EXPORT ───────────────────────────────────────────────────────
 async function exportBroadcast() {
-  const list = UI.bcastSessId ? allTimed().filter(s => s.id === UI.bcastSessId) : bcastScopeSessions();
+  const list = UI.bcastSessId ? bcastSessScope(allTimed(), UI.bcastSessId) : bcastScopeSessions();
   if (!list.length) { toast('No broadcast sessions to export'); return; }
   if (typeof ExcelJS === 'undefined') { toast('Excel engine not loaded — use Print / PDF'); return; }
   const title = (typeof genTitle === 'function' && genTitle()) || S.meet.name || 'USA Diving';
@@ -1088,11 +1212,16 @@ async function exportBroadcast() {
     const band = (text, bg) => { const r = ws.addRow([text]); ws.mergeCells(`A${r.number}:F${r.number}`); const c = r.getCell(1); c.fill = fill(bg); c.font = { bold: true, size: 11, color: { argb: W } }; c.alignment = { vertical: 'middle' }; r.height = 18; };
 
     list.forEach(sess => {
-      const rows = sess.timing.bcastRows || []; if (!rows.length) return;
+      const rows = (sess.timing.bcastRows || []).length ? sess.timing.bcastRows
+        : ((sess.timing.deferredAwards && sess.timing.deferredAwards.rows) || []);
+      if (!rows.length) return;
       const day = S.meet.days.find(d => d.id === sess.dayId);
       const evs = (sess.events || []).filter(e => isBcastEv(sess, e));
+      const da2 = sess.timing.deferredAwards;
+      const nmLine = (evs.length ? evs.map(evName).join('  &  ') : (typeof sessLabelOf === 'function' ? sessLabelOf(sess, null) : ''))
+        + (da2 ? (evs.length ? '  +  ' : '  ') + 'AWARDS FOR ' + da2.evNames : '');
       const total = rows[rows.length - 1].endSec - rows[0].startSec;
-      band(`${day ? String(fullDate(day.date)).toUpperCase() : ''}  ·  ${evs.map(evName).join('  &  ').toUpperCase()}  ·  ${bclockShort(rows[0].startSec)}–${bclockShort(rows[rows.length - 1].endSec)}  (${bsec(total)})`, N);
+      band(`${day ? String(fullDate(day.date)).toUpperCase() : ''}  ·  ${nmLine.toUpperCase()}  ·  ${bclockShort(rows[0].startSec)}–${bclockShort(rows[rows.length - 1].endSec)}  (${bsec(total)})`, N);
       rows.forEach(r => {
         const bg = r.kind === 'round' ? SKY : (r.kind === 'break' || r.kind === 'reset') ? PK
           : (r.kind === 'ceremony' || r.kind === 'ceremonyprep' || r.kind === 'flash') ? LAV

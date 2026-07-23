@@ -484,7 +484,14 @@ function calcFlightTimes(sess){
   let cur=Number(sess.warmupStartMinutes||0);
   return sess.flights.map(f=>{const dur=Number(f.durationMinutes||30);const s=cur;cur+=dur;return{...f,startMinutes:s,endMinutes:cur}});
 }
+// Every session's timing goes through here. The core does the work; the wrapper
+// gives sb-broadcast.js a chance to append awards that an earlier block on the
+// day handed over (see bcastAppendDeferredAwards).
 function calcSessTiming(sess){
+  const t=calcSessTimingCore(sess);
+  return (typeof bcastAppendDeferredAwards==='function')?bcastAppendDeferredAwards(sess,t):t;
+}
+function calcSessTimingCore(sess){
   if(sess.isPractice){
     const ft=calcFlightTimes(sess);
     const s=Number(sess.warmupStartMinutes);
@@ -4828,7 +4835,7 @@ function renderGenerateModal(timed){
         <div class="gen-preview">
           <div class="gen-sec-lbl">Preview — ${esc(genScopeLabel())} <span class="pp-scrollhint">scroll to see full schedule</span></div>
           ${aud==='broadcast'
-            ?renderBcastSheet(genTimed.filter(s=>bcastOn(s)&&s.timing&&s.timing.bcastRows),{title:genTitle(),showCues:cfg.showCues!==false})
+            ?renderBcastSheet(genTimed.filter(s=>s.timing&&((bcastOn(s)&&s.timing.bcastRows)||s.timing.deferredAwards)),{title:genTitle(),showCues:cfg.showCues!==false})
             :renderPP(genTimed,cfg,genTitle())}
         </div>
       </div>
