@@ -11,9 +11,14 @@
 
 const PALETTE = ['#171F69','#E31937','#009AC7','#15803d','#b45309','#7c3aed','#0f766e','#be185d','#8FC3EA','#a16207','#64748b','#92400e','#1d4ed8','#ca8a04','#0891b2','#9f1239'];
 const UNASSIGNED_BASE = '#eef1f6';
-// Distinct, brand-aligned color ramps for the tier-2 and tier-3 map views.
-const ZONE_RAMP = ['#171F69','#009AC7','#15803d','#b45309','#7c3aed','#E31937','#0891b2','#be185d','#a16207','#4f46e5'];
-const EWC_RAMP  = ['#171F69','#009AC7','#E31937','#15803d','#b45309','#7c3aed'];
+// Distinct, brand-aligned color ramps, one per level above the painted map.
+const RAMPS = [
+  ['#171F69','#009AC7','#15803d','#b45309','#7c3aed','#E31937','#0891b2','#be185d','#a16207','#4f46e5'],
+  ['#171F69','#009AC7','#E31937','#15803d','#b45309','#7c3aed'],
+  ['#0f766e','#b45309','#7c3aed','#171F69','#009AC7','#be185d'],
+  ['#be185d','#15803d','#1d4ed8','#ca8a04','#0891b2','#92400e'],
+];
+const MAX_LEVELS = 6;
 // Junior age groups (age as of Dec 31) + adult bucket, young->old color ramp.
 const AGE_GROUPS = [
   {k:'D',   label:'11 & under', color:'#8FC3EA'},
@@ -49,10 +54,11 @@ const S = {
   zoom: {k:1, x:0, y:0},
   painting: false,
   detailRegion: null,   // group index (in current tier view) for zip drill-down
-  tiers: null,          // {zones:[{name}], zoneOf:[zi per region], ewc:[{name}], ewcOf:[ei per zone]}
-  tierView: 0,          // 0 = painted areas, 1 = second tier, 2 = third tier
-  tierCount: 3,         // how many levels exist above nothing: 1, 2 or 3
-  tierNames: ['Regions','Zones','E / W / C'],
+  // levels[0] is the painted map itself (its groups are S.regions). Every level
+  // above it has its own groups and an `of` array mapping each group one level
+  // down to its parent here. Any depth, any group counts, any names.
+  levels: null,         // [{name}, {name, groups:[{name}], of:[...]}, ...]
+  tierView: 0,          // which level the map + tallies are showing
   finalName: 'Junior Nationals',
   legendMode: 'members',// members | age | comp
   panelMode: 'tally',   // tally | advance
@@ -73,53 +79,75 @@ function defaultRegions(n){
 }
 
 function defaultAdv(){
-  return {pool:'2026|Zones', focus:'all', steps:[{a:{},d:{}},{a:{},d:{}},{a:{},d:{}}]};
+  return {pool:'2026|Zones', focus:'all', step:0, steps:[{a:{},d:{}},{a:{},d:{}},{a:{},d:{}}]};
 }
 
-function defaultTiers(nRegions){
-  const nZones = Math.max(1, Math.ceil(nRegions/2));
-  const zones = Array.from({length:nZones}, (_,i)=>({name:'Zone '+String.fromCharCode(65+i)}));
-  const zoneOf = Array.from({length:nRegions}, (_,i)=>Math.min(Math.floor(i/2), nZones-1));
-  const nE = Math.max(1, Math.ceil(nZones/2));
-  const ewc = nE===3 ? [{name:'East'},{name:'Central'},{name:'West'}] : Array.from({length:nE}, (_,i)=>({name:'Group '+(i+1)}));
-  const ewcOf = Array.from({length:nZones}, (_,i)=>Math.min(Math.floor(i/2), nE-1));
-  return {zones, zoneOf, ewc, ewcOf};
+function defaultLevels(nRegions){
+  const nZ = Math.max(1, Math.ceil(nRegions/2));
+  const zones = Array.from({length:nZ}, (_,i)=>({name:'Zone '+String.fromCharCode(65+i)}));
+  const zoneOf = Array.from({length:nRegions}, (_,i)=>Math.min(Math.floor(i/2), nZ-1));
+  const nE = Math.max(1, Math.ceil(nZ/2));
+  const top = nE===3 ? [{name:'East'},{name:'Central'},{name:'West'}]
+                     : Array.from({length:nE}, (_,i)=>({name:'Group '+(i+1)}));
+  const topOf = Array.from({length:nZ}, (_,i)=>Math.min(Math.floor(i/2), nE-1));
+  return [{name:'Regions'}, {name:'Zones', groups:zones, of:zoneOf},
+          {name:'E / W / C', groups:top, of:topOf}];
 }
 
-function syncTiers(){
-  if (!S.tiers) S.tiers = defaultTiers(S.regions.length);
-  const T = S.tiers;
-  while (T.zoneOf.length < S.regions.length) T.zoneOf.push(Math.min(Math.floor(T.zoneOf.length/2), T.zones.length-1));
-  T.zoneOf.length = S.regions.length;
-  T.zoneOf = T.zoneOf.map(z => Math.min(z, T.zones.length-1));
-  while (T.ewcOf.length < T.zones.length) T.ewcOf.push(Math.min(Math.floor(T.ewcOf.length/2), T.ewc.length-1));
-  T.ewcOf.length = T.zones.length;
-  T.ewcOf = T.ewcOf.map(e => Math.min(e, T.ewc.length-1));
-  if (!S.adv) S.adv = defaultAdv();
-  while (S.adv.steps.length < 3) S.adv.steps.push({a:{},d:{}});
-  if (S.tierView >= S.tierCount) S.tierView = S.tierCount - 1;
+const levelCount = () => (S.levels ? S.levels.length : 1);
+// How many groups sit at a level. Level 0 is the painted map.
+function groupCountAt(level){
+  return level===0 ? S.regions.length : (S.levels[level].groups || []).length;
 }
 
-// Groups at a given level (0 = painted areas) + mapping regionIndex -> groupIndex.
-function tierGroupsAt(level){
-  syncTiers();
-  if (level===0) return {groups:S.regions.map(r=>({name:r.name, colors:[r.color]})), of:S.regions.map((_,i)=>i)};
-  if (level===1){
-    return {groups:S.tiers.zones.map((z,zi)=>({name:z.name, colors:S.regions.filter((_,ri)=>S.tiers.zoneOf[ri]===zi).map(r=>r.color)})),
-            of:S.regions.map((_,ri)=>S.tiers.zoneOf[ri])};
+function syncLevels(){
+  if (!S.levels || !S.levels.length) S.levels = defaultLevels(S.regions.length);
+  if (!S.levels[0]) S.levels[0] = {name:'Regions'};
+  if (!S.levels[0].name) S.levels[0].name = 'Regions';
+  for (let k=1; k<S.levels.length; k++){
+    const L = S.levels[k];
+    if (!L.name) L.name = 'Level ' + (k+1);
+    if (!L.groups || !L.groups.length) L.groups = [{name:'Group 1'}];
+    const nBelow = groupCountAt(k-1);
+    if (!Array.isArray(L.of)) L.of = [];
+    while (L.of.length < nBelow) L.of.push(Math.min(Math.floor(L.of.length/2), L.groups.length-1));
+    L.of.length = nBelow;
+    L.of = L.of.map(v => Math.min(Math.max(0, v|0), L.groups.length-1));
   }
-  const ewcOfRegion = S.regions.map((_,ri)=>S.tiers.ewcOf[S.tiers.zoneOf[ri]]);
-  return {groups:S.tiers.ewc.map((e,ei)=>({name:e.name, colors:S.regions.filter((_,ri)=>ewcOfRegion[ri]===ei).map(r=>r.color)})),
-          of:ewcOfRegion};
+  if (!S.adv) S.adv = defaultAdv();
+  while (S.adv.steps.length < S.levels.length) S.adv.steps.push({a:{},d:{}});
+  S.adv.steps.length = Math.max(S.adv.steps.length, S.levels.length);
+  if (S.adv.step==null) S.adv.step = 0;                 // open on the first transition
+  if (S.adv.step >= S.levels.length) S.adv.step = S.levels.length-1;
+  if (S.tierView >= S.levels.length) S.tierView = S.levels.length-1;
+}
+
+// region index -> group index at `level`, by walking the chain of `of` arrays.
+function ofChain(level){
+  let cur = S.regions.map((_,i)=>i);
+  for (let k=1; k<=level; k++){
+    const of = S.levels[k].of;
+    cur = cur.map(gi => (of[gi]==null ? 0 : of[gi]));
+  }
+  return cur;
+}
+
+// Groups at a given level + mapping regionIndex -> groupIndex.
+function tierGroupsAt(level){
+  syncLevels();
+  if (level===0) return {groups:S.regions.map(r=>({name:r.name, colors:[r.color]})), of:S.regions.map((_,i)=>i)};
+  const of = ofChain(level);
+  return {groups:S.levels[level].groups.map((g,gi)=>({name:g.name,
+            colors:S.regions.filter((_,ri)=>of[ri]===gi).map(r=>r.color)})), of};
 }
 function tierGroups(){ return tierGroupsAt(S.tierView); }
-function tierName(i){ return S.tierNames[i] || ('Tier '+(i+1)); }
+function tierName(i){ return (S.levels[i] && S.levels[i].name) || ('Level '+(i+1)); }
 
-// Color for a group index in the CURRENT tier view.
+// Color for a group index in the CURRENT level view.
 function groupColor(gi){
   if (gi==null || gi<0) return UNASSIGNED_BASE;
   if (S.tierView===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
-  const ramp = S.tierView===1 ? ZONE_RAMP : EWC_RAMP;
+  const ramp = RAMPS[(S.tierView-1) % RAMPS.length];
   return ramp[gi % ramp.length];
 }
 
@@ -206,7 +234,7 @@ function advPerGroup(step, kind){
 }
 // Field size arriving at the final destination, per cell.
 function finalField(){
-  const k = S.tierCount, res = {};
+  const k = levelCount(), res = {};
   CELLS.forEach(c=>res[c]=0);
   for (let i=0;i<k;i++){
     const n = tierGroupsAt(i).groups.length;
@@ -280,7 +308,7 @@ function applyZoom(){
 function renderPanel(){
   const y = S.year;
 
-  const tierBtns = Array.from({length:S.tierCount}, (_,i)=>
+  const tierBtns = Array.from({length:levelCount()}, (_,i)=>
     `<button data-tierv="${i}" class="${S.tierView===i?'on':''}">${esc(tierName(i))}</button>`).join('');
 
   const chips = S.regions.map((r,i)=>`
@@ -385,55 +413,57 @@ function renderTallyTable(t, mappableTotal, yLabel){
     ${drill}`;
 }
 
-/* ---------- names & tiers panel ---------- */
+/* ---------- names & structure panel ---------- */
 function renderNamesPanel(){
-  const lvlRow = (i, val) => `<label class="bs-tier-row"><span class="bs-lvl">Level ${i+1}</span>
-      <input class="bs-name-in bs-tiername" data-lvl="${i}" value="${esc(val)}" placeholder="Level ${i+1} name"></label>`;
-  const zoneSelects = S.tierCount>1 ? `
-    <div>
-      <div class="bs-tier-h">${esc(tierName(0))} &rarr; ${esc(tierName(1))}
-        <button class="tab bs-mini" id="bsAddZone">+ add</button>
-        <button class="tab bs-mini" id="bsRemZone" ${S.tiers.zones.length<=1?'disabled':''}>&minus; remove</button></div>
-      ${S.regions.map((r,ri)=>`<label class="bs-tier-row"><span class="sw" style="background:${r.color}"></span>
-        <input class="bs-name-in bs-rname" data-ri="${ri}" value="${esc(r.name)}">
-        <select class="sel bs-zsel" data-ri="${ri}">${S.tiers.zones.map((z,zi)=>`<option value="${zi}" ${S.tiers.zoneOf[ri]===zi?'selected':''}>${esc(z.name)}</option>`).join('')}</select></label>`).join('')}
-    </div>` : '';
-  const ewcSelects = S.tierCount>2 ? `
-    <div>
-      <div class="bs-tier-h">${esc(tierName(1))} &rarr; ${esc(tierName(2))}
-        <button class="tab bs-mini" id="bsAddEwc">+ add</button>
-        <button class="tab bs-mini" id="bsRemEwc" ${S.tiers.ewc.length<=1?'disabled':''}>&minus; remove</button></div>
-      ${S.tiers.zones.map((z,zi)=>`<label class="bs-tier-row">
-        <input class="bs-name-in bs-zname" data-zi="${zi}" value="${esc(z.name)}">
-        <select class="sel bs-esel" data-zi="${zi}">${S.tiers.ewc.map((e,ei)=>`<option value="${ei}" ${S.tiers.ewcOf[zi]===ei?'selected':''}>${esc(e.name)}</option>`).join('')}</select></label>`).join('')}
-    </div>` : '';
-  const topNames = S.tierCount>2 ? `
-    <div>
-      <div class="bs-tier-h">${esc(tierName(2))} names</div>
-      ${S.tiers.ewc.map((e,ei)=>`<label class="bs-tier-row">
-        <input class="bs-name-in bs-ename" data-ei="${ei}" value="${esc(e.name)}"></label>`).join('')}
-    </div>` : (S.tierCount>1 ? `
-    <div>
-      <div class="bs-tier-h">${esc(tierName(1))} names</div>
-      ${S.tiers.zones.map((z,zi)=>`<label class="bs-tier-row">
-        <input class="bs-name-in bs-zname" data-zi="${zi}" value="${esc(z.name)}"></label>`).join('')}
-    </div>` : `
-    <div>
-      <div class="bs-tier-h">${esc(tierName(0))} names</div>
-      ${S.regions.map((r,ri)=>`<label class="bs-tier-row"><span class="sw" style="background:${r.color}"></span>
-        <input class="bs-name-in bs-rname" data-ri="${ri}" value="${esc(r.name)}"></label>`).join('')}
+  const N = levelCount();
+
+  // One column per level above the map: rename each group one level down and
+  // choose which group here it rolls into. Plus a column naming the top level.
+  const cols = [];
+  for (let k=1; k<N; k++){
+    const L = S.levels[k];
+    cols.push(`<div>
+      <div class="bs-tier-h">${esc(tierName(k-1))} &rarr; ${esc(tierName(k))}
+        <button class="tab bs-mini bs-addgrp" data-lvl="${k}">+ add</button>
+        <button class="tab bs-mini bs-remgrp" data-lvl="${k}" ${L.groups.length<=1?'disabled':''}>&minus; remove</button></div>
+      ${Array.from({length:groupCountAt(k-1)}, (_,gi)=>{
+        const sw = k===1 ? `<span class="sw" style="background:${S.regions[gi].color}"></span>` : '';
+        const nm = k===1 ? S.regions[gi].name : S.levels[k-1].groups[gi].name;
+        return `<label class="bs-tier-row">${sw}
+          <input class="bs-name-in bs-gname" data-lvl="${k-1}" data-gi="${gi}" value="${esc(nm)}">
+          <select class="sel bs-psel" data-lvl="${k}" data-gi="${gi}">${L.groups.map((g,j)=>
+            `<option value="${j}" ${L.of[gi]===j?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label>`;
+      }).join('')}
     </div>`);
+  }
+  // Name the groups at the highest level (for a 1-level map that is the map itself).
+  const top = N-1;
+  cols.push(`<div>
+    <div class="bs-tier-h">${esc(tierName(top))} names</div>
+    ${Array.from({length:groupCountAt(top)}, (_,gi)=>{
+      const sw = top===0 ? `<span class="sw" style="background:${S.regions[gi].color}"></span>` : '';
+      const nm = top===0 ? S.regions[gi].name : S.levels[top].groups[gi].name;
+      return `<label class="bs-tier-row">${sw}
+        <input class="bs-name-in bs-gname" data-lvl="${top}" data-gi="${gi}" value="${esc(nm)}"></label>`;
+    }).join('')}
+  </div>`);
+
+  const lvlInputs = Array.from({length:N}, (_,i)=>
+    `<label class="bs-tier-row"><span class="bs-lvl">Level ${i+1}</span>
+      <input class="bs-name-in bs-lvlname" data-lvl="${i}" value="${esc(tierName(i))}"></label>`).join('');
 
   return `<details class="bs-tiers" ${S.tierView>0?'open':''}>
-    <summary>Names &amp; structure — rename anything, choose how many levels, set what rolls up into what</summary>
+    <summary>Names &amp; structure — rename anything, add or remove levels, set what rolls up into what</summary>
     <div class="bs-namebar">
-      <span class="bs-lvl">How many levels</span>
-      <div class="seg">${[1,2,3].map(n=>`<button data-tiercount="${n}" class="${S.tierCount===n?'on':''}">${n}</button>`).join('')}</div>
+      <span class="bs-lvl">Levels</span>
+      <button class="tab bs-mini" id="bsAddLevel" ${N>=MAX_LEVELS?'disabled':''}>+ add a level on top</button>
+      <button class="tab bs-mini" id="bsRemLevel" ${N<=1?'disabled':''}>&minus; remove top level</button>
       <span class="bs-lvl" style="margin-left:10px">Top meet</span>
       <input class="bs-name-in" id="bsFinalName" value="${esc(S.finalName)}" placeholder="Junior Nationals" style="min-width:150px">
     </div>
-    <div class="bs-namebar">${Array.from({length:S.tierCount},(_,i)=>lvlRow(i, tierName(i))).join('')}</div>
-    <div class="bs-tier-grid">${zoneSelects}${ewcSelects}${topNames}</div>
+    <div class="bs-namebar">${lvlInputs}</div>
+    <div class="bs-tier-grid">${cols.join('')}</div>
+    <div class="note" style="margin-top:6px">Level 1 is the map you paint. Everything above it is just grouping — name the levels whatever the committee is calling them.</div>
   </details>`;
 }
 
@@ -441,8 +471,8 @@ function renderNamesPanel(){
 function renderAdvShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
-  const steps = Array.from({length:S.tierCount}, (_,i)=>{
-    const to = i===S.tierCount-1 ? S.finalName : tierName(i+1);
+  const steps = Array.from({length:levelCount()}, (_,i)=>{
+    const to = i===levelCount()-1 ? S.finalName : tierName(i+1);
     return `<button data-step="${i}" class="${(S.adv.step||0)===i?'on':''}">${esc(tierName(i))} &rarr; ${esc(to)}</button>`;
   }).join('');
   const poolOpts = POOLS.map(p=>`<option value="${p.k}" ${S.adv.pool===p.k?'selected':''}>${esc(p.label)}</option>`).join('');
@@ -468,7 +498,7 @@ function renderAdvGrid(){
   const el = document.getElementById('bsAdvGrid');
   if (!el) return;
   const i = S.adv.step || 0;
-  const last = i === S.tierCount-1;
+  const last = i === levelCount()-1;
   const st = S.adv.steps[i] || (S.adv.steps[i] = {a:{},d:{}});
   const nFrom = tierGroupsAt(i).groups.length;
   const toName = last ? S.finalName : tierName(i+1);
@@ -505,7 +535,7 @@ function renderAdvResults(){
   const el = document.getElementById('bsAdvResults');
   if (!el) return;
   const i = S.adv.step || 0;
-  const last = i === S.tierCount-1;
+  const last = i === levelCount()-1;
   const TG = tierGroupsAt(i);
   const pooled = poolIsMembers() ? poolMembers(i) : poolCells(i);
   const perGroupAdv = advPerGroup(i, 'a');
@@ -541,16 +571,16 @@ function renderAdvResults(){
   // Pipeline summary across every level.
   const ff = finalField();
   const ffTotal = CELLS.reduce((s,c)=>s+ff[c],0);
-  const pipe = Array.from({length:S.tierCount},(_,j)=>{
+  const pipe = Array.from({length:levelCount()},(_,j)=>{
     const n = tierGroupsAt(j).groups.length;
     const a = CELLS.reduce((s,c)=>s+(+(S.adv.steps[j].a[c])||0),0);
     const d = CELLS.reduce((s,c)=>s+(+(S.adv.steps[j].d[c])||0),0);
-    const to = j===S.tierCount-1 ? S.finalName : tierName(j+1);
+    const to = j===levelCount()-1 ? S.finalName : tierName(j+1);
     return `<div class="bs-pipe-card">
       <span class="bs-pipe-nm">${esc(tierName(j))} &rarr; ${esc(to)}</span>
       <span class="bs-pipe-big">${fmt(n*a)}</span>
       <span class="bs-lg-sub">${n} ${n===1?'group':'groups'} × ${fmt(a)} spots</span>
-      ${(j<S.tierCount-1 && d>0) ? `<span class="bs-pipe-dir">+ ${fmt(n*d)} straight to ${esc(S.finalName)}</span>` : ''}
+      ${(j<levelCount()-1 && d>0) ? `<span class="bs-pipe-dir">+ ${fmt(n*d)} straight to ${esc(S.finalName)}</span>` : ''}
     </div>`;
   }).join('');
 
@@ -596,7 +626,7 @@ function renderAdvResults(){
 
 function tierColorAt(level, gi){
   if (level===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
-  const ramp = level===1 ? ZONE_RAMP : EWC_RAMP;
+  const ramp = RAMPS[(level-1) % RAMPS.length];
   return ramp[gi % ramp.length];
 }
 
@@ -812,12 +842,23 @@ function wirePanel(){
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
   }));
-  P.querySelectorAll('[data-tiercount]').forEach(b=>b.addEventListener('click',()=>{
-    S.tierCount = +b.dataset.tiercount;
-    if (S.tierView >= S.tierCount) S.tierView = S.tierCount-1;
-    if ((S.adv.step||0) >= S.tierCount) S.adv.step = S.tierCount-1;
-    S.dirty=true; repaintAll(); renderPanel();
-  }));
+  bind('bsAddLevel', ()=>{
+    if (levelCount() >= MAX_LEVELS) return;
+    const below = groupCountAt(levelCount()-1);
+    const n = Math.max(1, Math.ceil(below/2));
+    S.levels.push({name:'Level '+(levelCount()+1),
+      groups:Array.from({length:n},(_,i)=>({name:'Group '+(i+1)})),
+      of:Array.from({length:below},(_,i)=>Math.min(Math.floor(i/2), n-1))});
+    S.adv.steps.push({a:{},d:{}});
+    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
+  });
+  bind('bsRemLevel', ()=>{
+    if (levelCount() <= 1) return;
+    S.levels.pop();
+    if (S.tierView >= levelCount()) S.tierView = levelCount()-1;
+    if ((S.adv.step||0) >= levelCount()) S.adv.step = levelCount()-1;
+    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
+  });
   P.querySelectorAll('#bsAdvSteps [data-step]').forEach(b=>b.addEventListener('click',()=>{
     S.adv.step = +b.dataset.step;
     P.querySelectorAll('#bsAdvSteps [data-step]').forEach(x=>x.classList.toggle('on', +x.dataset.step===S.adv.step));
@@ -841,27 +882,23 @@ function wirePanel(){
       S._nameT = setTimeout(renderNumbers, 200);
     }));
   };
-  nameBind('.bs-rname', inp=>{
-    const ri = +inp.dataset.ri;
-    S.regions[ri].name = inp.value;
-    const chip = P.querySelector(`.bs-chip[data-ri="${ri}"] .chip-lbl`);
-    if (chip) chip.textContent = inp.value;
-    P.querySelectorAll(`.bs-rname[data-ri="${ri}"]`).forEach(o=>{ if(o!==inp) o.value = inp.value; });
+  nameBind('.bs-gname', inp=>{
+    const lvl = +inp.dataset.lvl, gi = +inp.dataset.gi, v = inp.value;
+    if (lvl===0){
+      S.regions[gi].name = v;
+      const chip = P.querySelector(`.bs-chip[data-ri="${gi}"] .chip-lbl`);
+      if (chip) chip.textContent = v;
+    } else {
+      S.levels[lvl].groups[gi].name = v;
+      P.querySelectorAll(`.bs-psel[data-lvl="${lvl}"] option[value="${gi}"]`).forEach(o=>o.textContent = v);
+    }
+    // the same group can appear in two columns; keep them in step
+    P.querySelectorAll(`.bs-gname[data-lvl="${lvl}"][data-gi="${gi}"]`).forEach(o=>{ if(o!==inp) o.value = v; });
   });
-  nameBind('.bs-zname', inp=>{
-    const zi = +inp.dataset.zi;
-    S.tiers.zones[zi].name = inp.value;
-    P.querySelectorAll(`.bs-zsel option[value="${zi}"]`).forEach(o=>o.textContent = inp.value);
-    P.querySelectorAll(`.bs-zname[data-zi="${zi}"]`).forEach(o=>{ if(o!==inp) o.value = inp.value; });
-  });
-  nameBind('.bs-ename', inp=>{
-    const ei = +inp.dataset.ei;
-    S.tiers.ewc[ei].name = inp.value;
-    P.querySelectorAll(`.bs-esel option[value="${ei}"]`).forEach(o=>o.textContent = inp.value);
-  });
-  nameBind('.bs-tiername', inp=>{
-    S.tierNames[+inp.dataset.lvl] = inp.value;
-    const tb = P.querySelector(`#bsTierSeg [data-tierv="${inp.dataset.lvl}"]`);
+  nameBind('.bs-lvlname', inp=>{
+    const lvl = +inp.dataset.lvl;
+    S.levels[lvl].name = inp.value;
+    const tb = P.querySelector(`#bsTierSeg [data-tierv="${lvl}"]`);
     if (tb) tb.textContent = inp.value;
   });
   const fin = document.getElementById('bsFinalName');
@@ -870,16 +907,21 @@ function wirePanel(){
     clearTimeout(S._nameT); S._nameT = setTimeout(renderNumbers, 200);
   });
 
-  P.querySelectorAll('.bs-zsel').forEach(sel=>sel.addEventListener('change',()=>{
-    S.tiers.zoneOf[+sel.dataset.ri] = +sel.value; S.dirty=true; repaintAll(); renderPanel();
+  P.querySelectorAll('.bs-psel').forEach(sel=>sel.addEventListener('change',()=>{
+    S.levels[+sel.dataset.lvl].of[+sel.dataset.gi] = +sel.value;
+    S.dirty=true; repaintAll(); renderPanel();
   }));
-  P.querySelectorAll('.bs-esel').forEach(sel=>sel.addEventListener('change',()=>{
-    S.tiers.ewcOf[+sel.dataset.zi] = +sel.value; S.dirty=true; repaintAll(); renderPanel();
+  P.querySelectorAll('.bs-addgrp').forEach(b=>b.addEventListener('click',()=>{
+    const k = +b.dataset.lvl;
+    S.levels[k].groups.push({name:'Group '+(S.levels[k].groups.length+1)});
+    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   }));
-  bind('bsAddZone', ()=>{ S.tiers.zones.push({name:'Zone '+String.fromCharCode(65+S.tiers.zones.length)}); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
-  bind('bsRemZone', ()=>{ if(S.tiers.zones.length<=1)return; S.tiers.zones.pop(); S.tiers.zoneOf=S.tiers.zoneOf.map(z=>Math.min(z,S.tiers.zones.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
-  bind('bsAddEwc', ()=>{ S.tiers.ewc.push({name:'Group '+(S.tiers.ewc.length+1)}); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
-  bind('bsRemEwc', ()=>{ if(S.tiers.ewc.length<=1)return; S.tiers.ewc.pop(); S.tiers.ewcOf=S.tiers.ewcOf.map(e=>Math.min(e,S.tiers.ewc.length-1)); syncTiers(); S.dirty=true; repaintAll(); renderPanel(); });
+  P.querySelectorAll('.bs-remgrp').forEach(b=>b.addEventListener('click',()=>{
+    const k = +b.dataset.lvl;
+    if (S.levels[k].groups.length<=1) return;
+    S.levels[k].groups.pop();
+    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
+  }));
 
   P.querySelectorAll('.bs-chip[data-ri]').forEach(ch=>ch.addEventListener('click',()=>{
     S.active = +ch.dataset.ri;
@@ -887,7 +929,7 @@ function wirePanel(){
   }));
   bind('bsAddRegion', ()=>{
     S.regions.push({name:'Region '+(S.regions.length+1), color:PALETTE[S.regions.length%PALETTE.length]});
-    syncTiers(); S.dirty=true; renderPanel();
+    syncLevels(); S.dirty=true; renderPanel();
   });
   bind('bsRemRegion', ()=>{
     if (S.regions.length<=1) return;
@@ -896,17 +938,16 @@ function wirePanel(){
     Object.keys(S.assign).forEach(f=>{ if (S.assign[f]===gone) delete S.assign[f]; });
     if (S.active>=S.regions.length) S.active=S.regions.length-1;
     if (S.detailRegion===gone) S.detailRegion=null;
-    if (S.tiers) S.tiers.zoneOf.length = S.regions.length;
-    syncTiers(); S.dirty=true; repaintAll(); renderPanel();
+    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   });
   const nameI = document.getElementById('bsName');
   nameI.addEventListener('input', ()=>{ S.scenarioName = nameI.value; S.dirty=true; });
   bind('bsSave', saveScenario);
   bind('bsNew', ()=>{
     if (S.dirty && !confirm('Discard unsaved changes and start a new scenario?')) return;
-    S.assign={}; S.regions=defaultRegions(12); S.tiers=null; S.adv=defaultAdv();
-    S.tierNames=['Regions','Zones','E / W / C']; S.finalName='Junior Nationals'; S.tierCount=3;
-    syncTiers(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
+    S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
+    S.finalName='Junior Nationals';
+    syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
   });
   bind('bsCsv', exportCsv);
@@ -921,9 +962,9 @@ function msg(t){ const m=document.getElementById('bsMsg'); if(m){ m.textContent=
 async function saveScenario(){
   if (!S.scenarioName.trim()){ msg('Give the scenario a name first.'); return; }
   if (!S.scenarioId) S.scenarioId = 'bs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
-  syncTiers();
-  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, tiers:S.tiers,
-    tierNames:S.tierNames, tierCount:S.tierCount, finalName:S.finalName, adv:S.adv, v:3});
+  syncLevels();
+  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year,
+    levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
     await NEON.query(
       `INSERT INTO membership.boundary_scenarios (id, name, data) VALUES ($1,$2,$3::jsonb)
@@ -951,6 +992,23 @@ async function loadScenarioList(){
   } catch(e){ /* silent */ }
 }
 
+// v2/v3 stored a fixed three-tier shape ({zones, zoneOf, ewc, ewcOf} + tierNames +
+// tierCount). v4 stores an arbitrary levels array. Bring the old ones forward.
+function migrateLevels(d, nRegions){
+  if (Array.isArray(d.levels) && d.levels.length) return d.levels;
+  const names = (d.tierNames && d.tierNames.length) ? d.tierNames : ['Regions','Zones','E / W / C'];
+  const depth = [1,2,3].includes(d.tierCount) ? d.tierCount : 3;
+  const t = d.tiers || {};
+  const out = [{name:names[0] || 'Regions'}];
+  if (depth>1) out.push({name:names[1] || 'Zones',
+    groups:(t.zones && t.zones.length ? t.zones : [{name:'Zone A'}]).map(z=>({name:z.name})),
+    of:(t.zoneOf || []).slice()});
+  if (depth>2) out.push({name:names[2] || 'E / W / C',
+    groups:(t.ewc && t.ewc.length ? t.ewc : [{name:'East'}]).map(e=>({name:e.name})),
+    of:(t.ewcOf || []).slice()});
+  return out.length ? out : defaultLevels(nRegions);
+}
+
 async function loadScenario(id){
   if (S.dirty && !confirm('Discard unsaved changes and load this scenario?')) return;
   try {
@@ -961,17 +1019,13 @@ async function loadScenario(id){
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
     S.year = d.year === 'y26' ? 'y26' : 'y25';
-    S.tiers = d.tiers || null;
-    // v2 scenarios carry no names/tier depth/advancement — fill in the defaults.
-    S.tierNames = (d.tierNames && d.tierNames.length===3) ? d.tierNames : ['Regions','Zones','E / W / C'];
-    S.tierCount = [1,2,3].includes(d.tierCount) ? d.tierCount : 3;
+    S.levels = migrateLevels(d, S.regions.length);
     S.finalName = d.finalName || 'Junior Nationals';
     S.adv = d.adv && d.adv.steps ? d.adv : defaultAdv();
     if (!S.adv.focus) S.adv.focus = 'all';
     if (!S.adv.pool) S.adv.pool = '2026|Zones';
-    syncTiers();
+    syncLevels();
     S.scenarioId = id; S.scenarioName = row.name; S.active = 0; S.detailRegion = null; S.dirty = false;
-    if (S.tierView >= S.tierCount) S.tierView = S.tierCount-1;
     repaintAll(); renderPanel();
     msg('Loaded "' + row.name + '".');
   } catch(e){ console.error(e); msg('Load failed: ' + (e.message||e)); }
@@ -988,11 +1042,11 @@ function exportCsv(){
 
 function exportAdvCsv(){
   const lines = ['level,group,age_group,gender,event,pool,advance_to_next,direct_to_final'];
-  for (let i=0;i<S.tierCount;i++){
+  for (let i=0;i<levelCount();i++){
     const TG = tierGroupsAt(i);
     const pooled = poolIsMembers() ? poolMembers(i) : poolCells(i);
     const st = S.adv.steps[i] || {a:{},d:{}};
-    const last = i===S.tierCount-1;
+    const last = i===levelCount()-1;
     TG.groups.forEach((g,gi)=>{
       CELLS.forEach(c=>{
         const pool = poolIsMembers() ? '' : ((pooled.rows[gi]||{})[c] || 0);
@@ -1035,10 +1089,11 @@ window.renderBoundary = async function(){
   try { S.advData = await (await fetch('advance-data.json?v=202607231600')).json(); }
   catch(e){ S.advData = {pools:{}, totals:{}}; }
   S.regions = defaultRegions(12);
+  S.levels = defaultLevels(12);
   S.adv = defaultAdv();
-  syncTiers();
+  syncLevels();
   el.innerHTML = `
-    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever &mdash; and rename everything under <b>Names &amp; structure</b>. Switch to <b>Who moves up</b> to type in how many advance per age group and event.
+    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape. Switch to <b>Who moves up</b> to type in how many advance per age group and event.
     <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
       <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
