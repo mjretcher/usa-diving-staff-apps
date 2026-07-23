@@ -68,6 +68,9 @@ const BCAST_DEFAULTS = {
   flashMin: 5,
   ceremonyPrepMin: 5,
   ceremonyMin: 8,
+  awardsBreakSec: 0,            // 0 = no break around the awards (default)
+  awardsBreakName: 'Commercial break',
+  awardsBreakPos: 'inPrep',     // inPrep | beforePrep | beforeCeremony
 };
 function bcastCfg(sess) {
   return Object.assign({}, BCAST_DEFAULTS, sess.bcast || {});
@@ -152,6 +155,29 @@ function bcastResetSplit(c, total) {
   return Math.max(1, Math.ceil(total / 2));
 }
 
+// ── THE AWARDS BREAK ──────────────────────────────────────────────────
+// A second optional commercial around the medal presentation. Off by default.
+//   inPrep         — runs while the awards area is set. Comes OUT of the
+//                    ceremony-prep window, so the show does not get longer.
+//   beforePrep     — straight after the flash interviews. Adds time.
+//   beforeCeremony — prep runs in full, then the break, then the medals. Adds time.
+const BCAST_AWARDS_POS = ['inPrep', 'beforePrep', 'beforeCeremony'];
+const BCAST_AWARDS_POS_LABEL = {
+  inPrep: 'In the ceremony-prep gap',
+  beforePrep: 'Before prep',
+  beforeCeremony: 'Right before the medals',
+};
+const BCAST_AWARDS_POS_HINT = {
+  inPrep: 'Runs while the awards area is set. It comes out of the ceremony-prep window, so the show does not get any longer.',
+  beforePrep: 'Straight after the flash interviews, then the awards area is set. This adds to the length of the show.',
+  beforeCeremony: 'The awards area is set first, then the break, then the medals. This adds to the length of the show.',
+};
+function bcastAwardsSec(c) { return clampSec(Number(c && c.awardsBreakSec) || 0); }
+function bcastAwardsPos(c) {
+  const p = c && c.awardsBreakPos;
+  return BCAST_AWARDS_POS.includes(p) ? p : 'inPrep';
+}
+
 // ── TIME HELPERS (seconds precision — broadcast sheets need it) ───────
 const bsec = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
 const bmmss = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60), x = s % 60; return `${m}:${String(x).padStart(2, '0')}`; };
@@ -171,6 +197,7 @@ const PA_CUE_DEFAULTS = {
   break: '{break}. We return with round {round} of the {event}.',
   flash: 'Please remain in your seats — we have flash interviews on the deck.',
   ceremonyPrep: 'Ladies and gentlemen, please direct your attention to the awards area.',
+  awardsBreak: 'Stay with us — the awards presentation for the {event} is coming up next.',
   ceremony: 'Awards presentation — {event}. Please stand for the presentation of medals.',
   finish: 'That concludes this session. Thank you for joining us at the {meet}.',
 };
@@ -278,10 +305,29 @@ function bcastRows(sess) {
   const ceremonyAfterEach = c.awardsMode === 'after' && !interleaved;
   const deferred = [];
 
+  // Every ceremony carries its own prep window, so an awards break placed in
+  // that window belongs to each ceremony — including when two events collect
+  // their medals back to back at the end of the show.
+  const awSec = bcastAwardsSec(c);
+  const awPos = bcastAwardsPos(c);
+  const awName = c.awardsBreakName || 'Commercial break';
   const pushCeremony = (ev) => {
     const nm = evName(ev);
+    const prepSec = Math.max(0, Number(c.ceremonyPrepMin || 0) * 60);
+    const inPrep = awPos === 'inPrep' && awSec > 0;
+    const prepShown = inPrep ? Math.max(0, prepSec - awSec) : prepSec;
+    const pushAwardsBreak = () => {
+      if (awSec <= 0) return;
+      push('break', 'awardsBreak', awName.toUpperCase(), awSec, { evName: nm, evId: ev.id, breakLabel: awName, awardsBreak: true });
+    };
+
     if (Number(c.flashMin) > 0) push('flash', 'flash', 'FLASH INTERVIEWS', Number(c.flashMin) * 60, { evName: nm, evId: ev.id });
-    if (Number(c.ceremonyPrepMin) > 0) push('ceremonyprep', 'ceremonyPrep', 'CEREMONY PREP', Number(c.ceremonyPrepMin) * 60, { evName: nm, evId: ev.id });
+    if (awPos === 'beforePrep') pushAwardsBreak();
+    if (prepShown > 0) push('ceremonyprep', 'ceremonyPrep', 'CEREMONY PREP', prepShown, {
+      evName: nm, evId: ev.id,
+      note: inPrep ? 'Awards area is set, then we go to break' : '',
+    });
+    if (awPos === 'inPrep' || awPos === 'beforeCeremony') pushAwardsBreak();
     if (Number(c.ceremonyMin) > 0) push('ceremony', 'ceremony', 'CEREMONY — ' + nm.toUpperCase(), Number(c.ceremonyMin) * 60, { evName: nm, evId: ev.id });
   };
 
@@ -479,6 +525,26 @@ function renderBcastSessPanel(sess) {
       ${num('Ceremony (min)', 'ceremonyMin', c.ceremonyMin, 1)}
     </div>
 
+    <div class="bc-f wide"><label>Break around the awards <span class="bc-opt">optional</span></label>
+      <input class="fi" value="${esc(c.awardsBreakName || 'Commercial break')}" onchange="setBcast('${sess.id}','awardsBreakName',this.value)" placeholder="Commercial break"/>
+      ${bcDurCtl(bcastAwardsSec(c), `setBcastAwardsSec('${sess.id}',`, `setBcastAwardsPart('${sess.id}',`)}
+      ${(() => {
+    const aSec = bcastAwardsSec(c);
+    const aPos = bcastAwardsPos(c);
+    const prepSec = Math.max(0, Number(c.ceremonyPrepMin || 0) * 60);
+    const chips = BCAST_AWARDS_POS.map(k =>
+      `<button type="button" class="chip ${aPos === k ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsBreakPos','${k}')">${BCAST_AWARDS_POS_LABEL[k]}</button>`).join('');
+    if (aSec === 0) return `<span class="bc-hint">Set to None — no break runs around the medal presentation.</span>`;
+    const over = aPos === 'inPrep' && aSec > prepSec;
+    return `<div class="bc-pos">
+        <span class="bc-pos-l">Where it goes</span>
+        <div class="chiprow">${chips}</div>
+        <span class="bc-hint">${BCAST_AWARDS_POS_HINT[aPos]}</span>
+        ${over ? `<span class="bc-hint warn">${prepSec ? `The break is longer than the ${bmmss(prepSec)} ceremony-prep window, so the window is used up and the show still gets ${bmmss(aSec - prepSec)} longer.` : 'There is no ceremony-prep time to absorb this, so the break adds to the length of the show.'}</span>` : ''}
+        ${c.awardsMode === 'after' ? `<span class="bc-hint">Awards run after each event, so this break runs before each ceremony.</span>` : ''}
+      </div>`;
+  })()}</div>
+
     <div class="bc-actions">
       <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
       <button class="btn btn-sm" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
@@ -625,6 +691,25 @@ function setBcastResetSec(sessId, sec) {
     cascadeSession(s, sess.id);
   });
 }
+function setBcastAwardsSec(sessId, sec) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+    sess.bcast.awardsBreakSec = clampSec(sec);
+    cascadeSession(s, sess.id);
+  });
+}
+function setBcastAwardsPart(sessId, part, value) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+    const now = bcastAwardsSec(bcastCfg(sess));
+    const m = part === 'm' ? (Number(value) || 0) : Math.floor(now / 60);
+    const x = part === 's' ? (Number(value) || 0) : now % 60;
+    sess.bcast.awardsBreakSec = clampSec(m * 60 + x);
+    cascadeSession(s, sess.id);
+  });
+}
 function setBcastResetPart(sessId, part, value) {
   upd(s => {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
@@ -651,7 +736,8 @@ function resetPaCues() {
 // the whole setup onto any other finals you pick, in the same order the meet
 // runs, so nothing has to be retyped.
 const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetSec', 'resetMin',
-  'resetName', 'resetPos', 'resetSplitAfter', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin'];
+  'resetName', 'resetPos', 'resetSplitAfter', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin',
+  'awardsBreakSec', 'awardsBreakName', 'awardsBreakPos'];
 
 // Every senior final in the meet, in running order.
 function bcastAllFinals() {
@@ -816,6 +902,7 @@ const PA_CUE_LABELS = {
   break: ['During a break', 'Read at each named break between rounds.'],
   flash: ['Flash interviews', 'Read after the final dive.'],
   ceremonyPrep: ['Ceremony prep', 'Read while the awards area is set.'],
+  awardsBreak: ['Break around the awards', 'Only used when an awards break is set.'],
   ceremony: ['Awards ceremony', 'Read to open the medal presentation.'],
   finish: ['End of session', 'Read to close the session.'],
 };
