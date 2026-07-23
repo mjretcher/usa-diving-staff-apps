@@ -482,6 +482,7 @@ function renderBcastSessPanel(sess) {
     <div class="bc-actions">
       <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
       <button class="btn btn-sm" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
+      ${bcastAllFinals().length > 1 ? `<button class="btn btn-sm" onclick="openBcastCopy('${sess.id}',null)">Copy setup to other finals…</button>` : ''}
     </div>
   </div>`;
 }
@@ -527,6 +528,7 @@ function renderBcastEvPanel(sess, ev) {
     <div class="bc-br-hd">
       <span class="bc-ev-l" style="margin:0">Breaks — name each one so the producer and PA read the same sheet</span>
       <span class="bc-br-tot">${betweenCt} break${betweenCt === 1 ? '' : 's'} between rounds · <strong>${bmmss(betweenSec)}</strong></span>
+      ${bcastAllFinals().length > 1 ? `<button class="bc-dp ghost" onclick="openBcastCopy('${sess.id}','${ev.id}')">Copy this setup to other finals…</button>` : ''}
     </div>
     <div class="bc-br-all"><span>Set every round:</span>${allRow}</div>
     <div class="bc-brs">${brRows}</div>
@@ -640,6 +642,167 @@ function setPaCue(key, value) {
 }
 function resetPaCues() {
   upd(s => { s.meet.paCues = {}; });
+}
+
+// ── COPY BROADCAST SETUP TO OTHER FINALS ──────────────────────────────
+// A televised session is a lot of small decisions — seconds per diver, six
+// named breaks, where the opening commercial sits, how long the ceremony runs.
+// Almost always the next final on the sheet should run identically. This lifts
+// the whole setup onto any other finals you pick, in the same order the meet
+// runs, so nothing has to be retyped.
+const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetSec', 'resetMin',
+  'resetName', 'resetPos', 'resetSplitAfter', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin'];
+
+// Every senior final in the meet, in running order.
+function bcastAllFinals() {
+  const out = [];
+  const seen = {};
+  (S.meet.days || []).forEach((d, di) => {
+    S.sessions.filter(x => x.dayId === d.id)
+      .sort((a, b) => (Number(a.warmupStartMinutes) || 0) - (Number(b.warmupStartMinutes) || 0))
+      .forEach(sess => {
+        seen[sess.id] = 1;
+        (sess.events || []).forEach(ev => { if (isBcastEv(sess, ev)) out.push({ day: d, dayIdx: di, sess, ev }); });
+      });
+  });
+  S.sessions.forEach(sess => {   // any block not attached to a day still shows up
+    if (seen[sess.id]) return;
+    (sess.events || []).forEach(ev => { if (isBcastEv(sess, ev)) out.push({ day: null, dayIdx: 99, sess, ev }); });
+  });
+  return out;
+}
+function bcastCopyState() {
+  return Object.assign({ srcSessId: null, srcEvId: null, sel: {}, doShow: true, doEv: true, turnOn: true }, UI.bcastCopy || {});
+}
+function openBcastCopy(sessId, evId) {
+  const sess = S.sessions.find(x => x.id === sessId);
+  const eligible = (sess && sess.events || []).filter(e => isBcastEv(sess, e));
+  UI.bcastCopy = { srcSessId: sessId, srcEvId: evId || (eligible[0] && eligible[0].id) || null, sel: {}, doShow: true, doEv: true, turnOn: true };
+  UI.modal = 'bcast-copy'; render();
+}
+function setBcastCopy(field, value) { UI.bcastCopy = Object.assign(bcastCopyState(), { [field]: value }); render(); }
+function toggleBcastCopyTarget(evId) {
+  const st = bcastCopyState();
+  st.sel = Object.assign({}, st.sel);
+  if (st.sel[evId]) delete st.sel[evId]; else st.sel[evId] = true;
+  UI.bcastCopy = st; render();
+}
+function bcastCopySelectAll(on) {
+  const st = bcastCopyState();
+  st.sel = {};
+  if (on) bcastAllFinals().forEach(t => { if (t.ev.id !== st.srcEvId) st.sel[t.ev.id] = true; });
+  UI.bcastCopy = st; render();
+}
+
+function renderBcastCopyModal() {
+  const st = bcastCopyState();
+  const src = S.sessions.find(x => x.id === st.srcSessId);
+  if (!src) return '';
+  const srcEvs = (src.events || []).filter(e => isBcastEv(src, e));
+  const srcEv = srcEvs.find(e => e.id === st.srcEvId) || srcEvs[0];
+  const all = bcastAllFinals();
+  const targets = all.filter(t => t.ev.id !== (srcEv && srcEv.id));
+  const c = bcastCfg(src);
+  const selCt = targets.filter(t => st.sel[t.ev.id]).length;
+  const onCt = targets.filter(t => st.sel[t.ev.id] && !bcastOn(t.sess)).length;
+
+  const srcSpd = srcEv ? bcastEvSpd(srcEv) : 45;
+  const srcBr = srcEv ? bcastBreaks(srcEv) : [];
+  const brSummary = srcBr.length
+    ? srcBr.slice(0, Math.max(0, srcBr.length - 1)).map(b => bmmss(brkSec(b, 0))).join(' · ') || 'no breaks'
+    : 'no breaks';
+
+  const evChips = srcEvs.length > 1
+    ? `<div class="chiprow" style="margin-top:6px">${srcEvs.map(e =>
+      `<button class="chip ${srcEv && e.id === srcEv.id ? 'on' : ''}" onclick="setBcastCopy('srcEvId','${e.id}')">${esc(evName(e))}</button>`).join('')}</div>
+       <span class="bc-hint">Two finals in this block — pick whose clock and breaks get copied.</span>` : '';
+
+  const rows = targets.map(t => {
+    const on = st.sel[t.ev.id];
+    const live = bcastOn(t.sess);
+    const nR = bcastDives(t.ev);
+    const nSrc = srcEv ? bcastDives(srcEv) : nR;
+    return `<button class="bcc-row ${on ? 'on' : ''}" onclick="toggleBcastCopyTarget('${t.ev.id}')">
+      <span class="bcc-box">${on ? '✓' : ''}</span>
+      <span class="bcc-main"><span class="bcc-ev">${esc(evName(t.ev))}</span>
+        <span class="bcc-meta">${t.day ? esc(shortDate(t.day.date)) + ' · ' : ''}${esc(sessLabelOf(t.sess, null))} · ${nR} rounds</span></span>
+      <span class="bcc-tags">${live ? '' : '<span class="bcc-tag off">broadcast off</span>'}${nR !== nSrc ? `<span class="bcc-tag diff">${nR > nSrc ? 'more' : 'fewer'} rounds</span>` : ''}</span>
+    </button>`;
+  }).join('');
+
+  const chk = (field, label, help) => `<label class="bcc-chk"><input type="checkbox" ${st[field] ? 'checked' : ''} onchange="setBcastCopy('${field}',this.checked)"/>
+    <span><b>${label}</b>${help ? `<em>${help}</em>` : ''}</span></label>`;
+
+  return `<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Copy broadcast setup</span>
+      <div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${esc(srcEv ? evName(srcEv) : '')} · ${esc(sessLabelOf(src, null))}</div></div>
+      <button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${evChips}
+      <label class="fl" style="margin-top:${srcEvs.length > 1 ? '12' : '0'}px">What to copy</label>
+      ${chk('doEv', 'Clock and breaks', `${srcSpd}s per diver · breaks between rounds: ${brSummary}`)}
+      ${chk('doShow', 'Show settings', `Boards close ${c.boardsCloseMin} min · ${esc(c.resetName || 'Commercial break')} ${bmmss(bcastResetSec(c))} (${BCAST_RESET_POS_LABEL[bcastResetPos(c)].toLowerCase()}) · awards ${c.awardsMode === 'after' ? 'after each event' : 'at the end'}`)}
+      ${chk('turnOn', 'Switch broadcast timing on where it is off', 'Leave unticked to copy the numbers without changing which sessions are on the broadcast clock')}
+
+      <div class="fdiv" style="margin:14px 0 10px"></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px">
+        <label class="fl" style="margin:0">Copy to</label>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="bc-dp ghost" onclick="bcastCopySelectAll(true)">All finals</button>
+          <button class="bc-dp ghost" onclick="bcastCopySelectAll(false)">None</button></span>
+      </div>
+      ${targets.length ? `<div class="bcc-list">${rows}</div>`
+      : `<div style="font-size:12px;color:var(--tx3)">There are no other senior finals in this schedule yet.</div>`}
+      ${targets.some(t => st.sel[t.ev.id] && bcastDives(t.ev) !== (srcEv ? bcastDives(srcEv) : 0))
+      ? `<p class="bc-hint" style="margin-top:10px">Where an event has a different number of rounds, breaks are matched round by round — extra rounds repeat the last break, and any beyond the target's round count are dropped. Names and lengths are never invented.</p>` : ''}
+      ${onCt ? `<p class="bc-hint warn" style="margin-top:8px">${onCt} of these ${onCt === 1 ? 'is' : 'are'} not on the broadcast clock yet. Switching ${onCt === 1 ? 'it' : 'them'} on re-times ${onCt === 1 ? 'that day' : 'those days'} around the show.</p>` : ''}
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-sm btn-p" ${selCt && (st.doEv || st.doShow) ? '' : 'disabled'} onclick="executeBcastCopy()">Copy to ${selCt || ''} ${selCt === 1 ? 'final' : 'finals'}</button></div>
+  </div>`;
+}
+
+function executeBcastCopy() {
+  const st = bcastCopyState();
+  let n = 0, sw = 0, adj = 0;
+  upd(s => {
+    const src = s.sessions.find(x => x.id === st.srcSessId); if (!src) return;
+    const srcEv = (src.events || []).find(e => e.id === st.srcEvId); if (!srcEv) return;
+    const srcSpd = bcastEvSpd(srcEv);
+    const srcBr = bcastBreaks(srcEv);
+    const srcCfg = bcastCfg(src);
+    const touched = {};
+
+    s.sessions.forEach(sess => {
+      (sess.events || []).forEach(ev => {
+        if (!st.sel[ev.id] || ev.id === srcEv.id) return;
+        if (!isBcastEv(sess, ev)) return;
+        if (st.doEv) {
+          if (!ev.bcast) ev.bcast = {};
+          ev.bcast.spd = srcSpd;
+          const nR = bcastDives(ev);
+          if (nR !== srcBr.length) adj++;
+          ev.bcast.breaks = Array.from({ length: nR }, (_, i) => {
+            const b = srcBr[Math.min(i, srcBr.length - 1)] || { name: 'Break', sec: BCAST_BREAK_DEFAULT_SEC };
+            return { name: b.name, sec: brkSec(b, BCAST_BREAK_DEFAULT_SEC), min: brkSec(b, BCAST_BREAK_DEFAULT_SEC) / 60 };
+          });
+        }
+        if (st.doShow) {
+          if (!sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+          BCAST_SHOW_KEYS.forEach(k => { sess.bcast[k] = srcCfg[k]; });
+        }
+        if (st.turnOn && !sess.bcast) sess.bcast = Object.assign({}, BCAST_DEFAULTS);
+        if (st.turnOn && !sess.bcast.on) { sess.bcast.on = true; sw++; }
+        n++;
+        touched[sess.id] = 1;
+      });
+    });
+    Object.keys(touched).forEach(id => cascadeSession(s, id));
+  });
+  closeModal();
+  toast(`Broadcast setup copied to ${n} final${n === 1 ? '' : 's'}` +
+    (sw ? ` · ${sw} session${sw === 1 ? '' : 's'} switched on` : '') +
+    (adj ? ` · ${adj} matched round by round` : ''));
 }
 
 // ── PA CUE EDITOR MODAL ───────────────────────────────────────────────
