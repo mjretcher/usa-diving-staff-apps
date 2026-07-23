@@ -169,6 +169,48 @@ tr:hover td{background:#f7fafd}
 .ag-bar span{display:block;min-width:0}
 .ag-nums{display:flex;flex-wrap:wrap;gap:3px 9px;margin-top:6px;font-size:10.5px;color:var(--muted);font-family:var(--mono)}
 .ag-n b{font-family:var(--display);font-weight:800;margin-right:3px}
+/* Boundary Studio — naming, tier depth, advancement scenarios */
+.bs-modeseg{margin-bottom:10px}
+.bs-stepseg{margin:8px 0 10px;flex-wrap:wrap}
+.bs-lvl{font-weight:800;color:var(--muted);text-transform:uppercase;font-size:10.5px;letter-spacing:.06em}
+.bs-namebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.bs-namebar .bs-tier-row{gap:6px;margin-right:4px}
+.bs-name-in{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font:600 12px var(--ui);color:var(--ink);background:#fff;min-width:104px;flex:1}
+.bs-name-in:focus{outline:2px solid var(--pool);outline-offset:-1px;border-color:var(--pool)}
+.bs-adv-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;font-size:12px}
+.bs-adv-head b{color:var(--navy)}
+.bs-fill{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.bs-adv-grid{width:100%;border-collapse:collapse;margin-bottom:6px}
+.bs-adv-grid th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800;padding:4px 6px;text-align:left;border-bottom:1px solid var(--line)}
+.bs-adv-grid th.num{text-align:center}
+.bs-adv-grid td{padding:2px 6px;font-size:12px;border-bottom:1px solid #eef1f6}
+.bs-adv-grid td.num{text-align:center}
+.bs-adv-grid .ag-cell{font-family:var(--display);font-size:14px;letter-spacing:.03em;color:var(--navy);vertical-align:middle;border-right:1px solid var(--line)}
+.bs-adv-grid .gn-cell{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.bs-adv-in{width:52px;border:1px solid var(--line);border-radius:7px;padding:4px 6px;font:700 12px var(--mono);color:var(--navy);text-align:center;background:#fff}
+.bs-adv-in:focus{outline:2px solid var(--pool);outline-offset:-1px;border-color:var(--pool)}
+.bs-direct{margin:8px 0 4px;border:1px dashed var(--line);border-radius:9px;padding:7px 10px;background:#fbfdff}
+.bs-direct summary{cursor:pointer;font-size:11.5px;font-weight:700;color:var(--navy)}
+.bs-pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin:12px 0 10px}
+.bs-pipe-card{border:1px solid var(--line);border-left:5px solid var(--pool);border-radius:10px;background:#fff;padding:8px 11px;display:flex;flex-direction:column;gap:2px;box-shadow:0 3px 10px rgba(16,24,40,.05)}
+.bs-pipe-card.final{border-left-color:var(--navy);background:#f6f9fd}
+.bs-pipe-nm{font-size:11px;font-weight:700;color:var(--ink);line-height:1.25}
+.bs-pipe-big{font-family:var(--display);font-weight:800;font-size:28px;line-height:1;color:var(--navy)}
+.bs-pipe-dir{font-size:10.5px;color:var(--pool);font-weight:700}
+.bs-evrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:5px}
+.bs-evh{font-weight:800;text-transform:uppercase;font-size:10px;letter-spacing:.06em;color:var(--muted);min-width:84px}
+.bs-ev b{font-family:var(--display);font-size:15px;color:var(--navy);margin-right:3px}
+.bs-balhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 7px;font-size:12px;border-top:1px solid var(--line);padding-top:12px}
+.bs-balhead b{color:var(--navy);font-family:var(--display);font-size:16px;letter-spacing:.03em;text-transform:uppercase}
+.bs-spread{margin-left:auto;font-size:11px;font-weight:800;border-radius:999px;padding:3px 10px}
+.bs-spread.ok{background:#e7f6ec;color:#15803d}
+.bs-spread.over{background:#fff4e5;color:#b45309}
+.bs-spread.under{background:#fdeaec;color:#b3122b}
+.bs-bar{display:block;width:70px;height:8px;border-radius:4px;background:#eef1f6;overflow:hidden}
+.bs-bar i{display:block;height:100%;border-radius:4px}
+.bs-table td.ok{color:#15803d;font-weight:700}
+.bs-table td.over{color:#b45309;font-weight:700}
+.bs-table td.under{color:#b3122b;font-weight:700}
 
 /* --- Types & Clubs --- */
 .tc-table td.indent1{padding-left:26px}
@@ -230,6 +272,6 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/neon-client.js?v=202607202300"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202607210130"></script>
-<script src="boundary.js?v=202607210045"></script>
+<script src="boundary.js?v=202607231615"></script>
 </body>
 </html>
