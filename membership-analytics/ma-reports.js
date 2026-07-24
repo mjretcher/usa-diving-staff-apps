@@ -1745,8 +1745,8 @@ const STYLES = `
 #mr-output .mr-down{color:#b3122b;font-weight:700;font-size:11px}
 #mr-output .mr-over{color:#b45309;font-weight:700}
 #mr-output .mr-under{color:#1d4ed8;font-weight:700}
-#mr-output .mr-bar{display:block;height:9px;background:#eef1f7;border-radius:3px;overflow:hidden;min-width:40px}
-#mr-output .mr-bar-f{display:block;height:100%;border-radius:3px}
+#mr-output .mr-bar{display:block;height:10px;line-height:0;background:#eef1f7;border-radius:3px;overflow:hidden;min-width:40px}
+#mr-output .mr-bar-f{display:block;height:10px;min-height:10px;border-radius:3px}
 #mr-output .mr-devbar{position:relative;display:block;height:11px;background:#f2f5fa;border-radius:3px}
 #mr-output .mr-devbar-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#94a3b8}
 #mr-output .mr-devbar-f{position:absolute;top:1px;bottom:1px;border-radius:2px}
@@ -1765,7 +1765,7 @@ const STYLES = `
 #mr-output .mr-profile-kpi{display:flex;flex-wrap:wrap;gap:13px;font-size:11px;color:#5a6480;margin-top:3px}
 #mr-output .mr-profile-kpi b{color:#171F69;font-size:12.5px}
 #mr-output .mr-stack{display:flex;height:11px;border-radius:3px;overflow:hidden;margin:5px 0 9px;background:#eef1f7}
-#mr-output .mr-seg{display:block;height:100%}
+#mr-output .mr-seg{display:block;height:11px;min-height:11px}
 #mr-output .mr-kv{display:flex;gap:9px;font-size:11px;margin:5px 0;line-height:1.5}
 #mr-output .mr-kv-k{flex:0 0 96px;font-weight:700;color:#171F69;text-transform:uppercase;
   font-size:9.5px;letter-spacing:.04em;padding-top:1px}
