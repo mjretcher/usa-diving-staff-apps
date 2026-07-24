@@ -1171,33 +1171,102 @@ const EQUITY_SECTIONS = {
   },
 
   boundary_map: {
-    label: 'Realignment — the map', group: 'Boundary Studio',
-    desc: 'The map itself, exactly as drawn on screen, with the area colour key.',
+    label: 'Realignment — maps by stage', group: 'Boundary Studio',
+    desc: 'A colour-coded map of every stage in the structure, each with its own breakdown.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — the map');
-      const svg = document.getElementById('bsSvg');
-      if (!svg) return `<section class="mr-section"><h2 class="mr-h2">Realignment — the map</h2>
-        <p class="mr-p mr-warn">The map is not currently drawn. Open the Boundary Studio tab, let it
-        render, then generate this report again.</p></section>`;
-      const clone = svg.cloneNode(true);
-      clone.removeAttribute('style');
-      clone.setAttribute('width','100%');
-      clone.setAttribute('height','auto');
-      // The on-screen map may be zoomed/panned; the report should always show
-      // the whole country.
-      const g = clone.querySelector('#bsSvgG');
-      if (g) g.removeAttribute('transform');
-      const {P} = groupProfiles();
-      const total = P.reduce((s,g2)=>s+g2.m,0);
-      const key = P.map(g2 => `<span class="mr-mapkey"><span class="mr-sw" style="background:${g2.color}"></span>
-        ${esc(g2.name)} <span class="mr-soft">${fmt(g2.m)} (${pctS(g2.m,total)})</span></span>`).join('');
+      if (!boundaryReady()) return notReady('Realignment — maps by stage');
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions();
+      const nLev = api.levelCount ? api.levelCount() : 1;
+      const counties = geo.counties;
+      const FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d',
+                        '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+
+      const blocks = [];
+      for (let L = 0; L < nLev; L++){
+        const TG = api.tierGroupsAt(L);
+        const of = TG.of, nG = TG.groups.length;
+        const colorOf = gi => {
+          const g = TG.groups[gi];
+          if (g && g.colors && g.colors.length && g.colors[0]) return g.colors[0];
+          return FALLBACK[gi % FALLBACK.length];
+        };
+        const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+
+        // Every county in a group shares one fill, so their outlines are merged
+        // into a single path per group. That keeps a three-stage report to a few
+        // dozen path elements instead of three copies of 3,142.
+        const dParts = Array.from({length:nG}, ()=>[]);
+        const unParts = [];
+        const stat = Array.from({length:nG}, ()=>({m:0,a:0,c:0,cl:new Set(),n:0}));
+        let unM = 0, unN = 0;
+        for (const c of counties){
+          const ri = assign[c.f];
+          const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+          if (gi == null || gi < 0 || gi >= nG){ unParts.push(c.d); unN++; }
+          else { dParts[gi].push(c.d); stat[gi].n++; }
+        }
+        for (const [fips, st] of Object.entries(geo.stats)){
+          const v = st[y]; if (!v) continue;
+          const ri = assign[fips];
+          const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+          if (gi == null || gi < 0 || gi >= nG){ unM += v.m; continue; }
+          stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c;
+          (v.cl||[]).forEach(i => stat[gi].cl.add(i));
+        }
+
+        const paths = dParts.map((parts, gi) => parts.length
+          ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '')
+          .join('') +
+          (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+        const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
+            ${paths}
+            <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
+            <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/>
+          </svg>`;
+
+        const total = stat.reduce((s2,x)=>s2+x.m, 0);
+        const mean = nG ? total/nG : 0;
+        const maxM = Math.max(1, ...stat.map(x=>x.m));
+        const rows = stat.map((x,gi) => `<tr>
+            <td><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</td>
+            <td class="mr-num">${fmt(x.m)}</td>
+            <td style="width:18%">${bar(x.m, maxM, colorOf(gi))}</td>
+            <td class="mr-num">${fmt(x.a)}</td><td class="mr-num">${fmt(x.c)}</td>
+            <td class="mr-num">${fmt(x.cl.size)}</td><td class="mr-num">${fmt(x.n)}</td>
+            <td class="mr-num">${pctS(x.m, total)}</td>
+            <td class="mr-num ${devClass(x.m, mean)}">${mean>0 ? signPct((x.m-mean)/mean) : '—'}</td>
+          </tr>`).join('');
+        const sd = nG ? Math.sqrt(stat.reduce((s2,x)=>s2+(x.m-mean)*(x.m-mean),0)/nG) : 0;
+        const mins = Math.min(...stat.map(x=>x.m)), maxs = Math.max(...stat.map(x=>x.m));
+        const key = stat.map((x,gi) => `<span class="mr-mapkey"><span class="mr-sw" style="background:${colorOf(gi)}"></span>
+          ${esc(nameOf(gi))} <span class="mr-soft">${fmt(x.m)}</span></span>`).join('');
+
+        blocks.push(`<div class="mr-stage">
+          <h3 class="mr-h3">${esc(api.tierName(L))} &mdash; ${nG} area${nG===1?'':'s'}</h3>
+          <p class="mr-p">Average ${fmt(Math.round(mean))} members ·
+            smallest ${fmt(mins)} to largest ${fmt(maxs)} ·
+            largest &divide; smallest ${mins>0 ? (maxs/mins).toFixed(2)+'\u00d7' : '—'} ·
+            spread ${mean>0 ? (100*sd/mean).toFixed(1) : '0.0'}%</p>
+          <div class="mr-map">${svg}</div>
+          <div class="mr-mapkeys">${key}</div>
+          <table class="mr-table mr-table-sm"><thead><tr><th>Area</th>
+            <th class="mr-num">Members</th><th>&nbsp;</th><th class="mr-num">Athletes</th>
+            <th class="mr-num">Coaches</th><th class="mr-num">Clubs</th>
+            <th class="mr-num">Counties</th><th class="mr-num">Share</th>
+            <th class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
+          ${unM > 0 && L === 0 ? `<p class="mr-note">${fmt(unM)} members sit in ${fmt(unN)}
+            unassigned counties, shown pale grey and excluded from every figure above.</p>` : ''}
+        </div>`);
+      }
+
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — the map</h2>
+        <h2 class="mr-h2">Realignment — maps by stage</h2>
         <p class="mr-p">${scenarioLine()}</p>
-        <div class="mr-map">${clone.outerHTML}</div>
-        <div class="mr-mapkeys">${key}</div>
-        <p class="mr-note">Counties are shaded by the area they belong to. Unassigned counties are
-        tinted by how many members live there.</p>
+        <p class="mr-p">One map per stage of the structure, in the colours used on screen, each with
+        the breakdown for that stage. Counties are shaded by the area they belong to at that level;
+        pale grey means unassigned.</p>
+        ${blocks.join('')}
       </section>`;
     }
   },
@@ -1783,7 +1852,7 @@ const STYLES = `
   font-size:9.5px;letter-spacing:.04em;padding-top:1px}
 #mr-output .mr-kv-v{flex:1;color:#2d3450}
 #mr-output .mr-map{border:1px solid #e2e8f2;border-radius:8px;padding:8px;margin:9px 0;background:#fff}
-#mr-output .mr-map svg{width:100%;height:auto;display:block}
+#mr-output .mr-map svg{width:100%;height:auto;display:block}\n#mr-output .mr-stage{margin:14px 0 20px;page-break-inside:avoid}\n#mr-output .mr-stagemap{width:100%;height:auto;display:block}
 #mr-output .mr-mapkeys{display:flex;flex-wrap:wrap;gap:5px 14px;margin:6px 0 2px}
 #mr-output .mr-mapkey{font-size:10.5px;color:#2d3450;white-space:nowrap}
 #mr-output .mr-foot-note{margin-top:20px;padding-top:10px;border-top:1px solid #e5e9f2;
