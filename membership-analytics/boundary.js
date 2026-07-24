@@ -1599,6 +1599,34 @@ function autoAssignStates(A, weights, N, opts){
    map, so a result can be reproduced and argued about.
    ========================================================================== */
 
+/* ============================================================================
+   SMART AUTO-ASSIGN — multi-objective boundary optimiser.
+
+   Equal member counts alone is the wrong target. A split can be perfectly even
+   and still be unusable: an area stretching Montana to Texas, or one with 400
+   members but only nine Group C girls, is not a workable competitive area. So
+   this optimises four things at once, each normalised to 0..1 (lower better)
+   and weighted by what the user says matters:
+
+     BALANCE     how evenly members are shared (spread around the average)
+     TRAVEL      member-weighted average distance to the area's centre. Weighted
+                 by members, because 500 people driving 100 miles is a bigger
+                 burden than 5 people driving 300.
+     VIABILITY   whether every area has enough athletes in EVERY junior age
+                 group to actually run its events. A shortfall in one age group
+                 is a broken event, invisible in the headline total.
+     CONTINUITY  how many members change area versus today. A proposal that
+                 moves everyone is politically dead however elegant it is.
+
+   Alaska and Hawaii sit in projection insets, so their map positions carry no
+   real distance. They are excluded from TRAVEL (their athletes fly regardless)
+   but still count fully toward balance and viability.
+
+   Search is deterministic multi-start: several different seedings are grown and
+   polished, and the best-scoring result wins. Same inputs always give the same
+   map, so a result can be reproduced and argued about.
+   ========================================================================== */
+
 const MI_PER_UNIT = 3.1;      // calibrated against known county-pair distances
 const TRAVEL_REF  = 250;      // miles; normalisation reference, not a limit
 
@@ -1608,7 +1636,26 @@ function smartAssign(A, ctx, N, opts){
   const W  = ctx.weights;                       // balance weight (members or athletes)
   const AG = ctx.ages || null;                  // [i] -> [D,C,B,A] junior athletes
   const base = ctx.baseline || null;            // [i] -> area index, or null
+  const locked = ctx.locked || null;            // [i] -> true if pinned in place
   const insular = A.st.map(s => s === 'AK' || s === 'HI');
+
+  /* Host sites. Travel to an area's mathematical centre is a poor proxy: the
+     centre may be farmland with no pool. A county carrying real membership
+     almost certainly has a facility, so those are treated as the candidate
+     hosts and travel is measured to the NEAREST host inside the same area.
+     This also rewards an area built around two clusters, which a centroid
+     measure wrongly punishes, and exposes an area with no viable host at all. */
+  const hostMin = opts.hostMin != null ? opts.hostMin : 25;
+  const hosts = [];
+  for (let i=0;i<n;i++) if (!insular[i] && (ctx.hostWeights || W)[i] >= hostMin) hosts.push(i);
+  const H = hosts.length;
+  // Precomputed county -> host distances (miles). n x H floats.
+  const hostD = H ? new Float32Array(n*H) : null;
+  if (H) for (let i=0;i<n;i++) for (let h=0;h<H;h++){
+    const j = hosts[h];
+    hostD[i*H+h] = Math.hypot(cx[i]-cx[j], cy[i]-cy[j]) * MI_PER_UNIT;
+  }
+  const hostArea = new Int32Array(H);
 
   const wB = opts.wBalance    != null ? opts.wBalance    : 1.0;
   const wT = opts.wTravel     != null ? opts.wTravel     : 0.8;
@@ -1647,12 +1694,45 @@ function smartAssign(A, ctx, N, opts){
       if (gw[r] > 0){ ctrX[r] = gx[r]/gw[r]; ctrY[r] = gy[r]/gw[r]; }
       else { ctrX[r] = NaN; ctrY[r] = NaN; }
     }
-    let travelNum = 0, travelDen = 0;
-    for (let i=0;i<n;i++){
-      const r = assign[i];
-      if (r < 0 || insular[i] || W[i] <= 0 || isNaN(ctrX[r])) continue;
-      travelNum += W[i] * dist(i, ctrX[r], ctrY[r]);
-      travelDen += W[i];
+    let travelNum = 0, travelDen = 0, hostless = 0;
+    const chosenHost = new Int32Array(N).fill(-1);
+    if (H){
+      for (let h=0;h<H;h++) hostArea[h] = assign[hosts[h]];
+      // A Regional is one meet at one site, so each area is scored on the SINGLE
+      // host that minimises member-weighted travel -- the site it would actually
+      // pick. Measuring to the nearest of many hosts flatters every map.
+      const byArea = Array.from({length:N}, ()=>[]);
+      for (let h=0;h<H;h++) if (hostArea[h] >= 0) byArea[hostArea[h]].push(h);
+      const areaCounties = Array.from({length:N}, ()=>[]);
+      for (let i=0;i<n;i++){
+        const r = assign[i];
+        if (r >= 0 && !insular[i] && W[i] > 0) areaCounties[r].push(i);
+      }
+      for (let r=0;r<N;r++){
+        const cs = areaCounties[r];
+        if (!cs.length) continue;
+        if (!byArea[r].length){
+          hostless++;
+          if (!isNaN(ctrX[r])) for (const i of cs){ travelNum += W[i]*dist(i,ctrX[r],ctrY[r]); travelDen += W[i]; }
+          continue;
+        }
+        let bestH = -1, bestSum = Infinity;
+        for (const h of byArea[r]){
+          let sum = 0;
+          for (const i of cs) sum += W[i]*hostD[i*H+h];
+          if (sum < bestSum){ bestSum = sum; bestH = h; }
+        }
+        chosenHost[r] = hosts[bestH];
+        travelNum += bestSum;
+        for (const i of cs) travelDen += W[i];
+      }
+    } else {
+      for (let i=0;i<n;i++){
+        const r = assign[i];
+        if (r < 0 || insular[i] || W[i] <= 0 || isNaN(ctrX[r])) continue;
+        travelNum += W[i] * dist(i, ctrX[r], ctrY[r]);
+        travelDen += W[i];
+      }
     }
     const travelMi = travelDen > 0 ? travelNum/travelDen : 0;
 
@@ -1672,9 +1752,11 @@ function smartAssign(A, ctx, N, opts){
     }
     const continuity = base && baseTot > 0 ? 1 - sameBase/baseTot : 0;
 
-    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity;
-    return {score, balance, travelMi, via, continuity, wsum:Array.from(wsum),
-            ages, ctrX, ctrY,
+    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity
+                + (hostless/N) * 2.0;   // an area that cannot host is not a real option
+    return {score, balance, travelMi, via, continuity, hostless, hostCount:H,
+            chosenHost: Array.from(chosenHost),
+            wsum:Array.from(wsum), ages, ctrX, ctrY,
             ratio: Math.min(...wsum) > 0 ? Math.max(...wsum)/Math.min(...wsum) : Infinity};
   }
 
@@ -1716,13 +1798,43 @@ function smartAssign(A, ctx, N, opts){
     const sx = new Float64Array(N), sy = new Float64Array(N), sw = new Float64Array(N);
     const cnt = new Int32Array(N);
     const front = [];
+    for (let r=0;r<N;r++) front.push(new Set());
+
+    // Pinned counties are placed first and are never reconsidered anywhere.
+    if (locked && base) for (let i=0;i<n;i++)
+      if (locked[i] && base[i] != null && base[i] >= 0 && base[i] < N) assign[i] = base[i];
+
+    // Seat every area. If its chosen seed is already pinned to a different
+    // area, fall back to the nearest still-free county so the area is not lost.
     for (let r=0;r<N;r++){
-      const s = seeds[r];
-      assign[s]=r; wsum[r]=W[s]; cnt[r]=1;
-      sx[r]=cx[s]*(W[s]||1); sy[r]=cy[s]*(W[s]||1); sw[r]=(W[s]||1);
-      front.push(new Set(adj[s].filter(j=>assign[j]<0)));
+      let sd = seeds[r];
+      if (assign[sd] >= 0 && assign[sd] !== r){
+        let best=-1, bd=Infinity;
+        for (let i=0;i<n;i++){
+          if (assign[i] >= 0) continue;
+          const d = Math.hypot(cx[i]-cx[sd], cy[i]-cy[sd]);
+          if (d < bd){ bd = d; best = i; }
+        }
+        if (best < 0) continue;      // nothing free left; area stays empty
+        sd = best;
+      }
+      if (assign[sd] < 0) assign[sd] = r;
     }
-    let placed = N;
+
+    // Accumulate over everything assigned so far -- pins included, which the
+    // earlier version missed, leaving seed weight out of the balance figure.
+    let placed = 0;
+    for (let i=0;i<n;i++){
+      const r = assign[i]; if (r < 0) continue;
+      placed++;
+      wsum[r] += W[i]; cnt[r]++;
+      const ww = W[i] || 0.001;
+      sx[r] += cx[i]*ww; sy[r] += cy[i]*ww; sw[r] += ww;
+    }
+    for (let i=0;i<n;i++){
+      const r = assign[i]; if (r < 0) continue;
+      for (const j of adj[i]) if (assign[j] < 0) front[r].add(j);
+    }
     while (placed < n){
       let pick=-1, worst=Infinity;
       for (let r=0;r<N;r++){
@@ -1788,6 +1900,7 @@ function smartAssign(A, ctx, N, opts){
       // with a full re-evaluation so approximation error can never accumulate.
       const cand = [];
       for (let i=0;i<n;i++){
+        if (locked && locked[i]) continue;      // pinned by the user
         const from = assign[i]; if (from<0) continue;
         const to = new Set();
         for (const j of adj[i]) if (assign[j]>=0 && assign[j]!==from) to.add(assign[j]);
@@ -1901,6 +2014,7 @@ function smartAssign(A, ctx, N, opts){
         const cost = (after-mean)*(after-mean) - touch[k]*1e-6;   // contact breaks ties
         if (cost < bestCost){ bestCost = cost; bestK = k; }
       }
+      if (locked && p.some(i=>locked[i])) continue;   // cannot move a pinned piece
       for (const i of p) assign[i]=bestK;
       repaired++;
     }
@@ -1949,6 +2063,8 @@ function smartAssign(A, ctx, N, opts){
       travelMi: final.travelMi, viability: final.via, continuity: final.continuity,
       score: final.score, repaired, restarts: tried,
       groupNeed, viabilityFraction: viaFrac,
+      hostless: final.hostless, hostCount: final.hostCount, hostMin,
+      chosenHost: final.chosenHost,
     },
   };
 }
@@ -1988,7 +2104,8 @@ const AUTO_PRESETS = [
    o:{wBalance:1.2, wTravel:0.7, wViability:0.8, viabilityFraction:0.8, wContinuity:0.8}, needsBase:true},
 ];
 
-const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null, busy: false };
+const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null,
+               busy: false, locks: [], hostMin: 40 };
 
 function openAutoDialog(){
   AUTO.n = Math.max(2, S.regions.length || 12);
@@ -2049,6 +2166,34 @@ function renderAutoDialog(){
         </div>
 
         <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Keep in place</label>
+          <div style="flex:1">
+            <div class="bs-auto-chips">
+              ${S.regions.map((r,i)=>`<button class="sm ${AUTO.locks.indexOf(i)>=0?'on':''}"
+                onclick="window._bsAutoLock(${i})" style="border-left:5px solid ${r.color}">
+                ${esc(r.name||('Area '+(i+1)))}</button>`).join('')}
+              ${AUTO.locks.length?`<button class="sm" onclick="window._bsAutoLock(-1)">Clear</button>`:''}
+            </div>
+            <div class="bs-auto-hint" style="margin-top:4px">Pick any areas whose counties must not
+              move. Everything else gets redrawn around them.</div>
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Host sites</label>
+          <div style="flex:1">
+            <div class="bs-auto-chips">
+              ${[25,40,60].map(h=>`<button class="sm ${AUTO.hostMin===h?'on':''}"
+                onclick="window._bsAutoHost(${h})">${h}+ members</button>`).join('')}
+            </div>
+            <div class="bs-auto-hint" style="margin-top:4px">Travel is measured to the single best
+              host county in each area &mdash; the site it would actually run the meet at &mdash; not
+              to an empty point in the middle. A county needs at least this many members to count as
+              able to host.</div>
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
           <label class="bs-auto-lbl">Whole states</label>
           <label class="bs-auto-check">
             <input type="checkbox" ${AUTO.whole?'checked':''} onchange="window._bsAutoWhole(this.checked)">
@@ -2072,6 +2217,12 @@ function renderAutoDialog(){
               ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest age group vs average</span></div>`:''}
               ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
             </div>
+            ${(r.stats.hostless>0)?`<div class="bs-auto-err"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county big enough to host.</b>
+              Either lower the host-site threshold or redraw &mdash; an area that cannot run its own
+              championship is not a workable area.</div>`:''}
+            ${(r.stats.chosenHost&&r.stats.chosenHost.some(x=>x>=0))?`
+              <div class="bs-auto-legend"><b>Likely host counties:</b>
+              ${r.stats.chosenHost.map((ci,i)=>ci>=0?hostLabel(ci):null).filter(Boolean).join(' · ')}</div>`:''}
             <div class="bs-auto-legend">Areas are always connected &mdash; no area is ever left in
               two separate pieces. Alaska and Hawaii are left out of the travel figure, since those
               athletes fly whatever the map says.</div>
@@ -2111,6 +2262,21 @@ function weakestGroup(r){
   }
   return isFinite(worst) ? worst : null;
 }
+function hostLabel(ci){
+  if (!_autoData) return '';
+  const f = _autoData.fips[ci];
+  const c = (S.geo.counties||[]).find(x=>x.f===f);
+  return c ? esc(c.n + ', ' + c.st) : esc(String(f));
+}
+window._bsAutoLock = function(i){
+  if (i < 0){ AUTO.locks = []; }
+  else {
+    const k = AUTO.locks.indexOf(i);
+    if (k >= 0) AUTO.locks.splice(k,1); else AUTO.locks.push(i);
+  }
+  AUTO.result = null; renderAutoDialog();
+};
+window._bsAutoHost = function(h){ AUTO.hostMin=h; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoPreset = function(k){ AUTO.preset=k; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
@@ -2140,8 +2306,23 @@ window._bsAutoRun = function(){
           });
           if (!baseline.some(v => v >= 0)) baseline = null;
         }
-        AUTO.result = smartAssign(A, {weights:w, ages, baseline}, AUTO.n,
-                                  Object.assign({restarts:4}, p.o));
+        // "Keep in place" pins every county currently painted into the chosen
+        // areas; the optimiser works around them.
+        let locked = null;
+        if (AUTO.locks.length){
+          locked = A.fips.map(f => {
+            const v = S.assign[f];
+            return v != null && v >= 0 && AUTO.locks.indexOf(v) >= 0;
+          });
+          if (!baseline){
+            baseline = A.fips.map(f => {
+              const v = S.assign[f];
+              return (v == null || v < 0 || v >= AUTO.n) ? -1 : v;
+            });
+          }
+        }
+        AUTO.result = smartAssign(A, {weights:w, ages, baseline, locked}, AUTO.n,
+                                  Object.assign({restarts:4, hostMin:AUTO.hostMin}, p.o));
       }
       AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
