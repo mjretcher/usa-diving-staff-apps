@@ -955,6 +955,310 @@ function devBar(d, maxAbs){
           <span class="mr-devbar-f" style="${side}"></span></span>`;
 }
 
+/* ===================================================================
+   COMPETITIVE EQUITY
+   The question a realignment is actually judged on is not "are the areas
+   the same size" but "does an athlete in one area need a better score to
+   advance than an athlete in another". Regionals advance the top 15 per
+   springboard event, so the 15th-place score IS the bar, and it is
+   directly measurable from historical results.
+
+   For a PROPOSED map we cannot know future scores, so each area is
+   expressed as shares of today's regions (results are tagged by region),
+   the corresponding shares of each region's historical score list are
+   pooled, and the 15th best of the pooled field is read off. Merging two
+   regions into one area therefore correctly raises the bar: the same
+   athletes now compete for one set of 15 places instead of two.
+   =================================================================== */
+let _qual = null, _qualLoading = null;
+function loadQual(){
+  if (_qual) return Promise.resolve(_qual);
+  if (_qualLoading) return _qualLoading;
+  _qualLoading = fetch('qual-data.json?v=202607242330')
+    .then(r => { if (!r.ok) throw new Error('qual-data.json ' + r.status); return r.json(); })
+    .then(j => { _qual = j; return j; });
+  return _qualLoading;
+}
+let _autoFips = null;
+function loadAutoFips(){
+  if (_autoFips) return Promise.resolve(_autoFips);
+  return fetch('auto-data.json?v=202607242100').then(r=>r.json())
+    .then(j => { _autoFips = j; return j; });
+}
+
+/* Member share of each official region falling inside each proposed area. */
+function areaRegionShares(Q, AD){
+  const api = B(), geo = api.geo(), y = api.year();
+  const assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
+  const nA = TG.groups.length;
+  const regTotal = {}, share = {};
+  for (let i=0;i<AD.fips.length;i++){
+    const f = AD.fips[i], orig = Q.officialRegion[i];
+    if (!orig) continue;
+    const st = geo.stats[f]; const m = st && st[y] ? st[y].m : 0;
+    if (m <= 0) continue;
+    regTotal[orig] = (regTotal[orig]||0) + m;
+    const ri = assign[f];
+    if (ri == null || ri < 0 || ri >= regions.length) continue;
+    const a = TG.of[ri];
+    if (a == null) continue;
+    (share[a] = share[a] || {});
+    share[a][orig] = (share[a][orig]||0) + m;
+  }
+  for (const a of Object.keys(share))
+    for (const r of Object.keys(share[a])) share[a][r] /= (regTotal[r]||1);
+  return {share, nA, regTotal};
+}
+
+/* Pool score lists by share and read off the advancement bar. */
+function pooledCut(Q, cellKey, sharesForArea, rank){
+  const cell = Q.cells[cellKey];
+  if (!cell) return null;
+  const pool = [];
+  let contributingRegions = 0;
+  for (const [rg, sh] of Object.entries(sharesForArea||{})){
+    const yrs = cell[rg]; if (!yrs || sh <= 0) continue;
+    // Average the per-year field so one unusually deep season cannot dominate.
+    const years = Object.keys(yrs);
+    if (!years.length) continue;
+    contributingRegions++;
+    const perYear = years.map(yr => yrs[yr]);
+    const longest = perYear.reduce((a,b)=>a.length>=b.length?a:b);
+    const avg = longest.map((_,i) => {
+      const vals = perYear.map(l=>l[i]).filter(v=>v!=null);
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    }).filter(v=>v!=null);
+    const take = Math.max(1, Math.round(sh * avg.length));
+    for (let i=0;i<take && i<avg.length;i++) pool.push(avg[i]);
+  }
+  if (pool.length < rank) return {cut:null, field:pool.length, regions:contributingRegions};
+  pool.sort((a,b)=>b-a);
+  return {cut: pool[rank-1], field: pool.length, regions: contributingRegions};
+}
+
+/* Today's actual bar per region, averaged across the stored years. */
+function todaysCuts(Q, cellKey, rank){
+  const cell = Q.cells[cellKey]; if (!cell) return [];
+  const out = [];
+  for (const [rg, yrs] of Object.entries(cell)){
+    const vals = Object.values(yrs).filter(l=>l.length>=rank).map(l=>l[rank-1]);
+    if (vals.length) out.push({region:+rg, cut: vals.reduce((a,b)=>a+b,0)/vals.length});
+  }
+  return out.sort((a,b)=>a.cut-b.cut);
+}
+
+const EQUITY_SECTIONS = {
+
+  boundary_equity: {
+    label: 'Realignment — competitive equity', group: 'Boundary Studio',
+    desc: 'What score it actually takes to advance in each area, versus today. The fairness test that headcount cannot show.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — competitive equity');
+      let Q, AD;
+      try { [Q, AD] = await Promise.all([loadQual(), loadAutoFips()]); }
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — competitive equity</h2>
+        <p class="mr-p mr-warn">Could not load the historical results data: ${esc(String(e.message||e))}</p></section>`; }
+      const rank = Q.advanceRank || 15;
+      const {share, nA} = areaRegionShares(Q, AD);
+      const api = B(), TG = api.tierGroups();
+      const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
+
+      const events = Object.keys(Q.cells)
+        .filter(k => !/Platform$/.test(k))
+        .sort();
+
+      // Today's inequity, worst events first.
+      const todayRows = events.map(k => {
+        const cuts = todaysCuts(Q, k, rank);
+        if (cuts.length < 2) return null;
+        const lo = cuts[0], hi = cuts[cuts.length-1];
+        return {k, lo, hi, gap: hi.cut - lo.cut, n: cuts.length};
+      }).filter(Boolean).sort((a,b)=>b.gap-a.gap);
+
+      const todayTable = todayRows.slice(0, 12).map(r => {
+        const [ag, gd, dc] = r.k.split('|');
+        return `<tr><td>${esc(ag)} ${esc(gd)} ${esc(dc)}</td>
+          <td class="mr-num">${r.lo.cut.toFixed(1)}</td><td>R${r.lo.region}</td>
+          <td class="mr-num">${r.hi.cut.toFixed(1)}</td><td>R${r.hi.region}</td>
+          <td class="mr-num mr-over">+${r.gap.toFixed(1)}</td>
+          <td class="mr-num">${(100*r.gap/r.lo.cut).toFixed(0)}%</td></tr>`;
+      }).join('');
+
+      // Proposed map: estimated bar per area for the worst few events.
+      const focus = todayRows.slice(0, 6).map(r => r.k);
+      const propBlocks = focus.map(k => {
+        const [ag, gd, dc] = k.split('|');
+        const rows = [];
+        for (let a=0;a<nA;a++){
+          const res = pooledCut(Q, k, share[a], rank);
+          rows.push({a, res});
+        }
+        const valid = rows.filter(r=>r.res && r.res.cut != null);
+        if (valid.length < 2) return '';
+        const cuts = valid.map(r=>r.res.cut);
+        const lo = Math.min(...cuts), hi = Math.max(...cuts);
+        const today = todayRows.find(r=>r.k===k);
+        const body = rows.map(r => {
+          if (!r.res || r.res.cut == null)
+            return `<tr><td>${esc(names[r.a])}</td><td class="mr-num">&mdash;</td>
+              <td class="mr-num">${r.res?fmt(r.res.field):'0'}</td>
+              <td colspan="2" class="mr-soft">field too small to fill ${rank} places</td></tr>`;
+          const rel = (r.res.cut - lo);
+          return `<tr><td>${esc(names[r.a])}</td>
+            <td class="mr-num">${r.res.cut.toFixed(1)}</td>
+            <td class="mr-num">${fmt(r.res.field)}</td>
+            <td style="width:28%">${bar(r.res.cut-lo, Math.max(1,hi-lo), r.res.cut>=hi-1e-9?RED:POOL)}</td>
+            <td class="mr-num ${rel>0?'mr-over':''}">${rel>0?'+'+rel.toFixed(1):'lowest bar'}</td></tr>`;
+        }).join('');
+        return `<h3 class="mr-h3">${esc(ag)} ${esc(gd)} ${esc(dc)}</h3>
+          <p class="mr-p">Estimated score needed for ${rank}th place under this map:
+            <b>${lo.toFixed(1)}</b> in the easiest area to <b>${hi.toFixed(1)}</b> in the hardest
+            &mdash; a spread of <b>${(hi-lo).toFixed(1)}</b> points.
+            ${today ? `Today that spread is <b>${today.gap.toFixed(1)}</b> points.
+              ${(hi-lo) < today.gap
+                 ? `<span class="mr-up">This map narrows it by ${(today.gap-(hi-lo)).toFixed(1)}.</span>`
+                 : `<span class="mr-down">This map widens it by ${((hi-lo)-today.gap).toFixed(1)}.</span>`}` : ''}</p>
+          <table class="mr-table mr-table-sm"><thead><tr><th>Area</th>
+            <th class="mr-num">Bar to advance</th><th class="mr-num">Field size</th>
+            <th>&nbsp;</th><th class="mr-num">vs easiest</th></tr></thead>
+            <tbody>${body}</tbody></table>`;
+      }).join('');
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Realignment — competitive equity</h2>
+        <p class="mr-p">${scenarioLine()}</p>
+        <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
+        experiences is the score they must post to get out of their Regional, and the top ${rank}
+        per springboard event advance. That bar is directly measurable, and today it is a long way
+        from equal.</p>
+
+        <h3 class="mr-h3">Today's inequity — the bar to advance, by region</h3>
+        <p class="mr-p">Average ${rank}th-place score at Regionals, ${esc((Q.years||[]).join('–'))}.
+        Platform is excluded because it is non-qualifying at Regionals in every year.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th>Event</th>
+          <th class="mr-num">Easiest bar</th><th>Where</th>
+          <th class="mr-num">Hardest bar</th><th>Where</th>
+          <th class="mr-num">Gap</th><th class="mr-num">Harder by</th></tr></thead>
+          <tbody>${todayTable}</tbody></table>
+        <p class="mr-note"><b>Read this as:</b> in ${esc((todayRows[0]||{}).k ? todayRows[0].k.split('|').join(' ') : 'the worst event')},
+        an athlete in the hardest region needs roughly
+        ${todayRows[0] ? (100*todayRows[0].gap/todayRows[0].lo.cut).toFixed(0) : '—'}% more score to reach the
+        same stage as an athlete in the easiest one. That is the inequity a realignment exists to fix.</p>
+
+        <h3 class="mr-h3">Under this map — estimated bar to advance</h3>
+        <p class="mr-p">Each proposed area is expressed as shares of today's regions, and the matching
+        shares of each region's historical field are pooled. Combining regions correctly raises the bar,
+        because the same athletes then compete for one set of ${rank} places instead of two.</p>
+        ${propBlocks || '<p class="mr-p mr-warn">Not enough overlap between this map and the published regions to estimate.</p>'}
+        <p class="mr-note"><b>What this is and is not:</b> an estimate built from ${esc((Q.years||[]).join('–'))}
+        results, assuming the same athletes competing under different boundaries. It cannot predict
+        who will actually enter, and it says nothing about athletes who move clubs. Treat it as the
+        relative ordering of areas, not a forecast of any individual score.</p>
+      </section>`;
+    }
+  },
+
+  boundary_map: {
+    label: 'Realignment — the map', group: 'Boundary Studio',
+    desc: 'The map itself, exactly as drawn on screen, with the area colour key.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — the map');
+      const svg = document.getElementById('bsSvg');
+      if (!svg) return `<section class="mr-section"><h2 class="mr-h2">Realignment — the map</h2>
+        <p class="mr-p mr-warn">The map is not currently drawn. Open the Boundary Studio tab, let it
+        render, then generate this report again.</p></section>`;
+      const clone = svg.cloneNode(true);
+      clone.removeAttribute('style');
+      clone.setAttribute('width','100%');
+      clone.setAttribute('height','auto');
+      // The on-screen map may be zoomed/panned; the report should always show
+      // the whole country.
+      const g = clone.querySelector('#bsSvgG');
+      if (g) g.removeAttribute('transform');
+      const {P} = groupProfiles();
+      const total = P.reduce((s,g2)=>s+g2.m,0);
+      const key = P.map(g2 => `<span class="mr-mapkey"><span class="mr-sw" style="background:${g2.color}"></span>
+        ${esc(g2.name)} <span class="mr-soft">${fmt(g2.m)} (${pctS(g2.m,total)})</span></span>`).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Realignment — the map</h2>
+        <p class="mr-p">${scenarioLine()}</p>
+        <div class="mr-map">${clone.outerHTML}</div>
+        <div class="mr-mapkeys">${key}</div>
+        <p class="mr-note">Counties are shaded by the area they belong to. Unassigned counties are
+        tinted by how many members live there.</p>
+      </section>`;
+    }
+  },
+
+  boundary_club_moves: {
+    label: 'Realignment — which clubs move', group: 'Boundary Studio',
+    desc: 'Every club that changes area, with where it goes. The first thing a regional chair will ask for.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — which clubs move');
+      let Q, AD;
+      try { [Q, AD] = await Promise.all([loadQual(), loadAutoFips()]); }
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — which clubs move</h2>
+        <p class="mr-p mr-warn">Could not load reference data: ${esc(String(e.message||e))}</p></section>`; }
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
+      const clubs = api.clubs();
+      const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
+      const offByFips = {}; AD.fips.forEach((f,i)=>offByFips[f]=Q.officialRegion[i]);
+
+      // A club can appear in several counties; attribute it to where most of
+      // its members are, weighting each county by its membership.
+      const acc = {};
+      for (const [fips, st] of Object.entries(geo.stats)){
+        const v = st[y]; if (!v || !v.cl) continue;
+        const ri = assign[fips];
+        const a = (ri != null && ri >= 0 && ri < regions.length) ? TG.of[ri] : null;
+        const off = offByFips[fips] || 0;
+        for (const ci of v.cl){
+          const e = acc[ci] = acc[ci] || {m:0, area:{}, off:{}};
+          e.m += v.m;
+          if (a != null) e.area[a] = (e.area[a]||0) + v.m;
+          if (off) e.off[off] = (e.off[off]||0) + v.m;
+        }
+      }
+      const top = obj => { let bk=null,bv=-1; for(const [k,v] of Object.entries(obj||{})) if(v>bv){bv=v;bk=k;} return bk; };
+      const rows = [];
+      for (const [ci, e] of Object.entries(acc)){
+        const a = top(e.area), off = top(e.off);
+        if (a == null) continue;
+        rows.push({name: clubs[ci] || ('club #'+ci), m: e.m,
+                   from: off ? ('Region '+off) : 'not in published map',
+                   to: names[+a], moved: off ? (names[+a] !== ('Region '+off)) : true});
+      }
+      rows.sort((x,y2)=>y2.m-x.m);
+      const movers = rows.filter(r=>r.moved);
+      const stay = rows.length - movers.length;
+      const body = movers.slice(0, o.topN || 60).map(r =>
+        `<tr><td>${esc(r.name)}</td><td class="mr-num">${fmt(r.m)}</td>
+         <td>${esc(r.from)}</td><td>${esc(r.to)}</td></tr>`).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Realignment — which clubs move</h2>
+        <p class="mr-p">${scenarioLine()}</p>
+        <div class="mr-kpis">
+          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(movers.length)}</div>
+            <div class="mr-kpi-l">Clubs changing area</div>
+            <div class="mr-kpi-s">out of ${fmt(rows.length)} with members on file</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(stay)}</div>
+            <div class="mr-kpi-l">Clubs staying put</div>
+            <div class="mr-kpi-s">${pctS(stay, rows.length)} of all clubs</div></div>
+        </div>
+        <table class="mr-table mr-table-sm"><thead><tr><th>Club</th>
+          <th class="mr-num">Members nearby</th><th>Today</th><th>Proposed</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="4">No club changes area under this map.</td></tr>'}</tbody></table>
+        <p class="mr-note">A club is placed where most of its members live. Clubs drawing members
+        across a county line may show a move that only affects part of their roster, so treat this as
+        the list to consult rather than the final word.</p>
+      </section>`;
+    }
+  },
+
+};
+Object.assign(BOUNDARY_SECTIONS, EQUITY_SECTIONS);
+
 Object.assign(SECTIONS, BOUNDARY_SECTIONS);
 /* =====================================================================
    TEMPLATES — curated section sequences for the deliverables staff
@@ -983,17 +1287,24 @@ const TEMPLATES = [
     sections:['clubs','geography_assoc','retention'], years:[2024,2025,2026] },
 
   { id:'realignment_proposal', label:'Realignment Proposal',
-    desc:'The case for a boundary scenario: structure, balance and equity statistics, tier rollups and a profile of every area.',
-    sections:['boundary_overview','boundary_balance','boundary_tiers','boundary_region_profiles'],
+    desc:'The full case: the map, size balance, what it takes to advance in each area, tier rollups and a profile of every area.',
+    sections:['boundary_map','boundary_overview','boundary_balance','boundary_equity',
+              'boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
+
+  { id:'realignment_equity', label:'Realignment — Fairness Case',
+    desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
+    sections:['boundary_map','boundary_equity','boundary_balance'], years:[2025,2026], boundary:true },
 
   { id:'realignment_compare', label:'Realignment — Before & After',
     desc:'What changes versus the currently loaded comparison scenario: counties moved, members affected, and the balance either side.',
-    sections:['boundary_overview','boundary_compare','boundary_balance'], years:[2025,2026], boundary:true },
+    sections:['boundary_map','boundary_overview','boundary_compare','boundary_club_moves',
+              'boundary_balance'], years:[2025,2026], boundary:true },
 
   { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',
     desc:'The document a rulebook edit needs: area definitions, profiles, and the full zip code appendix.',
-    sections:['boundary_overview','boundary_region_profiles','boundary_zips'], years:[2025,2026], boundary:true },
+    sections:['boundary_map','boundary_overview','boundary_region_profiles',
+              'boundary_club_moves','boundary_zips'], years:[2025,2026], boundary:true },
 ];
 
 /* =====================================================================
@@ -1459,6 +1770,10 @@ const STYLES = `
 #mr-output .mr-kv-k{flex:0 0 96px;font-weight:700;color:#171F69;text-transform:uppercase;
   font-size:9.5px;letter-spacing:.04em;padding-top:1px}
 #mr-output .mr-kv-v{flex:1;color:#2d3450}
+#mr-output .mr-map{border:1px solid #e2e8f2;border-radius:8px;padding:8px;margin:9px 0;background:#fff}
+#mr-output .mr-map svg{width:100%;height:auto;display:block}
+#mr-output .mr-mapkeys{display:flex;flex-wrap:wrap;gap:5px 14px;margin:6px 0 2px}
+#mr-output .mr-mapkey{font-size:10.5px;color:#2d3450;white-space:nowrap}
 #mr-output .mr-foot-note{margin-top:20px;padding-top:10px;border-top:1px solid #e5e9f2;
   font-size:9.5px;color:#6b7390}
 @media print{
