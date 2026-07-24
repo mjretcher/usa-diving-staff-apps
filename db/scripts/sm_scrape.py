@@ -89,6 +89,15 @@ def find_col(header, *needles, exclude=()):
 # double-count. Any row whose split field is empty would fall outside every
 # window, so we verify the recovered total against a probe and fail loudly
 # rather than ingest a silent gap.
+def zoho_date(iso):
+    """Zoho Analytics renders and accepts dates as DD-Mon-YYYY (e.g. 16-Jul-2026),
+    not ISO. Confirmed against the stored recon capture for meet 6925."""
+    y, m, d = iso.split("-")
+    mon = ["Jan","Feb","Mar","Apr","May","Jun",
+           "Jul","Aug","Sep","Oct","Nov","Dec"][int(m) - 1]
+    return f"{int(d):02d}-{mon}-{y}"
+
+
 def _is_cap(e):
     t = str(e)
     return "GRID CAP HIT" in t or "PAGINATION NEEDED" in t
@@ -111,7 +120,7 @@ def rows_split(v, table, base_crit, meet_id, label="rows"):
 
     out, header, capped_dates = [], None, []
     for d in dates:
-        crit = f'{base_crit} and "{table}"."event_date"=\'{d}\''
+        crit = f'{base_crit} and "{table}"."Event date"=\'{zoho_date(d)}\''
         try:
             rows, hdr = v.rows(crit)
         except RuntimeError as e:
@@ -128,8 +137,8 @@ def rows_split(v, table, base_crit, meet_id, label="rows"):
     for d in capped_dates:
         print(f"    {d}: still caps -- splitting by session")
         for sess in range(1, 21):
-            crit = (f'{base_crit} and "{table}"."event_date"=\'{d}\' '
-                    f'and "{table}"."session"={sess}')
+            crit = (f'{base_crit} and "{table}"."Event date"=\'{zoho_date(d)}\' '
+                    f'and "{table}"."Session"=\'{sess}\'')
             try:
                 rows, hdr = v.rows(crit)
             except RuntimeError as e:
