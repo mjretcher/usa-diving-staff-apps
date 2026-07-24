@@ -1314,6 +1314,419 @@ function download(text, filename){
 }
 
 /* ---------- boot ---------- */
+/* ============================================================================
+   AUTO-ASSIGN — partition the country into N contiguous, membership-balanced
+   areas.
+
+   Approach: capacity-constrained multi-source region growing.
+     1. Seeds are chosen far apart but weighted toward member density, so areas
+        form where the members actually are (deterministic — no random seed, so
+        the same inputs always produce the same map).
+     2. Every area grows outward along the real county adjacency graph. At each
+        step the area furthest below its quota gets to take the next county,
+        which balances membership while contiguity is guaranteed by construction
+        (an area only ever absorbs a county touching it).
+     3. A refinement pass trades border counties between an over-full area and
+        an adjacent under-full one, rejecting any swap that would break the
+        donor into disconnected pieces.
+
+   Counties with no members still get assigned, so the map has no holes; they
+   carry zero weight and so cannot distort the balance.
+
+   Returns {assign, stats, iterations} where assign is a county-index -> area
+   index array ready to drop into S.assign.
+   ========================================================================== */
+function autoAssign(A, weights, N, opts){
+  opts = opts || {};
+  const n = A.fips.length;
+  const adj = A.adj, cx = A.cx, cy = A.cy;
+  const W = weights;                      // county index -> weight (members)
+  const total = W.reduce((a,b)=>a+b, 0);
+  const target = total / N;
+  const dist2 = (i,j) => { const dx=cx[i]-cx[j], dy=cy[i]-cy[j]; return dx*dx+dy*dy; };
+
+  /* ---- 1. seeds: weighted farthest-point, deterministic ---- */
+  const seeds = [];
+  let first = 0;
+  for (let i=1;i<n;i++) if (W[i] > W[first]) first = i;
+  seeds.push(first);
+  const near = new Float64Array(n);
+  for (let i=0;i<n;i++) near[i] = dist2(i, first);
+  while (seeds.length < N){
+    let best = -1, bestScore = -1;
+    for (let i=0;i<n;i++){
+      if (seeds.indexOf(i) >= 0) continue;
+      // Distance dominates (keeps seeds spread); weight breaks ties toward
+      // populated counties so empty rural areas don't become area centres.
+      const score = near[i] * (1 + W[i]);
+      if (score > bestScore){ bestScore = score; best = i; }
+    }
+    if (best < 0) break;
+    seeds.push(best);
+    for (let i=0;i<n;i++){ const d = dist2(i, best); if (d < near[i]) near[i] = d; }
+  }
+
+  /* ---- 2. capacity-constrained growth ---- */
+  const assign = new Int32Array(n).fill(-1);
+  const wsum = new Float64Array(N);
+  const sx = new Float64Array(N), sy = new Float64Array(N), cnt = new Int32Array(N);
+  const frontier = [];                     // per area: Set of candidate counties
+  for (let r=0;r<N;r++){
+    const s = seeds[r];
+    assign[s] = r; wsum[r] = W[s];
+    sx[r] = cx[s]; sy[r] = cy[s]; cnt[r] = 1;
+    frontier.push(new Set(adj[s].filter(j => assign[j] < 0)));
+  }
+  let placed = N;
+  while (placed < n){
+    // The area furthest below quota goes first. Areas with an empty frontier
+    // are skipped; if every frontier is empty but counties remain, the
+    // leftovers are attached to the nearest area (cannot happen on a connected
+    // graph, but the guard keeps the map hole-free regardless).
+    let pick = -1, worst = Infinity;
+    for (let r=0;r<N;r++){
+      if (!frontier[r].size) continue;
+      const fill = target > 0 ? wsum[r]/target : cnt[r];
+      if (fill < worst){ worst = fill; pick = r; }
+    }
+    if (pick < 0){
+      for (let i=0;i<n;i++){
+        if (assign[i] >= 0) continue;
+        let br = 0, bd = Infinity;
+        for (let r=0;r<N;r++){
+          const dx = cx[i]-sx[r]/cnt[r], dy = cy[i]-sy[r]/cnt[r];
+          const d = dx*dx+dy*dy;
+          if (d < bd){ bd = d; br = r; }
+        }
+        assign[i] = br; wsum[br] += W[i]; cnt[br]++; placed++;
+      }
+      break;
+    }
+    // Within that area, take the candidate closest to its current centre so
+    // areas stay compact rather than growing in tendrils.
+    const mx = sx[pick]/cnt[pick], my = sy[pick]/cnt[pick];
+    let bestC = -1, bestD = Infinity;
+    for (const j of frontier[pick]){
+      if (assign[j] >= 0){ frontier[pick].delete(j); continue; }
+      const dx = cx[j]-mx, dy = cy[j]-my;
+      const d = dx*dx + dy*dy;
+      if (d < bestD){ bestD = d; bestC = j; }
+    }
+    if (bestC < 0) continue;
+    assign[bestC] = pick; wsum[pick] += W[bestC];
+    sx[pick] += cx[bestC]; sy[pick] += cy[bestC]; cnt[pick]++;
+    placed++;
+    frontier[pick].delete(bestC);
+    for (const j of adj[bestC]) if (assign[j] < 0) frontier[pick].add(j);
+    for (let r=0;r<N;r++) if (r !== pick) frontier[r].delete(bestC);
+  }
+
+  /* ---- 3. refinement: trade border counties, never breaking contiguity ---- */
+  const members = () => {
+    const m = Array.from({length:N}, ()=>[]);
+    for (let i=0;i<n;i++) if (assign[i] >= 0) m[assign[i]].push(i);
+    return m;
+  };
+  const stillConnected = (list, drop) => {
+    const set = new Set(list); set.delete(drop);
+    if (!set.size) return false;
+    const start = set.values().next().value;
+    const seen = new Set([start]); const stack = [start];
+    while (stack.length){
+      const u = stack.pop();
+      for (const v of adj[u]) if (set.has(v) && !seen.has(v)){ seen.add(v); stack.push(v); }
+    }
+    return seen.size === set.size;
+  };
+  const spread = () => {
+    const mean = total/N;
+    if (mean <= 0) return 0;
+    let s = 0; for (let r=0;r<N;r++) s += (wsum[r]-mean)*(wsum[r]-mean);
+    return Math.sqrt(s/N)/mean;
+  };
+
+  /* Local search over every border county, not just the single most-over /
+     most-under pair -- those two areas are frequently not adjacent, which
+     previously caused the refinement to give up immediately. Moves are ranked
+     by how much they reduce the sum of squared deviations from the target, and
+     the best one that keeps the donor area in one piece is applied. */
+  const mean0 = total/N;
+  const dev = r => (wsum[r]-mean0)*(wsum[r]-mean0);
+  let iterations = 0;
+  const maxIter = opts.maxIter || 600;
+  for (; iterations < maxIter; iterations++){
+    const moves = [];
+    for (let i=0;i<n;i++){
+      const from = assign[i];
+      if (from < 0) continue;
+      const cand = new Set();
+      for (const j of adj[i]) if (assign[j] >= 0 && assign[j] !== from) cand.add(assign[j]);
+      for (const to of cand){
+        const before = dev(from) + dev(to);
+        const wf = wsum[from] - W[i], wt = wsum[to] + W[i];
+        const after = (wf-mean0)*(wf-mean0) + (wt-mean0)*(wt-mean0);
+        const gain = before - after;
+        if (gain > 1e-9) moves.push({i, from, to, gain});
+      }
+    }
+    if (!moves.length) break;
+    moves.sort((a,b)=>b.gain-a.gain);
+    const M = members();
+    let applied = null;
+    for (const mv of moves){
+      if (M[mv.from].length <= 1) continue;          // never empty an area
+      if (!stillConnected(M[mv.from], mv.i)) continue;
+      applied = mv; break;
+    }
+    if (!applied) break;
+    assign[applied.i] = applied.to;
+    wsum[applied.from] -= W[applied.i];
+    wsum[applied.to]   += W[applied.i];
+  }
+
+  /* Safety net: if any area is still in more than one piece (possible in
+     state-whole mode, where contiguity is enforced between states rather than
+     between counties), every piece but the largest is handed to whichever
+     neighbouring area it shares the most border with. */
+  function repairContiguity(){
+    let repaired = 0;
+    for (let r=0;r<N;r++){
+      const list = []; for (let i=0;i<n;i++) if (assign[i] === r) list.push(i);
+      if (list.length < 2) continue;
+      const set = new Set(list), pieces = [], seen = new Set();
+      for (const s0 of list){
+        if (seen.has(s0)) continue;
+        const piece = [], stack = [s0]; seen.add(s0);
+        while (stack.length){
+          const u = stack.pop(); piece.push(u);
+          for (const v of adj[u]) if (set.has(v) && !seen.has(v)){ seen.add(v); stack.push(v); }
+        }
+        pieces.push(piece);
+      }
+      if (pieces.length < 2) continue;
+      pieces.sort((a,b)=>b.length-a.length);
+      for (const piece of pieces.slice(1)){
+        const touch = {};
+        for (const i of piece) for (const j of adj[i]){
+          const a2 = assign[j];
+          if (a2 >= 0 && a2 !== r) touch[a2] = (touch[a2]||0) + 1;
+        }
+        const best = Object.keys(touch).sort((a,b)=>touch[b]-touch[a])[0];
+        if (best === undefined) continue;
+        const to = +best;
+        for (const i of piece){ assign[i] = to; wsum[r] -= W[i]; wsum[to] += W[i]; }
+        repaired++;
+      }
+    }
+    return repaired;
+  }
+  const repaired = repairContiguity();
+
+  const mean = total/N;
+  const list = Array.from(wsum);
+  const stats = {
+    total, target: mean,
+    min: Math.min(...list), max: Math.max(...list),
+    ratio: Math.min(...list) > 0 ? Math.max(...list)/Math.min(...list) : Infinity,
+    spread: spread(),
+    counties: Array.from({length:N}, (_,r)=>{ let c=0; for(let i=0;i<n;i++) if(assign[i]===r) c++; return c; }),
+    weights: list,
+  };
+  stats.repaired = repaired;
+  return { assign: Array.from(assign), stats, iterations };
+}
+
+/* State-level variant: whole states are kept intact by collapsing the county
+   graph to a state graph, partitioning that, then expanding back. Real
+   governing-body maps often avoid splitting states, so this is offered as a
+   mode rather than forced. */
+function autoAssignStates(A, weights, N, opts){
+  const n = A.fips.length;
+  const states = [], sIdx = {};
+  for (let i=0;i<n;i++){
+    const st = A.st[i];
+    if (sIdx[st] === undefined){ sIdx[st] = states.length; states.push(st); }
+  }
+  const S = states.length;
+  const sw = new Float64Array(S), scx = new Float64Array(S), scy = new Float64Array(S), sc = new Int32Array(S);
+  const sadj = Array.from({length:S}, ()=>new Set());
+  for (let i=0;i<n;i++){
+    const a = sIdx[A.st[i]];
+    sw[a] += weights[i]; scx[a] += A.cx[i]; scy[a] += A.cy[i]; sc[a]++;
+    for (const j of A.adj[i]){
+      const b = sIdx[A.st[j]];
+      if (a !== b){ sadj[a].add(b); sadj[b].add(a); }
+    }
+  }
+  const SA = {
+    fips: states, st: states,
+    cx: Array.from({length:S}, (_,i)=>scx[i]/sc[i]),
+    cy: Array.from({length:S}, (_,i)=>scy[i]/sc[i]),
+    adj: sadj.map(s=>Array.from(s)),
+  };
+  const res = autoAssign(SA, Array.from(sw), Math.min(N, S), opts);
+  const assign = new Array(n);
+  for (let i=0;i<n;i++) assign[i] = res.assign[sIdx[A.st[i]]];
+  return { assign, stats: res.stats, iterations: res.iterations, byState: true };
+}
+
+
+/* ---------- auto-assign: data loading + UI ---------- */
+let _autoData = null, _autoLoading = null;
+function loadAutoData(){
+  if (_autoData) return Promise.resolve(_autoData);
+  if (_autoLoading) return _autoLoading;
+  _autoLoading = fetch('auto-data.json?v=202607242100')
+    .then(r => { if (!r.ok) throw new Error('auto-data.json ' + r.status); return r.json(); })
+    .then(j => { _autoData = j; return j; });
+  return _autoLoading;
+}
+
+// County weights for the current year, in auto-data county order.
+function autoWeights(A, basis){
+  const st = S.geo.stats, y = S.year;
+  return A.fips.map(f => {
+    const s = st[f]; if (!s || !s[y]) return 0;
+    return basis === 'athletes' ? (s[y].a || 0) : (s[y].m || 0);
+  });
+}
+
+const AUTO = { n: 12, basis: 'members', whole: false, result: null, busy: false };
+
+function openAutoDialog(){
+  AUTO.n = Math.max(2, S.regions.length || 12);
+  AUTO.result = null;
+  let d = document.getElementById('bsAutoModal');
+  if (!d){ d = document.createElement('div'); d.id = 'bsAutoModal'; document.body.appendChild(d); }
+  renderAutoDialog();
+  loadAutoData().then(renderAutoDialog).catch(e => {
+    AUTO.error = String(e.message || e); renderAutoDialog();
+  });
+}
+
+function renderAutoDialog(){
+  const d = document.getElementById('bsAutoModal');
+  if (!d) return;
+  const ready = !!_autoData;
+  const r = AUTO.result;
+  d.innerHTML = `
+  <div class="bs-auto-ov" onclick="if(event.target===this)window._bsAutoClose()">
+    <div class="bs-auto-dlg">
+      <div class="bs-auto-head">
+        <div><div class="bs-auto-eyebrow">Boundary Studio</div>
+             <h2>Auto-draw the map</h2></div>
+        <button class="bs-auto-x" onclick="window._bsAutoClose()">&#10005;</button>
+      </div>
+      <div class="bs-auto-body">
+        <p class="bs-auto-p">Pick how many areas you want and this will divide the whole
+        country into that many <b>connected</b> areas with roughly the same number of members
+        in each. It is a starting point, not a decision &mdash; every county stays fully
+        editable afterwards, and Undo puts back what you had.</p>
+
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl">How many areas?</label>
+          <div class="bs-auto-nrow">
+            <button onclick="window._bsAutoN(-1)">&minus;</button>
+            <input id="bsAutoN" type="number" min="2" max="24" value="${AUTO.n}"
+                   onchange="window._bsAutoSetN(this.value)">
+            <button onclick="window._bsAutoN(1)">+</button>
+            <span class="bs-auto-hint">2 to 24</span>
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Even them out by</label>
+          <div class="bs-auto-chips">
+            <button class="${AUTO.basis==='members'?'on':''}" onclick="window._bsAutoBasis('members')">All members</button>
+            <button class="${AUTO.basis==='athletes'?'on':''}" onclick="window._bsAutoBasis('athletes')">Athletes only</button>
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Whole states</label>
+          <label class="bs-auto-check">
+            <input type="checkbox" ${AUTO.whole?'checked':''} onchange="window._bsAutoWhole(this.checked)">
+            <span>Never split a state across two areas
+              <span class="bs-auto-hint">(tidier lines, but less even &mdash; a big state can't be shared)</span></span>
+          </label>
+        </div>
+
+        <div class="bs-auto-note">Using <b>${S.year==='y25'?'2025 (complete year)':'2026 (year to date)'}</b>
+          membership &mdash; switch the year on the map before drawing if you want the other one.</div>
+
+        ${AUTO.error ? `<div class="bs-auto-err">Could not load the map data: ${esc(AUTO.error)}</div>` : ''}
+
+        ${r ? `
+          <div class="bs-auto-result">
+            <div class="bs-auto-rh">Result</div>
+            <div class="bs-auto-kpis">
+              <div><b>${fmt(Math.round(r.stats.target))}</b><span>members per area if perfectly even</span></div>
+              <div><b>${fmt(Math.round(r.stats.min))} &ndash; ${fmt(Math.round(r.stats.max))}</b><span>smallest to largest area</span></div>
+              <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest</span></div>
+              <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>spread (lower is more even)</span></div>
+            </div>
+            <table class="bs-auto-tbl"><thead><tr><th>Area</th><th>Members</th><th>Counties</th></tr></thead>
+              <tbody>${r.stats.weights.map((w,i)=>`<tr>
+                <td><span class="sw" style="background:${PALETTE[i%PALETTE.length]}"></span>Area ${i+1}</td>
+                <td>${fmt(Math.round(w))}</td><td>${fmt(r.stats.counties[i])}</td></tr>`).join('')}</tbody></table>
+          </div>` : ''}
+      </div>
+      <div class="bs-auto-foot">
+        <span class="bs-auto-hint">${ready ? '' : 'Loading map data&hellip;'}</span>
+        <div class="bs-auto-btns">
+          <button onclick="window._bsAutoClose()">Cancel</button>
+          <button class="prim" ${ready&&!AUTO.busy?'':'disabled'} onclick="window._bsAutoRun()">
+            ${AUTO.busy ? 'Working&hellip;' : (r ? 'Draw it again' : 'Preview the map')}</button>
+          ${r ? `<button class="prim go" onclick="window._bsAutoApply()">Use this map</button>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
+window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); AUTO.result=null; renderAutoDialog(); };
+window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); AUTO.result=null; renderAutoDialog(); };
+window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
+window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
+
+window._bsAutoRun = function(){
+  if (!_autoData) return;
+  AUTO.busy = true; renderAutoDialog();
+  // Yield so the "Working..." state paints before the solver blocks the thread.
+  setTimeout(()=>{
+    try {
+      const A = _autoData;
+      const w = autoWeights(A, AUTO.basis);
+      AUTO.result = AUTO.whole ? autoAssignStates(A, w, AUTO.n) : autoAssign(A, w, AUTO.n);
+    } catch(e){ AUTO.error = String(e.message||e); }
+    AUTO.busy = false; renderAutoDialog();
+  }, 30);
+};
+
+window._bsAutoApply = function(){
+  const r = AUTO.result; if (!r || !_autoData) return;
+  pushUndo('auto');
+  const N = AUTO.n;
+  // Keep existing names and colours when the area count is unchanged, so a
+  // re-draw doesn't wipe naming work.
+  if (S.regions.length !== N) S.regions = defaultRegions(N);
+  const A = _autoData, next = {};
+  for (let i=0;i<A.fips.length;i++){
+    const g = r.assign[i];
+    if (g != null && g >= 0 && g < N) next[A.fips[i]] = g;
+  }
+  S.assign = next;
+  if (S.active >= S.regions.length) S.active = S.regions.length - 1;
+  S.detailRegion = null; S.dirty = true;
+  syncLevels();
+  window._bsAutoClose();
+  repaintAll(); renderPanel();
+  const msg = `Drew ${N} areas \u00b7 largest \u00f7 smallest ${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'n/a'} \u00b7 spread ${(100*r.stats.spread).toFixed(1)}%`;
+  if (window.USADToast && window.USADToast.show) window.USADToast.show(msg);
+};
+
+
 /* ---------- read-only API for the reporting layer (ma-reports.js) ----------
    Boundary Studio owns this state; the reports module only ever reads it.
    Every accessor returns live values, so a generated report always reflects
@@ -1340,7 +1753,16 @@ window.BoundaryAPI = {
   totals:     () => S.totals,
 };
 
+function injectAutoCSS(){
+  if (document.getElementById('bs-auto-css')) return;
+  const el = document.createElement('style');
+  el.id = 'bs-auto-css';
+  el.textContent = "\n/* auto-assign dialog */\n#bsAutoModal .bs-auto-ov{position:fixed;inset:0;background:rgba(15,20,45,.55);z-index:99998;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 16px}\n#bsAutoModal .bs-auto-dlg{background:#fff;border-radius:14px;max-width:620px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:92vh}\n#bsAutoModal .bs-auto-head{display:flex;align-items:flex-start;padding:18px 22px 12px;border-bottom:3px solid #E31937}\n#bsAutoModal .bs-auto-eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#009AC7}\n#bsAutoModal .bs-auto-head h2{font-family:'Barlow Condensed',sans-serif;font-size:27px;font-weight:700;margin:2px 0 0;color:#171F69;text-transform:uppercase}\n#bsAutoModal .bs-auto-x{margin-left:auto;border:none;background:none;font-size:19px;cursor:pointer;color:#6b7390}\n#bsAutoModal .bs-auto-body{padding:15px 22px;overflow:auto}\n#bsAutoModal .bs-auto-p{font-size:13px;color:#3d4a63;line-height:1.55;margin:0 0 14px}\n#bsAutoModal .bs-auto-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:13px}\n#bsAutoModal .bs-auto-lbl{flex:0 0 130px;font-size:12px;font-weight:800;color:#171F69;text-transform:uppercase;letter-spacing:.04em;padding-top:7px}\n#bsAutoModal .bs-auto-nrow{display:flex;align-items:center;gap:6px}\n#bsAutoModal .bs-auto-nrow button{width:32px;height:32px;border:1px solid #cdd6e4;background:#fff;border-radius:7px;font-size:16px;font-weight:800;color:#171F69;cursor:pointer}\n#bsAutoModal .bs-auto-nrow input{width:66px;height:32px;text-align:center;border:1px solid #cdd6e4;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#171F69}\n#bsAutoModal .bs-auto-chips{display:flex;gap:6px;flex-wrap:wrap}\n#bsAutoModal .bs-auto-chips button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:999px;padding:7px 15px;font-weight:700;font-size:12.5px;cursor:pointer}\n#bsAutoModal .bs-auto-chips button.on{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#3d4a63;padding-top:5px;cursor:pointer}\n#bsAutoModal .bs-auto-check input{margin-top:2px;accent-color:#171F69}\n#bsAutoModal .bs-auto-hint{color:#6b7390;font-size:11.5px;font-weight:500}\n#bsAutoModal .bs-auto-note{background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#3d4a63;margin-top:4px}\n#bsAutoModal .bs-auto-err{background:#fdecec;border-left:3px solid #E31937;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#8a1020;margin-top:9px}\n#bsAutoModal .bs-auto-result{margin-top:15px;border-top:1px solid #e5e9f2;padding-top:12px}\n#bsAutoModal .bs-auto-rh{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#171F69;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}\n#bsAutoModal .bs-auto-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:11px}\n#bsAutoModal .bs-auto-kpis div{background:#f6f8fc;border-radius:7px;padding:9px 10px;border-top:3px solid #009AC7}\n#bsAutoModal .bs-auto-kpis b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:#171F69;line-height:1.05}\n#bsAutoModal .bs-auto-kpis span{display:block;font-size:10.5px;color:#5a6480;margin-top:3px;line-height:1.35}\n#bsAutoModal .bs-auto-tbl{width:100%;border-collapse:collapse;font-size:12px}\n#bsAutoModal .bs-auto-tbl th{background:#eef1f7;color:#171F69;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.04em}\n#bsAutoModal .bs-auto-tbl td{padding:4px 8px;border-bottom:1px solid #eef1f7;font-variant-numeric:tabular-nums}\n#bsAutoModal .bs-auto-tbl .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;vertical-align:-1px}\n#bsAutoModal .bs-auto-foot{display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #e5e9f2;background:#fafbfd;border-radius:0 0 14px 14px}\n#bsAutoModal .bs-auto-btns{margin-left:auto;display:flex;gap:8px}\n#bsAutoModal .bs-auto-btns button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}\n#bsAutoModal .bs-auto-btns .prim{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-btns .go{background:#009AC7;border-color:#009AC7;color:#fff}\n#bsAutoModal .bs-auto-btns button[disabled]{opacity:.45;cursor:not-allowed}\n";
+  document.head.appendChild(el);
+}
+
 window.renderBoundary = async function(){
+  injectAutoCSS();
   const el = document.getElementById('viewBoundary');
   if (S.booted) return;
   el.innerHTML = '<div class="loading">Loading county map&hellip;</div>';
@@ -1362,6 +1784,8 @@ window.renderBoundary = async function(){
     <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape. Switch to <b>Who moves up</b> to type in how many advance per age group and event.
     <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
       <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
+    <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>
+      <span class="note">Choose how many areas you want and it divides the country into that many connected, evenly-sized areas. A starting point &mdash; edit anything afterwards, or Undo.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
       <span class="note">The older draft, built from which Regional meet each club actually attended. Useful for comparison, but it is not the published alignment.</span></div></div>
     <div class="bs-layout">
@@ -1386,6 +1810,8 @@ window.renderBoundary = async function(){
   });
   const offBtn = document.getElementById('bsLoadOfficial');
   if (offBtn) offBtn.addEventListener('click', ()=>loadScenario('seed-2026-official'));
+  const autoBtn = document.getElementById('bsAutoOpen');
+  if (autoBtn) autoBtn.addEventListener('click', openAutoDialog);
   const seedBtn = document.getElementById('bsLoadSeed');
   if (seedBtn) seedBtn.addEventListener('click', ()=>loadScenario('seed-2026-alignment'));
   S.booted = true;
