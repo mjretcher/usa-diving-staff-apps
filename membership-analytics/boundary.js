@@ -1571,6 +1571,389 @@ function autoAssignStates(A, weights, N, opts){
 }
 
 
+/* ============================================================================
+   SMART AUTO-ASSIGN — multi-objective boundary optimiser.
+
+   Equal member counts alone is the wrong target. A split can be perfectly even
+   and still be unusable: an area stretching Montana to Texas, or one with 400
+   members but only nine Group C girls, is not a workable competitive area. So
+   this optimises four things at once, each normalised to 0..1 (lower better)
+   and weighted by what the user says matters:
+
+     BALANCE     how evenly members are shared (spread around the average)
+     TRAVEL      member-weighted average distance to the area's centre. Weighted
+                 by members, because 500 people driving 100 miles is a bigger
+                 burden than 5 people driving 300.
+     VIABILITY   whether every area has enough athletes in EVERY junior age
+                 group to actually run its events. A shortfall in one age group
+                 is a broken event, invisible in the headline total.
+     CONTINUITY  how many members change area versus today. A proposal that
+                 moves everyone is politically dead however elegant it is.
+
+   Alaska and Hawaii sit in projection insets, so their map positions carry no
+   real distance. They are excluded from TRAVEL (their athletes fly regardless)
+   but still count fully toward balance and viability.
+
+   Search is deterministic multi-start: several different seedings are grown and
+   polished, and the best-scoring result wins. Same inputs always give the same
+   map, so a result can be reproduced and argued about.
+   ========================================================================== */
+
+const MI_PER_UNIT = 3.1;      // calibrated against known county-pair distances
+const TRAVEL_REF  = 250;      // miles; normalisation reference, not a limit
+
+function smartAssign(A, ctx, N, opts){
+  opts = opts || {};
+  const n = A.fips.length, adj = A.adj, cx = A.cx, cy = A.cy;
+  const W  = ctx.weights;                       // balance weight (members or athletes)
+  const AG = ctx.ages || null;                  // [i] -> [D,C,B,A] junior athletes
+  const base = ctx.baseline || null;            // [i] -> area index, or null
+  const insular = A.st.map(s => s === 'AK' || s === 'HI');
+
+  const wB = opts.wBalance    != null ? opts.wBalance    : 1.0;
+  const wT = opts.wTravel     != null ? opts.wTravel     : 0.8;
+  const wV = opts.wViability  != null ? opts.wViability  : 0.5;
+  const wC = opts.wContinuity != null ? opts.wContinuity : 0.0;
+  const viaFrac = opts.viabilityFraction != null ? opts.viabilityFraction : 0.55;
+  const restarts = opts.restarts || 5;
+  const maxIter  = opts.maxIter  || 1200;
+
+  const total = W.reduce((a,b)=>a+b,0);
+  const mean  = total / N;
+  const NG = 4;
+  const groupTotals = [0,0,0,0];
+  if (AG) for (let i=0;i<n;i++) for (let g=0;g<NG;g++) groupTotals[g] += AG[i][g];
+  const groupNeed = groupTotals.map(t => (t / N) * viaFrac);
+
+  const dist = (i, x, y) => Math.hypot(cx[i]-x, cy[i]-y) * MI_PER_UNIT;
+
+  /* ---------------- scoring ---------------- */
+  function evaluate(assign){
+    const wsum = new Float64Array(N);
+    const gx = new Float64Array(N), gy = new Float64Array(N), gw = new Float64Array(N);
+    const ages = Array.from({length:N}, ()=>[0,0,0,0]);
+    let sameBase = 0, baseTot = 0;
+    for (let i=0;i<n;i++){
+      const r = assign[i]; if (r < 0) continue;
+      wsum[r] += W[i];
+      if (!insular[i] && W[i] > 0){ gx[r] += cx[i]*W[i]; gy[r] += cy[i]*W[i]; gw[r] += W[i]; }
+      if (AG) for (let g=0;g<NG;g++) ages[r][g] += AG[i][g];
+      if (base){ baseTot += W[i]; if (base[i] === r) sameBase += W[i]; }
+    }
+    // Centres are member-weighted: the point most members are closest to, not
+    // the geometric middle of the landmass.
+    const ctrX = new Float64Array(N), ctrY = new Float64Array(N);
+    for (let r=0;r<N;r++){
+      if (gw[r] > 0){ ctrX[r] = gx[r]/gw[r]; ctrY[r] = gy[r]/gw[r]; }
+      else { ctrX[r] = NaN; ctrY[r] = NaN; }
+    }
+    let travelNum = 0, travelDen = 0;
+    for (let i=0;i<n;i++){
+      const r = assign[i];
+      if (r < 0 || insular[i] || W[i] <= 0 || isNaN(ctrX[r])) continue;
+      travelNum += W[i] * dist(i, ctrX[r], ctrY[r]);
+      travelDen += W[i];
+    }
+    const travelMi = travelDen > 0 ? travelNum/travelDen : 0;
+
+    let sd = 0;
+    for (let r=0;r<N;r++) sd += (wsum[r]-mean)*(wsum[r]-mean);
+    sd = Math.sqrt(sd/N);
+    const balance = mean > 0 ? sd/mean : 0;
+
+    let via = 0;
+    if (AG){
+      for (let r=0;r<N;r++) for (let g=0;g<NG;g++){
+        if (groupNeed[g] <= 0) continue;
+        const short = (groupNeed[g] - ages[r][g]) / groupNeed[g];
+        if (short > 0) via += short*short;   // squared: worst cell dominates
+      }
+      via /= (N*NG);
+    }
+    const continuity = base && baseTot > 0 ? 1 - sameBase/baseTot : 0;
+
+    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity;
+    return {score, balance, travelMi, via, continuity, wsum:Array.from(wsum),
+            ages, ctrX, ctrY,
+            ratio: Math.min(...wsum) > 0 ? Math.max(...wsum)/Math.min(...wsum) : Infinity};
+  }
+
+  /* ---------------- seeding ---------------- */
+  function seedsFor(variant){
+    const seeds = [];
+    // Different variants start from a different first seed and trade off
+    // spread against density, which lands the multi-start in genuinely
+    // different basins rather than jittering around one answer.
+    const order = Array.from({length:n}, (_,i)=>i)
+      .filter(i => W[i] > 0 && !insular[i])
+      .sort((a,b)=>W[b]-W[a]);
+    if (!order.length) return Array.from({length:N},(_,i)=>i);
+    seeds.push(order[Math.min(variant, order.length-1)]);
+    const near = new Float64Array(n);
+    for (let i=0;i<n;i++) near[i] = Math.hypot(cx[i]-cx[seeds[0]], cy[i]-cy[seeds[0]]);
+    const densityPow = [1.0, 0.0, 0.5, 1.5, 0.25][variant % 5];
+    while (seeds.length < N){
+      let best=-1, bs=-1;
+      for (let i=0;i<n;i++){
+        if (insular[i] || seeds.indexOf(i)>=0) continue;
+        const s = near[i]*near[i] * Math.pow(1+W[i], densityPow);
+        if (s > bs){ bs = s; best = i; }
+      }
+      if (best < 0) break;
+      seeds.push(best);
+      for (let i=0;i<n;i++){ const d=Math.hypot(cx[i]-cx[best], cy[i]-cy[best]); if (d<near[i]) near[i]=d; }
+    }
+    while (seeds.length < N){
+      for (let i=0;i<n && seeds.length<N;i++) if (seeds.indexOf(i)<0) seeds.push(i);
+    }
+    return seeds;
+  }
+
+  /* ---------------- growth ---------------- */
+  function grow(seeds){
+    const assign = new Int32Array(n).fill(-1);
+    const wsum = new Float64Array(N);
+    const sx = new Float64Array(N), sy = new Float64Array(N), sw = new Float64Array(N);
+    const cnt = new Int32Array(N);
+    const front = [];
+    for (let r=0;r<N;r++){
+      const s = seeds[r];
+      assign[s]=r; wsum[r]=W[s]; cnt[r]=1;
+      sx[r]=cx[s]*(W[s]||1); sy[r]=cy[s]*(W[s]||1); sw[r]=(W[s]||1);
+      front.push(new Set(adj[s].filter(j=>assign[j]<0)));
+    }
+    let placed = N;
+    while (placed < n){
+      let pick=-1, worst=Infinity;
+      for (let r=0;r<N;r++){
+        if (!front[r].size) continue;
+        const fill = mean>0 ? wsum[r]/mean : cnt[r];
+        if (fill < worst){ worst=fill; pick=r; }
+      }
+      if (pick<0){
+        for (let i=0;i<n;i++){
+          if (assign[i]>=0) continue;
+          let br=0,bd=Infinity;
+          for (let r=0;r<N;r++){
+            const d=Math.hypot(cx[i]-sx[r]/sw[r], cy[i]-sy[r]/sw[r]);
+            if (d<bd){bd=d;br=r;}
+          }
+          assign[i]=br; wsum[br]+=W[i]; cnt[br]++; placed++;
+        }
+        break;
+      }
+      const mx=sx[pick]/sw[pick], my=sy[pick]/sw[pick];
+      let bc=-1, bd=Infinity;
+      for (const j of front[pick]){
+        if (assign[j]>=0){ front[pick].delete(j); continue; }
+        const d=Math.hypot(cx[j]-mx, cy[j]-my);
+        if (d<bd){ bd=d; bc=j; }
+      }
+      if (bc<0) continue;
+      assign[bc]=pick; wsum[pick]+=W[bc]; cnt[pick]++;
+      const ww = W[bc]||0.001;
+      sx[pick]+=cx[bc]*ww; sy[pick]+=cy[bc]*ww; sw[pick]+=ww;
+      placed++;
+      front[pick].delete(bc);
+      for (const j of adj[bc]) if (assign[j]<0) front[pick].add(j);
+      for (let r=0;r<N;r++) if (r!==pick) front[r].delete(bc);
+    }
+    return assign;
+  }
+
+  /* ---------------- contiguity helpers ---------------- */
+  function membersOf(assign){
+    const m = Array.from({length:N},()=>[]);
+    for (let i=0;i<n;i++) if (assign[i]>=0) m[assign[i]].push(i);
+    return m;
+  }
+  function connectedWithout(list, drop){
+    const set = new Set(list); set.delete(drop);
+    if (!set.size) return false;
+    const s0 = set.values().next().value;
+    const seen = new Set([s0]), st=[s0];
+    while (st.length){
+      const u=st.pop();
+      for (const v of adj[u]) if (set.has(v) && !seen.has(v)){ seen.add(v); st.push(v); }
+    }
+    return seen.size === set.size;
+  }
+
+  /* ---------------- local search over the full objective ---------------- */
+  function polish(assign){
+    let cur = evaluate(assign);
+    for (let it=0; it<maxIter; it++){
+      // Candidate moves are border counties only. Scored against the real
+      // objective using the current area centres, then the winner is verified
+      // with a full re-evaluation so approximation error can never accumulate.
+      const cand = [];
+      for (let i=0;i<n;i++){
+        const from = assign[i]; if (from<0) continue;
+        const to = new Set();
+        for (const j of adj[i]) if (assign[j]>=0 && assign[j]!==from) to.add(assign[j]);
+        for (const t of to){
+          const wf = cur.wsum[from]-W[i], wt = cur.wsum[t]+W[i];
+          const dSS = ((wf-mean)**2 + (wt-mean)**2)
+                    - ((cur.wsum[from]-mean)**2 + (cur.wsum[t]-mean)**2);
+          let dT = 0;
+          if (!insular[i] && W[i]>0 && !isNaN(cur.ctrX[from]) && !isNaN(cur.ctrX[t])){
+            dT = W[i]*(dist(i,cur.ctrX[t],cur.ctrY[t]) - dist(i,cur.ctrX[from],cur.ctrY[from]));
+          }
+          let dV = 0;
+          if (AG) for (let g=0;g<4;g++){
+            if (groupNeed[g]<=0) continue;
+            const sq = x => x>0 ? x*x : 0;
+            const sf0 = sq((groupNeed[g]-cur.ages[from][g])/groupNeed[g]);
+            const st0 = sq((groupNeed[g]-cur.ages[t][g])/groupNeed[g]);
+            const sf1 = sq((groupNeed[g]-(cur.ages[from][g]-AG[i][g]))/groupNeed[g]);
+            const st1 = sq((groupNeed[g]-(cur.ages[t][g]+AG[i][g]))/groupNeed[g]);
+            dV += (sf1+st1)-(sf0+st0);
+          }
+          let dC = 0;
+          if (base) dC = ((base[i]===t)?-W[i]:0) + ((base[i]===from)?W[i]:0);
+          // Ranking heuristic only -- every applied move is confirmed against a
+          // full re-evaluation below, so an imperfect estimate can misorder
+          // candidates but can never let the objective get worse. Each term is
+          // scaled the same way the real objective normalises it.
+          const est = wB*(dSS/(N*mean*mean || 1))
+                    + wT*(dT/((total||1)*TRAVEL_REF))
+                    + wV*(dV/(N*4))
+                    + wC*(dC/(total||1));
+          if (est < 0) cand.push({i, from, to:t, est});
+        }
+      }
+      if (!cand.length) break;
+      cand.sort((a,b)=>a.est-b.est);
+      const M = membersOf(assign);
+      let applied = false;
+      for (const c of cand.slice(0, 40)){
+        if (M[c.from].length <= 1) continue;
+        if (!connectedWithout(M[c.from], c.i)) continue;
+        assign[c.i] = c.to;
+        const next = evaluate(assign);
+        if (next.score < cur.score - 1e-12){ cur = next; applied = true; break; }
+        assign[c.i] = c.from;   // revert, try the next candidate
+      }
+      if (!applied) break;
+    }
+    return cur;
+  }
+
+  /* ---------------- multi-start ---------------- */
+  let best = null, bestAssign = null, tried = 0;
+  const starts = [];
+  if (base){
+    const b = new Int32Array(n);
+    for (let i=0;i<n;i++) b[i] = (base[i] != null && base[i] >= 0 && base[i] < N) ? base[i] : -1;
+    // Any county the baseline does not cover (or that falls outside the
+    // requested area count) is attached to its nearest assigned neighbour so
+    // the starting map is complete before polishing.
+    let guard = 0;
+    while (Array.prototype.some.call(b, x => x < 0) && guard++ < 50){
+      for (let i=0;i<n;i++){
+        if (b[i] >= 0) continue;
+        for (const j of adj[i]) if (b[j] >= 0){ b[i] = b[j]; break; }
+      }
+    }
+    for (let i=0;i<n;i++) if (b[i] < 0) b[i] = 0;
+    starts.push(b);
+  }
+  for (let v=0; v<restarts; v++) starts.push(grow(seedsFor(v)));
+  for (const a of starts){
+    const res = polish(a);
+    tried++;
+    if (!best || res.score < best.score){ best = res; bestAssign = Array.from(a); }
+  }
+
+  // Final safety: no area may be in more than one piece.
+  const assign = bestAssign;
+  let repaired = 0;
+  for (let r=0;r<N;r++){
+    const list=[]; for (let i=0;i<n;i++) if (assign[i]===r) list.push(i);
+    if (list.length<2) continue;
+    const set=new Set(list), seen=new Set(), pieces=[];
+    for (const s0 of list){
+      if (seen.has(s0)) continue;
+      const p=[], st=[s0]; seen.add(s0);
+      while(st.length){ const u=st.pop(); p.push(u);
+        for (const v of adj[u]) if (set.has(v)&&!seen.has(v)){seen.add(v);st.push(v);} }
+      pieces.push(p);
+    }
+    if (pieces.length<2) continue;
+    pieces.sort((a,b)=>b.length-a.length);
+    for (const p of pieces.slice(1)){
+      const touch={};
+      for (const i of p) for (const j of adj[i]){
+        const a2=assign[j]; if (a2>=0&&a2!==r) touch[a2]=(touch[a2]||0)+1;
+      }
+      const opts2 = Object.keys(touch).map(Number);
+      if (!opts2.length) continue;
+      // Hand the stray piece to whichever neighbouring area it hurts least.
+      // Choosing purely by border contact could dump a 200-member piece into an
+      // already-large area and wreck the balance -- which is exactly what
+      // happened when starting from a map whose regions were already split.
+      const pw = p.reduce((sum,i)=>sum+W[i],0);
+      const wsNow = new Float64Array(N);
+      for (let i=0;i<n;i++) if (assign[i]>=0) wsNow[assign[i]] += W[i];
+      let bestK=opts2[0], bestCost=Infinity;
+      for (const k of opts2){
+        const after = wsNow[k] + pw;
+        const cost = (after-mean)*(after-mean) - touch[k]*1e-6;   // contact breaks ties
+        if (cost < bestCost){ bestCost = cost; bestK = k; }
+      }
+      for (const i of p) assign[i]=bestK;
+      repaired++;
+    }
+  }
+  // Relabel areas to line up with the baseline's numbering wherever possible,
+  // so "Region 7" still means roughly the same part of the country.
+  if (base){
+    const overlap = Array.from({length:N},()=>new Float64Array(N));
+    for (let i=0;i<n;i++){
+      const a2 = assign[i], b2 = base[i];
+      if (a2>=0 && b2!=null && b2>=0 && b2<N) overlap[a2][b2] += (W[i]||0) + 0.001;
+    }
+    const pairs = [];
+    for (let a2=0;a2<N;a2++) for (let b2=0;b2<N;b2++) pairs.push([overlap[a2][b2], a2, b2]);
+    pairs.sort((p,q)=>q[0]-p[0]);
+    const mapTo = new Array(N).fill(-1), usedB = new Set(), usedA = new Set();
+    for (const [, a2, b2] of pairs){
+      if (usedA.has(a2) || usedB.has(b2)) continue;
+      mapTo[a2] = b2; usedA.add(a2); usedB.add(b2);
+    }
+    let free = 0;
+    for (let a2=0;a2<N;a2++){
+      if (mapTo[a2] >= 0) continue;
+      while (usedB.has(free)) free++;
+      mapTo[a2] = free; usedB.add(free);
+    }
+    for (let i=0;i<n;i++) if (assign[i] >= 0) assign[i] = mapTo[assign[i]];
+  }
+  // Repair is a structural edit, not an optimising one, so give the objective
+  // the last word once the map is guaranteed contiguous.
+  let final = evaluate(assign);
+  if (repaired){
+    const arr = Int32Array.from(assign);
+    final = polish(arr);
+    for (let i=0;i<n;i++) assign[i] = arr[i];
+  }
+
+  const counties = Array.from({length:N},(_,r)=>{let c=0;for(let i=0;i<n;i++) if(assign[i]===r)c++;return c;});
+  return {
+    assign: Array.from(assign),
+    stats: {
+      total, target: mean,
+      weights: final.wsum, counties, ages: final.ages,
+      min: Math.min(...final.wsum), max: Math.max(...final.wsum),
+      ratio: final.ratio, spread: final.balance,
+      travelMi: final.travelMi, viability: final.via, continuity: final.continuity,
+      score: final.score, repaired, restarts: tried,
+      groupNeed, viabilityFraction: viaFrac,
+    },
+  };
+}
+
+
 /* ---------- auto-assign: data loading + UI ---------- */
 let _autoData = null, _autoLoading = null;
 function loadAutoData(){
@@ -1591,7 +1974,21 @@ function autoWeights(A, basis){
   });
 }
 
-const AUTO = { n: 12, basis: 'members', whole: false, result: null, busy: false };
+
+const AUTO_PRESETS = [
+  {k:'blend',   label:'Balanced blend',  hint:'Even sizes and sensible travel together. Start here.',
+   o:{wBalance:1.0, wTravel:0.8, wViability:0.8, viabilityFraction:0.8, wContinuity:0}},
+  {k:'even',    label:'Most even sizes', hint:'Push hardest on equal membership.',
+   o:{wBalance:1.5, wTravel:0.35, wViability:0.4, viabilityFraction:0.7, wContinuity:0}},
+  {k:'travel',  label:'Least travel',    hint:'Tightest areas. Sizes will be less even.',
+   o:{wBalance:0.5, wTravel:1.8, wViability:0.4, viabilityFraction:0.7, wContinuity:0}},
+  {k:'depth',   label:'Event depth',     hint:'Protect every age group from being too thin.',
+   o:{wBalance:0.8, wTravel:0.5, wViability:3.0, viabilityFraction:0.9, wContinuity:0}},
+  {k:'keep',    label:"Keep today's map", hint:'Fixes split regions, moves the fewest people. Stays uneven.',
+   o:{wBalance:1.2, wTravel:0.7, wViability:0.8, viabilityFraction:0.8, wContinuity:0.8}, needsBase:true},
+];
+
+const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null, busy: false };
 
 function openAutoDialog(){
   AUTO.n = Math.max(2, S.regions.length || 12);
@@ -1635,7 +2032,16 @@ function renderAutoDialog(){
         </div>
 
         <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Even them out by</label>
+          <label class="bs-auto-lbl">What matters most</label>
+          <div class="bs-auto-presets">
+            ${AUTO_PRESETS.map(p=>`
+              <button class="${AUTO.preset===p.k?'on':''}" onclick="window._bsAutoPreset('${p.k}')">
+                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span></button>`).join('')}
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Count</label>
           <div class="bs-auto-chips">
             <button class="${AUTO.basis==='members'?'on':''}" onclick="window._bsAutoBasis('members')">All members</button>
             <button class="${AUTO.basis==='athletes'?'on':''}" onclick="window._bsAutoBasis('athletes')">Athletes only</button>
@@ -1660,11 +2066,15 @@ function renderAutoDialog(){
           <div class="bs-auto-result">
             <div class="bs-auto-rh">Result</div>
             <div class="bs-auto-kpis">
-              <div><b>${fmt(Math.round(r.stats.target))}</b><span>members per area if perfectly even</span></div>
-              <div><b>${fmt(Math.round(r.stats.min))} &ndash; ${fmt(Math.round(r.stats.max))}</b><span>smallest to largest area</span></div>
-              <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest</span></div>
-              <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>spread (lower is more even)</span></div>
+              <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>size spread &mdash; lower is more even</span></div>
+              <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest area</span></div>
+              ${r.stats.travelMi!=null?`<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>`:''}
+              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest age group vs average</span></div>`:''}
+              ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
             </div>
+            <div class="bs-auto-legend">Areas are always connected &mdash; no area is ever left in
+              two separate pieces. Alaska and Hawaii are left out of the travel figure, since those
+              athletes fly whatever the map says.</div>
             <table class="bs-auto-tbl"><thead><tr><th>Area</th><th>Members</th><th>Counties</th></tr></thead>
               <tbody>${r.stats.weights.map((w,i)=>`<tr>
                 <td><span class="sw" style="background:${PALETTE[i%PALETTE.length]}"></span>Area ${i+1}</td>
@@ -1687,18 +2097,53 @@ function renderAutoDialog(){
 window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
 window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); AUTO.result=null; renderAutoDialog(); };
 window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); AUTO.result=null; renderAutoDialog(); };
+function weakestGroup(r){
+  if (!r || !r.stats || !r.stats.ages || !r.stats.groupNeed) return null;
+  const N = r.stats.ages.length;
+  let worst = Infinity;
+  for (let i=0;i<N;i++) for (let g=0;g<4;g++){
+    // groupNeed is already scaled by the viability fraction; undo it so the
+    // number shown is honestly "share of the average area", not of a threshold.
+    const avg = r.stats.groupNeed[g] / (r.stats.viabilityFraction || 0.8);
+    if (avg <= 0) continue;
+    const rel = r.stats.ages[i][g] / avg;
+    if (rel < worst) worst = rel;
+  }
+  return isFinite(worst) ? worst : null;
+}
+window._bsAutoPreset = function(k){ AUTO.preset=k; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
 
 window._bsAutoRun = function(){
   if (!_autoData) return;
   AUTO.busy = true; renderAutoDialog();
-  // Yield so the "Working..." state paints before the solver blocks the thread.
   setTimeout(()=>{
     try {
-      const A = _autoData;
+      const A = _autoData, y = S.year;
       const w = autoWeights(A, AUTO.basis);
-      AUTO.result = AUTO.whole ? autoAssignStates(A, w, AUTO.n) : autoAssign(A, w, AUTO.n);
+      const ages = A.fips.map(f => {
+        const a = S.age && S.age[f] ? S.age[f][y] : null;
+        return a ? [a[0]||0, a[1]||0, a[2]||0, a[3]||0] : [0,0,0,0];
+      });
+      const p = AUTO_PRESETS.find(x=>x.k===AUTO.preset) || AUTO_PRESETS[0];
+      if (AUTO.whole){
+        AUTO.result = autoAssignStates(A, w, AUTO.n);
+        AUTO.result.wholeStates = true;
+      } else {
+        // "Keep today's map" measures against whatever is currently painted.
+        let baseline = null;
+        if (p.needsBase){
+          baseline = A.fips.map(f => {
+            const v = S.assign[f];
+            return (v == null || v < 0 || v >= AUTO.n) ? -1 : v;
+          });
+          if (!baseline.some(v => v >= 0)) baseline = null;
+        }
+        AUTO.result = smartAssign(A, {weights:w, ages, baseline}, AUTO.n,
+                                  Object.assign({restarts:4}, p.o));
+      }
+      AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
     AUTO.busy = false; renderAutoDialog();
   }, 30);
@@ -1757,7 +2202,7 @@ function injectAutoCSS(){
   if (document.getElementById('bs-auto-css')) return;
   const el = document.createElement('style');
   el.id = 'bs-auto-css';
-  el.textContent = "\n/* auto-assign dialog */\n#bsAutoModal .bs-auto-ov{position:fixed;inset:0;background:rgba(15,20,45,.55);z-index:99998;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 16px}\n#bsAutoModal .bs-auto-dlg{background:#fff;border-radius:14px;max-width:620px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:92vh}\n#bsAutoModal .bs-auto-head{display:flex;align-items:flex-start;padding:18px 22px 12px;border-bottom:3px solid #E31937}\n#bsAutoModal .bs-auto-eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#009AC7}\n#bsAutoModal .bs-auto-head h2{font-family:'Barlow Condensed',sans-serif;font-size:27px;font-weight:700;margin:2px 0 0;color:#171F69;text-transform:uppercase}\n#bsAutoModal .bs-auto-x{margin-left:auto;border:none;background:none;font-size:19px;cursor:pointer;color:#6b7390}\n#bsAutoModal .bs-auto-body{padding:15px 22px;overflow:auto}\n#bsAutoModal .bs-auto-p{font-size:13px;color:#3d4a63;line-height:1.55;margin:0 0 14px}\n#bsAutoModal .bs-auto-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:13px}\n#bsAutoModal .bs-auto-lbl{flex:0 0 130px;font-size:12px;font-weight:800;color:#171F69;text-transform:uppercase;letter-spacing:.04em;padding-top:7px}\n#bsAutoModal .bs-auto-nrow{display:flex;align-items:center;gap:6px}\n#bsAutoModal .bs-auto-nrow button{width:32px;height:32px;border:1px solid #cdd6e4;background:#fff;border-radius:7px;font-size:16px;font-weight:800;color:#171F69;cursor:pointer}\n#bsAutoModal .bs-auto-nrow input{width:66px;height:32px;text-align:center;border:1px solid #cdd6e4;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#171F69}\n#bsAutoModal .bs-auto-chips{display:flex;gap:6px;flex-wrap:wrap}\n#bsAutoModal .bs-auto-chips button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:999px;padding:7px 15px;font-weight:700;font-size:12.5px;cursor:pointer}\n#bsAutoModal .bs-auto-chips button.on{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#3d4a63;padding-top:5px;cursor:pointer}\n#bsAutoModal .bs-auto-check input{margin-top:2px;accent-color:#171F69}\n#bsAutoModal .bs-auto-hint{color:#6b7390;font-size:11.5px;font-weight:500}\n#bsAutoModal .bs-auto-note{background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#3d4a63;margin-top:4px}\n#bsAutoModal .bs-auto-err{background:#fdecec;border-left:3px solid #E31937;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#8a1020;margin-top:9px}\n#bsAutoModal .bs-auto-result{margin-top:15px;border-top:1px solid #e5e9f2;padding-top:12px}\n#bsAutoModal .bs-auto-rh{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#171F69;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}\n#bsAutoModal .bs-auto-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:11px}\n#bsAutoModal .bs-auto-kpis div{background:#f6f8fc;border-radius:7px;padding:9px 10px;border-top:3px solid #009AC7}\n#bsAutoModal .bs-auto-kpis b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:#171F69;line-height:1.05}\n#bsAutoModal .bs-auto-kpis span{display:block;font-size:10.5px;color:#5a6480;margin-top:3px;line-height:1.35}\n#bsAutoModal .bs-auto-tbl{width:100%;border-collapse:collapse;font-size:12px}\n#bsAutoModal .bs-auto-tbl th{background:#eef1f7;color:#171F69;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.04em}\n#bsAutoModal .bs-auto-tbl td{padding:4px 8px;border-bottom:1px solid #eef1f7;font-variant-numeric:tabular-nums}\n#bsAutoModal .bs-auto-tbl .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;vertical-align:-1px}\n#bsAutoModal .bs-auto-foot{display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #e5e9f2;background:#fafbfd;border-radius:0 0 14px 14px}\n#bsAutoModal .bs-auto-btns{margin-left:auto;display:flex;gap:8px}\n#bsAutoModal .bs-auto-btns button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}\n#bsAutoModal .bs-auto-btns .prim{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-btns .go{background:#009AC7;border-color:#009AC7;color:#fff}\n#bsAutoModal .bs-auto-btns button[disabled]{opacity:.45;cursor:not-allowed}\n";
+  el.textContent = "\n/* auto-assign dialog */\n#bsAutoModal .bs-auto-ov{position:fixed;inset:0;background:rgba(15,20,45,.55);z-index:99998;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 16px}\n#bsAutoModal .bs-auto-dlg{background:#fff;border-radius:14px;max-width:620px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:92vh}\n#bsAutoModal .bs-auto-head{display:flex;align-items:flex-start;padding:18px 22px 12px;border-bottom:3px solid #E31937}\n#bsAutoModal .bs-auto-eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#009AC7}\n#bsAutoModal .bs-auto-head h2{font-family:'Barlow Condensed',sans-serif;font-size:27px;font-weight:700;margin:2px 0 0;color:#171F69;text-transform:uppercase}\n#bsAutoModal .bs-auto-x{margin-left:auto;border:none;background:none;font-size:19px;cursor:pointer;color:#6b7390}\n#bsAutoModal .bs-auto-body{padding:15px 22px;overflow:auto}\n#bsAutoModal .bs-auto-p{font-size:13px;color:#3d4a63;line-height:1.55;margin:0 0 14px}\n#bsAutoModal .bs-auto-row{display:flex;gap:14px;align-items:flex-start;margin-bottom:13px}\n#bsAutoModal .bs-auto-lbl{flex:0 0 130px;font-size:12px;font-weight:800;color:#171F69;text-transform:uppercase;letter-spacing:.04em;padding-top:7px}\n#bsAutoModal .bs-auto-nrow{display:flex;align-items:center;gap:6px}\n#bsAutoModal .bs-auto-nrow button{width:32px;height:32px;border:1px solid #cdd6e4;background:#fff;border-radius:7px;font-size:16px;font-weight:800;color:#171F69;cursor:pointer}\n#bsAutoModal .bs-auto-nrow input{width:66px;height:32px;text-align:center;border:1px solid #cdd6e4;border-radius:7px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#171F69}\n#bsAutoModal .bs-auto-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:6px;flex:1}\n#bsAutoModal .bs-auto-presets button{text-align:left;border:1px solid #cdd6e4;background:#fff;border-radius:8px;padding:8px 10px;cursor:pointer;font-family:inherit}\n#bsAutoModal .bs-auto-presets button.on{border-color:#171F69;background:#eef2fb;box-shadow:inset 0 0 0 1px #171F69}\n#bsAutoModal .bs-auto-presets b{display:block;font-size:12.5px;color:#171F69}\n#bsAutoModal .bs-auto-presets span{display:block;font-size:10.5px;color:#5a6480;margin-top:2px;line-height:1.35}\n#bsAutoModal .bs-auto-legend{font-size:11px;color:#5a6480;margin:8px 0 10px;line-height:1.5}\n#bsAutoModal .bs-auto-chips{display:flex;gap:6px;flex-wrap:wrap}\n#bsAutoModal .bs-auto-chips button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:999px;padding:7px 15px;font-weight:700;font-size:12.5px;cursor:pointer}\n#bsAutoModal .bs-auto-chips button.on{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#3d4a63;padding-top:5px;cursor:pointer}\n#bsAutoModal .bs-auto-check input{margin-top:2px;accent-color:#171F69}\n#bsAutoModal .bs-auto-hint{color:#6b7390;font-size:11.5px;font-weight:500}\n#bsAutoModal .bs-auto-note{background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#3d4a63;margin-top:4px}\n#bsAutoModal .bs-auto-err{background:#fdecec;border-left:3px solid #E31937;padding:8px 11px;border-radius:0 5px 5px 0;font-size:12px;color:#8a1020;margin-top:9px}\n#bsAutoModal .bs-auto-result{margin-top:15px;border-top:1px solid #e5e9f2;padding-top:12px}\n#bsAutoModal .bs-auto-rh{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;color:#171F69;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}\n#bsAutoModal .bs-auto-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:11px}\n#bsAutoModal .bs-auto-kpis div{background:#f6f8fc;border-radius:7px;padding:9px 10px;border-top:3px solid #009AC7}\n#bsAutoModal .bs-auto-kpis b{display:block;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:#171F69;line-height:1.05}\n#bsAutoModal .bs-auto-kpis span{display:block;font-size:10.5px;color:#5a6480;margin-top:3px;line-height:1.35}\n#bsAutoModal .bs-auto-tbl{width:100%;border-collapse:collapse;font-size:12px}\n#bsAutoModal .bs-auto-tbl th{background:#eef1f7;color:#171F69;text-align:left;padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.04em}\n#bsAutoModal .bs-auto-tbl td{padding:4px 8px;border-bottom:1px solid #eef1f7;font-variant-numeric:tabular-nums}\n#bsAutoModal .bs-auto-tbl .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;vertical-align:-1px}\n#bsAutoModal .bs-auto-foot{display:flex;align-items:center;gap:10px;padding:12px 22px;border-top:1px solid #e5e9f2;background:#fafbfd;border-radius:0 0 14px 14px}\n#bsAutoModal .bs-auto-btns{margin-left:auto;display:flex;gap:8px}\n#bsAutoModal .bs-auto-btns button{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:7px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer}\n#bsAutoModal .bs-auto-btns .prim{background:#171F69;color:#fff;border-color:#171F69}\n#bsAutoModal .bs-auto-btns .go{background:#009AC7;border-color:#009AC7;color:#fff}\n#bsAutoModal .bs-auto-btns button[disabled]{opacity:.45;cursor:not-allowed}\n";
   document.head.appendChild(el);
 }
 
