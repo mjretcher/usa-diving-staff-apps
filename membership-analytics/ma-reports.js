@@ -1373,6 +1373,10 @@ const TEMPLATES = [
               'boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
+  { id:'realignment_board', label:'Realignment — Board Packet',
+    desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, and what it takes to advance. No appendices.',
+    sections:['boundary_map','boundary_balance','boundary_equity'], years:[2025,2026], boundary:true },
+
   { id:'realignment_equity', label:'Realignment — Fairness Case',
     desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
     sections:['boundary_map','boundary_equity','boundary_balance'], years:[2025,2026], boundary:true },
