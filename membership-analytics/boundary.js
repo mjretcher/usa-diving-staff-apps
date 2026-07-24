@@ -2070,6 +2070,50 @@ function smartAssign(A, ctx, N, opts){
 }
 
 
+
+/* Roll the drawn areas up into higher tiers. Each tier is partitioned with the
+   same balanced-and-connected engine, run over a coarse graph whose nodes are
+   the tier below (two areas are neighbours if any of their counties touch), so
+   a zone is never a pair of areas on opposite sides of the country. Returns one
+   "of" array per tier above the base, in the shape S.levels expects. */
+function groupAreasIntoTiers(A, baseAssign, W, counts){
+  const chain = [];
+  let curAssign = baseAssign.slice();
+  let curN = 0;
+  for (const v of curAssign) if (v + 1 > curN) curN = v + 1;
+  for (const Kraw of counts){
+    const K = Math.max(1, Math.min(Kraw, curN));
+    if (curN <= 1){ chain.push(new Array(curN).fill(0)); continue; }
+    const wsum = new Array(curN).fill(0), sx = new Array(curN).fill(0),
+          sy = new Array(curN).fill(0), cnt = new Array(curN).fill(0);
+    const adjS = Array.from({length:curN}, ()=>new Set());
+    for (let i=0;i<A.fips.length;i++){
+      const a = curAssign[i]; if (a < 0) continue;
+      wsum[a] += W[i]; sx[a] += A.cx[i]; sy[a] += A.cy[i]; cnt[a]++;
+      for (const j of A.adj[i]){
+        const b = curAssign[j];
+        if (b >= 0 && b !== a){ adjS[a].add(b); adjS[b].add(a); }
+      }
+    }
+    const CA = {
+      fips: Array.from({length:curN}, (_,i)=>'n'+i),
+      st:   new Array(curN).fill(''),
+      cx:   Array.from({length:curN}, (_,i)=> cnt[i] ? sx[i]/cnt[i] : 0),
+      cy:   Array.from({length:curN}, (_,i)=> cnt[i] ? sy[i]/cnt[i] : 0),
+      adj:  adjS.map(x=>Array.from(x)),
+    };
+    // No host modelling at tier level and no age cells: balance and compactness only.
+    const res = (K === 1)
+      ? { assign: new Array(curN).fill(0) }
+      : smartAssign(CA, {weights: wsum}, K,
+          {restarts:4, wBalance:1.5, wTravel:0.4, wViability:0, hostMin:Infinity});
+    chain.push(res.assign.slice(0, curN));
+    curAssign = curAssign.map(v => v >= 0 ? res.assign[v] : -1);
+    curN = K;
+  }
+  return chain;
+}
+
 /* ---------- auto-assign: data loading + UI ---------- */
 let _genderData = null;
 function loadGenderData(){
@@ -2116,7 +2160,7 @@ const AUTO_PRESETS = [
 ];
 
 const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null,
-               busy: false, locks: [], hostMin: 40 };
+               busy: false, locks: [], hostMin: 40, ladder: '12, 6, 3' };
 
 function openAutoDialog(){
   AUTO.n = Math.max(2, S.regions.length || 12);
@@ -2160,6 +2204,20 @@ function renderAutoDialog(){
         </div>
 
         <div class="bs-auto-row">
+          <label class="bs-auto-lbl">Stages</label>
+          <div style="flex:1">
+            <input id="bsAutoLadder" type="text" value="${esc(AUTO.ladder)}"
+                   onchange="window._bsAutoLadder(this.value)"
+                   style="width:180px;height:32px;border:1px solid #cdd6e4;border-radius:7px;
+                          padding:0 9px;font-family:'JetBrains Mono',monospace;font-size:14px;
+                          font-weight:700;color:#171F69">
+            <div class="bs-auto-hint" style="margin-top:4px">How many at each stage, biggest first
+              &mdash; e.g. <b>9, 3, 1</b> for nine areas feeding three, feeding one. Each stage is
+              balanced and connected in its own right. Two stages is fine; so is one.</div>
+          </div>
+        </div>
+
+        <div class="bs-auto-row">
           <label class="bs-auto-lbl">What matters most</label>
           <div class="bs-auto-presets">
             ${AUTO_PRESETS.map(p=>`
@@ -2194,11 +2252,15 @@ function renderAutoDialog(){
           <label class="bs-auto-lbl">Host sites</label>
           <div style="flex:1">
             <div class="bs-auto-chips">
+              <button class="sm ${AUTO.hostMin===Infinity?'on':''}"
+                onclick="window._bsAutoHost(-1)">Skip for now</button>
               ${[25,40,60].map(h=>`<button class="sm ${AUTO.hostMin===h?'on':''}"
                 onclick="window._bsAutoHost(${h})">${h}+ members</button>`).join('')}
             </div>
-            <div class="bs-auto-hint" style="margin-top:4px">Travel is measured to the single best
-              host county in each area &mdash; the site it would actually run the meet at &mdash; not
+            <div class="bs-auto-hint" style="margin-top:4px">${AUTO.hostMin===Infinity
+              ? 'Host sites ignored. Travel is measured to the centre of each area instead, and no area is flagged for being unable to host.'
+              : `Travel is measured to the single best
+              host county in each area`} &mdash; the site it would actually run the meet at &mdash; not
               to an empty point in the middle. A county needs at least this many members to count as
               able to host.</div>
           </div>
@@ -2260,8 +2322,22 @@ function renderAutoDialog(){
 }
 
 window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
-window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); AUTO.result=null; renderAutoDialog(); };
-window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); AUTO.result=null; renderAutoDialog(); };
+function syncLadderFirst(){
+  const L = parseLadder(); L[0] = AUTO.n; AUTO.ladder = L.join(', ');
+}
+window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); syncLadderFirst(); AUTO.result=null; renderAutoDialog(); };
+function parseLadder(){
+  const nums = String(AUTO.ladder||'').split(/[^0-9]+/).filter(Boolean).map(Number)
+    .filter(n => n >= 1 && n <= 24);
+  return nums.length ? nums : [AUTO.n];
+}
+window._bsAutoLadder = function(v){
+  AUTO.ladder = v;
+  const L = parseLadder();
+  if (L.length) AUTO.n = L[0];
+  AUTO.result = null; renderAutoDialog();
+};
+window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); syncLadderFirst(); AUTO.result=null; renderAutoDialog(); };
 function weakestGroup(r, wantLabel){
   if (!r || !r.stats || !r.stats.ages || !r.stats.groupNeed) return null;
   const N = r.stats.ages.length, NG = r.stats.groupNeed.length;
@@ -2292,7 +2368,7 @@ window._bsAutoLock = function(i){
   }
   AUTO.result = null; renderAutoDialog();
 };
-window._bsAutoHost = function(h){ AUTO.hostMin=h; AUTO.result=null; renderAutoDialog(); };
+window._bsAutoHost = function(h){ AUTO.hostMin = (h < 0 ? Infinity : h); AUTO.result=null; renderAutoDialog(); };
 window._bsAutoPreset = function(k){ AUTO.preset=k; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
@@ -2363,6 +2439,28 @@ window._bsAutoApply = function(){
     if (g != null && g >= 0 && g < N) next[A.fips[i]] = g;
   }
   S.assign = next;
+  // Build the requested tier ladder from the map just drawn.
+  const ladder = parseLadder().slice(1).filter(k => k >= 1);
+  if (ladder.length && !r.byState){
+    try {
+      const baseAssign = A.fips.map((f,i) => {
+        const g = r.assign[i];
+        return (g != null && g >= 0 && g < N) ? g : -1;
+      });
+      const w = autoWeights(A, AUTO.basis);
+      const chain = groupAreasIntoTiers(A, baseAssign, w, ladder);
+      const names = ladder.length === 2 && ladder[0] === 3
+        ? [['East','Central','West'], ['National']]
+        : null;
+      S.levels = [{name:'Regions'}].concat(chain.map((of, t) => ({
+        name: ladder[t] === 1 ? 'National' : (t === 0 ? 'Zones' : 'Level ' + (t+2)),
+        groups: Array.from({length: ladder[t]}, (_,gi) =>
+          ({name: (names && names[t] && names[t][gi]) ? names[t][gi]
+                  : (ladder[t] === 1 ? 'National' : 'Group ' + (gi+1))})),
+        of: of.slice(),
+      })));
+    } catch(e){ console.warn('tier rollup failed, leaving levels as they were:', e && e.message); }
+  }
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
   S.detailRegion = null; S.dirty = true;
   syncLevels();
