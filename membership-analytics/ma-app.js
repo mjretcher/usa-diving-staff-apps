@@ -135,13 +135,20 @@ async function loadAll(){
                 count(DISTINCT member_id) total,
                 count(DISTINCT member_id) FILTER (WHERE NOT EXISTS (SELECT 1 FROM membership.members b WHERE b.member_id=membership.members.member_id AND b.membership_year=2026)) lost
                 FROM membership.members WHERE membership_year=2025 GROUP BY 1`),
+    // The only query needing name columns. The browser's database role cannot
+    // read those by design (this app's credential is served publicly), so this
+    // one query is allowed to fail on its own instead of taking the whole
+    // bootstrap -- and every other view -- down with it.
     NEON.query(`SELECT DISTINCT ON (a.member_id) a.member_id, a.first_name, a.last_name, a.membership_type, a.member_status,
                 COALESCE(a.club,'(no club)') club, COALESCE(a.association,'') assoc, a.state,
                 CASE WHEN a.birth_date IS NULL THEN '' ELSE (${GRP_SQL.replace(/membership_year/g,'a.membership_year').replace(/birth_date/g,'a.birth_date')}) END grp
                 FROM membership.members a
                 WHERE a.membership_year=2025
                 AND NOT EXISTS (SELECT 1 FROM membership.members b WHERE b.member_id=a.member_id AND b.membership_year=2026)
-                ORDER BY a.member_id, a.membership_type`),
+                ORDER BY a.member_id, a.membership_type`).catch(e => {
+                  console.warn('win-back roster unavailable:', e && e.message);
+                  return { rows: [] };
+                }),
     NEON.query(`SELECT EXTRACT(YEAR FROM start_date)::int y,
                 count(*) FILTER (WHERE sanction ILIKE '%AAU%') aau,
                 count(*) FILTER (WHERE sanction = 'USA Diving') usad
