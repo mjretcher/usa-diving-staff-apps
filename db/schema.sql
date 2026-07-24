@@ -766,6 +766,10 @@ CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, even
 -- crawl bookkeeping on the registry
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
+-- Per-meet failure counter so one un-crawlable meet cannot poison the head of
+-- the results queue forever (queue is ordered newest-first and the crawler used
+-- to re-raise, killing every scheduled run on the same meet).
+ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_attempts integer NOT NULL DEFAULT 0;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- season_calendar.meet_deadlines — DiveMeets MeetInfo deadline pulls

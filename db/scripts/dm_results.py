@@ -41,6 +41,9 @@ DB_URL = os.environ["DATABASE_URL"]
 SANCTION = os.environ.get("SANCTION", "").strip() or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 700)
 QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 3)
+# A meet that fails this many times is parked and skipped by the queue so it
+# cannot block every later run. Clear results_attempts to retry it.
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS") or 3)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
 SLEEP_S = 0.8
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -182,6 +185,7 @@ def main():
     conn.autocommit = False
     cur = conn.cursor()
     meets_done = 0
+    meets_failed = 0
     while fetches < FETCH_BUDGET:
         if ONLY_MEET:
             if meets_done:
@@ -192,11 +196,12 @@ def main():
                 """SELECT meet_id, meet_name FROM divemeets.meets
                    WHERE sanction=%s AND NOT results_done
                      AND http_status=200 AND meet_name IS NOT NULL
+                     AND coalesce(results_attempts,0) < %s::int
                      AND coalesce(end_date, start_date) IS NOT NULL
                      AND coalesce(end_date, start_date)
                          <= current_date - %s::int
                    ORDER BY start_date DESC, meet_id DESC LIMIT 1""",
-                (SANCTION, QUIET_DAYS))
+                (SANCTION, MAX_ATTEMPTS, QUIET_DAYS))
             r = cur.fetchone()
             if not r:
                 log(f"queue empty for sanction={SANCTION!r} — all caught up")
@@ -208,10 +213,38 @@ def main():
             meets_done += 1
             log(f"meet {meet_id} {name!r}: {n_ev} event-rounds, "
                 f"{n_rows} result rows{' [' + note + ']' if note else ''}")
-        except Exception:
+        except Exception as e:
+            # Isolate the failure to this meet. Re-raising here used to abort the
+            # whole run, and because the queue is ordered newest-first the same
+            # meet came back to the head every time -- one bad meet silently
+            # stalled the entire sanction's crawl indefinitely.
             conn.rollback()
-            raise
-    log(f"run done: {meets_done} meets, {fetches} fetches")
+            meets_failed += 1
+            msg = f"{type(e).__name__}: {e}"[:400]
+            log(f"meet {meet_id} {name!r}: FAILED -- {msg}")
+            try:
+                cur.execute(
+                    """UPDATE divemeets.meets
+                          SET results_attempts = coalesce(results_attempts,0) + 1,
+                              results_note = %s,
+                              results_crawled_at = now()
+                        WHERE meet_id = %s""",
+                    (msg, meet_id))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            if ONLY_MEET:
+                raise
+    log(f"run done: {meets_done} meets, {meets_failed} failed, {fetches} fetches")
+    if meets_failed:
+        cur.execute(
+            """SELECT count(*) FROM divemeets.meets
+                WHERE sanction=%s AND NOT results_done
+                  AND coalesce(results_attempts,0) >= %s::int""",
+            (SANCTION, MAX_ATTEMPTS))
+        log(f"parked (>= {MAX_ATTEMPTS} failed attempts) for "
+            f"sanction={SANCTION!r}: {cur.fetchone()[0]} meets")
     cur.close(); conn.close()
 
 def report(ok, err=None):

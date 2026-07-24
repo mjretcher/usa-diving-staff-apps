@@ -1314,6 +1314,32 @@ function download(text, filename){
 }
 
 /* ---------- boot ---------- */
+/* ---------- read-only API for the reporting layer (ma-reports.js) ----------
+   Boundary Studio owns this state; the reports module only ever reads it.
+   Every accessor returns live values, so a generated report always reflects
+   the exact scenario the user is looking at when they hit "Build report". */
+window.BoundaryAPI = {
+  ready:      () => !!(S.booted && S.geo),
+  geo:        () => S.geo,
+  age:        () => S.age,
+  clubs:      () => (S.geo ? S.geo.clubs : []),
+  counties:   () => (S.geo ? S.geo.counties : []),
+  year:       () => S.year,
+  yearLabel:  () => (S.year === 'y25' ? '2025 (complete year)' : '2026 (year to date)'),
+  regions:    () => S.regions,
+  assign:     () => S.assign,
+  levels:     () => S.levels,
+  levelCount, tierName, tierGroups, tierGroupsAt,
+  tierView:   () => S.tierView,
+  tallies:    computeTallies,
+  regionZips, groupColor,
+  ageGroups:  () => AGE_GROUPS,
+  finalName:  () => S.finalName,
+  scenario:   () => ({ id: S.scenarioId, name: S.scenarioName, dirty: S.dirty }),
+  compare:    () => S.compare,
+  totals:     () => S.totals,
+};
+
 window.renderBoundary = async function(){
   const el = document.getElementById('viewBoundary');
   if (S.booted) return;
