@@ -17,8 +17,12 @@ on:
         default: "700"
   schedule:
     # every 25 minutes, offset from the catalog crawl; exits fast once the
-    # queue for the sanction filter is drained
+    # queue for the sanction filter is drained.
+    #   :05/:30/:55 -> USA Diving      :15/:40 -> AAU
+    # The AAU backlog feeds athlete-level AAU comparison in Membership
+    # Analytics; without its own slot it would only ever advance by hand.
     - cron: "5/25 * * * *"
+    - cron: "15/25 * * * *"
 
 concurrency:
   group: divemeets-results
@@ -44,6 +48,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
-          SANCTION: ${{ github.event.inputs.sanction }}
+          SANCTION: ${{ github.event.inputs.sanction || (github.event.schedule == '15/25 * * * *' && 'Amateur Athletic Union (AAU)' || 'USA Diving') }}
           FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
         run: python db/scripts/dm_results.py
