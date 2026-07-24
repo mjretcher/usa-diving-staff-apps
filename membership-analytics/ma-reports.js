@@ -1129,31 +1129,43 @@ const EQUITY_SECTIONS = {
         <p class="mr-p">${scenarioLine()}</p>
         <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
         experiences is the score they must post to get out of their Regional, and the top ${rank}
-        per springboard event advance. That bar is directly measurable, and today it is a long way
-        from equal.</p>
+        per springboard event advance. That bar is directly measurable.</p>
+        <div class="mr-note"><b>Scope of this section — read before using any number below.</b>
+          <ul style="margin:6px 0 0 16px;padding:0">
+            <li><b>Gate modelled:</b> ${esc(Q.scope || '')}</li>
+            <li><b>Years used:</b> ${esc(Q.basis || '')}</li>
+            <li><b>Excluded:</b> ${esc(Q.exclusions || '')}</li>
+          </ul>
+          Every figure here is computed from those fields and nothing else. Gates beyond Regionals
+          &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
+          section says nothing about them.</div>
 
         <h3 class="mr-h3">Today's inequity — the bar to advance, by region</h3>
-        <p class="mr-p">Average ${rank}th-place score at Regionals, ${esc((Q.years||[]).join('–'))}.
-        Platform is excluded because it is non-qualifying at Regionals in every year.</p>
+        <p class="mr-p">Average ${rank}th-place score in each region's own Regionals field,
+        ${esc((Q.years||[]).join(' and '))}. Only fields meeting the exclusions above are counted.</p>
         <table class="mr-table mr-table-sm"><thead><tr><th>Event</th>
           <th class="mr-num">Easiest bar</th><th>Where</th>
           <th class="mr-num">Hardest bar</th><th>Where</th>
           <th class="mr-num">Gap</th><th class="mr-num">Harder by</th></tr></thead>
           <tbody>${todayTable}</tbody></table>
-        <p class="mr-note"><b>Read this as:</b> in ${esc((todayRows[0]||{}).k ? todayRows[0].k.split('|').join(' ') : 'the worst event')},
-        an athlete in the hardest region needs roughly
-        ${todayRows[0] ? (100*todayRows[0].gap/todayRows[0].lo.cut).toFixed(0) : '—'}% more score to reach the
-        same stage as an athlete in the easiest one. That is the inequity a realignment exists to fix.</p>
+        ${todayRows[0] ? `<p class="mr-note"><b>Largest measured gap:</b>
+          ${esc(todayRows[0].k.split('|').join(' '))} &mdash; ${todayRows[0].lo.cut.toFixed(1)} in
+          Region ${todayRows[0].lo.region} against ${todayRows[0].hi.cut.toFixed(1)} in Region
+          ${todayRows[0].hi.region}, a difference of ${todayRows[0].gap.toFixed(1)} points
+          (${(100*todayRows[0].gap/todayRows[0].lo.cut).toFixed(0)}%). This compares the
+          ${rank}th-place score in each region's own field across ${esc((Q.years||[]).join(' and '))};
+          it is not a statement about any individual athlete.</p>` : ''}
 
         <h3 class="mr-h3">Under this map — estimated bar to advance</h3>
         <p class="mr-p">Each proposed area is expressed as shares of today's regions, and the matching
         shares of each region's historical field are pooled. Combining regions correctly raises the bar,
         because the same athletes then compete for one set of ${rank} places instead of two.</p>
         ${propBlocks || '<p class="mr-p mr-warn">Not enough overlap between this map and the published regions to estimate.</p>'}
-        <p class="mr-note"><b>What this is and is not:</b> an estimate built from ${esc((Q.years||[]).join('–'))}
-        results, assuming the same athletes competing under different boundaries. It cannot predict
-        who will actually enter, and it says nothing about athletes who move clubs. Treat it as the
-        relative ordering of areas, not a forecast of any individual score.</p>
+        <p class="mr-note"><b>What this is and is not:</b> an estimate built from
+        ${esc((Q.years||[]).join(' and '))} Regionals results, assuming the same athletes competing
+        under different boundaries. It cannot predict who will actually enter, it says nothing about
+        athletes who change clubs, and it models only the Regionals gate. Treat it as the relative
+        ordering of areas, not a forecast of any score.</p>
       </section>`;
     }
   },
