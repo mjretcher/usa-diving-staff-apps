@@ -775,6 +775,17 @@ ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_attempts integer NO
 -- Zoho's 200-row cap and were therefore skipped rather than ingested partially.
 -- Lets the apps distinguish "this event had no entrants" from "we could not
 -- fetch this event".
+-- Gender derived for athlete members by name-matching Junior Circuit results
+-- (core.event_results carries gender; the Webpoint export does not). Only
+-- unambiguous name matches are stored; validated at 96.4% age-group agreement.
+CREATE TABLE IF NOT EXISTS membership.member_gender (
+  member_id  text PRIMARY KEY,
+  gender     text NOT NULL,
+  source     text NOT NULL,
+  match_name text,
+  derived_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
   meet_id  integer NOT NULL,
   event_id integer NOT NULL,

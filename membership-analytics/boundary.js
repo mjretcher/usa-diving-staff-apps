@@ -1667,8 +1667,8 @@ function smartAssign(A, ctx, N, opts){
 
   const total = W.reduce((a,b)=>a+b,0);
   const mean  = total / N;
-  const NG = 4;
-  const groupTotals = [0,0,0,0];
+  const NG = (AG && AG[0] && AG[0].length) ? AG[0].length : 4;
+  const groupTotals = new Array(NG).fill(0);
   if (AG) for (let i=0;i<n;i++) for (let g=0;g<NG;g++) groupTotals[g] += AG[i][g];
   const groupNeed = groupTotals.map(t => (t / N) * viaFrac);
 
@@ -1678,7 +1678,7 @@ function smartAssign(A, ctx, N, opts){
   function evaluate(assign){
     const wsum = new Float64Array(N);
     const gx = new Float64Array(N), gy = new Float64Array(N), gw = new Float64Array(N);
-    const ages = Array.from({length:N}, ()=>[0,0,0,0]);
+    const ages = Array.from({length:N}, ()=>new Array(NG).fill(0));
     let sameBase = 0, baseTot = 0;
     for (let i=0;i<n;i++){
       const r = assign[i]; if (r < 0) continue;
@@ -1913,7 +1913,7 @@ function smartAssign(A, ctx, N, opts){
             dT = W[i]*(dist(i,cur.ctrX[t],cur.ctrY[t]) - dist(i,cur.ctrX[from],cur.ctrY[from]));
           }
           let dV = 0;
-          if (AG) for (let g=0;g<4;g++){
+          if (AG) for (let g=0;g<NG;g++){
             if (groupNeed[g]<=0) continue;
             const sq = x => x>0 ? x*x : 0;
             const sf0 = sq((groupNeed[g]-cur.ages[from][g])/groupNeed[g]);
@@ -2071,6 +2071,17 @@ function smartAssign(A, ctx, N, opts){
 
 
 /* ---------- auto-assign: data loading + UI ---------- */
+let _genderData = null;
+function loadGenderData(){
+  if (_genderData) return Promise.resolve(_genderData);
+  return fetch('gender-data.json?v=202607250130')
+    .then(r => { if (!r.ok) throw new Error('gender-data.json ' + r.status); return r.json(); })
+    .then(j => { _genderData = j; return j; })
+    .catch(() => { _genderData = {counties:{}}; return _genderData; });
+}
+const VIA_LABELS = ['Boys 11&under','Boys 12-13','Boys 14-15','Boys 16-18',
+                    'Girls 11&under','Girls 12-13','Girls 14-15','Girls 16-18'];
+
 let _autoData = null, _autoLoading = null;
 function loadAutoData(){
   if (_autoData) return Promise.resolve(_autoData);
@@ -2214,7 +2225,7 @@ function renderAutoDialog(){
               <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>size spread &mdash; lower is more even</span></div>
               <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest area</span></div>
               ${r.stats.travelMi!=null?`<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>`:''}
-              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest age group vs average</span></div>`:''}
+              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest ${esc(weakestGroup(r,true)||'age group')} field vs average</span></div>`:''}
               ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
             </div>
             ${(r.stats.hostless>0)?`<div class="bs-auto-err"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county big enough to host.</b>
@@ -2248,19 +2259,21 @@ function renderAutoDialog(){
 window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
 window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); AUTO.result=null; renderAutoDialog(); };
 window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); AUTO.result=null; renderAutoDialog(); };
-function weakestGroup(r){
+function weakestGroup(r, wantLabel){
   if (!r || !r.stats || !r.stats.ages || !r.stats.groupNeed) return null;
-  const N = r.stats.ages.length;
-  let worst = Infinity;
-  for (let i=0;i<N;i++) for (let g=0;g<4;g++){
+  const N = r.stats.ages.length, NG = r.stats.groupNeed.length;
+  let worst = Infinity, worstG = -1;
+  for (let i=0;i<N;i++) for (let g=0;g<NG;g++){
     // groupNeed is already scaled by the viability fraction; undo it so the
     // number shown is honestly "share of the average area", not of a threshold.
     const avg = r.stats.groupNeed[g] / (r.stats.viabilityFraction || 0.8);
     if (avg <= 0) continue;
     const rel = r.stats.ages[i][g] / avg;
-    if (rel < worst) worst = rel;
+    if (rel < worst){ worst = rel; worstG = g; }
   }
-  return isFinite(worst) ? worst : null;
+  if (!isFinite(worst)) return null;
+  if (wantLabel) return (NG === 8 && VIA_LABELS[worstG]) ? VIA_LABELS[worstG] : 'age group';
+  return worst;
 }
 function hostLabel(ci){
   if (!_autoData) return '';
@@ -2284,11 +2297,15 @@ window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoD
 window._bsAutoRun = function(){
   if (!_autoData) return;
   AUTO.busy = true; renderAutoDialog();
-  setTimeout(()=>{
+  loadGenderData().then(()=>setTimeout(()=>{
     try {
       const A = _autoData, y = S.year;
       const w = autoWeights(A, AUTO.basis);
+      // Gender-split cells when available, falling back to age-group-only.
+      const GD = _genderData && _genderData.counties;
       const ages = A.fips.map(f => {
+        const g8 = GD && GD[f] && GD[f][y];
+        if (g8) return g8.slice(0,8);
         const a = S.age && S.age[f] ? S.age[f][y] : null;
         return a ? [a[0]||0, a[1]||0, a[2]||0, a[3]||0] : [0,0,0,0];
       });
@@ -2327,7 +2344,7 @@ window._bsAutoRun = function(){
       AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
     AUTO.busy = false; renderAutoDialog();
-  }, 30);
+  }, 30));
 };
 
 window._bsAutoApply = function(){
