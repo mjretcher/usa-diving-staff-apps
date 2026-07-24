@@ -359,6 +359,11 @@ function renderRetention(){
     <td>${esc(x.membership_type)}</td>
     <td>${x.grp?`<span class="pill navy">${esc(x.grp)}</span>`:''}</td>
     <td>${esc(x.club)}</td><td>${esc(x.assoc)}</td><td>${esc(x.state||'')}</td></tr>`).join('');
+  const rosterBlock = rosterRows ? rosterRows :
+    `<tr><td colspan="9"><b>Names unavailable.</b> This list shows members by name, and the browser's
+      database role can no longer read name fields &mdash; that access was removed because this app's
+      credential is served publicly. The retention and churn figures above are unaffected and complete.
+      Restoring the list means routing this one query through the server-side proxy.</td></tr>`;
 
   el.innerHTML = kpis + `
   <div class="coverage-note"><b>Coverage:</b> every figure on this tab &mdash; retained, not-yet-renewed, the renewal rate, and the win-back list &mdash; counts <b>all membership types</b> (athletes, coaches, officials, and other). The one exception is the <b>&ldquo;by age group&rdquo;</b> table below, which is athletes-only by definition.</div>
@@ -377,7 +382,7 @@ function renderRetention(){
         <span class="note">Page ${lostState.page+1} / ${pages}</span>
         <button class="tab" id="lostPrev">&larr;</button><button class="tab" id="lostNext">&rarr;</button>
       </div>
-      <table><thead><tr><th>Name</th><th>2025 membership</th><th>Group</th><th>Club</th><th>Association</th><th>State</th></tr></thead><tbody>${rosterRows}</tbody></table>
+      <table><thead><tr><th>Name</th><th>2025 membership</th><th>Group</th><th>Club</th><th>Association</th><th>State</th></tr></thead><tbody>${rosterBlock}</tbody></table>
     </div>
     <div class="foot">Contact details are intentionally not stored in this system. Pull outreach contacts from Webpoint using Member ID / name.</div></div>`;
 

@@ -61,7 +61,7 @@ const S = {
   tierView: 0,          // which level the map + tallies are showing
   finalName: 'Junior Nationals',
   legendMode: 'members',// members | age | comp
-  panelMode: 'tally',   // tally | advance
+  panelMode: 'tally',   // 'advance' is withdrawn pending rule verification   // tally | advance
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
   scenarioId: null,
@@ -430,7 +430,7 @@ function renderPanel(){
     </div>
     <div class="seg bs-modeseg">
       <button id="bsModeTally" class="${S.panelMode==='tally'?'on':''}">Who lives here</button>
-      <button id="bsModeAdv" class="${S.panelMode==='advance'?'on':''}">Who moves up</button>
+      <button id="bsModeAdv" class="off" disabled title="Withdrawn pending rule verification">Who moves up</button>
     </div>
     <div id="bsBody"></div>
     ${renderNamesPanel()}
@@ -452,7 +452,7 @@ function renderPanel(){
     ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="note" style="margin-top:6px"><b>${esc(S.scenarioName)}</b> is a reference map. Saving will create a copy so the original stays intact.</div>` : ''}
     <div class="note" id="bsMsg"></div>`;
 
-  if (S.panelMode==='advance') renderAdvShell();
+  if (false /* advance panel withdrawn */) renderAdvShell();
   renderNumbers();
   wirePanel();
   loadScenarioList();
@@ -828,7 +828,7 @@ function renderLegend(t, mappableTotal, yLabel){
         <span class="ag-nums">${nums}<span class="ag-n"><b style="color:#64748b">B/G</b>${fmt(boys)}/${fmt(girls)}</span></span>
       </button>`;
     }).join('');
-    lgEl.innerHTML = `<div class="bs-lg-head"><b>${esc(tierLabel)}</b> &mdash; ${esc(poolLabel)} by event · <span class="bs-lg-hint">one entry per diver per event · change the pool under "Who moves up"</span></div>${key}<div class="bs-lg-cards age">${cards}</div>`;
+    lgEl.innerHTML = `<div class="bs-lg-head"><b>${esc(tierLabel)}</b> &mdash; ${esc(poolLabel)} by event</div>${key}<div class="bs-lg-cards age">${cards}</div>`;
     return;
   }
 
@@ -995,7 +995,7 @@ function wirePanel(){
   bind('bsLgAge', ()=>{S.legendMode='age'; renderNumbers();});
   bind('bsLgComp', ()=>{S.legendMode='comp'; renderNumbers();});
   bind('bsModeTally', ()=>{S.panelMode='tally'; renderPanel();});
-  bind('bsModeAdv', ()=>{S.panelMode='advance'; renderPanel();});
+  // bsModeAdv intentionally unbound: see the note on the disabled button.
 
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
@@ -2225,7 +2225,7 @@ function renderAutoDialog(){
               <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>size spread &mdash; lower is more even</span></div>
               <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest area</span></div>
               ${r.stats.travelMi!=null?`<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>`:''}
-              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest ${esc(weakestGroup(r,true)||'age group')} field vs average</span></div>`:''}
+              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest ${esc(weakestGroup(r,true)||'age group')} field vs average <b>(estimated)</b></span></div>`:''}
               ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
             </div>
             ${(r.stats.hostless>0)?`<div class="bs-auto-err"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county big enough to host.</b>
@@ -2234,6 +2234,9 @@ function renderAutoDialog(){
             ${(r.stats.chosenHost&&r.stats.chosenHost.some(x=>x>=0))?`
               <div class="bs-auto-legend"><b>Likely host counties:</b>
               ${r.stats.chosenHost.map((ci,i)=>ci>=0?hostLabel(ci):null).filter(Boolean).join(' · ')}</div>`:''}
+            <div class="bs-auto-legend"><b>Age/gender fields are estimates.</b> Gender is known for
+              about 45% of athletes (name-matched to competition results); the rest are split using
+              the observed local ratio. Use these to compare areas, not as counts.</div>
             <div class="bs-auto-legend">Areas are always connected &mdash; no area is ever left in
               two separate pieces. Alaska and Hawaii are left out of the travel figure, since those
               athletes fly whatever the map says.</div>
@@ -2424,7 +2427,7 @@ window.renderBoundary = async function(){
   S.adv = defaultAdv();
   syncLevels();
   el.innerHTML = `
-    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape. Switch to <b>Who moves up</b> to type in how many advance per age group and event.
+    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape.
     <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
       <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>
