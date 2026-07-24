@@ -771,6 +771,18 @@ ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestam
 -- to re-raise, killing every scheduled run on the same meet).
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_attempts integer NOT NULL DEFAULT 0;
 
+-- ScoresAndMore (Dive Live) coverage gaps: events whose results grid exceeded
+-- Zoho's 200-row cap and were therefore skipped rather than ingested partially.
+-- Lets the apps distinguish "this event had no entrants" from "we could not
+-- fetch this event".
+CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
+  meet_id  integer NOT NULL,
+  event_id integer NOT NULL,
+  reason   text,
+  noted_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (meet_id, event_id)
+);
+
 -- ═══════════════════════════════════════════════════════════════════════
 -- season_calendar.meet_deadlines — DiveMeets MeetInfo deadline pulls
 -- Populated by db/scripts/fetch_meet_deadlines.py

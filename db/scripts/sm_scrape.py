@@ -32,6 +32,9 @@ MEET_ID = os.environ.get("MEET_ID", "").strip()
 CRITERIA = os.environ.get("CRITERIA", "").strip()
 SLEEP_S = float(os.environ.get("SLEEP_S", "0.3"))
 
+# Events skipped because their results grid exceeded the 200-row cap.
+CAP_GAPS = []
+
 if not DB_URL:
     sys.exit("DATABASE_URL not set")
 
@@ -78,6 +81,94 @@ def find_col(header, *needles, exclude=()):
     return None
 
 
+# ------------------------------------------------------- grid cap splitting
+# Zoho's grid returns at most 200 rows and sm_zoho.rows() refuses to ingest a
+# possibly-truncated result. The documented remedy is to narrow the criteria,
+# so when a meet is large enough to cap we split it into disjoint windows and
+# concatenate. Windows are disjoint by construction, so concatenating cannot
+# double-count. Any row whose split field is empty would fall outside every
+# window, so we verify the recovered total against a probe and fail loudly
+# rather than ingest a silent gap.
+def _is_cap(e):
+    t = str(e)
+    return "GRID CAP HIT" in t or "PAGINATION NEEDED" in t
+
+
+def rows_split(v, table, base_crit, meet_id, label="rows"):
+    """Fetch base_crit, splitting by event date then session if the grid caps."""
+    try:
+        return v.rows(base_crit)
+    except RuntimeError as e:
+        if not _is_cap(e):
+            raise
+        print(f"  {label}: grid cap hit -- splitting by date")
+
+    dates = meet_dates(meet_id)
+    if not dates:
+        raise RuntimeError(
+            f"{label}: grid cap hit for {base_crit!r} and no meet date range is "
+            f"known for meet {meet_id}; cannot split safely")
+
+    out, header, capped_dates = [], None, []
+    for d in dates:
+        crit = f'{base_crit} and "{table}"."event_date"=\'{d}\''
+        try:
+            rows, hdr = v.rows(crit)
+        except RuntimeError as e:
+            if not _is_cap(e):
+                raise
+            capped_dates.append(d)
+            continue
+        header = header or hdr
+        out.extend(rows)
+        if rows:
+            print(f"    {d}: {len(rows)} rows")
+
+    # A single date that still caps gets split again by session.
+    for d in capped_dates:
+        print(f"    {d}: still caps -- splitting by session")
+        for sess in range(1, 21):
+            crit = (f'{base_crit} and "{table}"."event_date"=\'{d}\' '
+                    f'and "{table}"."session"={sess}')
+            try:
+                rows, hdr = v.rows(crit)
+            except RuntimeError as e:
+                if _is_cap(e):
+                    raise RuntimeError(
+                        f"{label}: {d} session {sess} still exceeds the grid cap; "
+                        f"a finer split is needed before this meet can be trusted")
+                raise
+            header = header or hdr
+            out.extend(rows)
+            if rows:
+                print(f"      {d} session {sess}: {len(rows)} rows")
+
+    if header is None:
+        raise RuntimeError(f"{label}: split produced no rows for {base_crit!r}")
+    print(f"  {label}: {len(out)} rows recovered across {len(dates)} date window(s)")
+    return out, header
+
+
+def meet_dates(meet_id):
+    """Inclusive list of ISO dates for a meet, from the already-scraped catalog."""
+    import psycopg2
+    conn = psycopg2.connect(DB_URL); cur = conn.cursor()
+    cur.execute("SELECT start_date, end_date FROM scoresandmore.meets WHERE meet_id=%s",
+                (int(meet_id),))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row or not row[0]:
+        return []
+    start, end = row[0], row[1] or row[0]
+    if end < start:
+        start, end = end, start
+    # Pad a day either side: sources occasionally carry an event dated just
+    # outside the advertised window.
+    start, end = start - timedelta(days=1), end + timedelta(days=1)
+    return [(start + timedelta(days=i)).isoformat()
+            for i in range((end - start).days + 1)]
+
+
 # --------------------------------------------------------------------- meet
 def scrape_meet(meet_id):
     ev_view, ev_table = view("meet_events")
@@ -86,7 +177,8 @@ def scrape_meet(meet_id):
     cp_view, cp_table = view("coach_points")
 
     crit_events = f'"{ev_table}"."meet_id"={meet_id}'
-    events, ev_header = ev_view.rows(crit_events)
+    events, ev_header = rows_split(ev_view, ev_table, crit_events, meet_id,
+                                   label="meet events")
     print(f"meet {meet_id}: {len(events)} event rows | header: {ev_header}")
 
     c_title = find_col(ev_header, "event", "title")
@@ -129,7 +221,16 @@ def scrape_meet(meet_id):
     all_res = []
     for i, event_id in enumerate(uniq_ids, 1):
         crit = f'"{res_table}"."event_id"={event_id}'
-        rows, res_header = res_view.rows(crit)
+        try:
+            rows, res_header = res_view.rows(crit)
+        except RuntimeError as e:
+            if not _is_cap(e):
+                raise
+            # Never ingest a truncated event silently: skip it and record the
+            # gap so it is queryable and can be surfaced in the apps.
+            print(f"  GAP: event {event_id} exceeds the 200-row grid cap -- skipped")
+            CAP_GAPS.append((int(meet_id), int(event_id), str(e)[:400]))
+            continue
         if i == 1:
             print(f"event results header: {res_header}")
             rc_place = find_col(res_header, "place")
@@ -207,6 +308,23 @@ def scrape_meet(meet_id):
           f"({len(uniq_ids)} unique), {n} result rows, "
           f"{ndid} distinct diver_ids, {ndname} distinct diver names, "
           f"{len(tp_ins)} team-point rows, {len(cp_ins)} coach-point rows")
+
+    # Persist (or clear) this meet's coverage gaps so downstream apps can tell
+    # a genuinely empty event from one we could not fetch.
+    import psycopg2
+    conn = psycopg2.connect(DB_URL); cur = conn.cursor()
+    cur.execute("DELETE FROM scoresandmore.scrape_gaps WHERE meet_id=%s", (int(meet_id),))
+    for mid, eid, reason in CAP_GAPS:
+        cur.execute(
+            """INSERT INTO scoresandmore.scrape_gaps (meet_id, event_id, reason)
+               VALUES (%s,%s,%s)
+               ON CONFLICT (meet_id, event_id) DO UPDATE
+                 SET reason = EXCLUDED.reason, noted_at = now()""",
+            (mid, eid, reason))
+    conn.commit(); cur.close(); conn.close()
+    if CAP_GAPS:
+        print(f"WARNING: {len(CAP_GAPS)} event(s) skipped for meet {meet_id} -- "
+              f"see scoresandmore.scrape_gaps")
 
 
 # ------------------------------------------------------------------ catalog
