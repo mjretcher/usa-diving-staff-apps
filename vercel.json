@@ -1,12 +1,45 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/", "destination": "/junior-results/index.html" },
-    { "source": "/data/config.js", "destination": "/data/config.vercel.js" }
+    {
+      "source": "/",
+      "destination": "/junior-results/index.html"
+    },
+    {
+      "source": "/data/config.js",
+      "destination": "/data/config.vercel.js"
+    }
   ],
   "redirects": [
-    { "source": "/criteria-simulator/:path*", "destination": "/junior-results/", "permanent": false },
-    { "source": "/athlete-evaluation/:path*", "destination": "/junior-results/", "permanent": false },
-    { "source": "/season-calendar/:path*", "destination": "/junior-results/", "permanent": false }
+    {
+      "source": "/criteria-simulator/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    },
+    {
+      "source": "/athlete-evaluation/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    },
+    {
+      "source": "/season-calendar/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    },
+    {
+      "source": "/membership-analytics/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    },
+    {
+      "source": "/schedule-builder/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    },
+    {
+      "source": "/hp-analytics/:path*",
+      "destination": "/junior-results/",
+      "permanent": false
+    }
   ]
 }
