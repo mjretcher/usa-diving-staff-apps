@@ -9,7 +9,11 @@ const BUILTIN_SCHEDULES = [{"id":"seed-zone-b","name":"2026 USA Diving Zone B Ch
 // ── CONFIG ────────────────────────────────────────────────────────────
 const SK='usa-diving-sb-v4',LK='usa-diving-sb-v4-lib';
 const EDITOR_ID=localStorage.getItem('sb-eid')||(()=>{const i='e'+Math.random().toString(36).slice(2,8);localStorage.setItem('sb-eid',i);return i})();
-const NEON='postgresql://neondb_owner:npg_SN1ULPtYhC6J@ep-holy-bird-aj5deo63-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require';
+// Credential is read from data/config.js (loaded before this file in index.html)
+// so a role rotation only ever has to happen in one place. This line used to
+// hardcode the owner credential; when that role was rotated on 2026-07-24 every
+// client silently went offline and saves stopped reaching the cloud.
+const NEON=(window.USAD_CONFIG&&window.USAD_CONFIG.neon&&window.USAD_CONFIG.neon.connectionString)||'';
 const STATUS=['draft','review','ready','published'];
 const STATUS_LBL={draft:'Draft',review:'In Review',ready:'Ready',published:'Published'};
 const TZS=[{v:'America/New_York',l:'Eastern (ET)',s:'ET'},{v:'America/Chicago',l:'Central (CT)',s:'CT'},{v:'America/Denver',l:'Mountain (MT)',s:'MT'},{v:'America/Los_Angeles',l:'Pacific (PT)',s:'PT'}];
@@ -133,6 +137,7 @@ async function nq(sql,params=[]){
     // doesn't trigger the preflight Content-Type check. Neon parses body as JSON
     // regardless of Content-Type. (This is how Neon's official serverless driver
     // works under the hood.)
+    if(!NEON){const e=new Error('Config not loaded — data/config.js missing, blocked, or stale in cache');e._kind='network';console.error('[Neon] no connection string in USAD_CONFIG');throw e;}
     r=await fetch('https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql',{
       method:'POST',
       headers:{
