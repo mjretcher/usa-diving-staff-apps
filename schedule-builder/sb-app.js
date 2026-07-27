@@ -440,7 +440,122 @@ function snapshot(){return JSON.stringify(S)}
 function pushUndo(){undoStack.push(snapshot());if(undoStack.length>UNDO_MAX)undoStack.shift();redoStack=[]}
 function undo(){if(!undoStack.length){toast('Nothing to undo');return}redoStack.push(snapshot());S=JSON.parse(undoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Undone')}
 function redo(){if(!redoStack.length){toast('Nothing to redo');return}undoStack.push(snapshot());S=JSON.parse(redoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Redone')}
-function upd(fn){pushUndo();fn(S);saveS();if(S.currentLibraryId)scheduleSave();render()}
+// ── LOCKING ───────────────────────────────────────────────────────────
+// Two switches, both saved with the schedule so a lock travels with the meet to every
+// device and every member of staff:
+//   S.locked   — the whole schedule: every day, the day list, and the meet details
+//   day.locked — one single day
+//
+// A locked day is read-only. Times, blocks, events, entry counts, buffers, pool hours,
+// drag-and-drop and deletions are all refused. Everything you do to READ the schedule
+// still works: preview, coach handouts, printing, exports, presentation mode, the
+// health panel, entries in view-only form.
+//
+// Locking is one tap. UNLOCKING always asks first, and that asymmetry is the whole
+// point: on a phone the thing that quietly wrecks a published schedule is one stray
+// tap, so an unlock that also took one tap would be exactly as easy to hit by accident
+// as the edit it was supposed to prevent.
+function meetLocked(){return !!S.locked}
+function dayLocked(dayId){
+  if(S.locked)return true;
+  const d=((S.meet&&S.meet.days)||[]).find(x=>x.id===dayId);
+  return !!(d&&d.locked);
+}
+function sessionLocked(sessId){
+  const sess=(S.sessions||[]).find(x=>x.id===sessId);
+  return sess?dayLocked(sess.dayId):meetLocked();
+}
+function anyLocked(){return !!(S.locked||((S.meet&&S.meet.days)||[]).some(d=>d.locked))}
+function lockedDayCount(){
+  const days=((S.meet&&S.meet.days)||[]);
+  return S.locked?days.length:days.filter(d=>d.locked).length;
+}
+function lockedIdsOf(st){
+  const days=((st.meet&&st.meet.days)||[]);
+  return st.locked?days.map(d=>d.id):days.filter(d=>d.locked).map(d=>d.id);
+}
+// A fingerprint of exactly what a given set of locks protects. `locked` flags are
+// normalised out of it so the lock toggles themselves are never seen as a violation.
+function protectedFingerprint(st,ids,includeMeet){
+  const days=((st.meet&&st.meet.days)||[]);
+  const fp={};
+  fp._meet=includeMeet?JSON.stringify({...st.meet,days:days.map(d=>({...d,locked:null}))}):'';
+  ids.forEach(id=>{
+    const d=days.find(x=>x.id===id)||{};
+    fp[id]=JSON.stringify({
+      date:d.date,openMinutes:d.openMinutes,closeMinutes:d.closeMinutes,eventTag:d.eventTag,
+      sessions:(st.sessions||[]).filter(x=>x.dayId===id)
+    });
+  });
+  return JSON.stringify(fp);
+}
+// Did a change touch anything the locks protected? Uses the lock set as it was BEFORE
+// the change, so nothing can unlock a day and edit it in the same breath.
+function lockViolation(before,after){
+  const ids=lockedIdsOf(before);
+  if(!ids.length)return false;
+  const meet=!!before.locked;
+  return protectedFingerprint(before,ids,meet)!==protectedFingerprint(after,ids,meet);
+}
+function lockRefused(){
+  toast(S.locked
+    ?'The whole schedule is locked. Tap the padlock in the top bar to unlock it.'
+    :'This day is locked. Tap the padlock on the day toolbar to unlock it.',4200);
+}
+// Lock changes deliberately bypass the guard in upd() — they are the one thing a lock
+// must not be able to block.
+function applyLockChange(fn,msg){
+  pushUndo();fn(S);saveS();if(S.currentLibraryId)scheduleSave();render();if(msg)toast(msg,3600);
+}
+function toggleMeetLock(){
+  if(!S.locked){
+    applyLockChange(s=>{s.locked=true},'Whole schedule locked \u2014 nothing can be changed until you unlock it');
+    return;
+  }
+  askConfirm({
+    title:'Unlock the whole schedule?',
+    message:'Every day becomes editable again, including any day you locked on its own. Lock it back when you\u2019re done.',
+    confirmText:'Unlock schedule',
+    onConfirm:()=>applyLockChange(s=>{s.locked=false},'Schedule unlocked \u2014 changes are allowed again')
+  });
+}
+function toggleDayLock(dayId){
+  const day=((S.meet&&S.meet.days)||[]).find(d=>d.id===dayId);if(!day)return;
+  if(S.locked){toast('The whole schedule is locked \u2014 unlock it in the top bar first',4200);return;}
+  if(!day.locked){
+    applyLockChange(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d)d.locked=true},
+      fullDate(day.date)+' locked \u2014 nothing on this day can be changed');
+    return;
+  }
+  askConfirm({
+    title:'Unlock this day?',
+    message:fullDate(day.date)+' becomes editable again.',
+    confirmText:'Unlock day',
+    onConfirm:()=>applyLockChange(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d)d.locked=false},
+      fullDate(day.date)+' unlocked \u2014 changes are allowed again')
+  });
+}
+
+// Every edit in the app funnels through here. When anything is locked, the change is
+// applied and then checked: if it touched a locked day the WHOLE change is rolled back,
+// including the undo entry it created. Guarding here rather than at each of the ~65 call
+// sites means a locked day is safe from every existing path — drag-and-drop, delete,
+// re-stack, copy-day, prefill, DiveMeets entry sync — and from any path added later.
+function upd(fn){
+  const guard=anyLocked()?snapshot():null;
+  pushUndo();
+  fn(S);
+  if(guard){
+    const before=JSON.parse(guard);
+    if(lockViolation(before,S)){
+      S=before;
+      undoStack.pop();
+      render();lockRefused();
+      return;
+    }
+  }
+  saveS();if(S.currentLibraryId)scheduleSave();render();
+}
 
 // ── KEYBOARD SHORTCUTS ───────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
@@ -1062,7 +1177,8 @@ function blocksOutsideHours(dayId){
   const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
   return timedForDay(dayId).filter(s=>s.timing.warmupStartMinutes<open||s.timing.sessionEndMinutes>close).length;
 }
-function openFacilityHours(dayId){UI.modal='facility-hours';UI.hoursDayId=dayId||UI.dayId;render();}
+function openFacilityHours(dayId){
+  if(dayLocked(dayId)){lockRefused();return;}UI.modal='facility-hours';UI.hoursDayId=dayId||UI.dayId;render();}
 // Copy this day's hours onto every other day — venues rarely change their hours
 // mid-meet, so setting them once and stamping them across is the common case.
 function applyHoursToAllDays(dayId){
@@ -1294,6 +1410,7 @@ function normalizeAllDays(stateSnap){
 // one above it ends, plus that session's buffer. This is the auto-stacker run on
 // demand — it is exactly what used to happen invisibly on load.
 function restackDay(dayId){
+  if(dayLocked(dayId)){lockRefused();return;}
   const count=S.sessions.filter(x=>x.dayId===dayId&&!isParallel(x)).length;
   if(count<2){toast('Nothing to re-stack — this day only has one block');return;}
   askConfirm({
@@ -1309,6 +1426,7 @@ function restackDay(dayId){
 }
 // Same thing for the whole meet.
 function restackAllDays(){
+  if(anyLocked()){lockRefused();return;}
   askConfirm({
     title:'Re-stack every day?',
     message:'Every block in the meet will be moved to start as soon as the one above it ends, plus that block\u2019s buffer. Start times you typed by hand and deliberate gaps will be replaced. You can undo with Cmd+Z.',
@@ -1324,6 +1442,7 @@ function restackAllDays(){
 // For days that are all (or mostly) Open Training / Flighted Warm-Up blocks with no
 // gaps needed between them, rather than clicking the buffer chip to "0" one session at a time.
 function zeroBuffersForDay(dayId){
+  if(dayLocked(dayId)){lockRefused();return;}
   const count=S.sessions.filter(x=>x.dayId===dayId).length;
   if(count<2){toast('Nothing to pack — this day only has one session');return;}
   askConfirm({
@@ -2136,7 +2255,7 @@ function render(){
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
     <div class="workspace">
-      <div class="tl-wrap">${renderTlBar(timed)}${renderTimeline(timed)}</div>
+      <div class="tl-wrap ${dayLocked(UI.dayId)?'day-locked':''}">${renderTlBar(timed)}${renderLockBanner()}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
     ${UI.editSessId?renderEditModal(timed):''}
@@ -2226,7 +2345,7 @@ function renderPreviewPanel(timed){
 function renderBar(timed){
   const tz=TZS.find(t=>t.v===S.meet.timezone)||TZS[0];
   const st=S.publishStatus||'draft';
-  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'});const dn=isNaN(dd)?'':dd.getDate();return`<button class="dp ${d.id===UI.dayId?'active':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span></button>`}).join('');
+  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'});const dn=isNaN(dd)?'':dd.getDate();const dlk=dayLocked(d.id);return`<button class="dp ${d.id===UI.dayId?'active':''} ${dlk?'locked':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}${dlk?' — locked, read-only':''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span>${dlk?`<span class="dp-lock" aria-label="locked">\u{1F512}</span>`:''}</button>`}).join('');
   const conflicts=detectConflicts();
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
@@ -2249,6 +2368,14 @@ function renderBar(timed){
             <div class="bm-hint">Tip: Ctrl+K opens the command palette</div>
           </div>`:''}
         </div>
+        ${(()=>{const ml=meetLocked();const n=lockedDayCount(),total=(S.meet.days||[]).length;
+          const partial=!ml&&n>0;
+          const lbl=ml?'Locked':partial?`${n} of ${total} days locked`:'Lock';
+          const tip=ml
+            ?'The whole schedule is locked and cannot be changed. Click to unlock (you will be asked to confirm).'
+            :partial?`${n} day${n===1?'':'s'} locked individually. Click to lock the whole schedule so nothing anywhere can be changed.`
+            :'Lock the whole schedule so nothing can be changed by accident. You can also lock a single day from the day toolbar.';
+          return`<button class="bb lock-chip ${ml?'on':partial?'partial':''}" onclick="toggleMeetLock()" title="${esc(tip)}">${ml?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 017-2.6"/></svg>'}<span class="lock-lbl">${esc(lbl)}</span></button>`})()}
         ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
         <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
         <div class="bar-sep"></div>
@@ -2279,7 +2406,11 @@ function renderTlBar(timed){
   const dayStart=daySess.length?Math.min(...daySess.map(s=>s.timing.warmupStartMinutes)):null;
   const dayEnd=daySess.length?Math.max(...daySess.map(s=>s.timing.sessionEndMinutes)):null;
   const comp=daySess.filter(s=>!s.isPractice).length;
-  return`<div class="tl-bar">
+  // On a locked day every editing control is removed rather than just disabled, so
+  // there is nothing on screen to tap by mistake. Reading tools all stay.
+  const lk=day?dayLocked(UI.dayId):false;
+  const mlk=meetLocked();
+  return`<div class="tl-bar ${lk?'is-locked':''}">
     <span class="tl-title">${day?fullDate(day.date):'Schedule'}</span>
     ${anyEventTags()?`<div class="evf-row">
       <button class="evf-chip ${!UI.eventFilter?'on':''}" onclick="UI.eventFilter=null;render()">All</button>
@@ -2287,15 +2418,30 @@ function renderTlBar(timed){
       <button class="evf-chip ${UI.eventFilter==='shared'?'on':''}" onclick="UI.eventFilter='shared';render()">Shared</button>
     </div>`:''}
     <div class="tl-spacer"></div>
-    ${day?`<button class="tl-hours ${blocksOutsideHours(UI.dayId)?'warn':''}" onclick="openFacilityHours('${UI.dayId}')" title="Set when the pool opens and closes on this day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pool ${f12(dayOpenFor(UI.dayId))} – ${f12(dayCloseFor(UI.dayId))}</button>`:''}
+    ${day?`<button class="tl-hours ${blocksOutsideHours(UI.dayId)?'warn':''}" ${lk?'disabled':`onclick="openFacilityHours('${UI.dayId}')"`} title="Set when the pool opens and closes on this day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pool ${f12(dayOpenFor(UI.dayId))} – ${f12(dayCloseFor(UI.dayId))}</button>`:''}
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
     ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCoachHandout('${UI.dayId}')" title="Print coach handout — one page for the pool door"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCopyDay('${UI.dayId}')" title="Copy this day's schedule to another day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`:''}
-    ${daySess.length>1?`<button class="tl-iconbtn" onclick="restackDay('${UI.dayId}')" title="Re-stack this day — start each block as soon as the one above it ends, plus its buffer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/><path d="M17 9l3-3-3-3"/></svg></button>`:''}
-    ${daySess.length>1?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
+    ${daySess.length>1&&!lk?`<button class="tl-iconbtn" onclick="restackDay('${UI.dayId}')" title="Re-stack this day — start each block as soon as the one above it ends, plus its buffer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/><path d="M17 9l3-3-3-3"/></svg></button>`:''}
+    ${daySess.length>1&&!lk?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
     <button class="tl-iconbtn ${UI.previewOpen?'active':''}" onclick="UI.previewOpen=!UI.previewOpen;if(UI.previewOpen){UI.editSessId=null;UI.entriesOpen=false}render()" title="Quick preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
-    <button class="tl-addbtn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Add block</button>
+    ${day?`<button class="tl-lockbtn ${lk?'on':''}" onclick="${mlk?'toggleMeetLock()':`toggleDayLock('${UI.dayId}')`}" title="${mlk?'The whole schedule is locked. Click to unlock everything.':lk?'This day is locked and cannot be changed. Click to unlock it.':'Lock this day so nothing on it can be changed by accident.'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/>${lk?'<path d="M8 11V7a4 4 0 018 0v4"/>':'<path d="M8 11V7a4 4 0 017-2.6"/>'}</svg><span>${lk?'Locked':'Lock day'}</span></button>`:''}
+    ${lk?'':`<button class="tl-addbtn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Add block</button>`}
+  </div>`;
+}
+
+// Plain-English explanation of why the day cannot be edited, and the way out.
+function renderLockBanner(){
+  if(!dayLocked(UI.dayId))return'';
+  const whole=meetLocked();
+  return`<div class="lock-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+    <div class="lb-txt">
+      <b>${whole?'The whole schedule is locked':'This day is locked'}</b>
+      <span>Nothing here can be changed \u2014 times, blocks, entries and pool hours are all held as they are. You can still preview, print, export and check schedule health.</span>
+    </div>
+    <button class="lb-btn" onclick="${whole?'toggleMeetLock()':`toggleDayLock('${UI.dayId}')`}">${whole?'Unlock schedule':'Unlock this day'}</button>
   </div>`;
 }
 
@@ -3066,10 +3212,10 @@ function renderEntriesPanel(timed){
       const usingFinal=finlSet;
       rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-cell"><input type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
         <td class="feg-using">${finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':''}</td>
@@ -3110,6 +3256,7 @@ let _entryDirty=false;
 let _entryDirtyDays=new Set();
 function setEntry(sessId,evId,field,value){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
+  if(dayLocked(sess.dayId)){lockRefused();render();return;}
   const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
   // Empty string = unset (null); any number including 0 is a real value
   const v=(value===''||value==null)?null:Number(value);
@@ -3257,7 +3404,7 @@ function commitEntries(){
   // Re-flow ONLY the days whose entry counts changed, so each session on those days
   // auto-starts after the previous one ends + buffer. Days the user never touched keep
   // the times they were saved with.
-  _entryDirtyDays.forEach(dayId=>reflowDay(S,dayId));
+  _entryDirtyDays.forEach(dayId=>{if(!dayLocked(dayId))reflowDay(S,dayId)});
   _entryDirtyDays.clear();
   saveS();if(S.currentLibraryId)scheduleSave();
   render();
@@ -3305,6 +3452,7 @@ function renderSyncDot(){saveS();if(S.currentLibraryId)scheduleSave()}
 
 // ── ADD MENU ──────────────────────────────────────────────────────────
 function showAddMenu(){
+  if(dayLocked(UI.dayId)){lockRefused();return;}
   if(!UI.dayId){toast('Add a day first');return}
   UI.modal='add-block';render();
 }
@@ -4174,6 +4322,7 @@ function moveSessionToDay(sessId,dayId){
 // last. Repeated day structures (identical warm-up/practice patterns) become
 // one click instead of rebuilding block by block.
 function openCopyDay(dayId){
+  if(meetLocked()){lockRefused();return;}
   UI.copyDaySourceId=dayId;
   UI.copyDayTargetId=null;
   UI.modal='copy-day';
