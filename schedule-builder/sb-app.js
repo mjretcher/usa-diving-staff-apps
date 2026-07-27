@@ -117,6 +117,29 @@ const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)retu
 
 // ── NEON ──────────────────────────────────────────────────────────────
 let sync={ok:false,saving:false,err:null},saveTimer=null,lastSynced=null;
+// Record — in the SAVED state, not just in memory — the server-clock revision of the
+// cloud copy this browser last agreed with, and clear the "has unpushed edits" flag.
+//
+// This has to survive a page refresh. `lastSynced` used to be a plain module variable
+// that reset to null on every boot, and the poll in startSync() below is gated on
+// `lastSynced && cloud > lastSynced` — so on a fresh page load that test could never
+// pass and the app never re-read the cloud. It just kept running from whatever was in
+// localStorage, and the next edit pushed that copy back up. Persisting the marker lets
+// the very first poll after a refresh notice the cloud has moved on and pull it.
+//
+// Always a SERVER timestamp (Postgres now()), never the client clock — comparing the
+// two is what clock skew breaks.
+function markSynced(serverIso){
+  // Neon hands back "2026-07-27 12:00:00+00" (space separator, 2-digit offset). Bare
+  // new Date() on that is Invalid Date in Safari, and .toISOString() on an Invalid Date
+  // throws — which would abort the caller mid-sync. parseNeonTimestamp normalizes it.
+  const d=serverIso?parseNeonTimestamp(String(serverIso)):null;
+  const iso=(d&&!isNaN(d.getTime()))?d.toISOString():new Date().toISOString();
+  lastSynced=iso;
+  S.lastSyncedAt=iso;
+  S.dirty=false;
+  try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
+}
 async function nq(sql,params=[]){
   let r;
   const _proxy = window.USAD_CONFIG && window.USAD_CONFIG.neon && window.USAD_CONFIG.neon.proxy === true;
@@ -222,7 +245,12 @@ async function checkForUpdate(){
 // First check 60s after load (avoid flashing on initial hit), then every 5 min
 setTimeout(checkForUpdate,60000);
 setInterval(checkForUpdate,300000);
-function scheduleSave(){clearTimeout(saveTimer);setSyncDot('saving');saveTimer=setTimeout(doSave,3000)}
+// Every real user edit funnels through here. Flag the local copy as carrying work the
+// server has not confirmed yet, and persist that flag immediately so it survives a
+// refresh — the poll in startSync() uses it to know it must not pull a remote copy
+// over the top of unpushed edits. Deliberately NOT set by saveS(), which also runs for
+// load-time data repairs (initUI's rulebook re-lock) that are not user edits.
+function scheduleSave(){clearTimeout(saveTimer);S.dirty=true;try{localStorage.setItem(SK,JSON.stringify(S))}catch{}setSyncDot('saving');saveTimer=setTimeout(doSave,3000)}
 async function doSave(){
   if(!S.currentLibraryId)return;
   try{
@@ -232,7 +260,7 @@ async function doSave(){
     // is exactly the kind of thing clock skew / network latency breaks —
     // this was intermittently making the poll below mistake this save for
     // someone else's edit and silently reload mid-keystroke.
-    lastSynced=r.rows?.[0]?.[0]?new Date(r.rows[0][0]).toISOString():new Date().toISOString();
+    markSynced(r.rows?.[0]?.[0]);
     sync.ok=true;sync.err=null;setSyncDot('ok');
   }catch(e){sync.err=e.message;setSyncDot('error')}
 }
@@ -242,8 +270,7 @@ async function saveToNeon(name,folder){
   setSyncDot('saving');
   try{
     const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
-    lastSynced=r.rows?.[0]?.[0]?new Date(r.rows[0][0]).toISOString():new Date().toISOString();
-    sync.ok=true;sync.err=null;saveS();setSyncDot('ok');startSync();saveVersion('Manual save');
+    sync.ok=true;sync.err=null;saveS();markSynced(r.rows?.[0]?.[0]);setSyncDot('ok');startSync();saveVersion('Manual save');
     return true;
   }catch(e){
     sync.err=e.message;setSyncDot('error');
@@ -302,11 +329,28 @@ async function loadFromNeon(id,opts={}){
     const loaded=typeof rows[0][0]==='string'?JSON.parse(rows[0][0]):rows[0][0];
     S=loaded;S.currentLibraryId=id;
     if(rows[0][2])S.libraryFolder=rows[0][2];
-    normalizeAllDays(S);saveS();lastSynced=new Date(rows[0][1]).toISOString();
+    normalizeAllDays(S);saveS();markSynced(rows[0][1]);
     if(!opts.silent){UI.modal=null;initUI();render();toast('Schedule loaded');}else render();return loaded;}
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
-let presT=null,pollT=null,_pollFailures=0;
+let presT=null,pollT=null,_pollFailures=0,_conflictNoticed=false;
+// Snapshot whatever is currently in the cloud into version history, WITHOUT loading it,
+// so a copy we are about to overwrite is always recoverable from Version history.
+async function archiveRemoteVersion(id){
+  try{
+    await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)
+              SELECT id,$2,data,now() FROM schedule_builder.schedules WHERE id=$1`,
+             [id,'Cloud copy replaced by another browser\u2019s unsaved edits']);
+  }catch(e){
+    // Table may not exist yet — same fallback saveVersion() uses.
+    try{
+      await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
+      await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)
+                SELECT id,$2,data,now() FROM schedule_builder.schedules WHERE id=$1`,
+               [id,'Cloud copy replaced by another browser\u2019s unsaved edits']);
+    }catch(e2){console.warn('Could not archive remote version before overwrite:',e2.message)}
+  }
+}
 async function startSync(){
   clearInterval(presT);clearTimeout(pollT);
   _pollFailures=0;
@@ -316,14 +360,31 @@ async function startSync(){
     if(!S.currentLibraryId)return;
     try{
       const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);
-      if(r.rows?.length&&lastSynced&&new Date(r.rows[0][0]).toISOString()>lastSynced){
+      const _remote=r.rows?.length?parseNeonTimestamp(String(r.rows[0][0])):null;
+      if(_remote&&!isNaN(_remote.getTime())&&lastSynced&&_remote.toISOString()>lastSynced){
         // Safety net: never silently reload (and blow away in-progress,
         // not-yet-committed typing) while someone's actively in a text
         // field. If they are, skip this cycle — the next poll 8s later
         // will pick up the remote change once they've paused or blurred.
         const active=document.activeElement;
         const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
-        if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
+        if(!isTyping){
+          if(S.dirty){
+            // Both sides moved: this browser has edits that never reached the cloud
+            // (offline, or the tab closed inside the 3s save debounce) AND the cloud
+            // has changed since we last agreed with it. Never silently pick a winner.
+            // Archive the cloud copy to version history so it is recoverable, then
+            // push what is on screen, which is the work the user can actually see.
+            if(!_conflictNoticed){
+              _conflictNoticed=true;
+              await archiveRemoteVersion(S.currentLibraryId);
+              await doSave();
+              toast('This browser had unsaved edits and the cloud copy had also changed. Your on-screen version was kept and pushed; the other copy is in Version history.',9000);
+            }
+          }else{
+            await loadFromNeon(S.currentLibraryId,{silent:true});
+          }
+        }
       }
       sync.ok=true;sync.err=null;setSyncDot('ok');
       // Came back online: also push any pending local changes
@@ -1202,9 +1263,22 @@ function reflowDay(stateSnap,dayId){
   }
   positionParallels(stateSnap,dayId);
 }
-// Reflow every day at once. Used after loading a schedule, undo/redo, or anywhere
-// a bulk import could leave gaps between sessions (e.g. Open Training → next session).
-// This is the "normalize" pass — every day is laid out back-to-back per session buffers.
+// Runs on EVERY load path: cloud load, page refresh/boot, local library, template,
+// version restore, undo/redo.
+//
+// This pass MUST be lossless with respect to time. What you saved is what you see
+// when you come back. It used to end with reflowDay() on every day, which silently
+// re-packed every session back-to-back on load — so any hand-typed session start
+// time or deliberate gap (a published 4:00 PM finals block, a lunch break, an
+// afternoon open-training window) was overwritten the moment the page was refreshed,
+// and the schedule-health flags moved with it. The cloud copy stayed correct, which
+// is why it looked like "the times revert on refresh".
+//
+// Session times now change only in response to an edit the user actually makes.
+// To re-pack on purpose, use "Re-stack times" (restackDay / restackAllDays) or the
+// "remove buffers" control on a day.
+//
+// The only thing this pass does now is repair stale DATA carried by older saves.
 function normalizeAllDays(stateSnap){
   const st=stateSnap||S;
   if(!st||!st.meet||!Array.isArray(st.meet.days))return;
@@ -1214,7 +1288,37 @@ function normalizeAllDays(stateSnap){
   (st.sessions||[]).forEach(sess=>(sess.events||[]).forEach(ev=>{
     if(ev.level==='National Qualifier'&&ev.round&&ev.round!=='Qualifier')ev.round='Qualifier';
   }));
-  st.meet.days.forEach(d=>reflowDay(st,d.id));
+}
+
+// Explicit, user-initiated re-stack of ONE day: every session starts as soon as the
+// one above it ends, plus that session's buffer. This is the auto-stacker run on
+// demand — it is exactly what used to happen invisibly on load.
+function restackDay(dayId){
+  const count=S.sessions.filter(x=>x.dayId===dayId&&!isParallel(x)).length;
+  if(count<2){toast('Nothing to re-stack — this day only has one block');return;}
+  askConfirm({
+    title:'Re-stack this day?',
+    message:'Every block on this day will be moved to start as soon as the one above it ends, plus that block\u2019s buffer. Start times you typed by hand will be replaced. You can undo with Cmd+Z.',
+    confirmText:'Re-stack times',
+    danger:true,
+    onConfirm:()=>{
+      upd(s=>{reflowDay(s,dayId);});
+      toast('Day re-stacked back-to-back');
+    }
+  });
+}
+// Same thing for the whole meet.
+function restackAllDays(){
+  askConfirm({
+    title:'Re-stack every day?',
+    message:'Every block in the meet will be moved to start as soon as the one above it ends, plus that block\u2019s buffer. Start times you typed by hand and deliberate gaps will be replaced. You can undo with Cmd+Z.',
+    confirmText:'Re-stack whole meet',
+    danger:true,
+    onConfirm:()=>{
+      upd(s=>{s.meet.days.forEach(d=>reflowDay(s,d.id));});
+      toast('All days re-stacked back-to-back');
+    }
+  });
 }
 // Zero out the buffer on every session for a given day and pack them back-to-back.
 // For days that are all (or mostly) Open Training / Flighted Warm-Up blocks with no
@@ -2188,6 +2292,7 @@ function renderTlBar(timed){
     ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCoachHandout('${UI.dayId}')" title="Print coach handout — one page for the pool door"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCopyDay('${UI.dayId}')" title="Copy this day's schedule to another day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>`:''}
+    ${daySess.length>1?`<button class="tl-iconbtn" onclick="restackDay('${UI.dayId}')" title="Re-stack this day — start each block as soon as the one above it ends, plus its buffer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/><path d="M17 9l3-3-3-3"/></svg></button>`:''}
     ${daySess.length>1?`<button class="tl-iconbtn" onclick="zeroBuffersForDay('${UI.dayId}')" title="Remove buffers for this day — pack all sessions back-to-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h4M4 12h6M4 17h4M20 7h-4M20 12h-6M20 17h-4"/><path d="M14 12h-4"/></svg></button>`:''}
     <button class="tl-iconbtn ${UI.previewOpen?'active':''}" onclick="UI.previewOpen=!UI.previewOpen;if(UI.previewOpen){UI.editSessId=null;UI.entriesOpen=false}render()" title="Quick preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="tl-addbtn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg> Add block</button>
@@ -3000,6 +3105,9 @@ function renderEntriesPanel(timed){
 // the user is actively typing into, which causes the "flash" and dropped keystrokes.
 // Full render only happens on Tab/Enter/blur/close via commitEntries().
 let _entryDirty=false;
+// Which days an entry edit actually touched. Editing entry counts on Aug 3 must not
+// re-stack Aug 11 — only the days whose durations really changed get re-flowed.
+let _entryDirtyDays=new Set();
 function setEntry(sessId,evId,field,value){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
   const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
@@ -3023,6 +3131,7 @@ function setEntry(sessId,evId,field,value){
   // Re-flow this day immediately so session times update as user types
   reflowDay(S,sess.dayId);
   _entryDirty=true;
+  _entryDirtyDays.add(sess.dayId);
   saveS();
   // Surgical DOM update — refresh the time/badge text only, leaving the
   // focused <input> element untouched so the user's typing isn't disturbed.
@@ -3145,8 +3254,11 @@ document.addEventListener('focusout',function(e){
 function commitEntries(){
   if(!_entryDirty)return;
   _entryDirty=false;
-  // Re-flow every day so each session auto-starts after the previous one ends + buffer
-  S.meet.days.forEach(d=>reflowDay(S,d.id));
+  // Re-flow ONLY the days whose entry counts changed, so each session on those days
+  // auto-starts after the previous one ends + buffer. Days the user never touched keep
+  // the times they were saved with.
+  _entryDirtyDays.forEach(dayId=>reflowDay(S,dayId));
+  _entryDirtyDays.clear();
   saveS();if(S.currentLibraryId)scheduleSave();
   render();
 }
@@ -3591,6 +3703,8 @@ function paletteCommands(){
   cmds.push({label:(UI.timeScale?'Switch to list view':'Switch to time-scale view'),hint:'view',run:()=>{UI.palette=null;UI.timeScale=!UI.timeScale;render()}});
   cmds.push({label:'Presentation mode',hint:'view',run:()=>{UI.palette=null;openPresentation()}});
   cmds.push({label:'Schedule health',hint:'check',run:()=>{UI.palette=null;UI.modal='conflicts';render()}});
+  cmds.push({label:'Re-stack this day (times back-to-back)',hint:'times',run:()=>{UI.palette=null;render();restackDay(UI.dayId)}});
+  cmds.push({label:'Re-stack whole meet (times back-to-back)',hint:'times',run:()=>{UI.palette=null;render();restackAllDays()}});
   cmds.push({label:'Export — full meet handout',hint:'export',run:()=>{UI.palette=null;render();openMeetHandout()}});
   cmds.push({label:'Export — Excel workbook',hint:'export',run:()=>{UI.palette=null;render();exportMeetExcel()}});
   cmds.push({label:'Print this day (coach handout)',hint:'export',run:()=>{UI.palette=null;render();openCoachHandout(UI.dayId)}});
@@ -5295,9 +5409,13 @@ function dl(html,type,name){const blob=new Blob([html],{type});const a=document.
 const ps=document.createElement('style');ps.textContent='@media print{body *{visibility:hidden}#printPreview,#printPreview *{visibility:visible}#printPreview{position:absolute;left:0;top:0;width:100%}.modal-bg{position:absolute;background:white;display:block}.modal{width:100%;max-width:none;max-height:none;box-shadow:none;border:none}}';document.head.appendChild(ps);
 
 // ── BOOT ──────────────────────────────────────────────────────────────
-// Tighten any saved gaps between sessions (esp. Open Training → next session)
-// before the first paint, so the user sees a clean back-to-back layout on load.
-normalizeAllDays(S);saveS();
+// Repair stale data from older saves before the first paint. This does NOT touch
+// session times — a refresh shows exactly the times that were saved.
+normalizeAllDays(S);
+// Carry the server-clock sync marker across the refresh, so the first poll can tell
+// whether the cloud moved on while this tab was closed.
+lastSynced=S.lastSyncedAt||null;
+saveS();
 if(S.currentLibraryId)startSync();
 render();
 
