@@ -233,6 +233,33 @@ tr:hover td{background:#f7fafd}
 .tc-table tr.grand td{background:#eef3fa;font-weight:800;border-top:2px solid #c8d4e6}
 .tc-table tr.sub td{font-weight:700;background:#f7fafd}
 .clubs-wrap{max-height:560px;overflow:auto}
+/* Club Health tab */
+.cl-step{padding:14px 0;border-bottom:1px dashed var(--line)}
+.cl-step:last-of-type{border-bottom:0}
+.cl-step-h{font-family:var(--display);font-size:17px;letter-spacing:.05em;text-transform:uppercase;color:var(--navy);margin-bottom:9px}
+.cl-flow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cl-node{background:#f6f9fd;border:1px solid var(--line);border-radius:12px;padding:9px 16px;text-align:center;min-width:88px}
+.cl-node b{display:block;font-family:var(--display);font-weight:800;font-size:30px;line-height:1;color:var(--navy)}
+.cl-node span{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.cl-node.end{background:var(--navy);border-color:var(--navy)}
+.cl-node.end b{color:#fff}.cl-node.end span{color:#b9c6e4}
+.cl-arm{flex:1;min-width:150px;text-align:center}
+.cl-arm-l{font-size:11.5px;font-weight:800;color:var(--red)}
+.cl-arm-g{font-size:11.5px;font-weight:800;color:var(--green)}
+.cl-line{height:2px;background:linear-gradient(90deg,var(--sky),var(--pool));margin:4px 0;border-radius:2px}
+.cl-net{font-family:var(--mono);font-weight:700;font-size:13px;padding:5px 11px;border-radius:8px}
+.cl-net.dn{background:#fdeaee;color:var(--red)}.cl-net.up{background:#e7f4ec;color:var(--green)}
+.cl-two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.cl-two{grid-template-columns:1fr}}
+.cl-sub{font-family:var(--display);font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);margin-bottom:5px}
+.cl-bar{display:block;height:11px;background:#eef1f6;border-radius:6px;overflow:hidden}
+.cl-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--pool),var(--navy));border-radius:6px}
+.cl-money{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:13px;margin-bottom:6px}
+.cl-money-b{background:#f6f9fd;border:1px solid var(--line);border-left:4px solid var(--pool);border-radius:11px;padding:12px 15px}
+.cl-money-b span{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cl-money-b b{display:block;font-family:var(--display);font-weight:800;font-size:31px;line-height:1.05;color:var(--navy);margin:3px 0}
+.cl-money-b em{display:block;font-style:normal;font-size:11.5px;color:var(--muted);line-height:1.4}
+
 .clubs-table th{position:sticky;top:0;background:#fff;cursor:pointer;user-select:none}
 .clubs-table th .arr{color:var(--pool);font-size:10px}
 .clubs-table th .agdot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:-1px}
@@ -267,7 +294,8 @@ tr:hover td{background:#f7fafd}
     <button class="tab" data-view="map">Membership Map</button>
     <button class="tab" data-view="boundary">Boundary Studio</button>
     <button class="tab" data-view="trends">Trends</button>
-    <button class="tab" data-view="types">Types &amp; Clubs</button>
+    <button class="tab" data-view="types">Membership Types</button>
+    <button class="tab" data-view="clubs">Club Health</button>
     <button class="tab" data-view="geography">Geography</button>
     <button class="tab" data-view="retention">Retention &amp; Churn</button>
     <button class="tab" data-view="aau">AAU Landscape</button>
@@ -278,6 +306,7 @@ tr:hover td{background:#f7fafd}
   <div id="viewBoundary" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewTrends" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewTypes" class="view"><div class="loading">Loading&hellip;</div></div>
+  <div id="viewClubs" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewGeography" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewRetention" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewAau" class="view"><div class="loading">Loading&hellip;</div></div>
@@ -288,6 +317,7 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202607281105"></script>
 <script src="boundary.js?v=202607250620"></script>
+<script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202607250740"></script>
 </body>
 </html>

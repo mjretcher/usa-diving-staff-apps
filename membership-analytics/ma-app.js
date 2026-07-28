@@ -540,27 +540,12 @@ async function renderTypes(){
   const el = document.getElementById('viewTypes');
   if (!TC.loaded){
     el.innerHTML = '<div class="loading">Loading&hellip;</div>';
-    const ageSql = [2025,2026].flatMap(Y => AGE_BUCKETS.map(([k,lo,hi]) =>
-      `count(DISTINCT member_id) FILTER (WHERE membership_year=${Y} AND membership_type ILIKE '%Athlete%' AND birth_date IS NOT NULL AND (${Y}-EXTRACT(YEAR FROM birth_date)) BETWEEN ${lo} AND ${hi}) ${k}${Y%100}`
-    )).join(',\n          ');
     try {
-      const [types, clubs] = await Promise.all([
-        NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n,
+      const types = await NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n,
           count(DISTINCT member_id) FILTER (WHERE EXTRACT(YEAR FROM exp_date)=membership_year
                                              OR EXTRACT(YEAR FROM exp_date)>=2100) nc
-          FROM membership.members GROUP BY 1,2`),
-        NEON.query(`SELECT COALESCE(NULLIF(club,''),'(no club listed)') club,
-          mode() WITHIN GROUP (ORDER BY association) assoc,
-          mode() WITHIN GROUP (ORDER BY zip5 || '|' || COALESCE(city,'') || '|' || COALESCE(state,'')) zcs,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2024) m24,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2025) m25,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2026) m26,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Athlete%') a26,
-          count(DISTINCT member_id) FILTER (WHERE membership_year=2026 AND membership_type ILIKE '%Coach%') c26,
-          ${ageSql}
-          FROM membership.members GROUP BY 1`),
-      ]);
-      TC.types = types.rows; TC.clubs = clubs.rows; TC.loaded = true;
+          FROM membership.members GROUP BY 1,2`);
+      TC.types = types.rows; TC.loaded = true;
     } catch(e){ el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Load failed.</b> ${esc(e.message||e)}</div></div></div>`; return; }
   }
   const tm = {}; TC.types.forEach(r => (tm[r.t] = tm[r.t] || {})[r.y] = {n:+r.n, c:+r.nc});
@@ -632,78 +617,8 @@ async function renderTypes(){
     since renewed. Year totals, 2026 figures, and the accountant&rsquo;s sales ledger are unaffected.
   </div></div></div>`;
 
-  const clubsCard = `
-  <div class="card"><div class="card-h"><h2>Clubs</h2>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto">
-      <div class="seg"><button id="tcAge" class="${TC.ageOn?'on':''}">Age groups: ${TC.ageOn?'on':'off'}</button></div>
-      ${TC.ageOn ? `<div class="seg"><button id="tcY25" class="${TC.ageYear===2025?'on':''}">2025</button><button id="tcY26" class="${TC.ageYear===2026?'on':''}">2026 YTD</button></div>` : ''}
-      <input class="search" id="tcQ" placeholder="Search club / city / state&hellip;" value="${esc(TC.q)}">
-    </div></div>
-  <div class="card-b"><div class="clubs-wrap"><table class="clubs-table" id="tcClubs"></table></div>
-  <div class="note" style="margin-top:6px">Location = each club&rsquo;s most common member zip code. Click any column to sort.${TC.ageOn?` <b>Age groups</b> = AQUA age (Dec 31) of ${TC.ageYear} athletes: <span style="color:#0b6ea0">D</span> 11&amp;under · <span style="color:#009AC7">C</span> 12&ndash;13 · <span style="color:#2456B8">B</span> 14&ndash;15 · <span style="color:#171F69">A</span> 16&ndash;18 · <span style="color:#64748b">19+</span>.`:''}</div></div></div>`;
-
-  el.innerHTML = typesTable + clubsCard;
-  document.getElementById('tcQ').addEventListener('input', e=>{ TC.q = e.target.value; renderClubTable(); });
-  const ageBtn = document.getElementById('tcAge');
-  if (ageBtn) ageBtn.addEventListener('click', ()=>{ TC.ageOn=!TC.ageOn; renderTypes(); });
-  const y25 = document.getElementById('tcY25'); if (y25) y25.addEventListener('click', ()=>{ TC.ageYear=2025; renderTypes(); });
-  const y26 = document.getElementById('tcY26'); if (y26) y26.addEventListener('click', ()=>{ TC.ageYear=2026; renderTypes(); });
-  renderClubTable();
+  el.innerHTML = typesTable;
 }
-
-function renderClubTable(){
-  const yy = TC.ageYear % 100; // 25 | 26
-  const AGE_COLS = [['agebar','Age mix'],['gD','D'],['gC','C'],['gB','B'],['gA','A'],['gX','19+']];
-  const AGE_DOT = {gD:0,gC:1,gB:2,gA:3,gX:4};
-  const cols = [
-    ['club','Club'],['assoc','Association'],['loc','Location (modal zip)'],
-    ['m24','2024'],['m25','2025'],['m26','2026 YTD'],['a26','Athletes \u201926'],['c26','Coaches \u201926'],['d','\u0394 25\u219226'],
-  ].concat(TC.ageOn ? AGE_COLS : []);
-  const numCols = new Set(['m24','m25','m26','a26','c26','d','gD','gC','gB','gA','gX']);
-  // If age columns are hidden, don't leave the sort pointing at one.
-  if (!TC.ageOn && (TC.sort.col in AGE_DOT || TC.sort.col==='agebar')) TC.sort = {col:'m26', dir:-1};
-
-  let rows = TC.clubs.map(r => {
-    const [zip, city, st] = (r.zcs||'||').split('|');
-    return ({
-    club:r.club, assoc:r.assoc||'', zip, city, st,
-    loc: r.club==='(no club listed)' ? '—' : (city?city+', ':'')+(st||'')+(zip?' '+zip:''),
-    m24:+r.m24, m25:+r.m25, m26:+r.m26, a26:+r.a26, c26:+r.c26, d:+r.m26-+r.m25,
-    gD:+r['gd'+yy], gC:+r['gc'+yy], gB:+r['gb'+yy], gA:+r['ga'+yy], gX:+r['gx'+yy],
-  });});
-  const q = TC.q.trim().toLowerCase();
-  if (q) rows = rows.filter(r => (r.club+' '+r.assoc+' '+r.loc).toLowerCase().includes(q));
-  const {col, dir} = TC.sort;
-  const sortVal = (r) => col==='agebar' ? (r.gD+r.gC+r.gB+r.gA+r.gX) : r[col];
-  rows.sort((a,b)=>{ const x=sortVal(a), y=sortVal(b); return (typeof x==='string' ? x.localeCompare(y) : x-y) * dir; });
-
-  const head = cols.map(([k,l])=>{
-    const dot = k in AGE_DOT ? `<span class="agdot" style="background:${AGE_COLORS[AGE_DOT[k]]}"></span>` : '';
-    return `<th data-col="${k}" class="${numCols.has(k)?'num':''}">${dot}${l} ${TC.sort.col===k?`<span class="arr">${dir<0?'\u25BC':'\u25B2'}</span>`:''}</th>`;
-  }).join('');
-
-  const ageCells = (r) => {
-    if (!TC.ageOn) return '';
-    const vals=[r.gD,r.gC,r.gB,r.gA,r.gX], tot=vals.reduce((s,x)=>s+x,0);
-    const seg = vals.map((v,j)=> v>0 ? `<span style="flex:${v};background:${AGE_COLORS[j]}" title="${AGE_KEYS[j]}: ${fmt(v)}"></span>` : '').join('');
-    const bar = `<td><span class="ag-bar clubbar" title="${tot} athletes">${seg||'<span style="flex:1;background:#eef1f6"></span>'}</span></td>`;
-    const nums = vals.map(v=>`<td class="num">${v?fmt(v):'<span class="z0">0</span>'}</td>`).join('');
-    return bar + nums;
-  };
-  const body = rows.map(r=>`<tr>
-    <td><b>${esc(r.club)}</b></td><td>${esc(r.assoc)}</td><td>${esc(r.loc)}</td>
-    <td class="num">${fmt(r.m24)}</td><td class="num">${fmt(r.m25)}</td><td class="num">${fmt(r.m26)}</td>
-    <td class="num">${fmt(r.a26)}</td><td class="num">${fmt(r.c26)}</td><td class="num">${deltaHtml(r.m26,r.m25)}</td>${ageCells(r)}</tr>`).join('');
-  const t = document.getElementById('tcClubs');
-  t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
-  t.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{
-    const c = th.dataset.col;
-    TC.sort = { col:c, dir: TC.sort.col===c ? -TC.sort.dir : (['club','assoc','loc'].includes(c)?1:-1) };
-    renderClubTable();
-  }));
-}
-
-/* ---------- boot ---------- */
 function wireTabs(){
   document.querySelectorAll('#tabs .tab').forEach(t=>t.addEventListener('click',()=>{
     document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.toggle('active', x===t));
@@ -712,6 +627,7 @@ function wireTabs(){
     document.getElementById('view'+v[0].toUpperCase()+v.slice(1)).classList.add('active');
     if (v==='boundary' && window.renderBoundary) window.renderBoundary();
     if (v==='types') renderTypes();
+    if (v==='clubs' && window.renderClubs) window.renderClubs();
   }));
 }
 
