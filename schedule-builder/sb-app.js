@@ -1648,14 +1648,14 @@ function updEv(sessId,evId,field,value){
   upd(s=>{
     const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
     const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
-    const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','projectedDivers','finalDivers'];
+    const nums=['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','projectedDivers','finalDivers','advanceIn'];
     // Entry counts: empty=unset(null), 0=real. Other numbers coerce normally.
-    if(field==='projectedDivers'||field==='finalDivers'){
+    if(field==='projectedDivers'||field==='finalDivers'||field==='advanceIn'){
       ev[field]=(value===''||value==null)?null:Math.max(0,Number(value)||0);
     } else {
       ev[field]=nums.includes(field)?Number(value):value;
     }
-    if(field==='finalDivers'||field==='projectedDivers'){
+    if(field==='finalDivers'||field==='projectedDivers'||field==='advanceIn'){
       ev.numberOfDivers=entryValue(ev);
       if(ev.round==='Final')ev.autoFinals=false;
       if(ev.round==='Prelim'&&field==='finalDivers'){
@@ -1673,7 +1673,7 @@ function updEv(sessId,evId,field,value){
       }
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
-    if(['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','manualSplit','projectedDivers','finalDivers'].includes(field)){
+    if(['numberOfDivers','numberOfDives','secondsPerDive','numberOfPanelChanges','minutesPerPanelChange','customDurationMinutes','manualSplit','projectedDivers','finalDivers','advanceIn'].includes(field)){
       reflowDay(s,sess.dayId);
     }
   });
@@ -1985,6 +1985,7 @@ function entrySyncDeltas(){
       const base=findDivemeetsMatch(sources,ev,'projected');
       if(!reg&&!base)return;
       out.push({sessId:sess.id,evId:ev.id,name:evName(ev),projected:ev.projectedDivers,
+        advanceIn:canAdvanceIn(ev)?advanceInValue(ev):0,
         registered:reg?reg.entries:null,registeredSourceId:reg?reg.sourceId:null,
         baseline:base?base.entries:null,baselineSourceId:base?base.sourceId:null});
     });
@@ -2065,7 +2066,8 @@ function renderEntrySyncModal(){
       const known=projKeys.size?projKeys.has(en.diverKey):true;
       return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
     }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
-    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':d.registered}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
+    const advTag=d.advanceIn>0?` <span class="es-adv" title="${d.advanceIn} advancing in from an earlier event — kept on top of the registered count">+${d.advanceIn} adv</span>`:'';
+    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}${advTag}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':(d.advanceIn>0?`${d.registered} <span style="color:var(--cyan);font-weight:600">→ ${d.registered+d.advanceIn}</span>`:d.registered)}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
   }).join('');
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
     <div class="modal-body">
@@ -2078,6 +2080,7 @@ function renderEntrySyncModal(){
         <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th>${hasBaseline?'<th style="text-align:right;padding:4px 8px">Baseline</th>':''}<th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match any configured DiveMeets source.</div>`}
+      ${deltas.some(d=>d.advanceIn>0)?`<p style="font-size:11px;color:var(--tx3);margin-top:10px">Events marked <span class="es-adv">+N adv</span> have divers advancing in from an earlier event at this meet. DiveMeets never lists those divers, so that number is added on top of the registered count and is <strong>not</strong> cleared by this sync.</p>`:''}
       <p style="font-size:11px;color:var(--tx3);margin-top:12px">Both "Apply" buttons set the event's entry count and protect it from later pre-fills — "Registered" uses live signups, "Baseline" uses the projection-baseline meet(s). ${hasBaseline?'Only events with a configured baseline source are affected by "Apply baseline" — for events that have both, whichever you click last wins.':''}</p>
     </div>
     <div class="modal-foot">
@@ -2853,7 +2856,7 @@ function renderCard(sess,timed,warns){
       </div>
       <div class="sc-time">
         <div class="sc-time-main">${f12r(t.warmupStartMinutes,t.sessionEndMinutes)}</div>
-        <div class="sc-time-sub">${fdur(t.sessionEndMinutes-t.warmupStartMinutes)} · ${sess.events.reduce((a,e)=>a+Number(e.finalDivers||e.projectedDivers||e.numberOfDivers||0),0)} athletes</div>
+        <div class="sc-time-sub">${fdur(t.sessionEndMinutes-t.warmupStartMinutes)} · ${sess.events.reduce((a,e)=>a+entryValue(e),0)} athletes</div>
       </div>
       <div class="sc-actions">
         <button class="sc-act" onclick="event.stopPropagation();nudgeSession('${sess.id}',-1)" title="Move earlier in day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg></button>
@@ -3196,10 +3199,10 @@ function renderEntriesPanel(timed){
     const t=sess.timing;const n=getSessNum(sess,timed);
     const hasFinals=sess.events.some(e=>e.round==='Final');
     if(showAllDays&&day&&day.id!==lastDayId){
-      rowsHtml+=`<tr class="feg-day-row"><td colspan="7">${shortDate(day.date)}</td></tr>`;
+      rowsHtml+=`<tr class="feg-day-row"><td colspan="9">${shortDate(day.date)}</td></tr>`;
       lastDayId=day.id;
     }
-    rowsHtml+=`<tr class="feg-sess-row ${hasFinals?'finals':''}" data-sess-id="${sess.id}"><td colspan="7"><span class="feg-sess-badge ${hasFinals?'final':'prelim'}">${hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Prelims':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session'}</span> Session ${n} <span class="feg-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span></td></tr>`;
+    rowsHtml+=`<tr class="feg-sess-row ${hasFinals?'finals':''}" data-sess-id="${sess.id}"><td colspan="9"><span class="feg-sess-badge ${hasFinals?'final':'prelim'}">${hasFinals?'Finals':sess.events.some(e=>e.round==='Prelim')?'Prelims':sess.events.some(e=>e.round==='Qualifier')?'Qualifier':'Session'}</span> Session ${n} <span class="feg-sess-time">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span></td></tr>`;
     (t.events||[]).forEach(ev=>{
       const split=ev.manualSplit&&!isPlatform(ev.apparatus);
       const dur=calcEvDur(ev);
@@ -3213,14 +3216,21 @@ function renderEntriesPanel(timed){
       const needsSplit=(dur.rawMin>=150||effective>=40)&&ev.round!=='Final';
       const rc=(ev.round||'qualifier').toLowerCase().replace(/[^a-z]+/g,'');
       const usingFinal=finlSet;
+      const advOk=canAdvanceIn(ev);
+      const advSet=advOk&&hasAdvanceIn(ev);
+      const advVal=advanceInValue(ev);
       rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
         <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
+        <td class="feg-cell">${advOk?`<input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-adv" class="feg-inp adv ${advSet?'on':''}" value="${advSet?advVal:''}" placeholder="—" tabindex="${tabIndex++}"
+          oninput="setEntry('${sess.id}','${ev.id}','advanceIn',this.value)"
+          onkeydown="entryKey(event,this)"/>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
         <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
+        <td class="feg-total"><span class="feg-total-num ${advSet?'plus':''}" id="feg-${ev.id}-total">${effective||'—'}</span></td>
         <td class="feg-using">${finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':''}</td>
         <td class="feg-dives">${ev.numberOfDives||ev.defaultDives||0}<span class="feg-dives-lbl">dives</span></td>
         <td class="feg-split">${(!isPlatform(ev.apparatus)&&ev.round!=='Final')?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
@@ -3237,12 +3247,13 @@ function renderEntriesPanel(timed){
     <div class="enp-daybar">${dayTabs}</div>
     <div class="enp-legend">
       <div class="enp-legitem"><span class="enp-legpill proj">Projected</span> estimate</div>
+      <div class="enp-legitem"><span class="enp-legpill adv">Advancing in</span> moving up from an earlier event</div>
       <div class="enp-legitem"><span class="enp-legpill final">Final</span> confirmed — overrides projected</div>
       <button class="enp-matchall" onclick="copyAllProjectedToFinal()">Copy all Proj → Final</button>
     </div>
-    <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th>Final</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
+    <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th title="Divers moving up from an earlier event at this meet — never overwritten by a DiveMeets pull">Advancing in</th><th>Final</th><th>Total</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
     <div class="enp-foot">
-      <span class="enp-footinfo">Final overrides Projected for timing · finals can exceed 12 for ties</span>
+      <span class="enp-footinfo">Total = (Final or Projected) + Advancing in · Advancing in survives every DiveMeets pull</span>
       <button class="enp-finalsbtn" onclick="applyFinalsAll()">Set Finals → 12</button>
     </div>
   </div>`;
@@ -3325,6 +3336,13 @@ function surgicalUpdateEntryTimes(){
     const finlSet=ev.finalDivers!=null&&ev.finalDivers!=='';
     const using=row.querySelector('.feg-using');
     if(using)using.innerHTML=finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':'';
+    // Keep the computed Total cell honest while the user is still typing
+    const totalEl=row.querySelector('.feg-total-num');
+    if(totalEl){
+      const tot=entryValue(ev);
+      totalEl.textContent=tot||'—';
+      if(canAdvanceIn(ev)&&hasAdvanceIn(ev))totalEl.classList.add('plus');else totalEl.classList.remove('plus');
+    }
     // Sync the "on" state on the proj/final inputs without rewriting their value
     const projInp=row.querySelector('.feg-inp.proj');
     const finlInp=row.querySelector('.feg-inp.final');
@@ -3335,12 +3353,40 @@ function surgicalUpdateEntryTimes(){
     }
   });
 }
-// The effective diver count an event uses for timing.
-// Final wins if it's been entered (including 0); otherwise projected (including 0); else 0.
-function entryValue(ev){
+// The typed-in base entry count for an event, before any advancing-in add-on.
+// Final wins if it's been entered (including 0); otherwise projected (including 0);
+// null means neither column has been filled in.
+function entryBase(ev){
   if(ev.finalDivers!=null&&ev.finalDivers!=='')return Number(ev.finalDivers)||0;
   if(ev.projectedDivers!=null&&ev.projectedDivers!=='')return Number(ev.projectedDivers)||0;
-  return Number(ev.numberOfDivers)||0;
+  return null;
+}
+// "Advancing in" — divers who arrive in this prelim from an EARLIER event at the
+// same meet rather than from signup, e.g. the top 12 of each National Qualifier
+// individual event who move into the matching Senior Nationals prelim. DiveMeets
+// has no way to know about them (they never appear on the signup list), so this
+// is a staff-entered number. It lives in its own field precisely so that pulling
+// fresh entries from DiveMeets — which rewrites projectedDivers — can never wipe
+// it out. Blank/unset counts as 0.
+function advanceInValue(ev){
+  if(ev==null||ev.advanceIn==null||ev.advanceIn==='')return 0;
+  const v=Number(ev.advanceIn);
+  return isNaN(v)?0:Math.max(0,v);
+}
+// True when an event carries an advancing-in add-on worth showing to the user.
+function hasAdvanceIn(ev){return advanceInValue(ev)>0}
+// Which events may carry an advancing-in count. Finals fields are set by the
+// finals rule (top 12 of the prelim), and practice/custom blocks have no field,
+// so only the rounds people actually seed from a prior event are eligible.
+function canAdvanceIn(ev){return ev&&(ev.round==='Prelim'||ev.round==='Qualifier')&&ev.style!=='Custom Block'}
+// The effective diver count an event uses for timing: typed base + advancing in.
+// When neither entry column has been filled, fall back to the stored
+// numberOfDivers, which is ALREADY a total — adding advanceIn there would
+// double-count it.
+function entryValue(ev){
+  const base=entryBase(ev);
+  if(base==null)return Number(ev.numberOfDivers)||0;
+  return base+(canAdvanceIn(ev)?advanceInValue(ev):0);
 }
 // Sync a finals event's entries from its matching prelim's FINAL count.
 // Rule (per user): when user enters Final entries on a PRELIM event, the matching
@@ -3415,7 +3461,7 @@ function commitEntries(){
 // Commit when the entries body loses focus (clicking away / closing)
 function copyProjectedToFinal(sessId,evId){
   const sess=S.sessions.find(x=>x.id===sessId);const ev=sess?.events.find(e=>e.id===evId);
-  if(ev){ev.finalDivers=Number(ev.projectedDivers||0);ev.numberOfDivers=ev.finalDivers;}
+  if(ev){ev.finalDivers=Number(ev.projectedDivers||0);ev.numberOfDivers=entryValue(ev);}
   S.sessions.forEach(s=>{if(!s.isPractice)cascadeSession(S,s.id)});
   saveS();if(S.currentLibraryId)scheduleSave();render();
 }
@@ -3427,7 +3473,7 @@ function copyProjectedToFinal(sessId,evId){
     const sess=s.sessions.find(x=>x.id===sessId);if(!sess)return;
     const ev=sess.events.find(e=>e.id===evId);if(!ev)return;
     ev.finalDivers=Number(ev.projectedDivers||0);
-    ev.numberOfDivers=ev.finalDivers;
+    ev.numberOfDivers=entryValue(ev);
     cascadeSession(s,sessId);
   });
   toast('Final set to projected');
@@ -3442,7 +3488,7 @@ function copyAllProjectedToFinal(){
         const finl=Number(ev.finalDivers||0);
         if(proj>0&&!finl){
           ev.finalDivers=proj;
-          ev.numberOfDivers=proj;
+          ev.numberOfDivers=entryValue(ev);
           count++;
         }
       });
