@@ -22,7 +22,7 @@ information is ever lost even if column extraction assumptions drift.
 
 Env: DATABASE_URL, MODE, MEET_ID, CRITERIA (optional), SLEEP_S (default 0.3)
      CATALOG_START (catalog mode), QUEUE_FROM / MEET_BUDGET / MAX_ATTEMPTS /
-     QUIET_DAYS (queue mode)
+     QUIET_DAYS / RUN_MINUTES (queue mode)
 Used via .github/workflows/scoresandmore-scrape.yml (workflow_dispatch).
 """
 import json
@@ -41,7 +41,12 @@ MEET_ID = os.environ.get("MEET_ID", "").strip()
 CRITERIA = os.environ.get("CRITERIA", "").strip()
 SLEEP_S = float(os.environ.get("SLEEP_S", "0.3"))
 QUEUE_FROM = (os.environ.get("QUEUE_FROM") or "2021-01-01").strip()
-MEET_BUDGET = int(os.environ.get("MEET_BUDGET") or 8)
+MEET_BUDGET = int(os.environ.get("MEET_BUDGET") or 20)
+# Never START a meet past this many minutes into the run. The workflow's hard
+# timeout is 55 min; being killed mid-meet would leave the meet unmarked and
+# unpenalised, so it would come straight back to the head of the queue next
+# run and could loop forever. Stopping early instead always makes progress.
+RUN_MINUTES = float(os.environ.get("RUN_MINUTES") or 45)
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS") or 3)
 QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 1)
 
@@ -450,8 +455,13 @@ def scrape_queue():
     the end-date filter rather than by a name blacklist.
     """
     import psycopg2
+    started = time.time()
     done = failed = 0
     while done + failed < MEET_BUDGET:
+        if (time.time() - started) / 60.0 > RUN_MINUTES:
+            print(f"run-minute budget ({RUN_MINUTES:.0f}m) reached — stopping "
+                  "before the next meet")
+            break
         conn = psycopg2.connect(DB_URL); cur = conn.cursor()
         cur.execute(
             """SELECT meet_id, meet_name FROM scoresandmore.meets

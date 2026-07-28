@@ -24,14 +24,14 @@ on:
         required: false
         default: ""
       meet_budget:
-        description: "queue mode: max meets this run (default 8)"
+        description: "queue mode: max meets this run (default 20)"
         required: false
         default: ""
 
   schedule:
-    # Drain the Dive Live backlog unattended, 8 meets an hour. Playwright +
-    # Zoho is slow per meet, so this is deliberately a trickle rather than a
-    # burst; it exits immediately once the queue is empty.
+    # Drain the Dive Live backlog unattended, ~20 meets an hour (about 2 min
+    # per meet through Playwright + Zoho). Deliberately a trickle rather than
+    # a burst; exits immediately once the queue is empty.
     - cron: "35 * * * *"
 
 concurrency:
