@@ -1478,3 +1478,90 @@ html[data-theme="deck"] .hours-note{background:rgba(255,255,255,.05);border-colo
   .tl-lockbtn span{display:none}
   .tl-lockbtn{padding:0 9px}
 }
+
+/* ── LIVE RUN SHEET ───────────────────────────────────────────────────
+   Actuals sit alongside the plan and are visually distinct from it: the
+   plan is navy/pool, the run sheet is Pool-blue accents on white with a
+   single amber/green delta chip. Controls carry .live-ctl, which re-enables
+   pointer events inside a locked day — recording reality has to keep working
+   while the published plan is frozen. */
+.live-strip{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:10px 14px 0;padding:11px 12px;
+  border:1px solid var(--bd,#DDE1EC);border-left:4px solid var(--pool,#009AC7);border-radius:10px;
+  background:linear-gradient(180deg,#F7FCFE,#fff)}
+.live-strip .lv-card{flex:1 1 190px;min-width:170px;display:flex;flex-direction:column;gap:2px;
+  padding:0 12px 0 0;border-right:1px solid var(--bd,#E6E9F2)}
+.live-strip .lv-card:last-of-type{border-right:none}
+.lv-k{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--pool,#009AC7)}
+.lv-card.idle .lv-k{color:var(--tx3,#8A90A2)}
+.lv-v{font-family:var(--font-display,inherit);font-size:19px;font-weight:600;line-height:1.15;
+  color:var(--navy,#171F69);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.lv-m{font-size:11px;color:var(--tx2,#5A6072);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lv-m2{font-size:10.5px;color:var(--tx2,#5A6072);line-height:1.4}
+.lv-m.dim,.lv-m2.dim{color:var(--tx3,#8A90A2)}
+.lv-since{color:var(--tx3,#8A90A2)}
+.lv-chip{font-family:var(--font-mono,monospace);font-size:10px;font-weight:700;padding:1.5px 6px;
+  border-radius:5px;white-space:nowrap;letter-spacing:-.01em}
+.lv-chip.sm{font-size:9.5px;padding:1px 5px}
+.lv-chip.ontime{background:#E7F7EE;color:#1B7F4B;border:1px solid #BFE8D1}
+.lv-chip.early{background:#E9F4FE;color:#1D5E96;border:1px solid #C4E0F7}
+.lv-chip.slip{background:#FFF8EC;color:#8A5A00;border:1px solid #F0C77E}
+.lv-chip.late{background:#FDECEE;color:#A3182C;border:1px solid #F2C0C8}
+.lv-go{margin-top:5px;align-self:flex-start;height:27px;padding:0 11px;border-radius:7px;border:none;
+  background:var(--pool,#009AC7);color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+  font-family:var(--font-ui,inherit)}
+.lv-go:hover{background:#0086AD}
+.lv-tools{display:flex;flex-direction:column;gap:5px;justify-content:center;flex:0 0 auto}
+.lv-tool{height:26px;padding:0 10px;border-radius:7px;border:1px solid var(--bd,#DDE1EC);background:#fff;
+  color:var(--tx2,#5A6072);font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+  font-family:var(--font-ui,inherit)}
+.lv-tool:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7)}
+.lv-off{font-size:12px;color:var(--tx2,#5A6072);flex:1}
+
+/* per-session row inside a card */
+.lv-sess{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 13px;
+  border-top:1px solid var(--bd,#EDEFF6);background:#F8FCFE}
+.lv-sess.is-run{background:#FFFBF2;border-top-color:#F0C77E}
+.lv-sess.is-done{background:#F4FAF6;border-top-color:#BFE8D1}
+.lv-sess-state{display:flex;align-items:center;gap:7px;flex-wrap:wrap;flex:1;min-width:0}
+.lv-sess-btns{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lv-badge{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.lv-badge.todo{background:#EEF1F7;color:var(--tx2,#5A6072)}
+.lv-badge.run{background:#F5A524;color:#1A1400}
+.lv-badge.done{background:#1B7F4B;color:#fff}
+.lv-exp{font-size:10.5px;color:var(--tx3,#8A90A2)}
+.lv-btn{height:28px;padding:0 11px;border-radius:7px;border:1px solid var(--bd,#DDE1EC);background:#fff;
+  color:var(--tx1,#1B1F2A);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;
+  font-family:var(--font-ui,inherit);transition:.13s}
+.lv-btn:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7)}
+.lv-btn.primary{background:var(--pool,#009AC7);border-color:var(--pool,#009AC7);color:#fff}
+.lv-btn.primary:hover{background:#0086AD;border-color:#0086AD;color:#fff}
+.lv-btn.ghost{border-style:dashed;color:var(--tx3,#8A90A2)}
+
+/* per-event controls */
+.lv-ev{display:inline-flex;align-items:center;gap:5px;flex-shrink:0}
+.lv-ev-t{font-family:var(--font-mono,monospace);font-size:10px;color:var(--tx2,#5A6072);white-space:nowrap}
+.lv-xbtn{height:23px;padding:0 8px;border-radius:6px;border:1px solid var(--bd,#DDE1EC);background:#fff;
+  color:var(--tx2,#5A6072);font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-ui,inherit)}
+.lv-xbtn:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7)}
+.lv-xbtn.end{background:#F5A524;border-color:#F5A524;color:#1A1400}
+.lv-xbtn.end:hover{background:#FFB93D;border-color:#FFB93D}
+
+/* The run sheet stays usable while the plan is locked. */
+.tl-wrap.day-locked .tl-body .live-ctl,
+.tl-wrap.day-locked .tl-body .live-ctl *,
+.tl-wrap.day-locked .tl-body button.live-ctl{pointer-events:auto!important}
+
+@media (max-width:760px){
+  .live-strip{margin:8px 10px 0;padding:10px;gap:8px}
+  .live-strip .lv-card{flex:1 1 100%;border-right:none;border-bottom:1px solid var(--bd,#E6E9F2);
+    padding:0 0 8px}
+  .live-strip .lv-card:last-of-type{border-bottom:none;padding-bottom:0}
+  .lv-tools{flex-direction:row;width:100%}
+  .lv-tool{flex:1}
+  .lv-v{font-size:17px}
+  .lv-sess{padding:8px 10px}
+  .lv-btn{height:32px;padding:0 12px;font-size:11.5px}   /* bigger tap targets on deck */
+  .lv-xbtn{height:27px;padding:0 10px}
+}
+.lv-stale{font-size:10.5px;font-weight:700;color:#8A5A00;background:#FFF8EC;border:1px solid #F0C77E;
+  border-radius:5px;padding:2px 7px;white-space:nowrap}

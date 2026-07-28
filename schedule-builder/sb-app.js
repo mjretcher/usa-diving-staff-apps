@@ -2255,7 +2255,7 @@ function render(){
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
     <div class="workspace">
-      <div class="tl-wrap ${dayLocked(UI.dayId)?'day-locked':''}">${renderTlBar(timed)}${renderLockBanner()}${renderTimeline(timed)}</div>
+      <div class="tl-wrap ${dayLocked(UI.dayId)?'day-locked':''}">${renderTlBar(timed)}${typeof liveStrip==='function'?liveStrip():''}${renderLockBanner()}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
     ${UI.editSessId?renderEditModal(timed):''}
@@ -2360,6 +2360,7 @@ function renderBar(timed){
         <div class="bar-menu-wrap">
           <button class="bb icon-only ${UI.barMenu?'active':''}" onclick="UI.barMenu=!UI.barMenu;render()" title="Menu — overview, export, presentation, deck mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg></button>
           ${UI.barMenu?`<div class="bar-menu" onclick="event.stopPropagation()">
+            <button class="bm-item" onclick="UI.barMenu=false;render();liveToggle()">${typeof liveOn==='function'&&liveOn()?'Turn off the live run sheet':'Live run sheet \u2014 record what actually happens'}</button>
             <button class="bm-item" onclick="UI.barMenu=false;UI.modal='overview';render()">Meet overview board</button>
             <button class="bm-item" onclick="UI.barMenu=false;UI.modal='export';render()">Export…</button>
             <button class="bm-item" onclick="UI.barMenu=false;render();openPresentation()">Presentation mode</button>
@@ -2820,6 +2821,7 @@ function renderCard(sess,timed,warns){
           <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         </div>
       </div>
+      ${typeof liveSessRow==='function'?liveSessRow(sess,t):''}
       ${flights.length?`<div class="pcard-flights">${flights.map(f=>`<div class="pcard-flight"><div class="pcard-flight-bar" style="background:${f.color||typeColor}"></div><div class="pcard-flight-name">${esc(f.name)}</div><div class="pcard-flight-time">${f12(f.startMinutes)} – ${f12(f.endMinutes)}</div><div class="pcard-flight-dur">${fdur(f.durationMinutes)}</div></div>`).join('')}</div>`:''}
     </div>`;
   }
@@ -2879,7 +2881,7 @@ function renderCardPrac(sess,t){
 }
 
 function renderCardEvents(sess,t){
-  return`<div class="sc-events">${(t.events||[]).map(ev=>{
+  return`${typeof liveSessRow==='function'?liveSessRow(sess,t):''}<div class="sc-events">${(t.events||[]).map(ev=>{
     const split=ev.manualSplit&&!isPlatform(ev.apparatus)&&ev.round!=='Final';
     const dur={evMin:ev.evMin,rawMin:ev.rawMin};
     const divers=ev._combined?ev._combinedDivers:entryValue(ev);
@@ -2899,6 +2901,7 @@ function renderCardEvents(sess,t){
         <span class="ev-stat-lbl">divers</span>
       </div>
       ${evRound(ev)&&ev.round!=='Custom Block'&&!ev._combined?`<span class="ev-badge ${roundCls}">${esc(evRound(ev))}</span>`:''}
+      ${typeof liveEvCtl==='function'?liveEvCtl(sess,ev):''}
       ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
       ${split&&(isPlatform(ev.apparatus)||ev.round==='Final'||ev._combined)?`<span class="ev-badge split">Split</span>`:''}
       <span class="ev-time">${f12r(ev.eventStartMinutes,ev.eventEndMinutes)}</span>
