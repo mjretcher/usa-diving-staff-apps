@@ -1,0 +1,43 @@
+name: Fetch Doc Text
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL of a PDF or HTML document to fetch"
+        required: true
+      first_page:
+        description: "First page (PDF only)"
+        required: false
+        default: "1"
+      last_page:
+        description: "Last page (PDF only)"
+        required: false
+        default: "0"
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install poppler
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - name: Fetch and extract
+        run: |
+          set -e
+          curl -sSL -A "Mozilla/5.0" -o doc.bin "${{ github.event.inputs.url }}"
+          file doc.bin
+          if head -c 4 doc.bin | grep -q '%PDF'; then
+            pdfinfo doc.bin || true
+            FP="${{ github.event.inputs.first_page }}"
+            LP="${{ github.event.inputs.last_page }}"
+            if [ "$LP" = "0" ]; then
+              pdftotext -layout -f "$FP" doc.bin out.txt
+            else
+              pdftotext -layout -f "$FP" -l "$LP" doc.bin out.txt
+            fi
+          else
+            cp doc.bin out.txt
+          fi
+          echo "===== BEGIN DOC TEXT ====="
+          cat out.txt
+          echo "===== END DOC TEXT ====="
