@@ -17,7 +17,12 @@ on:
         default: "500"
   schedule:
     # every 20 minutes; exits in seconds once dm_catalog_done flag is set
-    - cron: "*/20 * * * *"
+    # THINNED 2026-07-28: was every 20 min (~72 runs/day). Runs measured a steady
+    # 88-105s, which is almost entirely job setup (checkout + python + psycopg2) — a
+    # 500-id batch could not fetch in the ~25s of script time left, so the catalog
+    # backlog is drained and these were near-empty wakeups. Hourly -> 24 runs/day.
+    # If a real catalog backlog reappears, put this back to */20.
+    - cron: "7 * * * *"
 
 concurrency:
   group: divemeets-catalog

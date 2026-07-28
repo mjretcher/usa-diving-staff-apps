@@ -18,16 +18,25 @@ on:
       fetch_budget:
         description: "Approx max page fetches this run"
         required: false
-        default: "700"
+        default: "1200"
   schedule:
     # every 25 minutes, offset from the catalog crawl; exits fast once the
     # queue for the sanction filter is drained.
     #   :05/:30/:55 -> USA Diving   :15/:40 -> AAU   :20/:45 -> NCAA targets
     # The AAU backlog feeds athlete-level AAU comparison in Membership
     # Analytics; without its own slot it would only ever advance by hand.
-    - cron: "5/25 * * * *"
-    - cron: "15/25 * * * *"
-    - cron: "20/25 * * * *"
+    # THINNED 2026-07-28. Was every 25 min on three staggered crons (~216 runs/day).
+    # Neon bills compute by AWAKE TIME, and scale-to-zero waits a fixed 5 minutes after
+    # the last query — so a run that exits in 18 seconds still costs ~5 minutes of
+    # compute. Measured run durations were a median of 18s across the last 12 runs, i.e.
+    # the queue is drained and nearly every wakeup was doing nothing.
+    # Throughput is preserved by raising fetch_budget below rather than by running often:
+    # the one genuinely-working run in that sample took 585s for 700 pages, so a 1200-page
+    # budget still finishes far inside the job timeout.
+    #   USA Diving every 2h, AAU every 3h, NCAA every 6h -> ~24 runs/day (-89% wakeups).
+    - cron: "5 */2 * * *"
+    - cron: "25 */3 * * *"
+    - cron: "45 */6 * * *"
 
 concurrency:
   group: divemeets-results
@@ -57,5 +66,8 @@ jobs:
           # NCAA is scoped by explicit target list, not by sanction — the
           # registry holds 7,200+ NCAA meets and we want ~380 championships.
           TARGET_TAG: ${{ github.event.inputs.target_tag || (github.event.schedule == '20/25 * * * *' && '*' || '') }}
-          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
+          # Scheduled runs carry no inputs, so this MUST have a fallback — otherwise the
+          # env var is empty on cron and the reduced run frequency above would not be
+          # compensated by a larger per-run budget.
+          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget || '1200' }}
         run: python db/scripts/dm_results.py
