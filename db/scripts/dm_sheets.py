@@ -19,6 +19,8 @@ Env:
   DATABASE_URL   required
   MEET_ID        crawl exactly this meet (ignores queue + done flag)
   SANCTION       registry sanction filter (default: USA Diving)
+  TARGET_TAG     take the queue from divemeets.crawl_targets with this tag
+                 instead of the sanction filter ('*' = every tag)
   FETCH_BUDGET   approx max page fetches this run (default 1100)
 
 Report -> app_meta.config key 'dm_sheets_last_run'.
@@ -39,6 +41,20 @@ DB_URL = os.environ["DATABASE_URL"]
 SANCTION = os.environ.get("SANCTION", "").strip() or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 1100)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
+TARGET_TAG = (os.environ.get("TARGET_TAG") or "").strip()
+
+# See dm_results.py — same two queue scopes (whole sanction, or an explicit
+# target list for NCAA). want_sheets lets a target be results-only.
+if TARGET_TAG:
+    SCOPE_SQL = ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
+                 "WHERE t.meet_id = m.meet_id AND t.want_sheets "
+                 "AND (%s = '*' OR t.tag = %s))")
+    SCOPE_PARAMS = (TARGET_TAG, TARGET_TAG)
+    SCOPE_DESC = f"target_tag={TARGET_TAG!r}"
+else:
+    SCOPE_SQL = "m.sanction = %s"
+    SCOPE_PARAMS = (SANCTION,)
+    SCOPE_DESC = f"sanction={SANCTION!r}"
 SLEEP_S = 0.7
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -169,13 +185,13 @@ def main():
             remaining = FETCH_BUDGET - fetches
             conn = db(); cur = conn.cursor()
             cur.execute(
-                """SELECT m.meet_id, m.meet_name,
+                f"""SELECT m.meet_id, m.meet_name,
                           (SELECT count(*) FROM divemeets.results r
                            WHERE r.meet_id=m.meet_id AND r.sheet_key IS NOT NULL)
                    FROM divemeets.meets m
-                   WHERE m.sanction=%s AND m.results_done AND NOT m.sheets_done
+                   WHERE {SCOPE_SQL} AND m.results_done AND NOT m.sheets_done
                    ORDER BY m.start_date DESC, m.meet_id DESC""",
-                (SANCTION,))
+                SCOPE_PARAMS)
             pick = None
             for (mid, mname, nsheets) in cur.fetchall():
                 if nsheets <= remaining:
@@ -183,7 +199,8 @@ def main():
                     break
             cur.close(); conn.close()
             if not pick:
-                log("no queued meet fits remaining budget — done for this run")
+                log(f"no queued meet fits remaining budget for {SCOPE_DESC}"
+                    " — done for this run")
                 break
             meet_id, name = pick
         n_t, n_d, note = crawl_meet(meet_id)

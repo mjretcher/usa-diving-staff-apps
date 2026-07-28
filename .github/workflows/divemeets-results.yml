@@ -11,6 +11,10 @@ on:
         description: "Registry sanction filter for auto mode"
         required: false
         default: "USA Diving"
+      target_tag:
+        description: "Queue from divemeets.crawl_targets with this tag ('*' = all). Overrides sanction."
+        required: false
+        default: ""
       fetch_budget:
         description: "Approx max page fetches this run"
         required: false
@@ -18,11 +22,12 @@ on:
   schedule:
     # every 25 minutes, offset from the catalog crawl; exits fast once the
     # queue for the sanction filter is drained.
-    #   :05/:30/:55 -> USA Diving      :15/:40 -> AAU
+    #   :05/:30/:55 -> USA Diving   :15/:40 -> AAU   :20/:45 -> NCAA targets
     # The AAU backlog feeds athlete-level AAU comparison in Membership
     # Analytics; without its own slot it would only ever advance by hand.
     - cron: "5/25 * * * *"
     - cron: "15/25 * * * *"
+    - cron: "20/25 * * * *"
 
 concurrency:
   group: divemeets-results
@@ -49,5 +54,8 @@ jobs:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
           SANCTION: ${{ github.event.inputs.sanction || (github.event.schedule == '15/25 * * * *' && 'Amateur Athletic Union (AAU)' || 'USA Diving') }}
+          # NCAA is scoped by explicit target list, not by sanction — the
+          # registry holds 7,200+ NCAA meets and we want ~380 championships.
+          TARGET_TAG: ${{ github.event.inputs.target_tag || (github.event.schedule == '20/25 * * * *' && '*' || '') }}
           FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
         run: python db/scripts/dm_results.py

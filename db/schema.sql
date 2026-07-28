@@ -838,6 +838,24 @@ CREATE INDEX IF NOT EXISTS dm_sheet_dives_profile ON divemeets.sheet_dives(profi
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_crawled_at timestamptz;
 
+-- Targeted crawl queue. The results/sheets crawlers normally drain a whole
+-- sanction (USA Diving, AAU). NCAA is different: the registry holds 7,200+
+-- NCAA meets, of which only D1 conference/national/zone championships are
+-- wanted, so those crawlers also accept TARGET_TAG and pull their queue from
+-- this table instead of the sanction filter. Seeded (and re-seeded as new
+-- seasons appear) by db/scripts/queue_ncaa_targets.py.
+--   tag examples: ncaa_d1_national, ncaa_d1_conference, ncaa_zone,
+--                 ncaa_d1_conference_multidiv  (ECAC/Metropolitan — kept
+--                 separable because those championships mix divisions)
+CREATE TABLE IF NOT EXISTS divemeets.crawl_targets (
+  meet_id    integer PRIMARY KEY,
+  tag        text NOT NULL,
+  label      text,
+  want_sheets boolean NOT NULL DEFAULT true,
+  added_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS dm_crawl_targets_tag ON divemeets.crawl_targets(tag);
+
 
 -- SCHEMA 10: membership — Membership Analytics app
 -- PII POLICY (agreed 2026-07-20): NEVER load street addresses, emails,

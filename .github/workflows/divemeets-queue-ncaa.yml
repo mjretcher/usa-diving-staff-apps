@@ -1,0 +1,46 @@
+name: DiveMeets queue NCAA targets
+
+# Classifies the NCAA rows in divemeets.meets and seeds divemeets.crawl_targets
+# with D1 conference championships, D1 national championships, and NCAA Zone
+# championships. Idempotent — re-run after each season's meets are catalogued
+# to pick up the new championships. Run with dry_run first to see the counts
+# without writing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      year_from:
+        description: "Earliest meet year to consider"
+        required: false
+        default: "2015"
+      dry_run:
+        description: "Set to 1 to report counts without writing"
+        required: false
+        default: ""
+
+concurrency:
+  group: divemeets-queue-ncaa
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Seed crawl targets
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          YEAR_FROM: ${{ github.event.inputs.year_from }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python db/scripts/queue_ncaa_targets.py

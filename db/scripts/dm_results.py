@@ -19,6 +19,10 @@ Env:
   DATABASE_URL   required
   MEET_ID        crawl exactly this meet (ignores queue + done flag)
   SANCTION       registry sanction filter (default: USA Diving)
+  TARGET_TAG     take the queue from divemeets.crawl_targets with this tag
+                 instead of the sanction filter ('*' = every tag). Used for
+                 NCAA, where only D1 championship meets are wanted out of
+                 7,200+ registry rows.
   FETCH_BUDGET   approx max page fetches this run (default 700)
   QUIET_DAYS     meet must have ended this many days ago (default 3)
 
@@ -45,6 +49,20 @@ QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 3)
 # cannot block every later run. Clear results_attempts to retry it.
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS") or 3)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
+TARGET_TAG = (os.environ.get("TARGET_TAG") or "").strip()
+
+# Queue scope: either a whole sanction (the USA Diving / AAU crawls) or an
+# explicit target list (NCAA). Kept as a SQL fragment + params so the queue
+# and the "parked" tally can't drift apart.
+if TARGET_TAG:
+    SCOPE_SQL = ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
+                 "WHERE t.meet_id = m.meet_id AND (%s = '*' OR t.tag = %s))")
+    SCOPE_PARAMS = (TARGET_TAG, TARGET_TAG)
+    SCOPE_DESC = f"target_tag={TARGET_TAG!r}"
+else:
+    SCOPE_SQL = "m.sanction = %s"
+    SCOPE_PARAMS = (SANCTION,)
+    SCOPE_DESC = f"sanction={SANCTION!r}"
 SLEEP_S = 0.8
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -193,18 +211,18 @@ def main():
             meet_id, name = int(ONLY_MEET), f"(explicit {ONLY_MEET})"
         else:
             cur.execute(
-                """SELECT meet_id, meet_name FROM divemeets.meets
-                   WHERE sanction=%s AND NOT results_done
+                f"""SELECT meet_id, meet_name FROM divemeets.meets m
+                   WHERE {SCOPE_SQL} AND NOT results_done
                      AND http_status=200 AND meet_name IS NOT NULL
                      AND coalesce(results_attempts,0) < %s::int
                      AND coalesce(end_date, start_date) IS NOT NULL
                      AND coalesce(end_date, start_date)
                          <= current_date - %s::int
                    ORDER BY start_date DESC, meet_id DESC LIMIT 1""",
-                (SANCTION, MAX_ATTEMPTS, QUIET_DAYS))
+                SCOPE_PARAMS + (MAX_ATTEMPTS, QUIET_DAYS))
             r = cur.fetchone()
             if not r:
-                log(f"queue empty for sanction={SANCTION!r} — all caught up")
+                log(f"queue empty for {SCOPE_DESC} — all caught up")
                 break
             meet_id, name = r
         try:
@@ -239,12 +257,12 @@ def main():
     log(f"run done: {meets_done} meets, {meets_failed} failed, {fetches} fetches")
     if meets_failed:
         cur.execute(
-            """SELECT count(*) FROM divemeets.meets
-                WHERE sanction=%s AND NOT results_done
+            f"""SELECT count(*) FROM divemeets.meets m
+                WHERE {SCOPE_SQL} AND NOT results_done
                   AND coalesce(results_attempts,0) >= %s::int""",
-            (SANCTION, MAX_ATTEMPTS))
+            SCOPE_PARAMS + (MAX_ATTEMPTS,))
         log(f"parked (>= {MAX_ATTEMPTS} failed attempts) for "
-            f"sanction={SANCTION!r}: {cur.fetchone()[0]} meets")
+            f"{SCOPE_DESC}: {cur.fetchone()[0]} meets")
     cur.close(); conn.close()
 
 def report(ok, err=None):
