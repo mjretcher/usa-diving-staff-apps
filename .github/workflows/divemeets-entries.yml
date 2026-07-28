@@ -15,6 +15,17 @@ on:
     # Daily at 10:05 UTC (~6 AM ET) while registration is open / meet approaches.
     # Harmless after the meet — remove or comment out when no longer needed.
     - cron: "5 10 * * *"
+    # Meet-window top-ups for the 2026 Junior Nationals (Jul 29 - Aug 4), at 11:05am and
+    # 6:05pm ET alongside the 6:05am daily run. Entries can technically change until three
+    # hours before each prelim event, but the late fee is steep enough that late signups
+    # are uncommon — so this is a light top-up so the app is never a day stale, NOT a poll.
+    # Date-scoped, so it stops on its own after Aug 4. REMOVE these four lines afterwards:
+    # otherwise they fire on the same calendar days next year against a stale default
+    # meet id (scheduled runs have no inputs and fall back to 12923 below).
+    - cron: "5 15 28-31 7 *"
+    - cron: "5 22 28-31 7 *"
+    - cron: "5 15 1-4 8 *"
+    - cron: "5 22 1-4 8 *"
 
 jobs:
   sync:
