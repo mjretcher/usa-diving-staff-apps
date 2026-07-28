@@ -545,7 +545,10 @@ async function renderTypes(){
     )).join(',\n          ');
     try {
       const [types, clubs] = await Promise.all([
-        NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n FROM membership.members GROUP BY 1,2`),
+        NEON.query(`SELECT membership_year y, membership_type t, count(DISTINCT member_id) n,
+          count(DISTINCT member_id) FILTER (WHERE EXTRACT(YEAR FROM exp_date)=membership_year
+                                             OR EXTRACT(YEAR FROM exp_date)>=2100) nc
+          FROM membership.members GROUP BY 1,2`),
         NEON.query(`SELECT COALESCE(NULLIF(club,''),'(no club listed)') club,
           mode() WITHIN GROUP (ORDER BY association) assoc,
           mode() WITHIN GROUP (ORDER BY zip5 || '|' || COALESCE(city,'') || '|' || COALESCE(state,'')) zcs,
@@ -560,13 +563,23 @@ async function renderTypes(){
       TC.types = types.rows; TC.clubs = clubs.rows; TC.loaded = true;
     } catch(e){ el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Load failed.</b> ${esc(e.message||e)}</div></div></div>`; return; }
   }
-  const tm = {}; TC.types.forEach(r => (tm[r.t] = tm[r.t] || {})[r.y] = +r.n);
-  const g = (types, y) => types.reduce((s,t)=>s+((tm[t]||{})[y]||0), 0);
-  const row = (label, types, cls, indent) => {
-    const v = y => g(types, y);
+  const tm = {}; TC.types.forEach(r => (tm[r.t] = tm[r.t] || {})[r.y] = {n:+r.n, c:+r.nc});
+  const g  = (types, y) => types.reduce((s,t)=>s+(((tm[t]||{})[y]||{}).n||0), 0);
+  const gc = (types, y) => types.reduce((s,t)=>s+(((tm[t]||{})[y]||{}).c||0), 0);
+  // A membership type that shows members in an earlier year but has ZERO records
+  // that actually belong to that year was not sold that year — the rows are the
+  // member's current (renewed) record bleeding backwards in the Webpoint export.
+  // Lifetime types are safe here: their far-future expiry counts as consistent.
+  const notSold = (types, y) => y < 2026 && g(types,y) > 0 && gc(types,y) === 0;
+  const NA = '<td class="num" style="color:#94a3b8" title="Not offered this year — see note below">&mdash;<sup style="color:#E31937">*</sup></td>';
+  const row = (label, types, cls, indent, opts) => {
+    const sup = y => !(opts&&opts.noSup) && notSold(types, y);
+    const cell = y => sup(y) ? NA : `<td class="num">${fmt(g(types,y))}</td>`;
+    const d = sup(2025)
+      ? `<td class="num" style="color:#009AC7;font-weight:600">new in 2026</td>`
+      : `<td class="num">${deltaHtml(g(types,2026), g(types,2025))}</td>`;
     return `<tr class="${cls||''}"><td class="${indent||''}">${label}</td>
-      <td class="num">${fmt(v(2024))}</td><td class="num">${fmt(v(2025))}</td><td class="num">${fmt(v(2026))}</td>
-      <td class="num">${deltaHtml(v(2026), v(2025))}</td></tr>`;
+      ${cell(2024)}${cell(2025)}${cell(2026)}${d}</tr>`;
   };
   const T = {
     ath17:'Athlete (17U)', ath18:'Athlete (AQUA Age 18+)',
@@ -578,6 +591,13 @@ async function renderTypes(){
   const allAth = [T.ath17,T.ath18,T.c17,T.c18,T.i17,T.i18];
   const allCoach = [T.co,T.cco,T.lco];
   const other = [T.j,T.vo,T.af,T.lt,T.mc,T.st];
+  // Anything Webpoint sent us that doesn't match a known type (blank type field,
+  // retired labels). Shown so the three groups above reconcile to the year totals.
+  const KNOWN = new Set(Object.values(T));
+  const unk = Object.keys(tm).filter(t => !KNOWN.has(t));
+  const unkRow = (g(unk,2024)+g(unk,2025)+g(unk,2026)) > 0
+    ? row('<b>NO TYPE ON FILE</b> (blank or retired label)', unk, 'grand', '', {noSup:true})
+    : '';
   const typesTable = `
   <div class="card"><div class="card-h"><h2>Membership Types</h2><span class="note">Distinct members &middot; 2026 is YTD</span></div>
   <div class="card-b"><table class="tc-table"><thead><tr>
@@ -599,7 +619,18 @@ async function renderTypes(){
     ${row(esc(T.lco), [T.lco], '', 'indent2')}
     ${row('<b>OFFICIALS &amp; OTHER</b> (combined)', other, 'grand')}
     ${other.map(t=>row(esc(t), [t], '', 'indent2')).join('')}
-  </tbody></table></div></div>`;
+    ${unkRow}
+  </tbody></table>
+  <div class="coverage-note"><b><span style="color:#E31937">*</span> Not offered that year.</b>
+    Webpoint exports show each member&rsquo;s <b>current</b> membership record, so when someone renews,
+    their earlier year&rsquo;s row gets rewritten with today&rsquo;s membership type and dates. That is why a type
+    first sold in 2026 (Introductory Athlete) can appear to have a handful of 2024 and 2025 sign-ups.
+    Those people were real members in those years &mdash; they are still counted in the combined athlete
+    rows &mdash; but their actual 2024/2025 type is not recoverable from this export.
+    <br><br>Same effect, smaller impact, everywhere else: <b>35% of 2024 rows and 53% of 2025 rows</b>
+    carry a renewed 2026 record, so prior-year type splits are close but not exact for members who have
+    since renewed. Year totals, 2026 figures, and the accountant&rsquo;s sales ledger are unaffected.
+  </div></div></div>`;
 
   const clubsCard = `
   <div class="card"><div class="card-h"><h2>Clubs</h2>
