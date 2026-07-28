@@ -924,3 +924,33 @@ CREATE TABLE IF NOT EXISTS membership.sales_ledger (
 -- analytics-refresh.yml, safe to re-run while the dive-sheet scraper
 -- back-fills toward 2015). Only the schema itself is created here.
 CREATE SCHEMA IF NOT EXISTS analytics;
+
+
+-- Dive Live crawl state (MODE=queue in db/scripts/sm_scrape.py). Same
+-- done/attempts/note shape as the DiveMeets registry so the two pipelines are
+-- read the same way.
+ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_done boolean NOT NULL DEFAULT false;
+ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_note text;
+ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
+CREATE INDEX IF NOT EXISTS sm_meets_queue ON scoresandmore.meets(results_done, start_date);
+
+
+-- ---------------------------------------------------------------------------
+-- Scoped-role grants. usad_app is the browser-facing read role shipped in
+-- data/config.js, so this list is effectively public: only public competition
+-- data goes here. The membership schema is deliberately absent (PII policy).
+-- Without this, every new table added above is invisible to the apps until
+-- someone remembers to grant it by hand.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA divemeets, scoresandmore TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA divemeets    TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA scoresandmore TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA divemeets
+      GRANT SELECT ON TABLES TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA scoresandmore
+      GRANT SELECT ON TABLES TO usad_app;
+  END IF;
+END $$;

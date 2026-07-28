@@ -6,6 +6,13 @@ Modes (env MODE):
   meet     Scrape one meet completely: events list, per-event diver results,
            team points, coach points. Env MEET_ID required. Idempotent:
            re-running replaces that meet's rows.
+  queue    Drain the catalog: pick meets that have no results yet and scrape
+           each one fully, newest-first, up to MEET_BUDGET meets per run.
+           This is what lets Dive Live be crawled unattended the way DiveMeets
+           is; MODE=meet only ever did one meet by hand. Marks
+           scoresandmore.meets.results_done inside the same pass and parks a
+           meet after MAX_ATTEMPTS failures so one bad meet can't stall the
+           queue. Skips meets that have not ended yet (QUIET_DAYS).
   catalog  Scrape the meets catalog (q_meets). Optional env CRITERIA, e.g.
              "q_meets"."start_date" >= '2025-08-01'
            Defaults to all meets up to today. Upserts scoresandmore.meets.
@@ -14,6 +21,8 @@ Every row also stores the complete parsed source row as JSONB (`data`) so no
 information is ever lost even if column extraction assumptions drift.
 
 Env: DATABASE_URL, MODE, MEET_ID, CRITERIA (optional), SLEEP_S (default 0.3)
+     CATALOG_START (catalog mode), QUEUE_FROM / MEET_BUDGET / MAX_ATTEMPTS /
+     QUIET_DAYS (queue mode)
 Used via .github/workflows/scoresandmore-scrape.yml (workflow_dispatch).
 """
 import json
@@ -31,6 +40,10 @@ MODE = os.environ.get("MODE", "meet").strip()
 MEET_ID = os.environ.get("MEET_ID", "").strip()
 CRITERIA = os.environ.get("CRITERIA", "").strip()
 SLEEP_S = float(os.environ.get("SLEEP_S", "0.3"))
+QUEUE_FROM = (os.environ.get("QUEUE_FROM") or "2021-01-01").strip()
+MEET_BUDGET = int(os.environ.get("MEET_BUDGET") or 8)
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS") or 3)
+QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 1)
 
 # Events skipped because their results grid exceeded the 200-row cap.
 CAP_GAPS = []
@@ -426,6 +439,66 @@ def scrape_catalog():
     print(f"DONE catalog: upserted {len(ins)} meets")
 
 
+# -------------------------------------------------------------------- queue
+def scrape_queue():
+    """Drain catalogued meets that have no results yet, newest-first.
+
+    Mirrors the DiveMeets phase-2 crawler: one meet per transaction-ish pass,
+    the done flag written immediately, failures isolated and counted so a
+    single unparseable meet cannot block every later run. Future-dated and
+    obviously bogus catalog rows (test meets dated 2035 etc.) are excluded by
+    the end-date filter rather than by a name blacklist.
+    """
+    import psycopg2
+    done = failed = 0
+    while done + failed < MEET_BUDGET:
+        conn = psycopg2.connect(DB_URL); cur = conn.cursor()
+        cur.execute(
+            """SELECT meet_id, meet_name FROM scoresandmore.meets
+                WHERE NOT coalesce(results_done, false)
+                  AND coalesce(results_attempts, 0) < %s::int
+                  AND start_date >= %s::date
+                  AND coalesce(end_date, start_date)
+                      <= current_date - %s::int
+                ORDER BY start_date DESC, meet_id DESC LIMIT 1""",
+            (MAX_ATTEMPTS, QUEUE_FROM, QUIET_DAYS))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if not row:
+            print(f"queue empty (>= {QUEUE_FROM}) — all caught up")
+            break
+        meet_id, name = int(row[0]), row[1]
+        try:
+            scrape_meet(meet_id)
+            _mark_meet(meet_id, ok=True)
+            done += 1
+            print(f"meet {meet_id} {name!r}: done")
+        except Exception as e:
+            failed += 1
+            msg = f"{type(e).__name__}: {e}"[:400]
+            print(f"meet {meet_id} {name!r}: FAILED -- {msg}", flush=True)
+            _mark_meet(meet_id, ok=False, note=msg)
+    print(f"DONE queue: {done} meets scraped, {failed} failed")
+
+
+def _mark_meet(meet_id, ok, note=None):
+    import psycopg2
+    conn = psycopg2.connect(DB_URL); cur = conn.cursor()
+    if ok:
+        cur.execute(
+            """UPDATE scoresandmore.meets
+                  SET results_done = true, results_note = NULL,
+                      results_crawled_at = now()
+                WHERE meet_id = %s""", (meet_id,))
+    else:
+        cur.execute(
+            """UPDATE scoresandmore.meets
+                  SET results_attempts = coalesce(results_attempts, 0) + 1,
+                      results_note = %s, results_crawled_at = now()
+                WHERE meet_id = %s""", (note, meet_id))
+    conn.commit(); cur.close(); conn.close()
+
+
 if __name__ == "__main__":
     try:
         if MODE == "meet":
@@ -434,6 +507,8 @@ if __name__ == "__main__":
             scrape_meet(MEET_ID)
         elif MODE == "catalog":
             scrape_catalog()
+        elif MODE == "queue":
+            scrape_queue()
         else:
             sys.exit(f"unknown MODE {MODE!r}")
         store_report(True)

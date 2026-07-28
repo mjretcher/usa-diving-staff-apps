@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "meet (one meet fully) or catalog (meets list)"
+        description: "meet (one meet fully), catalog (meets list), or queue (drain uncrawled meets)"
         required: true
         default: "meet"
       meet_id:
@@ -19,11 +19,30 @@ on:
         description: "Catalog window start date (default 2025-08-01)"
         required: false
         default: ""
+      queue_from:
+        description: "queue mode: earliest meet start date (default 2021-01-01)"
+        required: false
+        default: ""
+      meet_budget:
+        description: "queue mode: max meets this run (default 8)"
+        required: false
+        default: ""
+
+  schedule:
+    # Drain the Dive Live backlog unattended, 8 meets an hour. Playwright +
+    # Zoho is slow per meet, so this is deliberately a trickle rather than a
+    # burst; it exits immediately once the queue is empty.
+    - cron: "35 * * * *"
+
+concurrency:
+  group: scoresandmore-scrape
+  cancel-in-progress: false
 
 jobs:
   scrape:
     name: Scrape ScoresAndMore into Neon
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,8 +60,10 @@ jobs:
       - name: Scrape
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-          MODE: ${{ github.event.inputs.mode }}
+          MODE: ${{ github.event.inputs.mode || 'queue' }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
           CRITERIA: ${{ github.event.inputs.criteria }}
           CATALOG_START: ${{ github.event.inputs.catalog_start }}
+          QUEUE_FROM: ${{ github.event.inputs.queue_from }}
+          MEET_BUDGET: ${{ github.event.inputs.meet_budget }}
         run: python db/scripts/sm_scrape.py
