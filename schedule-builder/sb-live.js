@@ -227,14 +227,10 @@ function liveProject(dayId){
       if(anchor){shift=anchor.at-anchor.planned;basis='Shifted from the last event that finished';}
       else{shift=rec.st-plannedStart;basis='Shifted from this session\u2019s actual start';}
       projEnd=plannedEnd+shift;
-      // A session still running is at least as long as the clock says — but only
-      // trust that on the live day.
-      if(isToday&&now>projEnd){
-        // Overrun well past a plausible finish almost always means nobody tapped
-        // Finish. Say so instead of quietly reporting the whole day hours late.
-        if(now>projEnd+90){stale=true;basis='Still marked running since '+f12(rec.st)+' \u2014 was Finish missed?';}
-        else projEnd=now;
-      }
+      // The overrun / "was Finish missed?" decision is deferred until the per-event
+      // ends below are known — an event that actually started can push this later,
+      // and judging the session stale against a number that ignores its own boards
+      // would cry wolf.
       firstUnfinished=false;
     }else{
       status=firstUnfinished?'next':'todo';
@@ -253,14 +249,48 @@ function liveProject(dayId){
       const er=liveEv(ev.id)||{};
       let est,een,estatus;
       if(er.en!=null){estatus='done';est=er.st!=null?er.st:ev.eventStartMinutes+shift;een=er.en;}
-      else if(er.st!=null){estatus='running';est=er.st;
-        een=ev.eventEndMinutes+shift;if(isToday&&now>een&&now<=een+90)een=now;}
+      else if(er.st!=null){
+        estatus='running';est=er.st;
+        // Its OWN start plus its OWN planned length. The session-level shift must not
+        // speak for it: two boards that went in twenty minutes apart have to be able
+        // to report finishing twenty minutes apart, which is the whole reason for
+        // recording them separately.
+        een=est+Math.max(0,ev.eventEndMinutes-ev.eventStartMinutes);
+        if(isToday&&now>een&&now<=een+90)een=now;}
       else{estatus='todo';est=ev.eventStartMinutes+shift;een=ev.eventEndMinutes+shift;}
       return{id:ev.id,name:(typeof evName==='function'?evName(ev):''),
         plannedStart:ev.eventStartMinutes,plannedEnd:ev.eventEndMinutes,
         projStart:est,projEnd:een,status:estatus,
         delta:estatus==='done'?(er.en-ev.eventEndMinutes):(est-ev.eventStartMinutes)};
     });
+
+    // A session is over when its LAST event is over. Now that each running event
+    // carries its own end, fold the latest of them back up so the session — and
+    // everything downstream of it — reflects the board that is actually running late.
+    const anyEvActual=(t.events||[]).some(ev=>{const er=liveEv(ev.id);return er&&(er.st!=null||er.en!=null)});
+    if(status==='running'&&evs.length&&anyEvActual){
+      const latest=Math.max.apply(null,evs.map(e=>e.projEnd));
+      // The plan's gap between its last event ending and the session ending is the
+      // tail — awards, medals, clearing the deck. Preserve it rather than reporting
+      // the session over the moment the last dive lands.
+      const plannedLastEv=Math.max.apply(null,(t.events||[]).map(e=>e.eventEndMinutes));
+      const tail=Math.max(0,plannedEnd-plannedLastEv);
+      const fromEvents=latest+tail;
+      if(fromEvents!==projEnd){
+        projEnd=fromEvents;
+        const lateEv=evs.find(e=>e.projEnd===latest);
+        basis='Following '+(lateEv?lateEv.name:'the event running latest');
+      }
+      // Deferred from above: judge overrun against the real number, not the
+      // session-start estimate.
+      if(isToday&&now>projEnd){
+        if(now>projEnd+90){stale=true;basis='Still marked running since '+f12(rec.st)+' \u2014 was Finish missed?';}
+        else projEnd=now;
+      }
+    }else if(status==='running'&&isToday&&now>projEnd){
+      if(now>projEnd+90){stale=true;basis='Still marked running since '+f12(rec.st)+' \u2014 was Finish missed?';}
+      else projEnd=now;
+    }
 
     // Parallel blocks don't consume their own slot, so they must not push the cursor.
     if(!parallel)cursor=projEnd+Number(sess.bufferMinutes||0);
@@ -385,6 +415,11 @@ function liveSessRow(sess,t){
 function liveEvCtl(sess,ev){
   if(!liveOn()||sess.isPractice)return'';
   const r=liveEv(ev.id)||{};
+  // Each event's own projected finish. Events in a session run concurrently and can
+  // now diverge, so "when does THIS one get off the boards" is a different question
+  // per event — and the one people actually need when deciding what to do next.
+  const pr=(liveProject(sess.dayId).find(x=>x.sess.id===sess.id)||{events:[]})
+             .events.find(x=>x.id===ev.id);
   // Once a time is on the row, that time IS the edit control. Tapping the number
   // you want to change is the thing people try first, so it should work.
   const edit=(title)=>`onclick="event.stopPropagation();openLiveTimes('${sess.id}','${ev.id}')" title="${title}"`;
@@ -399,10 +434,12 @@ function liveEvCtl(sess,ev){
   if(r.st!=null){
     return`<span class="lv-ev run live-ctl" onclick="event.stopPropagation()">
       <button class="lv-ev-t lv-ev-edit live-ctl" ${edit('Started at '+f12(r.st)+' \u2014 tap to correct it by hand')}>on since ${f12(r.st)}${r.stM?' \u00b7 by hand':''}</button>
+      ${pr?`<span class="lv-ev-proj" title="Projected finish for this event, from its own start time and its own planned length">\u2192 ${f12(pr.projEnd)}</span>`:''}
       <button class="lv-xbtn end live-ctl" onclick="event.stopPropagation();liveEndEv('${ev.id}')" title="Mark this event finished now">End</button>
     </span>`;
   }
   return`<span class="lv-ev todo live-ctl" onclick="event.stopPropagation()">
+    ${pr?`<span class="lv-ev-proj dim" title="Expected window for this event once the day's knock-on is applied">${f12(pr.projStart)} \u2013 ${f12(pr.projEnd)}</span>`:''}
     <button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartEv('${sess.id}','${ev.id}')" title="Mark this event as starting now">Start</button>
   </span>`;
 }

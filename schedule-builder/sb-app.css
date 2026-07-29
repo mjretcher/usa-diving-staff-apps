@@ -1587,6 +1587,9 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
   padding:2px 7px;cursor:pointer;transition:.12s;font-family:inherit}
 .lv-ev-edit:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);
   background:rgba(0,154,199,.06);border-style:solid}
+.lv-ev-proj{font-family:var(--font-mono,monospace);font-size:10px;font-weight:600;
+  color:var(--pool,#009AC7);white-space:nowrap}
+.lv-ev-proj.dim{color:var(--tx3,#8A90A2);font-weight:500}
 @media(max-width:420px){.lt-grid{grid-template-columns:1fr}}
 html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
 
