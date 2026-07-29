@@ -1590,6 +1590,31 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
 .lv-ev-proj{font-family:var(--font-mono,monospace);font-size:10px;font-weight:600;
   color:var(--pool,#009AC7);white-space:nowrap}
 .lv-ev-proj.dim{color:var(--tx3,#8A90A2);font-weight:500}
+
+/* Split boards on the deck — one line per physical board */
+.lv-ev.split{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lv-bds{display:flex;flex-direction:column;gap:5px}
+.lv-bd{display:inline-flex;align-items:center;gap:6px}
+.lv-bd-n{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;
+  padding:0 6px;border-radius:5px;font-size:11px;font-weight:800;letter-spacing:.02em;
+  background:var(--navy,#171F69);color:#fff;flex-shrink:0}
+.lv-bd.running .lv-bd-n{background:#F5A524;color:#1A1400}
+.lv-bd.done .lv-bd-n{background:#1B7F4B;color:#fff}
+.lv-bd-t{font-family:var(--font-mono,monospace);font-size:10px;color:var(--tx2,#5A6072);
+  white-space:nowrap;border:1px dashed var(--bd2,#DDE1EC);background:transparent;border-radius:6px;
+  padding:2px 7px;cursor:pointer;transition:.12s}
+.lv-bd-t:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);
+  background:rgba(0,154,199,.06);border-style:solid}
+
+/* Split boards in the Edit times screen */
+.lt-splittag{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  background:rgba(0,154,199,.10);color:var(--cyan,#009AC7);border:1px solid rgba(0,154,199,.35);
+  padding:2px 6px;border-radius:4px}
+.lt-board{margin:0 0 10px 12px;padding-left:11px;border-left:2px solid var(--bd,#E6E9F2)}
+.lt-board.is-focus{border-left-color:var(--pool,#009AC7);background:rgba(0,154,199,.05);
+  border-radius:0 8px 8px 0;padding:8px 10px 8px 11px}
+.lt-bname{font-size:11.5px;font-weight:700;color:var(--tx2,#5A6072);margin-bottom:5px;
+  display:flex;align-items:center;gap:7px}
 @media(max-width:420px){.lt-grid{grid-template-columns:1fr}}
 html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
 
@@ -1655,8 +1680,18 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
   .lv-xbtn{height:34px;padding:0 13px;font-size:12px}
   .lv-ev-t{font-size:11.5px}
 
+  /* Split boards: stack the row so each board's controls get full width */
+  .lv-ev.split{display:flex;flex-direction:column;align-items:stretch;gap:7px;width:100%}
+  .lv-bds{gap:7px}
+  .lv-bd{gap:7px;flex-wrap:wrap}
+  .lv-bd-n{min-width:28px;height:28px;font-size:13px}
+  .lv-bd-t{font-size:12px;padding:5px 9px}
+  .lv-bd .lv-xbtn{margin-left:auto}
+
   /* Editing recorded times */
   .lt-grid{grid-template-columns:1fr;gap:8px}
+  .lt-board{margin-left:0;padding-left:9px}
+  .lt-bname{font-size:13px}
   .lt-row{margin-bottom:16px}
   .lt-name{font-size:13.5px}
   .lt-row .fi{height:46px;font-size:16px}   /* 16px keeps iOS from zooming the page */

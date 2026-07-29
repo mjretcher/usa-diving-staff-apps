@@ -2276,7 +2276,9 @@ function render(){
   // inside render() while a meet is running.
   if(UI.modal==='live-times'&&UI.liveTimesFocusEvId){
     try{
-      const fe=document.getElementById('lt-e-st-'+UI.liveTimesFocusEvId);
+      const fe=document.getElementById(UI.liveTimesFocusBoard!=null
+        ?'lt-b-st-'+UI.liveTimesFocusEvId+'-'+UI.liveTimesFocusBoard
+        :'lt-e-st-'+UI.liveTimesFocusEvId);
       if(fe){if(fe.scrollIntoView)fe.scrollIntoView({block:'center'});if(fe.focus)fe.focus();}
     }catch(e){}
   }

@@ -22,9 +22,13 @@
      S.live = {
        on: true,
        day: '2026-08-03',                       // guards against stale stamps
-       s: { <sessionId>: {st, en, stAt, enAt} },
-       e: { <eventId>:   {st, en, stAt, enAt} }
+       s: { <sessionId>:      {st, en, stAt, enAt} },
+       e: { <eventId>:        {st, en, stAt, enAt} },
+       b: { '<eventId>::0|1': {st, en, stAt, enAt} }   // split boards
      }
+   For a split event the e[] record is DERIVED from its boards — first board in,
+   last board out — so everything downstream stays right without knowing boards
+   exist.
    ───────────────────────────────────────────────────────────────────────── */
 
 // ── time helpers ─────────────────────────────────────────────────────────
@@ -70,9 +74,10 @@ function liveDeltaCls(mins){
 
 // ── state ────────────────────────────────────────────────────────────────
 function liveState(){
-  if(!S.live||typeof S.live!=='object')S.live={on:false,s:{},e:{}};
+  if(!S.live||typeof S.live!=='object')S.live={on:false,s:{},e:{},b:{}};
   if(!S.live.s)S.live.s={};
   if(!S.live.e)S.live.e={};
+  if(!S.live.b)S.live.b={};   // per-board actuals, keyed evId::0 / evId::1
   return S.live;
 }
 function liveOn(){return !!liveState().on}
@@ -117,6 +122,8 @@ function liveFinishSess(sessId){
     // Any event still shown as running is closed out at the same moment, so the
     // sheet can never be left claiming an event is live inside a finished session.
     (sess?sess.events:[]).forEach(ev=>{
+      [0,1].forEach(i=>{const br=l.b[boardKey(ev.id,i)];
+        if(br&&br.st!=null&&br.en==null){br.en=now;br.enAt=new Date().toISOString();}});
       const er=l.e[ev.id];
       if(er&&er.st!=null&&er.en==null){er.en=now;er.enAt=new Date().toISOString();}
     });
@@ -151,6 +158,12 @@ function liveStartAllEvs(sessId){
     const sr=l.s[sessId]||(l.s[sessId]={});
     if(sr.st==null){sr.st=now;sr.stAt=new Date().toISOString();}
     open.forEach(ev=>{
+      if(evIsSplit(ev)){
+        [0,1].forEach(i=>{const br=l.b[boardKey(ev.id,i)]||(l.b[boardKey(ev.id,i)]={});
+          if(br.st==null){br.st=now;br.stAt=new Date().toISOString();}});
+        liveSyncEvFromBoards(l,ev);
+        return;
+      }
       const r=l.e[ev.id]||(l.e[ev.id]={});
       if(r.st==null){r.st=now;r.stAt=new Date().toISOString();}
     });
@@ -164,7 +177,7 @@ function liveClearSess(sessId){
     confirmText:'Clear recorded times',danger:true,
     onConfirm:()=>liveWrite(l=>{
       delete l.s[sessId];
-      (sess?sess.events:[]).forEach(ev=>{delete l.e[ev.id]});
+      (sess?sess.events:[]).forEach(ev=>{delete l.e[ev.id];[0,1].forEach(i=>{delete l.b[boardKey(ev.id,i)]})});
     },'Recorded times cleared')
   });
 }
@@ -176,7 +189,9 @@ function liveResetDay(){
     message:'All actual start and finish times logged today are removed. The planned schedule is not affected.',
     confirmText:'Clear the day',danger:true,
     onConfirm:()=>liveWrite(l=>{
-      sessions.forEach(s=>{delete l.s[s.id];(s.events||[]).forEach(ev=>{delete l.e[ev.id]})});
+      sessions.forEach(s=>{delete l.s[s.id];
+        (s.events||[]).forEach(ev=>{delete l.e[ev.id];[0,1].forEach(i=>{delete l.b[boardKey(ev.id,i)]})});
+      });
     },'Recorded times cleared for this day')
   });
 }
@@ -247,6 +262,23 @@ function liveProject(dayId){
 
     const evs=(t.events||[]).map(ev=>{
       const er=liveEv(ev.id)||{};
+      // Both boards of a split run the same half-field concurrently, so each board's
+      // length is the event's own planned length. A board that goes in late gets off
+      // late by exactly that much.
+      const evDur=Math.max(0,ev.eventEndMinutes-ev.eventStartMinutes);
+      const split=(typeof evIsSplit==='function')&&evIsSplit(ev);
+      const bnames=split?boardNamesFor(ev.apparatus):null;
+      const boards=split?[0,1].map(i=>{
+        const br=liveBoard(ev.id,i)||{};
+        let bst,ben,bstatus;
+        if(br.en!=null){bstatus='done';bst=br.st!=null?br.st:ev.eventStartMinutes+shift;ben=br.en;}
+        else if(br.st!=null){bstatus='running';bst=br.st;ben=bst+evDur;
+          if(isToday&&now>ben&&now<=ben+90)ben=now;}
+        else{bstatus='todo';bst=ev.eventStartMinutes+shift;ben=ev.eventEndMinutes+shift;}
+        return{i:i,name:bnames[i],st:br.st,en:br.en,stM:!!br.stM,enM:!!br.enM,
+          projStart:bst,projEnd:ben,status:bstatus,
+          delta:bstatus==='done'?(br.en-ev.eventEndMinutes):(bst-ev.eventStartMinutes)};
+      }):null;
       let est,een,estatus;
       if(er.en!=null){estatus='done';est=er.st!=null?er.st:ev.eventStartMinutes+shift;een=er.en;}
       else if(er.st!=null){
@@ -255,19 +287,25 @@ function liveProject(dayId){
         // speak for it: two boards that went in twenty minutes apart have to be able
         // to report finishing twenty minutes apart, which is the whole reason for
         // recording them separately.
-        een=est+Math.max(0,ev.eventEndMinutes-ev.eventStartMinutes);
+        een=est+evDur;
+        // A split event is off the boards when its LAST board is off.
+        if(boards)een=Math.max.apply(null,boards.map(b=>b.projEnd));
         if(isToday&&now>een&&now<=een+90)een=now;}
       else{estatus='todo';est=ev.eventStartMinutes+shift;een=ev.eventEndMinutes+shift;}
       return{id:ev.id,name:(typeof evName==='function'?evName(ev):''),
         plannedStart:ev.eventStartMinutes,plannedEnd:ev.eventEndMinutes,
-        projStart:est,projEnd:een,status:estatus,
+        projStart:est,projEnd:een,status:estatus,split:split,boards:boards,
         delta:estatus==='done'?(er.en-ev.eventEndMinutes):(est-ev.eventStartMinutes)};
     });
 
     // A session is over when its LAST event is over. Now that each running event
     // carries its own end, fold the latest of them back up so the session — and
     // everything downstream of it — reflects the board that is actually running late.
-    const anyEvActual=(t.events||[]).some(ev=>{const er=liveEv(ev.id);return er&&(er.st!=null||er.en!=null)});
+    const anyEvActual=(t.events||[]).some(ev=>{
+      const er=liveEv(ev.id);
+      if(er&&(er.st!=null||er.en!=null))return true;
+      return [0,1].some(i=>{const br=liveBoard(ev.id,i);return br&&(br.st!=null||br.en!=null)});
+    });
     if(status==='running'&&evs.length&&anyEvActual){
       const latest=Math.max.apply(null,evs.map(e=>e.projEnd));
       // The plan's gap between its last event ending and the session ending is the
@@ -420,6 +458,33 @@ function liveEvCtl(sess,ev){
   // per event — and the one people actually need when deciding what to do next.
   const pr=(liveProject(sess.dayId).find(x=>x.sess.id===sess.id)||{events:[]})
              .events.find(x=>x.id===ev.id);
+  // A split event is two boards running at once. They start, end and get corrected
+  // independently, because on the deck they genuinely do.
+  if(pr&&pr.split&&pr.boards){
+    const rows=pr.boards.map(b=>{
+      const ed=`onclick="event.stopPropagation();openLiveTimes('${sess.id}','${ev.id}',${b.i})" title="Board ${esc(b.name)} \u2014 tap to type these times in by hand"`;
+      let body;
+      if(b.en!=null){
+        body=`<button class="lv-bd-t lv-ev-edit live-ctl" ${ed}>${f12(b.st!=null?b.st:b.projStart)}\u2013${f12(b.en)}${(b.stM||b.enM)?' \u00b7 by hand':''}</button>
+          <span class="lv-chip sm ${liveDeltaCls(b.delta)}">${liveDelta(b.delta)}</span>
+          <button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartBoard('${sess.id}','${ev.id}',${b.i})" title="Re-open board ${esc(b.name)} and set its start to now">\u21ba</button>`;
+      }else if(b.st!=null){
+        body=`<button class="lv-bd-t lv-ev-edit live-ctl" ${ed}>on since ${f12(b.st)}${b.stM?' \u00b7 by hand':''}</button>
+          <span class="lv-ev-proj" title="Projected finish for board ${esc(b.name)}, from its own start">\u2192 ${f12(b.projEnd)}</span>
+          <button class="lv-xbtn end live-ctl" onclick="event.stopPropagation();liveEndBoard('${sess.id}','${ev.id}',${b.i})" title="Board ${esc(b.name)} is finished">End</button>`;
+      }else{
+        body=`<span class="lv-ev-proj dim">${f12(b.projStart)} \u2013 ${f12(b.projEnd)}</span>
+          <button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartBoard('${sess.id}','${ev.id}',${b.i})" title="Board ${esc(b.name)} is going in now">Start</button>`;
+      }
+      return`<span class="lv-bd ${b.status}"><span class="lv-bd-n">${esc(b.name)}</span>${body}</span>`;
+    }).join('');
+    const anyOpen=pr.boards.some(b=>b.st==null);
+    return`<span class="lv-ev split live-ctl" onclick="event.stopPropagation()">
+      <span class="lv-bds">${rows}</span>
+      ${anyOpen?`<button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartBothBoards('${sess.id}','${ev.id}')" title="Both boards went in at the same time">Start both</button>`:''}
+    </span>`;
+  }
+
   // Once a time is on the row, that time IS the edit control. Tapping the number
   // you want to change is the thing people try first, so it should work.
   const edit=(title)=>`onclick="event.stopPropagation();openLiveTimes('${sess.id}','${ev.id}')" title="${title}"`;
@@ -444,6 +509,80 @@ function liveEvCtl(sess,ev){
   </span>`;
 }
 
+// ── SPLIT BOARDS ──────────────────────────────────────────────────────────
+// A split event is one field run across TWO boards at the same time — that is
+// exactly what the plan's timing means by "split" (raw/2 + panel changes). The
+// boards are physical positions the deck crew names out loud, and they do not
+// necessarily go in together. Recording them separately is the only way to answer
+// "which board is behind, and when does each one get off".
+//
+// Names are per apparatus and settable per meet.
+const BOARD_NAMES_DEFAULT={'1-Meter':['A','U'],'3-Meter':['S','D']};
+function boardNamesFor(apparatus){
+  const custom=(S.meet&&S.meet.boardNames)||{};
+  const n=custom[apparatus]||BOARD_NAMES_DEFAULT[apparatus]||['A','B'];
+  return [String(n[0]||'A'),String(n[1]||'B')];
+}
+// Same eligibility as the rest of the app's "split boards" tag.
+function evIsSplit(ev){
+  return Boolean(ev&&ev.manualSplit)&&!isPlatform(ev.apparatus)&&ev.round!=='Final';
+}
+function boardKey(evId,i){return evId+'::'+i}
+function liveBoard(evId,i){return liveState().b[boardKey(evId,i)]||null}
+// The event as a whole: under way once the FIRST board goes in, finished only once
+// BOTH are. Deriving it keeps every existing consumer of liveEv() correct without
+// having to know boards exist.
+function liveSyncEvFromBoards(l,ev){
+  const recs=[0,1].map(i=>l.b[boardKey(ev.id,i)]).filter(Boolean);
+  const r=l.e[ev.id]||{};
+  if(!recs.length){delete l.e[ev.id];return;}
+  const sts=recs.map(x=>x.st).filter(v=>v!=null);
+  const ens=recs.map(x=>x.en).filter(v=>v!=null);
+  if(sts.length)r.st=Math.min.apply(null,sts); else delete r.st;
+  if(ens.length===2)r.en=Math.max.apply(null,ens); else delete r.en;   // both boards must be done
+  r.stM=recs.some(x=>!!x.stM); r.enM=recs.some(x=>!!x.enM);
+  r.fromBoards=true;
+  if(r.st==null&&r.en==null)delete l.e[ev.id]; else l.e[ev.id]=r;
+}
+function liveStartBoard(sessId,evId,i){
+  const sess=S.sessions.find(x=>x.id===sessId); if(!sess)return;
+  const ev=(sess.events||[]).find(e=>e.id===evId); if(!ev)return;
+  const now=liveNowMin();
+  liveWrite(l=>{
+    const r=l.b[boardKey(ev.id,i)]||(l.b[boardKey(ev.id,i)]={});
+    r.st=now;r.stAt=new Date().toISOString();
+    delete r.en;delete r.enAt;delete r.stM;delete r.enM;
+    liveSyncEvFromBoards(l,ev);
+    const sr=l.s[sessId]||(l.s[sessId]={});
+    if(sr.st==null){sr.st=now;sr.stAt=new Date().toISOString();}
+  },'Board '+boardNamesFor(ev.apparatus)[i]+' started at '+f12(now));
+}
+function liveEndBoard(sessId,evId,i){
+  const sess=S.sessions.find(x=>x.id===sessId); if(!sess)return;
+  const ev=(sess.events||[]).find(e=>e.id===evId); if(!ev)return;
+  const now=liveNowMin();
+  liveWrite(l=>{
+    const r=l.b[boardKey(ev.id,i)]||(l.b[boardKey(ev.id,i)]={});
+    if(r.st==null){r.st=now;r.stAt=new Date().toISOString();}
+    r.en=now;r.enAt=new Date().toISOString();
+    liveSyncEvFromBoards(l,ev);
+  },'Board '+boardNamesFor(ev.apparatus)[i]+' finished at '+f12(now));
+}
+function liveStartBothBoards(sessId,evId){
+  const sess=S.sessions.find(x=>x.id===sessId); if(!sess)return;
+  const ev=(sess.events||[]).find(e=>e.id===evId); if(!ev)return;
+  const now=liveNowMin(); const nm=boardNamesFor(ev.apparatus);
+  liveWrite(l=>{
+    [0,1].forEach(i=>{
+      const r=l.b[boardKey(ev.id,i)]||(l.b[boardKey(ev.id,i)]={});
+      if(r.st==null){r.st=now;r.stAt=new Date().toISOString();}
+    });
+    liveSyncEvFromBoards(l,ev);
+    const sr=l.s[sessId]||(l.s[sessId]={});
+    if(sr.st==null){sr.st=now;sr.stAt=new Date().toISOString();}
+  },'Boards '+nm[0]+' and '+nm[1]+' started at '+f12(now));
+}
+
 // ── typing a time in by hand ──────────────────────────────────────────────
 // Tapping Start/Finish the moment something happens is the fast path, but it is
 // not always possible — you are on the deck, the session went in while you were
@@ -456,15 +595,16 @@ function liveEvCtl(sess,ev){
 // remains true either way and keeps the audit trail honest.
 //
 // Same hard rule as the rest of this module: this never touches the plan.
-function openLiveTimes(sessId,evId){
+function openLiveTimes(sessId,evId,boardI){
   UI.liveTimesSessId=sessId;
   UI.liveTimesFocusEvId=evId||null;   // jump straight to the event you tapped
+  UI.liveTimesFocusBoard=(boardI===0||boardI===1)?boardI:null;
   UI.liveTimesErr='';
   UI.modal='live-times';
   render();
 }
 function closeLiveTimes(){
-  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesErr='';UI.modal=null;render();
+  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesFocusBoard=null;UI.liveTimesErr='';UI.modal=null;render();
 }
 // '' / null -> not recorded. Anything else -> minutes from midnight.
 function liveParseField(id){
@@ -486,8 +626,20 @@ function liveSaveTimes(){
     UI.liveTimesErr='The session finish ('+f12(sEn)+') is before its start ('+f12(sSt)+'). Check both times.';
     render();return;
   }
-  const evVals=[];
+  const evVals=[],bdVals=[];
   for(const ev of (sess.events||[])){
+    if(evIsSplit(ev)){
+      const nm=boardNamesFor(ev.apparatus);
+      for(const i of [0,1]){
+        const a=liveParseField('lt-b-st-'+ev.id+'-'+i),b=liveParseField('lt-b-en-'+ev.id+'-'+i);
+        if(a!=null&&b!=null&&b<a){
+          UI.liveTimesErr=evName(ev)+' board '+nm[i]+' finishes ('+f12(b)+') before it starts ('+f12(a)+'). Check both times.';
+          render();return;
+        }
+        bdVals.push({ev,i,st:a,en:b});
+      }
+      continue;
+    }
     const a=liveParseField('lt-e-st-'+ev.id),b=liveParseField('lt-e-en-'+ev.id);
     if(a!=null&&b!=null&&b<a){
       UI.liveTimesErr=evName(ev)+' finishes ('+f12(b)+') before it starts ('+f12(a)+'). Check both times.';
@@ -516,8 +668,17 @@ function liveSaveTimes(){
       apply(er,'st',st);apply(er,'en',en);
       if(er.st==null&&er.en==null)delete l.e[ev.id];
     });
+    const touched=new Set();
+    bdVals.forEach(({ev,i,st,en})=>{
+      const br=l.b[boardKey(ev.id,i)]||(l.b[boardKey(ev.id,i)]={});
+      apply(br,'st',st);apply(br,'en',en);
+      if(br.st==null&&br.en==null)delete l.b[boardKey(ev.id,i)];
+      touched.add(ev);
+    });
+    // The event's own record is only ever a summary of its boards.
+    touched.forEach(ev=>liveSyncEvFromBoards(l,ev));
   },n?(n+' time'+(n===1?'':'s')+' saved'):'No times changed');
-  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesErr='';UI.modal=null;render();
+  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesFocusBoard=null;UI.liveTimesErr='';UI.modal=null;render();
 }
 function renderLiveTimesModal(){
   const sess=S.sessions.find(x=>x.id===UI.liveTimesSessId);
@@ -529,9 +690,30 @@ function renderLiveTimesModal(){
   const evRows=(sess.events||[]).map(ev=>{
     const r=liveEv(ev.id)||{};
     const pl=(t&&(t.timing.events||[]).find(x=>x.id===ev.id))||null;
+    const planned=pl?`<span class="lt-planned">planned ${f12(pl.eventStartMinutes)} \u2013 ${f12(pl.eventEndMinutes)}</span>`:'';
+    // Split: two named boards, each with its own pair. There is deliberately NO
+    // event-level pair to edit here — the event's times ARE its boards (first in,
+    // last out), and offering both would let you contradict yourself.
+    if(evIsSplit(ev)){
+      const nm=boardNamesFor(ev.apparatus);
+      const bd=[0,1].map(i=>{
+        const br=liveBoard(ev.id,i)||{};
+        const foc=(UI.liveTimesFocusEvId===ev.id&&UI.liveTimesFocusBoard===i)?' is-focus':'';
+        return`<div class="lt-board${foc}">
+          <div class="lt-bname">Board ${esc(nm[i])}${hand(br.stM||br.enM)}</div>
+          <div class="lt-grid">
+            <div class="fg"><label class="fl">Started</label><input id="lt-b-st-${ev.id}-${i}" class="fi" type="time" value="${br.st!=null?f24(br.st):''}"/></div>
+            <div class="fg"><label class="fl">Finished</label><input id="lt-b-en-${ev.id}-${i}" class="fi" type="time" value="${br.en!=null?f24(br.en):''}"/></div>
+          </div>
+        </div>`;
+      }).join('');
+      return`<div class="lt-row${UI.liveTimesFocusEvId===ev.id?' is-focus':''}">
+        <div class="lt-name">${esc(evName(ev))}<span class="lt-splittag">split \u00b7 2 boards</span>${planned}</div>
+        ${bd}
+      </div>`;
+    }
     return`<div class="lt-row${UI.liveTimesFocusEvId===ev.id?' is-focus':''}">
-      <div class="lt-name">${esc(evName(ev))}${hand(r.stM||r.enM)}
-        ${pl?`<span class="lt-planned">planned ${f12(pl.eventStartMinutes)} \u2013 ${f12(pl.eventEndMinutes)}</span>`:''}</div>
+      <div class="lt-name">${esc(evName(ev))}${hand(r.stM||r.enM)}${planned}</div>
       <div class="lt-grid">
         <div class="fg"><label class="fl">Started</label><input id="lt-e-st-${ev.id}" class="fi" type="time" value="${r.st!=null?f24(r.st):''}"/></div>
         <div class="fg"><label class="fl">Finished</label><input id="lt-e-en-${ev.id}" class="fi" type="time" value="${r.en!=null?f24(r.en):''}"/></div>
