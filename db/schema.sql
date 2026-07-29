@@ -937,6 +937,31 @@ CREATE INDEX IF NOT EXISTS sm_meets_queue ON scoresandmore.meets(results_done, s
 
 
 -- ---------------------------------------------------------------------------
+-- Live run sheet: what ACTUALLY happened, kept OUT of the schedule blob.
+--
+-- Actuals used to live inside schedules.data as data->'live'. That meant every
+-- tap on the deck rewrote and republished the entire published schedule, so a
+-- device holding an older copy could overwrite newer plan edits made elsewhere.
+-- Recording reality and authoring the plan are different jobs with different
+-- edit patterns and they now have different rows.
+CREATE TABLE IF NOT EXISTS schedule_builder.run_sheets (
+    schedule_id TEXT PRIMARY KEY,
+    data        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One-time backfill of anything already recorded inside a schedule blob.
+-- ON CONFLICT DO NOTHING makes it safe to re-run on every migration: once a
+-- run sheet row exists it is the source of truth and is never overwritten from
+-- the (now frozen) copy in the blob.
+INSERT INTO schedule_builder.run_sheets(schedule_id, data, updated_at)
+SELECT id, data->'live', now()
+  FROM schedule_builder.schedules
+ WHERE data ? 'live'
+   AND jsonb_typeof(data->'live') = 'object'
+ON CONFLICT (schedule_id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- Scoped-role grants. usad_app is the browser-facing read role shipped in
 -- data/config.js, so this list is effectively public: only public competition
 -- data goes here. The membership schema is deliberately absent (PII policy).
@@ -952,5 +977,9 @@ BEGIN
       GRANT SELECT ON TABLES TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA scoresandmore
       GRANT SELECT ON TABLES TO usad_app;
+    -- The run sheet is written from the deck by the browser role, so unlike the
+    -- crawl schemas above this one needs write access, not just SELECT.
+    GRANT USAGE ON SCHEMA schedule_builder TO usad_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON schedule_builder.run_sheets TO usad_app;
   END IF;
 END $$;
