@@ -3138,6 +3138,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
+    ${typeof renderJudgesSessPanel==='function'?renderJudgesSessPanel(sess):''}
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
     ${sess.events.length>1?renderCombinePanel(sess,t):''}
@@ -3171,6 +3172,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
         </div>
         ${splitHint}
         ${typeof renderBcastEvPanel==='function'?renderBcastEvPanel(sess,ev):''}
+        ${typeof renderJudgesEvPanel==='function'?renderJudgesEvPanel(sess,ev):''}
       </div>`;
     }).join('')}</div>`:`<p style="font-size:12px;color:var(--tx3);margin-bottom:12px">No events yet.</p>`}
     <button class="btn btn-sm" onclick="UI.modal='add-event';UI.pickerSessId='${sess.id}';UI.pickerSearch='';UI.pickerPreset='';UI.pickerRound='';render()">+ Add event</button>`;
