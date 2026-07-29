@@ -117,6 +117,8 @@ const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)retu
 
 // ── NEON ──────────────────────────────────────────────────────────────
 let sync={ok:false,saving:false,err:null},saveTimer=null,lastSynced=null;
+// Latches so a repeated conflict does not spam the user or the version table.
+let _staleSaveNoticed=false;
 // Record — in the SAVED state, not just in memory — the server-clock revision of the
 // cloud copy this browser last agreed with, and clear the "has unpushed edits" flag.
 //
@@ -254,7 +256,48 @@ function scheduleSave(){clearTimeout(saveTimer);S.dirty=true;try{localStorage.se
 async function doSave(){
   if(!S.currentLibraryId)return;
   try{
-    const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
+    // OPTIMISTIC CONCURRENCY. This used to be an unconditional upsert: whichever
+    // browser wrote last replaced the whole schedule, plan and all. Any device
+    // holding an older copy — including one whose only action was a run-sheet tap,
+    // since those push the same blob — silently republished that older copy over
+    // newer work from another device. That is the "schedule reverted to an old
+    // version" report, and with two browsers open on a meet day it is easy to hit.
+    //
+    // Now a write only lands on the revision this browser last agreed with.
+    //
+    // The millisecond tolerance is load-bearing: Postgres keeps microseconds
+    // (…13.216512+00) but markSynced stores a JS toISOString() that truncates to
+    // milliseconds (…13.216Z). A plain `updated_at <= $8` is therefore FALSE against
+    // the very row we just wrote, which would block every save. Verified against the
+    // live row before shipping.
+    const guard=lastSynced||null;
+    const sql=guard
+      ? `INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() WHERE schedules.updated_at < ($8::timestamptz + interval '1 millisecond') RETURNING updated_at`
+      : `INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`;
+    const args=[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)];
+    if(guard)args.push(guard);
+    const r=await nq(sql,args);
+
+    if(!r.rows||!r.rows.length){
+      // Somebody else moved the cloud copy since we last agreed with it. Do NOT
+      // overwrite them. Keep what is on this screen in version history so it is
+      // recoverable, then let this browser fall back in step with the cloud.
+      if(!_staleSaveNoticed){
+        _staleSaveNoticed=true;
+        await archiveLocalVersion(S.currentLibraryId,'Not saved \u2014 another browser had newer changes');
+        toast('Another device has newer changes, so this browser did not overwrite them. What was on this screen is saved in Version history.',9000);
+      }
+      // Dropping the dirty flag is what stops the poll from "winning" with this
+      // stale copy on its next cycle. The work is not lost — it is archived above.
+      S.dirty=false;
+      try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
+      const active=document.activeElement;
+      const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+      if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
+      setSyncDot('ok');
+      return;
+    }
+    _staleSaveNoticed=false;
     // Use the DATABASE's own timestamp for updated_at, not the client clock.
     // Comparing a client-clock lastSynced against a server-clock updated_at
     // is exactly the kind of thing clock skew / network latency breaks —
@@ -263,6 +306,17 @@ async function doSave(){
     markSynced(r.rows?.[0]?.[0]);
     sync.ok=true;sync.err=null;setSyncDot('ok');
   }catch(e){sync.err=e.message;setSyncDot('error')}
+}
+// Snapshot what is on THIS screen into version history — used when we decline to
+// overwrite a newer cloud copy, so declining can never mean losing.
+async function archiveLocalVersion(id,label){
+  const put=()=>nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,[id,label,JSON.stringify(S)]);
+  try{await put()}catch(e){
+    try{
+      await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
+      await put();
+    }catch(e2){console.warn('Could not archive local version:',e2.message)}
+  }
 }
 async function saveToNeon(name,folder){
   const id=S.currentLibraryId||uid();S.currentLibraryId=id;
