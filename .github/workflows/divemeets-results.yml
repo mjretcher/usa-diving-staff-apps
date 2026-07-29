@@ -20,23 +20,20 @@ on:
         required: false
         default: "1200"
   schedule:
-    # every 25 minutes, offset from the catalog crawl; exits fast once the
-    # queue for the sanction filter is drained.
-    #   :05/:30/:55 -> USA Diving   :15/:40 -> AAU   :20/:45 -> NCAA targets
-    # The AAU backlog feeds athlete-level AAU comparison in Membership
-    # Analytics; without its own slot it would only ever advance by hand.
-    # THINNED 2026-07-28. Was every 25 min on three staggered crons (~216 runs/day).
-    # Neon bills compute by AWAKE TIME, and scale-to-zero waits a fixed 5 minutes after
-    # the last query — so a run that exits in 18 seconds still costs ~5 minutes of
-    # compute. Measured run durations were a median of 18s across the last 12 runs, i.e.
-    # the queue is drained and nearly every wakeup was doing nothing.
-    # Throughput is preserved by raising fetch_budget below rather than by running often:
-    # the one genuinely-working run in that sample took 585s for 700 pages, so a 1200-page
-    # budget still finishes far inside the job timeout.
-    #   USA Diving every 2h, AAU every 3h, NCAA every 6h -> ~24 runs/day (-89% wakeups).
+    # ONE slot. The script drains the whole chain per run — USA Diving, then
+    # AAU, then the NCAA target list — so throughput comes from fetch_budget,
+    # not from staggered crons.
+    #
+    # Neon bills compute by AWAKE time and scale-to-zero waits a fixed 5 min
+    # after the last query, so a run that exits in 18s still costs ~5 min of
+    # compute. Fewer, fuller wakeups is both cheaper and faster here.
+    #
+    # The three staggered crons this replaces each carried a
+    # `github.event.schedule == '<cron literal>'` test to pick the scope. When
+    # the crons were retimed on 2026-07-28 those literals were not updated, so
+    # every run silently fell back to the already-drained USA Diving queue and
+    # the NCAA crawl made zero progress for 31 hours while reporting success.
     - cron: "5 */2 * * *"
-    - cron: "25 */3 * * *"
-    - cron: "45 */6 * * *"
 
 concurrency:
   group: divemeets-results
@@ -62,10 +59,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
-          SANCTION: ${{ github.event.inputs.sanction || (github.event.schedule == '15/25 * * * *' && 'Amateur Athletic Union (AAU)' || 'USA Diving') }}
-          # NCAA is scoped by explicit target list, not by sanction — the
-          # registry holds 7,200+ NCAA meets and we want ~380 championships.
-          TARGET_TAG: ${{ github.event.inputs.target_tag || (github.event.schedule == '20/25 * * * *' && '*' || '') }}
+          # Both empty on a scheduled run: that is the signal for the script
+          # to drain its default chain. Only a manual dispatch narrows scope.
+          SANCTION: ${{ github.event.inputs.sanction }}
+          TARGET_TAG: ${{ github.event.inputs.target_tag }}
           # Scheduled runs carry no inputs, so this MUST have a fallback — otherwise the
           # env var is empty on cron and the reduced run frequency above would not be
           # compensated by a larger per-run budget.

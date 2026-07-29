@@ -42,7 +42,8 @@ from datetime import date, datetime, timezone
 import psycopg2
 
 DB_URL = os.environ["DATABASE_URL"]
-SANCTION = os.environ.get("SANCTION", "").strip() or "USA Diving"
+SANCTION_ENV = os.environ.get("SANCTION", "").strip()
+SANCTION = SANCTION_ENV or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 700)
 QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 3)
 # A meet that fails this many times is parked and skipped by the queue so it
@@ -54,15 +55,33 @@ TARGET_TAG = (os.environ.get("TARGET_TAG") or "").strip()
 # Queue scope: either a whole sanction (the USA Diving / AAU crawls) or an
 # explicit target list (NCAA). Kept as a SQL fragment + params so the queue
 # and the "parked" tally can't drift apart.
-if TARGET_TAG:
-    SCOPE_SQL = ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
-                 "WHERE t.meet_id = m.meet_id AND (%s = '*' OR t.tag = %s))")
-    SCOPE_PARAMS = (TARGET_TAG, TARGET_TAG)
-    SCOPE_DESC = f"target_tag={TARGET_TAG!r}"
-else:
-    SCOPE_SQL = "m.sanction = %s"
-    SCOPE_PARAMS = (SANCTION,)
-    SCOPE_DESC = f"sanction={SANCTION!r}"
+def _sanction_scope(name):
+    return ("m.sanction = %s", (name,), f"sanction={name!r}")
+
+def _target_scope(tag):
+    return ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
+            "WHERE t.meet_id = m.meet_id AND (%s = '*' OR t.tag = %s))",
+            (tag, tag), f"target_tag={tag!r}")
+
+# A scheduled run drains this whole chain in priority order, falling through
+# as each queue empties, rather than relying on which cron string fired.
+#
+# The previous design keyed the scope off `github.event.schedule ==
+# '<literal cron>'` in the workflow. On 2026-07-28 the crons were rewritten to
+# cut Neon wakeups and those literals were left pointing at cron strings that
+# no longer existed, so TARGET_TAG silently evaluated to '' on every run and
+# the NCAA crawl sat at 32 of 380 meets for 31 hours while the logs cheerfully
+# reported success. Chaining in the script removes that whole class of bug:
+# there is nothing to keep in sync with the schedule.
+DEFAULT_CHAIN = ["USA Diving", "Amateur Athletic Union (AAU)", "*targets*"]
+
+def build_scopes():
+    if TARGET_TAG:
+        return [_target_scope(TARGET_TAG)]
+    if SANCTION_ENV:
+        return [_sanction_scope(SANCTION_ENV)]
+    return [_target_scope("*") if s == "*targets*" else _sanction_scope(s)
+            for s in DEFAULT_CHAIN]
 SLEEP_S = 0.8
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -204,65 +223,81 @@ def main():
     cur = conn.cursor()
     meets_done = 0
     meets_failed = 0
-    while fetches < FETCH_BUDGET:
-        if ONLY_MEET:
-            if meets_done:
-                break
-            meet_id, name = int(ONLY_MEET), f"(explicit {ONLY_MEET})"
-        else:
+
+    if ONLY_MEET:
+        meet_id, name = int(ONLY_MEET), f"(explicit {ONLY_MEET})"
+        try:
+            n_ev, n_rows, note = crawl_meet(cur, meet_id)
+            conn.commit()
+            log(f"meet {meet_id} {name!r}: {n_ev} event-rounds, "
+                f"{n_rows} result rows{' [' + note + ']' if note else ''}")
+        except Exception:
+            conn.rollback()
+            raise
+        cur.close(); conn.close()
+        return
+
+    for scope_sql, scope_params, scope_desc in build_scopes():
+        if fetches >= FETCH_BUDGET:
+            log(f"fetch budget spent — {scope_desc} not reached this run")
+            break
+        scope_done = 0
+        while fetches < FETCH_BUDGET:
             cur.execute(
                 f"""SELECT meet_id, meet_name FROM divemeets.meets m
-                   WHERE {SCOPE_SQL} AND NOT results_done
+                   WHERE {scope_sql} AND NOT results_done
                      AND http_status=200 AND meet_name IS NOT NULL
                      AND coalesce(results_attempts,0) < %s::int
                      AND coalesce(end_date, start_date) IS NOT NULL
                      AND coalesce(end_date, start_date)
                          <= current_date - %s::int
                    ORDER BY start_date DESC, meet_id DESC LIMIT 1""",
-                SCOPE_PARAMS + (MAX_ATTEMPTS, QUIET_DAYS))
+                scope_params + (MAX_ATTEMPTS, QUIET_DAYS))
             r = cur.fetchone()
             if not r:
-                log(f"queue empty for {SCOPE_DESC} — all caught up")
+                log(f"queue empty for {scope_desc} — all caught up")
                 break
             meet_id, name = r
-        try:
-            n_ev, n_rows, note = crawl_meet(cur, meet_id)
-            conn.commit()
-            meets_done += 1
-            log(f"meet {meet_id} {name!r}: {n_ev} event-rounds, "
-                f"{n_rows} result rows{' [' + note + ']' if note else ''}")
-        except Exception as e:
-            # Isolate the failure to this meet. Re-raising here used to abort the
-            # whole run, and because the queue is ordered newest-first the same
-            # meet came back to the head every time -- one bad meet silently
-            # stalled the entire sanction's crawl indefinitely.
-            conn.rollback()
-            meets_failed += 1
-            msg = f"{type(e).__name__}: {e}"[:400]
-            log(f"meet {meet_id} {name!r}: FAILED -- {msg}")
             try:
-                cur.execute(
-                    """UPDATE divemeets.meets
-                          SET results_attempts = coalesce(results_attempts,0) + 1,
-                              results_note = %s,
-                              results_crawled_at = now()
-                        WHERE meet_id = %s""",
-                    (msg, meet_id))
+                n_ev, n_rows, note = crawl_meet(cur, meet_id)
                 conn.commit()
-            except Exception:
+                meets_done += 1
+                scope_done += 1
+                log(f"meet {meet_id} {name!r}: {n_ev} event-rounds, "
+                    f"{n_rows} result rows{' [' + note + ']' if note else ''}")
+            except Exception as e:
+                # Isolate the failure to this meet. Re-raising here used to abort
+                # the whole run, and because the queue is ordered newest-first the
+                # same meet came back to the head every time -- one bad meet
+                # silently stalled the entire crawl indefinitely.
                 conn.rollback()
-                raise
-            if ONLY_MEET:
-                raise
+                meets_failed += 1
+                msg = f"{type(e).__name__}: {e}"[:400]
+                log(f"meet {meet_id} {name!r}: FAILED -- {msg}")
+                try:
+                    cur.execute(
+                        """UPDATE divemeets.meets
+                              SET results_attempts = coalesce(results_attempts,0) + 1,
+                                  results_note = %s,
+                                  results_crawled_at = now()
+                            WHERE meet_id = %s""",
+                        (msg, meet_id))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+        if meets_failed:
+            cur.execute(
+                f"""SELECT count(*) FROM divemeets.meets m
+                    WHERE {scope_sql} AND NOT results_done
+                      AND coalesce(results_attempts,0) >= %s::int""",
+                scope_params + (MAX_ATTEMPTS,))
+            parked = cur.fetchone()[0]
+            if parked:
+                log(f"parked (>= {MAX_ATTEMPTS} failed attempts) for "
+                    f"{scope_desc}: {parked} meets")
+
     log(f"run done: {meets_done} meets, {meets_failed} failed, {fetches} fetches")
-    if meets_failed:
-        cur.execute(
-            f"""SELECT count(*) FROM divemeets.meets m
-                WHERE {SCOPE_SQL} AND NOT results_done
-                  AND coalesce(results_attempts,0) >= %s::int""",
-            SCOPE_PARAMS + (MAX_ATTEMPTS,))
-        log(f"parked (>= {MAX_ATTEMPTS} failed attempts) for "
-            f"{SCOPE_DESC}: {cur.fetchone()[0]} meets")
     cur.close(); conn.close()
 
 def report(ok, err=None):

@@ -38,23 +38,32 @@ from datetime import datetime, timezone
 import psycopg2
 
 DB_URL = os.environ["DATABASE_URL"]
-SANCTION = os.environ.get("SANCTION", "").strip() or "USA Diving"
+SANCTION_ENV = os.environ.get("SANCTION", "").strip()
+SANCTION = SANCTION_ENV or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 1100)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
 TARGET_TAG = (os.environ.get("TARGET_TAG") or "").strip()
 
 # See dm_results.py — same two queue scopes (whole sanction, or an explicit
-# target list for NCAA). want_sheets lets a target be results-only.
-if TARGET_TAG:
-    SCOPE_SQL = ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
-                 "WHERE t.meet_id = m.meet_id AND t.want_sheets "
-                 "AND (%s = '*' OR t.tag = %s))")
-    SCOPE_PARAMS = (TARGET_TAG, TARGET_TAG)
-    SCOPE_DESC = f"target_tag={TARGET_TAG!r}"
-else:
-    SCOPE_SQL = "m.sanction = %s"
-    SCOPE_PARAMS = (SANCTION,)
-    SCOPE_DESC = f"sanction={SANCTION!r}"
+# target list for NCAA), and the same chain-in-the-script reasoning: a
+# scheduled run drains USA Diving first, then the NCAA targets, instead of
+# depending on which cron literal fired. want_sheets lets a target be
+# results-only.
+def _sanction_scope(name):
+    return ("m.sanction = %s", (name,), f"sanction={name!r}")
+
+def _target_scope(tag):
+    return ("EXISTS (SELECT 1 FROM divemeets.crawl_targets t "
+            "WHERE t.meet_id = m.meet_id AND t.want_sheets "
+            "AND (%s = '*' OR t.tag = %s))",
+            (tag, tag), f"target_tag={tag!r}")
+
+def build_scopes():
+    if TARGET_TAG:
+        return [_target_scope(TARGET_TAG)]
+    if SANCTION_ENV:
+        return [_sanction_scope(SANCTION_ENV)]
+    return [_sanction_scope("USA Diving"), _target_scope("*")]
 SLEEP_S = 0.7
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -174,12 +183,17 @@ def crawl_meet(meet_id):
 
 def main():
     meets_done = 0
-    while fetches < FETCH_BUDGET:
-        if ONLY_MEET:
-            if meets_done:
-                break
-            meet_id, name = int(ONLY_MEET), f"(explicit {ONLY_MEET})"
-        else:
+
+    if ONLY_MEET:
+        meet_id = int(ONLY_MEET)
+        n_t, n_d, note = crawl_meet(meet_id)
+        log(f"meet {meet_id} (explicit): {n_t} sheets -> {n_d} dives"
+            f"{' [' + note + ']' if note else ''}")
+        log(f"run done: 1 meets, {fetches} fetches")
+        return
+
+    for scope_sql, scope_params, scope_desc in build_scopes():
+        while fetches < FETCH_BUDGET:
             # skip meets whose remaining sheets would blow the budget — a
             # meet must fit in one run since the transaction is per-meet
             remaining = FETCH_BUDGET - fetches
@@ -189,9 +203,9 @@ def main():
                           (SELECT count(*) FROM divemeets.results r
                            WHERE r.meet_id=m.meet_id AND r.sheet_key IS NOT NULL)
                    FROM divemeets.meets m
-                   WHERE {SCOPE_SQL} AND m.results_done AND NOT m.sheets_done
+                   WHERE {scope_sql} AND m.results_done AND NOT m.sheets_done
                    ORDER BY m.start_date DESC, m.meet_id DESC""",
-                SCOPE_PARAMS)
+                scope_params)
             pick = None
             for (mid, mname, nsheets) in cur.fetchall():
                 if nsheets <= remaining:
@@ -199,14 +213,13 @@ def main():
                     break
             cur.close(); conn.close()
             if not pick:
-                log(f"no queued meet fits remaining budget for {SCOPE_DESC}"
-                    " — done for this run")
+                log(f"nothing queued within budget for {scope_desc}")
                 break
             meet_id, name = pick
-        n_t, n_d, note = crawl_meet(meet_id)
-        meets_done += 1
-        log(f"meet {meet_id} {name!r}: {n_t} sheets -> {n_d} dives"
-            f"{' [' + note + ']' if note else ''}")
+            n_t, n_d, note = crawl_meet(meet_id)
+            meets_done += 1
+            log(f"meet {meet_id} {name!r}: {n_t} sheets -> {n_d} dives"
+                f"{' [' + note + ']' if note else ''}")
     log(f"run done: {meets_done} meets, {fetches} fetches")
 
 def report(ok, err=None):

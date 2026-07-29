@@ -20,12 +20,10 @@ on:
         required: false
         default: "1100"
   schedule:
-    # offset from catalog (*/20) and results (5/25) crons; exits fast when
-    # no results-complete meet is awaiting sheets
-    - cron: "12/30 * * * *"
-    # NCAA championship sheets, hourly so it can't starve the USA Diving
-    # backlog while that is still draining (concurrency group serializes runs).
-    - cron: "47 * * * *"
+    # ONE slot; the script drains USA Diving then the NCAA targets per run.
+    # See divemeets-results.yml for why the scope is no longer keyed off the
+    # cron literal, and for the Neon awake-time cost reasoning.
+    - cron: "35 */2 * * *"
 
 concurrency:
   group: divemeets-sheets
@@ -52,6 +50,6 @@ jobs:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
           SANCTION: ${{ github.event.inputs.sanction }}
-          TARGET_TAG: ${{ github.event.inputs.target_tag || (github.event.schedule == '47 * * * *' && '*' || '') }}
-          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget }}
+          TARGET_TAG: ${{ github.event.inputs.target_tag }}
+          FETCH_BUDGET: ${{ github.event.inputs.fetch_budget || '2400' }}
         run: python db/scripts/dm_sheets.py
