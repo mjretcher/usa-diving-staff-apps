@@ -1615,6 +1615,27 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
   border-radius:0 8px 8px 0;padding:8px 10px 8px 11px}
 .lt-bname{font-size:11.5px;font-weight:700;color:var(--tx2,#5A6072);margin-bottom:5px;
   display:flex;align-items:center;gap:7px}
+
+/* Approve run sheet times — the preview of what would change */
+.ap-list{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ap-row{display:flex;align-items:center;gap:12px;padding:9px 11px;border-radius:8px;
+  border:1px solid var(--bd,#E6E9F2);background:var(--surf,#fff)}
+.ap-row+.ap-row{margin-top:-1px}
+.ap-name{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--tx);
+  display:flex;flex-direction:column;gap:2px}
+.ap-why{font-size:10.5px;font-weight:500;color:var(--tx3)}
+.ap-times{display:flex;align-items:center;gap:7px;flex-shrink:0;
+  font-family:var(--font-mono,monospace);font-size:11.5px;font-variant-numeric:tabular-nums}
+.ap-from{color:var(--tx3);text-decoration:line-through}
+.ap-arrow{color:var(--tx3)}
+.ap-to{font-weight:700;color:var(--navy,#171F69)}
+.lv-tool.primary{background:var(--pool,#009AC7);border-color:var(--pool,#009AC7);color:#fff;font-weight:700}
+.lv-tool.primary:hover{background:#0086AD;border-color:#0086AD;color:#fff}
+@media (max-width:760px){
+  .ap-row{flex-direction:column;align-items:flex-start;gap:6px}
+  .ap-times{font-size:13px}
+  .ap-name{font-size:13.5px}
+}
 @media(max-width:420px){.lt-grid{grid-template-columns:1fr}}
 html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
 

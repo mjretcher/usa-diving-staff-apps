@@ -3750,6 +3750,18 @@ function bindDrag(){
 
 
 // ── VERSION HISTORY ───────────────────────────────────────────────────
+// Snapshot an EXPLICIT payload rather than whatever S happens to be now — lets a
+// caller capture a pre-change state, apply the change immediately, and push the
+// snapshot afterwards without the change waiting on the network.
+async function saveVersionData(label,dataStr){
+  if(!S.currentLibraryId)return;
+  const put=()=>nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,
+    [S.currentLibraryId,label||('Snapshot '+new Date().toLocaleString()),dataStr]);
+  try{await put()}catch(e){
+    await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
+    await put();
+  }
+}
 async function saveVersion(label){
   if(!S.currentLibraryId)return;
   try{
@@ -4667,7 +4679,8 @@ function renderFacilityHoursModal(){
 
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
-    ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{})};
+    ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
+    ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{})};
   const fn=fns[UI.modal];if(!fn)return'';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.modal=null;render()}">${fn(timed)}</div>`;
 }

@@ -204,9 +204,13 @@ function liveResetDay(){
 //   status                     — 'done' | 'running' | 'next' | 'todo'
 //   basis                      — how the shift was worked out, for the tooltip
 //   events[]                   — same idea per event
-function liveProject(dayId){
+// opts.ignoreClock — leave the wall clock out of it entirely. The live view wants
+// "it can't start before now" and "a session still open is at least as long as the
+// clock says"; APPROVAL must not, or the mere passage of time would propose rewriting
+// published times with nothing actually recorded, and the button would never settle.
+function liveProject(dayId,opts){
   const now=liveNowMin();
-  const isToday=liveIsToday(dayId);
+  const isToday=liveIsToday(dayId)&&!(opts&&opts.ignoreClock);
   const day=(S.meet.days||[]).find(d=>d.id===dayId);
   const all=(typeof timedForDay==='function'?timedForDay(dayId):[]).slice()
     .sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
@@ -403,7 +407,9 @@ function liveStrip(){
   </div>`;
 }
 function liveStripTools(){
+  const pending=(typeof liveApproveChanges==='function')?liveApproveChanges(UI.dayId).length:0;
   return`<div class="lv-tools">
+    <button class="lv-tool primary live-ctl" onclick="openLiveApprove()" title="Update the published start times on this day to match what actually happened. Shows you every change first.">Approve times${pending?` \u00b7 ${pending}`:''}</button>
     <button class="lv-tool live-ctl" onclick="liveResetDay()" title="Clear every actual time recorded for this day. The plan is untouched.">Clear day</button>
     <button class="lv-tool live-ctl" onclick="liveToggle()" title="Turn the run sheet off and show planned times only">Turn off</button>
   </div>`;
@@ -743,6 +749,145 @@ function renderLiveTimesModal(){
       <button class="btn btn-sm btn-gh" onclick="closeLiveTimes()">Cancel</button>
       <div style="flex:1"></div>
       <button class="btn btn-p" onclick="liveSaveTimes()">Save times</button>
+    </div>
+  </div>`;
+}
+
+// ── APPROVING REALITY INTO THE PLAN ───────────────────────────────────────
+// Everything above this point is deliberately read-only with respect to the plan.
+// This is the one, explicit, user-driven exception: when the day has genuinely
+// moved and you want the PUBLISHED schedule to say so, you approve it.
+//
+// Rules it holds to:
+//   • It only ever moves START times. Durations, entries, dive counts, buffers and
+//     every other authored value are left exactly as they are — a session running
+//     long is expressed by moving what comes after it, not by rewriting the event.
+//   • Nothing happens without a preview showing every block that would move.
+//   • It goes through upd(), so Cmd+Z undoes it, and it snapshots a named version
+//     first so the pre-approval schedule is always recoverable.
+//   • A locked day is refused up front. upd() would silently roll the change back,
+//     which would look like the button did nothing.
+function liveApproveChanges(dayId){
+  // Approval is driven by what was RECORDED, never by the clock. With nothing logged
+  // on this day there is nothing to approve, however late it is.
+  const anyActual=(S.sessions||[]).filter(x=>x.dayId===dayId).some(sess=>{
+    const sr=liveSess(sess.id);
+    if(sr&&(sr.st!=null||sr.en!=null))return true;
+    return (sess.events||[]).some(ev=>{
+      const er=liveEv(ev.id);
+      if(er&&(er.st!=null||er.en!=null))return true;
+      return [0,1].some(i=>{const br=liveBoard(ev.id,i);return br&&(br.st!=null||br.en!=null)});
+    });
+  });
+  if(!anyActual)return[];
+  const rows=liveProject(dayId,{ignoreClock:true});
+  const out=[];
+  // Carry the running delta down the day rather than applying the projection's
+  // absolute start. The projection rounds to the block's own rounding step, so an
+  // 18-minute delay came out as a 20-minute move on the next block — and approving
+  // again then proposed another 2, so the button never settled. Propagating the
+  // delta is exact, converges (once approved the shift is zero), and is how anyone
+  // would say it out loud: "we're running eighteen minutes late".
+  let carry=0;
+  rows.forEach(r=>{
+    const sess=r.sess;
+    if(isParallel(sess))return;                 // handled below, from its anchor
+    const rec=liveSess(sess.id)||{};
+    const hasEvidence=(rec.st!=null||rec.en!=null)||(sess.events||[]).some(ev=>{
+      const er=liveEv(ev.id);
+      if(er&&(er.st!=null||er.en!=null))return true;
+      return [0,1].some(i=>{const br=liveBoard(ev.id,i);return br&&(br.st!=null||br.en!=null)});
+    });
+    const from=Math.round(r.plannedStart);
+    let to,why;
+    if(hasEvidence){
+      // An actual start is exact. Otherwise lean on the projection's shift, which
+      // also accounts for a block that started on time but ran long.
+      to=Math.round(rec.st!=null?rec.st:(r.plannedStart+r.shift));
+      why=rec.st!=null?'actual start':'ran long';
+      carry=Math.round(r.shift);
+    }else{
+      if(!carry)return;
+      to=from+carry;
+      why='knock-on from earlier blocks';
+    }
+    if(to===from)return;
+    out.push({sess,from,to,delta:to-from,why});
+  });
+  // Blocks pinned alongside another travel with it, keeping their offset.
+  (S.sessions||[]).filter(x=>x.dayId===dayId&&isParallel(x)).forEach(p=>{
+    const anchor=parallelAnchorOf(S,p);
+    if(!anchor)return;                           // floats at a fixed clock time on purpose
+    const moved=out.find(c=>c.sess.id===anchor.id);
+    if(!moved)return;
+    const from=Math.round(Number(p.warmupStartMinutes)||0);
+    const to=Math.round(moved.to+(Number(p.parallelOffset)||0));
+    if(to===from)return;
+    out.push({sess:p,from,to,delta:to-from,why:'runs alongside '+(typeof sessLabelOf==='function'?sessLabelOf(anchor):'another block')});
+  });
+  return out.sort((a,b)=>a.from-b.from);
+}
+function openLiveApprove(){
+  UI.modal='live-approve';UI.liveApproveDay=UI.dayId;render();
+}
+function closeLiveApprove(){UI.liveApproveDay=null;UI.modal=null;render();}
+function liveApplyApprove(){
+  const dayId=UI.liveApproveDay||UI.dayId;
+  if(dayLocked(dayId)){lockRefused();return;}
+  const changes=liveApproveChanges(dayId);
+  if(!changes.length){toast('Nothing to approve — the schedule already matches');closeLiveApprove();return;}
+  // Capture the pre-approval schedule SYNCHRONOUSLY, then apply, then push the
+  // snapshot in the background. The change must not be gated on a network round
+  // trip: on a bad connection at the pool that would either hang or quietly not
+  // happen, and Cmd+Z plus localStorage already make it recoverable without the
+  // cloud. If the snapshot genuinely fails we say so rather than let the preview's
+  // promise of version history stand.
+  const before=JSON.stringify(S);
+  const map={};changes.forEach(c=>{map[c.sess.id]=c.to});
+  upd(s=>{
+    (s.sessions||[]).forEach(sess=>{
+      if(map[sess.id]!=null)sess.warmupStartMinutes=map[sess.id];
+    });
+  });
+  const n=changes.length;
+  toast(n+' block'+(n===1?'':'s')+' updated to match the run sheet \u00b7 Cmd+Z to undo',6000);
+  closeLiveApprove();
+  if(typeof saveVersionData==='function'&&S.currentLibraryId){
+    saveVersionData('Before approving run sheet times',before)
+      .catch(()=>toast('Applied \u2014 but the pre-approval snapshot could not reach the cloud. Cmd+Z still undoes it.',8000));
+  }
+}
+function renderLiveApproveModal(){
+  const dayId=UI.liveApproveDay||UI.dayId;
+  const day=(S.meet.days||[]).find(d=>d.id===dayId);
+  const locked=dayLocked(dayId);
+  const changes=locked?[]:liveApproveChanges(dayId);
+  const body=locked
+    ? `<div class="lt-err">This day is locked, so the published times cannot be changed. Unlock the day first, then approve.</div>`
+    : (!changes.length
+      ? `<div class="lt-help">Nothing to approve — every block on this day already starts when the run sheet says it did.</div>`
+      : `<p class="lt-help">These are the published start times, updated to match what actually happened. Only start times change — durations, entries and dive counts are untouched. <b>Cmd+Z undoes this, and the schedule as it stands is copied to Version history.</b></p>
+         <div class="ap-list">
+           ${changes.map(c=>`<div class="ap-row">
+             <div class="ap-name">${esc(typeof sessLabelOf==='function'?sessLabelOf(c.sess):(c.sess.title||'Block'))}
+               <span class="ap-why">${esc(c.why)}</span></div>
+             <div class="ap-times"><span class="ap-from">${f12(c.from)}</span>
+               <span class="ap-arrow">\u2192</span>
+               <span class="ap-to">${f12(c.to)}</span>
+               <span class="lv-chip ${liveDeltaCls(c.delta)}">${liveDelta(c.delta)}</span></div>
+           </div>`).join('')}
+         </div>`);
+  return`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd">
+      <div><span class="modal-title">Approve run sheet times</span>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(day?fullDate(day.date):'')}</div></div>
+      <button class="modal-close" onclick="closeLiveApprove()">&times;</button>
+    </div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-foot">
+      <button class="btn btn-sm btn-gh" onclick="closeLiveApprove()">Cancel</button>
+      <div style="flex:1"></div>
+      ${(!locked&&changes.length)?`<button class="btn btn-p" onclick="liveApplyApprove()">Update ${changes.length} block${changes.length===1?'':'s'}</button>`:''}
     </div>
   </div>`;
 }
