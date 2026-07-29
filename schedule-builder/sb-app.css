@@ -1608,6 +1608,49 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
   .lv-btn{height:32px;padding:0 12px;font-size:11.5px}   /* bigger tap targets on deck */
   .lv-xbtn{height:27px;padding:0 10px}
 }
+
+/* ── RUNNING THE MEET FROM A PHONE ────────────────────────────────────
+   Standing at the pool with one hand on the rail. Three things have to hold:
+   controls are thumb-sized, the day toolbar does not eat four rows of vertical
+   space wrapping, and the run sheet is the first thing you can reach. */
+@media (max-width:760px){
+  /* One scrolling row instead of a wrapped pile. Same pattern the dark top bar
+     already uses, so the gesture is one the app has taught before. */
+  .tl-bar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;gap:6px;padding:7px 12px}
+  .tl-bar::-webkit-scrollbar{display:none}
+  .tl-bar>*{flex-shrink:0}
+  .tl-spacer{display:none}          /* a growing spacer makes no sense in a scroller */
+  /* Recording is what you came here to do — put it first, before the date. */
+  .tl-runsheet{order:-1}
+  .tl-textbtn{height:34px;padding:0 12px;font-size:12px}
+  .tl-iconbtn{width:34px;height:34px}
+  .tl-hours{height:34px}
+  .tl-lockbtn,.tl-addbtn{height:34px}
+
+  /* Session controls: state on one line, full-width buttons under it. Reading
+     and tapping stop competing for the same cramped row. */
+  .lv-sess{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px}
+  .lv-sess-state{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .lv-sess-btns{gap:7px}
+  .lv-sess-btns .lv-btn{flex:1 1 auto;height:42px;padding:0 12px;font-size:13px;
+    justify-content:center;min-width:0}
+  .lv-sess-btns .lv-btn.primary{flex:2 1 140px}   /* Start / Finish is the big one */
+  .lv-sess-btns .lv-btn.ghost{flex:1 1 90px}
+  .lv-badge{font-size:11.5px;padding:3px 8px}
+
+  /* Per-event Start / End / re-open on an event row */
+  .lv-ev{gap:7px}
+  .lv-xbtn{height:34px;padding:0 13px;font-size:12px}
+  .lv-ev-t{font-size:11.5px}
+
+  /* Editing recorded times */
+  .lt-grid{grid-template-columns:1fr;gap:8px}
+  .lt-row{margin-bottom:16px}
+  .lt-name{font-size:13.5px}
+  .lt-row .fi{height:46px;font-size:16px}   /* 16px keeps iOS from zooming the page */
+  .lt-help{font-size:13px}
+}
 .lv-stale{font-size:10.5px;font-weight:700;color:#8A5A00;background:#FFF8EC;border:1px solid #F0C77E;
   border-radius:5px;padding:2px 7px;white-space:nowrap}
 
