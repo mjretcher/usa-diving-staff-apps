@@ -91,15 +91,38 @@ function jSize(sess, ev) {
 function jConcurrent(sess) {
   return ((sess && sess.events) || []).filter(jIsScoring).length;
 }
+function jSplitSide(ev) { return /1m/i.test((ev && ev.apparatus) || '') ? 'right' : 'left'; }
 function jPlacement(sess, ev) {
   const e = (ev && ev.judges) || {};
   if (e.placement && e.placement !== 'auto') return e.placement;
   if (jIsSynchro(ev)) return 'both';           // 703.1.a.7 requires both sides
-  if (jConcurrent(sess) > 1) {
-    // Panel sits on the deck nearest its own apparatus.
-    return /1m/i.test(ev.apparatus || '') ? 'right' : 'left';
-  }
+  // Split boards run two full panels stacked on the deck for that apparatus.
+  if (ev && ev.manualSplit) return jSplitSide(ev);
+  if (jConcurrent(sess) > 1) return jSplitSide(ev);
   return 'both';
+}
+// Three distinct seating shapes, because they lay out differently:
+//   'both'    - one panel divided across the two decks
+//   'oneside' - one panel on one deck, half plus one in front (703.1.a.6.viii)
+//   'split2'  - TWO full panels, one row each, on the same deck
+function jMode(sess, ev) {
+  if (jIsSynchro(ev)) return 'both';
+  if (ev && ev.manualSplit && jPanels(sess, ev) > 1) return 'split2';
+  return jPlacement(sess, ev) === 'both' ? 'both' : 'oneside';
+}
+// Head referee reverses the rulebook anchor: seat 1 at the far end of the row,
+// numbers running back toward the boards. 'tip' restores 703.1.a.9.i.
+function jNumberDir(sess, ev) {
+  const e = (ev && ev.judges) || {}; if (e.numberDir) return e.numberDir;
+  const d = (sess && sess.judges) || {}; if (d.numberDir) return d.numberDir;
+  return 'far';
+}
+// Which board each row judges. House convention here inverts 703.1.a.9.i:
+// the back row takes the board nearest the deck.
+function jRowBoard(sess, ev, row) {
+  const e = (ev && ev.judges) || {};
+  if (e.rowBoards === 'rulebook') return row === 'back' ? 'far' : 'near';
+  return row === 'back' ? 'near' : 'far';
 }
 function jPanels(sess, ev) {
   const e = (ev && ev.judges) || {};
@@ -125,6 +148,7 @@ function jSeatMap(sess, ev) {
   const size = jSize(sess, ev);
   const place = jPlacement(sess, ev);
   if (jIsSynchro(ev)) return jSynchroSeats(size);
+  if (jMode(sess, ev) === 'split2') return jSplitSeats(sess, ev);
 
   const seats = [];
   if (place === 'both') {
@@ -140,6 +164,29 @@ function jSeatMap(sess, ev) {
   }
   seats.forEach(s => { s.role = 'Execution'; });
   if (seats[0]) seats[0].ref = true;
+  return seats;
+}
+
+// Split boards: two complete panels of five, one row each, same deck. Each
+// panel is its own panel with its own Judge 1 / Event Referee (703.1.c.3.i).
+function jSplitSeats(sess, ev) {
+  const size = jSize(sess, ev);
+  const deck = jPlacement(sess, ev) === 'right' ? 'R' : 'L';
+  const dir = jNumberDir(sess, ev);
+  const seats = [];
+  ['front', 'back'].forEach(row => {
+    for (let i = 0; i < size; i++) {
+      seats.push({
+        n: i + 1,
+        deck, row,
+        slot: dir === 'far' ? (size - 1 - i) : i,
+        role: 'Execution',
+        panel: row === 'front' ? 'Front panel' : 'Back panel',
+        board: jRowBoard(sess, ev, row),
+        ref: i === 0
+      });
+    }
+  });
   return seats;
 }
 
@@ -198,7 +245,9 @@ function jChairSpec(sess, ev) {
     out.push('Back row elevated above the front row so it sees over it (703.1.a.6.viii)');
   }
   if (ev.manualSplit) {
-    out.push('Split boards — back row judges the far board and needs taller chairs or a platform (703.1.a.9.i)');
+    const farRow = jRowBoard(sess, ev, 'back') === 'far' ? 'back' : 'front';
+    out.push(`Split boards — two panels of ${jSize(sess, ev)}; the ${farRow} row judges the far board. Back row needs taller chairs or a platform to see over the front row (703.1.a.9.i)`);
+    if (farRow === 'front') out.push('NOTE — 703.1.a.9.i pairs the FAR board with the BACK row; this event uses the head referee\u2019s reversed convention');
   }
   if (jIsSynchro(ev)) {
     out.push('Synchro — seat nearest the pool at least 5 ft, each seat outward rises at least 1\u2032 6\u2033 (703.1.a.7.iv\u2013v)');
@@ -228,6 +277,9 @@ function jSeatXY(seat, place) {
     else x = seat.row === 'front' ? nearR : farR;
     if (seat.row === 'sync') x = nearR;
   }
+  // Split-board panels are two parallel rows at matching depths; the
+  // half-plus-one fallback staggers its back row instead.
+  if (seat.panel) return { x, y: 232 + seat.slot * 40 };
   let y = G.rowY + seat.slot * G.rowStep;
   if (seat.row === 'back') y += G.rowStep / 2;
   if (seat.row === 'sync') y = G.rowY + seat.slot * G.rowStep + 8;
@@ -269,6 +321,13 @@ function jSchematic(sess, ev) {
     if (s.ref) chairs += `<text x="${p.x}" y="${p.y + G.r + 13}" text-anchor="middle" class="jsv-tag">REF</text>`;
   });
 
+  let rowLabels = '';
+  if (jMode(sess, ev) === 'split2') {
+    const R = place === 'right';
+    rowLabels = `<text x="${R ? 660 : 100}" y="212" text-anchor="middle" class="jsv-deck">FRONT</text>`
+      + `<text x="${R ? 716 : 44}" y="212" text-anchor="middle" class="jsv-deck">BACK</text>`;
+  }
+
   let balk = '';
   if (jBalk(sess, ev)) {
     const bx = jBalkSide(sess, ev) === 'right' ? 693 : 67;
@@ -294,13 +353,36 @@ ${bays}${boards}
 <rect x="${G.deckR[0]}" y="${G.wallY}" width="${G.deckR[1] - G.deckR[0]}" height="${G.h - G.wallY - 56}" rx="8" fill="none" stroke="${N}" stroke-width=".8" stroke-dasharray="4 4" opacity=".5"/>
 <text x="${(G.deckL[0] + G.deckL[1]) / 2}" y="${G.wallY + 20}" text-anchor="middle" class="jsv-deck">3M SIDE DECK</text>
 <text x="${(G.deckR[0] + G.deckR[1]) / 2}" y="${G.wallY + 20}" text-anchor="middle" class="jsv-deck">1M SIDE DECK</text>
-${chairs}${balk}
+${rowLabels}${chairs}${balk}
 <text x="${G.w / 2}" y="${G.h - 30}" text-anchor="middle" class="jsv-cap">Dashed line = front edge of boards and tower \u2014 no judge seats inside it (703.1.a.6.iii)</text>
-<text x="${G.w / 2}" y="${G.h - 14}" text-anchor="middle" class="jsv-cap">${size}-judge panel \u00b7 seat 1 = Event Referee \u00b7 ${place === 'both' ? 'divided across both decks' : 'one side, half plus one in the front row'}</text>
+<text x="${G.w / 2}" y="${G.h - 14}" text-anchor="middle" class="jsv-cap">${jCaption(sess, ev)}</text>
 </svg>`;
 }
 
 // ── STATE SETTERS ─────────────────────────────────────────────────────
+function jSeatSummary(sess, ev) {
+  const seats = jSeatMap(sess, ev), size = jSize(sess, ev);
+  const deck = jPlacement(sess, ev) === 'right' ? '1M-side deck' : '3M-side deck';
+  if (jMode(sess, ev) === 'split2') {
+    return `Front panel 1–${size} (${jRowBoard(sess, ev, 'front')} board) &nbsp;|&nbsp; `
+      + `Back panel 1–${size} (${jRowBoard(sess, ev, 'back')} board) &nbsp;|&nbsp; both on the ${deck}`;
+  }
+  return seats.map(s =>
+    `${s.n}${s.ref ? ' (ref)' : ''} ${s.deck === 'L' ? '3M side' : '1M side'}`
+    + `${s.row === 'back' ? ', back row' : (s.row === 'sync' ? ', synchro riser' : '')}`
+  ).join(' &nbsp;|&nbsp; ');
+}
+
+function jCaption(sess, ev) {
+  const size = jSize(sess, ev), mode = jMode(sess, ev);
+  if (mode === 'split2') {
+    const fb = jRowBoard(sess, ev, 'front'), bb = jRowBoard(sess, ev, 'back');
+    return `Two panels of ${size} · front panel judges the ${fb} board, back panel the ${bb} board · seat 1 = Event Referee on each panel`;
+  }
+  if (mode === 'oneside') return `${size}-judge panel · seat 1 = Event Referee · one side, half plus one in the front row`;
+  return `${size}-judge panel · seat 1 = Event Referee · divided across both decks`;
+}
+
 function updEvJudges(sessId, evId, field, value) {
   upd(s => {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
@@ -404,6 +486,16 @@ function renderJudgesEvPanel(sess, ev) {
           <button class="chip" style="padding:3px 10px;font-size:11px" onclick="jToggleSchematic('${sess.id}','${ev.id}')">${ev.judges && ev.judges.show ? 'Hide' : 'Schematic'}</button>
         </div>
       </div>
+      ${jMode(sess, ev) === 'split2' ? `<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <div>${lbl('Seat 1 sits')}<div class="chiprow">
+          ${chip('numberDir', 'far', jNumberDir(sess, ev), 'Far end of row')}
+          ${chip('numberDir', 'tip', jNumberDir(sess, ev), 'At board tips')}
+        </div></div>
+        <div>${lbl('Back panel judges')}<div class="chiprow">
+          ${chip('rowBoards', 'houseref', (ev.judges && ev.judges.rowBoards) || 'houseref', 'Closest board')}
+          ${chip('rowBoards', 'rulebook', (ev.judges && ev.judges.rowBoards) || '', 'Furthest board')}
+        </div></div>
+      </div>` : ''}
       <div style="font-size:10px;color:var(--tx3);margin-top:5px">${esc(jPlaceWords(sess, ev))}</div>
       ${rotLine}${schem}
     </div>`;
@@ -411,6 +503,13 @@ function renderJudgesEvPanel(sess, ev) {
 function jPlaceWords(sess, ev) {
   const size = jSize(sess, ev), place = jPlacement(sess, ev);
   const seats = jSeatMap(sess, ev);
+  if (jMode(sess, ev) === 'split2') {
+    const which = place === 'right' ? '1M-side' : '3M-side';
+    const dir = jNumberDir(sess, ev) === 'far'
+      ? 'far end of the row, numbers running back toward the boards'
+      : 'board-tip sight line (703.1.a.9.i)';
+    return `Two panels of ${size} on the ${which} deck — ${size * 2} judges. Front panel judges the ${jRowBoard(sess, ev, 'front')} board, back panel the ${jRowBoard(sess, ev, 'back')} board. Each panel numbered 1–${size} with its own referee at seat 1, placed at the ${dir}.`;
+  }
   if (place === 'both') {
     const l = seats.filter(s => s.deck === 'L').length, r = seats.length - l;
     return `${l} on the 3M-side deck, ${r} on the 1M-side deck. Seat 1 is the Event Referee, on the board-tip sight line.`;
@@ -443,9 +542,7 @@ function printJudges(sessId) {
     const rows = evs.map(ev => {
       const size = jSize(sess, ev), panels = jPanels(sess, ev), rot = jRotation(sess, ev);
       const seats = jSeatMap(sess, ev);
-      const seatTxt = seats.map(s =>
-        `${s.n}${s.ref ? ' (ref)' : ''} ${s.deck === 'L' ? '3M side' : '1M side'}${s.row === 'back' ? ', back row' : (s.row === 'sync' ? ', synchro riser' : '')}`
-      ).join(' &nbsp;|&nbsp; ');
+      const seatTxt = jSeatSummary(sess, ev);
       const rotTxt = rot
         ? `A: ${rot.A.join(', ')} &nbsp; B: ${rot.B.join(', ')}`
         : (panels > 1 ? 'Alternate max every 3 rounds' : '\u2014');
