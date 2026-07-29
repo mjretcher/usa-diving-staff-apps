@@ -8,9 +8,9 @@ on:
         required: false
         default: ""
       sanction:
-        description: "Registry sanction filter for auto mode"
+        description: "Narrow to one sanction (blank = drain the full chain)"
         required: false
-        default: "USA Diving"
+        default: ""
       target_tag:
         description: "Queue from divemeets.crawl_targets with this tag ('*' = all). Overrides sanction."
         required: false
