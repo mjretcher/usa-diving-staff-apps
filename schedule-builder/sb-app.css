@@ -1561,6 +1561,23 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
 .lv-btn.primary:hover{background:#0086AD;border-color:#0086AD;color:#fff}
 .lv-btn.ghost{border-style:dashed;color:var(--tx3,#8A90A2)}
 
+/* Edit recorded times — hand entry for the live run sheet */
+.lt-help{font-size:12px;color:var(--tx2);line-height:1.5;margin:0 0 12px}
+.lt-help b{color:var(--navy);font-weight:700}
+.lt-err{font-size:12px;font-weight:600;color:#991B1B;background:#FEF2F2;border:1px solid #FECACA;
+  border-radius:8px;padding:9px 12px;margin-bottom:12px;line-height:1.45}
+.lt-head{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);
+  margin:16px 0 8px;padding-top:12px;border-top:1px solid var(--bd)}
+.lt-row{margin-bottom:12px}
+.lt-name{font-size:12.5px;font-weight:600;color:var(--tx);margin-bottom:5px;display:flex;
+  align-items:center;gap:8px;flex-wrap:wrap}
+.lt-planned{font-size:11px;font-weight:500;color:var(--tx3);font-variant-numeric:tabular-nums}
+.lt-hand{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  background:#EEF1F7;color:var(--tx2);padding:2px 6px;border-radius:4px}
+.lt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:420px){.lt-grid{grid-template-columns:1fr}}
+html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
+
 /* per-event controls */
 .lv-ev{display:inline-flex;align-items:center;gap:5px;flex-shrink:0}
 .lv-ev-t{font-family:var(--font-mono,monospace);font-size:10px;color:var(--tx2,#5A6072);white-space:nowrap}

@@ -348,11 +348,11 @@ function liveSessRow(sess,t){
   const openEvs=(sess.events||[]).filter(ev=>{const r=liveEv(ev.id);return !r||r.en==null}).length;
   let state,btns;
   if(rec.en!=null){
-    state=`<span class="lv-badge done">Finished ${f12(rec.en)}</span>
+    state=`<span class="lv-badge done"${rec.enM?' title="This finish time was typed in by hand"':''}>Finished ${f12(rec.en)}${rec.enM?' \u00b7 by hand':''}</span>
            <span class="lv-chip ${liveDeltaCls(row.shift)}">${liveDelta(row.shift)}</span>`;
     btns=`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartSess('${sess.id}')" title="Re-open this session and set its start to now">Re-open</button>`;
   }else if(rec.st!=null){
-    state=`<span class="lv-badge run">Running since ${f12(rec.st)}</span>
+    state=`<span class="lv-badge run"${rec.stM?' title="This start time was typed in by hand"':''}>Running since ${f12(rec.st)}${rec.stM?' \u00b7 by hand':''}</span>
            <span class="lv-chip ${liveDeltaCls(row.shift)}">${liveDelta(row.shift)}</span>
            ${row.stale
              ?`<span class="lv-stale" title="${esc(row.basis)}">Still open \u2014 did this finish?</span>`
@@ -366,9 +366,12 @@ function liveSessRow(sess,t){
       ${(sess.events||[]).length?`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartAllEvs('${sess.id}')" title="Start the session and every event in it at the same moment">Start all events</button>`:''}`;
   }
   const clear=(rec.st!=null||rec.en!=null)?`<button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();liveClearSess('${sess.id}')" title="Remove the recorded times for this session">Clear</button>`:'';
+  // Always offered, in every state: tapping the button at the moment something
+  // happens is the fast path, not the only path.
+  const edit=`<button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();openLiveTimes('${sess.id}')" title="Type in the real start or finish time by hand \u2014 for when you couldn't tap the button as it happened">Edit times</button>`;
   return`<div class="lv-sess ${rec.en!=null?'is-done':rec.st!=null?'is-run':''}" onclick="event.stopPropagation()">
     <div class="lv-sess-state">${state}</div>
-    <div class="lv-sess-btns">${btns}${clear}</div>
+    <div class="lv-sess-btns">${btns}${edit}${clear}</div>
   </div>`;
 }
 
@@ -393,6 +396,126 @@ function liveEvCtl(sess,ev){
   return`<span class="lv-ev todo live-ctl" onclick="event.stopPropagation()">
     <button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartEv('${sess.id}','${ev.id}')" title="Mark this event as starting now">Start</button>
   </span>`;
+}
+
+// ── typing a time in by hand ──────────────────────────────────────────────
+// Tapping Start/Finish the moment something happens is the fast path, but it is
+// not always possible — you are on the deck, the session went in while you were
+// dealing with something else, and you only get back to the tablet twenty minutes
+// later. Stamping "now" at that point would record a time that never happened.
+// So every actual can also be typed in directly.
+//
+// Hand-entered values are flagged (stM / enM) so the sheet can say so out loud.
+// The tap timestamp (stAt / enAt) still records WHEN the entry was made, which
+// remains true either way and keeps the audit trail honest.
+//
+// Same hard rule as the rest of this module: this never touches the plan.
+function openLiveTimes(sessId){
+  UI.liveTimesSessId=sessId;
+  UI.liveTimesErr='';
+  UI.modal='live-times';
+  render();
+}
+function closeLiveTimes(){
+  UI.liveTimesSessId=null;UI.liveTimesErr='';UI.modal=null;render();
+}
+// '' / null -> not recorded. Anything else -> minutes from midnight.
+function liveParseField(id){
+  const el=document.getElementById(id);
+  if(!el)return undefined;                 // field absent — leave untouched
+  const v=(el.value||'').trim();
+  if(!v)return null;                       // cleared on purpose
+  const m=pt(v);
+  return (isNaN(m)||m<0||m>1439)?undefined:m;
+}
+function liveSaveTimes(){
+  const sessId=UI.liveTimesSessId;
+  const sess=S.sessions.find(x=>x.id===sessId);
+  if(!sess){closeLiveTimes();return;}
+  const sSt=liveParseField('lt-s-st'),sEn=liveParseField('lt-s-en');
+  // A finish before its own start is the one thing that is simply not a real
+  // reading, so it is refused by name rather than quietly "corrected".
+  if(sSt!=null&&sEn!=null&&sEn<sSt){
+    UI.liveTimesErr='The session finish ('+f12(sEn)+') is before its start ('+f12(sSt)+'). Check both times.';
+    render();return;
+  }
+  const evVals=[];
+  for(const ev of (sess.events||[])){
+    const a=liveParseField('lt-e-st-'+ev.id),b=liveParseField('lt-e-en-'+ev.id);
+    if(a!=null&&b!=null&&b<a){
+      UI.liveTimesErr=evName(ev)+' finishes ('+f12(b)+') before it starts ('+f12(a)+'). Check both times.';
+      render();return;
+    }
+    evVals.push({ev,st:a,en:b});
+  }
+  const stamp=new Date().toISOString();
+  let n=0;
+  const apply=(rec,key,val)=>{
+    if(val===undefined)return;                       // field wasn't on screen
+    const had=rec[key];
+    if(val===null){                                   // cleared
+      if(had!=null){delete rec[key];delete rec[key+'At'];delete rec[key+'M'];n++;}
+      return;
+    }
+    if(had===val)return;                              // unchanged
+    rec[key]=val;rec[key+'At']=stamp;rec[key+'M']=true;n++;
+  };
+  liveWrite(l=>{
+    const sr=l.s[sessId]||(l.s[sessId]={});
+    apply(sr,'st',sSt);apply(sr,'en',sEn);
+    if(sr.st==null&&sr.en==null)delete l.s[sessId];
+    evVals.forEach(({ev,st,en})=>{
+      const er=l.e[ev.id]||(l.e[ev.id]={});
+      apply(er,'st',st);apply(er,'en',en);
+      if(er.st==null&&er.en==null)delete l.e[ev.id];
+    });
+  },n?(n+' time'+(n===1?'':'s')+' saved'):'No times changed');
+  UI.liveTimesSessId=null;UI.liveTimesErr='';UI.modal=null;render();
+}
+function renderLiveTimesModal(){
+  const sess=S.sessions.find(x=>x.id===UI.liveTimesSessId);
+  if(!sess)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Edit recorded times</span><button class="modal-close" onclick="closeLiveTimes()">&times;</button></div><div class="modal-body">That session is no longer in the schedule.</div></div>`;
+  const t=(typeof timedForDay==='function'?timedForDay(sess.dayId):[]).find(x=>x.id===sess.id);
+  const rec=liveSess(sess.id)||{};
+  const label=(typeof sessLabelOf==='function')?sessLabelOf(sess):(sess.title||'Session');
+  const hand=v=>v?`<span class="lt-hand" title="This time was typed in by hand, not stamped when it happened">by hand</span>`:'';
+  const evRows=(sess.events||[]).map(ev=>{
+    const r=liveEv(ev.id)||{};
+    const pl=(t&&(t.timing.events||[]).find(x=>x.id===ev.id))||null;
+    return`<div class="lt-row">
+      <div class="lt-name">${esc(evName(ev))}${hand(r.stM||r.enM)}
+        ${pl?`<span class="lt-planned">planned ${f12(pl.eventStartMinutes)} \u2013 ${f12(pl.eventEndMinutes)}</span>`:''}</div>
+      <div class="lt-grid">
+        <div class="fg"><label class="fl">Started</label><input id="lt-e-st-${ev.id}" class="fi" type="time" value="${r.st!=null?f24(r.st):''}"/></div>
+        <div class="fg"><label class="fl">Finished</label><input id="lt-e-en-${ev.id}" class="fi" type="time" value="${r.en!=null?f24(r.en):''}"/></div>
+      </div>
+    </div>`;
+  }).join('');
+  return`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd">
+      <div><span class="modal-title">Edit recorded times</span>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(label)}</div></div>
+      <button class="modal-close" onclick="closeLiveTimes()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="lt-help">Type in what actually happened, for when you couldn't tap Start or Finish at the moment it did. Leave a box empty if it hasn't happened yet, or clear one to un-record it. <b>The published schedule is not changed by anything on this screen.</b></p>
+      ${UI.liveTimesErr?`<div class="lt-err">${esc(UI.liveTimesErr)}</div>`:''}
+      <div class="lt-row">
+        <div class="lt-name">Whole session${hand(rec.stM||rec.enM)}
+          ${t?`<span class="lt-planned">planned ${f12(t.timing.warmupStartMinutes)} \u2013 ${f12(t.timing.sessionEndMinutes)}</span>`:''}</div>
+        <div class="lt-grid">
+          <div class="fg"><label class="fl">Started</label><input id="lt-s-st" class="fi" type="time" value="${rec.st!=null?f24(rec.st):''}"/></div>
+          <div class="fg"><label class="fl">Finished</label><input id="lt-s-en" class="fi" type="time" value="${rec.en!=null?f24(rec.en):''}"/></div>
+        </div>
+      </div>
+      ${evRows?`<div class="lt-head">Events in this session</div>${evRows}`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm btn-gh" onclick="closeLiveTimes()">Cancel</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-p" onclick="liveSaveTimes()">Save times</button>
+    </div>
+  </div>`;
 }
 
 // ── keep the clock honest ─────────────────────────────────────────────────
