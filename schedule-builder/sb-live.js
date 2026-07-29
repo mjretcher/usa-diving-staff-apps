@@ -91,7 +91,10 @@ function liveWrite(fn,msg){
   fn(S.live);
   S.live.day=liveToday();
   saveS();
-  if(S.currentLibraryId&&typeof scheduleSave==='function')scheduleSave();
+  // Deliberately NOT scheduleSave(). That pushed the entire published schedule on
+  // every tap, which is how a device holding an older copy could overwrite newer
+  // plan edits made elsewhere. Actuals go to their own row and cannot touch the plan.
+  if(S.currentLibraryId&&typeof scheduleRunSheetSave==='function')scheduleRunSheetSave();
   render();
   if(msg)toast(msg,2600);
 }

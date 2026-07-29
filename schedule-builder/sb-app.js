@@ -274,7 +274,11 @@ async function doSave(){
     const sql=guard
       ? `INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() WHERE schedules.updated_at < ($8::timestamptz + interval '1 millisecond') RETURNING updated_at`
       : `INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`;
-    const args=[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)];
+    // The published schedule no longer carries the run sheet. Keeping actuals out
+    // of this payload is what stops recording on the deck from ever rewriting the
+    // plan, and it keeps this blob from growing all meet.
+    const {live:_liveOmitted,...planOnly}=S;
+    const args=[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(planOnly)];
     if(guard)args.push(guard);
     const r=await nq(sql,args);
 
@@ -384,6 +388,9 @@ async function loadFromNeon(id,opts={}){
     S=loaded;S.currentLibraryId=id;
     if(rows[0][2])S.libraryFolder=rows[0][2];
     normalizeAllDays(S);saveS();markSynced(rows[0][1]);
+    // Actuals live in their own row. Fall back to whatever the blob carried for
+    // schedules saved before the split, so nothing recorded is ever stranded.
+    await loadRunSheet(id);
     if(!opts.silent){UI.modal=null;initUI();render();toast('Schedule loaded');}else render();return loaded;}
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
@@ -413,8 +420,15 @@ async function startSync(){
   const tick=async()=>{
     if(!S.currentLibraryId)return;
     try{
-      const r=await nq(`SELECT updated_at FROM schedule_builder.schedules WHERE id=$1`,[S.currentLibraryId]);
+      const r=await nq(`SELECT s.updated_at, rs.updated_at FROM schedule_builder.schedules s LEFT JOIN schedule_builder.run_sheets rs ON rs.schedule_id=s.id WHERE s.id=$1`,[S.currentLibraryId]);
       const _remote=r.rows?.length?parseNeonTimestamp(String(r.rows[0][0])):null;
+      // Another device recording on the deck. Small row, folded into the same
+      // query so watching for it costs no extra round trip.
+      const _remoteRun=r.rows?.length&&r.rows[0][1]?String(r.rows[0][1]):null;
+      if(_remoteRun&&_remoteRun!==lastRunSheetSynced){
+        if(_liveDirty)doSaveRunSheet().catch(()=>{});   // our taps are newer
+        else await loadRunSheet(S.currentLibraryId);
+      }
       if(_remote&&!isNaN(_remote.getTime())&&lastSynced&&_remote.toISOString()>lastSynced){
         // Safety net: never silently reload (and blow away in-progress,
         // not-yet-committed typing) while someone's actively in a text
@@ -3750,6 +3764,48 @@ function bindDrag(){
 
 
 // ── VERSION HISTORY ───────────────────────────────────────────────────
+// ── RUN SHEET STORAGE ─────────────────────────────────────────────────
+// Actuals used to ride inside the schedule blob, so every tap on the deck
+// republished the whole plan — which is how a stale device could overwrite
+// newer plan edits made somewhere else. They are their own row now: small,
+// written often, and incapable of touching the published schedule.
+let runSheetTimer=null,_liveDirty=false,lastRunSheetSynced=null;
+async function loadRunSheet(id){
+  if(!id)return null;
+  try{
+    const r=await nq(`SELECT data,updated_at FROM schedule_builder.run_sheets WHERE schedule_id=$1`,[id]);
+    const rows=r.rows||[];
+    if(!rows.length)return null;
+    const d=typeof rows[0][0]==='string'?JSON.parse(rows[0][0]):rows[0][0];
+    if(d&&typeof d==='object'){
+      S.live=d;
+      if(!S.live.s)S.live.s={};if(!S.live.e)S.live.e={};if(!S.live.b)S.live.b={};
+    }
+    lastRunSheetSynced=rows[0][1]?String(rows[0][1]):null;
+    _liveDirty=false;
+    try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
+    return S.live;
+  }catch(e){console.warn('Run sheet load failed:',e&&e.message);return null}
+}
+function scheduleRunSheetSave(){
+  _liveDirty=true;
+  clearTimeout(runSheetTimer);
+  runSheetTimer=setTimeout(doSaveRunSheet,800);
+}
+async function doSaveRunSheet(){
+  if(!S.currentLibraryId)return;
+  try{
+    const r=await nq(`INSERT INTO schedule_builder.run_sheets(schedule_id,data,updated_at)VALUES($1,$2::jsonb,now())ON CONFLICT(schedule_id)DO UPDATE SET data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,
+      [S.currentLibraryId,JSON.stringify(S.live||{})]);
+    lastRunSheetSynced=r.rows?.[0]?.[0]?String(r.rows[0][0]):lastRunSheetSynced;
+    _liveDirty=false;
+  }catch(e){
+    // Left dirty on purpose: the next tap, or the poll coming back online,
+    // retries. Nothing is lost locally either way — saveS() already wrote it.
+    console.warn('Run sheet save failed:',e&&e.message);
+  }
+}
+
 // Snapshot an EXPLICIT payload rather than whatever S happens to be now — lets a
 // caller capture a pre-change state, apply the change immediately, and push the
 // snapshot afterwards without the change waiting on the network.
