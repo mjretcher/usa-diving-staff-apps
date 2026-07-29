@@ -286,19 +286,31 @@ async function doSave(){
       // Somebody else moved the cloud copy since we last agreed with it. Do NOT
       // overwrite them. Keep what is on this screen in version history so it is
       // recoverable, then let this browser fall back in step with the cloud.
+      let archived=true;
       if(!_staleSaveNoticed){
         _staleSaveNoticed=true;
-        await archiveLocalVersion(S.currentLibraryId,'Not saved \u2014 another browser had newer changes');
-        toast('Another device has newer changes, so this browser did not overwrite them. What was on this screen is saved in Version history.',9000);
+        try{
+          await archiveLocalVersion(S.currentLibraryId,'Not saved \u2014 another browser had newer changes');
+          toast('Another device has newer changes, so this browser did not overwrite them. What was on this screen is saved in Version history.',9000);
+        }catch(archErr){
+          archived=false;
+          console.error('Could not archive this browser\u2019s copy:',archErr&&archErr.message);
+          toast('Another device has newer changes. This browser did not overwrite them, and could not reach Version history either \u2014 what is on screen exists only here, so do not close this tab until you have copied anything you need.',15000);
+        }
       }
-      // Dropping the dirty flag is what stops the poll from "winning" with this
-      // stale copy on its next cycle. The work is not lost — it is archived above.
-      S.dirty=false;
-      try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
-      const active=document.activeElement;
-      const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
-      if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
-      setSyncDot('ok');
+      if(archived){
+        // Dropping the dirty flag is what stops the poll from "winning" with this
+        // stale copy on its next cycle. Safe only because it is archived above.
+        S.dirty=false;
+        try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
+        const active=document.activeElement;
+        const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+        if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
+      }
+      // If the archive failed, the on-screen work is deliberately left exactly
+      // where it is. Pulling the remote over it would be the one move that
+      // actually loses it.
+      setSyncDot(archived?'ok':'error');
       return;
     }
     _staleSaveNoticed=false;
@@ -314,13 +326,7 @@ async function doSave(){
 // Snapshot what is on THIS screen into version history — used when we decline to
 // overwrite a newer cloud copy, so declining can never mean losing.
 async function archiveLocalVersion(id,label){
-  const put=()=>nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,[id,label,JSON.stringify(S)]);
-  try{await put()}catch(e){
-    try{
-      await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
-      await put();
-    }catch(e2){console.warn('Could not archive local version:',e2.message)}
-  }
+  await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,[id,label,JSON.stringify(S)]);
 }
 async function saveToNeon(name,folder){
   const id=S.currentLibraryId||uid();S.currentLibraryId=id;
@@ -328,7 +334,7 @@ async function saveToNeon(name,folder){
   setSyncDot('saving');
   try{
     const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
-    sync.ok=true;sync.err=null;saveS();markSynced(r.rows?.[0]?.[0]);setSyncDot('ok');startSync();saveVersion('Manual save');
+    sync.ok=true;sync.err=null;saveS();markSynced(r.rows?.[0]?.[0]);setSyncDot('ok');startSync();saveVersion('Manual save').catch(e=>console.warn('Snapshot after save failed:',e&&e.message));
     return true;
   }catch(e){
     sync.err=e.message;setSyncDot('error');
@@ -397,21 +403,6 @@ async function loadFromNeon(id,opts={}){
 let presT=null,pollT=null,_pollFailures=0,_conflictNoticed=false;
 // Snapshot whatever is currently in the cloud into version history, WITHOUT loading it,
 // so a copy we are about to overwrite is always recoverable from Version history.
-async function archiveRemoteVersion(id){
-  try{
-    await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)
-              SELECT id,$2,data,now() FROM schedule_builder.schedules WHERE id=$1`,
-             [id,'Cloud copy replaced by another browser\u2019s unsaved edits']);
-  }catch(e){
-    // Table may not exist yet — same fallback saveVersion() uses.
-    try{
-      await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
-      await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)
-                SELECT id,$2,data,now() FROM schedule_builder.schedules WHERE id=$1`,
-               [id,'Cloud copy replaced by another browser\u2019s unsaved edits']);
-    }catch(e2){console.warn('Could not archive remote version before overwrite:',e2.message)}
-  }
-}
 async function startSync(){
   clearInterval(presT);clearTimeout(pollT);
   _pollFailures=0;
@@ -439,15 +430,14 @@ async function startSync(){
         if(!isTyping){
           if(S.dirty){
             // Both sides moved: this browser has edits that never reached the cloud
-            // (offline, or the tab closed inside the 3s save debounce) AND the cloud
-            // has changed since we last agreed with it. Never silently pick a winner.
-            // Archive the cloud copy to version history so it is recoverable, then
-            // push what is on screen, which is the work the user can actually see.
+            // AND the cloud changed since we last agreed with it. doSave() owns this
+            // now — its concurrency guard declines to overwrite, archives what is on
+            // screen, and reports honestly. This used to archive the remote copy and
+            // then claim the local one had been pushed, which stopped being true the
+            // moment the guard went in.
             if(!_conflictNoticed){
               _conflictNoticed=true;
-              await archiveRemoteVersion(S.currentLibraryId);
               await doSave();
-              toast('This browser had unsaved edits and the cloud copy had also changed. Your on-screen version was kept and pushed; the other copy is in Version history.',9000);
             }
           }else{
             await loadFromNeon(S.currentLibraryId,{silent:true});
@@ -3809,27 +3799,19 @@ async function doSaveRunSheet(){
 // Snapshot an EXPLICIT payload rather than whatever S happens to be now — lets a
 // caller capture a pre-change state, apply the change immediately, and push the
 // snapshot afterwards without the change waiting on the network.
+// Version-history writes. There is deliberately no CREATE TABLE fallback here:
+// the browser role has no CREATE on schedule_builder (tables are the migration's
+// job), so the "table might not exist yet" recovery these used to carry could
+// never once have run. It only turned a real failure into a second, confusing
+// one. A snapshot that does not happen now says so.
 async function saveVersionData(label,dataStr){
   if(!S.currentLibraryId)return;
-  const put=()=>nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,
+  await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,
     [S.currentLibraryId,label||('Snapshot '+new Date().toLocaleString()),dataStr]);
-  try{await put()}catch(e){
-    await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
-    await put();
-  }
 }
 async function saveVersion(label){
   if(!S.currentLibraryId)return;
-  try{
-    await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,
-      [S.currentLibraryId,label||('Snapshot '+new Date().toLocaleString()),JSON.stringify(S)]);
-  }catch(e){
-    // Table may not exist yet — try to create it
-    try{
-      await nq(`CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions(id BIGSERIAL PRIMARY KEY,schedule_id TEXT,label TEXT,data JSONB,created_at TIMESTAMPTZ DEFAULT now())`);
-      await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,[S.currentLibraryId,label||('Snapshot '+new Date().toLocaleString()),JSON.stringify(S)]);
-    }catch(e2){console.warn('version save failed',e2)}
-  }
+  return saveVersionData(label,JSON.stringify(S));
 }
 async function loadVersions(){
   if(!S.currentLibraryId)return[];
@@ -3842,7 +3824,11 @@ function restoreVersion(vid){
   askConfirm({title:'Restore this version?',message:'Your current state will be saved as a new version first, then this version will be loaded.',confirmText:'Restore',onConfirm:()=>_doRestoreVersion(vid)});
 }
 async function _doRestoreVersion(vid){
-  await saveVersion('Auto-backup before restore');
+  try{await saveVersion('Auto-backup before restore');}
+  catch(e){
+    toast('Could not save a backup of the current schedule, so nothing was restored. Check the connection and try again.',9000);
+    return;
+  }
   try{
     const r=await nq(`SELECT data FROM schedule_builder.schedule_versions WHERE id=$1`,[vid]);
     if(r.rows?.length){
@@ -3860,7 +3846,8 @@ async function openHistory(){
 function snapshotNow(){
   askPrompt({title:'Name this snapshot',message:'e.g. "Sent to HP Director 7/9" — a name you\'ll recognize later.',defaultValue:'',confirmText:'Save snapshot',onConfirm:(v)=>{
     const label=(v||'').trim()||('Snapshot '+new Date().toLocaleString());
-    saveVersion(label).then(()=>{toast('Snapshot saved');openHistory()});
+    saveVersion(label).then(()=>{toast('Snapshot saved');openHistory()})
+      .catch(e=>toast('Could not save the snapshot: '+((e&&e.message)||'unknown error'),7000));
   }});
 }
 // ── VERSION DIFF ──────────────────────────────────────────────────────

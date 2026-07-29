@@ -937,6 +937,27 @@ CREATE INDEX IF NOT EXISTS sm_meets_queue ON scoresandmore.meets(results_done, s
 
 
 -- ---------------------------------------------------------------------------
+-- Version history. This table was created ad hoc outside the schema and was
+-- never declared here, so a rebuilt database would not have had it and version
+-- history would have failed silently. Declared now, matching the live shape.
+CREATE TABLE IF NOT EXISTS schedule_builder.schedule_versions (
+    id          BIGSERIAL PRIMARY KEY,
+    schedule_id TEXT,
+    label       TEXT,
+    data        JSONB,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+-- CREATE TABLE IF NOT EXISTS silently no-ops on a table that already exists, so
+-- columns are guarded individually or drift goes unnoticed.
+ALTER TABLE schedule_builder.schedule_versions ADD COLUMN IF NOT EXISTS schedule_id TEXT;
+ALTER TABLE schedule_builder.schedule_versions ADD COLUMN IF NOT EXISTS label       TEXT;
+ALTER TABLE schedule_builder.schedule_versions ADD COLUMN IF NOT EXISTS data        JSONB;
+ALTER TABLE schedule_builder.schedule_versions ADD COLUMN IF NOT EXISTS created_at  TIMESTAMPTZ DEFAULT now();
+-- Every read is "this schedule's versions, newest first".
+CREATE INDEX IF NOT EXISTS schedule_versions_by_schedule
+    ON schedule_builder.schedule_versions(schedule_id, created_at DESC);
+
+-- ---------------------------------------------------------------------------
 -- Live run sheet: what ACTUALLY happened, kept OUT of the schedule blob.
 --
 -- Actuals used to live inside schedules.data as data->'live'. That meant every
@@ -977,9 +998,20 @@ BEGIN
       GRANT SELECT ON TABLES TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA scoresandmore
       GRANT SELECT ON TABLES TO usad_app;
-    -- The run sheet is written from the deck by the browser role, so unlike the
-    -- crawl schemas above this one needs write access, not just SELECT.
+    -- Schedule Builder is READ-WRITE from the browser, unlike the crawl schemas
+    -- above. These grants existed only because someone applied them by hand; a
+    -- rebuilt database would have had the tables and no access to them.
     GRANT USAGE ON SCHEMA schedule_builder TO usad_app;
-    GRANT SELECT, INSERT, UPDATE, DELETE ON schedule_builder.run_sheets TO usad_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON
+      schedule_builder.schedules,
+      schedule_builder.presence,
+      schedule_builder.schedule_versions,
+      schedule_builder.run_sheets
+      TO usad_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA schedule_builder TO usad_app;
+    -- NOTE: usad_app deliberately has no CREATE on this schema. Tables are the
+    -- migration's job. Client code must never try to create one.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA schedule_builder
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO usad_app;
   END IF;
 END $$;
