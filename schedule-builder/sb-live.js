@@ -282,9 +282,11 @@ function liveStrip(){
   const rows=liveProject(UI.dayId);
   if(!rows.length)return`<div class="live-strip"><div class="lv-off">Run sheet is on \u2014 there are no blocks on this day yet.</div>${liveStripTools()}</div>`;
   const now=liveNowMin();
-  const running=rows.filter(r=>r.status==='running');
-  const next=rows.find(r=>r.status==='next');
-  const done=rows.filter(r=>r.status==='done').length;
+  // Practice never gets recorded, so it must never be offered as the thing to start.
+  const comp=rows.filter(r=>!r.sess.isPractice);
+  const running=comp.filter(r=>r.status==='running');
+  const next=comp.find(r=>r.status==='next')||comp.find(r=>r.status==='todo');
+  const done=rows.filter(r=>!r.sess.isPractice&&r.status==='done').length;
   const last=rows[rows.length-1];
   const dayShift=last?Math.round(last.projEnd-last.plannedEnd):0;
   const recov=liveRecoverable(rows);
@@ -295,7 +297,7 @@ function liveStrip(){
     const evNext=r.events.find(e=>e.status==='todo');
     return`<div class="lv-card now">
       <div class="lv-k">Now running</div>
-      <div class="lv-v">${r.sess.isPractice?esc(r.sess.title||'Practice'):'Session '+n}</div>
+      <div class="lv-v">Session ${n}</div>
       <div class="lv-m">Started ${f12(r.rec.st)} \u00b7 planned ${f12(r.plannedStart)}
         <span class="lv-chip ${liveDeltaCls(r.shift)}">${liveDelta(r.shift)}</span></div>
       ${evRun.length?`<div class="lv-m2">On now: ${evRun.map(e=>esc(e.name)+' <span class="lv-since">since '+f12(e.projStart)+'</span>').join(' \u00b7 ')}</div>`:''}
@@ -313,7 +315,7 @@ function liveStrip(){
     const mins=Math.round(next.projStart-now);
     return`<div class="lv-card next">
       <div class="lv-k">Next up</div>
-      <div class="lv-v">${next.sess.isPractice?esc(next.sess.title||'Practice'):'Session '+n}</div>
+      <div class="lv-v">Session ${n}</div>
       <div class="lv-m">${mins>0?'in '+mins+' min \u00b7 ':''}about ${f12(next.projStart)} \u00b7 planned ${f12(next.plannedStart)}
         <span class="lv-chip ${liveDeltaCls(next.shift)}">${liveDelta(next.shift)}</span></div>
       <button class="lv-go live-ctl" onclick="liveStartSess('${next.sess.id}')">Start it now</button>
@@ -342,6 +344,10 @@ function liveStripTools(){
 // ── per-session controls, injected into the card ──────────────────────────
 function liveSessRow(sess,t){
   if(!liveOn())return'';
+  // Open training, flighted warm-ups, technical meetings: the run sheet is for
+  // recording competition, and cluttering practice blocks with Start/Finish only
+  // makes the controls that matter harder to find.
+  if(sess.isPractice)return'';
   const rec=liveSess(sess.id)||{};
   const row=liveProject(sess.dayId).find(r=>r.sess.id===sess.id);
   if(!row)return'';
@@ -377,19 +383,22 @@ function liveSessRow(sess,t){
 
 // ── per-event controls, injected into each event row ──────────────────────
 function liveEvCtl(sess,ev){
-  if(!liveOn())return'';
+  if(!liveOn()||sess.isPractice)return'';
   const r=liveEv(ev.id)||{};
+  // Once a time is on the row, that time IS the edit control. Tapping the number
+  // you want to change is the thing people try first, so it should work.
+  const edit=(title)=>`onclick="event.stopPropagation();openLiveTimes('${sess.id}','${ev.id}')" title="${title}"`;
   if(r.en!=null){
     const d=r.en-ev.eventEndMinutes;
     return`<span class="lv-ev done live-ctl" onclick="event.stopPropagation()">
-      <span class="lv-ev-t">${f12(r.st!=null?r.st:ev.eventStartMinutes)}\u2013${f12(r.en)}</span>
+      <button class="lv-ev-t lv-ev-edit live-ctl" ${edit('Tap to correct these times by hand')}>${f12(r.st!=null?r.st:ev.eventStartMinutes)}\u2013${f12(r.en)}</button>
       <span class="lv-chip sm ${liveDeltaCls(d)}">${liveDelta(d)}</span>
       <button class="lv-xbtn live-ctl" onclick="event.stopPropagation();liveStartEv('${sess.id}','${ev.id}')" title="Re-open this event and set its start to now">\u21ba</button>
     </span>`;
   }
   if(r.st!=null){
     return`<span class="lv-ev run live-ctl" onclick="event.stopPropagation()">
-      <span class="lv-ev-t">on since ${f12(r.st)}</span>
+      <button class="lv-ev-t lv-ev-edit live-ctl" ${edit('Started at '+f12(r.st)+' \u2014 tap to correct it by hand')}>on since ${f12(r.st)}${r.stM?' \u00b7 by hand':''}</button>
       <button class="lv-xbtn end live-ctl" onclick="event.stopPropagation();liveEndEv('${ev.id}')" title="Mark this event finished now">End</button>
     </span>`;
   }
@@ -410,14 +419,15 @@ function liveEvCtl(sess,ev){
 // remains true either way and keeps the audit trail honest.
 //
 // Same hard rule as the rest of this module: this never touches the plan.
-function openLiveTimes(sessId){
+function openLiveTimes(sessId,evId){
   UI.liveTimesSessId=sessId;
+  UI.liveTimesFocusEvId=evId||null;   // jump straight to the event you tapped
   UI.liveTimesErr='';
   UI.modal='live-times';
   render();
 }
 function closeLiveTimes(){
-  UI.liveTimesSessId=null;UI.liveTimesErr='';UI.modal=null;render();
+  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesErr='';UI.modal=null;render();
 }
 // '' / null -> not recorded. Anything else -> minutes from midnight.
 function liveParseField(id){
@@ -470,7 +480,7 @@ function liveSaveTimes(){
       if(er.st==null&&er.en==null)delete l.e[ev.id];
     });
   },n?(n+' time'+(n===1?'':'s')+' saved'):'No times changed');
-  UI.liveTimesSessId=null;UI.liveTimesErr='';UI.modal=null;render();
+  UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesErr='';UI.modal=null;render();
 }
 function renderLiveTimesModal(){
   const sess=S.sessions.find(x=>x.id===UI.liveTimesSessId);
@@ -482,7 +492,7 @@ function renderLiveTimesModal(){
   const evRows=(sess.events||[]).map(ev=>{
     const r=liveEv(ev.id)||{};
     const pl=(t&&(t.timing.events||[]).find(x=>x.id===ev.id))||null;
-    return`<div class="lt-row">
+    return`<div class="lt-row${UI.liveTimesFocusEvId===ev.id?' is-focus':''}">
       <div class="lt-name">${esc(evName(ev))}${hand(r.stM||r.enM)}
         ${pl?`<span class="lt-planned">planned ${f12(pl.eventStartMinutes)} \u2013 ${f12(pl.eventEndMinutes)}</span>`:''}</div>
       <div class="lt-grid">

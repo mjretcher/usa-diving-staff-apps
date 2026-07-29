@@ -2271,6 +2271,15 @@ function render(){
   `;
   bindDrag();
   if(UI.dialog&&UI.dialog.type==='prompt'){const di=document.getElementById('dialog-input');if(di){di.focus();di.select();}}
+  // Jumped in from tapping an event's time — land on that event's field, not the top.
+  // Wrapped whole: nothing about a convenience scroll is worth risking a throw
+  // inside render() while a meet is running.
+  if(UI.modal==='live-times'&&UI.liveTimesFocusEvId){
+    try{
+      const fe=document.getElementById('lt-e-st-'+UI.liveTimesFocusEvId);
+      if(fe){if(fe.scrollIntoView)fe.scrollIntoView({block:'center'});if(fe.focus)fe.focus();}
+    }catch(e){}
+  }
   if(UI.palette){const pi=document.getElementById('palette-input');if(pi&&document.activeElement!==pi){pi.focus();const L=pi.value.length;try{pi.setSelectionRange(L,L)}catch(e){}}}
   // Restore scroll for every matched surface — force instant restore (scrollBehavior
   // 'auto') so no CSS smooth-scroll setting can animate from 0, which reads as a

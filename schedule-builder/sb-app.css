@@ -1579,6 +1579,14 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
 .lt-hand{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
   background:#EEF1F7;color:var(--tx2);padding:2px 6px;border-radius:4px}
 .lt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* The event row you tapped in from, so it's obvious which one you're correcting. */
+.lt-row.is-focus{background:rgba(0,154,199,.06);border:1px solid rgba(0,154,199,.35);
+  border-radius:9px;padding:10px 11px;margin:-1px -11px 15px}
+/* A recorded time on an event row doubles as its edit control. */
+.lv-ev-edit{border:1px dashed var(--bd2,#DDE1EC);background:transparent;border-radius:6px;
+  padding:2px 7px;cursor:pointer;transition:.12s;font-family:inherit}
+.lv-ev-edit:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);
+  background:rgba(0,154,199,.06);border-style:solid}
 @media(max-width:420px){.lt-grid{grid-template-columns:1fr}}
 html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255,255,255,.75)}
 
