@@ -3254,6 +3254,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
+    ${typeof renderAnnSessPanel==='function'?renderAnnSessPanel(sess):''}
     ${typeof renderJudgesSessPanel==='function'?renderJudgesSessPanel(sess):''}
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
@@ -4768,6 +4769,7 @@ function renderFacilityHoursModal(){
 
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
+    ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{})};
   const fn=fns[UI.modal];if(!fn)return'';
