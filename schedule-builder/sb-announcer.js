@@ -387,6 +387,105 @@ function annDropFiles(ev, sessId) {
 function annDragOver(ev) { ev.preventDefault(); ev.stopPropagation(); try { ev.currentTarget.classList.add('ann-dz-over'); } catch (e) { } }
 function annDragLeave(ev) { try { ev.currentTarget.classList.remove('ann-dz-over'); } catch (e) { } }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   FLOW ITEMS  (anything extra that has to happen in the run of show)
+   ───────────────────────────────────────────────────────────────────────
+   A countdown video on the board, a moment of silence, a sponsor read, a
+   presentation — the shape is always the same: it has a name, it sits
+   somewhere in the flow, it may take time, there may be something to say,
+   and there is usually a cue for whoever is running it.
+
+   Items live at two levels. Meet-level items repeat in EVERY session of
+   that kind, which is how "a countdown video before all finals" is written
+   once. Session-level items are for the one-off. Both are edited in the
+   same place and print in the same shape; meet-level items print first
+   within a slot.
+
+   Slots are deliberately few and named for what the announcer sees, not
+   for the data structure — three places a thing can go, described the way
+   Mike would say them out loud.
+═══════════════════════════════════════════════════════════════════════ */
+const ANN_SLOTS = [
+  { k: 'start', l: 'Before the welcome', lOpen: 'Before the welcome' },
+  { k: 'beforeEvents', l: 'After the welcome, before the introductions', lOpen: 'After the welcome, before the event rundown' },
+  { k: 'beforeHandoff', l: 'Right before the pool is turned over', lOpen: 'Right before the pool is turned over' },
+];
+function annSlotLabel(k, kind) {
+  const s = ANN_SLOTS.find(x => x.k === k) || ANN_SLOTS[0];
+  return kind === 'session' ? s.lOpen : s.l;
+}
+function annNewItem(o) {
+  return Object.assign({
+    id: 'fi' + Math.random().toString(36).slice(2, 9),
+    label: 'New item', slot: 'start', sec: 0, say: '', cue: '',
+  }, o || {});
+}
+function annMeetFlowKey(kind) { return kind === 'session' ? 'flowOpen' : 'flowFinals'; }
+function annMeetFlow(kind) {
+  const v = (S.meet && S.meet.paScript && S.meet.paScript[annMeetFlowKey(kind)]) || [];
+  return Array.isArray(v) ? v : [];
+}
+function annSessFlow(sess) {
+  const v = (sess && sess.announcer && sess.announcer.items) || [];
+  return Array.isArray(v) ? v : [];
+}
+// Meet-level first, then this session's — the standing part of the show
+// before the one-off.
+function annFlowAt(sess, kind, slot) {
+  return annMeetFlow(kind).concat(annSessFlow(sess)).filter(i => (i.slot || 'start') === slot);
+}
+function annFlowSec(i) { return Math.max(0, Math.round(Number(i && i.sec) || 0)); }
+
+// ── mutators ──
+function annWriteMeetFlow(kind, fn) {
+  upd(s => {
+    s.meet.paScript = s.meet.paScript || {};
+    const k = annMeetFlowKey(kind);
+    const arr = Array.isArray(s.meet.paScript[k]) ? s.meet.paScript[k].slice() : [];
+    const out = fn(arr);
+    s.meet.paScript[k] = out || arr;
+  });
+}
+function annWriteSessFlow(sessId, fn) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    const a = annEnsure(sess);
+    const arr = Array.isArray(a.items) ? a.items.slice() : [];
+    a.items = fn(arr) || arr;
+  });
+}
+function annFlowWrite(scope, kind, sessId, fn) {
+  if (scope === 'meet') annWriteMeetFlow(kind, fn); else annWriteSessFlow(sessId, fn);
+}
+function annAddItem(scope, kind, sessId, preset) {
+  annFlowWrite(scope, kind, sessId, arr => { arr.push(annNewItem(preset)); return arr; });
+}
+function annUpdItem(scope, kind, sessId, id, field, value) {
+  annFlowWrite(scope, kind, sessId, arr => {
+    const it = arr.find(x => x.id === id); if (!it) return arr;
+    it[field] = field === 'sec' ? (Number(value) || 0) : value;
+    return arr;
+  });
+}
+function annDelItem(scope, kind, sessId, id) {
+  annFlowWrite(scope, kind, sessId, arr => arr.filter(x => x.id !== id));
+}
+function annMoveItem(scope, kind, sessId, id, dir) {
+  annFlowWrite(scope, kind, sessId, arr => {
+    const i = arr.findIndex(x => x.id === id); if (i < 0) return arr;
+    const j = i + dir; if (j < 0 || j >= arr.length) return arr;
+    const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return arr;
+  });
+}
+// The one item Mike asked for by name, pre-filled so it is one click.
+function annAddCountdown(scope, kind, sessId) {
+  annAddItem(scope, kind, sessId, {
+    label: 'Countdown video', slot: 'beforeEvents', sec: 60,
+    say: 'Please direct your attention to the video board.',
+    cue: 'Roll the countdown video. Hold the microphone until it has finished and the room settles.',
+  });
+}
+
 // ── DIVE ORDER PARSING ────────────────────────────────────────────────
 // Whatever the meet software prints, Mike is going to paste it. Accept:
 //     1. Noah Horwitz
@@ -584,9 +683,14 @@ function annRows(sess) {
     kind: 'warmup', label: 'Athlete warm-up', startSec: annSec(t.warmupStartMinutes * 60),
     endSec: annSec(t.warmupEndMinutes * 60), durSec: annSec((t.warmupEndMinutes - t.warmupStartMinutes) * 60),
   });
+  const itemAt = slot => annFlowAt(sess, 'finals', slot);
+  const pushItems = slot => itemAt(slot).forEach(it => push('item', it.label, annFlowSec(it), { item: it, slot }));
+
   push('boardsclose', 'Close the boards — line up the finalists', Number(c.boardsCloseMin || 0) * 60);
+  pushItems('start');
   push('welcome', 'Short welcome', c.welcomeSec);
   if (c.anthemOn) push('anthem', 'National Anthem', c.anthemSec);
+  pushItems('beforeEvents');
 
   evs.forEach((ev, i) => {
     const roster = annRoster(sess, ev, idx);
@@ -598,17 +702,23 @@ function annRows(sess) {
 
   const introsEnd = at;
   const eventStart = annSec(t.eventStartMinutes * 60);
+  // Anything sitting right before the handoff is fixed; the hold messaging is
+  // the elastic part, so it absorbs whatever slack is left rather than pushing
+  // the first dive later.
+  const preItems = itemAt('beforeHandoff');
+  const preSec = preItems.reduce((a, i) => a + annFlowSec(i), 0);
+  push('hold', 'Final preparation messaging', Math.max(0, eventStart - introsEnd - preSec));
+  pushItems('beforeHandoff');
   // When the schedule leaves no room between warm-up and the first dive, the
-  // handoff still has to read AFTER the introductions on the page. Clamping it
+  // handoff still has to read AFTER everything else on the page. Clamping it
   // keeps the printed order truthful; the fit warning is what tells Mike the
   // schedule needs more intro time.
-  const handoff = Math.max(eventStart, introsEnd);
-  push('hold', 'Final preparation messaging', Math.max(0, eventStart - introsEnd));
+  const handoff = Math.max(eventStart, at);
   rows.push({ kind: 'handoff', label: 'Judges, the pool is yours', startSec: handoff, endSec: handoff, durSec: 0 });
 
   return {
     rows,
-    needSec: introsEnd - annSec(t.warmupEndMinutes * 60),
+    needSec: (introsEnd - annSec(t.warmupEndMinutes * 60)) + preSec,
     availSec: eventStart - annSec(t.warmupEndMinutes * 60),
     introsEndSec: introsEnd,
     eventStartSec: eventStart,
@@ -697,6 +807,59 @@ function renderAnnSessPanel(sess) {
     </div>` : ''}`;
 }
 
+// ── EDITOR: FLOW TAB (shared by both script types) ────────────────────
+function renderFlowItemCard(it, scope, kind, sessId, i, n) {
+  const up = (field, extra) => `annUpdItem('${scope}','${kind}','${sessId}','${it.id}','${field}',${extra || 'this.value'})`;
+  const slotChip = sl => `<button class="chip ${(it.slot || 'start') === sl.k ? 'on' : ''}" style="padding:3px 9px;font-size:11px"
+    onclick="annUpdItem('${scope}','${kind}','${sessId}','${it.id}','slot','${sl.k}')">${esc(annSlotLabel(sl.k, kind))}</button>`;
+  return `<div style="border:1px solid var(--bd);border-radius:var(--r);padding:11px;margin-bottom:10px;background:var(--surf)">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px">
+      <input class="fi" style="flex:1;font-weight:700" value="${esc(it.label || '')}" placeholder="What is it? e.g. Countdown video"
+        onchange="${up('label')}"/>
+      <button class="chip" style="padding:3px 9px" title="Move earlier" ${i === 0 ? 'disabled' : ''} onclick="annMoveItem('${scope}','${kind}','${sessId}','${it.id}',-1)">↑</button>
+      <button class="chip" style="padding:3px 9px" title="Move later" ${i === n - 1 ? 'disabled' : ''} onclick="annMoveItem('${scope}','${kind}','${sessId}','${it.id}',1)">↓</button>
+      <button class="chip" style="padding:3px 9px;color:var(--red)" onclick="annDelItem('${scope}','${kind}','${sessId}','${it.id}')">Remove</button>
+    </div>
+    <div class="fg" style="margin-bottom:9px"><label class="fl">Where it goes</label>
+      <div class="chiprow">${ANN_SLOTS.map(slotChip).join('')}</div></div>
+    <div class="fg" style="margin-bottom:9px"><label class="fl">How long does it take? <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— seconds; 0 if it takes no time</span></label>
+      <input class="fi" type="number" min="0" step="5" style="max-width:140px" value="${annFlowSec(it)}" onchange="${up('sec')}"/></div>
+    <div class="fg" style="margin-bottom:9px"><label class="fl">What I say <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— leave blank if I say nothing</span></label>
+      <textarea class="fi" rows="2" style="resize:vertical;line-height:1.5" onchange="${up('say')}">${esc(it.say || '')}</textarea></div>
+    <div class="fg" style="margin-bottom:0"><label class="fl">Cue for me or the crew <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— printed in a box, not read out</span></label>
+      <textarea class="fi" rows="2" style="resize:vertical;line-height:1.5" onchange="${up('cue')}">${esc(it.cue || '')}</textarea></div>
+  </div>`;
+}
+function renderFlowTab(sess, kind) {
+  const meetList = annMeetFlow(kind), sessList = annSessFlow(sess);
+  const everyLabel = kind === 'session' ? 'every preliminary session' : 'every finals session';
+  const list = (arr, scope) => arr.length
+    ? arr.map((it, i) => renderFlowItemCard(it, scope, kind, sess.id, i, arr.length)).join('')
+    : `<div style="font-size:12px;color:var(--tx3);padding:10px 0">Nothing here yet.</div>`;
+  return `
+    <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:16px">
+      Anything extra that has to happen in the run of show — a countdown video, a moment of silence, a presentation,
+      a sponsor read. Give it a name, say where it goes and how long it takes. Whatever you put under
+      <strong>What I say</strong> is printed to read aloud; the <strong>cue</strong> is printed in a box for you and the crew.
+      Items that take time are counted in the timing check, so the script still tells you honestly whether it all fits.
+    </div>
+
+    <div class="fsec">Every finals session <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— write once, prints in ${esc(everyLabel)}</span></div>
+    ${list(meetList, 'meet')}
+    <div class="chiprow" style="margin-bottom:20px">
+      ${kind === 'finals' ? `<button class="chip" onclick="annAddCountdown('meet','${kind}','${sess.id}')">Add countdown video</button>` : ''}
+      <button class="chip" onclick="annAddItem('meet','${kind}','${sess.id}')">Add something else</button>
+    </div>
+
+    <div class="fdiv"></div>
+    <div class="fsec">Just this session <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— one-offs</span></div>
+    ${list(sessList, 'sess')}
+    <div class="chiprow">
+      ${kind === 'finals' ? `<button class="chip" onclick="annAddCountdown('sess','${kind}','${sess.id}')">Add countdown video</button>` : ''}
+      <button class="chip" onclick="annAddItem('sess','${kind}','${sess.id}')">Add something else</button>
+    </div>`;
+}
+
 function renderOpenModal(sess) {
   const timed = Object.assign({}, sess, { timing: calcSessTiming(sess) });
   const c = annCfg(sess);
@@ -705,7 +868,7 @@ function renderOpenModal(sess) {
   const ctx = annOpenCtx(timed, evs);
   const day = S.meet.days.find(d => d.id === sess.dayId);
   const n = getSessNum(sess, allTimed());
-  const tab = UI.annTab === 'words' || UI.annTab === 'preview' ? UI.annTab : 'notes';
+  const tab = ['words', 'preview', 'flow'].includes(UI.annTab) ? UI.annTab : 'notes';
   const tabBtn = (k, l) => `<button class="chip ${tab === k ? 'on' : ''}" onclick="UI.annTab='${k}';render()">${l}</button>`;
   const txtFld = (label, field, rows, hint) => `<div class="fg"><label class="fl">${label}${hint ? ` <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— ${hint}</span>` : ''}</label>
     <textarea class="fi" rows="${rows || 3}" style="resize:vertical;line-height:1.5" onchange="setAnnMeet('${field}',this.value)">${esc(annMeetCfg()[field])}</textarea></div>`;
@@ -740,6 +903,8 @@ function renderOpenModal(sess) {
       ${txtFld('Photography partner', 'pPhoto', 5)}
       ${txtFld('Thank-yous', 'pThanks', 3)}
       ${txtFld('Good luck / handoff', 'pGoodLuck', 3)}`;
+  } else if (tab === 'flow') {
+    body = renderFlowTab(sess, 'session');
   } else {
     body = renderOpenScript(timed);
   }
@@ -750,7 +915,7 @@ function renderOpenModal(sess) {
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${day ? esc(fullDate(day.date)) : ''} · ${esc(ctx.daypart)} ${esc(ctx.roundword)}</div></div>
       <button class="modal-close" onclick="UI.modal=null;render()">×</button>
     </div>
-    <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('notes', 'This session')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
+    <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('notes', 'This session')}${tabBtn('flow', 'Flow')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot">
       <button class="btn btn-gh" onclick="UI.modal=null;render()">Close</button>
@@ -926,6 +1091,8 @@ function renderAnnModal() {
       ${txtFld('Optional hold message 2', 'hold2', 3)}
       <div class="fdiv"></div>
       ${txtFld('Handoff to the tables', 'handoff', 2)}`;
+  } else if (tab === 'flow') {
+    body = renderFlowTab(sess, 'finals');
   } else {
     body = renderAnnScript(timed, { preview: true });
   }
@@ -937,7 +1104,7 @@ function renderAnnModal() {
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${day ? esc(fullDate(day.date)) : ''} · ${esc(evs.map(evName).join('  ·  '))}</div></div>
       <button class="modal-close" onclick="UI.modal=null;render()">×</button>
     </div>
-    <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('timing', 'Timing')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
+    <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('timing', 'Timing')}${tabBtn('flow', 'Flow')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot">
       <button class="btn btn-gh" onclick="UI.modal=null;render()">Close</button>
@@ -980,10 +1147,26 @@ function renderAnnScript(sess, opts) {
   const closeRow = st.rows.find(r => r.kind === 'boardsclose');
   const ord = annFinalsOrdinal(sess);
 
-  const flow = ['WARM-UP', 'WELCOME', c.anthemOn ? 'ANTHEM' : null]
+  const itemRows = st.rows.filter(r => r.kind === 'item');
+  const itemsIn = slot => itemRows.filter(r => r.slot === slot);
+  const flow = ['WARM-UP']
+    .concat(itemsIn('start').map(r => String(r.item.label || '').toUpperCase()))
+    .concat(['WELCOME', c.anthemOn ? 'ANTHEM' : null])
+    .concat(itemsIn('beforeEvents').map(r => String(r.item.label || '').toUpperCase()))
     .concat(introRows.map(r => (r.ev.apparatus === 'Platform' || isPlatform(r.ev.apparatus)) ? 'TOWER' : r.ev.apparatus.replace('-Meter', '-METER')))
-    .concat([c.holdOn ? 'HOLD MESSAGING' : null, 'JUDGES'])
+    .concat([c.holdOn ? 'HOLD MESSAGING' : null])
+    .concat(itemsIn('beforeHandoff').map(r => String(r.item.label || '').toUpperCase()))
+    .concat(['JUDGES'])
     .filter(Boolean).join('  >  ');
+  // One shape for every extra item, wherever it sits.
+  const itemBlock = r => `<section class="ans-sec">
+      <h2 class="ans-h2">${esc(r.item.label || 'Item')}
+        <span class="ans-h2sub">${r.item.say ? 'READ ALOUD' : 'CUE ONLY'}</span>
+        <span class="ans-h2t">${annClock(r.startSec)}${r.durSec ? ' · ' + annDur(r.durSec) : ''}</span></h2>
+      ${r.item.cue ? cueBlock('CUE', r.item.cue) : ''}
+      ${r.item.say ? `<p class="ans-read">${esc(annFill(r.item.say))}</p>` : ''}
+    </section>`;
+  const itemsHtml = slot => itemsIn(slot).map(itemBlock).join('');
 
   const cue = (title, text) => `<div class="ans-cue"><strong>${esc(title)}</strong>${text ? ` <em>${esc(text)}</em>` : ''}</div>`;
   const read = txt => `<p class="ans-read">${esc(annFill(txt))}</p>`;
@@ -1040,6 +1223,8 @@ function renderAnnScript(sess, opts) {
           ${st.needSec > st.availSec ? `<div class="ans-warn">This read is longer than the gap between warm-up and the first dive. Trim it live or hold the start.</div>` : ''}
         </section>
 
+        ${itemsHtml('start')}
+
         <section class="ans-sec">
           <h2 class="ans-h2">${c.anthemOn ? 'Short Welcome and National Anthem' : 'Short Welcome'} <span class="ans-h2sub">READ ALOUD</span>
             <span class="ans-h2t">${welcomeRow ? annClock(welcomeRow.startSec) : ''}</span></h2>
@@ -1052,8 +1237,10 @@ function renderAnnScript(sess, opts) {
           ${read(m.introLead)}
         </section>
 
+        ${itemsHtml('beforeEvents')}
         ${evBlocks}
         ${holdBlock}
+        ${itemsHtml('beforeHandoff')}
 
         <section class="ans-sec">
           <h2 class="ans-h2">Competition Handoff <span class="ans-h2sub">READ WHEN CLEARED</span>
@@ -1191,6 +1378,16 @@ function renderOpenScript(sess) {
   const backTo = annIsFirstCompSession(sess) ? 'welcome to' : 'welcome back to';
   const read = (txt) => `<p class="ans-read">${esc(annFill(txt, ctx))}</p>`;
   const split = annSplitSentence(evs);
+  // The morning read has no second-by-second rundown, so an item shows its
+  // length rather than a clock time.
+  const itemBlock = it => `<section class="ans-sec">
+      <h2 class="ans-h2">${esc(it.label || 'Item')}
+        <span class="ans-h2sub">${it.say ? 'READ ALOUD' : 'CUE ONLY'}</span>
+        ${annFlowSec(it) ? `<span class="ans-h2t">${annDur(annFlowSec(it))}</span>` : ''}</h2>
+      ${it.cue ? cueBlock('CUE', it.cue) : ''}
+      ${it.say ? `<p class="ans-read">${esc(annFill(it.say, ctx))}</p>` : ''}
+    </section>`;
+  const itemsHtml = slot => annFlowAt(sess, 'session', slot).map(itemBlock).join('');
 
   return `<div class="ans" id="annScript">
     <div class="ans-page">
@@ -1200,9 +1397,11 @@ function renderOpenScript(sess) {
       </header>
       <div class="ans-sub">
         <div class="ans-subt">Session ${n} — ${esc(daypartCap)} ${esc(roundCap)}${day ? ` · ${esc(fullDate(day.date))}` : ''}</div>
-        <div class="ans-flow">WARM-UP ${esc(f12(t.warmupStartMinutes))}&nbsp;&nbsp;&gt;&nbsp;&nbsp;COMPETITION ${esc(f12(t.eventStartMinutes))}</div>
+        <div class="ans-flow">WARM-UP ${esc(f12(t.warmupStartMinutes))}&nbsp;&nbsp;&gt;&nbsp;&nbsp;${ANN_SLOTS.map(sl => annFlowAt(sess, 'session', sl.k).map(i => esc(String(i.label || '').toUpperCase()) + '&nbsp;&nbsp;&gt;&nbsp;&nbsp;').join('')).join('')}COMPETITION ${esc(f12(t.eventStartMinutes))}</div>
       </div>
       <div class="ans-body">
+
+        ${itemsHtml('start')}
 
         <section class="ans-sec">
           <h2 class="ans-h2">Welcome <span class="ans-h2sub">READ ALOUD</span>
@@ -1215,6 +1414,8 @@ function renderOpenScript(sess) {
           <div class="ans-msg"><div class="ans-msgh">ACTION SHOTS PHOTOGRAPHY</div>${read(m.pPhoto)}</div>
           ${read(m.pThanks)}
         </section>
+
+        ${itemsHtml('beforeEvents')}
 
         <section class="ans-sec">
           <h2 class="ans-h2">This Session <span class="ans-h2sub">READ ALOUD</span></h2>
@@ -1239,6 +1440,8 @@ function renderOpenScript(sess) {
           <h2 class="ans-h2">Session Notes <span class="ans-h2sub">READ ALOUD</span></h2>
           ${String(c.notes).split(/\n\s*\n|\n/).map(x => x.trim()).filter(Boolean).map(x => `<p class="ans-read">${esc(annFill(x, ctx))}</p>`).join('')}
         </section>` : ''}
+
+        ${itemsHtml('beforeHandoff')}
 
         <section class="ans-sec">
           <h2 class="ans-h2">Competition Handoff <span class="ans-h2sub">READ WHEN CLEARED</span></h2>
