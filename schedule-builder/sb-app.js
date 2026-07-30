@@ -975,6 +975,34 @@ function detectConflicts(){
       }
     });
   }
+  // "Advancing in" cannot exceed the field it advances FROM. The top 12 of a
+  // National Qualifier event move into the matching Senior prelim — but a tower
+  // qualifier with 6 entered can only ever send 6. Nothing is changed
+  // automatically: the correct number is a rules call, not something to infer.
+  (function(){
+    const quals=[];
+    (S.sessions||[]).forEach(sess=>(sess.events||[]).forEach(ev=>{
+      if(ev.round==='Qualifier'&&ev.style!=='Synchronized')quals.push(ev);
+    }));
+    if(!quals.length)return;
+    (S.sessions||[]).forEach(sess=>{
+      if(sess.isPractice)return;
+      (sess.events||[]).forEach(ev=>{
+        const adv=advanceInValue(ev);
+        if(!adv||!canAdvanceIn(ev)||ev.round!=='Prelim')return;
+        const q=quals.find(x=>x.gender===ev.gender&&sameApparatus(x.apparatus,ev.apparatus));
+        if(!q)return;
+        const field=entryValue(q);
+        if(field>0&&adv>field){
+          const day=(S.meet.days||[]).find(d=>d.id===sess.dayId);
+          issues.push({sev:'err',
+            title:'More advancing in than the qualifier can send',
+            detail:`${evName(ev)} adds ${adv} advancing in, but ${evName(q)} has only ${field} entered — at most ${field} can advance. This prelim is sized for ${adv-field} diver${adv-field===1?'':'s'} who cannot exist.`,
+            loc:day?shortDate(day.date):'',fixSessId:sess.id,dayId:sess.dayId,fixHint:'edit'});
+        }
+      });
+    });
+  })();
   return issues;
 }
 // Open the right place to fix a given conflict, then act
@@ -1461,6 +1489,14 @@ function normalizeAllDays(stateSnap){
   // and future cloud saves all carry round "Qualifier".
   (st.sessions||[]).forEach(sess=>(sess.events||[]).forEach(ev=>{
     if(ev.level==='National Qualifier'&&ev.round&&ev.round!=='Qualifier')ev.round='Qualifier';
+    // numberOfDivers is a denormalised copy of the entry maths. Every write path
+    // keeps it in step, but schedules saved before "Advancing in" existed carry a
+    // value that no longer agrees with projected+advancing — and the exports read
+    // it, so reports could print a bigger field than the schedule was timed for.
+    // Recomputing is a no-op when neither entry column is filled, because
+    // entryValue() falls back to this very field.
+    const _t=entryValue(ev);
+    if(Number(ev.numberOfDivers||0)!==_t)ev.numberOfDivers=_t;
   }));
 }
 
@@ -2011,16 +2047,26 @@ async function pullDivemeetsNow(){
 // means "matches nothing" and must never silently fall back to
 // unrestricted matching, which would let a misconfigured source collide
 // with unrelated events.
+// The schedule calls the tower "10-Meter" on Senior and National Qualifier events
+// but "Platform" on Junior ones, while the DiveMeets parser only ever emits
+// "Platform". A raw === comparison therefore silently failed to match EVERY Senior
+// and Qualifier tower event: the sync looked like it ran and quietly skipped them,
+// leaving staff estimates in place with no indication they had not been updated.
+// isPlatform() already exists for exactly this; the matcher just never used it.
+function sameApparatus(a,b){
+  if(a===b)return true;
+  return isPlatform(a)&&isPlatform(b);
+}
 function findDivemeetsMatch(sources,ev,role){
   if(ev.style==='Synchronized')return null; // synchro is never comparable to individual DiveMeets entries — excluded by policy, same as the parser
   for(const s of sources){
     if(s.role!==role)continue;
     let row;
     if(s.levels===null){
-      row=(s.rows||[]).find(r=>r.ageGroup===ev.level&&r.gender===ev.gender&&r.discipline===ev.apparatus);
+      row=(s.rows||[]).find(r=>r.ageGroup===ev.level&&r.gender===ev.gender&&sameApparatus(r.discipline,ev.apparatus));
     }else{
       if(!(s.levels||[]).includes(ev.level))continue;
-      row=(s.rows||[]).find(r=>r.gender===ev.gender&&r.discipline===ev.apparatus);
+      row=(s.rows||[]).find(r=>r.gender===ev.gender&&sameApparatus(r.discipline,ev.apparatus));
     }
     if(row)return{entries:row.entries,sourceId:s.id};
   }
@@ -2029,8 +2075,8 @@ function findDivemeetsMatch(sources,ev,role){
 function findDivemeetsEntrants(sources,ev,sourceId){
   if(ev.style==='Synchronized')return[];
   const s=sources.find(x=>x.id===sourceId);if(!s)return[];
-  if(s.levels===null)return(s.entrants||[]).filter(e=>e.ageGroup===ev.level&&e.gender===ev.gender&&e.discipline===ev.apparatus);
-  return(s.entrants||[]).filter(e=>e.gender===ev.gender&&e.discipline===ev.apparatus);
+  if(s.levels===null)return(s.entrants||[]).filter(e=>e.ageGroup===ev.level&&e.gender===ev.gender&&sameApparatus(e.discipline,ev.apparatus));
+  return(s.entrants||[]).filter(e=>e.gender===ev.gender&&sameApparatus(e.discipline,ev.apparatus));
 }
 function entrySyncDeltas(){
   const sources=UI.entrySync?.sources||[];
@@ -2803,7 +2849,7 @@ async function exportMeetExcel(){
       }else{
         const n=getSessNum(sess,timed);
         aoa.push([f12(t.eventStartMinutes),f12(t.sessionEndMinutes),`Session ${n}${sess.awardsEnabled?' (+ Awards)':''}`,os.showWarmup!==false?`Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}`:'',fdur(t.sessionEndMinutes-t.warmupStartMinutes),'']);
-        (t.events||[]).forEach(ev=>aoa.push([f12(ev.eventStartMinutes),'','','  '+evName(ev)+(Number(ev.numberOfDivers)?` — ${ev.numberOfDivers} divers`:''),'','']));
+        (t.events||[]).forEach(ev=>aoa.push([f12(ev.eventStartMinutes),'','','  '+evName(ev)+(entryValue(ev)?` — ${entryValue(ev)} divers`:''),'','']));
       }
     });
     if(!ds.length)aoa.push(['(nothing scheduled)']);
@@ -5633,7 +5679,7 @@ async function exportOpsTimeline(){
       (t.events||[]).forEach(ev=>{
         const dur=calcEvDur(ev);const split=ev.manualSplit&&!isPlatform(ev.apparatus);
         const onAir=Boolean(ev._bcast);const spdShown=onAir?bcastEvSpd(ev):Number(ev.secondsPerDive||ev.defaultSpd||0);const minShown=onAir?Number(ev.evMin||0):dur.evMin;
-        dataRow(['',evRound(ev),evName(ev)+(split?' (Split)':'')+(onAir?' [BROADCAST]':''),split?'Split':'',split?splitPanelRot(ev):'',Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.numberOfDivers||0),spdShown,mins(minShown),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)],bg,
+        dataRow(['',evRound(ev),evName(ev)+(split?' (Split)':'')+(onAir?' [BROADCAST]':''),split?'Split':'',split?splitPanelRot(ev):'',Number(ev.numberOfDives||ev.defaultDives||0),entryValue(ev),spdShown,mins(minShown),'','',Number(sess.warmupMinutes||0),f12(t.warmupStartMinutes),f12(t.warmupEndMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)],bg,
           {2:{bg:roundBg(ev.round),font:{bold:true,size:9}},6:{bg:G,font:{bold:true}},7:{bg:G,font:{bold:true}},8:{bg:G,font:{bold:true}},12:{font:{bold:true}},13:{font:{bold:true}},14:{font:{bold:true}},15:cyan,16:cyan});
       });
     });
@@ -5671,7 +5717,7 @@ async function exportExcel(){
       ws.mergeCells(`B${sr.number}:K${sr.number}`);
       sr.getCell(2).fill=fill('FFF5F6FA');sr.getCell(2).font={bold:true,size:10};
       (t.events||[]).forEach(ev=>{
-        const r=ws.addRow([fullDate(day.date),lbl,evName(ev),ev.round||'',Number(ev.numberOfDivers||0),Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.secondsPerDive||ev.defaultSpd||35),ev.manualSplit&&!isPlatform(ev.apparatus)?'Yes':'',f12(t.warmupStartMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)]);
+        const r=ws.addRow([fullDate(day.date),lbl,evName(ev),ev.round||'',entryValue(ev),Number(ev.numberOfDives||ev.defaultDives||0),Number(ev.secondsPerDive||ev.defaultSpd||35),ev.manualSplit&&!isPlatform(ev.apparatus)?'Yes':'',f12(t.warmupStartMinutes),f12(ev.eventStartMinutes),f12(ev.eventEndMinutes)]);
         r.eachCell({includeEmpty:true},c=>{c.font={size:10};c.border=botBd;});
       });
     });
