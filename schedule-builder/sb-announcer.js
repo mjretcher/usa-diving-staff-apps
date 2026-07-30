@@ -205,14 +205,17 @@ function annParseDiverLine(text) {
   const m = String(text || '').match(/^(\d{1,3})\s+(\S.*)$/);
   if (!m) return null;
   let rest = m[2].trim();
-  // A row of dive codes or DDs can never reach here (no space after the
-  // leading integer), but guard anyway against anything numeric-looking.
   if (!/[A-Za-z]{2}/.test(rest)) return null;
-  if ((rest.match(/\d/g) || []).length > 2) return null;
+  // Split the club off FIRST. Clubs legitimately carry numbers - "Dive 2000
+  // Club", "5280 Diving" - so the numeric sanity check below has to be applied
+  // to the athlete's name alone or it throws the whole diver away.
   let club = '';
   const p = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
   if (p) { rest = p[1].trim(); club = p[2].trim(); }
   if (!/[A-Za-z]{2}/.test(rest)) return null;
+  // A row of dive codes or DDs can never reach here (no space after the
+  // leading integer), but a name is still never mostly digits.
+  if ((rest.match(/\d/g) || []).length > 2) return null;
   return { no: Number(m[1]), name: rest.replace(/\s+/g, ' '), club };
 }
 
@@ -243,8 +246,17 @@ function annSheetToOrder(parsed) {
   const rows = [];
   const problems = [];
   parsed.boards.forEach(b => {
+    const who = b.name ? `Board ${b.name}` : 'This sheet';
     if (b.expected != null && b.expected !== b.rows.length) {
-      problems.push(`Board ${b.name || '(unnamed)'}: the sheet says ${b.expected} divers but ${b.rows.length} were read.`);
+      problems.push(`${who}: the sheet says ${b.expected} divers but ${b.rows.length} were read.`);
+    }
+    // Prelim sheets declare their own total; finals sheets do not. What both
+    // always carry is the printed order number, which must run 1..n with no
+    // gap and no repeat. A gap means a diver line was not read.
+    const seq = b.rows.map(r => r.no);
+    const bad = seq.findIndex((n, i) => n !== i + 1);
+    if (seq.length && bad >= 0) {
+      problems.push(`${who}: the printed order reads ${seq.join(', ')} — expected 1 to ${seq.length}, so a diver line was missed or read twice.`);
     }
     b.rows.forEach(r => rows.push(Object.assign({ board: b.name }, r)));
   });
@@ -348,9 +360,11 @@ async function annImportFiles(sessId, fileList) {
       // A prior hand-typed club override would silently outrank the sheet.
       upd(s => { const ss = s.sessions.find(x => x.id === sessId); if (ss && ss.announcer && ss.announcer.clubs) delete ss.announcer.clubs[ev.id]; });
       const roundWarn = m.round && ev.round && m.round !== ev.round;
+      const sched = Number(ev.numberOfDivers || 0);
       annSetImport(sessId, ev.id, {
         file: f.name, label, at: new Date().toISOString(), count: ord.rows.length,
         boards: ord.boards, dmEventId: m.dmEventId || '', roundWarn: roundWarn ? m.round : '',
+        schedCount: sched && sched !== ord.rows.length ? sched : 0,
       });
       log.push({
         ok: true, warn: roundWarn,
@@ -841,6 +855,7 @@ function renderAnnModal() {
       if (!rec) return '';
       return `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--surf2);border:1px solid ${rec.roundWarn ? 'var(--red)' : 'var(--bd)'}">
           Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} divers${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.
+          ${rec.schedCount ? `<span style="color:var(--tx3)">The schedule is timed on ${rec.schedCount} for this event — an exhibition diver in the cut would explain one more.</span>` : ''}
           ${rec.roundWarn ? `<span style="color:var(--red);font-weight:700">This is the ${esc(rec.roundWarn)} sheet, not the ${esc(ev.round)} — check before printing.</span>` : ''}
         </div>`;
     })()}
