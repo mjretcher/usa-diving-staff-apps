@@ -345,8 +345,17 @@ function liveProject(dayId,opts){
     }
 
     // Parallel blocks don't consume their own slot, so they must not push the cursor.
-    if(!parallel)cursor=projEnd+Number(sess.bufferMinutes||0);
-    out.push({sess,t,status,shift,projStart,projEnd,plannedStart,plannedCompStart,plannedEnd,basis,events:evs,
+    // The gap the plan leaves before the next block is SLACK. If a block runs long
+    // but still finishes before the next one was due to start, the next one starts
+    // on time and the overrun is simply absorbed — re-adding the buffer on top of a
+    // late finish invented a delay that nobody on the deck would experience. Only
+    // an overrun that eats past the next planned start actually pushes, and then
+    // only by the amount that did not fit.
+    if(!parallel)cursor=projEnd;
+    // The block start and the first dive are different clocks; anything shown next
+    // to "First dive" has to be the first dive.
+    const projCompStart=projStart+(plannedCompStart-plannedStart);
+    out.push({sess,t,status,shift,projStart,projEnd,projCompStart,plannedStart,plannedCompStart,plannedEnd,basis,events:evs,
       rec,parallel,stale});
   });
   return out;
@@ -451,7 +460,7 @@ function liveSessRow(sess,t){
       <button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveFinishSess('${sess.id}')">Finish session</button>`;
   }else{
     state=`<span class="lv-badge todo" title="Block opens ${f12(row.plannedStart)} \u00b7 first dive planned ${f12(row.plannedCompStart)}">First dive ${f12(row.plannedCompStart)}</span>${
-      row.shift?`<span class="lv-chip ${liveDeltaCls(row.shift)}" title="${esc(row.basis)}">now expected ${f12(row.projStart)} \u00b7 ${liveDelta(row.shift)}</span>`:''}`;
+      row.shift?`<span class="lv-chip ${liveDeltaCls(row.shift)}" title="${esc(row.basis)}">first dive now ${f12(row.projCompStart!=null?row.projCompStart:row.projStart)} \u00b7 ${liveDelta(row.shift)}</span>`:''}`;
     btns=`<button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveStartSess('${sess.id}')" title="First diver on the board">Start competition</button>
       ${(sess.events||[]).length?`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartAllEvs('${sess.id}')" title="Start the session and every event in it at the same moment">Start all events</button>`:''}`;
   }
