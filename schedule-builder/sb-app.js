@@ -496,8 +496,13 @@ let S=loadS();
 let undoStack=[],redoStack=[];const UNDO_MAX=50;
 function snapshot(){return JSON.stringify(S)}
 function pushUndo(){undoStack.push(snapshot());if(undoStack.length>UNDO_MAX)undoStack.shift();redoStack=[]}
-function undo(){if(!undoStack.length){toast('Nothing to undo');return}redoStack.push(snapshot());S=JSON.parse(undoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Undone')}
-function redo(){if(!redoStack.length){toast('Nothing to redo');return}undoStack.push(snapshot());S=JSON.parse(redoStack.pop());normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Redone')}
+// Undo/redo is for the PLAN. The run sheet is a record of things that physically
+// happened and it lives in its own row in the cloud — rolling it back because
+// somebody undid a schedule edit would delete times that were genuinely observed,
+// and Cmd+Z right after approving would have wiped the very recordings that drove
+// the approval. Carried across every restore.
+function undo(){if(!undoStack.length){toast('Nothing to undo');return}const live=S.live;redoStack.push(snapshot());S=JSON.parse(undoStack.pop());if(live!==undefined)S.live=live;normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Undone')}
+function redo(){if(!redoStack.length){toast('Nothing to redo');return}const live=S.live;undoStack.push(snapshot());S=JSON.parse(redoStack.pop());if(live!==undefined)S.live=live;normalizeAllDays(S);saveS();if(S.currentLibraryId)scheduleSave();render();toast('Redone')}
 // ── LOCKING ───────────────────────────────────────────────────────────
 // Two switches, both saved with the schedule so a lock travels with the meet to every
 // device and every member of staff:
@@ -606,7 +611,9 @@ function upd(fn){
   if(guard){
     const before=JSON.parse(guard);
     if(lockViolation(before,S)){
+      const _live=S.live;
       S=before;
+      if(_live!==undefined)S.live=_live;
       undoStack.pop();
       render();lockRefused();
       return;
@@ -3255,7 +3262,6 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
-    ${typeof renderAnnSessPanel==='function'?renderAnnSessPanel(sess):''}
     ${typeof renderJudgesSessPanel==='function'?renderJudgesSessPanel(sess):''}
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
@@ -4815,7 +4821,6 @@ function renderFacilityHoursModal(){
 
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
-    ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{})};
   const fn=fns[UI.modal];if(!fn)return'';

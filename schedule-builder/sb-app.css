@@ -1591,6 +1591,27 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
   padding:2px 7px;cursor:pointer;transition:.12s;font-family:inherit}
 .lv-ev-edit:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);
   background:rgba(0,154,199,.06);border-style:solid}
+/* Session phases: warm-up and introductions, timed separately from the diving */
+.lv-phases{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding-top:7px;margin-top:1px;border-top:1px dashed var(--bd,#E6E9F2)}
+.lv-ph{display:inline-flex;align-items:center;gap:6px}
+.lv-ph-n{font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--tx3,#8A90A2)}
+.lv-ph.run .lv-ph-n{color:#B45309}
+.lv-ph.done .lv-ph-n{color:#1B7F4B}
+.lv-ph-t{font-family:var(--font-mono,monospace);font-size:10px;color:var(--tx2,#5A6072);
+  border:1px dashed var(--bd2,#DDE1EC);background:transparent;border-radius:6px;padding:2px 7px;cursor:pointer}
+.lv-ph-t:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);border-style:solid;
+  background:rgba(0,154,199,.06)}
+.lv-ph-d{font-size:10px;font-weight:700;color:var(--navy,#171F69);font-variant-numeric:tabular-nums}
+.lt-optional{font-size:9.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--tx3,#8A90A2);background:var(--surf2,#EEF1F7);padding:2px 6px;border-radius:4px}
+@media (max-width:760px){
+  .lv-phases{flex-direction:column;align-items:stretch;gap:8px}
+  .lv-ph{justify-content:space-between}
+  .lv-ph-n,.lv-ph-t,.lv-ph-d{font-size:12px}
+  .lv-ph .lv-xbtn{min-width:74px}
+}
+
 .lv-ev-proj{font-family:var(--font-mono,monospace);font-size:10px;font-weight:600;
   color:var(--pool,#009AC7);white-space:nowrap}
 .lv-ev-proj.dim{color:var(--tx3,#8A90A2);font-weight:500}
