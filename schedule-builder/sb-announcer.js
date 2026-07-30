@@ -73,6 +73,7 @@ const ANN_DEFAULTS = {
   perAthleteSec: 12,      // reading one name + club, at walk-out pace
   closeSec: 10,           // "Please join us in recognizing …", per event
   holdOn: true,
+  notes: '',              // anything extra to read in this one session
   order: {},              // { [evId]: pasted dive order text }
   clubs: {},              // { [evId]: { [rowIndex]: "typed club override" } }
 };
@@ -91,15 +92,42 @@ const ANN_MEET_DEFAULTS = {
   hold2: 'A special thank you to our judges, volunteers, medical staff, meet personnel, the venue staff, and everyone helping make these championships possible.',
   handoff: 'Congratulations to all of today\'s finalists. We wish each of you the very best of luck.',
 };
+// The morning read. Same shape of thing as the finals copy above: written
+// once per championship, stored on S.meet, editable, token-filled.
+const ANN_OPEN_DEFAULTS = {
+  pWelcome: 'On behalf of USA Diving, welcome to {venue}. We are pleased to welcome our {divers}, coaches, judges, volunteers, families, and fans for another exciting {daypart} of championship competition.',
+  pSport: 'Throughout the championships, we ask everyone to help us create a positive and respectful environment by demonstrating outstanding sportsmanship and supporting all of our athletes. Please remember to silence your cell phones during competition and refrain from using flash photography while athletes are on the boards or platform.',
+  pStream: 'Today\'s competition is being livestreamed free on the official USA Diving YouTube channel. Friends, families, and fans can also follow live scoring throughout the championships by visiting DiveMeets.com and selecting Live Results.',
+  pPhoto: 'A reminder that Action Shots Photography is the exclusive photography provider for the {meet}. If you would like professional photos of your diver, please visit the Action Shots booth located upstairs to pre-order your photography package. Pre-orders must be placed at least 30 minutes prior to the start of your athlete\'s competition session.',
+  pThanks: 'A special thank you to our judges, volunteers, medical staff, meet personnel, the staff at {venue}, and everyone whose hard work has helped make these championships possible.',
+  pGoodLuck: 'To all of our competitors, congratulations on earning your place at this national championship. We wish each of you the very best of luck in this {daypart}\'s {roundword} competition.',
+};
 function annMeetCfg() {
-  return Object.assign({}, ANN_MEET_DEFAULTS, (S.meet && S.meet.paScript) || {});
+  return Object.assign({}, ANN_MEET_DEFAULTS, ANN_OPEN_DEFAULTS, (S.meet && S.meet.paScript) || {});
 }
-// {venue} / {meet} / {city} are the only tokens; everything else is literal.
-function annFill(tpl) {
+// Tokens: {venue} {meet} {city} always; {divers} {daypart} {roundword} when a
+// session context is supplied. Everything else is literal.
+// The meet's venue field usually already ends with the city ("... at Mylan
+// Park, Morgantown, WV"), which makes "welcome to {venue}" read twice over and
+// "the staff at {venue}" read badly. Strip the trailing city when it is
+// literally the meet's own city string, so {venue} is the building and {city}
+// is the city.
+function annVenue() {
+  const v = String((S.meet && S.meet.venue) || '').trim();
+  const c = String((S.meet && S.meet.city) || '').trim();
+  if (!v) return 'the competition venue';
+  if (c && v.toLowerCase().endsWith((', ' + c).toLowerCase())) return v.slice(0, v.length - c.length - 2).trim();
+  return v;
+}
+function annFill(tpl, ctx) {
+  ctx = ctx || {};
   return String(tpl || '')
-    .replace(/\{venue\}/g, (S.meet && S.meet.venue) || 'the competition venue')
+    .replace(/\{venue\}/g, annVenue())
     .replace(/\{meet\}/g, (S.meet && S.meet.name) || 'these championships')
-    .replace(/\{city\}/g, (S.meet && S.meet.city) || '');
+    .replace(/\{city\}/g, (S.meet && S.meet.city) || '')
+    .replace(/\{divers\}/g, ctx.divers || 'divers')
+    .replace(/\{daypart\}/g, ctx.daypart || 'session')
+    .replace(/\{roundword\}/g, ctx.roundword || 'competition');
 }
 
 // ── DIVE ORDER PARSING ────────────────────────────────────────────────
@@ -373,14 +401,20 @@ function annApplyFit(sessId) {
   toast(`Intro set to ${m} minutes`);
 }
 function openAnnouncer(sessId) {
-  UI.annSessId = sessId; UI.modal = 'announcer'; UI.annTab = UI.annTab || 'order';
+  const sess = S.sessions.find(x => x.id === sessId);
+  const kind = sess ? annSessKind(sess) : null;
+  UI.annSessId = sessId; UI.modal = 'announcer';
+  UI.annTab = kind === 'session' ? 'notes' : 'order';
   render();
-  annLoadEntrants(false);
+  // The morning read needs no entrant names — only the dive-order screen does.
+  if (kind === 'finals') annLoadEntrants(false);
 }
 
 // ── EDITOR: SESSION PANEL ─────────────────────────────────────────────
 function renderAnnSessPanel(sess) {
-  if (!annSessHasFinals(sess)) return '';
+  const kind = annSessKind(sess);
+  if (!kind) return '';
+  if (kind === 'session') return renderOpenSessPanel(sess);
   const c = annCfg(sess);
   const evs = annEvents(sess);
   const filled = evs.filter(ev => annParseOrder((c.order || {})[ev.id] || '').length).length;
@@ -403,11 +437,99 @@ function renderAnnSessPanel(sess) {
     </div>` : ''}`;
 }
 
+function renderOpenModal(sess) {
+  const timed = Object.assign({}, sess, { timing: calcSessTiming(sess) });
+  const c = annCfg(sess);
+  const evs = annOpeningEvents(sess);
+  const t = timed.timing;
+  const ctx = annOpenCtx(timed, evs);
+  const day = S.meet.days.find(d => d.id === sess.dayId);
+  const n = getSessNum(sess, allTimed());
+  const tab = UI.annTab === 'words' || UI.annTab === 'preview' ? UI.annTab : 'notes';
+  const tabBtn = (k, l) => `<button class="chip ${tab === k ? 'on' : ''}" onclick="UI.annTab='${k}';render()">${l}</button>`;
+  const txtFld = (label, field, rows, hint) => `<div class="fg"><label class="fl">${label}${hint ? ` <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— ${hint}</span>` : ''}</label>
+    <textarea class="fi" rows="${rows || 3}" style="resize:vertical;line-height:1.5" onchange="setAnnMeet('${field}',this.value)">${esc(annMeetCfg()[field])}</textarea></div>`;
+
+  let body = '';
+  if (tab === 'notes') {
+    body = `
+      <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
+        Everything below is read straight off the schedule — you do not type any of it. The only thing to add is
+        anything extra you want to say in this one session.
+      </div>
+      <div style="border:1px solid var(--bd);border-radius:var(--r);padding:11px 13px;background:var(--surf2);margin-bottom:16px;font-size:13px;line-height:1.8">
+        <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Pulled from the schedule</div>
+        Greeting: <strong>Good ${esc(ctx.daypart)}, and ${annIsFirstCompSession(timed) ? 'welcome to' : 'welcome back to'}…</strong><br/>
+        Warm-up <strong>${esc(f12(t.warmupStartMinutes))} – ${esc(f12(t.warmupEndMinutes))}</strong> · competition <strong>${esc(f12(t.eventStartMinutes))}</strong><br/>
+        Audience: <strong>${esc(ctx.divers)}</strong> · round: <strong>${esc(ctx.roundword)}</strong><br/>
+        ${esc(annFeatureSentence(timed, evs, n))} ${esc(annSplitSentence(evs))}
+      </div>
+      <div class="fg"><label class="fl">Anything extra to read in this session <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— optional; one paragraph per line</span></label>
+        <textarea class="fi" rows="5" style="resize:vertical;line-height:1.5" placeholder="e.g. Awards for last night's finals will be presented at the conclusion of this session."
+          onchange="setAnn('${sess.id}','notes',this.value)">${esc(c.notes || '')}</textarea></div>`;
+  } else if (tab === 'words') {
+    body = `
+      <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
+        This wording is saved with the schedule and reused for every prelim session, so you write it once per championship.
+        Tokens: <strong>{venue}</strong> <strong>{meet}</strong> <strong>{city}</strong> <strong>{divers}</strong>
+        <strong>{daypart}</strong> <strong>{roundword}</strong> — the last three change by session on their own.
+      </div>
+      ${txtFld('Venue welcome', 'pWelcome', 4)}
+      ${txtFld('Sportsmanship, phones, flash photography', 'pSport', 4)}
+      ${txtFld('Livestream and live scoring', 'pStream', 4)}
+      ${txtFld('Photography partner', 'pPhoto', 5)}
+      ${txtFld('Thank-yous', 'pThanks', 3)}
+      ${txtFld('Good luck / handoff', 'pGoodLuck', 3)}`;
+  } else {
+    body = renderOpenScript(timed);
+  }
+
+  return `<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
+    <div class="modal-hd">
+      <div><span class="modal-title">Announcer script — Session ${n}</span>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${day ? esc(fullDate(day.date)) : ''} · ${esc(ctx.daypart)} ${esc(ctx.roundword)}</div></div>
+      <button class="modal-close" onclick="UI.modal=null;render()">×</button>
+    </div>
+    <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('notes', 'This session')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-foot">
+      <button class="btn btn-gh" onclick="UI.modal=null;render()">Close</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-p" onclick="printAnnouncer('${sess.id}')">Print / PDF</button>
+    </div>
+  </div>`;
+}
+
+// The morning read needs almost no setup — it is derived from the schedule.
+// So this panel is deliberately three controls, not a form.
+function renderOpenSessPanel(sess) {
+  const c = annCfg(sess);
+  const evs = annOpeningEvents(sess);
+  const t = sess.timing || calcSessTiming(sess);
+  const ctx = annOpenCtx(sess, evs);
+  return `
+    <div class="fdiv"></div>
+    <div class="fsec">Announcer script <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">${esc(ctx.daypart)} ${esc(ctx.roundword)} read</span></div>
+    <div class="fg"><label class="fl">Use an announcer script for this session</label>
+      <div class="chiprow">
+        <button class="chip ${c.on ? 'on' : ''}" onclick="setAnn('${sess.id}','on',${!c.on})">${c.on ? 'On' : 'Off'}</button>
+        ${c.on ? `<button class="chip" onclick="openAnnouncer('${sess.id}')">Review the wording…</button>
+                  <button class="chip" onclick="printAnnouncer('${sess.id}')">Print script</button>` : ''}
+      </div>
+    </div>
+    ${c.on ? `<div style="font-size:11px;color:var(--tx2);line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
+      Warm-up ${esc(f12(t.warmupStartMinutes))} · competition ${esc(f12(t.eventStartMinutes))}<br/>
+      ${esc(annFeatureSentence(sess, evs, getSessNum(sess, allTimed())))}
+      ${annSplitSentence(evs) ? ' ' + esc(annSplitSentence(evs)) : ''}
+    </div>` : ''}`;
+}
+
 // ── EDITOR MODAL ──────────────────────────────────────────────────────
 function renderAnnModal() {
   const sess = S.sessions.find(x => x.id === UI.annSessId);
   if (!sess) return '';
   annEnsurePreviewCss();
+  if (annSessKind(sess) === 'session') return renderOpenModal(sess);
   const timed = Object.assign({}, sess, { timing: calcSessTiming(sess) });
   const c = annCfg(sess);
   const evs = annEvents(sess);
@@ -658,14 +780,203 @@ function renderAnnScript(sess, opts) {
   </div>`;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SESSION-OPENING SCRIPT  (prelims / qualifiers — the morning read)
+   ───────────────────────────────────────────────────────────────────────
+   A prelim session has no walk-outs and no anthem. It is a straight read:
+   greeting, venue welcome, sportsmanship and phones, livestream, the photo
+   partner, thank-yous, what is competing this session, good luck, handoff.
+
+   Everything that changes session to session — the greeting's time of day,
+   whether it is "welcome" or "welcome back", the event list, which events
+   are on split boards, the warm-up and competition times — is derived from
+   the schedule, not typed twice.
+═══════════════════════════════════════════════════════════════════════ */
+
+// Which script does this session get? Junior finals get the walk-out script;
+// anything else with scored events gets the opening read. Senior finals fall
+// through to neither, because sb-broadcast.js already presents those athletes.
+function annIsOpeningEv(ev) {
+  if (!ev || ev.style === 'Custom Block') return false;
+  return ev.round === 'Prelim' || ev.round === 'Qualifier' || ev.round === 'Semifinal';
+}
+function annOpeningEvents(sess) {
+  // Schedule order is kept: that is the order the tables actually run.
+  return (sess.events || []).filter(annIsOpeningEv);
+}
+function annSessKind(sess) {
+  if (!sess || sess.isPractice) return null;
+  if (annSessHasFinals(sess)) return 'finals';
+  return annOpeningEvents(sess).length ? 'session' : null;
+}
+
+const ANN_ROUND_LABEL = { Prelim: 'Preliminary', Qualifier: 'Qualifier', Semifinal: 'Semifinal', Final: 'Final' };
+function annDaypart(mins) {
+  const h = Math.floor((Number(mins) || 0) / 60);
+  if (h < 12) return 'morning';
+  if (h < 17) return 'afternoon';
+  return 'evening';
+}
+// "junior divers" / "senior divers" / plain "divers" for a combined session.
+function annDiverWord(evs) {
+  let jr = false, sr = false;
+  evs.forEach(ev => {
+    const l = ev.level || '';
+    if (/^(Senior|National Qualifier)/i.test(l)) sr = true;
+    else if (/^(Group|Junior)/i.test(l)) jr = true;
+  });
+  if (jr && !sr) return 'junior divers';
+  if (sr && !jr) return 'senior divers';
+  return 'divers';
+}
+// "preliminary" / "qualifying" / "semifinal" — plain word for the read.
+function annRoundWord(evs) {
+  const set = new Set(evs.map(e => e.round));
+  if (set.size === 1) {
+    const r = [...set][0];
+    if (r === 'Prelim') return 'preliminary';
+    if (r === 'Qualifier') return 'qualifying';
+    if (r === 'Semifinal') return 'semifinal';
+  }
+  return 'competition';
+}
+// Is this the first competition session of the whole championship? Decides
+// "welcome to" versus "welcome back to".
+function annIsFirstCompSession(sess) {
+  try {
+    const all = allTimed().filter(s => annSessKind(s));
+    return all.length ? all[0].id === sess.id : true;
+  } catch (e) { return false; }
+}
+function annOpenCtx(sess, evs) {
+  const t = sess.timing || calcSessTiming(sess);
+  return {
+    daypart: annDaypart(t.eventStartMinutes),
+    divers: annDiverWord(evs),
+    roundword: annRoundWord(evs),
+  };
+}
+
+// "Session 3 features the Group A Boys 1-Meter Preliminary and the Group B
+//  Boys Platform Preliminary, competing simultaneously."
+// "National Qualifier Men 3-Meter" must not become "... 3-Meter Qualifier" —
+// the level already carries the word.
+function annEvReadName(ev) {
+  const nm = evName(ev), lbl = ANN_ROUND_LABEL[ev.round] || ev.round || '';
+  if (!lbl) return nm;
+  return new RegExp('\\b' + lbl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(nm) ? nm : (nm + ' ' + lbl);
+}
+function annFeatureSentence(sess, evs, n) {
+  const names = evs.map(ev => `the ${annEvReadName(ev)}`);
+  let list;
+  if (names.length === 1) list = names[0];
+  else if (names.length === 2) list = names[0] + ' and ' + names[1];
+  else list = names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  const sim = names.length > 1 ? ', competing simultaneously' : '';
+  return `Session ${n} features ${list}${sim}.`;
+}
+// Split boards are a real instruction to the crowd and the tables, so they get
+// their own sentence — driven by the schedule's own split flags, never typed.
+function annSplitSentence(evs) {
+  const split = evs.filter(ev => ev.manualSplit && !isPlatform(ev.apparatus));
+  if (!split.length) return '';
+  const apps = [...new Set(split.map(ev => (al(ev.apparatus) || '').toLowerCase()))];
+  const list = apps.length === 1 ? apps[0]
+    : apps.length === 2 ? apps[0] + ' and ' + apps[1]
+      : apps.slice(0, -1).join(', ') + ', and ' + apps[apps.length - 1];
+  return `The ${list} event${split.length > 1 ? 's' : ''} will be conducted on split boards.`;
+}
+
+function renderOpenScript(sess) {
+  const evs = annOpeningEvents(sess);
+  if (!evs.length) return `<div class="ans"><div class="ans-empty">No preliminary or qualifying events in this session.</div></div>`;
+  const t = sess.timing || calcSessTiming(sess);
+  const m = annMeetCfg();
+  const c = annCfg(sess);
+  const ctx = annOpenCtx(sess, evs);
+  const day = S.meet.days.find(d => d.id === sess.dayId);
+  const meetName = (S.meet && S.meet.name) || 'USA Diving';
+  const n = getSessNum(sess, allTimed());
+  const daypartCap = ctx.daypart.charAt(0).toUpperCase() + ctx.daypart.slice(1);
+  const roundCap = ctx.roundword.charAt(0).toUpperCase() + ctx.roundword.slice(1);
+  const backTo = annIsFirstCompSession(sess) ? 'welcome to' : 'welcome back to';
+  const read = (txt) => `<p class="ans-read">${esc(annFill(txt, ctx))}</p>`;
+  const split = annSplitSentence(evs);
+
+  return `<div class="ans" id="annScript">
+    <div class="ans-page">
+      <header class="ans-phd">
+        <div class="ans-pmeet">${esc(meetName)}<span>Announcer script</span></div>
+        <img class="ans-plogo" src="../shared/images/logo-white-horizontal.png?v=202606250245" alt="USA Diving"/>
+      </header>
+      <div class="ans-sub">
+        <div class="ans-subt">Session ${n} — ${esc(daypartCap)} ${esc(roundCap)}${day ? ` · ${esc(fullDate(day.date))}` : ''}</div>
+        <div class="ans-flow">WARM-UP ${esc(f12(t.warmupStartMinutes))}&nbsp;&nbsp;&gt;&nbsp;&nbsp;COMPETITION ${esc(f12(t.eventStartMinutes))}</div>
+      </div>
+      <div class="ans-body">
+
+        <section class="ans-sec">
+          <h2 class="ans-h2">Welcome <span class="ans-h2sub">READ ALOUD</span>
+            <span class="ans-h2t">${esc(f12(t.eventStartMinutes))}</span></h2>
+          ${cueBlock('BEFORE YOU BEGIN', `Wait for meet operations to confirm warm-up is complete and the panels are seated. Warm-up runs ${f12(t.warmupStartMinutes)} to ${f12(t.warmupEndMinutes)}.`)}
+          <p class="ans-read ans-big">Good ${esc(ctx.daypart)}, and ${backTo} the ${esc(meetName)}!</p>
+          ${read(m.pWelcome)}
+          ${read(m.pSport)}
+          ${read(m.pStream)}
+          <div class="ans-msg"><div class="ans-msgh">ACTION SHOTS PHOTOGRAPHY</div>${read(m.pPhoto)}</div>
+          ${read(m.pThanks)}
+        </section>
+
+        <section class="ans-sec">
+          <h2 class="ans-h2">This Session <span class="ans-h2sub">READ ALOUD</span></h2>
+          <p class="ans-read ans-big">Now, it is time to begin this ${esc(ctx.daypart)}'s ${esc(ctx.roundword)} competition!</p>
+          <p class="ans-read">${esc(annFeatureSentence(sess, evs, n))}${split ? ' ' + esc(split) : ''}</p>
+          <table class="ans-tbl">
+            <thead><tr><th class="ans-tno">#</th><th>Event</th><th>Entries</th><th>Dives</th><th>Boards</th><th>Starts</th></tr></thead>
+            <tbody>${evs.map((ev, i) => {
+    const tev = (t.events || []).find(e => e.id === ev.id) || {};
+    return `<tr><td class="ans-tno">${i + 1}</td>
+                <td class="ans-tnm">${esc(annEvReadName(ev))}</td>
+                <td class="ans-tcl">${ev.numberOfDivers || '—'}</td>
+                <td class="ans-tcl">${ev.numberOfDives || '—'}</td>
+                <td class="ans-tcl">${ev.manualSplit && !isPlatform(ev.apparatus) ? 'Split' : 'Single'}</td>
+                <td class="ans-tcl">${tev.eventStartMinutes != null ? esc(f12(tev.eventStartMinutes)) : ''}</td></tr>`;
+  }).join('')}</tbody>
+          </table>
+          ${sess.awardsEnabled ? cueBlock('AWARDS IN THIS SESSION', 'An awards presentation is scheduled in this block — hold the closing line until meet operations confirms the ceremony order.') : ''}
+        </section>
+
+        ${String(c.notes || '').trim() ? `<section class="ans-sec">
+          <h2 class="ans-h2">Session Notes <span class="ans-h2sub">READ ALOUD</span></h2>
+          ${String(c.notes).split(/\n\s*\n|\n/).map(x => x.trim()).filter(Boolean).map(x => `<p class="ans-read">${esc(annFill(x, ctx))}</p>`).join('')}
+        </section>` : ''}
+
+        <section class="ans-sec">
+          <h2 class="ans-h2">Competition Handoff <span class="ans-h2sub">READ WHEN CLEARED</span></h2>
+          ${read(m.pGoodLuck)}
+          <div class="ans-handoff">JUDGES, THE POOL IS YOURS.<span>Best of luck to all of our competitors.</span></div>
+        </section>
+
+      </div>
+      <footer class="ans-pft"><span>${esc(meetName)} · Session ${n} announcer script</span><span>Printed ${esc(new Date().toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span></footer>
+    </div>
+  </div>`;
+}
+// Shared cue-box helper (the finals renderer builds its own inline).
+function cueBlock(title, text) {
+  return `<div class="ans-cue"><strong>${esc(title)}</strong>${text ? ` <em>${esc(text)}</em>` : ''}</div>`;
+}
+
 // ── PRINT ─────────────────────────────────────────────────────────────
 function printAnnouncer(sessId) {
   const raw = S.sessions.find(x => x.id === (sessId || UI.annSessId));
   if (!raw) { toast('Session not found'); return; }
   const sess = Object.assign({}, raw, { timing: calcSessTiming(raw) });
-  if (!annSessHasFinals(sess)) { toast('No junior finals events in this session'); return; }
+  const kind = annSessKind(sess);
+  if (!kind) { toast('Nothing to announce in this session'); return; }
   const title = (S.meet && S.meet.name) || 'USA Diving';
-  const html = renderAnnScript(sess, {});
+  const html = kind === 'finals' ? renderAnnScript(sess, {}) : renderOpenScript(sess);
   const w = window.open('', '_blank');
   if (!w) { alert('Pop-up blocked — allow pop-ups for this site and try again'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)} — Announcer script</title>
