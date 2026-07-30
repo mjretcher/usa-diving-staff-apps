@@ -130,6 +130,249 @@ function annFill(tpl, ctx) {
     .replace(/\{roundword\}/g, ctx.roundword || 'competition');
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   DIVE ORDER SHEET IMPORT  (DiveMeets printed PDF → dive order)
+   ───────────────────────────────────────────────────────────────────────
+   The meet software prints the order to PDF and those land on a shared
+   drive. Filenames are typed by whoever ran the report, so they are NOT
+   trusted for anything — the event identity is read out of the sheet's own
+   header line, which the software writes:
+
+       ( 30650) Group A Boys 3m (16-18)  Prelim
+
+   Text is extracted with coordinates and regrouped into visual lines,
+   because a PDF stores glyph runs, not rows. Grouping is greedy on the
+   vertical gap: the order number and the name sit ~0.9pt apart and belong
+   together, while a name and the dive-code row below it are ~9pt apart.
+
+   A diver row is "<number> <name>". Dive-code rows ("403B 201B …") and
+   degree-of-difficulty rows ("2.1 1.8 …") cannot match that shape, because
+   the leading integer in those rows is never followed by a space.
+
+   The sheet states its own count ("Total Divers for board : 19"), which is
+   used as an integrity check — if what we parsed does not equal what the
+   sheet says, the import is reported as failed rather than half-loaded.
+═══════════════════════════════════════════════════════════════════════ */
+
+// Items are {str, x, y} with y increasing DOWNWARD (the pdf.js adapter flips).
+function annLinesFromItems(items, gap) {
+  gap = gap || 4;
+  const its = items.filter(i => String(i.str || '').trim()).slice().sort((a, b) => a.y - b.y || a.x - b.x);
+  const lines = [];
+  let cur = null;
+  for (const it of its) {
+    if (!cur || Math.abs(it.y - cur.y) > gap) { cur = { y: it.y, parts: [it] }; lines.push(cur); }
+    else cur.parts.push(it);
+  }
+  return lines.map(l => ({
+    y: l.y,
+    text: l.parts.slice().sort((a, b) => a.x - b.x).map(p => String(p.str).trim()).join(' ').replace(/\s+/g, ' ').trim(),
+  }));
+}
+
+const ANN_APP_FROM_SHEET = { '1m': '1-Meter', '1 m': '1-Meter', '3m': '3-Meter', '3 m': '3-Meter', '10m': 'Platform', '10 m': 'Platform', 'platform': 'Platform', 'tower': 'Platform' };
+const ANN_ROUND_FROM_SHEET = { prelim: 'Prelim', preliminary: 'Prelim', final: 'Final', finals: 'Final', semifinal: 'Semifinal', semi: 'Semifinal', quarterfinal: 'Prelim', qualifier: 'Qualifier', qualifying: 'Qualifier' };
+
+// "( 30650 ) Group A Boys 3m (16-18)  Prelim"
+function annParseSheetHeader(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  const idm = t.match(/^\(\s*(\d+)?\s*\)\s*(.+)$/);
+  if (!idm) return null;
+  const dmEventId = idm[1] || '';
+  let rest = idm[2].trim();
+  const m = rest.match(/^(.*?)\s+(Boys|Girls|Men|Women|Mixed)\s+(1\s?m|3\s?m|10\s?m|Platform|Tower)\b\s*(?:\(([^)]*)\))?\s*(.*)$/i);
+  if (!m) return null;
+  const tail = (m[5] || '').trim();
+  let round = '';
+  for (const w of tail.split(/[\s,]+/)) {
+    const k = ANN_ROUND_FROM_SHEET[w.toLowerCase()];
+    if (k) { round = k; break; }
+  }
+  return {
+    dmEventId,
+    level: m[1].trim(),
+    gender: m[2].replace(/^./, c => c.toUpperCase()).toLowerCase().replace(/^./, c => c.toUpperCase()),
+    apparatus: ANN_APP_FROM_SHEET[m[3].toLowerCase()] || m[3],
+    ageTag: (m[4] || '').trim(),
+    round,
+    synchro: /synchro/i.test(rest),
+    raw: t,
+  };
+}
+
+// "1 Rydan Russell"  /  "1 Noah Horwitz (RipFest)"
+function annParseDiverLine(text) {
+  const m = String(text || '').match(/^(\d{1,3})\s+(\S.*)$/);
+  if (!m) return null;
+  let rest = m[2].trim();
+  // A row of dive codes or DDs can never reach here (no space after the
+  // leading integer), but guard anyway against anything numeric-looking.
+  if (!/[A-Za-z]{2}/.test(rest)) return null;
+  if ((rest.match(/\d/g) || []).length > 2) return null;
+  let club = '';
+  const p = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (p) { rest = p[1].trim(); club = p[2].trim(); }
+  if (!/[A-Za-z]{2}/.test(rest)) return null;
+  return { no: Number(m[1]), name: rest.replace(/\s+/g, ' '), club };
+}
+
+function annParseSheetLines(lines) {
+  const out = { meta: null, boards: [], warnings: [] };
+  let board = null;
+  const newBoard = (name) => { board = { name: name || '', rows: [], expected: null }; out.boards.push(board); return board; };
+  for (const ln of lines) {
+    const t = ln.text;
+    if (!t) continue;
+    if (/^\(/.test(t)) { const h = annParseSheetHeader(t); if (h) { out.meta = out.meta || h; continue; } }
+    const bm = t.match(/^Board\s+(\S.*)$/i);
+    if (bm) { newBoard(bm[1].trim()); continue; }
+    const tm = t.match(/^Total\s+Divers\s+for\s+board\s*:?\s*(\d+)/i);
+    if (tm) { if (!board) newBoard(''); board.expected = Number(tm[1]); continue; }
+    if (/^(www\.|Page\b|Meet Sponsored|Hosted by|Cuts start|Contact the Meet)/i.test(t)) continue;
+    const d = annParseDiverLine(t);
+    if (d) { if (!board) newBoard(''); board.rows.push(d); }
+  }
+  return out;
+}
+
+// Flatten to a single ordered list. Boards are separate lanes of the same
+// event; a finals field small enough to introduce runs on one board, but if a
+// sheet does come through with two, they are concatenated in printed order
+// and renumbered so the announcer reads 1..n straight down.
+function annSheetToOrder(parsed) {
+  const rows = [];
+  const problems = [];
+  parsed.boards.forEach(b => {
+    if (b.expected != null && b.expected !== b.rows.length) {
+      problems.push(`Board ${b.name || '(unnamed)'}: the sheet says ${b.expected} divers but ${b.rows.length} were read.`);
+    }
+    b.rows.forEach(r => rows.push(Object.assign({ board: b.name }, r)));
+  });
+  return { rows: rows.map((r, i) => Object.assign({}, r, { no: i + 1 })), problems, boards: parsed.boards.length };
+}
+
+
+// ── pdf.js LOADER ─────────────────────────────────────────────────────
+// Loaded on demand, not on every page view — most sessions never import a
+// sheet. Several CDNs are tried so one blocked host is not fatal.
+const ANN_PDFJS_SRCS = [
+  ['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'],
+  ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'],
+  ['https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js', 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'],
+];
+function annLoadScript(src) {
+  return new Promise((res, rej) => {
+    const el = document.createElement('script');
+    el.src = src; el.onload = res; el.onerror = () => rej(new Error('blocked: ' + src));
+    document.head.appendChild(el);
+  });
+}
+async function annPdfLib() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  let last = null;
+  for (const [lib, worker] of ANN_PDFJS_SRCS) {
+    try {
+      await annLoadScript(lib);
+      if (window.pdfjsLib) { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = worker; } catch (e) { } return window.pdfjsLib; }
+    } catch (e) { last = e; }
+  }
+  throw new Error('Could not load the PDF reader' + (last ? ' (' + last.message + ')' : '') + '. Check the internet connection and try again.');
+}
+
+// A PDF stores glyph runs, not rows. Flip to a top-down y so line grouping
+// reads the way the page does, then regroup per page in printed order.
+async function annPdfSheetLines(file) {
+  const lib = await annPdfLib();
+  const buf = await file.arrayBuffer();
+  const doc = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  let lines = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const vp = page.getViewport({ scale: 1 });
+    const tc = await page.getTextContent();
+    const items = tc.items.map(i => ({ str: i.str, x: i.transform[4], y: vp.height - i.transform[5] }));
+    lines = lines.concat(annLinesFromItems(items));
+  }
+  try { doc.destroy(); } catch (e) { }
+  return lines;
+}
+
+// ── MATCHING A SHEET TO AN EVENT IN THIS SESSION ──────────────────────
+// Filenames are typed by whoever ran the report, so they are ignored
+// entirely. Identity comes from the sheet's own header.
+function annMatchSheetToEvent(sess, meta) {
+  if (!meta) return null;
+  const want = annEvKey(meta.level, meta.gender, meta.apparatus);
+  const cand = annEvents(sess).filter(ev => annEvMatchKey(ev) === want);
+  return cand.length === 1 ? cand[0] : null;
+}
+
+// ── IMPORT ────────────────────────────────────────────────────────────
+// Imported rows are written back into the same text box you can type in, as
+// "N <tab> Name <tab> Club". There is deliberately no parallel data path:
+// one source of truth, hand-editable after import, and the club lookup and
+// review table downstream are unchanged.
+function annOrderToText(rows) {
+  return rows.map(r => `${r.no}\t${r.name}${r.club ? '\t' + r.club : ''}`).join('\n');
+}
+function annSetImport(sessId, evId, rec) {
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    const a = annEnsure(sess); a.imports = a.imports || {}; a.imports[evId] = rec;
+  });
+}
+async function annImportFiles(sessId, fileList) {
+  const files = Array.from(fileList || []).filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  if (!files.length) { UI.annImport = { busy: false, log: [{ ok: false, msg: 'That was not a PDF. Drop the printed dive order sheet.' }] }; render(); return; }
+  const sess = S.sessions.find(x => x.id === sessId);
+  if (!sess) return;
+  UI.annImport = { busy: true, log: [] };
+  render();
+  const log = [];
+  for (const f of files) {
+    try {
+      const lines = await annPdfSheetLines(f);
+      const parsed = annParseSheetLines(lines);
+      if (!parsed.meta) { log.push({ ok: false, msg: `${f.name}: could not find the event line on this sheet. Is it a DiveMeets dive order printout?` }); continue; }
+      const m = parsed.meta;
+      const label = `${m.level} ${m.gender} ${m.apparatus}${m.round ? ' ' + m.round : ''}`;
+      const ev = annMatchSheetToEvent(sess, m);
+      if (!ev) {
+        log.push({ ok: false, msg: `${f.name}: this sheet is ${label}, which is not a finals event in this session (${annEvents(sess).map(evName).join(', ') || 'none'}).` });
+        continue;
+      }
+      const ord = annSheetToOrder(parsed);
+      if (!ord.rows.length) { log.push({ ok: false, msg: `${f.name}: no divers were found on this sheet.` }); continue; }
+      if (ord.problems.length) { log.push({ ok: false, msg: `${f.name}: ${ord.problems.join(' ')} Nothing was loaded — send this file over rather than trusting a partial read.` }); continue; }
+      setAnnOrder(sessId, ev.id, annOrderToText(ord.rows));
+      // A prior hand-typed club override would silently outrank the sheet.
+      upd(s => { const ss = s.sessions.find(x => x.id === sessId); if (ss && ss.announcer && ss.announcer.clubs) delete ss.announcer.clubs[ev.id]; });
+      const roundWarn = m.round && ev.round && m.round !== ev.round;
+      annSetImport(sessId, ev.id, {
+        file: f.name, label, at: new Date().toISOString(), count: ord.rows.length,
+        boards: ord.boards, dmEventId: m.dmEventId || '', roundWarn: roundWarn ? m.round : '',
+      });
+      log.push({
+        ok: true, warn: roundWarn,
+        msg: `${evName(ev)} — ${ord.rows.length} divers read from ${f.name}${ord.boards > 1 ? ` (${ord.boards} boards merged)` : ''}.` +
+          (roundWarn ? ` WARNING: this is the ${m.round} sheet, but the event here is the ${ev.round}.` : ''),
+      });
+    } catch (e) {
+      log.push({ ok: false, msg: `${f.name}: ${e.message || 'could not be read'}` });
+    }
+  }
+  UI.annImport = { busy: false, log };
+  render();
+}
+function annPickFiles(input, sessId) { annImportFiles(sessId, input.files); input.value = ''; }
+function annDropFiles(ev, sessId) {
+  ev.preventDefault(); ev.stopPropagation();
+  try { ev.currentTarget.classList.remove('ann-dz-over'); } catch (e) { }
+  annImportFiles(sessId, ev.dataTransfer && ev.dataTransfer.files);
+}
+function annDragOver(ev) { ev.preventDefault(); ev.stopPropagation(); try { ev.currentTarget.classList.add('ann-dz-over'); } catch (e) { } }
+function annDragLeave(ev) { try { ev.currentTarget.classList.remove('ann-dz-over'); } catch (e) { } }
+
 // ── DIVE ORDER PARSING ────────────────────────────────────────────────
 // Whatever the meet software prints, Mike is going to paste it. Accept:
 //     1. Noah Horwitz
@@ -214,7 +457,7 @@ function annEntrantIndex() {
   const list = (UI.annEntrants && UI.annEntrants.rows) || [];
   const byName = new Map(), byEvent = new Map();
   for (const e of list) {
-    const evKey = `${annNorm(e.ageGroup)}|${annNorm(e.gender)}|${annNorm(e.discipline)}`;
+    const evKey = annEvKey(e.ageGroup, e.gender, e.discipline);
     for (const k of annNameKeys(e.name)) {
       // Track collisions so an ambiguous name is never auto-filled
       const prev = byName.get(k);
@@ -228,17 +471,20 @@ function annEntrantIndex() {
   }
   return { byName, byEvent };
 }
-function annEvMatchKey(ev) {
-  const disc = isPlatform(ev.apparatus) ? 'platform' : annNorm(ev.apparatus);
-  return `${annNorm(ev.level)}|${annNorm(ev.gender)}|${disc}`;
+// annNorm() strips digits, which is correct for athlete names and WRONG for
+// anything where the digit carries the meaning: "3-Meter" and "1-Meter" both
+// normalize to "meter". Event identity uses this alphanumeric key instead.
+function annKeyPart(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+function annEvKey(level, gender, apparatus) {
+  return `${annKeyPart(level)}|${annKeyPart(gender)}|${isPlatform(apparatus) ? 'platform' : annKeyPart(apparatus)}`;
 }
+function annEvMatchKey(ev) { return annEvKey(ev.level, ev.gender, ev.apparatus); }
 // Returns { club, source } where source is 'typed' | 'entries' | 'entries-meet' | ''
 function annResolveClub(row, ev, idx) {
   if (row.clubTyped && row.club) return { club: row.club, source: 'typed' };
   const evKey = annEvMatchKey(ev);
-  const platKey = evKey.replace('|10 meter', '|platform').replace('|10m', '|platform');
   for (const k of annNameKeys(row.name)) {
-    const hit = idx.byEvent.get(platKey + '::' + k) || idx.byEvent.get(evKey + '::' + k);
+    const hit = idx.byEvent.get(evKey + '::' + k);
     if (hit && !hit.ambiguous && hit.team) return { club: hit.team, source: 'entries' };
     if (hit && hit.ambiguous) return { club: '', source: 'ambiguous' };
   }
@@ -551,9 +797,28 @@ function renderAnnModal() {
   let body = '';
   if (tab === 'order') {
     const idx = annEntrantIndex();
+    const imp = UI.annImport || {};
     body = `
+      <div class="ann-dz" ondragover="annDragOver(event)" ondragleave="annDragLeave(event)" ondrop="annDropFiles(event,'${sess.id}')"
+        style="border:2px dashed var(--bd2);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:14px;background:var(--surf2)">
+        <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">Drop the printed dive order PDFs here</div>
+        <div style="font-size:11.5px;color:var(--tx2);line-height:1.6">
+          Straight off the shared drive — as many events at once as you like. The file name does not matter;
+          the event is read off the sheet itself, so it lands in the right place no matter who ran the report.
+        </div>
+        <input type="file" id="annFileInput" accept="application/pdf,.pdf" multiple style="display:none"
+          onchange="annPickFiles(this,'${sess.id}')"/>
+        <button class="btn btn-sm" style="margin-top:9px" onclick="document.getElementById('annFileInput').click()">Choose PDF files…</button>
+        ${imp.busy ? `<div style="margin-top:9px;font-size:12px;color:var(--tx2)">Reading…</div>` : ''}
+      </div>
+      ${(imp.log || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+        ${imp.log.map(r => `<div style="font-size:12px;line-height:1.5;padding:7px 10px;border-radius:6px;
+          border:1px solid ${r.ok ? (r.warn ? 'var(--red)' : 'var(--bd)') : 'var(--red)'};
+          background:${r.ok && !r.warn ? 'var(--surf2)' : '#FFF5F7'};
+          color:${r.ok && !r.warn ? 'var(--tx)' : 'var(--red)'}">${r.ok && !r.warn ? '✓ ' : ''}${esc(r.msg)}</div>`).join('')}
+      </div>` : ''}
       <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
-        Paste or type the dive order for each event, one athlete per line, in the order the meet software printed.
+        Or paste or type the dive order for each event, one athlete per line, in the order the meet software printed.
         Numbers at the start of a line are ignored — the script always renumbers from 1.
         Clubs are filled in from the DiveMeets entry list where the name matches exactly; anything it could not match is flagged
         so you can type the club yourself.
@@ -571,6 +836,14 @@ function renderAnnModal() {
             <strong style="font-size:14px;color:var(--navy)">${esc(evName(ev))} Final</strong>
             <span style="font-size:11px;color:var(--tx3)">${roster.length} in the order${missing ? ` · ${missing} without a club` : ''}</span>
           </div>
+          ${(() => {
+      const rec = (c.imports || {})[ev.id];
+      if (!rec) return '';
+      return `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--surf2);border:1px solid ${rec.roundWarn ? 'var(--red)' : 'var(--bd)'}">
+          Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} divers${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.
+          ${rec.roundWarn ? `<span style="color:var(--red);font-weight:700">This is the ${esc(rec.roundWarn)} sheet, not the ${esc(ev.round)} — check before printing.</span>` : ''}
+        </div>`;
+    })()}
           <textarea class="fi" rows="${Math.min(16, Math.max(6, roster.length + 2))}" placeholder="1  Noah Horwitz&#10;2  Ivor Brown&#10;3  Rydan Russel"
             style="resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7"
             onchange="setAnnOrder('${sess.id}','${ev.id}',this.value)">${esc((c.order || {})[ev.id] || '')}</textarea>
@@ -1045,6 +1318,7 @@ function annEnsurePreviewCss() {
   const el = document.createElement('style');
   el.id = 'annPreviewCss';
   el.textContent = ANN_PRINT_CSS.replace(/@page\{[^}]*\}/, '') +
-    `\n.modal .ans-page{background:#fff;color:#15172b;border:1px solid #D9DEE8;border-radius:8px;overflow:hidden}`;
+    `\n.modal .ans-page{background:#fff;color:#15172b;border:1px solid #D9DEE8;border-radius:8px;overflow:hidden}` +
+    `\n.ann-dz.ann-dz-over{border-color:var(--pool)!important;background:#EAF6FB!important}`;
   document.head.appendChild(el);
 }
