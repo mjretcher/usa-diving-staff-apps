@@ -992,12 +992,13 @@ function detectConflicts(){
         if(!adv||!canAdvanceIn(ev)||ev.round!=='Prelim')return;
         const q=quals.find(x=>x.gender===ev.gender&&sameApparatus(x.apparatus,ev.apparatus));
         if(!q)return;
-        const field=entryValue(q);
-        if(field>0&&adv>field){
+        const typed=advanceInTyped(ev);
+        const field=qualifierFieldSize(q);
+        if(field>0&&typed>field){
           const day=(S.meet.days||[]).find(d=>d.id===sess.dayId);
-          issues.push({sev:'err',
-            title:'More advancing in than the qualifier can send',
-            detail:`${evName(ev)} adds ${adv} advancing in, but ${evName(q)} has only ${field} entered — at most ${field} can advance. This prelim is sized for ${adv-field} diver${adv-field===1?'':'s'} who cannot exist.`,
+          issues.push({sev:'info',
+            title:'Advancing in adjusted to the qualifier field',
+            detail:`${evName(ev)} is set to take the top ${typed}, but ${evName(q)} has only ${field} entered, so ${field} ${field===1?'is':'are'} being used. Nothing to do — if more enter the qualifier this lifts by itself.`,
             loc:day?shortDate(day.date):'',fixSessId:sess.id,dayId:sess.dayId,fixHint:'edit'});
         }
       });
@@ -3254,7 +3255,6 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
     <div class="fg"><label class="fl">Awards ceremony (+15 min)</label><div class="chiprow"><button class="chip ${sess.awardsEnabled?'on-r':''}" onclick="updSess('${sess.id}','awardsEnabled',${!sess.awardsEnabled})">${sess.awardsEnabled?'On — adds 15 min':'Off'}</button></div></div>
     <div class="fg"><label class="fl">Part of <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(tap to toggle — pick more than one if this block serves multiple events)</span></label><div class="chiprow"><button class="chip ${!sessTags(sess).length?'on':''}" onclick="clearSessTags('${sess.id}')" title="Shared — appears in every event's schedule">Shared</button>${EVENT_TAGS.map(t=>`<button class="chip ${sessTags(sess).includes(t.k)?'on':''}" onclick="toggleSessTag('${sess.id}','${t.k}')">${t.l}</button>`).join('')}</div></div>
     ${typeof renderBcastSessPanel==='function'?renderBcastSessPanel(sess):''}
-    ${typeof renderAnnSessPanel==='function'?renderAnnSessPanel(sess):''}
     ${typeof renderJudgesSessPanel==='function'?renderJudgesSessPanel(sess):''}
     <div class="fdiv"></div>
     <div class="fsec">Events</div>
@@ -3337,15 +3337,17 @@ function renderEntriesPanel(timed){
       const usingFinal=finlSet;
       const advOk=canAdvanceIn(ev);
       const advSet=advOk&&hasAdvanceIn(ev);
-      const advVal=advanceInValue(ev);
+      const advVal=advanceInTyped(ev);
+      const advCap=advOk?advanceInCappedBy(ev):null;
       rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
         <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-cell">${advOk?`<input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-adv" class="feg-inp adv ${advSet?'on':''}" value="${advSet?advVal:''}" placeholder="—" tabindex="${tabIndex++}"
+        <td class="feg-cell">${advOk?`<input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-adv" class="feg-inp adv ${advSet?'on':''}${advCap!=null?' capped':''}" value="${advSet?advVal:''}" placeholder="—" tabindex="${tabIndex++}"
+          title="${advCap!=null?`Only ${advCap} entered in the qualifier, so ${advCap} is being used instead of ${advVal}. This lifts on its own if more enter.`:'Divers arriving from an earlier event at this meet'}"
           oninput="setEntry('${sess.id}','${ev.id}','advanceIn',this.value)"
-          onkeydown="entryKey(event,this)"/>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
+          onkeydown="entryKey(event,this)"/>${advCap!=null?`<div class="feg-cap" title="The qualifier has only ${advCap} entered, so at most ${advCap} can advance">using ${advCap}</div>`:''}`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
         <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
@@ -3487,10 +3489,53 @@ function entryBase(ev){
 // is a staff-entered number. It lives in its own field precisely so that pulling
 // fresh entries from DiveMeets — which rewrites projectedDivers — can never wipe
 // it out. Blank/unset counts as 0.
-function advanceInValue(ev){
+// What staff typed: the RULE, e.g. "the top 12 advance". Kept exactly as entered —
+// this is the number the input box shows and the intent we must not lose.
+function advanceInTyped(ev){
   if(ev==null||ev.advanceIn==null||ev.advanceIn==='')return 0;
   const v=Number(ev.advanceIn);
   return isNaN(v)?0:Math.max(0,v);
+}
+// The field a qualifier event actually has. Deliberately does NOT consult
+// advanceInValue: a qualifier receives no advancers, and reading it here would
+// recurse. Falls back to the stored total for legacy rows, same as entryValue.
+function qualifierFieldSize(q){
+  const base=entryBase(q);
+  return base==null?(Number(q.numberOfDivers)||0):base;
+}
+// The matching National Qualifier event for a prelim — same gender, same
+// apparatus, tower spelt either way.
+function qualifierEventFor(ev){
+  if(!ev||ev.round!=='Prelim'||ev.style==='Synchronized')return null;
+  if(typeof S==='undefined'||!S||!S.sessions)return null;
+  for(const sess of S.sessions){
+    for(const q of (sess.events||[])){
+      if(q.round!=='Qualifier'||q.style==='Synchronized')continue;
+      if(q.gender===ev.gender&&sameApparatus(q.apparatus,ev.apparatus))return q;
+    }
+  }
+  return null;
+}
+// When the cap is biting, the qualifier field size; otherwise null. Used to show
+// the person WHY the effective number differs from what they typed.
+function advanceInCappedBy(ev){
+  const typed=advanceInTyped(ev);
+  if(!typed)return null;
+  const q=qualifierEventFor(ev);
+  if(!q)return null;
+  const field=qualifierFieldSize(q);
+  return (field>0&&typed>field)?field:null;
+}
+// The EFFECTIVE number advancing in. "Top 12 advance" cannot send 12 out of a
+// field of 6, so the rule is capped by the qualifier's actual entries. Derived
+// rather than stored on purpose: entries stay open until three hours before an
+// event, so this has to track signups in BOTH directions — if six more enter the
+// tower qualifier, the cap lifts on its own and nobody has to remember to undo it.
+function advanceInValue(ev){
+  const typed=advanceInTyped(ev);
+  if(!typed)return 0;
+  const cap=advanceInCappedBy(ev);
+  return cap==null?typed:cap;
 }
 // True when an event carries an advancing-in add-on worth showing to the user.
 function hasAdvanceIn(ev){return advanceInValue(ev)>0}
@@ -4769,7 +4814,6 @@ function renderFacilityHoursModal(){
 
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
-    ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{})};
   const fn=fns[UI.modal];if(!fn)return'';

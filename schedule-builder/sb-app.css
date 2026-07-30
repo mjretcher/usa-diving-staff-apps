@@ -763,6 +763,10 @@ button{cursor:pointer;border:none;background:none}
    prelim). Pool-blue so it reads as a distinct, staff-owned number rather than
    another flavour of the projected/final pair. */
 .feg-inp.adv{border-color:rgba(0,154,199,.35)}
+.feg-inp.adv.capped{border-color:var(--pool,#009AC7);background:rgba(0,154,199,.06)}
+/* The rule is still what's typed; this says what is actually being used. */
+.feg-cap{font-size:9px;font-weight:700;letter-spacing:.02em;color:var(--pool,#009AC7);
+  margin-top:2px;text-align:center;white-space:nowrap}
 .feg-inp.adv:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,154,199,.14)}
 .feg-inp.adv.on{background:rgba(0,154,199,.10);border-color:var(--cyan);color:var(--cyan)}
 .feg-total{width:54px}
