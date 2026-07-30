@@ -685,9 +685,21 @@ function closeLiveTimes(){
   UI.liveTimesSessId=null;UI.liveTimesFocusEvId=null;UI.liveTimesFocusBoard=null;UI.liveTimesErr='';UI.modal=null;render();
 }
 // '' / null -> not recorded. Anything else -> minutes from midnight.
+// A time box that is still showing its greyed planned time has not been filled
+// in — it is a starting point, not a reading. It reads as empty so that opening
+// this screen and pressing Save can never invent times that nobody observed.
+function liveSugClear(el){ if(!el)return; el.dataset.sug=''; el.style.color=''; }
+function liveSugInput(id,val,plan){
+  if(val!=null)return`<input id="${id}" class="fi" type="time" value="${f24(val)}"/>`;
+  if(plan==null)return`<input id="${id}" class="fi" type="time" value=""/>`;
+  return`<input id="${id}" class="fi" type="time" value="${f24(plan)}" data-sug="1" style="color:var(--tx3)"
+    oninput="liveSugClear(this)"
+    title="This is the planned time, shown so you can adjust it. Nothing is recorded unless you change it."/>`;
+}
 function liveParseField(id){
   const el=document.getElementById(id);
   if(!el)return undefined;                 // field absent — leave untouched
+  if(el.dataset&&el.dataset.sug==='1')return null;   // still the planned suggestion
   const v=(el.value||'').trim();
   if(!v)return null;                       // cleared on purpose
   const m=pt(v);
@@ -775,6 +787,15 @@ function renderLiveTimesModal(){
   const rec=liveSess(sess.id)||{};
   const label=(typeof sessLabelOf==='function')?sessLabelOf(sess):(sess.title||'Session');
   const hand=v=>v?`<span class="lt-hand" title="This time was typed in by hand, not stamped when it happened">by hand</span>`:'';
+  // Warm-up has its own planned block; the introductions are the gap between
+  // warm-up ending and the first dive, which is where the walk-outs run.
+  const plannedPhase=k=>{
+    if(!t)return[null,null];
+    const T=t.timing;
+    if(k==='w')return[T.warmupStartMinutes,T.warmupEndMinutes];
+    if(k==='i')return[T.warmupEndMinutes,T.eventStartMinutes];
+    return[null,null];
+  };
   const evRows=(sess.events||[]).map(ev=>{
     const r=liveEv(ev.id)||{};
     const pl=(t&&(t.timing.events||[]).find(x=>x.id===ev.id))||null;
@@ -790,8 +811,8 @@ function renderLiveTimesModal(){
         return`<div class="lt-board${foc}">
           <div class="lt-bname">Board ${esc(nm[i])}${hand(br.stM||br.enM)}</div>
           <div class="lt-grid">
-            <div class="fg"><label class="fl">Started</label><input id="lt-b-st-${ev.id}-${i}" class="fi" type="time" value="${br.st!=null?f24(br.st):''}"/></div>
-            <div class="fg"><label class="fl">Finished</label><input id="lt-b-en-${ev.id}-${i}" class="fi" type="time" value="${br.en!=null?f24(br.en):''}"/></div>
+            <div class="fg"><label class="fl">Started</label>${liveSugInput('lt-b-st-'+ev.id+'-'+i,br.st,pl?pl.eventStartMinutes:null)}</div>
+            <div class="fg"><label class="fl">Finished</label>${liveSugInput('lt-b-en-'+ev.id+'-'+i,br.en,pl?pl.eventEndMinutes:null)}</div>
           </div>
         </div>`;
       }).join('');
@@ -803,8 +824,8 @@ function renderLiveTimesModal(){
     return`<div class="lt-row${UI.liveTimesFocusEvId===ev.id?' is-focus':''}">
       <div class="lt-name">${esc(evName(ev))}${hand(r.stM||r.enM)}${planned}</div>
       <div class="lt-grid">
-        <div class="fg"><label class="fl">Started</label><input id="lt-e-st-${ev.id}" class="fi" type="time" value="${r.st!=null?f24(r.st):''}"/></div>
-        <div class="fg"><label class="fl">Finished</label><input id="lt-e-en-${ev.id}" class="fi" type="time" value="${r.en!=null?f24(r.en):''}"/></div>
+        <div class="fg"><label class="fl">Started</label>${liveSugInput('lt-e-st-'+ev.id,r.st,pl?pl.eventStartMinutes:null)}</div>
+        <div class="fg"><label class="fl">Finished</label>${liveSugInput('lt-e-en-'+ev.id,r.en,pl?pl.eventEndMinutes:null)}</div>
       </div>
     </div>`;
   }).join('');
@@ -815,22 +836,22 @@ function renderLiveTimesModal(){
       <button class="modal-close" onclick="closeLiveTimes()">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="lt-help">Type in what actually happened, for when you couldn't tap Start or Finish at the moment it did. Leave a box empty if it hasn't happened yet, or clear one to un-record it. <b>The published schedule is not changed by anything on this screen.</b></p>
+      <p class="lt-help">Type in what actually happened, for when you couldn't tap Start or Finish at the moment it did. Boxes still showing <span style="color:var(--tx3)">grey</span> are the planned times, there to adjust rather than retype &mdash; nothing is recorded from them until you change one. Clear a box to un-record it. <b>The published schedule is not changed by anything on this screen.</b></p>
       ${UI.liveTimesErr?`<div class="lt-err">${esc(UI.liveTimesErr)}</div>`:''}
       ${LIVE_PHASES.map(ph=>`<div class="lt-row">
         <div class="lt-name">${ph.label}<span class="lt-optional">optional</span>
           ${livePhaseDur(rec,ph)!=null?`<span class="lt-planned">took ${liveFmtDur(livePhaseDur(rec,ph))}</span>`:''}</div>
         <div class="lt-grid">
-          <div class="fg"><label class="fl">Started</label><input id="lt-p-${ph.st}" class="fi" type="time" value="${rec[ph.st]!=null?f24(rec[ph.st]):''}"/></div>
-          <div class="fg"><label class="fl">Finished</label><input id="lt-p-${ph.en}" class="fi" type="time" value="${rec[ph.en]!=null?f24(rec[ph.en]):''}"/></div>
+          <div class="fg"><label class="fl">Started</label>${liveSugInput('lt-p-'+ph.st,rec[ph.st],plannedPhase(ph.key)[0])}</div>
+          <div class="fg"><label class="fl">Finished</label>${liveSugInput('lt-p-'+ph.en,rec[ph.en],plannedPhase(ph.key)[1])}</div>
         </div>
       </div>`).join('')}
       <div class="lt-row">
         <div class="lt-name">Competition \u2014 first dive to last${hand(rec.stM||rec.enM)}
           ${t?`<span class="lt-planned">planned ${f12(t.timing.eventStartMinutes!=null?t.timing.eventStartMinutes:t.timing.warmupStartMinutes)} \u2013 ${f12(t.timing.sessionEndMinutes)}</span>`:''}</div>
         <div class="lt-grid">
-          <div class="fg"><label class="fl">Started</label><input id="lt-s-st" class="fi" type="time" value="${rec.st!=null?f24(rec.st):''}"/></div>
-          <div class="fg"><label class="fl">Finished</label><input id="lt-s-en" class="fi" type="time" value="${rec.en!=null?f24(rec.en):''}"/></div>
+          <div class="fg"><label class="fl">Started</label>${liveSugInput('lt-s-st',rec.st,t?(t.timing.eventStartMinutes!=null?t.timing.eventStartMinutes:t.timing.warmupStartMinutes):null)}</div>
+          <div class="fg"><label class="fl">Finished</label>${liveSugInput('lt-s-en',rec.en,t?t.timing.sessionEndMinutes:null)}</div>
         </div>
       </div>
       ${evRows?`<div class="lt-head">Events in this session</div>${evRows}`:''}
