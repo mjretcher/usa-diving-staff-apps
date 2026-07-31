@@ -942,6 +942,39 @@ function liveApproveChanges(dayId){
     if(to===from)return;
     out.push({sess,from,to,delta:to-from,why});
   });
+  // Approval must leave the day internally consistent with itself.
+  //
+  // A block's published DURATION is authored and is never rewritten here, but the
+  // blocks after it move by the recorded END delta. When a session starts late and
+  // then makes time up, its end delta is SMALLER than its start delta: the block
+  // itself slides forward by the larger number while everything after it slides by
+  // the smaller one, so the next block lands slightly before this one's published
+  // end. That is where the 3-minute overlap right after approving comes from — the
+  // day approves itself into a collision, then offers a "Fix" for it.
+  //
+  // Settle the proposal push-only before it is ever previewed, so the preview and
+  // the result are the same thing and no fix is needed afterwards.
+  {
+    const byId={};out.forEach(c=>{byId[c.sess.id]=c});
+    const stack=(typeof timedForDay==='function'?timedForDay(dayId):[]).slice()
+      .filter(s=>!((typeof isParallel==='function')&&isParallel(s)))
+      .sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
+    let prevEnd=null,prevBuf=0;
+    stack.forEach(sess=>{
+      const t=sess.timing;
+      const dur=Math.max(0,t.sessionEndMinutes-t.warmupStartMinutes);
+      const from=Math.round(t.warmupStartMinutes);
+      let start=byId[sess.id]?byId[sess.id].to:from;
+      if(prevEnd!=null&&start<prevEnd+prevBuf){
+        start=prevEnd+prevBuf;
+        if(byId[sess.id]){byId[sess.id].to=start;byId[sess.id].delta=start-byId[sess.id].from;}
+        else{const c={sess,from,to:start,delta:start-from,why:'kept clear of the block before it'};out.push(c);byId[sess.id]=c;}
+      }
+      prevEnd=start+dur;prevBuf=Number(sess.bufferMinutes||0);
+    });
+    // Clamping can land a block back on the time it already had — that is not a change.
+    for(let i=out.length-1;i>=0;i--)if(out[i].to===out[i].from)out.splice(i,1);
+  }
   // Blocks pinned alongside another travel with it, keeping their offset.
   (S.sessions||[]).filter(x=>x.dayId===dayId&&isParallel(x)).forEach(p=>{
     const anchor=parallelAnchorOf(S,p);

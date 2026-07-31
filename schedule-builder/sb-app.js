@@ -1015,11 +1015,45 @@ function detectConflicts(){
 }
 // Open the right place to fix a given conflict, then act
 
-// Fix a card's inline warning (these are session-overlap warnings) by re-flowing the day
+// Clear session overlaps on a day by pushing DOWN only.
+//
+// This exists because reflowDay() is the wrong tool for the job. reflowDay is the
+// RE-STACK primitive: it walks the day from the top and slams every block onto
+// "previous end + buffer", which is exactly what you want from the "Re-stack
+// times" button and exactly what you do NOT want from a one-click overlap fix.
+// On a day whose start times have been moved by an approved run-sheet delay,
+// re-stacking recomputes every block from durations alone and throws the
+// approval away — the schedule visibly snaps back to its pre-delay times, which
+// reads as "clicking Fix reverted my schedule". It did.
+//
+// This moves a colliding block later by the minimum needed and carries that push
+// down the day only where it creates a further collision. Nothing ever moves
+// EARLIER, deliberate gaps survive untouched, and an approved delay stays
+// approved. It is idempotent: run it twice and the second run moves nothing.
+function clearOverlaps(stateSnap,dayId){
+  const day=stateSnap.meet.days.find(x=>x.id===dayId);
+  const dayOpen=day&&day.openMinutes!=null?Number(day.openMinutes):0;
+  const stack=(stateSnap.sessions||[]).filter(s=>s.dayId===dayId&&!isParallel(s))
+    .sort((a,b)=>Number(a.warmupStartMinutes)-Number(b.warmupStartMinutes));
+  let moved=0;
+  for(let i=1;i<stack.length;i++){
+    const prev=stack[i-1];
+    const t=calcSessTimingFromObj(prev);
+    const min=Math.max(ruUp(t.sessionEndMinutes+Number(prev.bufferMinutes||0),5),dayOpen);
+    if((Number(stack[i].warmupStartMinutes)||0)<min){stack[i].warmupStartMinutes=min;moved++;}
+  }
+  positionParallels(stateSnap,dayId);
+  return moved;
+}
+
+// Fix a card's inline overlap warning by pushing the colliding block later —
+// never by re-stacking the day.
 function resolveCardWarning(sessId){
   const sess=S.sessions.find(x=>x.id===sessId);if(!sess)return;
-  upd(s=>{reflowDay(s,sess.dayId);});
-  toast('Spacing fixed automatically');
+  if(dayLocked(sess.dayId)){lockRefused();return;}
+  let moved=0;
+  upd(s=>{moved=clearOverlaps(s,sess.dayId);});
+  toast(moved?`Spacing fixed — ${moved} block${moved===1?'':'s'} moved later. Nothing else on the day changed.`:'Nothing was overlapping');
 }
 
 function resolveConflict(idx){
@@ -1029,9 +1063,13 @@ function resolveConflict(idx){
   // Switch to the day the issue is on
   if(c.dayId)UI.dayId=c.dayId;
   if(c.fixHint==='autoSpace'&&c.autoData){
-    // One-click fix: re-flow so the next session starts after the previous ends + buffer
-    upd(s=>{reflowDay(s,c.dayId);});
-    toast('Spacing fixed — session moved after the previous one');
+    // Push the colliding block later by the minimum needed. Deliberately NOT
+    // reflowDay() — see clearOverlaps() for why re-stacking here wipes out an
+    // approved run-sheet delay and looks like the schedule reverting.
+    if(dayLocked(c.dayId)){lockRefused();return;}
+    let moved=0;
+    upd(s=>{moved=clearOverlaps(s,c.dayId);});
+    toast(moved?`Spacing fixed — ${moved} block${moved===1?'':'s'} moved later. Nothing else on the day changed.`:'Nothing was overlapping');
     return;
   }
   if(c.fixHint==='entries'){
