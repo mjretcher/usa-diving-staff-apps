@@ -26,7 +26,7 @@ button,input,select,textarea{font-family:inherit}
 button{cursor:pointer;border:none;background:none}
 ::selection{background:rgba(23,31,105,.15)}
 
-#app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+#app{display:grid;grid-template-rows:auto 1fr;grid-template-columns:minmax(0,1fr);height:100vh;max-width:100%;overflow:hidden}
 
 /* ════ TOP BAR ════ */
 /* Two-tier structure. .bar-top holds identity (logo + meet name, which keeps
@@ -34,8 +34,8 @@ button{cursor:pointer;border:none;background:none}
    dedicated full-width strip for day pills + add-day + undo/redo — day tabs
    no longer compete with action buttons for the same row, so neither gets
    crushed no matter how many days a master schedule spans. */
-.bar{background:var(--navy);display:flex;flex-direction:column;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25)}
-.bar-top{display:flex;flex-wrap:wrap;align-items:center;min-height:52px;width:100%}
+.bar{background:var(--navy);display:flex;flex-direction:column;border-bottom:1px solid rgba(255,255,255,.06);z-index:300;box-shadow:0 1px 12px rgba(0,0,0,.25);min-width:0;max-width:100%}
+.bar-top{display:flex;flex-wrap:wrap;align-items:center;min-height:52px;width:100%;min-width:0;max-width:100%}
 .bar-logo{display:flex;align-items:center;padding:0 18px;height:52px;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0;text-decoration:none;transition:background .15s}
 .bar-logo:hover{background:rgba(255,255,255,.05)}
 .bar-logo img{height:26px;width:auto;display:block}
@@ -78,7 +78,7 @@ button{cursor:pointer;border:none;background:none}
 .sync-lbl{font-size:11px;color:rgba(255,255,255,.4);white-space:nowrap}
 
 /* ════ WORKSPACE ════ */
-.workspace{display:flex;height:100%;overflow:hidden;position:relative}
+.workspace{display:flex;height:100%;overflow:hidden;position:relative;min-width:0;max-width:100%}
 
 /* ════ TIMELINE ════ */
 .tl-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -109,7 +109,7 @@ button{cursor:pointer;border:none;background:none}
   .tl-day-info{display:none}
 }
 
-.tl-body{flex:1;overflow-y:auto;overflow-x:auto;padding:16px 18px 60px;display:flex;flex-direction:column;gap:10px}
+.tl-body{flex:1;overflow-y:auto;overflow-x:auto;padding:16px 18px 60px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .tl-body::-webkit-scrollbar{width:8px}
 .tl-body::-webkit-scrollbar-track{background:transparent}
 .tl-body::-webkit-scrollbar-thumb{background:var(--bd3);border-radius:4px;border:2px solid var(--bg)}
@@ -1003,7 +1003,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   .bar-meet { order: 2; flex: 1 1 auto; min-width: 0; }
   .bar-sync { order: 3; flex-shrink: 0; }
   .bar-right {
-    order: 5; flex: 0 0 100%; width: 100%; max-width: 100%;
+    order: 5; flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0;
     justify-content: flex-start; flex-wrap: nowrap;
     border-top: 1px solid rgba(255,255,255,.06);
     padding: 6px 8px; overflow-x: auto; scrollbar-width: none;
@@ -1042,7 +1042,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 
   /* Action buttons get their own full-width scrolling row — nothing hidden */
   .bar-right {
-    order: 5; flex: 0 0 100%; width: 100%; max-width: 100%;
+    order: 5; flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0;
     justify-content: flex-start; flex-wrap: nowrap;
     border-top: 1px solid rgba(255,255,255,.06);
     padding: 6px 8px; gap: 5px;
@@ -1106,6 +1106,73 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 
   .sc-hd { padding: 14px 14px 14px 16px; }   /* roomier tap area */
   .ev-handle { min-width: 38px; min-height: 38px; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PHONE FIT — everything on screen, everything reachable.
+
+   The bug this fixes: a row with `overflow-x:auto` still has the default
+   `min-width:auto`, which floors it at the width of ALL its contents. So
+   .bar-right (the Entries / Projections / Library cluster) never actually
+   scrolled — it grew to ~900px, pushed .bar-top → .bar → the #app grid
+   column out to that width, and since html,body are `overflow:hidden` the
+   whole app was laid out at desktop width and simply clipped at the edge of
+   the phone screen with no way to scroll to the rest. Cards, day tabs, meet
+   name and session times all lost their right-hand side.
+
+   Fixed at the source (min-width:0 on the scrollers, minmax(0,1fr) on the
+   #app column). This block is the phone-facing follow-through.
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 820px) {
+  /* Nothing may be wider than the screen. */
+  .bar-days, .bar-right, .tl-bar, .tl-wrap, .sc { max-width: 100% }
+
+  /* Scroll affordance. Pure background layers — the two solid "cover" layers
+     are attached `local` so they ride with the content and uncover the shadow
+     underneath only when there is genuinely more to scroll to. No mask, no
+     filter, so this cannot trap the position:fixed menu below. Cover colour is
+     a variable so deck (dark) mode can restate it without repeating the rule. */
+  .bar-right, .bar-days {
+    background:
+      linear-gradient(var(--hs-cover),var(--hs-cover)) 0 0/22px 100% no-repeat local,
+      linear-gradient(var(--hs-cover),var(--hs-cover)) 100% 0/22px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,var(--hs-shade),rgba(0,0,0,0)) 0 0/13px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%,var(--hs-shade),rgba(0,0,0,0)) 100% 0/13px 100% no-repeat scroll;
+  }
+  .bar-right { --hs-cover:#171F69; --hs-shade:rgba(0,0,0,.42) }
+  .bar-days  { --hs-cover:#141B5A; --hs-shade:rgba(0,0,0,.42) }
+  html[data-theme="deck"] .bar-right { --hs-cover:#0D1426 }
+  html[data-theme="deck"] .bar-days  { --hs-cover:#0B1121 }
+
+  /* The ⋮ menu lives INSIDE the scrolling action row, so its absolute dropdown
+     was being clipped to a 34px-tall strip — unopenable on a phone. On touch
+     it becomes a bottom sheet instead: nothing to clip it, and it lands under
+     the thumb rather than up by the status bar. */
+  .bar-menu {
+    position: fixed; top: auto; bottom: 10px; left: 10px; right: 10px;
+    min-width: 0; max-height: 62vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch; z-index: 700;
+  }
+
+  /* Session cards: wrap rather than run off the card (the card clips, so
+     anything past its edge is gone for good). */
+  .sc-titles { max-width: none; flex: 1 1 150px }
+  .sc-flight { flex-wrap: wrap; row-gap: 2px }
+  .sc-flight-name { min-width: 0 }
+  .sc-ev { flex-wrap: wrap }
+}
+
+@media (max-width: 760px) {
+  .tl-bar {
+    --hs-cover: var(--surf,#fff); --hs-shade: rgba(15,23,42,.16);
+    background:
+      linear-gradient(var(--hs-cover),var(--hs-cover)) 0 0/22px 100% no-repeat local,
+      linear-gradient(var(--hs-cover),var(--hs-cover)) 100% 0/22px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%,var(--hs-shade),rgba(15,23,42,0)) 0 0/12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%,var(--hs-shade),rgba(15,23,42,0)) 100% 0/12px 100% no-repeat scroll,
+      var(--hs-cover);   /* shorthand resets background-color — restate it */
+  }
+  html[data-theme="deck"] .tl-bar { --hs-shade: rgba(0,0,0,.5) }
 }
 
 /* ═══ PREMIER UI PASS ═══════════════════════════════════════════════ */
@@ -1699,7 +1766,7 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
   /* One scrolling row instead of a wrapped pile. Same pattern the dark top bar
      already uses, so the gesture is one the app has taught before. */
   .tl-bar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;gap:6px;padding:7px 12px}
+    scrollbar-width:none;gap:6px;padding:7px 12px;min-width:0;max-width:100%}
   .tl-bar::-webkit-scrollbar{display:none}
   .tl-bar>*{flex-shrink:0}
   .tl-spacer{display:none}          /* a growing spacer makes no sense in a scroller */
