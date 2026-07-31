@@ -2165,7 +2165,18 @@ function applyEntrySync(){
         if(fs)touched.add(fs.dayId);
       });
     });
-    touched.forEach(dayId=>reflowDay(s,dayId));
+    // Resize events WITHOUT re-packing the day. reflowDay() rewrites the start
+    // time of every later session on the day, which is exactly the silent
+    // overwrite normalizeAllDays() was changed to stop doing: a published 4:45 PM
+    // finals block is a commitment, not a derived value. Correcting the Senior
+    // prelims shrinks them by ~30 min a day, so reflowing here would have yanked
+    // Aug 7/8/9 finals half an hour earlier the moment you hit Apply — trading a
+    // headcount error for a much more visible one, mid-meet.
+    // Each session's END still recomputes from its events, so the shorter prelim
+    // shows up immediately and any gap it opens appears as a gap chip in the
+    // timeline. Closing that gap stays a deliberate act: "Re-stack times".
+    // Locked days are read-only and are skipped entirely.
+    touched.forEach(dayId=>{if(!dayLocked(dayId))positionParallels(s,dayId)});
   });
   UI.modal=null;
   toast(`Synced ${applied} event${applied===1?'':'s'} to registered DiveMeets entries`);
@@ -2194,7 +2205,9 @@ function applyBaselineProjections(){
       ev.numberOfDivers=entryValue(ev);
       touched.add(sess.dayId);applied++;
     });
-    touched.forEach(dayId=>reflowDay(s,dayId));
+    // Same rule as applyEntrySync: resize events, never re-pack published
+    // session start times, and never touch a locked day.
+    touched.forEach(dayId=>{if(!dayLocked(dayId))positionParallels(s,dayId)});
   });
   UI.modal=null;
   toast(`Synced ${applied} event${applied===1?'':'s'} to baseline meet counts`);
