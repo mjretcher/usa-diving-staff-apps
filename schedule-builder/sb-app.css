@@ -773,6 +773,13 @@ button{cursor:pointer;border:none;background:none}
 .feg-total-num{font-size:14px;font-weight:700;color:var(--tx2);font-variant-numeric:tabular-nums}
 .feg-total-num.plus{color:var(--cyan)}
 .feg-total-math{font-size:9px;color:var(--tx3);font-variant-numeric:tabular-nums;line-height:1.2;margin-top:1px}
+/* Sync-modal row selection. Big hit area — these get tapped on a tablet on the
+   pool deck, not clicked with a mouse. */
+.es-tick{width:17px;height:17px;accent-color:var(--cyan);cursor:pointer;margin:0;vertical-align:middle}
+.es-tick:disabled{cursor:default;opacity:.4}
+.es-opt{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:10px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--surf2);font-size:11.5px;color:var(--tx);line-height:1.45;cursor:pointer}
+.es-opt:hover{border-color:var(--cyan)}
+.es-opt input{margin-top:1px;flex-shrink:0}
 .feg-using{width:48px}
 .feg-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.03em}
 .feg-tag.final{background:var(--final-bg);color:var(--final);border:1px solid var(--final-bd)}

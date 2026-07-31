@@ -1998,6 +1998,11 @@ async function loadAllDivemeetsSources(){
 function openEntrySync(){
   UI.entrySync={loading:true,sources:null,error:null,pulling:false,pullMsg:null};
   UI.entrySyncExpand={};
+  // Per-event opt-out for this session of the modal only. Deliberately cleared
+  // on every open so an unticked row from last time can never silently skip an
+  // event you meant to update. Absent = ticked.
+  UI.entrySyncSkip={};
+  UI.entrySyncFinals=true;
   UI.modal='entry-sync';
   render();
   loadAllDivemeetsSources()
@@ -2126,10 +2131,29 @@ function entrySyncDeltas(){
   });
   return out;
 }
-function applyEntrySync(){
+// ── Per-row selection in the Sync modal ───────────────────────────────
+// Absent means ticked, so a freshly opened modal applies everything and the
+// stored object only ever holds deliberate opt-outs.
+function esPicked(evId){return !(UI.entrySyncSkip&&UI.entrySyncSkip[evId]===true)}
+function esTogglePick(evId){
+  if(!UI.entrySyncSkip)UI.entrySyncSkip={};
+  UI.entrySyncSkip[evId]=esPicked(evId);
+  render();
+}
+function esToggleAll(){
   const deltas=entrySyncDeltas().filter(d=>d.registered!=null);
-  if(!deltas.length){toast('No registered entries to apply');return;}
-  let applied=0;
+  const anyOn=deltas.some(d=>esPicked(d.evId));
+  UI.entrySyncSkip={};
+  if(anyOn)deltas.forEach(d=>{UI.entrySyncSkip[d.evId]=true});
+  render();
+}
+function esToggleFinals(){UI.entrySyncFinals=!(UI.entrySyncFinals!==false);render()}
+function esFinalsOn(){return UI.entrySyncFinals!==false}
+function applyEntrySync(){
+  const deltas=entrySyncDeltas().filter(d=>d.registered!=null&&esPicked(d.evId));
+  if(!deltas.length){toast('Nothing ticked — tick at least one event to apply');return;}
+  const doFinals=esFinalsOn();
+  let applied=0,finalsTouched=0;
   upd(s=>{
     const touched=new Set();
     const prelims=[];
@@ -2156,11 +2180,15 @@ function applyEntrySync(){
     // PASS 2 — resize each final off its prelim's new TOTAL. Must run after
     // pass 1: a prelim's advancing-in is capped by the qualifier's field size,
     // and that qualifier may itself have just been rewritten above.
-    prelims.forEach(({ev})=>{
+    // Skipped entirely when "also resize finals" is unticked, so you can take a
+    // corrected prelim headcount without disturbing a finals field you set by hand.
+    if(doFinals)prelims.forEach(({ev})=>{
       const target=finalsFieldTarget(ev);
       matchingFinalsEvents(s,ev).forEach(fe=>{
         if(Number(fe.finalDivers||0)>12)return; // preserve tie override
+        if(Number(fe.finalDivers||0)===target)return; // already right — don't count it as a change
         fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;fe.autoFinals=true;
+        finalsTouched++;
         const fs=s.sessions.find(x=>x.events.includes(fe));
         if(fs)touched.add(fs.dayId);
       });
@@ -2179,7 +2207,7 @@ function applyEntrySync(){
     touched.forEach(dayId=>{if(!dayLocked(dayId))positionParallels(s,dayId)});
   });
   UI.modal=null;
-  toast(`Synced ${applied} event${applied===1?'':'s'} to registered DiveMeets entries`);
+  toast(`Synced ${applied} event${applied===1?'':'s'} to registered DiveMeets entries${finalsTouched?` · ${finalsTouched} final${finalsTouched===1?'':'s'} resized`:''}`);
 }
 // A "projected baseline" source (e.g. last cycle's Winter Nationals turnout
 // standing in for this year's Qualifier/Nationals estimate before real
@@ -2187,8 +2215,8 @@ function applyEntrySync(){
 // touches the actual scheduled headcount, since it's an estimate the person
 // should still review before committing to it.
 function applyBaselineProjections(){
-  const deltas=entrySyncDeltas().filter(d=>d.baseline!=null);
-  if(!deltas.length){toast('No baseline projections to apply');return;}
+  const deltas=entrySyncDeltas().filter(d=>d.baseline!=null&&esPicked(d.evId));
+  if(!deltas.length){toast('Nothing ticked — tick at least one event to apply');return;}
   let applied=0;
   upd(s=>{
     const touched=new Set();
@@ -2237,13 +2265,31 @@ function renderEntrySyncModal(){
     const ev=sess&&sess.events.find(e=>e.id===d.evId);
     const who=ev&&d.registeredSourceId?findDivemeetsEntrants(sources,ev,d.registeredSourceId):[];
     const open=!!(UI.entrySyncExpand&&UI.entrySyncExpand[di]);
-    const whoRows=open&&who.length?`<tr><td colspan="${hasBaseline?5:4}" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
+    const whoRows=open&&who.length?`<tr><td colspan="${hasBaseline?6:5}" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
       const known=projKeys.size?projKeys.has(en.diverKey):true;
       return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
     }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
     const advTag=d.advanceIn>0?` <span class="es-adv" title="${d.advanceIn} advancing in from an earlier event — kept on top of the registered count">+${d.advanceIn} adv</span>`:'';
-    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}${advTag}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':(d.advanceIn>0?`<span style="font-weight:400;color:var(--tx3)">${d.registered} + ${d.advanceIn} adv =</span> <span style="color:var(--cyan)">${sizedNew}</span>`:d.registered)}${(sizedNow!=null&&diff!==0&&d.finalSet)?`<div style="font-size:10px;font-weight:400;color:var(--red)">replaces ${sizedNow} now scheduled</div>`:''}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
+    const picked=esPicked(d.evId);
+    const willChange=(diff!=null&&diff!==0);
+    return`<tr style="border-top:1px solid var(--bd);${picked?'':'opacity:.4'}"><td style="padding:6px 4px 6px 8px;width:26px"><input type="checkbox" class="es-tick" ${picked?'checked':''} onclick="esTogglePick('${d.evId}')" title="${picked?'This event will be updated':'Skipped — this event will be left exactly as it is'}"/></td><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}${advTag}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':(d.advanceIn>0?`<span style="font-weight:400;color:var(--tx3)">${d.registered} + ${d.advanceIn} adv =</span> <span style="color:var(--cyan)">${sizedNew}</span>`:d.registered)}${(sizedNow!=null&&diff!==0&&d.finalSet)?`<div style="font-size:10px;font-weight:400;color:var(--red)">replaces ${sizedNow} now scheduled</div>`:''}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
   }).join('');
+  // Which finals the ticked prelims would actually move, named up front so the
+  // consequence is visible BEFORE the button is pressed rather than after.
+  const finalsPreview=[];
+  if(esFinalsOn())deltas.filter(d=>d.registered!=null&&esPicked(d.evId)).forEach(d=>{
+    const sess=S.sessions.find(x=>x.id===d.sessId);
+    const ev=sess&&sess.events.find(e=>e.id===d.evId);
+    if(!ev||ev.round!=='Prelim')return;
+    const target=Math.min(12,d.registered+(d.advanceIn||0));
+    matchingFinalsEvents(S,ev).forEach(fe=>{
+      const cur=Number(fe.finalDivers||0);
+      if(cur>12||cur===target)return;
+      finalsPreview.push(`${evName(fe)} ${cur||'—'}→${target}`);
+    });
+  });
+  const pickedCount=deltas.filter(d=>d.registered!=null&&esPicked(d.evId)).length;
+  const pickedBase=deltas.filter(d=>d.baseline!=null&&esPicked(d.evId)).length;
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:rgba(0,154,199,.08);border:1px solid rgba(0,154,199,.25);font-size:12px;color:var(--tx);margin-bottom:14px">
@@ -2252,16 +2298,20 @@ function renderEntrySyncModal(){
         <button class="btn btn-sm" ${es.pulling?'disabled':''} onclick="pullDivemeetsNow()" style="flex-shrink:0">${es.pulling?'Pulling…':'Pull fresh from DiveMeets'}</button>
       </div>
       ${deltas.length?`<table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th>${hasBaseline?'<th style="text-align:right;padding:4px 8px">Baseline</th>':''}<th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
+        <thead><tr style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)"><th style="padding:4px 4px 4px 8px;width:26px"><input type="checkbox" class="es-tick" ${deltas.filter(x=>x.registered!=null).every(x=>esPicked(x.evId))?'checked':''} onclick="esToggleAll()" title="Tick or untick every event"/></th><th style="text-align:left;padding:4px 8px">Event</th><th style="text-align:right;padding:4px 8px">Projected</th>${hasBaseline?'<th style="text-align:right;padding:4px 8px">Baseline</th>':''}<th style="text-align:right;padding:4px 8px">Registered</th><th style="text-align:right;padding:4px 8px">Change</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`:`<div style="text-align:center;color:var(--tx3);padding:20px">No Prelim/Qualifier events in this schedule match any configured DiveMeets source.</div>`}
+      ${deltas.length?`<label class="es-opt" title="The finals field is the top 12 of the prelim, or the whole prelim field when fewer than 12 are in it. Untick to leave every finals number exactly as you have it.">
+        <input type="checkbox" class="es-tick" ${esFinalsOn()?'checked':''} onclick="esToggleFinals()"/>
+        <span><strong>Also resize the matching finals</strong> from the ticked prelims — top 12, or the whole field if it's smaller.${esFinalsOn()?(finalsPreview.length?` <span style="color:var(--cyan)">${finalsPreview.length} would change: ${finalsPreview.map(esc).join(', ')}</span>`:` <span style="color:var(--tx3)">Nothing would change — every final is already right.</span>`):` <span style="color:var(--tx3)">Off — finals will be left exactly as they are.</span>`}</span>
+      </label>`:''}
       ${deltas.some(d=>d.advanceIn>0)?`<p style="font-size:11px;color:var(--tx3);margin-top:10px">Events marked <span class="es-adv">+N adv</span> have divers advancing in from an earlier event at this meet. DiveMeets never lists those divers, so that number is added on top of the registered count and is <strong>not</strong> cleared by this sync.</p>`:''}
       <p style="font-size:11px;color:var(--tx3);margin-top:12px">Both "Apply" buttons set the event's entry count and protect it from later pre-fills — "Registered" uses live signups, "Baseline" uses the projection-baseline meet(s). ${hasBaseline?'Only events with a configured baseline source are affected by "Apply baseline" — for events that have both, whichever you click last wins.':''}</p>
     </div>
     <div class="modal-foot">
       <button class="btn btn-sm" onclick="UI.modal=null;render()">Cancel</button>
-      ${hasBaseline?`<button class="btn btn-sm" ${deltas.some(d=>d.baseline!=null)?'':'disabled'} onclick="applyBaselineProjections()">Apply baseline as projected</button>`:''}
-      <button class="btn btn-sm btn-p" ${deltas.some(d=>d.registered!=null)?'':'disabled'} onclick="applyEntrySync()">Apply registered counts</button>
+      ${hasBaseline?`<button class="btn btn-sm" ${pickedBase?'':'disabled'} onclick="applyBaselineProjections()">Apply baseline to ${pickedBase} ticked</button>`:''}
+      <button class="btn btn-sm btn-p" ${pickedCount?'':'disabled'} onclick="applyEntrySync()">Apply registered counts to ${pickedCount} event${pickedCount===1?'':'s'}</button>
     </div>
   </div>`;
 }
