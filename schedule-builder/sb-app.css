@@ -772,6 +772,7 @@ button{cursor:pointer;border:none;background:none}
 .feg-total{width:54px}
 .feg-total-num{font-size:14px;font-weight:700;color:var(--tx2);font-variant-numeric:tabular-nums}
 .feg-total-num.plus{color:var(--cyan)}
+.feg-total-math{font-size:9px;color:var(--tx3);font-variant-numeric:tabular-nums;line-height:1.2;margin-top:1px}
 .feg-using{width:48px}
 .feg-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.03em}
 .feg-tag.final{background:var(--final-bg);color:var(--final);border:1px solid var(--final-bd)}

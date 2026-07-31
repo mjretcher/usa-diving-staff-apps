@@ -1760,18 +1760,18 @@ function updEv(sessId,evId,field,value){
     if(field==='finalDivers'||field==='projectedDivers'||field==='advanceIn'){
       ev.numberOfDivers=entryValue(ev);
       if(ev.round==='Final')ev.autoFinals=false;
-      if(ev.round==='Prelim'&&field==='finalDivers'){
-        const prelimFinal=Number(ev.finalDivers||0);
-        const target=Math.min(12,prelimFinal); // 0-12 cap; ties handled via manual override
-        s.sessions.forEach(sess=>sess.events.forEach(fe=>{
-          if(fe===ev)return;
-          if(fe.round!=='Final')return;
-          if(fe.level!==ev.level||fe.gender!==ev.gender||fe.apparatus!==ev.apparatus)return;
+      // The finals field tracks the prelim's TOTAL field, so it has to re-sync
+      // when ANY of the three prelim inputs move — not just finalDivers. Typing
+      // "12 advancing in" grows the prelim field by 12 and can therefore grow
+      // the finals field too; before this, finals stayed sized off signups alone.
+      if(ev.round==='Prelim'&&entryBase(ev)!=null){
+        const target=finalsFieldTarget(ev);
+        matchingFinalsEvents(s,ev).forEach(fe=>{
           const currentFinal=Number(fe.finalDivers||0);
           if(currentFinal>12)return; // preserve tie override
           fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;
           fe.autoFinals=true;
-        }));
+        });
       }
     }
     // Cascade: changing divers/dives/sec can extend session, which pushes the next ones
@@ -1796,7 +1796,25 @@ function setPracEndTime(sessId,endMin){
 }
 function ackWarn(key){upd(s=>{if(!s.acknowledgedWarnings)s.acknowledgedWarnings=[];if(!s.acknowledgedWarnings.includes(key))s.acknowledgedWarnings.push(key)})}
 function cycleStatus(){const i=STATUS.indexOf(S.publishStatus||'draft');upd(s=>s.publishStatus=STATUS[(i+1)%STATUS.length])}
-function applyFinalsAll(){upd(s=>{s.sessions.forEach(sess=>sess.events.forEach(ev=>{if(ev.round==='Final'){ev.finalDivers=12;ev.numberOfDivers=12;}}));s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)})});toast('Finals set to 12 (editable for ties)')}
+// "Set finals from prelims": each final takes the top 12 of ITS OWN prelim, or
+// the whole prelim field when fewer than 12 are in it. A blanket 12 was wrong
+// for any event whose prelim field is smaller — e.g. a 6-entry tower qualifier
+// cannot send 12 to a final. Finals with no matching prelim keep the 12 default.
+function applyFinalsAll(){
+  let capped=0,total=0;
+  upd(s=>{
+    s.sessions.forEach(sess=>sess.events.forEach(ev=>{
+      if(ev.round!=='Final')return;
+      const prelim=prelimEventFor(s,ev);
+      const target=(prelim&&entryBase(prelim)!=null)?finalsFieldTarget(prelim):12;
+      if(target<12)capped++;
+      total++;
+      ev.projectedDivers=target;ev.finalDivers=target;ev.numberOfDivers=target;ev.autoFinals=true;
+    }));
+    s.sessions.forEach(sess=>{if(!sess.isPractice)cascadeSession(s,sess.id)});
+  });
+  toast(capped?`${total} finals sized from their prelims — ${capped} under 12 (smaller field)`:`${total} finals set to 12 (editable for ties)`);
+}
 function saveSchedule(){
   try{
     // If already saved (has cloud id and folder), just push an update with visible feedback
@@ -2097,6 +2115,10 @@ function entrySyncDeltas(){
       const base=findDivemeetsMatch(sources,ev,'projected');
       if(!reg&&!base)return;
       out.push({sessId:sess.id,evId:ev.id,name:evName(ev),projected:ev.projectedDivers,
+        // What the schedule is CURRENTLY sized off (Final wins over Projected).
+        // The change column compares against this, not against Projected — a
+        // stale Final used to hide a real difference behind a "same" badge.
+        base:entryBase(ev),finalSet:(ev.finalDivers!=null&&ev.finalDivers!==''),
         advanceIn:canAdvanceIn(ev)?advanceInValue(ev):0,
         registered:reg?reg.entries:null,registeredSourceId:reg?reg.sourceId:null,
         baseline:base?base.entries:null,baselineSourceId:base?base.sourceId:null});
@@ -2110,15 +2132,38 @@ function applyEntrySync(){
   let applied=0;
   upd(s=>{
     const touched=new Set();
+    const prelims=[];
+    // PASS 1 — write the registered count into BOTH entry columns.
+    // Writing only projectedDivers meant a stale hand-typed Final silently won
+    // (entryBase prefers Final), so the schedule kept sizing off an old number
+    // while the panel displayed the fresh one. Worse, those hand-typed Finals
+    // had the advancing-in divers baked in, so Total added them a second time.
+    // A live DiveMeets signup count IS the confirmed entry count for a
+    // Prelim/Qualifier, so it owns both columns and the double-count cannot
+    // survive a pull. Advancing-in still lives in its own field and is untouched.
     deltas.forEach(d=>{
       const sess=s.sessions.find(x=>x.id===d.sessId);if(!sess)return;
       const ev=sess.events.find(e=>e.id===d.evId);if(!ev)return;
       ev.projectedDivers=d.registered;
+      ev.finalDivers=d.registered;
       // Real registrations are authoritative — mark as a manual-grade value so
       // a later "Pre-fill projected entries" (projection data) can't overwrite.
       ev.autoProjected=false;
       ev.numberOfDivers=entryValue(ev);
+      if(ev.round==='Prelim')prelims.push({sess,ev});
       touched.add(sess.dayId);applied++;
+    });
+    // PASS 2 — resize each final off its prelim's new TOTAL. Must run after
+    // pass 1: a prelim's advancing-in is capped by the qualifier's field size,
+    // and that qualifier may itself have just been rewritten above.
+    prelims.forEach(({ev})=>{
+      const target=finalsFieldTarget(ev);
+      matchingFinalsEvents(s,ev).forEach(fe=>{
+        if(Number(fe.finalDivers||0)>12)return; // preserve tie override
+        fe.projectedDivers=target;fe.finalDivers=target;fe.numberOfDivers=target;fe.autoFinals=true;
+        const fs=s.sessions.find(x=>x.events.includes(fe));
+        if(fs)touched.add(fs.dayId);
+      });
     });
     touched.forEach(dayId=>reflowDay(s,dayId));
   });
@@ -2168,7 +2213,12 @@ function renderEntrySyncModal(){
   const projKeys=new Set((UI.projRows||[]).map(r=>r.diverKey));
   const rows=deltas.map((d,di)=>{
     const proj=d.projected==null||d.projected===''?null:Number(d.projected);
-    const diff=(proj==null||d.registered==null)?null:d.registered-proj;
+    // Compare against what the event is ACTUALLY sized at right now, including
+    // its advancing-in add-on, so the change column can never say "same" while
+    // the schedule is quietly running a different number.
+    const sizedNow=d.base==null?null:d.base+(d.advanceIn||0);
+    const sizedNew=d.registered==null?null:d.registered+(d.advanceIn||0);
+    const diff=(sizedNow==null||sizedNew==null)?null:sizedNew-sizedNow;
     const badge=diff==null?`<span style="color:var(--tx3)">—</span>`:diff===0?`<span style="color:var(--tx3)">same</span>`:diff>0?`<span style="color:var(--prac);font-weight:700">+${diff}</span>`:`<span style="color:var(--red);font-weight:700">${diff}</span>`;
     const sess=S.sessions.find(x=>x.id===d.sessId);
     const ev=sess&&sess.events.find(e=>e.id===d.evId);
@@ -2179,7 +2229,7 @@ function renderEntrySyncModal(){
       return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
     }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
     const advTag=d.advanceIn>0?` <span class="es-adv" title="${d.advanceIn} advancing in from an earlier event — kept on top of the registered count">+${d.advanceIn} adv</span>`:'';
-    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}${advTag}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':(d.advanceIn>0?`${d.registered} <span style="color:var(--cyan);font-weight:600">→ ${d.registered+d.advanceIn}</span>`:d.registered)}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
+    return`<tr style="border-top:1px solid var(--bd)"><td style="padding:6px 8px">${who.length?`<button class="es-expand" onclick="UI.entrySyncExpand[${di}]=!UI.entrySyncExpand[${di}];render()">${open?'▾':'▸'}</button> `:''}${esc(d.name)}${advTag}</td><td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)">${proj==null?'—':proj}</td>${hasBaseline?`<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;color:var(--cyan)">${d.baseline==null?'—':d.baseline}</td>`:''}<td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700">${d.registered==null?'—':(d.advanceIn>0?`<span style="font-weight:400;color:var(--tx3)">${d.registered} + ${d.advanceIn} adv =</span> <span style="color:var(--cyan)">${sizedNew}</span>`:d.registered)}${(sizedNow!=null&&diff!==0&&d.finalSet)?`<div style="font-size:10px;font-weight:400;color:var(--red)">replaces ${sizedNow} now scheduled</div>`:''}</td><td style="padding:6px 8px;text-align:right">${badge}</td></tr>${whoRows}`;
   }).join('');
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}
     <div class="modal-body">
@@ -3359,7 +3409,7 @@ function renderEntriesPanel(timed){
         <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-total"><span class="feg-total-num ${advSet?'plus':''}" id="feg-${ev.id}-total">${effective||'—'}</span></td>
+        <td class="feg-total"><span class="feg-total-num ${advSet?'plus':''}" id="feg-${ev.id}-total">${effective||'—'}</span><div class="feg-total-math">${advSet?`${entryBase(ev)??0} + ${advanceInValue(ev)}`:''}</div></td>
         <td class="feg-using">${finlSet?'<span class="feg-tag final">Final</span>':projSet?'<span class="feg-tag proj">Proj</span>':''}</td>
         <td class="feg-dives">${ev.numberOfDives||ev.defaultDives||0}<span class="feg-dives-lbl">dives</span></td>
         <td class="feg-split">${(!isPlatform(ev.apparatus)&&ev.round!=='Final')?`<button class="split-toggle sm ${split?'on':needsSplit?'rec':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')" title="${split?'Split ON':needsSplit?'Split recommended':'Split OFF'}"><span class="split-toggle-dot"></span>${split?'ON':needsSplit?'REC':'OFF'}</button>`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
@@ -3382,8 +3432,8 @@ function renderEntriesPanel(timed){
     </div>
     <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th title="Divers moving up from an earlier event at this meet — never overwritten by a DiveMeets pull">Advancing in</th><th>Final</th><th>Total</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
     <div class="enp-foot">
-      <span class="enp-footinfo">Total = (Final or Projected) + Advancing in · Advancing in survives every DiveMeets pull</span>
-      <button class="enp-finalsbtn" onclick="applyFinalsAll()">Set Finals → 12</button>
+      <span class="enp-footinfo">Total = entries + advancing in · A DiveMeets pull sets the entries; advancing in is yours and survives every pull</span>
+      <button class="enp-finalsbtn" onclick="applyFinalsAll()">Set finals from prelims</button>
     </div>
   </div>`;
 }
@@ -3470,7 +3520,10 @@ function surgicalUpdateEntryTimes(){
     if(totalEl){
       const tot=entryValue(ev);
       totalEl.textContent=tot||'—';
-      if(canAdvanceIn(ev)&&hasAdvanceIn(ev))totalEl.classList.add('plus');else totalEl.classList.remove('plus');
+      const showsAdv=canAdvanceIn(ev)&&hasAdvanceIn(ev);
+      if(showsAdv)totalEl.classList.add('plus');else totalEl.classList.remove('plus');
+      const mathEl=row.querySelector('.feg-total-math');
+      if(mathEl)mathEl.textContent=showsAdv?`${entryBase(ev)??0} + ${advanceInValue(ev)}`:'';
     }
     // Sync the "on" state on the proj/final inputs without rewriting their value
     const projInp=row.querySelector('.feg-inp.proj');
@@ -3560,20 +3613,56 @@ function entryValue(ev){
   if(base==null)return Number(ev.numberOfDivers)||0;
   return base+(canAdvanceIn(ev)?advanceInValue(ev):0);
 }
-// Sync a finals event's entries from its matching prelim's FINAL count.
-// Rule (per user): when user enters Final entries on a PRELIM event, the matching
-// FINALS event auto-populates to min(12, prelimFinalCount). Manual override above
-// 12 (for ties) is preserved — only finals values <=12 are auto-synced.
+// The finals field size for a prelim. Rule: the top 12 of the prelim advance —
+// or the whole field when fewer than 12 competed.
+// CRITICAL: the prelim's field is its TOTAL, i.e. entries PLUS anyone advancing
+// in from an earlier event at this meet (e.g. the top 12 of each National
+// Qualifier event moving into the matching Senior Nationals prelim). This used
+// to read finalDivers alone, which silently ignored the advancers and undersized
+// the finals for every event fed by a qualifier — a 6-entry prelim taking 12
+// advancers is an 18-diver field and gets a full 12-diver final, not a 6.
+function finalsFieldTarget(prelimEv){
+  return Math.min(12,entryValue(prelimEv)||0);
+}
+// The Final-round event(s) fed by a given prelim, matched on the same four
+// attributes everywhere so the rule can't drift between call sites. apparatus
+// goes through sameApparatus() because the schedule spells the tower "10-Meter"
+// on Senior events but "Platform" on Junior ones, and style is compared so an
+// Individual prelim can never seed a Synchronized final or vice versa.
+function matchingFinalsEvents(state,prelimEv){
+  const out=[];
+  (state.sessions||[]).forEach(sess=>(sess.events||[]).forEach(fe=>{
+    if(fe===prelimEv)return;
+    if(fe.round!=='Final')return;
+    if(fe.level!==prelimEv.level||fe.gender!==prelimEv.gender)return;
+    if((fe.style||'')!==(prelimEv.style||''))return;
+    if(!sameApparatus(fe.apparatus,prelimEv.apparatus))return;
+    out.push(fe);
+  }));
+  return out;
+}
+// The prelim that feeds a given final — the inverse of matchingFinalsEvents.
+function prelimEventFor(state,finalEv){
+  let found=null;
+  (state.sessions||[]).forEach(sess=>(sess.events||[]).forEach(pe=>{
+    if(found||pe===finalEv||pe.round!=='Prelim')return;
+    if(pe.level!==finalEv.level||pe.gender!==finalEv.gender)return;
+    if((pe.style||'')!==(finalEv.style||''))return;
+    if(!sameApparatus(pe.apparatus,finalEv.apparatus))return;
+    found=pe;
+  }));
+  return found;
+}
+// Sync a finals event's entries from its matching prelim's TOTAL field.
+// Rule (per user): the finals field is the top 12 of the prelim, or the whole
+// prelim field if fewer than 12 are in it. Manual override above 12 (for ties)
+// is preserved — only finals values <=12 are auto-synced.
 function syncFinalsToPrelim(prelimEv){
   if(prelimEv.round!=='Prelim')return; // safety
-  if(prelimEv.finalDivers==null||prelimEv.finalDivers==='')return;
-  const prelimFinal=Number(prelimEv.finalDivers)||0;
-  const target=Math.min(12,prelimFinal); // 0-12 cap (ties handled by manual override)
-  S.sessions.forEach(sess=>{
-    sess.events.forEach(fe=>{
-      if(fe===prelimEv)return;
-      if(fe.round!=='Final')return;
-      if(fe.level!==prelimEv.level||fe.gender!==prelimEv.gender||fe.apparatus!==prelimEv.apparatus)return;
+  if(entryBase(prelimEv)==null)return; // neither entry column filled — nothing to size from
+  const target=finalsFieldTarget(prelimEv);
+  {
+    matchingFinalsEvents(S,prelimEv).forEach(fe=>{
       // Preserve manual override for ties: if current finals count is >12, leave alone
       const currentFinal=Number(fe.finalDivers||0);
       if(currentFinal>12)return;
@@ -3588,7 +3677,7 @@ function syncFinalsToPrelim(prelimEv){
       if(fp){fp.value=target;if(target>0)fp.classList.add('on');else fp.classList.remove('on');}
       if(ff){ff.value=target;if(target>0)ff.classList.add('on');else ff.classList.remove('on');ff.classList.add('synced-flash');setTimeout(()=>ff.classList.remove('synced-flash'),600);}
     });
-  });
+  }
 }
 // On Enter or Tab, commit + cascade + light refresh of time columns
 function entryKey(e,el){
