@@ -525,13 +525,11 @@ for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec"
 sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
 sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])
 
-# ---------------------------------------------------------------- grants
-# Every table above was just DROPped and re-CREATEd, which throws away any
-# privileges the old table carried. db/schema.sql sets ALTER DEFAULT PRIVILEGES
-# for this schema, but that only fires for tables created by the role that ran
-# it — so re-granting here makes the browser role's access a property of the
-# build itself rather than of who happened to run the migration. Without this
-# the Athlete Evaluation app goes dark at the next refresh.
+# Every table above was just DROPped and recreated, which throws away its ACL.
+# db/schema.sql sets ALTER DEFAULT PRIVILEGES so new tables inherit SELECT, but
+# that only helps when this script runs as the same role the migration ran as.
+# Re-granting here makes the Athlete Evaluation app's access independent of that
+# assumption — without it a rebuild can silently 42501 the whole app.
 sql("""DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
@@ -539,4 +537,6 @@ BEGIN
     GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO usad_app;
   END IF;
 END $$""")
+log("usad_app SELECT re-granted on analytics")
+
 log(f"done: {counts}")

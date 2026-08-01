@@ -992,25 +992,25 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
     GRANT USAGE ON SCHEMA divemeets, scoresandmore TO usad_app;
-    -- Athlete Evaluation reads the entire analytics schema and nothing else
-    -- serves it. This grant was never written, so every analytics query from
-    -- the browser failed with "permission denied for schema analytics" —
-    -- athlete search and 7 of 8 tabs were dead on the Pages deployment.
-    --
-    -- ALTER DEFAULT PRIVILEGES is the load-bearing half. build_analytics.py
-    -- DROPs and re-CREATEs 11 of these 12 tables on every daily run, so a
-    -- one-time table grant would evaporate at the next 09:30 UTC rebuild.
-    -- Default privileges apply to tables that do not exist yet, which is
-    -- exactly the case a nightly drop/create creates.
-    GRANT USAGE ON SCHEMA analytics TO usad_app;
-    GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO usad_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA analytics
-      GRANT SELECT ON TABLES TO usad_app;
     GRANT SELECT ON ALL TABLES IN SCHEMA divemeets    TO usad_app;
     GRANT SELECT ON ALL TABLES IN SCHEMA scoresandmore TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA divemeets
       GRANT SELECT ON TABLES TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA scoresandmore
+      GRANT SELECT ON TABLES TO usad_app;
+    -- core + analytics are what the Athlete Evaluation app actually reads.
+    -- These grants were applied by hand once and were silently lost, because
+    -- build_analytics.py DROPs and recreates every analytics table on each
+    -- daily run and a dropped table takes its ACL with it. The ALTER DEFAULT
+    -- PRIVILEGES line below is the durable fix: tables created by this same
+    -- migration role in analytics inherit SELECT automatically, so a rebuild
+    -- can no longer lock the browser role out.
+    GRANT USAGE ON SCHEMA core, analytics TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA core      TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA core
+      GRANT SELECT ON TABLES TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA analytics
       GRANT SELECT ON TABLES TO usad_app;
     -- Schedule Builder is READ-WRITE from the browser, unlike the crawl schemas
     -- above. These grants existed only because someone applied them by hand; a
