@@ -117,6 +117,9 @@ def build(db, only=None, dive_sink=None):
                              ORDER BY event_id, round, sheet_key, dive_order""", (mid,)):
             sheets[(str(d["event_id"]), str(d["round"]), str(d["sheet_key"]))].append(d)
 
+        # A sheet_key can be shared by two result rows (synchro partners), so
+        # keep one representative row per sheet for the dive-row loop below.
+        res_by_sheet = {}
         for r in results:
             eid, rnd = str(r["event_id"]), str(r["round"])
             title = titles.get((eid, rnd), "")
@@ -126,6 +129,7 @@ def build(db, only=None, dive_sink=None):
             lvl = classify.event_level(title, grp, name, fam)
             age, sync = classify.age_group(title), classify.is_synchronized(title)
 
+            res_by_sheet.setdefault((eid, rnd, sk), r)
             dv = sheets.get((eid, rnd, sk), [])
             dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
                      for d in dv]
@@ -162,27 +166,42 @@ def build(db, only=None, dive_sink=None):
                 _num(fc["dropped_score"]) if fc["dropped_score"] not in ("", None) else "",
                 fc["status"], fc["note"],
             ])
+        # Dive rows are emitted per SHEET, not per result row. Synchro partners
+        # share one sheet_key -- 27 such sheets across the crawl -- so emitting
+        # inside the results loop wrote every dive twice and violated
+        # idx_ds_natural on (meet_id, event_id, result_set_id, diver_id,
+        # sheet_key, dive_order).
+        for (s_eid, s_rnd, s_sk), dv in sheets.items():
+            rr = res_by_sheet.get((s_eid, s_rnd, s_sk))
+            s_title = titles.get((s_eid, s_rnd), "")
+            s_gender, s_disc = classify.gender(s_title), classify.discipline(s_title)
+            s_stage = classify.round_stage(s_rnd)
+            s_dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
+                       for d in dv]
+            s_fc = five_cat(s_dives, fam, s_gender, s_disc)
             for d in dv:
                 code, label = dive_category(d["dive_number"])
-                key = id(next((x for x in dives if x["dive_number"] == d["dive_number"]), None))
-                incl = fc["inclusion"].get(key, "not_applicable") if fc["inclusion"] else "not_applicable"
+                key = id(next((x for x in s_dives if x["dive_number"] == d["dive_number"]), None))
+                incl = s_fc["inclusion"].get(key, "not_applicable") if s_fc["inclusion"] else "not_applicable"
                 note = {"dropped": "Dropped from derived NCAA 5-category score because it is the "
                                    "lower-scoring dive of the repeated category.",
                         "included": "Included in derived NCAA 5-category score."}.get(incl, "")
-                gen_sheets.add((mid, eid, rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
+                gen_sheets.add((mid, s_eid, s_rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
                 dive_count += 1
                 dive_writer.writerow(fmt_row(DIVE_COLS, [
-                    mid, eid, rnd,
+                    mid, s_eid, s_rnd,
                     "" if d["profile_id"] is None else str(d["profile_id"]),
                     "" if d["sheet_key"] is None else str(d["sheet_key"]),
                     d["dive_order"], d["dive_number"] or "", d["height"] or "",
                     d["description"] or "", _num(dec(d["dd"])), _num(dec(d["score"])),
                     _num(dec(d["net_score"])),
                     "" if d["round_place"] is None else str(d["round_place"]),
-                    d["opt_vol"] or "", "", "", r["diver_name"] or "",
-                    clean_team(r["team_name"]), title, gender, disc, stage,
-                    fam, grp, div, year, code, label, incl, note,
+                    d["opt_vol"] or "", "", "",
+                    (rr["diver_name"] if rr else "") or "",
+                    clean_team(rr["team_name"] if rr else ""), s_title,
+                    s_gender, s_disc, s_stage, fam, grp, div, year, code, label, incl, note,
                 ]))
+
         if i % 200 == 0:
             print(f"  {i}/{len(meets)} phases={len(phase_rows)} dives={dive_count}", flush=True)
     return phase_rows, dive_count, gen_sheets
@@ -230,6 +249,7 @@ def merge(phase_rows, gen_sheets):
 
 
 def copy_into(conn, table, cols, rows=None, path=None, truncate=True):
+    """Does NOT commit -- main() commits once after both tables are written."""
     cur = conn.cursor()
     if truncate:
         cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
@@ -245,7 +265,6 @@ def copy_into(conn, table, cols, rows=None, path=None, truncate=True):
             w.writerow(fmt_row(cols, r))
         buf.seek(0)
         cur.copy_expert(sql, buf)
-    conn.commit()
     cur.close()
 
 
@@ -271,6 +290,9 @@ def main():
     copy_into(conn, "core.result_phases", CORE_PHASE_COLS, rows=phases)
     copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, path=dive_path)
     copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, rows=kept_dives, truncate=False)
+    # One commit for both tables: a failure on dives can no longer leave core
+    # with new phases and stale dive sheets, which is what run 3 produced.
+    conn.commit()
     cur = conn.cursor()
     for t in ("core.result_phases", "core.dive_sheets"):
         cur.execute(f"SELECT COUNT(*) FROM {t}")
