@@ -524,4 +524,19 @@ for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec"
     counts[t] = rows(sql(f"SELECT COUNT(*) AS n FROM analytics.{t}"))[0]["n"]
 sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
 sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])
+
+# ---------------------------------------------------------------- grants
+# Every table above was just DROPped and re-CREATEd, which throws away any
+# privileges the old table carried. db/schema.sql sets ALTER DEFAULT PRIVILEGES
+# for this schema, but that only fires for tables created by the role that ran
+# it — so re-granting here makes the browser role's access a property of the
+# build itself rather than of who happened to run the migration. Without this
+# the Athlete Evaluation app goes dark at the next refresh.
+sql("""DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA analytics TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO usad_app;
+  END IF;
+END $$""")
 log(f"done: {counts}")
