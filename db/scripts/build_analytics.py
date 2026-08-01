@@ -433,10 +433,14 @@ log("field judge spread built")
 # execution trend (regr_slope of DD-weighted exec across seasons), and the
 # dive group where execution grew most season-over-season. Deepens
 # automatically as the scraper back-fills toward 2015.
-sql("DROP TABLE IF EXISTS analytics.la28_watch")
-sql("""CREATE TABLE analytics.la28_watch AS
-WITH lists AS (
-  SELECT m.canonical_id, d.meet_year, d.meet_id, d.event_id, d.round_stage,
+# la28_watch is built through staged tables rather than one big CTE chain.
+# Postgres has no statistics for a CTE result, and at 1.37M dive rows the
+# planner collapsed its estimate for the final join to rows=1 and chose a
+# nested loop over ~20k x ~12k rows, which never finished. Materialising each
+# step and ANALYZEing it gives the planner real counts and a hash join.
+sql("DROP TABLE IF EXISTS analytics._la28_lists")
+sql("""CREATE TABLE analytics._la28_lists AS
+SELECT m.canonical_id, d.meet_year, d.meet_id, d.event_id, d.round_stage,
          d.gender, d.discipline,
          SUM(d.score) AS tot, SUM(d.dd) AS sdd, COUNT(*) AS nd
   FROM core.dive_sheets d
@@ -445,41 +449,46 @@ WITH lists AS (
     AND d.dd > 0 AND d.score IS NOT NULL
     AND (d.optional_voluntary IS NULL OR d.optional_voluntary IN ('','O'))
   GROUP BY 1,2,3,4,5,6,7
-  HAVING COUNT(*) >= 4
-),
-yearly AS (
-  SELECT DISTINCT ON (canonical_id, gender, discipline, meet_year)
+  HAVING COUNT(*) >= 4""")
+sql("ANALYZE analytics._la28_lists")
+sql("DROP TABLE IF EXISTS analytics._la28_yearly")
+sql("""CREATE TABLE analytics._la28_yearly AS
+SELECT DISTINCT ON (canonical_id, gender, discipline, meet_year)
          canonical_id, gender, discipline, meet_year, tot, sdd, nd,
          tot/(3*sdd) AS ehat, meet_id, round_stage
-  FROM lists
-  ORDER BY canonical_id, gender, discipline, meet_year, tot DESC
-),
-agg AS (
-  SELECT canonical_id, gender, discipline,
+  FROM analytics._la28_lists
+  ORDER BY canonical_id, gender, discipline, meet_year, tot DESC""")
+sql("ANALYZE analytics._la28_yearly")
+sql("DROP TABLE IF EXISTS analytics._la28_agg")
+sql("""CREATE TABLE analytics._la28_agg AS
+SELECT canonical_id, gender, discipline,
          COUNT(*) AS n_years, MIN(meet_year) AS first_year, MAX(meet_year) AS last_year,
          REGR_SLOPE(ehat, meet_year) AS ehat_slope,
          JSONB_AGG(JSONB_BUILD_OBJECT(
             'y', meet_year, 'tot', ROUND(tot::numeric,1), 'dd', ROUND(sdd::numeric,1),
             'ehat', ROUND(ehat::numeric,3), 'meet', meet_id, 'stage', round_stage
          ) ORDER BY meet_year) AS yearly
-  FROM yearly GROUP BY 1,2,3
-),
-latest AS (
-  SELECT DISTINCT ON (canonical_id, gender, discipline)
+  FROM analytics._la28_yearly GROUP BY 1,2,3""")
+sql("ANALYZE analytics._la28_agg")
+sql("DROP TABLE IF EXISTS analytics._la28_latest")
+sql("""CREATE TABLE analytics._la28_latest AS
+SELECT DISTINCT ON (canonical_id, gender, discipline)
          canonical_id, gender, discipline,
          meet_year AS ly, tot AS last_tot, sdd AS last_dd, ehat AS last_ehat
-  FROM yearly ORDER BY canonical_id, gender, discipline, meet_year DESC
-),
-ageflag AS (
-  SELECT diver_id_dm::text AS canonical_id,
+  FROM analytics._la28_yearly ORDER BY canonical_id, gender, discipline, meet_year DESC""")
+sql("ANALYZE analytics._la28_latest")
+sql("DROP TABLE IF EXISTS analytics._la28_ageflag")
+sql("""CREATE TABLE analytics._la28_ageflag AS
+SELECT diver_id_dm::text AS canonical_id,
          (ARRAY_AGG(age_group ORDER BY year DESC))[1] AS latest_group,
          MAX(year) AS group_year
   FROM core.event_results
   WHERE age_group IN ('Group A','Group B','Group C','Group D')
-  GROUP BY 1
-),
-cat_year AS (
-  SELECT m.canonical_id, d.gender, d.discipline, d.meet_year,
+  GROUP BY 1""")
+sql("ANALYZE analytics._la28_ageflag")
+sql("DROP TABLE IF EXISTS analytics._la28_cat_year")
+sql("""CREATE TABLE analytics._la28_cat_year AS
+SELECT m.canonical_id, d.gender, d.discipline, d.meet_year,
          COALESCE(NULLIF(d.dive_category_code,''), LEFT(d.dive_number,1)) AS cat,
          AVG(LEAST(d.score/(3*d.dd),10)) AS ex
   FROM core.dive_sheets d
@@ -487,21 +496,25 @@ cat_year AS (
   WHERE d.discipline IN ('3m','Platform') AND d.gender IN ('Male','Female')
     AND d.dd > 0 AND d.score IS NOT NULL
     AND (d.optional_voluntary IS NULL OR d.optional_voluntary IN ('','O'))
-  GROUP BY 1,2,3,4,5 HAVING COUNT(*) >= 3
-),
-deltas AS (
-  SELECT a.canonical_id, a.gender, a.discipline, a.cat, a.ex - b.ex AS delta,
+  GROUP BY 1,2,3,4,5 HAVING COUNT(*) >= 3""")
+sql("ANALYZE analytics._la28_cat_year")
+sql("DROP TABLE IF EXISTS analytics._la28_deltas")
+sql("""CREATE TABLE analytics._la28_deltas AS
+SELECT a.canonical_id, a.gender, a.discipline, a.cat, a.ex - b.ex AS delta,
          ROW_NUMBER() OVER (PARTITION BY a.canonical_id, a.gender, a.discipline
                             ORDER BY a.meet_year DESC, (a.ex - b.ex) DESC) AS rn
-  FROM cat_year a
-  JOIN cat_year b ON b.canonical_id = a.canonical_id AND b.gender = a.gender
-    AND b.discipline = a.discipline AND b.cat = a.cat AND b.meet_year = a.meet_year - 1
-),
-grow AS (
-  SELECT canonical_id, gender, discipline, cat AS grow_cat,
+  FROM analytics._la28_cat_year a
+  JOIN analytics._la28_cat_year b ON b.canonical_id = a.canonical_id AND b.gender = a.gender
+    AND b.discipline = a.discipline AND b.cat = a.cat AND b.meet_year = a.meet_year - 1""")
+sql("ANALYZE analytics._la28_deltas")
+sql("DROP TABLE IF EXISTS analytics._la28_grow")
+sql("""CREATE TABLE analytics._la28_grow AS
+SELECT canonical_id, gender, discipline, cat AS grow_cat,
          ROUND(delta::numeric,2) AS grow_delta
-  FROM deltas WHERE rn = 1 AND delta > 0.05
-)
+  FROM analytics._la28_deltas WHERE rn = 1 AND delta > 0.05""")
+sql("ANALYZE analytics._la28_grow")
+sql("DROP TABLE IF EXISTS analytics.la28_watch")
+sql("""CREATE TABLE analytics.la28_watch AS
 SELECT a.canonical_id, dir.display_name, dir.nat, dir.team_name,
        a.gender, a.discipline, a.n_years, a.first_year, a.last_year,
        ROUND(a.ehat_slope::numeric, 4) AS ehat_slope, a.yearly,
@@ -509,13 +522,15 @@ SELECT a.canonical_id, dir.display_name, dir.nat, dir.team_name,
        ROUND(l.last_ehat::numeric,3) AS last_ehat,
        af.latest_group, af.group_year,
        g.grow_cat, g.grow_delta
-FROM agg a
-JOIN latest l USING (canonical_id, gender, discipline)
+FROM analytics._la28_agg a
+JOIN analytics._la28_latest l USING (canonical_id, gender, discipline)
 JOIN analytics.athlete_directory dir ON dir.canonical_id = a.canonical_id
-LEFT JOIN ageflag af ON af.canonical_id = a.canonical_id
-LEFT JOIN grow g ON g.canonical_id = a.canonical_id AND g.gender = a.gender AND g.discipline = a.discipline
+LEFT JOIN analytics._la28_ageflag af ON af.canonical_id = a.canonical_id
+LEFT JOIN analytics._la28_grow g ON g.canonical_id = a.canonical_id AND g.gender = a.gender AND g.discipline = a.discipline
 WHERE dir.families LIKE '%USA Diving%' AND COALESCE(NULLIF(dir.nat,''),'USA') = 'USA'""")
 sql("CREATE INDEX idx_la28 ON analytics.la28_watch (gender, discipline, last_year DESC)")
+for _t in ["lists","yearly","agg","latest","ageflag","cat_year","deltas","grow"]:
+    sql(f"DROP TABLE IF EXISTS analytics._la28_{_t}")
 log("la28 watch built")
 
 # ---------------------------------------------------------------- meta
