@@ -48,7 +48,22 @@ CORE_PHASE_COLS = PHASE_COLS
 CORE_DIVE_COLS = DIVE_COLS
 
 
-def build(db, only=None):
+def record(url, key, payload):
+    """Persist status/errors to app_meta.config -- the sandbox cannot read
+    GitHub Actions logs, so this is how a failed run reports what happened."""
+    try:
+        import psycopg2
+        c = psycopg2.connect(url)
+        cur = c.cursor()
+        cur.execute("""INSERT INTO app_meta.config (key, value) VALUES (%s, %s)
+                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+                    (key, payload[:60000]))
+        c.commit(); cur.close(); c.close()
+    except Exception as e:
+        print(f"could not record {key}: {e}", flush=True)
+
+
+def build(db, only=None, dive_sink=None):
     where = "WHERE results_done AND meet_name IS NOT NULL AND start_date IS NOT NULL"
     meets = db.query(f"""SELECT meet_id, meet_name, sanction, start_date
                          FROM divemeets.meets {where}
@@ -57,7 +72,10 @@ def build(db, only=None):
         meets = [m for m in meets if str(m["meet_id"]) in only]
     print(f"meets: {len(meets)}", flush=True)
 
-    phase_rows, dive_rows = [], []
+    phase_rows = []
+    dive_writer = csv.writer(dive_sink) if dive_sink else None
+    dive_count = 0
+    gen_sheets = set()
     for i, m in enumerate(meets, 1):
         mid = str(m["meet_id"])
         name = meetclass.normalize_name(m["meet_name"])
@@ -132,7 +150,9 @@ def build(db, only=None):
                 note = {"dropped": "Dropped from derived NCAA 5-category score because it is the "
                                    "lower-scoring dive of the repeated category.",
                         "included": "Included in derived NCAA 5-category score."}.get(incl, "")
-                dive_rows.append([
+                gen_sheets.add((mid, eid, rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
+                dive_count += 1
+                dive_writer.writerow([
                     mid, eid, rnd,
                     "" if d["profile_id"] is None else str(d["profile_id"]),
                     "" if d["sheet_key"] is None else str(d["sheet_key"]),
@@ -145,8 +165,8 @@ def build(db, only=None):
                     fam, grp, div, year, code, label, incl, note,
                 ])
         if i % 200 == 0:
-            print(f"  {i}/{len(meets)} phases={len(phase_rows)} dives={len(dive_rows)}", flush=True)
-    return phase_rows, dive_rows
+            print(f"  {i}/{len(meets)} phases={len(phase_rows)} dives={dive_count}", flush=True)
+    return phase_rows, dive_count, gen_sheets
 
 
 def load_seed_csv(name):
@@ -157,9 +177,8 @@ def load_seed_csv(name):
         return list(csv.DictReader(f))
 
 
-def merge(phase_rows, dive_rows):
+def merge(phase_rows, gen_sheets):
     seed_phases, seed_dives = load_seed_csv("criteria_phases.csv"), load_seed_csv("criteria_dives.csv")
-    gen_sheets = {dive_sheet_key(dict(zip(DIVE_COLS, r))) for r in dive_rows}
     gen_pkeys = {phase_key(dict(zip(PHASE_COLS, r))) for r in phase_rows}
 
     kept_dives = [[r.get(c, "") for c in DIVE_COLS] for r in seed_dives
@@ -186,21 +205,26 @@ def merge(phase_rows, dive_rows):
     kept_phases = [[r.get(c, "") for c in PHASE_COLS] for r in seed_phases
                    if phase_key(r) not in gen_pkeys]
     print(f"phases: {len(phase_rows)} crawl + {len(kept_phases)} kept ({restored} restored)")
-    print(f"dives:  {len(dive_rows)} crawl + {len(kept_dives)} kept "
+    print(f"dives:  kept {len(kept_dives)} from seed "
           f"({len(rescued)} sheets the crawl has not reached)")
-    return phase_rows + kept_phases, dive_rows + kept_dives
+    return phase_rows + kept_phases, kept_dives
 
 
-def copy_into(conn, table, cols, rows):
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    for r in rows:
-        w.writerow(["" if v is None else v for v in r])
-    buf.seek(0)
+def copy_into(conn, table, cols, rows=None, path=None, truncate=True):
     cur = conn.cursor()
-    cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
-    cur.copy_expert(
-        f"COPY {table} ({','.join(cols)}) FROM STDIN WITH (FORMAT csv, NULL '')", buf)
+    if truncate:
+        cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
+    sql = f"COPY {table} ({','.join(cols)}) FROM STDIN WITH (FORMAT csv, NULL '')"
+    if path:
+        with open(path, "r", encoding="utf-8") as f:
+            cur.copy_expert(sql, f)
+    else:
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        for r in rows:
+            w.writerow(["" if v is None else v for v in r])
+        buf.seek(0)
+        cur.copy_expert(sql, buf)
     conn.commit()
     cur.close()
 
@@ -213,16 +237,20 @@ def main():
     only = {x.strip() for x in args.only.split(",") if x.strip()} or None
 
     url = os.environ["DATABASE_URL"]
-    phase_rows, dive_rows = build(Neon(url), only)
-    phases, dives = merge(phase_rows, dive_rows)
+    dive_path = "/tmp/core_dives.csv"
+    with open(dive_path, "w", newline="", encoding="utf-8") as sink:
+        phase_rows, dive_count, gen_sheets = build(Neon(url), only, sink)
+    phases, kept_dives = merge(phase_rows, gen_sheets)
+    print(f"dives: {dive_count} crawl streamed to disk")
 
     if args.dry_run:
         print("dry run -- nothing written")
         return
     import psycopg2
     conn = psycopg2.connect(url)
-    copy_into(conn, "core.result_phases", CORE_PHASE_COLS, phases)
-    copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, dives)
+    copy_into(conn, "core.result_phases", CORE_PHASE_COLS, rows=phases)
+    copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, path=dive_path)
+    copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, rows=kept_dives, truncate=False)
     cur = conn.cursor()
     for t in ("core.result_phases", "core.dive_sheets"):
         cur.execute(f"SELECT COUNT(*) FROM {t}")
@@ -240,4 +268,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        tb = traceback.format_exc()
+        print(tb, flush=True)
+        record(os.environ.get("DATABASE_URL", ""), "core_load_last_error", tb)
+        raise
