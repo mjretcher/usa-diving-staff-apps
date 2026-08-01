@@ -43,6 +43,25 @@ from generate_seeds import (PHASE_COLS, DIVE_COLS, Neon, dec, clean_place,
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 SEED_DIR = os.path.join(REPO, "db", "seeds")
 
+# Columns declared NOT NULL in core.*. The crawl has 120 result rows with no
+# sheet_key at all (a placement with no dive sheet). Writing those as SQL NULL
+# fails the constraint, and would also defeat the unique index on
+# (meet_id, event_id, result_set_id, diver_id, sheet_key), since NULLs never
+# compare equal and so never deduplicate. They are written as empty strings.
+# That means COPY cannot use the default CSV convention of "empty field means
+# NULL", so an explicit \N marker is used instead.
+NOT_NULL_TEXT = {"meet_id", "event_id", "result_set_id", "sheet_key", "diver_id"}
+COPY_NULL = "\\N"
+
+
+def fmt_row(cols, row):
+    out = []
+    for c, v in zip(cols, row):
+        v = "" if v is None else str(v)
+        out.append(v if (v != "" or c in NOT_NULL_TEXT) else COPY_NULL)
+    return out
+
+
 # core.* column order, which differs from the CSV column order.
 CORE_PHASE_COLS = PHASE_COLS
 CORE_DIVE_COLS = DIVE_COLS
@@ -152,7 +171,7 @@ def build(db, only=None, dive_sink=None):
                         "included": "Included in derived NCAA 5-category score."}.get(incl, "")
                 gen_sheets.add((mid, eid, rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
                 dive_count += 1
-                dive_writer.writerow([
+                dive_writer.writerow(fmt_row(DIVE_COLS, [
                     mid, eid, rnd,
                     "" if d["profile_id"] is None else str(d["profile_id"]),
                     "" if d["sheet_key"] is None else str(d["sheet_key"]),
@@ -163,7 +182,7 @@ def build(db, only=None, dive_sink=None):
                     d["opt_vol"] or "", "", "", r["diver_name"] or "",
                     clean_team(r["team_name"]), title, gender, disc, stage,
                     fam, grp, div, year, code, label, incl, note,
-                ])
+                ]))
         if i % 200 == 0:
             print(f"  {i}/{len(meets)} phases={len(phase_rows)} dives={dive_count}", flush=True)
     return phase_rows, dive_count, gen_sheets
@@ -214,7 +233,8 @@ def copy_into(conn, table, cols, rows=None, path=None, truncate=True):
     cur = conn.cursor()
     if truncate:
         cur.execute(f"TRUNCATE {table} RESTART IDENTITY")
-    sql = f"COPY {table} ({','.join(cols)}) FROM STDIN WITH (FORMAT csv, NULL '')"
+    sql = (f"COPY {table} ({','.join(cols)}) FROM STDIN "
+           f"WITH (FORMAT csv, NULL '{COPY_NULL}')")
     if path:
         with open(path, "r", encoding="utf-8") as f:
             cur.copy_expert(sql, f)
@@ -222,7 +242,7 @@ def copy_into(conn, table, cols, rows=None, path=None, truncate=True):
         buf = io.StringIO()
         w = csv.writer(buf)
         for r in rows:
-            w.writerow(["" if v is None else v for v in r])
+            w.writerow(fmt_row(cols, r))
         buf.seek(0)
         cur.copy_expert(sql, buf)
     conn.commit()
