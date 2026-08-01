@@ -108,17 +108,32 @@ def age_group(title):
 _JO = re.compile(r"\bJ\.?\s*O\.?\b|\bjunior\b|\bage\s*group\b", re.I)
 
 
-def event_level(title, competition_group="", meet_name=""):
+def event_level(title, competition_group="", meet_name="", competition_family=""):
     """event_level tracks the MEET, not the event title: the identical title
     "16-18 Girls 1m J.O (Final)" is Junior at a Junior Region championship and
-    Other at an invitational. Verified against the seed."""
-    t = title or ""
-    g = competition_group or ""
-    n = meet_name or ""
-    if _HIGH_DIVING.search(t):
-        return "Other"
-    if re.search(r"\bjunior\b", g, re.I) or re.search(r"\bjunior\b", n, re.I):
+    Other at an invitational.
+
+    Senior synchro is normalised to Senior/Open. The stored seed value is
+    inconsistent -- "Synchronized Women 3m (Final)" is Other in meet 5337 and
+    Senior/Open in meet 11547, both USA Diving Nationals -- so there is no
+    value to reproduce, only one to choose. Senior/Open matches what the 2025
+    data does. Signed off by Mike, 2026-08-01.
+
+    Note the High Diving guard applies to age_group only, not here: the
+    "Junior High Diving National Championships" is genuinely a Junior meet.
+    """
+    from meetclass import SENIOR_CHAMPIONSHIP_GROUPS
+    t, g, n = title or "", competition_group or "", meet_name or ""
+    if competition_family in ("NCAA", "World Aquatics"):
+        return "Senior/Open"
+    if (re.search(r"\bjunior\b", g, re.I) or re.search(r"\bjunior\b", n, re.I)
+            or re.search(r"\bjunior\b", t, re.I)):
         return "Junior"
-    if _SENIOR.search(g) or _SENIOR.search(n) or _SENIOR.search(t):
+    senior_meet = g in SENIOR_CHAMPIONSHIP_GROUPS
+    if senior_meet and is_synchronized(t):
+        return "Senior/Open"
+    if _SENIOR.search(t):
+        return "Senior"
+    if senior_meet:
         return "Senior"
     return "Other"
