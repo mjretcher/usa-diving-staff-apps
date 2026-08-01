@@ -1253,7 +1253,7 @@ function renderLivePaceModal(){
 // printed heat sheet is handed out at the desk rather than posted online.
 function liveShareUrl(){
   if(!S.currentLibraryId)return null;
-  return location.href.replace(/\/[^\/]*(\?.*)?$/,'/')+'live-view.html?s='+encodeURIComponent(S.currentLibraryId);
+  return location.href.replace(/\/[^\/]*(\?.*)?$/,'/')+'live-view.html?v=202607312130&s='+encodeURIComponent(S.currentLibraryId);
 }
 function openShareLive(){
   const url=liveShareUrl();

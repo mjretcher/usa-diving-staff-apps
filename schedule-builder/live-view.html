@@ -128,7 +128,7 @@ header{background:var(--navy);color:#fff;padding:16px 14px calc(16px + env(safe-
   <div class="note">
     Times after the first block of the day are estimates based on how the meet is
     actually running. They move. Always come to the pool early.<br/>
-    Updates automatically every minute.
+    Updates on its own while the meet is running.
   </div>
 </div>
 
@@ -274,41 +274,123 @@ function evLabel(ev){
   return [ev.level, ev.gender, ev.apparatus, ev.style === 'Synchronized' ? 'Synchro' : ''].filter(Boolean).join(' ');
 }
 
-/* ── load ─────────────────────────────────────────────────────────────── */
-async function load(){
+/* ── load ─────────────────────────────────────────────────────────────────
+   COST NOTE, because this is the thing that makes this page expensive rather
+   than the rendering: Neon bills by how long the compute is AWAKE, and it only
+   scales to zero after five idle minutes. That timeout is fixed on this plan.
+   So the cost driver is WAKEUP FREQUENCY, multiplied by however many phones are
+   holding this page open — and this page is meant to be handed to hundreds of
+   people for eleven days.
+
+   Three things follow, and all three are implemented below:
+
+   1. The schedule and the run sheet are fetched SEPARATELY. The schedule is
+      21.7 KB and does not change during a session; the run sheet is 1.4 KB and
+      is the only thing that moves. Re-pulling both every minute — which is what
+      this did originally — was fifteen times the work for no new information.
+   2. Polling is GATED, not unconditional. A phone in a bag overnight, a laptop
+      left open on a finished day, or a tab in the background must not keep a
+      database awake. Each gate below is a real scenario, not a hypothetical.
+   3. Every client JITTERS its interval, so five hundred phones that all opened
+      the link when the session was announced do not arrive in the same second
+      and scale the compute up. */
+
+const POLL_MS      = 90000;   // base run-sheet poll while the meet is live
+const SCHED_MS     = 900000;  // schedule refresh — only for mid-meet edits
+const IDLE_STOP_MS = 1800000; // no interaction for 30 min: stop until touched
+const PRE_MEET_MIN = 60;      // start polling an hour before the first warm-up
+const POST_MEET_MIN= 30;      // keep going half an hour past the last finish
+
+let schedAt = 0, lastTouch = Date.now(), pollTimer = null, failures = 0;
+
+function touched(){
+  const wasIdle = Date.now() - lastTouch > IDLE_STOP_MS;
+  lastTouch = Date.now();
+  if(wasIdle) tick(true);      // coming back from idle: refresh immediately
+}
+['pointerdown','keydown','scroll','focus'].forEach(e =>
+  window.addEventListener(e, touched, {passive:true}));
+
+/* Should this client be polling at all right now? Every "no" here is a database
+   wakeup that never happens, multiplied by every phone holding the page. */
+function shouldPoll(){
+  if(document.hidden) return false;                       // background tab
+  if(Date.now() - lastTouch > IDLE_STOP_MS) return false; // page abandoned
+  if(!S || !DAY) return false;
+  const now = nowParts();
+  const day = (S.meet.days||[]).find(d=>d.id===DAY);
+  if(!day || day.date !== now.date) return false;         // not today: it's a published schedule, it can't move
+  // Outside the day's own competition window there is nothing live to learn.
+  const rows = (S.sessions||[]).filter(x=>x.dayId===DAY && !x.isPractice).map(sessTiming);
+  if(!rows.length) return false;
+  const first = Math.min.apply(null, rows.map(r=>r.warmupStartMinutes));
+  const last  = Math.max.apply(null, rows.map(r=>r.sessionEndMinutes));
+  return now.min >= first - PRE_MEET_MIN && now.min <= last + POST_MEET_MIN;
+}
+
+async function loadSchedule(){
+  const r = await nq(`SELECT data FROM schedule_builder.schedules WHERE id = $1`, [SCHED_ID]);
+  const rows = r.rows || [];
+  if(!rows.length) return false;
+  S = typeof rows[0][0] === 'string' ? JSON.parse(rows[0][0]) : rows[0][0];
+  TZ = (S.meet && S.meet.timezone) || TZ;
+  schedAt = Date.now();
+  if(!DAY){
+    const today = nowParts().date, days = (S.meet.days||[]);
+    DAY = (days.find(d=>d.date===today) || days[0] || {}).id;
+  }
+  return true;
+}
+
+/* The hot path. Deliberately touches ONE small row and nothing else. */
+async function loadRunSheet(){
+  const r = await nq(
+    `SELECT data, updated_at FROM schedule_builder.run_sheets WHERE schedule_id = $1`, [SCHED_ID]);
+  const rows = r.rows || [];
+  if(!rows.length){ LAST = null; return; }
+  const stamp = rows[0][1] ? String(rows[0][1]) : null;
+  if(stamp && stamp === LAST) return;        // nothing has moved; skip the re-render
+  const d = rows[0][0];
+  LIVE = d ? (typeof d === 'string' ? JSON.parse(d) : d) : {s:{},e:{},b:{}};
+  LIVE.s = LIVE.s || {}; LIVE.e = LIVE.e || {}; LIVE.b = LIVE.b || {};
+  LAST = stamp;
+}
+
+function fail(msg){
+  document.getElementById('body').innerHTML = `<div class="msg">${msg}</div>`;
+}
+
+async function tick(force){
   if(!SCHED_ID){
-    document.getElementById('body').innerHTML =
-      `<div class="msg">This link is missing its schedule. Ask whoever sent it for the full link.</div>`;
+    fail('This link is missing its schedule. Ask whoever sent it for the full link.');
     return;
   }
+  if(!force && !shouldPoll()){ schedule(); return; }
   try{
-    const r = await nq(
-      `SELECT s.data, r.data, r.updated_at
-         FROM schedule_builder.schedules s
-         LEFT JOIN schedule_builder.run_sheets r ON r.schedule_id = s.id
-        WHERE s.id = $1`, [SCHED_ID]);
-    const rows = r.rows || [];
-    if(!rows.length){
-      document.getElementById('body').innerHTML =
-        `<div class="msg">That schedule could not be found. It may have been renamed or removed.</div>`;
-      return;
+    if(!S || Date.now() - schedAt > SCHED_MS){
+      const ok = await loadSchedule();
+      if(!ok){ fail('That schedule could not be found. It may have been renamed or removed.'); return; }
     }
-    S = typeof rows[0][0] === 'string' ? JSON.parse(rows[0][0]) : rows[0][0];
-    const rs = rows[0][1];
-    LIVE = rs ? (typeof rs === 'string' ? JSON.parse(rs) : rs) : {s:{},e:{},b:{}};
-    LIVE.s = LIVE.s || {}; LIVE.e = LIVE.e || {}; LIVE.b = LIVE.b || {};
-    LAST = rows[0][2] ? String(rows[0][2]) : null;
-    TZ = (S.meet && S.meet.timezone) || TZ;
-    if(!DAY){
-      const today = nowParts().date;
-      const days = (S.meet.days||[]);
-      DAY = (days.find(d=>d.date===today) || days[0] || {}).id;
-    }
+    await loadRunSheet();
+    failures = 0;
     render();
   }catch(e){
-    document.getElementById('body').innerHTML =
-      `<div class="msg">Couldn't load the schedule just now. It will keep trying — or pull down to refresh.</div>`;
+    failures++;
+    // Back off on repeated failure rather than hammering a database that is
+    // already unhappy. If we have never loaded anything, say so; if we have,
+    // leave the last good render on screen — stale times beat a blank page.
+    if(!S) fail("Couldn't load the schedule just now. It will keep trying.");
   }
+  schedule();
+}
+
+function schedule(){
+  clearTimeout(pollTimer);
+  // Jitter ±20% so clients that all opened the link at once drift apart instead
+  // of arriving together and scaling the compute up.
+  const base = failures ? Math.min(POLL_MS * Math.pow(2, failures), 600000) : POLL_MS;
+  const wait = Math.round(base * (0.8 + Math.random() * 0.4));
+  pollTimer = setTimeout(()=>tick(), wait);
 }
 
 /* ── render ───────────────────────────────────────────────────────────── */
@@ -403,12 +485,13 @@ function card(r){
     ${evs ? `<div class="evs">${evs}</div>` : ''}
   </div>`;
 }
-function pick(id){ DAY = id; render(); }
+function pick(id){ DAY = id; render(); touched(); }
 
-load();
-setInterval(load, 60000);          // fresh actuals
-setInterval(()=>{ if(S) render(); }, 30000);   // keep "in N min" honest between loads
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) load(); });
+tick(true);
+// Re-render locally so "in N min" stays honest between polls. This is free —
+// it recomputes from data already in memory and never touches the network.
+setInterval(()=>{ if(S) render(); }, 30000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) touched(); });
 </script>
 </body>
 </html>
