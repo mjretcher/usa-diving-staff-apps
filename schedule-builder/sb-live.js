@@ -214,6 +214,13 @@ function liveResetDay(){
 function liveProject(dayId,opts){
   const now=liveNowMin();
   const isToday=liveIsToday(dayId)&&!(opts&&opts.ignoreClock);
+  // Pace staleness is about "is this mark still describing what is happening",
+  // which only means anything while the day is actually running. Reviewing
+  // yesterday, or approving a day with ignoreClock set, the marks are simply the
+  // record of what happened and the wall clock must not age them out — that read
+  // the real clock against a schedule-minute timestamp and silently discarded
+  // every mark on any day but today.
+  const paceNow=liveIsToday(dayId)?now:null;
   const day=(S.meet.days||[]).find(d=>d.id===dayId);
   const all=(typeof timedForDay==='function'?timedForDay(dayId):[]).slice()
     .sort((a,b)=>a.timing.warmupStartMinutes-b.timing.warmupStartMinutes);
@@ -293,7 +300,7 @@ function liveProject(dayId,opts){
           projStart:bst,projEnd:ben,status:bstatus,
           delta:bstatus==='done'?(br.en-ev.eventEndMinutes):(bst-ev.eventStartMinutes)};
       }):null;
-      let est,een,estatus;
+      let est,een,estatus,paceInfo=null;
       if(er.en!=null){estatus='done';est=er.st!=null?er.st:ev.eventStartMinutes+shift;een=er.en;}
       else if(er.st!=null){
         estatus='running';est=er.st;
@@ -304,11 +311,16 @@ function liveProject(dayId,opts){
         een=est+evDur;
         // A split event is off the boards when its LAST board is off.
         if(boards)een=Math.max.apply(null,boards.map(b=>b.projEnd));
+        // A pace mark beats the planned length: it is measured from this event's
+        // own dives, on this day, with these judges. Only overrides when the mark
+        // is fresh and substantial enough to mean something (see livePaceRate).
+        paceInfo=livePaceRate(ev,est,paceNow);
+        if(paceInfo)een=paceInfo.projEnd;
         if(isToday&&now>een&&now<=een+90)een=now;}
       else{estatus='todo';est=ev.eventStartMinutes+shift;een=ev.eventEndMinutes+shift;}
       return{id:ev.id,name:(typeof evName==='function'?evName(ev):''),
         plannedStart:ev.eventStartMinutes,plannedEnd:ev.eventEndMinutes,
-        projStart:est,projEnd:een,status:estatus,split:split,boards:boards,
+        projStart:est,projEnd:een,status:estatus,split:split,boards:boards,pace:paceInfo,ev:ev,
         delta:estatus==='done'?(er.en-ev.eventEndMinutes):(est-ev.eventStartMinutes)};
     });
 
@@ -367,6 +379,90 @@ function liveRecoverable(rows){
              .reduce((a,r)=>a+Number(r.sess.bufferMinutes||0),0);
 }
 
+// ══ PACE ══════════════════════════════════════════════════════════════════
+// Until now a running event's projected finish was its own start plus its own
+// PLANNED length — a number that cannot move until someone taps End. Twenty-five
+// divers into a thirty-nine diver round running twenty percent slow, the strip
+// still said "on time", then jumped half an hour the moment the round closed.
+// The run sheet could only ever report the past.
+//
+// A pace mark fixes that with one number: how far through the event we are.
+// Progress is counted in DIVE SLOTS (round R, diver N of the field = (R-1)*field
+// + N) because that is the unit the event's own duration is built from, so the
+// arithmetic is the same arithmetic calcEvDur already uses — no second model of
+// how long diving takes, and no way for the two to disagree.
+//
+//   rate  = minutes elapsed ÷ slots done
+//   left  = (total slots − slots done) × rate
+//
+// Stored on the event's live record as p:{d,of,at} — at is the clock time the
+// mark was taken, so a stale mark can be aged out rather than quietly steering
+// the day. Nothing here writes to the plan; this is still a read-only module.
+const PACE_MIN_SLOTS=3;      // below this the rate is noise, not a signal
+const PACE_STALE_MIN=45;     // a mark older than this stops driving the projection
+
+// Pace is OFF unless explicitly switched on. It changes the numbers people steer
+// the day by, so it does not arrive mid-meet as a surprise.
+function livePaceOn(){return !!liveState().pace}
+function livePaceToggle(){
+  liveWrite(l=>{l.pace=!l.pace},
+    liveState().pace?'Live pace on — running events now project from their real rate'
+                    :'Live pace off — running events project from their planned length');
+}
+// Total dive slots in an event: field × dives each. Split boards run half the
+// field each concurrently, but a slot is still a slot — the event's own duration
+// already accounts for the halving, so slots stay whole-field and the rate
+// naturally comes out per-board-pair.
+function paceSlots(ev){
+  const divers=(typeof entryValue==='function')?Math.max(0,entryValue(ev)):0;
+  const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
+  return divers*dives;
+}
+function livePace(evId){return (liveState().e[evId]||{}).p||null}
+function liveSetPace(sessId,evId,round,diver){
+  const sess=(S.sessions||[]).find(x=>x.id===sessId);
+  const ev=sess&&(sess.events||[]).find(e=>e.id===evId);
+  if(!ev)return;
+  const divers=(typeof entryValue==='function')?Math.max(0,entryValue(ev)):0;
+  const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
+  const r=Math.max(1,Math.min(dives||1,Math.round(Number(round)||1)));
+  const n=Math.max(0,Math.min(divers,Math.round(Number(diver)||0)));
+  const done=(r-1)*divers+n;
+  const total=paceSlots(ev);
+  liveWrite(l=>{
+    if(!l.e[evId])l.e[evId]={};
+    l.e[evId].p={d:done,of:total,r:r,n:n,at:liveNowMin()};
+  },`Round ${r}, diver ${n} of ${divers} — ${done} of ${total} dives done`);
+}
+function liveClearPace(evId){
+  liveWrite(l=>{if(l.e[evId])delete l.e[evId].p;},'Pace mark cleared');
+}
+// The measured rate for a running event, or null when there isn't enough to say.
+// Deliberately conservative: too few slots, a stale mark, a mark taken before the
+// event started, or a nonsense rate all return null and the caller falls back to
+// the planned length. A projection nobody can check is worse than no projection.
+function livePaceRate(ev,startMin,nowMin){
+  if(!livePaceOn())return null;
+  const p=livePace(ev.id);
+  if(!p||startMin==null)return null;
+  if(!(p.d>=PACE_MIN_SLOTS)||!(p.of>0)||p.d>p.of)return null;
+  if(p.at==null||p.at<startMin)return null;
+  if(nowMin!=null&&nowMin-p.at>PACE_STALE_MIN)return null;
+  const elapsed=p.at-startMin;
+  if(!(elapsed>0))return null;
+  const rate=elapsed/p.d;                    // minutes per dive slot
+  if(!isFinite(rate)||rate<=0||rate>10)return null;   // 10 min/dive is not diving
+  const planned=(typeof calcEvDur==='function')?calcEvDur(ev).evMin:null;
+  const plannedRate=(planned&&p.of)?planned/p.of:null;
+  return{
+    rate,plannedRate,done:p.d,of:p.of,at:p.at,round:p.r,diver:p.n,
+    // Projected finish = when the mark was taken + what is left at the measured rate.
+    projEnd:Math.round(p.at+(p.of-p.d)*rate),
+    // How much slower/faster than plan, in seconds per dive — the unit an
+    // announcer or referee can actually act on.
+    secPerDive:plannedRate!=null?Math.round((rate-plannedRate)*60):null
+  };
+}
 // ── the strip ────────────────────────────────────────────────────────────
 function liveStrip(){
   if(!liveOn())return'';
@@ -429,7 +525,10 @@ function liveStripTools(){
   const pending=(typeof liveApproveChanges==='function')?liveApproveChanges(UI.dayId).length:0;
   return`<div class="lv-tools">
     <button class="lv-tool primary live-ctl" onclick="openLiveApprove()" title="Update the published start times on this day to match what actually happened. Shows you every change first.">Approve times${pending?` \u00b7 ${pending}`:''}</button>
+    ${typeof openRecovery==='function'?`<button class="lv-tool live-ctl" onclick="openRecovery()" title="What can actually be done about the delay \u2014 the levers, what each buys, and what each costs. Suggestions only.">Recovery options</button>`:''}
+    ${typeof livePaceToggle==='function'?`<button class="lv-tool live-ctl${livePaceOn()?' on':''}" onclick="livePaceToggle()" title="${livePaceOn()?'Running events are projecting from the rate they are actually diving at. Tap to go back to planned lengths.':'Project running events from the rate they are actually diving at, instead of their planned length. Needs a \u201cWhere are we?\u201d mark on the event.'}">Live pace ${livePaceOn()?'on':'off'}</button>`:''}
     <button class="lv-tool live-ctl" onclick="liveResetDay()" title="Clear every actual time recorded for this day. The plan is untouched.">Clear day</button>
+    ${S.currentLibraryId?`<button class="lv-tool live-ctl" onclick="openShareLive()" title="A read-only link anyone can open on a phone \u2014 coaches, officials, families. Shows the same live times you are looking at, and nothing they could change.">Share live times</button>`:''}
     <button class="lv-tool live-ctl" onclick="liveToggle()" title="Turn the run sheet off and show planned times only">Turn off</button>
   </div>`;
 }
@@ -538,9 +637,17 @@ function liveEvCtl(sess,ev){
     </span>`;
   }
   if(r.st!=null){
+    const pace=pr&&pr.pace;
+    const slots=paceSlots(ev);
+    // The pace control only appears once the event is running and only when the
+    // event actually has countable dives — a custom block has nothing to be a
+    // fraction of.
+    const paceBtn=(livePaceOn()&&slots>0)?`<button class="lv-pace-set live-ctl" onclick="event.stopPropagation();openLivePace('${sess.id}','${ev.id}')" title="Where are we in this event? One tap keeps the finish time honest while the round is still running.">${pace?`R${pace.round} \u00b7 ${pace.done}/${pace.of}`:'Where are we?'}</button>`:'';
+    const paceChip=pace?`<span class="lv-pace-chip ${pace.secPerDive>4?'slow':pace.secPerDive<-4?'fast':'ok'}" title="Measured from ${pace.done} dives actually completed, not from the planned length. ${pace.secPerDive>0?pace.secPerDive+' seconds per dive slower than planned':pace.secPerDive<0?Math.abs(pace.secPerDive)+' seconds per dive faster than planned':'running at the planned rate'}.">${pace.secPerDive>0?'+':''}${pace.secPerDive}s/dive</span>`:'';
     return`<span class="lv-ev run live-ctl" onclick="event.stopPropagation()">
       <button class="lv-ev-t lv-ev-edit live-ctl" ${edit('Started at '+f12(r.st)+' \u2014 tap to correct it by hand')}>on since ${f12(r.st)}${r.stM?' \u00b7 by hand':''}</button>
-      ${pr?`<span class="lv-ev-proj" title="Projected finish for this event, from its own start time and its own planned length">\u2192 ${f12(pr.projEnd)}</span>`:''}
+      ${pr?`<span class="lv-ev-proj${pace?' from-pace':''}" title="${pace?'Projected from the rate this event is actually running at':'Projected finish for this event, from its own start time and its own planned length'}">\u2192 ${f12(pr.projEnd)}</span>`:''}
+      ${paceChip}${paceBtn}
       <button class="lv-xbtn end live-ctl" onclick="event.stopPropagation();liveEndEv('${ev.id}')" title="Mark this event finished now">End</button>
     </span>`;
   }
@@ -1084,4 +1191,82 @@ function liveBoot(){
 if(typeof window!=='undefined'){
   if(document.readyState==='complete'||document.readyState==='interactive')liveBoot();
   else window.addEventListener('DOMContentLoaded',liveBoot);
+}
+
+// ── "Where are we?" — the one-tap pace mark ────────────────────────────────
+// Two numbers, both of which the referee's table already has on a board in front
+// of them: which round, and which diver in the order. Everything else is derived.
+function openLivePace(sessId,evId){
+  UI.modal='live-pace';UI.paceSess=sessId;UI.paceEv=evId;render();
+}
+function closeLivePace(){UI.modal=null;UI.paceSess=null;UI.paceEv=null;render();}
+function submitLivePace(){
+  const r=document.getElementById('lp-round'),n=document.getElementById('lp-diver');
+  if(!r||!n)return;
+  liveSetPace(UI.paceSess,UI.paceEv,r.value,n.value);
+  closeLivePace();
+}
+function renderLivePaceModal(){
+  const sess=(S.sessions||[]).find(x=>x.id===UI.paceSess);
+  const ev=sess&&(sess.events||[]).find(e=>e.id===UI.paceEv);
+  if(!ev)return'';
+  const divers=(typeof entryValue==='function')?Math.max(0,entryValue(ev)):0;
+  const dives=Math.max(0,Number(ev.numberOfDives||ev.defaultDives||0));
+  const p=livePace(ev.id)||{};
+  const row=liveProject(sess.dayId).find(x=>x.sess.id===sess.id);
+  const pr=row&&row.events.find(x=>x.id===ev.id);
+  const pace=pr&&pr.pace;
+  const plannedEnd=pr?pr.plannedEnd:null;
+  return`<div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head"><div><span class="modal-title">Where are we in ${esc(evName(ev))}?</span>
+      <div class="modal-sub">${divers} divers \u00b7 ${dives} dives each. Tell it the round and the diver, and it works out the real finish time from the rate this event is actually running at.</div></div>
+      <button class="modal-close" onclick="closeLivePace()">&times;</button></div>
+    <div class="modal-body">
+      <div class="lp-grid">
+        <label class="lp-f"><span>Round now diving</span>
+          <input id="lp-round" type="number" inputmode="numeric" min="1" max="${dives||1}" value="${p.r||1}"/>
+          <em>of ${dives}</em></label>
+        <label class="lp-f"><span>Diver in the order</span>
+          <input id="lp-diver" type="number" inputmode="numeric" min="0" max="${divers}" value="${p.n||0}"/>
+          <em>of ${divers}</em></label>
+      </div>
+      ${pace?`<div class="lp-now">
+        <div><b>Right now:</b> ${pace.done} of ${pace.of} dives done, measured over ${Math.max(0,Math.round(pace.at-(pr.projStart||pace.at)))} min.</div>
+        <div>Running <b>${pace.secPerDive>0?pace.secPerDive+'s per dive slower':pace.secPerDive<0?Math.abs(pace.secPerDive)+'s per dive faster':'exactly at the planned rate'}</b> than planned \u2014 finishing about <b>${f12(pace.projEnd)}</b>${plannedEnd!=null?` instead of ${f12(plannedEnd)}`:''}.</div>
+      </div>`:`<div class="lt-help">Nothing recorded yet for this event. The first mark needs at least ${PACE_MIN_SLOTS} dives completed before it will move the projection \u2014 below that the rate is noise.</div>`}
+      <div class="lt-help" style="margin-top:10px">This never changes your published schedule. It only changes what the run sheet expects, and it stops driving the projection after ${PACE_STALE_MIN} minutes so an old mark can't quietly steer the day.</div>
+    </div>
+    <div class="modal-foot">
+      ${livePace(ev.id)?`<button class="btn btn-sm btn-gh" onclick="liveClearPace('${ev.id}');closeLivePace()">Clear mark</button>`:''}
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-gh" onclick="closeLivePace()">Cancel</button>
+      <button class="btn btn-p" onclick="submitLivePace()">Save</button>
+    </div>
+  </div>`;
+}
+
+// ── The public read-only link ─────────────────────────────────────────────
+// live-view.html reads the saved schedule and the run sheet and renders the same
+// projection this module produces. It has no write path, so handing the link out
+// cannot cost you anything except the schedule becoming visible — which at a
+// public meet it already is. It shows no athlete names for the same reason the
+// printed heat sheet is handed out at the desk rather than posted online.
+function liveShareUrl(){
+  if(!S.currentLibraryId)return null;
+  return location.href.replace(/\/[^\/]*(\?.*)?$/,'/')+'live-view.html?s='+encodeURIComponent(S.currentLibraryId);
+}
+function openShareLive(){
+  const url=liveShareUrl();
+  if(!url){toast('Save this schedule to the library first \u2014 the link points at the saved copy');return;}
+  askConfirm({
+    title:'Share live times',
+    message:'Anyone with this link sees the same live start times you do, updating on its own every minute. '+
+            'They cannot change anything, and no athlete names are shown.\n\n'+url,
+    confirmText:'Copy link',
+    onConfirm:()=>{
+      const done=()=>toast('Link copied \u2014 paste it wherever coaches and families will see it',6000);
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).then(done).catch(()=>window.prompt('Copy this link:',url));
+      else window.prompt('Copy this link:',url);
+    }
+  });
 }

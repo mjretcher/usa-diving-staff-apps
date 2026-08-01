@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Live schedule — USA Diving</title>
+<!--
+  PUBLIC LIVE VIEW — read-only, phone-shaped, one question answered.
+
+  Everyone who is not holding the operator's tablet wants the same thing: when
+  does my event actually start. Today the only way to get it is to interrupt the
+  person running the meet. This page answers it for everybody at once.
+
+  It is deliberately READ-ONLY. It has no Start button, no Finish button, no way
+  to record or correct anything, and it never writes to Neon. It reads the saved
+  schedule and the run sheet and renders the same projection the operator sees.
+
+  It also shows NO ATHLETE NAMES. Session and event times at a public meet are
+  public; a searchable list of which child is on which board at which minute is
+  a different thing, and this page is handed around by link.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --navy:#171F69; --red:#E31937; --pool:#009AC7; --sky:#8FC3EA;
+  --bg:#F4F6FA; --surf:#fff; --bd:#E2E6EF; --tx:#1B2233; --tx2:#4A5468; --tx3:#8A93A6;
+  --ok:#0F8A5F; --warn:#B45309;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.45;
+  padding-bottom:env(safe-area-inset-bottom)}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px 40px}
+
+header{background:var(--navy);color:#fff;padding:16px 14px calc(16px + env(safe-area-inset-top));
+  padding-top:calc(16px + env(safe-area-inset-top))}
+.hd-in{max-width:640px;margin:0 auto}
+.meet{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:25px;
+  line-height:1.1;letter-spacing:.01em;text-transform:uppercase}
+.venue{font-size:12.5px;color:var(--sky);margin-top:3px}
+.asof{font-size:11px;color:rgba(255,255,255,.62);margin-top:9px;display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;flex:none}
+.dot.stale{background:#FBBF24}
+
+.days{display:flex;gap:7px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.day{flex:none;border:1px solid var(--bd);background:var(--surf);border-radius:9px;
+  padding:7px 13px;font-size:13px;font-weight:600;color:var(--tx2);cursor:pointer;white-space:nowrap}
+.day.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.day.today::after{content:'Today';display:block;font-size:9px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--pool);margin-top:1px}
+.day.on.today::after{color:var(--sky)}
+
+.status{background:var(--surf);border:1px solid var(--bd);border-radius:13px;
+  padding:14px;margin:8px 0 14px}
+.status.late{border-color:#FCA5A5;background:#FEF5F5}
+.status.ok{border-color:#A7E8CD;background:#F3FCF8}
+.st-k{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3)}
+.st-v{font-size:19px;font-weight:700;margin-top:3px;font-family:'Barlow Condensed',sans-serif;
+  letter-spacing:.01em;text-transform:uppercase}
+.st-m{font-size:13px;color:var(--tx2);margin-top:4px}
+
+.sess{background:var(--surf);border:1px solid var(--bd);border-radius:13px;
+  margin-bottom:11px;overflow:hidden}
+.sess.now{border-color:var(--pool);box-shadow:0 0 0 3px rgba(0,154,199,.12)}
+.sess.done{opacity:.62}
+.sess-hd{padding:12px 14px;display:flex;gap:11px;align-items:flex-start}
+.sess-main{flex:1;min-width:0}
+.sess-n{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;
+  text-transform:uppercase;letter-spacing:.01em}
+.sess-evs{font-size:12.5px;color:var(--tx2);margin-top:2px}
+.sess-t{text-align:right;flex:none}
+.t-now{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15.5px;white-space:nowrap}
+.t-was{font-size:11px;color:var(--tx3);text-decoration:line-through;margin-top:1px;
+  font-family:'JetBrains Mono',monospace}
+.pill{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-right:5px;vertical-align:2px}
+.pill.prelim{background:#E7F6EE;color:var(--ok)}
+.pill.final{background:#FDECEF;color:var(--red)}
+.pill.qual{background:#EAF1FB;color:var(--navy)}
+.chip{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+  padding:2px 7px;border-radius:5px;margin-top:4px}
+.chip.late{background:#FDECEF;color:var(--red)}
+.chip.early{background:#E7F6EE;color:var(--ok)}
+.chip.ontime{background:#F0F2F6;color:var(--tx3)}
+.chip.running{background:#E5F6FB;color:var(--pool)}
+.evs{border-top:1px solid var(--bd);padding:4px 14px 10px}
+.ev{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:13.5px;
+  border-bottom:1px solid #F1F3F7}
+.ev:last-child{border-bottom:none}
+.ev-n{color:var(--tx);min-width:0}
+.ev-t{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--tx2);
+  white-space:nowrap;flex:none}
+.ev.done .ev-n,.ev.done .ev-t{color:var(--tx3)}
+
+.note{font-size:11.5px;color:var(--tx3);text-align:center;margin:20px 0 6px;line-height:1.5}
+.msg{background:var(--surf);border:1px solid var(--bd);border-radius:13px;padding:26px 18px;
+  text-align:center;color:var(--tx2);font-size:14px;margin-top:14px}
+.spin{width:22px;height:22px;border:2.5px solid var(--bd);border-top-color:var(--pool);
+  border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0E1220;--surf:#171C2E;--bd:#28304A;--tx:#EDF0F7;--tx2:#A8B2C8;--tx3:#6E7996}
+  .status.late{background:#2A1A20;border-color:#7F2436}
+  .status.ok{background:#132A22;border-color:#1E6347}
+  .ev{border-bottom-color:#212942}
+  .pill.prelim{background:#12331F;color:#57D896}
+  .pill.final{background:#331520;color:#FF8095}
+  .pill.qual{background:#161F3D;color:var(--sky)}
+  .chip.late{background:#331520;color:#FF8095}
+  .chip.early{background:#12331F;color:#57D896}
+  .chip.ontime{background:#212942;color:var(--tx3)}
+  .chip.running{background:#0C2C39;color:#4DC4E6}
+}
+</style>
+</head>
+<body>
+<header><div class="hd-in">
+  <div class="meet" id="meet">Live schedule</div>
+  <div class="venue" id="venue"></div>
+  <div class="asof" id="asof"><span class="dot"></span><span id="asof-t">Loading…</span></div>
+</div></header>
+<div class="wrap">
+  <div class="days" id="days"></div>
+  <div id="body"><div class="msg"><div class="spin"></div>Loading the schedule…</div></div>
+  <div class="note">
+    Times after the first block of the day are estimates based on how the meet is
+    actually running. They move. Always come to the pool early.<br/>
+    Updates automatically every minute.
+  </div>
+</div>
+
+<script src="../data/config.js"></script>
+<script>
+/* ── read-only Neon access ────────────────────────────────────────────────
+   Same scoped usad_app role the staff apps use. This page only ever SELECTs;
+   there is no write path in this file at all. */
+const CFG = window.USAD_CONFIG || {};
+async function nq(sql, params){
+  const r = await fetch(CFG.neon.sqlEndpoint, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Neon-Connection-String':CFG.neon.connectionString,
+             'Neon-Raw-Text-Output':'false','Neon-Array-Mode':'true'},
+    body: JSON.stringify({query:sql, params:params||[]})
+  });
+  if(!r.ok) throw new Error('db ' + r.status);
+  return r.json();
+}
+
+const qs = new URLSearchParams(location.search);
+const SCHED_ID = qs.get('s') || '';
+let S = null, LIVE = {s:{},e:{},b:{}}, DAY = null, TZ = 'America/New_York', LAST = null;
+
+/* ── time helpers (mirrors of the app's, kept tiny) ───────────────────── */
+const pad = n => String(n).padStart(2,'0');
+function f12(m){
+  if(m==null) return '—';
+  m = ((Math.round(m)%1440)+1440)%1440;
+  const h=Math.floor(m/60), mi=m%60, ap=h>=12?'PM':'AM', h12=h%12===0?12:h%12;
+  return h12+':'+pad(mi)+' '+ap;
+}
+function nowParts(){
+  const f = new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour12:false,
+    year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const p = {}; f.formatToParts(new Date()).forEach(x=>p[x.type]=x.value);
+  return { date:`${p.year}-${p.month}-${p.day}`, min:Number(p.hour)*60+Number(p.minute) };
+}
+function shortDate(d){
+  if(!d) return '';
+  const [y,m,dd] = d.split('-').map(Number);
+  return new Date(y, m-1, dd).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ── duration + timing, matching the builder's model ──────────────────── */
+function ru(v,step){ step=Number(step)||1; return Math.ceil(v/step)*step; }
+function entryVal(ev){
+  const f = ev.finalDivers, p = ev.projectedDivers;
+  const base = (f!=null && f!=='') ? Number(f) : (p!=null && p!=='') ? Number(p) : Number(ev.numberOfDivers||0);
+  const adv = Number(ev.advanceIn||0) || 0;
+  return Math.max(0, (base||0) + adv);
+}
+function evDur(ev){
+  if(Number(ev.customDurationMinutes||0) > 0) return Number(ev.customDurationMinutes);
+  const divers = Math.max(0, entryVal(ev));
+  const dives  = Math.max(0, Number(ev.numberOfDives||ev.defaultDives||0));
+  const spd    = Math.max(0, Number(ev.secondsPerDive||ev.defaultSpd||35));
+  const raw = (divers*dives*spd)/60;
+  const isPlat = /platform|10-?meter|10m/i.test(ev.apparatus||'');
+  const split = Boolean(ev.manualSplit) && !isPlat;
+  const panels = split ? Number(ev.numberOfPanelChanges||0)*Number(ev.minutesPerPanelChange||2.5) : 0;
+  return (split ? raw/2 : raw) + panels;
+}
+function sessTiming(sess){
+  const start = Number(sess.warmupStartMinutes)||0;
+  const round = Number(sess.rounding)||1;
+  const evStart = ru(start + Number(sess.warmupMinutes||0) + Number(sess.introMinutes||0), round);
+  let longest = 0;
+  const events = (sess.events||[]).map(ev=>{
+    const d = evDur(ev);
+    if(d > longest) longest = d;
+    return { ...ev, eventStartMinutes: evStart, eventEndMinutes: ru(evStart + d, round) };
+  });
+  return { warmupStartMinutes:start, eventStartMinutes:evStart,
+           sessionEndMinutes: events.length ? ru(evStart + longest, round) : evStart, events };
+}
+
+/* ── the projection: the same shift model the operator sees ───────────── */
+function project(dayId){
+  const now = nowParts();
+  const isToday = DAY === now.date;
+  const all = (S.sessions||[]).filter(s=>s.dayId===dayId)
+    .map(s=>({ sess:s, t:sessTiming(s) }))
+    .sort((a,b)=>a.t.warmupStartMinutes - b.t.warmupStartMinutes);
+  const out = []; let cursor = null, seenActual = false;
+  all.forEach(({sess,t})=>{
+    const rec = LIVE.s[sess.id] || {};
+    const pStart = t.warmupStartMinutes, pEnd = t.sessionEndMinutes;
+    const pComp = t.eventStartMinutes != null ? t.eventStartMinutes : pStart;
+    const dur = Math.max(0, pEnd - pStart);
+    let status, projStart, projEnd, shift;
+    if(rec.st != null || rec.en != null) seenActual = true;
+    if(rec.en != null){
+      status='done';
+      projStart = rec.st != null ? (pStart + (rec.st - pComp)) : pStart;
+      projEnd = rec.en; shift = rec.en - pEnd;
+    } else if(rec.st != null){
+      status='running';
+      shift = rec.st - pComp;
+      projStart = pStart + shift; projEnd = pEnd + shift;
+    } else {
+      status='todo';
+      const inherited = (seenActual && cursor != null) ? Math.max(pStart, cursor) : pStart;
+      projStart = inherited; shift = projStart - pStart; projEnd = projStart + dur;
+    }
+    // Per-event, each from its own start — two boards twenty minutes apart have
+    // to be able to report finishing twenty minutes apart.
+    const evs = (t.events||[]).map(ev=>{
+      const er = LIVE.e[ev.id] || {};
+      const d = Math.max(0, ev.eventEndMinutes - ev.eventStartMinutes);
+      let es, ee, st2;
+      if(er.en != null){ st2='done'; es = er.st != null ? er.st : ev.eventStartMinutes + shift; ee = er.en; }
+      else if(er.st != null){
+        st2='running'; es = er.st; ee = es + d;
+        const p = er.p;   // pace mark, if the operator has set one
+        if(p && p.d >= 3 && p.of > 0 && p.at != null && p.at > es && (p.of - p.d) >= 0){
+          const rate = (p.at - es) / p.d;
+          if(isFinite(rate) && rate > 0 && rate <= 10) ee = Math.round(p.at + (p.of - p.d) * rate);
+        }
+        if(isToday && now.min > ee && now.min <= ee + 90) ee = now.min;
+      }
+      else { st2='todo'; es = ev.eventStartMinutes + shift; ee = ev.eventEndMinutes + shift; }
+      return { name: evLabel(ev), round: ev.round, projStart:es, projEnd:ee, status:st2,
+               plannedStart: ev.eventStartMinutes };
+    });
+    if(status==='running' && evs.length){
+      const latest = Math.max.apply(null, evs.map(e=>e.projEnd));
+      const plannedLast = Math.max.apply(null, (t.events||[]).map(e=>e.eventEndMinutes));
+      const tail = Math.max(0, pEnd - plannedLast);
+      projEnd = Math.max(projEnd, latest + tail);
+      if(isToday && now.min > projEnd && now.min <= projEnd + 90) projEnd = now.min;
+    }
+    if(!sess.isPractice) cursor = projEnd;
+    const projComp = projStart + (pComp - pStart);
+    out.push({ sess, t, status, shift, projStart, projEnd, projComp,
+               plannedStart:pStart, plannedComp:pComp, plannedEnd:pEnd, events:evs });
+  });
+  return out;
+}
+function evLabel(ev){
+  if(ev.style === 'Custom Block') return ev.customLabel || 'Block';
+  return [ev.level, ev.gender, ev.apparatus, ev.style === 'Synchronized' ? 'Synchro' : ''].filter(Boolean).join(' ');
+}
+
+/* ── load ─────────────────────────────────────────────────────────────── */
+async function load(){
+  if(!SCHED_ID){
+    document.getElementById('body').innerHTML =
+      `<div class="msg">This link is missing its schedule. Ask whoever sent it for the full link.</div>`;
+    return;
+  }
+  try{
+    const r = await nq(
+      `SELECT s.data, r.data, r.updated_at
+         FROM schedule_builder.schedules s
+         LEFT JOIN schedule_builder.run_sheets r ON r.schedule_id = s.id
+        WHERE s.id = $1`, [SCHED_ID]);
+    const rows = r.rows || [];
+    if(!rows.length){
+      document.getElementById('body').innerHTML =
+        `<div class="msg">That schedule could not be found. It may have been renamed or removed.</div>`;
+      return;
+    }
+    S = typeof rows[0][0] === 'string' ? JSON.parse(rows[0][0]) : rows[0][0];
+    const rs = rows[0][1];
+    LIVE = rs ? (typeof rs === 'string' ? JSON.parse(rs) : rs) : {s:{},e:{},b:{}};
+    LIVE.s = LIVE.s || {}; LIVE.e = LIVE.e || {}; LIVE.b = LIVE.b || {};
+    LAST = rows[0][2] ? String(rows[0][2]) : null;
+    TZ = (S.meet && S.meet.timezone) || TZ;
+    if(!DAY){
+      const today = nowParts().date;
+      const days = (S.meet.days||[]);
+      DAY = (days.find(d=>d.date===today) || days[0] || {}).id;
+    }
+    render();
+  }catch(e){
+    document.getElementById('body').innerHTML =
+      `<div class="msg">Couldn't load the schedule just now. It will keep trying — or pull down to refresh.</div>`;
+  }
+}
+
+/* ── render ───────────────────────────────────────────────────────────── */
+function render(){
+  if(!S) return;
+  document.getElementById('meet').textContent = (S.meet && S.meet.name) || 'Live schedule';
+  document.getElementById('venue').textContent = (S.meet && S.meet.venue) || '';
+
+  const now = nowParts();
+  const stale = LAST ? (Date.now() - new Date(String(LAST).replace(' ','T')+(/Z|[+-]\d\d:?\d\d$/.test(String(LAST))?'':'Z')).getTime()) > 30*60*1000 : true;
+  document.querySelector('.dot').className = 'dot' + (stale ? ' stale' : '');
+  document.getElementById('asof-t').textContent = stale
+    ? 'Showing the published schedule — no live updates recorded yet'
+    : 'Live — following the meet as it runs';
+
+  document.getElementById('days').innerHTML = (S.meet.days||[]).map(d=>
+    `<button class="day${d.id===DAY?' on':''}${d.date===now.date?' today':''}" onclick="pick('${d.id}')">${esc(shortDate(d.date))}</button>`
+  ).join('');
+
+  const rows = project(DAY);
+  const comp = rows.filter(r=>!r.sess.isPractice);
+  if(!comp.length){
+    document.getElementById('body').innerHTML = `<div class="msg">No competition scheduled on this day.</div>`;
+    return;
+  }
+
+  const running = comp.filter(r=>r.status==='running');
+  const next = comp.find(r=>r.status==='todo');
+  const last = comp[comp.length-1];
+  const shift = Math.round(last.projEnd - last.plannedEnd);
+  const cls = DAY!==now.date ? '' : shift > 10 ? ' late' : shift < -5 ? ' ok' : '';
+  let status;
+  if(DAY !== now.date){
+    status = `<div class="status"><div class="st-k">Scheduled</div>
+      <div class="st-v">${esc(shortDate((S.meet.days.find(d=>d.id===DAY)||{}).date))}</div>
+      <div class="st-m">Published times. This day hasn't run yet.</div></div>`;
+  } else if(running.length){
+    const r = running[0];
+    status = `<div class="status${cls}"><div class="st-k">Diving now</div>
+      <div class="st-v">${esc(sessName(r))}</div>
+      <div class="st-m">Started ${f12(r.sess && LIVE.s[r.sess.id] ? LIVE.s[r.sess.id].st : r.projComp)}
+        · expected to finish about ${f12(r.projEnd)}${
+        next ? `<br/>Next block starts about <b>${f12(next.projComp)}</b>` : ''}</div></div>`;
+  } else if(next){
+    const mins = Math.round(next.projComp - now.min);
+    status = `<div class="status${cls}"><div class="st-k">Next up</div>
+      <div class="st-v">${esc(sessName(next))}</div>
+      <div class="st-m">First dive about <b>${f12(next.projComp)}</b>${mins>0?` — in ${mins} min`:''}
+        ${next.shift>4?`<br/>Running about ${next.shift} min behind the published time.`:''}</div></div>`;
+  } else {
+    status = `<div class="status ok"><div class="st-k">Today</div>
+      <div class="st-v">Diving has finished</div>
+      <div class="st-m">All blocks on this day are complete.</div></div>`;
+  }
+
+  document.getElementById('body').innerHTML = status + comp.map(card).join('');
+}
+function sessName(r){
+  const n = r.sess.title || '';
+  if(n) return n;
+  const ev = (r.sess.events||[])[0];
+  return ev ? evLabel(ev) : 'Session';
+}
+function card(r){
+  const moved = Math.round(r.projComp - r.plannedComp);
+  const chip = r.status==='running'
+    ? `<span class="chip running">diving now</span>`
+    : r.status==='done'
+      ? `<span class="chip ontime">finished ${f12(r.projEnd)}</span>`
+      : moved > 4  ? `<span class="chip late">about ${moved} min later</span>`
+      : moved < -4 ? `<span class="chip early">about ${Math.abs(moved)} min earlier</span>`
+      : `<span class="chip ontime">on time</span>`;
+  const kinds = [...new Set((r.sess.events||[]).map(e=>e.round))].map(k=>
+    k==='Final' ? `<span class="pill final">Finals</span>`
+    : k==='Qualifier' ? `<span class="pill qual">Qualifier</span>`
+    : k==='Prelim' ? `<span class="pill prelim">Prelims</span>` : '').join('');
+  const evs = r.events.filter(e=>e.name).map(e=>
+    `<div class="ev ${e.status}"><span class="ev-n">${esc(e.name)}</span>
+      <span class="ev-t">${f12(e.projStart)} – ${f12(e.projEnd)}</span></div>`).join('');
+  return `<div class="sess ${r.status==='running'?'now':r.status==='done'?'done':''}">
+    <div class="sess-hd">
+      <div class="sess-main">
+        <div class="sess-n">${kinds}${esc(sessName(r))}</div>
+        <div class="sess-evs">Warm-up from ${f12(r.projStart)}</div>
+        ${chip}
+      </div>
+      <div class="sess-t">
+        <div class="t-now">${f12(r.projComp)}</div>
+        ${Math.abs(moved)>4 ? `<div class="t-was">${f12(r.plannedComp)}</div>` : ''}
+      </div>
+    </div>
+    ${evs ? `<div class="evs">${evs}</div>` : ''}
+  </div>`;
+}
+function pick(id){ DAY = id; render(); }
+
+load();
+setInterval(load, 60000);          // fresh actuals
+setInterval(()=>{ if(S) render(); }, 30000);   // keep "in N min" honest between loads
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) load(); });
+</script>
+</body>
+</html>
