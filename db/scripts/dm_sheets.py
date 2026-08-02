@@ -42,6 +42,26 @@ SANCTION_ENV = os.environ.get("SANCTION", "").strip()
 SANCTION = SANCTION_ENV or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 1100)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
+# Wall-clock deadline. FETCH_BUDGET alone is a poor proxy for time because
+# sheet counts per meet vary enormously, and at 2400 the run landed at 39-45
+# minutes against a 45 minute job timeout -- roughly half of all scheduled runs
+# were being killed mid-meet and reported as "cancelled". Stopping on elapsed
+# time instead means a run always exits cleanly with headroom.
+DEADLINE_MIN = float(os.environ.get("DEADLINE_MIN") or 33)
+START = time.monotonic()
+SECS_PER_FETCH_GUESS = 1.1
+
+
+def elapsed_s():
+    return time.monotonic() - START
+
+
+def time_left_s():
+    return DEADLINE_MIN * 60 - elapsed_s()
+
+
+def secs_per_fetch():
+    return (elapsed_s() / fetches) if fetches >= 25 else SECS_PER_FETCH_GUESS
 TARGET_TAG = (os.environ.get("TARGET_TAG") or "").strip()
 
 # See dm_results.py — same two queue scopes (whole sanction, or an explicit
@@ -193,7 +213,7 @@ def main():
         return
 
     for scope_sql, scope_params, scope_desc in build_scopes():
-        while fetches < FETCH_BUDGET:
+        while fetches < FETCH_BUDGET and time_left_s() > 60:
             # skip meets whose remaining sheets would blow the budget — a
             # meet must fit in one run since the transaction is per-meet
             remaining = FETCH_BUDGET - fetches
@@ -206,32 +226,47 @@ def main():
                    WHERE {scope_sql} AND m.results_done AND NOT m.sheets_done
                    ORDER BY m.start_date DESC, m.meet_id DESC""",
                 scope_params)
+            # A meet must fit the run whole -- the transaction is per-meet, so a
+            # meet cut off by the timeout is rolled back and re-fetched next
+            # run. Screen on both remaining fetches and remaining time.
+            rate = secs_per_fetch()
             pick = None
             for (mid, mname, nsheets) in cur.fetchall():
-                if nsheets <= remaining:
+                if nsheets <= remaining and nsheets * rate < time_left_s() * 0.85:
                     pick = (mid, mname)
                     break
             cur.close(); conn.close()
             if not pick:
-                log(f"nothing queued within budget for {scope_desc}")
+                log(f"nothing queued within budget for {scope_desc} "
+                    f"({time_left_s()/60:.1f} min left, {rate:.2f}s/fetch)")
                 break
             meet_id, name = pick
             n_t, n_d, note = crawl_meet(meet_id)
             meets_done += 1
             log(f"meet {meet_id} {name!r}: {n_t} sheets -> {n_d} dives"
                 f"{' [' + note + ']' if note else ''}")
-    log(f"run done: {meets_done} meets, {fetches} fetches")
+    log(f"run done: {meets_done} meets, {fetches} fetches, "
+        f"{elapsed_s()/60:.1f} min, {secs_per_fetch():.2f}s/fetch")
 
 def report(ok, err=None):
+    payload = json.dumps({"at": datetime.now(timezone.utc).isoformat(),
+                          "ok": ok, "error": err, "log": LOG[-40:]})
     try:
         conn = psycopg2.connect(DB_URL); cur = conn.cursor()
         cur.execute(
             """INSERT INTO app_meta.config (key, value, description)
                VALUES ('dm_sheets_last_run', %s, 'dm_sheets.py')
                ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,
-                 updated_at=now()""",
-            (json.dumps({"at": datetime.now(timezone.utc).isoformat(),
-                         "ok": ok, "error": err, "log": LOG[-40:]}),))
+                 updated_at=now()""", (payload,))
+        # Failures also land under their own key. Sharing one key with the
+        # success path meant the next good run erased the evidence, which is
+        # exactly what happened to the 2026-08-02 04:06 failure.
+        if not ok:
+            cur.execute(
+                """INSERT INTO app_meta.config (key, value, description)
+                   VALUES ('dm_sheets_last_error', %s, 'dm_sheets.py last failure')
+                   ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,
+                     updated_at=now()""", (payload,))
         conn.commit(); cur.close(); conn.close()
     except Exception:
         traceback.print_exc()
