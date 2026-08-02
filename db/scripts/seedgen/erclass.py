@@ -106,6 +106,12 @@ def age_group(name, st=None):
             return label
     if st in SENIOR_STAGES:
         return "Senior"
+    # Camp is deliberately not in SENIOR_STAGES. Within the single 2023
+    # International Camp meet the legacy data gives its 22 synchro rows
+    # age_group='Senior' and its 70 individual rows NULL -- arbitrary, not a
+    # rule. Normalising both to NULL is more consistent than reproducing the
+    # split, and Camp rows are outside the Junior Circuit so no report reads
+    # them.
     return None
 
 
