@@ -82,128 +82,150 @@ def record(url, key, payload):
         print(f"could not record {key}: {e}", flush=True)
 
 
-def build(db, only=None, dive_sink=None):
+def build(db, only=None, dive_sink=None, limit=0):
     where = "WHERE results_done AND meet_name IS NOT NULL AND start_date IS NOT NULL"
     meets = db.query(f"""SELECT meet_id, meet_name, sanction, start_date
                          FROM divemeets.meets {where}
                          ORDER BY start_date DESC, meet_id DESC""")
     if only:
         meets = [m for m in meets if str(m["meet_id"]) in only]
+    if limit:
+        meets = meets[:limit]
     print(f"meets: {len(meets)}", flush=True)
+
+    tags = {str(t["meet_id"]): t["tag"]
+            for t in db.query("SELECT meet_id, tag FROM divemeets.crawl_targets")}
+
+    # Fetch in batches of meets rather than one meet at a time. Per-meet
+    # fetching meant ~6,100 sequential HTTP round trips and a 55 minute run,
+    # which matters because Neon compute is billed on wake time, not work done.
+    BATCH = 60
+    batches = [meets[i:i + BATCH] for i in range(0, len(meets), BATCH)]
 
     phase_rows = []
     dive_writer = csv.writer(dive_sink) if dive_sink else None
     dive_count = 0
     gen_sheets = set()
-    for i, m in enumerate(meets, 1):
-        mid = str(m["meet_id"])
-        name = meetclass.normalize_name(m["meet_name"])
-        sanc = m["sanction"] or ""
-        fam = meetclass.competition_family(mid, name, sanc)
-        grp = meetclass.competition_group(mid, name, sanc)
-        div = meetclass.ncaa_division(mid, name, sanc)
-        year = str(m["start_date"])[:4]
+    i = 0
+    for bn, batch in enumerate(batches, 1):
+        ids = ",".join("'" + str(m["meet_id"]) + "'" for m in batch)
+        ev_all, res_all, sd_all = {}, {}, {}
+        for e in db.query(f"SELECT meet_id, event_id, round, title FROM divemeets.events "
+                          f"WHERE meet_id IN ({ids})"):
+            ev_all.setdefault(str(e["meet_id"]), {})[(str(e["event_id"]), str(e["round"]))] = e["title"] or ""
+        for r in db.query(f"""SELECT meet_id, event_id, round, place, diver_name, profile_id,
+                                     team_name, team_id, score, sheet_key
+                              FROM divemeets.results WHERE meet_id IN ({ids})"""):
+            res_all.setdefault(str(r["meet_id"]), []).append(r)
+        for d in db.query(f"""SELECT meet_id, event_id, round, profile_id, sheet_key, dive_order,
+                                     dive_number, height, description, net_score, dd, score,
+                                     round_place, opt_vol
+                              FROM divemeets.sheet_dives WHERE meet_id IN ({ids})
+                              ORDER BY meet_id, event_id, round, sheet_key, dive_order"""):
+            sd_all.setdefault(str(d["meet_id"]), collections.defaultdict(list))[
+                (str(d["event_id"]), str(d["round"]), str(d["sheet_key"]))].append(d)
 
-        titles = {(str(e["event_id"]), str(e["round"])): (e["title"] or "")
-                  for e in db.query(
-                      "SELECT event_id, round, title FROM divemeets.events WHERE meet_id=$1", (mid,))}
-        results = db.query("""SELECT event_id, round, place, diver_name, profile_id, team_name,
-                                     team_id, score, sheet_key
-                              FROM divemeets.results WHERE meet_id=$1""", (mid,))
-        sheets = collections.defaultdict(list)
-        for d in db.query("""SELECT event_id, round, profile_id, sheet_key, dive_order, dive_number,
-                                    height, description, net_score, dd, score, round_place, opt_vol
-                             FROM divemeets.sheet_dives WHERE meet_id=$1
-                             ORDER BY event_id, round, sheet_key, dive_order""", (mid,)):
-            sheets[(str(d["event_id"]), str(d["round"]), str(d["sheet_key"]))].append(d)
+        for m in batch:
+            i += 1
+            mid = str(m["meet_id"])
+            name = meetclass.normalize_name(m["meet_name"])
+            sanc = m["sanction"] or ""
+            fam = meetclass.competition_family(mid, name, sanc)
+            grp = meetclass.competition_group(mid, name, sanc)
+            div = meetclass.ncaa_division(mid, name, sanc, tags.get(mid))
+            year = str(m["start_date"])[:4]
 
-        # A sheet_key can be shared by two result rows (synchro partners), so
-        # keep one representative row per sheet for the dive-row loop below.
-        res_by_sheet = {}
-        for r in results:
-            eid, rnd = str(r["event_id"]), str(r["round"])
-            title = titles.get((eid, rnd), "")
-            sk = "" if r["sheet_key"] is None else str(r["sheet_key"])
-            gender, disc = classify.gender(title), classify.discipline(title)
-            stage = classify.round_stage(rnd)
-            lvl = classify.event_level(title, grp, name, fam)
-            age, sync = classify.age_group(title), classify.is_synchronized(title)
+            titles = ev_all.get(mid, {})
+            results = res_all.get(mid, [])
+            sheets = sd_all.get(mid, {})
 
-            res_by_sheet.setdefault((eid, rnd, sk), r)
-            dv = sheets.get((eid, rnd, sk), [])
-            dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
-                     for d in dv]
-            posted = dec(r["score"])
-            if not dives:
-                p_from, p_cnt, p_dd = posted, "", ""
-                delta, cumul, mode = Decimal(0), "false", "Result-only (archive scrape)"
-            else:
-                p_cnt = len(dives)
-                p_dd = sum((d["dd"] for d in dives if d["dd"] is not None), Decimal(0))
-                p_from = sum((d["score"] for d in dives if d["score"] is not None), Decimal(0))
-                if posted is None:
-                    delta, cumul, mode = "", "", "Phase score from dives only"
-                elif abs(posted - p_from) <= TOL:
-                    delta, cumul, mode = posted - p_from, "false", "Posted score equals phase score"
+            # A sheet_key can be shared by two result rows (synchro partners), so
+            # keep one representative row per sheet for the dive-row loop below.
+            res_by_sheet = {}
+            for r in results:
+                eid, rnd = str(r["event_id"]), str(r["round"])
+                title = titles.get((eid, rnd), "")
+                sk = "" if r["sheet_key"] is None else str(r["sheet_key"])
+                gender, disc = classify.gender(title), classify.discipline(title)
+                stage = classify.round_stage(rnd)
+                lvl = classify.event_level(title, grp, name, fam)
+                age, sync = classify.age_group(title), classify.is_synchronized(title)
+
+                res_by_sheet.setdefault((eid, rnd, sk), r)
+                dv = sheets.get((eid, rnd, sk), [])
+                dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
+                         for d in dv]
+                posted = dec(r["score"])
+                if not dives:
+                    p_from, p_cnt, p_dd = posted, "", ""
+                    delta, cumul, mode = Decimal(0), "false", "Result-only (archive scrape)"
                 else:
-                    delta, cumul, mode = posted - p_from, "true", "Posted score differs from phase score"
+                    p_cnt = len(dives)
+                    p_dd = sum((d["dd"] for d in dives if d["dd"] is not None), Decimal(0))
+                    p_from = sum((d["score"] for d in dives if d["score"] is not None), Decimal(0))
+                    if posted is None:
+                        delta, cumul, mode = "", "", "Phase score from dives only"
+                    elif abs(posted - p_from) <= TOL:
+                        delta, cumul, mode = posted - p_from, "false", "Posted score equals phase score"
+                    else:
+                        delta, cumul, mode = posted - p_from, "true", "Posted score differs from phase score"
 
-            fc = five_cat(dives, fam, gender, disc)
-            phase_rows.append([
-                mid, eid, rnd, sk,
-                "" if r["profile_id"] is None else str(r["profile_id"]),
-                r["diver_name"] or "", clean_team(r["team_name"]),
-                "" if r["team_id"] is None else str(r["team_id"]),
-                "", clean_place(r["place"]), _num(posted),
-                _num(p_from) if p_from is not None else "", p_cnt,
-                _num(p_dd) if p_dd != "" else "", _num(delta) if delta != "" else "",
-                cumul, mode, name, year, fam, grp, div, gender, disc, lvl, age, title, stage,
-                "true" if sync else "false", "divemeets_crawl",
-                _num(fc["raw6"]) if fc["raw6"] != "" else "",
-                _num(fc["score"]) if fc["score"] != "" else "",
-                _num(fc["dd_sum"]) if fc["dd_sum"] != "" else "",
-                fc["repeated"], fc["dropped_number"],
-                _num(fc["dropped_score"]) if fc["dropped_score"] not in ("", None) else "",
-                fc["status"], fc["note"],
-            ])
-        # Dive rows are emitted per SHEET, not per result row. Synchro partners
-        # share one sheet_key -- 27 such sheets across the crawl -- so emitting
-        # inside the results loop wrote every dive twice and violated
-        # idx_ds_natural on (meet_id, event_id, result_set_id, diver_id,
-        # sheet_key, dive_order).
-        for (s_eid, s_rnd, s_sk), dv in sheets.items():
-            rr = res_by_sheet.get((s_eid, s_rnd, s_sk))
-            s_title = titles.get((s_eid, s_rnd), "")
-            s_gender, s_disc = classify.gender(s_title), classify.discipline(s_title)
-            s_stage = classify.round_stage(s_rnd)
-            s_dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
-                       for d in dv]
-            s_fc = five_cat(s_dives, fam, s_gender, s_disc)
-            for d in dv:
-                code, label = dive_category(d["dive_number"])
-                key = id(next((x for x in s_dives if x["dive_number"] == d["dive_number"]), None))
-                incl = s_fc["inclusion"].get(key, "not_applicable") if s_fc["inclusion"] else "not_applicable"
-                note = {"dropped": "Dropped from derived NCAA 5-category score because it is the "
-                                   "lower-scoring dive of the repeated category.",
-                        "included": "Included in derived NCAA 5-category score."}.get(incl, "")
-                gen_sheets.add((mid, s_eid, s_rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
-                dive_count += 1
-                dive_writer.writerow(fmt_row(DIVE_COLS, [
-                    mid, s_eid, s_rnd,
-                    "" if d["profile_id"] is None else str(d["profile_id"]),
-                    "" if d["sheet_key"] is None else str(d["sheet_key"]),
-                    d["dive_order"], d["dive_number"] or "", d["height"] or "",
-                    d["description"] or "", _num(dec(d["dd"])), _num(dec(d["score"])),
-                    _num(dec(d["net_score"])),
-                    "" if d["round_place"] is None else str(d["round_place"]),
-                    d["opt_vol"] or "", "", "",
-                    (rr["diver_name"] if rr else "") or "",
-                    clean_team(rr["team_name"] if rr else ""), s_title,
-                    s_gender, s_disc, s_stage, fam, grp, div, year, code, label, incl, note,
-                ]))
+                fc = five_cat(dives, fam, gender, disc)
+                phase_rows.append([
+                    mid, eid, rnd, sk,
+                    "" if r["profile_id"] is None else str(r["profile_id"]),
+                    r["diver_name"] or "", clean_team(r["team_name"]),
+                    "" if r["team_id"] is None else str(r["team_id"]),
+                    "", clean_place(r["place"]), _num(posted),
+                    _num(p_from) if p_from is not None else "", p_cnt,
+                    _num(p_dd) if p_dd != "" else "", _num(delta) if delta != "" else "",
+                    cumul, mode, name, year, fam, grp, div, gender, disc, lvl, age, title, stage,
+                    "true" if sync else "false", "divemeets_crawl",
+                    _num(fc["raw6"]) if fc["raw6"] != "" else "",
+                    _num(fc["score"]) if fc["score"] != "" else "",
+                    _num(fc["dd_sum"]) if fc["dd_sum"] != "" else "",
+                    fc["repeated"], fc["dropped_number"],
+                    _num(fc["dropped_score"]) if fc["dropped_score"] not in ("", None) else "",
+                    fc["status"], fc["note"],
+                ])
+            # Dive rows are emitted per SHEET, not per result row. Synchro partners
+            # share one sheet_key -- 27 such sheets across the crawl -- so emitting
+            # inside the results loop wrote every dive twice and violated
+            # idx_ds_natural on (meet_id, event_id, result_set_id, diver_id,
+            # sheet_key, dive_order).
+            for (s_eid, s_rnd, s_sk), dv in sheets.items():
+                rr = res_by_sheet.get((s_eid, s_rnd, s_sk))
+                s_title = titles.get((s_eid, s_rnd), "")
+                s_gender, s_disc = classify.gender(s_title), classify.discipline(s_title)
+                s_stage = classify.round_stage(s_rnd)
+                s_dives = [dict(dive_number=d["dive_number"], dd=dec(d["dd"]), score=dec(d["score"]))
+                           for d in dv]
+                s_fc = five_cat(s_dives, fam, s_gender, s_disc)
+                for d in dv:
+                    code, label = dive_category(d["dive_number"])
+                    key = id(next((x for x in s_dives if x["dive_number"] == d["dive_number"]), None))
+                    incl = s_fc["inclusion"].get(key, "not_applicable") if s_fc["inclusion"] else "not_applicable"
+                    note = {"dropped": "Dropped from derived NCAA 5-category score because it is the "
+                                       "lower-scoring dive of the repeated category.",
+                            "included": "Included in derived NCAA 5-category score."}.get(incl, "")
+                    gen_sheets.add((mid, s_eid, s_rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
+                    dive_count += 1
+                    dive_writer.writerow(fmt_row(DIVE_COLS, [
+                        mid, s_eid, s_rnd,
+                        "" if d["profile_id"] is None else str(d["profile_id"]),
+                        "" if d["sheet_key"] is None else str(d["sheet_key"]),
+                        d["dive_order"], d["dive_number"] or "", d["height"] or "",
+                        d["description"] or "", _num(dec(d["dd"])), _num(dec(d["score"])),
+                        _num(dec(d["net_score"])),
+                        "" if d["round_place"] is None else str(d["round_place"]),
+                        d["opt_vol"] or "", "", "",
+                        (rr["diver_name"] if rr else "") or "",
+                        clean_team(rr["team_name"] if rr else ""), s_title,
+                        s_gender, s_disc, s_stage, fam, grp, div, year, code, label, incl, note,
+                    ]))
 
-        if i % 200 == 0:
-            print(f"  {i}/{len(meets)} phases={len(phase_rows)} dives={dive_count}", flush=True)
+        print(f"  batch {bn}/{len(batches)}  meets={i}/{len(meets)} "
+              f"phases={len(phase_rows)} dives={dive_count}", flush=True)
     return phase_rows, dive_count, gen_sheets
 
 
@@ -272,13 +294,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", default="")
+    ap.add_argument("--limit-meets", type=int, default=0)
     args = ap.parse_args()
     only = {x.strip() for x in args.only.split(",") if x.strip()} or None
 
     url = os.environ["DATABASE_URL"]
     dive_path = "/tmp/core_dives.csv"
     with open(dive_path, "w", newline="", encoding="utf-8") as sink:
-        phase_rows, dive_count, gen_sheets = build(Neon(url), only, sink)
+        phase_rows, dive_count, gen_sheets = build(Neon(url), only, sink, args.limit_meets)
     phases, kept_dives = merge(phase_rows, gen_sheets)
     print(f"dives: {dive_count} crawl streamed to disk")
 

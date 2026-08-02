@@ -78,9 +78,25 @@ def competition_group(meet_id, meet_name, sanction):
     return n
 
 
-def ncaa_division(meet_id, meet_name, sanction):
+# The crawl records why each NCAA meet was targeted. That tag is a far better
+# division source than the meet name, which for a conference championship
+# usually does not mention a division at all.
+TAG_DIVISION = {
+    "ncaa_d1_national": "Division I",
+    "ncaa_d1_conference": "Division I",
+    "ncaa_zone": "Division I",
+    # ECAC and the Metropolitan Conference are genuinely multi-division: D1, D2
+    # and D3 schools compete in the same meet, so calling these athletes
+    # Division I asserts something false about roughly half of them.
+    "ncaa_d1_conference_multidiv": "Multi-division",
+}
+
+
+def ncaa_division(meet_id, meet_name, sanction, tag=None):
     if competition_family(meet_id, meet_name, sanction) != "NCAA":
         return ""
+    if tag and tag in TAG_DIVISION:
+        return TAG_DIVISION[tag]
     n = normalize_name(meet_name)
     if re.search(r"\bdiv\w*\s*(iii|3)\b", n, re.I):
         return "Division III"
