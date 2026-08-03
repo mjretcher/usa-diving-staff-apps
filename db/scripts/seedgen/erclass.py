@@ -200,10 +200,15 @@ _SENIOR_EVENT = re.compile(r"\bsenior\b", re.I)
 def is_junior_circuit(st, name=""):
     if _SENIOR_EVENT.search(name or ""):
         return False
+    # Junior Circuit events are always Boys/Girls. Men/Women is senior
+    # terminology -- the 2013-2014 combined Zone meets ran open synchro events
+    # titled "Synchronized Men 3m" with no "Senior" keyword at all.
+    if gender(name) in ("Men", "Women"):
+        return False
     return st in JUNIOR_CIRCUIT_STAGES
 
 
 def event_level(st, name=""):
-    if _SENIOR_EVENT.search(name or ""):
+    if _SENIOR_EVENT.search(name or "") or gender(name) in ("Men", "Women"):
         return "Senior"
     return _LEVEL_BY_STAGE.get(st, "Other")
