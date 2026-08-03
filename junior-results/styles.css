@@ -1195,3 +1195,15 @@ html, body { overflow-x: hidden; }
   .rpt-season-notes{ break-inside:avoid; page-break-inside:avoid; }
   .rpt-season-note{ border:1px solid #bbb; background:#fff !important; color:#000 !important; }
 }
+
+/* Dive-count caveat inside the live reports view (not the printed doc).
+   Amber on white — never red on blue. */
+.rpt-note-divecount{
+  background:#FFF4E5;
+  border-left:3px solid #B26A00;
+  color:#5A3600;
+  padding:8px 10px;
+  border-radius:4px;
+  font-size:12px;
+  line-height:1.5;
+}

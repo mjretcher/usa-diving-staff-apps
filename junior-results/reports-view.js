@@ -4660,7 +4660,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const top3s = r.rows.filter(x => x.place != null && x.place <= 3 && (x.round==='Final'||x.round==='')).length;
       const stages = {};
       r.rows.forEach(x => { stages[x.stage||'?'] = (stages[x.stage||'?']||0)+1; });
-      const careerSpansDiveChange = years.some(y => Number(y) < 2024) && years.some(y => Number(y) >= 2024);
+      // 2018, 2019 and 2024 all changed dive counts; ask the era module.
+      const careerCaveat2 = (window.JuniorEras && window.JuniorEras.diveCountCaveat(years.map(Number))) || null;
 
       out.innerHTML = `
         <div class="rpt-card">
@@ -4672,10 +4673,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             <div class="rpt-stat"><div class="rpt-stat-num">${fmt(top3s)}</div><div class="rpt-stat-lbl">Top-3 final placements</div></div>
           </div>
           <div style="margin-top:10px">
-            <strong>Stages competed:</strong> ${Object.keys(stages).map(s => esc(s)+' ('+stages[s]+')').join(', ')}
+            <strong>Stages competed:</strong> ${Object.keys(stages).map(s => esc(stageLabelFor(s))+' ('+stages[s]+')').join(', ')}
           </div>
-          ${careerSpansDiveChange ? `<div class="rpt-note" style="margin-top:10px;background:#fef3c7;border-left:3px solid #d97706">
-            <strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (−1 dive, all events), Group C girls' springboard (−1 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023→2024 for this athlete may partly reflect that rule change rather than pure performance change — check which group they competed in each year below.
+          ${careerCaveat2 ? `<div class="rpt-note rpt-note-divecount" style="margin-top:10px">
+            <strong>⚠ ${esc(careerCaveat2)}</strong> A jump or drop across one of those seasons for this athlete may partly reflect the rule change rather than a change in performance — check the age group they competed in each year below.
           </div>` : ''}
         </div>
         ${years.map(y => {
@@ -5324,6 +5325,73 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       },
     },
 
+    season_context: {
+      label: 'Season Rules & Format',
+      desc: 'What the competition looked like in each season covered — stages, advancement, dive counts, and anything that makes the numbers non-comparable.',
+      async build(opts){
+        const E = window.JuniorEras;
+        const yrs = (opts.years && opts.years.length ? opts.years : [_currentSeason]).slice().sort((a,b)=>a-b);
+        if (!E) return '';
+        const caveat = E.diveCountCaveat(yrs);
+        const row = (y) => {
+          const s = E.season(y);
+          if (!s) return `<tr><td><strong>${y}</strong></td><td colspan="4" class="rb-soft">No rules recorded for this season.</td></tr>`;
+          const stages = s.stages.map(st => E.stageLabel(st)).join(' → ');
+          let adv = [];
+          if (s.regionals && s.regionals.advance) adv.push('Regionals: top ' + s.regionals.advance);
+          if (s.zones && s.zones.springboardAdvance) adv.push('Zones: springboard top ' + s.zones.springboardAdvance + ', platform top ' + s.zones.platformAdvance);
+          if (s.zones && s.zones.direct) adv.push('Zones: top ' + s.zones.direct + ' direct, ' + s.zones.toEWC[0] + '–' + s.zones.toEWC[1] + ' to E/W/C');
+          if (s.ewc && s.ewc.direct) adv.push('E/W/C: top ' + s.ewc.direct);
+          const advTxt = adv.length ? adv.join('; ')
+            : '<span class="rb-soft">not confirmed for this season</span>';
+          const notes = (E.seasonNotes(y) || []).map(n => esc(n.text)).join(' ');
+          return `<tr>
+            <td><strong>${y}</strong></td>
+            <td>${esc(stages)}</td>
+            <td>${advTxt}</td>
+            <td>${s.verified ? '<span class="rb-ok">confirmed</span>' : '<span class="rb-warn">unconfirmed</span>'}</td>
+            <td class="rb-soft">${notes || ''}</td>
+          </tr>`;
+        };
+        // Dive counts for the seasons covered, so a reader can see for
+        // themselves whether two totals are on the same basis.
+        const groups = ['A','B','C','D'], genders = ['Girls','Boys'], boards = ['1M','3M','PL'];
+        const boardLbl = { '1M':'1m', '3M':'3m', 'PL':'Platform' };
+        const diveRows = [];
+        groups.forEach(g => genders.forEach(gd => boards.forEach(b => {
+          const vals = yrs.map(y => {
+            const d = E.diveCount(y, g, gd, b);
+            return d ? d.count : null;
+          });
+          // Compare the counts, not the rendered cell. The inferred asterisk
+          // would otherwise make an unchanged event look like it changed.
+          if (new Set(vals).size === 1 && yrs.length > 1) return;
+          const cells = yrs.map((y, i) => {
+            const d = E.diveCount(y, g, gd, b);
+            return vals[i] == null ? '—' : (vals[i] + (d.inferred ? '*' : ''));
+          });
+          diveRows.push(`<tr><td>Group ${g} ${gd} ${boardLbl[b]}</td>${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`);
+        })));
+        return `<section class="rb-section">
+          <h2 class="rb-h2">Season Rules &amp; Format</h2>
+          <p class="rb-soft">The Junior Circuit did not run the same way in every season covered by this report. Advancement numbers are only stated where they have been confirmed against a rule book; placements and scores are accurate throughout.</p>
+          <table class="rb-table rb-table-sm">
+            <thead><tr><th>Season</th><th>Stages</th><th>Advancement</th><th>Rules</th><th>Notes</th></tr></thead>
+            <tbody>${yrs.map(row).join('')}</tbody>
+          </table>
+          ${caveat ? `<p class="rb-p rb-callout-warn"><strong>⚠ ${esc(caveat)}</strong></p>` : ''}
+          ${diveRows.length ? `
+            <h3 class="rb-h3">Required dives — where they differ across these seasons</h3>
+            <table class="rb-table rb-table-sm">
+              <thead><tr><th>Event</th>${yrs.map(y=>`<th>${y}</th>`).join('')}</tr></thead>
+              <tbody>${diveRows.join('')}</tbody>
+            </table>
+            <p class="rb-soft">Derived from submitted dive sheets and cross-checked against the 2018 USA Diving rule book. An asterisk marks a season before continuous sheet coverage begins (${E.OBSERVED_FROM}), carried back from the earliest observed season.</p>
+          ` : `<p class="rb-soft">Required dive counts are the same across every season in this report, so raw totals are directly comparable.</p>`}
+        </section>`;
+      },
+    },
+
     year_matrix: {
       label: 'Year × Stage Matrix',
       desc: 'Cross-year participation matrix with drop-off percentages',
@@ -5337,18 +5405,27 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         );
         const grid = {};
         r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
+        // 2013 and 2014 ran the Age Group National Championships as a separate
+        // competition alongside the Junior Nationals. The column only appears
+        // when a selected season actually had one, so it does not sit empty
+        // across a modern report.
+        const anyAgn = yrs.some(y => (grid[y+'|AgeGroup-Nationals']||0) > 0);
         return `<section class="rb-section">
           <h2 class="rb-h2">Year × Stage Matrix</h2>
+          ${anyAgn ? `<p class="rb-soft">Age Group Nationals was a separate national championship from the Junior Nationals and is counted separately.</p>` : ''}
           <table class="rb-table">
-            <thead><tr><th>Year</th><th>Regionals</th><th>Zones</th><th>E/W/C</th><th>Nationals</th><th>R→Z drop</th><th>Z→Next drop</th></tr></thead>
+            <thead><tr><th>Year</th><th>Regionals</th><th>Zones</th><th>E/W/C</th><th>Junior Nationals</th>${anyAgn?'<th>Age Group Nationals</th>':''}<th>R→Z drop</th><th>Z→Next drop</th></tr></thead>
             <tbody>
             ${yrs.map(y => {
               const reg=grid[y+'|Regionals']||0, zon=grid[y+'|Zones']||0, ewc=grid[y+'|EWC']||0, nat=grid[y+'|Nationals']||0;
+              const agn=grid[y+'|AgeGroup-Nationals']||0;
               const next = y >= 2026 ? ewc : nat;
-              return `<tr><td><strong>${y}</strong></td>
+              const cancelled = window.JuniorEras && (window.JuniorEras.season(y)||{}).cancelled;
+              return `<tr${cancelled?' class="rb-row-muted"':''}><td><strong>${y}</strong>${cancelled?' <span class="rb-soft">(season ended early)</span>':''}</td>
                 <td>${fmt(reg)}</td><td>${fmt(zon)}</td>
                 <td>${ewc?fmt(ewc):'<span class="rb-soft">—</span>'}</td>
                 <td>${nat?fmt(nat):'<span class="rb-soft">—</span>'}</td>
+                ${anyAgn?`<td>${agn?fmt(agn):'<span class="rb-soft">—</span>'}</td>`:''}
                 <td>${reg?(100*(1-zon/reg)).toFixed(1)+'%':'—'}</td>
                 <td>${zon?(100*(1-next/zon)).toFixed(1)+'%':'—'}</td>
               </tr>`;
@@ -5513,22 +5590,45 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         );
         const grid = {};
         r.rows.forEach(x => grid[x.year+'|'+x.stage] = x.n);
+        // The audit reaches back to 2013, so the era list covers the whole
+        // span rather than the three most recent rule sets. Descriptions state
+        // what was structurally different, not just who was eligible.
         const eras = [
-          { lbl: '2021–2022', years: [2021,2022], desc: 'Old system + foreign Regionals-only', color: '#171F69' },
-          { lbl: '2023–2025', years: [2023,2024,2025], desc: 'Old system + foreign non-displacing', color: '#009AC7' },
-          { lbl: '2026+',     years: [2026], desc: 'New system + E/W/C tier', color: '#22893E' },
+          { lbl: '2013–2014', years: [2013,2014],
+            desc: 'Two national championships: Junior Nationals and a separate Age Group Nationals. Zones ran senior events too.',
+            color: '#6B7280' },
+          { lbl: '2015–2017', years: [2015,2016,2017],
+            desc: 'Junior Nationals held inside the senior National Championships.',
+            color: '#8FC3EA' },
+          { lbl: '2018–2019', years: [2018,2019],
+            desc: 'Junior Nationals a standalone meet; Zones renamed from "National Preliminary".',
+            color: '#0F4C68' },
+          { lbl: '2020',      years: [2020],
+            desc: 'Season ended after Region Championships (COVID-19).',
+            color: '#9CA3AF' },
+          { lbl: '2021–2022', years: [2021,2022],
+            desc: 'Region → Zone → Nationals. Foreign athletes restricted to Regionals.',
+            color: '#171F69' },
+          { lbl: '2023–2025', years: [2023,2024,2025],
+            desc: 'Region → Zone → Nationals. Foreign athletes non-displacing at Regionals and Zones.',
+            color: '#009AC7' },
+          { lbl: '2026+',     years: [2026],
+            desc: 'New system: East/West/Central tier added; Groups C & D skip Regionals.',
+            color: '#22893E' },
         ];
         const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
         return `<section class="rb-section">
           <h2 class="rb-h2">Rule Era Comparison</h2>
+          <p class="rb-soft">Averages are distinct athletes per season at each stage. A dash means the stage did not exist in that era.</p>
           <table class="rb-table">
-            <thead><tr><th>Era</th><th>Description</th><th>Avg Regionals</th><th>Avg Zones</th><th>Avg E/W/C</th><th>Avg Nationals</th></tr></thead>
+            <thead><tr><th>Era</th><th>What was different</th><th>Avg Regionals</th><th>Avg Zones</th><th>Avg E/W/C</th><th>Avg Jr Nationals</th><th>Avg Age Grp Nats</th></tr></thead>
             <tbody>
             ${eras.map(e => {
               const regs=avg(e.years.map(y=>grid[y+'|Regionals']||0));
               const zons=avg(e.years.map(y=>grid[y+'|Zones']||0));
               const ewcs=avg(e.years.map(y=>grid[y+'|EWC']||0));
               const nats=avg(e.years.map(y=>grid[y+'|Nationals']||0));
+              const agns=avg(e.years.map(y=>grid[y+'|AgeGroup-Nationals']||0));
               return `<tr>
                 <td><strong style="color:${e.color}">${e.lbl}</strong></td>
                 <td class="rb-soft">${esc(e.desc)}</td>
@@ -5536,6 +5636,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
                 <td>${zons>0?fmt(Math.round(zons)):'—'}</td>
                 <td>${ewcs>0?fmt(Math.round(ewcs)):'<span class="rb-soft">—</span>'}</td>
                 <td>${nats>0?fmt(Math.round(nats)):'<span class="rb-soft">—</span>'}</td>
+                <td>${agns>0?fmt(Math.round(agns)):'<span class="rb-soft">—</span>'}</td>
               </tr>`;
             }).join('')}
             </tbody>
@@ -5877,17 +5978,19 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         const byYear = {};
         r.rows.forEach(x => (byYear[x.year]=byYear[x.year]||[]).push(x));
         const careerYears = Object.keys(byYear).map(Number);
-        const careerSpansDiveChange = careerYears.some(y => y < 2024) && careerYears.some(y => y >= 2024);
+        // Dive counts changed in 2018, 2019 and 2024, not only 2024. Ask the
+        // era module rather than testing one boundary.
+        const careerCaveat = (window.JuniorEras && window.JuniorEras.diveCountCaveat(careerYears)) || null;
         return `<section class="rb-section">
           <h2 class="rb-h2">${esc(name)} — Career Trace</h2>
           <p class="rb-soft">DM ${esc(opts.dmId)} · ${fmt(r.rows.length)} result rows · ${Object.keys(byYear).length} year${Object.keys(byYear).length===1?'':'s'}</p>
-          ${careerSpansDiveChange ? `<p class="rb-p" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px"><strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (−1 dive, all events), Group C girls' springboard (−1 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023→2024 may partly reflect that rule change rather than pure performance change — check which group applied each year in the Event column below.</p>` : ''}
+          ${careerCaveat ? `<p class="rb-p rb-callout-warn"><strong>⚠ ${esc(careerCaveat)}</strong> A score jump or drop across one of those seasons may partly reflect the rule change rather than a change in performance — check the age group that applied each year in the Event column below.</p>` : ''}
           ${Object.keys(byYear).sort().map(y => `
             <h3 class="rb-h3">${y}</h3>
             <table class="rb-table rb-table-sm">
               <thead><tr><th>Stage</th><th>Meet</th><th>Event</th><th>Round</th><th>Place</th><th>Score</th></tr></thead>
               <tbody>${byYear[y].map(x => `<tr>
-                <td>${esc(x.stage||'')}</td><td>${esc(x.meet_name||'')}</td><td>${esc(x.event_key||'')}</td>
+                <td>${esc(stageLabelFor(x.stage||''))}</td><td>${esc(x.meet_name||'')}</td><td>${esc(x.event_key||'')}</td>
                 <td>${esc(x.round||'')}</td><td>${x.place||''}</td>
                 <td>${x.score!=null?Number(x.score).toFixed(2):''}</td>
               </tr>`).join('')}</tbody>
@@ -5910,23 +6013,23 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       defaultYears: [2026] },
     { id: 'cce_briefing', label: 'CCE Briefing',
       desc: 'For Committee for Competitive Excellence meetings. Year-over-year pipeline, decline rates, demographics, and band conversion.',
-      sections: ['exec_summary','year_matrix','qualifier_rates','declined_summary','demographic_mix','rule_era'],
+      sections: ['season_context','exec_summary','year_matrix','qualifier_rates','declined_summary','demographic_mix','rule_era'],
       defaultYears: allYears() },
     { id: 'board_update', label: 'Board Update',
       desc: 'Concise update for Board of Directors. Pipeline funnel + multi-year context + anomalies.',
-      sections: ['exec_summary','pipeline_funnel','year_matrix','anomaly_summary'],
+      sections: ['season_context','exec_summary','pipeline_funnel','year_matrix','anomaly_summary'],
       defaultYears: [2024,2025,2026] },
     { id: 'year_review', label: 'Year in Review',
       desc: 'Single-year deep dive. Funnel, demographics, region, band conversion, anomalies.',
-      sections: ['exec_summary','pipeline_funnel','band_conversion','demographic_mix','regional_strength','anomaly_summary'],
+      sections: ['season_context','exec_summary','pipeline_funnel','band_conversion','demographic_mix','regional_strength','anomaly_summary'],
       defaultYears: [_currentSeason] },
     { id: 'rule_change', label: 'Rule Change Impact',
       desc: 'Compare the three rule eras. Includes band conversion to show structural shifts.',
-      sections: ['rule_era','year_matrix','qualifier_rates','declined_summary','demographic_mix'],
+      sections: ['season_context','rule_era','year_matrix','qualifier_rates','declined_summary','demographic_mix'],
       defaultYears: allYears() },
     { id: 'decliner_deep', label: 'Decliner Deep Dive',
       desc: 'Full breakdown of top-3 Zone qualifiers who skipped the next stage. Named athlete list.',
-      sections: ['declined_summary','declined_athletes','band_demographic','demographic_mix'],
+      sections: ['season_context','declined_summary','declined_athletes','band_demographic','demographic_mix'],
       defaultYears: pastYears() },
     { id: 'athlete_spotlight', label: 'Athlete Spotlight',
       desc: 'Single-athlete career trace. Requires DM ID.',
@@ -6239,6 +6342,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         #rb-output .rb-table td { padding: 5px 8px; border-bottom: 1px solid #e5e9f2; font-variant-numeric: tabular-nums; }
         #rb-output .rb-table-sm { font-size: 10px; }
         #rb-output .rb-soft { color: #6b7390; font-size: 11px; }
+        /* Season-context styling. Reports can now span 2013-2026, so a printed
+           report has to carry its own caveats -- the reader will not have the
+           year picker in front of them. */
+        #rb-output .rb-callout-warn { background: #FFF4E5; border-left: 3px solid #B26A00; color: #5A3600; padding: 8px 10px; border-radius: 4px; }
+        #rb-output .rb-ok   { color: #1B6E3A; font-weight: 700; }
+        #rb-output .rb-warn { color: #8A5A00; font-weight: 700; }
+        #rb-output .rb-row-muted td { background: #f7f8fb; color: #6b7390; }
         #rb-output .rb-funnels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
         #rb-output .rb-funnel-card { background: #f6f8fc; border-radius: 6px; padding: 10px; }
         #rb-output .rb-funnel-yr { font-family: var(--f-display, 'Barlow Condensed', sans-serif); font-weight: 700; font-size: 15px; color: #171F69; margin-bottom: 6px; }
