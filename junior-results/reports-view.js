@@ -1861,7 +1861,7 @@
       return `<td class="mono mtx" style="background:rgba(23,31,105,${0.04 + intensity*0.18})">${v||''}</td>`;
     }
 
-    const allStages = ['Regionals','Zones','EWC','Nationals'];
+    const allStages = stagesForYear(selectedYear());
     const headerRow = `<tr><th>Group / Gender</th>${allStages.map(s => `<th>${s}</th>`).join('')}</tr>`;
     const bodyRows = groups.flatMap(g => genders.map(x => `
       <tr>
@@ -2327,6 +2327,37 @@
     ['saved',        'Saved views',        '⭐'],
   ];
 
+  /* Season context banner. Older seasons ran a different competition and in
+     some cases a different set of rules, so the report says so rather than
+     letting a 2016 result be read under 2026 assumptions. */
+  function buildSeasonNotes(){
+    const E = window.JuniorEras;
+    if (!E) return '';
+    const yr = (_yearOverrideRows ? rptState.selectedYear : _currentSeason);
+    const notes = E.seasonNotes(yr) || [];
+    const s = E.season(yr);
+    const out = notes.slice();
+    if (s && s.structure === 'region-zone-nationals' && yr < 2026) {
+      out.push({ kind:'info', text:'This season ran Region → Zone → Junior Nationals. There was no East/West/Central round; that begins in 2026.' });
+    }
+    if (s && s.regionals && s.regionals.advance) {
+      out.push({ kind:'rule', text:'Top ' + s.regionals.advance + ' per springboard event advanced from Regionals to Zones.' });
+    }
+    if (s && s.zones && s.zones.springboardAdvance) {
+      out.push({ kind:'rule', text:'From Zones: springboard top ' + s.zones.springboardAdvance +
+        ' and platform top ' + s.zones.platformAdvance + ' advanced to Junior Nationals.' });
+    }
+    if (s && s.zones && s.zones.direct) {
+      out.push({ kind:'rule', text:'From Zones: top ' + s.zones.direct + ' direct to Junior Nationals, places ' +
+        s.zones.toEWC[0] + '–' + s.zones.toEWC[1] + ' to East/West/Central.' });
+    }
+    if (!out.length) return '';
+    const ic = { warn:'⚠', caveat:'⚠', info:'ℹ', rule:'§' };
+    return `<div class="rpt-season-notes">` + out.map(n =>
+      `<span class="rpt-season-note rpt-note-${n.kind}"><b>${ic[n.kind]||'ℹ'}</b> ${esc(n.text)}</span>`
+    ).join('') + `</div>`;
+  }
+
   function buildTopHeader(){
     const mkTab = ([k,l,ic]) =>
       `<button class="rpt-toptab ${rptState.panel===k?'is-active':''}" onclick="window._rptPanel('${k}')">
@@ -2351,11 +2382,45 @@
       </div>
       <div class="rpt-top-row2"><div class="rpt-toptab-row">${tabsRowB}</div><div class="rpt-toptab-row">${tabsRowA}</div></div>
       <div class="rpt-top-row3">${buildFilterChips()}</div>
+      ${buildSeasonNotes()}
     </div>`;
   }
 
   /* ── Year selector + Neon year loader ───────────────────────── */
   let _availableYears = null;   // populated async
+
+  /* The app now spans 2013–2026. Several panels used to hard-code
+     [2021..2025], which silently hid a decade of history once the older
+     seasons loaded. Everything goes through this instead: the live list when
+     it has arrived, and the full known range as a fallback rather than the
+     recent slice. */
+  function allYears(){
+    if (_availableYears && _availableYears.length) return _availableYears.slice().sort((a,b)=>a-b);
+    const E = window.JuniorEras;
+    if (E) return E.seasons();
+    return [2013,2014,2015,2016,2017,2018,2019,2021,2022,2023,2024,2025,2026];
+  }
+  function pastYears(){
+    return allYears().filter(y => y !== _currentSeason);
+  }
+
+  /* Stages actually contested in a season. 2026 introduced East/West/Central;
+     2013 and 2014 additionally ran the Age Group National Championships, a
+     separate competition from the Junior Nationals. Hard-coding four stages
+     hid both. */
+  function stagesForYear(year){
+    const E = window.JuniorEras;
+    const y = Number(year) || _currentSeason;
+    if (E && E.season(y)) return E.season(y).stages.slice();
+    return ['Regionals','Zones','EWC','Nationals'];
+  }
+  function selectedYear(){
+    return (_yearOverrideRows ? rptState.selectedYear : _currentSeason);
+  }
+  function stageLabelFor(stage){
+    const E = window.JuniorEras;
+    return E ? E.stageLabel(stage) : stage;
+  }
   let _yearLoading = false;
   let _yearLoadError = null;
 
@@ -3935,7 +4000,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         fb.params
       );
       const sel = histState.yearsSelected;
-      const stages = ['Regionals','Zones','EWC','Nationals'];
+      const stages = stagesForYear(selectedYear());
       const years = Array.from(new Set(r.rows.map(x=>x.year))).filter(y => sel.has(y)).sort();
       const grid = {};
       r.rows.forEach(x => { grid[x.year+'|'+x.stage] = x.athletes; });
@@ -4022,7 +4087,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const fb = rptFiltersToSQL(2);
       const r = await neonQuery(
         "SELECT year, age_group, gender, COUNT(DISTINCT diver_id_dm)::int AS n "+
-        "FROM core.event_results WHERE is_junior_circuit AND stage IN ('Regionals','Zones','EWC','Nationals') "+
+        "FROM core.event_results WHERE is_junior_circuit AND stage IN ('Regionals','Zones','EWC','Nationals','AgeGroup-Nationals') "+
         "AND year = ANY($1::int[])"+fb.sql+" "+
         "GROUP BY year, age_group, gender ORDER BY year, age_group, gender",
         ['{'+yrList.join(',')+'}', ...fb.params]
@@ -4287,7 +4352,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     loadDeclinedData();
   };
   window._declAllYears = function(){ declState.years = null; loadDeclinedData(); };
-  window._declPre2026 = function(){ declState.years = new Set([2021,2022,2023,2024,2025]); loadDeclinedData(); };
+  window._declPre2026 = function(){ declState.years = new Set(pastYears()); loadDeclinedData(); };
   window._declExport = function(){
     const rows = window._declCachedRows || [];
     const hdr = ['year','diver_first','diver_last','diver_id_dm','team_name','zone','event_key','zone_place','zone_score','age_group','gender','discipline','region'];
@@ -4666,7 +4731,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     loadTierEntry();
   }
 
-  const tierState = { years: new Set([2021,2022,2023,2024,2025]) };
+  const tierState = { years: new Set(pastYears()) };
 
   async function loadTierEntry(){
     renderTierControls();
@@ -4802,7 +4867,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
 
   function renderTierControls(){
     const el = document.getElementById('tier-controls'); if (!el) return;
-    const years = [2021,2022,2023,2024,2025];
+    const years = pastYears();
     const sel = tierState.years;
     el.innerHTML = '<span class="rpt-slicer-lbl">Years:</span> '+
       years.map(y => `<button class="rpt-yr-chip ${sel.has(y)?'is-on':''}" onclick="window._tierToggleYear(${y})">${y}</button>`).join('')+
@@ -4814,7 +4879,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     else tierState.years.add(y);
     loadTierEntry();
   };
-  window._tierAllYears = function(){ tierState.years = new Set([2021,2022,2023,2024,2025]); loadTierEntry(); };
+  window._tierAllYears = function(){ tierState.years = new Set(allYears()); loadTierEntry(); };
 
   /* ── Shareable view URLs ──────────────────────────────────────
      Encode current filter+drill+panel state in URL hash. Apply on page load. */
@@ -5010,7 +5075,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         );
         const grid = {};
         r.rows.forEach(x => grid[x.year+'|'+x.stage] = x);
-        const stages = ['Regionals','Zones','EWC','Nationals'];
+        const stages = stagesForYear(selectedYear());
         return `<section class="rb-section">
           <h2 class="rb-h2">Executive Summary</h2>
           <table class="rb-table">
@@ -5263,7 +5328,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       label: 'Year × Stage Matrix',
       desc: 'Cross-year participation matrix with drop-off percentages',
       async build(opts){
-        const yrs = opts.years && opts.years.length ? opts.years : _availableYears || [2021,2022,2023,2024,2025,2026];
+        const yrs = opts.years && opts.years.length ? opts.years : allYears();
         const r = await neonQuery(
           "SELECT year, stage, COUNT(DISTINCT diver_id_dm)::int AS n "+
           "FROM core.event_results WHERE is_junior_circuit AND year IS NOT NULL "+
@@ -5298,7 +5363,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       label: 'Declined Nationals — Summary',
       desc: 'Top-3 Zone qualifiers absent from the next stage, count by year',
       async build(opts){
-        const yrs = opts.years && opts.years.length ? opts.years : [2021,2022,2023,2024,2025];
+        const yrs = opts.years && opts.years.length ? opts.years : pastYears();
         const r = await neonQuery(`
           WITH top3 AS (
             SELECT DISTINCT year, event_key, diver_id_dm
@@ -5337,7 +5402,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       label: 'Declined Nationals — Athlete List',
       desc: 'Names, teams, events of each decliner (may be long)',
       async build(opts){
-        const yrs = opts.years && opts.years.length ? opts.years : [2021,2022,2023,2024,2025];
+        const yrs = opts.years && opts.years.length ? opts.years : pastYears();
         const r = await neonQuery(`
           WITH top3 AS (
             SELECT DISTINCT ON (year, event_key, zone, diver_id_dm)
@@ -5846,7 +5911,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     { id: 'cce_briefing', label: 'CCE Briefing',
       desc: 'For Committee for Competitive Excellence meetings. Year-over-year pipeline, decline rates, demographics, and band conversion.',
       sections: ['exec_summary','year_matrix','qualifier_rates','declined_summary','demographic_mix','rule_era'],
-      defaultYears: [2021,2022,2023,2024,2025,2026] },
+      defaultYears: allYears() },
     { id: 'board_update', label: 'Board Update',
       desc: 'Concise update for Board of Directors. Pipeline funnel + multi-year context + anomalies.',
       sections: ['exec_summary','pipeline_funnel','year_matrix','anomaly_summary'],
@@ -5858,11 +5923,11 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     { id: 'rule_change', label: 'Rule Change Impact',
       desc: 'Compare the three rule eras. Includes band conversion to show structural shifts.',
       sections: ['rule_era','year_matrix','qualifier_rates','declined_summary','demographic_mix'],
-      defaultYears: [2021,2022,2023,2024,2025,2026] },
+      defaultYears: allYears() },
     { id: 'decliner_deep', label: 'Decliner Deep Dive',
       desc: 'Full breakdown of top-3 Zone qualifiers who skipped the next stage. Named athlete list.',
       sections: ['declined_summary','declined_athletes','band_demographic','demographic_mix'],
-      defaultYears: [2021,2022,2023,2024,2025] },
+      defaultYears: pastYears() },
     { id: 'athlete_spotlight', label: 'Athlete Spotlight',
       desc: 'Single-athlete career trace. Requires DM ID.',
       sections: ['athlete_career'],
@@ -5911,7 +5976,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   function renderBuilder(){
     const m = document.getElementById('rb-modal');
     if (!m) return;
-    const years = _availableYears || [2021,2022,2023,2024,2025,2026];
+    const years = allYears();
     const selYears = rbState.years || (rbState.selectedTemplate ? REPORT_TEMPLATES.find(t=>t.id===rbState.selectedTemplate)?.defaultYears : null) || [_currentSeason];
     const requiresDmId = Array.from(rbState.selectedSections).some(s => REPORT_SECTIONS[s] && REPORT_SECTIONS[s].requiresDmId);
     const canGenerate = rbState.selectedSections.size > 0 && (!requiresDmId || rbState.dmId.trim());
@@ -6099,7 +6164,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     rbState.years = cur.slice().sort();
     renderBuilder();
   };
-  window._rbAllYears = function(){ rbState.years = (_availableYears || [2021,2022,2023,2024,2025,2026]).slice().sort(); renderBuilder(); };
+  window._rbAllYears = function(){ rbState.years = allYears(); renderBuilder(); };
   window._rbCurrentOnly = function(){ rbState.years = [_currentSeason]; renderBuilder(); };
   window._rbSetDmId = function(v){ rbState.dmId = v; };
 
@@ -6284,7 +6349,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         if (era && byEra[era.id][x.stage]) byEra[era.id][x.stage].push(x.divers);
       });
       const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : 0;
-      const stages = ['Regionals','Zones','EWC','Nationals'];
+      const stages = stagesForYear(selectedYear());
       const html = `
         <h3 class="rpt-card-h">Avg athletes per year, per stage</h3>
         <table class="rpt-table">

@@ -1168,3 +1168,30 @@ html, body { overflow-x: hidden; }
 /* qv-sort-bar: no sticky positioning — flows inline within its view container */
 
 .stage-content { display: contents; }
+/* ── Season context notes (multi-season reports) ──────────────────────────
+   The audit spans 2013–2026 and the format changed several times. These
+   banners state the rules in force for the selected season so a historical
+   result is not read under current assumptions. Colours stay inside the
+   brand palette; note that red on blue is never used. */
+.rpt-season-notes{
+  display:flex; flex-wrap:wrap; gap:6px;
+  padding:8px 0 2px;
+  border-top:1px solid rgba(23,31,105,.10);
+  margin-top:6px;
+}
+.rpt-season-note{
+  display:inline-flex; align-items:flex-start; gap:6px;
+  font:500 11.5px/1.45 'Inter',system-ui,sans-serif;
+  padding:5px 10px; border-radius:6px;
+  max-width:100%;
+}
+.rpt-season-note b{ font-weight:800; flex:0 0 auto; }
+.rpt-note-info  { background:#EAF4FB; color:#0F4C68; }
+.rpt-note-rule  { background:#F1F3F9; color:#171F69; }
+.rpt-note-caveat{ background:#FFF4E5; color:#7A4A00; }
+.rpt-note-warn  { background:#FDECEF; color:#8B0C22; }
+
+@media print{
+  .rpt-season-notes{ break-inside:avoid; page-break-inside:avoid; }
+  .rpt-season-note{ border:1px solid #bbb; background:#fff !important; color:#000 !important; }
+}
