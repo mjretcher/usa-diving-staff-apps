@@ -163,21 +163,31 @@
     }
   });
 
-  // 2021–2025. From the app's own qualifier engine, which is the operative
-  // source for these seasons.
-  [2021, 2022, 2023, 2024, 2025].forEach(function (y) {
+  // 2019–2023. Verified against the 2019 USA Diving Competitive and Technical
+  // Rules, Art. 122. USA Diving's own 2023 Region Championships FAQ states that
+  // "all junior rules included in the current USA Diving rulebook (from 2019)
+  // will remain in effect through the end of 2023", so one document governs
+  // five seasons.
+  //
+  // 2024–2025 keep the same advancement structure but sit under a later
+  // revision, since the required dive counts changed on 1 Jan 2024. The
+  // advancement numbers below still match the qualifier engine in
+  // junior-data.js for those two seasons.
+  [2019, 2021, 2022, 2023, 2024, 2025].forEach(function (y) {
     defineSeason(y, {
       structure: 'region-zone-nationals',
       stages: ['Regionals', 'Zones', 'Nationals'],
       verified: true,
-      source: 'USA Diving junior rules (2019 rule book, in force through 2023); matches the qualifier engine in junior-data.js',
+      source: y <= 2023
+        ? '2019 USA Diving Competitive and Technical Rules, Art. 122 (in force through 2023)'
+        : '2019 rule book advancement structure, carried forward; dive counts revised 1 Jan 2024',
       regionCount: 12,
       zoneCount: 6,
       regionals: {
         groups: 'All four age groups compete on springboard',
         advance: 15,
         platform: 'exhibition',
-        note: 'Top 15 per springboard event advance to Zones. Platform is not contested at Regionals.'
+        note: 'Top 15 finishers in any springboard event who are U.S. citizens advance to Zones, provided they competed a full list. A diver scoring zero on two or more dives may not advance. A national 15th-place recalculated average also admits divers above that mark.'
       },
       zones: {
         groups: 'A, B, C, D on 1m, 3m and platform',
@@ -185,22 +195,25 @@
         platformAdvance: 7,
         semifinalDirect: 3,
         alternates: [11, 16],
-        note: 'Springboard top 10 and platform top 7 advance. Places 1–3 enter at the semifinal, the rest at prelims. Places 11–16 are conditional alternates only.'
+        noBackfillTop: 3,
+        note: 'Springboard: top 3 to the National Championships semifinals, 4th–10th to the preliminaries. Platform: top 3 to the semifinals, 4th–7th to the preliminaries. If a top-3 diver withdraws there is no advancement; a withdrawal from the 4th–10th or 4th–7th band is backfilled by the next finisher, but no diver below 16th place is considered and prequalified divers are excluded.'
       },
       ewc: null,
-      nationals: { note: 'Semifinal and final.' }
+      nationals: {
+        note: 'Three rounds. Preliminaries contest the 4th–10th (springboard) and 4th–7th (platform) Zone qualifiers. The semifinal adds the top 3 from each Zone to the top 6 out of the preliminaries. The top 12 from the semifinal contest the final, with dives-with-limit scores carried forward; 12th–30th are ranked on semifinal scores and below 30th on preliminary scores.'
+      }
     });
   });
 
   // 2018–2019. Structure is visible in the data — twelve Regionals, six Zones,
   // a single Junior Nationals — but the qualifying numbers for these seasons
   // have not been checked against a rule book, so they are not stated.
-  [2018, 2019].forEach(function (y) {
+  [2018].forEach(function (y) {
     defineSeason(y, {
       structure: 'region-zone-nationals',
       stages: ['Regionals', 'Zones', 'Nationals'],
       verified: false,
-      unverifiedNote: 'Advancement numbers for this season have not been confirmed against a rule book. Placements and scores are accurate; qualifying cutoffs are not shown.',
+      unverifiedNote: 'Advancement numbers for this season have not been confirmed against a rule book. Group C girls already dived the eight-dive springboard list in 2018, so this season sat under a revision between the 2014 and 2019 books rather than either of them. Placements and scores are accurate; qualifying cutoffs are not shown.',
       regionCount: 12,
       zoneCount: 6,
       regionals: { platform: 'exhibition' },
