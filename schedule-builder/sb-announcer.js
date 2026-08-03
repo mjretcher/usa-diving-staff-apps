@@ -45,7 +45,13 @@ function annSessHasFinals(sess) {
   if (!sess || sess.isPractice) return false;
   return (sess.events || []).some(e => annIsFinalEv(sess, e));
 }
+// The broadcast run-of-show presents the athletes on its own clock. A block
+// running on that clock must NOT also build an announcer script, or the
+// session gets two sets of introductions and two competing timings. Broadcast
+// wins because it is the authoritative clock (calcSessTiming defers to it);
+// the announcer panel says so in plain English rather than silently vanishing.
 function annOn(sess) {
+  if (typeof bcastOn === 'function' && bcastOn(sess)) return false;
   return Boolean(sess && sess.announcer && sess.announcer.on && annSessHasFinals(sess));
 }
 
@@ -785,6 +791,20 @@ function renderAnnSessPanel(sess) {
   const kind = annSessKind(sess);
   if (!kind) return '';
   if (kind === 'session') return renderOpenSessPanel(sess);
+  // Broadcast timing owns this block — it introduces the athletes itself, so
+  // the announcer script stands down rather than running a second set.
+  if (typeof bcastOn === 'function' && bcastOn(sess)) {
+    return `
+    <div class="fdiv"></div>
+    <div class="fsec">Announcer script</div>
+    <div style="font-size:11px;color:var(--tx2);line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
+      This block is running on the <strong>broadcast clock</strong>, which introduces the
+      finalists as part of the run-of-show. The announcer script is switched off here so the
+      session does not get two sets of introductions.<br/>
+      Use <strong>Preview run-of-show</strong> above for the running order and the PA lines, or turn
+      broadcast timing off to go back to the announcer script.
+    </div>`;
+  }
   const c = annCfg(sess);
   const evs = annEvents(sess);
   const filled = evs.filter(ev => annParseOrder((c.order || {})[ev.id] || '').length).length;

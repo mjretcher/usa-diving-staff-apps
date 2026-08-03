@@ -5524,7 +5524,7 @@ function renderGenerateModal(timed){
   ensureEntrantsLoaded();
   const aud=UI.genAud;const cfg={...AUD[aud]};
   const showLbl=S.meet.showCombineLabels!==false;
-  const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.',broadcast:'Second-by-second run-of-show for the streaming partner and the arena announcer — Senior finals only.'};
+  const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.',broadcast:'Second-by-second run-of-show for the streaming partner and the arena announcer — any final on the broadcast clock.'};
   const genTimed=genTimedForPreview(timed);
   return`<div class="modal modal-lg gen-modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>

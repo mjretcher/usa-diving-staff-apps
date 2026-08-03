@@ -1,11 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════════
    BROADCAST RUN-OF-SHOW
    ───────────────────────────────────────────────────────────────────────
-   Senior Nationals FINALS run on a broadcast clock, not the standard
-   throughput clock. A televised/streamed dive is not "how long does the
-   dive take" — it is: name announced → walk → dive → music sting →
-   two commentators talk it through → replay/camera cuts → score. That is
-   45–60 seconds per diver, not 32.
+   A PRESENTED FINAL runs on a broadcast clock, not the standard throughput
+   clock. A televised/streamed dive is not "how long does the dive take" —
+   it is: name announced → walk → dive → music sting → two commentators talk
+   it through → replay/camera cuts → score. That is 45–60 seconds per diver,
+   not 32.
+
+   This is available on ANY final — Senior, Junior, Junior Synchro, E/W/C,
+   Zone — and is opt-in per session. It began as a Senior Nationals tool, but
+   the show is the same shape wherever a final is presented rather than just
+   run. Junior Synchro is the case that opened it up: finals-only, no prelim
+   to pace it, and it needs a break after every round.
 
    This module is AUTHORITATIVE. When broadcast timing is switched on for a
    session, calcSessTiming() defers to bcastTiming() and the entire day
@@ -30,18 +36,26 @@
 ═══════════════════════════════════════════════════════════════════════ */
 
 // ── ELIGIBILITY ───────────────────────────────────────────────────────
-// Broadcast timing applies to SENIOR FINALS only. "Senior" is read from the
-// event level (Senior / Senior Synchro) or from the session's event tag, so
-// a senior block inside a combined Junior+Senior schedule still qualifies.
-// National Qualifier events carry round "Qualifier" and never qualify.
-function isSeniorish(sess, ev) {
-  if (/^senior/i.test(ev.level || '')) return true;
-  try { return sessTags(sess).includes('senior'); } catch (e) { return false; }
-}
+// ANY FINAL can be run on the broadcast clock — Senior, Junior, Junior
+// Synchro, E/W/C, Zone. It started as a Senior Nationals tool, but the shape
+// of the show is the same wherever a final is being presented rather than
+// simply run: introduce the field, dive a round, take a break, dive again.
+// Junior Synchro is the case that forced this — it is finals-only, so there
+// is no prelim to pace it, and it needs the round-by-round breaks.
+//
+// Eligibility is deliberately wide; ACTUALLY running on this clock is still
+// opt-in per session (sess.bcast.on), so nothing changes for any block until
+// it is switched on by hand. National Qualifier events carry round
+// "Qualifier" and so never qualify.
 function isBcastEv(sess, ev) {
   if (!ev || ev.style === 'Custom Block') return false;
-  if (ev.round !== 'Final') return false;
-  return isSeniorish(sess, ev);
+  return ev.round === 'Final';
+}
+// Senior-ness no longer gates anything — it only shades the wording on the
+// off-state panel so a Zone final does not get sold a television show.
+function isSeniorish(sess, ev) {
+  if (/^senior/i.test((ev && ev.level) || '')) return true;
+  try { return sessTags(sess).includes('senior'); } catch (e) { return false; }
 }
 function sessHasBcastEvents(sess) {
   if (!sess || sess.isPractice) return false;
@@ -698,10 +712,16 @@ function renderBcastSessPanel(sess) {
   const multi = evs.length > 1;
 
   if (!on) {
+    const annLive = typeof annOn === 'function' && sess.announcer && sess.announcer.on
+      && typeof annSessHasFinals === 'function' && annSessHasFinals(sess);
     return `<div class="bc-panel off">
       <div class="bc-hd"><span class="bc-dot"></span><span class="bc-title">Broadcast timing</span>
         <button class="chip" onclick="setBcast('${sess.id}','on',true)">Turn on</button></div>
-      <p class="bc-help">This session has Senior finals. Turning this on switches it to the broadcast clock — 45+ seconds per diver, named commercial breaks, intros and awards as timed show elements. <strong>The whole day reflows around it.</strong></p>
+      <p class="bc-help">Runs ${multi ? 'these finals' : 'this final'} as a presented show instead of straight through: athletes introduced,
+      a slower ${bcastEvSpd(evs[0])} seconds per diver, and a named break after every round that you set yourself.
+      Off by default — nothing changes until you turn it on. <strong>When you do, the whole day reflows around it.</strong></p>
+      ${annLive ? `<p class="bc-help">This block currently uses the <strong>announcer script</strong>. Turning broadcast timing on
+      switches that off, because the run-of-show does the introductions itself.</p>` : ''}
     </div>`;
   }
 
@@ -1043,7 +1063,7 @@ const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'reset
   'resetName', 'resetPos', 'resetSplitAfter', 'introMode', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin',
   'awardsBreakSec', 'awardsBreakName', 'awardsBreakPos'];
 
-// Every senior final in the meet, in running order.
+// Every final in the meet, in running order.
 function bcastAllFinals() {
   const out = [];
   const seen = {};
@@ -1142,7 +1162,7 @@ function renderBcastCopyModal() {
           <button class="bc-dp ghost" onclick="bcastCopySelectAll(false)">None</button></span>
       </div>
       ${targets.length ? `<div class="bcc-list">${rows}</div>`
-      : `<div style="font-size:12px;color:var(--tx3)">There are no other senior finals in this schedule yet.</div>`}
+      : `<div style="font-size:12px;color:var(--tx3)">There are no other finals in this schedule yet.</div>`}
       ${targets.some(t => st.sel[t.ev.id] && bcastDives(t.ev) !== (srcEv ? bcastDives(srcEv) : 0))
       ? `<p class="bc-hint" style="margin-top:10px">Where an event has a different number of rounds, breaks are matched round by round — extra rounds repeat the last break, and any beyond the target's round count are dropped. Names and lengths are never invented.</p>` : ''}
       ${onCt ? `<p class="bc-hint warn" style="margin-top:8px">${onCt} of these ${onCt === 1 ? 'is' : 'are'} not on the broadcast clock yet. Switching ${onCt === 1 ? 'it' : 'them'} on re-times ${onCt === 1 ? 'that day' : 'those days'} around the show.</p>` : ''}
