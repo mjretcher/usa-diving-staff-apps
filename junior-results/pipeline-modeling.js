@@ -19,6 +19,35 @@
   };
   const JUDGE_FEE_2026 = 2;
 
+  /* ── Era-driven advancement thresholds ──────────────────────────────────
+     The pre-2026 gate was hard-coded to springboard top 10 / platform top 7.
+     That is right for 2021–2025 but wrong for 2013–2014, where the 2014 rule
+     book (Subpart C, Art. 122.1) sets top 6 on every board, with places 7–12
+     going to the separate Age Group National Championships instead. Applying
+     the modern numbers to that era would report a 7th-place Zone finisher as
+     having failed to advance when in fact they advanced to a different
+     national championship.
+
+     For seasons whose rules are not confirmed (2015–2019) no threshold is
+     returned, and the caller reports advancement as unknown rather than
+     guessing. */
+  function eraAdvance(year){
+    const E = window.JuniorEras;
+    const s = E && E.season(Number(year));
+    if (!s || !s.zones) return null;
+    if (!s.verified) return null;
+    const z = s.zones;
+    if (z.springboardAdvance == null) return null;
+    return {
+      springboard: z.springboardAdvance,
+      platform: z.platformAdvance != null ? z.platformAdvance : z.springboardAdvance,
+      ageGroupBand: z.ageGroupBand || null,
+      note: z.note || ''
+    };
+  }
+
+  function eraRulesKnown(year){ return eraAdvance(year) !== null; }
+
   /* Stage order & display labels */
   const STAGE_ORDER = ['Regionals','Zones','EWC','Nationals'];
   const STAGE_LABELS = {
@@ -506,10 +535,24 @@
        level is per event-spot (was this specific qualified spot used). Only
        runs for years with both Zones and Nationals results, so a year missing
        Nationals data can never mislabel everyone as a no-show. */
+    const _adv = eraAdvance(year);
     if (out.advBreakdown === null
         && Number(year) < 2026
+        && !_adv) {
+      // Rules for this season are not confirmed, so the breakdown is withheld
+      // rather than computed against numbers that may not have applied.
+      out.advBreakdownUnknown = {
+        year: Number(year),
+        reason: 'Advancement rules for ' + year + ' have not been confirmed against a rule book, ' +
+                'so qualified / did-not-advance cannot be computed. Placements and scores below are accurate.'
+      };
+    }
+    if (out.advBreakdown === null
+        && Number(year) < 2026
+        && _adv
         && out.stages.Zones.unique_athletes > 0
         && out.stages.Nationals.unique_athletes > 0) {
+      const advSB = _adv.springboard, advPL = _adv.platform;
       try {
         const pbFb = buildFiltersSql(2);
         const flt = (pmState.excludeFutureChamps ? nonQualSql() : '') + pbFb.sql;
@@ -523,7 +566,7 @@
           "    AND stage = 'Zones' AND place IS NOT NULL AND place <> 127" +
           "), " +
           "zd AS (SELECT diver_id_dm, age_group, event_key, discipline, place, " +
-          "    ((discipline IN ('1M','3M') AND place <= 10) OR (discipline = 'Platform' AND place <= 7)) AS qualified " +
+          "    ((discipline IN ('1M','3M') AND place <= " + advSB + ") OR (discipline = 'Platform' AND place <= " + advPL + ")) AS qualified " +
           "  FROM (SELECT z.*, MAX(rr) OVER (PARTITION BY event_key, zone, diver_id_dm) AS mrr FROM z) t " +
           "  WHERE rr = mrr), " +
           "natE AS (SELECT DISTINCT diver_id_dm, event_key FROM core.event_results " +
@@ -1806,6 +1849,15 @@
        Wording adapts to era — 2026 gates Zones → E/W/C, pre-2026 gates
        Zones → Junior Nationals directly (no E/W/C tier). */
     let advCard = '';
+    // Seasons whose advancement rules are not confirmed get an explicit
+    // statement instead of a breakdown computed from the wrong era's numbers.
+    if (data.advBreakdownUnknown) {
+      advCard = '<div class="pm-card pm-rules-unknown">' +
+        '<h3 class="pm-card-h">Advancement breakdown</h3>' +
+        '<p class="pm-note pm-note-caveat"><strong>Not shown for ' +
+        data.advBreakdownUnknown.year + '.</strong> ' +
+        escapeHtml(data.advBreakdownUnknown.reason) + '</p></div>';
+    }
     const BK = (abMode === 'nats')
       ? [
         { key:'nat_reg',   short:'Reached Jr Nationals',            label:'Reached Junior Nationals (competed)',                color:'#009ac7' },
@@ -1820,6 +1872,10 @@
       ];
     const sumBK = function(r){ return BK.reduce(function(a,b){ return a + (r[b.key]||0); }, 0); };
     if (abSrc && abTot && sumBK(abTot) > 0) {
+      const _eraAdv = eraAdvance(data.year);
+      const _eraLine = (_eraAdv && abMode === 'nats')
+        ? '<p class="pm-note pm-note-rule">\u00A7 ' + escapeHtml(_eraAdv.note) + '</p>'
+        : '';
       const rowHtml = function(name, r, isTotal){
         const tot = sumBK(r);
         if (!tot) return '';
@@ -1847,7 +1903,8 @@
       advCard =
         '<div style="margin:18px 0 6px;border:1px solid #e2e5ef;border-radius:12px;padding:18px 20px;background:#fff">' +
           '<div style="font-family:Barlow Condensed,Inter,sans-serif;font-weight:700;font-size:20px;letter-spacing:.01em;color:#171f69;text-transform:uppercase">Where the Zones field went \u2014 by age group</div>' +
-          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 14px;line-height:1.5">' + descHtml + '</div>' +
+          '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 8px;line-height:1.5">' + descHtml + '</div>' +
+          _eraLine +
           '<div style="overflow-x:auto">' +
           '<table style="width:100%;border-collapse:collapse;min-width:640px">' +
             '<thead><tr>' +

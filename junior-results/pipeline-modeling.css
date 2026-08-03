@@ -1819,3 +1819,26 @@ body.pm-active #stageContent > *:not(#pmDashboard) { display: none !important; }
   border-top: 1px solid var(--line, #e2e5ef);
   font-size: 12.5px; color: var(--ink-2, #2d3a4a);
 }
+
+/* ── Era-awareness notices (multi-season pipeline) ────────────────────────
+   The circuit did not run the same way in every season the audit now covers,
+   so the pipeline states the rule it applied, and refuses to compute an
+   advancement split for seasons whose rules are unconfirmed. */
+.pm-rules-unknown{
+  margin:18px 0 6px; border:1px solid #e2e5ef; border-radius:12px;
+  padding:18px 20px; background:#fff;
+}
+.pm-rules-unknown .pm-card-h{
+  font-family:'Barlow Condensed',Inter,sans-serif; font-weight:700;
+  font-size:20px; letter-spacing:.01em; color:#171F69;
+  text-transform:uppercase; margin:0 0 8px;
+}
+.pm-note-caveat{
+  background:#FFF4E5; border-left:3px solid #B26A00; color:#5A3600;
+  padding:8px 10px; border-radius:4px; font-size:12.5px; line-height:1.5; margin:0;
+}
+.pm-note-rule{
+  background:#F1F3F9; color:#171F69; border-left:3px solid #009AC7;
+  padding:7px 10px; border-radius:4px; font-size:12.5px;
+  line-height:1.5; margin:0 0 12px;
+}

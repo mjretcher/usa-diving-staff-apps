@@ -140,6 +140,8 @@
     stages: ['Regionals', 'Zones', 'EWC', 'Nationals'],
     verified: true,
     source: 'USA Diving, "An Update on the Junior Competitive Season Beginning in 2026"',
+    regionCount: 12,
+    zoneCount: 6,
     regionals: {
       groups: 'Groups A & B only — C & D advance straight to Zones',
       advance: 15,
@@ -168,7 +170,9 @@
       structure: 'region-zone-nationals',
       stages: ['Regionals', 'Zones', 'Nationals'],
       verified: true,
-      source: 'USA Diving junior rules; matches the qualifier engine in junior-data.js',
+      source: 'USA Diving junior rules (2019 rule book, in force through 2023); matches the qualifier engine in junior-data.js',
+      regionCount: 12,
+      zoneCount: 6,
       regionals: {
         groups: 'All four age groups compete on springboard',
         advance: 15,
@@ -197,6 +201,8 @@
       stages: ['Regionals', 'Zones', 'Nationals'],
       verified: false,
       unverifiedNote: 'Advancement numbers for this season have not been confirmed against a rule book. Placements and scores are accurate; qualifying cutoffs are not shown.',
+      regionCount: 12,
+      zoneCount: 6,
       regionals: { platform: 'exhibition' },
       zones: {},
       ewc: null,
@@ -211,6 +217,8 @@
       stages: ['Regionals', 'Zones', 'Nationals'],
       verified: false,
       unverifiedNote: 'Advancement numbers for this season have not been confirmed against a rule book.',
+      regionCount: 12,
+      zoneCount: 6,
       combinedNationals: true,
       combinedNote: 'The Junior National Championships were held within the USA Diving National Championships this season — the same meet ran junior age-group events alongside senior events.',
       combinedZones: y <= 2017,
@@ -222,21 +230,44 @@
     });
   });
 
-  // 2013–2014. Two separate national championships.
+  // 2013–2014. Verified against the 2014 USA Diving Competitive and Technical
+  // Rules, Subpart C (Junior Diving Program), Articles 120–124. This era is
+  // structurally unlike anything after it, and every number below is from that
+  // document rather than inferred.
   [2013, 2014].forEach(function (y) {
     defineSeason(y, {
-      structure: 'region-zone-nationals',
+      structure: 'region-ew-zone-dual-nationals',
       stages: ['Regionals', 'Zones', 'Nationals', 'AgeGroup-Nationals'],
-      verified: false,
-      unverifiedNote: 'Advancement numbers for this season have not been confirmed against a rule book.',
+      verified: true,
+      source: '2014 USA Diving Competitive and Technical Rules, Subpart C, Art. 120–124',
+      regionCount: 10,
+      zoneCount: 5,
       dualNationals: true,
-      dualNote: 'This season ran two separate national championships: the Junior National Championships and the Age Group National Championships, both contesting Groups A–D. They are shown separately.',
+      dualNote: 'Two national championships ran this season. Zone places 1–6 qualified for the Junior National Championships; places 7–12 qualified for the Age Group National Championships. A top-6 diver could elect to dive Age Group instead.',
       combinedZones: true,
-      zonesNote: 'Zone Championships were titled "National Preliminary Zone Championships" and also ran senior events.',
-      regionals: {},
-      zones: {},
+      zonesNote: 'Zone Championships were titled "National Preliminary Zone Championships" and also ran senior events. There were five zones (A–E) and ten regions, not six and twelve.',
+      springTrackNote: 'A separate spring track ran Regionals into the East/West Spring National Championships (top 6 per springboard event). Its top 3 prequalified to the prelims of either summer national championship. DiveMeets holds these as "Junior East/West National Championships"; they are not part of the summer pipeline shown here.',
+      regionals: {
+        groups: 'Springboard in 11 & Under, 12/13, 14/15 and 16-18',
+        advance: null,
+        advanceUnknown: true,
+        toEastWest: 6,
+        platform: 'optional at meet director discretion',
+        note: 'Top 6 per springboard event advanced to the East/West Spring National Championships. The number advancing to Zones is set in Subpart F and is not stated in Subpart C.'
+      },
+      zones: {
+        groups: 'Springboard and platform in all four age groups',
+        springboardAdvance: 6,
+        platformAdvance: 6,
+        ageGroupBand: [7, 12],
+        alternates: [null, 16],
+        noBackfillTop: 6,
+        note: 'Top 6 per event to Junior Nationals, with no advancement if a qualifier withdrew. Places 7–12 to Age Group Nationals prelims, backfilled no lower than 16th place.'
+      },
       ewc: null,
-      nationals: {}
+      nationals: {
+        note: 'Top 12 from prelims contested the final; prelim scores for dives with limit were carried forward.'
+      }
     });
   });
 
@@ -248,6 +279,8 @@
     source: 'COVID-19 pandemic',
     cancelled: true,
     cancelledNote: 'The 2020 season ended after Region Championships. No Zone or National Championships were held.',
+    regionCount: 12,
+    zoneCount: 6,
     regionals: {},
     zones: null,
     ewc: null,
