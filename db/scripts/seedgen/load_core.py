@@ -310,9 +310,7 @@ def build_event_results(db, from_year, team_codes, only=None):
             mid = str(m["meet_id"])
             mname = meetclass.normalize_name(m["meet_name"])
             year = str(m["start_date"])[:4]
-            lvl = erclass.event_level(st)
             reg, zn, ewc = erclass.region(mname), erclass.zone(mname), erclass.ewc_meet(mname)
-            jc = erclass.is_junior_circuit(st)
             for r in results.get(mid, []):
                 title = titles.get(mid, {}).get((str(r["event_id"]), str(r["round"])), "")
                 nm = erclass.event_name(title)
@@ -321,6 +319,8 @@ def build_event_results(db, from_year, team_codes, only=None):
                 ag = erclass.age_group(nm, st)
                 gd = erclass.gender(nm)
                 di = erclass.discipline(nm)
+                lvl = erclass.event_level(st, nm)
+                jc = erclass.is_junior_circuit(st, nm)
                 first, last = split_name(r["diver_name"])
                 tid = "" if r["team_id"] is None else str(r["team_id"])
                 rows.append([

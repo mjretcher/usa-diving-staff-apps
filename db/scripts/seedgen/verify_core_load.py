@@ -79,9 +79,9 @@ CHECKS = [
     ("every EWC row has an ewc_meet",
      "SELECT COUNT(*) FROM core.event_results "
      "WHERE stage = 'EWC' AND ewc_meet IS NULL", 0, "=="),
-    ("Junior Circuit rows with no gender (was 102)",
+    ("no non-junior genders in the Junior Circuit",
      "SELECT COUNT(*) FROM core.event_results "
-     "WHERE is_junior_circuit AND gender NOT IN ('Boys','Girls')", 102, "<="),
+     "WHERE is_junior_circuit AND gender NOT IN ('Boys','Girls')", 0, "=="),
 ]
 
 # The Junior A/B pool over the 523 meets the seed already covered must be

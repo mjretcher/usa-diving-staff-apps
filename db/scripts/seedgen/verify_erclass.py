@@ -57,14 +57,14 @@ for r in rows:
     st = erclass.stage(mn)
     got = {
         "stage": st,
-        "event_level": erclass.event_level(st),
+        "event_level": erclass.event_level(st, nm),
         "age_group": erclass.age_group(nm, st),
         "gender": erclass.gender(nm),
         "discipline": erclass.discipline(nm),
         "event_key": erclass.event_key(erclass.age_group(nm, st), erclass.gender(nm),
                                        erclass.discipline(nm)),
         "is_synchro": erclass.is_synchro(nm),
-        "is_junior_circuit": erclass.is_junior_circuit(st),
+        "is_junior_circuit": erclass.is_junior_circuit(st, nm),
         "region": erclass.region(mn),
         "zone": erclass.zone(mn),
         "ewc_meet": erclass.ewc_meet(mn),

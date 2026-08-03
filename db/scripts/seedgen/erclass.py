@@ -189,9 +189,21 @@ def ewc_meet(meet_name):
     return m.group(1).capitalize() if m else None
 
 
-def is_junior_circuit(st):
+# Before 2018 the "National Preliminary Zone Championships" ran Senior events
+# alongside the junior age groups -- they were combined qualifiers for both the
+# Junior and the Senior National Championships. So the stage alone does not
+# settle the level: a Senior event at a Zone meet is not Junior Circuit, and
+# treating it as such put 4,581 senior results into the junior pipeline.
+_SENIOR_EVENT = re.compile(r"\bsenior\b", re.I)
+
+
+def is_junior_circuit(st, name=""):
+    if _SENIOR_EVENT.search(name or ""):
+        return False
     return st in JUNIOR_CIRCUIT_STAGES
 
 
-def event_level(st):
+def event_level(st, name=""):
+    if _SENIOR_EVENT.search(name or ""):
+        return "Senior"
     return _LEVEL_BY_STAGE.get(st, "Other")
