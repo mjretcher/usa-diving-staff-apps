@@ -1,0 +1,83 @@
+/* ── Junior HP Squad tracker ───────────────────────────────────────────────
+   Laid out block-by-block to mirror the sheet the HP Director builds by hand,
+   so the shape is familiar: event heading, target, then the divers who met it.
+   Brand palette only; red is never placed on blue. */
+.hps-wrap{ font-family:'Inter',system-ui,sans-serif; color:#1b2233; }
+.hps-h2{
+  font-family:'Barlow Condensed',Inter,sans-serif; font-weight:700;
+  font-size:26px; letter-spacing:.01em; text-transform:uppercase;
+  color:#171F69; margin:26px 0 4px; padding-bottom:6px;
+  border-bottom:2px solid #171F69;
+}
+.hps-sub{ font-size:12.5px; color:#5a6a7e; margin:2px 0 12px; }
+
+.hps-kpis{ display:flex; flex-wrap:wrap; gap:10px; margin:12px 0; }
+.hps-kpi{
+  background:#F1F3F9; border-radius:10px; padding:10px 16px; min-width:150px;
+  border-left:4px solid #009AC7;
+}
+.hps-kpi b{ display:block; font-family:'JetBrains Mono',monospace; font-size:24px; color:#171F69; }
+.hps-kpi span{ font-size:11.5px; color:#5a6a7e; }
+.hps-kpi-warn{ background:#FFF4E5; border-left-color:#B26A00; }
+.hps-kpi-warn b{ color:#7A4A00; }
+
+.hps-caveat{
+  background:#FFF4E5; border-left:3px solid #B26A00; color:#5A3600;
+  padding:9px 12px; border-radius:4px; font-size:12.5px; line-height:1.55; margin:10px 0 0;
+}
+
+.hps-block{ margin:18px 0; break-inside:avoid; page-break-inside:avoid; }
+.hps-h3{
+  font-family:'Barlow Condensed',Inter,sans-serif; font-weight:700; font-size:19px;
+  color:#171F69; text-transform:uppercase; letter-spacing:.01em;
+  margin:0 0 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+}
+.hps-round{
+  font-family:'Inter',sans-serif; font-weight:600; font-size:11px;
+  text-transform:none; letter-spacing:0; color:#0F4C68;
+  background:#EAF4FB; border-radius:20px; padding:2px 10px;
+}
+.hps-target{
+  font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11.5px;
+  text-transform:none; color:#fff; background:#009AC7;
+  border-radius:4px; padding:2px 8px;
+}
+.hps-target-none{ background:#8b93a7; }
+.hps-disc{
+  font-family:'Inter',sans-serif; font-weight:700; font-size:10.5px;
+  text-transform:uppercase; color:#7A4A00; background:#FFF4E5;
+  border:1px solid #E5C68A; border-radius:4px; padding:2px 8px;
+}
+
+.hps-table{ width:100%; border-collapse:collapse; margin:6px 0 4px; font-size:13px; }
+.hps-table th{
+  text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+  color:#5a6a7e; border-bottom:1px solid #d8dce8; padding:5px 8px; font-weight:700;
+}
+.hps-table td{ padding:5px 8px; border-bottom:1px solid #eef0f6; }
+.hps-table tbody tr:hover{ background:#F7F9FC; }
+.hps-pl{ width:44px; color:#5a6a7e; font-family:'JetBrains Mono',monospace; }
+.hps-nm{ font-weight:600; }
+.hps-tm{ color:#5a6a7e; font-size:12px; }
+.hps-sc{ font-family:'JetBrains Mono',monospace; text-align:right; width:88px; font-weight:600; }
+.hps-note{ font-size:12px; color:#7A4A00; }
+.hps-soft{ font-size:12px; color:#5a6a7e; margin:4px 0; }
+.hps-agewarn{ background:#FFF4E5; color:#5A3600; padding:7px 10px; border-radius:4px; border-left:3px solid #B26A00; }
+
+/* Voluntary dives: each cell is one dive's surviving-judge total. */
+.hps-dives{ display:flex; gap:5px; flex-wrap:wrap; }
+.hps-dv{
+  font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;
+  background:#EAF4FB; color:#0F4C68; border-radius:4px; padding:2px 8px; min-width:38px; text-align:center;
+}
+.hps-dv.is-short{ background:#FFF4E5; color:#8A4B00; border:1px solid #E5C68A; }
+
+.hps-loading,.hps-error{ padding:24px; font-size:14px; color:#5a6a7e; }
+.hps-error{ color:#8B0C22; }
+
+@media print{
+  .hps-h2{ font-size:20px; }
+  .hps-kpi{ border:1px solid #bbb; }
+  .hps-dv{ border:1px solid #bbb; background:#fff !important; color:#000 !important; }
+  .hps-caveat,.hps-agewarn{ border:1px solid #999; background:#fff !important; color:#000 !important; }
+}
