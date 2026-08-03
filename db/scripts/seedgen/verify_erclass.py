@@ -54,7 +54,7 @@ for r in rows:
 
     mn = r["meet_name"]
     nm = erclass.event_name(title)
-    st = erclass.stage(mn)
+    st = erclass.stage(mn, nm)
     got = {
         "stage": st,
         "event_level": erclass.event_level(st, nm),

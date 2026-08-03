@@ -306,7 +306,7 @@ def build_event_results(db, from_year, team_codes, only=None):
                               FROM divemeets.results WHERE meet_id IN ({ids})"""):
             results.setdefault(str(r["meet_id"]), []).append(r)
 
-        for m, st in chunk:
+        for m, meet_st in chunk:
             mid = str(m["meet_id"])
             mname = meetclass.normalize_name(m["meet_name"])
             year = str(m["start_date"])[:4]
@@ -316,11 +316,14 @@ def build_event_results(db, from_year, team_codes, only=None):
                 nm = erclass.event_name(title)
                 if not nm:
                     continue
+                # Stage can differ per event within one meet: 2015-2017 ran the
+                # Junior National Championships inside the senior meet.
+                st = erclass.stage(mname, nm) or meet_st
+                jc = erclass.is_junior_circuit(st, nm)
                 ag = erclass.age_group(nm, st)
                 gd = erclass.gender(nm)
                 di = erclass.discipline(nm)
                 lvl = erclass.event_level(st, nm)
-                jc = erclass.is_junior_circuit(st, nm)
                 first, last = split_name(r["diver_name"])
                 tid = "" if r["team_id"] is None else str(r["team_id"])
                 rows.append([

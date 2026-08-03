@@ -130,6 +130,11 @@ _STAGE_RULES = [
     ("Zones", r"\bzone\s+[A-F]\b"),
     ("JrWorlds-Trials", r"junior\s+world.*trials"),
     ("Nationals", r"junior\s+national"),
+    # 2013 and 2014 ran a separate "Age Group National Championships" alongside
+    # the Junior National Championships -- both with Groups A-D. The rulebook
+    # lists them as distinct championships. Matched before the senior rules,
+    # which would otherwise claim it via "National Championships".
+    ("AgeGroup-Nationals", r"age\s+group\s+national"),
     ("High-Dive", r"high\s+dive"),
     ("Camp", r"\bcamp\b"),
     ("Winter-Nationals-Qualifier", r"winter\s+national\w*\s+qualifier"),
@@ -140,11 +145,23 @@ _STAGE_RULES = [
     # "National Championships Qualifier" was filed under Senior-Nationals. That
     # is a legacy inconsistency, not a rule; the singular form is matched here
     # and the 83 plural rows are left to the merge.
-    ("Senior-Nat-Qualifier", r"national\s+championship\s+qualifier"),
-    ("Senior-Nationals", r"national\s+championship"),
+    # "2015 USA Diving ATT National Diving Championships" puts a word between
+    # National and Championships, so the adjacency has to be optional.
+    ("Senior-Nat-Qualifier", r"national\s+(?:\w+\s+)?championship\w*\s+qualifier"),
+    ("Senior-Nationals", r"national\s+(?:\w+\s+)?championship"),
     ("Open", r"open\s+championship"),
 ]
-JUNIOR_CIRCUIT_STAGES = {"Regionals", "Zones", "EWC", "Nationals"}
+JUNIOR_CIRCUIT_STAGES = {"Regionals", "Zones", "EWC", "Nationals", "AgeGroup-Nationals"}
+
+# A junior age-group event title. Junior meets label these "J.O" or by bracket;
+# senior events in the same meet say "Senior" or use Men/Women.
+_JUNIOR_EVENT = re.compile(
+    r"\bGroup\s*[ABCD]\b|\b16\s*-\s*18\b|\b14\s*-\s*18\b|\b14\s*-\s*15\b|"
+    r"\b12\s*-\s*13\b|\b11\s*(?:&|and)\s*under\b|\b10\s*-\s*11\b|\bJ\.?\s*O\.?\b", re.I)
+
+
+def is_junior_event(name):
+    return bool(_JUNIOR_EVENT.search(name or ""))
 SENIOR_STAGES = {"Winter-Nationals", "Winter-Nationals-Qualifier", "Senior-Nationals",
                  "Senior-Nat-Qualifier", "Open", "Olympic-Trials",
                  "Olympic-Trials-Qualifier"}
@@ -164,14 +181,30 @@ _NOT_USA_DIVING = re.compile(r"\bNCAA\b|national\s+collegiate|\bconference\b|"
                              r"world\s+aquatics|\bFINA\b", re.I)
 
 
-def stage(meet_name):
+def stage(meet_name, event_name=None):
+    """Stage is usually a property of the meet, but not always. From 2015 to
+    2017 the Junior National Championships were run inside the senior meet --
+    "2015 USA Diving ATT National Diving Championships" carries 72 junior
+    age-group events next to 16 senior ones. Judging by meet name alone filed
+    three whole seasons of Junior Nationals under Senior-Nationals, which is
+    why 2015-2017 looked like missing data.
+
+    When an event name is supplied and the meet is a national championship,
+    the event decides."""
     n = " ".join((meet_name or "").split())
     if _NOT_USA_DIVING.search(n):
         return None
+    base = None
     for label, rx in _STAGE_RULES:
         if re.search(rx, n, re.I):
-            return label
-    return None
+            base = label
+            break
+    if event_name and base in ("Senior-Nationals", "Nationals"):
+        if is_junior_event(event_name):
+            return "Nationals"
+        if _SENIOR_EVENT.search(event_name) or gender(event_name) in ("Men", "Women"):
+            return "Senior-Nationals"
+    return base
 
 
 def region(meet_name):
