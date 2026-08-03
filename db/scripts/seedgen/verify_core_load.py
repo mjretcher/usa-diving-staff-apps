@@ -94,7 +94,8 @@ fails = 0
 print(f"{'check':<52}{'expected':>12}{'actual':>12}  result")
 for label, sql, exp, cmp_ in CHECKS:
     got = int(one(sql))
-    ok = {"==": got == exp, ">=": got >= exp, ">": got > exp}[cmp_]
+    ok = {"==": got == exp, ">=": got >= exp, ">": got > exp,
+          "<=": got <= exp, "<": got < exp}[cmp_]
     fails += not ok
     print(f"{label:<52}{cmp_+' '+str(exp):>12}{got:>12}  {'PASS' if ok else 'FAIL'}")
 

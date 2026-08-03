@@ -280,6 +280,12 @@ def build_event_results(db, from_year, team_codes, only=None):
             continue
         if int(str(m["start_date"])[:4]) < from_year:
             continue
+        # Belt and braces with the guard inside erclass.stage: only USA Diving
+        # sanctioned meets belong in this table's regenerated rows. NCAA and
+        # World Aquatics rows here come from the supplement, which is carried
+        # through untouched rather than regenerated.
+        if meetclass.competition_family(mid, m["meet_name"], m["sanction"] or "") != "USA Diving":
+            continue
         st = erclass.stage(m["meet_name"])
         if st:
             picked.append((m, st))
@@ -431,8 +437,16 @@ def main():
                 team_codes.setdefault(str(r["team_id_dm"]), r["team_code"])
         er_rows = build_event_results(dbq, args.er_from_year, team_codes, only)
         gen_keys = {er_key(lambda c, r=r: r[ER_COLS.index(c)]) for r in er_rows}
+        # Rows this loader wrote on a previous run are ALWAYS discarded and
+        # rebuilt, never kept. Without this the merge is not idempotent: when a
+        # classification rule tightens, rows that no longer qualify simply stop
+        # being regenerated and the stale versions survive as "kept". That is
+        # exactly how 9,497 NCAA zone rows would have stayed in the Junior
+        # Circuit after the guard was added. Only rows from a non-crawl source
+        # are eligible to be preserved.
         kept = [[("" if r[c] is None else str(r[c])) for c in ER_COLS] for r in existing
-                if er_key(lambda c, r=r: r[c]) not in gen_keys]
+                if r["source_file"] != "divemeets_crawl"
+                and er_key(lambda c, r=r: r[c]) not in gen_keys]
         er_all = er_rows + kept
         # This table legitimately contains a few duplicate natural keys (11
         # groups today), so duplicates are reported rather than rejected -- but
@@ -463,12 +477,21 @@ def main():
     # The analytics rebuild drops and recreates its tables, taking their ACLs
     # with them, so the browser role has to be re-granted. Same guard as
     # build_analytics.py.
-    cur.execute("""DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='usad_app') THEN
-        GRANT USAGE ON SCHEMA core TO usad_app;
-        GRANT SELECT ON ALL TABLES IN SCHEMA core TO usad_app;
-      END IF; END $$""")
-    conn.commit()
+    # GRANT touches a shared catalog tuple, so two overlapping runs collide with
+    # "tuple concurrently updated" -- which is what failed this job after the
+    # data had already committed. The data is what matters; a lost re-grant is
+    # harmless because db/schema.sql sets ALTER DEFAULT PRIVILEGES on core. So
+    # this is best-effort and never fails the run.
+    try:
+        cur.execute("""DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='usad_app') THEN
+            GRANT USAGE ON SCHEMA core TO usad_app;
+            GRANT SELECT ON ALL TABLES IN SCHEMA core TO usad_app;
+          END IF; END $$""")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"re-grant skipped ({e.__class__.__name__}); data already committed", flush=True)
     conn.close()
 
 

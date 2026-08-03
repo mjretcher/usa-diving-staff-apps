@@ -155,8 +155,19 @@ _LEVEL_BY_STAGE["JrWorlds-Trials"] = "Junior"
 _LEVEL_BY_STAGE.update({s: "Senior" for s in SENIOR_STAGES})
 
 
+# The Junior Circuit stage names collide with collegiate ones: "2026 NCAA ZONE
+# A CHAMPIONSHIPS" matches the same "Zone [A-F]" pattern as "2026 USA Diving
+# Zone A Championships". The seed only ever held 130 meets so this never came
+# up; the crawl carries 65 NCAA zone meets, which landed 9,497 collegiate rows
+# in the Junior Circuit pipeline before this guard.
+_NOT_USA_DIVING = re.compile(r"\bNCAA\b|national\s+collegiate|\bconference\b|"
+                             r"world\s+aquatics|\bFINA\b", re.I)
+
+
 def stage(meet_name):
     n = " ".join((meet_name or "").split())
+    if _NOT_USA_DIVING.search(n):
+        return None
     for label, rx in _STAGE_RULES:
         if re.search(rx, n, re.I):
             return label
