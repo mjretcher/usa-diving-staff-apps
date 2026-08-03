@@ -35,7 +35,7 @@ import argparse, csv, collections, io, os, sys
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import classify, meetclass
+import classify, meetclass, erclass
 from ncaa5cat import five_cat, dive_category, _num
 from generate_seeds import (PHASE_COLS, DIVE_COLS, Neon, dec, clean_place,
                             clean_team, phase_key, dive_sheet_key, TOL)
@@ -60,6 +60,35 @@ def fmt_row(cols, row):
         v = "" if v is None else str(v)
         out.append(v if (v != "" or c in NOT_NULL_TEXT) else COPY_NULL)
     return out
+
+
+ER_COLS = ["meet_id_dm", "diver_id_dm", "team_id_dm", "meet_name", "event_name", "round",
+           "diver_first", "diver_last", "team_name", "team_code", "place", "score", "year",
+           "stage", "event_level", "age_group", "gender", "discipline", "event_key",
+           "is_synchro", "is_junior_circuit", "region", "zone", "ewc_meet", "source_file"]
+
+# core.event_results has no natural unique key -- 11 duplicate groups already
+# exist on (meet, diver, event_name, round) -- so the merge keeps existing rows
+# by that key rather than by meet. Merging at meet granularity would drop the
+# 631 rows the crawl has no counterpart for, most of them Camp, Winter-Nationals
+# and Senior-Nationals results the old pipeline captured and DiveMeets no longer
+# serves.
+ER_KEY = ("meet_id_dm", "diver_id_dm", "event_name", "round")
+
+
+def er_key(get):
+    """Merge key with event_name whitespace collapsed. 1,320 legacy rows carry
+    a doubled space ("1m  J.O") that the crawl does not; comparing them raw
+    made every one of those rows look absent from the crawl, so it would have
+    been kept alongside its regenerated twin -- 1,320 duplicates."""
+    return (str(get("meet_id_dm") or ""), str(get("diver_id_dm") or ""),
+            " ".join(str(get("event_name") or "").split()),
+            str(get("round") or ""))
+
+# The table currently starts at 2021. The crawl reaches back to 2013, which
+# would silently widen every report that does not filter by year, so history
+# before this is opt-in via --er-from-year.
+ER_DEFAULT_FROM_YEAR = 2021
 
 
 # core.* column order, which differs from the CSV column order.
@@ -229,6 +258,80 @@ def build(db, only=None, dive_sink=None, limit=0):
     return phase_rows, dive_count, gen_sheets
 
 
+def split_name(full):
+    """DiveMeets stores one name field. Verified against 105,394 joined rows:
+    the legacy split is on the FIRST space. Stored values carry stray trailing
+    spaces on 662 rows; these are stripped."""
+    parts = (full or "").strip().split(" ", 1)
+    return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+
+
+def build_event_results(db, from_year, team_codes, only=None):
+    """Regenerate core.event_results rows from the crawl for every meet whose
+    name maps to a recognised stage."""
+    meets = db.query("""SELECT meet_id, meet_name, sanction, start_date
+                        FROM divemeets.meets
+                        WHERE results_done AND meet_name IS NOT NULL AND start_date IS NOT NULL
+                        ORDER BY start_date DESC, meet_id DESC""")
+    picked = []
+    for m in meets:
+        mid = str(m["meet_id"])
+        if only and mid not in only:
+            continue
+        if int(str(m["start_date"])[:4]) < from_year:
+            continue
+        st = erclass.stage(m["meet_name"])
+        if st:
+            picked.append((m, st))
+    print(f"event_results: {len(picked)} meets with a recognised stage "
+          f"from {from_year}", flush=True)
+
+    rows = []
+    BATCH = 60
+    for i in range(0, len(picked), BATCH):
+        chunk = picked[i:i + BATCH]
+        ids = ",".join("'" + str(m["meet_id"]) + "'" for m, _ in chunk)
+        titles, results = {}, {}
+        for e in db.query(f"SELECT meet_id, event_id, round, title FROM divemeets.events "
+                          f"WHERE meet_id IN ({ids})"):
+            titles.setdefault(str(e["meet_id"]), {})[(str(e["event_id"]), str(e["round"]))] = e["title"] or ""
+        for r in db.query(f"""SELECT meet_id, event_id, round, place, diver_name, profile_id,
+                                     team_name, team_id, score
+                              FROM divemeets.results WHERE meet_id IN ({ids})"""):
+            results.setdefault(str(r["meet_id"]), []).append(r)
+
+        for m, st in chunk:
+            mid = str(m["meet_id"])
+            mname = meetclass.normalize_name(m["meet_name"])
+            year = str(m["start_date"])[:4]
+            lvl = erclass.event_level(st)
+            reg, zn, ewc = erclass.region(mname), erclass.zone(mname), erclass.ewc_meet(mname)
+            jc = erclass.is_junior_circuit(st)
+            for r in results.get(mid, []):
+                title = titles.get(mid, {}).get((str(r["event_id"]), str(r["round"])), "")
+                nm = erclass.event_name(title)
+                if not nm:
+                    continue
+                ag = erclass.age_group(nm, st)
+                gd = erclass.gender(nm)
+                di = erclass.discipline(nm)
+                first, last = split_name(r["diver_name"])
+                tid = "" if r["team_id"] is None else str(r["team_id"])
+                rows.append([
+                    mid, "" if r["profile_id"] is None else str(r["profile_id"]), tid,
+                    mname, nm, erclass.round_label(r["round"], title),
+                    first, last, r["team_name"] or "", team_codes.get(tid, ""),
+                    clean_place(r["place"]), _num(dec(r["score"])), year,
+                    st, lvl, ag or "", gd or "", di or "",
+                    erclass.event_key(ag, gd, di) or "",
+                    "true" if erclass.is_synchro(nm) else "false",
+                    "true" if jc else "false",
+                    "" if reg is None else str(reg), zn or "", ewc or "",
+                    "divemeets_crawl",
+                ])
+    return rows
+
+
 def load_seed_csv(name):
     p = os.path.join(SEED_DIR, name)
     if not os.path.exists(p):
@@ -295,6 +398,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", default="")
     ap.add_argument("--limit-meets", type=int, default=0)
+    ap.add_argument("--er-from-year", type=int, default=ER_DEFAULT_FROM_YEAR,
+                    help="earliest year to regenerate into core.event_results")
+    ap.add_argument("--skip-event-results", action="store_true")
     args = ap.parse_args()
     only = {x.strip() for x in args.only.split(",") if x.strip()} or None
 
@@ -305,6 +411,38 @@ def main():
     phases, kept_dives = merge(phase_rows, gen_sheets)
     print(f"dives: {dive_count} crawl streamed to disk")
 
+    # ---- core.event_results ------------------------------------------------
+    er_rows, er_all = [], []
+    if not args.skip_event_results:
+        dbq = Neon(url)
+        existing = dbq.query("""SELECT meet_id_dm, diver_id_dm, team_id_dm, meet_name,
+                                       event_name, round, diver_first, diver_last, team_name,
+                                       team_code, place, score, year, stage, event_level,
+                                       age_group, gender, discipline, event_key, is_synchro,
+                                       is_junior_circuit, region, zone, ewc_meet, source_file
+                                FROM core.event_results""")
+        # DiveMeets' own team abbreviation is not derivable from the team name
+        # (Triad Diving Academy -> TRIA but Atlantic Coast Diving Jax -> ACDJ),
+        # and the crawl does not carry it, so it is preserved by lookup and left
+        # blank for teams first seen in the crawl.
+        team_codes = {}
+        for r in existing:
+            if r["team_id_dm"] and r["team_code"]:
+                team_codes.setdefault(str(r["team_id_dm"]), r["team_code"])
+        er_rows = build_event_results(dbq, args.er_from_year, team_codes, only)
+        gen_keys = {er_key(lambda c, r=r: r[ER_COLS.index(c)]) for r in er_rows}
+        kept = [[("" if r[c] is None else str(r[c])) for c in ER_COLS] for r in existing
+                if er_key(lambda c, r=r: r[c]) not in gen_keys]
+        er_all = er_rows + kept
+        # This table legitimately contains a few duplicate natural keys (11
+        # groups today), so duplicates are reported rather than rejected -- but
+        # a jump here means the merge key stopped matching and rows are being
+        # kept alongside their regenerated twins.
+        dup = collections.Counter(er_key(lambda c, r=r: r[ER_COLS.index(c)]) for r in er_all)
+        ndup = sum(v - 1 for v in dup.values() if v > 1)
+        print(f"event_results: {len(er_rows)} crawl + {len(kept)} kept "
+              f"of {len(existing)} existing; duplicate natural keys: {ndup}")
+
     if args.dry_run:
         print("dry run -- nothing written")
         return
@@ -313,11 +451,13 @@ def main():
     copy_into(conn, "core.result_phases", CORE_PHASE_COLS, rows=phases)
     copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, path=dive_path)
     copy_into(conn, "core.dive_sheets", CORE_DIVE_COLS, rows=kept_dives, truncate=False)
+    if er_all:
+        copy_into(conn, "core.event_results", ER_COLS, rows=er_all)
     # One commit for both tables: a failure on dives can no longer leave core
     # with new phases and stale dive sheets, which is what run 3 produced.
     conn.commit()
     cur = conn.cursor()
-    for t in ("core.result_phases", "core.dive_sheets"):
+    for t in ("core.result_phases", "core.dive_sheets", "core.event_results"):
         cur.execute(f"SELECT COUNT(*) FROM {t}")
         print(f"{t}: {cur.fetchone()[0]} rows")
     # The analytics rebuild drops and recreates its tables, taking their ACLs

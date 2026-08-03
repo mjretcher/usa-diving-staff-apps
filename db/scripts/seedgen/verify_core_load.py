@@ -49,6 +49,31 @@ CHECKS = [
      "SELECT COUNT(DISTINCT meet_id) FROM core.dive_sheets", 20, ">"),
     ("no NULL sheet_key slipped in",
      "SELECT COUNT(*) FROM core.result_phases WHERE sheet_key IS NULL", 0, "=="),
+
+    # --- core.event_results ---
+    ("supplement rows preserved",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE source_file = 'criteria-simulator/data.js'", 2920, "=="),
+    ("Camp rows preserved (no crawl counterpart)",
+     "SELECT COUNT(*) FROM core.event_results WHERE stage = 'Camp'", 92, "=="),
+    ("event_results grew",
+     "SELECT COUNT(*) FROM core.event_results", 49635, ">"),
+    ("Junior Circuit rows grew",
+     "SELECT COUNT(*) FROM core.event_results WHERE is_junior_circuit", 42757, ">"),
+    ("no pre-2021 rows leaked in",
+     "SELECT COUNT(*) FROM core.event_results WHERE year < 2021", 0, "=="),
+    ("every Regionals row has a region",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE stage = 'Regionals' AND region IS NULL", 0, "=="),
+    ("every Zones row has a zone",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE stage = 'Zones' AND zone IS NULL", 0, "=="),
+    ("every EWC row has an ewc_meet",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE stage = 'EWC' AND ewc_meet IS NULL", 0, "=="),
+    ("Junior Circuit rows with no gender (was 102)",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE is_junior_circuit AND gender NOT IN ('Boys','Girls')", 102, "<="),
 ]
 
 # The Junior A/B pool over the 523 meets the seed already covered must be
