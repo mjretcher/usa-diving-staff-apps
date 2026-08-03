@@ -1849,6 +1849,15 @@
        Wording adapts to era — 2026 gates Zones → E/W/C, pre-2026 gates
        Zones → Junior Nationals directly (no E/W/C tier). */
     let advCard = '';
+    // Even where the era rules ARE confirmed, a past season has no athlete
+    // status behind it, so any count here is placement-only. Said plainly on
+    // the card rather than left to the reader.
+    const _limNote = (function(){
+      const E = window.JuniorEras;
+      const l = E && E.dataLimitations(data.year);
+      return l ? '<p class="pm-note pm-note-caveat" style="margin-top:8px">\u26A0 ' +
+        escapeHtml(l.text) + '</p>' : '';
+    })();
     // Seasons whose advancement rules are not confirmed get an explicit
     // statement instead of a breakdown computed from the wrong era's numbers.
     if (data.advBreakdownUnknown) {
@@ -1856,7 +1865,7 @@
         '<h3 class="pm-card-h">Advancement breakdown</h3>' +
         '<p class="pm-note pm-note-caveat"><strong>Not shown for ' +
         data.advBreakdownUnknown.year + '.</strong> ' +
-        escapeHtml(data.advBreakdownUnknown.reason) + '</p></div>';
+        escapeHtml(data.advBreakdownUnknown.reason) + '</p>' + _limNote + '</div>';
     }
     const BK = (abMode === 'nats')
       ? [
@@ -1904,7 +1913,7 @@
         '<div style="margin:18px 0 6px;border:1px solid #e2e5ef;border-radius:12px;padding:18px 20px;background:#fff">' +
           '<div style="font-family:Barlow Condensed,Inter,sans-serif;font-weight:700;font-size:20px;letter-spacing:.01em;color:#171f69;text-transform:uppercase">Where the Zones field went \u2014 by age group</div>' +
           '<div style="font-family:Inter,sans-serif;font-size:13.5px;color:#5a6a7e;margin:5px 0 8px;line-height:1.5">' + descHtml + '</div>' +
-          _eraLine +
+          _eraLine + _limNote +
           '<div style="overflow-x:auto">' +
           '<table style="width:100%;border-collapse:collapse;min-width:640px">' +
             '<thead><tr>' +

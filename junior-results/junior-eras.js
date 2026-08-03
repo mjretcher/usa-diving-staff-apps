@@ -337,6 +337,66 @@
     return out;
   }
 
+  /* ── What is NOT in a historical season ────────────────────────────────
+     The qualifier engine decides advancement partly from athlete status:
+     foreign and dual-citizenship declarations, non-displacing status, YMCA
+     champion berths, HPS/prequalified berths, and the official averaged-in
+     qualifying score. None of that comes from DiveMeets results. It lives in
+     junior_results.athlete_status, which is a CURRENT-SEASON roster — 26
+     divers in total, with zero coverage of 2013–2018 and single digits for
+     2019–2022.
+
+     So for any season other than the current one, placements and scores are
+     exact but the status layer is simply absent. This is stated wherever
+     historical figures are shown rather than left for the reader to discover:
+     a single non-displacing diver moves the qualifying line for everyone below
+     them in that event, so the omission is not a rounding detail.
+
+     Pass the season being displayed and the current season. Returns null for
+     the current season, where the status data does exist. */
+  var MISSING_FIELDS = [
+    'foreign and dual-citizenship declarations',
+    'non-displacing status',
+    'YMCA champion berths',
+    'HPS and other prequalified berths',
+    'the official averaged-in qualifying score'
+  ];
+
+  /* Single source for "which season is live". reports-view.js carried a
+     literal 2026 with a comment claiming it was updated on init; it never was,
+     and pipeline-modeling.js had no notion of it at all. Both now read this,
+     and it is seeded from app_meta.config.current_season_year on load, so next
+     season changes in one place. */
+  var _current = null;
+
+  function currentSeason() {
+    if (_current) return _current;
+    var ys = Object.keys(SEASONS).map(Number);
+    return ys.length ? Math.max.apply(null, ys) : 2026;
+  }
+
+  function setCurrentSeason(y) {
+    y = Number(y);
+    if (y) _current = y;
+    return currentSeason();
+  }
+
+  function dataLimitations(year, currentSeason_) {
+    var cur = (currentSeason_ != null) ? Number(currentSeason_) : currentSeason();
+    if (Number(year) === cur) return null;
+    return {
+      fields: MISSING_FIELDS.slice(),
+      short: 'Athlete status is not available for ' + year +
+        ': foreign declarations, YMCA and prequalification are not reflected.',
+      text: 'Placements and scores for ' + year + ' are exact, but athlete status ' +
+        'is not held for past seasons. ' + MISSING_FIELDS.slice(0, -1).join(', ') +
+        ' and ' + MISSING_FIELDS[MISSING_FIELDS.length - 1] +
+        ' are therefore not reflected. Because a non-displacing diver moves the ' +
+        'qualifying line for everyone below them, any qualifier count shown for ' +
+        'this season is placement-only and may differ from the official result.'
+    };
+  }
+
   window.JuniorEras = {
     season: season,
     seasons: function () { return Object.keys(SEASONS).map(Number).sort(); },
@@ -347,6 +407,10 @@
     diveCount: diveCount,
     diveCountChanged: diveCountChanged,
     diveCountCaveat: diveCountCaveat,
+    dataLimitations: dataLimitations,
+    currentSeason: currentSeason,
+    setCurrentSeason: setCurrentSeason,
+    MISSING_FIELDS: MISSING_FIELDS,
     DIVE_COUNT_CHANGE_YEARS: DIVE_COUNT_CHANGE_YEARS,
     OBSERVED_FROM: OBSERVED_FROM
   };

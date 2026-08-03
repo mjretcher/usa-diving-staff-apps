@@ -51,7 +51,10 @@
   let _yearOverrideRows = null;
   let _yearOverrideEvents = null;
   const _yearDataCache = {};   // year -> { rows, events }
-  let _currentSeason = 2026;   // updated on init from app_meta.config or static data
+  // Seeded from app_meta.config.current_season_year by fetchAvailableYears().
+  // The previous literal was never actually updated despite its comment, so a
+  // new season would have silently kept treating 2026 as current.
+  let _currentSeason = (window.JuniorEras ? window.JuniorEras.currentSeason() : 2026);
 
   function allResults(){
     if (_yearOverrideRows) return _yearOverrideRows;
@@ -2351,6 +2354,8 @@
       out.push({ kind:'rule', text:'From Zones: top ' + s.zones.direct + ' direct to Junior Nationals, places ' +
         s.zones.toEWC[0] + '–' + s.zones.toEWC[1] + ' to East/West/Central.' });
     }
+    const _lim = E.dataLimitations(yr, _currentSeason);
+    if (_lim) out.push({ kind:'caveat', text: _lim.short });
     if (!qualRulesKnown() && yr !== _currentSeason) {
       out.push({ kind:'caveat', text:'Zone-qualifier counts are not shown for ' + yr +
         ': the Region advancement cutoff for this season is not confirmed. Placements and scores below are accurate.' });
@@ -2450,7 +2455,24 @@
     `;
   }
 
+  async function loadCurrentSeason(){
+    try {
+      const r = await neonQuery(
+        "SELECT COALESCE(NULLIF(value,'')::int, NULL) AS y FROM app_meta.config " +
+        "WHERE key = 'current_season_year'");
+      const y = r && r.rows && r.rows[0] && r.rows[0].y;
+      if (y) {
+        _currentSeason = Number(y);
+        if (window.JuniorEras) window.JuniorEras.setCurrentSeason(_currentSeason);
+      }
+    } catch (e) {
+      console.warn('[season] current_season_year unavailable, using', _currentSeason, e);
+    }
+    return _currentSeason;
+  }
+
   async function fetchAvailableYears(){
+    await loadCurrentSeason();
     if (_availableYears !== null) return _availableYears;
     try {
       const r = await neonQuery("SELECT DISTINCT year FROM core.event_results WHERE year IS NOT NULL AND is_junior_circuit ORDER BY year DESC");
@@ -5416,6 +5438,21 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             <tbody>${yrs.map(row).join('')}</tbody>
           </table>
           ${caveat ? `<p class="rb-p rb-callout-warn"><strong>⚠ ${esc(caveat)}</strong></p>` : ''}
+          ${(function(){
+            // A printed report can outlive the app, so the status gap has to
+            // travel with it rather than living only in the on-screen banner.
+            const lims = yrs.map(y => E.dataLimitations(y, _currentSeason)).filter(Boolean);
+            if (!lims.length) return '';
+            const past = yrs.filter(y => Number(y) !== Number(_currentSeason));
+            return `<h3 class="rb-h3">Not included for past seasons</h3>
+              <p class="rb-p rb-callout-warn"><strong>⚠ Athlete status is not held for
+              ${esc(past.join(', '))}.</strong> Placements and scores are exact, but
+              ${esc(E.MISSING_FIELDS.slice(0,-1).join(', '))} and
+              ${esc(E.MISSING_FIELDS[E.MISSING_FIELDS.length-1])} are not reflected.
+              Because a non-displacing diver moves the qualifying line for everyone below
+              them, any qualifier count for these seasons is placement-only and may differ
+              from the official result.</p>`;
+          })()}
           ${diveRows.length ? `
             <h3 class="rb-h3">Required dives — where they differ across these seasons</h3>
             <table class="rb-table rb-table-sm">
