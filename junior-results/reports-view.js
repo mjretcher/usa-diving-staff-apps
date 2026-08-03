@@ -2351,6 +2351,10 @@
       out.push({ kind:'rule', text:'From Zones: top ' + s.zones.direct + ' direct to Junior Nationals, places ' +
         s.zones.toEWC[0] + '–' + s.zones.toEWC[1] + ' to East/West/Central.' });
     }
+    if (!qualRulesKnown() && yr !== _currentSeason) {
+      out.push({ kind:'caveat', text:'Zone-qualifier counts are not shown for ' + yr +
+        ': the Region advancement cutoff for this season is not confirmed. Placements and scores below are accurate.' });
+    }
     if (!out.length) return '';
     const ic = { warn:'⚠', caveat:'⚠', info:'ℹ', rule:'§' };
     return `<div class="rpt-season-notes">` + out.map(n =>
@@ -2468,7 +2472,31 @@
      JUNIOR_RESULTS_DATA.results-compatible shape the existing panels expect.
      Aggregates Prelim/Semi/Final rounds into one row per athlete-event-meet
      (using Final placement when available, falling back to Semi then Prelim). */
+  /* Region -> Zone advancement for a historical season.
+     Top 15 is the 2019 rule book number and holds from 2019 through 2026, but
+     it is NOT universal: the 2014 book sends the top 6 per springboard event to
+     the East/West Spring Nationals and does not set the Zones number in Subpart
+     C at all, and 2015-2018 sat under revisions that have not been checked.
+     Marking a 12th-place 2013 finisher as a Zone qualifier because 2019 said
+     top 15 would be a fabrication, so unknown seasons return null and the
+     panels show the flag as indeterminate rather than false. */
+  function regionAdvanceFor(year){
+    const E = window.JuniorEras;
+    const s = E && E.season(Number(year));
+    if (!s || !s.verified || !s.regionals) return null;
+    return (typeof s.regionals.advance === 'number') ? s.regionals.advance : null;
+  }
+
+  /* True when the selected season's Region->Zone cutoff is confirmed. Panels
+     use this to distinguish "did not advance" from "we cannot say". */
+  function qualRulesKnown(){ return regionAdvanceFor(selectedYear()) != null; }
+
   function transformYearRows(rows){
+    const _advN = regionAdvanceFor(selectedYear());
+    const _qual = function(place){
+      if (_advN == null || place == null) return null;   // unknown for this season
+      return place <= _advN;
+    };
     const grouped = {};
     for (const r of rows){
       const key = (r.meet_name||'')+'|'+(r.event_key||r.event_name||'')+'|'+(r.diver_id_dm||'');
@@ -2546,17 +2574,19 @@
         nonDisplacingReason: '',
         countsTowardTop15: true,
         countingRank: null,
-        top15Qualifier: place != null && place <= 15,
+        regionAdvanceCutoff: _advN,
+        qualificationRulesKnown: _advN != null,
+        top15Qualifier: _qual(place),
         officialThresholdScore: null,
         scoreMeetsOfficialThreshold: false,
         officialAverageScoreQualifier: false,
-        officialQualified: place != null && place <= 15,
+        officialQualified: _qual(place),
         officialQualifierRank: place,
         officialQualifierScore: score,
         officialQualifierType: '',
         officialQualifierRegion: s.region != null ? ('Region ' + s.region) : '',
         qualificationStatus: '',
-        advancesToZone: s.stage === 'Regionals' && place != null && place <= 15,
+        advancesToZone: s.stage === 'Regionals' ? _qual(place) : false,
         flags: [],
         reviewFlags: [],
         originalStatus: '',
@@ -2605,12 +2635,18 @@
         openedSpots: 0,
       };
     }
+    const _qCut = regionAdvanceFor(selectedYear());
     // Count entries per event
     for (const r of yearRows){
       if (!r.eventId || !map[r.eventId]) continue;
       map[r.eventId].entries += 1;
       map[r.eventId].countableEntries += 1;
-      if (r.placeNumber != null && r.placeNumber <= 15) map[r.eventId].top15Qualifiers += 1;
+      // Same era caveat as regionAdvanceFor(): 15 is the 2019-book number and
+      // does not apply to every season. Count nothing when the cutoff for the
+      // selected season is unknown, rather than counting against 15.
+      if (_qCut != null && r.placeNumber != null && r.placeNumber <= _qCut) {
+        map[r.eventId].top15Qualifiers += 1;
+      }
     }
     return Object.values(map);
   }
