@@ -60,8 +60,16 @@ CHECKS = [
      "SELECT COUNT(*) FROM core.event_results", 49635, ">"),
     ("Junior Circuit rows grew",
      "SELECT COUNT(*) FROM core.event_results WHERE is_junior_circuit", 42757, ">"),
-    ("no pre-2021 rows leaked in",
-     "SELECT COUNT(*) FROM core.event_results WHERE year < 2021", 0, "=="),
+    # Scope is now the full DiveMeets history. This guards the floor rather
+    # than the old 2021 boundary.
+    ("no rows before the crawl's earliest season",
+     "SELECT COUNT(*) FROM core.event_results WHERE year < 2013", 0, "=="),
+    ("pre-2021 Junior Circuit history present",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE is_junior_circuit AND year < 2021", 1000, ">"),
+    ("no collegiate meets in the Junior Circuit",
+     "SELECT COUNT(*) FROM core.event_results "
+     "WHERE is_junior_circuit AND meet_name ILIKE '%NCAA%'", 0, "=="),
     ("every Regionals row has a region",
      "SELECT COUNT(*) FROM core.event_results "
      "WHERE stage = 'Regionals' AND region IS NULL", 0, "=="),

@@ -12,6 +12,11 @@ name: Load core from crawl
 
 on:
   workflow_dispatch:
+    inputs:
+      er_from_year:
+        description: "Earliest year to load into core.event_results (2013 = full history)"
+        required: false
+        default: "2013"
   schedule:
     - cron: "40 4 * * *"
 
@@ -32,6 +37,7 @@ jobs:
       - name: Load core from crawl
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          ER_FROM_YEAR: ${{ github.event.inputs.er_from_year || '2013' }}
         run: python3 db/scripts/seedgen/load_core.py
 
       - name: Rebuild analytics

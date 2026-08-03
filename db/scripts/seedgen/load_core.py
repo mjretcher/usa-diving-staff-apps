@@ -88,7 +88,7 @@ def er_key(get):
 # The table currently starts at 2021. The crawl reaches back to 2013, which
 # would silently widen every report that does not filter by year, so history
 # before this is opt-in via --er-from-year.
-ER_DEFAULT_FROM_YEAR = 2021
+ER_DEFAULT_FROM_YEAR = int(os.environ.get("ER_FROM_YEAR") or 2021)
 
 
 # core.* column order, which differs from the CSV column order.
