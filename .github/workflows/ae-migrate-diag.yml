@@ -1,0 +1,30 @@
+name: AE migrate diagnostic
+on: { workflow_dispatch: }
+permissions: { contents: write }
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: Run schema.sql and capture errors
+        shell: bash
+        env: { DATABASE_URL: "${{ secrets.NEON_DATABASE_URL }}" }
+        run: |
+          mkdir -p db/audits
+          set +e
+          psql "$DATABASE_URL" -f db/schema.sql --set ON_ERROR_STOP=1 \
+            > db/audits/ae_migrate_diag.txt 2>&1
+          echo "psql exit code: $?" >> db/audits/ae_migrate_diag.txt
+          tail -40 db/audits/ae_migrate_diag.txt
+      - name: Commit
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "gha@users.noreply.github.com"
+          git add db/audits/ae_migrate_diag.txt
+          git commit -m "AE migrate diagnostic" || echo none
+          git push
