@@ -1,0 +1,15 @@
+scope       gender      dives
+----------------------------------------
+ncaa        Female        21,006
+ncaa        Male          14,887
+us-junior   Female       146,549
+us-junior   Male          99,541
+us-open     Female       645,991
+us-open     Male         404,181
+us-open     None             109
+us-open     Mixed             63
+us-senior   Female        37,669
+us-senior   Male          36,388
+world       Male           3,792
+world       Female         2,900
+world       Mixed            408
