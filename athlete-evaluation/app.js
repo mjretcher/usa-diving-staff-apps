@@ -103,6 +103,10 @@
   function renderChip() {
     const b = window.AE.state.bundle;
     const chip = document.getElementById('aeAthleteChip');
+    // Report and Excel act on the selected athlete, so they only exist when
+    // there is one.
+    const exp = document.getElementById('aeExport');
+    if (exp) exp.hidden = !b;
     if (!b) { chip.innerHTML = ''; return; }
     const iv = b.ident;
     chip.innerHTML = `<span class="ae-sel-athlete" title="${esc(iv.families || '')}">
@@ -176,6 +180,24 @@
   }
 
   window.AEApp = {
+    async report() {
+      const btns = document.querySelectorAll('.ae-exp-btn');
+      btns.forEach((b) => { b.disabled = true; });
+      try {
+        await window.AEReport.printReport({ scope: 'us-junior' });
+      } catch (e) {
+        alert(e.message || 'Could not build the report.');
+      } finally { btns.forEach((b) => { b.disabled = false; }); }
+    },
+    async excel() {
+      const btns = document.querySelectorAll('.ae-exp-btn');
+      btns.forEach((b) => { b.disabled = true; });
+      try {
+        await window.AEReport.excel({ scope: 'us-junior' });
+      } catch (e) {
+        alert(e.message || 'Could not build the workbook.');
+      } finally { btns.forEach((b) => { b.disabled = false; }); }
+    },
     goSection(secId) {
       const first = VIEWS.find((v) => v.section === secId);
       if (first) this.go(first.id);

@@ -939,3 +939,12 @@ html,body{overflow-x:hidden;max-width:100vw}
 .ae-subrow .ae-tab[hidden] { display:none; }
 .ae-samplenote { color:#5A6079; font:400 12px/1.5 'Inter',sans-serif;
   border-left:2px solid #8FC3EA; padding-left:8px; margin-top:8px; }
+
+/* ---- report / excel export bar ---- */
+.ae-export { display:flex; gap:6px; align-items:center; margin-left:8px; }
+.ae-export[hidden] { display:none; }
+.ae-exp-btn { font:600 12px/1 'Inter',sans-serif; padding:8px 14px; border-radius:6px;
+  border:1px solid #171F69; background:#171F69; color:#fff; cursor:pointer; letter-spacing:.02em; }
+.ae-exp-btn:last-child { background:#fff; color:#171F69; }
+.ae-exp-btn:hover:not(:disabled) { background:#009AC7; border-color:#009AC7; color:#fff; }
+.ae-exp-btn:disabled { opacity:.5; cursor:progress; }
