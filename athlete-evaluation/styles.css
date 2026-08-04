@@ -960,3 +960,5 @@ html,body{overflow-x:hidden;max-width:100vw}
 .ae-tbl tr.ae-tot td { font-weight:700; border-top:2px solid #171F69; background:#F5F7FC; }
 .ae-warn-note { background:#FFF4E5; border-left:3px solid #B26A00; color:#5A3600;
   padding:9px 11px; border-radius:4px; font:400 12px/1.55 'Inter',sans-serif; margin-top:12px; }
+.ae-ok-note { background:#EEF7F0; border-left:3px solid #1B6E3A; color:#14532B;
+  padding:9px 11px; border-radius:4px; font:400 12px/1.55 'Inter',sans-serif; margin-top:12px; }

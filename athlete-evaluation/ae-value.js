@@ -35,7 +35,7 @@
   // A dive needs this many attempts before its spread means anything.
   const MIN_N = 5;
 
-  const st = { disc: null, listSize: 6, distinctGroups: false, sort: 'ev' };
+  const st = { disc: null, formatId: null, sort: 'ev' };
 
   function quantile(sorted, q) {
     if (!sorted.length) return null;
@@ -167,20 +167,13 @@
 
   /* ---------------- list construction ---------------- */
 
-  // Highest expected-value selection from dives the athlete has performed.
-  // Greedy by EV, optionally forcing distinct dive groups.
-  function bestList(dives, size, distinct) {
-    const pool = dives.filter((d) => d.reliable).slice().sort((a, b) => b.ev - a.ev);
-    const out = [], usedGroups = new Set(), usedCodes = new Set();
-    for (const d of pool) {
-      if (out.length >= size) break;
-      if (usedCodes.has(d.code)) continue;           // a dive may be used once
-      if (distinct && d.group && usedGroups.has(d.group)) continue;
-      out.push(d);
-      usedCodes.add(d.code);
-      if (d.group) usedGroups.add(d.group);
-    }
-    return out;
+  // List construction now runs through AERules, which encodes the actual
+  // competition formats from the 2026 USA Diving rulebook and the World
+  // Aquatics regulations — including Art. 105.2, under which every position
+  // of a dive number counts as the same dive.
+  function bestList(dives, format, discipline) {
+    const pool = dives.filter((d) => d.reliable);
+    return window.AERules.buildList(pool, format, discipline);
   }
 
   // What the athlete most recently actually performed, as a list of that size.
@@ -229,10 +222,17 @@
     const rated = dives.filter((d) => d.quad);
     const thin = dives.filter((d) => !d.reliable);
 
-    const proposed = bestList(dives, st.listSize, st.distinctGroups);
+    const gender = (b.sheets.find((r) => r.gender) || {}).gender || null;
+    const formats = window.AERules.formatsFor(gender, st.disc);
+    if (!st.formatId || !formats.some((f) => f.id === st.formatId)) {
+      st.formatId = formats.length ? formats[0].id : null;
+    }
+    const format = window.AERules.byId(st.formatId);
+    const build = bestList(dives, format, st.disc);
+    const proposed = build.list;
     const pT = totals(proposed);
 
-    const actualRows = recentList(b, st.listSize);
+    const actualRows = recentList(b, format ? format.dives : 6);
     const actual = actualRows.map((r) => {
       const code = r.dive_code_norm || r.dive_number;
       return dives.find((d) => d.code === code && d.height === (r.height || r.discipline))
@@ -271,11 +271,11 @@
         <div class="ae-card-h"><h3>List construction</h3></div>
         <div class="ae-ctl">
           <div class="ae-ctl-row">
-            <span class="ae-ctl-lab">Dives in list</span>
-            <select class="ae-sel" id="val-size">${[5, 6, 8, 10, 11].map((n) =>
-              `<option value="${n}"${n === st.listSize ? ' selected' : ''}>${n}</option>`).join('')}</select>
-            <label class="ae-check"><input type="checkbox" id="val-distinct"${st.distinctGroups ? ' checked' : ''}>
-              One dive per group</label>
+            <span class="ae-ctl-lab">Competition format</span>
+            <select class="ae-sel" id="val-format">${formats.map((f) =>
+              `<option value="${esc(f.id)}"${f.id === st.formatId ? ' selected' : ''}>${
+                esc(f.body)} ${esc(f.level)}${f.group ? ' Group ' + f.group : ''} ${
+                esc(f.gender === 'any' ? '' : f.gender)} — ${f.dives} dives</option>`).join('')}</select>
           </div>
         </div>
         ${proposed.length ? `
@@ -291,6 +291,14 @@
               <td class="r">${f1(pT.floor)}</td><td class="r">${f1(pT.ceiling)}</td><td class="r"></td></tr>
           </tbody>
         </table>
+        ${build.violations && build.violations.length ? `<div class="ae-warn-note">
+          <b>This selection does not satisfy the format.</b><ul style="margin:6px 0 0;padding-left:18px">
+          ${build.violations.map((x) => `<li>${esc(x.rule)} — ${esc(x.detail)} <span class="ae-soft">(${esc(x.cite)})</span></li>`).join('')}
+          </ul>${build.note ? `<p style="margin:6px 0 0">${esc(build.note)}</p>` : ''}</div>`
+        : `<div class="ae-ok-note">Satisfies ${esc(format ? format.cite : '')}: ${format ? format.dives : ''} dives,
+            no repeated dive number, group and difficulty requirements met.</div>`}
+        ${format && format.note ? `<p class="ae-soft">${esc(format.note)}</p>` : ''}
+        ${format && format.confirm ? `<div class="ae-warn-note">${esc(format.confirm)}</div>` : ''}
         ${actual.length ? `<p class="ae-soft" style="margin-top:10px">
             Their most recent full list of this size expects <b>${f1(aT.ev)}</b> points
             (floor ${f1(aT.floor)}, ceiling ${f1(aT.ceiling)}, total DD ${f1(aT.dd)}).
@@ -300,11 +308,10 @@
                  or what the athlete is currently training.`
               : 'The list they are already performing is at or near the best available on expected value.'}
           </p>` : ''}
-        <div class="ae-warn-note">
-          Built only from dives this athlete has actually performed, using the constraints set
-          above. It does not apply event or age-group composition rules, so treat it as a
-          coaching starting point and check eligibility against the rulebook before use.
-        </div>` : `<div class="ae-empty">No dive has ${MIN_N}+ attempts yet, so there is nothing
+        <p class="ae-soft">Built from dives this athlete has actually performed, and checked against
+          ${esc(window.AERules.SOURCES.map((x) => x.label).join(' and '))}. Expected value takes no
+          account of session order, fatigue, or what the athlete is currently training — it is a
+          starting point for a coach, not a training plan.</p>` : `<div class="ae-empty">No dive has ${MIN_N}+ attempts yet, so there is nothing
           reliable enough to build a list from.</div>`}
       </div>
 
@@ -340,10 +347,8 @@
     root.querySelectorAll('[data-sort]').forEach((el) => el.addEventListener('click', () => {
       st.sort = el.getAttribute('data-sort'); render(root);
     }));
-    const sz = root.querySelector('#val-size');
-    if (sz) sz.addEventListener('change', () => { st.listSize = +sz.value; render(root); });
-    const dg = root.querySelector('#val-distinct');
-    if (dg) dg.addEventListener('change', () => { st.distinctGroups = dg.checked; render(root); });
+    const fm = root.querySelector('#val-format');
+    if (fm) fm.addEventListener('change', () => { st.formatId = fm.value; render(root); });
   }
 
   window.AEValue = { render, repertoire, classify, bestList };
