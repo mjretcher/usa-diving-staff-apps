@@ -1,0 +1,38 @@
+name: Rebuild squad rosters
+
+# Captures the published squad rosters and measures what they actually entered.
+# Manual only: rerun when a squad is renamed or when entries move.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Match squad rosters to entrants
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+      - name: Build
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/build_squad_rosters.py
+      - name: Commit if changed
+        run: |
+          git add -A membership-analytics/squad-rosters.json
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Rebuild squad rosters and measured entries"
+          git fetch origin main
+          git rebase origin/main || { git rebase --abort || true; echo "::warning::rebase failed"; exit 0; }
+          git push origin HEAD:main
