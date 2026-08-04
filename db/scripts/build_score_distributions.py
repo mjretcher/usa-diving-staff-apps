@@ -43,6 +43,34 @@ GENDER_CODE = {"Boys": "B", "Girls": "G"}
 BOARD_CODE = {"1M": "1", "3M": "3", "Platform": "P"}
 STAGES = ["Regionals", "Zones", "EWC", "Nationals"]
 
+# Invitational scores, from the raw scrape via the title classification. This
+# is the population a score standard would actually be applied to: everyone who
+# turns up to a sanctioned meet, not the subset who already reached a
+# championship. Same unit as the circuit pull -- one score per diver per event
+# per meet -- so the two are directly comparable.
+INVITE_SQL = """
+SELECT yr, age_group, gender, discipline, best
+FROM (
+    SELECT EXTRACT(YEAR FROM m.start_date)::int yr,
+           c.age_group, c.gender, c.discipline,
+           r.profile_id, r.meet_id, r.event_id,
+           max(r.score) AS best
+    FROM divemeets.results r
+    JOIN divemeets.event_class c
+      ON c.meet_id = r.meet_id AND c.event_id = r.event_id AND c.round = r.round
+    JOIN divemeets.meets m ON m.meet_id = r.meet_id
+    WHERE c.sanction = 'USA Diving'
+      AND c.in_circuit = FALSE
+      AND c.parsed_ok = TRUE
+      AND c.is_synchro = FALSE
+      AND c.age_group IN ('Group A','Group B','Group C','Group D')
+      AND r.score IS NOT NULL AND r.score > 0
+      AND (r.place IS NULL OR r.place <> 127)
+      AND m.start_date IS NOT NULL
+    GROUP BY 1,2,3,4, r.profile_id, r.meet_id, r.event_id
+) t
+"""
+
 SQL = """
 SELECT year, stage, age_group, gender, discipline, best
 FROM (
@@ -116,11 +144,22 @@ def main():
     cur.execute(SQL, (STAGES,))
     rows = cur.fetchall()
     cur.close()
-    conn.close()
-    print(f"rows: {len(rows)}")
+    print(f"circuit rows: {len(rows)}")
+
+    cur = conn.cursor()
+    cur.execute(INVITE_SQL)
+    inv_rows = cur.fetchall()
+    cur.close()
+    print(f"invitational rows: {len(inv_rows)}")
 
     cells = collections.defaultdict(lambda: collections.defaultdict(list))
     skipped = collections.Counter()
+    for yr, ag, gen, disc, best in inv_rows:
+        g, x, b = GROUP_CODE.get(ag), GENDER_CODE.get(gen), BOARD_CODE.get(disc)
+        if not (g and x and b):
+            skipped[f"inv|{ag}|{gen}|{disc}"] += 1
+            continue
+        cells[g + x + b][f"Invitational|{yr}"].append(round(float(best), 2))
     for year, stage, ag, gen, disc, best in rows:
         g, x, b = GROUP_CODE.get(ag), GENDER_CODE.get(gen), BOARD_CODE.get(disc)
         if not (g and x and b):
@@ -128,17 +167,23 @@ def main():
             continue
         cells[g + x + b][f"{stage}|{year}"].append(round(float(best), 2))
 
+    conn.close()
     out_cells, total = {}, 0
     for code in sorted(cells):
         buckets = {}
         for key in sorted(cells[code]):
             arr = sorted(cells[code][key], reverse=True)
             total += len(arr)
-            buckets[key] = {
-                "n": len(arr),
-                "scores": arr,
-                "p": {str(p): pct(arr, p) for p in (10, 25, 50, 75, 90)},
-            }
+            year = key.split("|")[-1]
+            rec = {"n": len(arr),
+                   "p": {str(p): pct(arr, p) for p in (10, 25, 50, 75, 90)}}
+            # Full arrays only from 2024, the dive-count-comparable era and the
+            # only one a cut score should be set from. Earlier seasons keep
+            # percentiles for trend work without carrying 150k numbers into the
+            # browser.
+            if year >= "2024":
+                rec["scores"] = arr
+            buckets[key] = rec
         out_cells[code] = buckets
 
     # A cut score set from a handful of results is not a standard, it is a
