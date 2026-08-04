@@ -49,16 +49,37 @@ BUDGET_S = int(os.environ.get("BUDGET_S", "900"))
 _started = time.time()
 
 
+def _fetch(url, timeout):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
 def get(url, tries=2):
     for i in range(tries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA})
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                return r.read()
+            return _fetch(url, TIMEOUT)
         except Exception:
             if i == tries - 1:
                 raise
             time.sleep(1.5)
+
+
+def get_pdf(url, year=None):
+    """
+    omegatiming.com refuses or stalls on datacenter IPs, so fall back to the
+    Wayback Machine, which Wikipedia already archives these files to. Returns
+    (bytes, source) so the log records which copy was used.
+    """
+    try:
+        return _fetch(url, TIMEOUT), "omega"
+    except Exception as direct_err:
+        stamp = str(year or 2019)
+        wb = f"https://web.archive.org/web/{stamp}id_/{url}"
+        try:
+            return _fetch(wb, TIMEOUT * 2), "wayback"
+        except Exception:
+            raise direct_err
 
 
 def discover(page):
@@ -82,9 +103,9 @@ def pdf_text(blob):
         return "\n".join((p.extract_text() or "") for p in pdf.pages)
 
 
-def ingest_one(url, code, cur, stats):
+def ingest_one(url, code, cur, stats, year_hint=None):
     try:
-        blob = get(url)
+        blob, src = get_pdf(url, year_hint)
         text = pdf_text(blob)
     except Exception as e:
         log(f"    FETCH FAILED {code}: {type(e).__name__}: {e}")
@@ -94,7 +115,7 @@ def ingest_one(url, code, cur, stats):
     head = parse_header(text)
     rows, skipped = parse(text)
     if not rows:
-        log(f"    {code}: no dive rows parsed ({len(skipped)} lines skipped) — skipping")
+        log(f"    [{src}] {code}: no dive rows parsed ({len(skipped)} lines skipped) — skipping")
         stats["no_rows"] += 1
         return
 
@@ -111,7 +132,7 @@ def ingest_one(url, code, cur, stats):
     if head.get("is_synchro"):
         label += " SYNCHRO"
 
-    log(f"    {code}  {label:38} rows={len(rows):4} ok={len(ok_rows):4} "
+    log(f"    [{src:8}] {code}  {label:34} rows={len(rows):4} ok={len(ok_rows):4} "
         f"bad={bad:3} pass={rate:.1%}")
 
     if rate < MIN_PASS:
@@ -172,7 +193,9 @@ def main():
         except Exception as e:
             log(f"    DISCOVERY FAILED: {e}")
             continue
-        log(f"    {len(urls)} OMEGA pdf(s) cited")
+        ym = re.search(r"(19|20)\d{2}", page)
+        year_hint = ym.group(0) if ym else None
+        log(f"    {len(urls)} OMEGA pdf(s) cited (year hint {year_hint})")
         if MAX_FILES:
             urls = urls[:MAX_FILES]
             log(f"    limited to first {len(urls)}")
@@ -181,7 +204,7 @@ def main():
                 log("    TIME BUDGET REACHED — stopping early")
                 stats["budget_stop"] = stats.get("budget_stop", 0) + 1
                 break
-            ingest_one(url, code, cur, stats)
+            ingest_one(url, code, cur, stats, year_hint)
             time.sleep(0.3)
         if not DRY_RUN:
             conn.commit()
