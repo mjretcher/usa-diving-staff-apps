@@ -1,0 +1,46 @@
+name: Meet Layer Build
+
+# analytics.dive_population + analytics.meet_directory — the two reference
+# tables behind Meet Replay. Deliberately separate from Analytics Refresh:
+# that job drops and recreates thirteen tables and takes the Athlete
+# Evaluation app offline while it runs. These two are additive, so they can
+# be rebuilt at any hour without interrupting anyone using the app.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'db/scripts/build_meet_layer.py'
+
+concurrency:
+  group: ae-meet-layer
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build meet layer
+        shell: bash
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          python db/scripts/build_meet_layer.py 2>&1 | tee /tmp/meet_layer.log
+      - name: Publish log
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p db/audits
+          cp /tmp/meet_layer.log db/audits/meet_layer.txt || true
+          git config user.name  "usad-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add db/audits/meet_layer.txt || true
+          git diff --cached --quiet || git commit -m "meet layer build log [skip ci]"
+          git push || true

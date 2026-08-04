@@ -40,6 +40,14 @@ jobs:
           set -o pipefail
           mkdir -p db/audits
           python db/scripts/build_analytics.py 2>&1 | tee db/audits/analytics_refresh.log
+
+      - name: Build meet layer
+        shell: bash
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          python db/scripts/build_meet_layer.py
       - name: Commit log
         if: always()
         run: |
