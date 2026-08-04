@@ -52,6 +52,34 @@ class Neon:
             raise RuntimeError(f"Neon error: {d.get('message')}")
         return d["rows"]
 
+    def query_keyset(self, select_sql, key="id", page=8000):
+        """Read a large table in pages, keyed on a unique ascending column.
+
+        Neon's HTTP SQL endpoint answers 507 Insufficient Storage when a single
+        response exceeds its size limit, and this client runs in object mode so
+        every row repeats all of its column names. That is what began failing
+        the nightly core load on 2026-08-04: one unpaginated read of
+        core.event_results, which grew from 47,775 rows to 123,541 that day.
+        It fails harder as the table grows, so it is paginated rather than
+        merely made smaller.
+
+        Keyset rather than OFFSET: OFFSET rescans from the top on every page and
+        can skip or repeat rows if anything writes mid-read. select_sql must be
+        a plain SELECT, optionally with its own WHERE.
+        """
+        joiner = " AND " if re.search(r"\bWHERE\b", select_sql, re.I) else " WHERE "
+        out, last = [], None
+        while True:
+            sql = select_sql
+            if last is not None:
+                sql += f"{joiner}{key} > {int(last)}"
+            sql += f" ORDER BY {key} LIMIT {page}"
+            chunk = self.query(sql)
+            out.extend(chunk)
+            if len(chunk) < page:
+                return out
+            last = chunk[-1][key]
+
 PHASE_COLS = ["meet_id", "event_id", "result_set_id", "sheet_key", "diver_id", "diver_name",
               "team_name", "team_id", "nat", "place", "posted_score", "phase_score_from_dives",
               "phase_dive_count", "phase_dd_sum", "score_delta_posted_minus_phase",
