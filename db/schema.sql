@@ -1083,3 +1083,15 @@ CREATE TABLE IF NOT EXISTS core.nation_unresolved (
     divers      INTEGER,
     seen_at     TIMESTAMPTZ DEFAULT now()
 );
+
+-- Grants for the browser role on the tables added with the dive taxonomy and
+-- nation normalization. schema.sql grants per-schema elsewhere, but tables
+-- created after those blocks need an explicit pass or the app role cannot read.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT SELECT ON core.dive_skills        TO usad_app;
+    GRANT SELECT ON core.nations            TO usad_app;
+    GRANT SELECT ON core.nation_unresolved  TO usad_app;
+  END IF;
+END $$;
