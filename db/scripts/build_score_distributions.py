@@ -146,11 +146,39 @@ def main():
     cur.close()
     print(f"circuit rows: {len(rows)}")
 
+    # Actions log archives are not reachable from every environment, so a
+    # failure here has to survive into the output file rather than only into a
+    # log nobody can open.
+    inv_rows, inv_error = [], None
     cur = conn.cursor()
-    cur.execute(INVITE_SQL)
-    inv_rows = cur.fetchall()
-    cur.close()
-    print(f"invitational rows: {len(inv_rows)}")
+    try:
+        cur.execute(INVITE_SQL)
+        inv_rows = cur.fetchall()
+        print(f"invitational rows: {len(inv_rows)}")
+    except Exception as e:
+        conn.rollback()
+        inv_error = str(e).strip()
+        print("INVITATIONAL PULL FAILED:", inv_error[:400])
+    finally:
+        cur.close()
+
+    # Pin the join column types: the last failure of this shape was schema drift
+    # between what schema.sql declares and what the database actually has.
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT table_schema||'.'||table_name t, column_name c, data_type d
+            FROM information_schema.columns
+            WHERE (table_schema='divemeets' AND table_name IN ('results','event_class','events','meets')
+                   AND column_name IN ('meet_id','event_id','round','score','profile_id','place','start_date'))
+            ORDER BY 1,2""")
+        join_types = [{"col": f"{r[0]}.{r[1]}", "type": r[2]} for r in cur.fetchall()]
+        for j in join_types:
+            print(f"   {j['col']:34} {j['type']}")
+    except Exception as e:
+        conn.rollback(); join_types = [{"error": str(e).strip()}]
+    finally:
+        cur.close()
 
     cells = collections.defaultdict(lambda: collections.defaultdict(list))
     skipped = collections.Counter()
@@ -204,6 +232,8 @@ def main():
         "thin_buckets": thin,
         "unmapped": dict(skipped),
         "stage_probe": probe,
+        "invitational_error": inv_error,
+        "join_types": join_types,
         "cells": out_cells,
     }
     with open(TARGET, "w") as fh:
