@@ -59,6 +59,37 @@ NATIONAL_TEAM = [
     "Sophie Verzyl",
 ]
 
+# 2024 U.S. Olympic Diving Team, Paris. Ten named at selection, plus Brandon
+# Loschiavo added by World Aquatics reallocation the day before the Games.
+# Per-event mapping recorded because the criterion reads "in their OLY events";
+# note the individual Olympic events are 3m and 10m only — 1m is not an
+# Olympic event — so a synchro-only Olympian may take nothing from this
+# pathway on the individual side. That reading is an interpretation and is
+# flagged rather than assumed; the measured entries below sidestep it.
+OLYMPIC_2024 = [
+    "Sarah Bacon", "Andrew Capobianco", "Kassidy Cook", "Tyler Downs",
+    "Greg Duncan", "Alison Gibson", "Jessica Parratto", "Delaney Schnell",
+    "Carson Tyler", "Daryn Wright", "Brandon Loschiavo",
+]
+
+# Tier 1 High Performance Squad, from the still-live tier-1 page. The page
+# carries NO year label, so the vintage is unverified: it is presumed to be the
+# final (2024-25) squad, since the National Team replaced Tier 1/2/3 Senior in
+# February 2026. Treated as indicative, not authoritative.
+TIER1_HPS = [
+    "Sarah Bacon", "Grayson Campbell", "Andrew Capobianco", "Kassidy Cook",
+    "Tyler Downs", "Joshua Hedberg", "Quinn Henninger", "Hailey Hernandez",
+    "Krysta Palmer", "Jack Ryan", "Delaney Schnell", "Carson Tyler",
+    "Sophie Verzyl", "Daryn Wright",
+]
+
+# NOT captured, deliberately:
+#   Tier 2 HPS  — the tier-2 page now returns 404. A cached search snippet
+#                 showed five names but was truncated mid-list. A partial
+#                 roster is worse than none here: it would look authoritative
+#                 and undercount the pathway.
+#   Tier 3 Senior HPS — no published roster found.
+
 SQUADS = [
     {"key": "tier3_junior", "label": "2025-26 Tier III Junior High Performance Squad",
      "names": TIER3_JUNIOR, "meets": ["12923"],
@@ -69,6 +100,17 @@ SQUADS = [
      "label": "2025-26 Tier III Junior HPS — at the Senior Championships",
      "names": TIER3_JUNIOR, "meets": ["12924", "12925"],
      "source": "https://www.usadiving.org/tier-3-juniors"},
+    {"key": "olympic_2024", "label": "2024 U.S. Olympic Team (Paris)",
+     "names": OLYMPIC_2024, "meets": ["12924", "12925"],
+     "source": "https://www.nbcolympics.com/news/diving-101-us-olympic-roster-and-athlete-news",
+     "caveat": "Per-event eligibility reading is an interpretation; entries are measured."},
+    {"key": "tier1_hps", "label": "Tier 1 High Performance Squad (vintage unverified)",
+     "names": TIER1_HPS, "meets": ["12924", "12925"],
+     "source": "https://www.usadiving.org/tier-1",
+     "caveat": "Page carries no year label. Presumed the final 2024-25 squad. "
+               "Overlaps the National Team; the criterion covers only those NOT "
+               "named to it, and additionally requires having competed at 2025 "
+               "Nationals or Winter Nationals."},
     {"key": "national_team", "label": "2026 USA Diving National Team",
      "names": NATIONAL_TEAM, "meets": ["12924", "12925"],
      "source": "https://www.usadiving.org/news/2026/february/18/usa-diving-announces-national-team"},
@@ -183,6 +225,7 @@ def main():
             "meets": sq["meets"], "roster": len(sq["names"]),
             "entered": len(matched), "match_rate_pct": round(rate, 1),
             "entries": entries, "events_per_athlete": round(per, 2),
+            "caveat": sq.get("caveat"),
             "not_entered": unmatched,
             "fuzzy_matches": fuzzy,
             # A low match rate means the name matching is failing, not that the
