@@ -513,6 +513,12 @@
       document.body.appendChild(a); a.click();
       document.body.removeChild(a); URL.revokeObjectURL(a.href);
     });
+    var comp = document.getElementById('qvNatCompeted');
+    if (comp) {
+      comp.innerHTML = '<strong>' + all.length + '</strong> events &middot; <strong>' +
+                       totalDivers + '</strong> scoring finishes';
+      comp.hidden = false;
+    }
     if (window.natShellRefresh) window.natShellRefresh();
   };
 })();

@@ -3641,9 +3641,46 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <div id="recon-stage-table" class="rpt-card"><div class="rpt-loading">Loading per-stage reconciliation…</div></div>
         <div id="recon-band-table" class="rpt-card"><div class="rpt-loading">Loading band reconciliation…</div></div>
         <div id="recon-event-table" class="rpt-card"><div class="rpt-loading">Loading per-event reconciliation…</div></div>
+
+        <!-- Qualification-side views. These lived on the Nationals stage, which
+             meant that stage opened on a June invitation list rather than the
+             championship results. They belong with the other qualified /
+             registered / attended analysis. -->
+        <div id="recon-nat-invited" class="rpt-card"></div>
+        <div id="recon-nat-ewc" class="rpt-card"></div>
+        <div id="recon-nat-list" class="rpt-card"></div>
       </div>
     `;
     loadReconcileYears();
+    mountQualificationViews();
+  }
+
+  /* The three qualification-side views moved out of the Nationals stage. Each
+     is rendered by qualifier-views.js / nat-reconciliation.js, which own the
+     data; this only decides where they appear. */
+  function mountQualificationViews(){
+    var inv = document.getElementById('recon-nat-invited');
+    if (inv && window.renderNatReconciliation) window.renderNatReconciliation(inv);
+
+    var ewc = document.getElementById('recon-nat-ewc');
+    if (ewc && window._qvMountComputedEWCNat) {
+      ewc.innerHTML = '<h3 class="rpt-card-h">Computed E/W/C → Junior Nationals</h3>';
+      var host = document.createElement('div');
+      ewc.appendChild(host);
+      window._qvMountComputedEWCNat(host);
+    }
+
+    var lst = document.getElementById('recon-nat-list');
+    if (lst && window._qvRenderNatQualifierList) {
+      lst.innerHTML = '<h3 class="rpt-card-h">Official Junior Nationals qualifier list — who was invited</h3>';
+      var det = document.createElement('details');
+      det.className = 'rpt-fold';
+      det.innerHTML = '<summary>Show the published list by event</summary>';
+      var body = document.createElement('div');
+      det.appendChild(body);
+      lst.appendChild(det);
+      window._qvRenderNatQualifierList(body);
+    }
   }
 
   async function loadReconcileYears(){

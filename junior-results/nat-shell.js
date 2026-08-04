@@ -37,17 +37,15 @@
   /* Order matches the reading order of the stage: what happened, then how it
      was scored, then how the field compared to the invitation list, then the
      list itself. */
+  /* The Nationals stage is the championship: what was scored and who won.
+     The qualification-side views — invitation list, computed E/W/C layer,
+     invited-vs-competed reconciliation — moved to Junior Circuit Analytics
+     under Qual / Reg / Att, so they are not framed here. */
   var SECTIONS = [
     { id: 'qvTeamPoints', label: 'Team points', src: 'computed',
       note: 'Placings official; points applied under Art. 602.20 and the synchro policy.' },
     { id: 'qvNatResults', label: 'Results', src: 'computed',
-      note: 'Placings and scores official; the voluntary/optional split is summed from dive sheets.' },
-    { id: 'qvNatRecon', label: 'Reconciliation', src: 'inferred',
-      note: 'Counts are exact. How an unlisted diver qualified is inferred from where they appear.' },
-    { id: 'qvComputedEWCNat', label: 'E/W/C qualifiers', src: 'computed',
-      note: 'Derived from E/W/C placings under Art. 303(b)(3).' },
-    { id: 'qvNatListWrap', label: 'Who was invited', src: 'official',
-      note: 'The official qualifier list as published, unmodified.' }
+      note: 'Placings and scores official; the voluntary/optional split is summed from dive sheets.' }
   ];
 
   var SRC = {

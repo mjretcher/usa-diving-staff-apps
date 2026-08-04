@@ -1179,11 +1179,8 @@
     if (ctx) ctx.innerHTML = `
       <div class="context-title-block">
         <strong>Junior Nationals</strong>
-        <span>${hasOfficialList ? esc(NAT.meta.title || 'Championship results') : 'Computed from Zone results'}</span>
+        <span>Championship results and team scores</span>
       </div>
-      ${hasOfficialList ? `
-        <div class="context-stat"><strong>${NAT.meta.totalAthletes}</strong> invited</div>
-        <div class="context-stat"><strong>${NAT.meta.totalEvents}</strong> events</div>` : ''}
       <div class="context-stat" id="qvNatCompeted" hidden></div>`;
 
     renderNatSidebar();
@@ -1192,18 +1189,13 @@
     // than straight into tableWrap so that nat-reconciliation.js can move the
     // results above it once the meet has actually been contested. Before that
     // it stays exactly where it has always been.
-    tableWrap.innerHTML = '<div id="qvNatRecon"></div><div id="qvNatListWrap"></div>';
-    const natList = document.getElementById('qvNatListWrap');
-
-    if (hasOfficialList) {
-      renderNatFromOfficialList(natList);
-    } else {
-      renderNatFromComputed(natList);
-    }
-
-    // Computed E/W/C → Nationals layer (from Neon), appended below either path.
-    tableWrap.insertAdjacentHTML('beforeend', '<div id="qvComputedEWCNat"></div>');
-    mountComputedEWCNat();
+    /* This stage is the championship: what was scored and who won. Everything
+       about how the field got here — the official qualifier list, the computed
+       E/W/C → Nationals layer, and the reconciliation of invited against
+       competed — is qualification analysis, and now lives in Junior Circuit
+       Analytics under Qual / Reg / Att. Keeping it here made the stage open on
+       an invitation list from June instead of the results. */
+    tableWrap.innerHTML = '';
 
     // Team points — the headline deliverable, above the per-diver detail.
     tableWrap.insertAdjacentHTML('beforeend', '<div id="qvTeamPoints"></div>');
@@ -1794,6 +1786,19 @@
 
     window._qvRenderEWC = renderEWCView;
     window._qvRenderNat = renderNationalsView;
+
+  /* Mounted by Junior Circuit Analytics (Qual / Reg / Att), which is where the
+     qualification-side views now live. */
+  window._qvRenderNatQualifierList = function (wrap) {
+    if (!wrap) return;
+    if (NAT && NAT.qualifiers && NAT.qualifiers.length) renderNatFromOfficialList(wrap);
+    else renderNatFromComputed(wrap);
+  };
+  window._qvMountComputedEWCNat = function (wrap) {
+    if (!wrap) return;
+    wrap.innerHTML = '<div id="qvComputedEWCNat"></div>';
+    mountComputedEWCNat();
+  };
     window._qvRenderZones = renderZonesView;
 
     // Patch Zones stage to use our enhanced view when in origin mode
