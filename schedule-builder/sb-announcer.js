@@ -140,24 +140,40 @@ function annFill(tpl, ctx) {
    DIVE ORDER SHEET IMPORT  (DiveMeets printed PDF → dive order)
    ───────────────────────────────────────────────────────────────────────
    The meet software prints the order to PDF and those land on a shared
-   drive. Filenames are typed by whoever ran the report, so they are NOT
-   trusted for anything — the event identity is read out of the sheet's own
-   header line, which the software writes:
+   drive. Two things about those files are nobody's to control, so the
+   importer is built around them:
 
-       ( 30650) Group A Boys 3m (16-18)  Prelim
+     1. The file name is typed by whoever ran the report — "Tuesday synchro",
+        "orders final 2" — so it is never read for anything.
+     2. One printout often holds SEVERAL events, and the title line is
+        worded differently every time:
+
+            ( 30650 ) Group A Boys 3m (16-18)  Prelim
+            ( 30660 ) Group A/B Synchro.Boys 3m  Final
+            ( 30540 ) Group A/B Synchronized Girls Platform  Final
+
+   So the sheet is cut into one section per title line, each section is read
+   on its own, and the title is matched on what it MEANS — sex, board, and
+   whether it is synchro — instead of on the wording. All three have to
+   agree before an event is even a candidate, the age group is not allowed
+   to contradict, and the answer has to be the only one that fits. Anything
+   short of that is handed back to be placed from a list rather than
+   guessed at, so a sheet never lands on the wrong event.
 
    Text is extracted with coordinates and regrouped into visual lines,
    because a PDF stores glyph runs, not rows. Grouping is greedy on the
    vertical gap: the order number and the name sit ~0.9pt apart and belong
    together, while a name and the dive-code row below it are ~9pt apart.
 
-   A diver row is "<number> <name>". Dive-code rows ("403B 201B …") and
-   degree-of-difficulty rows ("2.1 1.8 …") cannot match that shape, because
-   the leading integer in those rows is never followed by a space.
+   A diver row is "<number> <name>", and a synchro row is
+   "<number> <name> (club) / <name> (club)". Dive-code rows ("403B 201B …")
+   and degree-of-difficulty rows ("2.1 1.8 …") cannot match that shape,
+   because the leading integer in those rows is never followed by a space.
 
-   The sheet states its own count ("Total Divers for board : 19"), which is
-   used as an integrity check — if what we parsed does not equal what the
-   sheet says, the import is reported as failed rather than half-loaded.
+   Printed order numbers have to run consecutively inside a section. On a
+   combined printout the second event carries straight on from the first
+   (8, 9, 10, 11) which is fine and gets renumbered from 1; a gap is not,
+   because it means a diver line was missed.
 ═══════════════════════════════════════════════════════════════════════ */
 
 // Items are {str, x, y} with y increasing DOWNWARD (the pdf.js adapter flips).
@@ -176,97 +192,201 @@ function annLinesFromItems(items, gap) {
   }));
 }
 
-const ANN_APP_FROM_SHEET = { '1m': '1-Meter', '1 m': '1-Meter', '3m': '3-Meter', '3 m': '3-Meter', '10m': 'Platform', '10 m': 'Platform', 'platform': 'Platform', 'tower': 'Platform' };
-const ANN_ROUND_FROM_SHEET = { prelim: 'Prelim', preliminary: 'Prelim', final: 'Final', finals: 'Final', semifinal: 'Semifinal', semi: 'Semifinal', quarterfinal: 'Prelim', qualifier: 'Qualifier', qualifying: 'Qualifier' };
-
-// "( 30650 ) Group A Boys 3m (16-18)  Prelim"
-function annParseSheetHeader(text) {
+// ── READING A TITLE LINE ──────────────────────────────────────────────
+// Longest form first in each list: "semi-final" must not be read as "final",
+// and "women" must not be read as "men".
+const ANN_TITLE_ROUND = [
+  [/\bquarter\s*-?\s*finals?\b/i, 'Prelim'],
+  [/\bsemi\s*-?\s*finals?\b/i, 'Semifinal'],
+  [/\bprelim(?:inar(?:y|ies))?s?\b/i, 'Prelim'],
+  [/\bfinals?\b/i, 'Final'],
+  [/\bqualif(?:ier|ying)\b/i, 'Qualifier'],
+];
+const ANN_TITLE_SEX = [
+  [/\bwomen(?:'?s)?\b/i, 'Women'],
+  [/\bgirls?(?:'?s)?\b/i, 'Girls'],
+  [/\bmen(?:'?s)?\b/i, 'Men'],
+  [/\bboys?(?:'?s)?\b/i, 'Boys'],
+  [/\bmixed\b/i, 'Mixed'],
+];
+// A board number is only a board when it is not part of an age range: the "1"
+// in "14-15" and the "10" in "10-11" must never be read as a springboard.
+const ANN_TITLE_APP = [
+  [/\bplatform\b|\btower\b|(?:^|[^\d.])10\s*-?\s*m(?:etre|eter)?\b/i, 'Platform'],
+  [/(?:^|[^\d.])3\s*-?\s*m(?:etre|eter)?\b/i, '3-Meter'],
+  [/(?:^|[^\d.])1\s*-?\s*m(?:etre|eter)?\b/i, '1-Meter'],
+];
+// Age groups, however the sheet chooses to say it. These are the USA Diving
+// junior brackets, so "16-18" and "Group A" are the same statement.
+const ANN_TITLE_AGES = [
+  [/\b16\s*[-–—]\s*18\b/, ['a']],
+  [/\b14\s*[-–—]\s*15\b/, ['b']],
+  [/\b12\s*[-–—]\s*13\b/, ['c']],
+  [/\b(?:11|10)\s*(?:&|and)?\s*(?:under|below)\b/i, ['d']],
+  [/\b14\s*[-–—]\s*18\b/, ['a', 'b']],
+];
+function annPickToken(list, text) {
+  for (const [re, val] of list) if (re.test(text)) return val;
+  return '';
+}
+// The set of age brackets a piece of text is talking about. Used on both the
+// sheet title and the scheduled event, so "Group A/B", "14-18" and
+// "Junior 14-18" all come out as the same two tags.
+function annLevelTags(text) {
+  const s = String(text || '');
+  const tags = new Set();
+  const gm = s.match(/\bgroups?\s*([a-d](?:\s*[\/&+,]\s*[a-d])*)\b/i);
+  if (gm) gm[1].toLowerCase().split(/[^a-d]+/).filter(Boolean).forEach(x => tags.add(x));
+  else {
+    const ab = s.match(/\b([a-d])\s*\/\s*([a-d])\b/i);
+    if (ab) { tags.add(ab[1].toLowerCase()); tags.add(ab[2].toLowerCase()); }
+  }
+  for (const [re, add] of ANN_TITLE_AGES) if (re.test(s)) add.forEach(x => tags.add(x));
+  if (/\bsenior\b/i.test(s)) tags.add('senior');
+  if (/\bmaster/i.test(s)) tags.add('masters');
+  if (/\bnational\s+qualifier\b/i.test(s)) tags.add('qualifier');
+  return tags;
+}
+// "Group A/B Synchro.Boys 3m Final" -> "Group A/B Synchro"
+function annTitleLevel(title, sexWord) {
+  let head = title;
+  if (sexWord) {
+    const i = title.toLowerCase().indexOf(String(sexWord).toLowerCase());
+    if (i > 0) head = title.slice(0, i);
+  }
+  return head.replace(/[\s.,;:/\\-]+$/, '').trim();
+}
+// Returns the meta for a title line, or null if the line is not a title.
+// A line that carries the software's "( 30660 )" event number is ALWAYS
+// treated as a title even when the wording defeats us — otherwise its divers
+// would silently pile onto the event above it, which is the one outcome worth
+// protecting against above all others.
+function annReadSheetTitle(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
-  const idm = t.match(/^\(\s*(\d+)?\s*\)\s*(.+)$/);
-  if (!idm) return null;
-  const dmEventId = idm[1] || '';
-  let rest = idm[2].trim();
-  const m = rest.match(/^(.*?)\s+(Boys|Girls|Men|Women|Mixed)\s+(1\s?m|3\s?m|10\s?m|Platform|Tower)\b\s*(?:\(([^)]*)\))?\s*(.*)$/i);
-  if (!m) return null;
-  const tail = (m[5] || '').trim();
-  let round = '';
-  for (const w of tail.split(/[\s,]+/)) {
-    const k = ANN_ROUND_FROM_SHEET[w.toLowerCase()];
-    if (k) { round = k; break; }
+  if (!t) return null;
+  let title = t, dmEventId = '', tagged = false;
+  const idm = t.match(/^\(\s*(\d*)\s*\)\s*(.*)$/);
+  if (idm) { tagged = true; dmEventId = idm[1] || ''; title = (idm[2] || '').trim(); }
+  const gender = annPickToken(ANN_TITLE_SEX, title);
+  const apparatus = annPickToken(ANN_TITLE_APP, title);
+  if (!tagged) {
+    // No event number to go on, so only accept an unmistakable title: it has
+    // to name a sex and a board, and be short enough to be a heading.
+    if (!gender || !apparatus) return null;
+    if (title.split(' ').length > 12) return null;
+    if (annParseDiverLine(t)) return null;
   }
   return {
     dmEventId,
-    level: m[1].trim(),
-    gender: m[2].replace(/^./, c => c.toUpperCase()).toLowerCase().replace(/^./, c => c.toUpperCase()),
-    apparatus: ANN_APP_FROM_SHEET[m[3].toLowerCase()] || m[3],
-    ageTag: (m[4] || '').trim(),
-    round,
-    synchro: /synchro/i.test(rest),
-    raw: t,
+    title: title || t,
+    gender,
+    apparatus,
+    round: annPickToken(ANN_TITLE_ROUND, title),
+    synchro: /synchro/i.test(title),
+    level: annTitleLevel(title, gender),
+    tags: annLevelTags(title),
   };
 }
 
-// "1 Rydan Russell"  /  "1 Noah Horwitz (RipFest)"
+// ── READING A DIVER ROW ───────────────────────────────────────────────
+// Split a row into athletes on the slash that sits OUTSIDE the club brackets,
+// so a club with a slash in its name is never mistaken for a synchro partner.
+function annSplitPair(text) {
+  const out = [];
+  let depth = 0, cur = '';
+  for (const ch of String(text || '')) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === '/' && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map(s => s.trim()).filter(Boolean);
+}
+function annSplitClub(text) {
+  const t = String(text || '').trim();
+  const p = t.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  return p ? { name: p[1].trim(), club: p[2].trim() } : { name: t, club: '' };
+}
+// "1 Noah Horwitz"  /  "1 Noah Horwitz (RipFest)"
+// "1 Rydan Russell (Coral Springs Diving) / Amir Owens (Montgomery Dive Club)"
 function annParseDiverLine(text) {
   const m = String(text || '').match(/^(\d{1,3})\s+(\S.*)$/);
   if (!m) return null;
-  let rest = m[2].trim();
+  const rest = m[2].trim();
   if (!/[A-Za-z]{2}/.test(rest)) return null;
-  // Split the club off FIRST. Clubs legitimately carry numbers - "Dive 2000
-  // Club", "5280 Diving" - so the numeric sanity check below has to be applied
-  // to the athlete's name alone or it throws the whole diver away.
-  let club = '';
-  const p = rest.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-  if (p) { rest = p[1].trim(); club = p[2].trim(); }
-  if (!/[A-Za-z]{2}/.test(rest)) return null;
-  // A row of dive codes or DDs can never reach here (no space after the
-  // leading integer), but a name is still never mostly digits.
-  if ((rest.match(/\d/g) || []).length > 2) return null;
-  return { no: Number(m[1]), name: rest.replace(/\s+/g, ' '), club };
+  // Clubs legitimately carry numbers — "Dive 2000 Club", "5280 Diving" — so
+  // the numeric sanity check has to be applied to the athlete's name alone or
+  // it throws the whole diver away.
+  const people = annSplitPair(rest).map(annSplitClub);
+  if (!people.length || people.length > 2) return null;
+  for (const p of people) {
+    if (!/[A-Za-z]{2}/.test(p.name)) return null;
+    // A row of dive codes or DDs can never reach here (no space after the
+    // leading integer), but a name is still never mostly digits.
+    if ((p.name.match(/\d/g) || []).length > 2) return null;
+  }
+  const clubs = [];
+  for (const p of people) {
+    if (!p.club) continue;
+    if (!clubs.some(c => annNorm(c) === annNorm(p.club))) clubs.push(p.club);
+  }
+  return {
+    no: Number(m[1]),
+    name: people.map(p => p.name.replace(/\s+/g, ' ')).join(' and '),
+    club: clubs.join(' and '),
+    pair: people.length > 1,
+  };
 }
 
-function annParseSheetLines(lines) {
-  const out = { meta: null, boards: [], warnings: [] };
-  let board = null;
-  const newBoard = (name) => { board = { name: name || '', rows: [], expected: null }; out.boards.push(board); return board; };
+// ── CUTTING THE SHEET INTO EVENTS ─────────────────────────────────────
+// Every title line opens a new section. Divers printed before the first title
+// are page furniture and are dropped.
+function annParseSheetSections(lines) {
+  const sections = [];
+  let cur = null, board = null;
+  const newSection = meta => { cur = { meta, boards: [] }; board = null; sections.push(cur); return cur; };
+  const newBoard = name => { board = { name: name || '', rows: [], expected: null }; cur.boards.push(board); return board; };
   for (const ln of lines) {
     const t = ln.text;
     if (!t) continue;
-    if (/^\(/.test(t)) { const h = annParseSheetHeader(t); if (h) { out.meta = out.meta || h; continue; } }
+    const h = annReadSheetTitle(t);
+    if (h) { newSection(h); continue; }
+    if (!cur) continue;
     const bm = t.match(/^Board\s+(\S.*)$/i);
     if (bm) { newBoard(bm[1].trim()); continue; }
     const tm = t.match(/^Total\s+Divers\s+for\s+board\s*:?\s*(\d+)/i);
     if (tm) { if (!board) newBoard(''); board.expected = Number(tm[1]); continue; }
-    if (/^(www\.|Page\b|Meet Sponsored|Hosted by|Cuts start|Contact the Meet)/i.test(t)) continue;
+    if (/^(www\.|Page\b|Meet Sponsored|Hosted by|Cuts start|Contact the Meet|Order\b\s+Round\b)/i.test(t)) continue;
     const d = annParseDiverLine(t);
     if (d) { if (!board) newBoard(''); board.rows.push(d); }
   }
-  return out;
+  return sections;
 }
 
-// Flatten to a single ordered list. Boards are separate lanes of the same
-// event; a finals field small enough to introduce runs on one board, but if a
-// sheet does come through with two, they are concatenated in printed order
-// and renumbered so the announcer reads 1..n straight down.
-function annSheetToOrder(parsed) {
+// Flatten one section to a single ordered list. Boards are separate lanes of
+// the same event; if a sheet comes through with two they are concatenated in
+// printed order and renumbered so the announcer reads 1..n straight down.
+function annSheetToOrder(section) {
   const rows = [];
   const problems = [];
-  parsed.boards.forEach(b => {
+  (section.boards || []).forEach(b => {
     const who = b.name ? `Board ${b.name}` : 'This sheet';
     if (b.expected != null && b.expected !== b.rows.length) {
       problems.push(`${who}: the sheet says ${b.expected} divers but ${b.rows.length} were read.`);
     }
     // Prelim sheets declare their own total; finals sheets do not. What both
-    // always carry is the printed order number, which must run 1..n with no
-    // gap and no repeat. A gap means a diver line was not read.
+    // always carry is the printed order number, which must step by one with no
+    // gap and no repeat. On a combined printout the numbering carries on from
+    // the event above, so the run is checked, not the starting value.
     const seq = b.rows.map(r => r.no);
-    const bad = seq.findIndex((n, i) => n !== i + 1);
-    if (seq.length && bad >= 0) {
-      problems.push(`${who}: the printed order reads ${seq.join(', ')} — expected 1 to ${seq.length}, so a diver line was missed or read twice.`);
+    const bad = seq.some((n, i) => i > 0 && n !== seq[i - 1] + 1);
+    if (seq.length > 1 && bad) {
+      problems.push(`${who}: the printed order reads ${seq.join(', ')} — those do not run one after another, so a diver line was missed or read twice.`);
     }
     b.rows.forEach(r => rows.push(Object.assign({ board: b.name }, r)));
   });
-  return { rows: rows.map((r, i) => Object.assign({}, r, { no: i + 1 })), problems, boards: parsed.boards.length };
+  return { rows: rows.map((r, i) => Object.assign({}, r, { no: i + 1 })), problems, boards: (section.boards || []).length };
 }
 
 
@@ -315,14 +435,70 @@ async function annPdfSheetLines(file) {
   return lines;
 }
 
-// ── MATCHING A SHEET TO AN EVENT IN THIS SESSION ──────────────────────
-// Filenames are typed by whoever ran the report, so they are ignored
-// entirely. Identity comes from the sheet's own header.
+// ── MATCHING A SHEET TO AN EVENT ──────────────────────────────────────
+// Sex, board and synchro are facts, not wording, and all three must agree.
+// The age bracket is allowed to be silent on either side, but it is never
+// allowed to disagree: a Group C sheet must not land on the Group D event
+// just because that is the only 1-meter final in the session.
+function annSexClass(g) {
+  const s = String(g || '').toLowerCase();
+  if (/^(boy|men|man|male)/.test(s)) return 'm';
+  if (/^(girl|women|woman|female)/.test(s)) return 'f';
+  if (/mixed/.test(s)) return 'x';
+  return '';
+}
+function annSheetFits(meta, ev) {
+  if (!ev || !meta) return false;
+  if (Boolean(meta.synchro) !== (ev.style === 'Synchronized')) return false;
+  const a = annSexClass(meta.gender), b = annSexClass(ev.gender);
+  if (a && b && a !== 'x' && b !== 'x' && a !== b) return false;
+  if (meta.apparatus && ev.apparatus && lk(meta.apparatus) !== lk(ev.apparatus)) return false;
+  const mt = meta.tags || new Set(), et = annLevelTags(ev.level);
+  if (mt.size && et.size && ![...mt].some(x => et.has(x))) return false;
+  return true;
+}
+function annSheetScore(meta, ev) {
+  let s = 0;
+  const mt = meta.tags || new Set(), et = annLevelTags(ev.level);
+  if ([...mt].some(x => et.has(x))) s += 4;
+  if (annKeyPart(meta.level) && annKeyPart(meta.level) === annKeyPart(ev.level)) s += 2;
+  if (meta.round && ev.round && meta.round === ev.round) s += 1;
+  return s;
+}
+// Every finals event in the meet, so a sheet from another session can be named
+// rather than simply refused.
+function annAllFinalTargets() {
+  const out = [];
+  const timed = (typeof allTimed === 'function') ? allTimed() : null;
+  (S.sessions || []).forEach(s => {
+    if (s.isPractice) return;
+    annEvents(s).forEach(ev => {
+      let label = '';
+      try { label = timed ? `Session ${getSessNum(s, timed)}` : ''; } catch (e) { }
+      out.push({ sessId: s.id, sessLabel: label || (s.title || 'Session'), evId: ev.id, ev });
+    });
+  });
+  return out;
+}
+// { ev, reason, elsewhere:[{sessId,sessLabel,evId,ev}] }
 function annMatchSheetToEvent(sess, meta) {
-  if (!meta) return null;
-  const want = annEvKey(meta.level, meta.gender, meta.apparatus);
-  const cand = annEvents(sess).filter(ev => annEvMatchKey(ev) === want);
-  return cand.length === 1 ? cand[0] : null;
+  const out = { ev: null, reason: '', elsewhere: [] };
+  if (!meta) { out.reason = 'There was no event title on this sheet.'; return out; }
+  if (!meta.gender || !meta.apparatus) {
+    out.reason = 'The title does not say which sex and board this event is in a way the app can read.';
+  } else {
+    const fits = annEvents(sess).filter(ev => annSheetFits(meta, ev));
+    if (fits.length === 1) { out.ev = fits[0]; return out; }
+    if (fits.length > 1) {
+      const scored = fits.map(ev => ({ ev, s: annSheetScore(meta, ev) })).sort((a, b) => b.s - a.s);
+      if (scored[0].s > scored[1].s) { out.ev = scored[0].ev; return out; }
+      out.reason = `Two events in this session could be this sheet — ${scored.filter(x => x.s === scored[0].s).map(x => evName(x.ev)).join(' and ')}.`;
+    } else {
+      out.reason = 'No finals event in this session matches this sheet.';
+    }
+  }
+  out.elsewhere = annAllFinalTargets().filter(t => t.sessId !== sess.id && annSheetFits(meta, t.ev));
+  return out;
 }
 
 // ── IMPORT ────────────────────────────────────────────────────────────
@@ -339,49 +515,114 @@ function annSetImport(sessId, evId, rec) {
     const a = annEnsure(sess); a.imports = a.imports || {}; a.imports[evId] = rec;
   });
 }
+// Write one read section onto one event, and hand back the line to show for it.
+function annApplySection(sessId, ev, sec, byHand) {
+  const sess = S.sessions.find(x => x.id === sessId);
+  setAnnOrder(sessId, ev.id, annOrderToText(sec.rows));
+  // A prior hand-typed club override would silently outrank the sheet.
+  upd(s => { const ss = s.sessions.find(x => x.id === sessId); if (ss && ss.announcer && ss.announcer.clubs) delete ss.announcer.clubs[ev.id]; });
+  const roundWarn = sec.meta.round && ev.round && sec.meta.round !== ev.round ? sec.meta.round : '';
+  const sched = Number(ev.numberOfDivers || 0);
+  annSetImport(sessId, ev.id, {
+    file: sec.file, label: sec.meta.title, at: new Date().toISOString(), count: sec.rows.length,
+    pair: Boolean(sec.rows[0] && sec.rows[0].pair),
+    boards: sec.boards, dmEventId: sec.meta.dmEventId || '', roundWarn,
+    schedCount: sched && sched !== sec.rows.length ? sched : 0, byHand: Boolean(byHand),
+  });
+  let where = '';
+  if (sess && sessId !== UI.annSessId) {
+    let n = '';
+    try { n = getSessNum(sess, allTimed()); } catch (e) { }
+    where = n ? ` in Session ${n}` : '';
+  }
+  return {
+    ok: true, warn: Boolean(roundWarn),
+    msg: `${evName(ev)}${where} — ${sec.rows.length} ${sec.rows[0] && sec.rows[0].pair ? 'pairs' : 'divers'} read from ${sec.file}` +
+      `${sec.boards > 1 ? ` (${sec.boards} boards merged)` : ''}.` +
+      (roundWarn ? ` Careful: this is the ${roundWarn} sheet, but the event here is the ${ev.round}.` : ''),
+  };
+}
 async function annImportFiles(sessId, fileList) {
   const files = Array.from(fileList || []).filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
-  if (!files.length) { UI.annImport = { busy: false, log: [{ ok: false, msg: 'That was not a PDF. Drop the printed dive order sheet.' }] }; render(); return; }
+  if (!files.length) { UI.annImport = { busy: false, log: [{ ok: false, msg: 'That was not a PDF. Drop the printed dive order sheet.' }], pending: [] }; render(); return; }
   const sess = S.sessions.find(x => x.id === sessId);
   if (!sess) return;
-  UI.annImport = { busy: true, log: [] };
+  UI.annImport = { busy: true, log: [], pending: [] };
   render();
-  const log = [];
+  const log = [], pending = [];
   for (const f of files) {
     try {
       const lines = await annPdfSheetLines(f);
-      const parsed = annParseSheetLines(lines);
-      if (!parsed.meta) { log.push({ ok: false, msg: `${f.name}: could not find the event line on this sheet. Is it a DiveMeets dive order printout?` }); continue; }
-      const m = parsed.meta;
-      const label = `${m.level} ${m.gender} ${m.apparatus}${m.round ? ' ' + m.round : ''}`;
-      const ev = annMatchSheetToEvent(sess, m);
-      if (!ev) {
-        log.push({ ok: false, msg: `${f.name}: this sheet is ${label}, which is not a finals event in this session (${annEvents(sess).map(evName).join(', ') || 'none'}).` });
-        continue;
+      const sections = annParseSheetSections(lines);
+      if (!sections.length) { log.push({ ok: false, msg: `${f.name}: no event title line was found. Is this a DiveMeets dive order printout?` }); continue; }
+      for (const raw of sections) {
+        const ord = annSheetToOrder(raw);
+        const many = sections.length > 1;
+        const title = raw.meta.title || 'an untitled event';
+        const where = many ? `${f.name}, "${title}"` : f.name;
+        if (!ord.rows.length) { log.push({ ok: false, msg: `${where}: no divers were read under this title.` }); continue; }
+        if (ord.problems.length) { log.push({ ok: false, msg: `${where}: ${ord.problems.join(' ')} Nothing was loaded from it — send the file over rather than trusting a partial read.` }); continue; }
+        const sec = { file: f.name, meta: raw.meta, rows: ord.rows, boards: ord.boards };
+        const hit = annMatchSheetToEvent(sess, raw.meta);
+        if (hit.ev) { log.push(annApplySection(sessId, hit.ev, sec)); continue; }
+        pending.push(Object.assign({
+          id: 'imp' + Math.random().toString(36).slice(2, 9),
+          reason: hit.reason, elsewhere: hit.elsewhere || [],
+        }, sec));
       }
-      const ord = annSheetToOrder(parsed);
-      if (!ord.rows.length) { log.push({ ok: false, msg: `${f.name}: no divers were found on this sheet.` }); continue; }
-      if (ord.problems.length) { log.push({ ok: false, msg: `${f.name}: ${ord.problems.join(' ')} Nothing was loaded — send this file over rather than trusting a partial read.` }); continue; }
-      setAnnOrder(sessId, ev.id, annOrderToText(ord.rows));
-      // A prior hand-typed club override would silently outrank the sheet.
-      upd(s => { const ss = s.sessions.find(x => x.id === sessId); if (ss && ss.announcer && ss.announcer.clubs) delete ss.announcer.clubs[ev.id]; });
-      const roundWarn = m.round && ev.round && m.round !== ev.round;
-      const sched = Number(ev.numberOfDivers || 0);
-      annSetImport(sessId, ev.id, {
-        file: f.name, label, at: new Date().toISOString(), count: ord.rows.length,
-        boards: ord.boards, dmEventId: m.dmEventId || '', roundWarn: roundWarn ? m.round : '',
-        schedCount: sched && sched !== ord.rows.length ? sched : 0,
-      });
-      log.push({
-        ok: true, warn: roundWarn,
-        msg: `${evName(ev)} — ${ord.rows.length} divers read from ${f.name}${ord.boards > 1 ? ` (${ord.boards} boards merged)` : ''}.` +
-          (roundWarn ? ` WARNING: this is the ${m.round} sheet, but the event here is the ${ev.round}.` : ''),
-      });
     } catch (e) {
       log.push({ ok: false, msg: `${f.name}: ${e.message || 'could not be read'}` });
     }
   }
-  UI.annImport = { busy: false, log };
+  UI.annImport = { busy: false, log, pending };
+  render();
+}
+// Every finals event in the meet, this session's first, so a held sheet can be
+// placed anywhere it actually belongs. When exactly one event elsewhere fits
+// the sheet, that one starts selected — one look and one click.
+function annAssignOptions(sess, p) {
+  const all = annAllFinalTargets();
+  const near = p.elsewhere || [];
+  const only = near.length === 1 ? near[0] : null;
+  const key = t => t.sessId + '::' + t.evId;
+  const taken = new Set(near.map(key));
+  const opt = t => `<option value="${key(t)}"${only && key(only) === key(t) ? ' selected' : ''}>${esc(evName(t.ev))}${t.sessId === sess.id ? '' : ` \u2014 ${esc(t.sessLabel)}`}</option>`;
+  const mine = all.filter(t => t.sessId === sess.id && !taken.has(key(t)));
+  const groups = [];
+  all.filter(t => t.sessId !== sess.id && !taken.has(key(t))).forEach(t => {
+    let g = groups.find(x => x.k === t.sessLabel);
+    if (!g) { g = { k: t.sessLabel, rows: [] }; groups.push(g); }
+    g.rows.push(t);
+  });
+  return `<option value="">Choose the event this sheet is\u2026</option>` +
+    (near.length ? `<optgroup label="${near.length === 1 ? 'Same sex, board and synchro as this sheet' : 'Could be any of these'}">${near.map(opt).join('')}</optgroup>` : '') +
+    (mine.length ? `<optgroup label="This session">${mine.map(opt).join('')}</optgroup>` : '') +
+    groups.map(g => `<optgroup label="${esc(g.k)}">${g.rows.map(opt).join('')}</optgroup>`).join('');
+}
+// Placing a held sheet by hand. The dropdown carries "<session id>::<event id>"
+// so a sheet that belongs to another session can be sent straight there.
+function annAssignPending(sessId, pid) {
+  const st = UI.annImport || {};
+  const p = (st.pending || []).find(x => x.id === pid);
+  if (!p) return;
+  const sel = document.getElementById('annAssign-' + pid);
+  const val = sel ? sel.value : '';
+  if (!val) { toast('Choose the event this sheet belongs to first.'); return; }
+  const cut = val.indexOf('::');
+  const targetSess = val.slice(0, cut), evId = val.slice(cut + 2);
+  const ts = S.sessions.find(x => x.id === targetSess);
+  const ev = ts && (ts.events || []).find(e => e.id === evId);
+  if (!ev) { toast('That event is no longer in the schedule.'); return; }
+  const line = annApplySection(targetSess, ev, p, true);
+  st.pending = (st.pending || []).filter(x => x.id !== pid);
+  st.log = (st.log || []).concat([line]);
+  UI.annImport = st;
+  render();
+}
+function annSkipPending(pid) {
+  const st = UI.annImport || {};
+  st.pending = (st.pending || []).filter(x => x.id !== pid);
+  UI.annImport = st;
   render();
 }
 function annPickFiles(input, sessId) { annImportFiles(sessId, input.files); input.value = ''; }
@@ -1002,8 +1243,10 @@ function renderAnnModal() {
         style="border:2px dashed var(--bd2);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:14px;background:var(--surf2)">
         <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">Drop the printed dive order PDFs here</div>
         <div style="font-size:11.5px;color:var(--tx2);line-height:1.6">
-          Straight off the shared drive — as many events at once as you like. The file name does not matter;
-          the event is read off the sheet itself, so it lands in the right place no matter who ran the report.
+          Straight off the shared drive — as many files as you like, and one printout holding several events is fine.
+          File names are ignored: every event is read off its own title line, so it lands in the right place no matter
+          who ran the report or what they called it. Anything that cannot be placed with certainty is listed below for
+          you to point at the right event.
         </div>
         <input type="file" id="annFileInput" accept="application/pdf,.pdf" multiple style="display:none"
           onchange="annPickFiles(this,'${sess.id}')"/>
@@ -1015,6 +1258,29 @@ function renderAnnModal() {
           border:1px solid ${r.ok ? (r.warn ? 'var(--red)' : 'var(--bd)') : 'var(--red)'};
           background:${r.ok && !r.warn ? 'var(--surf2)' : '#FFF5F7'};
           color:${r.ok && !r.warn ? 'var(--tx)' : 'var(--red)'}">${r.ok && !r.warn ? '✓ ' : ''}${esc(r.msg)}</div>`).join('')}
+      </div>` : ''}
+      ${(imp.pending || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
+        ${imp.pending.map(p => {
+      const first = p.rows[0], last = p.rows[p.rows.length - 1];
+      const one = (p.elsewhere || []).length === 1 ? p.elsewhere[0] : null;
+      return `<div style="border:1px solid var(--wu-bd);background:var(--wu-bg);border-radius:var(--r);padding:10px 12px">
+          <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px">
+            “${esc(p.meta.title || 'Untitled event')}” — ${p.rows.length} ${first && first.pair ? 'pairs' : 'divers'} read, waiting for an event
+          </div>
+          <div style="font-size:11.5px;color:var(--tx2);line-height:1.6;margin-bottom:8px">
+            ${esc(p.reason || '')}
+            ${one ? ` This looks like <strong>${esc(evName(one.ev))}</strong> in ${esc(one.sessLabel)}, which is picked below — check it, then load it.` : ''}
+            <br/><span style="color:var(--tx3)">From ${esc(p.file)} · starts ${esc(first ? first.name : '')}${p.rows.length > 1 ? `, ends ${esc(last.name)}` : ''}.</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select class="fi" id="annAssign-${p.id}" style="width:auto;max-width:100%;flex:1 1 260px;padding:6px 9px;font-size:12px">
+              ${annAssignOptions(sess, p)}
+            </select>
+            <button class="btn btn-p btn-sm" onclick="annAssignPending('${sess.id}','${p.id}')">Load it here</button>
+            <button class="chip" onclick="annSkipPending('${p.id}')">Skip this one</button>
+          </div>
+        </div>`;
+    }).join('')}
       </div>` : ''}
       <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
         Or paste or type the dive order for each event, one athlete per line, in the order the meet software printed.
@@ -1039,7 +1305,7 @@ function renderAnnModal() {
       const rec = (c.imports || {})[ev.id];
       if (!rec) return '';
       return `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--surf2);border:1px solid ${rec.roundWarn ? 'var(--red)' : 'var(--bd)'}">
-          Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} divers${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.
+          Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} ${rec.pair ? 'pairs' : 'divers'}${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.${rec.byHand ? ' Placed on this event by hand.' : ''}
           ${rec.schedCount ? `<span style="color:var(--tx3)">The schedule is timed on ${rec.schedCount} for this event — an exhibition diver in the cut would explain one more.</span>` : ''}
           ${rec.roundWarn ? `<span style="color:var(--red);font-weight:700">This is the ${esc(rec.roundWarn)} sheet, not the ${esc(ev.round)} — check before printing.</span>` : ''}
         </div>`;
