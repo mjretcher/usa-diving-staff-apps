@@ -63,6 +63,17 @@ function defaultFees(levelCount){
 }
 const LATE_ATHLETE = 100, LATE_COACH = 50;
 
+/* Synchro is billed once per TEAM entry, not once per diver, and the DiveMeets
+   levy follows the same rule -- one charge for the pair. Synchro sits outside
+   advance-data.json (which carries individual events only), so team counts are
+   entered per level. 2026 Junior Nationals ran 4 synchro events / 20 entries. */
+function defaultSynchro(levelCount){
+  const out = [];
+  for (let i=0;i<levelCount;i++) out.push({teams:0, fee:0});
+  out.push({teams:20, fee:125});   // the final championship
+  return out;
+}
+
 /* Every entry fee carries a per-entry pass-through to DiveMeets, the scoring
    management platform. It is NOT USA Diving revenue, and because it is a flat
    amount rather than a percentage it bites hardest on the cheapest entries:
@@ -89,9 +100,11 @@ function defaultSenior(){
    E/W/C     -> top 3 direct to Nationals (+ 4th-6th clearing the average).
 ------------------------------------------------------------------------- */
 function defaultFlow(levelCount){
-  const d = [{advance:15, direct:0, add:0}, {advance:15, direct:3, add:0}, {advance:0, direct:3, add:0}];
+  const d = [{advance:15, direct:0, add:0, byCell:{}},
+             {advance:15, direct:3, add:0, byCell:{}},
+             {advance:0,  direct:3, add:0, byCell:{}}];
   const out = [];
-  for (let i=0;i<levelCount;i++) out.push(d[i] ? Object.assign({}, d[i]) : {advance:12, direct:0, add:0});
+  for (let i=0;i<levelCount;i++) out.push(d[i] ? JSON.parse(JSON.stringify(d[i])) : {advance:12, direct:0, add:0, byCell:{}});
   if (out.length) out[out.length-1].advance = 0;   // top level cannot advance further
   return out;
 }
@@ -111,7 +124,9 @@ const PS = {
   cal:null,                           // frozen flow constants (see deriveCalibration)
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
   senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
-  scenarioId:null, scenarioName:'',
+  synchro:null,                       // per-level synchro team entries (billed once per pair)
+  baseFinal:null,                     // national field under the calibrated baseline
+  scenarioId:null, scenarioName:'', openGrid:null,
   bList:null, sList:null,
   dirty:false, err:null, tab:'summary',
 };
@@ -178,6 +193,28 @@ function totalCells(rows){
   return t;
 }
 
+/* Qualifier counts may be set per age group AND per event, not just per level.
+   A scenario can send 12 out of Group A 1M and 18 out of Group D platform at the
+   same stop. byCell holds the overrides; the level value is the fallback. */
+function advanceFor(L, code){
+  const f = PS.flow[L]; if (!f) return 0;
+  const o = f.byCell && f.byCell[code];
+  return (o && o.advance != null) ? o.advance : f.advance;
+}
+function directFor(L, code){
+  const f = PS.flow[L]; if (!f) return 0;
+  const o = f.byCell && f.byCell[code];
+  return (o && o.direct != null) ? o.direct : f.direct;
+}
+function cellOverridden(L, code){
+  const f = PS.flow[L]; const o = f && f.byCell && f.byCell[code];
+  return !!(o && (o.advance != null || o.direct != null));
+}
+function levelOverrideCount(L){
+  const f = PS.flow[L]; if (!f || !f.byCell) return 0;
+  return CODES.filter(c => cellOverridden(L, c)).length;
+}
+
 /* Advancement out of one stop for one cell, honouring "or the last diver if
    fewer entries than the cap" -- a 9-entry field cannot send 15 divers on. */
 function advanceOut(entries, cap, direct){
@@ -208,7 +245,7 @@ function deriveCalibration(){
   const advIntoZ = {};
   a0.rows.forEach(r => CODES.forEach(c => {
     const e = r[c] || 0;
-    if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, f0.advance, f0.direct);
+    if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, advanceFor(0,c), directFor(0,c));
   }));
   const addRate = {}, directAtZ = {};
   CODES.forEach(c => {
@@ -260,7 +297,7 @@ function computeVolume(){
     lvl[0].rows.forEach(r => {
       CODES.forEach(c => {
         const e = r[c] || 0;
-        if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, f0.advance, f0.direct);
+        if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, advanceFor(0,c), directFor(0,c));
       });
     });
   }
@@ -292,7 +329,7 @@ function computeVolume(){
       CODES.forEach(c => {
         const e = src[c] || 0;
         if (!e) return;
-        const out = advanceOut(e, fPrev.advance, fPrev.direct) * (1 + (L===1 ? (addRate[c]||0) : 0) + (fPrev.add||0)/100);
+        const out = advanceOut(e, advanceFor(L-1,c), directFor(L-1,c)) * (1 + (L===1 ? (addRate[c]||0) : 0) + (fPrev.add||0)/100);
         rows[parent][c] = (rows[parent][c]||0) + out;
       });
     }
@@ -320,11 +357,12 @@ function computeVolume(){
   const finalCells = {};
   for (let L=0; L<NL; L++){
     const f = flow[L];
-    if (!f || !f.direct) continue;
+    if (!f) continue;
+    if (!f.direct && !CODES.some(c => directFor(L,c) > 0)) continue;
     lvl[L].rows.forEach(r => {
       CODES.forEach(c => {
         const e = r[c] || 0;
-        if (e > 0) finalCells[c] = (finalCells[c]||0) + directOut(e, f.direct) * (1 + (f.add||0)/100);
+        if (e > 0) finalCells[c] = (finalCells[c]||0) + directOut(e, directFor(L,c)) * (1 + (f.add||0)/100);
       });
     });
   }
@@ -370,7 +408,7 @@ function computeRevenue(useNewPrices){
 
   /* ---- junior circuit event fees ---- */
   const perLevel = [];
-  let eventRev = 0, eventEntries = 0;
+  let eventRev = 0, eventEntries = 0, synchroTeams = 0;
   for (let L=0; L<=NL; L++){
     const fee = PS.fees[L] || {qual:0, non:0, name:'Level '+(L+1)};
     const baseFee = defaultFees(NL)[L] || {qual:0, non:0};
@@ -391,11 +429,18 @@ function computeRevenue(useNewPrices){
     const entries = q + nq;
     const late = entries * (PS.lateRate/100) * LATE_ATHLETE;
     rev += late;
-    const lv = entries * levy;
+    // Synchro: one entry fee and one levy charge per TEAM, not per diver.
+    const sy = (PS.synchro && PS.synchro[L]) || {teams:0, fee:0};
+    const syTeams = Math.max(0, +sy.teams||0);
+    const syRev = syTeams * (+sy.fee||0);
+    const lv = (entries + syTeams) * levy;
+    rev += syRev;
     eventRev += rev; eventEntries += entries;
+    synchroTeams += syTeams;
     perLevel.push({
       L, name: fee.name, stops: (L<NL ? groupCountAt(L) : 1),
       qual:q, nonqual:nq, entries, late, rev, levy:lv, net:rev-lv,
+      syTeams, syRev, syFee:(+sy.fee||0),
       source: (L<NL ? V.levels[L].source : 'modelled'),
     });
   }
@@ -432,14 +477,16 @@ function computeRevenue(useNewPrices){
     perType.push({name, baseP, newP, rider, n0, n, rev});
   });
 
+  // Chargeable units: every individual event entry, plus one per synchro team.
   const allEntries = eventEntries + seniorEntries;
-  const levyTotal  = allEntries * levy;
+  const chargeable = allEntries + synchroTeams;
+  const levyTotal  = chargeable * levy;
   const gross      = eventRev + seniorRev + memberRev;
 
   return {V, perLevel, perSenior, perType,
           eventRev, eventEntries, seniorRev, seniorEntries,
           memberRev, memberCount,
-          allEntries, levyTotal, gross, net: gross - levyTotal,
+          allEntries, synchroTeams, chargeable, levyTotal, gross, net: gross - levyTotal,
           total: gross};
 }
 
@@ -521,6 +568,16 @@ function resizeCards(){
   }));
   PS.flow = dfl.map((f,i) => oldFl[i] ? Object.assign({}, f, oldFl[i]) : f);
   if (PS.flow.length) PS.flow[PS.flow.length-1].advance = 0;
+  const ds = defaultSynchro(NL), oldS = PS.synchro || [];
+  PS.synchro = ds.map((x,i) => oldS[i] ? Object.assign({}, x, oldS[i]) : x);
+}
+
+/* Freeze the national field produced by the calibrated baseline, so the
+   qualification panel can show what a scenario actually does to the number of
+   athletes reaching the championships. */
+function snapshotBaseline(){
+  const V = computeVolume();
+  PS.baseFinal = Object.assign({}, V.final);
 }
 
 /* Pull live senior entry counts from the DiveMeets entries sync. One row per
@@ -568,6 +625,7 @@ async function bootstrap(){
     await loadSeniorEntries();
     deriveCalibration();     // freeze against the alignment actually run
     calibratePrequal();
+    snapshotBaseline();
     PS.ready = true;
   } catch(e){
     console.error(e); PS.err = e.message || String(e);
@@ -678,6 +736,7 @@ function renderStructure(sim){
               : p.source==='calibrated' ? '<span class="ps-tag cal">calibrated</span>'
               :                           '<span class="ps-tag mod">modelled</span>';
     const f = PS.flow[p.L];
+    const ovc = f ? levelOverrideCount(p.L) : 0;
     return `<tr>
       <td><b>${esc(p.name)}</b> ${tag}</td>
       <td class="num">${fmt(p.stops)}</td>
@@ -686,7 +745,8 @@ function renderStructure(sim){
       <td class="num">${fmt(Math.round(p.nonqual))}</td>
       <td class="num">${f ? `<input class="ps-in sm" type="number" min="0" max="99" data-flow="advance" data-l="${p.L}" value="${f.advance}">` : '<span class="ps-na">&mdash;</span>'}</td>
       <td class="num">${f ? `<input class="ps-in sm" type="number" min="0" max="99" data-flow="direct" data-l="${p.L}" value="${f.direct}">` : '<span class="ps-na">&mdash;</span>'}</td>
-    </tr>`;
+      <td class="num">${f ? `<button class="ps-btn tiny" data-grid="${p.L}">${PS.openGrid===p.L?'Hide':'By age group'}${ovc?` <span class="ps-ovc">${ovc}</span>`:''}</button>` : ''}</td>
+    </tr>` + ((f && PS.openGrid===p.L) ? `<tr class="ps-gridrow"><td colspan="8">${renderCellGrid(p.L)}</td></tr>` : '');
   }).join('');
   return `<div class="card"><div class="card-h">
       <h3>Competition structure</h3>
@@ -695,7 +755,7 @@ function renderStructure(sim){
     <table class="ps-tbl"><thead><tr>
       <th>Level</th><th class="num">Stops</th><th class="num">Entries</th>
       <th class="num">Qualifying</th><th class="num">Non-qual.</th>
-      <th class="num">Advance / event</th><th class="num">Direct to final / event</th>
+      <th class="num">Advance / event</th><th class="num">Direct to final / event</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table>
     <p class="note ps-foot">Advance = places moving to the next level per event per stop. Direct = places going straight to ${esc(PS.finalName)}. A field smaller than the cap sends only as many divers as it has, matching the &ldquo;or the last diver&rdquo; rule.</p>
     </div></div>`;
@@ -718,6 +778,8 @@ function renderEventFees(base, sim){
       <td class="num">${showNon ? `<input class="ps-in" type="number" min="0" step="5" data-fee="non" data-l="${i}" value="${f.non}">
         <span class="ps-bite">${biteNon?biteNon.toFixed(1)+'% levy':''}</span>` : '<span class="ps-na">n/a</span>'}</td>
       <td class="num"><input class="ps-in sm" type="number" min="0" max="100" step="0.5" data-eel="${i}" value="${PS.eElast[i]||0}"></td>
+      <td class="num"><input class="ps-in sm" type="number" min="0" data-syt="${i}" value="${p.syTeams}">
+        <span class="ps-bite">@ <input class="ps-in xs2" type="number" min="0" step="5" data-syf="${i}" value="${p.syFee}"></span></td>
       <td class="num mono">${usd(p.rev)}</td>
       <td class="num mono ps-levy">&minus;${usd(p.levy)}</td>
       <td class="num mono">${usd(p.net)}</td>
@@ -731,11 +793,11 @@ function renderEventFees(base, sim){
     </div><div class="card-b">
     <table class="ps-tbl"><thead><tr>
       <th>Level</th><th class="num">Entries</th><th class="num">Qualifying fee</th>
-      <th class="num">Non-qual. fee</th><th class="num">Response</th>
+      <th class="num">Non-qual. fee</th><th class="num">Response</th><th class="num">Synchro teams</th>
       <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
       <tr class="ps-tot"><td>Total</td><td class="num">${fmt(Math.round(sim.eventEntries))}</td>
-      <td colspan="3"></td><td class="num mono">${usd(sim.eventRev)}</td>
+      <td colspan="3"></td><td class="num">${fmt(sim.synchroTeams)}</td><td class="num mono">${usd(sim.eventRev)}</td>
       <td class="num mono ps-levy">&minus;${usd(sim.eventEntries*PS.levy)}</td>
       <td class="num mono">${usd(sim.eventRev - sim.eventEntries*PS.levy)}</td>
       <td class="num">${deltaSpan(dTot)}</td></tr>
@@ -743,7 +805,7 @@ function renderEventFees(base, sim){
     <div class="ps-inline">
       <label>DiveMeets levy <input class="ps-in sm" type="number" min="0" max="100" step="0.05" data-levy value="${PS.levy}"> per entry</label>
       <label>Late entries <input class="ps-in sm" type="number" min="0" max="100" step="0.5" data-late value="${PS.lateRate}"> % of entries</label>
-      <span class="note">The levy is a flat amount, not a percentage, so it bites hardest on the cheapest entries &mdash; ${(PS.levy/45*100).toFixed(1)}% of a $45 non-qualifying entry against ${(PS.levy/125*100).toFixed(1)}% of a $125 national entry. Cutting a fee to widen access gives away proportionally more of what is left. Late registration is $${LATE_ATHLETE} per athlete ($${LATE_COACH} coach); your calibration is that the late fee is steep enough to deter, so this stays near zero unless you are testing a change to it.</span>
+      <span class="note">The levy is a flat amount, not a percentage, so it bites hardest on the cheapest entries &mdash; ${(PS.levy/45*100).toFixed(1)}% of a $45 non-qualifying entry against ${(PS.levy/125*100).toFixed(1)}% of a $125 national entry. Cutting a fee to widen access gives away proportionally more of what is left. Synchro is billed once per team, not once per diver, and the levy follows the same rule &mdash; one charge for the pair. Late registration is $${LATE_ATHLETE} per athlete ($${LATE_COACH} coach); your calibration is that the late fee is steep enough to deter, so this stays near zero unless you are testing a change to it.</span>
     </div>
     </div></div>`;
 }
@@ -780,6 +842,98 @@ function renderMemberPrices(base, sim){
     </tbody></table>
     <p class="note ps-foot">Riders are the background screening ($33), judging course ($30) and club organisation ($150) add-ons carried in the published fee schedule. They are billed on top and are not moved by the dues slider.</p>
     </div></div>`;
+}
+
+/* ---------- qualification outcomes ----------
+   The half of the question that is not money: what a scenario does to the
+   number of athletes reaching each stage, by age group, gender and event. */
+function renderQualification(sim){
+  const V = sim.V;
+  const nowF = V.final, baseF = PS.baseFinal || {};
+  const rowsFor = g => GENDERS.flatMap(x => BOARDS.map(b => {
+    const c = g+x+b;
+    const now = nowF[c]||0, was = baseF[c]||0;
+    return `<tr>
+      <td class="ps-sub">${GENDER_NAME[x]} ${BOARD_NAME[b]}</td>
+      <td class="num mono">${fmt(Math.round(was))}</td>
+      <td class="num mono">${fmt(Math.round(now))}</td>
+      <td class="num">${qDelta(now-was)}</td></tr>`;
+  })).join('');
+  const groupBlocks = GROUPS.map(g => {
+    let was=0, now=0;
+    GENDERS.forEach(x => BOARDS.forEach(b => { was += baseF[g+x+b]||0; now += nowF[g+x+b]||0; }));
+    return `<tr class="ps-grp"><td><b>Group ${g}</b></td>
+        <td class="num mono">${fmt(Math.round(was))}</td>
+        <td class="num mono">${fmt(Math.round(now))}</td>
+        <td class="num">${qDelta(now-was)}</td></tr>` + rowsFor(g);
+  }).join('');
+  let tWas=0, tNow=0;
+  CODES.forEach(c => { tWas += baseF[c]||0; tNow += nowF[c]||0; });
+
+  const fieldRows = sim.perLevel.map(p => {
+    const per = p.stops ? p.entries/p.stops : 0;
+    return `<tr><td>${esc(p.name)}</td><td class="num">${fmt(p.stops)}</td>
+      <td class="num mono">${fmt(Math.round(p.entries))}</td>
+      <td class="num mono">${per.toFixed(0)}</td>
+      <td class="num mono">${(per/24).toFixed(1)}</td></tr>`;
+  }).join('');
+
+  return `<div class="card"><div class="card-h">
+      <h3>Qualification outcomes</h3>
+      <div class="note">What the scenario does to athlete opportunity, independent of money. Baseline is the calibrated ${yearNum()} alignment.</div>
+    </div><div class="card-b">
+    <div class="ps-grid2">
+      <div>
+        <h4 class="ps-h4">Field reaching ${esc(PS.finalName)}</h4>
+        <table class="ps-tbl"><thead><tr>
+          <th>Age group / event</th><th class="num">Baseline</th><th class="num">Scenario</th><th class="num">Change</th>
+        </tr></thead><tbody>${groupBlocks}
+          <tr class="ps-tot"><td>All events</td>
+            <td class="num mono">${fmt(Math.round(tWas))}</td>
+            <td class="num mono">${fmt(Math.round(tNow))}</td>
+            <td class="num">${qDelta(tNow-tWas)}</td></tr>
+        </tbody></table>
+      </div>
+      <div>
+        <h4 class="ps-h4">Field size per stop</h4>
+        <table class="ps-tbl"><thead><tr>
+          <th>Level</th><th class="num">Stops</th><th class="num">Entries</th>
+          <th class="num">Per stop</th><th class="num">Per event</th>
+        </tr></thead><tbody>${fieldRows}</tbody></table>
+        <p class="note ps-foot">Per event assumes all 24 individual events run at every stop. This is the number that decides session length &mdash; a scenario that looks affordable can still be unrunnable if it pushes a stop past what the pool can get through in a day.</p>
+      </div>
+    </div>
+    <p class="note ps-foot"><b>Read this alongside the money.</b> Cutting stops usually raises revenue per stop while cutting the number of athletes who reach the championships. Those two move in opposite directions, and this panel is the half the committee will feel.</p>
+    </div></div>`;
+}
+function qDelta(d){
+  const n = Math.round(d);
+  if (n === 0) return '<span class="ps-d flat">&mdash;</span>';
+  return `<span class="ps-d ${n>0?'up':'down'}">${n>0?'+':''}${fmt(n)} ${Math.abs(n)===1?'place':'places'}</span>`;
+}
+
+/* Per age group / per event qualifier overrides for one level. */
+function renderCellGrid(L){
+  const f = PS.flow[L];
+  const head = GROUPS.map(g => `<th colspan="2">Group ${g}</th>`).join('');
+  const sub  = GROUPS.map(() => '<th class="num">Boys</th><th class="num">Girls</th>').join('');
+  const body = BOARDS.map(b => {
+    const cells = GROUPS.flatMap(g => GENDERS.map(x => {
+      const c = g+x+b;
+      const ov = cellOverridden(L, c);
+      return `<td class="num"><input class="ps-in xs2${ov?' ov':''}" type="number" min="0" max="99"
+        data-cell="${c}" data-cl="${L}" value="${advanceFor(L, c)}"></td>`;
+    })).join('');
+    return `<tr><td class="ps-sub">${BOARD_NAME[b]}</td>${cells}</tr>`;
+  }).join('');
+  return `<div class="ps-cellgrid">
+    <div class="ps-cg-head"><span>Places advancing out of <b>${esc(levelName(L))}</b>, per event per stop</span>
+      <button class="ps-btn tiny" data-clear="${L}">Reset all to ${f.advance}</button></div>
+    <table class="ps-tbl ps-cg"><thead>
+      <tr><th></th>${head}</tr><tr><th></th>${sub}</tr></thead>
+      <tbody>${body}</tbody></table>
+    <p class="note">Set any cell independently &mdash; Group A 1-metre can send 12 while Group D platform sends 18. Highlighted cells differ from the level default.</p>
+  </div>`;
 }
 
 function renderCalibration(sim){
@@ -904,6 +1058,7 @@ function render(){
     renderMemberPrices(base, sim) +
     renderEventFees(base, sim) +
     renderSenior(base, sim) +
+    renderQualification(sim) +
     renderStructure(sim) +
     renderCalibration(sim);
 
@@ -945,6 +1100,29 @@ function wire(){
     PS.senior[+e.target.dataset.smeet].meet = String(e.target.value||'').trim();
     PS.dirty=true; await loadSeniorEntries(); render();
   }));
+  host.querySelectorAll('button[data-grid]').forEach(el => el.addEventListener('click', e => {
+    const L = +e.currentTarget.dataset.grid;
+    PS.openGrid = (PS.openGrid === L) ? null : L; render();
+  }));
+  host.querySelectorAll('input[data-cell]').forEach(el => el.addEventListener('change', e => {
+    const L = +e.target.dataset.cl, c = e.target.dataset.cell;
+    const v = clamp(Math.round(+e.target.value||0), 0, 99);
+    const f = PS.flow[L];
+    f.byCell = f.byCell || {};
+    if (v === f.advance) delete f.byCell[c];
+    else f.byCell[c] = Object.assign({}, f.byCell[c], {advance:v});
+    PS.dirty=true; render();
+  }));
+  host.querySelectorAll('button[data-clear]').forEach(el => el.addEventListener('click', e => {
+    PS.flow[+e.currentTarget.dataset.clear].byCell = {}; PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-syt]').forEach(el => el.addEventListener('change', e => {
+    PS.synchro[+e.target.dataset.syt].teams = Math.max(0, Math.round(+e.target.value||0)); PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-syf]').forEach(el => el.addEventListener('change', e => {
+    PS.synchro[+e.target.dataset.syf].fee = Math.max(0, +e.target.value||0); PS.dirty=true; render();
+  }));
+
   const lv = host.querySelector('input[data-levy]');
   if (lv) lv.addEventListener('change', e => { PS.levy = Math.max(0, +e.target.value||0); PS.dirty=true; render(); });
 
@@ -962,7 +1140,7 @@ function wire(){
 
   host.querySelectorAll('.ps-seg button').forEach(b => b.addEventListener('click', async () => {
     PS.year = b.dataset.year;
-    await loadCounts(); deriveCalibration(); calibratePrequal(); render();
+    await loadCounts(); deriveCalibration(); calibratePrequal(); snapshotBaseline(); render();
   }));
 
   const nm = host.querySelector('#psName');
@@ -978,6 +1156,8 @@ function resetPrices(){
   PS.prices = {}; PS.mElast = {}; PS.eElast = {}; PS.sElast = {}; PS.lateRate = 0;
   PS.levy = DIVEMEETS_LEVY;
   (PS.senior||[]).forEach(r => { r.fee = 125; });
+  PS.synchro = defaultSynchro(levelCount());
+  PS.openGrid = null;
   resizeCards(); PS.flow = defaultFlow(levelCount());
   PS.dirty = false; render(); msg('Prices reset to the published 2026 card.');
 }
@@ -998,7 +1178,7 @@ async function saveScenario(){
   const data = JSON.stringify({
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
     prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
-    senior:PS.senior, levy:PS.levy,
+    senior:PS.senior, levy:PS.levy, synchro:PS.synchro,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
     await NEON.query(
@@ -1027,6 +1207,10 @@ async function loadScenario(id){
     PS.prices = d.prices||{}; PS.mElast = d.mElast||{}; PS.eElast = d.eElast||{}; PS.sElast = d.sElast||{};
     if (d.senior && d.senior.length){ PS.senior = d.senior; await loadSeniorEntries(); }
     if (d.levy != null) PS.levy = +d.levy;
+    if (d.synchro && d.synchro.length) PS.synchro = d.synchro;
+    // NB: deliberately no snapshotBaseline() here. baseFinal is the calibrated
+    // baseline field; re-taking it after applying a scenario would make the
+    // scenario its own baseline and every qualification delta would read zero.
     PS.prequal = +d.prequal||0; PS.lateRate = +d.lateRate||0;
     PS.scenarioId = id; PS.scenarioName = r.rows[0].name; PS.dirty = false;
     render(); msg('Loaded "' + r.rows[0].name + '".');
@@ -1073,7 +1257,8 @@ window.__PRICING = {
   PS, CODES, computeVolume, computeRevenue, allocate, isQualifying,
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
-  defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY,
+  defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro,
+  advanceFor, directFor, snapshotBaseline,
 };
 
 /* ---------- entry point ---------- */
