@@ -88,23 +88,16 @@ jobs:
         # psql output is the only diagnostic this workflow produces, and Actions
         # logs are not always reachable. A truncate that fails leaves the table
         # intact but the reason invisible, so it is written where it can be read.
+        # Uses psql, already installed above -- an earlier psycopg2 version of
+        # this step failed for want of a Python setup, which defeated the point.
         if: always()
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          pip install psycopg2-binary -q
-          python - <<'PY'
-          import os, json, datetime, psycopg2
-          try:
-              log = open('/tmp/seed.log', encoding='utf-8', errors='replace').read()[-8000:]
-          except Exception as e:
-              log = '(no console captured: %r)' % (e,)
-          conn = psycopg2.connect(os.environ['DATABASE_URL']); cur = conn.cursor()
-          cur.execute("""INSERT INTO app_meta.config (key, value, description)
-                         VALUES ('neon_seed_last_console', %s, 'console tail of the last core.event_results seed')
-                         ON CONFLICT (key) DO UPDATE
-                           SET value = EXCLUDED.value, updated_at = now()""",
-                      (json.dumps({'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                   'console': log}),))
-          conn.commit(); cur.close(); conn.close()
-          PY
+          LOG="$(tail -c 6000 /tmp/seed.log 2>/dev/null || echo '(no console captured)')"
+          psql "$DATABASE_URL" -v log="$LOG" -c \
+            "INSERT INTO app_meta.config (key, value, description)
+             VALUES ('neon_seed_last_console', jsonb_build_object('at', now(), 'console', :'log')::text,
+                     'console tail of the last core.event_results seed')
+             ON CONFLICT (key) DO UPDATE
+               SET value = EXCLUDED.value, updated_at = now();"
