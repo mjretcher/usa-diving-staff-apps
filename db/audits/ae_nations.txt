@@ -10,33 +10,32 @@ Verifying:
   dive_sheets.nation_code present: True
 
 === BACKFILL ===
-71 distinct team_name values on World Aquatics rows
-  resolved 70 -> 56 distinct nations
-  unresolved 1: NAB(408)
-  dive_sheets updated: 8666 rows
+73 distinct team_name values on World Aquatics rows
+  resolved 73 -> 59 distinct nations
+  unresolved 0: 
+  dive_sheets updated: 408 rows
 
 Nations after normalization:
-  USA  United States                 960 dives    85 divers
-  CHN  China                         828 dives    55 divers
-  AUS  Australia                     786 dives    60 divers
-  MEX  Mexico                        653 dives    51 divers
-  CAN  Canada                        544 dives    40 divers
-  GBR  Great Britain                 521 dives    45 divers
-  UKR  Ukraine                       451 dives    44 divers
-  ITA  Italy                         414 dives    34 divers
-  GER  Germany                       408 dives    32 divers
-  KOR  Republic of Korea             291 dives    30 divers
-  JPN  Japan                         260 dives    15 divers
-  FRA  France                        257 dives    15 divers
+  USA  United States               1,010 dives    94 divers
+  CHN  China                         894 dives    67 divers
+  AUS  Australia                     812 dives    65 divers
+  MEX  Mexico                        663 dives    53 divers
+  CAN  Canada                        570 dives    45 divers
+  GBR  Great Britain                 560 dives    52 divers
+  UKR  Ukraine                       474 dives    48 divers
+  ITA  Italy                         430 dives    37 divers
+  GER  Germany                       425 dives    35 divers
+  NAB  Neutral Athlete B             408 dives    38 divers
+  KOR  Republic of Korea             314 dives    34 divers
+  JPN  Japan                         270 dives    17 divers
+  FRA  France                        263 dives    16 divers
   ESP  Spain                         241 dives    20 divers
-  COL  Colombia                      156 dives     8 divers
-  NZL  New Zealand                   150 dives    13 divers
+  COL  Colombia                      161 dives     9 divers
+  NZL  New Zealand                   155 dives    14 divers
   PRK  DPR Korea                     116 dives    14 divers
+  MAS  Malaysia                      107 dives    15 divers
   CUB  Cuba                          105 dives     7 divers
   BRA  Brazil                        104 dives    14 divers
-  SGP  Singapore                      98 dives    12 divers
-  MAS  Malaysia                       97 dives    13 divers
-  ... 56 nations total
+  ... 59 nations total
 
 Still unresolved (for review):
-  NAB              408 dives — unresolved:not an IOC code; 408 dives across 38 divers, 2025-26 — needs review
