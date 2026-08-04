@@ -1,0 +1,2451 @@
+{
+  "generated": "2026-08-04T19:37:52Z",
+  "note": "Unfiltered inventory. 'scraped_not_canonical' is the set that exists in the raw scrape but was never promoted into core.event_results -- present but unusable, which is a very different problem from absent.",
+  "core_by_year_stage": [
+    {
+      "year": 2021,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1615,
+      "meets": 1
+    },
+    {
+      "year": 2021,
+      "stage": "Open",
+      "lvl": "Senior",
+      "rows": 162,
+      "meets": 1
+    },
+    {
+      "year": 2021,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 2966,
+      "meets": 12
+    },
+    {
+      "year": 2021,
+      "stage": "Winter-Nationals",
+      "lvl": "Senior",
+      "rows": 382,
+      "meets": 1
+    },
+    {
+      "year": 2021,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2304,
+      "meets": 6
+    },
+    {
+      "year": 2022,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1626,
+      "meets": 1
+    },
+    {
+      "year": 2022,
+      "stage": "Open",
+      "lvl": "Senior",
+      "rows": 323,
+      "meets": 1
+    },
+    {
+      "year": 2022,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 3278,
+      "meets": 12
+    },
+    {
+      "year": 2022,
+      "stage": "Winter-Nationals",
+      "lvl": "Senior",
+      "rows": 365,
+      "meets": 1
+    },
+    {
+      "year": 2022,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2492,
+      "meets": 6
+    },
+    {
+      "year": 2023,
+      "stage": "Camp",
+      "lvl": "Other",
+      "rows": 92,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "High-Dive",
+      "lvl": "Other",
+      "rows": 24,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1774,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 3086,
+      "meets": 12
+    },
+    {
+      "year": 2023,
+      "stage": "Senior-Nat-Qualifier",
+      "lvl": "Senior",
+      "rows": 140,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "Senior-Nationals",
+      "lvl": "Senior",
+      "rows": 433,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "Winter-Nationals",
+      "lvl": "Senior",
+      "rows": 471,
+      "meets": 1
+    },
+    {
+      "year": 2023,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2634,
+      "meets": 6
+    },
+    {
+      "year": 2024,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1813,
+      "meets": 1
+    },
+    {
+      "year": 2024,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 3048,
+      "meets": 12
+    },
+    {
+      "year": 2024,
+      "stage": "Winter-Nationals",
+      "lvl": "Senior",
+      "rows": 296,
+      "meets": 1
+    },
+    {
+      "year": 2024,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2561,
+      "meets": 6
+    },
+    {
+      "year": 2025,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1779,
+      "meets": 1
+    },
+    {
+      "year": 2025,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 2903,
+      "meets": 12
+    },
+    {
+      "year": 2025,
+      "stage": "Senior-Nationals",
+      "lvl": "Senior",
+      "rows": 479,
+      "meets": 2
+    },
+    {
+      "year": 2025,
+      "stage": "Winter-Nationals",
+      "lvl": "Senior",
+      "rows": 345,
+      "meets": 1
+    },
+    {
+      "year": 2025,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2439,
+      "meets": 6
+    },
+    {
+      "year": 2026,
+      "stage": "EWC",
+      "lvl": "Junior",
+      "rows": 1617,
+      "meets": 3
+    },
+    {
+      "year": 2026,
+      "stage": "JrWorlds-Trials",
+      "lvl": "Junior",
+      "rows": 446,
+      "meets": 1
+    },
+    {
+      "year": 2026,
+      "stage": "Nationals",
+      "lvl": "Junior",
+      "rows": 1060,
+      "meets": 1
+    },
+    {
+      "year": 2026,
+      "stage": "Regionals",
+      "lvl": "Junior",
+      "rows": 2425,
+      "meets": 12
+    },
+    {
+      "year": 2026,
+      "stage": "Zones",
+      "lvl": "Junior",
+      "rows": 2397,
+      "meets": 6
+    }
+  ],
+  "core_age_group_fill": [
+    {
+      "stage": "Regionals",
+      "rows": 17706,
+      "with_age": 17646,
+      "with_disc": 17646,
+      "with_score": 17706
+    },
+    {
+      "stage": "Zones",
+      "rows": 14827,
+      "with_age": 14812,
+      "with_disc": 14812,
+      "with_score": 14827
+    },
+    {
+      "stage": "Nationals",
+      "rows": 9667,
+      "with_age": 9667,
+      "with_disc": 9667,
+      "with_score": 9667
+    },
+    {
+      "stage": "Winter-Nationals",
+      "rows": 1859,
+      "with_age": 1859,
+      "with_disc": 1859,
+      "with_score": 1859
+    },
+    {
+      "stage": "EWC",
+      "rows": 1617,
+      "with_age": 1617,
+      "with_disc": 1617,
+      "with_score": 1617
+    },
+    {
+      "stage": "Senior-Nationals",
+      "rows": 912,
+      "with_age": 912,
+      "with_disc": 912,
+      "with_score": 912
+    },
+    {
+      "stage": "Open",
+      "rows": 485,
+      "with_age": 485,
+      "with_disc": 485,
+      "with_score": 485
+    },
+    {
+      "stage": "JrWorlds-Trials",
+      "rows": 446,
+      "with_age": 446,
+      "with_disc": 446,
+      "with_score": 446
+    },
+    {
+      "stage": "Senior-Nat-Qualifier",
+      "rows": 140,
+      "with_age": 140,
+      "with_disc": 140,
+      "with_score": 140
+    },
+    {
+      "stage": "Camp",
+      "rows": 92,
+      "with_age": 22,
+      "with_disc": 22,
+      "with_score": 92
+    },
+    {
+      "stage": "High-Dive",
+      "rows": 24,
+      "with_age": 0,
+      "with_disc": 0,
+      "with_score": 24
+    }
+  ],
+  "dm_meets_by_year": [
+    {
+      "yr": 2013,
+      "sanction": "(null)",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 34
+    },
+    {
+      "yr": 2013,
+      "sanction": "CIF Central Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "CIF Southern",
+      "meets": 3
+    },
+    {
+      "yr": 2013,
+      "sanction": "Central Illinois Country Club Association",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Federacion Mexicana de Natacion (FMN)",
+      "meets": 3
+    },
+    {
+      "yr": 2013,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 6
+    },
+    {
+      "yr": 2013,
+      "sanction": "Georgia High School Association",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Maui Interscholastic League",
+      "meets": 2
+    },
+    {
+      "yr": 2013,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 144
+    },
+    {
+      "yr": 2013,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2013,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "USA Diving",
+      "meets": 53
+    },
+    {
+      "yr": 2013,
+      "sanction": "Union Americana de Natacion (Pan Am)",
+      "meets": 1
+    },
+    {
+      "yr": 2013,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 3
+    },
+    {
+      "yr": 2013,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 59
+    },
+    {
+      "yr": 2014,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2014,
+      "sanction": "CIF Southern",
+      "meets": 10
+    },
+    {
+      "yr": 2014,
+      "sanction": "Central Illinois Country Club Association",
+      "meets": 2
+    },
+    {
+      "yr": 2014,
+      "sanction": "Federacion Mexicana de Natacion (FMN)",
+      "meets": 7
+    },
+    {
+      "yr": 2014,
+      "sanction": "Federation of Gay Games",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 8
+    },
+    {
+      "yr": 2014,
+      "sanction": "Georgia High School Association",
+      "meets": 7
+    },
+    {
+      "yr": 2014,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2014,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 336
+    },
+    {
+      "yr": 2014,
+      "sanction": "Nevada Interscholastic Athletics Association",
+      "meets": 11
+    },
+    {
+      "yr": 2014,
+      "sanction": "New England Prep School Swimming and Diving",
+      "meets": 2
+    },
+    {
+      "yr": 2014,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2014,
+      "sanction": "North Dakota High School Activities Association",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2014,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "USA Diving",
+      "meets": 93
+    },
+    {
+      "yr": 2014,
+      "sanction": "Union Americana de Natacion (Pan Am)",
+      "meets": 1
+    },
+    {
+      "yr": 2014,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2014,
+      "sanction": "World Aquatics",
+      "meets": 4
+    },
+    {
+      "yr": 2014,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 61
+    },
+    {
+      "yr": 2015,
+      "sanction": "CIF Central",
+      "meets": 2
+    },
+    {
+      "yr": 2015,
+      "sanction": "CIF Central Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "CIF Southern",
+      "meets": 13
+    },
+    {
+      "yr": 2015,
+      "sanction": "Colorado High School Activities Assoc",
+      "meets": 2
+    },
+    {
+      "yr": 2015,
+      "sanction": "Confederacao Brasileira de Desportos Aquaticos",
+      "meets": 5
+    },
+    {
+      "yr": 2015,
+      "sanction": "Federacion Mexicana de Natacion (FMN)",
+      "meets": 5
+    },
+    {
+      "yr": 2015,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 4
+    },
+    {
+      "yr": 2015,
+      "sanction": "Georgia High School Association",
+      "meets": 17
+    },
+    {
+      "yr": 2015,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Maui Interscholastic League",
+      "meets": 7
+    },
+    {
+      "yr": 2015,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 347
+    },
+    {
+      "yr": 2015,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2015,
+      "sanction": "Ohio High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2015,
+      "sanction": "USA Diving",
+      "meets": 80
+    },
+    {
+      "yr": 2015,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2015,
+      "sanction": "World Aquatics",
+      "meets": 2
+    },
+    {
+      "yr": 2015,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2016,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 57
+    },
+    {
+      "yr": 2016,
+      "sanction": "CIF Central",
+      "meets": 2
+    },
+    {
+      "yr": 2016,
+      "sanction": "CIF Central Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "CIF Southern",
+      "meets": 17
+    },
+    {
+      "yr": 2016,
+      "sanction": "Colorado High School Activities Assoc",
+      "meets": 2
+    },
+    {
+      "yr": 2016,
+      "sanction": "Confederacao Brasileira de Desportos Aquaticos",
+      "meets": 4
+    },
+    {
+      "yr": 2016,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 4
+    },
+    {
+      "yr": 2016,
+      "sanction": "Georgia High School Association",
+      "meets": 22
+    },
+    {
+      "yr": 2016,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2016,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 338
+    },
+    {
+      "yr": 2016,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 3
+    },
+    {
+      "yr": 2016,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2016,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 4
+    },
+    {
+      "yr": 2016,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 2
+    },
+    {
+      "yr": 2016,
+      "sanction": "US High Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "USA Diving",
+      "meets": 91
+    },
+    {
+      "yr": 2016,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2016,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2016,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 62
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF Central",
+      "meets": 2
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF Central Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF Los Angeles City",
+      "meets": 3
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF North Coast",
+      "meets": 3
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "CIF Southern",
+      "meets": 15
+    },
+    {
+      "yr": 2017,
+      "sanction": "Colorado High School Activities Assoc",
+      "meets": 3
+    },
+    {
+      "yr": 2017,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 10
+    },
+    {
+      "yr": 2017,
+      "sanction": "Georgia High School Association",
+      "meets": 27
+    },
+    {
+      "yr": 2017,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Illinois High School Association",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2017,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 335
+    },
+    {
+      "yr": 2017,
+      "sanction": "New Jersey State Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 4
+    },
+    {
+      "yr": 2017,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2017,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2017,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 2
+    },
+    {
+      "yr": 2017,
+      "sanction": "USA Diving",
+      "meets": 95
+    },
+    {
+      "yr": 2017,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2017,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2017,
+      "sanction": "Wyoming High School Activities Association",
+      "meets": 2
+    },
+    {
+      "yr": 2017,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 62
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF Central",
+      "meets": 2
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF Los Angeles City",
+      "meets": 5
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF North Coast",
+      "meets": 7
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "CIF Southern",
+      "meets": 13
+    },
+    {
+      "yr": 2018,
+      "sanction": "College Club Swimming and Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Colorado High School Activities Assoc",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2018,
+      "sanction": "Georgia High School Association",
+      "meets": 28
+    },
+    {
+      "yr": 2018,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Hidden Hollow Swim Club",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Maui Interscholastic League",
+      "meets": 5
+    },
+    {
+      "yr": 2018,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 337
+    },
+    {
+      "yr": 2018,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 7
+    },
+    {
+      "yr": 2018,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2018,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "USA Diving",
+      "meets": 93
+    },
+    {
+      "yr": 2018,
+      "sanction": "Union Americana de Natacion (Pan Am)",
+      "meets": 1
+    },
+    {
+      "yr": 2018,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2018,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Alaska High School Activities Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 55
+    },
+    {
+      "yr": 2019,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 4
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF Central",
+      "meets": 2
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF Central Coast",
+      "meets": 3
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF Los Angeles City",
+      "meets": 6
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF North Coast",
+      "meets": 7
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "CIF Southern",
+      "meets": 13
+    },
+    {
+      "yr": 2019,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 6
+    },
+    {
+      "yr": 2019,
+      "sanction": "Georgia High School Association",
+      "meets": 28
+    },
+    {
+      "yr": 2019,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "Maui Interscholastic League",
+      "meets": 5
+    },
+    {
+      "yr": 2019,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 2
+    },
+    {
+      "yr": 2019,
+      "sanction": "Montgomery County Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 392
+    },
+    {
+      "yr": 2019,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 12
+    },
+    {
+      "yr": 2019,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2019,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "USA Diving",
+      "meets": 91
+    },
+    {
+      "yr": 2019,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2019,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2019,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 27
+    },
+    {
+      "yr": 2020,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 5
+    },
+    {
+      "yr": 2020,
+      "sanction": "CIF Los Angeles City",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "CIF North Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2020,
+      "sanction": "CIF Southern",
+      "meets": 5
+    },
+    {
+      "yr": 2020,
+      "sanction": "California Community College Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Georgia High School Association",
+      "meets": 33
+    },
+    {
+      "yr": 2020,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 5
+    },
+    {
+      "yr": 2020,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "Maui Interscholastic League",
+      "meets": 4
+    },
+    {
+      "yr": 2020,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 2
+    },
+    {
+      "yr": 2020,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 285
+    },
+    {
+      "yr": 2020,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 7
+    },
+    {
+      "yr": 2020,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2020,
+      "sanction": "USA Diving",
+      "meets": 45
+    },
+    {
+      "yr": 2020,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 3
+    },
+    {
+      "yr": 2020,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 28
+    },
+    {
+      "yr": 2021,
+      "sanction": "CIF Central Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "CIF Southern",
+      "meets": 12
+    },
+    {
+      "yr": 2021,
+      "sanction": "East Coast Master Diving",
+      "meets": 2
+    },
+    {
+      "yr": 2021,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 9
+    },
+    {
+      "yr": 2021,
+      "sanction": "Georgia High School Association",
+      "meets": 28
+    },
+    {
+      "yr": 2021,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 4
+    },
+    {
+      "yr": 2021,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 561
+    },
+    {
+      "yr": 2021,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2021,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2021,
+      "sanction": "USA Diving",
+      "meets": 62
+    },
+    {
+      "yr": 2021,
+      "sanction": "Union Americana de Natacion (Pan Am)",
+      "meets": 1
+    },
+    {
+      "yr": 2021,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 3
+    },
+    {
+      "yr": 2022,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 50
+    },
+    {
+      "yr": 2022,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 9
+    },
+    {
+      "yr": 2022,
+      "sanction": "CIF Central",
+      "meets": 3
+    },
+    {
+      "yr": 2022,
+      "sanction": "CIF Central Coast",
+      "meets": 3
+    },
+    {
+      "yr": 2022,
+      "sanction": "CIF North Coast",
+      "meets": 6
+    },
+    {
+      "yr": 2022,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "CIF Southern",
+      "meets": 16
+    },
+    {
+      "yr": 2022,
+      "sanction": "California Community College Athletic Association",
+      "meets": 4
+    },
+    {
+      "yr": 2022,
+      "sanction": "East Coast Master Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 12
+    },
+    {
+      "yr": 2022,
+      "sanction": "Georgia High School Association",
+      "meets": 29
+    },
+    {
+      "yr": 2022,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Illinois High School Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 4
+    },
+    {
+      "yr": 2022,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2022,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 2
+    },
+    {
+      "yr": 2022,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 776
+    },
+    {
+      "yr": 2022,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 6
+    },
+    {
+      "yr": 2022,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2022,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "USA Diving",
+      "meets": 72
+    },
+    {
+      "yr": 2022,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 6
+    },
+    {
+      "yr": 2022,
+      "sanction": "Washington Metro Interscholastic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2022,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Alabama High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 53
+    },
+    {
+      "yr": 2023,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 7
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF Central",
+      "meets": 6
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF North Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF Sac-Joaquin",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "CIF Southern",
+      "meets": 14
+    },
+    {
+      "yr": 2023,
+      "sanction": "California Community College Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2023,
+      "sanction": "Country Club Swim and Dive Association",
+      "meets": 23
+    },
+    {
+      "yr": 2023,
+      "sanction": "East Coast Master Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 7
+    },
+    {
+      "yr": 2023,
+      "sanction": "Georgia High School Association",
+      "meets": 34
+    },
+    {
+      "yr": 2023,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Illinois High School Association",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 6
+    },
+    {
+      "yr": 2023,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2023,
+      "sanction": "Missouri State HS St.Activites Association",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "Montgomery County Diving League",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 854
+    },
+    {
+      "yr": 2023,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 6
+    },
+    {
+      "yr": 2023,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 21
+    },
+    {
+      "yr": 2023,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "USA Diving",
+      "meets": 76
+    },
+    {
+      "yr": 2023,
+      "sanction": "Washington Interscholastic Activities Association",
+      "meets": 3
+    },
+    {
+      "yr": 2023,
+      "sanction": "Washington Metro Interscholastic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2023,
+      "sanction": "World Aquatics",
+      "meets": 2
+    },
+    {
+      "yr": 2023,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "(null)",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 60
+    },
+    {
+      "yr": 2024,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 5
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF Central",
+      "meets": 7
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF North Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF Sac-Joaquin",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "CIF Southern",
+      "meets": 16
+    },
+    {
+      "yr": 2024,
+      "sanction": "California Community College Athletic Association",
+      "meets": 7
+    },
+    {
+      "yr": 2024,
+      "sanction": "Colorado High School Activities Assoc",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Country Club Swim and Dive Association",
+      "meets": 28
+    },
+    {
+      "yr": 2024,
+      "sanction": "East Coast Master Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2024,
+      "sanction": "Georgia High School Association",
+      "meets": 37
+    },
+    {
+      "yr": 2024,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Illinois High School Association",
+      "meets": 2
+    },
+    {
+      "yr": 2024,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 5
+    },
+    {
+      "yr": 2024,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Maryland Public Secondary Schools Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "Maui Interscholastic League",
+      "meets": 6
+    },
+    {
+      "yr": 2024,
+      "sanction": "Montgomery County Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 980
+    },
+    {
+      "yr": 2024,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 6
+    },
+    {
+      "yr": 2024,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2024,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 26
+    },
+    {
+      "yr": 2024,
+      "sanction": "USA Diving",
+      "meets": 56
+    },
+    {
+      "yr": 2024,
+      "sanction": "Virginia Independent Schools Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2024,
+      "sanction": "Washington Metro Interscholastic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2024,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "(null)",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 46
+    },
+    {
+      "yr": 2025,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 3
+    },
+    {
+      "yr": 2025,
+      "sanction": "British Diving(ASA)",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF Central",
+      "meets": 6
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF North Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF Sac-Joaquin",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "CIF Southern",
+      "meets": 14
+    },
+    {
+      "yr": 2025,
+      "sanction": "California Community College Athletic Association",
+      "meets": 5
+    },
+    {
+      "yr": 2025,
+      "sanction": "Country Club Swim and Dive Association",
+      "meets": 28
+    },
+    {
+      "yr": 2025,
+      "sanction": "East Coast Master Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Florida High School Athletic Association",
+      "meets": 7
+    },
+    {
+      "yr": 2025,
+      "sanction": "Georgia High School Association",
+      "meets": 34
+    },
+    {
+      "yr": 2025,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Illinois High School Association",
+      "meets": 2
+    },
+    {
+      "yr": 2025,
+      "sanction": "Iowa Girls HighSchool Athletic Union",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 5
+    },
+    {
+      "yr": 2025,
+      "sanction": "Knox-area Interscholastic Swim League (KISL)",
+      "meets": 2
+    },
+    {
+      "yr": 2025,
+      "sanction": "Maryland Public Secondary Schools Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Maui Interscholastic League",
+      "meets": 7
+    },
+    {
+      "yr": 2025,
+      "sanction": "Montgomery County Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 1082
+    },
+    {
+      "yr": 2025,
+      "sanction": "National Junior College Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "No Limits Tour Cliff Diving",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 3
+    },
+    {
+      "yr": 2025,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2025,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 30
+    },
+    {
+      "yr": 2025,
+      "sanction": "Tennessee Interscholastic Swim Coaches Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "USA Diving",
+      "meets": 48
+    },
+    {
+      "yr": 2025,
+      "sanction": "Virginia Independent Schools Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Washington Metro Interscholastic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "Washington Metropolitan Prep School",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2025,
+      "sanction": "YMCA",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "(null)",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 24
+    },
+    {
+      "yr": 2026,
+      "sanction": "Big Island Interscholastic Federation",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "CIF Central",
+      "meets": 6
+    },
+    {
+      "yr": 2026,
+      "sanction": "CIF Central Coast",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "CIF North Coast",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "CIF San Diego",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "CIF Southern",
+      "meets": 7
+    },
+    {
+      "yr": 2026,
+      "sanction": "California Community College Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "Country Club Swim and Dive Association",
+      "meets": 26
+    },
+    {
+      "yr": 2026,
+      "sanction": "Georgia High School Association",
+      "meets": 12
+    },
+    {
+      "yr": 2026,
+      "sanction": "Greater Atlanta Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "Hawaii High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "Illinois High School Association",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "Indiana High School Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "Kentucky HS Athletics Association",
+      "meets": 3
+    },
+    {
+      "yr": 2026,
+      "sanction": "Maryland Public Secondary Schools Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "Maui Interscholastic League",
+      "meets": 5
+    },
+    {
+      "yr": 2026,
+      "sanction": "Montgomery County Diving League",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "NAIA",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 465
+    },
+    {
+      "yr": 2026,
+      "sanction": "North Carolina High School Athletic Association",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "Northern Virginia Swimming League",
+      "meets": 2
+    },
+    {
+      "yr": 2026,
+      "sanction": "Pennsylvania Interscholastic Athletic Association",
+      "meets": 23
+    },
+    {
+      "yr": 2026,
+      "sanction": "USA Diving",
+      "meets": 37
+    },
+    {
+      "yr": 2026,
+      "sanction": "Virginia Independent Schools Athletic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "Washington Metro Interscholastic Association",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "World Aquatics",
+      "meets": 1
+    },
+    {
+      "yr": 2026,
+      "sanction": "YMCA",
+      "meets": 1
+    }
+  ],
+  "dm_results_by_year": [
+    {
+      "yr": 2013,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 29,
+      "rows": 4260
+    },
+    {
+      "yr": 2013,
+      "sanction": "USA Diving",
+      "meets_with_results": 52,
+      "rows": 14817
+    },
+    {
+      "yr": 2014,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 56,
+      "rows": 8797
+    },
+    {
+      "yr": 2014,
+      "sanction": "USA Diving",
+      "meets_with_results": 90,
+      "rows": 23575
+    },
+    {
+      "yr": 2015,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 57,
+      "rows": 9026
+    },
+    {
+      "yr": 2015,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 28,
+      "rows": 4973
+    },
+    {
+      "yr": 2015,
+      "sanction": "USA Diving",
+      "meets_with_results": 77,
+      "rows": 20011
+    },
+    {
+      "yr": 2016,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 56,
+      "rows": 9096
+    },
+    {
+      "yr": 2016,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 26,
+      "rows": 4809
+    },
+    {
+      "yr": 2016,
+      "sanction": "USA Diving",
+      "meets_with_results": 88,
+      "rows": 21012
+    },
+    {
+      "yr": 2017,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 58,
+      "rows": 8950
+    },
+    {
+      "yr": 2017,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 29,
+      "rows": 4987
+    },
+    {
+      "yr": 2017,
+      "sanction": "USA Diving",
+      "meets_with_results": 89,
+      "rows": 21094
+    },
+    {
+      "yr": 2018,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 59,
+      "rows": 8896
+    },
+    {
+      "yr": 2018,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 31,
+      "rows": 5221
+    },
+    {
+      "yr": 2018,
+      "sanction": "USA Diving",
+      "meets_with_results": 89,
+      "rows": 20757
+    },
+    {
+      "yr": 2019,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 54,
+      "rows": 8115
+    },
+    {
+      "yr": 2019,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 31,
+      "rows": 5338
+    },
+    {
+      "yr": 2019,
+      "sanction": "USA Diving",
+      "meets_with_results": 90,
+      "rows": 20883
+    },
+    {
+      "yr": 2020,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 17,
+      "rows": 2608
+    },
+    {
+      "yr": 2020,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 29,
+      "rows": 4744
+    },
+    {
+      "yr": 2020,
+      "sanction": "USA Diving",
+      "meets_with_results": 22,
+      "rows": 3799
+    },
+    {
+      "yr": 2021,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 28,
+      "rows": 4321
+    },
+    {
+      "yr": 2021,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 26,
+      "rows": 3849
+    },
+    {
+      "yr": 2021,
+      "sanction": "USA Diving",
+      "meets_with_results": 58,
+      "rows": 12889
+    },
+    {
+      "yr": 2022,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 46,
+      "rows": 7143
+    },
+    {
+      "yr": 2022,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 35,
+      "rows": 5665
+    },
+    {
+      "yr": 2022,
+      "sanction": "USA Diving",
+      "meets_with_results": 68,
+      "rows": 15440
+    },
+    {
+      "yr": 2023,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 52,
+      "rows": 7755
+    },
+    {
+      "yr": 2023,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 34,
+      "rows": 5675
+    },
+    {
+      "yr": 2023,
+      "sanction": "USA Diving",
+      "meets_with_results": 71,
+      "rows": 16957
+    },
+    {
+      "yr": 2024,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 55,
+      "rows": 9095
+    },
+    {
+      "yr": 2024,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 34,
+      "rows": 5988
+    },
+    {
+      "yr": 2024,
+      "sanction": "USA Diving",
+      "meets_with_results": 50,
+      "rows": 13658
+    },
+    {
+      "yr": 2025,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 44,
+      "rows": 8178
+    },
+    {
+      "yr": 2025,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 34,
+      "rows": 6034
+    },
+    {
+      "yr": 2025,
+      "sanction": "USA Diving",
+      "meets_with_results": 48,
+      "rows": 12188
+    },
+    {
+      "yr": 2026,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets_with_results": 22,
+      "rows": 3542
+    },
+    {
+      "yr": 2026,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets_with_results": 30,
+      "rows": 5828
+    },
+    {
+      "yr": 2026,
+      "sanction": "USA Diving",
+      "meets_with_results": 32,
+      "rows": 9798
+    }
+  ],
+  "scraped_not_canonical": {
+    "error": "operator does not exist: text = integer\nLINE 8: ...CT 1 FROM core.event_results c WHERE c.meet_id_dm = r.meet_i...\n                                                             ^\nHINT:  No operator matches the given name and argument types. You might need to add explicit type casts."
+  }
+}
