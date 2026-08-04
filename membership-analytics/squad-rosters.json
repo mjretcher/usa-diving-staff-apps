@@ -1,0 +1,61 @@
+{
+  "generated": "2026-08-04T17:47:38Z",
+  "retrieved": "2026-08-04",
+  "note": "Squad pathways grant eligibility in ALL events, so the places they produce are behavioural, not rule-determined. Entries are measured against junior_results.meet_entrants, not assumed.",
+  "squads": [
+    {
+      "key": "tier3_junior",
+      "label": "2025-26 Tier III Junior High Performance Squad",
+      "source": "https://www.usadiving.org/tier-3-juniors",
+      "meets": [
+        "12923"
+      ],
+      "roster": 35,
+      "entered": 29,
+      "match_rate_pct": 82.9,
+      "entries": 69,
+      "events_per_athlete": 2.38,
+      "not_entered": [
+        "Olivia Astrologes",
+        "Quinn Fidanza",
+        "Nathaniel Grannis",
+        "Molly Gray",
+        "Noah Lieberman",
+        "Juliet Radich"
+      ],
+      "fuzzy_matches": [
+        "Lindy Johnson -> Lindyn Johnson",
+        "Katie Parker -> Kathryn Parker",
+        "Mik Schwickert -> Mikolas Schwickert"
+      ],
+      "reliable": true
+    },
+    {
+      "key": "national_team",
+      "label": "2026 USA Diving National Team",
+      "source": "https://www.usadiving.org/news/2026/february/18/usa-diving-announces-national-team",
+      "meets": [
+        "12924",
+        "12925"
+      ],
+      "roster": 17,
+      "entered": 12,
+      "match_rate_pct": 70.6,
+      "entries": 17,
+      "events_per_athlete": 1.42,
+      "not_entered": [
+        "Drew Bennett",
+        "Max Flory",
+        "ElliReese Niday",
+        "Jordan Rzepka",
+        "Josh Sollenberger"
+      ],
+      "fuzzy_matches": [
+        "Josh Hedberg -> Joshua Hedberg",
+        "Quinn Henninger -> Quentin Henninger",
+        "Sophie McAfee -> Sophia McAfee"
+      ],
+      "reliable": true
+    }
+  ]
+}
