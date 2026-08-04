@@ -35,6 +35,11 @@ from nations import resolve as resolve_nation
 
 UA = "Mozilla/5.0 (compatible; USADivingAnalytics/1.0)"
 OMEGA_RX = re.compile(r"https?://(?:www\.)?omegatiming\.com/File/([0-9A-F]{20,40})\.pdf", re.I)
+# Wikipedia cites exact Wayback snapshots for many of these. A known-good
+# snapshot URL beats one we construct, so capture and prefer them.
+ARCHIVE_RX = re.compile(
+    r"(https?://web\.archive\.org/web/(\d{14})/https?://(?:www\.)?omegatiming\.com/File/"
+    r"([0-9A-F]{20,40})\.pdf)", re.I)
 DRY_RUN = os.environ.get("DRY_RUN", "1") != "0"
 MIN_PASS = float(os.environ.get("MIN_PASS", "0.95"))
 
@@ -65,21 +70,30 @@ def get(url, tries=2):
             time.sleep(1.5)
 
 
-def get_pdf(url, year=None):
+def _looks_pdf(blob):
+    return bool(blob) and blob[:5] == b"%PDF-"
+
+
+def get_pdf(url, snapshots=(), year=None):
     """
-    omegatiming.com refuses or stalls on datacenter IPs, so fall back to the
-    Wayback Machine, which Wikipedia already archives these files to. Returns
-    (bytes, source) so the log records which copy was used.
+    omegatiming.com stalls on datacenter IPs. Try it, then the exact Wayback
+    snapshots Wikipedia cites, then a constructed one. Anything that is not
+    actually a PDF is treated as a miss rather than parsed as garbage.
     """
-    try:
-        return _fetch(url, TIMEOUT), "omega"
-    except Exception as direct_err:
-        stamp = str(year or 2019)
-        wb = f"https://web.archive.org/web/{stamp}id_/{url}"
+    attempts = [(url, "omega")]
+    for ts in snapshots:
+        attempts.append((f"https://web.archive.org/web/{ts}id_/{url}", f"wb:{ts[:8]}"))
+    attempts.append((f"https://web.archive.org/web/{year or 2019}id_/{url}", "wb:guess"))
+    last = None
+    for target, tag in attempts:
         try:
-            return _fetch(wb, TIMEOUT * 2), "wayback"
-        except Exception:
-            raise direct_err
+            blob = _fetch(target, TIMEOUT * 2 if "web.archive" in target else TIMEOUT)
+            if _looks_pdf(blob):
+                return blob, tag
+            last = ValueError("not a PDF (%d bytes)" % len(blob))
+        except Exception as e:
+            last = e
+    raise last or ValueError("no source succeeded")
 
 
 def discover(page):
@@ -87,13 +101,17 @@ def discover(page):
     url = ("https://en.wikipedia.org/w/index.php?action=raw&title="
            + urllib.parse.quote(page.replace(" ", "_")))
     html = get(url).decode("utf-8", "replace")
+    snaps = {}
+    for m in ARCHIVE_RX.finditer(html):
+        snaps.setdefault(m.group(3).upper(), []).append(m.group(2))
     seen, out = set(), []
     for m in OMEGA_RX.finditer(html):
         code = m.group(1).upper()
         if code in seen:
             continue
         seen.add(code)
-        out.append(("https://www.omegatiming.com/File/%s.pdf" % code, code))
+        out.append(("https://www.omegatiming.com/File/%s.pdf" % code,
+                    code, sorted(snaps.get(code, []))))
     return out
 
 
@@ -103,9 +121,9 @@ def pdf_text(blob):
         return "\n".join((p.extract_text() or "") for p in pdf.pages)
 
 
-def ingest_one(url, code, cur, stats, year_hint=None):
+def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
     try:
-        blob, src = get_pdf(url, year_hint)
+        blob, src = get_pdf(url, snapshots, year_hint)
         text = pdf_text(blob)
     except Exception as e:
         log(f"    FETCH FAILED {code}: {type(e).__name__}: {e}")
@@ -199,12 +217,12 @@ def main():
         if MAX_FILES:
             urls = urls[:MAX_FILES]
             log(f"    limited to first {len(urls)}")
-        for url, code in urls:
+        for url, code, snapshots in urls:
             if time.time() - _started > BUDGET_S:
                 log("    TIME BUDGET REACHED — stopping early")
                 stats["budget_stop"] = stats.get("budget_stop", 0) + 1
                 break
-            ingest_one(url, code, cur, stats, year_hint)
+            ingest_one(url, code, snapshots, cur, stats, year_hint)
             time.sleep(0.3)
         if not DRY_RUN:
             conn.commit()
