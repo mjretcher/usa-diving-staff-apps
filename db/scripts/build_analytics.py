@@ -293,17 +293,52 @@ SELECT competition_family, meet_year, gender, discipline,
             WHEN event_name ILIKE '%senior%' THEN 'us-senior'
             WHEN event_name ILIKE 'group%' THEN 'us-junior'
             ELSE 'us-open' END AS scope,
-       COALESCE(NULLIF(dive_category_code,''), LEFT(dive_number,1)) AS category_code,
+       dive_group_code AS category_code,
+       MAX(dive_group_label) AS category_label,
        COUNT(*) AS n,
+       COUNT(DISTINCT diver_id) AS n_divers,
        ROUND(AVG(LEAST(score/(3*dd),10))::numeric, 3)  AS avg_exec,
+       ROUND((PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p25_exec,
        ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p50_exec,
+       ROUND((PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p75_exec,
        ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY LEAST(score/(3*dd),10)))::numeric,3) AS p90_exec,
-       ROUND(AVG(CASE WHEN score/(3*dd) < 4.5 THEN 1 ELSE 0 END)::numeric,4) AS fail_rate
+       ROUND(AVG(CASE WHEN score/(3*dd) < 4.5 THEN 1 ELSE 0 END)::numeric,4) AS fail_rate,
+       ROUND(AVG(dd)::numeric,3) AS avg_dd
 FROM core.dive_sheets
 WHERE discipline IN ('1m','3m','Platform')
   AND score IS NOT NULL AND dd > 0
+  -- rulebook dives only: skills (DD 1.0 lineups/jumps) and scraper
+  -- concatenations are excluded so they cannot distort field execution.
+  AND dive_bucket = 'dive'
+  AND dive_group_code IS NOT NULL
 GROUP BY 1,2,3,4,5,6""")
 sql("CREATE INDEX idx_fge ON analytics.field_group_exec (competition_family, gender, discipline, meet_year DESC)")
+sql("CREATE INDEX idx_fge_scope ON analytics.field_group_exec (scope, gender, discipline, category_code)")
+
+# --- same grain, split by voluntary vs optional (optional_voluntary was
+# --- fetched by the app but never used anywhere until now)
+sql("DROP TABLE IF EXISTS analytics.field_group_exec_vo")
+sql("""CREATE TABLE analytics.field_group_exec_vo AS
+SELECT meet_year, gender, discipline,
+       CASE WHEN competition_family='World Aquatics' THEN 'world'
+            WHEN competition_family='NCAA' THEN 'ncaa'
+            WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+            WHEN event_name ILIKE 'group%' THEN 'us-junior'
+            ELSE 'us-open' END AS scope,
+       dive_group_code AS category_code,
+       CASE WHEN optional_voluntary ILIKE 'v%' THEN 'voluntary'
+            WHEN optional_voluntary ILIKE 'o%' THEN 'optional'
+            ELSE 'unspecified' END AS vo,
+       COUNT(*) AS n,
+       COUNT(DISTINCT diver_id) AS n_divers,
+       ROUND(AVG(LEAST(score/(3*dd),10))::numeric,3) AS avg_exec,
+       ROUND(AVG(CASE WHEN score/(3*dd) < 4.5 THEN 1 ELSE 0 END)::numeric,4) AS fail_rate,
+       ROUND(AVG(dd)::numeric,3) AS avg_dd
+FROM core.dive_sheets
+WHERE discipline IN ('1m','3m','Platform')
+  AND score IS NOT NULL AND dd > 0 AND dive_bucket = 'dive'
+GROUP BY 1,2,3,4,5,6""")
+sql("CREATE INDEX idx_fgevo ON analytics.field_group_exec_vo (scope, gender, discipline, category_code)")
 
 sql("DROP TABLE IF EXISTS analytics.field_list_dd")
 sql("""CREATE TABLE analytics.field_list_dd AS
@@ -319,6 +354,7 @@ WITH lists AS (
   FROM core.dive_sheets
   WHERE discipline IN ('1m','3m','Platform')
     AND round_stage = 'Final' AND score IS NOT NULL AND dd > 0
+    AND dive_bucket <> 'parse_error'
   GROUP BY 1,2,3,4,5,6,7,8
 )
 SELECT competition_family, meet_year, gender, discipline, scope,
@@ -535,7 +571,7 @@ log("la28 watch built")
 
 # ---------------------------------------------------------------- meta
 counts = {}
-for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_list_dd","cohort_seniors","corridor_marks","corridor","field_judge_spread","la28_watch"]:
+for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_group_exec_vo","field_list_dd","cohort_seniors","corridor_marks","corridor","field_judge_spread","la28_watch"]:
     counts[t] = rows(sql(f"SELECT COUNT(*) AS n FROM analytics.{t}"))[0]["n"]
 sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
 sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])

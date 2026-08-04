@@ -15,6 +15,7 @@
     { id: 'listlab',  label: 'List Lab',         el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
     { id: 'pressure', label: 'Pressure',         el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
     { id: 'podium',   label: 'Podium Gap',       el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
+    { id: 'groups',   label: 'Dive Groups',      el: 'view-groups',   athlete: true, mod: () => window.AEGroups },
     { id: 'race',     label: 'Race Replay',      el: 'view-race',     athlete: false, mod: () => window.AERace },
     { id: 'medaltrack', label: 'Medal Track',    el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
   ];

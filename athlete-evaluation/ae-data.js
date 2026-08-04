@@ -33,7 +33,17 @@
   }
 
   const INDIV = new Set(['1m', '3m', 'Platform']);
-  const CAT_NAMES = { '1': 'Front', '2': 'Back', '3': 'Reverse', '4': 'Inward', '5': 'Twister', '6': 'Armstand' };
+  // Dive groups now come from AETaxonomy (ae-taxonomy.js), which implements the
+  // 2026 Rulebook Art. 105.1 grammar: twists split by takeoff direction and
+  // armstands split by direction, with skills and scraper artifacts excluded.
+  const CAT_NAMES = (function () {
+    const m = {};
+    const G = (window.AETaxonomy && window.AETaxonomy.GROUPS) || {};
+    Object.keys(G).forEach((k) => { m[k] = G[k][1]; });
+    return m;
+  })();
+  const CAT_ORDER = (window.AETaxonomy && window.AETaxonomy.GROUP_ORDER)
+    || ['1', '2', '3', '4', '51', '52', '53', '54', '61', '62', '63'];
 
   function isIndiv(row) { return INDIV.has(row.discipline); }
 
@@ -48,9 +58,27 @@
     return String(str).split(';').map((p) => num(p.split(':')[1])).filter((v) => v != null);
   }
 
+  // Prefer the backfilled column; fall back to live classification so the app
+  // still works on rows written before the taxonomy backfill.
   function catOf(row) {
-    const c = (row.dive_category_code && String(row.dive_category_code)) || String(row.dive_number || '').charAt(0);
-    return CAT_NAMES[c] ? c : null;
+    if (row.dive_group_code) return CAT_NAMES[row.dive_group_code] ? row.dive_group_code : null;
+    if (window.AETaxonomy) {
+      const r = window.AETaxonomy.classify(row.dive_number);
+      return r.bucket === 'dive' ? r.groupCode : null;
+    }
+    return null;
+  }
+
+  // True when the row is a rulebook dive (not a skill or a parse artifact).
+  function isRulebookDive(row) {
+    if (row.dive_bucket) return row.dive_bucket === 'dive';
+    if (window.AETaxonomy) return window.AETaxonomy.classify(row.dive_number).bucket === 'dive';
+    return true;
+  }
+
+  function bucketOf(row) {
+    if (row.dive_bucket) return row.dive_bucket;
+    return window.AETaxonomy ? window.AETaxonomy.classify(row.dive_number).bucket : 'dive';
   }
 
   /* ---------- basic stats ---------- */
@@ -102,7 +130,8 @@
       q(`SELECT meet_id, meet_year, competition_family, event_id, event_name, gender,
                 discipline, round_stage, dive_order, dive_number, height, description,
                 dd, score, judges_scores, running_total_points, round_place,
-                dive_category_code, optional_voluntary
+                dive_category_code, optional_voluntary,
+                dive_bucket, dive_group_code, dive_group_label, dive_code_norm
          FROM core.dive_sheets
          WHERE diver_id = $1 OR diver_id = $2
          ORDER BY meet_year, meet_id, event_id, round_stage, dive_order`, ids),
@@ -183,22 +212,55 @@
     return r.rows;
   }
 
-  async function fieldGroupExec(gender, discipline) {
+  // Five comparison fields exist in analytics.field_group_exec:
+  //   us-open (1.15M dives) · us-junior (246k) · us-senior (74k)
+  //   ncaa (36k) · world (7.1k, 2025-26 only)
+  // The app used to hardcode 'world', the thinnest of the five.
+  const SCOPES = [
+    { id: 'us-junior', label: 'US Junior' },
+    { id: 'us-senior', label: 'US Senior' },
+    { id: 'us-open',   label: 'US All levels' },
+    { id: 'ncaa',      label: 'NCAA' },
+    { id: 'world',     label: 'World Aquatics' },
+  ];
+  const NUMS_FGE = ['meet_year', 'n', 'n_divers', 'avg_exec', 'p25_exec',
+    'p50_exec', 'p75_exec', 'p90_exec', 'fail_rate', 'avg_dd'];
+
+  async function fieldGroupExec(gender, discipline, scope, yearFrom) {
     const r = await q(
-      `SELECT meet_year, category_code, n, avg_exec, p50_exec, p90_exec, fail_rate
+      `SELECT meet_year, scope, category_code, category_label, n, n_divers,
+              avg_exec, p25_exec, p50_exec, p75_exec, p90_exec, fail_rate, avg_dd
        FROM analytics.field_group_exec
-       WHERE competition_family = 'World Aquatics' AND gender = $1 AND discipline = $2
-       ORDER BY meet_year DESC`, [gender, discipline]);
-    r.rows.forEach((x) => ['meet_year', 'n', 'avg_exec', 'p50_exec', 'p90_exec', 'fail_rate'].forEach((k) => { x[k] = num(x[k]); }));
+       WHERE gender = $1 AND discipline = $2
+         AND ($3::text IS NULL OR scope = $3)
+         AND ($4::int  IS NULL OR meet_year >= $4)
+       ORDER BY meet_year DESC`,
+      [gender, discipline, scope || null, yearFrom || null]);
+    r.rows.forEach((x) => NUMS_FGE.forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
   }
 
-  async function fieldListDD(gender, discipline) {
+  // Same grain, split voluntary vs optional.
+  async function fieldGroupExecVO(gender, discipline, scope, yearFrom) {
+    const r = await q(
+      `SELECT meet_year, scope, category_code, vo, n, n_divers, avg_exec, fail_rate, avg_dd
+       FROM analytics.field_group_exec_vo
+       WHERE gender = $1 AND discipline = $2
+         AND ($3::text IS NULL OR scope = $3)
+         AND ($4::int  IS NULL OR meet_year >= $4)
+       ORDER BY meet_year DESC`,
+      [gender, discipline, scope || null, yearFrom || null]);
+    r.rows.forEach((x) => ['meet_year', 'n', 'n_divers', 'avg_exec', 'fail_rate', 'avg_dd']
+      .forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+
+  async function fieldListDD(gender, discipline, scope) {
     const r = await q(
       `SELECT meet_year, n_lists, avg_list_dd, p50_list_dd, p90_list_dd, avg_n_dives
        FROM analytics.field_list_dd
-       WHERE competition_family = 'World Aquatics' AND gender = $1 AND discipline = $2
-       ORDER BY meet_year DESC`, [gender, discipline]);
+       WHERE ($3::text IS NULL OR scope = $3) AND gender = $1 AND discipline = $2
+       ORDER BY meet_year DESC`, [gender, discipline, scope || null]);
     r.rows.forEach((x) => Object.keys(x).forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
   }
@@ -296,10 +358,11 @@
 
   window.AE = {
     esc, escJsAttr, num, q,
-    isIndiv, execOf, parseJudges, catOf, CAT_NAMES,
+    isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
+    isRulebookDive, bucketOf, SCOPES,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
-    benchmarks, fieldGroupExec, fieldListDD, buildMeta,
+    benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,
     sheetMeets, meetEvents, eventSheets,
     corridor, corridorMarks, juniorMarks, judgeSpreadRef,
     state: { athleteId: null, bundle: null },
