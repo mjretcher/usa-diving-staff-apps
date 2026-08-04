@@ -1,0 +1,307 @@
+psql:db/schema.sql:7: NOTICE:  schema "schedule_builder" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:19: NOTICE:  relation "schedules" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:26: NOTICE:  relation "presence" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:28: NOTICE:  relation "idx_sb_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:29: NOTICE:  relation "idx_sb_type" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:32: NOTICE:  column "folder" of relation "schedules" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:33: NOTICE:  relation "idx_sb_folder" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:37: NOTICE:  schema "junior_results" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:61: NOTICE:  relation "results" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:63: NOTICE:  relation "idx_jr_year_stage" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:64: NOTICE:  relation "idx_jr_zone" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:65: NOTICE:  relation "idx_jr_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:66: NOTICE:  relation "idx_jr_athlete" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:78: NOTICE:  relation "scrape_log" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:108: NOTICE:  relation "athlete_status" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:109: NOTICE:  relation "idx_jas_dmid" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:110: NOTICE:  relation "idx_jas_name" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:126: NOTICE:  relation "zone_thresholds" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:127: NOTICE:  relation "idx_jzt_year_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:149: NOTICE:  relation "projected_nationals_field" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:150: NOTICE:  relation "idx_pnf_season" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:151: NOTICE:  relation "idx_pnf_lookup" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:155: NOTICE:  schema "hp_analytics" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:172: NOTICE:  relation "athlete_summaries" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:174: NOTICE:  relation "idx_hp_uniq" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:175: NOTICE:  relation "idx_hp_group" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:179: NOTICE:  schema "criteria_simulator" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:189: NOTICE:  relation "scenarios" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:193: NOTICE:  schema "app_meta" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:200: NOTICE:  relation "config" already exists, skipping
+CREATE TABLE
+INSERT 0 0
+CREATE FUNCTION
+DO
+DO
+DO
+DO
+psql:db/schema.sql:243: NOTICE:  schema "core" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:277: NOTICE:  relation "event_results" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:279: NOTICE:  relation "idx_ev_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:280: NOTICE:  relation "idx_ev_stage_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:281: NOTICE:  relation "idx_ev_diver" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:282: NOTICE:  relation "idx_ev_event_key" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:283: NOTICE:  relation "idx_ev_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:284: NOTICE:  relation "idx_ev_team" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:285: NOTICE:  relation "idx_ev_junior" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:286: NOTICE:  relation "idx_ev_athlete_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:299: NOTICE:  relation "divers" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:307: NOTICE:  relation "teams" already exists, skipping
+CREATE TABLE
+CREATE VIEW
+INSERT 0 1
+DROP VIEW
+DO
+CREATE VIEW
+psql:db/schema.sql:416: NOTICE:  relation "result_phases" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:418: NOTICE:  relation "idx_rp_natural" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:419: NOTICE:  relation "idx_rp_diver" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:420: NOTICE:  relation "idx_rp_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:421: NOTICE:  relation "idx_rp_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:422: NOTICE:  relation "idx_rp_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:423: NOTICE:  relation "idx_rp_family" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:465: NOTICE:  relation "dive_sheets" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:467: NOTICE:  relation "idx_ds_natural" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:468: NOTICE:  relation "idx_ds_diver" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:469: NOTICE:  relation "idx_ds_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:470: NOTICE:  relation "idx_ds_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:471: NOTICE:  relation "idx_ds_dd" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:472: NOTICE:  relation "idx_ds_category" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:473: NOTICE:  relation "idx_ds_optional" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:513: NOTICE:  relation "zone_qualifier_lists" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:518: NOTICE:  relation "idx_zql_natural" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:521: NOTICE:  relation "idx_zql_marker" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:522: NOTICE:  relation "idx_zql_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:523: NOTICE:  relation "idx_zql_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:524: NOTICE:  relation "idx_zql_diver" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:525: NOTICE:  relation "idx_zql_zone" already exists, skipping
+CREATE INDEX
+INSERT 0 1
+psql:db/schema.sql:547: NOTICE:  relation "meet_entries" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:548: NOTICE:  relation "idx_meet_entries_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:567: NOTICE:  relation "meet_entrants" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:568: NOTICE:  relation "idx_meet_entrants_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:569: NOTICE:  relation "idx_meet_entrants_key" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:578: NOTICE:  schema "season_calendar" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:585: NOTICE:  relation "calendar" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:589: NOTICE:  column "updated_by" of relation "calendar" already exists, skipping
+ALTER TABLE
+ALTER TABLE
+DO
+INSERT 0 0
+psql:db/schema.sql:606: NOTICE:  schema "scoresandmore" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:615: NOTICE:  relation "meets" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:635: NOTICE:  relation "meet_events" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:636: NOTICE:  relation "sm_meet_events_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:637: NOTICE:  relation "sm_meet_events_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:639: NOTICE:  column "id" of relation "meet_events" already exists, skipping
+ALTER TABLE
+DO
+psql:db/schema.sql:679: NOTICE:  relation "event_results" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:680: NOTICE:  relation "sm_event_results_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:681: NOTICE:  relation "sm_event_results_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:682: NOTICE:  relation "sm_event_results_diver" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:685: NOTICE:  column "is_exhibition" of relation "event_results" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:694: NOTICE:  relation "team_points" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:695: NOTICE:  relation "sm_team_points_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:705: NOTICE:  relation "coach_points" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:706: NOTICE:  relation "sm_coach_points_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:714: NOTICE:  schema "divemeets" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:731: NOTICE:  relation "meets" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:732: NOTICE:  relation "dm_meets_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:733: NOTICE:  relation "dm_meets_sanction" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:746: NOTICE:  relation "events" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:747: NOTICE:  relation "dm_events_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:762: NOTICE:  relation "results" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:763: NOTICE:  relation "dm_results_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:764: NOTICE:  relation "dm_results_profile" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:765: NOTICE:  relation "dm_results_event" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:767: NOTICE:  column "results_note" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:768: NOTICE:  column "results_crawled_at" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:772: NOTICE:  column "results_attempts" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:787: NOTICE:  relation "member_gender" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:795: NOTICE:  relation "scrape_gaps" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:814: NOTICE:  relation "meet_deadlines" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:835: NOTICE:  relation "sheet_dives" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:836: NOTICE:  relation "dm_sheet_dives_meet" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:837: NOTICE:  relation "dm_sheet_dives_profile" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:838: NOTICE:  column "sheets_note" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:839: NOTICE:  column "sheets_crawled_at" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:856: NOTICE:  relation "crawl_targets" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:857: NOTICE:  relation "dm_crawl_targets_tag" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:865: NOTICE:  schema "membership" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:886: NOTICE:  relation "members" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:887: NOTICE:  relation "idx_mem_year" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:888: NOTICE:  relation "idx_mem_assoc" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:889: NOTICE:  relation "idx_mem_state" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:890: NOTICE:  relation "idx_mem_zip5" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:891: NOTICE:  relation "idx_mem_id" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:900: NOTICE:  relation "ingest_log" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:909: NOTICE:  relation "boundary_scenarios" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:919: NOTICE:  relation "sales_ledger" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:926: NOTICE:  schema "analytics" already exists, skipping
+CREATE SCHEMA
+psql:db/schema.sql:932: NOTICE:  column "results_done" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:933: NOTICE:  column "results_note" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:934: NOTICE:  column "results_attempts" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:935: NOTICE:  column "results_crawled_at" of relation "meets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:936: NOTICE:  relation "sm_meets_queue" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:949: NOTICE:  relation "schedule_versions" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:952: NOTICE:  column "schedule_id" of relation "schedule_versions" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:953: NOTICE:  column "label" of relation "schedule_versions" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:954: NOTICE:  column "data" of relation "schedule_versions" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:955: NOTICE:  column "created_at" of relation "schedule_versions" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:958: NOTICE:  relation "schedule_versions_by_schedule" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:972: NOTICE:  relation "run_sheets" already exists, skipping
+CREATE TABLE
+INSERT 0 0
+DO
+psql:db/schema.sql:1048: NOTICE:  relation "dive_skills" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:1052: NOTICE:  column "dive_bucket" of relation "dive_sheets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:1053: NOTICE:  column "dive_group_code" of relation "dive_sheets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:1054: NOTICE:  column "dive_group_label" of relation "dive_sheets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:1055: NOTICE:  column "dive_code_norm" of relation "dive_sheets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:1057: NOTICE:  relation "idx_ds_bucket" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:1058: NOTICE:  relation "idx_ds_groupcode" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:1072: NOTICE:  relation "nations" already exists, skipping
+CREATE TABLE
+psql:db/schema.sql:1074: NOTICE:  column "nation_code" of relation "dive_sheets" already exists, skipping
+ALTER TABLE
+psql:db/schema.sql:1075: NOTICE:  relation "idx_ds_nation" already exists, skipping
+CREATE INDEX
+psql:db/schema.sql:1085: NOTICE:  relation "nation_unresolved" already exists, skipping
+CREATE TABLE
+psql exit code: 0
