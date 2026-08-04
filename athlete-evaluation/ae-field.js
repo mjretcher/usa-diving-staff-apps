@@ -21,8 +21,27 @@
   const f1 = (v) => v == null ? '—' : Number(v).toFixed(1);
   let booted = false;
 
-  async function bootstrap() {
-    if (booted) return;
+  // Both sides of every comparison are selectable. Defaults keep the original
+  // US-senior-vs-world framing, but the other three fields are now reachable.
+  const cmp = { a: 'us-senior', b: 'world' };
+  const scopeName = (id) => {
+    const s2 = (window.AE.SCOPES || []).find((x) => x.id === id);
+    return s2 ? s2.label : id;
+  };
+
+  function cmpBar() {
+    const opts = (id) => (window.AE.SCOPES || [])
+      .map((sc) => `<option value="${esc(sc.id)}"${sc.id === id ? ' selected' : ''}>${esc(sc.label)}</option>`).join('');
+    return `<section class="ae-card ae-fi-sec"><div class="ae-ctl-row">
+      <span class="ae-ctl-lab">Compare</span>
+      <select class="ae-sel" onchange="AEField.setA(this.value)">${opts(cmp.a)}</select>
+      <span class="ae-ctl-lab" style="min-width:auto">against</span>
+      <select class="ae-sel" onchange="AEField.setB(this.value)">${opts(cmp.b)}</select>
+      </div></section>`;
+  }
+
+  async function bootstrap(force) {
+    if (booted && !force) return;
     booted = true;
     const root = document.getElementById('fieldRoot');
     root.innerHTML = `<div class="ae-fi-skel">${'<div class="ae-skel"></div>'.repeat(4)}</div>`;
@@ -34,6 +53,7 @@
       const usBest = await loadUSBest(bench);
       root.innerHTML =
         pulseHtml(pulse) +
+        cmpBar() +
         worldStageHtml(bench, usBest) +
         movingBarHtml(bench) +
         armsRaceHtml(listDD) +
@@ -103,7 +123,7 @@
     const r = await q(`
       SELECT scope, gender, discipline, meet_year, n_lists, avg_list_dd, p90_list_dd
       FROM analytics.field_list_dd
-      WHERE scope IN ('us-senior','world') AND gender IN ('Male','Female')
+      WHERE gender IN ('Male','Female')
         AND discipline IN ('3m','Platform')`);
     r.rows.forEach((x) => ['meet_year','n_lists','avg_list_dd','p90_list_dd'].forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
@@ -113,8 +133,7 @@
     const r = await q(`
       SELECT scope, gender, discipline, category_code, meet_year, n, avg_exec
       FROM analytics.field_group_exec
-      WHERE scope IN ('us-senior','world') AND gender IN ('Male','Female')
-        AND discipline IN ('3m','Platform') AND category_code IN ('1','2','3','4','5','6')`);
+      WHERE gender IN ('Male','Female') AND discipline IN ('3m','Platform')`);
     r.rows.forEach((x) => ['meet_year','n','avg_exec'].forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
   }
@@ -215,19 +234,23 @@
       return rows.reduce((a, b) => b.meet_year > a.meet_year ? b : a);
     };
     const rows = EVENTS.map((ev) => {
-      const us = pick('us-senior', ev), wd = pick('world', ev);
+      const us = pick(cmp.a, ev), wd = pick(cmp.b, ev);
       return { label: ev.label, us: us && us.avg_list_dd, world: wd && wd.avg_list_dd, worldP90: wd && wd.p90_list_dd };
     });
     return `<section class="ae-card ae-fi-sec">
       <div class="ae-card-h"><div><h3>The Difficulty Arms Race</h3>
-      <p class="ae-soft">Average list DD carried by finalists — US senior championships (navy) vs World Aquatics finals (red). The dashed tick is the world's top decile. Difficulty caps the score before anyone leaves the board: a +2.0 DD gap at 7.0 execution is 42 points conceded at entry.</p></div></div>
+      <p class="ae-soft">Average list DD carried by finalists — ${esc(scopeName(cmp.a))} (navy) vs ${esc(scopeName(cmp.b))} (red). The dashed tick is the second field's top decile. Difficulty caps the score before anyone leaves the board: a +2.0 DD gap at 7.0 execution is 42 points conceded at entry.</p></div></div>
       ${C.dumbbell(rows, { w: 780 })}
-      <div class="ae-legend"><span><i style="background:${C.COLORS.NAVY}"></i>US senior finalists</span><span><i style="background:${C.COLORS.RED}"></i>World finalists</span><span class="ae-soft">number = DD the US would need to add to match</span></div>
+      <div class="ae-legend"><span><i style="background:${C.COLORS.NAVY}"></i>${esc(scopeName(cmp.a))}</span><span><i style="background:${C.COLORS.RED}"></i>${esc(scopeName(cmp.b))}</span><span class="ae-soft">number = DD the first field would need to add to match</span></div>
     </section>`;
   }
 
   function heatHtml(groupExec) {
-    const CATS = [['1','Front'],['2','Back'],['3','Reverse'],['4','Inward'],['5','Twister'],['6','Armstand']];
+    // Groups come from the rulebook taxonomy now: twists split by takeoff
+    // direction, armstands by direction. The old ['5','6'] codes no longer exist.
+    const ORDER = (window.AE.CAT_ORDER) || ['1','2','3','4','51','52','53','54','61','62','63'];
+    const NAMES = (window.AE.CAT_NAMES) || {};
+    const CATS = ORDER.map((c) => [c, NAMES[c] || c]);
     const cell = (scope, ev, cat) => {
       const rows = groupExec.filter((x) => x.scope === scope && x.gender === ev.gender && x.discipline === ev.discipline && x.category_code === cat && x.n >= 20);
       if (!rows.length) return null;
@@ -238,16 +261,16 @@
     CATS.forEach(([code, name]) => {
       body += `<div class="ae-heat-rowlab">${esc(name)}</div>`;
       EVENTS.forEach((ev) => {
-        const us = cell('us-senior', ev, code), wd = cell('world', ev, code);
+        const us = cell(cmp.a, ev, code), wd = cell(cmp.b, ev, code);
         if (us == null || wd == null) { body += `<div class="ae-heat-cell ae-heat-na">—</div>`; return; }
         const d = us - wd;
         const cls = d >= 0.15 ? 'ahead2' : d >= 0.02 ? 'ahead1' : d > -0.02 ? 'even' : d > -0.35 ? 'behind1' : d > -0.7 ? 'behind2' : 'behind3';
-        body += `<div class="ae-heat-cell ae-heat-${cls}" title="${esc(ev.label + ' · ' + name)} — US ${us.toFixed(2)} vs World ${wd.toFixed(2)} per judge">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
+        body += `<div class="ae-heat-cell ae-heat-${cls}" title="${esc(ev.label + ' · ' + name)} — ${esc(scopeName(cmp.a))} ${us.toFixed(2)} vs ${esc(scopeName(cmp.b))} ${wd.toFixed(2)} per judge">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
       });
     });
     return `<section class="ae-card ae-fi-sec">
       <div class="ae-card-h"><div><h3>Where the Points Leak</h3>
-      <p class="ae-soft">US senior-field execution minus the world field, per judge, by dive group. Red cells are where American dives score lower out of the same six shapes — each −0.5 here is roughly 1.5 raw points conceded on every dive of that group.</p></div></div>
+      <p class="ae-soft">${esc(scopeName(cmp.a))} execution minus ${esc(scopeName(cmp.b))}, per judge, by dive group. Red cells are where the first field scores lower — each −0.5 is roughly 1.5 raw points conceded on every dive of that group. A dash means one side has too few dives (under 20) to compare.</p></div></div>
       <div class="ae-heat-grid">
         <div></div>${EVENTS.map((ev) => `<div class="ae-heat-collab">${esc(ev.label.replace(' · ', ' '))}</div>`).join('')}
         ${body}
@@ -278,5 +301,9 @@
     </section>`;
   }
 
-  window.AEField = { bootstrap };
+  window.AEField = {
+    bootstrap,
+    setA(v) { cmp.a = v; bootstrap(true); },
+    setB(v) { cmp.b = v; bootstrap(true); },
+  };
 })();

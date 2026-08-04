@@ -12,7 +12,13 @@
   'use strict';
   const { esc, escJsAttr, mean } = window.AE;
   const C = window.AECharts;
-  const st = { board: null, targetKey: null, ddMode: 'avg' };
+  const st = { board: null, targetKey: null, ddMode: 'avg', scope: 'world' };
+  // benchmarks() keys on competition_family; field tables key on scope.
+  const FAMILY = { world: 'World Aquatics', ncaa: 'NCAA' };
+  const scopeLabel = () => {
+    const s2 = (window.AE.SCOPES || []).find((x) => x.id === st.scope);
+    return s2 ? s2.label : st.scope;
+  };
   const f1 = (v) => v == null ? '—' : Number(v).toFixed(1);
   const f2 = (v) => v == null ? '—' : Number(v).toFixed(2);
 
@@ -48,9 +54,9 @@
     let bench = [], listDD = [], groupExec = [];
     try {
       [bench, listDD, groupExec] = await Promise.all([
-        window.AE.benchmarks(gender, st.board, 'World Aquatics'),
-        window.AE.fieldListDD(gender, st.board),
-        window.AE.fieldGroupExec(gender, st.board),
+        window.AE.benchmarks(gender, st.board, FAMILY[st.scope] || 'USA Diving'),
+        window.AE.fieldListDD(gender, st.board, st.scope),
+        window.AE.fieldGroupExec(gender, st.board, st.scope),
       ]);
     } catch (e) {}
 
@@ -60,7 +66,7 @@
       if (x.final_cut != null) targets.push({ key: x.meet_id + ':fc', label: `Make the final — ${x.meet_name}`, val: x.final_cut });
       if (x.win_score != null) targets.push({ key: x.meet_id + ':w', label: `Win — ${x.meet_name}`, val: x.win_score });
     });
-    if (!targets.length) { root.innerHTML = `<div class="ae-card"><div class="ae-empty">No World Aquatics benchmarks available for ${esc(gender || '')} ${esc(st.board)} yet.</div></div>`; return; }
+    if (!targets.length) { root.innerHTML = `<div class="ae-card"><div class="ae-empty">No ${esc(scopeLabel())} benchmarks available for ${esc(gender || '')} ${esc(st.board)} yet. Try another comparison field.</div></div>`; return; }
     if (!st.targetKey || !targets.some((t) => t.key === st.targetKey)) st.targetKey = targets[0].key;
     const target = targets.find((t) => t.key === st.targetKey);
 
@@ -108,6 +114,9 @@
           <p class="ae-soft">Because a list total is exactly 3 × list-DD × weighted execution, the road to any score splits cleanly into a difficulty move and an execution move. The two bars sum to the gap — nothing hidden.</p></div>
           <div class="ae-controls">
             ${boards.map((d) => `<button class="ae-pill ${d === st.board ? 'active' : ''}" onclick="AEPodium.setBoard('${escJsAttr(d)}')">${esc(d)}</button>`).join('')}
+            <select class="ae-select" onchange="AEPodium.setScope(this.value)" title="Which field to measure against">
+              ${(window.AE.SCOPES || []).map((sc) => `<option value="${esc(sc.id)}" ${sc.id === st.scope ? 'selected' : ''}>vs ${esc(sc.label)}</option>`).join('')}
+            </select>
           </div>
         </div>
 
@@ -121,8 +130,8 @@
           <select class="ae-select" onchange="AEPodium.setTarget(this.value)">
             ${targets.map((t) => `<option value="${esc(t.key)}" ${t.key === st.targetKey ? 'selected' : ''}>${esc(t.label)} (${f1(t.val)})</option>`).join('')}
           </select>
-          <button class="ae-pill ${st.ddMode === 'avg' ? 'active' : ''}" onclick="AEPodium.setDD('avg')">World avg finalist DD${fdd ? ' ' + f1(fdd.avg_list_dd) : ''}</button>
-          <button class="ae-pill ${st.ddMode === 'p90' ? 'active' : ''}" onclick="AEPodium.setDD('p90')">Top-decile DD${fdd ? ' ' + f1(fdd.p90_list_dd) : ''}</button>
+          <button class="ae-pill ${st.ddMode === 'avg' ? 'active' : ''}" onclick="AEPodium.setDD('avg')">${esc(scopeLabel())} avg finalist DD${fdd ? ' ' + f1(fdd.avg_list_dd) : ''}</button>
+          <button class="ae-pill ${st.ddMode === 'p90' ? 'active' : ''}" onclick="AEPodium.setDD('p90')">${esc(scopeLabel())} top-decile DD${fdd ? ' ' + f1(fdd.p90_list_dd) : ''}</button>
         </div>
 
         ${waterfallHtml}
@@ -132,7 +141,7 @@
       <div class="ae-dual">
         <div class="ae-card">
           <div class="ae-card-h"><div><h3>Dive-group execution vs the world</h3>
-            <p class="ae-soft">${esc(b.ident.display_name.split(' ')[0])}'s last two seasons (navy) against the World Aquatics field — median (sky) and top performers (red outline). Gaps show where points leak.</p></div></div>
+            <p class="ae-soft">${esc(b.ident.display_name.split(' ')[0])}'s last two seasons (navy) against the ${esc(scopeLabel())} field — median (sky) and top performers (red outline). Gaps show where points leak.</p></div></div>
           ${C.radar(axes, [
             { values: fieldBy('p90_exec'), color: C.COLORS.RED, label: 'World p90', fillOpacity: 0.05 },
             { values: fieldBy('p50_exec'), color: C.COLORS.SKY, label: 'World median', fillOpacity: 0.14 },
@@ -161,6 +170,7 @@
   }
 
   window.AEPodium = {
+    setScope(v) { st.scope = v; st.targetKey = null; window.AEApp.rerender(); },
     render,
     setBoard(d) { st.board = d; window.AEApp.rerender(); },
     setTarget(k) { st.targetKey = k; window.AEApp.rerender(); },

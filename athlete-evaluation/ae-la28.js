@@ -34,7 +34,7 @@
       [rows, bench, ldd, corridor] = await Promise.all([
         q(`SELECT * FROM analytics.la28_watch WHERE gender=$1 AND discipline=$2 AND last_year >= 2025 ORDER BY last_tot DESC LIMIT 40`, [ev.gender, ev.discipline]).then((r) => r.rows),
         window.AE.benchmarks(ev.gender, ev.discipline, 'World Aquatics'),
-        window.AE.fieldListDD(ev.gender, ev.discipline),
+        window.AE.fieldListDD(ev.gender, ev.discipline, 'world'),
         window.AE.corridor(ev.gender, ev.discipline),
       ]);
       jr = await juniorBests(rows);
