@@ -857,9 +857,9 @@ function renderSenior(base, sim){
     const row = PS.senior[i];
     const b = base.perSenior[i];
     const d = p.net - b.net;
-    const tag = p.source==='observed' ? `<span class="ps-tag obs">live &middot; ${fmt(p.evCount)} events</span>`
-              : p.source==='entered'  ? '<span class="ps-tag cal">entered</span>'
-              :                         '<span class="ps-tag mod">not synced</span>';
+    const tag = p.source==='observed' ? prov('measured', fmt(p.evCount) + ' events')
+              : p.source==='entered'  ? prov('entered')
+              :                         prov('missing', 'not synced');
     return `<tr>
       <td><b>${esc(row.name)}</b> ${tag}
         <span class="ps-rider">${esc(row.dates)} &middot; ${row.events} individual events &middot; ${esc(row.rounds)}${
@@ -867,7 +867,7 @@ function renderSenior(base, sim){
           Entry: <b>${row.entry==='open'?'open to any member':'prequalified only'}</b>
           &middot; meet <input class="ps-in xs" type="text" data-smeet="${i}" value="${esc(row.meet)}"></span></td>
       <td class="num">${p.liveInd?fmt(p.liveInd):'<span class="ps-na">&mdash;</span>'}</td>
-      <td class="num">${row.hasSynchro ? '<span class="ps-tag mod">by hand</span>' : '<span class="ps-na">n/a</span>'}</td>
+      <td class="num">${row.hasSynchro ? prov('entered', 'type it in') : '<span class="ps-na">n/a</span>'}</td>
       <td class="num"><input class="ps-in sm" type="number" min="0" data-smanual="${i}" value="${Math.round(row.manual)||0}">
         <label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label>
         ${row.hasSynchro?`<span class="ps-bite">synchro teams <input class="ps-in xs2" type="number" min="0" data-smansyn="${i}" value="${Math.round(row.manualSyn)||0}"></span>`:''}</td>
@@ -914,15 +914,15 @@ function renderSenior(base, sim){
       else manual += (+val||0);
       return `<tr>
         <td class="ps-sub">${esc(p.label)}
-          ${p.derived ? `<span class="ps-tag obs">derived${p.athletes!=null?` &middot; ${fmt(p.athletes)} athletes`:''}</span>`
-            : isQual ? `<span class="ps-tag cal">rule &middot; top ${fmt(PS.qualCutoff)} of each event, ${fmt(qFields.length)} events live</span>`
-            : sq ? `<span class="ps-tag cal">measured &middot; ${fmt(sq.entered)} of ${fmt(sq.roster)} entered, ${sq.events_per_athlete} events each</span>`
+          ${p.derived ? prov('measured', p.athletes!=null ? fmt(p.athletes)+' athletes' : '')
+            : isQual ? prov('modelled', 'top '+fmt(PS.qualCutoff)+' of each of '+fmt(qFields.length)+' events')
+            : sq ? prov('measured', fmt(sq.entered)+' of '+fmt(sq.roster)+' entered, '+sq.events_per_athlete+' events each')
             : (() => {
                 const raw = sk && PS.squads && PS.squads.squads
                           ? PS.squads.squads.find(x => x.key === sk) : null;
                 return raw
-                  ? `<span class="ps-tag mod">roster held (${fmt(raw.roster)}) &middot; too few matched to measure yet</span>`
-                  : '<span class="ps-tag mod">needs a number</span>';
+                  ? prov('missing', 'roster of ' + fmt(raw.roster) + ' held, too few matched to measure yet')
+                  : prov('missing');
               })()}</td>
         <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}"
           value="${Math.round(val)||0}"></td></tr>`;
@@ -994,9 +994,9 @@ function structureStops(){
 function renderStructure(sim){
   const NL = levelCount();
   const rows = sim.perLevel.map(p => {
-    const tag = p.source==='observed'   ? '<span class="ps-tag obs">observed</span>'
-              : p.source==='calibrated' ? '<span class="ps-tag cal">calibrated</span>'
-              :                           '<span class="ps-tag mod">modelled</span>';
+    const tag = p.source==='observed'   ? prov('measured')
+              : p.source==='calibrated' ? prov('reconstructed')
+              :                           prov('modelled');
     const f = PS.flow[p.L];
     const ovc = f ? levelOverrideCount(p.L) : 0;
     return `<tr>
@@ -1215,7 +1215,7 @@ function renderCalibration(sim){
 
   const rows = cal.map(k => {
     const convPct = k.rules > 0 ? (k.conv / k.rules * 100) : 0;
-    const tag = k.wasObserved ? '<span class="ps-tag obs">observed</span>' : '<span class="ps-tag mod">no data</span>';
+    const tag = k.wasObserved ? prov('measured') : prov('modelled', 'no results behind it');
     return `<tr class="ps-grp"><td><b>${esc(k.name)}</b> ${tag}</td>
         <td class="num mono">${fmt(Math.round(k.total))}</td>
         <td class="num mono">${k.wasObserved ? fmt(Math.round(k.observed)) : '<span class="ps-na">&mdash;</span>'}</td>
@@ -1461,7 +1461,7 @@ function renderCompare(){
       </div></div></div>`;
   }
   const base = cols[0];
-  const head = cols.map(c => `<th class="num">${esc(c.name)}${c.current?' <span class="ps-tag cal">current</span>':
+  const head = cols.map(c => `<th class="num">${esc(c.name)}${c.current?' <span class="ps-mark">current</span>':
     `<button class="ps-x" data-rmcmp="${esc(findCmpId(c.name))}" title="Remove">&times;</button>`}</th>`).join('');
   const row = (label, get, fmtF, better) => {
     const vals = cols.map(get);
@@ -1557,7 +1557,7 @@ function renderAthleteCost(){
   }
   const rows = now.lines.map((l,i) => {
     const b = base.lines[i] || {cost:0};
-    return `<tr><td>${esc(l.name)}${l.kind==='non'?' <span class="ps-tag mod">non-qual</span>':''}</td>
+    return `<tr><td>${esc(l.name)}${l.kind==='non'?' <span class="ps-mark">non-qualifying</span>':''}</td>
       <td class="num">${l.kind==='dues'?'&mdash;':fmt(l.n)}</td>
       <td class="num mono">${usd(l.fee)}</td>
       <td class="num mono">${usd(l.cost)}</td>
@@ -1732,9 +1732,82 @@ function openReport(){
   setTimeout(() => { try { w.focus(); w.print(); } catch(e){} }, 350);
 }
 
+/* ---------- one provenance vocabulary ----------
+   These tags accumulated one at a time -- observed, calibrated, modelled,
+   derived, measured, live, rule, by hand, roster held, needs a number -- and
+   individually each was reasonable. Eleven phrasings across one screen is not
+   scannable. Five canonical states, one fixed colour each, explained once in a
+   legend; the specifics move into the row detail where they already live. */
+const PROV = {
+  measured:      ['measured',      'Counted from real entry or results data.'],
+  reconstructed: ['reconstructed', 'Rebuilt from the rules, and ties to real data at the calibrated baseline.'],
+  modelled:      ['modelled',      'Follows the rules alone. No results behind it.'],
+  entered:       ['entered',       'A figure someone typed in.'],
+  missing:       ['missing',       'No number supplied yet.'],
+};
+function prov(kind, detail){
+  const p = PROV[kind] || PROV.missing;
+  return `<span class="ps-tag ${kind}" title="${esc(p[1])}">${p[0]}` +
+         (detail ? ` <span class="ps-tagd">${detail}</span>` : '') + '</span>';
+}
+function provLegend(){
+  return '<div class="ps-legend">' +
+    Object.keys(PROV).map(k =>
+      `<span class="ps-lg"><span class="ps-tag ${k}">${PROV[k][0]}</span>${esc(PROV[k][1])}</span>`).join('') +
+    '</div>';
+}
+
+/* ---------- keeping your place across a redraw ----------
+   Every edit rebuilds the panel's HTML, which in a browser discards focus AND
+   resets the scroll position: change a fee, press tab, and you are thrown back
+   to the top of an eight-card page. Rather than restructure eight tested cards
+   into a shell/numbers split, the redraw records which field you were in and
+   where you were on the page, then puts you back. Fields are identified by
+   their data-* attributes, which survive the rebuild because they are how the
+   handlers find them in the first place. */
+function fieldKey(el){
+  if (!el || !el.attributes || !el.tagName) return null;
+  if (el.id) return '#' + el.id;
+  const parts = [];
+  for (let i=0; i<el.attributes.length; i++){
+    const a = el.attributes[i];
+    if (a.name.indexOf('data-') === 0) parts.push('[' + a.name + '="' + String(a.value).replace(/"/g,'\\"') + '"]');
+  }
+  return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
+}
+function capturePlace(){
+  const host = document.getElementById('viewPricing');
+  const el = document.activeElement;
+  const st = {scroll: (window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0),
+              key:null, sel:null};
+  if (host && el && host.contains(el) && el !== host){
+    st.key = fieldKey(el);
+    // Number inputs throw on selectionStart in some browsers; the position is
+    // not worth an exception.
+    try { st.sel = [el.selectionStart, el.selectionEnd]; } catch(e){ st.sel = null; }
+  }
+  return st;
+}
+function restorePlace(st){
+  if (!st) return;
+  const host = document.getElementById('viewPricing');
+  if (st.key && host){
+    let el = null;
+    try { el = host.querySelector(st.key); } catch(e){ el = null; }
+    if (el){
+      try { el.focus({preventScroll:true}); } catch(e){ try { el.focus(); } catch(e2){} }
+      if (st.sel && st.sel[0] != null){
+        try { el.setSelectionRange(st.sel[0], st.sel[1]); } catch(e){}
+      }
+    }
+  }
+  if (st.scroll) { try { window.scrollTo(0, st.scroll); } catch(e){} }
+}
+
 function render(){
   const host = document.getElementById('viewPricing');
   if (!host) return;
+  const place = capturePlace();
   if (PS.err){
     host.innerHTML = `<div class="card"><div class="card-b"><p><b>Pricing Studio could not load.</b></p>
       <p class="note mono">${esc(PS.err)}</p></div></div>`;
@@ -1748,6 +1821,7 @@ function render(){
   host.innerHTML =
     renderScenarioBar() +
     renderSummary(base, sim) +
+    provLegend() +
     renderMemberPrices(base, sim) +
     renderEventFees(base, sim) +
     renderSenior(base, sim) +
@@ -1758,6 +1832,7 @@ function render(){
     renderCalibration(sim);
 
   wire();
+  restorePlace(place);
 }
 
 /* ---------- events ---------- */

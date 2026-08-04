@@ -348,6 +348,19 @@ tr:hover td{background:#f7fafd}
 .ps-ev{display:flex;flex-direction:column;gap:4px;font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.03em}
 .ps-ev span{text-transform:uppercase;font-size:9.5px}
 .ps-inline select{border:1px solid #cdd6e4;border-radius:8px;padding:6px 9px;font-size:12px;background:#fff;color:var(--ink)}
+.ps-tag.measured{background:#dcfce7;color:#14532d}
+.ps-tag.reconstructed{background:#e0f2fe;color:#075985}
+.ps-tag.modelled{background:#f1f5f9;color:#475569}
+.ps-tag.entered{background:#e8ecfa;color:var(--navy)}
+.ps-tag.missing{background:#fef3c7;color:#92400e}
+.ps-tagd{font-weight:600;opacity:.75;text-transform:none;letter-spacing:.01em}
+.ps-mark{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;margin-left:6px;border:1px solid var(--line);color:var(--muted);background:#fff}
+.ps-legend{display:flex;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;
+  padding:11px 14px;margin-bottom:16px;box-shadow:0 4px 12px rgba(16,24,40,.04)}
+.ps-lg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);line-height:1.35;flex:1;min-width:190px}
+.ps-lg .ps-tag{margin-left:0;flex-shrink:0}
+@media(max-width:760px){.ps-lg{min-width:100%}}
 @media(max-width:760px){.ps-bar-g,.ps-bar-g.grow{width:100%}.ps-k-v{font-size:28px}}
 </style>
 </head>
@@ -401,6 +414,6 @@ tr:hover td{background:#f7fafd}
 <script src="boundary.js?v=202608042400"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202607250740"></script>
-<script src="pricing.js?v=202608043400"></script>
+<script src="pricing.js?v=202608043600"></script>
 </body>
 </html>
