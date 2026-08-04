@@ -530,7 +530,9 @@ function computeRevenue(useNewPrices){
     const liveInd = pulled ? pulled.n : 0;
     const liveSyn = pulled ? pulled.syn : 0;
     const rawInd = row.useManual ? (+row.manual||0) : liveInd;
-    const rawSyn = row.hasSynchro ? (row.useManual ? (+row.manualSyn||0) : liveSyn) : 0;
+    // Synchro is never live: the entries scraper excludes it by policy, so the
+    // hand-entered figure is authoritative whether or not the override is on.
+    const rawSyn = row.hasSynchro ? (+row.manualSyn||0) : 0;
     const baseF = 125;
     const E = useNewPrices ? ((PS.sElast && PS.sElast[i]) || 0) : 0;
     const f = useNewPrices ? (+row.fee||0) : baseF;
@@ -747,10 +749,12 @@ async function loadNationalActual(){
     const row = r.rows && r.rows[0];
     if (row && +row.ind > 0){
       PS.natActual = +row.ind;
-      PS.natSyn = +row.syn;
       PS.natFetched = row.fetched || null;
       PS.natSource = 'live';
-      if (PS.synchro && PS.synchro.length) PS.synchro[PS.synchro.length-1].teams = +row.syn;
+      // Do NOT seed synchro from this source. The DiveMeets entries scraper
+      // excludes synchro by policy (individual-entry planning only), so it
+      // always reports zero -- which would silently wipe a real team count.
+      PS.natSyn = null;
     } else {
       PS.natSource = 'fallback';
     }
@@ -817,10 +821,10 @@ function renderSenior(base, sim){
           Entry: <b>${row.entry==='open'?'open to any member':'prequalified only'}</b>
           &middot; meet <input class="ps-in xs" type="text" data-smeet="${i}" value="${esc(row.meet)}"></span></td>
       <td class="num">${p.liveInd?fmt(p.liveInd):'<span class="ps-na">&mdash;</span>'}</td>
-      <td class="num">${row.hasSynchro ? (p.liveSyn?fmt(p.liveSyn):'<span class="ps-na">&mdash;</span>') : '<span class="ps-na">n/a</span>'}</td>
+      <td class="num">${row.hasSynchro ? '<span class="ps-tag mod">by hand</span>' : '<span class="ps-na">n/a</span>'}</td>
       <td class="num"><input class="ps-in sm" type="number" min="0" data-smanual="${i}" value="${Math.round(row.manual)||0}">
-        ${row.hasSynchro?`<span class="ps-bite">sync <input class="ps-in xs2" type="number" min="0" data-smansyn="${i}" value="${Math.round(row.manualSyn)||0}"></span>`:''}
-        <label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label></td>
+        <label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label>
+        ${row.hasSynchro?`<span class="ps-bite">synchro teams <input class="ps-in xs2" type="number" min="0" data-smansyn="${i}" value="${Math.round(row.manualSyn)||0}"></span>`:''}</td>
       <td class="num">${fmt(Math.round(p.entries))}${p.synchro?` <span class="ps-bite">+${fmt(Math.round(p.synchro))} teams</span>`:''}</td>
       <td class="num"><input class="ps-in" type="number" min="0" step="5" data-sfee="${i}" value="${row.fee}"></td>
       <td class="num mono">${usd(p.rev)}</td>
@@ -860,7 +864,8 @@ function renderSenior(base, sim){
       </tbody></table>
     <p class="note ps-foot">Synchronised events sit outside this: the criteria set no qualification protocol for them, only a
       minimum degree of difficulty, and a diver may pair with up to two partners per event. So synchro entries do not move when
-      you change a prequalification pathway &mdash; but they are still billed, once per team.</p>`;
+      you change a prequalification pathway &mdash; but they are still billed, once per team. <b>Synchro team counts must be typed in:</b>
+      the DiveMeets entries sync excludes synchro by policy, so it reports zero for every meet and can never fill this in.</p>`;
   }
 
   return `<div class="card"><div class="card-h">
@@ -870,7 +875,7 @@ function renderSenior(base, sim){
     ${notStarted ? `<div class="ps-warn">Entry counts read zero because these meets have not opened or have not been synced yet &mdash; the Qualifier runs 5&ndash;6 August and the Championships 7&ndash;11 August. Tick <b>use</b> to model a figure in the meantime, or re-run the DiveMeets entries sync once signup opens.</div>`
       : (missing ? '<div class="ps-warn">One or more meets have no synced entry count. Tick <b>use</b> and type a figure, or re-run the DiveMeets entries sync for that meet number.</div>' : '')}
     <table class="ps-tbl"><thead><tr>
-      <th>Meet</th><th class="num">Live individual</th><th class="num">Live synchro</th><th class="num">Override</th>
+      <th>Meet</th><th class="num">Live individual</th><th class="num">Synchro</th><th class="num">Override</th>
       <th class="num">Entries used</th><th class="num">Fee / event</th>
       <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
@@ -1139,7 +1144,7 @@ function renderCalibration(sim){
          <td class="num mono">${fmt(natActual())}</td>
          <td class="num">${diffCell(modelledNat, natActual())}</td></tr>
        <tr><td colspan="4" class="note">${PS.natSource==='live'
-             ? `Live from the DiveMeets sync, meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}. Individual entries only; ${fmt(PS.natSyn||0)} synchro teams counted separately.`
+             ? `Live from the DiveMeets sync, meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}. Individual entries only &mdash; the entries sync excludes synchro by policy, so synchro team counts are entered by hand below and are never overwritten by a sync.`
              : `<b>Snapshot, not live.</b> Meet ${esc(PS.natMeet)} has no synced entry count, so this falls back to the 28 July 2026 figure taken while signup was still open. Re-run the DiveMeets entries sync for this meet to anchor on the real number.`}</td></tr>`
     : `<tr class="ps-tot"><td>${esc(PS.finalName)} entries</td><td class="num mono">${fmt(Math.round(modelledNat))}</td>
          <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td></tr>`;
