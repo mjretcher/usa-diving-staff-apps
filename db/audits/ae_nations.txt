@@ -1,0 +1,12 @@
+71 distinct team_name values on World Aquatics rows
+  resolved 70 -> 56 distinct nations
+  unresolved 1: NAB(408)
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/backfill_nations.py", line 35, in <module>
+    psycopg2.extras.execute_values(cur, """
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/psycopg2/extras.py", line 1299, in execute_values
+    cur.execute(b''.join(parts))
+psycopg2.errors.UndefinedColumn: column ds.nation_code does not exist
+LINE 6:       AND ds.nation_code IS DISTINCT FROM v.code
+                  ^
+
