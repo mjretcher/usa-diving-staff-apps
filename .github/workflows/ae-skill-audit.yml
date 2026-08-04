@@ -1,0 +1,31 @@
+name: AE skill vs rulebook audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Run audit
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          mkdir -p db/audits
+          python db/scripts/ae_skill_catalog_audit.py | tee db/audits/ae_skill_audit.txt
+          cat db/audits/ae_skill_audit.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/audits/ae_skill_audit.txt
+          git commit -m "AE skill vs rulebook audit results" || echo "no change"
+          git push
