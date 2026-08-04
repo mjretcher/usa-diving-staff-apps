@@ -1,0 +1,59 @@
+name: Rebuild advance-data
+
+# Regenerates membership-analytics/advance-data.json from core.event_results,
+# including the East/West/Central pool, and commits it back to main.
+#
+# Manual only. This file underpins Boundary Studio's advancement view and the
+# whole Pricing Studio volume model, so it should be rebuilt deliberately --
+# after a season's results land, or after diver data is corrected upstream --
+# not on a timer.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Rebuild advance-data.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install psycopg2-binary
+
+      - name: Rebuild
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/build_advance_data.py
+
+      - name: Show diff summary
+        run: |
+          git --no-pager diff --stat -- membership-analytics/advance-data.json || true
+          python - <<'PY'
+          import json
+          d = json.load(open('membership-analytics/advance-data.json'))
+          print('pools :', sorted(d['pools']))
+          for k, v in sorted(d['totals'].items()):
+              print(f"  {k:22} mapped={v['mapped']:5} unmapped={v['unmapped']:4} total={v['total']:5}")
+          PY
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- membership-analytics/advance-data.json; then
+            echo "No change."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add membership-analytics/advance-data.json
+          git commit -m "Rebuild advance-data.json from core.event_results (adds E/W/C pool)"
+          git push
