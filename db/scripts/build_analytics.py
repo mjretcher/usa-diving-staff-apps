@@ -571,7 +571,86 @@ log("la28 watch built")
 
 # ---------------------------------------------------------------- meta
 counts = {}
-for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_group_exec_vo","field_list_dd","cohort_seniors","corridor_marks","corridor","field_judge_spread","la28_watch"]:
+
+
+# ---------------------------------------------------------------------------
+# analytics.event_profile — the field, decomposed.
+#
+# A total score is 3 x (sum of DD x execution). result_phases carries
+# phase_dd_sum next to posted_score, so every result splits into how hard the
+# list was and how well it was performed. That split, by finishing band, is
+# the field-level question worth asking: is the podium winning on difficulty
+# or on execution?
+#
+# Grain: scope x gender x discipline x dive-count format x year x finish band.
+# Cumulative totals and rows without a dive count are excluded outright —
+# they are not comparable measurements.
+# ---------------------------------------------------------------------------
+sql("DROP TABLE IF EXISTS analytics.event_profile")
+sql("""CREATE TABLE analytics.event_profile AS
+WITH base AS (
+  SELECT meet_year, gender, discipline, phase_dive_count AS dive_count,
+         CASE WHEN competition_family='World Aquatics' THEN 'world'
+              WHEN competition_family='NCAA' THEN 'ncaa'
+              WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+              WHEN event_name ILIKE 'group%' THEN 'us-junior'
+              ELSE 'us-open' END AS scope,
+         place, posted_score, phase_dd_sum,
+         posted_score / NULLIF(3 * phase_dd_sum, 0) AS exec_per_judge
+  FROM core.result_phases
+  WHERE posted_score IS NOT NULL
+    AND phase_dive_count IS NOT NULL
+    AND score_is_cumulative IS NOT TRUE
+    AND phase_dd_sum > 0
+    AND discipline IN ('1m','3m','Platform')
+    AND is_synchronized IS NOT TRUE
+    AND round_stage = 'Final'
+)
+SELECT scope, gender, discipline, dive_count, meet_year,
+       CASE WHEN place <= 3 THEN 'podium'
+            WHEN place <= 12 THEN 'finalist'
+            ELSE 'field' END AS band,
+       COUNT(*) AS n,
+       ROUND(AVG(posted_score)::numeric,2)  AS avg_score,
+       ROUND(AVG(phase_dd_sum)::numeric,3)  AS avg_list_dd,
+       ROUND(AVG(exec_per_judge)::numeric,3) AS avg_exec,
+       ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY posted_score))::numeric,2) AS p50_score,
+       ROUND((PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY posted_score))::numeric,2) AS p90_score,
+       ROUND(MIN(posted_score)::numeric,2) AS min_score,
+       ROUND(MAX(posted_score)::numeric,2) AS max_score
+FROM base
+WHERE place IS NOT NULL
+GROUP BY 1,2,3,4,5,6""")
+sql("CREATE INDEX idx_evprof ON analytics.event_profile (scope, gender, discipline, dive_count, meet_year)")
+
+# Score-by-rank: what each finishing position actually cost, with the spread
+# across meets rather than one meet's number presented as a constant.
+sql("DROP TABLE IF EXISTS analytics.rank_cost")
+sql("""CREATE TABLE analytics.rank_cost AS
+SELECT CASE WHEN competition_family='World Aquatics' THEN 'world'
+            WHEN competition_family='NCAA' THEN 'ncaa'
+            WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+            WHEN event_name ILIKE 'group%' THEN 'us-junior'
+            ELSE 'us-open' END AS scope,
+       gender, discipline, phase_dive_count AS dive_count,
+       place::int AS place,
+       COUNT(*) AS n_meets,
+       ROUND(AVG(posted_score)::numeric,2) AS avg_score,
+       ROUND((PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY posted_score))::numeric,2) AS p25_score,
+       ROUND((PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY posted_score))::numeric,2) AS p50_score,
+       ROUND((PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY posted_score))::numeric,2) AS p75_score,
+       ROUND(STDDEV_SAMP(posted_score)::numeric,2) AS sd_score,
+       MIN(meet_year) AS y0, MAX(meet_year) AS y1
+FROM core.result_phases
+WHERE posted_score IS NOT NULL AND phase_dive_count IS NOT NULL
+  AND score_is_cumulative IS NOT TRUE
+  AND discipline IN ('1m','3m','Platform') AND is_synchronized IS NOT TRUE
+  AND round_stage = 'Final' AND place IS NOT NULL AND place <= 24
+  AND meet_year >= 2018
+GROUP BY 1,2,3,4,5""")
+sql("CREATE INDEX idx_rankcost ON analytics.rank_cost (scope, gender, discipline, dive_count, place)")
+
+for t in ["athlete_identity","athlete_directory","benchmarks","field_group_exec","field_group_exec_vo","event_profile","rank_cost","field_list_dd","cohort_seniors","corridor_marks","corridor","field_judge_spread","la28_watch"]:
     counts[t] = rows(sql(f"SELECT COUNT(*) AS n FROM analytics.{t}"))[0]["n"]
 sql("CREATE TABLE IF NOT EXISTS analytics.build_meta (built_at timestamptz PRIMARY KEY, detail jsonb)")
 sql("INSERT INTO analytics.build_meta (built_at, detail) VALUES (now(), $1::jsonb)", [json.dumps(counts)])

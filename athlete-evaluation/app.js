@@ -149,6 +149,7 @@
   /* ---------- boot ---------- */
   async function boot() {
     const tabs = document.getElementById('aeTabs');
+    tabs.classList.add('ae-tabs-stacked');
     tabs.innerHTML =
       `<div class="ae-secrow">${SECTIONS.map((sc) =>
         `<button class="ae-sec" data-section="${sc.id}" onclick="AEApp.goSection('${sc.id}')">${esc(sc.label)}</button>`
