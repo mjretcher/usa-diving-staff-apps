@@ -1,0 +1,62 @@
+
+====================================================================================
+DEFINITIVE SKILL LIST — non-rulebook numbers WITH a DD (every one, no limit)
+====================================================================================
+  code        n      divers  description                                                                      min_dd  max_dd  #dd  disciplines     y0    y1  
+  ----------  -----  ------  -------------------------------------------------------------------------------  ------  ------  ---  --------------  ----  ----
+  001B        12823  4801    Forward Entry Pike                                                               1.00    1.20    2    1m/3m/Platform  2013  2026
+  002A        7632   3828    Back Entry Straight                                                              1.00    1.30    2    1m/3m/Platform  2013  2026
+  001D        6339   1939    Forward Entry Free                                                               1.00    1.20    2    1m/3m/Platform  2013  2026
+  001A        3333   1844    Forward Entry Straight                                                           1.00    1.20    2    1m/3m/Platform  2013  2026
+  001C        3306   1849    Forward Entry Tuck                                                               1.00    1.20    2    1m/3m/Platform  2014  2026
+  002D        2273   1064    Back Entry Free                                                                  1.00    1.00    1    1m/3m/Platform  2014  2026
+  002C        1411   878     Back Entry Tuck                                                                  1.00    1.30    2    1m/3m/Platform  2014  2026
+  600A        206    113     Armstand Dive Straight                                                           1.00    2.00    4    Platform        2014  2026
+  002B        135    108     Back Entry Pike                                                                  1.00    1.00    1    1m/3m/Platform  2014  2024
+  OO1B        3      3       None                                                                             1.10    1.30    2    1m/3m           2019  2021
+  0001D       2      2       None                                                                             1.00    1.00    1    3m              2015  2015
+  407c        2      2       407c                                                                             3.20    3.20    1    Platform        2025  2025
+  5253b       2      2       5253b                                                                            3.20    3.20    1    Platform        2025  2025
+  107b        2      2       107b                                                                             3.00    3.00    1    Platform        2025  2025
+  305c        2      2       305c                                                                             2.80    2.80    1    Platform        2025  2025
+  405C407C    2      2       Inward 2 1/2 Somersault TuckInward 3 1/2 Somersault Tuck                         2.70    3.10    2    Platform        2025  2025
+  5132D305C   1      1       Forward 1 1/2 Somersault 1 Twist FreeReverse 2 1/2 Somersault Tuck               2.10    2.10    1    3m              2025  2025
+  5152B107B   1      1       Forward 2 1/2 Somersault 1 Twist PikeForward 3 1/2 Somersault Pike               3.00    3.00    1    3m              2025  2025
+  5233D5132D  1      1       Back 1 1/2 Somersault 1 1/2 Twist FreeForward 1 1/2 Somersault 1 Twist Free      2.50    2.50    1    1m              2025  2025
+  5251B624B   1      1       Back 2 1/2 Somersault 1/2 Twist PikeArmstand Back 2 Somersault Pike              2.60    2.60    1    Platform        2025  2025
+  5255B407C   1      1       Back 2 1/2 Somersault 2 1/2 Twist PikeInward 3 1/2 Somersault Tuck               3.60    3.60    1    Platform        2025  2025
+  5333D5233D  1      1       Reverse 1 1/2 Somersault 1 1/2 Twist FreeBack 1 1/2 Somersault 1 1/2 Twist Free  2.60    2.60    1    1m              2025  2025
+  6241b       1      1       6241b                                                                            2.70    2.70    1    Platform        2025  2025
+  6243d       1      1       6243d                                                                            3.20    3.20    1    Platform        2025  2025
+  624B205B    1      1       Armstand Back 2 Somersault PikeBack 2 1/2 Somersault Pike                        2.80    2.80    1    Platform        2025  2025
+  624B305C    1      1       Armstand Back 2 Somersault PikeReverse 2 1/2 Somersault Tuck                     2.80    2.80    1    Platform        2025  2025
+  407C107B    1      1       Inward 3 1/2 Somersault TuckForward 3 1/2 Somersault Pike                        3.20    3.20    1    Platform        2025  2025
+  003A        1      1       None                                                                             1.50    1.50    1    3m              2025  2025
+  107B105B    1      1       Forward 3 1/2 Somersault PikeForward 2 1/2 Somersault Pike                       3.00    3.00    1    Platform        2025  2025
+  107B5255B   1      1       Forward 3 1/2 Somersault PikeBack 2 1/2 Somersault 2 1/2 Twist Pike              3.00    3.00    1    Platform        2025  2025
+  107C5152B   1      1       Forward 3 1/2 Somersault TuckForward 2 1/2 Somersault 1 Twist Pike               2.80    2.80    1    3m              2025  2025
+  205B305C    1      1       Back 2 1/2 Somersault PikeReverse 2 1/2 Somersault Tuck                          2.90    2.90    1    Platform        2025  2025
+  205B5251B   1      1       Back 2 1/2 Somersault PikeBack 2 1/2 Somersault 1/2 Twist Pike                   2.90    2.90    1    Platform        2025  2025
+  205C205B    1      1       Back 2 1/2 Somersault TuckBack 2 1/2 Somersault Pike                             2.80    2.80    1    3m              2025  2025
+  305C105B    1      1       Reverse 2 1/2 Somersault TuckForward 2 1/2 Somersault Pike                       2.80    2.80    1    Platform        2025  2025
+  305C405B    1      1       Reverse 2 1/2 Somersault TuckInward 2 1/2 Somersault Pike                        2.80    2.80    1    Platform        2025  2025
+  305C5132D   1      1       Reverse 2 1/2 Somersault TuckForward 1 1/2 Somersault 1 Twist Free               2.80    2.80    1    3m              2025  2025
+  401.C       1      1       None                                                                             1.40    1.40    1    1m              2014  2014
+  405B205B    1      1       Inward 2 1/2 Somersault PikeBack 2 1/2 Somersault Pike                           2.80    2.80    1    Platform        2025  2025
+  405C405B    1      1       Inward 2 1/2 Somersault TuckInward 2 1/2 Somersault Pike                         2.70    2.70    1    3m              2025  2025
+  0001B       1      1       None                                                                             1.00    1.00    1    1m              2014  2014
+  5001A       1      1       None                                                                             1.00    1.00    1    3m              2016  2016
+
+====================================================================================
+Confirm: artifacts (no DD) are ALL multi-dive concatenations
+====================================================================================
+  kind                     n      distinct_codes
+  -----------------------  -----  --------------
+  concatenated (>5 chars)  51158  3966          
+
+====================================================================================
+Any short no-DD codes needing review
+====================================================================================
+  (none)
+
+Done — no writes.
