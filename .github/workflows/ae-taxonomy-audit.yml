@@ -3,6 +3,9 @@ name: AE dive taxonomy audit
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   audit:
     name: Read-only audit of dive-category coverage
@@ -22,4 +25,15 @@ jobs:
       - name: Run audit
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: python db/scripts/ae_taxonomy_audit.py
+        run: |
+          mkdir -p db/audits
+          python db/scripts/ae_taxonomy_audit.py | tee db/audits/ae_taxonomy_audit.txt
+          cat db/audits/ae_taxonomy_audit.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/audits/ae_taxonomy_audit.txt
+          git commit -m "AE taxonomy audit results ($(date -u +%Y-%m-%dT%H:%MZ))" || echo "no change"
+          git push
