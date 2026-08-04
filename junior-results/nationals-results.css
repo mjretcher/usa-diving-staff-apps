@@ -128,3 +128,9 @@ th.nr-official{ background:#DCEDF5; color:#0B5975; }
 .nr-dns td{ background:#FFF7F8; }
 .nr-dns .nr-pl-prelim{ color:#A11128; }
 .nr-tag-dns{ background:#FDECEF; color:#A11128; font-weight:600; }
+
+/* Complete-state confirmation, the counterpart of .nr-live */
+.nr-ok{
+  background:#EAF4F9; border-left:4px solid #009AC7; color:#0B5975;
+  padding:9px 12px; border-radius:0 6px 6px 0; font-size:12.5px; margin:0 0 12px;
+}

@@ -76,6 +76,7 @@
     try {
       var r = await neonQuery(
         "SELECT e.title, s.round, r.place, r.diver_name, r.team_name, " +
+        "       r.diver2_name, r.team2_name, " +
         "       sum(CASE WHEN s.opt_vol IN ('V','S') THEN s.score ELSE 0 END) AS vol, " +
         "       sum(CASE WHEN s.opt_vol = 'O'        THEN s.score ELSE 0 END) AS opt, " +
         "       count(*) FILTER (WHERE s.opt_vol IN ('V','S')) AS nvol, " +
@@ -86,7 +87,7 @@
         "JOIN divemeets.sheet_dives s ON s.meet_id=r.meet_id AND s.event_id=r.event_id " +
         "     AND s.round=r.round AND s.sheet_key=r.sheet_key " +
         "WHERE r.meet_id=" + MEET_ID + " " +
-        "GROUP BY e.title, s.round, r.place, r.diver_name, r.team_name " +
+        "GROUP BY e.title, s.round, r.place, r.diver_name, r.team_name, r.diver2_name, r.team2_name " +
         "ORDER BY e.title, s.round");
       state.rows = (r && r.rows) || [];
 
@@ -116,10 +117,34 @@
 
   function build() {
     var ev = {};
+    // A synchronized placing is one row carrying TWO athletes on one dive
+    // sheet. Both performed the dives and both hold the placing, so the row is
+    // expanded into an entry per diver -- the same shape core.event_results
+    // uses. Read unexpanded, this panel showed half the synchro field.
+    var expanded = [];
     state.rows.forEach(function (row) {
+      expanded.push(row);
+      if (!row.diver2_name) return;
+      var partner = {};
+      for (var k in row) partner[k] = row[k];
+      partner.diver_name = row.diver2_name;
+      partner.team_name = row.team2_name;
+      partner._partner = true;
+      expanded.push(partner);
+    });
+    expanded.forEach(function (row) {
       var base = baseTitle(row.title);
       var e = ev[base] || (ev[base] = { title: base, divers: {}, fmt: {} });
-      var d = e.divers[row.diver_name] || (e.divers[row.diver_name] = {
+      /* Individual events key on the diver, because a prelim row and a final
+         row are the same person and must merge into one line. Synchro keys on
+         diver AND place, because a diver may hold two placings in one event
+         from two different pairings, and merging them loses one: Leyton Dean
+         won Boys Platform with Noah Horwitz and took 2nd with Pengxu Lor, and
+         keying on name alone dropped the gold. */
+      var key = /synchro/i.test(row.title)
+        ? row.diver_name + '||' + String(row.place)
+        : row.diver_name;
+      var d = e.divers[key] || (e.divers[key] = {
         name: row.diver_name, team: row.team_name || '', P: null, F: null
       });
       var seg = {
@@ -314,10 +339,19 @@
     }).join('\r\n');
   }
 
-  function inProgress() {
+  /* The warning is about incompleteness, not about the calendar. Comparing the
+     crawl date to the meet end date left it showing all through the final day
+     even once every event had been scored and crawled -- telling the HP
+     Director her numbers were provisional when they were final. It now asks
+     the data: is any contested event still missing its final? */
+  function pendingFinals(events) {
+    return events.filter(function (e) {
+      return e.hasFinal === false;
+    }).map(function (e) { return e.title; });
+  }
+  function crawlPredatesEnd() {
     if (!state.endDate || !state.asOf) return false;
-    // crawl finished before the meet's last day is over
-    return String(state.asOf).slice(0, 10) <= String(state.endDate);
+    return String(state.asOf).slice(0, 10) < String(state.endDate);
   }
 
   window.renderNationalsResultsPanel = async function (wrap) {
@@ -348,11 +382,21 @@
         '<p class="nr-sub">' + esc(state.meetName) +
           (state.asOf ? ' &middot; as of ' + esc(String(state.asOf).slice(0, 16).replace(' ', ' ')) + ' UTC' : '') +
         '</p>' +
-        (inProgress()
-          ? '<p class="nr-live"><b>Meet still in progress.</b> These figures reflect the last crawl' +
-            (state.endDate ? ', and the meet runs through ' + esc(state.endDate) : '') +
-            '. Events finishing after that crawl are not here yet. Re-run the results crawl before circulating anything final.</p>'
-          : '') +
+        (function () {
+          var pend = pendingFinals(all);
+          if (pend.length) {
+            return '<p class="nr-live"><b>' + pend.length + ' event' + (pend.length === 1 ? '' : 's') +
+              ' still awaiting a final.</b> ' + esc(pend.join('; ')) +
+              '. Re-run the results crawl before circulating anything as final.</p>';
+          }
+          if (crawlPredatesEnd()) {
+            return '<p class="nr-live"><b>Crawled before the meet ended.</b> Last crawl ' +
+              esc(String(state.asOf).slice(0, 10)) + ', meet ran through ' + esc(state.endDate) +
+              '. Anything scored after that crawl is not here yet.</p>';
+          }
+          return '<p class="nr-ok">Every contested event has a final and the crawl post-dates the ' +
+            'last day of the meet. These figures are complete as far as the published results go.</p>';
+        })() +
         '<div class="nr-kpis">' +
           '<div class="nr-kpi"><b>' + all.length + '</b><span>events</span></div>' +
           '<div class="nr-kpi"><b>' + totalDivers + '</b><span>scoring finishes</span></div>' +
