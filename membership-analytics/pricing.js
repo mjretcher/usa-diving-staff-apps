@@ -127,6 +127,7 @@ const PS = {
   synchro:null,                       // per-level synchro team entries (billed once per pair)
   baseFinal:null,                     // national field under the calibrated baseline
   scenarioId:null, scenarioName:'', openGrid:null,
+  compare:[], pathway:null,
   bList:null, sList:null,
   dirty:false, err:null, tab:'summary',
 };
@@ -621,6 +622,7 @@ async function bootstrap(){
     const seed = (PS.bList||[]).find(b => /2026 Alignment/i.test(b.name));
     if (seed) await applyBoundary(seed.id);
     PS.senior = defaultSenior();
+    PS.pathway = defaultPathway();
     await loadCounts();
     await loadSeniorEntries();
     deriveCalibration();     // freeze against the alignment actually run
@@ -1033,10 +1035,438 @@ function renderScenarioBar(){
         <button class="ps-btn primary" id="psSave">Save</button>
         <select id="psLoad"><option value="">Load…</option>${sOpts}</select>
         <button class="ps-btn" id="psReset">Reset prices</button>
+        <button class="ps-btn" id="psReport">Committee report</button>
         <button class="ps-btn" id="psCsv">Export CSV</button>
       </div>
     </div>
   </div>`;
+}
+
+/* ==========================================================================
+   SCENARIO COMPARISON
+   --------------------------------------------------------------------------
+   Computes several saved scenarios against the same season, pools and frozen
+   calibration, so the only thing differing between columns is the scenario.
+   State is swapped in and out around each computation; the swap is wrapped in
+   try/finally because a throw mid-compare would otherwise leave the live tab
+   showing another scenario's structure under the current scenario's name.
+   ========================================================================== */
+
+/* Structure refs are never mutated in place, so they can be held by reference.
+   The editable cards ARE mutated by the UI, so they are deep copied. */
+function snapshotState(){
+  return {
+    regions:PS.regions, assign:PS.assign, levels:PS.levels,
+    finalName:PS.finalName, boundaryId:PS.boundaryId, boundaryName:PS.boundaryName,
+    fees:   JSON.parse(JSON.stringify(PS.fees   || [])),
+    flow:   JSON.parse(JSON.stringify(PS.flow   || [])),
+    synchro:JSON.parse(JSON.stringify(PS.synchro|| [])),
+    senior: JSON.parse(JSON.stringify(PS.senior || [])),
+    prices: Object.assign({}, PS.prices),
+    mElast: Object.assign({}, PS.mElast),
+    eElast: Object.assign({}, PS.eElast),
+    sElast: Object.assign({}, PS.sElast),
+    levy:PS.levy, lateRate:PS.lateRate, prequal:PS.prequal,
+  };
+}
+function restoreState(s){
+  // Deep copy the mutable cards on the way back out. The snapshot is restored
+  // once per comparison column, so handing back the same array objects each
+  // time would let one column's edits alias into the next.
+  Object.assign(PS, s, {
+    fees:   JSON.parse(JSON.stringify(s.fees   || [])),
+    flow:   JSON.parse(JSON.stringify(s.flow   || [])),
+    synchro:JSON.parse(JSON.stringify(s.synchro|| [])),
+    senior: JSON.parse(JSON.stringify(s.senior || [])),
+    prices: Object.assign({}, s.prices),
+    mElast: Object.assign({}, s.mElast),
+    eElast: Object.assign({}, s.eElast),
+    sElast: Object.assign({}, s.sElast),
+  });
+}
+
+/* Install a saved payload's price cards, padding or trimming to the structure
+   it is being applied to. A scenario saved against 12 regions and replayed
+   against 9 must not read fees off the end of its own array. */
+function applyCards(d){
+  const NL = levelCount();
+  const df = defaultFees(NL), dfl = defaultFlow(NL), ds = defaultSynchro(NL);
+  PS.fees = df.map((f,i) => {
+    const k = d.fees && d.fees[i];
+    return {name: feeRowName(i, NL, f.name), qual: k ? +k.qual : f.qual, non: k ? +k.non : f.non};
+  });
+  PS.flow = dfl.map((f,i) => {
+    const k = d.flow && d.flow[i];
+    return k ? {advance:+k.advance||0, direct:+k.direct||0, add:+k.add||0,
+                byCell: k.byCell ? JSON.parse(JSON.stringify(k.byCell)) : {}} : f;
+  });
+  if (PS.flow.length) PS.flow[PS.flow.length-1].advance = 0;
+  PS.synchro = ds.map((x,i) => (d.synchro && d.synchro[i]) ? Object.assign({}, x, d.synchro[i]) : x);
+  if (d.senior && d.senior.length) PS.senior = JSON.parse(JSON.stringify(d.senior));
+  PS.prices = Object.assign({}, d.prices||{});
+  PS.mElast = Object.assign({}, d.mElast||{});
+  PS.eElast = Object.assign({}, d.eElast||{});
+  PS.sElast = Object.assign({}, d.sElast||{});
+  if (d.levy != null) PS.levy = +d.levy;
+  if (d.lateRate != null) PS.lateRate = +d.lateRate;
+  if (d.prequal != null) PS.prequal = +d.prequal;
+}
+
+function columnFor(name, current){
+  const r = computeRevenue(true);
+  const nat = CODES.reduce((s,c)=>s+(r.V.final[c]||0),0);
+  const stops = [];
+  for (let L=0; L<levelCount(); L++) stops.push(groupCountAt(L));
+  return {
+    name, current,
+    structure: PS.boundaryName, regions: PS.regions.length, stops,
+    totalStops: structureStops(),
+    net:r.net, gross:r.gross, levy:r.levyTotal,
+    memberRev:r.memberRev, feeRev:r.eventRev + r.seniorRev,
+    entries:r.allEntries, chargeable:r.chargeable,
+    national:nat, perLevel:r.perLevel.map(p=>({name:p.name, entries:p.entries, stops:p.stops, net:p.net})),
+    final:Object.assign({}, r.V.final),
+  };
+}
+
+/* Compute the current scenario plus every loaded comparison, all against the
+   same frozen calibration. Never mutates persistent state on exit. */
+function computeCompare(){
+  const saved = snapshotState();
+  const cols = [];
+  try {
+    cols.push(columnFor(PS.scenarioName.trim() || 'Current (unsaved)', true));
+    (PS.compare||[]).forEach(c => {
+      // Every column starts from the live state. Without this reset a scenario
+      // that carries no structure of its own would silently inherit whichever
+      // structure the previous column installed.
+      restoreState(saved);
+      if (c.boundary && c.boundary.regions && c.boundary.regions.length){
+        PS.regions = c.boundary.regions; PS.assign = c.boundary.assign;
+        PS.levels = c.boundary.levels;   PS.finalName = c.boundary.finalName;
+        PS.boundaryName = c.boundary.name;
+      }
+      applyCards(c.payload || {});
+      cols.push(columnFor(c.name, false));
+    });
+  } finally {
+    restoreState(saved);
+  }
+  return cols;
+}
+
+async function addCompare(id){
+  if ((PS.compare||[]).some(c => c.id === id)) { msg('Already in the comparison.'); return; }
+  if ((PS.compare||[]).length >= 3){ msg('Three comparison scenarios is the maximum.'); return; }
+  try {
+    const r = await NEON.query(`SELECT name, data FROM membership.pricing_scenarios WHERE id=$1`, [id]);
+    if (!r.rows.length){ msg('Scenario not found.'); return; }
+    const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    let boundary = null;
+    if (d.boundaryId){
+      try {
+        const b = await NEON.query(`SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`, [d.boundaryId]);
+        if (b.rows.length){
+          const bd = typeof b.rows[0].data === 'string' ? JSON.parse(b.rows[0].data) : b.rows[0].data;
+          boundary = {name:b.rows[0].name, regions:bd.regions||[], assign:bd.assign||{},
+                      levels:(bd.levels&&bd.levels.length)?bd.levels:defaultLevels((bd.regions||[]).length||12),
+                      finalName:bd.finalName||'Junior Nationals'};
+        }
+      } catch(e){ console.warn('compare boundary', e); }
+    }
+    PS.compare = PS.compare || [];
+    PS.compare.push({id, name:r.rows[0].name, payload:d, boundary});
+    render();
+  } catch(e){ console.error(e); msg('Could not add: ' + (e.message||e)); }
+}
+function removeCompare(id){
+  PS.compare = (PS.compare||[]).filter(c => c.id !== id);
+  render();
+}
+
+function renderCompare(){
+  const cols = computeCompare();
+  const opts = (PS.sList||[]).filter(x => !(PS.compare||[]).some(c=>c.id===x.id) && x.id !== PS.scenarioId)
+    .map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+  if (cols.length < 2){
+    return `<div class="card"><div class="card-h"><h3>Scenario comparison</h3>
+      <div class="note">Put two or three saved scenarios side by side against the same season and the same frozen calibration.</div></div>
+      <div class="card-b">
+      <div class="ps-inline" style="margin-top:0;padding-top:0;border:0">
+        <label>Add a saved scenario <select id="psAddCmp"><option value="">Choose…</option>${opts}</select></label>
+        <span class="note">${opts ? 'Only the scenario differs between columns &mdash; season, member roster and calibration are held constant.' : 'Save a scenario first, then it can be added here.'}</span>
+      </div></div></div>`;
+  }
+  const base = cols[0];
+  const head = cols.map(c => `<th class="num">${esc(c.name)}${c.current?' <span class="ps-tag cal">current</span>':
+    `<button class="ps-x" data-rmcmp="${esc(findCmpId(c.name))}" title="Remove">&times;</button>`}</th>`).join('');
+  const row = (label, get, fmtF, better) => {
+    const vals = cols.map(get);
+    return `<tr><td>${label}</td>` + vals.map((v,i) => {
+      const d = i===0 ? 0 : v - vals[0];
+      const cls = (!better || i===0 || Math.abs(d) < 0.5) ? '' : ((better==='up') === (d>0) ? 'up' : 'down');
+      return `<td class="num mono">${fmtF(v)}${i>0 && Math.abs(d)>=0.5 ? `<span class="ps-cd ${cls}">${d>0?'+':''}${fmtF(d)}</span>`:''}</td>`;
+    }).join('') + '</tr>';
+  };
+  const lvlRows = base.perLevel.map((p,li) => row('&nbsp;&nbsp;' + esc(p.name),
+      c => (c.perLevel[li] ? c.perLevel[li].entries : 0), v=>fmt(Math.round(v)), null)).join('');
+
+  return `<div class="card"><div class="card-h">
+      <h3>Scenario comparison</h3>
+      <div class="note">Same season, same member roster, same frozen calibration &mdash; only the scenario differs. Change shown against the first column.</div>
+    </div><div class="card-b">
+    <table class="ps-tbl ps-cmp"><thead><tr><th>Measure</th>${head}</tr></thead><tbody>
+      <tr class="ps-grp"><td colspan="${cols.length+1}">Financial</td></tr>
+      ${row('Net retained by USA Diving', c=>c.net, usd1, 'up')}
+      ${row('Membership dues', c=>c.memberRev, usd1, 'up')}
+      ${row('Entry fees, gross', c=>c.feeRev, usd1, 'up')}
+      ${row('DiveMeets pass-through', c=>-c.levy, usd1, 'up')}
+      <tr class="ps-grp"><td colspan="${cols.length+1}">Athlete opportunity</td></tr>
+      ${row('Field reaching the final', c=>c.national, v=>fmt(Math.round(v)), 'up')}
+      ${row('Total chargeable entries', c=>c.chargeable, v=>fmt(Math.round(v)), null)}
+      <tr class="ps-grp"><td colspan="${cols.length+1}">Entries by level</td></tr>
+      ${lvlRows}
+      <tr class="ps-grp"><td colspan="${cols.length+1}">Structure</td></tr>
+      ${row('Regions painted', c=>c.regions, v=>fmt(Math.round(v)), null)}
+      ${row('Total stops', c=>c.totalStops, v=>fmt(Math.round(v)), null)}
+      <tr class="ps-tot"><td>Net per athlete place at the final</td>${cols.map(c=>
+        `<td class="num mono">${c.national>0?usd(c.net/c.national):'&mdash;'}</td>`).join('')}</tr>
+    </tbody></table>
+    <div class="ps-inline">
+      <label>Add a saved scenario <select id="psAddCmp"><option value="">Choose…</option>${opts}</select></label>
+      <span class="note">The bottom row is the trade-off in one number: what the organisation nets for every athlete place created at the championships. A scenario that raises net revenue while cutting places will show it here.</span>
+    </div>
+    </div></div>`;
+}
+function findCmpId(name){
+  const c = (PS.compare||[]).find(x => x.name === name);
+  return c ? c.id : '';
+}
+
+/* ==========================================================================
+   ATHLETE / FAMILY COST
+   ========================================================================== */
+const PATHWAY_PRESETS = {
+  ab_full: {label:'Group A/B, full pathway', group:'A', dues:'Competition Athlete (17U)', events:[2,3,3,3]},
+  ab_zone: {label:'Group A/B, out at Zones',  group:'A', dues:'Competition Athlete (17U)', events:[2,3,0,0]},
+  cd_full: {label:'Group C/D, full pathway',  group:'C', dues:'Competition Athlete (17U)', events:[0,3,3,3]},
+  cd_zone: {label:'Group C/D, out at Zones',  group:'C', dues:'Competition Athlete (17U)', events:[0,3,0,0]},
+  reg_only:{label:'Regionals only',           group:'A', dues:'Athlete (17U)',             events:[2,0,0,0]},
+};
+function defaultPathway(){ return {preset:'ab_full', group:'A', dues:'Competition Athlete (17U)', events:[2,3,3,3]}; }
+
+function pathwayCost(useNew){
+  const p = PS.pathway, NL = levelCount();
+  const df = defaultFees(NL);
+  const lines = [];
+  let total = 0;
+  const duesType = MEMBER_TYPES.find(t => t[0] === p.dues) || MEMBER_TYPES[2];
+  const duesBase = duesType[1] + duesType[2];
+  const duesNow  = (useNew && PS.prices[duesType[0]] != null ? PS.prices[duesType[0]] : duesType[1]) + duesType[2];
+  lines.push({name:duesType[0] + (duesType[2] ? ' (incl. riders)' : ''), n:1, fee:duesNow, cost:duesNow, kind:'dues'});
+  total += duesNow;
+  for (let L=0; L<=NL; L++){
+    const n = Math.max(0, +(p.events[L]||0));
+    if (!n) continue;
+    // Representative cell for this athlete: springboard first, platform once past Regionals.
+    const code = p.group + 'G' + (L===0 ? '1' : 'P');
+    const qualifying = isQualifying(L, code);
+    const f = useNew ? (qualifying ? PS.fees[L].qual : PS.fees[L].non)
+                     : (qualifying ? df[L].qual      : df[L].non);
+    lines.push({name:PS.fees[L].name, n, fee:f, cost:n*f, kind:qualifying?'qual':'non'});
+    total += n*f;
+  }
+  return {lines, total, duesBase};
+}
+
+function renderAthleteCost(){
+  const base = pathwayCost(false), now = pathwayCost(true);
+  const NL = levelCount();
+  const d = now.total - base.total;
+  const presetOpts = Object.entries(PATHWAY_PRESETS).map(([k,v]) =>
+    `<option value="${k}"${PS.pathway.preset===k?' selected':''}>${esc(v.label)}</option>`).join('');
+  const duesOpts = MEMBER_TYPES.map(t =>
+    `<option value="${esc(t[0])}"${PS.pathway.dues===t[0]?' selected':''}>${esc(t[0])}</option>`).join('');
+  const evInputs = [];
+  for (let L=0; L<=NL; L++){
+    evInputs.push(`<label class="ps-ev"><span>${esc(PS.fees[L].name)}</span>
+      <input class="ps-in sm" type="number" min="0" max="12" data-ev="${L}" value="${+(PS.pathway.events[L]||0)}"> events</label>`);
+  }
+  const rows = now.lines.map((l,i) => {
+    const b = base.lines[i] || {cost:0};
+    return `<tr><td>${esc(l.name)}${l.kind==='non'?' <span class="ps-tag mod">non-qual</span>':''}</td>
+      <td class="num">${l.kind==='dues'?'&mdash;':fmt(l.n)}</td>
+      <td class="num mono">${usd(l.fee)}</td>
+      <td class="num mono">${usd(l.cost)}</td>
+      <td class="num">${deltaSpan(l.cost-b.cost)}</td></tr>`;
+  }).join('');
+  return `<div class="card"><div class="card-h">
+      <h3>Cost to the athlete</h3>
+      <div class="note">What one athlete&rsquo;s family actually pays to go through the pathway. Entry fees and dues only &mdash; travel, lodging and coaching are not modelled.</div>
+    </div><div class="card-b">
+    <div class="ps-inline" style="margin-top:0;padding-top:0;border:0">
+      <label>Pathway <select id="psPreset">${presetOpts}<option value="custom"${PS.pathway.preset==='custom'?' selected':''}>Custom</option></select></label>
+      <label>Membership <select id="psDues">${duesOpts}</select></label>
+    </div>
+    <div class="ps-evrow">${evInputs.join('')}</div>
+    <table class="ps-tbl"><thead><tr>
+      <th>Item</th><th class="num">Events</th><th class="num">Unit</th><th class="num">Cost</th><th class="num">vs baseline</th>
+    </tr></thead><tbody>${rows}
+      <tr class="ps-tot"><td>Total for one athlete</td><td colspan="2"></td>
+        <td class="num mono">${usd(now.total)}</td><td class="num">${deltaSpan(d)}</td></tr>
+    </tbody></table>
+    <p class="note ps-foot">Baseline for this athlete is ${usd(base.total)}. ${Math.abs(d)>=1
+      ? `This scenario moves it by <b>${usd1(d)}</b>, or ${(d/base.total*100).toFixed(1)}%.`
+      : 'This scenario does not change what the family pays.'}
+      A fee rise that looks small at organisation level compounds across a family&rsquo;s season &mdash; an athlete entering three events at four stops pays the increase twelve times over.</p>
+    </div></div>`;
+}
+
+/* ==========================================================================
+   PRINTABLE COMMITTEE REPORT
+   Self-contained document opened in its own window, styled for print/PDF.
+   Everything it states is recomputed here rather than scraped from the DOM.
+   ========================================================================== */
+function buildReport(){
+  const base = computeRevenue(false), sim = computeRevenue(true);
+  const cols = computeCompare();
+  const pw = {base:pathwayCost(false), now:pathwayCost(true)};
+  const cb = PS.cal || {};
+  const drifted = cb.basis && (cb.basis !== PS.boundaryName || cb.regions !== PS.regions.length);
+  const nowF = sim.V.final, baseF = PS.baseFinal || {};
+  const when = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const money = (label, b, n) => `<tr><td>${label}</td><td class="n">${usd(b)}</td><td class="n">${usd(n)}</td>
+    <td class="n ${n-b>0?'up':(n-b<0?'dn':'')}">${Math.abs(n-b)<1?'&mdash;':(n-b>0?'+':'')+usd1(n-b)}</td></tr>`;
+
+  const qualRows = GROUPS.map(g => {
+    let was=0, now=0;
+    GENDERS.forEach(x=>BOARDS.forEach(b=>{ was+=baseF[g+x+b]||0; now+=nowF[g+x+b]||0; }));
+    const d = Math.round(now-was);
+    return `<tr><td>Group ${g}</td><td class="n">${fmt(Math.round(was))}</td><td class="n">${fmt(Math.round(now))}</td>
+      <td class="n ${d>0?'up':(d<0?'dn':'')}">${d===0?'&mdash;':(d>0?'+':'')+fmt(d)}</td></tr>`;
+  }).join('');
+  let tW=0,tN=0; CODES.forEach(c=>{tW+=baseF[c]||0;tN+=nowF[c]||0;});
+
+  const lvlRows = sim.perLevel.map((p,i) => `<tr>
+    <td>${esc(p.name)} <span class="tag">${p.source}</span></td>
+    <td class="n">${fmt(p.stops)}</td><td class="n">${fmt(Math.round(p.entries))}</td>
+    <td class="n">${usd(PS.fees[i].qual)}</td><td class="n">${usd(p.rev)}</td>
+    <td class="n">${usd(p.levy)}</td><td class="n">${usd(p.net)}</td></tr>`).join('');
+
+  const cmpBlock = cols.length < 2 ? '' : `
+    <h2>Scenario comparison</h2>
+    <table><thead><tr><th>Measure</th>${cols.map(c=>`<th class="n">${esc(c.name)}</th>`).join('')}</tr></thead><tbody>
+      <tr><td>Net retained</td>${cols.map(c=>`<td class="n">${usd(c.net)}</td>`).join('')}</tr>
+      <tr><td>Entry fees, gross</td>${cols.map(c=>`<td class="n">${usd(c.feeRev)}</td>`).join('')}</tr>
+      <tr><td>DiveMeets pass-through</td>${cols.map(c=>`<td class="n">&minus;${usd(c.levy)}</td>`).join('')}</tr>
+      <tr><td>Field reaching the final</td>${cols.map(c=>`<td class="n">${fmt(Math.round(c.national))}</td>`).join('')}</tr>
+      <tr><td>Total stops</td>${cols.map(c=>`<td class="n">${fmt(c.totalStops)}</td>`).join('')}</tr>
+      <tr class="tot"><td>Net per athlete place at the final</td>${cols.map(c=>
+        `<td class="n">${c.national>0?usd(c.net/c.national):'&mdash;'}</td>`).join('')}</tr>
+    </tbody></table>`;
+
+  const pwRows = pw.now.lines.map((l,i)=>`<tr><td>${esc(l.name)}</td><td class="n">${l.kind==='dues'?'&mdash;':fmt(l.n)}</td>
+    <td class="n">${usd(l.fee)}</td><td class="n">${usd(l.cost)}</td></tr>`).join('');
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>USA Diving — Pricing Scenario Report</title>
+<style>
+  @page{margin:16mm}
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,Arial,sans-serif;color:#13213a;margin:0;font-size:11px;line-height:1.5}
+  .hd{background:#171F69;color:#fff;padding:20px 24px;border-bottom:5px solid #E31937}
+  .hd h1{font-family:'Barlow Condensed',Arial Narrow,sans-serif;font-size:30px;margin:0;letter-spacing:.04em;text-transform:uppercase}
+  .hd p{margin:5px 0 0;color:#cfe3ff;font-size:11px}
+  .wrap{padding:20px 24px 30px}
+  h2{font-family:'Barlow Condensed',Arial Narrow,sans-serif;font-size:19px;text-transform:uppercase;letter-spacing:.04em;
+     color:#171F69;margin:22px 0 8px;border-bottom:2px solid #d8e0ec;padding-bottom:4px}
+  h2:first-child{margin-top:0}
+  table{width:100%;border-collapse:collapse;margin-bottom:6px}
+  th{background:#f8fafc;color:#171F69;font-size:9px;text-transform:uppercase;letter-spacing:.06em;
+     text-align:left;padding:6px 7px;border-bottom:1px solid #d8e0ec}
+  td{padding:5px 7px;border-bottom:1px solid #eef2f7}
+  .n{text-align:right;font-family:'JetBrains Mono',Menlo,monospace;font-size:10px}
+  th.n{text-align:right}
+  .up{color:#15803d;font-weight:700}.dn{color:#E31937;font-weight:700}
+  tr.tot td{background:#f4f8fd;font-weight:800;border-top:2px solid #171F69}
+  .tag{font-size:8px;text-transform:uppercase;letter-spacing:.06em;background:#eef2f7;color:#475569;
+       padding:1px 5px;border-radius:8px;margin-left:4px}
+  .kpis{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+  .k{flex:1;min-width:120px;border:1px solid #d8e0ec;border-left:4px solid #171F69;border-radius:8px;padding:9px 11px}
+  .k b{display:block;font-size:8.5px;text-transform:uppercase;letter-spacing:.06em;color:#667085;font-weight:800}
+  .k span{font-family:'Barlow Condensed',Arial Narrow,sans-serif;font-size:22px;color:#171F69}
+  .note{font-size:9.5px;color:#667085;line-height:1.55}
+  .warn{background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #b45309;padding:8px 11px;
+        border-radius:7px;font-size:9.5px;color:#5c3a05;margin-bottom:8px}
+  .foot{margin-top:22px;padding-top:9px;border-top:1px solid #d8e0ec;font-size:8.5px;color:#667085}
+</style></head><body>
+<div class="hd"><h1>Pricing Scenario Report</h1>
+  <p>${esc(PS.scenarioName.trim()||'Unnamed scenario')} &middot; structure: ${esc(PS.boundaryName)}
+     &middot; season ${yearNum()}${PS.year==='y26'?' (year to date)':''} &middot; prepared ${when}</p></div>
+<div class="wrap">
+
+<h2>Headline</h2>
+<div class="kpis">
+  <div class="k"><b>Net retained</b><span>${usd(sim.net)}</span></div>
+  <div class="k"><b>Membership dues</b><span>${usd(sim.memberRev)}</span></div>
+  <div class="k"><b>Entry fees, gross</b><span>${usd(sim.eventRev+sim.seniorRev)}</span></div>
+  <div class="k"><b>DiveMeets pass-through</b><span>&minus;${usd(sim.levyTotal)}</span></div>
+  <div class="k"><b>Field at the final</b><span>${fmt(Math.round(tN))}</span></div>
+</div>
+<table><thead><tr><th>Revenue line</th><th class="n">Baseline</th><th class="n">Scenario</th><th class="n">Change</th></tr></thead>
+<tbody>
+  ${money('Membership dues', base.memberRev, sim.memberRev)}
+  ${money('Junior circuit entry fees', base.eventRev, sim.eventRev)}
+  ${money('Senior circuit entry fees', base.seniorRev, sim.seniorRev)}
+  ${money('DiveMeets pass-through', -base.levyTotal, -sim.levyTotal)}
+  <tr class="tot"><td>Net retained by USA Diving</td><td class="n">${usd(base.net)}</td>
+    <td class="n">${usd(sim.net)}</td>
+    <td class="n ${sim.net-base.net>0?'up':(sim.net-base.net<0?'dn':'')}">${Math.abs(sim.net-base.net)<1?'&mdash;':(sim.net-base.net>0?'+':'')+usd1(sim.net-base.net)}</td></tr>
+</tbody></table>
+<p class="note">Baseline is the published ${yearNum()} fee card applied to this same structure, so the change column isolates the pricing decision from the structural one.
+$${PS.levy.toFixed(2)} of every event entry goes to DiveMeets as the scoring platform, charged once per synchro team rather than once per diver. It is a flat amount, so it takes ${(PS.levy/45*100).toFixed(1)}% of a $45 non-qualifying entry against ${(PS.levy/125*100).toFixed(1)}% of a $125 national entry.</p>
+
+<h2>By level</h2>
+<table><thead><tr><th>Level</th><th class="n">Stops</th><th class="n">Entries</th><th class="n">Qual. fee</th>
+  <th class="n">Gross</th><th class="n">DiveMeets</th><th class="n">Net</th></tr></thead><tbody>${lvlRows}</tbody></table>
+
+<h2>Athlete opportunity</h2>
+<table><thead><tr><th>Age group</th><th class="n">Baseline field</th><th class="n">Scenario field</th><th class="n">Change</th></tr></thead>
+<tbody>${qualRows}
+  <tr class="tot"><td>All events</td><td class="n">${fmt(Math.round(tW))}</td><td class="n">${fmt(Math.round(tN))}</td>
+  <td class="n ${tN-tW>0?'up':(tN-tW<0?'dn':'')}">${Math.round(tN-tW)===0?'&mdash;':(tN-tW>0?'+':'')+fmt(Math.round(tN-tW))}</td></tr>
+</tbody></table>
+<p class="note">The size of the field reaching ${esc(PS.finalName)} is set by the number of stops and the direct-qualifying places at each one, not by how many advance between levels. Advancement caps change the size of the intermediate fields, and therefore meet-day load and entry revenue, without changing how many athletes reach the championships.</p>
+
+<h2>Cost to one athlete</h2>
+<table><thead><tr><th>Item</th><th class="n">Events</th><th class="n">Unit</th><th class="n">Cost</th></tr></thead>
+<tbody>${pwRows}
+  <tr class="tot"><td>Total, ${esc((PATHWAY_PRESETS[PS.pathway.preset]||{label:'custom pathway'}).label)}</td>
+  <td colspan="2"></td><td class="n">${usd(pw.now.total)}</td></tr>
+</tbody></table>
+<p class="note">Baseline for the same athlete is ${usd(pw.base.total)}. Entry fees and membership dues only; travel, lodging and coaching are excluded.</p>
+${cmpBlock}
+
+<h2>Basis and limitations</h2>
+${drifted ? `<div class="warn"><b>This scenario is off the calibrated baseline.</b> Flow constants were derived from ${esc(cb.basis)} (${fmt(cb.regions)} regions, ${esc(cb.year||yearNum())}) and held fixed while simulating ${esc(PS.boundaryName)} (${fmt(PS.regions.length)} regions). Holding them fixed is deliberate: re-deriving them per scenario would let the residual absorb the structural change and every scenario would falsely appear to have no effect.</div>` : ''}
+<p class="note">
+<b>Observed.</b> Regional entry volumes come from competition results joined to the membership roster by county, so they are exact for the map as drawn. Senior entry counts come from the live DiveMeets sync.<br>
+<b>Reconstructed.</b> Zone volumes are rebuilt as advancement out of Regionals, plus athletes clearing the average 15th-place score, plus the cohort entering the circuit at Zones. This ties to the observed Zone field exactly at the calibrated baseline by construction, and is therefore a decomposition rather than an independent test.<br>
+<b>Modelled.</b> East/West/Central and ${esc(PS.finalName)} volumes are derived from the advancement rules, because no structure other than the one actually run has real results behind it.<br>
+<b>Assumptions.</b> Volume responses to price are the elasticity figures entered on the pricing screen, expressed as percentage of volume lost per 10% price increase; where these are zero the model holds volume fixed and reports pure price arithmetic. Membership counts are the live roster for ${yearNum()}${PS.year==='y26'?', which is a year-to-date figure and not directly comparable to a completed season':''}. Costs of delivery are not modelled: this is a revenue view only.
+</p>
+<div class="foot">USA Diving Pricing Studio &middot; generated ${when} &middot; figures recomputed at generation time from the live membership roster and competition results.</div>
+</div></body></html>`;
+}
+
+function openReport(){
+  const w = window.open('', '_blank');
+  if (!w){ msg('Allow pop-ups for this site to open the report.'); return; }
+  w.document.open();
+  w.document.write(buildReport());
+  w.document.close();
+  setTimeout(() => { try { w.focus(); w.print(); } catch(e){} }, 350);
 }
 
 function render(){
@@ -1059,6 +1489,8 @@ function render(){
     renderEventFees(base, sim) +
     renderSenior(base, sim) +
     renderQualification(sim) +
+    renderAthleteCost() +
+    renderCompare() +
     renderStructure(sim) +
     renderCalibration(sim);
 
@@ -1150,6 +1582,30 @@ function wire(){
   const ld = host.querySelector('#psLoad');   if (ld) ld.addEventListener('change', e => { if (e.target.value) loadScenario(e.target.value); });
   const rs = host.querySelector('#psReset');  if (rs) rs.addEventListener('click', resetPrices);
   const cx = host.querySelector('#psCsv');    if (cx) cx.addEventListener('click', exportCsv);
+  const rp = host.querySelector('#psReport'); if (rp) rp.addEventListener('click', openReport);
+
+  const ac = host.querySelector('#psAddCmp');
+  if (ac) ac.addEventListener('change', e => { if (e.target.value) addCompare(e.target.value); });
+  host.querySelectorAll('button[data-rmcmp]').forEach(el => el.addEventListener('click', e =>
+    removeCompare(e.currentTarget.dataset.rmcmp)));
+
+  const pp = host.querySelector('#psPreset');
+  if (pp) pp.addEventListener('change', e => {
+    const k = e.target.value;
+    if (k !== 'custom' && PATHWAY_PRESETS[k]){
+      const p = PATHWAY_PRESETS[k];
+      PS.pathway = {preset:k, group:p.group, dues:p.dues, events:p.events.slice()};
+    } else { PS.pathway.preset = 'custom'; }
+    render();
+  });
+  const pd = host.querySelector('#psDues');
+  if (pd) pd.addEventListener('change', e => { PS.pathway.dues = e.target.value; render(); });
+  host.querySelectorAll('input[data-ev]').forEach(el => el.addEventListener('change', e => {
+    const L = +e.target.dataset.ev;
+    PS.pathway.events[L] = clamp(Math.round(+e.target.value||0), 0, 12);
+    PS.pathway.preset = 'custom';
+    render();
+  }));
 }
 
 function resetPrices(){
@@ -1158,6 +1614,7 @@ function resetPrices(){
   (PS.senior||[]).forEach(r => { r.fee = 125; });
   PS.synchro = defaultSynchro(levelCount());
   PS.openGrid = null;
+  PS.pathway = defaultPathway();
   resizeCards(); PS.flow = defaultFlow(levelCount());
   PS.dirty = false; render(); msg('Prices reset to the published 2026 card.');
 }
@@ -1178,7 +1635,7 @@ async function saveScenario(){
   const data = JSON.stringify({
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
     prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
-    senior:PS.senior, levy:PS.levy, synchro:PS.synchro,
+    senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
     await NEON.query(
@@ -1208,6 +1665,7 @@ async function loadScenario(id){
     if (d.senior && d.senior.length){ PS.senior = d.senior; await loadSeniorEntries(); }
     if (d.levy != null) PS.levy = +d.levy;
     if (d.synchro && d.synchro.length) PS.synchro = d.synchro;
+    if (d.pathway && d.pathway.events) PS.pathway = d.pathway;
     // NB: deliberately no snapshotBaseline() here. baseFinal is the calibrated
     // baseline field; re-taking it after applying a scenario would make the
     // scenario its own baseline and every qualification delta would read zero.
@@ -1259,6 +1717,7 @@ window.__PRICING = {
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
   defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro,
   advanceFor, directFor, snapshotBaseline,
+  computeCompare, snapshotState, restoreState, applyCards, pathwayCost, buildReport, defaultPathway,
 };
 
 /* ---------- entry point ---------- */
