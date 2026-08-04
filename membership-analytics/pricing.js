@@ -87,10 +87,45 @@ const DIVEMEETS_LEVY = 4.90;
    number, with a manual override when a meet has not been synced. */
 function defaultSenior(){
   return [
-    {name:'National Championship Qualifier', meet:'12924', fee:125, manual:0, useManual:false},
-    {name:'Senior National Championships',   meet:'12925', fee:125, manual:0, useManual:false},
+    {key:'qual', name:'National Championships Qualifier', meet:'12924',
+     dates:'5-6 Aug', events:6, rounds:'Prelim only, no final',
+     entry:'open', hasSynchro:false, synchroEvents:0,
+     fee:125, manual:0, manualSyn:0, useManual:false},
+    {key:'nats', name:'USA Diving National Championships', meet:'12925',
+     dates:'7-11 Aug', events:6, rounds:'Prelim + Final, top 12 advance',
+     entry:'prequalified', hasSynchro:true, synchroEvents:4,
+     synchroRounds:'Prelim + Final, top 8 advance',
+     fee:125, manual:0, manualSyn:0, useManual:false},
   ];
 }
+
+/* The Senior pathway is NOT a placement cascade like the Junior circuit. Entry
+   to the National Championships is by prequalification against a published list
+   of standards; athletes may only enter the events they hold a standard in, and
+   the Qualifier exists so they can add events. Source: 2026 USA Diving National
+   Championship Qualification Criteria and Competition Format, as of 11 June.
+
+   Counts are left at zero deliberately. Inventing a split would put invented
+   numbers in front of the committee; instead the panel reconciles whatever is
+   entered against the live entry count, the same discipline the Junior
+   calibration uses. */
+const SENIOR_PREQUAL = [
+  '2024 Olympic Games Team, in their Olympic events',
+  '2022 Winter National Championships — champions',
+  '2023 National Championships — champions',
+  '2023 Winter National Championships — champions',
+  '2024 Winter National Championships — champions',
+  '2025 National Championships — champions',
+  '2025 Winter National Championships — champions',
+  '2025 Winter National Championships — places 2 to 12, 1M / 3M / 10M',
+  '2026 NCAA Championships — top 5 U.S. citizens',
+  '2026 National Team members (eligible in all events)',
+  '2025-26 Tier III Junior High Performance Squad (all events)',
+  '2025 Tier I or II HPS who competed at 2025 Nationals or Winter Nationals',
+  '2024-25 Tier III HPS who competed at 2025 Nationals or Winter Nationals',
+  'Non-HPS athletes who met an HPS score threshold at 2025 Nationals',
+  'Added at the National Championships Qualifier',
+];
 
 /* ---------- flow defaults (2026 rulebook) ----------
    advance : places advancing to the NEXT level, per event, per stop
@@ -124,6 +159,7 @@ const PS = {
   cal:null,                           // frozen flow constants (see deriveCalibration)
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
   senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
+  prequalPaths:{},                    // senior prequalification decomposition (path index -> entries)
   synchro:null,                       // per-level synchro team entries (billed once per pair)
   natMeet:'12923',                    // DiveMeets meet number for the final championship
   natActual:null, natSyn:null, natFetched:null, natSource:'fallback',
@@ -483,22 +519,31 @@ function computeRevenue(useNewPrices){
     });
   }
 
-  /* ---- senior circuit ---- */
+  /* ---- senior circuit ----
+     Individual entries bill per event entry. Synchro bills once per TEAM, and
+     the DiveMeets levy follows the same rule, so synchro is carried separately
+     all the way through rather than folded into the entry count. */
   const perSenior = [];
-  let seniorRev = 0, seniorEntries = 0;
+  let seniorRev = 0, seniorEntries = 0, seniorSynchro = 0;
   (PS.senior||[]).forEach((row, i) => {
     const pulled = PS.seniorEntries[row.meet];
-    const live = pulled ? pulled.n : 0;
-    const raw = row.useManual ? (+row.manual||0) : live;
+    const liveInd = pulled ? pulled.n : 0;
+    const liveSyn = pulled ? pulled.syn : 0;
+    const rawInd = row.useManual ? (+row.manual||0) : liveInd;
+    const rawSyn = row.hasSynchro ? (row.useManual ? (+row.manualSyn||0) : liveSyn) : 0;
     const baseF = 125;
-    const E = useNewPrices ? (PS.sElast && PS.sElast[i] || 0) : 0;
+    const E = useNewPrices ? ((PS.sElast && PS.sElast[i]) || 0) : 0;
     const f = useNewPrices ? (+row.fee||0) : baseF;
-    const n = raw * volMult(baseF, f, E);
-    const rev = n * f;
-    const lv = n * levy;
-    seniorRev += rev; seniorEntries += n;
-    perSenior.push({i, name:row.name, meet:row.meet, entries:n, raw, live,
-                    events: pulled ? pulled.ev : 0, fee:f, rev, levy:lv, net:rev-lv,
+    const n = rawInd * volMult(baseF, f, E);
+    const sy = rawSyn * volMult(baseF, f, E);
+    const rev = (n + sy) * f;
+    const lv = (n + sy) * levy;
+    seniorRev += rev; seniorEntries += n; seniorSynchro += sy;
+    perSenior.push({i, name:row.name, meet:row.meet, dates:row.dates,
+                    events:row.events, rounds:row.rounds, entry:row.entry,
+                    hasSynchro:row.hasSynchro, synchroEvents:row.synchroEvents,
+                    entries:n, synchro:sy, liveInd, liveSyn,
+                    evCount: pulled ? pulled.ev : 0, fee:f, rev, levy:lv, net:rev-lv,
                     source: row.useManual ? 'entered' : (pulled ? 'observed' : 'missing')});
   });
 
@@ -517,14 +562,14 @@ function computeRevenue(useNewPrices){
 
   // Chargeable units: every individual event entry, plus one per synchro team.
   const allEntries = eventEntries + seniorEntries;
-  const chargeable = allEntries + synchroTeams;
+  const chargeable = allEntries + synchroTeams + seniorSynchro;
   const levyTotal  = chargeable * levy;
   const gross      = eventRev + seniorRev + memberRev;
 
   return {V, perLevel, perSenior, perType,
           eventRev, eventEntries, seniorRev, seniorEntries,
           memberRev, memberCount,
-          allEntries, synchroTeams, chargeable, levyTotal, gross, net: gross - levyTotal,
+          allEntries, synchroTeams, seniorSynchro, chargeable, levyTotal, gross, net: gross - levyTotal,
           total: gross};
 }
 
@@ -625,10 +670,15 @@ async function loadSeniorEntries(){
   if (!ids.length) return;
   try {
     const r = await NEON.query(
-      `SELECT meet_id_dm m, sum(entries)::int n, count(*)::int ev
+      `SELECT meet_id_dm m,
+         COALESCE(sum(entries) FILTER (WHERE NOT (COALESCE(discipline,'') ILIKE '%synchro%'
+                                              OR COALESCE(event_name,'') ILIKE '%synchro%')),0)::int ind,
+         COALESCE(sum(entries) FILTER (WHERE COALESCE(discipline,'') ILIKE '%synchro%'
+                                          OR COALESCE(event_name,'') ILIKE '%synchro%'),0)::int syn,
+         count(*)::int ev
        FROM junior_results.meet_entries WHERE meet_id_dm = ANY($1) GROUP BY 1`, [ids]);
     const out = {};
-    r.rows.forEach(x => { out[String(x.m)] = {n:+x.n, ev:+x.ev}; });
+    r.rows.forEach(x => { out[String(x.m)] = {n:+x.ind, syn:+x.syn, ev:+x.ev}; });
     PS.seniorEntries = out;
   } catch(e){ console.warn('senior entries', e); PS.seniorEntries = {}; }
 }
@@ -757,16 +807,21 @@ function renderSenior(base, sim){
     const row = PS.senior[i];
     const b = base.perSenior[i];
     const d = p.net - b.net;
-    const tag = p.source==='observed' ? `<span class="ps-tag obs">live &middot; ${fmt(p.events)} events</span>`
+    const tag = p.source==='observed' ? `<span class="ps-tag obs">live &middot; ${fmt(p.evCount)} events</span>`
               : p.source==='entered'  ? '<span class="ps-tag cal">entered</span>'
               :                         '<span class="ps-tag mod">not synced</span>';
     return `<tr>
       <td><b>${esc(row.name)}</b> ${tag}
-        <span class="ps-rider">DiveMeets meet <input class="ps-in xs" type="text" data-smeet="${i}" value="${esc(row.meet)}"></span></td>
-      <td class="num">${p.live ? fmt(p.live) : '<span class="ps-na">&mdash;</span>'}</td>
-      <td class="num"><input class="ps-in sm" type="number" min="0" data-smanual="${i}" value="${Math.round(row.manual)||0}"></td>
-      <td class="num"><label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label></td>
-      <td class="num">${fmt(Math.round(p.entries))}</td>
+        <span class="ps-rider">${esc(row.dates)} &middot; ${row.events} individual events &middot; ${esc(row.rounds)}${
+          row.hasSynchro?` &middot; ${row.synchroEvents} synchro events`:''}<br>
+          Entry: <b>${row.entry==='open'?'open to any member':'prequalified only'}</b>
+          &middot; meet <input class="ps-in xs" type="text" data-smeet="${i}" value="${esc(row.meet)}"></span></td>
+      <td class="num">${p.liveInd?fmt(p.liveInd):'<span class="ps-na">&mdash;</span>'}</td>
+      <td class="num">${row.hasSynchro ? (p.liveSyn?fmt(p.liveSyn):'<span class="ps-na">&mdash;</span>') : '<span class="ps-na">n/a</span>'}</td>
+      <td class="num"><input class="ps-in sm" type="number" min="0" data-smanual="${i}" value="${Math.round(row.manual)||0}">
+        ${row.hasSynchro?`<span class="ps-bite">sync <input class="ps-in xs2" type="number" min="0" data-smansyn="${i}" value="${Math.round(row.manualSyn)||0}"></span>`:''}
+        <label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label></td>
+      <td class="num">${fmt(Math.round(p.entries))}${p.synchro?` <span class="ps-bite">+${fmt(Math.round(p.synchro))} teams</span>`:''}</td>
       <td class="num"><input class="ps-in" type="number" min="0" step="5" data-sfee="${i}" value="${row.fee}"></td>
       <td class="num mono">${usd(p.rev)}</td>
       <td class="num mono ps-levy">&minus;${usd(p.levy)}</td>
@@ -776,26 +831,60 @@ function renderSenior(base, sim){
   }).join('');
   const dTot = sim.seniorRev - base.seniorRev;
   const missing = sim.perSenior.some(p => p.source==='missing');
+  const notStarted = sim.perSenior.some(p => p.source!=='entered' && !p.liveInd);
+
+  // --- prequalification decomposition for the National Championships ---
+  const nats = sim.perSenior.find(p => p.entry==='prequalified');
+  let prequalBlock = '';
+  if (nats){
+    let entered = 0;
+    const pr = SENIOR_PREQUAL.map((label, k) => {
+      const v = +(PS.prequalPaths[k]||0); entered += v;
+      return `<tr><td class="ps-sub">${esc(label)}</td>
+        <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}" value="${v}"></td></tr>`;
+    }).join('');
+    const obs = nats.liveInd;
+    prequalBlock = `
+    <h4 class="ps-h4">How the National Championships field is filled</h4>
+    <p class="note" style="margin:0 0 10px">The Senior pathway is <b>not</b> a placement cascade like the Junior circuit &mdash;
+      entry is by prequalification against a published list of standards, and athletes may only enter events they hold a
+      standard in. The Qualifier on ${esc((PS.senior.find(r=>r.entry==='open')||{}).dates||'5-6 Aug')} exists so they can add events.
+      Fill in what each pathway contributes and the total reconciles against the live entry count &mdash; then cutting or widening
+      a pathway shows what it does to both the field and the money.</p>
+    <table class="ps-tbl"><thead><tr><th>Qualification pathway</th><th class="num">Entries</th></tr></thead>
+      <tbody>${pr}
+        <tr class="ps-tot"><td>Accounted for</td><td class="num mono">${fmt(entered)}</td></tr>
+        <tr><td class="ps-sub">Live entry count for meet ${esc(nats.meet)}</td>
+          <td class="num mono">${obs?fmt(obs):'<span class="ps-na">not yet open</span>'}</td></tr>
+        ${obs?`<tr><td class="ps-sub">Unaccounted for</td><td class="num">${diffCell(entered, obs)}</td></tr>`:''}
+      </tbody></table>
+    <p class="note ps-foot">Synchronised events sit outside this: the criteria set no qualification protocol for them, only a
+      minimum degree of difficulty, and a diver may pair with up to two partners per event. So synchro entries do not move when
+      you change a prequalification pathway &mdash; but they are still billed, once per team.</p>`;
+  }
+
   return `<div class="card"><div class="card-h">
       <h3>Senior circuit</h3>
-      <div class="note">$125 per event for the national championships and the qualifiers. Entry counts come live from the DiveMeets sync; override any meet that has not been synced.</div>
+      <div class="note">$125 per event. Structure taken from the 2026 USA Diving National Championship Qualification Criteria and the published schedule.</div>
     </div><div class="card-b">
-    ${missing ? '<div class="ps-warn">One or more meets have no synced entry count yet. Tick <b>use</b> and type a figure, or re-run the DiveMeets entries sync for that meet number.</div>' : ''}
+    ${notStarted ? `<div class="ps-warn">Entry counts read zero because these meets have not opened or have not been synced yet &mdash; the Qualifier runs 5&ndash;6 August and the Championships 7&ndash;11 August. Tick <b>use</b> to model a figure in the meantime, or re-run the DiveMeets entries sync once signup opens.</div>`
+      : (missing ? '<div class="ps-warn">One or more meets have no synced entry count. Tick <b>use</b> and type a figure, or re-run the DiveMeets entries sync for that meet number.</div>' : '')}
     <table class="ps-tbl"><thead><tr>
-      <th>Meet</th><th class="num">Live entries</th><th class="num">Override</th><th class="num"></th>
+      <th>Meet</th><th class="num">Live individual</th><th class="num">Live synchro</th><th class="num">Override</th>
       <th class="num">Entries used</th><th class="num">Fee / event</th>
       <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
       <tr class="ps-tot"><td>Total</td><td colspan="3"></td>
-      <td class="num">${fmt(Math.round(sim.seniorEntries))}</td><td></td>
+      <td class="num">${fmt(Math.round(sim.seniorEntries + sim.seniorSynchro))}</td><td></td>
       <td class="num mono">${usd(sim.seniorRev)}</td>
-      <td class="num mono ps-levy">&minus;${usd(sim.seniorEntries*PS.levy)}</td>
-      <td class="num mono">${usd(sim.seniorRev - sim.seniorEntries*PS.levy)}</td>
+      <td class="num mono ps-levy">&minus;${usd((sim.seniorEntries+sim.seniorSynchro)*PS.levy)}</td>
+      <td class="num mono">${usd(sim.seniorRev - (sim.seniorEntries+sim.seniorSynchro)*PS.levy)}</td>
       <td class="num">${deltaSpan(dTot)}</td></tr>
     </tbody></table>
-    <p class="note ps-foot">Add a meet by putting its DiveMeets number in the field under the name. The senior circuit is a flat set of stops rather than a regional cascade, so adding qualifier meets adds entries directly &mdash; it does not feed a downstream field the way a Zone does.</p>
+    ${prequalBlock}
     </div></div>`;
 }
+
 function structureStops(){
   let n = 1;
   for (let L=0; L<levelCount(); L++) n += groupCountAt(L);
@@ -1599,6 +1688,12 @@ function wire(){
   host.querySelectorAll('input[data-smanual]').forEach(el => el.addEventListener('change', e => {
     PS.senior[+e.target.dataset.smanual].manual = Math.max(0, Math.round(+e.target.value||0)); PS.dirty=true; render();
   }));
+  host.querySelectorAll('input[data-smansyn]').forEach(el => el.addEventListener('change', e => {
+    PS.senior[+e.target.dataset.smansyn].manualSyn = Math.max(0, Math.round(+e.target.value||0)); PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-pq]').forEach(el => el.addEventListener('change', e => {
+    PS.prequalPaths[+e.target.dataset.pq] = Math.max(0, Math.round(+e.target.value||0)); PS.dirty=true; render();
+  }));
   host.querySelectorAll('input[data-suse]').forEach(el => el.addEventListener('change', e => {
     PS.senior[+e.target.dataset.suse].useManual = e.target.checked; PS.dirty=true; render();
   }));
@@ -1691,7 +1786,7 @@ function wire(){
 function resetPrices(){
   PS.prices = {}; PS.mElast = {}; PS.eElast = {}; PS.sElast = {}; PS.lateRate = 0;
   PS.levy = DIVEMEETS_LEVY;
-  (PS.senior||[]).forEach(r => { r.fee = 125; });
+  PS.senior = defaultSenior(); PS.prequalPaths = {};
   PS.synchro = defaultSynchro(levelCount());
   PS.openGrid = null;
   PS.pathway = defaultPathway();
@@ -1716,6 +1811,7 @@ async function saveScenario(){
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
     prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
     senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway, natMeet:PS.natMeet,
+    prequalPaths:PS.prequalPaths,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
     await NEON.query(
@@ -1743,6 +1839,7 @@ async function loadScenario(id){
     if (d.flow) PS.flow = PS.flow.map((f,i) => d.flow[i] ? Object.assign({}, f, d.flow[i]) : f);
     PS.prices = d.prices||{}; PS.mElast = d.mElast||{}; PS.eElast = d.eElast||{}; PS.sElast = d.sElast||{};
     if (d.senior && d.senior.length){ PS.senior = d.senior; await loadSeniorEntries(); }
+    if (d.prequalPaths) PS.prequalPaths = d.prequalPaths;
     if (d.levy != null) PS.levy = +d.levy;
     if (d.synchro && d.synchro.length) PS.synchro = d.synchro;
     if (d.pathway && d.pathway.events) PS.pathway = d.pathway;
@@ -1797,6 +1894,7 @@ window.__PRICING = {
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
   defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro, loadNationalActual, natActual,
+  SENIOR_PREQUAL,
   advanceFor, directFor, snapshotBaseline,
   computeCompare, snapshotState, restoreState, applyCards, pathwayCost, buildReport, defaultPathway,
 };
