@@ -1029,3 +1029,30 @@ BEGIN
       GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO usad_app;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- core.dive_skills — the Skills Bank (2026 Rulebook Art. 401.4 / 503.15(d))
+-- plus the Group D platform lineup allowance (Art. 302.2(a)(3)).
+-- These are NOT rulebook dives; they are scored actions at DD 1.0 used in
+-- novice / Future Champions / age-group competition. Catalogued separately so
+-- they never contaminate dive-group execution statistics.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS core.dive_skills (
+    code            TEXT PRIMARY KEY,
+    stem            TEXT NOT NULL,
+    position_code   TEXT,
+    skill_name      TEXT NOT NULL,
+    rulebook_cite   TEXT,
+    platform_only   BOOLEAN DEFAULT false,
+    notes           TEXT
+);
+
+-- Taxonomy columns on core.dive_sheets. CREATE TABLE IF NOT EXISTS no-ops on an
+-- existing table, so these must be explicit ALTERs.
+ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_bucket      TEXT;
+ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_group_code  TEXT;
+ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_group_label TEXT;
+ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_code_norm   TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_ds_bucket ON core.dive_sheets(dive_bucket);
+CREATE INDEX IF NOT EXISTS idx_ds_groupcode ON core.dive_sheets(dive_group_code);

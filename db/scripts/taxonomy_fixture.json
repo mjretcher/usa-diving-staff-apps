@@ -1,0 +1,232 @@
+[
+ {
+  "code": "105B",
+  "bucket": "dive",
+  "group": "1"
+ },
+ {
+  "code": "101C",
+  "bucket": "dive",
+  "group": "1"
+ },
+ {
+  "code": "1011C",
+  "bucket": "dive",
+  "group": "1"
+ },
+ {
+  "code": "113B",
+  "bucket": "dive",
+  "group": "1"
+ },
+ {
+  "code": "205C",
+  "bucket": "dive",
+  "group": "2"
+ },
+ {
+  "code": "305C",
+  "bucket": "dive",
+  "group": "3"
+ },
+ {
+  "code": "405B",
+  "bucket": "dive",
+  "group": "4"
+ },
+ {
+  "code": "407C",
+  "bucket": "dive",
+  "group": "4"
+ },
+ {
+  "code": "5152B",
+  "bucket": "dive",
+  "group": "51"
+ },
+ {
+  "code": "5231D",
+  "bucket": "dive",
+  "group": "52"
+ },
+ {
+  "code": "5337D",
+  "bucket": "dive",
+  "group": "53"
+ },
+ {
+  "code": "5432D",
+  "bucket": "dive",
+  "group": "54"
+ },
+ {
+  "code": "612B",
+  "bucket": "dive",
+  "group": "61"
+ },
+ {
+  "code": "624B",
+  "bucket": "dive",
+  "group": "62"
+ },
+ {
+  "code": "6243D",
+  "bucket": "dive",
+  "group": "62"
+ },
+ {
+  "code": "636C",
+  "bucket": "dive",
+  "group": "63"
+ },
+ {
+  "code": "001A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "001B",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "001D",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "002A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "002D",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "003A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "100C",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "200A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "5101A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "5205C",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "5303B",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "620A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "600A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "407c",
+  "bucket": "dive",
+  "group": "4"
+ },
+ {
+  "code": "5253b",
+  "bucket": "dive",
+  "group": "52"
+ },
+ {
+  "code": "107b",
+  "bucket": "dive",
+  "group": "1"
+ },
+ {
+  "code": "305c",
+  "bucket": "dive",
+  "group": "3"
+ },
+ {
+  "code": "6241b",
+  "bucket": "dive",
+  "group": "62"
+ },
+ {
+  "code": "6243d",
+  "bucket": "dive",
+  "group": "62"
+ },
+ {
+  "code": "OO1B",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "0001D",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "0001B",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "401.C",
+  "bucket": "dive",
+  "group": "4"
+ },
+ {
+  "code": "5001A",
+  "bucket": "skill",
+  "group": "SKILL"
+ },
+ {
+  "code": "105B103B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "207B201B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "612B612B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "5132D5231D",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "405C407C",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "107B5255B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ }
+]
