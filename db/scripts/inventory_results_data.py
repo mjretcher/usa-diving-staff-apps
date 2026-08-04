@@ -58,6 +58,15 @@ QUERIES = {
         JOIN divemeets.meets m ON m.meet_id = r.meet_id
         GROUP BY 1,2 ORDER BY 1,2
     """,
+    "column_types": """
+        SELECT table_schema||'.'||table_name tbl, column_name col, data_type typ
+        FROM information_schema.columns
+        WHERE (table_schema='core' AND table_name='event_results'
+               AND column_name IN ('meet_id_dm','diver_id_dm','year','place'))
+           OR (table_schema='divemeets' AND table_name IN ('results','meets')
+               AND column_name IN ('meet_id','event_id','profile_id'))
+        ORDER BY 1,2
+    """,
     # The gap that matters: meets we scraped results for that never made it
     # into the canonical table.
     "scraped_not_canonical": """
@@ -67,7 +76,8 @@ QUERIES = {
         FROM divemeets.results r
         JOIN divemeets.meets m ON m.meet_id = r.meet_id
         WHERE NOT EXISTS (
-            SELECT 1 FROM core.event_results c WHERE c.meet_id_dm = r.meet_id)
+            SELECT 1 FROM core.event_results c
+            WHERE c.meet_id_dm::text = r.meet_id::text)
         GROUP BY 1,2 ORDER BY 1,2
     """,
 }
