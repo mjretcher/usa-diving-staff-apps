@@ -43,16 +43,22 @@ def log(m):
     print(m, flush=True)
 
 
-def get(url, tries=3):
+TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "20"))
+MAX_FILES = int(os.environ.get("MAX_FILES", "0")) or None
+BUDGET_S = int(os.environ.get("BUDGET_S", "900"))
+_started = time.time()
+
+
+def get(url, tries=2):
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
                 return r.read()
-        except Exception as e:
+        except Exception:
             if i == tries - 1:
                 raise
-            time.sleep(2 * (i + 1))
+            time.sleep(1.5)
 
 
 def discover(page):
@@ -167,9 +173,16 @@ def main():
             log(f"    DISCOVERY FAILED: {e}")
             continue
         log(f"    {len(urls)} OMEGA pdf(s) cited")
+        if MAX_FILES:
+            urls = urls[:MAX_FILES]
+            log(f"    limited to first {len(urls)}")
         for url, code in urls:
+            if time.time() - _started > BUDGET_S:
+                log("    TIME BUDGET REACHED — stopping early")
+                stats["budget_stop"] = stats.get("budget_stop", 0) + 1
+                break
             ingest_one(url, code, cur, stats)
-            time.sleep(0.5)
+            time.sleep(0.3)
         if not DRY_RUN:
             conn.commit()
 
