@@ -1,0 +1,29 @@
+
+==========================================================================================
+posted_score range by competition family and round (3m only)
+==========================================================================================
+  family          round      n       min    median  max   
+  --------------  ---------  ------  -----  ------  ------
+  World Aquatics  Final      225     159.0  371.5   544.4 
+  World Aquatics  Semifinal  82      197.1  347.4   547.3 
+  USA Diving      Semifinal  3209    54.6   323.0   973.2 
+  NCAA            Final      8476    54.9   309.9   927.4 
+  World Aquatics  Prelim     358     128.0  303.5   514.7 
+  USA Diving      Prelim     8941    8.1    266.1   652.5 
+  NCAA            Prelim     16093   9.0    263.6   564.7 
+  USA Diving      Final      116506  4.2    210.3   1452.8
+
+==========================================================================================
+What are the 900+ scores? (3m)
+==========================================================================================
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/ae_score_scale_audit.py", line 24, in <module>
+    show("What are the 900+ scores? (3m)",
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/ae_score_scale_audit.py", line 9, in show
+    cur.execute(sql); rows=cur.fetchall()
+    ^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedColumn: column "event_name" does not exist
+LINE 1: SELECT competition_family, round_stage, event_name, COUNT(*)...
+                                                ^
+HINT:  Perhaps you meant to reference the column "result_phases.meet_name".
+
