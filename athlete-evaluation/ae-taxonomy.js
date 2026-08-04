@@ -61,12 +61,28 @@
     return RX_G14.test(s) || RX_G5.test(s) || RX_G6.test(s);
   }
 
+  function isToken(s) {
+    if (isWellformed(s)) return true;
+    if (/^00\d[ABCD]$/.test(s)) return true;
+    var stem = POS[s.charAt(s.length - 1)] ? s.slice(0, -1) : s;
+    return !!SKILL_STEMS[stem] && s.length === stem.length + 1;
+  }
+
+  // Scraper artifacts glue 2+ codes together (105B103B, 001A001B, 002A200C,
+  // 103B101B103B101B). Detected by full segmentation into >=2 valid tokens.
   function looksConcatenated(s) {
     if (s.length < 8) return false;
-    for (var cut = 4; cut < s.length - 3; cut++) {
-      if (isWellformed(s.slice(0, cut)) && isWellformed(s.slice(cut))) return true;
+    var n = s.length, reach = new Array(n + 1).fill(false), parts = new Array(n + 1).fill(0);
+    reach[0] = true;
+    for (var i = 1; i <= n; i++) {
+      for (var j = Math.max(0, i - 6); j < i; j++) {
+        if (reach[j] && isToken(s.slice(j, i))) {
+          reach[i] = true;
+          parts[i] = Math.max(parts[i], parts[j] + 1);
+        }
+      }
     }
-    return false;
+    return reach[n] && parts[n] >= 2;
   }
 
   function classify(raw) {

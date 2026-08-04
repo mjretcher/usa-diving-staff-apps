@@ -72,18 +72,39 @@ def normalize(raw):
     return s
 
 
-def looks_concatenated(s):
-    """Two dive numbers glued together by the scraper (105B103B, 612B612B)."""
-    if len(s) < 8:
-        return False
-    for cut in range(4, len(s) - 3):
-        if is_wellformed(s[:cut]) and is_wellformed(s[cut:]):
-            return True
-    return False
-
-
 def is_wellformed(s):
     return bool(RX_G14.match(s) or RX_G5.match(s) or RX_G6.match(s))
+
+
+def is_token(s):
+    """A single classifiable unit: a rulebook dive OR a Skills Bank code."""
+    if is_wellformed(s):
+        return True
+    if re.match(r"^00\d[ABCD]$", s):
+        return True
+    stem = s[:-1] if s and s[-1] in POS else s
+    return stem in SKILL_STEMS and len(s) == len(stem) + 1
+
+
+def looks_concatenated(s):
+    """
+    Scraper artifacts glue 2+ codes together (105B103B, 001A001B, 002A200C,
+    103B101B103B101B). Detected by full segmentation: the string splits
+    cleanly into two or more valid dive/skill tokens with nothing left over.
+    """
+    if len(s) < 8:
+        return False
+    n = len(s)
+    # reach[i] = True when s[:i] segments into >=1 whole tokens
+    reach = [False] * (n + 1)
+    reach[0] = True
+    parts = [0] * (n + 1)
+    for i in range(1, n + 1):
+        for j in range(max(0, i - 6), i):
+            if reach[j] and is_token(s[j:i]):
+                reach[i] = True
+                parts[i] = max(parts[i], parts[j] + 1)
+    return reach[n] and parts[n] >= 2
 
 
 def classify(raw):

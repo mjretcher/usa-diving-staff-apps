@@ -228,5 +228,45 @@
   "code": "107B5255B",
   "bucket": "parse_error",
   "group": "PARSE"
+ },
+ {
+  "code": "001A001B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "001D001D",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "002A200C",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "201C002D",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "103B101B103B101B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "002A5101A",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "001B100B",
+  "bucket": "parse_error",
+  "group": "PARSE"
+ },
+ {
+  "code": "001D101C",
+  "bucket": "parse_error",
+  "group": "PARSE"
  }
 ]
