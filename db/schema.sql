@@ -1056,3 +1056,30 @@ ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_code_norm   TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_ds_bucket ON core.dive_sheets(dive_bucket);
 CREATE INDEX IF NOT EXISTS idx_ds_groupcode ON core.dive_sheets(dive_group_code);
+
+-- ---------------------------------------------------------------------------
+-- core.nations — IOC nation reference, and nation_code on dive_sheets.
+-- team_name arrives as IOC codes from some sources and full English names from
+-- others; without this, nation-level analysis splits each country in two.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS core.nations (
+    ioc_code      TEXT PRIMARY KEY,
+    nation_name   TEXT NOT NULL,
+    dives         INTEGER DEFAULT 0,
+    divers        INTEGER DEFAULT 0,
+    first_year    INTEGER,
+    last_year     INTEGER
+);
+
+ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS nation_code TEXT;
+CREATE INDEX IF NOT EXISTS idx_ds_nation ON core.dive_sheets(nation_code);
+
+-- Values that look like nations but could not be resolved, kept for review
+-- rather than silently guessed.
+CREATE TABLE IF NOT EXISTS core.nation_unresolved (
+    team_name   TEXT PRIMARY KEY,
+    reason      TEXT,
+    dives       INTEGER,
+    divers      INTEGER,
+    seen_at     TIMESTAMPTZ DEFAULT now()
+);
