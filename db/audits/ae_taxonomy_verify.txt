@@ -1,0 +1,37 @@
+
+============================================================================
+Dive groups (individual disciplines) — nothing uncategorised now
+============================================================================
+  bucket        code   label                            n       divers  avg_exec
+  ------------  -----  -------------------------------  ------  ------  --------
+  dive          1      Forward                          345441  16363   5.482   
+  dive          4      Inward                           307894  15073   5.575   
+  dive          2      Back                             270814  15021   5.302   
+  dive          3      Reverse                          232249  12896   5.229   
+  dive          52     Back twisting                    126990  10373   5.307   
+  dive          51     Forward twisting                 98147   10016   5.281   
+  dive          61     Armstand forward                 16400   3407    5.440   
+  dive          53     Reverse twisting                 11238   1854    5.573   
+  dive          62     Armstand back                    3845    691     5.589   
+  dive          54     Inward twisting                  492     232     3.857   
+  dive          63     Armstand reverse                 26      18      5.244   
+  parse_error   PARSE  Unparseable (multi-dive string)  48960   7701    9.998   
+  skill         SKILL  Skill                            103101  7926    5.574   
+  unclassified  UNK    Unclassified                     2220    1380    10.000  
+  None          None   None                             1       1       0.000   
+
+============================================================================
+Coverage check — any rows still unclassified?
+============================================================================
+  bucket        n      
+  ------------  -------
+  dive          1420709
+  skill         103972 
+  parse_error   69082  
+  unclassified  3578   
+  (null)        9      
+
+============================================================================
+Skills catalog
+============================================================================
+  (none)
