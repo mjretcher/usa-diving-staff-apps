@@ -763,17 +763,6 @@ CREATE TABLE IF NOT EXISTS divemeets.results (
 CREATE INDEX IF NOT EXISTS dm_results_meet    ON divemeets.results(meet_id);
 CREATE INDEX IF NOT EXISTS dm_results_profile ON divemeets.results(profile_id);
 CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, event_id, round);
--- Synchronized placings list TWO athletes and TWO clubs on one row. The base
--- diver_name/profile_id/team_name/team_id columns hold the first; these hold
--- the partner, and are null on individual events. Added 2026-08-04: without
--- them the crawler kept only one diver per synchro pair, which made synchro
--- team points impossible to attribute (a pair is frequently cross-club, and
--- the points are split between the two clubs).
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS diver2_name text;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS profile2_id integer;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_name  text;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_id    integer;
-CREATE INDEX IF NOT EXISTS dm_results_profile2 ON divemeets.results(profile2_id);
 -- crawl bookkeeping on the registry
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
@@ -909,6 +898,30 @@ CREATE TABLE IF NOT EXISTS membership.ingest_log (
     loaded_at TIMESTAMPTZ DEFAULT now(),
     notes TEXT
 );
+
+-- Parsed classification of DiveMeets event titles, keyed to (meet, event, round).
+-- Deliberately NOT merged into core.event_results: that table drives the junior
+-- qualification pipeline, and parser-classified invitational rows must not be
+-- able to alter who advances. Consumers filter on sanction and in_circuit.
+CREATE TABLE IF NOT EXISTS divemeets.event_class (
+    meet_id       INTEGER NOT NULL,
+    event_id      INTEGER NOT NULL,
+    round         TEXT    NOT NULL,
+    title         TEXT,
+    sanction      TEXT,
+    meet_year     SMALLINT,
+    age_group     TEXT,
+    gender        TEXT,
+    discipline    TEXT,
+    round_label   TEXT,
+    is_synchro    BOOLEAN DEFAULT FALSE,
+    parsed_ok     BOOLEAN DEFAULT FALSE,
+    in_circuit    BOOLEAN DEFAULT FALSE,
+    classified_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (meet_id, event_id, round)
+);
+CREATE INDEX IF NOT EXISTS idx_evclass_sanction ON divemeets.event_class(sanction, meet_year);
+CREATE INDEX IF NOT EXISTS idx_evclass_cell ON divemeets.event_class(age_group, gender, discipline);
 
 -- Boundary Studio scenarios (Membership Analytics)
 CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (

@@ -1,0 +1,37 @@
+name: Classify event titles
+
+# Parses DiveMeets event titles into age group / gender / discipline and stores
+# them as a lookup. Does NOT write to core.event_results: that table drives the
+# qualification pipeline and must not gain parser-classified rows.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Parser self-test
+        run: python db/scripts/event_title_parser.py
+      - name: Classify
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/classify_events.py
+      - name: Commit coverage
+        run: |
+          git add -A membership-analytics/event-class-coverage.json
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Event title classification coverage"
+          git fetch origin main
+          git rebase origin/main || { git rebase --abort || true; exit 0; }
+          git push origin HEAD:main
