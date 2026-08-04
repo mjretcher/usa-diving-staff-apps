@@ -63,6 +63,12 @@ SQUADS = [
     {"key": "tier3_junior", "label": "2025-26 Tier III Junior High Performance Squad",
      "names": TIER3_JUNIOR, "meets": ["12923"],
      "source": "https://www.usadiving.org/tier-3-juniors"},
+    # The Junior squad is prequalified to Junior Nationals AND eligible in all
+    # events at the Senior Championships, so it has to be measured twice.
+    {"key": "tier3_junior_senior",
+     "label": "2025-26 Tier III Junior HPS — at the Senior Championships",
+     "names": TIER3_JUNIOR, "meets": ["12924", "12925"],
+     "source": "https://www.usadiving.org/tier-3-juniors"},
     {"key": "national_team", "label": "2026 USA Diving National Team",
      "names": NATIONAL_TEAM, "meets": ["12924", "12925"],
      "source": "https://www.usadiving.org/news/2026/february/18/usa-diving-announces-national-team"},
