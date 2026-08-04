@@ -126,7 +126,24 @@ def pdf_text(blob):
         return "\n".join((p.extract_text() or "") for p in pdf.pages)
 
 
-def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
+def live_cursor(state):
+    """Return a usable cursor, reconnecting if Neon dropped the socket."""
+    try:
+        state["cur"].execute("SELECT 1")
+        return state["cur"]
+    except Exception:
+        try:
+            state["conn"].close()
+        except Exception:
+            pass
+        log("      (reconnecting to Neon)")
+        state["conn"] = psycopg2.connect(os.environ["DATABASE_URL"])
+        state["conn"].autocommit = False
+        state["cur"] = state["conn"].cursor()
+        return state["cur"]
+
+
+def ingest_one(url, code, snapshots, state, stats, year_hint=None):
     try:
         blob, src = get_pdf(url, snapshots, year_hint)
         text = pdf_text(blob)
@@ -140,6 +157,11 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
     if not rows:
         log(f"    [{src}] {code}: no dive rows parsed ({len(skipped)} lines skipped) — skipping")
         stats["no_rows"] += 1
+        return
+
+    if head.get("is_synchro"):
+        log(f"    [{'skip':8}] {code}  synchro — individual analysis only")
+        stats["synchro_skipped"] += 1
         return
 
     ok_rows, bad = [], 0
@@ -162,9 +184,6 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
         log(f"      REJECTED — arithmetic pass rate below {MIN_PASS:.0%}")
         stats["rejected"] += 1
         return
-    if head.get("is_synchro"):
-        stats["synchro_skipped"] += 1
-        return                                   # individual analysis only
     if not (head.get("gender") and head.get("discipline") and head.get("round_stage")):
         log("      REJECTED — incomplete meet identity")
         stats["rejected"] += 1
@@ -194,13 +213,17 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
     stats["files"] += 1
     if DRY_RUN:
         return
+    cur = live_cursor(state)
+    # Idempotent: one OMEGA document is one result set, so clear it first.
+    cur.execute("DELETE FROM core.dive_sheets WHERE result_set_id = %s", (result_set_id,))
     psycopg2.extras.execute_values(cur, """
         INSERT INTO core.dive_sheets
           (meet_id, meet_year, competition_family, event_id, result_set_id, event_name, gender,
            discipline, round_stage, dive_order, dive_number, height, description,
            dd, score, judges_scores, running_total_points, round_place,
            diver_id, sheet_key, diver_name, team_name, nation_code)
-        VALUES %s ON CONFLICT DO NOTHING""", payload)
+        VALUES %s""", payload)
+    state["conn"].commit()
 
 
 def main():
@@ -211,7 +234,7 @@ def main():
 
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
     conn.autocommit = False
-    cur = conn.cursor()
+    state = {"conn": conn, "cur": conn.cursor()}
     stats = dict(files=0, rows=0, rejected=0, fetch_fail=0, no_rows=0, synchro_skipped=0)
 
     for page in pages:
@@ -232,16 +255,17 @@ def main():
                 log("    TIME BUDGET REACHED — stopping early")
                 stats["budget_stop"] = stats.get("budget_stop", 0) + 1
                 break
-            ingest_one(url, code, snapshots, cur, stats, year_hint)
+            ingest_one(url, code, snapshots, state, stats, year_hint)
             time.sleep(0.3)
-        if not DRY_RUN:
-            conn.commit()
+
 
     log("\nSummary: " + ", ".join(f"{k}={v}" for k, v in stats.items()))
     if DRY_RUN:
         log("DRY RUN — nothing written. Set DRY_RUN=0 to load.")
-    cur.close()
-    conn.close()
+    try:
+        state["cur"].close(); state["conn"].close()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
