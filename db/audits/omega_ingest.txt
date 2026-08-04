@@ -2,10 +2,11 @@ OMEGA ingest — 1 page(s), DRY_RUN=True, MIN_PASS=95%
 
   Diving at the 2019 World Aquatics Championships
     13 OMEGA pdf(s) cited (year hint 2019)
-    limited to first 3
-    FETCH FAILED 0001130005010104FFFFFFFFFFFFFF02: PdfminerException: No /Root object! - Is this really a PDF?
-    FETCH FAILED 0001130005010204FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
-    FETCH FAILED 0001130005010304FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
+    limited to first 4
+    [wb:20190714] 0001130005010104FFFFFFFFFFFFFF02  2019 Male 1m Final                 rows=  71 ok=  71 bad=  0 pass=100.0%
+    FETCH FAILED 0001130005010204FFFFFFFFFFFFFF02: URLError: <urlopen error timed out>
+    [wb:guess] 0001130005010304FFFFFFFFFFFFFF02  2019 Male Platform Final           rows=  72 ok=  72 bad=  0 pass=100.0%
+    FETCH FAILED 0001130005010404FFFFFFFFFFFFFF02: URLError: <urlopen error timed out>
 
-Summary: files=0, rows=0, rejected=0, fetch_fail=3, no_rows=0, synchro_skipped=0
+Summary: files=2, rows=143, rejected=0, fetch_fail=2, no_rows=0, synchro_skipped=0
 DRY RUN — nothing written. Set DRY_RUN=0 to load.
