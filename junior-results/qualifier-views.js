@@ -1183,10 +1183,17 @@
 
     renderNatSidebar();
 
+    // Fixed slots. The qualifier list renders into its own container rather
+    // than straight into tableWrap so that nat-reconciliation.js can move the
+    // results above it once the meet has actually been contested. Before that
+    // it stays exactly where it has always been.
+    tableWrap.innerHTML = '<div id="qvNatRecon"></div><div id="qvNatListWrap"></div>';
+    const natList = document.getElementById('qvNatListWrap');
+
     if (hasOfficialList) {
-      renderNatFromOfficialList(tableWrap);
+      renderNatFromOfficialList(natList);
     } else {
-      renderNatFromComputed(tableWrap);
+      renderNatFromComputed(natList);
     }
 
     // Computed E/W/C → Nationals layer (from Neon), appended below either path.
@@ -1205,6 +1212,12 @@
     tableWrap.insertAdjacentHTML('beforeend', '<div id="qvNatResults" class="qv-nat-results"></div>');
     if (window.renderNationalsResultsPanel) {
       window.renderNationalsResultsPanel(document.getElementById('qvNatResults'));
+    }
+
+    // Reconciles the qualifier list against the field that actually competed,
+    // and — only when results exist — promotes results above the list.
+    if (window.renderNatReconciliation) {
+      window.renderNatReconciliation(document.getElementById('qvNatRecon'));
     }
   }
 
