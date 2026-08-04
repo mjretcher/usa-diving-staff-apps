@@ -3,27 +3,38 @@
 
    THE RULES THIS IMPLEMENTS
 
-   POINTS.  Top 12 places in each event score 15-12-11-10-9-8-7-6-4-3-2-1.
-   Note there is no 5: the table steps 6 then 4. (2026 Rulebook Art. 401.6(d)
-   states the junior table; Art. 602.20 carries the same one for championships.)
+   All rule references are to the 2026 USA Diving Technical Rulebook, verified
+   against the published text on 2026-08-04.
 
-   TIES.  The points for the tied place are added to those of the next place or
-   places, the sum divided by the number tied, and that amount given to each.
-   A two-way tie for 7th is therefore (7+6)/2 = 6.5 each, not 7 each. This
-   keeps every event awarding exactly 88 points, which the panel asserts.
-   DiveMeets' own team report does NOT do this -- it awards the tied place in
-   full to both and skips the next -- so its 2026 totals run 1 point high, with
-   +0.5 each to Minnesota Diving Academy and Mansfield Diving. The audit view
-   states the difference rather than hiding it.
+   POINTS -- Art. 602.20(e).  Team points go to the top 12 places in each event
+   as 15-12-11-10-9-8-7-6-4-3-2-1. Note there is no 5: the table steps 6 then 4.
 
-   AWARDS.  Three: girls' team, boys' team, and combined.
+   TIES -- Art. 602.20(f).  The points allocated to the tied place are added to
+   those allocated to the next place or places, the sum divided by the number of
+   divers who tied, and that amount added to the score for each team. A two-way
+   tie for 7th is therefore (7+6)/2 = 6.5 each, not 7 each, and 8th is absorbed.
+   This keeps every event awarding exactly 88, which the panel asserts per event.
 
-   WHO SCORES.  Only a finishing place scores, so points come from the final.
-   Non-displacing entries -- foreign athletes and those who have declared
-   another sport nationality -- are recorded by DiveMeets without a place;
-   Art. 102(b) and 301.3 keep them from taking a placing from a U.S. athlete
-   and Art. 602.20(g), new for 2026, keeps them out of team scoring. Unattached
-   divers score for nobody; their points are reported, not silently dropped.
+   DiveMeets' own Team Scoring report does NOT apply 602.20(f) -- it awards the
+   tied place in full to both divers and skips the next -- so its 2026 Junior
+   Nationals totals run 1 point high, +0.5 each to Minnesota Diving Academy and
+   Mansfield Diving. This panel follows the rulebook; the audit view states the
+   difference rather than hiding it.
+
+   AWARDS -- Art. 602.20(d).  At Junior Nationals the rulebook prescribes team
+   awards for the three teams with the most COMBINED (boys & girls) points. The
+   girls and boys tables are shown alongside because they are awarded in practice
+   and DiveMeets reports them, but combined is the table the rule names.
+
+   WHO SCORES -- Art. 602.20(g), new for 2026.  Foreign divers are not eligible
+   to earn team points; where such an athlete finishes in a scoring position the
+   points and the place drop to the next highest-placing U.S. citizen athlete.
+   DiveMeets implements this upstream by recording those entries with no place
+   and enlarging the final to hold them (Art. 301.3), so places 1-12 are held
+   entirely by scoring athletes -- verified across every event at this meet.
+   Skipping place-less rows here is therefore equivalent to the drop-down, not a
+   substitute for it. Unattached divers represent no club and score for nobody;
+   their points are reported, not silently dropped.
 
    SYNCHRO.  Scores on the same table as individual events. Where the two
    partners represent different clubs the place points are SPLIT between them,
@@ -225,6 +236,9 @@
     var unTot = Object.keys(c.unattached).reduce(function (s, k) { return s + c.unattached[k]; }, 0);
 
     return '<div class="tp-audit">' +
+      '<p class="tp-soft"><b>Art.&nbsp;602.20(d)</b> names team awards for the three teams with the ' +
+      'most combined (boys &amp; girls) points at Junior Nationals. Girls and boys tables are shown ' +
+      'because they are awarded in practice, but combined is the table the rule names.</p>' +
       '<h4 class="tp-h4">Every event</h4>' +
       '<table class="tp-table tp-small"><thead><tr><th>Event</th><th class="tp-n">Placings</th>' +
       '<th class="tp-n">Offered</th><th class="tp-n">To clubs</th><th class="tp-n">Forfeited</th><th></th>' +
@@ -297,7 +311,7 @@
       '<header class="tp-head">' +
         '<h2 class="tp-h2">Team points</h2>' +
         '<p class="tp-sub">' + indEvents + ' individual events &middot; ' + synEvents +
-          ' synchro events &middot; top 12 score 15-12-11-10-9-8-7-6-4-3-2-1' +
+          ' synchro events &middot; Art.&nbsp;602.20(e) 15-12-11-10-9-8-7-6-4-3-2-1' +
           (bad ? ' &middot; <b class="tp-warnink">' + bad + ' event(s) not awarding a full slate</b>' : '') +
         '</p>' +
         '<div class="tp-tabs">' +
