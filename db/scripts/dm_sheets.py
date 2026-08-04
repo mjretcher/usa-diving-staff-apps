@@ -41,6 +41,9 @@ DB_URL = os.environ["DATABASE_URL"]
 SANCTION_ENV = os.environ.get("SANCTION", "").strip()
 SANCTION = SANCTION_ENV or "USA Diving"
 FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 1100)
+# Mirrors dm_results.py: a meet is only "done" once it ended this many days
+# ago, so a crawl run mid-meet cannot latch the flag and strand the rest.
+QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 3)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
 # Wall-clock deadline. FETCH_BUDGET alone is a poor proxy for time because
 # sheet counts per meet vary enormously, and at 2400 the run landed at 39-45
@@ -195,9 +198,16 @@ def crawl_meet(meet_id):
                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                ON CONFLICT (meet_id, event_id, round, profile_id, dive_order)
                DO NOTHING""", all_rows)
+    # Same reasoning as results_done in dm_results.py: a meet crawled while it
+    # was still being contested has not had all its sheets seen, and latching
+    # the flag removes it from the queue for good. QUIET_DAYS matches the
+    # results crawler so the two stay in step.
     cur.execute(
-        """UPDATE divemeets.meets SET sheets_done=true, sheets_note=%s,
-           sheets_crawled_at=now() WHERE meet_id=%s""", (note, meet_id))
+        """UPDATE divemeets.meets
+           SET sheets_done = (coalesce(end_date, start_date) IS NOT NULL
+                              AND coalesce(end_date, start_date) <= current_date - %s::int),
+               sheets_note = %s, sheets_crawled_at = now()
+           WHERE meet_id = %s""", (QUIET_DAYS, note, meet_id))
     conn.commit(); cur.close(); conn.close()
     return len(targets), len(all_rows), note
 

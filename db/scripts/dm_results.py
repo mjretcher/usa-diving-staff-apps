@@ -248,9 +248,18 @@ def crawl_meet(cur, meet_id):
                     diver2_name, profile2_id, team2_name, team2_id)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", rows)
             n_rows += len(rows)
+    # results_done means "fully crawled", so it must not latch on a meet that
+    # was still running when we looked. Crawling by explicit MEET_ID bypasses
+    # the QUIET_DAYS gate, and a run made mid-meet captures only the events
+    # finished so far -- latching there permanently excludes the rest from the
+    # queue, which is what left 2026 Junior Nationals with 28 of its 52 events
+    # and no way back. The rows are kept either way; only the flag waits.
     cur.execute(
-        """UPDATE divemeets.meets SET results_done=true, results_note=%s,
-           results_crawled_at=now() WHERE meet_id=%s""", (note, meet_id))
+        """UPDATE divemeets.meets
+           SET results_done = (coalesce(end_date, start_date) IS NOT NULL
+                               AND coalesce(end_date, start_date) <= current_date - %s::int),
+               results_note = %s, results_crawled_at = now()
+           WHERE meet_id = %s""", (QUIET_DAYS, note, meet_id))
     return len(events), n_rows, note
 
 def main():

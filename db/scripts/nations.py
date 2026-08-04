@@ -63,10 +63,20 @@ for code, name in IOC.items():
 
 # Neutral-athlete designations. These are real competitive entries but not
 # nations, so they must not be folded into a country and must not be dropped.
-# NAB is PROVISIONAL pending confirmation from USA Diving staff.
+#
+# NAB CONFIRMED by Mike (USA Diving), 2026-08-04: "Neutral Athlete B" — a World
+# Aquatics designation for an athlete who does not, or is not permitted to,
+# represent a federation because of a global ruling. It is a competitive status,
+# not a country, which is why the code never appears in any IOC list and why
+# guessing at it would have been wrong.
+#
+# The analytic consequence matters more than the label: NAB divers have no
+# federation, so they must not be counted toward any nation's depth, medal
+# share, or quota picture. is_neutral() is what downstream code should branch
+# on — never a string test against the code itself.
 NEUTRAL = {
-    "NAB": "Neutral Athletes B (provisional)",
-    "NAA": "Neutral Athletes A (provisional)",
+    "NAB": "Neutral Athlete B",
+    "NAA": "Neutral Athlete A",
     "AIN": "Individual Neutral Athletes",
     "NPA": "Neutral Para Athletes",
 }

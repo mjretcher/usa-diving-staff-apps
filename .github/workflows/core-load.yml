@@ -44,3 +44,8 @@ jobs:
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: python3 db/scripts/build_analytics.py
+
+      - name: Rebuild meet layer
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python3 db/scripts/build_meet_layer.py
