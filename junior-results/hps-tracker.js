@@ -74,7 +74,7 @@
   var NO_TARGET_NOTE = 'No published target score for 1m — shown for reference.';
 
   var state = { rows: null, vols: null, loading: false, error: null,
-                showNearMiss: true, meetName: '' };
+                showNearMiss: true, meetName: '', hasSynchro: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -118,6 +118,17 @@
   }
 
   /* ── Load ─────────────────────────────────────────────────────────────── */
+
+  /* Every panel file is its own IIFE, so the neonQuery helper in
+     reports-view.js is private to that file and not reachable here. This is a
+     local copy of the same two-line wrapper over the shared client. */
+  async function neonQuery(sql, params) {
+    if (!window.NEON || !window.NEON.query) {
+      throw new Error('Neon client not loaded (shared/neon-client.js)');
+    }
+    return await window.NEON.query(sql, params || []);
+  }
+
   async function load() {
     state.loading = true; state.error = null;
     try {
@@ -129,6 +140,15 @@
         "WHERE r.meet_id=" + MEET_ID + " AND r.score IS NOT NULL " +
         "ORDER BY e.title, r.round, r.score DESC");
       state.rows = (res && res.rows) || [];
+
+      /* The published criteria carry synchro target scores, but synchro results
+         are only shown if the crawl actually holds them. As of the 2026 crawl it
+         does not, and an empty synchro section would read as "nobody qualified"
+         rather than "not checked". Detected rather than hard-coded, so this note
+         disappears by itself once synchro is crawled. */
+      state.hasSynchro = state.rows.some(function (r) {
+        return /synchro/i.test(r.title || '');
+      });
 
       // Voluntary dives, preliminaries only, individual events only.
       var vol = await neonQuery(
@@ -330,7 +350,11 @@
         '<p class="hps-caveat"><b>⚠ Not included.</b> World Junior Championship team members (criterion E), ' +
         '2024 World Juniors finalists under the injury provision (criterion G), and Group A AQUA age. ' +
         'Nationals and Winter Nationals target hits are also not shown here — this covers the Junior ' +
-        'National Championships only.</p>' +
+        'National Championships only.' +
+        (state.hasSynchro ? '' :
+          ' <b>Synchro is not checked.</b> The published criteria set synchro targets, but no synchro ' +
+          'results have been collected for this meet, so no synchro diver can appear below either way.') +
+        '</p>' +
       '</header>' +
       '<h2 class="hps-h2">Target score pathway</h2>' + renderScore(sBlocks) +
       '<h2 class="hps-h2">Voluntary dive pathway — Groups C and D</h2>' + renderVol(vBlocks) +
