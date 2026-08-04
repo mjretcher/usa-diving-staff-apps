@@ -40,16 +40,14 @@ jobs:
           ER_FROM_YEAR: ${{ github.event.inputs.er_from_year || '2013' }}
         run: python3 db/scripts/seedgen/load_core.py
 
-      # core.dive_sheets is TRUNCATEd and reloaded above, and CORE_DIVE_COLS
-      # carries no taxonomy columns — so every run of this job wipes
-      # dive_bucket, dive_group_code, dive_group_label and dive_code_norm to
-      # NULL across all 1.6M rows. Until now the backfill was dispatch-only,
-      # which meant the nightly 04:40 run silently emptied
-      # analytics.field_group_exec, field_group_exec_vo and dive_population
-      # every night: The Field, Dive Groups and Meet Replay's percentile layer
-      # all read those. It has to run here, after the load and BEFORE analytics
-      # is rebuilt from it.
-      - name: Restore dive taxonomy
+      # load_core.py now classifies every dive as it writes, so this step no
+      # longer repairs anything in the normal case — it should update zero
+      # rows, which makes it a standing check that the at-load classification
+      # still agrees with dive_taxonomy.classify. It also seeds
+      # core.dive_skills, which the load does not. Keep it BEFORE the analytics
+      # rebuild either way: field_group_exec, field_group_exec_vo and
+      # dive_population all filter on dive_bucket.
+      - name: Verify dive taxonomy and seed dive_skills
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: python3 db/scripts/backfill_dive_taxonomy.py

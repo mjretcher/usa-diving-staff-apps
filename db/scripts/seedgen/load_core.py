@@ -35,7 +35,9 @@ import argparse, csv, collections, io, os, sys
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import classify, meetclass, erclass
+from dive_taxonomy import classify as classify_dive
 from ncaa5cat import five_cat, dive_category, _num
 from generate_seeds import (PHASE_COLS, DIVE_COLS, Neon, dec, clean_place,
                             clean_team, phase_key, dive_sheet_key, TOL)
@@ -93,7 +95,37 @@ ER_DEFAULT_FROM_YEAR = int(os.environ.get("ER_FROM_YEAR") or 2021)
 
 # core.* column order, which differs from the CSV column order.
 CORE_PHASE_COLS = PHASE_COLS
-CORE_DIVE_COLS = DIVE_COLS
+
+# Dive taxonomy is written AT LOAD, not repaired afterwards.
+#
+# This table is TRUNCATEd and reloaded on every run. When these four columns
+# were absent from the write, each run NULLed them across all 1.6M rows and
+# left analytics.field_group_exec, field_group_exec_vo and dive_population --
+# every one of which filters on dive_bucket='dive' -- to rebuild from nothing.
+# The Field, Dive Groups and Meet Replay's percentile layer all read those, so
+# the nightly job was quietly emptying them and a separate dispatch-only
+# backfill was the only thing putting them back.
+#
+# DIVE_COLS itself is left alone: it is the column contract for the seed CSVs
+# in db/seeds, and widening it there would invalidate those files.
+TAXONOMY_COLS = ["dive_code_norm", "dive_bucket", "dive_group_code", "dive_group_label"]
+CORE_DIVE_COLS = DIVE_COLS + TAXONOMY_COLS
+
+# ~3k distinct codes across 1.6M rows, so classification is memoised per code.
+_TAX_CACHE = {}
+
+
+def taxonomy(dive_number):
+    """dive_number -> [code_norm, bucket, group_code, group_label]."""
+    raw = "" if dive_number is None else str(dive_number).strip()
+    if not raw:
+        return ["", "", "", ""]
+    hit = _TAX_CACHE.get(raw)
+    if hit is None:
+        r = classify_dive(raw)
+        hit = [r["code"] or "", r["bucket"] or "", r["group_code"] or "", r["group_label"] or ""]
+        _TAX_CACHE[raw] = hit
+    return hit
 
 
 def record(url, key, payload):
@@ -248,7 +280,7 @@ def build(db, only=None, dive_sink=None, limit=0):
                             "included": "Included in derived NCAA 5-category score."}.get(incl, "")
                     gen_sheets.add((mid, s_eid, s_rnd, "" if d["sheet_key"] is None else str(d["sheet_key"])))
                     dive_count += 1
-                    dive_writer.writerow(fmt_row(DIVE_COLS, [
+                    dive_writer.writerow(fmt_row(CORE_DIVE_COLS, [
                         mid, s_eid, s_rnd,
                         "" if d["profile_id"] is None else str(d["profile_id"]),
                         "" if d["sheet_key"] is None else str(d["sheet_key"]),
@@ -260,7 +292,7 @@ def build(db, only=None, dive_sink=None, limit=0):
                         (rr["diver_name"] if rr else "") or "",
                         clean_team(rr["team_name"] if rr else ""), s_title,
                         s_gender, s_disc, s_stage, fam, grp, div, year, code, label, incl, note,
-                    ]))
+                    ] + taxonomy(d["dive_number"])))
 
         print(f"  batch {bn}/{len(batches)}  meets={i}/{len(meets)} "
               f"phases={len(phase_rows)} dives={dive_count}", flush=True)
@@ -362,8 +394,8 @@ def merge(phase_rows, gen_sheets):
     seed_phases, seed_dives = load_seed_csv("criteria_phases.csv"), load_seed_csv("criteria_dives.csv")
     gen_pkeys = {phase_key(dict(zip(PHASE_COLS, r))) for r in phase_rows}
 
-    kept_dives = [[r.get(c, "") for c in DIVE_COLS] for r in seed_dives
-                  if dive_sheet_key(r) not in gen_sheets]
+    kept_dives = [[r.get(c, "") for c in DIVE_COLS] + taxonomy(r.get("dive_number"))
+                  for r in seed_dives if dive_sheet_key(r) not in gen_sheets]
     rescued = {dive_sheet_key(r) for r in seed_dives if dive_sheet_key(r) not in gen_sheets}
     seed_by_key = {phase_key(r): r for r in seed_phases}
 
