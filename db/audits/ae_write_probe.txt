@@ -1,0 +1,16 @@
+  SELECT current_user                           -> neondb_owner
+  SELECT current_database()                     -> neondb
+  SHOW default_transaction_read_only            -> off
+  SHOW transaction_read_only                    -> off
+  SELECT pg_is_in_recovery()                    -> False
+  SHOW server_version                           -> 18.4 (df16b3c)
+
+Write test into core.dive_skills:
+  WRITE OK
+
+Did the earlier UPDATE persist?
+  dive           1,420,709
+  skill            103,972
+  parse_error       69,082
+  unclassified       3,578
+  None                   9
