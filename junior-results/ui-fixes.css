@@ -1,1 +1,7 @@
 /* UI fixes consolidated into styles.css v2.1 */
+
+/* View tabs are inert on stages that render their own content — renderTable()
+   hands off before state.view is read. Hidden rather than shown as dead
+   controls. The toolbar keeps its export actions, which still work. */
+#viewTabs.is-inert{ display:none; }
+.results-toolbar.toolbar-selfrender{ justify-content:flex-end; border-bottom:0; }

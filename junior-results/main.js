@@ -1308,8 +1308,24 @@ function renderContext() {
   `;
 }
 
+/* Stages that render their own content. renderTable() hands off to them and
+   returns BEFORE it ever reads state.view, so the shared view tabs — Results,
+   Bumps & shifts, Flags, Athletes, Official list, Overrides — do nothing at
+   all on these stages. Clicking them has never done anything; they simply sat
+   there looking like controls. They are hidden where they are inert. */
+const SELF_RENDERING_STAGES = new Set(['EWC', 'Nationals', 'Reports', 'Pipeline']);
+
+function syncStageChrome() {
+  const inert = SELF_RENDERING_STAGES.has(state.stage);
+  const tabs = document.getElementById('viewTabs');
+  if (tabs) tabs.classList.toggle('is-inert', inert);
+  const bar = document.querySelector('.results-toolbar');
+  if (bar) bar.classList.toggle('toolbar-selfrender', inert);
+}
+
 /* ── Table dispatch ───────────────────────────────────────────── */
 function renderTable() {
+  syncStageChrome();
   // qualifier-views.js handles EWC and Nationals stages
   if (state.stage === 'EWC' && window._qvRenderEWC)           { window._qvRenderEWC();       return; }
   if (state.stage === 'Nationals' && window._qvRenderNat)     { window._qvRenderNat();       return; }

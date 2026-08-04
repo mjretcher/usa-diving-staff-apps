@@ -1171,15 +1171,20 @@
     // Primary source: uploaded qualifier list
     const hasOfficialList = NAT && NAT.qualifiers && NAT.qualifiers.length > 0;
 
+    /* The stage header names the STAGE. It used to announce "Junior Nationals
+       — Qualifier List" with that list's athlete and slot counts, which made
+       the invitation list look like the whole stage even after it had been
+       folded into a section below the results. #qvNatCompeted is filled in by
+       nat-reconciliation.js once results are known. */
     if (ctx) ctx.innerHTML = `
       <div class="context-title-block">
-        <strong>Junior Nationals — Qualifier List</strong>
-        <span>${hasOfficialList ? `Official list · ${NAT.meta.totalAthletes} athletes · ${NAT.meta.totalSlots} event slots` : 'Computed from Zone results'}</span>
+        <strong>Junior Nationals</strong>
+        <span>${hasOfficialList ? esc(NAT.meta.title || 'Championship results') : 'Computed from Zone results'}</span>
       </div>
       ${hasOfficialList ? `
-        <div class="context-stat"><strong>${NAT.meta.totalAthletes}</strong> athletes</div>
-        <div class="context-stat"><strong>${NAT.meta.totalSlots}</strong> event slots</div>
-        <div class="context-stat"><strong>${NAT.meta.totalEvents}</strong> events</div>` : ''}`;
+        <div class="context-stat"><strong>${NAT.meta.totalAthletes}</strong> invited</div>
+        <div class="context-stat"><strong>${NAT.meta.totalEvents}</strong> events</div>` : ''}
+      <div class="context-stat" id="qvNatCompeted" hidden></div>`;
 
     renderNatSidebar();
 

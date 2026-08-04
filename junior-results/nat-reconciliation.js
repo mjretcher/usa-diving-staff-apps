@@ -192,6 +192,13 @@
     }
     if (!state.data) { wrap.innerHTML = ''; return; }   // meet not contested yet
     render(wrap, state.data);
+    // The stage header can only state the invitation count on its own; the
+    // number that actually matters is how many turned up.
+    var comp = document.getElementById('qvNatCompeted');
+    if (comp) {
+      comp.innerHTML = '<strong>' + state.data.competedCount + '</strong> competed';
+      comp.hidden = false;
+    }
     reorder();
     if (window.natShellRefresh) window.natShellRefresh();
   };
