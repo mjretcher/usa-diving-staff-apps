@@ -1,16 +1,16 @@
 {
-  "generated": "2026-08-04T16:49:29Z",
+  "generated": "2026-08-04T16:51:20Z",
   "source": "core.event_results",
   "unit": "distinct (athlete, event) pairs \u2014 a 3M champion is prequalified on 3M only",
   "note": "Pathways overlap: the same athlete can qualify through several. Summing rows overstates the field; use union_entries.",
-  "union_entries": 90,
-  "union_athletes": 70,
-  "sum_of_derived": 121,
+  "union_entries": 85,
+  "union_athletes": 66,
+  "sum_of_derived": 102,
   "pathways": [
     {
       "label": "2022 Winter National Championships \u2014 champions",
-      "entries": 7,
-      "athletes": 7,
+      "entries": 6,
+      "athletes": 6,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -23,8 +23,8 @@
     },
     {
       "label": "2023 National Championships \u2014 champions",
-      "entries": 10,
-      "athletes": 10,
+      "entries": 6,
+      "athletes": 6,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -37,8 +37,8 @@
     },
     {
       "label": "2023 Winter National Championships \u2014 champions",
-      "entries": 10,
-      "athletes": 10,
+      "entries": 6,
+      "athletes": 6,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -51,8 +51,8 @@
     },
     {
       "label": "2024 Winter National Championships \u2014 champions",
-      "entries": 7,
-      "athletes": 5,
+      "entries": 6,
+      "athletes": 4,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -65,8 +65,8 @@
     },
     {
       "label": "2025 National Championships \u2014 champions",
-      "entries": 10,
-      "athletes": 10,
+      "entries": 6,
+      "athletes": 6,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -79,8 +79,8 @@
     },
     {
       "label": "2025 Winter National Championships \u2014 champions",
-      "entries": 7,
-      "athletes": 7,
+      "entries": 6,
+      "athletes": 6,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -93,8 +93,8 @@
     },
     {
       "label": "2025 Winter National Championships \u2014 places 2 to 12, 1M/3M/10M",
-      "entries": 70,
-      "athletes": 57,
+      "entries": 66,
+      "athletes": 53,
       "events": [
         "Senior Men 1M",
         "Senior Men 3M",
@@ -148,6 +148,7 @@
       "derived": false
     }
   ],
+  "warnings": [],
   "stages_present": [
     {
       "stage": "High-Dive",
@@ -358,6 +359,20 @@
       "level": "Senior/Open",
       "year": 2026,
       "rows": 319
+    }
+  ],
+  "rounds_present": [
+    {
+      "round": "Prelim",
+      "rows": 1327
+    },
+    {
+      "round": "Final",
+      "rows": 748
+    },
+    {
+      "round": "Semifinal",
+      "rows": 230
     }
   ],
   "is_synchro_flag": [
