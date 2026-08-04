@@ -63,6 +63,24 @@ function defaultFees(levelCount){
 }
 const LATE_ATHLETE = 100, LATE_COACH = 50;
 
+/* Every entry fee carries a per-entry pass-through to DiveMeets, the scoring
+   management platform. It is NOT USA Diving revenue, and because it is a flat
+   amount rather than a percentage it bites hardest on the cheapest entries:
+   $4.90 is 10.9% of a $45 non-qualifying entry but 3.9% of a $125 national
+   entry. Gross and net are therefore reported separately throughout. */
+const DIVEMEETS_LEVY = 4.90;
+
+/* Senior circuit. Not a regional cascade -- a set of qualifier meets feeding
+   the national championships, each entry billed at the national rate. Entry
+   counts are pulled live from junior_results.meet_entries by DiveMeets meet
+   number, with a manual override when a meet has not been synced. */
+function defaultSenior(){
+  return [
+    {name:'National Championship Qualifier', meet:'12924', fee:125, manual:0, useManual:false},
+    {name:'Senior National Championships',   meet:'12925', fee:125, manual:0, useManual:false},
+  ];
+}
+
 /* ---------- flow defaults (2026 rulebook) ----------
    advance : places advancing to the NEXT level, per event, per stop
    direct  : places advancing straight to the final, per event, per stop
@@ -86,11 +104,13 @@ const PS = {
   boundaryId:null, boundaryName:'Official 2026 Alignment',
   year:'y26',
   fees:null, flow:null,
-  prices:{}, mElast:{}, eElast:{},    // membership price overrides + elasticities
+  prices:{}, mElast:{}, eElast:{}, sElast:{},   // price overrides + elasticities
   prequal:0,                          // HPS Tier 3 pre-qualified entries into the final
   lateRate:0,                         // % of entries paying the late fee
   counts:{}, countsYear:null,
   cal:null,                           // frozen flow constants (see deriveCalibration)
+  levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
+  senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
   scenarioId:null, scenarioName:'',
   bList:null, sList:null,
   dirty:false, err:null, tab:'summary',
@@ -340,12 +360,15 @@ function volMult(baseP, newP, E){
   return Math.max(0, 1 - (E/100) * (pctChange/10));
 }
 
-/* Full revenue roll-up at a given price card. */
+/* Full revenue roll-up at a given price card.
+   Reports gross fee income, the DiveMeets per-entry pass-through, and the net
+   retained by USA Diving. Membership dues carry no pass-through. */
 function computeRevenue(useNewPrices){
   const V = computeVolume();
   const NL = levelCount();
+  const levy = PS.levy || 0;
 
-  /* ---- event fee revenue ---- */
+  /* ---- junior circuit event fees ---- */
   const perLevel = [];
   let eventRev = 0, eventEntries = 0;
   for (let L=0; L<=NL; L++){
@@ -368,15 +391,35 @@ function computeRevenue(useNewPrices){
     const entries = q + nq;
     const late = entries * (PS.lateRate/100) * LATE_ATHLETE;
     rev += late;
+    const lv = entries * levy;
     eventRev += rev; eventEntries += entries;
     perLevel.push({
       L, name: fee.name, stops: (L<NL ? groupCountAt(L) : 1),
-      qual:q, nonqual:nq, entries, late, rev,
+      qual:q, nonqual:nq, entries, late, rev, levy:lv, net:rev-lv,
       source: (L<NL ? V.levels[L].source : 'modelled'),
     });
   }
 
-  /* ---- membership dues revenue ---- */
+  /* ---- senior circuit ---- */
+  const perSenior = [];
+  let seniorRev = 0, seniorEntries = 0;
+  (PS.senior||[]).forEach((row, i) => {
+    const pulled = PS.seniorEntries[row.meet];
+    const live = pulled ? pulled.n : 0;
+    const raw = row.useManual ? (+row.manual||0) : live;
+    const baseF = 125;
+    const E = useNewPrices ? (PS.sElast && PS.sElast[i] || 0) : 0;
+    const f = useNewPrices ? (+row.fee||0) : baseF;
+    const n = raw * volMult(baseF, f, E);
+    const rev = n * f;
+    const lv = n * levy;
+    seniorRev += rev; seniorEntries += n;
+    perSenior.push({i, name:row.name, meet:row.meet, entries:n, raw, live,
+                    events: pulled ? pulled.ev : 0, fee:f, rev, levy:lv, net:rev-lv,
+                    source: row.useManual ? 'entered' : (pulled ? 'observed' : 'missing')});
+  });
+
+  /* ---- membership dues ---- */
   const perType = [];
   let memberRev = 0, memberCount = 0;
   MEMBER_TYPES.forEach(([name, baseP, rider]) => {
@@ -389,8 +432,15 @@ function computeRevenue(useNewPrices){
     perType.push({name, baseP, newP, rider, n0, n, rev});
   });
 
-  return {V, perLevel, perType, eventRev, eventEntries, memberRev, memberCount,
-          total: eventRev + memberRev};
+  const allEntries = eventEntries + seniorEntries;
+  const levyTotal  = allEntries * levy;
+  const gross      = eventRev + seniorRev + memberRev;
+
+  return {V, perLevel, perSenior, perType,
+          eventRev, eventEntries, seniorRev, seniorEntries,
+          memberRev, memberCount,
+          allEntries, levyTotal, gross, net: gross - levyTotal,
+          total: gross};
 }
 
 /* ==========================================================================
@@ -473,6 +523,21 @@ function resizeCards(){
   if (PS.flow.length) PS.flow[PS.flow.length-1].advance = 0;
 }
 
+/* Pull live senior entry counts from the DiveMeets entries sync. One row per
+   (meet, event), so summing entries does not double count prelim vs final. */
+async function loadSeniorEntries(){
+  const ids = (PS.senior||[]).map(r => String(r.meet||'').trim()).filter(Boolean);
+  if (!ids.length) return;
+  try {
+    const r = await NEON.query(
+      `SELECT meet_id_dm m, sum(entries)::int n, count(*)::int ev
+       FROM junior_results.meet_entries WHERE meet_id_dm = ANY($1) GROUP BY 1`, [ids]);
+    const out = {};
+    r.rows.forEach(x => { out[String(x.m)] = {n:+x.n, ev:+x.ev}; });
+    PS.seniorEntries = out;
+  } catch(e){ console.warn('senior entries', e); PS.seniorEntries = {}; }
+}
+
 async function loadCounts(){
   const y = PS.year==='y25' ? 2025 : 2026;
   if (PS.countsYear === y) return;
@@ -498,7 +563,9 @@ async function bootstrap(){
     await loadBoundaryList();
     const seed = (PS.bList||[]).find(b => /2026 Alignment/i.test(b.name));
     if (seed) await applyBoundary(seed.id);
+    PS.senior = defaultSenior();
     await loadCounts();
+    await loadSeniorEntries();
     deriveCalibration();     // freeze against the alignment actually run
     calibratePrequal();
     PS.ready = true;
@@ -534,20 +601,69 @@ function deltaSpan(d){
 }
 
 function renderSummary(base, sim){
-  const dTotal = sim.total - base.total;
-  const dMem   = sim.memberRev - base.memberRev;
-  const dEvt   = sim.eventRev - base.eventRev;
+  const dNet = sim.net - base.net;
+  const dMem = sim.memberRev - base.memberRev;
+  const dEvt = (sim.eventRev + sim.seniorRev) - (base.eventRev + base.seniorRev);
+  const feeIncome = sim.eventRev + sim.seniorRev;
+  const takeRate = feeIncome > 0 ? (sim.levyTotal / feeIncome * 100) : 0;
   return `
   <div class="kpi-band">
-    ${kpi('Total modelled revenue', usd(sim.total),
-          `Baseline ${usd(base.total)} &middot; ${deltaSpan(dTotal)}`, 'var(--navy)')}
+    ${kpi('Net retained by USA Diving', usd(sim.net),
+          `Baseline ${usd(base.net)} &middot; ${deltaSpan(dNet)}`, 'var(--navy)')}
     ${kpi('Membership dues', usd(sim.memberRev),
           `${fmt(Math.round(sim.memberCount))} memberships &middot; ${deltaSpan(dMem)}`, 'var(--pool)')}
-    ${kpi('Event entry fees', usd(sim.eventRev),
-          `${fmt(Math.round(sim.eventEntries))} entries &middot; ${deltaSpan(dEvt)}`, 'var(--sky)')}
-    ${kpi('Structure', fmt(structureStops()) + ' stops',
+    ${kpi('Entry fees, gross', usd(feeIncome),
+          `${fmt(Math.round(sim.allEntries))} entries &middot; ${deltaSpan(dEvt)}`, 'var(--sky)')}
+    ${kpi('DiveMeets pass-through', '&minus;' + usd(sim.levyTotal),
+          `${usd(PS.levy)} &times; ${fmt(Math.round(sim.allEntries))} entries &middot; ${takeRate.toFixed(1)}% of fee income`, '#b45309')}
+    ${kpi('Structure', fmt(structureStops()) + ' junior stops',
           esc(PS.boundaryName) + ' &middot; ' + levelCount() + ' levels + final')}
   </div>`;
+}
+
+function renderSenior(base, sim){
+  const rows = sim.perSenior.map((p,i) => {
+    const row = PS.senior[i];
+    const b = base.perSenior[i];
+    const d = p.net - b.net;
+    const tag = p.source==='observed' ? `<span class="ps-tag obs">live &middot; ${fmt(p.events)} events</span>`
+              : p.source==='entered'  ? '<span class="ps-tag cal">entered</span>'
+              :                         '<span class="ps-tag mod">not synced</span>';
+    return `<tr>
+      <td><b>${esc(row.name)}</b> ${tag}
+        <span class="ps-rider">DiveMeets meet <input class="ps-in xs" type="text" data-smeet="${i}" value="${esc(row.meet)}"></span></td>
+      <td class="num">${p.live ? fmt(p.live) : '<span class="ps-na">&mdash;</span>'}</td>
+      <td class="num"><input class="ps-in sm" type="number" min="0" data-smanual="${i}" value="${Math.round(row.manual)||0}"></td>
+      <td class="num"><label class="ps-chk"><input type="checkbox" data-suse="${i}"${row.useManual?' checked':''}> use</label></td>
+      <td class="num">${fmt(Math.round(p.entries))}</td>
+      <td class="num"><input class="ps-in" type="number" min="0" step="5" data-sfee="${i}" value="${row.fee}"></td>
+      <td class="num mono">${usd(p.rev)}</td>
+      <td class="num mono ps-levy">&minus;${usd(p.levy)}</td>
+      <td class="num mono">${usd(p.net)}</td>
+      <td class="num">${deltaSpan(d)}</td>
+    </tr>`;
+  }).join('');
+  const dTot = sim.seniorRev - base.seniorRev;
+  const missing = sim.perSenior.some(p => p.source==='missing');
+  return `<div class="card"><div class="card-h">
+      <h3>Senior circuit</h3>
+      <div class="note">$125 per event for the national championships and the qualifiers. Entry counts come live from the DiveMeets sync; override any meet that has not been synced.</div>
+    </div><div class="card-b">
+    ${missing ? '<div class="ps-warn">One or more meets have no synced entry count yet. Tick <b>use</b> and type a figure, or re-run the DiveMeets entries sync for that meet number.</div>' : ''}
+    <table class="ps-tbl"><thead><tr>
+      <th>Meet</th><th class="num">Live entries</th><th class="num">Override</th><th class="num"></th>
+      <th class="num">Entries used</th><th class="num">Fee / event</th>
+      <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
+    </tr></thead><tbody>${rows}
+      <tr class="ps-tot"><td>Total</td><td colspan="3"></td>
+      <td class="num">${fmt(Math.round(sim.seniorEntries))}</td><td></td>
+      <td class="num mono">${usd(sim.seniorRev)}</td>
+      <td class="num mono ps-levy">&minus;${usd(sim.seniorEntries*PS.levy)}</td>
+      <td class="num mono">${usd(sim.seniorRev - sim.seniorEntries*PS.levy)}</td>
+      <td class="num">${deltaSpan(dTot)}</td></tr>
+    </tbody></table>
+    <p class="note ps-foot">Add a meet by putting its DiveMeets number in the field under the name. The senior circuit is a flat set of stops rather than a regional cascade, so adding qualifier meets adds entries directly &mdash; it does not feed a downstream field the way a Zone does.</p>
+    </div></div>`;
 }
 function structureStops(){
   let n = 1;
@@ -589,34 +705,45 @@ function renderEventFees(base, sim){
   const NL = levelCount();
   const rows = sim.perLevel.map((p,i) => {
     const f = PS.fees[i], b = base.perLevel[i];
-    const d = p.rev - b.rev;
+    const d = p.net - b.net;
     const showNon = p.nonqual > 0.5 || f.non > 0;
+    // What the pass-through costs as a share of the headline fee at this level.
+    const bite = f.qual > 0 ? (PS.levy / f.qual * 100) : 0;
+    const biteNon = f.non > 0 ? (PS.levy / f.non * 100) : 0;
     return `<tr>
       <td><b>${esc(f.name)}</b></td>
       <td class="num">${fmt(Math.round(p.entries))}</td>
-      <td class="num"><input class="ps-in" type="number" min="0" step="5" data-fee="qual" data-l="${i}" value="${f.qual}"></td>
-      <td class="num">${showNon ? `<input class="ps-in" type="number" min="0" step="5" data-fee="non" data-l="${i}" value="${f.non}">` : '<span class="ps-na">n/a</span>'}</td>
+      <td class="num"><input class="ps-in" type="number" min="0" step="5" data-fee="qual" data-l="${i}" value="${f.qual}">
+        <span class="ps-bite">${bite?bite.toFixed(1)+'% levy':''}</span></td>
+      <td class="num">${showNon ? `<input class="ps-in" type="number" min="0" step="5" data-fee="non" data-l="${i}" value="${f.non}">
+        <span class="ps-bite">${biteNon?biteNon.toFixed(1)+'% levy':''}</span>` : '<span class="ps-na">n/a</span>'}</td>
       <td class="num"><input class="ps-in sm" type="number" min="0" max="100" step="0.5" data-eel="${i}" value="${PS.eElast[i]||0}"></td>
       <td class="num mono">${usd(p.rev)}</td>
+      <td class="num mono ps-levy">&minus;${usd(p.levy)}</td>
+      <td class="num mono">${usd(p.net)}</td>
       <td class="num">${deltaSpan(d)}</td>
     </tr>`;
   }).join('');
-  const dTot = sim.eventRev - base.eventRev;
+  const dTot = (sim.eventRev - sim.eventEntries*PS.levy) - (base.eventRev - base.eventEntries*PS.levy);
   return `<div class="card"><div class="card-h">
-      <h3>Event entry fees</h3>
-      <div class="note">Baseline is the 2026 Junior Circuit card from the Athlete Progression Guide. Response = % of entries lost per 10% fee increase.</div>
+      <h3>Junior circuit entry fees</h3>
+      <div class="note">Baseline is the 2026 card from the Athlete Progression Guide. Response = % of entries lost per 10% fee increase.</div>
     </div><div class="card-b">
     <table class="ps-tbl"><thead><tr>
       <th>Level</th><th class="num">Entries</th><th class="num">Qualifying fee</th>
       <th class="num">Non-qual. fee</th><th class="num">Response</th>
-      <th class="num">Revenue</th><th class="num">vs baseline</th>
+      <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
       <tr class="ps-tot"><td>Total</td><td class="num">${fmt(Math.round(sim.eventEntries))}</td>
-      <td colspan="3"></td><td class="num mono">${usd(sim.eventRev)}</td><td class="num">${deltaSpan(dTot)}</td></tr>
+      <td colspan="3"></td><td class="num mono">${usd(sim.eventRev)}</td>
+      <td class="num mono ps-levy">&minus;${usd(sim.eventEntries*PS.levy)}</td>
+      <td class="num mono">${usd(sim.eventRev - sim.eventEntries*PS.levy)}</td>
+      <td class="num">${deltaSpan(dTot)}</td></tr>
     </tbody></table>
     <div class="ps-inline">
+      <label>DiveMeets levy <input class="ps-in sm" type="number" min="0" max="100" step="0.05" data-levy value="${PS.levy}"> per entry</label>
       <label>Late entries <input class="ps-in sm" type="number" min="0" max="100" step="0.5" data-late value="${PS.lateRate}"> % of entries</label>
-      <span class="note">Late registration is $${LATE_ATHLETE} per athlete ($${LATE_COACH} coach). Your calibration: the late fee is steep enough to deter, so this stays near zero unless you are testing a change to it.</span>
+      <span class="note">The levy is a flat amount, not a percentage, so it bites hardest on the cheapest entries &mdash; ${(PS.levy/45*100).toFixed(1)}% of a $45 non-qualifying entry against ${(PS.levy/125*100).toFixed(1)}% of a $125 national entry. Cutting a fee to widen access gives away proportionally more of what is left. Late registration is $${LATE_ATHLETE} per athlete ($${LATE_COACH} coach); your calibration is that the late fee is steep enough to deter, so this stays near zero unless you are testing a change to it.</span>
     </div>
     </div></div>`;
 }
@@ -776,6 +903,7 @@ function render(){
     renderSummary(base, sim) +
     renderMemberPrices(base, sim) +
     renderEventFees(base, sim) +
+    renderSenior(base, sim) +
     renderStructure(sim) +
     renderCalibration(sim);
 
@@ -804,6 +932,22 @@ function wire(){
     const L = +e.target.dataset.l;
     PS.flow[L][e.target.dataset.flow] = clamp(Math.round(+e.target.value||0), 0, 99); PS.dirty=true; render();
   }));
+  host.querySelectorAll('input[data-sfee]').forEach(el => el.addEventListener('change', e => {
+    PS.senior[+e.target.dataset.sfee].fee = Math.max(0, +e.target.value||0); PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-smanual]').forEach(el => el.addEventListener('change', e => {
+    PS.senior[+e.target.dataset.smanual].manual = Math.max(0, Math.round(+e.target.value||0)); PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-suse]').forEach(el => el.addEventListener('change', e => {
+    PS.senior[+e.target.dataset.suse].useManual = e.target.checked; PS.dirty=true; render();
+  }));
+  host.querySelectorAll('input[data-smeet]').forEach(el => el.addEventListener('change', async e => {
+    PS.senior[+e.target.dataset.smeet].meet = String(e.target.value||'').trim();
+    PS.dirty=true; await loadSeniorEntries(); render();
+  }));
+  const lv = host.querySelector('input[data-levy]');
+  if (lv) lv.addEventListener('change', e => { PS.levy = Math.max(0, +e.target.value||0); PS.dirty=true; render(); });
+
   const pq = host.querySelector('input[data-prequal]');
   if (pq) pq.addEventListener('change', e => { PS.prequal = clamp(Math.round(+e.target.value||0),0,2000); PS.dirty=true; render(); });
 
@@ -831,7 +975,9 @@ function wire(){
 }
 
 function resetPrices(){
-  PS.prices = {}; PS.mElast = {}; PS.eElast = {}; PS.lateRate = 0;
+  PS.prices = {}; PS.mElast = {}; PS.eElast = {}; PS.sElast = {}; PS.lateRate = 0;
+  PS.levy = DIVEMEETS_LEVY;
+  (PS.senior||[]).forEach(r => { r.fee = 125; });
   resizeCards(); PS.flow = defaultFlow(levelCount());
   PS.dirty = false; render(); msg('Prices reset to the published 2026 card.');
 }
@@ -851,7 +997,8 @@ async function saveScenario(){
   if (!PS.scenarioId) PS.scenarioId = 'ps-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
   const data = JSON.stringify({
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
-    prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast,
+    prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
+    senior:PS.senior, levy:PS.levy,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
     await NEON.query(
@@ -877,7 +1024,9 @@ async function loadScenario(id){
     if (yearChanged || !PS.cal) deriveCalibration();
     if (d.fees) PS.fees = PS.fees.map((f,i) => d.fees[i] ? Object.assign({}, f, {qual:d.fees[i].qual, non:d.fees[i].non}) : f);
     if (d.flow) PS.flow = PS.flow.map((f,i) => d.flow[i] ? Object.assign({}, f, d.flow[i]) : f);
-    PS.prices = d.prices||{}; PS.mElast = d.mElast||{}; PS.eElast = d.eElast||{};
+    PS.prices = d.prices||{}; PS.mElast = d.mElast||{}; PS.eElast = d.eElast||{}; PS.sElast = d.sElast||{};
+    if (d.senior && d.senior.length){ PS.senior = d.senior; await loadSeniorEntries(); }
+    if (d.levy != null) PS.levy = +d.levy;
     PS.prequal = +d.prequal||0; PS.lateRate = +d.lateRate||0;
     PS.scenarioId = id; PS.scenarioName = r.rows[0].name; PS.dirty = false;
     render(); msg('Loaded "' + r.rows[0].name + '".');
@@ -891,17 +1040,25 @@ function exportCsv(){
   L.push('scenario,' + q(PS.scenarioName||'(unnamed)'));
   L.push('structure,' + q(PS.boundaryName));
   L.push('season,' + (PS.year==='y25'?'2025 complete':'2026 YTD'));
+  L.push('divemeets levy per entry,' + PS.levy.toFixed(2));
   L.push('');
-  L.push('section,item,members_or_entries,current_price,simulated_price,modelled_volume,revenue,baseline_revenue,delta');
+  L.push('section,item,volume,current_price,simulated_price,gross,divemeets_levy,net,baseline_net,delta_net,provenance');
   sim.perType.forEach((t,i) => L.push(['membership', q(t.name), t.n0, t.baseP, t.newP,
-    Math.round(t.n), Math.round(t.rev), Math.round(base.perType[i].rev),
-    Math.round(t.rev-base.perType[i].rev)].join(',')));
-  sim.perLevel.forEach((p,i) => L.push(['event', q(p.name), Math.round(p.entries),
-    base.perLevel[i] ? defaultFees(levelCount())[i].qual : '', PS.fees[i].qual,
-    Math.round(p.entries), Math.round(p.rev), Math.round(base.perLevel[i].rev),
-    Math.round(p.rev-base.perLevel[i].rev)].join(',')));
+    Math.round(t.rev), 0, Math.round(t.rev), Math.round(base.perType[i].rev),
+    Math.round(t.rev-base.perType[i].rev), 'live roster'].join(',')));
+  const df = defaultFees(levelCount());
+  sim.perLevel.forEach((p,i) => L.push(['junior event', q(p.name), Math.round(p.entries),
+    df[i] ? df[i].qual : '', PS.fees[i].qual,
+    Math.round(p.rev), Math.round(p.levy), Math.round(p.net),
+    Math.round(base.perLevel[i].net), Math.round(p.net-base.perLevel[i].net), p.source].join(',')));
+  sim.perSenior.forEach((p,i) => L.push(['senior event', q(p.name + ' (meet ' + p.meet + ')'),
+    Math.round(p.entries), 125, p.fee,
+    Math.round(p.rev), Math.round(p.levy), Math.round(p.net),
+    Math.round(base.perSenior[i].net), Math.round(p.net-base.perSenior[i].net), p.source].join(',')));
   L.push('');
-  L.push('total,,,,,,' + Math.round(sim.total) + ',' + Math.round(base.total) + ',' + Math.round(sim.total-base.total));
+  L.push(['TOTAL','',Math.round(sim.allEntries),'','',
+    Math.round(sim.gross), Math.round(sim.levyTotal), Math.round(sim.net),
+    Math.round(base.net), Math.round(sim.net-base.net),''].join(','));
   const blob = new Blob([L.join('\n')], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -916,6 +1073,7 @@ window.__PRICING = {
   PS, CODES, computeVolume, computeRevenue, allocate, isQualifying,
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
+  defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY,
 };
 
 /* ---------- entry point ---------- */
