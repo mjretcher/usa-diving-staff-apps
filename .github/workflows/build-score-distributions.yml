@@ -1,0 +1,33 @@
+name: Rebuild score distributions
+
+# Junior-circuit score distributions for cut-score simulation. Manual: rerun
+# when a season's results land.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/build_score_distributions.py
+      - name: Commit if changed
+        run: |
+          git add -A membership-analytics/score-distributions.json
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Rebuild junior score distributions"
+          git fetch origin main
+          git rebase origin/main || { git rebase --abort || true; echo "::warning::rebase failed"; exit 0; }
+          git push origin HEAD:main
