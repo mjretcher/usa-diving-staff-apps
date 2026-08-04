@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T17:48:54Z",
+  "generated": "2026-08-04T18:07:30Z",
   "retrieved": "2026-08-04",
   "note": "Squad pathways grant eligibility in ALL events, so the places they produce are behavioural, not rule-determined. Entries are measured against junior_results.meet_entrants, not assumed.",
   "squads": [
@@ -15,6 +15,7 @@
       "match_rate_pct": 82.9,
       "entries": 69,
       "events_per_athlete": 2.38,
+      "caveat": null,
       "not_entered": [
         "Olivia Astrologes",
         "Quinn Fidanza",
@@ -43,6 +44,7 @@
       "match_rate_pct": 51.4,
       "entries": 24,
       "events_per_athlete": 1.33,
+      "caveat": null,
       "not_entered": [
         "Olivia Astrologes",
         "Ivor Brown",
@@ -68,6 +70,65 @@
       "reliable": true
     },
     {
+      "key": "olympic_2024",
+      "label": "2024 U.S. Olympic Team (Paris)",
+      "source": "https://www.nbcolympics.com/news/diving-101-us-olympic-roster-and-athlete-news",
+      "meets": [
+        "12924",
+        "12925"
+      ],
+      "roster": 11,
+      "entered": 1,
+      "match_rate_pct": 9.1,
+      "entries": 2,
+      "events_per_athlete": 2.0,
+      "caveat": "Per-event eligibility reading is an interpretation; entries are measured.",
+      "not_entered": [
+        "Sarah Bacon",
+        "Andrew Capobianco",
+        "Kassidy Cook",
+        "Tyler Downs",
+        "Greg Duncan",
+        "Alison Gibson",
+        "Jessica Parratto",
+        "Delaney Schnell",
+        "Daryn Wright",
+        "Brandon Loschiavo"
+      ],
+      "fuzzy_matches": [],
+      "reliable": false
+    },
+    {
+      "key": "tier1_hps",
+      "label": "Tier 1 High Performance Squad (vintage unverified)",
+      "source": "https://www.usadiving.org/tier-1",
+      "meets": [
+        "12924",
+        "12925"
+      ],
+      "roster": 14,
+      "entered": 5,
+      "match_rate_pct": 35.7,
+      "entries": 8,
+      "events_per_athlete": 1.6,
+      "caveat": "Page carries no year label. Presumed the final 2024-25 squad. Overlaps the National Team; the criterion covers only those NOT named to it, and additionally requires having competed at 2025 Nationals or Winter Nationals.",
+      "not_entered": [
+        "Sarah Bacon",
+        "Grayson Campbell",
+        "Andrew Capobianco",
+        "Kassidy Cook",
+        "Tyler Downs",
+        "Hailey Hernandez",
+        "Krysta Palmer",
+        "Delaney Schnell",
+        "Daryn Wright"
+      ],
+      "fuzzy_matches": [
+        "Quinn Henninger -> Quentin Henninger"
+      ],
+      "reliable": false
+    },
+    {
       "key": "national_team",
       "label": "2026 USA Diving National Team",
       "source": "https://www.usadiving.org/news/2026/february/18/usa-diving-announces-national-team",
@@ -80,6 +141,7 @@
       "match_rate_pct": 70.6,
       "entries": 17,
       "events_per_athlete": 1.42,
+      "caveat": null,
       "not_entered": [
         "Drew Bennett",
         "Max Flory",
