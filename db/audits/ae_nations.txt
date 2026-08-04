@@ -1,12 +1,42 @@
+=== DDL ===
+  OK    core.nations table
+  OK    dive_sheets.nation_code
+  OK    idx_ds_nation
+  OK    core.nation_unresolved
+
+Verifying:
+  core.nations: core.nations
+  core.nation_unresolved: core.nation_unresolved
+  dive_sheets.nation_code present: True
+
+=== BACKFILL ===
 71 distinct team_name values on World Aquatics rows
   resolved 70 -> 56 distinct nations
   unresolved 1: NAB(408)
-Traceback (most recent call last):
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/backfill_nations.py", line 35, in <module>
-    psycopg2.extras.execute_values(cur, """
-  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/psycopg2/extras.py", line 1299, in execute_values
-    cur.execute(b''.join(parts))
-psycopg2.errors.UndefinedColumn: column ds.nation_code does not exist
-LINE 6:       AND ds.nation_code IS DISTINCT FROM v.code
-                  ^
+  dive_sheets updated: 8666 rows
 
+Nations after normalization:
+  USA  United States                 960 dives    85 divers
+  CHN  China                         828 dives    55 divers
+  AUS  Australia                     786 dives    60 divers
+  MEX  Mexico                        653 dives    51 divers
+  CAN  Canada                        544 dives    40 divers
+  GBR  Great Britain                 521 dives    45 divers
+  UKR  Ukraine                       451 dives    44 divers
+  ITA  Italy                         414 dives    34 divers
+  GER  Germany                       408 dives    32 divers
+  KOR  Republic of Korea             291 dives    30 divers
+  JPN  Japan                         260 dives    15 divers
+  FRA  France                        257 dives    15 divers
+  ESP  Spain                         241 dives    20 divers
+  COL  Colombia                      156 dives     8 divers
+  NZL  New Zealand                   150 dives    13 divers
+  PRK  DPR Korea                     116 dives    14 divers
+  CUB  Cuba                          105 dives     7 divers
+  BRA  Brazil                        104 dives    14 divers
+  SGP  Singapore                      98 dives    12 divers
+  MAS  Malaysia                       97 dives    13 divers
+  ... 56 nations total
+
+Still unresolved (for review):
+  NAB              408 dives — unresolved:not an IOC code; 408 dives across 38 divers, 2025-26 — needs review
