@@ -17,6 +17,9 @@ concurrency:
   group: analytics-refresh
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,6 +30,19 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build analytics tables
+        shell: bash
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: python db/scripts/build_analytics.py
+        run: |
+          set -o pipefail
+          mkdir -p db/audits
+          python db/scripts/build_analytics.py 2>&1 | tee db/audits/analytics_refresh.log
+      - name: Commit log
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "gha@users.noreply.github.com"
+          git add db/audits/analytics_refresh.log || true
+          git commit -m "analytics refresh log" || echo none
+          git pull --rebase --autostash -q || true
+          git push || true
