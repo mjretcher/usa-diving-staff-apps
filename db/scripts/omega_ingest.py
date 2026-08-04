@@ -32,6 +32,7 @@ import psycopg2.extras
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from omega_parse import parse, parse_header, check_arithmetic
 from nations import resolve as resolve_nation
+from dive_taxonomy import classify as classify_dive
 
 UA = "Mozilla/5.0 (compatible; USADivingAnalytics/1.0)"
 OMEGA_RX = re.compile(r"https?://(?:www\.)?omegatiming\.com/File/([0-9A-F]{20,40})\.pdf", re.I)
@@ -198,6 +199,7 @@ def ingest_one(url, code, snapshots, state, stats, year_hint=None):
     for i, r in enumerate(ok_rows):
         nat, _ = resolve_nation(r["nat"])
         slug = re.sub(r"[^A-Za-z0-9]", "", r["diver_name"] or "")[:24]
+        tax = classify_dive(r["dive_number"])
         diver_id = f"OM-{code[:14]}-{slug}"
         sheet_key = f"{result_set_id}-{slug}"
         payload.append((
@@ -208,6 +210,7 @@ def ingest_one(url, code, snapshots, state, stats, year_hint=None):
             r["running_total_points"],
             int(r["overall_rank"]) if (r["overall_rank"] or "").isdigit() else None,
             diver_id, sheet_key, r["diver_name"], r["nat"], nat,
+            tax["code"], tax["bucket"], tax["group_code"], tax["group_label"],
         ))
     stats["rows"] += len(payload)
     stats["files"] += 1
@@ -221,7 +224,8 @@ def ingest_one(url, code, snapshots, state, stats, year_hint=None):
           (meet_id, meet_year, competition_family, event_id, result_set_id, event_name, gender,
            discipline, round_stage, dive_order, dive_number, height, description,
            dd, score, judges_scores, running_total_points, round_place,
-           diver_id, sheet_key, diver_name, team_name, nation_code)
+           diver_id, sheet_key, diver_name, team_name, nation_code,
+           dive_code_norm, dive_bucket, dive_group_code, dive_group_label)
         VALUES %s""", payload)
     state["conn"].commit()
 
