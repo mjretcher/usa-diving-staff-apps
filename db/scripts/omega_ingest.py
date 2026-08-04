@@ -86,13 +86,18 @@ def get_pdf(url, snapshots=(), year=None):
     attempts.append((f"https://web.archive.org/web/{year or 2019}id_/{url}", "wb:guess"))
     last = None
     for target, tag in attempts:
-        try:
-            blob = _fetch(target, TIMEOUT * 2 if "web.archive" in target else TIMEOUT)
-            if _looks_pdf(blob):
-                return blob, tag
-            last = ValueError("not a PDF (%d bytes)" % len(blob))
-        except Exception as e:
-            last = e
+        archive = "web.archive" in target
+        for attempt in range(3 if archive else 1):
+            try:
+                blob = _fetch(target, (TIMEOUT * 3) if archive else TIMEOUT)
+                if _looks_pdf(blob):
+                    return blob, tag
+                last = ValueError("not a PDF (%d bytes)" % len(blob))
+                break
+            except Exception as e:
+                last = e
+                if archive and attempt < 2:
+                    time.sleep(3 * (attempt + 1))
     raise last or ValueError("no source succeeded")
 
 
