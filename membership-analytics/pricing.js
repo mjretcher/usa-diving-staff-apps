@@ -228,44 +228,126 @@ function directOut(entries, direct){
   return Math.min(direct, entries);
 }
 
+/* Build one level's field from the level below. Used by BOTH deriveCalibration
+   and computeVolume, deliberately: the conversion constant is a ratio measured
+   against the advancement arriving at a level, so if derivation measured it
+   against the observed distribution while simulation applied it to the
+   reconstructed one, the two would disagree wherever the "or the last diver"
+   cap bit differently -- and the level would not reconcile. One function, one
+   answer. */
+function buildLevel(L, prevRows, k){
+  const n = groupCountAt(L);
+  const rows = Array.from({length:n}, () => ({}));
+  const fPrev = PS.flow[L-1] || {add:0};
+  for (let gPrev=0; gPrev<groupCountAt(L-1); gPrev++){
+    let parent = null;
+    for (let ri=0; ri<PS.regions.length; ri++){
+      if (groupOfRegion(L-1, ri) === gPrev){ parent = groupOfRegion(L, ri); break; }
+    }
+    if (parent==null || parent>=n) continue;
+    const src = prevRows[gPrev] || {};
+    CODES.forEach(c => {
+      const e = src[c] || 0;
+      if (!e) return;
+      const conv = (k && k.conv[c] != null) ? k.conv[c] : 1;
+      rows[parent][c] = (rows[parent][c]||0)
+        + advanceOut(e, advanceFor(L-1,c), directFor(L-1,c)) * conv * (1 + (fPrev.add||0)/100);
+    });
+  }
+  const sh = shareFor(L);
+  if (sh && k){
+    for (const fips in sh.P){
+      const ri = PS.assign[fips];
+      if (ri==null || ri<0 || ri>=PS.regions.length) continue;
+      const gi = groupOfRegion(L, ri);
+      if (gi==null || gi>=n) continue;
+      const cells = sh.P[fips];
+      for (const c in cells){
+        const dc = k.directAt[c] || 0;
+        if (!dc) continue;
+        rows[gi][c] = (rows[gi][c]||0) + dc * (sh.tot[c] ? cells[c]/sh.tot[c] : 0);
+      }
+    }
+  }
+  return rows;
+}
+
+/* County shares for spreading a direct-entry cohort when the map changes. */
+function shareFor(L){
+  const st = stageForLevel(L);
+  const P = st && PS.adv && PS.adv.pools ? PS.adv.pools[poolKey(st)] : null;
+  if (!P) return null;
+  const tot = {};
+  for (const f in P) for (const c in P[f]) tot[c] = (tot[c]||0) + P[f][c];
+  return {P, tot};
+}
+
+function stageForLevel(L){ return ['Regionals','Zones','EWC'][L] || null; }
+function observedPool(L){
+  const st = stageForLevel(L);
+  if (!st) return null;
+  const P = PS.adv && PS.adv.pools ? PS.adv.pools[poolKey(st)] : null;
+  return P ? allocate(poolKey(st), L) : null;
+}
+
 /* Derive the flow constants ONCE, against the structure the observed data came
-   from (the alignment actually run that season). Two constants per event cell:
+   from. Two constants per level per event cell:
 
-     addRate[c]    fraction of top-15 advancers added again by athletes who
-                   clear the average 15th-place score bar.
-     directAtZ[c]  athletes who enter the circuit at Zones rather than passing
-                   through Regionals -- Groups C/D in 2026 (they auto-advance)
-                   and platform in every year (non-qualifying at Regionals).
+     conv[c]     observed field at this level divided by the advancement the
+                 rules alone would send there. Above 1 it absorbs the athletes
+                 added by clearing the average-place score bar; BELOW 1 it
+                 absorbs qualified athletes who do not take up their place.
+                 E/W/C is the case that forced this to be two-directional --
+                 the rules send far more athletes there than actually enter.
+     directAt[c] athletes who join at this level without passing through the
+                 one below: Groups C/D at Zones in 2026, platform in any year
+                 (non-qualifying at Regionals), and YMCA champions at E/W/C.
 
-   These are structural rates of the sport, not of any one map, so they are
-   held fixed while the map is redrawn. */
+   These are rates of behaviour, not of any one map, so they are held fixed
+   while the map is redrawn. Re-deriving them per scenario would let the
+   residual swallow the structural change and every hypothetical would falsely
+   read as having no effect. */
 function deriveCalibration(){
   const NL = levelCount();
-  if (NL < 2){ PS.cal = {addRate:{}, directAtZ:{}, basis:PS.boundaryName, year:yearNum()}; return; }
-  const a0 = allocate(poolKey('Regionals'), 0);
-  const obsZTot = totalCells(allocate(poolKey('Zones'), 1).rows);
-  const f0 = PS.flow[0];
-  const advIntoZ = {};
-  a0.rows.forEach(r => CODES.forEach(c => {
-    const e = r[c] || 0;
-    if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, advanceFor(0,c), directFor(0,c));
-  }));
-  const addRate = {}, directAtZ = {};
-  CODES.forEach(c => {
-    const modelled = advIntoZ[c] || 0;
-    const observed = obsZTot[c] || 0;
-    const gap = observed - modelled;
-    const skipsRegionals = (PS.year==='y26' && (codeGroup(c)==='C' || codeGroup(c)==='D'));
-    const isPlatform = codeBoard(c)==='P';
-    if (skipsRegionals || isPlatform || modelled === 0){
-      directAtZ[c] = Math.max(0, gap); addRate[c] = 0;
-    } else if (gap > 0){
-      addRate[c] = gap / modelled; directAtZ[c] = 0;
-    } else {
-      addRate[c] = 0; directAtZ[c] = 0;
-    }
-  });
-  PS.cal = {addRate, directAtZ, basis:PS.boundaryName, year:yearNum(),
+  const levels = [];
+  const observedAt = [];
+  for (let L=0; L<NL; L++){ levels.push({conv:{}, directAt:{}}); observedAt.push(false); }
+  observedAt[0] = !!observedPool(0);
+
+  // Walk upward reconstructing as we go, so each level's constant is measured
+  // against the same reconstructed field the simulation will apply it to.
+  let prevRows = allocate(poolKey('Regionals'), 0).rows;
+  for (let L=1; L<NL; L++){
+    const obs = observedPool(L);
+    if (!obs) break;                     // no observed data above this level
+    observedAt[L] = true;
+    const obsTot = totalCells(obs.rows);
+    const adv = {};
+    prevRows.forEach(r => CODES.forEach(c => {
+      const e = r[c] || 0;
+      if (e > 0) adv[c] = (adv[c]||0) + advanceOut(e, advanceFor(L-1,c), directFor(L-1,c));
+    }));
+    CODES.forEach(c => {
+      const modelled = adv[c] || 0;
+      const observed = obsTot[c] || 0;
+      if (modelled <= 0){
+        levels[L].directAt[c] = Math.max(0, observed);
+        levels[L].conv[c] = 1;
+      } else if (L===1 && (codeBoard(c)==='P' ||
+                 (PS.year==='y26' && (codeGroup(c)==='C' || codeGroup(c)==='D')))){
+        // These cohorts do not come through Regionals at all, so the whole
+        // field is a direct-entry cohort rather than a conversion on
+        // advancement that never happened.
+        levels[L].directAt[c] = Math.max(0, observed);
+        levels[L].conv[c] = 0;
+      } else {
+        levels[L].conv[c] = observed / modelled;
+        levels[L].directAt[c] = 0;
+      }
+    });
+    prevRows = buildLevel(L, prevRows, levels[L]);
+  }
+  PS.cal = {levels, observedAt, basis:PS.boundaryName, year:yearNum(),
             regions:PS.regions.length, stops:structureStops()};
 }
 
@@ -274,86 +356,19 @@ function deriveCalibration(){
 function computeVolume(){
   const NL = levelCount();
   const flow = PS.flow;
+  const cal = PS.cal || {levels:[], observedAt:[]};
+  const calAt = L => (cal.levels && cal.levels[L]) || {conv:{}, directAt:{}};
+  const wasObserved = L => !!(cal.observedAt && cal.observedAt[L]);
 
   // --- level 0: observed Regionals, reallocated by the current map ---
   const lvl = [];
   const a0 = allocate(poolKey('Regionals'), 0);
   lvl.push({rows:a0.rows, un:a0.un, source:'observed'});
 
-  // --- observed Zones, used both as truth (baseline map) and to calibrate ---
-  const obsZ = NL > 1 ? allocate(poolKey('Zones'), 1) : null;
-  const obsZTot = obsZ ? totalCells(obsZ.rows) : {};
-
-  // Calibration constants are FROZEN against the structure the observed data
-  // actually came from. They must never be re-derived per scenario: if they
-  // were, the residual would silently absorb whatever a structural change did
-  // and Zone volume would heal itself straight back to the observed figure,
-  // making every hypothetical look like it changed nothing.
-  const cal = PS.cal || {addRate:{}, directAtZ:{}};
-  const addRate = cal.addRate, directAtZ = cal.directAtZ;
-
-  // Advancement modelled from level 0 under the CURRENT structure (this does
-  // move with the scenario -- it is the thing being simulated).
-  const advIntoZ = {};
-  if (NL > 1){
-    const f0 = flow[0];
-    lvl[0].rows.forEach(r => {
-      CODES.forEach(c => {
-        const e = r[c] || 0;
-        if (e > 0) advIntoZ[c] = (advIntoZ[c]||0) + advanceOut(e, advanceFor(0,c), directFor(0,c));
-      });
-    });
-  }
-
-  // County shares for redistributing the direct-entry cohort when the map changes.
-  const zShare = (() => {
-    const P = PS.adv && PS.adv.pools ? PS.adv.pools[poolKey('Zones')] : null;
-    if (!P) return null;
-    const tot = {};
-    for (const f in P) for (const c in P[f]) tot[c] = (tot[c]||0) + P[f][c];
-    return {P, tot};
-  })();
-
-  // --- levels 1..NL-1 ---
+  // --- levels 1..NL-1, via the same builder the calibration used ---
   for (let L=1; L<NL; L++){
-    const n = groupCountAt(L);
-    const rows = Array.from({length:n}, () => ({}));
-    const fPrev = flow[L-1];
-
-    // advancement in from the level below
-    for (let gPrev=0; gPrev<groupCountAt(L-1); gPrev++){
-      // find this child's parent group at L
-      let parent = null;
-      for (let ri=0; ri<PS.regions.length; ri++){
-        if (groupOfRegion(L-1, ri) === gPrev){ parent = groupOfRegion(L, ri); break; }
-      }
-      if (parent==null || parent>=n) continue;
-      const src = lvl[L-1].rows[gPrev] || {};
-      CODES.forEach(c => {
-        const e = src[c] || 0;
-        if (!e) return;
-        const out = advanceOut(e, advanceFor(L-1,c), directFor(L-1,c)) * (1 + (L===1 ? (addRate[c]||0) : 0) + (fPrev.add||0)/100);
-        rows[parent][c] = (rows[parent][c]||0) + out;
-      });
-    }
-
-    // direct-entry cohort at this level (Zones only), spread by county share
-    if (L===1 && zShare){
-      for (const fips in zShare.P){
-        const ri = PS.assign[fips];
-        if (ri==null || ri<0 || ri>=PS.regions.length) continue;
-        const gi = groupOfRegion(L, ri);
-        if (gi==null || gi>=n) continue;
-        const cells = zShare.P[fips];
-        for (const c in cells){
-          const dc = directAtZ[c] || 0;
-          if (!dc) continue;
-          const share = zShare.tot[c] ? cells[c]/zShare.tot[c] : 0;
-          rows[gi][c] = (rows[gi][c]||0) + dc*share;
-        }
-      }
-    }
-    lvl.push({rows, un:{}, source: L===1 ? 'calibrated' : 'modelled'});
+    const rows = buildLevel(L, lvl[L-1].rows, calAt(L));
+    lvl.push({rows, un:{}, source: wasObserved(L) ? 'calibrated' : 'modelled'});
   }
 
   // --- the final championship: one stop, fed by every level's direct places ---
@@ -374,11 +389,31 @@ function computeVolume(){
     CODES.forEach(c => { finalCells[c] = (finalCells[c]||0) + PS.prequal * ((finalCells[c]||0)/finalTotalBefore); });
   }
 
-  return {
-    levels: lvl,
-    final: finalCells,
-    calib: { advIntoZ, obsZTot, addRate, directAtZ },
-  };
+  // Per-level decomposition for the calibration panel: what the rules alone
+  // send up, what the frozen conversion does to it, and who joins directly.
+  const calib = [];
+  for (let L=1; L<NL; L++){
+    const k = calAt(L);
+    const obs = observedPool(L);
+    let rules = 0, conv = 0, direct = 0, observed = 0;
+    for (let gPrev=0; gPrev<groupCountAt(L-1); gPrev++){
+      const src = lvl[L-1].rows[gPrev] || {};
+      CODES.forEach(c => {
+        const e = src[c] || 0;
+        if (!e) return;
+        const a = advanceOut(e, advanceFor(L-1,c), directFor(L-1,c));
+        rules += a;
+        conv += a * (((k.conv[c] != null) ? k.conv[c] : 1) - 1);
+      });
+    }
+    CODES.forEach(c => { direct += k.directAt[c] || 0; });
+    if (obs){ const t = totalCells(obs.rows); CODES.forEach(c => { observed += t[c]||0; }); }
+    calib.push({L, name:levelName(L), rules, conv, direct,
+                total: lvl[L].rows.reduce((s,r)=>s+CODES.reduce((q,c)=>q+(r[c]||0),0),0),
+                observed, wasObserved: wasObserved(L)});
+  }
+
+  return { levels: lvl, final: finalCells, calib };
 }
 
 /* Is a cell a QUALIFYING event at this level?
@@ -975,70 +1010,69 @@ function renderCellGrid(L){
 }
 
 function renderCalibration(sim){
-  const cal = sim.V.calib;
-  const NL = levelCount();
-  let modZ = 0, obsZ = 0, adds = 0, direct = 0;
-  CODES.forEach(c => {
-    modZ += cal.advIntoZ[c]||0; obsZ += cal.obsZTot[c]||0;
-    adds += (cal.advIntoZ[c]||0)*(cal.addRate[c]||0);
-    direct += cal.directAtZ[c]||0;
-  });
-  const modelledNat = sim.perLevel[sim.perLevel.length-1].entries;
-  const natRow = PS.year==='y26'
-    ? `<tr><td>${esc(PS.finalName)} entries</td>
-         <td class="num mono">${fmt(Math.round(modelledNat))}</td>
-         <td class="num mono">${fmt(natActual())}</td>
-         <td class="num">${diffCell(modelledNat, natActual())}</td>
-         <td class="note">${PS.natSource==='live'
-             ? `Live from the DiveMeets sync, meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}. Individual entries only; ${fmt(PS.natSyn||0)} synchro teams counted separately.`
-             : `<b>Snapshot, not live.</b> Meet ${esc(PS.natMeet)} has no synced entry count, so this falls back to the 28 July 2026 figure taken while signup was still open. Re-run the DiveMeets entries sync for this meet to anchor on the real number.`}</td></tr>`
-    : `<tr><td>${esc(PS.finalName)} entries</td><td class="num mono">${fmt(Math.round(modelledNat))}</td>
-         <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td>
-         <td class="note">No verified 2025 national entry count loaded</td></tr>`;
+  const cal = sim.V.calib || [];
   const cb = PS.cal || {};
   const drifted = cb.basis && (cb.basis !== PS.boundaryName || cb.regions !== PS.regions.length);
+  const modelledNat = sim.perLevel[sim.perLevel.length-1].entries;
+
   const banner = drifted
     ? `<div class="ps-warn"><b>You are off the calibrated baseline.</b> The flow constants were derived from
-        <b>${esc(cb.basis)}</b> (${fmt(cb.regions)} regions, ${yearNum()}) and are being held fixed while you
+        <b>${esc(cb.basis)}</b> (${fmt(cb.regions)} regions, ${esc(cb.year||yearNum())}) and are being held fixed while you
         simulate <b>${esc(PS.boundaryName)}</b> (${fmt(PS.regions.length)} regions). That is deliberate &mdash;
         re-deriving them per scenario would let the residual absorb your structural change and every hypothetical
         would falsely show no effect.</div>`
     : `<div class="ps-ok">Flow constants derived from <b>${esc(cb.basis||PS.boundaryName)}</b>, ${yearNum()} &mdash;
         the alignment actually run that season. This is the calibrated baseline.</div>`;
 
+  const rows = cal.map(k => {
+    const convPct = k.rules > 0 ? (k.conv / k.rules * 100) : 0;
+    const tag = k.wasObserved ? '<span class="ps-tag obs">observed</span>' : '<span class="ps-tag mod">no data</span>';
+    return `<tr class="ps-grp"><td><b>${esc(k.name)}</b> ${tag}</td>
+        <td class="num mono">${fmt(Math.round(k.total))}</td>
+        <td class="num mono">${k.wasObserved ? fmt(Math.round(k.observed)) : '<span class="ps-na">&mdash;</span>'}</td>
+        <td class="num">${k.wasObserved ? diffCell(k.total, k.observed) : '<span class="ps-na">&mdash;</span>'}</td></tr>
+      <tr><td class="ps-sub">places the rules alone send up</td><td class="num mono">${fmt(Math.round(k.rules))}</td>
+        <td colspan="2" class="note">Capped at field size, so a short field sends fewer than the cap allows.</td></tr>
+      <tr><td class="ps-sub">take-up adjustment</td>
+        <td class="num mono ${k.conv<-0.5?'ps-levy':''}">${k.conv>=0?'+':''}${fmt(Math.round(k.conv))}</td>
+        <td colspan="2" class="note">${k.conv >= 0
+          ? 'Athletes added by clearing the average-place score bar.'
+          : `Qualified athletes who do not take up their place &mdash; ${Math.abs(convPct).toFixed(0)}% of those eligible.`}</td></tr>
+      <tr><td class="ps-sub">joining at this level</td><td class="num mono">${fmt(Math.round(k.direct))}</td>
+        <td colspan="2" class="note">${k.L===1
+          ? (PS.year==='y26' ? 'Groups C/D auto-advance in 2026; plus platform, non-qualifying at Regionals.' : 'Platform, non-qualifying at Regionals.')
+          : 'Athletes entering here directly, including YMCA national champions.'}</td></tr>`;
+  }).join('');
+
+  const natRow = PS.year==='y26'
+    ? `<tr class="ps-tot"><td>${esc(PS.finalName)} entries</td>
+         <td class="num mono">${fmt(Math.round(modelledNat))}</td>
+         <td class="num mono">${fmt(natActual())}</td>
+         <td class="num">${diffCell(modelledNat, natActual())}</td></tr>
+       <tr><td colspan="4" class="note">${PS.natSource==='live'
+             ? `Live from the DiveMeets sync, meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}. Individual entries only; ${fmt(PS.natSyn||0)} synchro teams counted separately.`
+             : `<b>Snapshot, not live.</b> Meet ${esc(PS.natMeet)} has no synced entry count, so this falls back to the 28 July 2026 figure taken while signup was still open. Re-run the DiveMeets entries sync for this meet to anchor on the real number.`}</td></tr>`
+    : `<tr class="ps-tot"><td>${esc(PS.finalName)} entries</td><td class="num mono">${fmt(Math.round(modelledNat))}</td>
+         <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td></tr>`;
+
   return `<div class="card"><div class="card-h">
       <h3>Model calibration</h3>
-      <div class="note">Before a hypothetical is worth anything, the model has to reproduce the season we actually ran &mdash; and be clear about which parts are checks and which are definitions.</div>
+      <div class="note">How each level&rsquo;s field is reconstructed, and whether it lands on the season we actually ran.</div>
     </div><div class="card-b">
     ${banner}
     <table class="ps-tbl"><thead><tr>
-      <th>Zone field, reconstructed</th><th class="num">Entries</th><th class="num">Observed</th><th class="num">Difference</th><th>What this is</th>
-    </tr></thead><tbody>
-      <tr><td>&mdash; places 1&ndash;15 advancing from Regionals</td><td class="num mono">${fmt(Math.round(modZ))}</td>
-        <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td>
-        <td class="note">Modelled. Capped at field size, so a short field sends fewer.</td></tr>
-      <tr><td>&mdash; average 15th-place score adds</td><td class="num mono">${fmt(Math.round(adds))}</td>
-        <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td>
-        <td class="note">Rate frozen at baseline, applied to advancement above.</td></tr>
-      <tr><td>&mdash; entering the circuit at Zones</td><td class="num mono">${fmt(Math.round(direct))}</td>
-        <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td>
-        <td class="note">${PS.year==='y26' ? 'Groups C/D auto-advance in 2026; plus platform, non-qualifying at Regionals.' : 'Platform, non-qualifying at Regionals.'} Fixed count.</td></tr>
-      <tr class="ps-tot"><td>Total Zone entries</td>
-        <td class="num mono">${fmt(Math.round(modZ+adds+direct))}</td>
-        <td class="num mono">${fmt(Math.round(obsZ))}</td>
-        <td class="num">${diffCell(modZ+adds+direct, obsZ)}</td>
-        <td class="note">${drifted ? 'Gap is the structural effect you are simulating.' : 'Reconciles exactly <b>by construction</b> at baseline &mdash; not an independent test.'}</td></tr>
-      ${natRow}
-    </tbody></table>
+      <th>Level</th><th class="num">Reconstructed</th><th class="num">Observed</th><th class="num">Difference</th>
+    </tr></thead><tbody>${rows}${natRow}</tbody></table>
     <div class="ps-inline">
       <label>Pre-qualified into ${esc(PS.finalName)}
         <input class="ps-in sm" type="number" min="0" max="2000" data-prequal value="${Math.round(PS.prequal)}"> entries</label>
-      <span class="note">HP Squad athletes plus any residual needed to reconcile to the actual national field, solved to ${fmt(natActual())}${PS.natSource==='live'?' (live)':' (28 July snapshot)'}. Replace it with the true squad number when you have it and the difference becomes a real check rather than a plug.</span>
       <label>Final meet no. <input class="ps-in xs" type="text" data-natmeet value="${esc(PS.natMeet)}"></label>
+      <span class="note">HP Squad athletes plus any residual needed to reconcile to the actual national field. Replace it with the true squad number when you have it and the difference becomes a real check rather than a plug.</span>
     </div>
-    <p class="note ps-foot"><b>Read this before quoting a number.</b> Regionals volume is observed and exact for the map as drawn. Zones is reconstructed and ties to observed at baseline. E/W/C and ${esc(PS.finalName)} are modelled from the flow rules, because no alternative structure has real results behind it. The tag on each row of the structure table tells you which is which.</p>
+    <p class="note ps-foot"><b>Read this before quoting a number.</b> Levels tagged observed reconcile to real entry data <b>by construction</b> at the calibrated baseline &mdash; that is a decomposition, not an independent test. Move off the baseline and the difference column becomes the structural effect you are simulating. Levels tagged no data are projected from the rules alone.</p>
     </div></div>`;
 }
+
 function diffCell(a, b){
   const d = a - b;
   if (!b) return '<span class="ps-na">&mdash;</span>';
