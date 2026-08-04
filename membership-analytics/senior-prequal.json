@@ -1,0 +1,307 @@
+{
+  "generated": "2026-08-04T16:46:57Z",
+  "source": "core.event_results",
+  "unit": "distinct (athlete, event) pairs \u2014 a 3M champion is prequalified on 3M only",
+  "note": "Pathways overlap: the same athlete can qualify through several. Summing rows overstates the field; use union_entries.",
+  "union_entries": 90,
+  "union_athletes": 70,
+  "sum_of_derived": 121,
+  "pathways": [
+    {
+      "label": "2022 Winter National Championships \u2014 champions",
+      "entries": 7,
+      "athletes": 7,
+      "derived": true
+    },
+    {
+      "label": "2023 National Championships \u2014 champions",
+      "entries": 10,
+      "athletes": 10,
+      "derived": true
+    },
+    {
+      "label": "2023 Winter National Championships \u2014 champions",
+      "entries": 10,
+      "athletes": 10,
+      "derived": true
+    },
+    {
+      "label": "2024 Winter National Championships \u2014 champions",
+      "entries": 7,
+      "athletes": 5,
+      "derived": true
+    },
+    {
+      "label": "2025 National Championships \u2014 champions",
+      "entries": 10,
+      "athletes": 10,
+      "derived": true
+    },
+    {
+      "label": "2025 Winter National Championships \u2014 champions",
+      "entries": 7,
+      "athletes": 7,
+      "derived": true
+    },
+    {
+      "label": "2025 Winter National Championships \u2014 places 2 to 12, 1M/3M/10M",
+      "entries": 70,
+      "athletes": 57,
+      "derived": true
+    },
+    {
+      "label": "2024 Olympic Games Team, in their Olympic events",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "2026 NCAA Championships \u2014 top 5 U.S. citizens",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "2026 National Team members (eligible in all events)",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "2025-26 Tier III Junior High Performance Squad (all events)",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "2025 Tier I or II HPS who competed at 2025 Nationals or Winter Nationals",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "2024-25 Tier III HPS who competed at 2025 Nationals or Winter Nationals",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "Non-HPS athletes who met an HPS score threshold at 2025 Nationals",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    }
+  ],
+  "stages_present": [
+    {
+      "stage": "High-Dive",
+      "level": "Other",
+      "year": 2022,
+      "rows": 17
+    },
+    {
+      "stage": "High-Dive",
+      "level": "Senior",
+      "year": 2022,
+      "rows": 15
+    },
+    {
+      "stage": "Open",
+      "level": "Senior",
+      "year": 2022,
+      "rows": 321
+    },
+    {
+      "stage": "Winter-Nationals",
+      "level": "Senior",
+      "year": 2022,
+      "rows": 366
+    },
+    {
+      "stage": "Winter-Nationals-Qualifier",
+      "level": "Senior",
+      "year": 2022,
+      "rows": 65
+    },
+    {
+      "stage": "Zones",
+      "level": "Senior",
+      "year": 2022,
+      "rows": 4
+    },
+    {
+      "stage": "Camp",
+      "level": "Other",
+      "year": 2023,
+      "rows": 92
+    },
+    {
+      "stage": "High-Dive",
+      "level": "Other",
+      "year": 2023,
+      "rows": 4
+    },
+    {
+      "stage": "High-Dive",
+      "level": "Senior",
+      "year": 2023,
+      "rows": 20
+    },
+    {
+      "stage": "Senior-Nat-Qualifier",
+      "level": "Senior",
+      "year": 2023,
+      "rows": 140
+    },
+    {
+      "stage": "Senior-Nationals",
+      "level": "Senior",
+      "year": 2023,
+      "rows": 430
+    },
+    {
+      "stage": "Winter-Nationals",
+      "level": "Senior",
+      "year": 2023,
+      "rows": 472
+    },
+    {
+      "stage": "Winter-Nationals-Qualifier",
+      "level": "Senior",
+      "year": 2023,
+      "rows": 162
+    },
+    {
+      "stage": "Olympic-Trials",
+      "level": "Senior",
+      "year": 2024,
+      "rows": 464
+    },
+    {
+      "stage": "Olympic-Trials",
+      "level": "Senior/Open",
+      "year": 2024,
+      "rows": 32
+    },
+    {
+      "stage": "Olympic-Trials-Qualifier",
+      "level": "Senior",
+      "year": 2024,
+      "rows": 181
+    },
+    {
+      "stage": "Olympic-Trials-Qualifier",
+      "level": "Senior/Open",
+      "year": 2024,
+      "rows": 9
+    },
+    {
+      "stage": "Winter-Nationals",
+      "level": "Senior",
+      "year": 2024,
+      "rows": 296
+    },
+    {
+      "stage": "Winter-Nationals-Qualifier",
+      "level": "Senior",
+      "year": 2024,
+      "rows": 78
+    },
+    {
+      "stage": "High-Dive",
+      "level": "Other",
+      "year": 2025,
+      "rows": 5
+    },
+    {
+      "stage": "High-Dive",
+      "level": "Senior",
+      "year": 2025,
+      "rows": 10
+    },
+    {
+      "stage": "NCAA-Championships",
+      "level": "Senior/Open",
+      "year": 2025,
+      "rows": 381
+    },
+    {
+      "stage": "Senior-Nat-Qualifier",
+      "level": "Senior",
+      "year": 2025,
+      "rows": 83
+    },
+    {
+      "stage": "Senior-Nationals",
+      "level": "Senior",
+      "year": 2025,
+      "rows": 396
+    },
+    {
+      "stage": "Winter-Nationals",
+      "level": "Senior",
+      "year": 2025,
+      "rows": 345
+    },
+    {
+      "stage": "Winter-Nationals-Qualifier",
+      "level": "Senior",
+      "year": 2025,
+      "rows": 308
+    },
+    {
+      "stage": "World-Aquatics-Event",
+      "level": "Senior/Open",
+      "year": 2025,
+      "rows": 82
+    },
+    {
+      "stage": "World-Championships",
+      "level": "Senior/Open",
+      "year": 2025,
+      "rows": 629
+    },
+    {
+      "stage": "World-Cup",
+      "level": "Senior/Open",
+      "year": 2025,
+      "rows": 498
+    },
+    {
+      "stage": "JrWorlds-Trials",
+      "level": "Junior",
+      "year": 2026,
+      "rows": 451
+    },
+    {
+      "stage": "NCAA-Championships",
+      "level": "Senior/Open",
+      "year": 2026,
+      "rows": 333
+    },
+    {
+      "stage": "Regionals",
+      "level": "Senior",
+      "year": 2026,
+      "rows": 22
+    },
+    {
+      "stage": "World-Aquatics-Event",
+      "level": "Other",
+      "year": 2026,
+      "rows": 3
+    },
+    {
+      "stage": "World-Aquatics-Event",
+      "level": "Senior/Open",
+      "year": 2026,
+      "rows": 178
+    },
+    {
+      "stage": "World-Cup",
+      "level": "Senior/Open",
+      "year": 2026,
+      "rows": 319
+    }
+  ]
+}
