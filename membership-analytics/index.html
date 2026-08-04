@@ -361,6 +361,16 @@ tr:hover td{background:#f7fafd}
 .ps-lg{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);line-height:1.35;flex:1;min-width:190px}
 .ps-lg .ps-tag{margin-left:0;flex-shrink:0}
 @media(max-width:760px){.ps-lg{min-width:100%}}
+.ps-sections{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+.ps-sec{flex:1;min-width:170px;text-align:left;border:1px solid #cdd6e4;background:#fff;border-radius:14px;
+  padding:11px 15px;box-shadow:0 4px 12px rgba(16,24,40,.04)}
+.ps-sec b{display:block;font-family:var(--display);font-size:19px;letter-spacing:.03em;text-transform:uppercase;color:var(--navy);line-height:1.05}
+.ps-sec span{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.3}
+.ps-sec.on{background:var(--navy);border-color:var(--navy)}
+.ps-sec.on b{color:#fff}
+.ps-sec.on span{color:#cfe3ff}
+.ps-sec:not(.on):hover{background:#f4f8fd}
+@media(max-width:760px){.ps-sec{min-width:100%}}
 @media(max-width:760px){.ps-bar-g,.ps-bar-g.grow{width:100%}.ps-k-v{font-size:28px}}
 </style>
 </head>
@@ -414,6 +424,6 @@ tr:hover td{background:#f7fafd}
 <script src="boundary.js?v=202608042400"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202607250740"></script>
-<script src="pricing.js?v=202608043600"></script>
+<script src="pricing.js?v=202608043800"></script>
 </body>
 </html>

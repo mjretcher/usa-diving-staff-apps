@@ -169,6 +169,7 @@ const PS = {
   prequalSource:'solved',
   baseFinal:null,                     // national field under the calibrated baseline
   scenarioId:null, scenarioName:'', openGrid:null,
+  section:'prices',                   // prices | athletes | compare | basis
   compare:[], pathway:null,
   bList:null, sList:null,
   dirty:false, err:null, tab:'summary',
@@ -1732,6 +1733,24 @@ function openReport(){
   setTimeout(() => { try { w.focus(); w.print(); } catch(e){} }, 350);
 }
 
+/* ---------- sections ----------
+   Eight cards, nine tables and 85 inputs on one scroll is too much to hand
+   someone in a meeting. Split into tabs rather than collapsible panels: a
+   collapsed section is a hidden control, and the people using this should not
+   have to discover anything. The summary band and the legend stay put across
+   all four, because those are the numbers you are steering by. */
+const SECTIONS = [
+  ['prices',   'Prices',  'What we charge, and what it brings in'],
+  ['athletes', 'Athletes', 'Who gets to compete, and what it costs them'],
+  ['compare',  'Compare',  'Scenarios side by side'],
+  ['basis',    'Basis',    'Structure, and where every number came from'],
+];
+function renderSectionBar(){
+  return '<div class="ps-sections">' + SECTIONS.map(([k,label,hint]) =>
+    `<button class="ps-sec ${PS.section===k?'on':''}" data-sec="${k}">
+       <b>${label}</b><span>${hint}</span></button>`).join('') + '</div>';
+}
+
 /* ---------- one provenance vocabulary ----------
    These tags accumulated one at a time -- observed, calibrated, modelled,
    derived, measured, live, rule, by hand, roster held, needs a number -- and
@@ -1818,18 +1837,18 @@ function render(){
   const base = computeRevenue(false);
   const sim  = computeRevenue(true);
 
+  const body =
+      PS.section==='prices'   ? renderMemberPrices(base, sim) + renderEventFees(base, sim) + renderSenior(base, sim)
+    : PS.section==='athletes' ? renderQualification(sim) + renderAthleteCost()
+    : PS.section==='compare'  ? renderCompare()
+    :                           renderStructure(sim) + renderCalibration(sim);
+
   host.innerHTML =
     renderScenarioBar() +
     renderSummary(base, sim) +
+    renderSectionBar() +
     provLegend() +
-    renderMemberPrices(base, sim) +
-    renderEventFees(base, sim) +
-    renderSenior(base, sim) +
-    renderQualification(sim) +
-    renderAthleteCost() +
-    renderCompare() +
-    renderStructure(sim) +
-    renderCalibration(sim);
+    body;
 
   wire();
   restorePlace(place);
@@ -1936,6 +1955,14 @@ function wire(){
   const rs = host.querySelector('#psReset');  if (rs) rs.addEventListener('click', resetPrices);
   const cx = host.querySelector('#psCsv');    if (cx) cx.addEventListener('click', exportCsv);
   const rp = host.querySelector('#psReport'); if (rp) rp.addEventListener('click', openReport);
+
+  host.querySelectorAll('button[data-sec]').forEach(el => el.addEventListener('click', e => {
+    PS.section = e.currentTarget.dataset.sec;
+    render();
+    // A section change is a deliberate move, not an edit, so go to the top of
+    // the new section rather than restoring the old scroll offset.
+    try { window.scrollTo(0, 0); } catch(err){}
+  }));
 
   const ac = host.querySelector('#psAddCmp');
   if (ac) ac.addEventListener('change', e => { if (e.target.value) addCompare(e.target.value); });
