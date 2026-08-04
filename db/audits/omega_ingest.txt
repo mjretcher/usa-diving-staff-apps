@@ -4,19 +4,14 @@ OMEGA ingest — 1 page(s), DRY_RUN=False, MIN_PASS=95%
     13 OMEGA pdf(s) cited (year hint 2019)
     [wb:20190714] 0001130005010104FFFFFFFFFFFFFF02  2019 Male 1m Final                 rows=  71 ok=  71 bad=  0 pass=100.0%
     [wb:guess] 0001130005010204FFFFFFFFFFFFFF02  2019 Male 3m Final                 rows=  70 ok=  70 bad=  0 pass=100.0%
-    FETCH FAILED 0001130005010304FFFFFFFFFFFFFF02: URLError: <urlopen error [Errno 111] Connection refused>
-    [wb:guess] 0001130005010404FFFFFFFFFFFFFF02  2019 Male 3m None SYNCHRO          rows=  43 ok=   0 bad= 43 pass=0.0%
-      REJECTED — arithmetic pass rate below 95%
-    FETCH FAILED 0001130005010504FFFFFFFFFFFFFF02: URLError: <urlopen error [Errno 111] Connection refused>
+    [wb:guess] 0001130005010304FFFFFFFFFFFFFF02  2019 Male Platform Final           rows=  72 ok=  72 bad=  0 pass=100.0%
+    [skip    ] 0001130005010404FFFFFFFFFFFFFF02  synchro — individual analysis only
+    [skip    ] 0001130005010504FFFFFFFFFFFFFF02  synchro — individual analysis only
     [wb:20190713] 0001130005020104FFFFFFFFFFFFFF02  2019 Female 1m Final               rows=  60 ok=  60 bad=  0 pass=100.0%
-Traceback (most recent call last):
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 248, in <module>
-    main()
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 235, in main
-    ingest_one(url, code, snapshots, cur, stats, year_hint)
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 197, in ingest_one
-    psycopg2.extras.execute_values(cur, """
-  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/psycopg2/extras.py", line 1299, in execute_values
-    cur.execute(b''.join(parts))
-psycopg2.OperationalError: SSL connection has been closed unexpectedly
+    [wb:20190720] 0001130005020204FFFFFFFFFFFFFF02  2019 Female 3m Final               rows=  60 ok=  60 bad=  0 pass=100.0%
+    [wb:guess] 0001130005020304FFFFFFFFFFFFFF02  2019 Female Platform Final         rows=  60 ok=  60 bad=  0 pass=100.0%
+    [skip    ] 0001130005020404FFFFFFFFFFFFFF02  synchro — individual analysis only
+    [skip    ] 0001130005020504FFFFFFFFFFFFFF02  synchro — individual analysis only
+    TIME BUDGET REACHED — stopping early
 
+Summary: files=6, rows=393, rejected=0, fetch_fail=0, no_rows=0, synchro_skipped=4, budget_stop=1
