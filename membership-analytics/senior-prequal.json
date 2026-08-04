@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T16:46:57Z",
+  "generated": "2026-08-04T16:48:37Z",
   "source": "core.event_results",
   "unit": "distinct (athlete, event) pairs \u2014 a 3M champion is prequalified on 3M only",
   "note": "Pathways overlap: the same athlete can qualify through several. Summing rows overstates the field; use union_entries.",
