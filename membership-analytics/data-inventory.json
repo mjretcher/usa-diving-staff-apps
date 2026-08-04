@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T19:39:24Z",
+  "generated": "2026-08-04T19:40:45Z",
   "note": "Unfiltered inventory. 'scraped_not_canonical' is the set that exists in the raw scrape but was never promoted into core.event_results -- present but unusable, which is a very different problem from absent.",
   "core_by_year_stage": [
     {
@@ -2485,6 +2485,217 @@
       "tbl": "divemeets.results",
       "col": "profile_id",
       "typ": "integer"
+    }
+  ],
+  "invitational_event_titles": [
+    {
+      "title": "14-15 Girls 1m J.O (Final)",
+      "meets": 554,
+      "events": 554
+    },
+    {
+      "title": "12-13 Girls 1m J.O (Final)",
+      "meets": 552,
+      "events": 552
+    },
+    {
+      "title": "11 & Under Girls 1m J.O (Final)",
+      "meets": 549,
+      "events": 549
+    },
+    {
+      "title": "14-15 Girls 3m J.O (Final)",
+      "meets": 537,
+      "events": 537
+    },
+    {
+      "title": "14-15 Boys 1m J.O (Final)",
+      "meets": 519,
+      "events": 519
+    },
+    {
+      "title": "12-13 Boys 1m J.O (Final)",
+      "meets": 513,
+      "events": 513
+    },
+    {
+      "title": "11 & Under Boys 1m J.O (Final)",
+      "meets": 508,
+      "events": 508
+    },
+    {
+      "title": "16-18 Boys 1m J.O (Final)",
+      "meets": 504,
+      "events": 504
+    },
+    {
+      "title": "12-13 Girls 3m J.O (Final)",
+      "meets": 499,
+      "events": 499
+    },
+    {
+      "title": "11 & Under Girls 3m J.O (Final)",
+      "meets": 493,
+      "events": 493
+    },
+    {
+      "title": "14-15 Boys 3m J.O (Final)",
+      "meets": 487,
+      "events": 487
+    },
+    {
+      "title": "16-18 Girls 3m J.O (Final)",
+      "meets": 483,
+      "events": 483
+    },
+    {
+      "title": "16-18 Boys 3m J.O (Final)",
+      "meets": 483,
+      "events": 483
+    },
+    {
+      "title": "16-18 Girls 1m J.O (Final)",
+      "meets": 480,
+      "events": 480
+    },
+    {
+      "title": "11 & Under Boys 3m J.O (Final)",
+      "meets": 457,
+      "events": 457
+    },
+    {
+      "title": "12-13 Boys 3m J.O (Final)",
+      "meets": 455,
+      "events": 455
+    },
+    {
+      "title": "Senior Women 3m (Final)",
+      "meets": 258,
+      "events": 258
+    },
+    {
+      "title": "14-15 Girls Platform J.O (Final)",
+      "meets": 255,
+      "events": 255
+    },
+    {
+      "title": "16-18 Girls Platform J.O (Final)",
+      "meets": 240,
+      "events": 240
+    },
+    {
+      "title": "12-13 Girls Platform J.O (Final)",
+      "meets": 239,
+      "events": 239
+    },
+    {
+      "title": "Senior Men 3m (Final)",
+      "meets": 237,
+      "events": 237
+    },
+    {
+      "title": "Senior Women 1m (Final)",
+      "meets": 231,
+      "events": 231
+    },
+    {
+      "title": "11 & Under Girls Platform J.O (Final)",
+      "meets": 226,
+      "events": 226
+    },
+    {
+      "title": "16-18 Boys Platform J.O (Final)",
+      "meets": 218,
+      "events": 218
+    },
+    {
+      "title": "14-15 Boys Platform J.O (Final)",
+      "meets": 218,
+      "events": 218
+    },
+    {
+      "title": "12-13 Boys Platform J.O (Final)",
+      "meets": 209,
+      "events": 209
+    },
+    {
+      "title": "Senior Men 1m (Final)",
+      "meets": 206,
+      "events": 206
+    },
+    {
+      "title": "11 & Under Boys Platform J.O (Final)",
+      "meets": 193,
+      "events": 193
+    },
+    {
+      "title": "FC Level 3 Girls 3m (Final)",
+      "meets": 192,
+      "events": 192
+    },
+    {
+      "title": "FC Level 2 Girls 1m (Final)",
+      "meets": 187,
+      "events": 187
+    },
+    {
+      "title": "FC Level 1 Girls 3m (Final)",
+      "meets": 181,
+      "events": 181
+    },
+    {
+      "title": "FC Level 3 Girls 1m (Final)",
+      "meets": 174,
+      "events": 174
+    },
+    {
+      "title": "9 & Under Girls 1m J.O (Final)",
+      "meets": 174,
+      "events": 174
+    },
+    {
+      "title": "FC Level 2 Girls 3m (Final)",
+      "meets": 168,
+      "events": 168
+    },
+    {
+      "title": "FC Level 5 Girls 1m (Final)",
+      "meets": 166,
+      "events": 166
+    },
+    {
+      "title": "FC Level 1 Girls 1m (Final)",
+      "meets": 165,
+      "events": 165
+    },
+    {
+      "title": "FC Level 7 Girls 1m (Final)",
+      "meets": 165,
+      "events": 165
+    },
+    {
+      "title": "FC Level 6 Girls 1m (Final)",
+      "meets": 161,
+      "events": 161
+    },
+    {
+      "title": "12-13 Girls 1m Novice (Final)",
+      "meets": 161,
+      "events": 161
+    },
+    {
+      "title": "12-13 Girls 3m Novice (Final)",
+      "meets": 155,
+      "events": 155
+    }
+  ],
+  "invitational_title_shape": [
+    {
+      "events": 27842,
+      "has_board": 27215,
+      "has_gender": 27667,
+      "has_age": 18517,
+      "synchro": 867
     }
   ],
   "scraped_not_canonical": [
