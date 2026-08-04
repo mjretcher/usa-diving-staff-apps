@@ -226,7 +226,18 @@
   const NUMS_FGE = ['meet_year', 'n', 'n_divers', 'avg_exec', 'p25_exec',
     'p50_exec', 'p75_exec', 'p90_exec', 'fail_rate', 'avg_dd'];
 
+  // core.dive_sheets uses Female/Male throughout, but athlete rows have carried
+  // Women/Girls/Boys in places. Normalise so a variant never silently returns
+  // an empty comparison field.
+  function normGender(g) {
+    const t = String(g || '').trim().toLowerCase();
+    if (['female', 'women', 'woman', 'girls', 'girl', 'f', 'w'].includes(t)) return 'Female';
+    if (['male', 'men', 'man', 'boys', 'boy', 'm'].includes(t)) return 'Male';
+    return g || null;
+  }
+
   async function fieldGroupExec(gender, discipline, scope, yearFrom) {
+    gender = normGender(gender);
     const r = await q(
       `SELECT meet_year, scope, category_code, category_label, n, n_divers,
               avg_exec, p25_exec, p50_exec, p75_exec, p90_exec, fail_rate, avg_dd
@@ -242,6 +253,7 @@
 
   // Same grain, split voluntary vs optional.
   async function fieldGroupExecVO(gender, discipline, scope, yearFrom) {
+    gender = normGender(gender);
     const r = await q(
       `SELECT meet_year, scope, category_code, vo, n, n_divers, avg_exec, fail_rate, avg_dd
        FROM analytics.field_group_exec_vo
@@ -359,7 +371,7 @@
   window.AE = {
     esc, escJsAttr, num, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
-    isRulebookDive, bucketOf, SCOPES,
+    isRulebookDive, bucketOf, SCOPES, normGender,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,
