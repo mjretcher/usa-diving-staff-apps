@@ -178,6 +178,9 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
     payload = []
     for i, r in enumerate(ok_rows):
         nat, _ = resolve_nation(r["nat"])
+        slug = re.sub(r"[^A-Za-z0-9]", "", r["diver_name"] or "")[:24]
+        diver_id = f"OM-{code[:14]}-{slug}"
+        sheet_key = f"{result_set_id}-{slug}"
         payload.append((
             meet_id, head["meet_year"], "World Aquatics", event_id, result_set_id,
             head.get("event_title") or label, head["gender"], head["discipline"],
@@ -185,8 +188,7 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
             r["dd"], r["score"], " ".join(str(j) for j in r["judges"]),
             r["running_total_points"],
             int(r["overall_rank"]) if (r["overall_rank"] or "").isdigit() else None,
-            f"OM-{code[:14]}-{re.sub(r'[^A-Za-z0-9]', '', r['diver_name'] or '')[:24]}",
-            r["diver_name"], r["nat"], nat,
+            diver_id, sheet_key, r["diver_name"], r["nat"], nat,
         ))
     stats["rows"] += len(payload)
     stats["files"] += 1
@@ -197,7 +199,7 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
           (meet_id, meet_year, competition_family, event_id, result_set_id, event_name, gender,
            discipline, round_stage, dive_order, dive_number, height, description,
            dd, score, judges_scores, running_total_points, round_place,
-           diver_id, diver_name, team_name, nation_code)
+           diver_id, sheet_key, diver_name, team_name, nation_code)
         VALUES %s ON CONFLICT DO NOTHING""", payload)
 
 
