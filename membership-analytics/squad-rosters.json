@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T17:47:38Z",
+  "generated": "2026-08-04T17:48:54Z",
   "retrieved": "2026-08-04",
   "note": "Squad pathways grant eligibility in ALL events, so the places they produce are behavioural, not rule-determined. Entries are measured against junior_results.meet_entrants, not assumed.",
   "squads": [
@@ -27,6 +27,43 @@
         "Lindy Johnson -> Lindyn Johnson",
         "Katie Parker -> Kathryn Parker",
         "Mik Schwickert -> Mikolas Schwickert"
+      ],
+      "reliable": true
+    },
+    {
+      "key": "tier3_junior_senior",
+      "label": "2025-26 Tier III Junior HPS \u2014 at the Senior Championships",
+      "source": "https://www.usadiving.org/tier-3-juniors",
+      "meets": [
+        "12924",
+        "12925"
+      ],
+      "roster": 35,
+      "entered": 18,
+      "match_rate_pct": 51.4,
+      "entries": 24,
+      "events_per_athlete": 1.33,
+      "not_entered": [
+        "Olivia Astrologes",
+        "Ivor Brown",
+        "Alden Charette",
+        "Avery Cowan",
+        "Quinn Fidanza",
+        "Cristiano Garcia",
+        "Emma Guo",
+        "Sophia Hoffman",
+        "Thibault Lede",
+        "Victoria Li",
+        "Noah Lieberman",
+        "Jacob Mannarino",
+        "Jackson Monus",
+        "Katie Parker",
+        "Raine Rutter",
+        "Mik Schwickert",
+        "Gage Sprintz"
+      ],
+      "fuzzy_matches": [
+        "Lindy Johnson -> Lindyn Johnson"
       ],
       "reliable": true
     },
