@@ -900,6 +900,8 @@ function renderSenior(base, sim){
     const SQUAD_FOR = [
       [/National Team/i,            'national_team'],
       [/Tier III Junior|Tier 3 Junior/i, 'tier3_junior_senior'],
+      [/Olympic Games Team/i,       'olympic_2024'],
+      [/Tier I or II HPS/i,         'tier1_hps'],
     ];
     const pr = paths.map((p, k) => {
       const sk = (SQUAD_FOR.find(([re]) => re.test(p.label)) || [])[1];
@@ -915,7 +917,13 @@ function renderSenior(base, sim){
           ${p.derived ? `<span class="ps-tag obs">derived${p.athletes!=null?` &middot; ${fmt(p.athletes)} athletes`:''}</span>`
             : isQual ? `<span class="ps-tag cal">rule &middot; top ${fmt(PS.qualCutoff)} of each event, ${fmt(qFields.length)} events live</span>`
             : sq ? `<span class="ps-tag cal">measured &middot; ${fmt(sq.entered)} of ${fmt(sq.roster)} entered, ${sq.events_per_athlete} events each</span>`
-                 : '<span class="ps-tag mod">needs a number</span>'}</td>
+            : (() => {
+                const raw = sk && PS.squads && PS.squads.squads
+                          ? PS.squads.squads.find(x => x.key === sk) : null;
+                return raw
+                  ? `<span class="ps-tag mod">roster held (${fmt(raw.roster)}) &middot; too few matched to measure yet</span>`
+                  : '<span class="ps-tag mod">needs a number</span>';
+              })()}</td>
         <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}"
           value="${Math.round(val)||0}"></td></tr>`;
     }).join('');
