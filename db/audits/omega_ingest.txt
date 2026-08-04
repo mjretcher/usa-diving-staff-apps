@@ -3,15 +3,20 @@ OMEGA ingest — 1 page(s), DRY_RUN=False, MIN_PASS=95%
   Diving at the 2019 World Aquatics Championships
     13 OMEGA pdf(s) cited (year hint 2019)
     [wb:20190714] 0001130005010104FFFFFFFFFFFFFF02  2019 Male 1m Final                 rows=  71 ok=  71 bad=  0 pass=100.0%
+    [wb:guess] 0001130005010204FFFFFFFFFFFFFF02  2019 Male 3m Final                 rows=  70 ok=  70 bad=  0 pass=100.0%
+    FETCH FAILED 0001130005010304FFFFFFFFFFFFFF02: URLError: <urlopen error [Errno 111] Connection refused>
+    [wb:guess] 0001130005010404FFFFFFFFFFFFFF02  2019 Male 3m None SYNCHRO          rows=  43 ok=   0 bad= 43 pass=0.0%
+      REJECTED — arithmetic pass rate below 95%
+    FETCH FAILED 0001130005010504FFFFFFFFFFFFFF02: URLError: <urlopen error [Errno 111] Connection refused>
+    [wb:20190713] 0001130005020104FFFFFFFFFFFFFF02  2019 Female 1m Final               rows=  60 ok=  60 bad=  0 pass=100.0%
 Traceback (most recent call last):
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 246, in <module>
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 248, in <module>
     main()
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 233, in main
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 235, in main
     ingest_one(url, code, snapshots, cur, stats, year_hint)
-  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 195, in ingest_one
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 197, in ingest_one
     psycopg2.extras.execute_values(cur, """
   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/psycopg2/extras.py", line 1299, in execute_values
     cur.execute(b''.join(parts))
-psycopg2.errors.NotNullViolation: null value in column "sheet_key" of relation "dive_sheets" violates not-null constraint
-DETAIL:  Failing row contains (1597352, OM-2019-00011300050101, 04FF, OM-0001130005010104FF, OM-00011300050101-WANGZongyuan, null, 1, 5335D, null, null, 3.000, 67.50, null, 3.0, null, 7.5 7.5 7.5 7.5 7.5 7.5 8.0, 67.50, WANG Zongyuan, CHN, Event 101 Men's 1m Springboard Final, Male, 1m, Final, World Aquatics, null, null, 2019, null, null, null, null, 2026-08-04 06:41:01.414776+00, null, null, null, null, CHN).
+psycopg2.OperationalError: SSL connection has been closed unexpectedly
 
