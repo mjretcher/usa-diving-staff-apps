@@ -22,25 +22,29 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -c "SELECT to_regclass('core.event_results') AS table_exists;"
+          set -o pipefail
+          psql "$DATABASE_URL" -c "SELECT to_regclass('core.event_results') AS table_exists;" 2>&1 | tee -a /tmp/seed.log
 
       - name: Truncate table (idempotent reload)
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -c "TRUNCATE core.event_results RESTART IDENTITY;"
+          set -o pipefail
+          psql "$DATABASE_URL" -c "TRUNCATE core.event_results RESTART IDENTITY;" 2>&1 | tee -a /tmp/seed.log
 
       - name: Bulk load via \copy
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core.event_results(meet_id_dm,meet_name,event_name,round,diver_id_dm,diver_first,diver_last,place,score,team_id_dm,team_name,team_code,year,stage,event_level,age_group,gender,discipline,event_key,is_synchro,is_junior_circuit,region,zone,ewc_meet,source_file) FROM 'db/seeds/core_event_results.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+          set -o pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy core.event_results(meet_id_dm,meet_name,event_name,round,diver_id_dm,diver_first,diver_last,place,score,team_id_dm,team_name,team_code,year,stage,event_level,age_group,gender,discipline,event_key,is_synchro,is_junior_circuit,region,zone,ewc_meet,source_file) FROM 'db/seeds/core_event_results.csv' WITH (FORMAT csv, HEADER true, NULL '')" 2>&1 | tee -a /tmp/seed.log
 
       - name: Populate divers + teams from event_results
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          set -o pipefail
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL' 2>&1 | tee -a /tmp/seed.log
             INSERT INTO core.teams(team_id_dm, name, code)
             SELECT DISTINCT ON (team_id_dm) team_id_dm, team_name, team_code
             FROM core.event_results
@@ -74,7 +78,33 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS rows_loaded FROM core.event_results;"
-          psql "$DATABASE_URL" -c "SELECT year, COUNT(*) AS rows FROM core.event_results GROUP BY year ORDER BY year;"
-          psql "$DATABASE_URL" -c "SELECT stage, COUNT(*) AS rows FROM core.event_results GROUP BY stage ORDER BY rows DESC;"
-          psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM core.divers; SELECT COUNT(*) FROM core.teams;"
+          set -o pipefail
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) AS rows_loaded FROM core.event_results;" 2>&1 | tee -a /tmp/seed.log
+          psql "$DATABASE_URL" -c "SELECT year, COUNT(*) AS rows FROM core.event_results GROUP BY year ORDER BY year;" 2>&1 | tee -a /tmp/seed.log
+          psql "$DATABASE_URL" -c "SELECT stage, COUNT(*) AS rows FROM core.event_results GROUP BY stage ORDER BY rows DESC;" 2>&1 | tee -a /tmp/seed.log
+          psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM core.divers; SELECT COUNT(*) FROM core.teams;" 2>&1 | tee -a /tmp/seed.log
+
+      - name: Record console tail to Neon
+        # psql output is the only diagnostic this workflow produces, and Actions
+        # logs are not always reachable. A truncate that fails leaves the table
+        # intact but the reason invisible, so it is written where it can be read.
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          pip install psycopg2-binary -q
+          python - <<'PY'
+          import os, json, datetime, psycopg2
+          try:
+              log = open('/tmp/seed.log', encoding='utf-8', errors='replace').read()[-8000:]
+          except Exception as e:
+              log = '(no console captured: %r)' % (e,)
+          conn = psycopg2.connect(os.environ['DATABASE_URL']); cur = conn.cursor()
+          cur.execute("""INSERT INTO app_meta.config (key, value, description)
+                         VALUES ('neon_seed_last_console', %s, 'console tail of the last core.event_results seed')
+                         ON CONFLICT (key) DO UPDATE
+                           SET value = EXCLUDED.value, updated_at = now()""",
+                      (json.dumps({'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                   'console': log}),))
+          conn.commit(); cur.close(); conn.close()
+          PY
