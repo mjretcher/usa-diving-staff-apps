@@ -65,7 +65,10 @@ FROM (
       AND c.is_synchro = FALSE
       AND c.age_group IN ('Group A','Group B','Group C','Group D')
       AND r.score IS NOT NULL AND r.score > 0
-      AND (r.place IS NULL OR r.place <> 127)
+      -- place is TEXT in the raw scrape and can hold tie markers like 'T3',
+      -- so compare as text rather than casting and risking an error on a
+      -- non-numeric value. 127 is the exhibition / non-displacing sentinel.
+      AND COALESCE(btrim(r.place), '') <> '127'
       AND m.start_date IS NOT NULL
     GROUP BY 1,2,3,4, r.profile_id, r.meet_id, r.event_id
 ) t
@@ -84,7 +87,10 @@ FROM (
       AND r.stage = ANY(%s)
       AND r.score IS NOT NULL
       AND r.score > 0
-      AND (r.place IS NULL OR r.place <> 127)
+      -- place is TEXT in the raw scrape and can hold tie markers like 'T3',
+      -- so compare as text rather than casting and risking an error on a
+      -- non-numeric value. 127 is the exhibition / non-displacing sentinel.
+      AND COALESCE(btrim(r.place), '') <> '127'
       AND r.age_group IS NOT NULL
       AND r.gender IS NOT NULL
       AND r.discipline IS NOT NULL
