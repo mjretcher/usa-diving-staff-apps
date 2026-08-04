@@ -75,6 +75,21 @@
 
   /* Groups A/B come from Regionals; C/D skip to Zones */
   const GROUPS_REQ_REG = new Set(['Group A','Group B']);
+
+  /* The season the in-app registration files describe. Read from their own
+     metadata rather than hard-coded, so replacing the files for a new season
+     moves this with them instead of leaving a stale year literal behind —
+     which is exactly how the Nationals "event has not occurred" text survived
+     past the meet. */
+  function currentRegSeason() {
+    var srcs = [window.USAD_JO_NAT_QUALIFIERS, window.USAD_EWC_DATA];
+    for (var i = 0; i < srcs.length; i++) {
+      var t = srcs[i] && srcs[i].meta && (srcs[i].meta.title || srcs[i].meta.generatedAt);
+      var m = String(t || '').match(/\b(20\d\d)\b/);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
   const GROUPS_DIRECT_Z = new Set(['Group C','Group D']);
 
   /* ── Filter state ────────────────────────────────────────────── */
@@ -2801,7 +2816,12 @@
         athletes:reachedEWC,
         attendedCount: actuallyAtEWC.length },
       { id:'nationals', label:'On the Jr Nationals qualifier list',
-        sub:'Published qualifier list — 2026 Jr Nationals event has not occurred yet',
+        /* Says what this row IS rather than asserting the meet is in the
+           future, which stopped being true the day it was scored. Actual
+           attendance cannot be computed here: junior-data.js carries only
+           Regionals, Zones and E/W/C rows, so the figure lives on the
+           Nationals stage, which reads core.event_results. */
+        sub:'Published qualifier list — who was invited. Actual attendance is on the Nationals stage.',
         source:'Source: jo-nat-qualifiers.js (USA Diving published list)',
         athletes:madeNationals },
     ];
@@ -3704,29 +3724,54 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       // These only have current-year (2026) data. Older years: registered = unknown / "—".
       let regEWC = '—';
       let regNat = '—';
-      const filtMatch = (entry) => {
-        // entry should have ageGroup, gender, etc.
-        const f = rptState || {};
-        if (f.ageGroup && entry.ageGroup && entry.ageGroup !== f.ageGroup) return false;
-        if (f.gender && entry.gender && entry.gender !== f.gender) return false;
-        if (f.discipline && entry.discipline && entry.discipline !== f.discipline) return false;
-        return true;
+
+      /* Both registration files key the athlete on `name`; this counted
+         `entry.athlete`, which exists on neither. Every athlete therefore
+         collapsed to one empty string and both cells read "1" — for lists of
+         521 and 237 people.
+
+         Neither file carries ageGroup/gender/discipline either, so the old
+         filter test could never fire and this column silently ignored the
+         filter bar while every other column honoured it. Both files DO carry
+         the athlete's event names, so the demographics are parsed from those
+         and an athlete counts if any of their events matches the filter. */
+      const evDemog = (evName) => {
+        const t = String(evName || '');
+        const ag = (t.match(/Group\s*([A-D])\b/i) || [])[1];
+        return {
+          ageGroup: ag ? 'Group ' + ag.toUpperCase() : '',
+          gender: /girls/i.test(t) ? 'Girls' : (/boys/i.test(t) ? 'Boys' : ''),
+          discipline: /platform|tower/i.test(t) ? 'Platform'
+                    : (/\b3m\b/i.test(t) ? '3M' : (/\b1m\b/i.test(t) ? '1M' : '')),
+        };
       };
-      if (y === 2026) {
+      const entryMatches = (events) => {
+        const f = rptState || {};
+        if (!f.ageGroup && !f.gender && !f.discipline) return true;
+        return (events || []).some(evName => {
+          const d = evDemog(evName);
+          if (f.ageGroup   && d.ageGroup   !== f.ageGroup)   return false;
+          if (f.gender     && d.gender     !== f.gender)     return false;
+          if (f.discipline && d.discipline !== f.discipline) return false;
+          return true;
+        });
+      };
+      const countRegistered = (list, evKey) => {
+        const names = new Set();
+        (list || []).forEach(e => {
+          const nm = (e.name || '').trim().toLowerCase();
+          if (!nm) return;
+          if (entryMatches(e[evKey])) names.add(nm);
+        });
+        return names.size;
+      };
+      if (y === currentRegSeason()) {
         try {
           if (window.USAD_EWC_DATA && Array.isArray(window.USAD_EWC_DATA.entries)) {
-            const ewcAths = new Set();
-            window.USAD_EWC_DATA.entries.forEach(e => {
-              if (filtMatch(e)) ewcAths.add((e.athlete||'').toLowerCase());
-            });
-            regEWC = ewcAths.size;
+            regEWC = countRegistered(window.USAD_EWC_DATA.entries, 'events');
           }
           if (window.USAD_JO_NAT_QUALIFIERS && Array.isArray(window.USAD_JO_NAT_QUALIFIERS.qualifiers)) {
-            const natAths = new Set();
-            window.USAD_JO_NAT_QUALIFIERS.qualifiers.forEach(e => {
-              if (filtMatch(e)) natAths.add((e.athlete||'').toLowerCase());
-            });
-            regNat = natAths.size;
+            regNat = countRegistered(window.USAD_JO_NAT_QUALIFIERS.qualifiers, 'qualifiedEvents');
           }
         } catch(_){}
       }
@@ -3753,7 +3798,13 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           ? `<strong>${fmtNum((q.qualified_to_nat_direct||0)+(q.qualified_to_nat_from_ewc||0))}</strong> (${fmtNum(q.qualified_to_nat_direct||0)} top-3 Zones + ${fmtNum(q.qualified_to_nat_from_ewc||0)} top E/W/C)`
           : `<strong>${fmtNum(q.qualified_to_nat_direct||0)}</strong> top-3 at Zones (direct)`,
         registered: regNat === '—' ? '<span class="rpt-soft">—</span>' : `<strong>${fmtNum(regNat)}</strong>`,
-        attended: (y >= 2026) ? '<span class="rpt-soft">event has not occurred</span>' : (att['Nationals']||0),
+        /* This read `y >= 2026 ? 'event has not occurred'`, which stayed wrong
+           from the moment the meet was scored — the per-event table directly
+           below it was already showing Nationals attendance on the same page.
+           Ask the data instead: a stage with result rows has occurred. */
+        attended: att['Nationals'] > 0
+          ? att['Nationals']
+          : '<span class="rpt-soft">not yet contested</span>',
       });
 
       const el = document.getElementById('recon-stage-table');
