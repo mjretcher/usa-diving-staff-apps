@@ -96,7 +96,14 @@
     /* Radar: athlete last-2y exec by group vs field p50/p90 */
     const maxYear = Math.max(...b.sheets.map((r) => r.meet_year || 0));
     const own = b.sheets.filter((r) => r.discipline === st.board && window.AE.isIndiv(r) && r._exec != null && r.meet_year >= maxYear - 1);
-    const axes = ['1', '2', '3', '4', '5', '6'].map((c) => ({ code: c, label: window.AE.CAT_NAMES[c] }));
+    // Groups come from the shared rulebook order — the old ['1'..'6'] list
+    // lost all four twisting directions and two of the three armstand ones.
+    // Axes with no data on either side are dropped so the radar stays legible.
+    const allCodes = window.AE.CAT_ORDER || ['1', '2', '3', '4'];
+    const axes = allCodes
+      .map((c) => ({ code: c, label: window.AE.CAT_NAMES[c] }))
+      .filter((a) => a.label && (own.some((r) => r._cat === a.code)
+        || groupExec.some((g) => g.category_code === a.code && g.n >= 20)));
     const ownVals = axes.map((a) => {
       const ex = own.filter((r) => r._cat === a.code).map((r) => r._exec);
       return ex.length >= 2 ? mean(ex) : null;
