@@ -190,6 +190,19 @@
     const worst = rated.slice().sort((a, b) => a.diff - b.diff)[0];
 
     const scopeLabel = ((window.AE.SCOPES || []).find((s) => s.id === state.scope) || {}).label || state.scope;
+    const P = window.AEProv;
+    const fieldN = rows.reduce((a, r) => a + (r.fieldN || 0), 0);
+    const prov = P ? P.record('dive-groups', {
+      source: 'analytics.field_group_exec',
+      filters: { scope: state.scope, gender, discipline: state.disc,
+                 dive_type: state.vo, since: state.since || 'all years' },
+      key: 'meet_id + event_id + result_set_id + diver_id',
+      n: fieldN, nLabel: 'field dives',
+      method: 'Execution = score / (3 x DD) per dive, averaged by rulebook dive group '
+        + '(Art. 105.1). Difference is athlete mean minus field mean.',
+      caveats: ['Skills and unparseable dive numbers excluded',
+        `Minimum ${MIN_ATHLETE_N} athlete attempts and ${MIN_FIELD_N} field dives to compare`],
+    }) : null;
 
     let headline;
     if (!rated.length) {
@@ -248,7 +261,7 @@
         </p>
       </div>
       <div class="ae-card">
-        <div class="ae-card-h"><h3>Group by group</h3></div>
+        <div class="ae-card-h"><h3>Group by group</h3>${prov ? P.badge(prov) : ''}</div>
         ${tbl}
         ${notes.length ? `<ul class="ae-notes">${notes.map((n) => `<li>${n}</li>`).join('')}</ul>` : ''}
       </div>`;

@@ -182,6 +182,8 @@
     setView(h.view && VIEWS.some((v) => v.id === h.view) ? h.view : (h.a ? 'passport' : 'field'));
   }
 
+    if (window.AEProv) window.AEProv.bind(document);
+
   window.AEApp = {
     async report() {
       const btns = document.querySelectorAll('.ae-exp-btn');

@@ -201,6 +201,30 @@
     }
 
     const scopeLabel = ((window.AE.SCOPES || []).find((s) => s.id === st.scope) || {}).label || st.scope;
+
+    // Provenance for the two figures that could reach a selection conversation.
+    const P = window.AEProv;
+    const provGap = (P && bar) ? P.record('gap-to-place', {
+      source: 'analytics.rank_cost',
+      filters: { scope: st.scope, gender, discipline: st.disc, dive_count: format, place: st.place },
+      key: 'meet_id + event_id + result_set_id + diver_id',
+      n: bar.n, nLabel: 'meets behind the bar',
+      method: 'Athlete mean of comparable finals minus the mean score at that place. '
+        + 'Probability from the overlap of two normal approximations, variance summed.',
+      caveats: ['Cumulative totals excluded', `Restricted to ${format}-dive lists`,
+        `Athlete distribution from ${scores.n} finals`,
+        'Normal approximation; finals scores are mildly left-skewed'],
+    }) : null;
+    const provSplit = (P && split && barSplit) ? P.record('gap-decomposition', {
+      source: 'analytics.event_profile',
+      filters: { scope: st.scope, gender, discipline: st.disc, dive_count: format,
+                 band: st.place <= 3 ? 'podium' : 'finalist' },
+      key: 'meet_id + event_id + result_set_id + diver_id',
+      n: barSplit.n, nLabel: 'results in band',
+      method: 'score = 3 x sum(DD x execution); gap attributed by holding one factor '
+        + 'at the athlete level. The two parts sum to the gap exactly.',
+      caveats: ['Cumulative totals excluded', 'One dive-count format only'],
+    }) : null;
     const gap = (bar && scores.mean != null) ? scores.mean - bar.mean : null;
 
     root.innerHTML = `
@@ -250,7 +274,7 @@
       </div>
 
       ${split ? `<div class="ae-card">
-        <div class="ae-card-h"><h3>What would close it</h3></div>
+        <div class="ae-card-h"><h3>What would close it</h3>${provSplit ? P.badge(provSplit) : ''}</div>
         <p class="ae-soft">The gap splits exactly into difficulty and execution, because a
           total is 3 &times; the sum of (DD &times; execution). This is arithmetic, not a model —
           the two parts always sum to the gap.</p>
