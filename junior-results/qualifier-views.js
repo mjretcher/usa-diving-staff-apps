@@ -1192,6 +1192,14 @@
     // Computed E/W/C → Nationals layer (from Neon), appended below either path.
     tableWrap.insertAdjacentHTML('beforeend', '<div id="qvComputedEWCNat"></div>');
     mountComputedEWCNat();
+
+    // Full results — every event, every diver, with the voluntary/optional
+    // split and both totals. Lives below the qualifier list because the list
+    // answers "who was invited" and this answers "what happened".
+    tableWrap.insertAdjacentHTML('beforeend', '<div id="qvNatResults" class="qv-nat-results"></div>');
+    if (window.renderNationalsResultsPanel) {
+      window.renderNationalsResultsPanel(document.getElementById('qvNatResults'));
+    }
   }
 
   function renderNatSidebar() {
