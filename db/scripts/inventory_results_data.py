@@ -67,6 +67,32 @@ QUERIES = {
                AND column_name IN ('meet_id','event_id','profile_id'))
         ORDER BY 1,2
     """,
+    # Feasibility: promoting those rows means parsing age group, gender and
+    # discipline out of event titles. Championship titles are house style;
+    # invitational titles are whatever the host typed. Sample them before
+    # promising anything.
+    "invitational_event_titles": """
+        SELECT e.title, count(DISTINCT e.meet_id)::int meets, count(*)::int events
+        FROM divemeets.events e
+        JOIN divemeets.meets m ON m.meet_id = e.meet_id
+        WHERE m.sanction = 'USA Diving'
+          AND NOT EXISTS (SELECT 1 FROM core.event_results c
+                          WHERE c.meet_id_dm::text = e.meet_id::text)
+          AND e.title IS NOT NULL
+        GROUP BY 1 ORDER BY 3 DESC LIMIT 40
+    """,
+    "invitational_title_shape": """
+        SELECT count(*)::int events,
+               count(*) FILTER (WHERE e.title ~* '(1m|3m|platform|5m|7\\.5m|10m)')::int has_board,
+               count(*) FILTER (WHERE e.title ~* '(boys|girls|men|women|male|female)')::int has_gender,
+               count(*) FILTER (WHERE e.title ~* '(group [a-d]|1[1-8]|under|u1[0-9]|9-10|11-12|12-13|14-15|16-18)')::int has_age,
+               count(*) FILTER (WHERE e.title ~* 'synchro')::int synchro
+        FROM divemeets.events e
+        JOIN divemeets.meets m ON m.meet_id = e.meet_id
+        WHERE m.sanction = 'USA Diving'
+          AND NOT EXISTS (SELECT 1 FROM core.event_results c
+                          WHERE c.meet_id_dm::text = e.meet_id::text)
+    """,
     # The gap that matters: meets we scraped results for that never made it
     # into the canonical table.
     "scraped_not_canonical": """
