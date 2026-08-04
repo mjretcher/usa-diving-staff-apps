@@ -54,6 +54,14 @@ CREATE_RX = re.compile(
     r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\s*\((.*?)\n\)\s*;",
     re.I | re.S)
 
+# A column added to a live table can only arrive by ALTER, because CREATE TABLE
+# IF NOT EXISTS no-ops. Those statements are as much a declaration as anything
+# inside the CREATE block, and the file is not fully read without them.
+ALTER_RX = re.compile(
+    r"ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\s+"
+    r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_][a-z0-9_]*)\s+([^;]+);",
+    re.I)
+
 
 def norm_type(decl):
     d = decl.strip().lower()
@@ -90,6 +98,8 @@ def parse_schema_file(path):
                 buf.append(ch)
         cols_add(cols, "".join(buf))
         out[f"{schema.lower()}.{table.lower()}"] = cols
+    for schema, table, col, decl in ALTER_RX.findall(sql):
+        out.setdefault(f"{schema.lower()}.{table.lower()}", {})[col.lower()] = norm_type(decl)
     return out
 
 
