@@ -126,15 +126,35 @@
     clearTimeout(state.searching);
     if (!val || val.trim().length < 2) { closeResults(); return; }
     state.searching = setTimeout(async () => {
-      let rows = [];
-      try { rows = await window.AE.searchAthletes(val); } catch (e) { console.error(e); }
+      // One box, both things you might be looking for. Athletes and meets are
+      // fetched together and shown under headings rather than merged into one
+      // ranked list, because "Chen" and "Zone C" are different intentions and
+      // interleaving them makes both harder to find.
+      const [athletes, meets] = await Promise.all([
+        window.AE.searchAthletes(val).catch((e) => { console.error(e); return []; }),
+        window.AE.meetSearch(val, {}).then((r) => r.slice(0, 6)).catch(() => []),
+      ]);
       const r = document.getElementById('aeSearchResults');
-      if (!rows.length) { r.innerHTML = `<div class="ae-sr-empty">No athletes match "${esc(val)}".</div>`; r.hidden = false; return; }
-      r.innerHTML = rows.map((a) => `
-        <button class="ae-sr-row" onclick="AEApp.pick('${escJsAttr(a.canonical_id)}')">
-          <span class="ae-sr-name">${esc(a.display_name)}${a.nat && a.nat !== 'USA' ? ` <i>${esc(a.nat)}</i>` : ''}</span>
-          <span class="ae-sr-meta">${esc(a.team_name || '')} · ${esc(a.first_year)}–${esc(a.last_year)} · ${esc(a.n_phase_meets)} meets${Number(a.n_dives) ? ` · ${esc(a.n_dives)} dives` : ''}${a.wa_id && a.match_method === 'name_token_exact' ? ' · <b class="ae-sr-wa">WORLD</b>' : ''}</span>
-        </button>`).join('');
+      if (!athletes.length && !meets.length) {
+        r.innerHTML = `<div class="ae-sr-empty">Nothing matches "${esc(val)}" — no athlete or meet by that name.</div>`;
+        r.hidden = false; return;
+      }
+      let html = '';
+      if (athletes.length) {
+        html += `<div class="ae-sr-head">Athletes</div>` + athletes.map((a) => `
+          <button class="ae-sr-row" onclick="AEApp.pick('${escJsAttr(a.canonical_id)}')">
+            <span class="ae-sr-name">${esc(a.display_name)}${a.nat && a.nat !== 'USA' ? ` <i>${esc(a.nat)}</i>` : ''}</span>
+            <span class="ae-sr-meta">${esc(a.team_name || '')} · ${esc(a.first_year)}–${esc(a.last_year)} · ${esc(a.n_phase_meets)} meets${Number(a.n_dives) ? ` · ${esc(a.n_dives)} dives` : ''}${a.wa_id && a.match_method === 'name_token_exact' ? ' · <b class="ae-sr-wa">WORLD</b>' : ''}</span>
+          </button>`).join('');
+      }
+      if (meets.length) {
+        html += `<div class="ae-sr-head">Meets</div>` + meets.map((m) => `
+          <button class="ae-sr-row" onclick="AEApp.openMeet('${escJsAttr(m.meet_id)}')">
+            <span class="ae-sr-name">${esc(m.meet_name)}</span>
+            <span class="ae-sr-meta">${esc(m.meet_year)}${m.venue ? ' · ' + esc(m.venue) : ''} · ${esc(m.n_events)} events · ${esc(m.n_divers)} divers</span>
+          </button>`).join('');
+      }
+      r.innerHTML = html;
       r.hidden = false;
     }, 240);
   }
@@ -206,6 +226,15 @@
     goSection(secId) {
       const first = VIEWS.find((v) => v.section === secId);
       if (first) this.go(first.id);
+    },
+    // Picking a meet from the global search jumps straight into the replay,
+    // rather than dropping you on the Meets tab to search a second time.
+    openMeet(id) {
+      closeResults();
+      const inp = document.getElementById('aeSearchInput');
+      if (inp) inp.value = '';
+      if (window.AEMeet) window.AEMeet.select(id);
+      setView('race');
     },
     go: setView,
     rerender,

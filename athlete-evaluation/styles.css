@@ -1235,3 +1235,8 @@ tr.ae-fc-start b { color: var(--brand-blue); }
   color: var(--ink-4); background: var(--surface-2); border: 1px solid var(--line);
   border-radius: 4px; padding: 1px 4px;
 }
+.ae-sr-head {
+  font: 700 9.5px Inter, sans-serif; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); padding: 9px 13px 4px; background: var(--surface-2);
+  border-bottom: 1px solid var(--line-2); position: sticky; top: 0;
+}

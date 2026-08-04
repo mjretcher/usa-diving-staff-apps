@@ -591,11 +591,14 @@
 
   window.AEMeet = {
     render,
-    open(id) {
+    // select() only sets state; open() also repaints. The global search needs
+    // the first form, because it switches view straight afterwards and a
+    // repaint here would render whichever view you were on beforehand.
+    select(id) {
       st.meetId = id; st.meet = null; st.events = null;
       st.eventKey = null; st.rows = null; st.pop = null; st.official = null; st.focus = null;
-      window.AEApp.rerender();
     },
+    open(id) { this.select(id); window.AEApp.rerender(); },
     back() {
       st.meetId = null; st.meet = null; st.events = null;
       st.eventKey = null; st.rows = null; st.pop = null; st.official = null; st.focus = null;
