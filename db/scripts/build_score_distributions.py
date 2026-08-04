@@ -74,12 +74,45 @@ def pct(sorted_desc, p):
     return sorted_desc[max(0, min(len(sorted_desc) - 1, i))]
 
 
+# Everything sanctioned that is not Regionals / Zones / E-W-C / Nationals is,
+# in practice, an invitational. They have never been used as an official
+# qualifier, so nobody has needed to know what their fields look like -- which
+# is exactly why a structure that qualifies through them cannot be simulated
+# from circuit data alone.
+PROBE = """
+SELECT COALESCE(stage,'(null)') stage,
+       COALESCE(is_junior_circuit,FALSE) circuit,
+       year,
+       count(*)::int rows,
+       count(DISTINCT COALESCE(NULLIF(diver_id_dm::text,''),
+             lower(btrim(diver_first))||'|'||lower(btrim(diver_last))))::int divers,
+       count(DISTINCT meet_id_dm)::int meets
+FROM core.event_results
+WHERE year >= 2024
+  AND age_group IN ('Group A','Group B','Group C','Group D')
+GROUP BY 1,2,3 ORDER BY 3,1
+"""
+
+
 def main():
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         sys.exit("DATABASE_URL not set")
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
+
+    cur.execute(PROBE)
+    probe = [{"stage": r[0], "circuit": bool(r[1]), "year": r[2],
+              "rows": r[3], "divers": r[4], "meets": r[5]} for r in cur.fetchall()]
+    print("junior-aged results by stage (2024+), circuit and non-circuit:")
+    for p in probe:
+        tag = "circuit" if p["circuit"] else "OTHER  "
+        print(f"   {p['year']} {tag} {p['stage']!r:24} {p['rows']:6} rows  "
+              f"{p['divers']:5} divers  {p['meets']:4} meets")
+    noncirc = [p for p in probe if not p["circuit"]]
+    print(f"\nnon-circuit junior results: {sum(p['rows'] for p in noncirc)} rows across "
+          f"{len(set(p['stage'] for p in noncirc))} stage labels")
+
     cur.execute(SQL, (STAGES,))
     rows = cur.fetchall()
     cur.close()
@@ -125,6 +158,7 @@ def main():
         "total_scores": total,
         "thin_buckets": thin,
         "unmapped": dict(skipped),
+        "stage_probe": probe,
         "cells": out_cells,
     }
     with open(TARGET, "w") as fh:
