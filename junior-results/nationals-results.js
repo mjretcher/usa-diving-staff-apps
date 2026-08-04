@@ -134,14 +134,30 @@
 
     return Object.keys(ev).sort().map(function (k) {
       var e = ev[k];
+      // An event whose final has not been contested yet must not report its
+      // prelim leaders as having failed to start one.
+      var hasFinal = Object.keys(e.divers).some(function (nm) { return !!e.divers[nm].F; });
       var list = Object.keys(e.divers).map(function (nm) {
         var d = e.divers[nm];
         var P = d.P, F = d.F;
         var prelim = P ? P.vol + P.opt : null;
         var finals = F ? F.vol + F.opt : null;
         var finalist = !!F;
-        var place = finalist ? F.place : (P ? P.place : null);
-        var isEx = !(place != null && /^\d+$/.test(String(place).trim()));
+        var toNum = function (v) {
+          return (v != null && /^\d+$/.test(String(v).trim())) ? parseInt(v, 10) : null;
+        };
+        var prelimRank = P ? toNum(P.place) : null;
+        // Non-displacing: DiveMeets records "Exhibition" instead of a place for
+        // foreign athletes and those who have declared another sport nationality.
+        // Art. 102(b) / 301.3 keep them from taking a placing or a final spot
+        // from a U.S. athlete; the final is enlarged to fit them instead.
+        var isEx = toNum(finalist ? F.place : (P ? P.place : null)) == null;
+        // A diver who made the prelim top 12 but is absent from the final did
+        // not start it, and the next diver moved up under Art. 106.3(e). Their
+        // prelim place is NOT a finishing place. Reading it as one turned Brody
+        // Johnson — who won the Group C Boys 3m prelim and then did not swim —
+        // into the national champion, ahead of Charles Torrione who actually won.
+        var dns = hasFinal && !finalist && !isEx && prelimRank != null && prelimRank <= 12;
         return {
           name: d.name, team: d.team,
           volP: P ? P.vol : null, optP: P ? P.opt : null,
@@ -151,7 +167,10 @@
           official: finalist ? (P ? P.vol + finals : finals) : prelim,
           // Selection Procedure sheet — every segment added
           sheet: finalist ? (prelim + finals) : prelim,
-          place: isEx ? null : parseInt(place, 10),
+          // Only a final produces a finishing place.
+          place: finalist ? toNum(F.place) : null,
+          prelimRank: prelimRank,
+          dns: dns,
           exhibition: isEx,
           // cross-check: does our split reproduce what DiveMeets published?
           checkP: P ? Math.abs((P.vol + P.opt) - P.published) < 0.005 : true,
@@ -166,12 +185,18 @@
         d.move = (d.place != null && d.sheetRank != null) ? (d.sheetRank - d.place) : 0;
       });
       list.sort(function (a, b) {
-        if (a.exhibition !== b.exhibition) return a.exhibition ? 1 : -1;
-        return (a.place || 999) - (b.place || 999);
+        var key = function (d) {
+          if (d.exhibition) return 3000 + (d.prelimRank || 999);
+          if (d.finalist)   return d.place || 999;
+          return 1000 + (d.prelimRank || 999);
+        };
+        return key(a) - key(b);
       });
 
       e.list = list;
       e.moved = scoring.filter(function (d) { return d.move !== 0; }).length;
+      e.dns = list.filter(function (d) { return d.dns; }).length;
+      e.hasFinal = hasFinal;
       e.badSplit = list.filter(function (d) { return !d.checkP || !d.checkF; }).length;
       e.finalists = list.filter(function (d) { return d.finalist; }).length;
       return e;
@@ -190,8 +215,8 @@
         return true;
       });
       if (!list.length) return null;
-      return { title: e.title, fmt: e.fmt, list: list, moved: e.moved,
-               badSplit: e.badSplit, finalists: e.finalists };
+      return { title: e.title, fmt: e.fmt, list: list, moved: e.moved, dns: e.dns,
+               hasFinal: e.hasFinal, badSplit: e.badSplit, finalists: e.finalists };
     }).filter(Boolean);
   }
 
@@ -213,23 +238,31 @@
         '<span class="nr-tag">exhibition &middot; non-scoring</span></td></tr>';
     }
     var mv = d.move;
-    var mvHtml = !mv ? '<span class="nr-flat">&ndash;</span>'
+    var mvHtml = !d.finalist ? '<span class="nr-flat">&ndash;</span>'
+      : !mv ? '<span class="nr-flat">&ndash;</span>'
       : '<span class="nr-move ' + (mv > 0 ? 'nr-up' : 'nr-down') + '">' +
         (mv > 0 ? '&#9650; ' + mv : '&#9660; ' + Math.abs(mv)) + '</span>';
     var warn = (!d.checkP || !d.checkF)
       ? ' <span class="nr-warn" title="dive-sheet split does not reproduce the published score">!</span>' : '';
-    return '<tr' + (d.finalist ? '' : ' class="nr-noswim"') + '>' +
-      '<td class="nr-pl">' + d.place + '</td>' +
+    var plCell = d.finalist
+      ? '<td class="nr-pl">' + d.place + '</td>'
+      : '<td class="nr-pl nr-pl-prelim" title="preliminary rank — not a finishing place">P'
+        + (d.prelimRank == null ? '?' : d.prelimRank) + '</td>';
+    var tail = d.dns
+      ? '<span class="nr-tag nr-tag-dns">qualified &middot; did not start the final</span>'
+      : (!d.finalist ? '<span class="nr-tag">did not advance</span>' : '');
+    return '<tr class="' + (d.dns ? 'nr-dns' : (d.finalist ? '' : 'nr-noswim')) + '">' +
+      plCell +
       '<td class="nr-nm">' + esc(d.name) + warn + '</td>' +
       '<td class="nr-tm">' + esc(d.team || 'Unattached') + '</td>' +
       '<td class="nr-n nr-vol">' + n2(d.volP) + '</td>' +
       '<td class="nr-n">' + n2(d.optP) + '</td>' +
       '<td class="nr-n">' + n2(d.prelim) + '</td>' +
-      '<td class="nr-n">' + (d.finalist ? n2(d.finals) : '<span class="nr-flat">did not swim</span>') + '</td>' +
+      '<td class="nr-n">' + (d.finalist ? n2(d.finals) : '<span class="nr-flat">&mdash;</span>') + '</td>' +
       '<td class="nr-n nr-official">' + n2(d.official) + '</td>' +
       '<td class="nr-n">' + n2(d.sheet) + '</td>' +
       '<td class="nr-n nr-sr">' + (d.sheetRank || '') + '</td>' +
-      '<td class="nr-mv">' + mvHtml + '</td></tr>';
+      '<td class="nr-mv">' + mvHtml + ' ' + tail + '</td></tr>';
   }
 
   function eventHtml(e) {
@@ -238,6 +271,9 @@
         '<span class="nr-fmt">' + fmtLine(e.fmt) + '</span>' +
         (e.moved ? '<span class="nr-badge">' + e.moved + ' place' + (e.moved === 1 ? '' : 's') +
                    ' differ between the two totals</span>' : '') +
+        (e.hasFinal === false ? '<span class="nr-badge">final not yet contested &mdash; prelim only</span>' : '') +
+        (e.dns ? '<span class="nr-badge nr-badge-bad">' + e.dns +
+                 ' qualifier did not start the final</span>' : '') +
         (e.badSplit ? '<span class="nr-badge nr-badge-bad">' + e.badSplit +
                       ' split mismatch</span>' : '') +
       '</h3>' +
@@ -255,15 +291,19 @@
   }
 
   function csv(events) {
-    var out = [['Event', 'Place', 'Diver', 'Team', 'VolPrelim', 'OptPrelim', 'PrelimTotal',
-                'FinalsSession', 'OfficialTotal', 'SheetTotal', 'SheetRank', 'Move', 'Note']];
+    var out = [['Event', 'FinishPlace', 'PrelimRank', 'Diver', 'Team',
+                'VolPrelim', 'OptPrelim', 'PrelimTotal', 'FinalsSession',
+                'OfficialTotal', 'SheetTotal', 'SheetRank', 'Move', 'Note']];
     events.forEach(function (e) {
       e.list.forEach(function (d) {
-        out.push([e.title, d.exhibition ? '' : d.place, d.name, d.team || 'Unattached',
+        out.push([e.title, d.finalist ? d.place : '', d.exhibition ? '' : (d.prelimRank || ''),
+          d.name, d.team || 'Unattached',
           n2(d.volP), n2(d.optP), n2(d.prelim), d.finalist ? n2(d.finals) : '',
           d.exhibition ? '' : n2(d.official), d.exhibition ? '' : n2(d.sheet),
-          d.exhibition ? '' : (d.sheetRank || ''), d.exhibition ? '' : d.move,
-          d.exhibition ? 'exhibition - non-scoring' : (d.finalist ? '' : 'ranked on prelim')]);
+          d.exhibition ? '' : (d.sheetRank || ''), d.finalist ? d.move : '',
+          d.exhibition ? 'non-displacing - no place, no team points'
+            : d.dns ? 'qualified - did not start the final'
+            : d.finalist ? '' : 'did not advance - prelim rank only']);
       });
     });
     return out.map(function (r) {
@@ -297,6 +337,9 @@
       return n + e.list.filter(function (d) { return !d.exhibition; }).length; }, 0);
     var totalMoved = all.reduce(function (n, e) { return n + e.moved; }, 0);
     var totalBad = all.reduce(function (n, e) { return n + e.badSplit; }, 0);
+    var totalDns = all.reduce(function (n, e) { return n + e.dns; }, 0);
+    var totalEx  = all.reduce(function (n, e) {
+      return n + e.list.filter(function (d) { return d.exhibition; }).length; }, 0);
 
     wrap.innerHTML =
       '<div class="nr-wrap">' +
@@ -315,6 +358,9 @@
           '<div class="nr-kpi"><b>' + totalDivers + '</b><span>scoring finishes</span></div>' +
           '<div class="nr-kpi' + (totalMoved ? ' nr-kpi-warn' : '') + '"><b>' + totalMoved +
             '</b><span>places where the two totals disagree</span></div>' +
+          (totalDns ? '<div class="nr-kpi nr-kpi-bad"><b>' + totalDns +
+            '</b><span>qualified but did not start a final</span></div>' : '') +
+          '<div class="nr-kpi"><b>' + totalEx + '</b><span>non-displacing entries</span></div>' +
           (totalBad ? '<div class="nr-kpi nr-kpi-bad"><b>' + totalBad +
             '</b><span>dive-sheet split mismatches</span></div>' : '') +
         '</div>' +
@@ -323,8 +369,15 @@
           'prelim plus the finals session, per Art.&nbsp;303(c)(2), and it is what DiveMeets publishes. ' +
           '<b>Sheet</b> is the "Selection Procedure" total, which adds every segment and so counts the ' +
           'prelim optionals twice. Rows are ranked by Official; <b>Move</b> shows how far a diver sits ' +
-          'from that on the Sheet ordering. Divers below 12th never swim a final and are ranked on their ' +
-          'prelim, so their two totals match.</p>' +
+          'from that on the Sheet ordering.</p>' +
+        '<p class="nr-explain"><b>Only a final produces a place.</b> Finishing places 1&ndash;12 come from ' +
+          'the final. Everyone else shows a <b>P-number</b>, which is their preliminary rank and not a ' +
+          'finishing place &mdash; including any diver who made the top 12 and then did not start the final, ' +
+          'who is flagged as such because the next diver moved up under Art.&nbsp;106.3(e). ' +
+          '<b>Non-displacing entries</b> &mdash; foreign athletes and those who have declared another sport ' +
+          'nationality &mdash; are listed for reference but hold no place, take none from a U.S. athlete, ' +
+          'and score no team points under Art.&nbsp;602.20(g). The final is enlarged to accommodate them ' +
+          'rather than shortened, per Art.&nbsp;301.3.</p>' +
       '</header>' +
 
       '<div class="nr-controls">' +

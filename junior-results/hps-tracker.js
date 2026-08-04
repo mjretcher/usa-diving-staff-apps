@@ -74,7 +74,7 @@
   var NO_TARGET_NOTE = 'No published target score for 1m — shown for reference.';
 
   var state = { rows: null, vols: null, loading: false, error: null,
-                showNearMiss: true, meetName: '', hasSynchro: false };
+                showNearMiss: true, meetName: '', hasSynchro: false, excluded: 0 };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -115,6 +115,18 @@
 
   function roundLabel(r) {
     return String(r) === '1' ? 'Preliminaries' : (String(r) === '9' ? 'Finals' : 'Semifinal');
+  }
+
+  /* Non-displacing entries. DiveMeets records a place of "Exhibition" rather
+     than a number for athletes who are foreign or have declared another sport
+     nationality; Art. 102(b) and Art. 301.3 keep them from taking a placing or
+     a spot from a U.S. athlete, and Art. 602.20(g), new for 2026, keeps them
+     off team scoring on the same principle. They cannot be selected to a USA
+     Diving Junior High Performance Squad either, so they are excluded from
+     both pathways here. Left in, they read as qualifiers: Ivan Kliminov
+     out-scored the target in Group C Boys 3m and platform in both sessions. */
+  function isScoring(place) {
+    return place != null && /^\d+$/.test(String(place).trim());
   }
 
   /* ── Load ─────────────────────────────────────────────────────────────── */
@@ -161,7 +173,8 @@
       // understated one near miss.
       var vol = await neonQuery(
         "SELECT e.title, s.sheet_key::text AS sheet_key, s.dive_order, s.dive_number, " +
-        "       s.net_score, r.diver_name, r.profile_id::text AS profile_id, r.team_name " +
+        "       s.net_score, r.diver_name, r.profile_id::text AS profile_id, r.team_name, " +
+        "       r.place::text AS place " +
         "FROM divemeets.sheet_dives s " +
         "JOIN divemeets.events e ON e.meet_id=s.meet_id AND e.event_id=s.event_id AND e.round=s.round " +
         "LEFT JOIN divemeets.results r ON r.meet_id=s.meet_id AND r.event_id=s.event_id " +
@@ -183,7 +196,9 @@
   /* ── Score pathway ────────────────────────────────────────────────────── */
   function scoreBlocks() {
     var by = {};
+    state.excluded = 0;
     state.rows.forEach(function (r) {
+      if (!isScoring(r.place)) { state.excluded++; return; }   // non-displacing
       var c = classify(r.title);
       if (!c.gender || !c.board) return;
       var k = [c.gender, c.synchro ? 'AB-Synchro' : ('Group ' + c.group), c.board,
@@ -218,6 +233,7 @@
   function volBlocks() {
     var by = {};
     state.vols.forEach(function (v) {
+      if (!isScoring(v.place)) return;                          // non-displacing
       var c = classify(v.title);
       if (!c.gender || !c.group || (c.group !== 'C' && c.group !== 'D')) return;
       var k = [c.gender, 'Group ' + c.group, c.board].join('|');
@@ -362,6 +378,9 @@
         (state.hasSynchro ? '' :
           ' <b>Synchro is not checked.</b> The published criteria set synchro targets, but no synchro ' +
           'results have been collected for this meet, so no synchro diver can appear below either way.') +
+        (state.excluded ? ' <b>' + state.excluded + ' non-displacing entries excluded.</b> Foreign athletes ' +
+          'and those who have declared another sport nationality are recorded by DiveMeets without a ' +
+          'place; they take no placing from a U.S. athlete and are not selectable to this squad.' : '') +
         '</p>' +
       '</header>' +
       '<h2 class="hps-h2">Target score pathway</h2>' + renderScore(sBlocks) +

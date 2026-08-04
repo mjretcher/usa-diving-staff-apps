@@ -122,3 +122,9 @@ th.nr-official{ background:#DCEDF5; color:#0B5975; }
   .nr-controls{ display:none; }
   .nr-table tbody tr:hover{ background:transparent; }
 }
+
+/* Preliminary rank shown where there is no finishing place */
+.nr-pl-prelim{ color:#7A889B; font-weight:600; }
+.nr-dns td{ background:#FFF7F8; }
+.nr-dns .nr-pl-prelim{ color:#A11128; }
+.nr-tag-dns{ background:#FDECEF; color:#A11128; font-weight:600; }
