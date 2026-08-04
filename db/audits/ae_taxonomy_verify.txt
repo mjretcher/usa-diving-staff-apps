@@ -15,9 +15,9 @@ Dive groups (individual disciplines) — nothing uncategorised now
   dive          62     Armstand back                    3845    691     5.589   
   dive          54     Inward twisting                  492     232     3.857   
   dive          63     Armstand reverse                 26      18      5.244   
-  parse_error   PARSE  Unparseable (multi-dive string)  48960   7701    9.998   
+  parse_error   PARSE  Unparseable (multi-dive string)  51170   8109    9.998   
   skill         SKILL  Skill                            103101  7926    5.574   
-  unclassified  UNK    Unclassified                     2220    1380    10.000  
+  unclassified  UNK    Unclassified                     10      7       10.000  
   None          None   None                             1       1       0.000   
 
 ============================================================================
@@ -27,11 +27,53 @@ Coverage check — any rows still unclassified?
   ------------  -------
   dive          1420709
   skill         103972 
-  parse_error   69082  
-  unclassified  3578   
+  parse_error   72641  
+  unclassified  19     
   (null)        9      
 
 ============================================================================
 Skills catalog
 ============================================================================
-  (none)
+  code   skill_name                                     cite                    
+  -----  ---------------------------------------------  ------------------------
+  001A   Forward entry (lineup) — Straight              Art. 302.2(a)(3) / 401.4
+  001B   Forward entry (lineup) — Pike                  Art. 302.2(a)(3) / 401.4
+  001C   Forward entry (lineup) — Tuck                  Art. 302.2(a)(3) / 401.4
+  001D   Forward entry (lineup) — Free                  Art. 302.2(a)(3) / 401.4
+  002A   Back entry (lineup) — Straight                 Art. 302.2(a)(3) / 401.4
+  002B   Back entry (lineup) — Pike                     Art. 302.2(a)(3) / 401.4
+  002C   Back entry (lineup) — Tuck                     Art. 302.2(a)(3) / 401.4
+  002D   Back entry (lineup) — Free                     Art. 302.2(a)(3) / 401.4
+  003A   Entry (lineup, unlisted variant) — Straight    not in rulebook         
+  100A   Forward jump — Straight                        Art. 401.4              
+  100B   Forward jump — Pike                            Art. 401.4              
+  100C   Forward jump — Tuck                            Art. 401.4              
+  100D   Forward jump — Free                            Art. 401.4              
+  200A   Back jump — Straight                           Art. 401.4              
+  200B   Back jump — Pike                               Art. 401.4              
+  200C   Back jump — Tuck                               Art. 401.4              
+  200D   Back jump — Free                               Art. 401.4              
+  300A   Skill (unlisted variant) — Straight            not in rulebook         
+  300B   Skill (unlisted variant) — Pike                not in rulebook         
+  300C   Skill (unlisted variant) — Tuck                not in rulebook         
+  400A   Skill (unlisted variant) — Straight            not in rulebook         
+  400B   Skill (unlisted variant) — Pike                not in rulebook         
+  400C   Skill (unlisted variant) — Tuck                not in rulebook         
+  5001A  Skill (unlisted variant) — Straight            not in rulebook         
+  5101A  Forward jump 1/2 twist — Straight              Art. 401.4              
+  5101D  Forward jump 1/2 twist — Free                  Art. 401.4              
+  5102A  Forward jump 1 twist — Straight                Art. 401.4              
+  5102D  Forward jump 1 twist — Free                    Art. 401.4              
+  5103D  Skill (unlisted variant) — Free                not in rulebook         
+  5104A  Forward jump 2 twists — Straight               Art. 401.4              
+  5201A  Back jump 1/2 twist — Straight                 Art. 401.4              
+  5201C  Back jump 1/2 twist — Tuck                     Art. 401.4              
+  5201D  Back jump 1/2 twist — Free                     Art. 401.4              
+  5202A  Skill (unlisted variant) — Straight            not in rulebook         
+  5202D  Skill (unlisted variant) — Free                not in rulebook         
+  5203A  Back jump 1 1/2 twists — Straight              Art. 401.4              
+  5301A  Reverse jump 1/2 twist — Straight              Art. 503.15(d)          
+  5301D  Reverse jump 1/2 twist — Free                  Art. 503.15(d)          
+  5303A  Reverse jump 1 1/2 twists — Straight           Art. 503.15(d)          
+  600A   Armstand (unlisted variant of 620) — Straight  not in rulebook         
+  610A   Skill (unlisted variant) — Straight            not in rulebook         
