@@ -1,12 +1,17 @@
-OMEGA ingest — 1 page(s), DRY_RUN=True, MIN_PASS=95%
+OMEGA ingest — 1 page(s), DRY_RUN=False, MIN_PASS=95%
 
   Diving at the 2019 World Aquatics Championships
     13 OMEGA pdf(s) cited (year hint 2019)
-    limited to first 4
     [wb:20190714] 0001130005010104FFFFFFFFFFFFFF02  2019 Male 1m Final                 rows=  71 ok=  71 bad=  0 pass=100.0%
-    FETCH FAILED 0001130005010204FFFFFFFFFFFFFF02: URLError: <urlopen error timed out>
-    [wb:guess] 0001130005010304FFFFFFFFFFFFFF02  2019 Male Platform Final           rows=  72 ok=  72 bad=  0 pass=100.0%
-    FETCH FAILED 0001130005010404FFFFFFFFFFFFFF02: URLError: <urlopen error timed out>
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 243, in <module>
+    main()
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 230, in main
+    ingest_one(url, code, snapshots, cur, stats, year_hint)
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/omega_ingest.py", line 192, in ingest_one
+    psycopg2.extras.execute_values(cur, """
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/psycopg2/extras.py", line 1299, in execute_values
+    cur.execute(b''.join(parts))
+psycopg2.errors.NotNullViolation: null value in column "result_set_id" of relation "dive_sheets" violates not-null constraint
+DETAIL:  Failing row contains (1597351, OM-2019-00011300050101, 04FF, null, OM-00011300050101-WANGZongyuan, null, 1, 5335D, null, null, 3.000, 67.50, null, 3.0, null, 7.5 7.5 7.5 7.5 7.5 7.5 8.0, 67.50, WANG Zongyuan, CHN, Event 101 Men's 1m Springboard Final, Male, 1m, Final, World Aquatics, null, null, 2019, null, null, null, null, 2026-08-04 06:39:41.464339+00, null, null, null, null, CHN).
 
-Summary: files=2, rows=143, rejected=0, fetch_fail=2, no_rows=0, synchro_skipped=0
-DRY RUN — nothing written. Set DRY_RUN=0 to load.
