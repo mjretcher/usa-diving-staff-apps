@@ -104,6 +104,16 @@ def main():
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
 
+    cur.execute("""
+        SELECT year, COALESCE(is_synchro::text,'(null)'), count(*)::int
+        FROM core.event_results
+        WHERE stage IN ('Senior-Nationals','Winter-Nationals') AND year BETWEEN 2022 AND 2025
+        GROUP BY 1,2 ORDER BY 1,2""")
+    synflag = [{"year": r[0], "is_synchro": r[1], "rows": r[2]} for r in cur.fetchall()]
+    print("is_synchro flag population on senior nationals rows:")
+    for r in synflag:
+        print(f"   {r['year']} is_synchro={r['is_synchro']:7} {r['rows']:6} rows")
+
     cur.execute(PROBE)
     probe = [{"stage": r[0], "level": r[1], "year": r[2], "rows": r[3]} for r in cur.fetchall()]
     print("senior-side stages present:")
@@ -119,9 +129,12 @@ def main():
             pairs = {p for p in pairs
                      if any(k in (p[1] or "").lower() for k in ("1m", "3m", "10m", "platform"))}
         union |= pairs
+        evs = sorted({p[1] for p in pairs})
         derived.append({"label": label, "entries": len(pairs),
-                        "athletes": len({p[0] for p in pairs}), "derived": True})
+                        "athletes": len({p[0] for p in pairs}),
+                        "events": evs, "derived": True})
         print(f"   {label}: {len(pairs)} entries / {len({p[0] for p in pairs})} athletes")
+        print(f"      events: {evs}")
 
     cur.close()
     conn.close()
@@ -140,6 +153,7 @@ def main():
         "sum_of_derived": sum(r["entries"] for r in derived),
         "pathways": rows,
         "stages_present": probe,
+        "is_synchro_flag": synflag,
     }
     with open(TARGET, "w") as fh:
         json.dump(out, fh, indent=2)
