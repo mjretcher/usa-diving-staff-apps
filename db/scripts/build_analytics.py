@@ -346,8 +346,8 @@ WITH lists AS (
   SELECT competition_family, meet_year, gender, discipline,
          CASE WHEN competition_family='World Aquatics' THEN 'world'
               WHEN competition_family='NCAA' THEN 'ncaa'
-              WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
-              WHEN event_level = 'Junior' THEN 'us-junior'
+              WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+              WHEN event_name ILIKE 'group%' THEN 'us-junior'
               ELSE 'us-open' END AS scope,
          meet_id, event_id, diver_id,
          SUM(dd) AS list_dd, COUNT(*) AS n_dives, SUM(score) AS list_score
