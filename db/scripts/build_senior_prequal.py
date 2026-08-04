@@ -99,9 +99,11 @@ NOT_DERIVABLE = [
     "2025 Tier I or II HPS who competed at 2025 Nationals or Winter Nationals",
     "2024-25 Tier III HPS who competed at 2025 Nationals or Winter Nationals",
     "Non-HPS athletes who met an HPS score threshold at 2025 Nationals",
-    # Derivable in principle once the Qualifier has been swum, but the criteria
-    # document does not state a placement cutoff for it, so the rule is unknown
-    # and guessing one would be worse than asking.
+    # Rule-based, not roster-based, and applied live in the app rather than
+    # frozen here: the top 12 of each Qualifier event advance to the
+    # Championships in that event (2026 Qualifier Criteria, as of 11 June),
+    # capped at field size. Entries move until the meet, so freezing a number
+    # here would go stale.
     "Added at the National Championships Qualifier (5-6 Aug)",
 ]
 

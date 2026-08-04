@@ -158,7 +158,8 @@ const PS = {
   counts:{}, countsYear:null,
   cal:null,                           // frozen flow constants (see deriveCalibration)
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
-  senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
+  senior:null, seniorEntries:{}, seniorEventFields:{},
+  qualCutoff:12,                      // Qualifier: top N of each event advance to Nationals
   prequalPaths:{},                    // manual overrides for senior prequalification paths
   seniorPrequal:null,                 // derived pathway counts (senior-prequal.json)
   squads:null,                        // published squad rosters + measured entries
@@ -685,6 +686,17 @@ async function loadSeniorEntries(){
     const out = {};
     r.rows.forEach(x => { out[String(x.m)] = {n:+x.ind, syn:+x.syn, ev:+x.ev}; });
     PS.seniorEntries = out;
+    // Per-event detail: the Qualifier advances the top N of each event, and a
+    // field shorter than N can only send as many divers as it has.
+    const d = await NEON.query(
+      `SELECT meet_id_dm m, event_id_dm e, entries n
+       FROM junior_results.meet_entries
+       WHERE meet_id_dm = ANY($1)
+         AND NOT (COALESCE(discipline,'') ILIKE '%synchro%'
+               OR COALESCE(event_name,'') ILIKE '%synchro%')`, [ids]);
+    const per = {};
+    d.rows.forEach(x => { (per[String(x.m)] = per[String(x.m)] || []).push(+x.n); });
+    PS.seniorEventFields = per;
   } catch(e){ console.warn('senior entries', e); PS.seniorEntries = {}; }
 }
 
@@ -879,6 +891,12 @@ function renderSenior(base, sim){
     const paths = SP && SP.pathways ? SP.pathways
                 : SENIOR_PREQUAL.map(l => ({label:l, entries:null, derived:false}));
     let manual = 0, derivedShown = 0;
+    // Top 12 of each Qualifier event advance to Nationals in that event
+    // (2026 National Championship Qualifier Criteria, as of 11 June). Capped
+    // at field size: a seven-entry event cannot send twelve.
+    const qMeet = (PS.senior.find(r => r.entry==='open')||{}).meet;
+    const qFields = (PS.seniorEventFields||{})[qMeet] || [];
+    const qAdvance = qFields.reduce((a,n) => a + Math.min(PS.qualCutoff, n), 0);
     const SQUAD_FOR = [
       [/National Team/i,            'national_team'],
       [/Tier III Junior|Tier 3 Junior/i, 'tier3_junior_senior'],
@@ -886,14 +904,16 @@ function renderSenior(base, sim){
     const pr = paths.map((p, k) => {
       const sk = (SQUAD_FOR.find(([re]) => re.test(p.label)) || [])[1];
       const sq = sk ? squad(sk) : null;
+      const isQual = /Qualifier/i.test(p.label);
       const override = PS.prequalPaths[k];
       const val = override != null ? override
-                : (p.derived ? p.entries : (sq ? sq.entries : 0));
+                : (p.derived ? p.entries : (isQual ? qAdvance : (sq ? sq.entries : 0)));
       if (p.derived && override == null) derivedShown += (p.entries||0);
       else manual += (+val||0);
       return `<tr>
         <td class="ps-sub">${esc(p.label)}
           ${p.derived ? `<span class="ps-tag obs">derived${p.athletes!=null?` &middot; ${fmt(p.athletes)} athletes`:''}</span>`
+            : isQual ? `<span class="ps-tag cal">rule &middot; top ${fmt(PS.qualCutoff)} of each event, ${fmt(qFields.length)} events live</span>`
             : sq ? `<span class="ps-tag cal">measured &middot; ${fmt(sq.entered)} of ${fmt(sq.roster)} entered, ${sq.events_per_athlete} events each</span>`
                  : '<span class="ps-tag mod">needs a number</span>'}</td>
         <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}"
@@ -922,6 +942,11 @@ function renderSenior(base, sim){
     ${naive>union?`<div class="ps-ok" style="margin-top:10px"><b>Do not add the column up.</b> The derived pathways overlap &mdash;
       the same athlete wins in more than one year &mdash; so they sum to ${fmt(naive)} but represent only
       <b>${fmt(union)}</b> distinct athlete-event places. The total above uses the deduplicated figure.</div>`:''}
+    <div class="ps-inline">
+      <label>Qualifier advances the top <input class="ps-in sm" type="number" min="0" max="60" data-qcut value="${PS.qualCutoff}"> of each event</label>
+      <span class="note">Published rule for 2026 is 12, and it is the sharpest lever on the senior field: six events, so each place added or removed moves the Championships by six.
+        Capped at field size &mdash; a short event cannot send a full twelve. Athletes who advance this way have the Championships late fee waived, so raising the cutoff does not raise late-fee income.</span>
+    </div>
     <p class="note ps-foot">Counted as athlete-and-event pairs, because a pathway qualifies an athlete for a specific event &mdash;
       a 3-metre champion is prequalified on 3-metre, not across the board &mdash; and that is also the unit entry fees bill in.
       Synchronised events sit outside all of this: the criteria set no qualification protocol for them, only a minimum degree of
@@ -1800,6 +1825,9 @@ function wire(){
     await loadNationalActual(); calibratePrequal(); snapshotBaseline(); PS.dirty=true; render();
   });
 
+  const qc = host.querySelector('input[data-qcut]');
+  if (qc) qc.addEventListener('change', e => { PS.qualCutoff = clamp(Math.round(+e.target.value||0),0,60); PS.dirty=true; render(); });
+
   const pq = host.querySelector('input[data-prequal]');
   if (pq) pq.addEventListener('change', e => { PS.prequal = clamp(Math.round(+e.target.value||0),0,2000); PS.dirty=true; render(); });
 
@@ -1877,7 +1905,7 @@ async function saveScenario(){
   const data = JSON.stringify({
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
     prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
-    senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway, natMeet:PS.natMeet,
+    senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway, natMeet:PS.natMeet, qualCutoff:PS.qualCutoff,
     prequalPaths:PS.prequalPaths,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
@@ -1907,6 +1935,7 @@ async function loadScenario(id){
     PS.prices = d.prices||{}; PS.mElast = d.mElast||{}; PS.eElast = d.eElast||{}; PS.sElast = d.sElast||{};
     if (d.senior && d.senior.length){ PS.senior = d.senior; await loadSeniorEntries(); }
     if (d.prequalPaths) PS.prequalPaths = d.prequalPaths;
+    if (d.qualCutoff != null) PS.qualCutoff = +d.qualCutoff;
     if (d.levy != null) PS.levy = +d.levy;
     if (d.synchro && d.synchro.length) PS.synchro = d.synchro;
     if (d.pathway && d.pathway.events) PS.pathway = d.pathway;
