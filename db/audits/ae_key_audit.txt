@@ -1,0 +1,25 @@
+core.dive_sheets — max distinct values spanned by one key
+  key                   meets   events   divers   verdict
+  ----------------------------------------------------------
+  result_set_id           890     1157    16743   UNSAFE alone
+  sheet_key                 6        9        2   UNSAFE alone
+  event_id                555        1     3040   UNSAFE alone
+  meet_id                   1      103      721   UNSAFE alone
+  diver_id                 72       41        1   UNSAFE alone
+
+core.result_phases — same test
+  key                   meets   events   divers   verdict
+  ----------------------------------------------------------
+  result_set_id          1923     1819    27621   UNSAFE alone
+  sheet_key               105       69      113   UNSAFE alone
+  event_id                717        1     3666   UNSAFE alone
+  meet_id                   1      108      721   UNSAFE alone
+  diver_id                 87       57        1   UNSAFE alone
+
+Is (meet_id, event_id, result_set_id, diver_id) a unique list key in dive_sheets?
+  lists where dive_order is not unique within the key: 0
+
+Does event_id alone identify an event across meets?
+  event_id 370: spans 555 meets
+  event_id 260: spans 552 meets
+  event_id 180: spans 548 meets
