@@ -1,0 +1,52 @@
+/* team-points.css — Junior Nationals team scoring panel.
+   Brand: Navy #171F69, Red #E31937, Pool #009AC7, Sky #8FC3EA. Never red on blue. */
+
+.tp-wrap{ font-family:'Inter',system-ui,sans-serif; color:#1b2233; margin:22px 0; }
+.tp-h2{ font-family:'Barlow Condensed','Inter',sans-serif; font-weight:700; font-size:26px;
+        color:#171F69; margin:0 0 2px; }
+.tp-sub{ font-size:12.5px; color:#5a6a7e; margin:0 0 10px; }
+.tp-warnink{ color:#A11128; }
+
+.tp-tabs{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:10px 0 14px; }
+.tp-tab{ font-family:'Inter',sans-serif; font-size:13px; font-weight:600; cursor:pointer;
+         background:#EEF1F7; color:#40506B; border:1px solid #DDE3EE;
+         border-radius:20px; padding:7px 16px; }
+.tp-tab:hover{ background:#E3E9F3; }
+.tp-tab.on{ background:#171F69; color:#fff; border-color:#171F69; }
+.tp-btn{ font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600; cursor:pointer;
+         background:#009AC7; color:#fff; border:0; border-radius:6px; padding:8px 14px; margin-left:4px; }
+.tp-btn:hover{ background:#0B84A8; }
+.tp-ghost{ background:#fff; color:#171F69; border:1px solid #CBD3E1; }
+.tp-ghost:hover{ background:#F2F5FA; }
+
+.tp-table{ width:100%; border-collapse:collapse; font-size:13.5px; background:#fff;
+           border:1px solid #E3E7F0; border-radius:8px; overflow:hidden; }
+.tp-table th{ text-align:left; font-weight:600; font-size:11px; color:#40506B;
+              background:#F6F8FB; border-bottom:2px solid #DDE3EE; padding:8px 10px; }
+.tp-table td{ padding:7px 10px; border-bottom:1px solid #EEF1F7; }
+.tp-table tbody tr:last-child td{ border-bottom:0; }
+.tp-table tbody tr:hover{ background:#F7FAFD; }
+.tp-n{ text-align:right; font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+.tp-rk{ width:38px; font-family:'JetBrains Mono',monospace; color:#7A889B; }
+.tp-tm{ font-weight:600; color:#141B2C; }
+
+.tp-podium td{ background:#F4F8FC; }
+.tp-podium .tp-rk{ color:#171F69; font-weight:700; }
+.tp-p1 td{ background:#EAF4F9; }
+.tp-p1 .tp-tm{ color:#0B5975; font-weight:700; }
+
+.tp-small{ font-size:12px; }
+.tp-tot td{ background:#F6F8FB; font-weight:700; border-top:2px solid #DDE3EE; }
+.tp-tag{ font-size:10.5px; background:#EAF4F9; color:#0B5975; border-radius:20px; padding:2px 9px; }
+.tp-bad{ background:#FDECEF; color:#A11128; font-weight:600; }
+
+.tp-audit{ margin-top:20px; padding-top:14px; border-top:1px solid #E3E7F0; }
+.tp-h4{ font-family:'Barlow Condensed','Inter',sans-serif; font-weight:600; font-size:17px;
+        color:#171F69; margin:18px 0 7px; }
+.tp-list{ margin:0 0 8px; padding-left:20px; font-size:12.5px; color:#26333F; line-height:1.65; }
+.tp-soft{ font-size:12.5px; color:#5a6a7e; margin:4px 0 8px; }
+.tp-loading{ color:#5a6a7e; font-size:13px; padding:14px 0; }
+.tp-error{ color:#A11128; background:#FDECEF; border-left:4px solid #E31937;
+           padding:10px 13px; border-radius:0 6px 6px 0; font-size:13px; }
+
+@media print{ .tp-tabs{ display:none; } .tp-table tbody tr:hover{ background:transparent; } }

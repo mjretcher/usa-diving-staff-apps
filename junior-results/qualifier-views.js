@@ -1193,6 +1193,12 @@
     tableWrap.insertAdjacentHTML('beforeend', '<div id="qvComputedEWCNat"></div>');
     mountComputedEWCNat();
 
+    // Team points — the headline deliverable, above the per-diver detail.
+    tableWrap.insertAdjacentHTML('beforeend', '<div id="qvTeamPoints"></div>');
+    if (window.renderTeamPointsPanel) {
+      window.renderTeamPointsPanel(document.getElementById('qvTeamPoints'));
+    }
+
     // Full results — every event, every diver, with the voluntary/optional
     // split and both totals. Lives below the qualifier list because the list
     // answers "who was invited" and this answers "what happened".
