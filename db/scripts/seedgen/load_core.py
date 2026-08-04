@@ -112,7 +112,16 @@ def record(url, key, payload):
 
 
 def build(db, only=None, dive_sink=None, limit=0):
-    where = "WHERE results_done AND meet_name IS NOT NULL AND start_date IS NOT NULL"
+    # results_done was doing two jobs: "the crawl queue has finished with this
+    # meet" and "this meet's data is fit to load". Those came apart once the
+    # flag stopped latching on meets that are still being contested, and using
+    # it here would silently exclude a live meet from core — which is precisely
+    # the meet anyone is most interested in. Crawl completeness is not the same
+    # as data validity: partial results are still real results, and a meet with
+    # no rows contributes nothing regardless. So the gate is "has it been
+    # crawled at all", and results_done keeps its narrower meaning.
+    where = ("WHERE meet_name IS NOT NULL AND start_date IS NOT NULL"
+             "  AND (results_done OR results_crawled_at IS NOT NULL)")
     meets = db.query(f"""SELECT meet_id, meet_name, sanction, start_date
                          FROM divemeets.meets {where}
                          ORDER BY start_date DESC, meet_id DESC""")
