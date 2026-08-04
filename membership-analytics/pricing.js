@@ -159,7 +159,8 @@ const PS = {
   cal:null,                           // frozen flow constants (see deriveCalibration)
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
   senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
-  prequalPaths:{},                    // senior prequalification decomposition (path index -> entries)
+  prequalPaths:{},                    // manual overrides for senior prequalification paths
+  seniorPrequal:null,                 // derived pathway counts (senior-prequal.json)
   synchro:null,                       // per-level synchro team entries (billed once per pair)
   natMeet:'12923',                    // DiveMeets meet number for the final championship
   natActual:null, natSyn:null, natFetched:null, natSource:'fallback',
@@ -685,6 +686,14 @@ async function loadSeniorEntries(){
   } catch(e){ console.warn('senior entries', e); PS.seniorEntries = {}; }
 }
 
+/* Derived senior prequalification pathways. Seven are placement results we can
+   compute; the rest are roster decisions recorded nowhere in this database and
+   come back null so they are asked for rather than invented. */
+async function loadSeniorPrequal(){
+  try { PS.seniorPrequal = await loadJson('senior-prequal.json'); }
+  catch(e){ console.warn('senior prequal', e); PS.seniorPrequal = null; }
+}
+
 async function loadCounts(){
   const y = PS.year==='y25' ? 2025 : 2026;
   if (PS.countsYear === y) return;
@@ -715,6 +724,7 @@ async function bootstrap(){
     await loadCounts();
     await loadSeniorEntries();
     await loadNationalActual();
+    await loadSeniorPrequal();
     deriveCalibration();     // freeze against the alignment actually run
     calibratePrequal();
     snapshotBaseline();
@@ -841,31 +851,51 @@ function renderSenior(base, sim){
   const nats = sim.perSenior.find(p => p.entry==='prequalified');
   let prequalBlock = '';
   if (nats){
-    let entered = 0;
-    const pr = SENIOR_PREQUAL.map((label, k) => {
-      const v = +(PS.prequalPaths[k]||0); entered += v;
-      return `<tr><td class="ps-sub">${esc(label)}</td>
-        <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}" value="${v}"></td></tr>`;
+    const SP = PS.seniorPrequal;
+    const paths = SP && SP.pathways ? SP.pathways
+                : SENIOR_PREQUAL.map(l => ({label:l, entries:null, derived:false}));
+    let manual = 0, derivedShown = 0;
+    const pr = paths.map((p, k) => {
+      const override = PS.prequalPaths[k];
+      const val = override != null ? override : (p.derived ? p.entries : 0);
+      if (p.derived && override == null) derivedShown += (p.entries||0);
+      else manual += (+val||0);
+      return `<tr>
+        <td class="ps-sub">${esc(p.label)}
+          ${p.derived ? `<span class="ps-tag obs">derived${p.athletes!=null?` &middot; ${fmt(p.athletes)} athletes`:''}</span>`
+                      : '<span class="ps-tag mod">needs a number</span>'}</td>
+        <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}"
+          value="${Math.round(val)||0}"></td></tr>`;
     }).join('');
+    // Pathways overlap -- the same athlete wins in more than one year -- so the
+    // derived rows must be combined by their deduplicated union, not summed.
+    const union = SP && SP.union_entries != null ? SP.union_entries : derivedShown;
+    const naive = SP && SP.sum_of_derived != null ? SP.sum_of_derived : derivedShown;
+    const accounted = union + manual;
     const obs = nats.liveInd;
     prequalBlock = `
     <h4 class="ps-h4">How the National Championships field is filled</h4>
     <p class="note" style="margin:0 0 10px">The Senior pathway is <b>not</b> a placement cascade like the Junior circuit &mdash;
       entry is by prequalification against a published list of standards, and athletes may only enter events they hold a
       standard in. The Qualifier on ${esc((PS.senior.find(r=>r.entry==='open')||{}).dates||'5-6 Aug')} exists so they can add events.
-      Fill in what each pathway contributes and the total reconciles against the live entry count &mdash; then cutting or widening
-      a pathway shows what it does to both the field and the money.</p>
+      Rows marked <b>derived</b> are computed from final standings in our own results; the rest are roster decisions recorded
+      nowhere in this database and need a number from you.</p>
     <table class="ps-tbl"><thead><tr><th>Qualification pathway</th><th class="num">Entries</th></tr></thead>
       <tbody>${pr}
-        <tr class="ps-tot"><td>Accounted for</td><td class="num mono">${fmt(entered)}</td></tr>
+        <tr class="ps-tot"><td>Accounted for</td><td class="num mono">${fmt(Math.round(accounted))}</td></tr>
         <tr><td class="ps-sub">Live entry count for meet ${esc(nats.meet)}</td>
           <td class="num mono">${obs?fmt(obs):'<span class="ps-na">not yet open</span>'}</td></tr>
-        ${obs?`<tr><td class="ps-sub">Unaccounted for</td><td class="num">${diffCell(entered, obs)}</td></tr>`:''}
+        ${obs?`<tr><td class="ps-sub">Unaccounted for</td><td class="num">${diffCell(accounted, obs)}</td></tr>`:''}
       </tbody></table>
-    <p class="note ps-foot">Synchronised events sit outside this: the criteria set no qualification protocol for them, only a
-      minimum degree of difficulty, and a diver may pair with up to two partners per event. So synchro entries do not move when
-      you change a prequalification pathway &mdash; but they are still billed, once per team. <b>Synchro team counts must be typed in:</b>
-      the DiveMeets entries sync excludes synchro by policy, so it reports zero for every meet and can never fill this in.</p>`;
+    ${naive>union?`<div class="ps-ok" style="margin-top:10px"><b>Do not add the column up.</b> The derived pathways overlap &mdash;
+      the same athlete wins in more than one year &mdash; so they sum to ${fmt(naive)} but represent only
+      <b>${fmt(union)}</b> distinct athlete-event places. The total above uses the deduplicated figure.</div>`:''}
+    <p class="note ps-foot">Counted as athlete-and-event pairs, because a pathway qualifies an athlete for a specific event &mdash;
+      a 3-metre champion is prequalified on 3-metre, not across the board &mdash; and that is also the unit entry fees bill in.
+      Synchronised events sit outside all of this: the criteria set no qualification protocol for them, only a minimum degree of
+      difficulty, and a diver may pair with up to two partners. So synchro does not move when you change a pathway &mdash; but it is
+      still billed, once per team. <b>Synchro team counts must be typed in:</b> the DiveMeets entries sync excludes synchro by
+      policy, so it reports zero for every meet and can never fill this in.</p>`;
   }
 
   return `<div class="card"><div class="card-h">
@@ -1899,7 +1929,7 @@ window.__PRICING = {
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
   defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro, loadNationalActual, natActual,
-  SENIOR_PREQUAL,
+  SENIOR_PREQUAL, loadSeniorPrequal,
   advanceFor, directFor, snapshotBaseline,
   computeCompare, snapshotState, restoreState, applyCards, pathwayCost, buildReport, defaultPathway,
 };

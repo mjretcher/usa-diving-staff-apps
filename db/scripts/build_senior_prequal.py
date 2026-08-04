@@ -99,6 +99,10 @@ NOT_DERIVABLE = [
     "2025 Tier I or II HPS who competed at 2025 Nationals or Winter Nationals",
     "2024-25 Tier III HPS who competed at 2025 Nationals or Winter Nationals",
     "Non-HPS athletes who met an HPS score threshold at 2025 Nationals",
+    # Derivable in principle once the Qualifier has been swum, but the criteria
+    # document does not state a placement cutoff for it, so the rule is unknown
+    # and guessing one would be worse than asking.
+    "Added at the National Championships Qualifier (5-6 Aug)",
 ]
 
 
