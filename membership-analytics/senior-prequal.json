@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T16:48:37Z",
+  "generated": "2026-08-04T16:49:29Z",
   "source": "core.event_results",
   "unit": "distinct (athlete, event) pairs \u2014 a 3M champion is prequalified on 3M only",
   "note": "Pathways overlap: the same athlete can qualify through several. Summing rows overstates the field; use union_entries.",
@@ -11,42 +11,98 @@
       "label": "2022 Winter National Championships \u2014 champions",
       "entries": 7,
       "athletes": 7,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2023 National Championships \u2014 champions",
       "entries": 10,
       "athletes": 10,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2023 Winter National Championships \u2014 champions",
       "entries": 10,
       "athletes": 10,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2024 Winter National Championships \u2014 champions",
       "entries": 7,
       "athletes": 5,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2025 National Championships \u2014 champions",
       "entries": 10,
       "athletes": 10,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2025 Winter National Championships \u2014 champions",
       "entries": 7,
       "athletes": 7,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
       "label": "2025 Winter National Championships \u2014 places 2 to 12, 1M/3M/10M",
       "entries": 70,
       "athletes": 57,
+      "events": [
+        "Senior Men 1M",
+        "Senior Men 3M",
+        "Senior Men Platform",
+        "Senior Women 1M",
+        "Senior Women 3M",
+        "Senior Women Platform"
+      ],
       "derived": true
     },
     {
@@ -302,6 +358,48 @@
       "level": "Senior/Open",
       "year": 2026,
       "rows": 319
+    }
+  ],
+  "is_synchro_flag": [
+    {
+      "year": 2022,
+      "is_synchro": "false",
+      "rows": 260
+    },
+    {
+      "year": 2022,
+      "is_synchro": "true",
+      "rows": 106
+    },
+    {
+      "year": 2023,
+      "is_synchro": "false",
+      "rows": 680
+    },
+    {
+      "year": 2023,
+      "is_synchro": "true",
+      "rows": 222
+    },
+    {
+      "year": 2024,
+      "is_synchro": "false",
+      "rows": 240
+    },
+    {
+      "year": 2024,
+      "is_synchro": "true",
+      "rows": 56
+    },
+    {
+      "year": 2025,
+      "is_synchro": "false",
+      "rows": 547
+    },
+    {
+      "year": 2025,
+      "is_synchro": "true",
+      "rows": 194
     }
   ]
 }
