@@ -184,7 +184,8 @@ def build(db, only=None, dive_sink=None, limit=0):
                           f"WHERE meet_id IN ({ids})"):
             ev_all.setdefault(str(e["meet_id"]), {})[(str(e["event_id"]), str(e["round"]))] = e["title"] or ""
         for r in db.query(f"""SELECT meet_id, event_id, round, place, diver_name, profile_id,
-                                     team_name, team_id, score, sheet_key
+                                     team_name, team_id, score, sheet_key,
+                                     profile2_id, diver2_name, team2_name
                               FROM divemeets.results WHERE meet_id IN ({ids})"""):
             res_all.setdefault(str(r["meet_id"]), []).append(r)
         for d in db.query(f"""SELECT meet_id, event_id, round, profile_id, sheet_key, dive_order,
@@ -257,6 +258,13 @@ def build(db, only=None, dive_sink=None, limit=0):
                     fc["repeated"], fc["dropped_number"],
                     _num(fc["dropped_score"]) if fc["dropped_score"] not in ("", None) else "",
                     fc["status"], fc["note"],
+                    # Partner on a synchronized placing; blank on individual
+                    # events. PHASE_COLS gained these three in 43af0759 and this
+                    # builder was not updated with it, so every core load since
+                    # then died in COPY with 'missing data for column diver2_id'.
+                    "" if r.get("profile2_id") is None else str(r["profile2_id"]),
+                    r.get("diver2_name") or "",
+                    clean_team(r.get("team2_name")) if r.get("team2_name") else "",
                 ])
             # Dive rows are emitted per SHEET, not per result row. Synchro partners
             # share one sheet_key -- 27 such sheets across the crawl -- so emitting
