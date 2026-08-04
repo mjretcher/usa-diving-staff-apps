@@ -465,7 +465,13 @@ def main():
     er_rows, er_all = [], []
     if not args.skip_event_results:
         dbq = Neon(url)
-        existing = dbq.query("""SELECT meet_id_dm, diver_id_dm, team_id_dm, meet_name,
+        # Paginated. One unbounded read of this table is what broke the runs on
+        # 2026-08-04 with HTTP 507 Insufficient Storage: 47,775 rows x 24
+        # columns, and this client runs in object mode so every row repeats its
+        # column names. `id` is the primary key, so the pages are stable; it is
+        # selected here only to give the keyset something to advance on and is
+        # not in ER_COLS, so it never reaches the write.
+        existing = dbq.query_keyset("""SELECT id, meet_id_dm, diver_id_dm, team_id_dm, meet_name,
                                        event_name, round, diver_first, diver_last, team_name,
                                        team_code, place, score, year, stage, event_level,
                                        age_group, gender, discipline, event_key, is_synchro,
