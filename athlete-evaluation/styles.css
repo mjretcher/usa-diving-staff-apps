@@ -937,3 +937,5 @@ html,body{overflow-x:hidden;max-width:100vw}
 .ae-sec.active { color:#171F69; border-bottom-color:#009AC7; }
 .ae-subrow { display:flex; gap:6px; padding:10px 0 4px; flex-wrap:wrap; }
 .ae-subrow .ae-tab[hidden] { display:none; }
+.ae-samplenote { color:#5A6079; font:400 12px/1.5 'Inter',sans-serif;
+  border-left:2px solid #8FC3EA; padding-left:8px; margin-top:8px; }

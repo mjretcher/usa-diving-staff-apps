@@ -24,6 +24,7 @@
   // Both sides of every comparison are selectable. Defaults keep the original
   // US-senior-vs-world framing, but the other three fields are now reachable.
   const cmp = { a: 'us-senior', b: 'world' };
+  const GUARD = (window.AE.GUARD || { cell: 20, field: 150 });
   const scopeName = (id) => {
     const s2 = (window.AE.SCOPES || []).find((x) => x.id === id);
     return s2 ? s2.label : id;
@@ -229,16 +230,26 @@
 
   function armsRaceHtml(listDD) {
     const pick = (scope, ev) => {
-      const rows = listDD.filter((x) => x.scope === scope && x.gender === ev.gender && x.discipline === ev.discipline && x.n_lists >= 5);
+      const rows = listDD.filter((x) => x.scope === scope && x.gender === ev.gender && x.discipline === ev.discipline && x.n_lists >= GUARD.lists);
       if (!rows.length) return null;
       return rows.reduce((a, b) => b.meet_year > a.meet_year ? b : a);
     };
-    const rows = EVENTS.map((ev) => {
+    const allRows = EVENTS.map((ev) => {
       const us = pick(cmp.a, ev), wd = pick(cmp.b, ev);
-      return { label: ev.label, us: us && us.avg_list_dd, world: wd && wd.avg_list_dd, worldP90: wd && wd.p90_list_dd };
+      return { label: ev.label, us: us && us.avg_list_dd, world: wd && wd.avg_list_dd,
+               worldP90: wd && wd.p90_list_dd, usN: us && us.n_lists, wdN: wd && wd.n_lists };
     });
+    // An event needs a real baseline on both sides or it is not drawn.
+    const rows = allRows.filter((r) => r.us != null && r.world != null);
+    const dropped = allRows.length - rows.length;
+    if (!rows.length) {
+      return `<section class="ae-card ae-fi-sec"><h3>The difficulty arms race</h3>
+        <p class="ae-soft">No event has enough finalist lists on both sides to compare
+        ${esc(scopeName(cmp.a))} with ${esc(scopeName(cmp.b))}. Try a larger field.</p></section>`;
+    }
     return `<section class="ae-card ae-fi-sec">
       <div class="ae-card-h"><div><h3>The Difficulty Arms Race</h3>
+      ${dropped ? `<p class="ae-soft ae-samplenote">${dropped} event${dropped === 1 ? '' : 's'} omitted — fewer than ${GUARD.lists} finalist lists on one side.</p>` : ''}
       <p class="ae-soft">Average list DD carried by finalists — ${esc(scopeName(cmp.a))} (navy) vs ${esc(scopeName(cmp.b))} (red). The dashed tick is the second field's top decile. Difficulty caps the score before anyone leaves the board: a +2.0 DD gap at 7.0 execution is 42 points conceded at entry.</p></div></div>
       ${C.dumbbell(rows, { w: 780 })}
       <div class="ae-legend"><span><i style="background:${C.COLORS.NAVY}"></i>${esc(scopeName(cmp.a))}</span><span><i style="background:${C.COLORS.RED}"></i>${esc(scopeName(cmp.b))}</span><span class="ae-soft">number = DD the first field would need to add to match</span></div>
@@ -252,7 +263,7 @@
     const NAMES = (window.AE.CAT_NAMES) || {};
     const CATS = ORDER.map((c) => [c, NAMES[c] || c]);
     const cell = (scope, ev, cat) => {
-      const rows = groupExec.filter((x) => x.scope === scope && x.gender === ev.gender && x.discipline === ev.discipline && x.category_code === cat && x.n >= 20);
+      const rows = groupExec.filter((x) => x.scope === scope && x.gender === ev.gender && x.discipline === ev.discipline && x.category_code === cat && x.n >= GUARD.cell);
       if (!rows.length) return null;
       const recent = rows.sort((a, b) => b.meet_year - a.meet_year).slice(0, 2);
       return mean(recent.map((r) => r.avg_exec));

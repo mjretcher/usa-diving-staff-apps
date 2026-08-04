@@ -216,6 +216,27 @@
   //   us-open (1.15M dives) · us-junior (246k) · us-senior (74k)
   //   ncaa (36k) · world (7.1k, 2025-26 only)
   // The app used to hardcode 'world', the thinnest of the five.
+  // ---- shared sample-size standard -------------------------------------
+  // One set of thresholds for every view, so a number that is too thin to
+  // trust never renders identically to one built from a real sample.
+  //   athlete  minimum scored dives by this athlete in a group
+  //   field    minimum dives behind a comparison baseline
+  //   cell     minimum dives behind a single chart cell or axis
+  //   lists    minimum finalist lists behind a list-DD benchmark
+  const GUARD = { athlete: 8, field: 150, cell: 20, lists: 6 };
+
+  // n is sufficient for `kind`. Missing/zero always fails.
+  function ok(n, kind) {
+    return Number(n) >= (GUARD[kind] != null ? GUARD[kind] : GUARD.cell);
+  }
+
+  // Plain-English note for a number that did not clear the bar.
+  function thinNote(n, kind) {
+    const need = GUARD[kind] != null ? GUARD[kind] : GUARD.cell;
+    const have = Number(n) || 0;
+    return `Too few dives to compare (${have.toLocaleString()} of ${need} needed).`;
+  }
+
   const SCOPES = [
     { id: 'us-junior', label: 'US Junior' },
     { id: 'us-senior', label: 'US Senior' },
@@ -371,7 +392,7 @@
   window.AE = {
     esc, escJsAttr, num, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
-    isRulebookDive, bucketOf, SCOPES, normGender,
+    isRulebookDive, bucketOf, SCOPES, normGender, GUARD, ok, thinNote,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,

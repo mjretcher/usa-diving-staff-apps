@@ -18,10 +18,9 @@
   const NAVY = '#171F69', RED = '#E31937', POOL = '#009AC7', SKY = '#8FC3EA';
   const INK2 = '#5A6079', GRID = '#E3E6EF';
 
-  // Below this many attempts an athlete average is not worth reading.
-  const MIN_ATHLETE_N = 8;
-  // Below this many field dives the comparison baseline is too thin to trust.
-  const MIN_FIELD_N = 150;
+  // Thresholds are shared across every view — see GUARD in ae-data.js.
+  const MIN_ATHLETE_N = (window.AE.GUARD || {}).athlete || 8;
+  const MIN_FIELD_N = (window.AE.GUARD || {}).field || 150;
 
   const state = { disc: null, scope: 'us-junior', vo: 'all', since: null };
 

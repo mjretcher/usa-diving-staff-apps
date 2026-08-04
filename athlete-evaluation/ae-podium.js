@@ -70,10 +70,20 @@
     if (!st.targetKey || !targets.some((t) => t.key === st.targetKey)) st.targetKey = targets[0].key;
     const target = targets.find((t) => t.key === st.targetKey);
 
-    const fdd = listDD.find((x) => x.n_lists >= 6) || listDD[0] || null;
+    // A benchmark built on a handful of lists is not a benchmark. If nothing
+    // clears the bar, say so rather than quietly using the thin one.
+    const GUARD = (window.AE.GUARD || { athlete: 8, field: 150, cell: 20, lists: 6 });
+    const fddOk = listDD.find((x) => (x.n_lists || 0) >= GUARD.lists) || null;
+    const fddThin = fddOk ? null : (listDD[0] || null);
+    const fdd = fddOk;
     const Db = fdd ? (st.ddMode === 'p90' ? fdd.p90_list_dd : fdd.avg_list_dd) : null;
 
-    let waterfallHtml = '<div class="ae-empty">Field DD profile unavailable.</div>', narrate = '';
+    let waterfallHtml = fddThin
+      ? `<div class="ae-empty">The ${esc(scopeLabel())} baseline for ${esc(gender || '')} ${esc(st.board)} rests on `
+        + `${fddThin.n_lists || 0} finalist list${(fddThin.n_lists || 0) === 1 ? '' : 's'} — `
+        + `too few to measure a gap against. Pick a larger comparison field.</div>`
+      : '<div class="ae-empty">Field DD profile unavailable.</div>';
+    let narrate = '';
     if (cur && Db != null && target) {
       const step1 = 3 * (Db - cur.D) * cur.eHat;
       const eB = target.val / (3 * Db);
@@ -103,13 +113,13 @@
     const axes = allCodes
       .map((c) => ({ code: c, label: window.AE.CAT_NAMES[c] }))
       .filter((a) => a.label && (own.some((r) => r._cat === a.code)
-        || groupExec.some((g) => g.category_code === a.code && g.n >= 20)));
+        || groupExec.some((g) => g.category_code === a.code && g.n >= GUARD.cell)));
     const ownVals = axes.map((a) => {
       const ex = own.filter((r) => r._cat === a.code).map((r) => r._exec);
-      return ex.length >= 2 ? mean(ex) : null;
+      return ex.length >= GUARD.athlete ? mean(ex) : null;
     });
     const fieldBy = (k) => axes.map((a) => {
-      const rows = groupExec.filter((g) => g.category_code === a.code && g.n >= 25);
+      const rows = groupExec.filter((g) => g.category_code === a.code && g.n >= GUARD.cell);
       if (!rows.length) return null;
       return mean(rows.slice(0, 2).map((r) => r[k]));
     });
@@ -117,7 +127,7 @@
     root.innerHTML = `
       <div class="ae-card">
         <div class="ae-card-h">
-          <div><h3>Podium Gap — ${esc(b.ident.display_name)}</h3>
+          <div><h3>Gap to the podium — ${esc(b.ident.display_name)}</h3>
           <p class="ae-soft">Because a list total is exactly 3 × list-DD × weighted execution, the road to any score splits cleanly into a difficulty move and an execution move. The two bars sum to the gap — nothing hidden.</p></div>
           <div class="ae-controls">
             ${boards.map((d) => `<button class="ae-pill ${d === st.board ? 'active' : ''}" onclick="AEPodium.setBoard('${escJsAttr(d)}')">${esc(d)}</button>`).join('')}
@@ -159,6 +169,10 @@
           <div class="ae-card-h"><div><h3>The moving target</h3>
             <p class="ae-soft">World final-cut and medal lines by season, with ${esc(b.ident.display_name.split(' ')[0])}'s best score each year. The question isn't the gap today — it's whether the lines converge by 2028.</p></div></div>
           <div id="aePodTrend">${trendChart(b, bench)}</div>
+          <p class="ae-soft ae-samplenote">${fdd
+            ? `Baseline: ${fdd.n_lists} ${esc(scopeLabel())} finalist lists. Radar axes need `
+              + `${GUARD.athlete}+ dives from the athlete and ${GUARD.cell}+ in the field; thinner groups are omitted.`
+            : `No ${esc(scopeLabel())} baseline meets the minimum of ${GUARD.lists} finalist lists.`}</p>
         </div>
       </div>`;
   }

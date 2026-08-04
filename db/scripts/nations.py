@@ -61,20 +61,35 @@ ALIAS = {
 for code, name in IOC.items():
     ALIAS.setdefault(name.lower(), code)
 
-# Values that look like nations but are not, or that we refuse to guess.
-UNRESOLVED_NOTE = {
-    "NAB": "not an IOC code; 408 dives across 38 divers, 2025-26 — needs review",
+# Neutral-athlete designations. These are real competitive entries but not
+# nations, so they must not be folded into a country and must not be dropped.
+# NAB is PROVISIONAL pending confirmation from USA Diving staff.
+NEUTRAL = {
+    "NAB": "Neutral Athletes B (provisional)",
+    "NAA": "Neutral Athletes A (provisional)",
+    "AIN": "Individual Neutral Athletes",
+    "NPA": "Neutral Para Athletes",
 }
+
+# Values that look like nations but are not, or that we refuse to guess.
+UNRESOLVED_NOTE = {}
 
 
 def resolve(raw):
-    """team_name -> (ioc_code | None, reason)."""
+    """
+    team_name -> (code | None, reason).
+    Neutral-athlete designations resolve to their own code with reason
+    "neutral" so they can be counted and displayed without being mistaken
+    for a country.
+    """
     if raw is None:
         return None, "null"
     s = str(raw).strip()
     if not s:
         return None, "empty"
     up = s.upper()
+    if up in NEUTRAL:
+        return up, "neutral"
     if up in UNRESOLVED_NOTE:
         return None, "unresolved:" + UNRESOLVED_NOTE[up]
     if len(s) == 3 and up in IOC:
@@ -88,4 +103,8 @@ def resolve(raw):
 
 
 def canonical_name(code):
-    return IOC.get(code)
+    return IOC.get(code) or NEUTRAL.get(code)
+
+
+def is_neutral(code):
+    return code in NEUTRAL
