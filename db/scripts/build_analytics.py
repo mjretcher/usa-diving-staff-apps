@@ -346,8 +346,8 @@ WITH lists AS (
   SELECT competition_family, meet_year, gender, discipline,
          CASE WHEN competition_family='World Aquatics' THEN 'world'
               WHEN competition_family='NCAA' THEN 'ncaa'
-              WHEN event_name ILIKE '%senior%' THEN 'us-senior'
-              WHEN event_name ILIKE 'group%' THEN 'us-junior'
+              WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
+              WHEN event_level = 'Junior' THEN 'us-junior'
               ELSE 'us-open' END AS scope,
          meet_id, event_id, diver_id,
          SUM(dd) AS list_dd, COUNT(*) AS n_dives, SUM(score) AS list_score
@@ -592,8 +592,8 @@ WITH base AS (
   SELECT meet_year, gender, discipline, phase_dive_count AS dive_count,
          CASE WHEN competition_family='World Aquatics' THEN 'world'
               WHEN competition_family='NCAA' THEN 'ncaa'
-              WHEN event_name ILIKE '%senior%' THEN 'us-senior'
-              WHEN event_name ILIKE 'group%' THEN 'us-junior'
+              WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
+              WHEN event_level = 'Junior' THEN 'us-junior'
               ELSE 'us-open' END AS scope,
          place, posted_score, phase_dd_sum,
          posted_score / NULLIF(3 * phase_dd_sum, 0) AS exec_per_judge
@@ -629,8 +629,8 @@ sql("DROP TABLE IF EXISTS analytics.rank_cost")
 sql("""CREATE TABLE analytics.rank_cost AS
 SELECT CASE WHEN competition_family='World Aquatics' THEN 'world'
             WHEN competition_family='NCAA' THEN 'ncaa'
-            WHEN event_name ILIKE '%senior%' THEN 'us-senior'
-            WHEN event_name ILIKE 'group%' THEN 'us-junior'
+            WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
+            WHEN event_level = 'Junior' THEN 'us-junior'
             ELSE 'us-open' END AS scope,
        gender, discipline, phase_dive_count AS dive_count,
        place::int AS place,
