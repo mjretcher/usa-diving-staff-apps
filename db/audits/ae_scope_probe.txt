@@ -1,0 +1,29 @@
+
+event_level:
+   Other                                       238,198
+   Junior                                       69,986
+   Senior/Open                                  65,825
+   Senior                                       16,250
+
+competition_group:
+   USA Diving Junior Nationals                  15,316
+   NCAA Division I Championships                 4,116
+   USA Diving Winter Nationals                   3,603
+   Laura Wilkinson Golden Invitational           3,461
+   LEE BRENNAN Memorial Invitational             2,945
+   Alexandria Invite                             2,454
+   2015 USA Diving ATT National Diving Cham      2,274
+   The Jingle Bell Classic                       2,133
+
+age_group:
+   (null)                                      126,986
+   Group A                                      78,602
+   Group C                                      60,620
+   Group B                                      59,619
+   Group D                                      46,631
+   Senior                                       17,801
+
+competition_family:
+   USA Diving                                  325,439
+   NCAA                                         63,111
+   World Aquatics                                1,709
