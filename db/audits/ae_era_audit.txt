@@ -1,0 +1,43 @@
+
+==============================================================================================
+Modal dives per list by age group / gender / year (springboard, Nationals finals)
+==============================================================================================
+  group  gender  year  modal_dives  lists
+  -----  ------  ----  -----------  -----
+  A      Female  2021  9            13   
+  A      Female  2023  9            87   
+  A      Female  2024  9            1085 
+  A      Female  2025  9            948  
+  A      Female  2026  9            773  
+  A      Male    2021  10           12   
+  A      Male    2023  10           34   
+  A      Male    2024  20           599  
+  A      Male    2025  20           517  
+  A      Male    2026  20           445  
+  B      Female  2021  8            24   
+  B      Female  2023  8            41   
+  B      Female  2024  16           559  
+  B      Female  2025  16           521  
+  B      Female  2026  16           413  
+  B      Male    2023  9            25   
+  B      Male    2024  18           283  
+  B      Male    2025  18           244  
+  B      Male    2026  18           226  
+  C      Female  2021  7            34   
+  C      Female  2023  7            24   
+  C      Female  2024  14           398  
+  C      Female  2025  14           360  
+  C      Female  2026  7            339  
+  C      Male    2021  8            20   
+  C      Male    2023  8            24   
+  C      Male    2024  16           240  
+  C      Male    2025  16           196  
+  C      Male    2026  8            175  
+  D      Female  2021  5            21   
+  D      Female  2024  12           258  
+  D      Female  2025  12           248  
+  D      Female  2026  6            222  
+  D      Male    2021  5            18   
+  D      Male    2024  12           166  
+  D      Male    2025  12           202  
+  D      Male    2026  6            122  
