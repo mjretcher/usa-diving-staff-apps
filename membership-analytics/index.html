@@ -269,6 +269,56 @@ tr:hover td{background:#f7fafd}
 .scope-tag.all{background:#e6f0fb;color:#173a8a}
 .scope-tag.ath{background:#e7f6fb;color:#0b6ea0}
 .coverage-note{margin:-2px 0 14px;padding:9px 13px;background:#f4f8fc;border:1px solid var(--line);border-left:4px solid var(--pool);border-radius:8px;font-size:12.5px;color:var(--ink);line-height:1.45}
+
+/* ---------- Pricing Studio ---------- */
+.ps-bar{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 18px;margin-bottom:16px;box-shadow:0 8px 22px rgba(16,24,40,.06)}
+.ps-bar-g{display:flex;flex-direction:column;gap:5px}
+.ps-bar-g.grow{flex:1;min-width:200px}
+.ps-bar-g label{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ps-bar select,.ps-bar input[type=text]{border:1px solid #cdd6e4;border-radius:9px;padding:8px 10px;font-size:13px;background:#fff;color:var(--ink);min-width:170px}
+.ps-bar-g.grow input[type=text]{width:100%;min-width:0}
+.ps-btns{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.ps-btn{border:1px solid #cdd6e4;background:#fff;color:var(--navy);border-radius:9px;padding:8px 14px;font-weight:700;font-size:12.5px}
+.ps-btn:hover{background:#f4f8fd}
+.ps-btn.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+.ps-btn.primary:hover{background:#0c1349}
+.ps-seg button{border:0;background:#fff;color:var(--navy);padding:8px 14px;font-size:12.5px;font-weight:700}
+.ps-seg button.on{background:var(--navy);color:#fff}
+.ps-k-l{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ps-k-v{font-family:var(--display);font-size:34px;line-height:1.05;letter-spacing:.02em;color:var(--navy);margin:4px 0 3px}
+.ps-k-s{font-size:11.5px;color:var(--muted);line-height:1.45}
+.ps-tbl{width:100%;border-collapse:collapse}
+.ps-tbl th{background:#f8fafc;color:var(--navy);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:9px;text-align:left;white-space:nowrap;cursor:default}
+.ps-tbl th.num{text-align:right}
+.ps-tbl td{border-bottom:1px solid #eef2f7;padding:8px 9px;font-size:12.5px;vertical-align:middle}
+.ps-tbl td.num{text-align:right;font-family:var(--mono);font-size:12px}
+.ps-tbl td.mono{font-family:var(--mono)}
+.ps-tbl tr.ps-tot td{background:#f4f8fd;font-weight:800;border-top:2px solid var(--navy)}
+.ps-tbl tr.ps-chg td{background:#fffbeb}
+.ps-in{width:80px;border:1px solid #cdd6e4;border-radius:8px;padding:6px 8px;font-family:var(--mono);font-size:12px;text-align:right;background:#fff;color:var(--ink)}
+.ps-in:focus{outline:2px solid var(--pool);outline-offset:-1px;border-color:var(--pool)}
+.ps-in.sm{width:62px}
+.ps-tag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:999px;margin-left:7px;vertical-align:2px}
+.ps-tag.obs{background:#dcfce7;color:#14532d}
+.ps-tag.cal{background:#e0f2fe;color:#075985}
+.ps-tag.mod{background:#f1f5f9;color:#475569}
+.ps-d{font-size:11.5px;font-weight:700;white-space:nowrap}
+.ps-d.up{color:var(--green)}
+.ps-d.down{color:var(--red)}
+.ps-d.flat{color:var(--muted);font-weight:600}
+.ps-diff{font-size:11.5px;font-weight:700;white-space:nowrap}
+.ps-diff.good{color:var(--green)}
+.ps-diff.ok{color:#b45309}
+.ps-diff.bad{color:var(--red)}
+.ps-na{color:#b6c0d0}
+.ps-rider{display:block;font-size:10.5px;color:var(--muted);font-weight:600}
+.ps-foot{margin:12px 0 0}
+.ps-inline{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:13px;border-top:1px solid #eef2f7}
+.ps-inline label{font-size:12.5px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:7px}
+.ps-inline .note{flex:1;min-width:240px}
+.ps-warn{background:#fffbeb;border:1px solid #fde68a;border-left:5px solid #b45309;border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.5;margin-bottom:14px;color:#5c3a05}
+.ps-ok{background:#f0fdf4;border:1px solid #bbf7d0;border-left:5px solid var(--green);border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.5;margin-bottom:14px;color:#14532d}
+@media(max-width:760px){.ps-bar-g,.ps-bar-g.grow{width:100%}.ps-k-v{font-size:28px}}
 </style>
 </head>
 <body>
@@ -293,6 +343,7 @@ tr:hover td{background:#f7fafd}
     <button class="tab active" data-view="overview">Overview</button>
     <button class="tab" data-view="map">Membership Map</button>
     <button class="tab" data-view="boundary">Boundary Studio</button>
+    <button class="tab" data-view="pricing">Pricing Studio</button>
     <button class="tab" data-view="trends">Trends</button>
     <button class="tab" data-view="types">Membership Types</button>
     <button class="tab" data-view="clubs">Club Health</button>
@@ -304,6 +355,7 @@ tr:hover td{background:#f7fafd}
   <div id="viewOverview" class="view active"><div class="loading">Loading membership data&hellip;</div></div>
   <div id="viewMap" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewBoundary" class="view"><div class="loading">Loading&hellip;</div></div>
+  <div id="viewPricing" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewTrends" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewTypes" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewClubs" class="view"><div class="loading">Loading&hellip;</div></div>
@@ -315,9 +367,10 @@ tr:hover td{background:#f7fafd}
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/neon-client.js?v=202607202300"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
-<script src="ma-app.js?v=202607281105"></script>
+<script src="ma-app.js?v=202608041200"></script>
 <script src="boundary.js?v=202607250620"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202607250740"></script>
+<script src="pricing.js?v=202608041200"></script>
 </body>
 </html>

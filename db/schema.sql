@@ -908,6 +908,16 @@ CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Pricing Studio scenarios (Membership Analytics): membership + event fee cards,
+-- elasticity assumptions and flow overrides, bound to a boundary scenario id.
+CREATE TABLE IF NOT EXISTS membership.pricing_scenarios (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Accounting same-period membership sales ledger (source: accountant xlsx, Dec-Jun windows)
 CREATE TABLE IF NOT EXISTS membership.sales_ledger (
     year INT NOT NULL,

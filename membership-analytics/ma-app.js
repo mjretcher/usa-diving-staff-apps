@@ -628,6 +628,7 @@ function wireTabs(){
     if (v==='boundary' && window.renderBoundary) window.renderBoundary();
     if (v==='types') renderTypes();
     if (v==='clubs' && window.renderClubs) window.renderClubs();
+    if (v==='pricing' && window.renderPricing) window.renderPricing();
   }));
 }
 
