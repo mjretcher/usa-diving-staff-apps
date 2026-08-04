@@ -1,0 +1,281 @@
+{
+  "generated": "2026-08-04T20:19:02Z",
+  "note": "sanction and in_circuit are on every row. USA Diving non-circuit events are the invitational population; AAU and NCAA are a different population and must not be pooled into a USA Diving qualifying field.",
+  "summary": [
+    {
+      "sanction": "USA Diving",
+      "in_circuit": false,
+      "events": 27842,
+      "parsed": 27212,
+      "meets": 794,
+      "pct": 97.7
+    },
+    {
+      "sanction": "Amateur Athletic Union (AAU)",
+      "in_circuit": false,
+      "events": 22811,
+      "parsed": 22754,
+      "meets": 633,
+      "pct": 99.8
+    },
+    {
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "in_circuit": false,
+      "events": 4075,
+      "parsed": 3979,
+      "meets": 367,
+      "pct": 97.6
+    },
+    {
+      "sanction": "USA Diving",
+      "in_circuit": true,
+      "events": 3023,
+      "parsed": 3015,
+      "meets": 130,
+      "pct": 99.7
+    }
+  ],
+  "usable_usad_noncircuit_rows": 174393,
+  "top_unparsed": [
+    {
+      "title": "Women Team Event (Final)",
+      "events": 42
+    },
+    {
+      "title": "Men Team Event (Final)",
+      "events": 29
+    },
+    {
+      "title": "Masters 50-64 Synchro. Mixed (Final)",
+      "events": 28
+    },
+    {
+      "title": "Masters 35-49 Synchronized Women (Final)",
+      "events": 26
+    },
+    {
+      "title": "Masters 50-64 Synchro. Women (Final)",
+      "events": 26
+    },
+    {
+      "title": "Masters 50-64 Synchro. Men (Final)",
+      "events": 26
+    },
+    {
+      "title": "Masters 35-49 Synchronized Mixed (Final)",
+      "events": 26
+    },
+    {
+      "title": "Women Grand Masters #1 21-34 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Women Grand Masters #2 35-49 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Men Grand Masters #1 21-34 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Men Grand Masters #2 35-49 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Women Grand Masters #3 50-64 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Men Grand Masters #3 50-64 (Final)",
+      "events": 25
+    },
+    {
+      "title": "Men Grand Masters #4 65-79 (Final)",
+      "events": 24
+    },
+    {
+      "title": "Masters 35-49 Synchronized Men (Final)",
+      "events": 23
+    },
+    {
+      "title": "WomenGrand Masters #4 65-79 (Final)",
+      "events": 22
+    },
+    {
+      "title": "Men Grand Masters #5 80 & Up (Final)",
+      "events": 21
+    },
+    {
+      "title": "Masters 65 - 79 Synchro. Women (Final)",
+      "events": 21
+    },
+    {
+      "title": "Masters 65 - 79 Synchro. Mixed (Final)",
+      "events": 20
+    },
+    {
+      "title": "Masters 65 - 79 Synchro. Men (Final)",
+      "events": 19
+    },
+    {
+      "title": "Masters 21-34 Synchronized Women (Final)",
+      "events": 19
+    },
+    {
+      "title": "Masters 21-34 Synchronized Mixed (Final)",
+      "events": 19
+    },
+    {
+      "title": "Masters 21-34 Synchronized Men (Final)",
+      "events": 17
+    },
+    {
+      "title": "Open All Ages Synchro. Mixed (Final)",
+      "events": 17
+    },
+    {
+      "title": "Women Team Event Springboard Only (Final)",
+      "events": 15
+    },
+    {
+      "title": "WomenGrand Masters #5 80 & Up (Final)",
+      "events": 14
+    },
+    {
+      "title": "Masters 80 & Up Synchro. Men (Final)",
+      "events": 11
+    },
+    {
+      "title": "Men Team Event Springboard Only (Final)",
+      "events": 10
+    },
+    {
+      "title": "Masters 80 & Up Synchro. Mixed (Final)",
+      "events": 7
+    },
+    {
+      "title": "High Diving Women (Final)",
+      "events": 5
+    },
+    {
+      "title": "High Diving Men (Final)",
+      "events": 5
+    },
+    {
+      "title": "Open All Ages Synchro. Mixed (5 dives) (Final)",
+      "events": 5
+    },
+    {
+      "title": "Masters 65 & Up Synchro. Mixed (Final)",
+      "events": 5
+    },
+    {
+      "title": "HD Group A (17-18-19) Boys (Final)",
+      "events": 4
+    },
+    {
+      "title": "HD Group B (14-15-16) Boys (Final)",
+      "events": 4
+    },
+    {
+      "title": "Skills A Girls (Final)",
+      "events": 4
+    },
+    {
+      "title": "Skills A Boys (Final)",
+      "events": 4
+    },
+    {
+      "title": "Skills B Girls (Final)",
+      "events": 4
+    },
+    {
+      "title": "Masters 65 & Up Synchro. Women (Final)",
+      "events": 4
+    },
+    {
+      "title": "Masters 65 & Up Synchro. Men (Final)",
+      "events": 4
+    },
+    {
+      "title": "HD Group A (17-18-19) Girls (Final)",
+      "events": 3
+    },
+    {
+      "title": "HD Group A (17-18-19) Boys (Prelim / Quarterfinal)",
+      "events": 3
+    },
+    {
+      "title": "HD Group B (14-15-16) Boys (Prelim / Quarterfinal)",
+      "events": 3
+    },
+    {
+      "title": "High Diving Women (Prelim / Quarterfinal)",
+      "events": 3
+    },
+    {
+      "title": "High Diving Men (Prelim / Quarterfinal)",
+      "events": 3
+    },
+    {
+      "title": "Skills C Girls (Final)",
+      "events": 3
+    },
+    {
+      "title": "Skills C Boys (Final)",
+      "events": 3
+    },
+    {
+      "title": "ECMD Tuck Pike Layout Women (Final)",
+      "events": 3
+    },
+    {
+      "title": "ECMD Tuck Pike Layout Men (Final)",
+      "events": 3
+    },
+    {
+      "title": "HD Group A (17-18-19) Girls (Prelim / Quarterfinal)",
+      "events": 2
+    },
+    {
+      "title": "HD Group B (14-15-16) Girls (Final)",
+      "events": 2
+    },
+    {
+      "title": "HD Group C (12-13) Boys (Final)",
+      "events": 2
+    },
+    {
+      "title": "10-11Boys Platform Open (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 2 Boys Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 5 Girls Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 5 Boys Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 6 Boys Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 2 Girls Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 3 Girls Side or Tower (Final)",
+      "events": 2
+    },
+    {
+      "title": "Level 3 Boys Side or Tower (Final)",
+      "events": 2
+    }
+  ]
+}
