@@ -763,6 +763,17 @@ CREATE TABLE IF NOT EXISTS divemeets.results (
 CREATE INDEX IF NOT EXISTS dm_results_meet    ON divemeets.results(meet_id);
 CREATE INDEX IF NOT EXISTS dm_results_profile ON divemeets.results(profile_id);
 CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, event_id, round);
+-- Synchronized placings list TWO athletes and TWO clubs on one row. The base
+-- diver_name/profile_id/team_name/team_id columns hold the first; these hold
+-- the partner, and are null on individual events. Added 2026-08-04: without
+-- them the crawler kept only one diver per synchro pair, which made synchro
+-- team points impossible to attribute (a pair is frequently cross-club, and
+-- the points are split between the two clubs).
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS diver2_name text;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS profile2_id integer;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_name  text;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_id    integer;
+CREATE INDEX IF NOT EXISTS dm_results_profile2 ON divemeets.results(profile2_id);
 -- crawl bookkeeping on the registry
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;

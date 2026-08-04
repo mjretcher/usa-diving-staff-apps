@@ -152,20 +152,51 @@ def parse_meet_events(h, meet_id):
                     dm.group(1) if dm else None))
     return out
 
+def _roster(anchors):
+    """Recover the roster from a placing row's repeated anchor list.
+
+    A placing row lists its roster twice: [A, A] on an individual event and
+    [A, B, A, B] on a synchronized one. The first half is the roster. If the
+    halves do not match -- unexpected markup -- fall back to the first anchor
+    only, which is the behaviour this replaced.
+    """
+    n = len(anchors)
+    if n >= 2 and n % 2 == 0 and anchors[:n // 2] == anchors[n // 2:]:
+        return anchors[:n // 2]
+    return anchors[:1]
+
 def parse_event_rows(h, meet_id, event_id, rnd):
-    """Placement rows for one EventResults page."""
+    """Placement rows for one EventResults page.
+
+    Synchronized rows carry TWO divers and TWO clubs. Until 2026-08-04 this
+    read only the first anchor of each, so every synchro placing lost a diver
+    and a club and synchro team points could not be attributed at all -- the
+    partner had to be read off the DiveMeets page by hand. The partner now
+    lands in diver2_name / profile2_id / team2_name / team2_id, which are null
+    on individual events.
+
+    Row de-duplication also keys on the whole roster rather than the first
+    diver. Keying on the first diver alone would silently drop a placing if
+    one athlete led two different pairs in the same event -- possible, since
+    a diver may appear in more than one pair (Leyton Dean was in both the 1st
+    and 2nd place pairs in Group A/B Synchro Boys Platform, 2026).
+    """
     sheet_rx = re.compile(
         rf"DiveSheetResults/{meet_id}/{event_id}/{rnd}/(\d+)/(\d+)")
     out, seen = [], set()
     for chunk in h.split(ROW_MARKER)[1:]:
-        pm = PROFILE_RX.search(chunk)
-        if not pm:
+        prof_roster = _roster(PROFILE_RX.findall(chunk))
+        if not prof_roster:
             continue
-        profile_id = int(pm.group(1))
-        if profile_id in seen:
+        team_roster = _roster(TEAM_RX.findall(chunk))
+        key = tuple(p[0] for p in prof_roster)
+        if key in seen:
             continue
-        seen.add(profile_id)
-        tm = TEAM_RX.search(chunk)
+        seen.add(key)
+        profile_id = int(prof_roster[0][0])
+        pm2 = prof_roster[1] if len(prof_roster) > 1 else None
+        tm1 = team_roster[0] if team_roster else None
+        tm2 = team_roster[1] if len(team_roster) > 1 else None
         sm = sheet_rx.search(chunk)
         # fullsize cells after the name/team: place, score, diff-from-first
         fs = [clean(x) for x in re.findall(
@@ -174,11 +205,15 @@ def parse_event_rows(h, meet_id, event_id, rnd):
         score = next((float(x) for x in fs[1:2] if NUM_RX.match(x)), None)
         diff = next((float(x) for x in fs[2:3] if NUM_RX.match(x)), None)
         out.append((int(meet_id), int(event_id), str(rnd), place,
-                    clean(pm.group(2)), profile_id,
-                    clean(tm.group(2)) if tm else None,
-                    int(tm.group(1)) if tm else None,
+                    clean(prof_roster[0][1]), profile_id,
+                    clean(tm1[1]) if tm1 else None,
+                    int(tm1[0]) if tm1 else None,
                     score, diff,
-                    int(sm.group(2)) if sm else None))
+                    int(sm.group(2)) if sm else None,
+                    clean(pm2[1]) if pm2 else None,
+                    int(pm2[0]) if pm2 else None,
+                    clean(tm2[1]) if tm2 else None,
+                    int(tm2[0]) if tm2 else None))
     return out
 
 def crawl_meet(cur, meet_id):
@@ -209,8 +244,9 @@ def crawl_meet(cur, meet_id):
             cur.executemany(
                 """INSERT INTO divemeets.results
                    (meet_id, event_id, round, place, diver_name, profile_id,
-                    team_name, team_id, score, diff_first, sheet_key)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", rows)
+                    team_name, team_id, score, diff_first, sheet_key,
+                    diver2_name, profile2_id, team2_name, team2_id)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", rows)
             n_rows += len(rows)
     cur.execute(
         """UPDATE divemeets.meets SET results_done=true, results_note=%s,
