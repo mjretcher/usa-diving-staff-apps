@@ -1,17 +1,6 @@
 OMEGA ingest — 1 page(s), DRY_RUN=False, MIN_PASS=95%
 
-  Diving at the 2019 World Aquatics Championships
-    13 OMEGA pdf(s) cited (year hint 2019)
-    [wb:20190714] 0001130005010104FFFFFFFFFFFFFF02  2019 Male 1m Final                 rows=  71 ok=  71 bad=  0 pass=100.0%
-    [wb:guess] 0001130005010204FFFFFFFFFFFFFF02  2019 Male 3m Final                 rows=  70 ok=  70 bad=  0 pass=100.0%
-    [wb:guess] 0001130005010304FFFFFFFFFFFFFF02  2019 Male Platform Final           rows=  72 ok=  72 bad=  0 pass=100.0%
-    [skip    ] 0001130005010404FFFFFFFFFFFFFF02  synchro — individual analysis only
-    [skip    ] 0001130005010504FFFFFFFFFFFFFF02  synchro — individual analysis only
-    [wb:20190713] 0001130005020104FFFFFFFFFFFFFF02  2019 Female 1m Final               rows=  60 ok=  60 bad=  0 pass=100.0%
-    [wb:20190720] 0001130005020204FFFFFFFFFFFFFF02  2019 Female 3m Final               rows=  60 ok=  60 bad=  0 pass=100.0%
-    [wb:guess] 0001130005020304FFFFFFFFFFFFFF02  2019 Female Platform Final         rows=  60 ok=  60 bad=  0 pass=100.0%
-    [skip    ] 0001130005020404FFFFFFFFFFFFFF02  synchro — individual analysis only
-    [skip    ] 0001130005020504FFFFFFFFFFFFFF02  synchro — individual analysis only
-    TIME BUDGET REACHED — stopping early
+  Diving at the 2017 World Aquatics Championships
+    0 OMEGA pdf(s) cited (year hint 2017)
 
-Summary: files=6, rows=393, rejected=0, fetch_fail=0, no_rows=0, synchro_skipped=4, budget_stop=1
+Summary: files=0, rows=0, rejected=0, fetch_fail=0, no_rows=0, synchro_skipped=0
