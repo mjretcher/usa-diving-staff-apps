@@ -85,19 +85,16 @@ jobs:
           psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM core.divers; SELECT COUNT(*) FROM core.teams;" 2>&1 | tee -a /tmp/seed.log
 
       - name: Record console tail to Neon
-        # psql output is the only diagnostic this workflow produces, and Actions
-        # logs are not always reachable. A truncate that fails leaves the table
-        # intact but the reason invisible, so it is written where it can be read.
-        # Uses psql, already installed above -- an earlier psycopg2 version of
-        # this step failed for want of a Python setup, which defeated the point.
+        # psql output is the only diagnostic this workflow produces and Actions
+        # logs are not always reachable, so the tail is written where it can be
+        # read. Best-effort by design: continue-on-error keeps a diagnostic
+        # aid from ever marking a successful load as failed, which is exactly
+        # what an earlier version of this step did.
         if: always()
+        continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          LOG="$(tail -c 6000 /tmp/seed.log 2>/dev/null || echo '(no console captured)')"
-          psql "$DATABASE_URL" -v log="$LOG" -c \
-            "INSERT INTO app_meta.config (key, value, description)
-             VALUES ('neon_seed_last_console', jsonb_build_object('at', now(), 'console', :'log')::text,
-                     'console tail of the last core.event_results seed')
-             ON CONFLICT (key) DO UPDATE
-               SET value = EXCLUDED.value, updated_at = now();"
+          LOG="$(tail -c 6000 /tmp/seed.log 2>/dev/null || true)"
+          [ -n "$LOG" ] || LOG="(no console captured)"
+          psql "$DATABASE_URL" -v log="$LOG" -c "INSERT INTO app_meta.config (key, value, description) VALUES ('neon_seed_last_console', :'log', 'console tail of the last core.event_results seed') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();"
