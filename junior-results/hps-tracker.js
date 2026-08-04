@@ -151,6 +151,14 @@
       });
 
       // Voluntary dives, preliminaries only, individual events only.
+      // DiveMeets tags a dive V, O or S. S appears only on Group D platform
+      // sheets, exactly once per diver, always in the first dive slot. It is a
+      // VOLUNTARY: Art. 302.2(a)(3) sets Group D platform at four voluntaries
+      // plus two optionals, and the crawl holds 3 V + 1 S + 2 O — so S is the
+      // fourth voluntary, and the four V+S degrees of difficulty sum to just
+      // under the 7.6 cap that rule places on the voluntary list. Filtering on
+      // 'V' alone tested Group D platform on three of its four voluntaries and
+      // understated one near miss.
       var vol = await neonQuery(
         "SELECT e.title, s.sheet_key::text AS sheet_key, s.dive_order, s.dive_number, " +
         "       s.net_score, r.diver_name, r.profile_id::text AS profile_id, r.team_name " +
@@ -158,7 +166,7 @@
         "JOIN divemeets.events e ON e.meet_id=s.meet_id AND e.event_id=s.event_id AND e.round=s.round " +
         "LEFT JOIN divemeets.results r ON r.meet_id=s.meet_id AND r.event_id=s.event_id " +
         "     AND r.round=s.round AND r.sheet_key=s.sheet_key " +
-        "WHERE s.meet_id=" + MEET_ID + " AND s.round='1' AND s.opt_vol='V' " +
+        "WHERE s.meet_id=" + MEET_ID + " AND s.round='1' AND s.opt_vol IN ('V','S') " +
         "  AND e.title !~* 'synchro' " +
         "ORDER BY e.title, r.diver_name, s.dive_order");
       state.vols = (vol && vol.rows) || [];
