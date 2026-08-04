@@ -18,4 +18,5 @@ jobs:
           git config user.email "gha@users.noreply.github.com"
           git add db/audits/ae_nation_audit.txt
           git commit -m "AE nation audit" || echo none
+          git pull --rebase --autostash -q || true
           git push

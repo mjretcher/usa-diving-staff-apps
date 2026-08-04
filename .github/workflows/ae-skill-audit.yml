@@ -28,4 +28,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add db/audits/ae_skill_audit.txt
           git commit -m "AE skill vs rulebook audit results" || echo "no change"
+          git pull --rebase --autostash -q || true
           git push

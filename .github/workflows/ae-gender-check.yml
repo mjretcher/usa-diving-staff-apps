@@ -18,4 +18,5 @@ jobs:
           git config user.email "gha@users.noreply.github.com"
           git add db/audits/ae_gender_check.txt
           git commit -m "AE gender check" || echo none
+          git pull --rebase --autostash -q || true
           git push

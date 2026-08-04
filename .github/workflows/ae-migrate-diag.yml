@@ -27,4 +27,5 @@ jobs:
           git config user.email "gha@users.noreply.github.com"
           git add db/audits/ae_migrate_diag.txt
           git commit -m "AE migrate diagnostic" || echo none
+          git pull --rebase --autostash -q || true
           git push
