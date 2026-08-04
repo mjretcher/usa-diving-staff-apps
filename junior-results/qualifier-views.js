@@ -1219,6 +1219,10 @@
     if (window.renderNatReconciliation) {
       window.renderNatReconciliation(document.getElementById('qvNatRecon'));
     }
+
+    // Frame the stage: sticky rail + provenance chips. Panels render async, so
+    // the shell debounces and re-frames as each one lands.
+    if (window.natShellRefresh) window.natShellRefresh();
   }
 
   function renderNatSidebar() {

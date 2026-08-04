@@ -193,5 +193,6 @@
     if (!state.data) { wrap.innerHTML = ''; return; }   // meet not contested yet
     render(wrap, state.data);
     reorder();
+    if (window.natShellRefresh) window.natShellRefresh();
   };
 })();

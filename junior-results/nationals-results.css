@@ -134,3 +134,27 @@ th.nr-official{ background:#DCEDF5; color:#0B5975; }
   background:#EAF4F9; border-left:4px solid #009AC7; color:#0B5975;
   padding:9px 12px; border-radius:0 6px 6px 0; font-size:12.5px; margin:0 0 12px;
 }
+
+/* ── Group chips: 28 events is too many to scroll blind ───────────────────── */
+.nr-groups{ display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 0; }
+.nr-gchip{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600; cursor:pointer;
+  background:#fff; color:#40506B; border:1px solid #DDE3EE; border-radius:20px; padding:6px 13px;
+}
+.nr-gchip:hover{ background:#F2F5FA; color:#171F69; }
+.nr-gchip.on{ background:#171F69; color:#fff; border-color:#171F69; }
+.nr-gn{
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:600;
+  background:#EEF1F7; color:#5a6a7e; border-radius:10px; padding:1px 6px;
+}
+.nr-gchip.on .nr-gn{ background:rgba(255,255,255,.22); color:#fff; }
+
+.nr-fold{ margin:12px 0; border-bottom:1px solid #EEF1F7; }
+.nr-fold > summary{
+  cursor:pointer; padding:8px 2px;
+  font-family:'Barlow Condensed','Inter',sans-serif; font-weight:600; font-size:17px; color:#171F69;
+}
+.nr-fold > summary:focus-visible{ outline:2px solid #009AC7; outline-offset:2px; }
+.nr-foldn{ font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A889B; font-weight:400; }
+.nr-fold[open] > summary{ border-bottom:1px solid #EEF1F7; margin-bottom:4px; }

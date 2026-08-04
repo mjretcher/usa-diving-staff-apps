@@ -50,7 +50,7 @@
   var state = {
     rows: null, loading: false, error: null,
     meetName: '', asOf: null, startDate: null, endDate: null,
-    q: '', eventPick: '', scope: 'all', onlyMoves: false
+    q: '', eventPick: '', scope: 'all', onlyMoves: false, group: '', folded: false
   };
 
   function esc(s) {
@@ -108,6 +108,15 @@
   }
 
   /* ── Shape ────────────────────────────────────────────────────────────── */
+  /* Group A-D, or Synchro. Read from the event title rather than a lookup so
+     it cannot drift from what the panel actually displays. */
+  function groupOf(title) {
+    var t = String(title || '');
+    if (/synchro/i.test(t)) return 'Synchro';
+    var m = t.match(/Group\s*([A-D])\b/i);
+    return m ? 'Group ' + m[1].toUpperCase() : 'Other';
+  }
+
   function baseTitle(t) {
     return String(t || '')
       .replace(/\s*\(Prelim\s*\/\s*Quarterfinal\)\s*$/i, '')
@@ -233,6 +242,7 @@
     var q = state.q.trim().toLowerCase();
     return events.map(function (e) {
       if (state.eventPick && e.title !== state.eventPick) return null;
+      if (state.group && groupOf(e.title) !== state.group) return null;
       var list = e.list.filter(function (d) {
         if (state.scope === 'finalists' && !d.finalist) return false;
         if (state.onlyMoves && !d.move) return false;
@@ -291,6 +301,15 @@
   }
 
   function eventHtml(e) {
+    var body = eventBody(e);
+    if (!state.folded) return body;
+    var n = e.list.length;
+    return '<details class="nr-fold"><summary>' + esc(e.title) +
+      ' <span class="nr-foldn">' + n + ' diver' + (n === 1 ? '' : 's') + '</span></summary>' +
+      body + '</details>';
+  }
+
+  function eventBody(e) {
     return '<section class="nr-block">' +
       '<h3 class="nr-h3">' + esc(e.title) +
         '<span class="nr-fmt">' + fmtLine(e.fmt) + '</span>' +
@@ -424,6 +443,15 @@
           'rather than shortened, per Art.&nbsp;301.3.</p>' +
       '</header>' +
 
+      '<div class="nr-groups">' +
+        ['', 'Group A', 'Group B', 'Group C', 'Group D', 'Synchro'].map(function (g) {
+          var lbl = g || 'All events';
+          var n = g ? all.filter(function (e) { return groupOf(e.title) === g; }).length : all.length;
+          return '<button type="button" class="nr-gchip' + (state.group === g ? ' on' : '') +
+                 '" data-g="' + esc(g) + '">' + esc(lbl) +
+                 '<span class="nr-gn">' + n + '</span></button>';
+        }).join('') +
+      '</div>' +
       '<div class="nr-controls">' +
         '<input class="nr-in" id="nrQ" type="search" placeholder="Search diver or team&hellip;" value="' + esc(state.q) + '">' +
         '<select class="nr-in" id="nrEvent"><option value="">All events</option>' +
@@ -437,6 +465,8 @@
         '</select>' +
         '<label class="nr-chk"><input type="checkbox" id="nrMoves"' + (state.onlyMoves ? ' checked' : '') +
           '> Only rows where the orders differ</label>' +
+        '<button class="nr-btn nr-ghost" id="nrFold">' +
+          (state.folded ? 'Open all events' : 'Collapse events') + '</button>' +
         '<button class="nr-btn" id="nrCsv">Export CSV</button>' +
       '</div>' +
 
@@ -465,6 +495,15 @@
     if (mv) mv.addEventListener('change', function () {
       state.onlyMoves = mv.checked; window.renderNationalsResultsPanel(wrap);
     });
+    wrap.querySelectorAll('.nr-gchip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.group = b.dataset.g; window.renderNationalsResultsPanel(wrap);
+      });
+    });
+    var fd = wrap.querySelector('#nrFold');
+    if (fd) fd.addEventListener('click', function () {
+      state.folded = !state.folded; window.renderNationalsResultsPanel(wrap);
+    });
     var cs = wrap.querySelector('#nrCsv');
     if (cs) cs.addEventListener('click', function () {
       var blob = new Blob([csv(shown)], { type: 'text/csv;charset=utf-8;' });
@@ -474,5 +513,6 @@
       document.body.appendChild(a); a.click();
       document.body.removeChild(a); URL.revokeObjectURL(a.href);
     });
+    if (window.natShellRefresh) window.natShellRefresh();
   };
 })();

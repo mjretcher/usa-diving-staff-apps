@@ -1,0 +1,92 @@
+/* ============================================================================
+   nat-shell.css — the frame around the Junior Nationals stage.
+
+   Palette and type are USA Diving's and are not negotiable here: Navy #171F69,
+   Red #E31937, Pool #009AC7, Sky #8FC3EA; Barlow Condensed for display, Inter
+   for interface, JetBrains Mono for anything numeric. Red never sits on blue.
+
+   The freedom this file spends is on structure, and it spends nearly all of it
+   in one place: the provenance chip. Everything else stays quiet so the chip
+   reads as information rather than ornament.
+   ========================================================================= */
+
+/* ── Sticky meet strip + section rail ─────────────────────────────────────── */
+.nsx-rail{
+  position:sticky; top:0; z-index:30;
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 18px;
+  padding:11px 16px; margin:0 0 6px;
+  background:rgba(255,255,255,.94); backdrop-filter:saturate(1.4) blur(8px);
+  border-bottom:1px solid #DDE3EE;
+}
+.nsx-meet{
+  font-family:'Barlow Condensed','Inter',sans-serif; font-weight:700;
+  font-size:17px; letter-spacing:.02em; text-transform:uppercase;
+  color:#171F69; margin-right:4px; white-space:nowrap;
+}
+.nsx-links{ display:flex; flex-wrap:wrap; gap:4px; }
+.nsx-link{
+  font-family:'Inter',system-ui,sans-serif; font-size:12.5px; font-weight:500;
+  color:#40506B; background:transparent; border:0; border-radius:6px;
+  padding:5px 11px; cursor:pointer; position:relative;
+}
+.nsx-link:hover{ background:#EEF1F7; color:#171F69; }
+.nsx-link:focus-visible{ outline:2px solid #009AC7; outline-offset:1px; }
+/* The active marker is a rule under the label — the same device the chip bar
+   uses — rather than a pill, so the rail and the sections share one language. */
+.nsx-link.on{ color:#171F69; font-weight:700; }
+.nsx-link.on::after{
+  content:''; position:absolute; left:11px; right:11px; bottom:1px;
+  height:2px; background:#009AC7; border-radius:2px;
+}
+
+/* ── Provenance chip: the signature element ───────────────────────────────── */
+.nsx-chipbar{
+  display:flex; align-items:center; gap:12px;
+  margin:30px 0 -4px; scroll-margin-top:64px;
+}
+.nsx-rule{ flex:1; height:1px; background:linear-gradient(90deg,#DDE3EE,#EEF1F7); }
+.nsx-chip{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:'JetBrains Mono',ui-monospace,monospace;
+  font-size:9.5px; font-weight:600; letter-spacing:.13em; text-transform:uppercase;
+  padding:4px 11px; border-radius:20px; white-space:nowrap; cursor:help;
+  border:1px solid transparent;
+}
+.nsx-dot{ width:6px; height:6px; border-radius:50%; display:inline-block; }
+/* Official — the darkest, because it is the one thing not derived here. */
+.nsx-official{ background:#EDEFF7; color:#171F69; border-color:#CBD3E1; }
+.nsx-official .nsx-dot{ background:#171F69; }
+/* Computed — pool blue, the app's working colour. */
+.nsx-computed{ background:#EAF4F9; color:#0B5975; border-color:#B8DCEA; }
+.nsx-computed .nsx-dot{ background:#009AC7; }
+/* Inferred — amber, not red. Red is reserved for something being wrong, and an
+   inference is not an error; it is a weaker claim. Also keeps red off blue. */
+.nsx-inferred{ background:#FFF4E5; color:#7A4A00; border-color:#E8C48A; }
+.nsx-inferred .nsx-dot{ background:#B26A00; }
+
+.nsx-sec{ scroll-margin-top:70px; }
+
+/* ── Quieting the panels so the chip is the loud thing ────────────────────── */
+/* Four panels were authored separately and each opened with a 26px display
+   heading, so the stage had five things all shouting at once. One scale now. */
+.hps-h2, .nr-h2, .tp-h2{ font-size:21px !important; margin-top:6px !important; }
+.nrc-h3{ font-size:19px !important; }
+.hps-sub, .nr-sub, .tp-sub, .nrc-sub{ font-size:12px !important; }
+
+/* Panels sat flush against each other; give each room to be a separate thing. */
+.nsx-sec .hps-wrap, .nsx-sec .nr-wrap, .nsx-sec .tp-wrap{ margin-top:2px; }
+
+@media (max-width:760px){
+  .nsx-rail{ padding:9px 12px; gap:5px 12px; }
+  .nsx-meet{ font-size:15px; width:100%; }
+  .nsx-link{ font-size:12px; padding:5px 9px; }
+  .nsx-chipbar{ margin-top:22px; }
+}
+@media (prefers-reduced-motion:reduce){
+  .nsx-rail{ backdrop-filter:none; }
+}
+@media print{
+  .nsx-rail{ display:none; }
+  .nsx-chipbar{ margin-top:18px; }
+  .nsx-chip{ border:1px solid #999; }
+}

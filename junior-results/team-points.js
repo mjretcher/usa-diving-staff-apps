@@ -341,5 +341,6 @@
       document.body.appendChild(el); el.click(); document.body.removeChild(el);
       URL.revokeObjectURL(el.href);
     });
+    if (window.natShellRefresh) window.natShellRefresh();
   };
 })();
