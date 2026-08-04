@@ -56,6 +56,7 @@ jobs:
         run: pip install psycopg2-binary
 
       - name: Crawl results batch
+        id: crawl
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           MEET_ID: ${{ github.event.inputs.meet_id }}
@@ -67,4 +68,36 @@ jobs:
           # env var is empty on cron and the reduced run frequency above would not be
           # compensated by a larger per-run budget.
           FETCH_BUDGET: ${{ github.event.inputs.fetch_budget || '1200' }}
-        run: python db/scripts/dm_results.py
+        run: |
+          set -o pipefail
+          python -u db/scripts/dm_results.py 2>&1 | tee /tmp/crawl.log
+
+      - name: Record console tail to Neon
+        # The script self-reports through report(), but that only runs when the
+        # process survives to its own except block. A hard exit -- an OOM kill,
+        # a segfault in the driver, an exception before DB_URL is read -- leaves
+        # no trace anywhere, and Actions logs are not always reachable. This
+        # step always runs, so a failed crawl can be diagnosed from Neon alone.
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          STEP_OUTCOME: ${{ steps.crawl.outcome }}
+        run: |
+          python - <<'PY'
+          import os, json, datetime, psycopg2
+          try:
+              log = open('/tmp/crawl.log', encoding='utf-8', errors='replace').read()[-8000:]
+          except Exception as e:
+              log = '(no console captured: %r)' % (e,)
+          payload = json.dumps({
+              'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'outcome': os.environ.get('STEP_OUTCOME'),
+              'console': log})
+          conn = psycopg2.connect(os.environ['DATABASE_URL']); cur = conn.cursor()
+          cur.execute("""INSERT INTO app_meta.config (key, value, description)
+                         VALUES (%s, %s, 'console tail of the last crawl run')
+                         ON CONFLICT (key) DO UPDATE
+                           SET value = EXCLUDED.value, updated_at = now()""",
+                      (os.environ.get('CONSOLE_KEY', 'dm_results_last_console'), payload))
+          conn.commit(); cur.close(); conn.close()
+          PY
