@@ -87,10 +87,9 @@ FROM (
       AND r.stage = ANY(%s)
       AND r.score IS NOT NULL
       AND r.score > 0
-      -- place is TEXT in the raw scrape and can hold tie markers like 'T3',
-      -- so compare as text rather than casting and risking an error on a
-      -- non-numeric value. 127 is the exhibition / non-displacing sentinel.
-      AND COALESCE(btrim(r.place), '') <> '127'
+      -- core.event_results.place is smallint, unlike the raw scrape's text.
+      -- 127 is the exhibition / non-displacing sentinel.
+      AND (r.place IS NULL OR r.place <> 127)
       AND r.age_group IS NOT NULL
       AND r.gender IS NOT NULL
       AND r.discipline IS NOT NULL
