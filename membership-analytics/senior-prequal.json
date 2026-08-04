@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T16:51:20Z",
+  "generated": "2026-08-04T16:53:31Z",
   "source": "core.event_results",
   "unit": "distinct (athlete, event) pairs \u2014 a 3M champion is prequalified on 3M only",
   "note": "Pathways overlap: the same athlete can qualify through several. Summing rows overstates the field; use union_entries.",
@@ -143,6 +143,12 @@
     },
     {
       "label": "Non-HPS athletes who met an HPS score threshold at 2025 Nationals",
+      "entries": null,
+      "athletes": null,
+      "derived": false
+    },
+    {
+      "label": "Added at the National Championships Qualifier (5-6 Aug)",
       "entries": null,
       "athletes": null,
       "derived": false
