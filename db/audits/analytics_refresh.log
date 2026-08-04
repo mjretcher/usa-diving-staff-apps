@@ -1,0 +1,43 @@
+[build_analytics] endpoint: https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql
+[build_analytics] fetched 28062 DiveMeets athletes, 290 WA individual athletes
+[build_analytics] identities: 28273 total, 79 DM<->WA links auto-accepted
+[build_analytics] athlete_identity inserted
+[build_analytics] athlete_directory built
+[build_analytics] benchmarks built
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_analytics.py", line 52, in sql
+    with urllib.request.urlopen(req, timeout=180) as r:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 215, in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_analytics.py", line 344, in <module>
+    sql("""CREATE TABLE analytics.field_list_dd AS
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_analytics.py", line 56, in sql
+    raise RuntimeError(f"SQL error {e.code}: {detail}\n-- query: {query[:300]}")
+RuntimeError: SQL error 400: {"message":"column \"event_level\" does not exist","code":"42703","detail":null,"hint":null,"position":"261","internalPosition":null,"internalQuery":null,"severity":"ERROR","where":null,"table":null,"column":null,"schema":null,"dataType":null,"constraint":null,"file":"parse_relation.c","line":"3822","routine":"errorMissingColumn","neon:retryable":false}
+-- query: CREATE TABLE analytics.field_list_dd AS
+WITH lists AS (
+  SELECT competition_family, meet_year, gender, discipline,
+         CASE WHEN competition_family='World Aquatics' THEN 'world'
+              WHEN competition_family='NCAA' THEN 'ncaa'
+              WHEN event_level IN ('Senior','Senior/Open') 
