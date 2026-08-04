@@ -1,0 +1,110 @@
+Athlete Evaluation — dive taxonomy audit (read-only)
+
+========================================================================
+0. Baseline row counts
+========================================================================
+  all_rows  individual  in_field_stats  y0    y1  
+  --------  ----------  --------------  ----  ----
+  1597350   1567818     1516608         2013  2026
+
+========================================================================
+1. TWISTERS (5xxx) — split by underlying direction (2nd digit)
+========================================================================
+  digit  resolved_group    n       divers  avg_exec
+  -----  ----------------  ------  ------  --------
+  0      UNEXPECTED        1       1       0.000   
+  1      Forward twisting  100826  10738   5.269   
+  2      Back twisting     127622  10602   5.303   
+  3      Reverse twisting  12646   2370    5.490   
+  4      Inward twisting   491     232     3.844   
+
+========================================================================
+2. ARMSTANDS (6xxx) — direction split + category-code coverage
+========================================================================
+  digit  n      blank_code  blank_label  avg_exec
+  -----  -----  ----------  -----------  --------
+  0      206    206         206          4.977   
+  1      16402  16402       16402        5.440   
+  2      3844   3844        3844         5.587   
+  3      26     26          26           5.244   
+
+========================================================================
+3. CATEGORY-CODE COVERAGE by leading digit (individual disciplines)
+========================================================================
+  lead  n       blank_code  blank_label
+  ----  ------  ----------  -----------
+  0     38730   38730       38730      
+  1     390649  0           0          
+  2     306972  0           0          
+  3     239860  0           0          
+  4     318831  0           0          
+  5     251272  0           0          
+  6     21500   21500       21500      
+  O     3       3           3          
+
+========================================================================
+4. MALFORMED dive numbers on INDIVIDUAL disciplines (>5 chars = concatenated)
+========================================================================
+  len  n      polluting  example     min_dd  max_dd
+  ---  -----  ---------  ----------  ------  ------
+  8    37811  12         001A001A    2.703   3.203 
+  9    7024   8          001A5101A   2.102   3.603 
+  10   6345   2          5101A5101C  2.502   2.602 
+
+========================================================================
+4b. Execution impact of those malformed rows vs clean rows
+========================================================================
+  bucket     n        avg_exec  fail_rate
+  ---------  -------  --------  ---------
+  clean      1516585  5.408     0.1844   
+  malformed  22       5.411     0.1818   
+
+========================================================================
+5. SCOPES available in analytics.field_group_exec
+========================================================================
+  scope      grain_rows  dives    y0    y1    cats
+  ---------  ----------  -------  ----  ----  ----
+  us-open    537         1153350  2013  2026  8   
+  us-junior  411         246178   2013  2026  7   
+  us-senior  411         74065    2014  2026  7   
+  ncaa       104         35915    2021  2026  6   
+  world      66          7100     2025  2026  6   
+
+========================================================================
+6. Scope x discipline depth (is us-senior usable as a comparison field?)
+========================================================================
+  scope      discipline  gender  dives
+  ---------  ----------  ------  -----
+  ncaa       1m          Female  8901 
+  ncaa       1m          Male    5890 
+  ncaa       3m          Female  8429 
+  ncaa       3m          Male    5900 
+  ncaa       Platform    Female  3662 
+  ncaa       Platform    Male    2981 
+  us-junior  1m          Female  59762
+  us-junior  1m          Male    40488
+  us-junior  3m          Female  51372
+  us-junior  3m          Male    36001
+  us-junior  Platform    Female  17253
+  us-junior  Platform    Male    11606
+  us-open    1m          Female  7684 
+  us-open    1m          Male    3852 
+  us-open    3m          Female  7372 
+  us-open    3m          Male    4040 
+  us-open    Platform    Female  1190 
+  us-open    Platform    Male    844  
+  us-senior  1m          Female  1169 
+  us-senior  1m          Male    1225 
+  us-senior  3m          Female  1756 
+  us-senior  3m          Male    2216 
+  us-senior  Platform    Female  1194 
+  us-senior  Platform    Male    1174 
+  world      1m          Female  319  
+  world      1m          Male    426  
+  world      3m          Female  1365 
+  world      3m          Male    1878 
+  world      3m          Mixed   408  
+  world      Platform    Female  1216 
+  world      Platform    Male    1488 
+
+Audit complete — no writes performed.
