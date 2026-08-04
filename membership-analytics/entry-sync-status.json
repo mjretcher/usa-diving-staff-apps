@@ -1,0 +1,34 @@
+{
+  "generated": "2026-08-04T16:43:27Z",
+  "meets": {
+    "12923": {
+      "entries": 719,
+      "events": 24,
+      "fetched": "2026-08-04 16:40",
+      "individual": 719,
+      "max_round": "Prelim",
+      "min_round": "Prelim",
+      "synchro": 0
+    },
+    "12924": {
+      "entries": 101,
+      "events": 6,
+      "fetched": "2026-08-04 16:42",
+      "individual": 101,
+      "max_round": "Prelim",
+      "min_round": "Prelim",
+      "synchro": 0
+    },
+    "12925": {
+      "entries": 77,
+      "events": 6,
+      "fetched": "2026-08-04 16:43",
+      "individual": 77,
+      "max_round": "Prelim",
+      "min_round": "Prelim",
+      "synchro": 0
+    }
+  },
+  "note": "entries are one row per (meet, event); never_synced=true means no row exists at all, which is different from a synced meet with zero signups",
+  "source": "junior_results.meet_entries"
+}
