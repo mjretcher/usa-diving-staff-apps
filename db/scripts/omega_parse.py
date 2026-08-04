@@ -163,3 +163,84 @@ def check_arithmetic(row, tol=0.051):
         return None, None
     expected = round(sum(keep) * row["dd"], 2)
     return abs(expected - row["score"]) <= tol, expected
+
+
+# --------------------------------------------------------------- header meta
+HEAD_EVENT_RX = re.compile(r"^Event\s+(\d+)\b", re.I)
+HEAD_DATE_RX = re.compile(r"^(\d{1,2})\s+([A-Z]{3})\s+(\d{4})")
+# Footer document code, e.g. "DIVM3M----------------FNL-000100--_73E"
+#   DIV = diving, then gender M/W, then discipline, then phase PRE/SEM/FNL/QUA
+FOOTER_RX = re.compile(r"^DIV([MWX])(1M|3M|10M|PLATFORM|HIGH)?(SYN|TEAM)?-+([A-Z]{3})", re.I)
+
+DISCIPLINE_FROM_TITLE = [
+    (re.compile(r"\b1\s*m\b", re.I), "1m"),
+    (re.compile(r"\b3\s*m\b", re.I), "3m"),
+    (re.compile(r"\b(10\s*m|platform|highboard)\b", re.I), "Platform"),
+]
+PHASE = {"FNL": "Final", "SEM": "Semifinal", "PRE": "Prelim", "QUA": "Prelim"}
+MONTHS = {m: i + 1 for i, m in enumerate(
+    ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])}
+
+
+def parse_header(text):
+    """
+    Pull meet identity out of an Omega detailed-results PDF.
+    Returns a dict; any field it cannot establish is None rather than guessed.
+    """
+    out = {"event_no": None, "event_title": None, "gender": None, "discipline": None,
+           "round_stage": None, "meet_name": None, "meet_year": None, "venue": None,
+           "is_synchro": False, "doc_code": None}
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    for l in lines[:40]:
+        m = HEAD_EVENT_RX.match(l)
+        if m and out["event_no"] is None:
+            out["event_no"] = m.group(1)
+        m = HEAD_DATE_RX.match(l)
+        if m and out["meet_year"] is None:
+            out["meet_year"] = int(m.group(3))
+        # "Men's 3m Springboard" / "Women's 10m Platform"
+        if out["event_title"] is None and re.search(r"(Men|Women|Mixed)'?s?\s", l) \
+                and re.search(r"(1m|3m|10m|Platform|Springboard|Synchro)", l, re.I):
+            out["event_title"] = l
+        if out["meet_name"] is None and re.search(
+                r"(World Championships|World Cup|Olympic|\bChampionships\b|\bFINA\b|World Aquatics)", l, re.I):
+            out["meet_name"] = l
+            y = re.search(r"(19|20)\d{2}", l)
+            if y:
+                out["meet_year"] = int(y.group(0))
+        if out["venue"] is None and re.match(r"^[A-Z][\w' .-]+\s*\([A-Z]{3}\)$", l):
+            out["venue"] = l
+
+    for l in lines:
+        m = FOOTER_RX.match(l)
+        if m:
+            out["doc_code"] = l.split()[0]
+            g, disc, syn, phase = m.groups()
+            out["gender"] = {"M": "Male", "W": "Female", "X": "Mixed"}.get(g.upper())
+            if disc:
+                d = disc.upper()
+                out["discipline"] = {"1M": "1m", "3M": "3m", "10M": "Platform",
+                                     "PLATFORM": "Platform", "HIGH": "Platform"}.get(d)
+            out["is_synchro"] = syn is not None and syn.upper() == "SYN"
+            out["round_stage"] = PHASE.get(phase.upper())
+            break
+
+    title = out["event_title"] or ""
+    if out["gender"] is None:
+        if re.search(r"\bMen", title, re.I): out["gender"] = "Male"
+        elif re.search(r"\bWomen", title, re.I): out["gender"] = "Female"
+        elif re.search(r"\bMixed", title, re.I): out["gender"] = "Mixed"
+    if out["discipline"] is None:
+        for rx, d in DISCIPLINE_FROM_TITLE:
+            if rx.search(title):
+                out["discipline"] = d
+                break
+    if out["round_stage"] is None:
+        for l in lines[:30]:
+            if re.fullmatch(r"Final", l, re.I): out["round_stage"] = "Final"; break
+            if re.fullmatch(r"Semifinal|Semi-final", l, re.I): out["round_stage"] = "Semifinal"; break
+            if re.fullmatch(r"Preliminary|Preliminaries", l, re.I): out["round_stage"] = "Prelim"; break
+    if not out["is_synchro"] and re.search(r"synchro", title, re.I):
+        out["is_synchro"] = True
+    return out
