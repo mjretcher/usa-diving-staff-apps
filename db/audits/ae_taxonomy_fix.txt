@@ -2,33 +2,22 @@
 ============================================================================
 A. UNCLASSIFIED codes — what are they?
 ============================================================================
-  code              n   description                                                                                   disc             scored
-  ----------------  --  --------------------------------------------------------------------------------------------  ---------------  ------
-  001A001B          97  Forward Entry StraightForward Entry Pike                                                      3m               0     
-  001D001D          80  Forward Entry FreeForward Entry Free                                                          Platform         32    
-  001B001C          57  Forward Entry PikeForward Entry Tuck                                                          3m               0     
-  001B001A          56  Forward Entry PikeForward Entry Straight                                                      3m               0     
-  001C001B          46  Forward Entry TuckForward Entry Pike                                                          3m               0     
-  201C002D          41  Back Dive TuckBack Entry Free                                                                 3m               0     
-  002A200C          41  Back Entry StraightBack Jump Tuck                                                             1m               0     
-  002A002C          39  Back Entry StraightBack Entry Tuck                                                            3m               0     
-  002A200A          36  Back Entry StraightBack Jump Straight                                                         3m               0     
-  002C002A          35  Back Entry TuckBack Entry Straight                                                            3m               0     
-  001B001B          32  Forward Entry PikeForward Entry Pike                                                          Platform         10    
-  200A002A          26  Back Jump StraightBack Entry Straight                                                         3m               0     
-  002A001B          25  Back Entry StraightForward Entry Pike                                                         3m               0     
-  201A002D          24  Back Dive StraightBack Entry Free                                                             1m               0     
-  002A001A          24  Back Entry StraightForward Entry Straight                                                     1m               0     
-  001A001D          23  Forward Entry StraightForward Entry Free                                                      3m               0     
-  103B101B103B101B  22  Forward 1 1/2 Somersault PikeForward Dive PikeForward 1 1/2 Somersault PikeForward Dive Pike  Synchronized 3m  0     
-  001C001A          20  Forward Entry TuckForward Entry Straight                                                      3m               0     
-  002A5101A         19  Back Entry StraightForward Jump 1/2 Twist Straight                                            3m               0     
-  001D101C          19  Forward Entry FreeForward Dive Tuck                                                           1m               0     
-  002D401C          19  Back Entry FreeInward Dive Tuck                                                               1m               0     
-  201C002A          19  Back Dive TuckBack Entry Straight                                                             3m               0     
-  001B100B          19  Forward Entry PikeForward Jump Pike                                                           3m               0     
-  002B002A          19  Back Entry PikeBack Entry Straight                                                            3m               0     
-  001B200C          19  Forward Entry PikeBack Jump Tuck                                                              3m               0     
+  code             n  description                                                                   disc             scored
+  ---------------  -  ----------------------------------------------------------------------------  ---------------  ------
+  302E             5  Reverse 1 Somersault Pos                                                      None             5     
+  51325132D        2  Forward 1 1/2 Somersault 1 Twist Free                                         1m               0     
+  5110151101B      1  Forward 5 Somersaults 1/2 Tw Pike                                             None             0     
+  51225122D        1  Forward 1 Somersault 1 Twist Free                                             1m               0     
+  51245124D        1  Forward 1 Somersault 2 Twist Free                                             1m               0     
+  5132D602B        1  Forward 1 1/2 Somersault 1 Twist Free                                         Platform         0     
+  51345134D        1  Forward 1 1/2 Somersault 2 Twist Free                                         1m               0     
+  5161E            1  Forward 3 Somersault 1/2 Twist 3 Pos                                          None             1     
+  52235223D        1  Back 1 Somersault 1 1/2 Twist Free                                            1m               0     
+  5225D5132E       1  Back 1 Somersault 2 1/2 Twist Free                                            1m               0     
+  52315231D        1  Back 1 1/2 Somersault 1/2 Twist Free                                          3m               0     
+  022D             1  Falling backflip                                                              None             1     
+  5233D52335233 D  1  Back 1 1/2 Somersault 1 1/2 Twist FreeBack 1 1/2 Somersault 1 1/2 Twist Free  Synchronized 3m  1     
+  401B5501D        1  Inward Dive Pike                                                              3m               0     
 
 ============================================================================
 B. Top SKILL codes — sanity check the reclassification
@@ -58,12 +47,37 @@ B. Top SKILL codes — sanity check the reclassification
 
 (Re)seeding core.dive_skills…
   41 distinct skill codes in data
-  INSERT FAILED: ReadOnlySqlTransaction: cannot execute INSERT in a read-only transaction
-
+  inserted/updated 41 skill codes
 
 ============================================================================
 C. Skills catalog after seeding (top 25 by data volume)
 ============================================================================
-  (none)
+  code   skill_name                                   cite                      notes             
+  -----  -------------------------------------------  ------------------------  ------------------
+  001A   Forward entry (lineup) — Straight            Art. 302.2(a)(3) / 401.4  3590 rows in data 
+  001B   Forward entry (lineup) — Pike                Art. 302.2(a)(3) / 401.4  12827 rows in data
+  001C   Forward entry (lineup) — Tuck                Art. 302.2(a)(3) / 401.4  3306 rows in data 
+  001D   Forward entry (lineup) — Free                Art. 302.2(a)(3) / 401.4  6341 rows in data 
+  002A   Back entry (lineup) — Straight               Art. 302.2(a)(3) / 401.4  7632 rows in data 
+  002B   Back entry (lineup) — Pike                   Art. 302.2(a)(3) / 401.4  135 rows in data  
+  002C   Back entry (lineup) — Tuck                   Art. 302.2(a)(3) / 401.4  1411 rows in data 
+  002D   Back entry (lineup) — Free                   Art. 302.2(a)(3) / 401.4  2273 rows in data 
+  003A   Entry (lineup, unlisted variant) — Straight  not in rulebook           1 rows in data    
+  100A   Forward jump — Straight                      Art. 401.4                18238 rows in data
+  100B   Forward jump — Pike                          Art. 401.4                4821 rows in data 
+  100C   Forward jump — Tuck                          Art. 401.4                10508 rows in data
+  100D   Forward jump — Free                          Art. 401.4                7 rows in data    
+  200A   Back jump — Straight                         Art. 401.4                18502 rows in data
+  200B   Back jump — Pike                             Art. 401.4                1527 rows in data 
+  200C   Back jump — Tuck                             Art. 401.4                7160 rows in data 
+  200D   Back jump — Free                             Art. 401.4                9 rows in data    
+  300A   Skill (unlisted variant) — Straight          not in rulebook           228 rows in data  
+  300B   Skill (unlisted variant) — Pike              not in rulebook           12 rows in data   
+  300C   Skill (unlisted variant) — Tuck              not in rulebook           274 rows in data  
+  400A   Skill (unlisted variant) — Straight          not in rulebook           94 rows in data   
+  400B   Skill (unlisted variant) — Pike              not in rulebook           3 rows in data    
+  400C   Skill (unlisted variant) — Tuck              not in rulebook           131 rows in data  
+  5001A  Skill (unlisted variant) — Straight          not in rulebook           1 rows in data    
+  5101A  Forward jump 1/2 twist — Straight            Art. 401.4                2250 rows in data 
 
-  total catalog rows: 0
+  total catalog rows: 41
