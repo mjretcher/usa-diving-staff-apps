@@ -2,7 +2,9 @@ OMEGA ingest — 1 page(s), DRY_RUN=True, MIN_PASS=95%
 
   Diving at the 2019 World Aquatics Championships
     13 OMEGA pdf(s) cited
+    limited to first 2
     FETCH FAILED 0001130005010104FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
     FETCH FAILED 0001130005010204FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
-    FETCH FAILED 0001130005010304FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
-    FETCH FAILED 0001130005010404FFFFFFFFFFFFFF02: TimeoutError: The read operation timed out
+
+Summary: files=0, rows=0, rejected=0, fetch_fail=2, no_rows=0, synchro_skipped=0
+DRY RUN — nothing written. Set DRY_RUN=0 to load.
