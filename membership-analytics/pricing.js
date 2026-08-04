@@ -161,9 +161,11 @@ const PS = {
   senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
   prequalPaths:{},                    // manual overrides for senior prequalification paths
   seniorPrequal:null,                 // derived pathway counts (senior-prequal.json)
+  squads:null,                        // published squad rosters + measured entries
   synchro:null,                       // per-level synchro team entries (billed once per pair)
   natMeet:'12923',                    // DiveMeets meet number for the final championship
   natActual:null, natSyn:null, natFetched:null, natSource:'fallback',
+  prequalSource:'solved',
   baseFinal:null,                     // national field under the calibrated baseline
   scenarioId:null, scenarioName:'', openGrid:null,
   compare:[], pathway:null,
@@ -692,6 +694,13 @@ async function loadSeniorEntries(){
 async function loadSeniorPrequal(){
   try { PS.seniorPrequal = await loadJson('senior-prequal.json'); }
   catch(e){ console.warn('senior prequal', e); PS.seniorPrequal = null; }
+  try { PS.squads = await loadJson('squad-rosters.json'); }
+  catch(e){ console.warn('squad rosters', e); PS.squads = null; }
+}
+function squad(key){
+  const s = PS.squads && PS.squads.squads;
+  const r = s ? s.find(x => x.key === key) : null;
+  return (r && r.reliable) ? r : null;
 }
 
 async function loadCounts(){
@@ -773,11 +782,26 @@ async function loadNationalActual(){
 
 /* Seed the pre-qualified count so the modelled final matches the actual
    national entry count. */
+/* Pre-qualified entries into the final championship.
+
+   This used to be a plug: whatever number made the model reconcile to the
+   actual field. It is now the MEASURED entry count of the published Tier III
+   Junior squad, matched name by name against the entrant list. The difference
+   between (modelled + measured) and the actual field is therefore a real
+   residual that says something about the model, rather than a figure defined
+   to make the residual zero. */
 function calibratePrequal(){
-  if (PS.year !== 'y26') { PS.prequal = 0; return; }
-  const V = computeVolume();
-  const modelled = CODES.reduce((s,c)=>s+(V.final[c]||0),0);
-  PS.prequal = Math.max(0, Math.round(natActual() - modelled));
+  if (PS.year !== 'y26') { PS.prequal = 0; PS.prequalSource = 'n/a'; return; }
+  const sq = squad('tier3_junior');
+  if (sq){
+    PS.prequal = sq.entries;
+    PS.prequalSource = 'measured';
+  } else {
+    const V = computeVolume();
+    const modelled = CODES.reduce((s,c)=>s+(V.final[c]||0),0);
+    PS.prequal = Math.max(0, Math.round(natActual() - modelled));
+    PS.prequalSource = 'solved';
+  }
 }
 
 /* ==========================================================================
@@ -855,15 +879,23 @@ function renderSenior(base, sim){
     const paths = SP && SP.pathways ? SP.pathways
                 : SENIOR_PREQUAL.map(l => ({label:l, entries:null, derived:false}));
     let manual = 0, derivedShown = 0;
+    const SQUAD_FOR = [
+      [/National Team/i,            'national_team'],
+      [/Tier III Junior|Tier 3 Junior/i, 'tier3_junior_senior'],
+    ];
     const pr = paths.map((p, k) => {
+      const sk = (SQUAD_FOR.find(([re]) => re.test(p.label)) || [])[1];
+      const sq = sk ? squad(sk) : null;
       const override = PS.prequalPaths[k];
-      const val = override != null ? override : (p.derived ? p.entries : 0);
+      const val = override != null ? override
+                : (p.derived ? p.entries : (sq ? sq.entries : 0));
       if (p.derived && override == null) derivedShown += (p.entries||0);
       else manual += (+val||0);
       return `<tr>
         <td class="ps-sub">${esc(p.label)}
           ${p.derived ? `<span class="ps-tag obs">derived${p.athletes!=null?` &middot; ${fmt(p.athletes)} athletes`:''}</span>`
-                      : '<span class="ps-tag mod">needs a number</span>'}</td>
+            : sq ? `<span class="ps-tag cal">measured &middot; ${fmt(sq.entered)} of ${fmt(sq.roster)} entered, ${sq.events_per_athlete} events each</span>`
+                 : '<span class="ps-tag mod">needs a number</span>'}</td>
         <td class="num"><input class="ps-in sm" type="number" min="0" data-pq="${k}"
           value="${Math.round(val)||0}"></td></tr>`;
     }).join('');
