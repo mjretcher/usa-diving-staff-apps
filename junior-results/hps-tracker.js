@@ -146,12 +146,29 @@
     try {
       var res = await neonQuery(
         "SELECT e.title, r.round, r.place, r.diver_name, r.profile_id::text AS profile_id, " +
-        "       r.team_name, r.score, r.sheet_key::text AS sheet_key, r.event_id::text AS event_id " +
+        "       r.team_name, r.score, r.sheet_key::text AS sheet_key, r.event_id::text AS event_id, " +
+        "       r.diver2_name, r.profile2_id::text AS profile2_id, r.team2_name " +
         "FROM divemeets.results r " +
         "JOIN divemeets.events e ON e.meet_id=r.meet_id AND e.event_id=r.event_id AND e.round=r.round " +
         "WHERE r.meet_id=" + MEET_ID + " AND r.score IS NOT NULL " +
         "ORDER BY e.title, r.round, r.score DESC");
-      state.rows = (res && res.rows) || [];
+      // A synchronized placing is one row carrying TWO athletes. Both performed
+      // the dives and both earn the pair's score against a published synchro
+      // target, so the pair is expanded into one entry per diver. Left folded,
+      // the sheet silently omitted every partner -- Kayla Jensen, Ella Guo, Zoe
+      // Quigley, Cristiano Garcia, Mason Lawson and Leyton Dean all cleared a
+      // target in 2026 and none of them appeared.
+      state.rows = [];
+      ((res && res.rows) || []).forEach(function (r) {
+        state.rows.push(r);
+        if (!r.diver2_name) return;
+        state.rows.push({
+          title: r.title, round: r.round, place: r.place,
+          diver_name: r.diver2_name, profile_id: r.profile2_id,
+          team_name: r.team2_name, score: r.score,
+          sheet_key: r.sheet_key, event_id: r.event_id, _partner: true
+        });
+      });
 
       /* The published criteria carry synchro target scores, but synchro results
          are only shown if the crawl actually holds them. As of the 2026 crawl it
@@ -225,6 +242,21 @@
           else if (sc >= t.aqua1617) b.ageDependent.push(r);
         }
       });
+      /* A diver can appear twice in one synchro event by competing in two
+         pairs (Leyton Dean was in both the 1st and 2nd place pairs on platform
+         in 2026). Qualification is binary -- they either cleared the target or
+         did not -- so keep one entry per athlete, at their best score. */
+      var dedupe = function (arr) {
+        var best = {}, order = [];
+        arr.forEach(function (r) {
+          var k = r.profile_id || r.diver_name;
+          if (!(k in best)) { best[k] = r; order.push(k); }
+          else if (Number(r.score) > Number(best[k].score)) best[k] = r;
+        });
+        return order.map(function (k) { return best[k]; });
+      };
+      b.qualified = dedupe(b.qualified);
+      b.ageDependent = dedupe(b.ageDependent);
       return b;
     });
   }
