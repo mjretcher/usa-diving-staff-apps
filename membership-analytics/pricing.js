@@ -1139,7 +1139,8 @@ function snapshotState(){
     mElast: Object.assign({}, PS.mElast),
     eElast: Object.assign({}, PS.eElast),
     sElast: Object.assign({}, PS.sElast),
-    levy:PS.levy, lateRate:PS.lateRate, prequal:PS.prequal,
+    levy:PS.levy, lateRate:PS.lateRate, prequal:PS.prequal, year:PS.year,
+    cal:PS.cal,
   };
 }
 function restoreState(s){
@@ -1798,6 +1799,96 @@ window.__PRICING = {
   defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro, loadNationalActual, natActual,
   advanceFor, directFor, snapshotBaseline,
   computeCompare, snapshotState, restoreState, applyCards, pathwayCost, buildReport, defaultPathway,
+};
+
+/* ==========================================================================
+   SHARED FLOW API
+   --------------------------------------------------------------------------
+   Boundary Studio needs the same "who actually moves up" maths this module
+   already carries. Exposing it rather than reimplementing keeps one answer to
+   the question -- the previous Boundary advancement panel was withdrawn
+   precisely because it did its own arithmetic on hand-entered spot counts,
+   with no field-size cap and no take-up, and could not be reconciled against
+   real entries.
+
+   Calibration is cached per season and always derived on the alignment that
+   season was actually run under, never on whatever map the user is currently
+   painting. Deriving on the painted map would let the residual absorb the
+   change and every redrawn boundary would falsely appear to move nothing.
+   ========================================================================== */
+const FLOW = { calByYear:{}, baseline:null, dataReady:false };
+
+async function ensureFlowData(){
+  if (!PS.adv){
+    const [adv, age] = await Promise.all([loadJson('advance-data.json'), loadJson('age-data.json')]);
+    PS.adv = adv; PS.age = age;
+  }
+  if (!FLOW.baseline){
+    // The alignment actually run: the reference scenario, or a stock 12/6/3.
+    let base = null;
+    try {
+      await loadBoundaryList();
+      const seed = (PS.bList||[]).find(b => /2026 Alignment/i.test(b.name));
+      if (seed){
+        const r = await NEON.query(`SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`, [seed.id]);
+        if (r.rows.length){
+          const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+          base = {name:r.rows[0].name, regions:d.regions||defaultRegions(12), assign:d.assign||{},
+                  levels:(d.levels&&d.levels.length)?d.levels:defaultLevels((d.regions||[]).length||12),
+                  finalName:d.finalName||'Junior Nationals'};
+        }
+      }
+    } catch(e){ console.warn('flow baseline', e); }
+    FLOW.baseline = base || {name:'Default 12 / 6 / 3', regions:defaultRegions(12), assign:{},
+                             levels:defaultLevels(12), finalName:'Junior Nationals'};
+  }
+  FLOW.dataReady = true;
+  return true;
+}
+
+function calForYear(y){
+  if (FLOW.calByYear[y]) return FLOW.calByYear[y];
+  const saved = snapshotState();
+  try {
+    const b = FLOW.baseline;
+    PS.regions = b.regions; PS.assign = b.assign; PS.levels = b.levels;
+    PS.finalName = b.finalName; PS.boundaryName = b.name; PS.year = y;
+    resizeCards();
+    PS.flow = defaultFlow(levelCount());
+    deriveCalibration();
+    FLOW.calByYear[y] = PS.cal;
+  } finally { restoreState(saved); }
+  return FLOW.calByYear[y];
+}
+
+/* Compute the junior flow for an arbitrary structure without disturbing the
+   Pricing Studio's own state. */
+function computeFlowFor(struct){
+  const saved = snapshotState();
+  try {
+    const y = (struct.year === 'y25' || struct.year === 'y26') ? struct.year : PS.year;
+    const cal = calForYear(y);
+    PS.regions = struct.regions || PS.regions;
+    PS.assign  = struct.assign  || PS.assign;
+    PS.levels  = (struct.levels && struct.levels.length) ? struct.levels : PS.levels;
+    PS.finalName = struct.finalName || PS.finalName;
+    PS.year = y;
+    resizeCards();
+    PS.flow = struct.flow ? struct.flow : defaultFlow(levelCount());
+    PS.cal = cal;
+    PS.prequal = 0;               // caller wants the flow itself, not the HP top-up
+    return computeVolume();
+  } finally { restoreState(saved); }
+}
+
+window.JuniorFlow = {
+  ready: ensureFlowData,
+  compute: computeFlowFor,
+  defaultFlow,
+  baseline: () => FLOW.baseline,
+  stageForLevel,
+  CODES, GROUPS, GENDERS, BOARDS, BOARD_NAME, GENDER_NAME,
+  totalCells,
 };
 
 /* ---------- entry point ---------- */

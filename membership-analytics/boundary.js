@@ -61,7 +61,9 @@ const S = {
   tierView: 0,          // which level the map + tallies are showing
   finalName: 'Junior Nationals',
   legendMode: 'members',// members | age | comp
-  panelMode: 'tally',   // 'advance' is withdrawn pending rule verification   // tally | advance
+  panelMode: 'tally',   // tally | advance
+  flow: null,           // cached JuniorFlow result for the current map
+  flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
   scenarioId: null,
@@ -300,28 +302,6 @@ function poolTotal(cells){
   return cells[f] || 0;
 }
 // How many advance out of ONE group at a step, honoring the focus filter.
-function advPerGroup(step, kind){
-  const st = S.adv.steps[step] || {a:{},d:{}};
-  const g = st[kind] || {};
-  const f = S.adv.focus;
-  if (f==='all') return CELLS.reduce((s,c)=>s+(+g[c]||0),0);
-  if (poolIsMembers() && f.length===1) return CELLS.filter(c=>c[0]===f).reduce((s,c)=>s+(+g[c]||0),0);
-  return +g[f] || 0;
-}
-// Field size arriving at the final destination, per cell.
-function finalField(){
-  const k = levelCount(), res = {};
-  CELLS.forEach(c=>res[c]=0);
-  for (let i=0;i<k;i++){
-    const n = tierGroupsAt(i).groups.length;
-    const st = S.adv.steps[i] || {a:{},d:{}};
-    CELLS.forEach(c=>{
-      res[c] += n * (+((i===k-1 ? st.a : st.d)[c]) || 0);
-    });
-  }
-  return res;
-}
-
 function regionZips(gi){
   const y = S.year;
   const TG = tierGroups();
@@ -430,7 +410,7 @@ function renderPanel(){
     </div>
     <div class="seg bs-modeseg">
       <button id="bsModeTally" class="${S.panelMode==='tally'?'on':''}">Who lives here</button>
-      <button id="bsModeAdv" class="off" disabled title="Withdrawn pending rule verification">Who moves up</button>
+      <button id="bsModeAdv" class="${S.panelMode==='advance'?'on':''}">Who moves up</button>
     </div>
     <div id="bsBody"></div>
     ${renderNamesPanel()}
@@ -452,7 +432,7 @@ function renderPanel(){
     ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="note" style="margin-top:6px"><b>${esc(S.scenarioName)}</b> is a reference map. Saving will create a copy so the original stays intact.</div>` : ''}
     <div class="note" id="bsMsg"></div>`;
 
-  if (false /* advance panel withdrawn */) renderAdvShell();
+  if (S.panelMode==='advance') renderAdvShell();
   renderNumbers();
   wirePanel();
   loadScenarioList();
@@ -472,7 +452,7 @@ function renderNumbers(){
     if (body) body.innerHTML = renderTallyTable(t, mappableTotal, yLabel);
     wireTallyRows();
   } else {
-    renderAdvResults();
+    refreshFlow();
   }
   renderLegend(t, mappableTotal, yLabel);
 }
@@ -615,99 +595,96 @@ function renderNamesPanel(){
 }
 
 /* ---------- advancement ---------- */
+/* The advancement view is READ-ONLY with respect to the rules. It shows what
+   the published qualification rules plus measured take-up actually produce on
+   the map you have drawn. What-if on the rules themselves (different qualifier
+   counts per age group, fee changes) lives in Pricing Studio, which owns that
+   model; this panel consumes it through window.JuniorFlow so there is only one
+   answer to "who moves up". */
 function renderAdvShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
-  const steps = Array.from({length:levelCount()}, (_,i)=>{
-    const to = i===levelCount()-1 ? S.finalName : tierName(i+1);
-    return `<button data-step="${i}" class="${(S.adv.step||0)===i?'on':''}">${esc(tierName(i))} &rarr; ${esc(to)}</button>`;
-  }).join('');
-  const poolOpts = POOLS.map(p=>`<option value="${p.k}" ${S.adv.pool===p.k?'selected':''}>${esc(p.label)}</option>`).join('');
-  const focusOpts = `<option value="all" ${S.adv.focus==='all'?'selected':''}>All events &amp; age groups</option>` +
-    (poolIsMembers()
-      ? AGES.map(a=>`<option value="${a.k}" ${S.adv.focus===a.k?'selected':''}>${esc(a.label)}</option>`).join('')
-      : CELLS.map(c=>`<option value="${c}" ${S.adv.focus===c?'selected':''}>${esc(cellLabel(c))}</option>`).join(''));
-
+  const focusOpts = ['<option value="all">every event and age group</option>']
+    .concat(CELLS.map(c=>`<option value="${c}" ${S.adv && S.adv.focus===c?'selected':''}>${esc(cellLabel(c))}</option>`))
+    .join('');
   body.innerHTML = `
-    <div class="bs-row">
-      <span class="bs-lvl">Compare against</span>
-      <select class="sel" id="bsAdvPool">${poolOpts}</select>
-      <span class="bs-lvl">Balance shown for</span>
+    <div class="bs-adv-head">
+      <span class="bs-lvl">Show</span>
       <select class="sel" id="bsAdvFocus">${focusOpts}</select>
+      <span class="note">Entries that actually competed, carried up the pathway by the published rules and the take-up measured from the season we ran.</span>
     </div>
-    <div class="seg bs-stepseg" id="bsAdvSteps">${steps}</div>
-    <div id="bsAdvGrid"></div>
-    <div id="bsAdvResults"></div>`;
-  renderAdvGrid();
+    <div id="bsAdvResults"><div class="note">Working out the pathway&hellip;</div></div>`;
+  wirePanelAdv();
 }
 
-function renderAdvGrid(){
-  const el = document.getElementById('bsAdvGrid');
-  if (!el) return;
-  const i = S.adv.step || 0;
-  const last = i === levelCount()-1;
-  const st = S.adv.steps[i] || (S.adv.steps[i] = {a:{},d:{}});
-  const nFrom = tierGroupsAt(i).groups.length;
-  const toName = last ? S.finalName : tierName(i+1);
+function wirePanelAdv(){
+  const f = document.getElementById('bsAdvFocus');
+  if (f) f.addEventListener('change', ()=>{ S.adv = S.adv||{}; S.adv.focus = f.value; renderAdvResults(); });
+}
 
-  const grid = kind => `<table class="bs-adv-grid"><thead><tr><th>Age group</th><th></th>${DISCS.map(d=>`<th class="num">${d.label}</th>`).join('')}</tr></thead><tbody>` +
-    AGES.map(a=>GENS.map((g,gi)=>`<tr>
-        ${gi===0?`<td rowspan="2" class="ag-cell"><b>${a.label}</b></td>`:''}
-        <td class="gn-cell">${g.label}</td>
-        ${DISCS.map(d=>{
-          const c = a.k+g.k+d.k;
-          return `<td class="num"><input class="bs-adv-in" type="number" min="0" step="1" data-kind="${kind}" data-cell="${c}" value="${st[kind][c]!=null?st[kind][c]:''}" placeholder="0"></td>`;
-        }).join('')}
-      </tr>`).join('')).join('') + '</tbody></table>';
-
-  el.innerHTML = `
-    <div class="bs-adv-head">
-      <b>How many advance from EACH ${esc(tierName(i))} &rarr; ${esc(toName)}</b>
-      <span class="bs-lvl">${nFrom} ${nFrom===1?'group':'groups'} at this level</span>
-      <span class="bs-fill">Fill every box: <input class="bs-adv-in" id="bsFillA" type="number" min="0" step="1" placeholder="—"></span>
-      <button class="tab bs-mini" id="bsCopyStep">Copy to all levels</button>
-      <button class="tab bs-mini" id="bsClearStep">Clear</button>
-    </div>
-    ${grid('a')}
-    ${last ? '' : `
-      <details class="bs-direct">
-        <summary>Also send some straight to ${esc(S.finalName)}, skipping ${esc(tierName(i+1))} (this is how 2026 works — Zone top 3 go direct)</summary>
-        <div class="bs-adv-head"><span class="bs-fill">Fill every box: <input class="bs-adv-in" id="bsFillD" type="number" min="0" step="1" placeholder="—"></span></div>
-        ${grid('d')}
-      </details>`}`;
-  wireAdvGrid();
+/* Recompute the flow for the current map. Cheap after the first call: the
+   calibration is derived once per season and cached inside JuniorFlow. */
+let flowBusy = false, flowAgain = false;
+async function refreshFlow(){
+  if (flowBusy){ flowAgain = true; return; }   // painting fires this rapidly
+  flowBusy = true;
+  try { await doRefreshFlow(); }
+  finally {
+    flowBusy = false;
+    if (flowAgain){ flowAgain = false; refreshFlow(); }
+  }
+}
+async function doRefreshFlow(){
+  if (!window.JuniorFlow){ S.flowErr = 'Pricing engine not loaded.'; renderAdvResults(); return; }
+  try {
+    await window.JuniorFlow.ready();
+    S.flow = window.JuniorFlow.compute({
+      regions:S.regions, assign:S.assign, levels:S.levels,
+      finalName:S.finalName, year:S.year,
+    });
+    S.flowErr = null;
+  } catch(e){
+    console.error(e); S.flow = null; S.flowErr = e.message || String(e);
+  }
+  renderAdvResults();
 }
 
 function renderAdvResults(){
   const el = document.getElementById('bsAdvResults');
   if (!el) return;
-  const i = S.adv.step || 0;
-  const last = i === levelCount()-1;
+  if (S.flowErr){
+    el.innerHTML = `<div class="note"><b>Could not work out the pathway.</b> ${esc(S.flowErr)}</div>`;
+    return;
+  }
+  if (!S.flow){ el.innerHTML = '<div class="note">Working out the pathway&hellip;</div>'; return; }
+
+  const JF = window.JuniorFlow;
+  const focus = (S.adv && S.adv.focus) || 'all';
+  const cellSum = row => focus==='all'
+    ? CELLS.reduce((s,c)=>s+(row[c]||0), 0)
+    : (row[focus]||0);
+
+  const i = Math.min(S.tierView, S.flow.levels.length-1);
   const TG = tierGroupsAt(i);
-  const pooled = poolIsMembers() ? poolMembers(i) : poolCells(i);
-  const perGroupAdv = advPerGroup(i, 'a');
-  const perGroupDir = last ? 0 : advPerGroup(i, 'd');
-  const nFrom = TG.groups.length;
-
-  const totals = pooled.rows.map(c=>poolTotal(c));
+  const rowsAtLevel = S.flow.levels[i] ? S.flow.levels[i].rows : [];
+  const totals = TG.groups.map((_,gi)=>cellSum(rowsAtLevel[gi]||{}));
   const grand = totals.reduce((s,x)=>s+x,0);
+  const nFrom = TG.groups.length;
   const equal = nFrom>0 ? 100/nFrom : 0;
+  const maxT = Math.max(1, ...totals);
 
-  const rows = TG.groups.map((g,gi)=>{
+  const body = TG.groups.map((g,gi)=>{
     const pool = totals[gi];
     const share = grand>0 ? 100*pool/grand : 0;
     const diff = share - equal;
-    const rate = pool>0 ? 100*(perGroupAdv+perGroupDir)/pool : null;
-    const bar = grand>0 ? Math.max(2, Math.round(100*pool/Math.max(1,Math.max(...totals)))) : 0;
+    const bar = Math.max(2, Math.round(100*pool/maxT));
     const diffCls = Math.abs(diff) < equal*0.15 ? 'ok' : (diff>0 ? 'over' : 'under');
     return `<tr>
       <td><span class="sw" style="background:${tierColorAt(i,gi)}"></span><b>${esc(g.name)}</b></td>
-      <td class="num">${fmt(pool)}</td>
+      <td class="num">${fmt(Math.round(pool))}</td>
       <td><span class="bs-bar"><i style="width:${bar}%;background:${tierColorAt(i,gi)}"></i></span></td>
       <td class="num">${share.toFixed(1)}%</td>
       <td class="num ${diffCls}">${diff>=0?'+':''}${diff.toFixed(1)} pp</td>
-      <td class="num">${fmt(perGroupAdv+perGroupDir)}</td>
-      <td class="num">${rate==null?'—':rate.toFixed(1)+'%'}</td>
     </tr>`;
   }).join('');
 
@@ -715,60 +692,68 @@ function renderAdvResults(){
     ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
   const spreadCls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'over' : 'under');
 
-  // Pipeline summary across every level.
-  const ff = finalField();
-  const ffTotal = CELLS.reduce((s,c)=>s+ff[c],0);
-  const pipe = Array.from({length:levelCount()},(_,j)=>{
-    const n = tierGroupsAt(j).groups.length;
-    const a = CELLS.reduce((s,c)=>s+(+(S.adv.steps[j].a[c])||0),0);
-    const d = CELLS.reduce((s,c)=>s+(+(S.adv.steps[j].d[c])||0),0);
-    const to = j===levelCount()-1 ? S.finalName : tierName(j+1);
+  // Pipeline across every level, from real entries.
+  const pipe = S.flow.levels.map((l,j)=>{
+    const n = l.rows.reduce((s,r)=>s+cellSum(r), 0);
+    const stops = l.rows.length;
+    const tag = l.source==='observed' ? 'measured'
+              : l.source==='calibrated' ? 'measured' : 'projected';
     return `<div class="bs-pipe-card">
-      <span class="bs-pipe-nm">${esc(tierName(j))} &rarr; ${esc(to)}</span>
-      <span class="bs-pipe-big">${fmt(n*a)}</span>
-      <span class="bs-lg-sub">${n} ${n===1?'group':'groups'} × ${fmt(a)} spots</span>
-      ${(j<levelCount()-1 && d>0) ? `<span class="bs-pipe-dir">+ ${fmt(n*d)} straight to ${esc(S.finalName)}</span>` : ''}
+      <span class="bs-pipe-nm">${esc(tierName(j))}</span>
+      <span class="bs-pipe-big">${fmt(Math.round(n))}</span>
+      <span class="bs-lg-sub">${stops} ${stops===1?'stop':'stops'} &middot; ${Math.round(n/Math.max(1,stops))} per stop &middot; ${tag}</span>
     </div>`;
   }).join('');
+  const ffTotal = focus==='all'
+    ? CELLS.reduce((s,c)=>s+(S.flow.final[c]||0),0)
+    : (S.flow.final[focus]||0);
 
   const byEvent = DISCS.map(d=>{
-    const n = CELLS.filter(c=>c[2]===d.k).reduce((s,c)=>s+ff[c],0);
-    return `<span class="bs-ev"><b>${fmt(n)}</b> ${d.label}</span>`;
+    const n = CELLS.filter(c=>c[2]===d.k).reduce((s,c)=>s+(S.flow.final[c]||0),0);
+    return `<span class="bs-ev"><b>${fmt(Math.round(n))}</b> ${d.label}</span>`;
   }).join('');
   const byAge = AGES.map(a=>{
-    const n = CELLS.filter(c=>c[0]===a.k).reduce((s,c)=>s+ff[c],0);
-    return `<span class="bs-ev"><b>${fmt(n)}</b> ${a.label}</span>`;
+    const n = CELLS.filter(c=>c[0]===a.k).reduce((s,c)=>s+(S.flow.final[c]||0),0);
+    return `<span class="bs-ev"><b>${fmt(Math.round(n))}</b> ${a.label}</span>`;
   }).join('');
 
-  const poolLabel = (POOLS.find(p=>p.k===S.adv.pool)||{}).label || '';
-  const focusLabel = S.adv.focus==='all' ? 'all events and age groups'
-    : (poolIsMembers() ? (AGES.find(a=>a.k===S.adv.focus)||{label:''}).label : cellLabel(S.adv.focus));
-  const cov = S.advData && S.advData.totals && S.advData.totals[S.adv.pool];
-  const covNote = (!poolIsMembers() && cov)
-    ? `${fmt(cov.mapped)} of ${fmt(cov.total)} entries placed on the map (${(100*cov.mapped/cov.total).toFixed(1)}% — the rest are entrants whose name has no matching membership address).`
-    : (poolIsMembers() ? 'Registered athletes have no gender or event recorded in the Webpoint export, so balance here is by age group only.' : '');
+  // Take-up, straight from the calibration decomposition.
+  const takeup = (S.flow.calib||[]).map(k=>{
+    if (!k.wasObserved || k.rules<=0) return '';
+    const pct = k.conv/k.rules*100;
+    const word = k.conv < 0 ? 'do not take up their place' : 'added by clearing the score bar';
+    return `<span class="bs-ev"><b>${pct>=0?'+':''}${pct.toFixed(0)}%</b> into ${esc(k.name)} &mdash; ${word}</span>`;
+  }).filter(Boolean).join('');
+
+  const base = JF && JF.baseline ? JF.baseline() : null;
+  const cov = S.advData && S.advData.totals && S.advData.totals[(S.year==='y25'?'2025':'2026')+'|Regionals'];
 
   el.innerHTML = `
     <div class="bs-pipe">${pipe}
       <div class="bs-pipe-card final">
         <span class="bs-pipe-nm">${esc(S.finalName)} field</span>
-        <span class="bs-pipe-big">${fmt(ffTotal)}</span>
-        <span class="bs-lg-sub">total entries across all events</span>
+        <span class="bs-pipe-big">${fmt(Math.round(ffTotal))}</span>
+        <span class="bs-lg-sub">places created by this map</span>
       </div>
     </div>
     <div class="bs-evrow"><span class="bs-evh">By event</span>${byEvent}</div>
     <div class="bs-evrow"><span class="bs-evh">By age group</span>${byAge}</div>
-
-    <div class="bs-balhead">
-      <b>Is ${esc(tierName(i))} balanced?</b>
-      <span class="bs-lvl">${esc(poolLabel)} · ${esc(focusLabel)}</span>
-      <span class="bs-spread ${spreadCls}">${spread.toFixed(1)} pp spread between biggest and smallest</span>
-    </div>
-    <table class="bs-table"><thead><tr>
-      <th>${esc(tierName(i))}</th><th class="num">Pool</th><th></th><th class="num">Share</th>
-      <th class="num">vs equal (${equal.toFixed(1)}%)</th><th class="num">Move up</th><th class="num">Rate</th>
-    </tr></thead><tbody>${rows}</tbody></table>
-    <div class="note" style="margin-top:6px">Pool = ${esc(poolLabel)} living in each ${esc(tierName(i))} under the map as painted. "Move up" is what you typed above, applied to every group equally. ${covNote}</div>`;
+    ${takeup?`<div class="bs-evrow"><span class="bs-evh">Take-up</span>${takeup}</div>`:''}
+    <table class="bs-drill"><thead><tr>
+      <th>${esc(tierName(i))}</th><th class="num">Competing here</th><th></th>
+      <th class="num">Share</th><th class="num">vs even split</th>
+    </tr></thead><tbody>${body}</tbody></table>
+    <div class="bs-spread ${spreadCls}">Widest gap between ${esc(tierName(i))}: <b>${spread.toFixed(1)} percentage points</b>
+      ${spread <= equal*0.30 ? '&mdash; evenly balanced.' : (spread <= equal*0.60 ? '&mdash; somewhat uneven.' : '&mdash; markedly uneven.')}</div>
+    <p class="note" style="margin-top:10px">
+      Entries are athletes who actually competed, not registered members. Levels marked <b>measured</b> reconcile
+      to real entry data on the alignment that season was run under; <b>projected</b> levels have no results behind
+      them and follow the rules alone. Take-up and score-bar behaviour are held fixed from that alignment while you
+      redraw &mdash; re-measuring them on every map would let them absorb your change and nothing would ever appear to move.
+      ${base?`Behaviour measured on <b>${esc(base.name)}</b>.`:''}
+      ${cov?`${fmt(cov.mapped)} of ${fmt(cov.total)} entries carry a mappable address (${(100*cov.mapped/cov.total).toFixed(1)}%).`:''}
+      Changing the qualifier counts themselves is done in Pricing Studio.
+    </p>`;
 }
 
 function tierColorAt(level, gi){
@@ -948,38 +933,6 @@ function wireTallyRows(){
   }));
 }
 
-function wireAdvGrid(){
-  const commit = (kind, cell, val)=>{
-    const st = S.adv.steps[S.adv.step||0];
-    if (val==='' || val==null) delete st[kind][cell]; else st[kind][cell] = Math.max(0, Math.round(+val)||0);
-    S.dirty = true;
-    renderAdvResults();
-  };
-  document.querySelectorAll('#bsAdvGrid .bs-adv-in[data-cell]').forEach(inp=>{
-    inp.addEventListener('input', ()=>commit(inp.dataset.kind, inp.dataset.cell, inp.value));
-  });
-  const fill = (kind, val)=>{
-    const st = S.adv.steps[S.adv.step||0];
-    CELLS.forEach(c=>{ if (val==='') delete st[kind][c]; else st[kind][c] = Math.max(0, Math.round(+val)||0); });
-    S.dirty = true; renderAdvGrid(); renderAdvResults();
-  };
-  const fa = document.getElementById('bsFillA');
-  if (fa) fa.addEventListener('change', ()=>fill('a', fa.value));
-  const fd = document.getElementById('bsFillD');
-  if (fd) fd.addEventListener('change', ()=>fill('d', fd.value));
-  const cs = document.getElementById('bsCopyStep');
-  if (cs) cs.addEventListener('click', ()=>{
-    const src = S.adv.steps[S.adv.step||0];
-    S.adv.steps = S.adv.steps.map(()=>({a:Object.assign({},src.a), d:Object.assign({},src.d)}));
-    S.dirty=true; renderAdvResults(); msg('Copied these numbers to every level.');
-  });
-  const cl = document.getElementById('bsClearStep');
-  if (cl) cl.addEventListener('click', ()=>{
-    S.adv.steps[S.adv.step||0] = {a:{},d:{}};
-    S.dirty=true; renderAdvGrid(); renderAdvResults();
-  });
-}
-
 function wirePanel(){
   const P = document.getElementById('bsPanel');
   const bind = (id,f)=>{ const b=document.getElementById(id); if(b) b.addEventListener('click',f); };
@@ -995,7 +948,7 @@ function wirePanel(){
   bind('bsLgAge', ()=>{S.legendMode='age'; renderNumbers();});
   bind('bsLgComp', ()=>{S.legendMode='comp'; renderNumbers();});
   bind('bsModeTally', ()=>{S.panelMode='tally'; renderPanel();});
-  // bsModeAdv intentionally unbound: see the note on the disabled button.
+  bind('bsModeAdv',   ()=>{S.panelMode='advance'; renderPanel(); refreshFlow();});
 
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
@@ -1022,7 +975,7 @@ function wirePanel(){
   P.querySelectorAll('#bsAdvSteps [data-step]').forEach(b=>b.addEventListener('click',()=>{
     S.adv.step = +b.dataset.step;
     P.querySelectorAll('#bsAdvSteps [data-step]').forEach(x=>x.classList.toggle('on', +x.dataset.step===S.adv.step));
-    renderAdvGrid(); renderAdvResults();
+    renderAdvResults();
   }));
   const poolSel = document.getElementById('bsAdvPool');
   if (poolSel) poolSel.addEventListener('change', ()=>{
@@ -1281,26 +1234,28 @@ function exportCsv(){
 }
 
 function exportAdvCsv(){
-  const lines = ['level,group,age_group,gender,event,pool,advance_to_next,direct_to_final'];
-  for (let i=0;i<levelCount();i++){
+  if (!S.flow){ msg('Open "Who moves up" first so the pathway is worked out.'); return; }
+  const q = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const lines = ['level,group,age_group,gender,event,entries_competing,provenance'];
+  S.flow.levels.forEach((l,i)=>{
     const TG = tierGroupsAt(i);
-    const pooled = poolIsMembers() ? poolMembers(i) : poolCells(i);
-    const st = S.adv.steps[i] || {a:{},d:{}};
-    const last = i===levelCount()-1;
     TG.groups.forEach((g,gi)=>{
+      const row = l.rows[gi] || {};
       CELLS.forEach(c=>{
-        const pool = poolIsMembers() ? '' : ((pooled.rows[gi]||{})[c] || 0);
-        lines.push([`"${tierName(i).replace(/"/g,'""')}"`, `"${g.name.replace(/"/g,'""')}"`,
+        lines.push([q(tierName(i)), q(g.name),
           AGES.find(a=>a.k===c[0]).label, GENS.find(x=>x.k===c[1]).label, DISCS.find(d=>d.k===c[2]).label,
-          pool, (+st.a[c]||0), last ? 0 : (+st.d[c]||0)].join(','));
+          Math.round(row[c]||0), l.source].join(','));
       });
     });
-  }
-  const ff = finalField();
+  });
   lines.push('');
-  lines.push(`"${S.finalName.replace(/"/g,'""')} field",,age_group,gender,event,,entries,`);
-  CELLS.forEach(c=>lines.push([`"${S.finalName.replace(/"/g,'""')}"`,'',
-    AGES.find(a=>a.k===c[0]).label, GENS.find(x=>x.k===c[1]).label, DISCS.find(d=>d.k===c[2]).label, '', ff[c], ''].join(',')));
+  lines.push(`${q(S.finalName + ' field')},,age_group,gender,event,entries,`);
+  CELLS.forEach(c=>lines.push([q(S.finalName), '',
+    AGES.find(a=>a.k===c[0]).label, GENS.find(x=>x.k===c[1]).label, DISCS.find(d=>d.k===c[2]).label,
+    Math.round(S.flow.final[c]||0), ''].join(',')));
+  lines.push('');
+  (S.flow.calib||[]).forEach(k=>lines.push([q('take-up into '+k.name), '', '', '', '',
+    Math.round(k.conv), k.wasObserved?'measured':'projected'].join(',')));
   download(lines.join('\n'), (S.scenarioName.trim()||'boundary-scenario') + '-advancement.csv');
 }
 
