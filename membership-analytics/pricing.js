@@ -70,7 +70,7 @@ const LATE_ATHLETE = 100, LATE_COACH = 50;
 function defaultSynchro(levelCount){
   const out = [];
   for (let i=0;i<levelCount;i++) out.push({teams:0, fee:0});
-  out.push({teams:20, fee:125});   // the final championship
+  out.push({teams:NAT_SYN_FALLBACK_2026, fee:125});   // overwritten by the live sync
   return out;
 }
 
@@ -125,6 +125,8 @@ const PS = {
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
   senior:null, seniorEntries:{},      // senior circuit rows + live entry counts by meet id
   synchro:null,                       // per-level synchro team entries (billed once per pair)
+  natMeet:'12923',                    // DiveMeets meet number for the final championship
+  natActual:null, natSyn:null, natFetched:null, natSource:'fallback',
   baseFinal:null,                     // national field under the calibrated baseline
   scenarioId:null, scenarioName:'', openGrid:null,
   compare:[], pathway:null,
@@ -625,6 +627,7 @@ async function bootstrap(){
     PS.pathway = defaultPathway();
     await loadCounts();
     await loadSeniorEntries();
+    await loadNationalActual();
     deriveCalibration();     // freeze against the alignment actually run
     calibratePrequal();
     snapshotBaseline();
@@ -635,15 +638,48 @@ async function bootstrap(){
   PS.loading = false;
 }
 
-/* Seed the pre-qualified count so the modelled final matches the known 2026
-   entry count for meet 12923 (728 individual prelim entries). */
+/* The national entry count is the anchor the whole flow model is solved
+   against, so it must not be a frozen snapshot. 728 was captured on 28 July
+   2026 while signup was still open; entries can change until three hours
+   before each event. Read it live from the DiveMeets entries sync instead,
+   splitting individual from synchro, and fall back to the snapshot only if the
+   table cannot be reached -- labelled as such in the UI either way. */
+const NAT_FALLBACK_2026 = 728, NAT_SYN_FALLBACK_2026 = 20;
+const natActual = () => (PS.natActual != null ? PS.natActual : NAT_FALLBACK_2026);
+
+async function loadNationalActual(){
+  const id = String(PS.natMeet||'').trim();
+  if (!id) return;
+  try {
+    const r = await NEON.query(
+      `SELECT
+         COALESCE(sum(entries) FILTER (WHERE NOT (COALESCE(discipline,'') ILIKE '%synchro%'
+                                              OR COALESCE(event_name,'') ILIKE '%synchro%')),0)::int ind,
+         COALESCE(sum(entries) FILTER (WHERE COALESCE(discipline,'') ILIKE '%synchro%'
+                                          OR COALESCE(event_name,'') ILIKE '%synchro%'),0)::int syn,
+         to_char(max(fetched_at),'Mon DD HH24:MI') fetched
+       FROM junior_results.meet_entries WHERE meet_id_dm=$1`, [id]);
+    const row = r.rows && r.rows[0];
+    if (row && +row.ind > 0){
+      PS.natActual = +row.ind;
+      PS.natSyn = +row.syn;
+      PS.natFetched = row.fetched || null;
+      PS.natSource = 'live';
+      if (PS.synchro && PS.synchro.length) PS.synchro[PS.synchro.length-1].teams = +row.syn;
+    } else {
+      PS.natSource = 'fallback';
+    }
+  } catch(e){ console.warn('national actual', e); PS.natSource = 'fallback'; }
+}
+
+/* Seed the pre-qualified count so the modelled final matches the actual
+   national entry count. */
 function calibratePrequal(){
   if (PS.year !== 'y26') { PS.prequal = 0; return; }
   const V = computeVolume();
   const modelled = CODES.reduce((s,c)=>s+(V.final[c]||0),0);
-  PS.prequal = Math.max(0, Math.round(728 - modelled));
+  PS.prequal = Math.max(0, Math.round(natActual() - modelled));
 }
-const NAT_ACTUAL_2026 = 728;
 
 /* ==========================================================================
    RENDER
@@ -951,9 +987,11 @@ function renderCalibration(sim){
   const natRow = PS.year==='y26'
     ? `<tr><td>${esc(PS.finalName)} entries</td>
          <td class="num mono">${fmt(Math.round(modelledNat))}</td>
-         <td class="num mono">${fmt(NAT_ACTUAL_2026)}</td>
-         <td class="num">${diffCell(modelledNat, NAT_ACTUAL_2026)}</td>
-         <td class="note">Actual = DiveMeets meet 12923, individual prelim entries</td></tr>`
+         <td class="num mono">${fmt(natActual())}</td>
+         <td class="num">${diffCell(modelledNat, natActual())}</td>
+         <td class="note">${PS.natSource==='live'
+             ? `Live from the DiveMeets sync, meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}. Individual entries only; ${fmt(PS.natSyn||0)} synchro teams counted separately.`
+             : `<b>Snapshot, not live.</b> Meet ${esc(PS.natMeet)} has no synced entry count, so this falls back to the 28 July 2026 figure taken while signup was still open. Re-run the DiveMeets entries sync for this meet to anchor on the real number.`}</td></tr>`
     : `<tr><td>${esc(PS.finalName)} entries</td><td class="num mono">${fmt(Math.round(modelledNat))}</td>
          <td class="num ps-na">&mdash;</td><td class="ps-na">&mdash;</td>
          <td class="note">No verified 2025 national entry count loaded</td></tr>`;
@@ -995,7 +1033,8 @@ function renderCalibration(sim){
     <div class="ps-inline">
       <label>Pre-qualified into ${esc(PS.finalName)}
         <input class="ps-in sm" type="number" min="0" max="2000" data-prequal value="${Math.round(PS.prequal)}"> entries</label>
-      <span class="note">HP Squad athletes plus any residual needed to reconcile to the actual national field. Solved to ${fmt(NAT_ACTUAL_2026)} for 2026 &mdash; replace it with the true squad number when you have it and the difference becomes a real check rather than a plug.</span>
+      <span class="note">HP Squad athletes plus any residual needed to reconcile to the actual national field, solved to ${fmt(natActual())}${PS.natSource==='live'?' (live)':' (28 July snapshot)'}. Replace it with the true squad number when you have it and the difference becomes a real check rather than a plug.</span>
+      <label>Final meet no. <input class="ps-in xs" type="text" data-natmeet value="${esc(PS.natMeet)}"></label>
     </div>
     <p class="note ps-foot"><b>Read this before quoting a number.</b> Regionals volume is observed and exact for the map as drawn. Zones is reconstructed and ties to observed at baseline. E/W/C and ${esc(PS.finalName)} are modelled from the flow rules, because no alternative structure has real results behind it. The tag on each row of the structure table tells you which is which.</p>
     </div></div>`;
@@ -1451,7 +1490,7 @@ ${cmpBlock}
 <h2>Basis and limitations</h2>
 ${drifted ? `<div class="warn"><b>This scenario is off the calibrated baseline.</b> Flow constants were derived from ${esc(cb.basis)} (${fmt(cb.regions)} regions, ${esc(cb.year||yearNum())}) and held fixed while simulating ${esc(PS.boundaryName)} (${fmt(PS.regions.length)} regions). Holding them fixed is deliberate: re-deriving them per scenario would let the residual absorb the structural change and every scenario would falsely appear to have no effect.</div>` : ''}
 <p class="note">
-<b>Observed.</b> Regional entry volumes come from competition results joined to the membership roster by county, so they are exact for the map as drawn. Senior entry counts come from the live DiveMeets sync.<br>
+<b>Observed.</b> Regional entry volumes come from competition results joined to the membership roster by county, so they are exact for the map as drawn. Senior entry counts come from the live DiveMeets sync. The national field is anchored on ${PS.natSource==='live' ? `the live entry count for meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}` : `a 28 July 2026 snapshot of ${fmt(NAT_FALLBACK_2026)} entries taken while signup was still open, because meet ${esc(PS.natMeet)} has no synced count`}.<br>
 <b>Reconstructed.</b> Zone volumes are rebuilt as advancement out of Regionals, plus athletes clearing the average 15th-place score, plus the cohort entering the circuit at Zones. This ties to the observed Zone field exactly at the calibrated baseline by construction, and is therefore a decomposition rather than an independent test.<br>
 <b>Modelled.</b> East/West/Central and ${esc(PS.finalName)} volumes are derived from the advancement rules, because no structure other than the one actually run has real results behind it.<br>
 <b>Assumptions.</b> Volume responses to price are the elasticity figures entered on the pricing screen, expressed as percentage of volume lost per 10% price increase; where these are zero the model holds volume fixed and reports pure price arithmetic. Membership counts are the live roster for ${yearNum()}${PS.year==='y26'?', which is a year-to-date figure and not directly comparable to a completed season':''}. Costs of delivery are not modelled: this is a revenue view only.
@@ -1558,6 +1597,12 @@ function wire(){
   const lv = host.querySelector('input[data-levy]');
   if (lv) lv.addEventListener('change', e => { PS.levy = Math.max(0, +e.target.value||0); PS.dirty=true; render(); });
 
+  const nm2 = host.querySelector('input[data-natmeet]');
+  if (nm2) nm2.addEventListener('change', async e => {
+    PS.natMeet = String(e.target.value||'').trim();
+    await loadNationalActual(); calibratePrequal(); snapshotBaseline(); PS.dirty=true; render();
+  });
+
   const pq = host.querySelector('input[data-prequal]');
   if (pq) pq.addEventListener('change', e => { PS.prequal = clamp(Math.round(+e.target.value||0),0,2000); PS.dirty=true; render(); });
 
@@ -1572,7 +1617,7 @@ function wire(){
 
   host.querySelectorAll('.ps-seg button').forEach(b => b.addEventListener('click', async () => {
     PS.year = b.dataset.year;
-    await loadCounts(); deriveCalibration(); calibratePrequal(); snapshotBaseline(); render();
+    await loadCounts(); await loadNationalActual(); deriveCalibration(); calibratePrequal(); snapshotBaseline(); render();
   }));
 
   const nm = host.querySelector('#psName');
@@ -1635,7 +1680,7 @@ async function saveScenario(){
   const data = JSON.stringify({
     boundaryId:PS.boundaryId, boundaryName:PS.boundaryName, year:PS.year,
     prices:PS.prices, mElast:PS.mElast, eElast:PS.eElast, sElast:PS.sElast,
-    senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway,
+    senior:PS.senior, levy:PS.levy, synchro:PS.synchro, pathway:PS.pathway, natMeet:PS.natMeet,
     fees:PS.fees, flow:PS.flow, prequal:PS.prequal, lateRate:PS.lateRate, v:1});
   try {
     await NEON.query(
@@ -1666,6 +1711,7 @@ async function loadScenario(id){
     if (d.levy != null) PS.levy = +d.levy;
     if (d.synchro && d.synchro.length) PS.synchro = d.synchro;
     if (d.pathway && d.pathway.events) PS.pathway = d.pathway;
+    if (d.natMeet) { PS.natMeet = d.natMeet; await loadNationalActual(); }
     // NB: deliberately no snapshotBaseline() here. baseFinal is the calibrated
     // baseline field; re-taking it after applying a scenario would make the
     // scenario its own baseline and every qualification delta would read zero.
@@ -1715,7 +1761,7 @@ window.__PRICING = {
   PS, CODES, computeVolume, computeRevenue, allocate, isQualifying,
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
-  defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro,
+  defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro, loadNationalActual, natActual,
   advanceFor, directFor, snapshotBaseline,
   computeCompare, snapshotState, restoreState, applyCards, pathwayCost, buildReport, defaultPathway,
 };
