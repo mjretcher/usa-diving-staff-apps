@@ -69,6 +69,11 @@ WHERE year = %s
   AND place IS NOT NULL
   AND place BETWEEN %s AND %s
   AND place <> 127
+  -- Placement standings are the FINAL standings. Results carry a row per
+  -- round, and a prelim winner also has place = 1, so without this an event
+  -- whose prelim and final were won by different athletes yields two
+  -- "champions". Verified against the expected six per meet.
+  AND strpos(lower(COALESCE(round,'')), 'final') = 1
 GROUP BY 1,2
 """.format(ath=ATHLETE)
 
@@ -114,13 +119,23 @@ def main():
     for r in synflag:
         print(f"   {r['year']} is_synchro={r['is_synchro']:7} {r['rows']:6} rows")
 
+    cur.execute("""
+        SELECT COALESCE(round,'(null)'), count(*)::int
+        FROM core.event_results
+        WHERE stage IN ('Senior-Nationals','Winter-Nationals') AND year BETWEEN 2022 AND 2025
+        GROUP BY 1 ORDER BY 2 DESC""")
+    rounds = [{"round": r[0], "rows": r[1]} for r in cur.fetchall()]
+    print("round values on senior nationals rows:")
+    for r in rounds:
+        print(f"   {r['round']!r:18} {r['rows']:6} rows")
+
     cur.execute(PROBE)
     probe = [{"stage": r[0], "level": r[1], "year": r[2], "rows": r[3]} for r in cur.fetchall()]
     print("senior-side stages present:")
     for p in probe:
         print(f"   {p['year']} {p['stage']!r:22} {p['level']!r:10} {p['rows']:6} rows")
 
-    derived, union = [], set()
+    derived, union, warnings = [], set(), []
     for label, year, stages, lo, hi in PATHWAYS:
         cur.execute(PLACERS, (year, stages, lo, hi))
         pairs = {(r[0], r[1]) for r in cur.fetchall()}
@@ -135,6 +150,9 @@ def main():
                         "events": evs, "derived": True})
         print(f"   {label}: {len(pairs)} entries / {len({p[0] for p in pairs})} athletes")
         print(f"      events: {evs}")
+        if lo == 1 and hi == 1 and len(pairs) != 6:
+            print(f"      WARNING: expected 6 champions (Men/Women x 1M/3M/10M), got {len(pairs)}")
+            warnings.append(f"{label}: expected 6 champions, got {len(pairs)}")
 
     cur.close()
     conn.close()
@@ -152,7 +170,9 @@ def main():
         "union_athletes": len({p[0] for p in union}),
         "sum_of_derived": sum(r["entries"] for r in derived),
         "pathways": rows,
+        "warnings": warnings,
         "stages_present": probe,
+        "rounds_present": rounds,
         "is_synchro_flag": synflag,
     }
     with open(TARGET, "w") as fh:
