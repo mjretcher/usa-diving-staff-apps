@@ -286,6 +286,36 @@
     return r.rows;
   }
 
+  // Score-by-place with its spread across meets, for a single dive-count format.
+  async function rankCost(gender, discipline, scope, diveCount, place) {
+    const r = await q(
+      `SELECT scope, gender, discipline, dive_count, place, n_meets,
+              avg_score, p25_score, p50_score, p75_score, sd_score
+       FROM analytics.rank_cost
+       WHERE gender = $1 AND discipline = $2 AND scope = $3
+         AND ($4::int IS NULL OR dive_count = $4)
+         AND ($5::int IS NULL OR place = $5)
+       ORDER BY place`,
+      [normGender(gender), discipline, scope, diveCount || null, place || null]);
+    r.rows.forEach((x) => ['dive_count', 'place', 'n_meets', 'avg_score', 'p25_score',
+      'p50_score', 'p75_score', 'sd_score'].forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+
+  // Field decomposed by finishing band: difficulty vs execution.
+  async function eventProfile(gender, discipline, scope, diveCount) {
+    const r = await q(
+      `SELECT scope, gender, discipline, dive_count, meet_year, band,
+              n, avg_score, avg_list_dd, avg_exec
+       FROM analytics.event_profile
+       WHERE gender = $1 AND discipline = $2 AND scope = $3
+         AND ($4::int IS NULL OR dive_count = $4)`,
+      [normGender(gender), discipline, scope, diveCount || null]);
+    r.rows.forEach((x) => ['dive_count', 'meet_year', 'n', 'avg_score', 'avg_list_dd',
+      'avg_exec'].forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+
   // Same grain, split voluntary vs optional.
   async function fieldGroupExecVO(gender, discipline, scope, yearFrom) {
     gender = normGender(gender);
@@ -410,6 +440,7 @@
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,
+    rankCost, eventProfile,
     sheetMeets, meetEvents, eventSheets,
     corridor, corridorMarks, juniorMarks, judgeSpreadRef,
     state: { athleteId: null, bundle: null },

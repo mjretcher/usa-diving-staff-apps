@@ -27,7 +27,8 @@
     { id: 'listlab',  section: 'athlete', label: 'Dive list',          el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
     { id: 'pressure', section: 'athlete', label: 'Under pressure',     el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
 
-    { id: 'podium',   section: 'compare', label: 'Gap to the podium',  el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
+    { id: 'gap',      section: 'compare', label: 'Gap to the podium',  el: 'view-gap',      athlete: true, mod: () => window.AEGap },
+    { id: 'podium',   section: 'compare', label: 'List vs the field',    el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
     { id: 'medaltrack', section: 'compare', label: 'Junior to senior', el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
 
     { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: false },

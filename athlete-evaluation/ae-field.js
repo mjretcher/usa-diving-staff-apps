@@ -48,17 +48,13 @@
     root.innerHTML = `<div class="ae-fi-skel">${'<div class="ae-skel"></div>'.repeat(4)}</div>`;
 
     try {
-      const [pulse, bench, listDD, groupExec, depth, profile, rankCost] = await Promise.all([
-        loadPulse(), loadBenchmarks(), loadListDD(), loadGroupExec(), loadDepth(),
-        loadProfile(), loadRankCost(),
+      const [listDD, groupExec, depth, profile, rankCost] = await Promise.all([
+        loadListDD(), loadGroupExec(), loadDepth(), loadProfile(), loadRankCost(),
       ]);
-      const usBest = await loadUSBest(bench);
       root.innerHTML =
         cmpBar() +
         decompositionHtml(profile) +
         rankCostHtml(rankCost) +
-        worldStageHtml(bench, usBest) +
-        movingBarHtml(bench) +
         armsRaceHtml(listDD) +
         heatHtml(groupExec) +
         depthHtml(depth);
@@ -92,58 +88,9 @@
     return r.rows;
   }
 
-  async function loadPulse() {
-    const r = await q(`
-      SELECT (SELECT COUNT(*) FROM core.dive_sheets) AS dives,
-             (SELECT COUNT(DISTINCT meet_id) FROM core.dive_sheets) AS sheet_meets,
-             (SELECT COUNT(*) FROM core.dive_sheets WHERE judges_scores IS NOT NULL AND judges_scores <> '') AS judge_dives,
-             (SELECT COUNT(*) FROM core.result_phases) AS phases,
-             (SELECT COUNT(DISTINCT meet_id) FROM core.result_phases) AS meets,
-             (SELECT COUNT(DISTINCT diver_id) FROM core.result_phases) AS athletes,
-             (SELECT MIN(meet_year) FROM core.result_phases) AS y0,
-             (SELECT MAX(meet_year) FROM core.result_phases) AS y1`);
-    const p = r.rows[0];
-    Object.keys(p).forEach((k) => { p[k] = num(p[k]); });
-    return p;
-  }
 
-  async function loadBenchmarks() {
-    const r = await q(`
-      SELECT meet_id, meet_name, meet_year, gender, discipline, n_semi, n_final,
-             win_score, medal_score, final_cut, semi_cut
-      FROM analytics.benchmarks
-      WHERE competition_family = 'World Aquatics'
-        AND gender IN ('Male','Female') AND discipline IN ('3m','Platform')
-      ORDER BY meet_year, meet_id`);
-    r.rows.forEach((b) => ['meet_year','n_semi','n_final','win_score','medal_score','final_cut','semi_cut'].forEach((k) => { b[k] = num(b[k]); }));
-    return r.rows;
-  }
 
-  async function loadUSBest(bench) {
-    // Best US score at each World Aquatics meet we benchmark against, same
-    // scoring basis (fresh per-round WA scores) — apples to apples.
-    const r = await q(`
-      SELECT meet_id, gender, discipline, MAX(posted_score) AS best,
-             (ARRAY_AGG(diver_name ORDER BY posted_score DESC))[1] AS name
-      FROM core.result_phases
-      WHERE competition_family = 'World Aquatics' AND nat = 'USA'
-        AND COALESCE(is_synchronized,false) = false
-        AND gender IN ('Male','Female') AND discipline IN ('3m','Platform')
-        AND posted_score IS NOT NULL
-      GROUP BY meet_id, gender, discipline`);
-    const map = new Map();
-    r.rows.forEach((x) => map.set(x.meet_id + '|' + x.gender + '|' + x.discipline, { v: num(x.best), name: prettyName(x.name) }));
-    return map;
-  }
 
-  function prettyName(n) {
-    // WA names arrive "SURNAME Given" — flip and title-case the surname.
-    if (!n) return '';
-    const m = String(n).match(/^([A-Z][A-Z'\-\s]+)\s+(.+)$/);
-    if (!m) return n;
-    const sur = m[1].trim().toLowerCase().replace(/(^|[\s'\-])\w/g, (c) => c.toUpperCase());
-    return m[2] + ' ' + sur;
-  }
 
   async function loadListDD() {
     const r = await q(`
@@ -352,79 +299,10 @@
     </section>`;
   }
 
-  function pulseHtml(p) {
-    const chips = [
-      [p.dives, 'dives scored'], [p.athletes, 'athletes tracked'], [p.meets, 'meets'],
-      [`${p.y0}–${p.y1}`, 'seasons'], [p.judge_dives, 'judge-by-judge dives'],
-    ];
-    return `<div class="ae-pulse">
-      <div class="ae-pulse-title">THE DATASET<span>growing nightly — scraper is back-filling toward 2015</span></div>
-      <div class="ae-pulse-chips">${chips.map(([v, l]) => `<div class="ae-pulse-chip"><b>${typeof v === 'number' ? v.toLocaleString() : esc(v)}</b><span>${esc(l)}</span></div>`).join('')}</div>
-    </div>`;
-  }
 
-  function latestChampMeet(bench, ev) {
-    const rows = bench.filter((b) => b.gender === ev.gender && b.discipline === ev.discipline && b.medal_score != null);
-    if (!rows.length) return null;
-    const champs = rows.filter((b) => /Championships/i.test(b.meet_name || '') && b.n_semi > 0);
-    const pool = champs.length ? champs : rows;
-    return pool.reduce((a, b) => (b.meet_year > a.meet_year) ? b : a);
-  }
 
-  function worldStageHtml(bench, usBest) {
-    const cards = EVENTS.map((ev) => {
-      const bm = latestChampMeet(bench, ev);
-      if (!bm) return `<div class="ae-stage-card"><div class="ae-stage-ev">${esc(ev.label)}</div><div class="ae-empty">Awaiting data</div></div>`;
-      const us = usBest.get(bm.meet_id + '|' + ev.gender + '|' + ev.discipline) || null;
-      const gap = us && bm.medal_score != null ? bm.medal_score - us.v : null;
-      return `<div class="ae-stage-card">
-        <div class="ae-stage-ev">${esc(ev.label)}</div>
-        <div class="ae-stage-meet">${esc(bm.meet_name)}</div>
-        ${C.ladder({ win: bm.win_score, medal: bm.medal_score, cut: bm.final_cut, us, h: 252 })}
-        ${gap != null ? `<div class="ae-stage-gap ${gap <= 0 ? 'good' : ''}">${gap <= 0 ? `US best CLEARED the medal line by ${f1(-gap)}` : `${f1(gap)} points from the medal line`}</div>` : `<div class="ae-stage-gap dim">No US result at this meet</div>`}
-      </div>`;
-    }).join('');
-    return `<section class="ae-stage">
-      <div class="ae-stage-head">
-        <h2>THE WORLD STAGE</h2>
-        <p>The latest World Championships, drawn to scale: gold, the medal line, the final cut — and the best American in that same pool. Fresh per-round scores, no cumulative mixing.</p>
-      </div>
-      <div class="ae-stage-grid">${cards}</div>
-    </section>`;
-  }
 
-  function shortMeet(name, year) {
-    const n = String(name || '');
-    if (/Championships/i.test(n) && /World Aquatics/i.test(n)) return ['Worlds', String(year)];
-    if (/Super Final/i.test(n)) return ['Super Final', String(year)];
-    if (/American Cup/i.test(n)) return ['Am Cup', String(year)];
-    if (/World Cup/i.test(n)) return ['World Cup', String(year)];
-    return [n.slice(0, 10), String(year)];
-  }
 
-  function movingBarHtml(bench) {
-    const panels = EVENTS.map((ev) => {
-      const rows = bench.filter((b) => b.gender === ev.gender && b.discipline === ev.discipline &&
-        (b.win_score != null || b.final_cut != null));
-      if (!rows.length) return '';
-      const labels = rows.map((b) => shortMeet(b.meet_name, b.meet_year));
-      const svg = C.areaTrend({
-        labels,
-        series: [
-          { name: 'Gold', color: C.COLORS.GOLD, values: rows.map((b) => b.win_score), area: true },
-          { name: 'Medal', color: C.COLORS.RED, values: rows.map((b) => b.medal_score) },
-          { name: 'Final cut', color: C.COLORS.POOL, values: rows.map((b) => b.final_cut), dash: true },
-        ], w: 440, h: 232,
-      });
-      return `<div class="ae-mb-panel"><div class="ae-mb-title">${esc(ev.label)}</div>${svg}</div>`;
-    }).join('');
-    return `<section class="ae-card ae-fi-sec">
-      <div class="ae-card-h"><div><h3>The Moving Bar</h3>
-      <p class="ae-soft">What winning, medaling, and making the final has cost at every World Aquatics meet on record. The question for 2028 isn't today's gap — it's the slope. New meets join this chart automatically as the scraper lands them.</p></div>
-      <div class="ae-legend"><span><i style="background:${C.COLORS.GOLD}"></i>Gold</span><span><i style="background:${C.COLORS.RED}"></i>Medal (3rd)</span><span><i style="background:${C.COLORS.POOL}"></i>Final cut</span></div></div>
-      <div class="ae-mb-grid">${panels}</div>
-    </section>`;
-  }
 
   function armsRaceHtml(listDD) {
     const pick = (scope, ev) => {
