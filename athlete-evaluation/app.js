@@ -34,7 +34,7 @@
     { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: false },
     { id: 'la28',     section: 'fields',  label: '2028 projection',    el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
 
-    { id: 'race',     section: 'meets',   label: 'Round by round',     el: 'view-race',     athlete: false, mod: () => window.AERace },
+    { id: 'race',     section: 'meets',   label: 'Meet replay',        el: 'view-race',     athlete: false, mod: () => window.AEMeet },
   ];
   const sectionOf = (id) => (VIEWS.find((v) => v.id === id) || VIEWS[0]).section;
   const state = { view: 'passport', fieldBooted: false, searching: null };

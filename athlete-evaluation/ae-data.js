@@ -28,6 +28,13 @@
 
   const num = (v) => { if (v == null || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
 
+  // Postgres booleans reach us as real booleans over the normal client, but as
+  // 't'/'f' strings whenever raw-text output is on — which is how the Vercel
+  // proxy and several of the audit scripts talk to Neon. A bare === true test
+  // silently inverts under one transport and not the other, so every boolean
+  // from the database goes through this.
+  const truthy = (v) => v === true || v === 't' || v === 'true' || v === 1 || v === '1';
+
   function q(sql, params) {
     return window.NEON.query(sql, (params || []).map((p) => p == null ? null : String(p)));
   }
@@ -351,42 +358,160 @@
     } catch (e) { return {}; }
   }
 
-  /* ---------- race replay lookups ---------- */
-  async function sheetMeets() {
+  /* ---------- meet lookups ----------
+     903 meets carry dive-level data and the scraper keeps adding them, so a
+     select element was never going to work. analytics.meet_directory holds one
+     pre-searchable row per meet; these two calls are the whole meet finder. */
+  const MEET_COLS = `meet_id, meet_name, start_date, end_date, venue,
+                     competition_family, meet_year, n_dives, n_events, n_divers, scope`;
+  const meetNums = (rows) => {
+    rows.forEach((x) => ['meet_year', 'n_dives', 'n_events', 'n_divers']
+      .forEach((k) => { x[k] = num(x[k]); }));
+    return rows;
+  };
+
+  // Ranked by how well the term matches, then by recency and size — so typing
+  // "zone" surfaces this year's Zone championships before a 2015 invitational.
+  async function meetSearch(term, opts) {
+    const o = opts || {};
+    const t = String(term || '').trim().toLowerCase();
+    const like = '%' + t.replace(/[%_]/g, '') + '%';
     const r = await q(
-      `WITH m AS (
-         SELECT meet_id, competition_family, MAX(meet_year) AS meet_year,
-                COUNT(DISTINCT event_id) AS n_events, COUNT(DISTINCT diver_id) AS n_divers
-         FROM core.dive_sheets GROUP BY meet_id, competition_family)
-       SELECT m.*, (SELECT MAX(meet_name) FROM core.result_phases p WHERE p.meet_id = m.meet_id) AS meet_name
-       FROM m ORDER BY meet_year DESC, meet_name`);
-    r.rows.forEach((x) => { x.meet_year = num(x.meet_year); });
+      `SELECT ${MEET_COLS}
+       FROM analytics.meet_directory
+       WHERE ($1 = '' OR search_text LIKE $2)
+         AND ($3::int  IS NULL OR meet_year = $3)
+         AND ($4::text IS NULL OR scope = $4)
+       ORDER BY (CASE WHEN LOWER(meet_name) LIKE $2 THEN 0 ELSE 1 END),
+                meet_year DESC, n_dives DESC
+       LIMIT 40`,
+      [t, like, o.year || null, o.scope || null]);
+    return meetNums(r.rows);
+  }
+
+  // Years that actually have data, for the year filter chips.
+  async function meetYears() {
+    const r = await q(
+      `SELECT meet_year, COUNT(*) AS n_meets FROM analytics.meet_directory
+       GROUP BY 1 ORDER BY 1 DESC`);
+    r.rows.forEach((x) => { x.meet_year = num(x.meet_year); x.n_meets = num(x.n_meets); });
     return r.rows;
+  }
+
+  async function meetInfo(meetId) {
+    const r = await q(`SELECT ${MEET_COLS} FROM analytics.meet_directory WHERE meet_id = $1`, [meetId]);
+    return meetNums(r.rows)[0] || null;
   }
 
   async function meetEvents(meetId) {
     const r = await q(
       `SELECT event_id, MAX(event_name) AS event_name, gender, discipline, round_stage,
-              COUNT(DISTINCT diver_id) AS n_divers, MAX(dive_order) AS n_rounds
+              COUNT(DISTINCT diver_id) AS n_divers, MAX(dive_order) AS n_rounds,
+              COUNT(*) AS n_dives
        FROM core.dive_sheets
        WHERE meet_id = $1 AND discipline IN ('1m','3m','Platform')
        GROUP BY event_id, gender, discipline, round_stage
        ORDER BY event_name, round_stage`, [meetId]);
+    r.rows.forEach((x) => ['n_divers', 'n_rounds', 'n_dives'].forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
   }
 
   async function eventSheets(meetId, eventId, stage) {
     const r = await q(
-      `SELECT diver_id, diver_name, team_name, dive_order, dive_number, height, dd, score,
-              running_total_points, round_place
+      `SELECT diver_id, diver_name, team_name, dive_order, dive_number, height,
+              description, dd, score, judges_scores, running_total_points, round_place,
+              optional_voluntary, dive_bucket, dive_group_code, dive_group_label
        FROM core.dive_sheets
        WHERE meet_id = $1 AND event_id = $2 AND round_stage = $3
        ORDER BY diver_name, dive_order`, [meetId, eventId, stage]);
     r.rows.forEach((x) => {
       x.dd = num(x.dd); x.score = num(x.score); x.dive_order = num(x.dive_order);
       x.running_total_points = num(x.running_total_points); x.round_place = num(x.round_place);
+      x._exec = execOf(x);
     });
     return r.rows;
+  }
+
+  // The posted result for the same event/stage.
+  //
+  // This is load-bearing, not decoration. Junior Circuit finals are scored
+  // cumulatively: a diver carries their prelim VOLUNTARY total into the final
+  // and only optional dives are contested there. Verified to the cent across
+  // the 2026 East Championship Group A Boys 1m final — official total minus
+  // the final's dives equals the prelim voluntary sum for all 12 divers, zero
+  // residual. Replaying such a final from zero produces the wrong winner,
+  // which is exactly the "cumulative totals masquerading as round scores"
+  // trap. Meet Replay anchors on posted_score instead of assuming a format,
+  // so it is also correct for stages that carry nothing.
+  async function eventOfficial(meetId, eventId, stage) {
+    const r = await q(
+      `SELECT diver_id, place, posted_score, score_is_cumulative, phase_dive_count
+       FROM core.result_phases
+       WHERE meet_id = $1 AND event_id = $2 AND round_stage = $3`,
+      [meetId, eventId, stage]);
+    const m = new Map();
+    r.rows.forEach((x) => {
+      x.place = num(x.place); x.posted_score = num(x.posted_score);
+      x.phase_dive_count = num(x.phase_dive_count);
+      m.set(String(x.diver_id), x);
+    });
+    return m;
+  }
+
+  /* ---------- dive population ----------
+     What a dive normally scores at a given level, so one dive in one meet can
+     be read against its own history rather than against nothing. Coaching
+     context only — coverage is uneven by level and it is not published in
+     advance, so it does not meet the bar for selection criteria. */
+  async function divePopulation(scope, gender, discipline, diveNumbers) {
+    const list = [...new Set((diveNumbers || []).filter(Boolean))];
+    if (!list.length) return new Map();
+    // Postgres array literal; dive numbers are alphanumeric but quote anyway.
+    const arr = '{' + list.map((d) => '"' + String(d).replace(/"/g, '') + '"') + '}';
+    let rows = [];
+    try {
+      const r = await q(
+        `SELECT dive_number, n, n_divers, avg_dd, avg_exec, p10_exec, p25_exec,
+                p50_exec, p75_exec, p90_exec, sd_exec, avg_score, p50_score,
+                p90_score, fail_rate, y0, y1
+         FROM analytics.dive_population
+         WHERE scope = $1 AND gender = $2 AND discipline = $3
+           AND dive_number = ANY($4::text[])`,
+        [scope, normGender(gender), discipline, arr]);
+      rows = r.rows;
+    } catch (e) {
+      // Table lands with the next analytics rebuild; the view degrades to
+      // showing scores without population context rather than breaking.
+      console.warn('[AE] dive_population unavailable', e.message);
+      return new Map();
+    }
+    const m = new Map();
+    rows.forEach((x) => {
+      ['n', 'n_divers', 'avg_dd', 'avg_exec', 'p10_exec', 'p25_exec', 'p50_exec',
+       'p75_exec', 'p90_exec', 'sd_exec', 'avg_score', 'p50_score', 'p90_score',
+       'fail_rate', 'y0', 'y1'].forEach((k) => { x[k] = num(x[k]); });
+      m.set(x.dive_number, x);
+    });
+    return m;
+  }
+
+  // Where an execution mark sits inside a dive's own distribution.
+  // Piecewise-linear through the five stored percentiles — honest about being
+  // an interpolation rather than pretending to a smooth parametric fit.
+  function execPercentile(exec, pop) {
+    if (exec == null || !pop) return null;
+    const pts = [[pop.p10_exec, 10], [pop.p25_exec, 25], [pop.p50_exec, 50],
+                 [pop.p75_exec, 75], [pop.p90_exec, 90]].filter((p) => p[0] != null);
+    if (pts.length < 2) return null;
+    if (exec <= pts[0][0]) return Math.max(1, Math.round(pts[0][1] * (exec / (pts[0][0] || 1))));
+    for (let i = 1; i < pts.length; i++) {
+      if (exec <= pts[i][0]) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        return Math.round(x1 === x0 ? y1 : y0 + (exec - x0) / (x1 - x0) * (y1 - y0));
+      }
+    }
+    const last = pts[pts.length - 1];
+    return Math.min(99, Math.round(last[1] + (exec - last[0]) * 9));
   }
 
   /* ---------- medal-track corridor ---------- */
@@ -434,14 +559,15 @@
   }
 
   window.AE = {
-    esc, escJsAttr, num, q,
+    esc, escJsAttr, num, truthy, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
     isRulebookDive, bucketOf, SCOPES, normGender, GUARD, ok, thinNote,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,
     rankCost, eventProfile,
-    sheetMeets, meetEvents, eventSheets,
+    meetSearch, meetYears, meetInfo, meetEvents, eventSheets, eventOfficial,
+    divePopulation, execPercentile,
     corridor, corridorMarks, juniorMarks, judgeSpreadRef,
     state: { athleteId: null, bundle: null },
   };
