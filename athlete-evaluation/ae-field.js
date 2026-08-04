@@ -48,13 +48,15 @@
     root.innerHTML = `<div class="ae-fi-skel">${'<div class="ae-skel"></div>'.repeat(4)}</div>`;
 
     try {
-      const [pulse, bench, listDD, groupExec, depth] = await Promise.all([
+      const [pulse, bench, listDD, groupExec, depth, profile, rankCost] = await Promise.all([
         loadPulse(), loadBenchmarks(), loadListDD(), loadGroupExec(), loadDepth(),
+        loadProfile(), loadRankCost(),
       ]);
       const usBest = await loadUSBest(bench);
       root.innerHTML =
-        pulseHtml(pulse) +
         cmpBar() +
+        decompositionHtml(profile) +
+        rankCostHtml(rankCost) +
         worldStageHtml(bench, usBest) +
         movingBarHtml(bench) +
         armsRaceHtml(listDD) +
@@ -67,6 +69,29 @@
   }
 
   /* ---------------- data ---------------- */
+  // Score decomposed by finishing band: is the podium winning on difficulty
+  // or on execution? Score = 3 x SUM(DD x execution), and result_phases
+  // carries phase_dd_sum, so the split is exact rather than estimated.
+  async function loadProfile() {
+    const r = await q(`SELECT scope, gender, discipline, dive_count, meet_year, band,
+                              n, avg_score, avg_list_dd, avg_exec, p50_score, p90_score
+                       FROM analytics.event_profile
+                       WHERE meet_year >= 2018`);
+    r.rows.forEach((x) => ['dive_count','meet_year','n','avg_score','avg_list_dd','avg_exec',
+      'p50_score','p90_score'].forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+
+  // What each finishing place actually costs, with its spread across meets.
+  async function loadRankCost() {
+    const r = await q(`SELECT scope, gender, discipline, dive_count, place, n_meets,
+                              avg_score, p25_score, p50_score, p75_score, sd_score
+                       FROM analytics.rank_cost WHERE place <= 18`);
+    r.rows.forEach((x) => ['dive_count','place','n_meets','avg_score','p25_score',
+      'p50_score','p75_score','sd_score'].forEach((k) => { x[k] = num(x[k]); }));
+    return r.rows;
+  }
+
   async function loadPulse() {
     const r = await q(`
       SELECT (SELECT COUNT(*) FROM core.dive_sheets) AS dives,
@@ -154,6 +179,179 @@
   }
 
   /* ---------------- sections ---------------- */
+
+  /* ---------------- field decomposition ---------------- */
+
+  const EV_LABEL = { '1m': '1m', '3m': '3m', Platform: 'Platform' };
+  const G_LABEL = { Male: 'Men', Female: 'Women' };
+
+  // For a scope+gender+discipline, pick the dive-count format with the most
+  // results — comparing across formats is the error this whole layer exists
+  // to prevent.
+  function dominantFormat(rows) {
+    const c = new Map();
+    rows.forEach((r) => c.set(r.dive_count, (c.get(r.dive_count) || 0) + r.n));
+    let best = null, bestN = 0;
+    c.forEach((n, dc) => { if (n > bestN) { bestN = n; best = dc; } });
+    return best;
+  }
+
+  function decompositionHtml(profile) {
+    const scope = cmp.a;
+    const rows = profile.filter((r) => r.scope === scope);
+    if (!rows.length) {
+      return `<section class="ae-card ae-fi-sec"><h3>Where the podium comes from</h3>
+        <p class="ae-soft">No decomposable results for ${esc(scopeName(scope))}. A result needs a
+        dive count and a list DD to be split into difficulty and execution.</p></section>`;
+    }
+
+    const cells = [];
+    ['Male', 'Female'].forEach((g) => {
+      ['1m', '3m', 'Platform'].forEach((d) => {
+        const sub = rows.filter((r) => r.gender === g && r.discipline === d);
+        if (!sub.length) return;
+        const dc = dominantFormat(sub);
+        const use = sub.filter((r) => r.dive_count === dc);
+        const band = (b) => {
+          const bs = use.filter((r) => r.band === b);
+          const n = bs.reduce((a, r) => a + r.n, 0);
+          if (!n) return null;
+          return {
+            n,
+            score: bs.reduce((a, r) => a + r.avg_score * r.n, 0) / n,
+            dd: bs.reduce((a, r) => a + r.avg_list_dd * r.n, 0) / n,
+            exec: bs.reduce((a, r) => a + r.avg_exec * r.n, 0) / n,
+          };
+        };
+        const pod = band('podium'), fin = band('finalist');
+        if (!pod || !fin || pod.n < GUARD.cell || fin.n < GUARD.cell) return;
+
+        // Split the podium-minus-finalist gap into its two causes.
+        // score = 3 x DD x exec, so hold one factor at the finalist level
+        // to attribute the difference.
+        const ddPart = 3 * (pod.dd - fin.dd) * fin.exec;
+        const exPart = 3 * pod.dd * (pod.exec - fin.exec);
+        const total = pod.score - fin.score;
+        cells.push({ g, d, dc, pod, fin, ddPart, exPart, total });
+      });
+    });
+
+    if (!cells.length) {
+      return `<section class="ae-card ae-fi-sec"><h3>Where the podium comes from</h3>
+        <p class="ae-soft">Not enough finals results in ${esc(scopeName(scope))} to separate the
+        podium from the rest of the final.</p></section>`;
+    }
+
+    const maxAbs = Math.max(...cells.map((c) => Math.abs(c.ddPart) + Math.abs(c.exPart)), 1);
+    const bar = (c) => {
+      const w = 260;
+      const dw = Math.abs(c.ddPart) / maxAbs * w, ew = Math.abs(c.exPart) / maxAbs * w;
+      return `<svg viewBox="0 0 ${w} 16" class="ae-decomp-bar" preserveAspectRatio="none">
+        <rect x="0" y="2" width="${dw}" height="12" fill="${C.COLORS.NAVY}" opacity=".85"></rect>
+        <rect x="${dw}" y="2" width="${ew}" height="12" fill="${C.COLORS.POOL}" opacity=".85"></rect>
+      </svg>`;
+    };
+
+    return `<section class="ae-card ae-fi-sec">
+      <h3>Where the podium comes from</h3>
+      <p class="ae-soft">A total is 3 &times; the sum of (difficulty &times; execution), so the gap
+        between the podium and the rest of the final splits exactly into those two causes. This is
+        the difference in ${esc(scopeName(scope))} finals: how much the medallists gain from
+        carrying a harder list, and how much from performing it better.</p>
+      <table class="ae-tbl">
+        <thead><tr><th>Event</th><th class="r">Podium</th><th class="r">4th&ndash;12th</th>
+          <th class="r">Gap</th><th class="r">From difficulty</th><th class="r">From execution</th>
+          <th style="width:270px">Split</th><th class="r">Results</th></tr></thead>
+        <tbody>${cells.map((c) => `<tr>
+          <td>${esc(G_LABEL[c.g] || c.g)} ${esc(EV_LABEL[c.d] || c.d)}
+            <span class="ae-soft">${c.dc}-dive</span></td>
+          <td class="r">${c.pod.score.toFixed(1)}<br><span class="ae-soft">DD ${c.pod.dd.toFixed(1)} &middot; ex ${c.pod.exec.toFixed(2)}</span></td>
+          <td class="r">${c.fin.score.toFixed(1)}<br><span class="ae-soft">DD ${c.fin.dd.toFixed(1)} &middot; ex ${c.fin.exec.toFixed(2)}</span></td>
+          <td class="r"><b>${c.total >= 0 ? '+' : ''}${c.total.toFixed(1)}</b></td>
+          <td class="r" style="color:${C.COLORS.NAVY};font-weight:600">${c.ddPart >= 0 ? '+' : ''}${c.ddPart.toFixed(1)}</td>
+          <td class="r" style="color:${C.COLORS.POOL};font-weight:600">${c.exPart >= 0 ? '+' : ''}${c.exPart.toFixed(1)}</td>
+          <td>${bar(c)}</td>
+          <td class="r">${(c.pod.n + c.fin.n).toLocaleString()}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="ae-legend">
+        <span><i style="background:${C.COLORS.NAVY}"></i>points gained from harder dives</span>
+        <span><i style="background:${C.COLORS.POOL}"></i>points gained from better execution</span>
+      </div>
+      <p class="ae-soft">Each row uses the dive-count format most common for that event, so no two
+        formats are ever averaged together. Bands need ${GUARD.cell}+ results on each side.</p>
+    </section>`;
+  }
+
+  /* ---------------- what a place costs ---------------- */
+
+  function rankCostHtml(rankCost) {
+    const scope = cmp.b;
+    const evs = [];
+    ['Male', 'Female'].forEach((g) => ['3m', 'Platform'].forEach((d) => {
+      const sub = rankCost.filter((r) => r.scope === scope && r.gender === g && r.discipline === d);
+      if (!sub.length) return;
+      const dc = dominantFormat(sub.map((r) => ({ dive_count: r.dive_count, n: r.n_meets })));
+      const use = sub.filter((r) => r.dive_count === dc && r.n_meets >= 3)
+        .sort((a, b) => a.place - b.place);
+      if (use.length >= 4) evs.push({ g, d, dc, rows: use });
+    }));
+    if (!evs.length) {
+      return `<section class="ae-card ae-fi-sec"><h3>What a place costs</h3>
+        <p class="ae-soft">Not enough repeated finals in ${esc(scopeName(scope))} to establish what
+        each finishing position costs.</p></section>`;
+    }
+
+    const w = 330, h = 190, padL = 46, padR = 12, padT = 12, padB = 30;
+    const chart = (ev) => {
+      const rs = ev.rows;
+      const lo = Math.min(...rs.map((r) => r.p25_score)) * 0.97;
+      const hi = Math.max(...rs.map((r) => r.p75_score)) * 1.03;
+      const X = (p) => padL + ((p - rs[0].place) / Math.max(1, rs[rs.length - 1].place - rs[0].place)) * (w - padL - padR);
+      const Y = (v) => h - padB - ((v - lo) / (hi - lo || 1)) * (h - padT - padB);
+      const area = rs.map((r) => `${X(r.place)},${Y(r.p75_score)}`).join(' ')
+        + ' ' + rs.slice().reverse().map((r) => `${X(r.place)},${Y(r.p25_score)}`).join(' ');
+      let g = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg">`;
+      [0, 0.5, 1].forEach((t) => {
+        const v = lo + (hi - lo) * t;
+        g += `<line x1="${padL}" y1="${Y(v)}" x2="${w - padR}" y2="${Y(v)}" stroke="#E3E6EF"/>`
+          + `<text x="${padL - 6}" y="${Y(v) + 4}" text-anchor="end" class="ae-tick">${v.toFixed(0)}</text>`;
+      });
+      g += `<polygon points="${area}" fill="${C.COLORS.SKY}" opacity=".45"></polygon>`;
+      g += `<polyline points="${rs.map((r) => `${X(r.place)},${Y(r.p50_score)}`).join(' ')}"
+             fill="none" stroke="${C.COLORS.NAVY}" stroke-width="2"></polyline>`;
+      rs.forEach((r) => {
+        g += `<circle cx="${X(r.place)}" cy="${Y(r.p50_score)}" r="3" fill="${C.COLORS.NAVY}">`
+          + `<title>Place ${r.place}: median ${r.p50_score.toFixed(1)}, `
+          + `middle half ${r.p25_score.toFixed(1)}–${r.p75_score.toFixed(1)} `
+          + `across ${r.n_meets} meets</title></circle>`;
+      });
+      [rs[0].place, rs[Math.floor(rs.length / 2)].place, rs[rs.length - 1].place].forEach((p) => {
+        g += `<text x="${X(p)}" y="${h - padB + 16}" text-anchor="middle" class="ae-tick">${p}</text>`;
+      });
+      g += `<text x="${(padL + w - padR) / 2}" y="${h - 4}" text-anchor="middle" class="ae-axlab">Finishing place</text>`;
+      return g + '</svg>';
+    };
+
+    return `<section class="ae-card ae-fi-sec">
+      <h3>What a place costs</h3>
+      <p class="ae-soft">The score that has actually produced each finishing position in
+        ${esc(scopeName(scope))} finals since 2018. The line is the median; the band is the middle
+        half of results. A single meet's medal line is one observation &mdash; the band is what you
+        can plan against.</p>
+      <div class="ae-fi-grid">${evs.map((ev) => `<div class="ae-fi-cell">
+        <div class="ae-fi-cap">${esc(G_LABEL[ev.g] || ev.g)} ${esc(EV_LABEL[ev.d] || ev.d)}
+          <span class="ae-soft">${ev.dc}-dive</span></div>${chart(ev)}
+        <div class="ae-soft">Podium ${ev.rows.find((r) => r.place === 3)
+          ? ev.rows.find((r) => r.place === 3).p25_score.toFixed(0) + '–'
+            + ev.rows.find((r) => r.place === 3).p75_score.toFixed(0) : '—'}
+          &middot; final cut ${ev.rows.find((r) => r.place === 12)
+          ? ev.rows.find((r) => r.place === 12).p25_score.toFixed(0) + '–'
+            + ev.rows.find((r) => r.place === 12).p75_score.toFixed(0) : '—'}</div>
+      </div>`).join('')}</div>
+    </section>`;
+  }
+
   function pulseHtml(p) {
     const chips = [
       [p.dives, 'dives scored'], [p.athletes, 'athletes tracked'], [p.meets, 'meets'],
