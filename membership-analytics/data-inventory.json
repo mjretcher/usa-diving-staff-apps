@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-04T19:37:52Z",
+  "generated": "2026-08-04T19:39:24Z",
   "note": "Unfiltered inventory. 'scraped_not_canonical' is the set that exists in the raw scrape but was never promoted into core.event_results -- present but unusable, which is a very different problem from absent.",
   "core_by_year_stage": [
     {
@@ -2445,7 +2445,288 @@
       "rows": 9798
     }
   ],
-  "scraped_not_canonical": {
-    "error": "operator does not exist: text = integer\nLINE 8: ...CT 1 FROM core.event_results c WHERE c.meet_id_dm = r.meet_i...\n                                                             ^\nHINT:  No operator matches the given name and argument types. You might need to add explicit type casts."
-  }
+  "column_types": [
+    {
+      "tbl": "core.event_results",
+      "col": "diver_id_dm",
+      "typ": "text"
+    },
+    {
+      "tbl": "core.event_results",
+      "col": "meet_id_dm",
+      "typ": "text"
+    },
+    {
+      "tbl": "core.event_results",
+      "col": "place",
+      "typ": "smallint"
+    },
+    {
+      "tbl": "core.event_results",
+      "col": "year",
+      "typ": "smallint"
+    },
+    {
+      "tbl": "divemeets.meets",
+      "col": "meet_id",
+      "typ": "integer"
+    },
+    {
+      "tbl": "divemeets.results",
+      "col": "event_id",
+      "typ": "integer"
+    },
+    {
+      "tbl": "divemeets.results",
+      "col": "meet_id",
+      "typ": "integer"
+    },
+    {
+      "tbl": "divemeets.results",
+      "col": "profile_id",
+      "typ": "integer"
+    }
+  ],
+  "scraped_not_canonical": [
+    {
+      "yr": 2013,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 29,
+      "rows": 4260
+    },
+    {
+      "yr": 2013,
+      "sanction": "USA Diving",
+      "meets": 52,
+      "rows": 14817
+    },
+    {
+      "yr": 2014,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 56,
+      "rows": 8797
+    },
+    {
+      "yr": 2014,
+      "sanction": "USA Diving",
+      "meets": 90,
+      "rows": 23575
+    },
+    {
+      "yr": 2015,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 57,
+      "rows": 9026
+    },
+    {
+      "yr": 2015,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 28,
+      "rows": 4973
+    },
+    {
+      "yr": 2015,
+      "sanction": "USA Diving",
+      "meets": 77,
+      "rows": 20011
+    },
+    {
+      "yr": 2016,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 56,
+      "rows": 9096
+    },
+    {
+      "yr": 2016,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 26,
+      "rows": 4809
+    },
+    {
+      "yr": 2016,
+      "sanction": "USA Diving",
+      "meets": 88,
+      "rows": 21012
+    },
+    {
+      "yr": 2017,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 58,
+      "rows": 8950
+    },
+    {
+      "yr": 2017,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 29,
+      "rows": 4987
+    },
+    {
+      "yr": 2017,
+      "sanction": "USA Diving",
+      "meets": 89,
+      "rows": 21094
+    },
+    {
+      "yr": 2018,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 59,
+      "rows": 8896
+    },
+    {
+      "yr": 2018,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 31,
+      "rows": 5221
+    },
+    {
+      "yr": 2018,
+      "sanction": "USA Diving",
+      "meets": 89,
+      "rows": 20757
+    },
+    {
+      "yr": 2019,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 54,
+      "rows": 8115
+    },
+    {
+      "yr": 2019,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 31,
+      "rows": 5338
+    },
+    {
+      "yr": 2019,
+      "sanction": "USA Diving",
+      "meets": 90,
+      "rows": 20883
+    },
+    {
+      "yr": 2020,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 17,
+      "rows": 2608
+    },
+    {
+      "yr": 2020,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 29,
+      "rows": 4744
+    },
+    {
+      "yr": 2020,
+      "sanction": "USA Diving",
+      "meets": 22,
+      "rows": 3799
+    },
+    {
+      "yr": 2021,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 28,
+      "rows": 4321
+    },
+    {
+      "yr": 2021,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 26,
+      "rows": 3849
+    },
+    {
+      "yr": 2021,
+      "sanction": "USA Diving",
+      "meets": 37,
+      "rows": 5512
+    },
+    {
+      "yr": 2022,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 46,
+      "rows": 7143
+    },
+    {
+      "yr": 2022,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 35,
+      "rows": 5665
+    },
+    {
+      "yr": 2022,
+      "sanction": "USA Diving",
+      "meets": 47,
+      "rows": 7420
+    },
+    {
+      "yr": 2023,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 52,
+      "rows": 7755
+    },
+    {
+      "yr": 2023,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 34,
+      "rows": 5675
+    },
+    {
+      "yr": 2023,
+      "sanction": "USA Diving",
+      "meets": 48,
+      "rows": 8517
+    },
+    {
+      "yr": 2024,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 55,
+      "rows": 9095
+    },
+    {
+      "yr": 2024,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 34,
+      "rows": 5988
+    },
+    {
+      "yr": 2024,
+      "sanction": "USA Diving",
+      "meets": 30,
+      "rows": 5990
+    },
+    {
+      "yr": 2025,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 44,
+      "rows": 8178
+    },
+    {
+      "yr": 2025,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 34,
+      "rows": 6034
+    },
+    {
+      "yr": 2025,
+      "sanction": "USA Diving",
+      "meets": 26,
+      "rows": 4363
+    },
+    {
+      "yr": 2026,
+      "sanction": "Amateur Athletic Union (AAU)",
+      "meets": 22,
+      "rows": 3542
+    },
+    {
+      "yr": 2026,
+      "sanction": "National Collegiate Athletic Association (NCAA)",
+      "meets": 30,
+      "rows": 5828
+    },
+    {
+      "yr": 2026,
+      "sanction": "USA Diving",
+      "meets": 9,
+      "rows": 1761
+    }
+  ]
 }
