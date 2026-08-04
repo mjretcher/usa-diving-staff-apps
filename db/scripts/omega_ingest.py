@@ -172,11 +172,14 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
 
     meet_id = f"OM-{head['meet_year']}-{code[:14]}"
     event_id = f"{code[14:18]}"
+    # core.dive_sheets.result_set_id is NOT NULL; one OMEGA document is exactly
+    # one result set, so the document code is a natural stable key.
+    result_set_id = f"OM-{code[:18]}"
     payload = []
     for i, r in enumerate(ok_rows):
         nat, _ = resolve_nation(r["nat"])
         payload.append((
-            meet_id, head["meet_year"], "World Aquatics", event_id,
+            meet_id, head["meet_year"], "World Aquatics", event_id, result_set_id,
             head.get("event_title") or label, head["gender"], head["discipline"],
             head["round_stage"], i + 1, r["dive_number"], None, None,
             r["dd"], r["score"], " ".join(str(j) for j in r["judges"]),
@@ -191,7 +194,7 @@ def ingest_one(url, code, snapshots, cur, stats, year_hint=None):
         return
     psycopg2.extras.execute_values(cur, """
         INSERT INTO core.dive_sheets
-          (meet_id, meet_year, competition_family, event_id, event_name, gender,
+          (meet_id, meet_year, competition_family, event_id, result_set_id, event_name, gender,
            discipline, round_stage, dive_order, dive_number, height, description,
            dd, score, judges_scores, running_total_points, round_place,
            diver_id, diver_name, team_name, nation_code)
