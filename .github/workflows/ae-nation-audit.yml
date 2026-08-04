@@ -1,0 +1,21 @@
+name: AE nation audit
+on: { workflow_dispatch: }
+permissions: { contents: write }
+jobs:
+  n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install psycopg2-binary
+      - env: { DATABASE_URL: "${{ secrets.NEON_DATABASE_URL }}" }
+        run: |
+          mkdir -p db/audits
+          python db/scripts/ae_nation_audit.py 2>&1 | tee db/audits/ae_nation_audit.txt
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "gha@users.noreply.github.com"
+          git add db/audits/ae_nation_audit.txt
+          git commit -m "AE nation audit" || echo none
+          git push
