@@ -1,0 +1,93 @@
+Athlete Evaluation — rulebook dive vs. skill audit (read-only)
+
+==============================================================================
+0. Split: valid rulebook dive numbers vs. everything else
+==============================================================================
+  kind           n        distinct_numbers  divers  y0    y1  
+  -------------  -------  ----------------  ------  ----  ----
+  rulebook dive  1479160  235               17099   2013  2026
+  NOT rulebook   88657    3990              11709   2013  2026
+
+==============================================================================
+1. Top 40 NON-rulebook numbers — the skill candidates
+==============================================================================
+  dive_number  n      divers  common_description                                                         disc      min_dd  max_dd  y0    y1  
+  -----------  -----  ------  -------------------------------------------------------------------------  --------  ------  ------  ----  ----
+  001B         12823  4801    Forward Entry Pike                                                         3m        1.00    1.20    2013  2026
+  002A         7632   3828    Back Entry Straight                                                        1m        1.00    1.30    2013  2026
+  001D         6339   1939    Forward Entry Free                                                         3m        1.00    1.20    2013  2026
+  001A         3333   1844    Forward Entry Straight                                                     3m        1.00    1.20    2013  2026
+  001C         3306   1849    Forward Entry Tuck                                                         3m        1.00    1.20    2014  2026
+  002D         2273   1064    Back Entry Free                                                            3m        1.00    1.00    2014  2026
+  002C         1411   878     Back Entry Tuck                                                            3m        1.00    1.30    2014  2026
+  103C103B     738    588     Forward 1 1/2 Somersault TuckForward 1 1/2 Somersault Pike                 1m        None    None    2014  2026
+  401C401B     656    503     Inward Dive TuckInward Dive Pike                                           1m        None    None    2014  2026
+  403B403C     655    532     Inward 1 1/2 Somersault PikeInward 1 1/2 Somersault Tuck                   1m        None    None    2014  2026
+  301B301C     629    464     Reverse Dive PikeReverse Dive Tuck                                         1m        None    None    2014  2026
+  201B201C     573    429     Back Dive PikeBack Dive Tuck                                               1m        None    None    2013  2026
+  105B105C     526    415     Forward 2 1/2 Somersault PikeForward 2 1/2 Somersault Tuck                 1m        None    None    2014  2026
+  201C201B     478    364     Back Dive TuckBack Dive Pike                                               1m        None    None    2013  2026
+  301C301B     451    343     Reverse Dive TuckReverse Dive Pike                                         1m        None    None    2014  2026
+  103B101B     442    359     Forward 1 1/2 Somersault PikeForward Dive Pike                             3m        None    None    2013  2026
+  103B103C     431    352     Forward 1 1/2 Somersault PikeForward 1 1/2 Somersault Tuck                 1m        None    None    2014  2026
+  401B401C     403    324     Inward Dive PikeInward Dive Tuck                                           1m        None    None    2014  2026
+  403C402C     397    361     Inward 1 1/2 Somersault TuckInward 1 Somersault Tuck                       1m        None    None    2014  2026
+  403C403B     386    335     Inward 1 1/2 Somersault TuckInward 1 1/2 Somersault Pike                   3m        None    None    2014  2026
+  101C101B     362    288     Forward Dive TuckForward Dive Pike                                         1m        None    None    2014  2025
+  5132D5231D   354    293     Forward 1 1/2 Somersault 1 Twist FreeBack 1 1/2 Somersault 1/2 Twist Free  3m        None    None    2014  2026
+  105C105B     350    308     Forward 2 1/2 Somersault TuckForward 2 1/2 Somersault Pike                 3m        None    None    2014  2026
+  101B103B     327    290     Forward Dive PikeForward 1 1/2 Somersault Pike                             1m        None    None    2014  2026
+  303C302C     312    249     Reverse 1 1/2 Somersault TuckReverse 1 Somersault Tuck                     1m        None    None    2014  2026
+  107C105B     310    237     Forward 3 1/2 Somersault TuckForward 2 1/2 Somersault Pike                 3m        None    None    2014  2026
+  403C401B     298    261     Inward 1 1/2 Somersault TuckInward Dive Pike                               3m        None    None    2013  2026
+  101B101C     298    247     Forward Dive PikeForward Dive Tuck                                         1m        None    None    2013  2026
+  5231D5132D   281    236     Back 1 1/2 Somersault 1/2 Twist FreeForward 1 1/2 Somersault 1 Twist Free  3m        None    None    2014  2026
+  103B103B     269    232     Forward 1 1/2 Somersault PikeForward 1 1/2 Somersault Pike                 Platform  None    None    2014  2026
+  201C201A     268    242     Back Dive TuckBack Dive Straight                                           1m        None    None    2014  2026
+  403B401B     259    218     Inward 1 1/2 Somersault PikeInward Dive Pike                               3m        None    None    2014  2026
+  203B203C     255    214     Back 1 1/2 Somersault PikeBack 1 1/2 Somersault Tuck                       1m        None    None    2014  2026
+  401B403C     254    225     Inward Dive PikeInward 1 1/2 Somersault Tuck                               3m        None    None    2014  2026
+  405C403B     253    213     Inward 2 1/2 Somersault TuckInward 1 1/2 Somersault Pike                   3m        None    None    2014  2026
+  105C104C     246    221     Forward 2 1/2 Somersault TuckForward 2 Somersault Tuck                     1m        None    None    2014  2026
+  303B303C     240    201     Reverse 1 1/2 Somersault PikeReverse 1 1/2 Somersault Tuck                 1m        None    None    2013  2026
+  612B612B     225    187     Armstand Forward 1 Somersault PikeArmstand Forward 1 Somersault Pike       Platform  None    None    2014  2026
+  105C103B     224    203     Forward 2 1/2 Somersault TuckForward 1 1/2 Somersault Pike                 3m        None    None    2013  2026
+  401B403B     217    192     Inward Dive PikeInward 1 1/2 Somersault Pike                               3m        None    None    2014  2026
+
+==============================================================================
+2. Where do non-rulebook numbers appear? (event context)
+==============================================================================
+  context             skills  rulebook  pct_skill
+  ------------------  ------  --------  ---------
+  other / open        67206   1055544   6.0      
+  novice              15240   60432     20.1     
+  senior              2744    74064     3.6      
+  junior (Group A-D)  2408    246107    1.0      
+  NCAA                1049    35893     2.8      
+  world               10      7120      0.1      
+
+==============================================================================
+3. Do skills carry scores? (are they scored competition dives)
+==============================================================================
+  status             n    
+  -----------------  -----
+  score, no dd       51158
+  scored (score+dd)  37499
+
+==============================================================================
+4. Sanity check — armstands (6xxx) that PASS the rulebook test
+==============================================================================
+  prefix  n      distinct  common_description                         
+  ------  -----  --------  -------------------------------------------
+  61      16402  15        Armstand Forward 1 Somersault Pike         
+  62      3843   20        Armstand Back 2 Somersault 1 1/2 Twist Free
+  63      26     3         Armstand Reverse 1/2 Somersault Tuck       
+
+==============================================================================
+5. Distinct-count of skills, to size the catalog table
+==============================================================================
+  distinct_skill_numbers  total_skill_rows
+  ----------------------  ----------------
+  3990                    88657           
+
+Audit complete — no writes performed.
