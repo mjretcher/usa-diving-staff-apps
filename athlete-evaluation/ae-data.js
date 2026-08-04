@@ -123,7 +123,12 @@
     const [phases, sheets] = await Promise.all([
       q(`SELECT meet_id, meet_name, meet_year, competition_family, gender, discipline,
                 event_id, age_group, event_level, round_stage, place, posted_score,
-                is_synchronized
+                is_synchronized,
+                -- Format columns. Without these a 6-dive age-group total and an
+                -- 11-dive international total are indistinguishable, and
+                -- cumulative running totals get plotted as single-round scores.
+                phase_dive_count, score_is_cumulative, phase_dd_sum,
+                phase_score_from_dives, score_analysis_mode
          FROM core.result_phases
          WHERE diver_id = $1 OR diver_id = $2
          ORDER BY meet_year, meet_id, event_id`, ids),
@@ -138,7 +143,16 @@
     ]);
 
     // numeric coercion once (Neon returns strings)
-    phases.rows.forEach((r) => { r.place = num(r.place); r.posted_score = num(r.posted_score); r.meet_year = num(r.meet_year); });
+    phases.rows.forEach((r) => {
+      r.place = num(r.place); r.posted_score = num(r.posted_score); r.meet_year = num(r.meet_year);
+      r.phase_dive_count = num(r.phase_dive_count);
+      r.phase_dd_sum = num(r.phase_dd_sum);
+      r.phase_score_from_dives = num(r.phase_score_from_dives);
+      // Comparability class. Scores are only ever comparable within one of these.
+      r._format = r.score_is_cumulative === true ? 'cumulative'
+        : (r.phase_dive_count ? r.phase_dive_count + '-dive' : 'unverified');
+      r._comparable = r.score_is_cumulative !== true && r.phase_dive_count != null;
+    });
     sheets.rows.forEach((r) => {
       r.dd = num(r.dd); r.score = num(r.score); r.meet_year = num(r.meet_year);
       r.dive_order = num(r.dive_order); r.round_place = num(r.round_place);

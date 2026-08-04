@@ -23,6 +23,7 @@
   const VIEWS = [
     { id: 'passport', section: 'athlete', label: 'Overview',           el: 'view-passport', athlete: true, mod: () => window.AEPassport },
     { id: 'groups',   section: 'athlete', label: 'Dive groups',        el: 'view-groups',   athlete: true, mod: () => window.AEGroups },
+    { id: 'value',    section: 'athlete', label: 'Value & risk',      el: 'view-value',    athlete: true, mod: () => window.AEValue },
     { id: 'listlab',  section: 'athlete', label: 'Dive list',          el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
     { id: 'pressure', section: 'athlete', label: 'Under pressure',     el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
 

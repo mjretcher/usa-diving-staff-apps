@@ -10,8 +10,7 @@
   const st = {
     disc: null, stageMode: 'final', // final | all
     dnaYears: 'all', dnaStage: 'all',
-    benchOn: true,
-  };
+    benchOn: true, format: null, formats: [] };
 
   function fam(f) { return FAM_COLOR[f] || C.COLORS.SKY; }
   const f1 = (v) => v == null ? '—' : Number(v).toFixed(1);
@@ -153,8 +152,23 @@
 
   function renderTraj(b, latestBench) {
     const wrap = document.getElementById('aeTrajWrap');
-    const rows = b.phases.filter((p) => p.discipline === st.disc && p.posted_score != null && !(p.is_synchronized === true) &&
-      (st.stageMode === 'all' || p.round_stage === 'Final'));
+    // Scores are only comparable within one event format. A 6-dive age-group
+    // total, an 11-dive international total and a cumulative running total are
+    // three different measurements; plotting them on one axis against a world
+    // medal line is not a design choice, it is wrong. Default to the format the
+    // athlete competes in most, and let the user switch.
+    const all = b.phases.filter((p) => p.discipline === st.disc && p.posted_score != null
+      && !(p.is_synchronized === true)
+      && (st.stageMode === 'all' || p.round_stage === 'Final'));
+
+    const counts = new Map();
+    all.forEach((p) => counts.set(p._format, (counts.get(p._format) || 0) + 1));
+    st.formats = [...counts.entries()].sort((a, c) => c[1] - a[1]);
+    if (!st.format || !counts.has(st.format)) {
+      const primary = st.formats.find(([f]) => f !== 'cumulative' && f !== 'unverified');
+      st.format = primary ? primary[0] : (st.formats[0] ? st.formats[0][0] : null);
+    }
+    const rows = all.filter((p) => p._format === st.format);
     // spread points within each year for readability
     const byYear = new Map();
     rows.forEach((r) => { if (!byYear.has(r.meet_year)) byYear.set(r.meet_year, []); byYear.get(r.meet_year).push(r); });
@@ -177,7 +191,25 @@
       if (latestBench.final_cut != null) refs.push({ y: latestBench.final_cut, label: 'World final cut', color: C.COLORS.GOLD, dash: true });
       if (latestBench.medal_score != null) refs.push({ y: latestBench.medal_score, label: 'World medal', color: C.COLORS.RED, dash: true });
     }
-    wrap.innerHTML = C.trajectory({ points, line, refs, w: 900, h: 320 });
+    const comparable = st.format && st.format !== 'cumulative' && st.format !== 'unverified';
+    const fmtChips = st.formats.map(([f, n]) =>
+      `<button class="ae-chip${f === st.format ? ' on' : ''}" data-fmt="${esc(f)}">${
+        esc(f === 'cumulative' ? 'Cumulative totals'
+          : f === 'unverified' ? 'Format unverified' : f + ' lists')} (${n})</button>`).join('');
+    wrap.innerHTML =
+      `<div class="ae-ctl"><div class="ae-ctl-row"><span class="ae-ctl-lab">Event format</span>
+        <div class="ae-chips">${fmtChips}</div></div></div>` +
+      (comparable ? '' :
+        `<div class="ae-warn-note">${st.format === 'cumulative'
+          ? 'These are cumulative running totals across rounds, not single-round scores. They cannot be compared with round scores or with a medal line.'
+          : 'These results carry no dive count, so the event format cannot be verified. They are shown for completeness but must not be compared with other formats.'}</div>`) +
+      C.trajectory({ points, line, refs: comparable ? refs : [], w: 900, h: 320 }) +
+      `<p class="ae-soft">Showing ${rows.length} result${rows.length === 1 ? '' : 's'} on the
+        <b>${esc(st.format || 'unknown')}</b> format. Scores from other formats are on the other
+        chips above and are never mixed into one axis.</p>`;
+    wrap.querySelectorAll('[data-fmt]').forEach((el) => el.addEventListener('click', () => {
+      st.format = el.getAttribute('data-fmt'); renderTraj(b, latestBench);
+    }));
   }
 
   function dnaRows(b) {
