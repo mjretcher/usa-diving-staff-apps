@@ -1,5 +1,5 @@
 /* ============================================================
-   ae-passport.js — Athlete Passport: career trajectory + Dive DNA.
+   ae-passport.js — Athlete Passport: career trajectory + Dive-by-dive execution.
    ============================================================ */
 (function () {
   'use strict';
@@ -95,7 +95,7 @@
 
       <div class="ae-card">
         <div class="ae-card-h">
-          <div><h3>Dive DNA — every dive, judged by its history</h3>
+          <div><h3>Dive-by-dive execution — every dive, judged by its history</h3>
           <p class="ae-soft">Per-judge execution = score ÷ (3 × DD), so a Regionals dive and a Worlds dive sit on the same 0–10 scale.
              Box shows the middle half of attempts, thick tick = typical, whisker ends = best and worst. Background bands: red = deficient (&lt;4.5), blue = good (6.5+), green = excellent (8.5+).</p></div>
           <div class="ae-controls">
@@ -197,9 +197,9 @@
   function worldTag(sEl) {
     const ref = sEl.cat ? worldRef(sEl.cat) : null;
     if (!ref || sEl.n < 3) return '';
-    if (sEl.avgExec >= ref.p90) return '<span class="ae-wtag ae-wtag-top">🌍 world top-10% level</span>';
-    if (sEl.avgExec >= ref.p50) return '<span class="ae-wtag ae-wtag-up">🌍 above world median</span>';
-    return '<span class="ae-wtag ae-wtag-dn">🌍 below world median</span>';
+    if (sEl.avgExec >= ref.p90) return '<span class="ae-wtag ae-wtag-top"> world top-10% level</span>';
+    if (sEl.avgExec >= ref.p50) return '<span class="ae-wtag ae-wtag-up"> above world median</span>';
+    return '<span class="ae-wtag ae-wtag-dn"> below world median</span>';
   }
 
   function renderDNA(b) {

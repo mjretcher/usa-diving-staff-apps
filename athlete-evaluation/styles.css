@@ -927,3 +927,13 @@ html,body{overflow-x:hidden;max-width:100vw}
 .ae-notes { margin:12px 0 0; padding-left:18px; color:#5A6079;
   font:400 12.5px/1.6 'Inter',sans-serif; }
 .ae-notes li { margin-bottom:4px; }
+
+/* ---- two-level navigation: four sections, sub-tabs within ---- */
+.ae-secrow { display:flex; gap:4px; border-bottom:1px solid #E3E6EF; margin-bottom:0; }
+.ae-sec { font:600 15px/1 'Barlow Condensed','Inter',sans-serif; letter-spacing:.03em;
+  text-transform:uppercase; padding:12px 20px; background:none; border:none;
+  border-bottom:3px solid transparent; color:#5A6079; cursor:pointer; }
+.ae-sec:hover { color:#171F69; }
+.ae-sec.active { color:#171F69; border-bottom-color:#009AC7; }
+.ae-subrow { display:flex; gap:6px; padding:10px 0 4px; flex-wrap:wrap; }
+.ae-subrow .ae-tab[hidden] { display:none; }

@@ -1,25 +1,41 @@
 /* ============================================================
-   app.js — Athlete Evaluation shell: view tabs, hash routing, and
-   the shared athlete picker. Field Intel (the field-level dashboard
-   in main.js) boots lazily; athlete views render from AE.state.
-   Deep-linkable: #view=passport&a=49903
+   app.js — Athlete Evaluation shell: two-level navigation, hash routing,
+   and the shared athlete picker.
+
+   Four sections — Athlete, Compare, The field, Meets — each holding the
+   screens that belong to it. The field-level dashboard (main.js) boots
+   lazily; athlete screens render from AE.state.
+   Deep-linkable: #view=passport&a=49903  (view ids are unchanged)
    ============================================================ */
 (function () {
   'use strict';
   const { esc, escJsAttr } = window.AE;
 
-  const VIEWS = [
-    { id: 'field',    label: 'Field Intel',      el: 'view-field',    athlete: false },
-    { id: 'la28',     label: 'LA28 Watch',       el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
-    { id: 'passport', label: 'Athlete Passport', el: 'view-passport', athlete: true, mod: () => window.AEPassport },
-    { id: 'listlab',  label: 'List Lab',         el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
-    { id: 'pressure', label: 'Pressure',         el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
-    { id: 'podium',   label: 'Podium Gap',       el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
-    { id: 'groups',   label: 'Dive Groups',      el: 'view-groups',   athlete: true, mod: () => window.AEGroups },
-    { id: 'race',     label: 'Race Replay',      el: 'view-race',     athlete: false, mod: () => window.AERace },
-    { id: 'medaltrack', label: 'Medal Track',    el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
+  // Four sections, named for what they contain rather than as nine separate
+  // branded products. Ids are unchanged so existing #view= links still work.
+  const SECTIONS = [
+    { id: 'athlete', label: 'Athlete' },
+    { id: 'compare', label: 'Compare' },
+    { id: 'fields',  label: 'The field' },
+    { id: 'meets',   label: 'Meets' },
   ];
-  const state = { view: 'field', fieldBooted: false, searching: null };
+
+  const VIEWS = [
+    { id: 'passport', section: 'athlete', label: 'Overview',           el: 'view-passport', athlete: true, mod: () => window.AEPassport },
+    { id: 'groups',   section: 'athlete', label: 'Dive groups',        el: 'view-groups',   athlete: true, mod: () => window.AEGroups },
+    { id: 'listlab',  section: 'athlete', label: 'Dive list',          el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
+    { id: 'pressure', section: 'athlete', label: 'Under pressure',     el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
+
+    { id: 'podium',   section: 'compare', label: 'Gap to the podium',  el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
+    { id: 'medaltrack', section: 'compare', label: 'Junior to senior', el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
+
+    { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: false },
+    { id: 'la28',     section: 'fields',  label: '2028 projection',    el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
+
+    { id: 'race',     section: 'meets',   label: 'Round by round',     el: 'view-race',     athlete: false, mod: () => window.AERace },
+  ];
+  const sectionOf = (id) => (VIEWS.find((v) => v.id === id) || VIEWS[0]).section;
+  const state = { view: 'passport', fieldBooted: false, searching: null };
 
   function parseHash() {
     const h = {}; location.hash.replace(/^#/, '').split('&').forEach((kv) => {
@@ -35,7 +51,12 @@
 
   async function setView(id) {
     state.view = id;
-    document.querySelectorAll('.ae-tab').forEach((t) => t.classList.toggle('active', t.dataset.view === id));
+    const sec = sectionOf(id);
+    document.querySelectorAll('.ae-sec').forEach((t) => t.classList.toggle('active', t.dataset.section === sec));
+    document.querySelectorAll('.ae-tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.view === id);
+      t.hidden = t.dataset.section !== sec;
+    });
     VIEWS.forEach((v) => { const el = document.getElementById(v.el); if (el) el.hidden = v.id !== id; });
     writeHash();
     const v = VIEWS.find((x) => x.id === id);
@@ -123,7 +144,13 @@
   /* ---------- boot ---------- */
   async function boot() {
     const tabs = document.getElementById('aeTabs');
-    tabs.innerHTML = VIEWS.map((v) => `<button class="ae-tab" data-view="${v.id}" onclick="AEApp.go('${v.id}')">${esc(v.label)}</button>`).join('');
+    tabs.innerHTML =
+      `<div class="ae-secrow">${SECTIONS.map((sc) =>
+        `<button class="ae-sec" data-section="${sc.id}" onclick="AEApp.goSection('${sc.id}')">${esc(sc.label)}</button>`
+      ).join('')}</div>` +
+      `<div class="ae-subrow">${VIEWS.map((v) =>
+        `<button class="ae-tab" data-view="${v.id}" data-section="${v.section}" onclick="AEApp.go('${v.id}')">${esc(v.label)}</button>`
+      ).join('')}</div>`;
 
     const inp = document.getElementById('aeSearchInput');
     inp.addEventListener('input', (e) => onSearchInput(e.target.value));
@@ -149,6 +176,10 @@
   }
 
   window.AEApp = {
+    goSection(secId) {
+      const first = VIEWS.find((v) => v.section === secId);
+      if (first) this.go(first.id);
+    },
     go: setView,
     rerender,
     pick: selectAthlete,

@@ -69,7 +69,7 @@
 
       <div class="ae-card ae-fi-sec">
         <div class="ae-card-h"><div><h3>The full board — ${esc(ev.label)}</h3>
-        <p class="ae-soft">Every active US athlete with a qualifying list since 2025, ranked by <b>Podium Index</b> — projected 2028 capability as a percentage of the world medal bar (100 = at the medal line). Tap anyone for their full passport.</p></div></div>
+        <p class="ae-soft">Every active US athlete with a qualifying list since 2025, ranked by <b>% of medal standard</b> — projected 2028 capability as a percentage of the world medal bar (100 = at the medal line). Tap anyone for their full passport.</p></div></div>
         ${boardStory(ranked, medal, cut, semi)}
         <div class="ae-board">
           ${ranked.map((r, i) => {
@@ -137,10 +137,10 @@
 
   function tierOf(r, medal, cut, semi) {
     if (r.proj_world == null || medal == null) return { tag: 'DEVELOPING', cls: 'dev' };
-    if (r.proj_world >= medal) return { tag: 'MEDAL TRACK', cls: 'medal' };
+    if (r.proj_world >= medal) return { tag: 'On medal pace', cls: 'medal' };
     if (cut != null && r.proj_world >= cut) return { tag: 'WORLD FINALIST TRACK', cls: 'final' };
     if (semi != null && r.proj_world >= semi) return { tag: 'WORLD SEMI TRACK', cls: 'semi' };
-    return { tag: 'BUILDING', cls: 'dev' };
+    return { tag: 'Building', cls: 'dev' };
   }
   function podiumIndex(r, medal) {
     if (r.proj_world == null || !medal) return null;
@@ -162,9 +162,9 @@
   }
 
   function card(r, medal, cut, wdd, corridor, jr) {
-    const grow = r.grow_cat && CAT[r.grow_cat] ? `<span class="ae-la-chip">📈 ${esc(CAT[r.grow_cat])} group +${f2(r.grow_delta)} this season</span>` : '';
+    const grow = r.grow_cat && CAT[r.grow_cat] ? `<span class="ae-la-chip">${esc(CAT[r.grow_cat])} group +${f2(r.grow_delta)} this season</span>` : '';
     const dd = wdd && r.last_dd != null && wdd.avg_list_dd - r.last_dd > 0.5
-      ? `<span class="ae-la-chip">🧰 +${f1(wdd.avg_list_dd - r.last_dd)} DD headroom to world avg</span>` : '';
+      ? `<span class="ae-la-chip">+${f1(wdd.avg_list_dd - r.last_dd)} DD headroom to world avg</span>` : '';
     const jrChip = jrPath(r, corridor, jr);
     return `<div class="ae-la-card" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
       <div class="ae-la-card-top">
@@ -190,10 +190,10 @@
     const m = marks.slice().sort((a, b) => order[b.age_group] - order[a.age_group])[0];
     const band = corridor.find((c) => c.tier === 'intl' && c.age_group === m.age_group && c.n_athletes >= 3)
       || corridor.find((c) => c.tier === 'senior' && c.age_group === m.age_group && c.n_athletes >= 3);
-    if (!band) return `<span class="ae-la-chip">🎓 Jr Nats ${esc(m.age_group)}: ${f1(m.best)}</span>`;
+    if (!band) return `<span class="ae-la-chip">Jr Nats ${esc(m.age_group)}: ${f1(m.best)}</span>`;
     const pos = m.best >= band.p75 ? 'top quarter of' : m.best >= band.p50 ? 'above the median of' : m.best >= band.p25 ? 'inside' : 'below';
     const who = band.tier === 'intl' ? 'the international track' : 'the senior-finalist track';
-    return `<span class="ae-la-chip">🎓 Jr path: ${esc(m.age_group)} best ${f1(m.best)} — ${pos} ${who}</span>`;
+    return `<span class="ae-la-chip">Jr path: ${esc(m.age_group)} best ${f1(m.best)} — ${pos} ${who}</span>`;
   }
 
   function fan(r, medal, cut, wdd) {
