@@ -1,0 +1,25 @@
+name: AE era audit
+on: { workflow_dispatch: }
+permissions: { contents: write }
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install psycopg2-binary
+      - shell: bash
+        env: { DATABASE_URL: "${{ secrets.NEON_DATABASE_URL }}" }
+        run: |
+          set -o pipefail
+          mkdir -p db/audits
+          python db/scripts/ae_era_audit.py 2>&1 | tee db/audits/ae_era_audit.txt
+      - if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "gha@users.noreply.github.com"
+          git add db/audits/ae_era_audit.txt
+          git commit -m "AE era audit" || echo none
+          git pull --rebase --autostash -q || true
+          git push
