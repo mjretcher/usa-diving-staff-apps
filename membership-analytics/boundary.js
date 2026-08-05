@@ -64,6 +64,7 @@ const S = {
   panelMode: 'tally',   // tally | advance
   flow: null,           // cached JuniorFlow result for the current map
   routing: null,        // editable qualification pathway (see routing.js)
+  mult: null,           // measured entries-per-athlete (athlete-multiplicity.json)
   routeRes: null,       // its projection
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
@@ -644,6 +645,29 @@ function groupUp(fromL, g, toL){
 }
 
 /* Project the current pathway over the current map. */
+/* Which stage's measured behaviour applies to a level. Custom structures do not
+   carry the rulebook's names, so it is matched by depth: the first stop behaves
+   like Regionals, the championship like Nationals. Named on screen, because
+   applying Nationals behaviour to a Regionals-sized field would be wrong and
+   invisible. */
+function multBasisFor(L){
+  const n = S.levels.length;
+  const yr = S.year === 'y25' ? '2025' : '2026';
+  const stage = (L === 0) ? 'Regionals'
+              : (L === n - 1) ? 'Nationals'
+              : (L === 1) ? 'Zones' : 'EWC';
+  return stage + '|' + yr;
+}
+
+async function ensureMult(){
+  if (S.mult) return S.mult;
+  try {
+    const r = await fetch('athlete-multiplicity.json?v=' + Date.now().toString(36).slice(0,5));
+    S.mult = r.ok ? await r.json() : null;
+  } catch(e){ console.warn('multiplicity', e); S.mult = null; }
+  return S.mult;
+}
+
 function projectPathway(){
   if (!QR() || !S.flow) return null;
   syncRouting();
@@ -746,6 +770,17 @@ function renderPathway(){
     const roundRows = rounds.map(r => {
       const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
       const size = QR().sizeAt(res, L, r.key, CELLS);
+      let people = '';
+      if (S.mult && size > 0.5){
+        const d = QR().diversAt(res, L, r.key, CELLS, S.mult, multBasisFor(L));
+        if (d && d.ok){
+          people = ` &middot; <b>${fmt(Math.round(d.divers))} divers</b>` +
+            (d.reliable ? '' :
+              `<span class="bs-est" title="${esc(d.boards_dropped
+                ? 'A board that is normally contested has no entries here, so the measured mix no longer describes this field.'
+                : 'The boards disagree about how many people this is, which means the mix of events has moved away from what was measured.')}">estimate</span>`);
+        }
+      }
       const routes = outs.map(({rt,ri}) => `
         <div class="bs-route">
           <span class="bs-rt-lbl">places</span>
@@ -759,7 +794,7 @@ function renderPathway(){
         </div>`).join('');
       return `<div class="bs-round">
         <div class="bs-round-h"><b>${esc(RN[r.key]||r.key)}</b>
-          <span class="bs-round-n">${fmt(Math.round(size))} entries &middot; ${Math.round(size/Math.max(1,stops))} per stop</span>
+          <span class="bs-round-n">${fmt(Math.round(size))} entries &middot; ${Math.round(size/Math.max(1,stops))} per stop${people}</span>
           <button class="tab bs-mini" data-rndel="${esc(r.key)}" data-l="${L}" ${rounds.length<=1?'disabled':''}>remove round</button></div>
         ${routes || '<div class="note bs-rt-none">Nobody advances from here.</div>'}
         <button class="tab bs-mini bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ add a route</button>
@@ -789,7 +824,12 @@ function renderPathway(){
     ${levels}
     <p class="note" style="margin-top:12px">Entry counts include the take-up measured from the season we actually
       ran &mdash; the published rules qualify more athletes than turn up. Places are counted, never simulated:
-      nothing here predicts who wins.</p>`;
+      nothing here predicts who wins.</p>
+    <p class="note"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
+      what a session costs and how long it runs, while divers tell you how many bodies need a lane, a bed and an award.
+      Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
+      gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
+      measured, so treat the headcount as indicative rather than a count.</p>`;
   wirePathway();
 }
 
@@ -889,6 +929,7 @@ async function doRefreshFlow(){
   if (!window.JuniorFlow){ S.flowErr = 'Pricing engine not loaded.'; renderAdvResults(); return; }
   try {
     await window.JuniorFlow.ready();
+    await ensureMult();
     S.flow = window.JuniorFlow.compute({
       regions:S.regions, assign:S.assign, levels:S.levels,
       finalName:S.finalName, year:S.year,

@@ -273,9 +273,119 @@ function describe(routing, L, levelName){
 /* The round a level is entered at when nothing says otherwise: its first. */
 function entryRound(level){ return roundsOf(level)[0].key; }
 
+
+/* ==========================================================================
+   ENTRIES vs DIVERS
+   --------------------------------------------------------------------------
+   A field of 40 entries is not 40 people. Athletes commonly contest two or
+   three events, so entries answer "how long is the session and what does it
+   bill", while divers answer "how many bodies need a hotel, a warm-up lane and
+   an award".
+
+   Overlap is bounded and observable: an athlete competes only within their own
+   age group and gender, across at most three individual boards. So rather than
+   dividing by one global average, this uses the measured share of athletes
+   contesting each COMBINATION of boards, per stage, per age group, per gender
+   (athlete-multiplicity.json).
+
+   The estimate carries its own quality check. Each board implies an athlete
+   count independently -- entries on 1M divided by the share of athletes who
+   contest 1M, and so on. If a projection has not disturbed the board mix those
+   three agree; if it has, they diverge, and the spread is reported rather than
+   averaged away. A wide spread means the historical mix no longer describes
+   the field and the headcount should be treated as indicative.
+   ========================================================================== */
+const BOARDS3 = ['1','3','P'];
+
+/* Share of athletes in a cell who contest a given board, from the measured
+   combination mix. */
+function boardShare(combos, board){
+  let p = 0;
+  for (const k in combos) if (k.indexOf(board) >= 0) p += combos[k];
+  return p;
+}
+function meanEvents(combos){
+  let m = 0;
+  for (const k in combos) m += combos[k] * k.length;
+  return m;
+}
+
+/* entriesByCell : {AG1: n, AG3: n, AGP: n, ...}
+   mult          : athlete-multiplicity.json
+   stageKey      : e.g. "Zones|2026" -- which measured behaviour to apply
+   Returns divers per age-group+gender block and in total, with a spread. */
+function estimateDivers(entriesByCell, mult, stageKey){
+  const cells = (mult && mult.cells && mult.cells[stageKey]) || null;
+  if (!cells) return {ok:false, reason:'no measured behaviour for ' + stageKey};
+  const blocks = {};
+  let total = 0, worst = 0;
+  Object.keys(cells).forEach(block => {
+    const m = cells[block];
+    const raw = m.combinations || {};
+    const e = {};
+    let sum = 0;
+    BOARDS3.forEach(b => { e[b] = entriesByCell[block + b] || 0; sum += e[b]; });
+    if (sum <= 0) return;
+
+    /* Re-base the historical mix onto the boards this projection actually
+       runs. Drop platform and the old mix still expects platform entries, so
+       dividing by its average understates the headcount -- and the boards that
+       remain agree with each other, so nothing looks wrong. Athletes who
+       contested only the dropped boards leave the population entirely. */
+    const present = BOARDS3.filter(b => e[b] > 0);
+    const combos = {};
+    let kept = 0;
+    for (const k in raw){
+      const nk = k.split('').filter(ch => present.indexOf(ch) >= 0).join('');
+      if (!nk) continue;
+      combos[nk] = (combos[nk] || 0) + raw[k];
+      kept += raw[k];
+    }
+    if (kept > 0) for (const k in combos) combos[k] /= kept;
+    const droppedBoards = BOARDS3.filter(b => e[b] === 0 && boardShare(raw, b) > 0.05);
+
+    // One estimate per board, independently.
+    const per = [];
+    BOARDS3.forEach(b => {
+      const share = boardShare(combos, b);
+      if (share > 0.02 && e[b] > 0) per.push({board:b, athletes: e[b] / share});
+    });
+    const mean = meanEvents(combos) || m.entries_per_athlete || 2;
+    const pooled = sum / mean;
+    const lo = per.length ? Math.min(...per.map(p => p.athletes)) : pooled;
+    const hi = per.length ? Math.max(...per.map(p => p.athletes)) : pooled;
+    const spread = pooled > 0 ? (hi - lo) / pooled : 0;
+    if (spread > worst) worst = spread;
+    blocks[block] = {entries: sum, divers: pooled, lo, hi, spread,
+                     mean_events: mean, measured_mean: m.entries_per_athlete,
+                     dropped_boards: droppedBoards,
+                     population_kept: kept};
+    total += pooled;
+  });
+  const dropped = Object.keys(blocks).some(b => (blocks[b].dropped_boards||[]).length);
+  return {ok:true, blocks, divers: total, spread: worst, basis: stageKey,
+          boards_dropped: dropped,
+          // Above roughly a fifth, the boards disagree enough that the mix has
+          // moved and this is an indication rather than a count.
+          // Above roughly a fifth the boards disagree enough that the mix has
+          // moved. A dropped board is a mix change too, even when the boards
+          // that remain agree perfectly with each other.
+          reliable: worst <= 0.20 && !dropped};
+}
+
+/* Divers at one level and round of a projection. */
+function diversAt(res, level, round, cells, mult, stageKey){
+  const lvl = res.field[level];
+  if (!lvl || !lvl[round]) return {ok:false, reason:'no such round'};
+  const byCell = {};
+  lvl[round].forEach(g => cells.forEach(c => { byCell[c] = (byCell[c] || 0) + (g[c] || 0); }));
+  return estimateDivers(byCell, mult, stageKey);
+}
+
 window.QualRouting = {
   ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound,
   defaultRouting, validate, project, sizeAt, describe,
+  estimateDivers, diversAt, boardShare, meanEvents,
 };
 
 })();
