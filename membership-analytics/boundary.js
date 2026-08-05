@@ -900,6 +900,104 @@ function renderPathwayBreakdown(res){
 }
 
 
+
+/* ---------- the meet manifest ----------
+   A schedule is built one meet at a time. This lists every stop at every level
+   with the events it runs and how big each field is, because "E/W/C prelims are
+   1,316" is not something anyone can timetable -- East, Central and West each
+   run their own competition and they are not the same size.
+
+   Two scheduling rules shape the summary:
+     prelims and finals of an event are the same day, so an event is one day's
+     commitment rather than two;
+     an age group and gender does not contest more than one event in a day, so
+     the days a meet needs is at least the number of events its busiest
+     age-and-gender block runs.
+   ------------------------------------------------------------------------- */
+function meetManifest(res){
+  if (!res) return [];
+  const out = [];
+  S.routing.forEach((lvl, L) => {
+    const TG = tierGroupsAt(L);
+    const rounds = QR().roundsOf(lvl);
+    TG.groups.forEach((g, gi) => {
+      const events = [];
+      let entries = 0;
+      const blocks = {};
+      CELLS.forEach(cell => {
+        // The field at the first round is the meet's entry list for that event;
+        // later rounds are the same people again.
+        const first = rounds[0].key;
+        const f = res.field[L] && res.field[L][first];
+        const n = f && f[gi] ? (f[gi][cell] || 0) : 0;
+        if (n < 0.5) return;
+        const byRound = {};
+        rounds.forEach(r => {
+          const ff = res.field[L] && res.field[L][r.key];
+          byRound[r.key] = ff && ff[gi] ? Math.round(ff[gi][cell] || 0) : 0;
+        });
+        events.push({cell, n: Math.round(n), byRound});
+        entries += n;
+        const blk = cell.slice(0,2);
+        blocks[blk] = (blocks[blk] || 0) + 1;
+      });
+      const minDays = Object.keys(blocks).length ? Math.max(...Object.values(blocks)) : 0;
+      out.push({level:L, levelName: tierName(L), gi,
+                name: g.name || ('Area ' + (gi+1)),
+                rounds: rounds.map(r => r.key),
+                events, entries: Math.round(entries),
+                biggest: events.length ? Math.max(...events.map(e => e.n)) : 0,
+                minDays, blocks});
+    });
+  });
+  return out;
+}
+
+function renderMeetManifest(res){
+  const meets = meetManifest(res);
+  if (!meets.length) return '';
+  const rows = meets.map(m => `<tr>
+      <td><b>${esc(m.name)}</b><span class="bs-mf-l">${esc(m.levelName)}</span></td>
+      <td class="num">${fmt(m.events.length)}</td>
+      <td class="num">${fmt(m.entries)}</td>
+      <td class="num">${fmt(m.biggest)}</td>
+      <td class="num">${m.rounds.map(r => QR().ROUND_NAME[r]||r).join(' + ')}</td>
+      <td class="num"><b>${fmt(m.minDays)}</b></td>
+    </tr>`).join('');
+  return `<div class="bs-bd">
+    <div class="bs-bd-h"><b>Every meet</b>
+      <button class="tab bs-mini" id="bsMfCsv">Export for scheduling</button>
+      <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
+        <b>Days</b> is the least a meet can run in, given an age group and gender does not contest
+        more than one event in a day; prelims and finals of an event share a day, so an event is
+        one day's commitment.</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-mf-tbl">
+      <thead><tr><th>Meet</th><th class="num">Events</th><th class="num">Entries</th>
+        <th class="num">Biggest field</th><th class="num">Rounds</th><th class="num">Days</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+function exportManifestCsv(){
+  const res = S.routeRes || projectPathway();
+  const meets = meetManifest(res);
+  if (!meets.length){ msg('Nothing to export yet.'); return; }
+  const q = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const rounds = new Set();
+  meets.forEach(m => m.rounds.forEach(r => rounds.add(r)));
+  const rl = QR().ROUND_ORDER.filter(r => rounds.has(r));
+  const head = ['stage','meet','age_group','gender','event','entries']
+    .concat(rl.map(r => 'in_' + r)).concat(['min_days_for_this_meet']);
+  const lines = [head.join(',')];
+  meets.forEach(m => m.events.forEach(e => {
+    lines.push([q(m.levelName), q(m.name), q(AGE_LBL[e.cell[0]]), q(GEN_LBL[e.cell[1]]),
+                q(DIS_LBL[e.cell[2]]), e.n]
+      .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
+      .concat([m.minDays]).join(','));
+  }));
+  download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
+}
+
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
@@ -997,6 +1095,7 @@ function renderPathway(){
     </div>
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
+    ${renderMeetManifest(res)}
     ${renderPathwayBreakdown(res)}
     ${(S.takeUp && S.takeUp.usable)
       ? `<p class="note" style="margin-top:12px">The <b>arrive</b> figure on each level is how big that field
@@ -1075,6 +1174,8 @@ function wirePathway(){
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
   }));
+  const mc = document.getElementById('bsMfCsv');
+  if (mc) mc.addEventListener('click', exportManifestCsv);
   const fc = document.getElementById('bsPathFocus');
   if (fc) fc.addEventListener('change', () => { S.bdCell = fc.value; renderPathway(); });
   const rs = document.getElementById('bsPathReset');
