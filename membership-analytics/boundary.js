@@ -2437,7 +2437,23 @@ window.BoundaryAPI = {
   clubs:      () => (S.geo ? S.geo.clubs : []),
   counties:   () => (S.geo ? S.geo.counties : []),
   year:       () => S.year,
-  yearLabel:  () => (S.year === 'y25' ? '2025 (complete year)' : '2026 (year to date)'),
+  yearLabel:  (y) => ((y || S.year) === 'y25' ? '2025 (complete year)' : '2026 (year to date)'),
+  /* Which membership years the boundary data actually covers. The geocoded
+     county statistics only carry y25 and y26, so a report asking for 2024 can
+     be told plainly rather than silently shown the wrong year. */
+  availableYears: () => ['y25', 'y26'],
+  /* Run something with the map temporarily set to another year, then put it
+     back. Every boundary computation reads S.year through shared helpers, so
+     this is how a report renders more than one year without nine section
+     builders each having to thread a year parameter through.
+     CALLERS MUST NOT RUN THESE CONCURRENTLY: the year is global state for the
+     duration, so two overlapping calls would read each other's year. The
+     report runner serialises boundary sections for exactly this reason. */
+  withYear: async (y, fn) => {
+    const prev = S.year;
+    try { S.year = y; return await fn(); }
+    finally { S.year = prev; }
+  },
   regions:    () => S.regions,
   assign:     () => S.assign,
   levels:     () => S.levels,

@@ -519,6 +519,19 @@ function pct100(a,b){ return b>0 ? 100*a/b : 0; }
    ===================================================================== */
 
 function B(){ return window.BoundaryAPI; }
+/* Map the report's membership years onto the years the boundary data holds.
+   Previously every boundary section rendered whichever single year Boundary
+   Studio happened to be sitting on, ignoring the report's selection entirely --
+   so asking for 2025 and 2026 produced one year twice over. */
+function boundaryYears(o){
+  const avail = (B().availableYears && B().availableYears()) || ['y25','y26'];
+  const want = (o && o.years && o.years.length ? o.years : [2026])
+    .map(y => 'y' + String(y).slice(-2))
+    .filter(y => avail.indexOf(y) >= 0);
+  const missing = (o && o.years ? o.years : [])
+    .filter(y => avail.indexOf('y' + String(y).slice(-2)) < 0);
+  return {years: want.length ? want : [B().year()], missing};
+}
 function boundaryReady(){ return !!(B() && B().ready()); }
 function notReady(title){
   return `<section class="mr-section"><h2 class="mr-h2">${esc(title)}</h2>
@@ -1634,15 +1647,57 @@ window._mrGenerate = async function(){
   document.body.appendChild(out);
 
   let done = 0;
-  const results = await Promise.all(ids.map(id =>
-    Promise.resolve()
-      .then(() => SECTIONS[id].build(opts))
-      .catch(e => `<section class="mr-section"><h2 class="mr-h2">${esc(SECTIONS[id].label)}</h2>
+  const total = ids.length;
+  const tick = () => { done++; const el = document.getElementById('mr-prog');
+                       if (el) el.textContent = done + ' / ' + total; };
+  const fail = (id, e) => `<section class="mr-section"><h2 class="mr-h2">${esc(SECTIONS[id].label)}</h2>
         <p class="mr-p mr-warn">This section could not be built: ${esc(String(e && e.message || e))}</p>
-        </section>`)
-      .then(html => { done++; const el = document.getElementById('mr-prog');
-                      if (el) el.textContent = done + ' / ' + ids.length; return html; })
-  ));
+        </section>`;
+
+  const isBoundary = id => !!BOUNDARY_SECTIONS[id];
+  const plainIds = ids.filter(id => !isBoundary(id));
+  const boundIds = ids.filter(isBoundary);
+
+  // Non-boundary sections are independent and can run together.
+  const plain = await Promise.all(plainIds.map(id =>
+    Promise.resolve().then(() => SECTIONS[id].build(opts))
+      .catch(e => fail(id, e)).then(h => { tick(); return h; })));
+
+  // Boundary sections read the live map through global state, so they run one
+  // at a time -- and once per requested year, which is what was missing.
+  const bound = [];
+  if (boundIds.length){
+    const by = boundaryReady() ? boundaryYears(opts) : {years:[], missing:[]};
+    for (const id of boundIds){
+      let html = '';
+      try {
+        if (!boundaryReady()){
+          html = await SECTIONS[id].build(opts);      // renders its own "open the tab" notice
+        } else if (by.years.length <= 1){
+          html = await SECTIONS[id].build(opts);
+        } else {
+          const parts = [];
+          for (const y of by.years){
+            const one = await B().withYear(y, () => SECTIONS[id].build(opts));
+            parts.push(`<div class="mr-yearband">Membership year — ${esc(B().yearLabel(y))}</div>` + one);
+          }
+          if (by.missing.length){
+            parts.push(`<p class="mr-note">No boundary data exists for ${esc(by.missing.join(', '))}: the
+              geocoded county statistics only cover 2025 and 2026, so those years are omitted here rather
+              than estimated.</p>`);
+          }
+          html = parts.join('');
+        }
+      } catch(e){ html = fail(id, e); }
+      tick();
+      bound.push(html);
+    }
+  }
+
+  const order = {};
+  plainIds.forEach((id,i) => order[id] = plain[i]);
+  boundIds.forEach((id,i) => order[id] = bound[i]);
+  const results = ids.map(id => order[id]);
 
   const body = document.getElementById('mr-doc-body');
   if (body){
@@ -1805,6 +1860,9 @@ const STYLES = `
 #mr-output .mr-section{margin:26px 0;page-break-inside:auto}
 #mr-output .mr-h2{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#171F69;
   border-bottom:2px solid #171F69;padding-bottom:4px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
+.mr-yearband{background:var(--navy);color:#fff;font-family:var(--display);font-size:17px;letter-spacing:.05em;
+  text-transform:uppercase;padding:7px 14px;border-radius:9px;margin:22px 0 10px;page-break-after:avoid}
+
 #mr-output .mr-h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14.5px;color:#171F69;
   margin:18px 0 6px;text-transform:uppercase;letter-spacing:.03em}
 #mr-output .mr-p{font-size:12px;color:#2d3450;margin:0 0 9px;line-height:1.55}
