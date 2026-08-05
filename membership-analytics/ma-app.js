@@ -629,6 +629,13 @@ function wireTabs(){
     if (v==='types') renderTypes();
     if (v==='clubs' && window.renderClubs) window.renderClubs();
     if (v==='pricing' && window.renderPricing) window.renderPricing();
+    if (v==='overview' && window.renderMemberImport){
+      const host = document.getElementById('viewOverview');
+      if (host && !document.getElementById('miCard')){
+        const d = document.createElement('div'); d.id = 'miCard'; host.appendChild(d);
+      }
+      window.renderMemberImport();
+    }
   }));
 }
 

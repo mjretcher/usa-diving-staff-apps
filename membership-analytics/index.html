@@ -371,6 +371,31 @@ tr:hover td{background:#f7fafd}
 .ps-sec.on span{color:#cfe3ff}
 .ps-sec:not(.on):hover{background:#f4f8fd}
 @media(max-width:760px){.ps-sec{min-width:100%}}
+.mi-drop{border:2px dashed #cdd6e4;border-radius:14px;padding:22px;text-align:center;background:#f8fbff;margin-bottom:14px}
+.mi-drop.on{border-color:var(--pool);background:#eff9fd}
+.mi-drop span{display:block;margin-top:9px;font-size:12.5px;color:var(--muted)}
+.mi-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.mi-stat{flex:1;min-width:130px;border:1px solid var(--line);border-left:4px solid var(--navy);border-radius:11px;padding:9px 12px}
+.mi-stat b{display:block;font-family:var(--display);font-size:22px;color:var(--navy);line-height:1.1;word-break:break-all}
+.mi-stat span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+.mi-inline{display:flex;gap:13px;align-items:center;flex-wrap:wrap;margin:12px 0;padding:11px 13px;background:#f7fafd;border:1px solid var(--line);border-radius:11px}
+.mi-inline label{font-size:12.5px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:7px}
+.mi-inline .note{flex:1;min-width:230px}
+.mi-in{width:96px;border:1px solid #cdd6e4;border-radius:8px;padding:6px 9px;font-family:var(--mono);font-size:12.5px}
+.mi-det{margin:12px 0;border:1px solid var(--line);border-radius:11px;padding:10px 13px;background:#fff}
+.mi-det summary{cursor:pointer;font-weight:800;font-size:12.5px;color:var(--navy)}
+.mi-tbl{width:100%;border-collapse:collapse;margin-top:9px}
+.mi-tbl th{background:#f8fafc;color:var(--navy);font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;text-align:left}
+.mi-tbl td{border-bottom:1px solid #eef2f7;padding:5px 8px;font-size:12px}
+.mi-tbl td.num,.mi-tbl th.num{text-align:right;font-family:var(--mono)}
+.mi-tbl tr.mi-tot td{background:#f4f8fd;font-weight:800;border-top:2px solid var(--navy)}
+.mi-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.mi-btn{border:1px solid #cdd6e4;background:#fff;color:var(--navy);border-radius:9px;padding:9px 16px;font-weight:700;font-size:12.5px}
+.mi-btn.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+.mi-btn[disabled]{opacity:.5}
+.mi-ok{background:#f0fdf4;border:1px solid #bbf7d0;border-left:5px solid var(--green);border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.5;margin-top:12px;color:#14532d}
+.mi-err{background:#fffbeb;border:1px solid #fde68a;border-left:5px solid #b45309;border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.55;margin-top:12px;color:#5c3a05}
+.mi-code{display:inline-block;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-family:var(--mono);font-size:11.5px;color:var(--navy)}
 @media(max-width:760px){.ps-bar-g,.ps-bar-g.grow{width:100%}.ps-k-v{font-size:28px}}
 </style>
 </head>
@@ -425,5 +450,6 @@ tr:hover td{background:#f7fafd}
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202608050100"></script>
 <script src="pricing.js?v=202608043800"></script>
+<script src="ma-import.js?v=202608050400"></script>
 </body>
 </html>
