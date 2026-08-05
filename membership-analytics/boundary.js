@@ -72,6 +72,10 @@ const S = {
   seedPool: null,       // which observed field feeds the first stop
   fees: null,           // entry fee per level, for the per-meet financials
   hostShare: 0.25,      // share of net entry income going to the host
+  hostMode: 'pct',      // pct | flat | per_entry
+  hostFlat: 3000,       // flat fee per meet
+  hostPer: 15,          // dollars per entry
+  hostMin: 0,           // guaranteed minimum, whichever model is used
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
   flowErr: null,
@@ -1121,13 +1125,28 @@ function feeFor(L){
 }
 const LEVY = 4.90;
 
+/* How a host is paid. A percentage is only one of the answers, and on an
+   unbalanced tier it is the worst of them: at 44x apart it pays one host
+   forty-four times another for running the same meet. A flat fee inverts the
+   problem -- fine for the small meet, trivial for the large one. Per-entry sits
+   between. A guaranteed minimum on top of any of them is what actually makes a
+   small meet biddable, so it is a separate lever rather than a fourth mode. */
 function meetMoney(m){
   const fee = feeFor(m.level);
   const gross = m.entries * fee;
   const levy = m.entries * LEVY;
   const net = gross - levy;
-  const host = net * (S.hostShare || 0);
-  return {fee, gross, levy, net, host, usad: net - host};
+  const mode = S.hostMode || 'pct';
+  let host = mode === 'flat'      ? (+S.hostFlat || 0)
+           : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
+           :                        net * (S.hostShare || 0);
+  const floored = (+S.hostMin || 0) > host;
+  if (floored) host = +S.hostMin;
+  // A host cut cannot exceed what the meet actually took.
+  const capped = host > net;
+  if (capped) host = net;
+  return {fee, gross, levy, net, host, usad: net - host, floored, capped,
+          pct: net > 0 ? host/net : 0};
 }
 
 /* Largest against smallest within a tier: the number a host cut lives or dies
@@ -1191,18 +1210,38 @@ function renderMeetManifest(res){
   const meets = meetManifest(res);
   if (!meets.length) return '';
   const spread = tierSpread(meets);
+  const COLS = 10;
+  let lastLevel = null;
   const rows = meets.map(m => {
     const $ = meetMoney(m);
-    return `<tr>
-      <td><b>${esc(m.name)}</b><span class="bs-mf-l">${esc(m.levelName)}</span></td>
+    // A tier header, because "Group 1" exists at more than one level and a flat
+    // list makes you read a grey subtitle to tell two meets apart.
+    let head = '';
+    if (m.level !== lastLevel){
+      lastLevel = m.level;
+      const kin = meets.filter(x => x.level === m.level);
+      const tot = kin.reduce((s2,x) => s2 + x.entries, 0);
+      const money = kin.reduce((s2,x) => s2 + meetMoney(x).net, 0);
+      head = `<tr class="bs-mf-tier"><td colspan="${COLS}">
+        <b>${esc(m.levelName)}</b> &middot; ${fmt(kin.length)} ${kin.length===1?'meet':'meets'}
+        &middot; ${fmt(Math.round(tot))} entries &middot; ${usd(money)} net</td></tr>`;
+    }
+    return head + `<tr>
+      <td><b>${esc(m.name)}</b></td>
       <td class="num">${fmt(m.events.length)}</td>
       <td class="num"><b>${fmt(m.entries)}</b></td>
-      <td class="num">${m.spots ? fmt(m.spots) + (m.spots > m.entries*1.4
-          ? `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>` : '') : '<span class="bs-bd-0">open</span>'}</td>
+      <td class="num">${m.spots
+          ? fmt(m.spots) + `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>`
+          : '<span class="bs-bd-0">no cap</span>'}</td>
       <td class="num">${fmt(m.biggest)}</td>
       <td class="num mono">${usd($.gross)}</td>
       <td class="num mono bs-mf-levy">&minus;${usd($.levy)}</td>
-      <td class="num mono"><b>${usd($.host)}</b></td>
+      <td class="num mono"><b>${usd($.host)}</b>${
+        // The cap is reported first: when a meet cannot pay what the model asks,
+        // that it hit a floor is beside the point.
+        $.capped  ? '<span class="bs-bd-rng bs-mf-cap">all of net</span>'
+        : $.floored ? '<span class="bs-bd-rng">at the minimum</span>'
+        : `<span class="bs-bd-rng">${Math.round($.pct*100)}% of net</span>`}</td>
       <td class="num mono">${usd($.usad)}</td>
       <td class="num"><b>${fmt(m.minDays)}</b></td>
     </tr>`;
@@ -1220,8 +1259,20 @@ function renderMeetManifest(res){
   return `<div class="bs-bd">
     <div class="bs-bd-h"><b>Every meet</b>
       <label class="bs-arr">host cut
-        <input class="bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1"
-          value="${Math.round((S.hostShare||0)*100)}">% of net</label>
+        <select class="sel bs-mini" id="bsHostMode">
+          <option value="pct"       ${(S.hostMode||'pct')==='pct'?'selected':''}>% of net</option>
+          <option value="flat"      ${S.hostMode==='flat'?'selected':''}>flat per meet</option>
+          <option value="per_entry" ${S.hostMode==='per_entry'?'selected':''}>per entry</option>
+        </select>
+        ${(S.hostMode||'pct')==='pct'
+          ? `<input class="bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1"
+               value="${Math.round((S.hostShare||0)*100)}">%`
+          : S.hostMode==='flat'
+          ? `$<input class="bs-rt-in" id="bsHostFlat" type="number" min="0" step="100" value="${+S.hostFlat||0}">`
+          : `$<input class="bs-rt-in" id="bsHostPer" type="number" min="0" step="1" value="${+S.hostPer||0}">/entry`}
+      </label>
+      <label class="bs-arr">minimum $<input class="bs-rt-in" id="bsHostMin" type="number" min="0" step="100"
+        value="${+S.hostMin||0}"></label>
       <button class="tab bs-mini" id="bsMfCsv">Export</button>
       <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
         <b>Places</b> is what the bands entitle this meet to take; where it far exceeds the entries, the
@@ -1251,7 +1302,8 @@ function exportManifestCsv(){
   const head = ['stage','meet','age_group','gender','event','entries']
     .concat(rl.map(r => 'in_' + r))
     .concat(['min_days_for_this_meet','meet_total_entries','entry_fee',
-             'meet_gross','meet_divemeets_levy','meet_host_cut','meet_usad_keeps']);
+             'meet_gross','meet_divemeets_levy','meet_host_cut','host_cut_pct_of_net',
+             'meet_usad_keeps']);
   const lines = [head.join(',')];
   meets.forEach(m => {
     const $ = meetMoney(m);
@@ -1260,7 +1312,7 @@ function exportManifestCsv(){
                   q(DIS_LBL[e.cell[2]]), e.n]
         .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
         .concat([m.minDays, m.entries, $.fee, Math.round($.gross), Math.round($.levy),
-                 Math.round($.host), Math.round($.usad)]).join(','));
+                 Math.round($.host), Math.round($.pct*100), Math.round($.usad)]).join(','));
     });
   });
   download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
@@ -1476,10 +1528,13 @@ function wirePathway(){
     S.dirty = true; renderPathway();
   }));
 
-  const hs = document.getElementById('bsHostShare');
-  if (hs) hs.addEventListener('change', () => {
-    S.hostShare = Math.max(0, Math.min(100, +hs.value||0))/100; S.dirty = true; renderPathway();
-  });
+  const bind$ = (id, fn) => { const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { fn(el); S.dirty = true; renderPathway(); }); };
+  bind$('bsHostMode',  el => { S.hostMode = el.value; });
+  bind$('bsHostShare', el => { S.hostShare = Math.max(0, Math.min(100, +el.value||0))/100; });
+  bind$('bsHostFlat',  el => { S.hostFlat = Math.max(0, +el.value||0); });
+  bind$('bsHostPer',   el => { S.hostPer  = Math.max(0, +el.value||0); });
+  bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
   const fc = document.getElementById('bsPathFocus');
