@@ -5,12 +5,16 @@ name: Schema drift check
 # the table exists -- so the file and the database drift apart with no error
 # and the migration still reports success.
 
+# Runs AFTER the migration, not alongside it. Both used to trigger on
+# db/schema.sql, so they raced: the check would see a newly declared table in
+# the file before the migration had created it and report drift that was about
+# to fix itself. A check that cries wolf on every new table is a check people
+# learn to ignore.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'db/schema.sql'
-      - 'db/scripts/check_schema_drift.py'
+  workflow_run:
+    workflows: ["Neon DB migration"]
+    types: [completed]
 
 permissions:
   contents: write
