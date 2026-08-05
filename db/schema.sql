@@ -934,6 +934,22 @@ CREATE TABLE IF NOT EXISTS divemeets.event_class (
 CREATE INDEX IF NOT EXISTS idx_evclass_sanction ON divemeets.event_class(sanction, meet_year);
 CREATE INDEX IF NOT EXISTS idx_evclass_cell ON divemeets.event_class(age_group, gender, discipline);
 
+-- Saved qualification pathways, held apart from the maps they were drawn on.
+-- A pathway (rounds, place bands, which events each stage contests, arrival
+-- rates) is a rules question; a map is a geography question. Keeping them
+-- separate means one pathway can be tried against many maps without being
+-- rebuilt each time. Routes address levels by index, so loading one into a
+-- structure with a different number of tiers adapts it -- and the adaptation is
+-- reported rather than applied silently.
+CREATE TABLE IF NOT EXISTS membership.pathways (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    notes       TEXT,
+    levels      SMALLINT,
+    data        JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- Boundary Studio scenarios (Membership Analytics)
 CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     id TEXT PRIMARY KEY,

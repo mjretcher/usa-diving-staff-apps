@@ -78,6 +78,9 @@ const S = {
   hostMin: 0,           // guaranteed minimum, whichever model is used
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
+  pathList: null,       // saved pathways
+  pathName: '',         // the one currently loaded
+  pathNotes: null,      // what adapting it changed
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -1318,10 +1321,147 @@ function exportManifestCsv(){
   download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
 }
 
+
+/* ---------- the pathway library ----------
+   A pathway and a map are separate questions. The pathway is rules -- rounds,
+   place bands, which events a stage holds, arrival rates. The map is geography.
+   Welding them together means rebuilding the same rules every time a boundary
+   is redrawn, which is most of the work and all of the transcription errors.
+
+   Routes address levels by index, so a pathway built on three tiers has to
+   adapt to four. The adaptation is deliberate rather than silent: the old
+   championship maps onto the new championship, the tiers below match up from
+   the bottom, and anything that cannot be placed is dropped and named. */
+function pathwayPayload(){
+  syncRouting();
+  return {
+    v: 1,
+    levels: S.routing.length,
+    routing: JSON.parse(JSON.stringify(S.routing)),
+    arrival: S.arrival ? JSON.parse(JSON.stringify(S.arrival)) : null,
+    seedPool: S.seedPool || null,
+    levelNames: S.levels.map(l => l.name),
+  };
+}
+
+/* Fit a saved pathway onto the structure now on screen.
+
+   Tiers are matched from the bottom and the championship is matched to the
+   championship, because those are the two ends anyone actually means. What
+   happens between them depends on which structure is deeper:
+
+     more tiers here  -- the saved intermediates fill from the bottom and the
+                         extra tiers are left empty for you to fill, rather than
+                         being handed a copy of the championship's rules;
+     fewer tiers here -- routes aimed at a tier that no longer exists are sent
+                         up to the next one that does, so athletes still move
+                         forward instead of the entry stop being left with no
+                         way out.
+
+   Every one of those decisions is named on the panel. Adapting a pathway is a
+   change to the rules, and a change to the rules should not be silent. */
+function adaptPathway(p){
+  const src = p.routing || [];
+  const N = src.length, M = S.levels.length;
+  const notes = [];
+  const seen = {};
+
+  // Where does saved tier L end up here?
+  const mapLevel = (L) => {
+    if (L === N - 1) return M - 1;            // championship to championship
+    if (L <= M - 2) return L;                 // intermediates from the bottom
+    return M - 1;                             // ran out of tiers: send it up
+  };
+
+  const out = [];
+  for (let L = 0; L < M; L++){
+    // Which saved tier supplies this one.
+    const from = (L === M - 1) ? src[N - 1] : (L <= N - 2 ? src[L] : null);
+    if (!from){
+      out.push({rounds:[{key:'final'}], routes:[]});
+      notes.push(`${tierName(L)} has no counterpart in the saved pathway and is left empty for you to fill.`);
+      continue;
+    }
+    const lvl = {rounds: JSON.parse(JSON.stringify(from.rounds || [{key:'final'}])),
+                 notOffered: (from.notOffered || []).slice(), routes: []};
+    (from.routes || []).forEach(rt => {
+      const copy = {from: rt.from, lo: rt.lo, hi: rt.hi};
+      if (rt.to){
+        const to = mapLevel(rt.to.level);
+        if (rt.to.level !== to && rt.to.level !== N - 1 && !seen['r'+L]){
+          seen['r'+L] = 1;
+          notes.push(`Routes out of ${tierName(L)} aimed at a tier that does not exist here, so they now go to ${tierName(to)}.`);
+        }
+        copy.to = {level: to, round: rt.to.round};
+      }
+      lvl.routes.push(copy);
+    });
+    out.push(lvl);
+  }
+  if (N !== M) notes.push(`Saved for ${N} tiers, loaded onto ${M}.`);
+  return {routing: out, notes};
+}
+
+async function listPathways(){
+  try {
+    const r = await NEON.query(
+      `SELECT id, name, levels, notes, to_char(updated_at,'Mon DD') u
+       FROM membership.pathways ORDER BY updated_at DESC LIMIT 60`);
+    return r.rows || [];
+  } catch(e){ console.warn('pathways', e); return []; }
+}
+
+async function savePathway(){
+  const name = (prompt('Name this pathway', S.pathName || (S.scenarioName || 'Pathway')) || '').trim();
+  if (!name) return;
+  const id = 'pw-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
+  try {
+    await NEON.query(
+      `INSERT INTO membership.pathways (id,name,levels,data,updated_at)
+       VALUES ($1,$2,$3,$4::jsonb, now())`,
+      [id, name, S.routing.length, JSON.stringify(pathwayPayload())]);
+    S.pathName = name; S.pathList = await listPathways();
+    msg(`Saved "${name}" — it can be loaded onto any map.`);
+    renderPathway();
+  } catch(e){ msg('Could not save: ' + (e.message || e)); }
+}
+
+async function loadPathway(id){
+  if (!id) return;
+  try {
+    const r = await NEON.query(`SELECT name, data FROM membership.pathways WHERE id=$1`, [id]);
+    if (!r.rows || !r.rows.length){ msg('That pathway is gone.'); return; }
+    const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    pushUndo();
+    const fit = adaptPathway(p);
+    S.routing = fit.routing;
+    if (p.arrival) S.arrival = p.arrival;
+    if (p.seedPool) S.seedPool = p.seedPool;
+    S.pathName = r.rows[0].name;
+    S.pathNotes = fit.notes;
+    S.dirty = true;
+    syncRouting(); repaintAll(); renderPathway();
+    msg(`Loaded "${r.rows[0].name}"` + (fit.notes.length ? ` — ${fit.notes.length} adjustment(s), see the panel.` : ''));
+  } catch(e){ msg('Could not load: ' + (e.message || e)); }
+}
+
+async function deletePathway(){
+  const id = (document.getElementById('bsPathLoad') || {}).value;
+  if (!id) { msg('Choose a saved pathway first.'); return; }
+  const nm = (S.pathList || []).find(p => p.id === id);
+  if (!confirm(`Delete "${nm ? nm.name : id}"? Maps that used it keep their own copy.`)) return;
+  try {
+    await NEON.query(`DELETE FROM membership.pathways WHERE id=$1`, [id]);
+    S.pathList = await listPathways(); renderPathway();
+    msg('Deleted.');
+  } catch(e){ msg('Could not delete: ' + (e.message || e)); }
+}
+
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
   body.innerHTML = `<div id="bsPathWrap"><div class="note">Working out the pathway&hellip;</div></div>`;
+  if (!S.pathList) listPathways().then(l => { S.pathList = l; renderPathway(); });
   refreshFlow();
 }
 
@@ -1419,7 +1559,19 @@ function renderPathway(){
             }).join('')).join('') + '</optgroup>').join('')}
         </select></label>
       <button class="tab bs-mini" id="bsPathReset">Load current rules</button>
+      <span class="bs-pwlib">
+        <select class="sel bs-mini" id="bsPathLoad">
+          <option value="">Saved pathways&hellip;</option>
+          ${(S.pathList||[]).map(p => `<option value="${esc(p.id)}" ${S.pathName===p.name?'selected':''}>
+            ${esc(p.name)} &middot; ${p.levels} tiers &middot; ${esc(p.u||'')}</option>`).join('')}
+        </select>
+        <button class="tab bs-mini" id="bsPathSave">Save this pathway</button>
+        <button class="tab bs-mini" id="bsPathDel" title="Delete the selected saved pathway">&times;</button>
+      </span>
     </div>
+    ${S.pathNotes && S.pathNotes.length ? `<ul class="bs-probs">
+      <li class="bs-prob warn"><b>Loaded "${esc(S.pathName)}" onto a different structure.</b>
+        ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
     ${renderMeetManifest(res)}
@@ -1537,6 +1689,12 @@ function wirePathway(){
   bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
+  const pl = document.getElementById('bsPathLoad');
+  if (pl) pl.addEventListener('change', () => { if (pl.value) loadPathway(pl.value); });
+  const pv = document.getElementById('bsPathSave');
+  if (pv) pv.addEventListener('click', savePathway);
+  const pd = document.getElementById('bsPathDel');
+  if (pd) pd.addEventListener('click', deletePathway);
   const fc = document.getElementById('bsPathFocus');
   if (fc) fc.addEventListener('change', () => { S.bdCell = fc.value; renderPathway(); });
   const rs = document.getElementById('bsPathReset');
