@@ -68,6 +68,7 @@ const S = {
   routeRes: null,       // its projection
   bdMode: 'stop',       // breakdown view: stop | total | qualified
   bdCell: 'all',        // which event+gender the panel is showing
+  arrival: null,        // per-level arrival rate override
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -674,24 +675,61 @@ async function ensureMult(){
    people to; `expected` applies the take-up measured from the season we ran,
    because the published rules always qualify more athletes than turn up. Asked
    "how many could register", the honest answer is both numbers. */
+/* The arrival rate: how big a field actually turns out to be, against the size
+   the rules alone would send. Above 100% means extra athletes arrive by a route
+   the bands do not describe -- the average-score pathway. Below means qualified
+   athletes decline their place, which is the usual case.
+
+   This used to be a hidden per-cell constant lifted from the calibrated
+   alignment, and it was wrong in a way that erased events. Sixteen of the 24
+   cells carry a measured rate of ZERO at the second level -- every platform
+   event and all of Groups C and D -- not because nobody turns up, but because
+   under current rules those cohorts do not ADVANCE into Zones at all. Platform
+   is non-qualifying at Regionals and Groups C and D auto-advance, so their
+   arrival was never measured as advancement. Multiplying a hypothetical pathway
+   by that zero deleted those events from the projection entirely.
+
+   So it is now one visible, editable rate per level, defaulted from the mean of
+   the cells that WERE measured, and shown on the panel. A number this
+   consequential should not be invisible. */
+function measuredArrival(L){
+  try {
+    const k = window.JuniorFlow && window.JuniorFlow.constants
+            ? window.JuniorFlow.constants(S.year) : null;
+    if (!k || !k.usable) return null;
+    const lv = k.levels[L];
+    if (!lv || !lv.conv) return null;
+    const vals = Object.keys(lv.conv).map(c => lv.conv[c]).filter(v => v > 0);
+    if (!vals.length) return null;
+    return vals.reduce((a,b)=>a+b, 0) / vals.length;
+  } catch(e){ return null; }
+}
+
+function arrivalRate(L){
+  if (S.arrival && S.arrival[L] != null) return S.arrival[L];
+  const m = measuredArrival(L);
+  return m == null ? 1 : m;
+}
+
 function projectPathway(withTakeUp){
   if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
   const cells = CELLS;
-  let conv = {};
+  const conv = {};
   S.takeUp = null;
   if (withTakeUp !== false){
-    try {
-      const k = window.JuniorFlow && window.JuniorFlow.constants
-              ? window.JuniorFlow.constants(S.year) : null;
-      if (k){
-        S.takeUp = {basis:k.basis, usable:k.usable, fallback:k.fallbackBaseline};
-        // Only apply constants that actually measured something. All-ones is the
-        // absence of a measurement, and applying it while saying take-up is
-        // included would be a claim the numbers do not support.
-        if (k.usable) (k.levels || []).forEach((lv, i) => { if (lv && lv.conv) conv[i] = lv.conv; });
+    let anyMeasured = false;
+    for (let L = 1; L < S.routing.length; L++){
+      const r = arrivalRate(L);
+      if (measuredArrival(L) != null) anyMeasured = true;
+      if (Math.abs(r - 1) > 0.001){
+        const m = {}; cells.forEach(c => { m[c] = r; });
+        conv[L] = m;
       }
-    } catch(e){ console.warn('take-up constants', e); S.takeUp = {error:String(e.message||e)}; }
+    }
+    let basis = null;
+    try { const k = window.JuniorFlow.constants(S.year); basis = k && k.basis; } catch(e){}
+    S.takeUp = {basis, usable: anyMeasured};
   }
   return QR().project({
     routing: S.routing,
@@ -927,6 +965,11 @@ function renderPathway(){
     return `<div class="bs-plevel">
       <div class="bs-plevel-h"><b>${esc(tierName(L))}</b>
         <span class="bs-round-n">${fmt(stops)} ${stops===1?'stop':'stops'}</span>
+        ${L>0 ? `<label class="bs-arr">arrive
+          <input class="bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}"
+            value="${Math.round(arrivalRate(L)*100)}">%
+          ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}%</span>`
+            : `<span class="bs-arr-m warn">not measured</span>`}</label>` : ''}
         ${spare.length ? `<select class="sel bs-mini bs-rndadd" data-l="${L}">
           <option value="">+ add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
       </div>
@@ -956,9 +999,11 @@ function renderPathway(){
     ${levels}
     ${renderPathwayBreakdown(res)}
     ${(S.takeUp && S.takeUp.usable)
-      ? `<p class="note" style="margin-top:12px">Entry counts include the take-up measured from
-          <b>${esc(S.takeUp.basis)}</b> &mdash; the published rules qualify more athletes than turn up.
-          Places are counted, never simulated: nothing here predicts who wins.</p>`
+      ? `<p class="note" style="margin-top:12px">The <b>arrive</b> figure on each level is how big that field
+          actually turns out to be against the size the rules alone would send &mdash; above 100% means athletes
+          arrive by the average-score route as well as the bands; below means qualified athletes decline.
+          Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden. Places are counted,
+          never simulated: nothing here predicts who wins.</p>`
       : `<div class="ps-warn" style="margin-top:12px"><b>These are qualified places, not expected entries.</b>
           ${S.takeUp && S.takeUp.fallback
             ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
@@ -1021,6 +1066,11 @@ function wirePathway(){
     // Routes out of a round that no longer runs would be orphaned.
     S.routing[L].routes = S.routing[L].routes.filter(r => r.from !== k);
     touch();
+  }));
+  P.querySelectorAll('input[data-arr]').forEach(el => el.addEventListener('change', e => {
+    S.arrival = S.arrival || {};
+    S.arrival[+e.target.dataset.arr] = Math.max(0, (+e.target.value||0) / 100);
+    S.dirty = true; renderPathway();
   }));
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
