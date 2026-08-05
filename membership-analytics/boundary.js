@@ -70,6 +70,8 @@ const S = {
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
+  fees: null,           // entry fee per level, for the per-meet financials
+  hostShare: 0.25,      // share of net entry income going to the host
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
   flowErr: null,
@@ -87,6 +89,8 @@ const S = {
 };
 
 const fmt = n => Number(n||0).toLocaleString('en-US');
+const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
+
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function defaultRegions(n){
@@ -1097,6 +1101,51 @@ function renderPathwayBreakdown(res){
      the days a meet needs is at least the number of events its busiest
      age-and-gender block runs.
    ------------------------------------------------------------------------- */
+
+/* ---------- per-meet money ----------
+   What each stop draws and what it is worth, because a host bidding for a Zone
+   or an E/W/C is bidding on a field size nobody can currently tell them.
+
+   The reason to look at this before drawing lines rather than after: under the
+   worked scenario East draws 259 entries and Central 691 at the same tier. A
+   percentage cut pays Central's host 2.7 times East's for running the same
+   meet; a flat fee may not cover East's pool rental. Neither is a fee problem.
+   It is the map, and it is only fixable while the map is still being drawn. */
+const DEFAULT_FEES = [85, 90, 115, 125];
+function feeFor(L){
+  if (S.fees && S.fees[L] != null) return S.fees[L];
+  const n = S.levels.length;
+  // Last level is the championship; otherwise walk the published ladder.
+  if (L === n - 1) return DEFAULT_FEES[3];
+  return DEFAULT_FEES[Math.min(L + (n <= 3 ? 1 : 0), 2)];
+}
+const LEVY = 4.90;
+
+function meetMoney(m){
+  const fee = feeFor(m.level);
+  const gross = m.entries * fee;
+  const levy = m.entries * LEVY;
+  const net = gross - levy;
+  const host = net * (S.hostShare || 0);
+  return {fee, gross, levy, net, host, usad: net - host};
+}
+
+/* Largest against smallest within a tier: the number a host cut lives or dies
+   on. */
+function tierSpread(meets){
+  const byLevel = {};
+  meets.forEach(m => (byLevel[m.level] = byLevel[m.level] || []).push(m.entries));
+  const out = {};
+  for (const L in byLevel){
+    const v = byLevel[L].filter(x => x > 0);
+    if (v.length < 2) continue;
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const mean = v.reduce((a,b)=>a+b,0)/v.length;
+    out[L] = {lo, hi, ratio: lo ? hi/lo : Infinity, mean, n: v.length};
+  }
+  return out;
+}
+
 function meetManifest(res){
   if (!res) return [];
   const out = [];
@@ -1141,27 +1190,51 @@ function meetManifest(res){
 function renderMeetManifest(res){
   const meets = meetManifest(res);
   if (!meets.length) return '';
-  const rows = meets.map(m => `<tr>
+  const spread = tierSpread(meets);
+  const rows = meets.map(m => {
+    const $ = meetMoney(m);
+    return `<tr>
       <td><b>${esc(m.name)}</b><span class="bs-mf-l">${esc(m.levelName)}</span></td>
       <td class="num">${fmt(m.events.length)}</td>
-      <td class="num">${fmt(m.entries)}</td>
+      <td class="num"><b>${fmt(m.entries)}</b></td>
       <td class="num">${m.spots ? fmt(m.spots) + (m.spots > m.entries*1.4
           ? `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>` : '') : '<span class="bs-bd-0">open</span>'}</td>
       <td class="num">${fmt(m.biggest)}</td>
-      <td class="num">${m.rounds.map(r => QR().ROUND_NAME[r]||r).join(' + ')}</td>
+      <td class="num mono">${usd($.gross)}</td>
+      <td class="num mono bs-mf-levy">&minus;${usd($.levy)}</td>
+      <td class="num mono"><b>${usd($.host)}</b></td>
+      <td class="num mono">${usd($.usad)}</td>
       <td class="num"><b>${fmt(m.minDays)}</b></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+  const bal = Object.keys(spread).map(L => {
+    const s2 = spread[L];
+    const bad = s2.ratio >= 2;
+    return `<li class="${bad?'bs-prob bad':'bs-prob warn'}"><b>${esc(tierName(+L))}</b>:
+      biggest meet ${fmt(Math.round(s2.hi))} entries, smallest ${fmt(Math.round(s2.lo))} &mdash;
+      <b>${s2.ratio.toFixed(1)}&times;</b> apart across ${s2.n} stops.
+      ${bad ? `A percentage cut pays one host ${s2.ratio.toFixed(1)} times another for running the same meet;
+               a flat fee may not cover the smallest one's rental. That is the map, not the fee.`
+            : 'Close enough that one host cut works across the tier.'}</li>`;
+  }).join('');
   return `<div class="bs-bd">
     <div class="bs-bd-h"><b>Every meet</b>
-      <button class="tab bs-mini" id="bsMfCsv">Export for scheduling</button>
+      <label class="bs-arr">host cut
+        <input class="bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1"
+          value="${Math.round((S.hostShare||0)*100)}">% of net</label>
+      <button class="tab bs-mini" id="bsMfCsv">Export</button>
       <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
         <b>Places</b> is what the bands entitle this meet to take; where it far exceeds the entries, the
         stop is admitting nearly everyone sent to it. <b>Days</b> is the least a meet can run in, given an
         age group and gender does not contest more than one event in a day; prelims and finals of an event
-        share a day, so an event is one day's commitment.</span></div>
+        share a day, so an event is one day's commitment. Entry income is at
+        ${SEED_STAGES.map((x,i)=>'').join('')}the published fee for each tier; change fees in Pricing Studio to model them properly.</span>
+      ${bal ? `<ul class="bs-probs" style="width:100%;margin:8px 0 0">${bal}</ul>` : ''}</div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-mf-tbl">
       <thead><tr><th>Meet</th><th class="num">Events</th><th class="num">Entries</th>
-        <th class="num">Places</th><th class="num">Biggest field</th><th class="num">Rounds</th>
+        <th class="num">Places</th><th class="num">Biggest field</th>
+        <th class="num">Entry income</th><th class="num">DiveMeets</th>
+        <th class="num">Host cut</th><th class="num">USA Diving keeps</th>
         <th class="num">Days</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
@@ -1176,14 +1249,20 @@ function exportManifestCsv(){
   meets.forEach(m => m.rounds.forEach(r => rounds.add(r)));
   const rl = QR().ROUND_ORDER.filter(r => rounds.has(r));
   const head = ['stage','meet','age_group','gender','event','entries']
-    .concat(rl.map(r => 'in_' + r)).concat(['min_days_for_this_meet']);
+    .concat(rl.map(r => 'in_' + r))
+    .concat(['min_days_for_this_meet','meet_total_entries','entry_fee',
+             'meet_gross','meet_divemeets_levy','meet_host_cut','meet_usad_keeps']);
   const lines = [head.join(',')];
-  meets.forEach(m => m.events.forEach(e => {
-    lines.push([q(m.levelName), q(m.name), q(AGE_LBL[e.cell[0]]), q(GEN_LBL[e.cell[1]]),
-                q(DIS_LBL[e.cell[2]]), e.n]
-      .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
-      .concat([m.minDays]).join(','));
-  }));
+  meets.forEach(m => {
+    const $ = meetMoney(m);
+    m.events.forEach(e => {
+      lines.push([q(m.levelName), q(m.name), q(AGE_LBL[e.cell[0]]), q(GEN_LBL[e.cell[1]]),
+                  q(DIS_LBL[e.cell[2]]), e.n]
+        .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
+        .concat([m.minDays, m.entries, $.fee, Math.round($.gross), Math.round($.levy),
+                 Math.round($.host), Math.round($.usad)]).join(','));
+    });
+  });
   download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
 }
 
@@ -1397,6 +1476,10 @@ function wirePathway(){
     S.dirty = true; renderPathway();
   }));
 
+  const hs = document.getElementById('bsHostShare');
+  if (hs) hs.addEventListener('change', () => {
+    S.hostShare = Math.max(0, Math.min(100, +hs.value||0))/100; S.dirty = true; renderPathway();
+  });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
   const fc = document.getElementById('bsPathFocus');
