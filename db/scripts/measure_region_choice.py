@@ -50,9 +50,12 @@ SELECT DISTINCT year, stage,
        -- often its athletes stay together.
        COALESCE(NULLIF(btrim(COALESCE(team_id_dm,'')),''),
                 NULLIF(btrim(COALESCE(team_name,'')),'')) AS club,
-       COALESCE(NULLIF(btrim(COALESCE(region,'')::text),''),
-                NULLIF(btrim(COALESCE(zone,'')),''),
-                NULLIF(btrim(COALESCE(ewc_meet,'')),'')) AS where_competed
+       -- region is smallint while zone and ewc_meet are text, so each is cast
+       -- to text on its own. COALESCE'ing a smallint against '' is a type
+       -- error, which is how this failed the first time.
+       COALESCE(NULLIF(btrim(region::text), ''),
+                NULLIF(btrim(zone::text), ''),
+                NULLIF(btrim(ewc_meet::text), '')) AS where_competed
 FROM core.event_results
 WHERE is_junior_circuit = TRUE
   AND year >= 2024
@@ -113,8 +116,14 @@ def main():
            "field_population": probe, "stages": {}}
 
     for stage in ("Regionals", "Zones"):
-        cur.execute(SQL, ([stage],))
-        rows = [r for r in cur.fetchall() if r[3] and r[4]]
+        try:
+            cur.execute(SQL, ([stage],))
+            rows = [r for r in cur.fetchall() if r[3] and r[4]]
+        except Exception as e:
+            conn.rollback()
+            out["stages"][stage] = {"error": str(e).strip()}
+            print(f"{stage} FAILED: {str(e).strip()[:300]}")
+            continue
         by_year = collections.defaultdict(lambda: collections.defaultdict(
             lambda: collections.defaultdict(set)))
         for year, _st, athlete, club, where in rows:
