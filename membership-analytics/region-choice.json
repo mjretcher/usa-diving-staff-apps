@@ -1,0 +1,35 @@
+{
+  "error": "missing columns",
+  "missing": [
+    "team"
+  ],
+  "available": [
+    "age_group",
+    "discipline",
+    "diver_first",
+    "diver_id_dm",
+    "diver_last",
+    "event_key",
+    "event_level",
+    "event_name",
+    "ewc_meet",
+    "gender",
+    "id",
+    "imported_at",
+    "is_junior_circuit",
+    "is_synchro",
+    "meet_id_dm",
+    "meet_name",
+    "place",
+    "region",
+    "round",
+    "score",
+    "source_file",
+    "stage",
+    "team_code",
+    "team_id_dm",
+    "team_name",
+    "year",
+    "zone"
+  ]
+}
