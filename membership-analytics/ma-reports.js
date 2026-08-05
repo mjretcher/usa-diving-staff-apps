@@ -1586,7 +1586,11 @@ async function loadFilterOptions(){
 function openBuilder(preset){
   RB.template = null; RB.sections = new Set(); RB.years = null;
   RB.cats = []; RB.assocs = []; RB.states = []; RB.scopeOpen = false;
-  if (preset){ pickTemplate(preset, true); }
+  // '__boundary__' means "show me the map templates", not "pick one for me".
+  // Landing already committed to the six-section Realignment Proposal is a
+  // choice made on the reader's behalf, and it was not asked for.
+  RB.mapFirst = (preset === '__boundary__');
+  if (preset && preset !== '__boundary__') pickTemplate(preset, true);
   let m = document.getElementById('mr-modal');
   if (!m){ m = document.createElement('div'); m.id = 'mr-modal'; document.body.appendChild(m); }
   renderBuilder();
@@ -1602,9 +1606,44 @@ function pickTemplate(id, silent){
   if (!silent) renderBuilder();
 }
 
+/* ---------- keeping your place ----------
+   Every click here -- a template, a section, a year -- rebuilt the whole
+   modal's HTML, which discards focus and sends the scroll position back to the
+   top. With nine templates and five section groups that means scrolling back
+   down after every single choice. Record where you were and put you back. */
+function rbPlace(){
+  const m = document.getElementById('mr-modal');
+  const box = m && (m.querySelector('.mr-modal-body') || m.firstElementChild);
+  const el = document.activeElement;
+  let key = null;
+  if (m && el && m.contains(el)){
+    const parts = [];
+    for (let i = 0; i < el.attributes.length; i++){
+      const a = el.attributes[i];
+      if (a.name.indexOf('data-') === 0) parts.push(`[${a.name}="${String(a.value).replace(/"/g,'\\"')}"]`);
+    }
+    if (el.id) key = '#' + el.id;
+    else if (parts.length) key = el.tagName.toLowerCase() + parts.join('');
+  }
+  return {top: box ? box.scrollTop : 0, win: window.pageYOffset || 0, key};
+}
+function rbRestore(p){
+  if (!p) return;
+  const m = document.getElementById('mr-modal');
+  const box = m && (m.querySelector('.mr-modal-body') || m.firstElementChild);
+  if (box && p.top) box.scrollTop = p.top;
+  if (p.win) { try { window.scrollTo(0, p.win); } catch(e){} }
+  if (p.key && m){
+    let el = null;
+    try { el = m.querySelector(p.key); } catch(e){}
+    if (el) { try { el.focus({preventScroll:true}); } catch(e){ try{ el.focus(); }catch(e2){} } }
+  }
+}
+
 function renderBuilder(){
   const m = document.getElementById('mr-modal');
   if (!m) return;
+  const place = rbPlace();
   const sel = rbYears();
   const canGo = RB.sections.size > 0;
   const groups = {};
@@ -1640,7 +1679,8 @@ function renderBuilder(){
           <div class="mr-step-h">Start from a template</div>
           <div class="mr-tmpls">
             ${TEMPLATES.map(t => `
-              <button class="mr-tmpl ${RB.template===t.id?'is-on':''} ${t.boundary && !bReady ? 'is-dim':''}"
+              <button class="mr-tmpl ${RB.template===t.id?'is-on':''} ${t.boundary && !bReady ? 'is-dim':''} ${RB.mapFirst && t.boundary ? 'is-hint':''}"
+                      data-tpl="${t.id}"
                       onclick="window._mrPickTemplate('${t.id}')">
                 <div class="mr-tmpl-n">${esc(t.label)}</div>
                 <div class="mr-tmpl-d">${esc(t.desc)}</div>
@@ -1717,6 +1757,7 @@ function renderBuilder(){
       </div>
     </div>
   </div>`;
+  rbRestore(place);
 }
 
 window._mrClose = function(){ const m=document.getElementById('mr-modal'); if (m) m.remove(); };
@@ -1897,8 +1938,8 @@ function mount(){
   bar.innerHTML = `
     <span class="mr-bar-lbl">Reports</span>
     <button class="mr-bar-btn mr-bar-prim" onclick="window._mrOpenBuilder()">📄 Build a report</button>
-    <button class="mr-bar-btn" onclick="window._mrOpenBuilder('realignment_proposal')"
-            title="Report on the boundary scenario currently open in Boundary Studio">🗺️ Report on this map</button>
+    <button class="mr-bar-btn" onclick="window._mrOpenBuilder('__boundary__')"
+            title="Open the builder with the map templates first — nothing is chosen for you">🗺️ Report on this map</button>
     <button class="mr-bar-btn" onclick="window._mrShare()"
             title="Copy a link that opens this same view">🔗 Share this view</button>
     <span class="mr-bar-note">Every report prints straight to PDF.</span>`;
