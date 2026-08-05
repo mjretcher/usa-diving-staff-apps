@@ -1,0 +1,1434 @@
+{
+  "caution": "the ratio is not invariant to selectivity \u2014 see the stage trend before applying one stage's ratio to a differently-selective structure",
+  "cells": {
+    "EWC|2026": {
+      "AB": {
+        "athletes": 82,
+        "by_count": {
+          "1": 19,
+          "2": 38,
+          "3": 25
+        },
+        "combinations": {
+          "1": 0.0732,
+          "13": 0.378,
+          "13P": 0.3049,
+          "1P": 0.0488,
+          "3": 0.0976,
+          "3P": 0.0366,
+          "P": 0.061
+        },
+        "entries": 170,
+        "entries_per_athlete": 2.073
+      },
+      "AG": {
+        "athletes": 116,
+        "by_count": {
+          "1": 38,
+          "2": 49,
+          "3": 29
+        },
+        "combinations": {
+          "1": 0.069,
+          "13": 0.2414,
+          "13P": 0.25,
+          "1P": 0.0948,
+          "3": 0.069,
+          "3P": 0.0862,
+          "P": 0.1897
+        },
+        "entries": 223,
+        "entries_per_athlete": 1.922
+      },
+      "BB": {
+        "athletes": 54,
+        "by_count": {
+          "1": 11,
+          "2": 23,
+          "3": 20
+        },
+        "combinations": {
+          "1": 0.0926,
+          "13": 0.4074,
+          "13P": 0.3704,
+          "3": 0.0741,
+          "3P": 0.0185,
+          "P": 0.037
+        },
+        "entries": 117,
+        "entries_per_athlete": 2.167
+      },
+      "BG": {
+        "athletes": 77,
+        "by_count": {
+          "1": 14,
+          "2": 31,
+          "3": 32
+        },
+        "combinations": {
+          "1": 0.0779,
+          "13": 0.3117,
+          "13P": 0.4156,
+          "1P": 0.013,
+          "3": 0.0649,
+          "3P": 0.0779,
+          "P": 0.039
+        },
+        "entries": 172,
+        "entries_per_athlete": 2.234
+      },
+      "CB": {
+        "athletes": 37,
+        "by_count": {
+          "1": 9,
+          "2": 20,
+          "3": 8
+        },
+        "combinations": {
+          "1": 0.1351,
+          "13": 0.4595,
+          "13P": 0.2162,
+          "3": 0.0811,
+          "3P": 0.0811,
+          "P": 0.027
+        },
+        "entries": 73,
+        "entries_per_athlete": 1.973
+      },
+      "CG": {
+        "athletes": 82,
+        "by_count": {
+          "1": 22,
+          "2": 35,
+          "3": 25
+        },
+        "combinations": {
+          "1": 0.1829,
+          "13": 0.3659,
+          "13P": 0.3049,
+          "1P": 0.0488,
+          "3": 0.061,
+          "3P": 0.0122,
+          "P": 0.0244
+        },
+        "entries": 167,
+        "entries_per_athlete": 2.037
+      },
+      "DB": {
+        "athletes": 18,
+        "by_count": {
+          "1": 4,
+          "2": 9,
+          "3": 5
+        },
+        "combinations": {
+          "1": 0.1667,
+          "13": 0.3333,
+          "13P": 0.2778,
+          "1P": 0.0556,
+          "3": 0.0556,
+          "3P": 0.1111
+        },
+        "entries": 37,
+        "entries_per_athlete": 2.056
+      },
+      "DG": {
+        "athletes": 48,
+        "by_count": {
+          "1": 16,
+          "2": 25,
+          "3": 7
+        },
+        "combinations": {
+          "1": 0.2083,
+          "13": 0.4375,
+          "13P": 0.1458,
+          "1P": 0.0625,
+          "3": 0.1042,
+          "3P": 0.0208,
+          "P": 0.0208
+        },
+        "entries": 87,
+        "entries_per_athlete": 1.812
+      }
+    },
+    "Nationals|2024": {
+      "AB": {
+        "athletes": 97,
+        "by_count": {
+          "1": 31,
+          "2": 38,
+          "3": 28
+        },
+        "combinations": {
+          "1": 0.1237,
+          "13": 0.2784,
+          "13P": 0.2887,
+          "1P": 0.0515,
+          "3": 0.0928,
+          "3P": 0.0619,
+          "P": 0.1031
+        },
+        "entries": 191,
+        "entries_per_athlete": 1.969
+      },
+      "AG": {
+        "athletes": 99,
+        "by_count": {
+          "1": 37,
+          "2": 37,
+          "3": 25
+        },
+        "combinations": {
+          "1": 0.1414,
+          "13": 0.2525,
+          "13P": 0.2525,
+          "1P": 0.0404,
+          "3": 0.1111,
+          "3P": 0.0808,
+          "P": 0.1212
+        },
+        "entries": 186,
+        "entries_per_athlete": 1.879
+      },
+      "BB": {
+        "athletes": 76,
+        "by_count": {
+          "1": 15,
+          "2": 32,
+          "3": 29
+        },
+        "combinations": {
+          "1": 0.0921,
+          "13": 0.3421,
+          "13P": 0.3816,
+          "1P": 0.0395,
+          "3": 0.0789,
+          "3P": 0.0395,
+          "P": 0.0263
+        },
+        "entries": 166,
+        "entries_per_athlete": 2.184
+      },
+      "BG": {
+        "athletes": 84,
+        "by_count": {
+          "1": 17,
+          "2": 28,
+          "3": 39
+        },
+        "combinations": {
+          "1": 0.0595,
+          "13": 0.2619,
+          "13P": 0.4643,
+          "1P": 0.0476,
+          "3": 0.0833,
+          "3P": 0.0238,
+          "P": 0.0595
+        },
+        "entries": 190,
+        "entries_per_athlete": 2.262
+      },
+      "CB": {
+        "athletes": 62,
+        "by_count": {
+          "1": 6,
+          "2": 27,
+          "3": 29
+        },
+        "combinations": {
+          "1": 0.0645,
+          "13": 0.371,
+          "13P": 0.4677,
+          "1P": 0.0161,
+          "3": 0.0323,
+          "3P": 0.0484
+        },
+        "entries": 147,
+        "entries_per_athlete": 2.371
+      },
+      "CG": {
+        "athletes": 71,
+        "by_count": {
+          "1": 13,
+          "2": 29,
+          "3": 29
+        },
+        "combinations": {
+          "1": 0.0563,
+          "13": 0.3099,
+          "13P": 0.4085,
+          "1P": 0.0423,
+          "3": 0.0845,
+          "3P": 0.0563,
+          "P": 0.0423
+        },
+        "entries": 158,
+        "entries_per_athlete": 2.225
+      },
+      "DB": {
+        "athletes": 59,
+        "by_count": {
+          "1": 15,
+          "2": 23,
+          "3": 21
+        },
+        "combinations": {
+          "1": 0.2203,
+          "13": 0.339,
+          "13P": 0.3559,
+          "1P": 0.0169,
+          "3": 0.0339,
+          "3P": 0.0339
+        },
+        "entries": 124,
+        "entries_per_athlete": 2.102
+      },
+      "DG": {
+        "athletes": 63,
+        "by_count": {
+          "1": 14,
+          "2": 21,
+          "3": 28
+        },
+        "combinations": {
+          "1": 0.1429,
+          "13": 0.3016,
+          "13P": 0.4444,
+          "3": 0.0794,
+          "3P": 0.0317
+        },
+        "entries": 140,
+        "entries_per_athlete": 2.222
+      }
+    },
+    "Nationals|2025": {
+      "AB": {
+        "athletes": 90,
+        "by_count": {
+          "1": 24,
+          "2": 40,
+          "3": 26
+        },
+        "combinations": {
+          "1": 0.1333,
+          "13": 0.3,
+          "13P": 0.2889,
+          "1P": 0.0222,
+          "3": 0.0556,
+          "3P": 0.1222,
+          "P": 0.0778
+        },
+        "entries": 182,
+        "entries_per_athlete": 2.022
+      },
+      "AG": {
+        "athletes": 97,
+        "by_count": {
+          "1": 34,
+          "2": 41,
+          "3": 22
+        },
+        "combinations": {
+          "1": 0.1443,
+          "13": 0.2784,
+          "13P": 0.2268,
+          "1P": 0.0412,
+          "3": 0.0928,
+          "3P": 0.1031,
+          "P": 0.1134
+        },
+        "entries": 182,
+        "entries_per_athlete": 1.876
+      },
+      "BB": {
+        "athletes": 61,
+        "by_count": {
+          "1": 7,
+          "2": 21,
+          "3": 33
+        },
+        "combinations": {
+          "1": 0.0656,
+          "13": 0.3115,
+          "13P": 0.541,
+          "3": 0.0328,
+          "3P": 0.0328,
+          "P": 0.0164
+        },
+        "entries": 148,
+        "entries_per_athlete": 2.426
+      },
+      "BG": {
+        "athletes": 83,
+        "by_count": {
+          "1": 18,
+          "2": 28,
+          "3": 37
+        },
+        "combinations": {
+          "1": 0.0843,
+          "13": 0.241,
+          "13P": 0.4458,
+          "1P": 0.012,
+          "3": 0.0723,
+          "3P": 0.0843,
+          "P": 0.0602
+        },
+        "entries": 185,
+        "entries_per_athlete": 2.229
+      },
+      "CB": {
+        "athletes": 54,
+        "by_count": {
+          "1": 6,
+          "2": 22,
+          "3": 26
+        },
+        "combinations": {
+          "1": 0.0741,
+          "13": 0.3519,
+          "13P": 0.4815,
+          "1P": 0.0185,
+          "3": 0.0185,
+          "3P": 0.037,
+          "P": 0.0185
+        },
+        "entries": 128,
+        "entries_per_athlete": 2.37
+      },
+      "CG": {
+        "athletes": 74,
+        "by_count": {
+          "1": 11,
+          "2": 24,
+          "3": 39
+        },
+        "combinations": {
+          "1": 0.0676,
+          "13": 0.2568,
+          "13P": 0.527,
+          "1P": 0.027,
+          "3": 0.0541,
+          "3P": 0.0405,
+          "P": 0.027
+        },
+        "entries": 176,
+        "entries_per_athlete": 2.378
+      },
+      "DB": {
+        "athletes": 52,
+        "by_count": {
+          "1": 7,
+          "2": 22,
+          "3": 23
+        },
+        "combinations": {
+          "1": 0.1154,
+          "13": 0.4038,
+          "13P": 0.4423,
+          "3": 0.0192,
+          "3P": 0.0192
+        },
+        "entries": 120,
+        "entries_per_athlete": 2.308
+      },
+      "DG": {
+        "athletes": 65,
+        "by_count": {
+          "1": 19,
+          "2": 22,
+          "3": 24
+        },
+        "combinations": {
+          "1": 0.1846,
+          "13": 0.2923,
+          "13P": 0.3692,
+          "1P": 0.0308,
+          "3": 0.0615,
+          "3P": 0.0154,
+          "P": 0.0462
+        },
+        "entries": 135,
+        "entries_per_athlete": 2.077
+      }
+    },
+    "Nationals|2026": {
+      "AB": {
+        "athletes": 59,
+        "by_count": {
+          "1": 24,
+          "2": 19,
+          "3": 16
+        },
+        "combinations": {
+          "1": 0.1017,
+          "13": 0.1695,
+          "13P": 0.2712,
+          "1P": 0.0508,
+          "3": 0.1017,
+          "3P": 0.1017,
+          "P": 0.2034
+        },
+        "entries": 110,
+        "entries_per_athlete": 1.864
+      },
+      "AG": {
+        "athletes": 55,
+        "by_count": {
+          "1": 18,
+          "2": 26,
+          "3": 11
+        },
+        "combinations": {
+          "1": 0.0727,
+          "13": 0.2364,
+          "13P": 0.2,
+          "1P": 0.0909,
+          "3": 0.0545,
+          "3P": 0.1455,
+          "P": 0.2
+        },
+        "entries": 103,
+        "entries_per_athlete": 1.873
+      },
+      "BB": {
+        "athletes": 40,
+        "by_count": {
+          "1": 11,
+          "2": 13,
+          "3": 16
+        },
+        "combinations": {
+          "1": 0.125,
+          "13": 0.175,
+          "13P": 0.4,
+          "1P": 0.05,
+          "3": 0.05,
+          "3P": 0.1,
+          "P": 0.1
+        },
+        "entries": 85,
+        "entries_per_athlete": 2.125
+      },
+      "BG": {
+        "athletes": 45,
+        "by_count": {
+          "1": 9,
+          "2": 17,
+          "3": 19
+        },
+        "combinations": {
+          "1": 0.0222,
+          "13": 0.2222,
+          "13P": 0.4222,
+          "1P": 0.0667,
+          "3": 0.0444,
+          "3P": 0.0889,
+          "P": 0.1333
+        },
+        "entries": 100,
+        "entries_per_athlete": 2.222
+      },
+      "CB": {
+        "athletes": 30,
+        "by_count": {
+          "1": 4,
+          "2": 14,
+          "3": 12
+        },
+        "combinations": {
+          "1": 0.0333,
+          "13": 0.4,
+          "13P": 0.4,
+          "1P": 0.0333,
+          "3P": 0.0333,
+          "P": 0.1
+        },
+        "entries": 68,
+        "entries_per_athlete": 2.267
+      },
+      "CG": {
+        "athletes": 38,
+        "by_count": {
+          "1": 9,
+          "2": 9,
+          "3": 20
+        },
+        "combinations": {
+          "1": 0.0526,
+          "13": 0.1316,
+          "13P": 0.5263,
+          "1P": 0.0526,
+          "3": 0.0263,
+          "3P": 0.0526,
+          "P": 0.1579
+        },
+        "entries": 87,
+        "entries_per_athlete": 2.289
+      },
+      "DB": {
+        "athletes": 26,
+        "by_count": {
+          "2": 13,
+          "3": 13
+        },
+        "combinations": {
+          "13": 0.5,
+          "13P": 0.5
+        },
+        "entries": 65,
+        "entries_per_athlete": 2.5
+      },
+      "DG": {
+        "athletes": 40,
+        "by_count": {
+          "1": 12,
+          "2": 13,
+          "3": 15
+        },
+        "combinations": {
+          "1": 0.1,
+          "13": 0.125,
+          "13P": 0.375,
+          "1P": 0.15,
+          "3": 0.175,
+          "3P": 0.05,
+          "P": 0.025
+        },
+        "entries": 83,
+        "entries_per_athlete": 2.075
+      }
+    },
+    "Regionals|2024": {
+      "AB": {
+        "athletes": 277,
+        "by_count": {
+          "1": 41,
+          "2": 227,
+          "3": 9
+        },
+        "combinations": {
+          "1": 0.13,
+          "13": 0.8195,
+          "13P": 0.0325,
+          "3": 0.0181
+        },
+        "entries": 522,
+        "entries_per_athlete": 1.884
+      },
+      "AG": {
+        "athletes": 493,
+        "by_count": {
+          "1": 77,
+          "2": 393,
+          "3": 23
+        },
+        "combinations": {
+          "1": 0.142,
+          "13": 0.7951,
+          "13P": 0.0467,
+          "1P": 0.002,
+          "3": 0.0122,
+          "P": 0.002
+        },
+        "entries": 932,
+        "entries_per_athlete": 1.89
+      },
+      "BB": {
+        "athletes": 120,
+        "by_count": {
+          "1": 13,
+          "2": 99,
+          "3": 8
+        },
+        "combinations": {
+          "1": 0.1083,
+          "13": 0.825,
+          "13P": 0.0667
+        },
+        "entries": 235,
+        "entries_per_athlete": 1.958
+      },
+      "BG": {
+        "athletes": 245,
+        "by_count": {
+          "1": 43,
+          "2": 196,
+          "3": 6
+        },
+        "combinations": {
+          "1": 0.1714,
+          "13": 0.8,
+          "13P": 0.0245,
+          "3": 0.0041
+        },
+        "entries": 453,
+        "entries_per_athlete": 1.849
+      },
+      "CB": {
+        "athletes": 107,
+        "by_count": {
+          "1": 19,
+          "2": 85,
+          "3": 3
+        },
+        "combinations": {
+          "1": 0.1776,
+          "13": 0.7944,
+          "13P": 0.028
+        },
+        "entries": 198,
+        "entries_per_athlete": 1.85
+      },
+      "CG": {
+        "athletes": 181,
+        "by_count": {
+          "1": 34,
+          "2": 140,
+          "3": 7
+        },
+        "combinations": {
+          "1": 0.1878,
+          "13": 0.7735,
+          "13P": 0.0387
+        },
+        "entries": 335,
+        "entries_per_athlete": 1.851
+      },
+      "DB": {
+        "athletes": 84,
+        "by_count": {
+          "1": 25,
+          "2": 57,
+          "3": 2
+        },
+        "combinations": {
+          "1": 0.2857,
+          "13": 0.6786,
+          "13P": 0.0238,
+          "3": 0.0119
+        },
+        "entries": 145,
+        "entries_per_athlete": 1.726
+      },
+      "DG": {
+        "athletes": 137,
+        "by_count": {
+          "1": 43,
+          "2": 90,
+          "3": 4
+        },
+        "combinations": {
+          "1": 0.3066,
+          "13": 0.6569,
+          "13P": 0.0292,
+          "3": 0.0073
+        },
+        "entries": 235,
+        "entries_per_athlete": 1.715
+      }
+    },
+    "Regionals|2025": {
+      "AB": {
+        "athletes": 252,
+        "by_count": {
+          "1": 36,
+          "2": 212,
+          "3": 4
+        },
+        "combinations": {
+          "1": 0.1429,
+          "13": 0.8413,
+          "13P": 0.0159
+        },
+        "entries": 472,
+        "entries_per_athlete": 1.873
+      },
+      "AG": {
+        "athletes": 461,
+        "by_count": {
+          "1": 73,
+          "2": 378,
+          "3": 10
+        },
+        "combinations": {
+          "1": 0.154,
+          "13": 0.8178,
+          "13P": 0.0217,
+          "1P": 0.0022,
+          "3": 0.0043
+        },
+        "entries": 859,
+        "entries_per_athlete": 1.863
+      },
+      "BB": {
+        "athletes": 118,
+        "by_count": {
+          "1": 16,
+          "2": 101,
+          "3": 1
+        },
+        "combinations": {
+          "1": 0.1356,
+          "13": 0.8559,
+          "13P": 0.0085
+        },
+        "entries": 221,
+        "entries_per_athlete": 1.873
+      },
+      "BG": {
+        "athletes": 248,
+        "by_count": {
+          "1": 45,
+          "2": 199,
+          "3": 4
+        },
+        "combinations": {
+          "1": 0.1815,
+          "13": 0.7984,
+          "13P": 0.0161,
+          "3P": 0.004
+        },
+        "entries": 455,
+        "entries_per_athlete": 1.835
+      },
+      "CB": {
+        "athletes": 97,
+        "by_count": {
+          "1": 19,
+          "2": 78
+        },
+        "combinations": {
+          "1": 0.1959,
+          "13": 0.8041
+        },
+        "entries": 175,
+        "entries_per_athlete": 1.804
+      },
+      "CG": {
+        "athletes": 188,
+        "by_count": {
+          "1": 45,
+          "2": 142,
+          "3": 1
+        },
+        "combinations": {
+          "1": 0.2287,
+          "13": 0.7553,
+          "13P": 0.0053,
+          "3": 0.0106
+        },
+        "entries": 332,
+        "entries_per_athlete": 1.766
+      },
+      "DB": {
+        "athletes": 98,
+        "by_count": {
+          "1": 21,
+          "2": 74,
+          "3": 3
+        },
+        "combinations": {
+          "1": 0.2143,
+          "13": 0.7551,
+          "13P": 0.0306
+        },
+        "entries": 178,
+        "entries_per_athlete": 1.816
+      },
+      "DG": {
+        "athletes": 121,
+        "by_count": {
+          "1": 28,
+          "2": 91,
+          "3": 2
+        },
+        "combinations": {
+          "1": 0.2149,
+          "13": 0.7521,
+          "13P": 0.0165,
+          "3": 0.0165
+        },
+        "entries": 216,
+        "entries_per_athlete": 1.785
+      }
+    },
+    "Regionals|2026": {
+      "AB": {
+        "athletes": 220,
+        "by_count": {
+          "1": 26,
+          "2": 183,
+          "3": 11
+        },
+        "combinations": {
+          "1": 0.0955,
+          "13": 0.8318,
+          "13P": 0.05,
+          "3": 0.0227
+        },
+        "entries": 425,
+        "entries_per_athlete": 1.932
+      },
+      "AG": {
+        "athletes": 397,
+        "by_count": {
+          "1": 61,
+          "2": 311,
+          "3": 25
+        },
+        "combinations": {
+          "1": 0.1385,
+          "13": 0.7809,
+          "13P": 0.063,
+          "1P": 0.0025,
+          "3": 0.0151
+        },
+        "entries": 758,
+        "entries_per_athlete": 1.909
+      },
+      "BB": {
+        "athletes": 119,
+        "by_count": {
+          "1": 16,
+          "2": 95,
+          "3": 8
+        },
+        "combinations": {
+          "1": 0.1176,
+          "13": 0.7983,
+          "13P": 0.0672,
+          "3": 0.0168
+        },
+        "entries": 230,
+        "entries_per_athlete": 1.933
+      },
+      "BG": {
+        "athletes": 213,
+        "by_count": {
+          "1": 36,
+          "2": 162,
+          "3": 15
+        },
+        "combinations": {
+          "1": 0.1643,
+          "13": 0.7606,
+          "13P": 0.0704,
+          "3": 0.0047
+        },
+        "entries": 405,
+        "entries_per_athlete": 1.901
+      },
+      "CB": {
+        "athletes": 57,
+        "by_count": {
+          "1": 15,
+          "2": 37,
+          "3": 5
+        },
+        "combinations": {
+          "1": 0.2632,
+          "13": 0.614,
+          "13P": 0.0877,
+          "1P": 0.0175,
+          "3P": 0.0175
+        },
+        "entries": 104,
+        "entries_per_athlete": 1.825
+      },
+      "CG": {
+        "athletes": 128,
+        "by_count": {
+          "1": 34,
+          "2": 82,
+          "3": 12
+        },
+        "combinations": {
+          "1": 0.2422,
+          "13": 0.6094,
+          "13P": 0.0938,
+          "1P": 0.0234,
+          "3": 0.0234,
+          "3P": 0.0078
+        },
+        "entries": 234,
+        "entries_per_athlete": 1.828
+      },
+      "DB": {
+        "athletes": 40,
+        "by_count": {
+          "1": 10,
+          "2": 20,
+          "3": 10
+        },
+        "combinations": {
+          "1": 0.25,
+          "13": 0.5,
+          "13P": 0.25
+        },
+        "entries": 80,
+        "entries_per_athlete": 2.0
+      },
+      "DG": {
+        "athletes": 62,
+        "by_count": {
+          "1": 20,
+          "2": 38,
+          "3": 4
+        },
+        "combinations": {
+          "1": 0.3065,
+          "13": 0.5645,
+          "13P": 0.0645,
+          "1P": 0.0161,
+          "3": 0.0161,
+          "3P": 0.0323
+        },
+        "entries": 108,
+        "entries_per_athlete": 1.742
+      }
+    },
+    "Zones|2024": {
+      "AB": {
+        "athletes": 206,
+        "by_count": {
+          "1": 40,
+          "2": 102,
+          "3": 64
+        },
+        "combinations": {
+          "1": 0.0874,
+          "13": 0.466,
+          "13P": 0.3107,
+          "1P": 0.0146,
+          "3": 0.0631,
+          "3P": 0.0146,
+          "P": 0.0437
+        },
+        "entries": 436,
+        "entries_per_athlete": 2.117
+      },
+      "AG": {
+        "athletes": 250,
+        "by_count": {
+          "1": 68,
+          "2": 96,
+          "3": 86
+        },
+        "combinations": {
+          "1": 0.096,
+          "13": 0.24,
+          "13P": 0.344,
+          "1P": 0.064,
+          "3": 0.044,
+          "3P": 0.08,
+          "P": 0.132
+        },
+        "entries": 518,
+        "entries_per_athlete": 2.072
+      },
+      "BB": {
+        "athletes": 104,
+        "by_count": {
+          "1": 6,
+          "2": 54,
+          "3": 44
+        },
+        "combinations": {
+          "1": 0.0481,
+          "13": 0.5,
+          "13P": 0.4231,
+          "1P": 0.0192,
+          "P": 0.0096
+        },
+        "entries": 246,
+        "entries_per_athlete": 2.365
+      },
+      "BG": {
+        "athletes": 188,
+        "by_count": {
+          "1": 27,
+          "2": 72,
+          "3": 89
+        },
+        "combinations": {
+          "1": 0.1117,
+          "13": 0.3404,
+          "13P": 0.4734,
+          "3": 0.0319,
+          "3P": 0.0426
+        },
+        "entries": 438,
+        "entries_per_athlete": 2.33
+      },
+      "CB": {
+        "athletes": 99,
+        "by_count": {
+          "1": 14,
+          "2": 47,
+          "3": 38
+        },
+        "combinations": {
+          "1": 0.1212,
+          "13": 0.4444,
+          "13P": 0.3838,
+          "1P": 0.0303,
+          "3": 0.0101,
+          "P": 0.0101
+        },
+        "entries": 222,
+        "entries_per_athlete": 2.242
+      },
+      "CG": {
+        "athletes": 140,
+        "by_count": {
+          "1": 27,
+          "2": 48,
+          "3": 65
+        },
+        "combinations": {
+          "1": 0.1714,
+          "13": 0.3286,
+          "13P": 0.4643,
+          "1P": 0.0143,
+          "P": 0.0214
+        },
+        "entries": 318,
+        "entries_per_athlete": 2.271
+      },
+      "DB": {
+        "athletes": 81,
+        "by_count": {
+          "1": 27,
+          "2": 27,
+          "3": 27
+        },
+        "combinations": {
+          "1": 0.321,
+          "13": 0.321,
+          "13P": 0.3333,
+          "3P": 0.0123,
+          "P": 0.0123
+        },
+        "entries": 162,
+        "entries_per_athlete": 2.0
+      },
+      "DG": {
+        "athletes": 106,
+        "by_count": {
+          "1": 30,
+          "2": 39,
+          "3": 37
+        },
+        "combinations": {
+          "1": 0.2736,
+          "13": 0.3679,
+          "13P": 0.3491,
+          "P": 0.0094
+        },
+        "entries": 219,
+        "entries_per_athlete": 2.066
+      }
+    },
+    "Zones|2025": {
+      "AB": {
+        "athletes": 173,
+        "by_count": {
+          "1": 26,
+          "2": 81,
+          "3": 66
+        },
+        "combinations": {
+          "1": 0.0867,
+          "13": 0.4335,
+          "13P": 0.3815,
+          "1P": 0.0116,
+          "3": 0.0462,
+          "3P": 0.0231,
+          "P": 0.0173
+        },
+        "entries": 386,
+        "entries_per_athlete": 2.231
+      },
+      "AG": {
+        "athletes": 234,
+        "by_count": {
+          "1": 56,
+          "2": 91,
+          "3": 87
+        },
+        "combinations": {
+          "1": 0.0684,
+          "13": 0.2735,
+          "13P": 0.3718,
+          "1P": 0.047,
+          "3": 0.0641,
+          "3P": 0.0684,
+          "P": 0.1068
+        },
+        "entries": 499,
+        "entries_per_athlete": 2.132
+      },
+      "BB": {
+        "athletes": 107,
+        "by_count": {
+          "1": 9,
+          "2": 49,
+          "3": 49
+        },
+        "combinations": {
+          "1": 0.0841,
+          "13": 0.4299,
+          "13P": 0.4579,
+          "1P": 0.0187,
+          "3P": 0.0093
+        },
+        "entries": 254,
+        "entries_per_athlete": 2.374
+      },
+      "BG": {
+        "athletes": 178,
+        "by_count": {
+          "1": 15,
+          "2": 64,
+          "3": 99
+        },
+        "combinations": {
+          "1": 0.0618,
+          "13": 0.3315,
+          "13P": 0.5562,
+          "1P": 0.0056,
+          "3": 0.0169,
+          "3P": 0.0225,
+          "P": 0.0056
+        },
+        "entries": 440,
+        "entries_per_athlete": 2.472
+      },
+      "CB": {
+        "athletes": 79,
+        "by_count": {
+          "1": 10,
+          "2": 32,
+          "3": 37
+        },
+        "combinations": {
+          "1": 0.1139,
+          "13": 0.3924,
+          "13P": 0.4684,
+          "1P": 0.0127,
+          "P": 0.0127
+        },
+        "entries": 185,
+        "entries_per_athlete": 2.342
+      },
+      "CG": {
+        "athletes": 143,
+        "by_count": {
+          "1": 24,
+          "2": 60,
+          "3": 59
+        },
+        "combinations": {
+          "1": 0.1259,
+          "13": 0.3916,
+          "13P": 0.4126,
+          "1P": 0.014,
+          "3": 0.035,
+          "3P": 0.014,
+          "P": 0.007
+        },
+        "entries": 321,
+        "entries_per_athlete": 2.245
+      },
+      "DB": {
+        "athletes": 71,
+        "by_count": {
+          "1": 10,
+          "2": 35,
+          "3": 26
+        },
+        "combinations": {
+          "1": 0.1268,
+          "13": 0.4789,
+          "13P": 0.3662,
+          "1P": 0.0141,
+          "3": 0.0141
+        },
+        "entries": 158,
+        "entries_per_athlete": 2.225
+      },
+      "DG": {
+        "athletes": 95,
+        "by_count": {
+          "1": 22,
+          "2": 41,
+          "3": 32
+        },
+        "combinations": {
+          "1": 0.2105,
+          "13": 0.4211,
+          "13P": 0.3368,
+          "1P": 0.0105,
+          "3": 0.0105,
+          "P": 0.0105
+        },
+        "entries": 200,
+        "entries_per_athlete": 2.105
+      }
+    },
+    "Zones|2026": {
+      "AB": {
+        "athletes": 167,
+        "by_count": {
+          "1": 28,
+          "2": 76,
+          "3": 63
+        },
+        "combinations": {
+          "1": 0.0958,
+          "13": 0.3952,
+          "13P": 0.3772,
+          "1P": 0.024,
+          "3": 0.0539,
+          "3P": 0.0359,
+          "P": 0.018
+        },
+        "entries": 369,
+        "entries_per_athlete": 2.21
+      },
+      "AG": {
+        "athletes": 237,
+        "by_count": {
+          "1": 52,
+          "2": 90,
+          "3": 95
+        },
+        "combinations": {
+          "1": 0.0928,
+          "13": 0.2785,
+          "13P": 0.4008,
+          "1P": 0.0338,
+          "3": 0.0464,
+          "3P": 0.0675,
+          "P": 0.0802
+        },
+        "entries": 517,
+        "entries_per_athlete": 2.181
+      },
+      "BB": {
+        "athletes": 100,
+        "by_count": {
+          "1": 9,
+          "2": 37,
+          "3": 54
+        },
+        "combinations": {
+          "1": 0.08,
+          "13": 0.34,
+          "13P": 0.54,
+          "3": 0.01,
+          "3P": 0.03
+        },
+        "entries": 245,
+        "entries_per_athlete": 2.45
+      },
+      "BG": {
+        "athletes": 168,
+        "by_count": {
+          "1": 17,
+          "2": 78,
+          "3": 73
+        },
+        "combinations": {
+          "1": 0.0833,
+          "13": 0.4405,
+          "13P": 0.4345,
+          "1P": 0.006,
+          "3": 0.006,
+          "3P": 0.0179,
+          "P": 0.0119
+        },
+        "entries": 392,
+        "entries_per_athlete": 2.333
+      },
+      "CB": {
+        "athletes": 79,
+        "by_count": {
+          "1": 10,
+          "2": 38,
+          "3": 31
+        },
+        "combinations": {
+          "1": 0.1266,
+          "13": 0.443,
+          "13P": 0.3924,
+          "1P": 0.0253,
+          "3P": 0.0127
+        },
+        "entries": 179,
+        "entries_per_athlete": 2.266
+      },
+      "CG": {
+        "athletes": 155,
+        "by_count": {
+          "1": 20,
+          "2": 73,
+          "3": 62
+        },
+        "combinations": {
+          "1": 0.129,
+          "13": 0.4387,
+          "13P": 0.4,
+          "1P": 0.0194,
+          "3P": 0.0129
+        },
+        "entries": 352,
+        "entries_per_athlete": 2.271
+      },
+      "DB": {
+        "athletes": 55,
+        "by_count": {
+          "1": 11,
+          "2": 23,
+          "3": 21
+        },
+        "combinations": {
+          "1": 0.2,
+          "13": 0.4182,
+          "13P": 0.3818
+        },
+        "entries": 120,
+        "entries_per_athlete": 2.182
+      },
+      "DG": {
+        "athletes": 109,
+        "by_count": {
+          "1": 25,
+          "2": 53,
+          "3": 31
+        },
+        "combinations": {
+          "1": 0.2018,
+          "13": 0.4679,
+          "13P": 0.2844,
+          "1P": 0.0183,
+          "3": 0.0183,
+          "P": 0.0092
+        },
+        "entries": 224,
+        "entries_per_athlete": 2.055
+      }
+    }
+  },
+  "generated": "2026-08-05T14:05:33Z",
+  "note": "combinations give the share of athletes contesting exactly that set of boards (1, 3, P). Overlap is bounded at three because an athlete competes only within their own age group and gender.",
+  "stage_trend": {
+    "EWC": 2.035,
+    "Nationals": 2.144,
+    "Regionals": 1.861,
+    "Zones": 2.226
+  },
+  "unit": "one entry = one diver in one event at one meet; rounds collapsed"
+}
