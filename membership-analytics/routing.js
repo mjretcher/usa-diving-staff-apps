@@ -176,6 +176,16 @@ function project(opts){
   const conv = opts.conv || {};
   const cells = opts.cells;
 
+  /* A stage only contests the events it runs. Platform at Regionals is
+     exhibition, Groups C and D do not appear there at all in 2026 -- and a
+     proposal may switch any of that on or off. Athletes routed into an event a
+     stage does not hold simply do not compete it; they are not an error and
+     they are not carried forward. */
+  const offered = (L, cell) => {
+    const no = routing[L] && routing[L].notOffered;
+    return !(no && no.indexOf(cell) >= 0);
+  };
+
   // field[L][round][group][cell]
   const field = routing.map((lvl, L) => {
     const f = {};
@@ -189,12 +199,15 @@ function project(opts){
   const firstRound = roundsOf(routing[0])[0].key;
   entries0.forEach((row, g) => {
     if (!field[0][firstRound][g]) return;
-    cells.forEach(c => { if (row[c]) field[0][firstRound][g][c] = row[c]; });
+    cells.forEach(c => {
+      if (row[c] && offered(0, c)) field[0][firstRound][g][c] = row[c];
+    });
   });
 
   const flows = [], dropped = [];
   const add = (toL, toR, toG, cell, n) => {
     if (n <= 0) return;
+    if (!offered(toL, cell)) return;
     const lvl = field[toL];
     if (!lvl || !lvl[toR] || !lvl[toR][toG]){
       // Record it. Athletes vanishing without trace is how a projection ends up
@@ -459,6 +472,7 @@ window.QualRouting = {
   defaultRouting, validate, project, sizeAt, describe,
   estimateDivers, diversAt, boardShare, meanEvents,
   billableEntries, billableByGroup, revenue,
+  ALL_CELLS: null,
 };
 
 })();

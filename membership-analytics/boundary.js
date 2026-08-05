@@ -69,6 +69,8 @@ const S = {
   bdMode: 'stop',       // breakdown view: stop | total | qualified
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
+  seedPool: null,       // which observed field feeds the first stop
+  evOpen: null,         // which level's events grid is expanded
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -711,6 +713,41 @@ function arrivalRate(L){
   return m == null ? 1 : m;
 }
 
+/* Which observed field feeds the first stop. A structure whose first stop is a
+   Zone championship must be seeded from the Zone pool, not the Regional one:
+   platform is exhibition at Regionals, so seeding from there gives Group A
+   girls 25 platform entries where the real Zone field is 136. Inferred from the
+   level's own name, and shown so it can be corrected. */
+const SEED_STAGES = ['Regionals','Zones','EWC','Nationals'];
+function seedStage(){
+  if (S.seedPool) return S.seedPool;
+  const n = String(tierName(0)||'').toLowerCase();
+  if (/zone/.test(n)) return 'Zones';
+  if (/east|west|central|e\/w\/c/.test(n)) return 'EWC';
+  if (/national/.test(n)) return 'Nationals';
+  return 'Regionals';
+}
+function seedPoolKey(){ return (S.year==='y25'?'2025':'2026') + '|' + seedStage(); }
+function seedRows(){
+  const n = Math.max(1, groupCountAt(0));
+  const rows = Array.from({length:n}, () => ({}));
+  const P = S.advData && S.advData.pools ? S.advData.pools[seedPoolKey()] : null;
+  if (!P) return rows;
+  for (const fips in P){
+    const ri = S.assign[fips];
+    if (ri == null || ri < 0 || ri >= n) continue;
+    const cells = P[fips];
+    for (const c in cells) rows[ri][c] = (rows[ri][c]||0) + cells[c];
+  }
+  return rows;
+}
+function seedTotal(){
+  const P = S.advData && S.advData.pools ? S.advData.pools[seedPoolKey()] : null;
+  if (!P) return 0;
+  let t = 0; for (const f in P) for (const c in P[f]) t += P[f][c];
+  return t;
+}
+
 function projectPathway(withTakeUp){
   if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
@@ -733,7 +770,7 @@ function projectPathway(withTakeUp){
   }
   return QR().project({
     routing: S.routing,
-    entries0: (S.flow.levels[0] || {rows: []}).rows,
+    entries0: seedRows(),
     groupCount: L => groupCountAt(L),
     groupOf: groupUp,
     conv, cells,
@@ -817,6 +854,35 @@ function focusLabel(){
   if (!S.bdCell || S.bdCell === 'all') return 'every event and age group';
   const c = S.bdCell;
   return `${AGE_LBL[c[0]]} ${GEN_LBL[c[1]]} ${DIS_LBL[c[2]]}`;
+}
+
+
+/* Which events a stage contests. Platform is exhibition at Regionals today and
+   Groups C and D do not appear there at all, but a proposal can change either.
+   Rather than bake the current rules in, every event is a switch per stage. */
+function renderEventGrid(L){
+  const off = new Set(S.routing[L].notOffered || []);
+  const head = ['A','B','C','D'].map(a=>`<th colspan="2">${esc(AGE_LBL[a])}</th>`).join('');
+  const sub  = ['A','B','C','D'].map(()=>'<th class="num">Boys</th><th class="num">Girls</th>').join('');
+  const body = ['1','3','P'].map(d => {
+    const tds = ['A','B','C','D'].flatMap(a => ['B','G'].map(g => {
+      const c = a+g+d;
+      return `<td class="num"><label class="bs-ev-c"><input type="checkbox" data-ev="${c}" data-evl="${L}"
+        ${off.has(c)?'':'checked'}></label></td>`;
+    })).join('');
+    return `<tr><td class="ps-sub">${esc(DIS_LBL[d])}</td>${tds}</tr>`;
+  }).join('');
+  return `<div class="bs-evgrid">
+    <div class="bs-cg-head"><span>Events contested at <b>${esc(tierName(L))}</b></span>
+      <span>
+        <button class="tab bs-mini" data-evall="${L}">all on</button>
+        <button class="tab bs-mini" data-evnone="${L}" title="Turn platform off for every age group">platform off</button>
+      </span></div>
+    <table class="ps-tbl bs-cg"><thead><tr><th></th>${head}</tr><tr><th></th>${sub}</tr></thead>
+      <tbody>${body}</tbody></table>
+    <p class="note">Unticking an event means this stage does not hold it. Athletes are not carried into an
+      event a stage does not run.</p>
+  </div>`;
 }
 
 function renderPathwayBreakdown(res){
@@ -1063,6 +1129,8 @@ function renderPathway(){
     return `<div class="bs-plevel">
       <div class="bs-plevel-h"><b>${esc(tierName(L))}</b>
         <span class="bs-round-n">${fmt(stops)} ${stops===1?'stop':'stops'}</span>
+        <button class="tab bs-mini" data-evtog="${L}">${S.evOpen===L?'hide events':'events'}${
+          (S.routing[L].notOffered||[]).length ? ` <span class="bs-ovc">${(S.routing[L].notOffered||[]).length} off</span>` : ''}</button>
         ${L>0 ? `<label class="bs-arr">arrive
           <input class="bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}"
             value="${Math.round(arrivalRate(L)*100)}">%
@@ -1071,6 +1139,7 @@ function renderPathway(){
         ${spare.length ? `<select class="sel bs-mini bs-rndadd" data-l="${L}">
           <option value="">+ add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
       </div>
+      ${S.evOpen===L ? renderEventGrid(L) : ''}
       ${roundRows}
     </div>`;
   }).join('');
@@ -1082,6 +1151,10 @@ function renderPathway(){
     <div class="bs-adv-head">
       <span class="note">Places finishing a round, and where they go. Every route is a band of finishing
         positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.</span>
+      <label class="bs-focus">First stop&rsquo;s field
+        <select class="sel" id="bsSeedPool">
+          ${SEED_STAGES.map(x=>`<option value="${x}" ${seedStage()===x?'selected':''}>${esc(x)} ${(S.year==='y25'?'2025':'2026')}</option>`).join('')}
+        </select><span class="bs-arr-m">${fmt(seedTotal())} entries</span></label>
       <label class="bs-focus">Showing
         <select class="sel" id="bsPathFocus">
           <option value="all" ${(!S.bdCell||S.bdCell==='all')?'selected':''}>every event and age group</option>
@@ -1174,6 +1247,33 @@ function wirePathway(){
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
   }));
+  const sp = document.getElementById('bsSeedPool');
+  if (sp) sp.addEventListener('change', () => { S.seedPool = sp.value; S.dirty = true; renderPathway(); });
+  P.querySelectorAll('[data-evtog]').forEach(b => b.addEventListener('click', e => {
+    const L = +e.currentTarget.dataset.evtog;
+    S.evOpen = (S.evOpen === L) ? null : L; renderPathway();
+  }));
+  P.querySelectorAll('input[data-ev]').forEach(el => el.addEventListener('change', e => {
+    pushUndo();
+    const L = +e.target.dataset.evl, c = e.target.dataset.ev;
+    const set = new Set(S.routing[L].notOffered || []);
+    if (e.target.checked) set.delete(c); else set.add(c);
+    S.routing[L].notOffered = [...set];
+    S.dirty = true; renderPathway();
+  }));
+  P.querySelectorAll('[data-evall]').forEach(b => b.addEventListener('click', e => {
+    pushUndo(); S.routing[+e.currentTarget.dataset.evall].notOffered = [];
+    S.dirty = true; renderPathway();
+  }));
+  P.querySelectorAll('[data-evnone]').forEach(b => b.addEventListener('click', e => {
+    pushUndo();
+    const L = +e.currentTarget.dataset.evnone;
+    const set = new Set(S.routing[L].notOffered || []);
+    CELLS.filter(c => c[2] === 'P').forEach(c => set.add(c));
+    S.routing[L].notOffered = [...set];
+    S.dirty = true; renderPathway();
+  }));
+
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
   const fc = document.getElementById('bsPathFocus');
