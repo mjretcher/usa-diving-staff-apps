@@ -467,11 +467,44 @@ function revenue(res, cells, seedRows, opts){
   return {perLevel: per, entries, gross, levy: levyTotal, net: gross - levyTotal};
 }
 
+
+/* ==========================================================================
+   CAPACITY
+   --------------------------------------------------------------------------
+   How many places a structure creates, before any athlete exists. Purely the
+   arithmetic of the bands: a round that takes places 9 to 24 from three stops
+   has 48 places in it per event, whether or not 48 people turn up.
+
+   This is the number that says whether a structure is over-built. A final with
+   48 places and a realistic field of 12 is not selective, it is a formality --
+   and that is invisible while only projected attendance is shown.
+   ========================================================================== */
+function capacityAt(routing, L, round, groupCount, cell){
+  let cap = 0, unbounded = false;
+  routing.forEach((lvl, from) => {
+    (lvl.routes || []).forEach(rt => {
+      if (!rt.to || rt.to.level !== L || rt.to.round !== round) return;
+      const no = routing[L] && routing[L].notOffered;
+      if (cell && no && no.indexOf(cell) >= 0) return;
+      const width = (rt.hi == null) ? Infinity : Math.max(0, rt.hi - (rt.lo || 1) + 1);
+      if (!isFinite(width)) { unbounded = true; return; }
+      cap += width * Math.max(1, groupCount(from));
+    });
+  });
+  return unbounded ? Infinity : cap;
+}
+
+/* Total places across every cell at a level and round. */
+function capacityTotal(routing, L, round, groupCount, cells){
+  return cells.reduce((s, c) => s + capacityAt(routing, L, round, groupCount, c), 0);
+}
+
 window.QualRouting = {
   ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound,
   defaultRouting, validate, project, sizeAt, describe,
   estimateDivers, diversAt, boardShare, meanEvents,
   billableEntries, billableByGroup, revenue,
+  capacityAt, capacityTotal,
   ALL_CELLS: null,
 };
 

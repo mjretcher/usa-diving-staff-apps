@@ -70,6 +70,7 @@ const S = {
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
+  gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
@@ -670,6 +671,12 @@ async function ensureMult(){
     const r = await fetch('athlete-multiplicity.json?v=' + Date.now().toString(36).slice(0,5));
     S.mult = r.ok ? await r.json() : null;
   } catch(e){ console.warn('multiplicity', e); S.mult = null; }
+  if (!S.gender){
+    try {
+      const g = await fetch('gender-data.json?v=' + Date.now().toString(36).slice(0,5));
+      S.gender = g.ok ? await g.json() : null;
+    } catch(e){ S.gender = null; }
+  }
   return S.mult;
 }
 
@@ -749,6 +756,7 @@ function seedTotal(){
 }
 
 function projectPathway(withTakeUp){
+  S._cr = null;
   if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
   const cells = CELLS;
@@ -860,6 +868,71 @@ function focusLabel(){
 /* Which events a stage contests. Platform is exhibition at Regionals today and
    Groups C and D do not appear there at all, but a proposal can change either.
    Rather than bake the current rules in, every event is a switch per stage. */
+
+/* ---------- the membership pool ----------
+   Everything else here is seeded from athletes who competed. This is seeded
+   from athletes who merely EXIST: everyone holding a junior membership in the
+   area a stop draws from. It answers a different question -- not "how many will
+   turn up under current behaviour" but "how many could".
+
+   Two conversions stand between a member and an entry, and both are measured
+   rather than assumed: what share of members compete at all, and what share of
+   competitors contest each board. Both are shown, because a projection built on
+   two silent multipliers is not one anybody should trust. */
+function memberPool(L){
+  const n = Math.max(1, groupCountAt(L));
+  const rows = Array.from({length:n}, () => ({A:0,B:0,C:0,D:0}));
+  if (!S.age) return rows;
+  const idx = {D:0, C:1, B:2, A:3};
+  for (const fips in S.age){
+    const rec = S.age[fips][S.year];
+    if (!rec) continue;
+    const ri = S.assign[fips];
+    if (ri == null || ri < 0 || ri >= S.regions.length) continue;
+    const gi = groupUp(0, ri, L);
+    if (gi == null || gi >= n) continue;
+    for (const a in idx) rows[gi][a] += (rec[idx[a]] || 0);
+  }
+  return rows;
+}
+
+/* Gender split per county, name-matched where known and filled locally where
+   not. Falls back to an even split rather than guessing a national ratio. */
+function genderSplit(){
+  const g = S.gender && S.gender.counties;
+  if (!g) return null;
+  const tot = {A:[0,0], B:[0,0], C:[0,0], D:[0,0]};
+  const order = ['D','C','B','A'];
+  for (const f in g){
+    const v = g[f][S.year];
+    if (!v) continue;
+    order.forEach((a,i) => { tot[a][0] += (v[i]||0); tot[a][1] += (v[i+4]||0); });
+  }
+  const out = {};
+  order.forEach(a => {
+    const s = tot[a][0] + tot[a][1];
+    out[a] = s > 0 ? [tot[a][0]/s, tot[a][1]/s] : [0.5, 0.5];
+  });
+  return out;
+}
+
+/* What share of members actually compete, measured at the seeded stage. */
+function competeRate(){
+  const pool = memberPool(0).reduce((s,r) => s + r.A + r.B + r.C + r.D, 0);
+  if (!pool) return null;
+  const seed = seedRows();
+  const entries = seed.reduce((s,r) => s + CELLS.reduce((q,c)=>q+(r[c]||0), 0), 0);
+  const mult = S.mult && S.mult.cells && S.mult.cells[seedPoolKey().replace('|','|')];
+  // Entries are athlete-events; divide by events-per-athlete to get people.
+  let per = 2.0;
+  try {
+    const b = S.mult.cells[seedPoolKey()];
+    const vals = Object.values(b).map(x => x.entries_per_athlete).filter(Boolean);
+    if (vals.length) per = vals.reduce((a,b2)=>a+b2,0)/vals.length;
+  } catch(e){}
+  return {members: pool, competitors: entries/per, rate: (entries/per)/pool, per};
+}
+
 function renderEventGrid(L){
   const off = new Set(S.routing[L].notOffered || []);
   const head = ['A','B','C','D'].map(a=>`<th colspan="2">${esc(AGE_LBL[a])}</th>`).join('');
@@ -890,6 +963,8 @@ function renderPathwayBreakdown(res){
   const mode = S.bdMode || 'stop';
   const qual = (mode === 'qualified') ? projectPathway(false) : null;
   const src = qual || res;
+  const gsplit = (mode === 'members') ? genderSplit() : null;
+  const pools = (mode === 'members') ? {} : null;
 
   const cols = [];
   S.routing.forEach((lvl, L) => QR().roundsOf(lvl).forEach(r => {
@@ -900,7 +975,34 @@ function renderPathwayBreakdown(res){
   /* Across every stop, and at a single one. The per-stop figure is the field a
      diver actually stands in and the session an official actually runs -- a
      total spread over three championships tells you neither. */
+  /* Spots: what the bands create, before anyone exists.
+     Members: how many athletes hold a membership in the area this stop draws
+     from, converted to entries by the measured share who compete and the
+     measured share who contest each board. */
+  const capAt = (c, cell) => {
+    const v = QR().capacityAt(S.routing, c.L, c.key, L2 => groupCountAt(L2), cell);
+    return isFinite(v) ? v : 0;
+  };
+  const memAt = (c, cell) => {
+    if (!pools[c.L]) pools[c.L] = memberPool(c.L);
+    const ag = cell[0], gd = cell[1], bd = cell[2];
+    const rows = pools[c.L];
+    const people = rows.reduce((s,r) => s + (r[ag]||0), 0);
+    const gs = gsplit ? gsplit[ag] : [0.5,0.5];
+    const share = gd === 'B' ? gs[0] : gs[1];
+    // Of members, the share who compete; of competitors, the share on this board.
+    const cr = S._cr || (S._cr = competeRate());
+    const rate = cr ? cr.rate : 0.4;
+    let boardShare = 0.6;
+    try {
+      const blk = S.mult.cells[seedPoolKey()][ag+gd];
+      boardShare = QR().boardShare(blk.combinations, bd);
+    } catch(e){}
+    return people * share * rate * boardShare;
+  };
   const at = (c, cell) => {
+    if (mode === 'spots')   { const v = capAt(c, cell); return {tot:v, per:v/Math.max(1,c.stops), lo:0, hi:0}; }
+    if (mode === 'members') { const v = memAt(c, cell); return {tot:v, per:v/Math.max(1,c.stops), lo:0, hi:0}; }
     const f = src.field[c.L] && src.field[c.L][c.key];
     if (!f) return {tot:0, per:0, lo:0, hi:0};
     const vals = f.map(g => g[cell] || 0);
@@ -919,6 +1021,8 @@ function renderPathwayBreakdown(res){
   };
   const agg = (c, cells) => {
     const t = cells.reduce((s,cell) => s + at(c, cell).tot, 0);
+    if (mode === 'spots' || mode === 'members')
+      return {tot:t, per:t/Math.max(1,c.stops), lo:0, hi:0};
     const lo = [], hi = [];
     const f = src.field[c.L] && src.field[c.L][c.key];
     if (f) f.forEach(g => { const n = cells.reduce((s,cell)=>s+(g[cell]||0),0); if (n>0){ lo.push(n); hi.push(n);} });
@@ -943,7 +1047,18 @@ function renderPathwayBreakdown(res){
 
   const totals = cols.map(c => `<td class="num"><b>${show(agg(c, CELLS))}</b></td>`).join('');
 
-  const note = mode === 'stop'
+  const cr = (mode === 'members') ? (S._cr || (S._cr = competeRate())) : null;
+  const note = mode === 'spots'
+    ? 'Places the bands create, before any athlete exists. The entry stop is blank because nothing routes into it — its size is whoever enters. A round with far more places than field is a formality rather than a selection.'
+    : mode === 'members'
+      ? (cr ? `Everyone holding a junior membership where each stop draws from, converted at the measured
+              ${Math.round(cr.rate*100)}% of members who compete (${fmt(Math.round(cr.members))} members,
+              about ${fmt(Math.round(cr.competitors))} competing) and the measured share contesting each board.
+              This is who COULD be there, not who would. Membership does not thin as you climb the pathway
+              &mdash; above the entry stop the population is whoever qualified, so only the per-stop figure
+              means anything here: it is the catchment each meet draws from.`
+            : 'Membership pool could not be worked out.')
+    : mode === 'stop'
     ? 'One event at one meet &mdash; the field a diver stands in and the session an official runs. Where stops differ in size, the range is shown beside the average.'
     : mode === 'qualified'
       ? 'What the rules entitle athletes to, before take-up. Always higher than the field that turns up.'
@@ -956,6 +1071,8 @@ function renderPathwayBreakdown(res){
         <button data-bd="stop" class="${mode==='stop'?'on':''}">At one stop</button>
         <button data-bd="total" class="${mode==='total'?'on':''}">All stops</button>
         <button data-bd="qualified" class="${mode==='qualified'?'on':''}">Qualified, before take-up</button>
+        <button data-bd="spots" class="${mode==='spots'?'on':''}">Spots the structure creates</button>
+        <button data-bd="members" class="${mode==='members'?'on':''}">Membership pool</button>
       </div>
       <span class="note">${note}</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
@@ -988,7 +1105,7 @@ function meetManifest(res){
     const rounds = QR().roundsOf(lvl);
     TG.groups.forEach((g, gi) => {
       const events = [];
-      let entries = 0;
+      let entries = 0, spots = 0;
       const blocks = {};
       CELLS.forEach(cell => {
         // The field at the first round is the meet's entry list for that event;
@@ -1004,6 +1121,8 @@ function meetManifest(res){
         });
         events.push({cell, n: Math.round(n), byRound});
         entries += n;
+        const cap = QR().capacityAt(S.routing, L, rounds[0].key, l => groupCountAt(l), cell);
+        if (isFinite(cap)) spots += cap / Math.max(1, TG.groups.length);
         const blk = cell.slice(0,2);
         blocks[blk] = (blocks[blk] || 0) + 1;
       });
@@ -1011,7 +1130,7 @@ function meetManifest(res){
       out.push({level:L, levelName: tierName(L), gi,
                 name: g.name || ('Area ' + (gi+1)),
                 rounds: rounds.map(r => r.key),
-                events, entries: Math.round(entries),
+                events, entries: Math.round(entries), spots: Math.round(spots),
                 biggest: events.length ? Math.max(...events.map(e => e.n)) : 0,
                 minDays, blocks});
     });
@@ -1026,6 +1145,8 @@ function renderMeetManifest(res){
       <td><b>${esc(m.name)}</b><span class="bs-mf-l">${esc(m.levelName)}</span></td>
       <td class="num">${fmt(m.events.length)}</td>
       <td class="num">${fmt(m.entries)}</td>
+      <td class="num">${m.spots ? fmt(m.spots) + (m.spots > m.entries*1.4
+          ? `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>` : '') : '<span class="bs-bd-0">open</span>'}</td>
       <td class="num">${fmt(m.biggest)}</td>
       <td class="num">${m.rounds.map(r => QR().ROUND_NAME[r]||r).join(' + ')}</td>
       <td class="num"><b>${fmt(m.minDays)}</b></td>
@@ -1034,12 +1155,14 @@ function renderMeetManifest(res){
     <div class="bs-bd-h"><b>Every meet</b>
       <button class="tab bs-mini" id="bsMfCsv">Export for scheduling</button>
       <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
-        <b>Days</b> is the least a meet can run in, given an age group and gender does not contest
-        more than one event in a day; prelims and finals of an event share a day, so an event is
-        one day's commitment.</span></div>
+        <b>Places</b> is what the bands entitle this meet to take; where it far exceeds the entries, the
+        stop is admitting nearly everyone sent to it. <b>Days</b> is the least a meet can run in, given an
+        age group and gender does not contest more than one event in a day; prelims and finals of an event
+        share a day, so an event is one day's commitment.</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-mf-tbl">
       <thead><tr><th>Meet</th><th class="num">Events</th><th class="num">Entries</th>
-        <th class="num">Biggest field</th><th class="num">Rounds</th><th class="num">Days</th></tr></thead>
+        <th class="num">Places</th><th class="num">Biggest field</th><th class="num">Rounds</th>
+        <th class="num">Days</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }
