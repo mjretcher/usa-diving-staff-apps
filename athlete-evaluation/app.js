@@ -29,10 +29,10 @@
 
     { id: 'gap',      section: 'compare', label: 'Gap to the podium',  el: 'view-gap',      athlete: true, mod: () => window.AEGap },
     { id: 'podium',   section: 'compare', label: 'List vs the field',    el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
-    { id: 'medaltrack', section: 'compare', label: 'Junior to senior', el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
+    { id: 'medaltrack', section: 'compare', label: 'Junior to senior', el: 'view-medaltrack', athlete: true,  mod: () => window.AECorridor },
 
     { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: true,  mod: () => window.AEField },
-    { id: 'la28',     section: 'fields',  label: '2028 projection',    el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
+    { id: 'la28',     section: 'fields',  label: '2028 projection',    el: 'view-la28',     athlete: true,  mod: () => window.AELa28 },
 
     { id: 'race',     section: 'meets',   label: 'Meet replay',        el: 'view-race',     athlete: false, mod: () => window.AEMeet },
   ];
@@ -91,7 +91,12 @@
       if (window.AEPodium) window.AEPodium.onAthleteChange();
       renderChip();
       writeHash();
-      if (state.view === 'field') setView('passport'); else rerender();
+      // Stay where you are. This used to bounce you to the passport whenever
+      // you picked someone from The Field, because The Field could not show an
+      // athlete — now it can, and every other view either overlays them or
+      // says why it cannot, so being thrown off the page you were reading is
+      // just lost context.
+      rerender();
     } catch (e) {
       chip.innerHTML = `<span class="ae-chip" style="color:var(--brand-red)">Could not load athlete</span>`;
       console.error('[AE picker]', e);

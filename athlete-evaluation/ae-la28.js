@@ -71,13 +71,16 @@
         <div class="ae-card-h"><div><h3>The full board — ${esc(ev.label)}</h3>
         <p class="ae-soft">Every active US athlete with a qualifying list since 2025, ranked by <b>% of medal standard</b> — projected 2028 capability as a percentage of the world medal bar (100 = at the medal line). Tap anyone for their full passport.</p></div></div>
         ${boardStory(ranked, medal, cut, semi)}
+        ${whereAmI(ranked, ev, medal)}
         <div class="ae-board">
           ${ranked.map((r, i) => {
             const tier = tierOf(r, medal, cut, semi);
             const pi = podiumIndex(r, medal);
             const gap = medal != null && r.proj_world != null ? r.proj_world - medal : null;
             const sparkVals = (r.yearlyArr || []).map((y) => y.tot);
-            return `<button class="ae-brow ae-brow-${tier.cls}" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
+            const selB = window.AE.state.bundle;
+            const meB = selB && selB.ident && String(selB.ident.canonical_id) === String(r.canonical_id);
+            return `<button class="ae-brow ae-brow-${tier.cls}${meB ? ' ae-la-mine' : ''}" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
               <span class="ae-brow-rank">${i + 1}</span>
               <span class="ae-brow-id">
                 <b>${esc(r.display_name)}</b>
@@ -100,6 +103,49 @@
         </div>
         <p class="ae-soft ae-footnote">Projection = the athlete's own execution trend carried to 2028 on a world-finalist-average list${wdd ? ` (DD ${f1(wdd.avg_list_dd)})` : ''}. Tiers: clears the medal bar → Medal Track; clears the Worlds final cut → World Finalist Track; clears the semi cut → World Semi Track. One-season athletes project flat. Optional dives only, so junior and senior lists sit on one scale. Trends rest on 2–3 seasons today and sharpen automatically as the scraper lands 2015–2023.</p>
       </div>`;
+  }
+
+  // A ranked board of forty people is a league table until you can find your
+  // own athlete on it. When they are absent, "not here" is the least useful
+  // possible answer — the reason is the information, and there are only a few
+  // reasons: wrong event, no result since 2025, or no qualifying list.
+  function whereAmI(ranked, ev, medal) {
+    const b = window.AE.state.bundle;
+    if (!b || !b.ident) return '';
+    const nm = b.ident.display_name;
+    const i = ranked.findIndex((r) => String(r.canonical_id) === String(b.ident.canonical_id));
+    if (i >= 0) {
+      const r = ranked[i];
+      const gap = medal != null && r.proj_world != null ? r.proj_world - medal : null;
+      return `<div class="ae-la-you"><b>${esc(nm)}</b> is <b>${i + 1}</b> of ${ranked.length} on this
+        board${r.proj_world != null ? ` · 2028 projection ${f1(r.proj_world)}` : ''}${gap != null
+          ? ` · ${gap >= 0 ? f1(gap) + ' above' : f1(-gap) + ' below'} today's medal bar` : ''}.</div>`;
+    }
+    // Absent — work out which of the board's own entry conditions they miss.
+    // Gender first: telling a women's diver she has "no Men · Platform results"
+    // is true and useless, and reads as though the app does not know who she is.
+    const own = (b.phases || []).map((p) => p.gender).filter(Boolean);
+    const aGender = own.length
+      ? (own.filter((g) => g === 'Female').length > own.length / 2 ? 'Female' : 'Male') : null;
+    if (aGender && aGender !== ev.gender) {
+      return `<div class="ae-la-you ae-la-you-off">This board is ${esc(ev.label)}.
+        ${esc(nm)} dives ${aGender === 'Female' ? "women's" : "men's"} events — switch the event
+        above to place them.</div>`;
+    }
+    const ph = (b.phases || []).filter((p) => p.discipline === ev.discipline
+      && p.gender === ev.gender && !window.AE.truthy(p.is_synchronized));
+    if (!ph.length) {
+      return `<div class="ae-la-you ae-la-you-off">${esc(nm)} has no ${esc(ev.label)} results on
+        record, so they are not on this board. Try another event above.</div>`;
+    }
+    const recent = ph.filter((p) => Number(p.meet_year) >= 2025).length;
+    return `<div class="ae-la-you ae-la-you-off">${esc(nm)} is not on this board.
+      ${recent
+        ? `They have ${recent} ${esc(ev.label)} result${recent === 1 ? '' : 's'} since 2025, but no
+           qualifying list on file — the board needs dive-level sheets to project an engine, and the
+           scraper has not landed theirs.`
+        : `Their most recent ${esc(ev.label)} result is from ${Math.max(...ph.map((p) => Number(p.meet_year)))},
+           and the board only carries athletes active since 2025.`}</div>`;
   }
 
   function boardStory(ranked, medal, cut, semi) {
@@ -166,7 +212,10 @@
     const dd = wdd && r.last_dd != null && wdd.avg_list_dd - r.last_dd > 0.5
       ? `<span class="ae-la-chip">+${f1(wdd.avg_list_dd - r.last_dd)} DD headroom to world avg</span>` : '';
     const jrChip = jrPath(r, corridor, jr);
-    return `<div class="ae-la-card" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
+    const sel = window.AE.state.bundle;
+    const isMe = sel && sel.ident && String(sel.ident.canonical_id) === String(r.canonical_id);
+    return `<div class="ae-la-card${isMe ? ' ae-la-mine' : ''}" onclick="AEApp.pick('${escJsAttr(r.canonical_id)}')">
+      ${isMe ? '<div class="ae-la-flag">selected athlete</div>' : ''}
       <div class="ae-la-card-top">
         <div><div class="ae-la-name">${esc(r.display_name)}</div>
         <div class="ae-la-sub">${esc(r.team_name || '')}</div></div>
