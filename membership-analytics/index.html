@@ -432,7 +432,7 @@ tr:hover td{background:#f7fafd}
 .bs-namebar{flex-wrap:wrap}
 .bs-bd{margin-top:16px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
 .bs-bd-h{background:#f4f8fd;padding:9px 13px;border-bottom:1px solid var(--line)}
-.bs-bd-h b{font-family:var(--display);font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--navy);display:block}
+.bs-bd-h>b{font-family:var(--display);font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--navy);display:block}
 .bs-bd-h .note{margin-top:2px}
 .bs-bd-scroll{overflow-x:auto}
 .bs-bd-tbl{min-width:520px}
@@ -444,7 +444,7 @@ tr:hover td{background:#f7fafd}
 .bs-bd-tbl tr.bs-bd-tot td{background:#eef4fb;border-top:2px solid var(--navy)}
 .bs-bd-0{color:#c8d2e0}
 .bs-bd-h{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
-.bs-bd-h b{flex:0 0 auto}
+.bs-bd-h>b{flex:0 0 auto}
 .bs-bdseg{flex:0 0 auto}
 .bs-bdseg button{border:0;background:#fff;color:var(--navy);padding:4px 10px;font-size:11px;font-weight:700}
 .bs-bdseg button.on{background:var(--navy);color:#fff}
@@ -454,6 +454,11 @@ tr:hover td{background:#f7fafd}
 .bs-focus{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--navy)}
 .bs-focus .sel{font-size:11.5px;padding:4px 8px;max-width:230px}
 .bs-bd-tbl tr.bs-bd-on td{background:#eff9fd;box-shadow:inset 3px 0 0 var(--pool)}
+/* ---- Pathway gets the whole page; the map drops below it ---- */
+.bs-layout.bs-wide{grid-template-columns:minmax(0,1fr)}
+.bs-layout.bs-wide>.card:first-child{order:2}
+.bs-layout.bs-wide>.card:first-child .card-b{max-width:840px;margin:0 auto;width:100%}
+.bs-layout.bs-wide>.card:last-child{order:1}
 /* ---- every-meet breakdown ---- */
 .bs-bdsplit{flex:0 0 auto}
 .bs-bdsplit button{border:0;background:#fff;color:var(--navy);padding:4px 10px;font-size:11px;font-weight:700}
@@ -483,6 +488,14 @@ tr:hover td{background:#f7fafd}
 .bs-evgrid td{padding:3px 5px}
 .bs-ev-c{display:inline-flex;cursor:pointer}
 .bs-ev-c input{cursor:pointer;width:15px;height:15px}
+.bs-mf-levy{color:#b45309}
+.mr-tmpl.is-hint{border-color:var(--pool);box-shadow:0 0 0 2px rgba(0,154,199,.14)}
+.bs-mf-tier td{background:var(--navy) !important;color:#fff;font-family:var(--display);font-size:14px;
+  letter-spacing:.05em;text-transform:uppercase;padding:6px 10px !important}
+.bs-mf-tier td b{color:#fff}
+.bs-mf-cap{color:var(--red) !important;font-weight:800}
+.bs-pwlib{display:inline-flex;align-items:center;gap:5px}
+.bs-pwlib .sel{font-size:11.5px;max-width:230px}
 </style>
 </head>
 <body>
@@ -532,10 +545,10 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/neon-client.js?v=202607202300"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202608041200"></script>
-<script src="routing.js?v=202608052900"></script>
-<script src="boundary.js?v=202608052009"></script>
+<script src="routing.js?v=202608053100"></script>
+<script src="boundary.js?v=202608052022"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202608051300"></script>
+<script src="ma-reports.js?v=202608053300"></script>
 <script src="pricing.js?v=202608051700"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

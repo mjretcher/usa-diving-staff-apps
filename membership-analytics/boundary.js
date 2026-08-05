@@ -71,8 +71,17 @@ const S = {
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
+  fees: null,           // entry fee per level, for the per-meet financials
+  hostShare: 0.25,      // share of net entry income going to the host
+  hostMode: 'pct',      // pct | flat | per_entry
+  hostFlat: 3000,       // flat fee per meet
+  hostPer: 15,          // dollars per entry
+  hostMin: 0,           // guaranteed minimum, whichever model is used
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
+  pathList: null,       // saved pathways
+  pathName: '',         // the one currently loaded
+  pathNotes: null,      // what adapting it changed
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -88,6 +97,8 @@ const S = {
 };
 
 const fmt = n => Number(n||0).toLocaleString('en-US');
+const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
+
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function defaultRegions(n){
@@ -446,6 +457,12 @@ function renderPanel(){
 
   if (S.panelMode==='advance') renderAdvShell();
   if (S.panelMode==='pathway') renderPathwayShell();
+  /* The pathway is tables thirty columns wide and a routing editor; squeezing
+     it into the right-hand column made every line wrap and turned it into a
+     very long scroll. It gets the full page, with the map moved beneath it --
+     nothing is painted while a pathway is being designed. */
+  const lay = document.querySelector('.bs-layout');
+  if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
   renderNumbers();
   wirePanel();
   loadScenarioList();
@@ -1171,6 +1188,66 @@ function renderPathwayBreakdown(res){
      the days a meet needs is at least the number of events its busiest
      age-and-gender block runs.
    ------------------------------------------------------------------------- */
+
+/* ---------- per-meet money ----------
+   What each stop draws and what it is worth, because a host bidding for a Zone
+   or an E/W/C is bidding on a field size nobody can currently tell them.
+
+   The reason to look at this before drawing lines rather than after: under the
+   worked scenario East draws 259 entries and Central 691 at the same tier. A
+   percentage cut pays Central's host 2.7 times East's for running the same
+   meet; a flat fee may not cover East's pool rental. Neither is a fee problem.
+   It is the map, and it is only fixable while the map is still being drawn. */
+const DEFAULT_FEES = [85, 90, 115, 125];
+function feeFor(L){
+  if (S.fees && S.fees[L] != null) return S.fees[L];
+  const n = S.levels.length;
+  // Last level is the championship; otherwise walk the published ladder.
+  if (L === n - 1) return DEFAULT_FEES[3];
+  return DEFAULT_FEES[Math.min(L + (n <= 3 ? 1 : 0), 2)];
+}
+const LEVY = 4.90;
+
+/* How a host is paid. A percentage is only one of the answers, and on an
+   unbalanced tier it is the worst of them: at 44x apart it pays one host
+   forty-four times another for running the same meet. A flat fee inverts the
+   problem -- fine for the small meet, trivial for the large one. Per-entry sits
+   between. A guaranteed minimum on top of any of them is what actually makes a
+   small meet biddable, so it is a separate lever rather than a fourth mode. */
+function meetMoney(m){
+  const fee = feeFor(m.level);
+  const gross = m.entries * fee;
+  const levy = m.entries * LEVY;
+  const net = gross - levy;
+  const mode = S.hostMode || 'pct';
+  let host = mode === 'flat'      ? (+S.hostFlat || 0)
+           : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
+           :                        net * (S.hostShare || 0);
+  const floored = (+S.hostMin || 0) > host;
+  if (floored) host = +S.hostMin;
+  // A host cut cannot exceed what the meet actually took.
+  const capped = host > net;
+  if (capped) host = net;
+  return {fee, gross, levy, net, host, usad: net - host, floored, capped,
+          pct: net > 0 ? host/net : 0};
+}
+
+/* Largest against smallest within a tier: the number a host cut lives or dies
+   on. */
+function tierSpread(meets){
+  const byLevel = {};
+  meets.forEach(m => (byLevel[m.level] = byLevel[m.level] || []).push(m.entries));
+  const out = {};
+  for (const L in byLevel){
+    const v = byLevel[L].filter(x => x > 0);
+    if (v.length < 2) continue;
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const mean = v.reduce((a,b)=>a+b,0)/v.length;
+    out[L] = {lo, hi, ratio: lo ? hi/lo : Infinity, mean, n: v.length};
+  }
+  return out;
+}
+
 function meetManifest(res){
   if (!res) return [];
   const out = [];
@@ -1215,27 +1292,83 @@ function meetManifest(res){
 function renderMeetManifest(res){
   const meets = meetManifest(res);
   if (!meets.length) return '';
-  const rows = meets.map(m => `<tr>
-      <td><b>${esc(m.name)}</b><span class="bs-mf-l">${esc(m.levelName)}</span></td>
+  const spread = tierSpread(meets);
+  const COLS = 10;
+  let lastLevel = null;
+  const rows = meets.map(m => {
+    const $ = meetMoney(m);
+    // A tier header, because "Group 1" exists at more than one level and a flat
+    // list makes you read a grey subtitle to tell two meets apart.
+    let head = '';
+    if (m.level !== lastLevel){
+      lastLevel = m.level;
+      const kin = meets.filter(x => x.level === m.level);
+      const tot = kin.reduce((s2,x) => s2 + x.entries, 0);
+      const money = kin.reduce((s2,x) => s2 + meetMoney(x).net, 0);
+      head = `<tr class="bs-mf-tier"><td colspan="${COLS}">
+        <b>${esc(m.levelName)}</b> &middot; ${fmt(kin.length)} ${kin.length===1?'meet':'meets'}
+        &middot; ${fmt(Math.round(tot))} entries &middot; ${usd(money)} net</td></tr>`;
+    }
+    return head + `<tr>
+      <td><b>${esc(m.name)}</b></td>
       <td class="num">${fmt(m.events.length)}</td>
-      <td class="num">${fmt(m.entries)}</td>
-      <td class="num">${m.spots ? fmt(m.spots) + (m.spots > m.entries*1.4
-          ? `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>` : '') : '<span class="bs-bd-0">open</span>'}</td>
+      <td class="num"><b>${fmt(m.entries)}</b></td>
+      <td class="num">${m.spots
+          ? fmt(m.spots) + `<span class="bs-bd-rng">${Math.round(m.entries/m.spots*100)}% used</span>`
+          : '<span class="bs-bd-0">no cap</span>'}</td>
       <td class="num">${fmt(m.biggest)}</td>
-      <td class="num">${m.rounds.map(r => QR().ROUND_NAME[r]||r).join(' + ')}</td>
+      <td class="num mono">${usd($.gross)}</td>
+      <td class="num mono bs-mf-levy">&minus;${usd($.levy)}</td>
+      <td class="num mono"><b>${usd($.host)}</b>${
+        // The cap is reported first: when a meet cannot pay what the model asks,
+        // that it hit a floor is beside the point.
+        $.capped  ? '<span class="bs-bd-rng bs-mf-cap">all of net</span>'
+        : $.floored ? '<span class="bs-bd-rng">at the minimum</span>'
+        : `<span class="bs-bd-rng">${Math.round($.pct*100)}% of net</span>`}</td>
+      <td class="num mono">${usd($.usad)}</td>
       <td class="num"><b>${fmt(m.minDays)}</b></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+  const bal = Object.keys(spread).map(L => {
+    const s2 = spread[L];
+    const bad = s2.ratio >= 2;
+    return `<li class="${bad?'bs-prob bad':'bs-prob warn'}"><b>${esc(tierName(+L))}</b>:
+      biggest meet ${fmt(Math.round(s2.hi))} entries, smallest ${fmt(Math.round(s2.lo))} &mdash;
+      <b>${s2.ratio.toFixed(1)}&times;</b> apart across ${s2.n} stops.
+      ${bad ? `A percentage cut pays one host ${s2.ratio.toFixed(1)} times another for running the same meet;
+               a flat fee may not cover the smallest one's rental. That is the map, not the fee.`
+            : 'Close enough that one host cut works across the tier.'}</li>`;
+  }).join('');
   return `<div class="bs-bd">
     <div class="bs-bd-h"><b>Every meet</b>
-      <button class="tab bs-mini" id="bsMfCsv">Export for scheduling</button>
+      <label class="bs-arr">host cut
+        <select class="sel bs-mini" id="bsHostMode">
+          <option value="pct"       ${(S.hostMode||'pct')==='pct'?'selected':''}>% of net</option>
+          <option value="flat"      ${S.hostMode==='flat'?'selected':''}>flat per meet</option>
+          <option value="per_entry" ${S.hostMode==='per_entry'?'selected':''}>per entry</option>
+        </select>
+        ${(S.hostMode||'pct')==='pct'
+          ? `<input class="bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1"
+               value="${Math.round((S.hostShare||0)*100)}">%`
+          : S.hostMode==='flat'
+          ? `$<input class="bs-rt-in" id="bsHostFlat" type="number" min="0" step="100" value="${+S.hostFlat||0}">`
+          : `$<input class="bs-rt-in" id="bsHostPer" type="number" min="0" step="1" value="${+S.hostPer||0}">/entry`}
+      </label>
+      <label class="bs-arr">minimum $<input class="bs-rt-in" id="bsHostMin" type="number" min="0" step="100"
+        value="${+S.hostMin||0}"></label>
+      <button class="tab bs-mini" id="bsMfCsv">Export</button>
       <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
         <b>Places</b> is what the bands entitle this meet to take; where it far exceeds the entries, the
         stop is admitting nearly everyone sent to it. <b>Days</b> is the least a meet can run in, given an
         age group and gender does not contest more than one event in a day; prelims and finals of an event
-        share a day, so an event is one day's commitment.</span></div>
+        share a day, so an event is one day's commitment. Entry income is at
+        ${SEED_STAGES.map((x,i)=>'').join('')}the published fee for each tier; change fees in Pricing Studio to model them properly.</span>
+      ${bal ? `<ul class="bs-probs" style="width:100%;margin:8px 0 0">${bal}</ul>` : ''}</div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-mf-tbl">
       <thead><tr><th>Meet</th><th class="num">Events</th><th class="num">Entries</th>
-        <th class="num">Places</th><th class="num">Biggest field</th><th class="num">Rounds</th>
+        <th class="num">Places</th><th class="num">Biggest field</th>
+        <th class="num">Entry income</th><th class="num">DiveMeets</th>
+        <th class="num">Host cut</th><th class="num">USA Diving keeps</th>
         <th class="num">Days</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
@@ -1250,21 +1383,165 @@ function exportManifestCsv(){
   meets.forEach(m => m.rounds.forEach(r => rounds.add(r)));
   const rl = QR().ROUND_ORDER.filter(r => rounds.has(r));
   const head = ['stage','meet','age_group','gender','event','entries']
-    .concat(rl.map(r => 'in_' + r)).concat(['min_days_for_this_meet']);
+    .concat(rl.map(r => 'in_' + r))
+    .concat(['min_days_for_this_meet','meet_total_entries','entry_fee',
+             'meet_gross','meet_divemeets_levy','meet_host_cut','host_cut_pct_of_net',
+             'meet_usad_keeps']);
   const lines = [head.join(',')];
-  meets.forEach(m => m.events.forEach(e => {
-    lines.push([q(m.levelName), q(m.name), q(AGE_LBL[e.cell[0]]), q(GEN_LBL[e.cell[1]]),
-                q(DIS_LBL[e.cell[2]]), e.n]
-      .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
-      .concat([m.minDays]).join(','));
-  }));
+  meets.forEach(m => {
+    const $ = meetMoney(m);
+    m.events.forEach(e => {
+      lines.push([q(m.levelName), q(m.name), q(AGE_LBL[e.cell[0]]), q(GEN_LBL[e.cell[1]]),
+                  q(DIS_LBL[e.cell[2]]), e.n]
+        .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
+        .concat([m.minDays, m.entries, $.fee, Math.round($.gross), Math.round($.levy),
+                 Math.round($.host), Math.round($.pct*100), Math.round($.usad)]).join(','));
+    });
+  });
   download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
+}
+
+
+/* ---------- the pathway library ----------
+   A pathway and a map are separate questions. The pathway is rules -- rounds,
+   place bands, which events a stage holds, arrival rates. The map is geography.
+   Welding them together means rebuilding the same rules every time a boundary
+   is redrawn, which is most of the work and all of the transcription errors.
+
+   Routes address levels by index, so a pathway built on three tiers has to
+   adapt to four. The adaptation is deliberate rather than silent: the old
+   championship maps onto the new championship, the tiers below match up from
+   the bottom, and anything that cannot be placed is dropped and named. */
+function pathwayPayload(){
+  syncRouting();
+  return {
+    v: 1,
+    levels: S.routing.length,
+    routing: JSON.parse(JSON.stringify(S.routing)),
+    arrival: S.arrival ? JSON.parse(JSON.stringify(S.arrival)) : null,
+    seedPool: S.seedPool || null,
+    levelNames: S.levels.map(l => l.name),
+  };
+}
+
+/* Fit a saved pathway onto the structure now on screen.
+
+   Tiers are matched from the bottom and the championship is matched to the
+   championship, because those are the two ends anyone actually means. What
+   happens between them depends on which structure is deeper:
+
+     more tiers here  -- the saved intermediates fill from the bottom and the
+                         extra tiers are left empty for you to fill, rather than
+                         being handed a copy of the championship's rules;
+     fewer tiers here -- routes aimed at a tier that no longer exists are sent
+                         up to the next one that does, so athletes still move
+                         forward instead of the entry stop being left with no
+                         way out.
+
+   Every one of those decisions is named on the panel. Adapting a pathway is a
+   change to the rules, and a change to the rules should not be silent. */
+function adaptPathway(p){
+  const src = p.routing || [];
+  const N = src.length, M = S.levels.length;
+  const notes = [];
+  const seen = {};
+
+  // Where does saved tier L end up here?
+  const mapLevel = (L) => {
+    if (L === N - 1) return M - 1;            // championship to championship
+    if (L <= M - 2) return L;                 // intermediates from the bottom
+    return M - 1;                             // ran out of tiers: send it up
+  };
+
+  const out = [];
+  for (let L = 0; L < M; L++){
+    // Which saved tier supplies this one.
+    const from = (L === M - 1) ? src[N - 1] : (L <= N - 2 ? src[L] : null);
+    if (!from){
+      out.push({rounds:[{key:'final'}], routes:[]});
+      notes.push(`${tierName(L)} has no counterpart in the saved pathway and is left empty for you to fill.`);
+      continue;
+    }
+    const lvl = {rounds: JSON.parse(JSON.stringify(from.rounds || [{key:'final'}])),
+                 notOffered: (from.notOffered || []).slice(), routes: []};
+    (from.routes || []).forEach(rt => {
+      const copy = {from: rt.from, lo: rt.lo, hi: rt.hi};
+      if (rt.to){
+        const to = mapLevel(rt.to.level);
+        if (rt.to.level !== to && rt.to.level !== N - 1 && !seen['r'+L]){
+          seen['r'+L] = 1;
+          notes.push(`Routes out of ${tierName(L)} aimed at a tier that does not exist here, so they now go to ${tierName(to)}.`);
+        }
+        copy.to = {level: to, round: rt.to.round};
+      }
+      lvl.routes.push(copy);
+    });
+    out.push(lvl);
+  }
+  if (N !== M) notes.push(`Saved for ${N} tiers, loaded onto ${M}.`);
+  return {routing: out, notes};
+}
+
+async function listPathways(){
+  try {
+    const r = await NEON.query(
+      `SELECT id, name, levels, notes, to_char(updated_at,'Mon DD') u
+       FROM membership.pathways ORDER BY updated_at DESC LIMIT 60`);
+    return r.rows || [];
+  } catch(e){ console.warn('pathways', e); return []; }
+}
+
+async function savePathway(){
+  const name = (prompt('Name this pathway', S.pathName || (S.scenarioName || 'Pathway')) || '').trim();
+  if (!name) return;
+  const id = 'pw-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
+  try {
+    await NEON.query(
+      `INSERT INTO membership.pathways (id,name,levels,data,updated_at)
+       VALUES ($1,$2,$3,$4::jsonb, now())`,
+      [id, name, S.routing.length, JSON.stringify(pathwayPayload())]);
+    S.pathName = name; S.pathList = await listPathways();
+    msg(`Saved "${name}" — it can be loaded onto any map.`);
+    renderPathway();
+  } catch(e){ msg('Could not save: ' + (e.message || e)); }
+}
+
+async function loadPathway(id){
+  if (!id) return;
+  try {
+    const r = await NEON.query(`SELECT name, data FROM membership.pathways WHERE id=$1`, [id]);
+    if (!r.rows || !r.rows.length){ msg('That pathway is gone.'); return; }
+    const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    pushUndo();
+    const fit = adaptPathway(p);
+    S.routing = fit.routing;
+    if (p.arrival) S.arrival = p.arrival;
+    if (p.seedPool) S.seedPool = p.seedPool;
+    S.pathName = r.rows[0].name;
+    S.pathNotes = fit.notes;
+    S.dirty = true;
+    syncRouting(); repaintAll(); renderPathway();
+    msg(`Loaded "${r.rows[0].name}"` + (fit.notes.length ? ` — ${fit.notes.length} adjustment(s), see the panel.` : ''));
+  } catch(e){ msg('Could not load: ' + (e.message || e)); }
+}
+
+async function deletePathway(){
+  const id = (document.getElementById('bsPathLoad') || {}).value;
+  if (!id) { msg('Choose a saved pathway first.'); return; }
+  const nm = (S.pathList || []).find(p => p.id === id);
+  if (!confirm(`Delete "${nm ? nm.name : id}"? Maps that used it keep their own copy.`)) return;
+  try {
+    await NEON.query(`DELETE FROM membership.pathways WHERE id=$1`, [id]);
+    S.pathList = await listPathways(); renderPathway();
+    msg('Deleted.');
+  } catch(e){ msg('Could not delete: ' + (e.message || e)); }
 }
 
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
   body.innerHTML = `<div id="bsPathWrap"><div class="note">Working out the pathway&hellip;</div></div>`;
+  if (!S.pathList) listPathways().then(l => { S.pathList = l; renderPathway(); });
   refreshFlow();
 }
 
@@ -1362,7 +1639,19 @@ function renderPathway(){
             }).join('')).join('') + '</optgroup>').join('')}
         </select></label>
       <button class="tab bs-mini" id="bsPathReset">Load current rules</button>
+      <span class="bs-pwlib">
+        <select class="sel bs-mini" id="bsPathLoad">
+          <option value="">Saved pathways&hellip;</option>
+          ${(S.pathList||[]).map(p => `<option value="${esc(p.id)}" ${S.pathName===p.name?'selected':''}>
+            ${esc(p.name)} &middot; ${p.levels} tiers &middot; ${esc(p.u||'')}</option>`).join('')}
+        </select>
+        <button class="tab bs-mini" id="bsPathSave">Save this pathway</button>
+        <button class="tab bs-mini" id="bsPathDel" title="Delete the selected saved pathway">&times;</button>
+      </span>
     </div>
+    ${S.pathNotes && S.pathNotes.length ? `<ul class="bs-probs">
+      <li class="bs-prob warn"><b>Loaded "${esc(S.pathName)}" onto a different structure.</b>
+        ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
     ${renderMeetManifest(res)}
@@ -1474,8 +1763,21 @@ function wirePathway(){
     S.dirty = true; renderPathway();
   }));
 
+  const bind$ = (id, fn) => { const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { fn(el); S.dirty = true; renderPathway(); }); };
+  bind$('bsHostMode',  el => { S.hostMode = el.value; });
+  bind$('bsHostShare', el => { S.hostShare = Math.max(0, Math.min(100, +el.value||0))/100; });
+  bind$('bsHostFlat',  el => { S.hostFlat = Math.max(0, +el.value||0); });
+  bind$('bsHostPer',   el => { S.hostPer  = Math.max(0, +el.value||0); });
+  bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
+  const pl = document.getElementById('bsPathLoad');
+  if (pl) pl.addEventListener('change', () => { if (pl.value) loadPathway(pl.value); });
+  const pv = document.getElementById('bsPathSave');
+  if (pv) pv.addEventListener('click', savePathway);
+  const pd = document.getElementById('bsPathDel');
+  if (pd) pd.addEventListener('click', deletePathway);
   const fc = document.getElementById('bsPathFocus');
   if (fc) fc.addEventListener('change', () => { S.bdCell = fc.value; renderPathway(); });
   const rs = document.getElementById('bsPathReset');
