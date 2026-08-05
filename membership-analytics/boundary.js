@@ -67,6 +67,7 @@ const S = {
   mult: null,           // measured entries-per-athlete (athlete-multiplicity.json)
   routeRes: null,       // its projection
   bdMode: 'stop',       // breakdown view: stop | total | qualified
+  bdCell: 'all',        // which event+gender the panel is showing
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -766,6 +767,20 @@ const AGE_LBL = {A:'Group A', B:'Group B', C:'Group C', D:'Group D'};
 const GEN_LBL = {B:'Boys', G:'Girls'};
 const DIS_LBL = {'1':'1m', '3':'3m', P:'Platform'};
 
+/* Which cells the panel is showing. A stage total is the sum of 24 separate
+   competitions; the field an official runs and a diver stands in is one of
+   them. Filtering to a single event and gender makes every number on the panel
+   -- round sizes, per-stop loads, diver counts -- that competition's, not a
+   figure nobody ever experiences. */
+function focusCells(){
+  return (!S.bdCell || S.bdCell === 'all') ? CELLS : [S.bdCell];
+}
+function focusLabel(){
+  if (!S.bdCell || S.bdCell === 'all') return 'every event and age group';
+  const c = S.bdCell;
+  return `${AGE_LBL[c[0]]} ${GEN_LBL[c[1]]} ${DIS_LBL[c[2]]}`;
+}
+
 function renderPathwayBreakdown(res){
   if (!res) return '';
   const mode = S.bdMode || 'stop';
@@ -816,7 +831,8 @@ function renderPathwayBreakdown(res){
     const rows = ['B','G'].flatMap(g => ['1','3','P'].map(d => {
       const cell = ag+g+d;
       const tds = cols.map(c => `<td class="num">${show(at(c, cell))}</td>`).join('');
-      return `<tr><td class="bs-bd-cell">${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
+      const on = (S.bdCell === cell) ? ' class="bs-bd-on"' : '';
+      return `<tr${on}><td class="bs-bd-cell">${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
     })).join('');
     return `<tr class="bs-bd-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
   }).join('');
@@ -873,10 +889,13 @@ function renderPathway(){
     const stops = groupCountAt(L);
     const roundRows = rounds.map(r => {
       const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
-      const size = QR().sizeAt(res, L, r.key, CELLS);
+      const size = QR().sizeAt(res, L, r.key, focusCells());
       let people = '';
-      if (S.mult && size > 0.5){
-        const d = QR().diversAt(res, L, r.key, CELLS, S.mult, multBasisFor(L));
+      if (size > 0.5 && focusCells().length === 1){
+        // Within one event an entry IS a diver. No estimation, no caveat.
+        people = ` &middot; <b>${fmt(Math.round(size))} divers</b>`;
+      } else if (S.mult && size > 0.5){
+        const d = QR().diversAt(res, L, r.key, focusCells(), S.mult, multBasisFor(L));
         if (d && d.ok){
           people = ` &middot; <b>${fmt(Math.round(d.divers))} divers</b>` +
             (d.reliable ? '' :
@@ -898,7 +917,7 @@ function renderPathway(){
         </div>`).join('');
       return `<div class="bs-round">
         <div class="bs-round-h"><b>${esc(RN[r.key]||r.key)}</b>
-          <span class="bs-round-n">${fmt(Math.round(size))} entries &middot; ${Math.round(size/Math.max(1,stops))} per stop${people}</span>
+          <span class="bs-round-n"><b>${Math.round(size/Math.max(1,stops))}</b> per stop &middot; ${fmt(Math.round(size))} across ${stops} ${stops===1?'stop':'stops'}${people}</span>
           <button class="tab bs-mini" data-rndel="${esc(r.key)}" data-l="${L}" ${rounds.length<=1?'disabled':''}>remove round</button></div>
         ${routes || '<div class="note bs-rt-none">Nobody advances from here.</div>'}
         <button class="tab bs-mini bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ add a route</button>
@@ -922,6 +941,15 @@ function renderPathway(){
     <div class="bs-adv-head">
       <span class="note">Places finishing a round, and where they go. Every route is a band of finishing
         positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.</span>
+      <label class="bs-focus">Showing
+        <select class="sel" id="bsPathFocus">
+          <option value="all" ${(!S.bdCell||S.bdCell==='all')?'selected':''}>every event and age group</option>
+          ${['A','B','C','D'].map(a=>`<optgroup label="${esc(AGE_LBL[a])}">` +
+            ['G','B'].map(g=>['1','3','P'].map(d=>{
+              const c=a+g+d;
+              return `<option value="${c}" ${S.bdCell===c?'selected':''}>${esc(AGE_LBL[a])} ${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</option>`;
+            }).join('')).join('') + '</optgroup>').join('')}
+        </select></label>
       <button class="tab bs-mini" id="bsPathReset">Load current rules</button>
     </div>
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
@@ -997,6 +1025,8 @@ function wirePathway(){
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
   }));
+  const fc = document.getElementById('bsPathFocus');
+  if (fc) fc.addEventListener('change', () => { S.bdCell = fc.value; renderPathway(); });
   const rs = document.getElementById('bsPathReset');
   if (rs) rs.addEventListener('click', () => {
     if (!confirm('Replace the whole pathway with the current published rules?')) return;
