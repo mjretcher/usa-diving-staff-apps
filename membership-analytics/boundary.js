@@ -546,7 +546,8 @@ function renderNamesPanel(){
     cols.push(`<div>
       <div class="bs-tier-h">${esc(tierName(k-1))} &rarr; ${esc(tierName(k))}
         <button class="tab bs-mini bs-addgrp" data-lvl="${k}">+ add</button>
-        <button class="tab bs-mini bs-remgrp" data-lvl="${k}" ${L.groups.length<=1?'disabled':''}>&minus; remove</button></div>
+        <button class="tab bs-mini bs-remgrp" data-lvl="${k}" ${L.groups.length<=1?'disabled':''}>&minus; remove</button>
+        <button class="tab bs-mini bs-renum" data-lvl="${k-1}" title="Rename every area from the level name, including ones you typed">renumber</button></div>
       ${Array.from({length:groupCountAt(k-1)}, (_,gi)=>{
         const sw = k===1 ? `<button class="sw bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '';
         const nm = k===1 ? S.regions[gi].name : S.levels[k-1].groups[gi].name;
@@ -563,7 +564,8 @@ function renderNamesPanel(){
   // Name the groups at the highest level (for a 1-level map that is the map itself).
   const top = N-1;
   cols.push(`<div>
-    <div class="bs-tier-h">${esc(tierName(top))} names</div>
+    <div class="bs-tier-h">${esc(tierName(top))} names
+      <button class="tab bs-mini bs-renum" data-lvl="${top}" title="Rename every area from the level name, including ones you typed">renumber</button></div>
     ${Array.from({length:groupCountAt(top)}, (_,gi)=>{
       const sw = top===0 ? `<button class="sw bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '';
       const nm = top===0 ? S.regions[gi].name : S.levels[top].groups[gi].name;
@@ -601,6 +603,60 @@ function renderNamesPanel(){
    counts per age group, fee changes) lives in Pricing Studio, which owns that
    model; this panel consumes it through window.JuniorFlow so there is only one
    answer to "who moves up". */
+
+/* ---------- naming areas from the level they sit under ----------
+   Renaming a level should rename the areas beneath it: call level 1 "Zones"
+   and its areas become Zone 1, Zone 2, and so on, rather than being typed by
+   hand nine times (which is how "Zone8" ends up missing its space).
+
+   The whole difficulty is knowing what NOT to touch. A level whose areas are
+   called East, Central and West must survive being renamed, because those are
+   real names rather than placeholders. So a name is only replaced when it
+   looks like something we generated. */
+
+/* "Zones" -> "Zone". Returns null when the label is not a simple plural noun:
+   "East, Central, West" names the areas themselves, and numbering areas from
+   it would produce nonsense. */
+function singulariseLevel(name){
+  const n = String(name || '').trim();
+  if (!n || n.indexOf(',') >= 0) return null;
+  if (n.split(/\s+/).length > 2) return null;
+  if (/ies$/i.test(n)) return n.slice(0, -3) + 'y';
+  if (/(ses|xes|zes|ches|shes)$/i.test(n)) return n.slice(0, -2);
+  if (/ss$/i.test(n)) return n;
+  if (/s$/i.test(n)) return n.slice(0, -1);
+  return n;
+}
+
+/* Did we generate this name, or did a person choose it? "Zone 1" and "Zone8"
+   are ours; "East" and "Central" are not, and are never overwritten. */
+function looksGenerated(name){
+  const n = String(name || '').trim();
+  if (!n) return true;
+  return /^[A-Za-z][A-Za-z .'\-]*\s*\d+$/.test(n) ||
+         /^[A-Za-z][A-Za-z .'\-]*\s+[A-Z]$/.test(n);
+}
+
+function areasAtLevel(lvl){
+  return lvl === 0 ? S.regions : ((S.levels[lvl] && S.levels[lvl].groups) || []);
+}
+
+/* Rename the areas under a level from that level's own name.
+   force=true renames everything, including names a person chose. */
+function renumberAreas(lvl, force){
+  const base = singulariseLevel(tierName(lvl));
+  const areas = areasAtLevel(lvl);
+  if (!base || !areas.length) return {renamed:0, kept:0, base:null};
+  let renamed = 0, kept = 0;
+  areas.forEach((g, i) => {
+    if (!force && !looksGenerated(g.name)){ kept++; return; }
+    // A single area does not want a number after it.
+    const want = areas.length === 1 ? base : base + ' ' + (i + 1);
+    if (g.name !== want){ g.name = want; renamed++; }
+  });
+  return {renamed, kept, base};
+}
+
 function renderAdvShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
@@ -1016,6 +1072,40 @@ function wirePanel(){
     const tb = P.querySelector(`#bsTierSeg [data-tierv="${lvl}"]`);
     if (tb) tb.textContent = inp.value;
   });
+  /* Renaming the level renames the areas under it -- but on commit, not on
+     every keystroke, or typing "Zones" would march the areas through
+     "Z 1", "Zo 1", "Zon 1". Names you chose yourself are left alone. */
+  P.querySelectorAll('.bs-lvlname').forEach(inp => inp.addEventListener('change', ()=>{
+    const lvl = +inp.dataset.lvl;
+    const r = renumberAreas(lvl, false);
+    if (!r.renamed) return;
+    S.dirty = true;
+    syncLevels(); repaintAll(); renderPanel();
+    const n = areasAtLevel(lvl).length;
+    msg(`Renamed ${r.renamed} area${r.renamed===1?'':'s'} to ` +
+        (n === 1 ? r.base : `${r.base} 1–${n}`) +
+        (r.kept ? ` · kept ${r.kept} you named yourself` : ''));
+  }));
+  P.querySelectorAll('.bs-renum').forEach(b => b.addEventListener('click', ()=>{
+    const lvl = +b.dataset.lvl;
+    const base = singulariseLevel(tierName(lvl));
+    if (!base){
+      msg(`"${tierName(lvl)}" is not a plural name to number from — try something like "Zones".`);
+      return;
+    }
+    const areas = areasAtLevel(lvl);
+    const custom = areas.filter(g => !looksGenerated(g.name)).map(g => g.name);
+    // Forcing overwrites deliberate names, so say exactly which ones first.
+    if (custom.length && !confirm(
+        `Rename all ${areas.length} areas to ${base} 1–${areas.length}?\n\n` +
+        `This will overwrite ${custom.length} name${custom.length===1?'':'s'} you chose: ` +
+        custom.slice(0,6).join(', ') + (custom.length>6 ? ', …' : ''))) return;
+    pushUndo();
+    const r = renumberAreas(lvl, true);
+    S.dirty = true;
+    syncLevels(); repaintAll(); renderPanel();
+    msg(`Renamed ${r.renamed} area${r.renamed===1?'':'s'} to ${base} 1–${areas.length}`);
+  }));
   const fin = document.getElementById('bsFinalName');
   if (fin) fin.addEventListener('input', ()=>{
     pushUndo('finalName');
