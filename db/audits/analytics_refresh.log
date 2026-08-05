@@ -1,4 +1,5 @@
 [build_analytics] endpoint: https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql
+[build_analytics] meet_scope built
 [build_analytics] fetched 28062 DiveMeets athletes, 290 WA individual athletes
 [build_analytics] identities: 28273 total, 79 DM<->WA links auto-accepted
 [build_analytics] athlete_identity inserted
@@ -9,4 +10,4 @@
 [build_analytics] field judge spread built
 [build_analytics] la28 watch built
 [build_analytics] usad_app SELECT re-granted on analytics
-[build_analytics] done: {'athlete_identity': '28273', 'athlete_directory': '28273', 'benchmarks': '53076', 'field_group_exec': '2047', 'field_group_exec_vo': '3340', 'event_profile': '2574', 'rank_cost': '1804', 'field_list_dd': '271', 'cohort_seniors': '3837', 'corridor_marks': '3019', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '10436'}
+[build_analytics] done: {'athlete_identity': '28273', 'athlete_directory': '28273', 'benchmarks': '53076', 'field_group_exec': '2103', 'field_group_exec_vo': '3372', 'event_profile': '2591', 'rank_cost': '1855', 'field_list_dd': '280', 'cohort_seniors': '3837', 'corridor_marks': '3019', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '10436'}
