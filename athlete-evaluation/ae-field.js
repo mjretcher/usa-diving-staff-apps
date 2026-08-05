@@ -50,6 +50,7 @@
     root.innerHTML =
       cmpBar() +
       decompositionHtml(cache.profile) +
+      diagnosisHtml(cache.profile) +
       rankCostHtml(cache.rankCost) +
       armsRaceHtml(cache.listDD) +
       heatHtml(cache.groupExec) +
@@ -169,6 +170,194 @@
     if (score == null || !rows.length) return null;
     for (const r of rows) if (score >= r.p50_score) return r.place;
     return null;
+  }
+
+  /* ---------------- difficulty or execution? ----------------
+     The diagnostic this whole section exists for. A score is
+     3 x SUM(DD x execution), so the distance between an athlete and a podium
+     splits exactly into "their list is harder" and "they performed it better".
+     Those have completely different answers — one is a season of new dives,
+     the other is water time on the dives you already have — and a raw points
+     gap tells you nothing about which one you are looking at.
+
+     The split is exact, not apportioned:
+       gap    = 3(DDp x Ep) - 3(DDa x Ea)
+       from DD   = 3(DDp - DDa) x Ea
+       from exec = 3 x DDp x (Ep - Ea)
+     Those two sum to the gap identically. */
+
+  // An athlete's own list DD and execution, from the score identity. Verified
+  // across all 172,282 non-cumulative finals: posted_score equals
+  // phase_score_from_dives exactly, so execution divides out cleanly.
+  //
+  // 1.8% of those rows carry a phase_dd_sum that implies an impossible
+  // execution — above 10, or near zero — which means a partial DD sum rather
+  // than a remarkable dive. Those are dropped rather than averaged in.
+  function athleteSplit(scope, gender, discipline, diveCount) {
+    const b = window.AE.state && window.AE.state.bundle;
+    if (!b || !b.phases) return null;
+    const truthy = window.AE.truthy;
+    const base = b.phases.filter((p) =>
+      p.round_stage === 'Final' &&
+      !truthy(p.score_is_cumulative) && !truthy(p.is_synchronized) &&
+      p.gender === gender && p.discipline === discipline &&
+      num(p.phase_dive_count) === diveCount &&
+      num(p.meet_year) >= 2018 &&
+      num(p.posted_score) != null && num(p.phase_dd_sum) > 0);
+
+    const usable = base.filter((p) => {
+      const e = num(p.posted_score) / (3 * num(p.phase_dd_sum));
+      return e >= 2 && e <= 10;
+    });
+    if (!usable.length) return null;
+
+    // Strictly like-for-like. An earlier version widened to other fields when
+    // the athlete had little in the benchmark one, which produced a true but
+    // useless number: a platform specialist's junior 3m results measured
+    // against a world podium showed a 230-point gap that says nothing about
+    // his 3m. Execution marks are also not comparable across meet levels.
+    // Coverage is the comparison selector's job, not a silent substitution.
+    const use = usable.filter((p) => phaseScope(p) === scope);
+    if (!use.length) return null;
+
+    const recent = use.slice().sort((a, b2) => num(b2.meet_year) - num(a.meet_year)).slice(0, 3);
+    const dd = window.AE.mean(recent.map((p) => num(p.phase_dd_sum)));
+    const ex = window.AE.mean(recent.map((p) => num(p.posted_score) / (3 * num(p.phase_dd_sum))));
+    const scopes = [...new Set(recent.map((p) => scopeName(phaseScope(p))))];
+    return {
+      dd, exec: ex, score: 3 * dd * ex,
+      n: recent.length, pool: use.length, scopes,
+      y0: Math.min(...recent.map((p) => num(p.meet_year))),
+      y1: Math.max(...recent.map((p) => num(p.meet_year))),
+      dropped: base.length - usable.length,
+      name: (b.ident && b.ident.display_name) || 'Selected athlete',
+    };
+  }
+
+  // "No data" is the wrong thing to tell someone who plainly has results. Sarah
+  // Bacon has a stack of US Senior finals; every one is cumulative, because
+  // that final is scored prelim plus semi plus final. Comparing her 639.00 to a
+  // world podium's 348 would show her 290 points clear of it. The exclusion is
+  // right — but saying which exclusion applied is what makes it trustworthy
+  // rather than just opaque.
+  function splitBlockers(scope) {
+    const b = window.AE.state && window.AE.state.bundle;
+    const nm = (b && b.ident && b.ident.display_name) || 'This athlete';
+    const truthy = window.AE.truthy;
+    const fin = (b.phases || []).filter((p) =>
+      p.round_stage === 'Final' && !truthy(p.is_synchronized) && num(p.meet_year) >= 2018);
+    if (!fin.length) return `No finals on record for ${esc(nm)} since 2018.`;
+
+    const cum = fin.filter((p) => truthy(p.score_is_cumulative)).length;
+    const noDD = fin.filter((p) => !truthy(p.score_is_cumulative)
+      && !(num(p.phase_dd_sum) > 0 && num(p.phase_dive_count) > 0)).length;
+    const inScope = fin.filter((p) => !truthy(p.score_is_cumulative)
+      && num(p.phase_dd_sum) > 0 && phaseScope(p) === scope).length;
+
+    const bits = [];
+    if (cum) bits.push(`${cum} ${cum === 1 ? 'is' : 'are'} scored cumulatively — a total carried
+      across prelims and semis is not a single-round score and cannot be set against a podium average`);
+    if (noDD) bits.push(`${noDD} ${noDD === 1 ? 'has' : 'have'} no list DD recorded, so
+      ${noDD === 1 ? 'it' : 'they'} cannot be split into difficulty and execution`);
+    if (!inScope) bits.push(`none of what remains is in ${esc(scopeName(scope))}`);
+    return `${esc(nm)} has ${fin.length} final${fin.length === 1 ? '' : 's'} on record since 2018,
+      but ${bits.join('; ')}. Switching the comparison field above may give a usable match.`;
+  }
+
+  function diagnosisHtml(profile) {
+    const scope = cmp.b;
+    const b = window.AE.state && window.AE.state.bundle;
+    if (!b) return '';
+
+    const rows = profile.filter((r) => r.scope === scope);
+    const cells = [];
+    ['Male', 'Female'].forEach((g) => ['1m', '3m', 'Platform'].forEach((d) => {
+      const sub = rows.filter((r) => r.gender === g && r.discipline === d);
+      if (!sub.length) return;
+      const dc = dominantFormat(sub);
+      const use = sub.filter((r) => r.dive_count === dc && r.band === 'podium');
+      const n = use.reduce((a, r) => a + r.n, 0);
+      if (n < GUARD.cell) return;
+      const pod = {
+        n,
+        dd: use.reduce((a, r) => a + r.avg_list_dd * r.n, 0) / n,
+        exec: use.reduce((a, r) => a + r.avg_exec * r.n, 0) / n,
+        posted: use.reduce((a, r) => a + r.avg_score * r.n, 0) / n,
+      };
+      // Both sides modelled from the same identity. Using the stored average
+      // score for the podium and a modelled one for the athlete left the two
+      // parts failing to sum to the gap by up to 0.6, because the mean of
+      // DD x exec is not the product of their means. Under a point either way,
+      // but a decomposition that does not add up is not a decomposition.
+      pod.score = 3 * pod.dd * pod.exec;
+      const me = athleteSplit(scope, g, d, dc);
+      if (!me) return;
+      const ddPart = 3 * (pod.dd - me.dd) * me.exec;
+      const exPart = 3 * pod.dd * (pod.exec - me.exec);
+      cells.push({ g, d, dc, pod, me, ddPart, exPart, total: pod.score - me.score });
+    }));
+
+    if (!cells.length) {
+      return `<section class="ae-card ae-fi-sec"><h3>Difficulty or execution?</h3>
+        <p class="ae-soft">${splitBlockers(scope)}</p></section>`;
+    }
+
+    const verdict = (c) => {
+      const dd = c.ddPart, ex = c.exPart;
+      if (c.total <= 0) return `already at or above this podium's average`;
+      const share = Math.abs(dd) / (Math.abs(dd) + Math.abs(ex) || 1);
+      if (dd > 0 && ex > 0) {
+        return share > 0.65 ? 'mostly difficulty — the list is the limiter'
+          : share < 0.35 ? 'mostly execution — the list is competitive'
+          : 'both, roughly evenly';
+      }
+      if (dd > 0) return 'difficulty alone — execution already clears this podium';
+      return 'execution alone — the list already clears this podium';
+    };
+
+    const row = (c) => {
+      const w = 240;
+      const tot = Math.abs(c.ddPart) + Math.abs(c.exPart) || 1;
+      const dw = Math.abs(c.ddPart) / tot * w, ew = Math.abs(c.exPart) / tot * w;
+      return `<tr>
+        <td class="ae-dx-ev"><b>${esc(G_LABEL[c.g] || c.g)} ${esc(EV_LABEL[c.d] || c.d)}</b>
+          <span>${c.dc}-dive</span></td>
+        <td class="num">${c.me.dd.toFixed(1)}<span class="ae-dx-vs">vs ${c.pod.dd.toFixed(1)}</span></td>
+        <td class="num">${c.me.exec.toFixed(2)}<span class="ae-dx-vs">vs ${c.pod.exec.toFixed(2)}</span></td>
+        <td class="num ${c.total > 0 ? 'ae-dn' : 'ae-up'}">${c.total > 0 ? '−' : '+'}${Math.abs(c.total).toFixed(1)}</td>
+        <td class="num">${c.ddPart > 0 ? '−' : '+'}${Math.abs(c.ddPart).toFixed(1)}</td>
+        <td class="num">${c.exPart > 0 ? '−' : '+'}${Math.abs(c.exPart).toFixed(1)}</td>
+        <td><svg viewBox="0 0 ${w} 14" class="ae-decomp-bar" preserveAspectRatio="none">
+          <rect x="0" y="1" width="${dw.toFixed(1)}" height="12" fill="${C.COLORS.NAVY}" opacity=".85"/>
+          <rect x="${dw.toFixed(1)}" y="1" width="${ew.toFixed(1)}" height="12" fill="${C.COLORS.POOL}" opacity=".85"/>
+        </svg></td>
+        <td class="ae-dx-verdict">${esc(verdict(c))}</td></tr>`;
+    };
+
+    const me0 = cells[0].me;
+    const dropped = cells.reduce((a, c) => a + c.me.dropped, 0);
+    return `<section class="ae-card ae-fi-sec">
+      <h3>Difficulty or execution?</h3>
+      <p class="ae-soft">${esc(me0.name)}'s distance from the ${esc(scopeName(scope))} podium,
+        split into its two causes. A score is 3 × the sum of difficulty × execution, so the gap
+        divides exactly: how much comes from carrying a lighter list, and how much from performing
+        it less well. These have different answers — one is a season of new dives, the other is
+        water time on the dives already there.</p>
+      <div class="table-wrap"><table class="data-table ae-dx">
+        <thead><tr><th>Event</th><th class="num">List DD</th><th class="num">Execution</th>
+          <th class="num">Gap</th><th class="num">From difficulty</th><th class="num">From execution</th>
+          <th>Split</th><th>Read</th></tr></thead>
+        <tbody>${cells.map(row).join('')}</tbody></table></div>
+      <div class="ae-legend"><span class="ae-key" style="background:${C.COLORS.NAVY}"></span>difficulty
+        <span class="ae-key" style="background:${C.COLORS.POOL}"></span>execution</div>
+      <div class="ae-fi-foot">Athlete figures are the mean of their ${me0.n} most recent finals
+        (${me0.y0}–${me0.y1}${me0.scopes.length ? ' · ' + me0.scopes.map(esc).join(', ') : ''}), matched
+        to the podium on dive-count format so no two scoring formats are ever compared.
+        ${dropped ? `${dropped} final${dropped === 1 ? '' : 's'} excluded for carrying a list DD that
+          implies an impossible execution mark.` : ''}
+        Coaching context, not a selection metric: this depends on how completely an athlete's meets
+        were recorded, which is not equal across athletes.</div>
+    </section>`;
   }
 
 
