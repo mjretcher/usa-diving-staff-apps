@@ -133,8 +133,6 @@ function validate(routing){
       }
     });
 
-    // A round nothing feeds and nothing leaves is dead weight; more often it
-    // means a route points at the wrong round key.
     rounds.forEach(rk => {
       const leaves = (byRound[rk] || []).length;
       const fed = L === 0 && rk === rounds[0];
@@ -143,6 +141,21 @@ function validate(routing){
       if (!leaves && !arrives && !fed){
         problems.push({level:L, kind:'orphan-round',
           msg:`the "${rk}" round is never entered and never left`});
+      } else if (arrives && !leaves && rounds.indexOf(rk) < rounds.length - 1){
+        // Elimination is a normal outcome, so a level's LAST round having no
+        // exit is expected. An earlier round with athletes in it and no way out,
+        // while a later round exists, means the sequence is broken and those
+        // athletes are stranded.
+        problems.push({level:L, kind:'stranded',
+          msg:`athletes reach the "${rk}" round but nothing takes them out of it, ` +
+              `while a later round runs here — is the sequence wired through?`});
+      } else if (leaves && !arrives && !fed){
+        // Adding a round does not rewire what feeds it. The round then sits at
+        // zero and every route out of it quietly does nothing -- which reads as
+        // a structure that simply produces no athletes rather than as an error.
+        problems.push({level:L, kind:'unfed-round',
+          msg:`nothing arrives at the "${rk}" round, so the routes out of it move nobody — ` +
+              `something upstream probably still points at a later round here`});
       }
     });
   });

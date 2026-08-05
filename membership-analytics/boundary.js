@@ -63,6 +63,8 @@ const S = {
   legendMode: 'members',// members | age | comp
   panelMode: 'tally',   // tally | advance
   flow: null,           // cached JuniorFlow result for the current map
+  routing: null,        // editable qualification pathway (see routing.js)
+  routeRes: null,       // its projection
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -109,6 +111,7 @@ function groupCountAt(level){
 function syncLevels(){
   if (!S.levels || !S.levels.length) S.levels = defaultLevels(S.regions.length);
   if (!S.levels[0]) S.levels[0] = {name:'Regions'};
+  syncRouting();
   if (!S.levels[0].name) S.levels[0].name = 'Regions';
   for (let k=1; k<S.levels.length; k++){
     const L = S.levels[k];
@@ -411,6 +414,7 @@ function renderPanel(){
     <div class="seg bs-modeseg">
       <button id="bsModeTally" class="${S.panelMode==='tally'?'on':''}">Who lives here</button>
       <button id="bsModeAdv" class="${S.panelMode==='advance'?'on':''}">Who moves up</button>
+      <button id="bsModePath" class="${S.panelMode==='pathway'?'on':''}">Pathway</button>
     </div>
     <div id="bsBody"></div>
     ${renderNamesPanel()}
@@ -433,6 +437,7 @@ function renderPanel(){
     <div class="note" id="bsMsg"></div>`;
 
   if (S.panelMode==='advance') renderAdvShell();
+  if (S.panelMode==='pathway') renderPathwayShell();
   renderNumbers();
   wirePanel();
   loadScenarioList();
@@ -604,6 +609,60 @@ function renderNamesPanel(){
    model; this panel consumes it through window.JuniorFlow so there is only one
    answer to "who moves up". */
 
+
+/* ---------- the qualification pathway ----------
+   Which athletes move where, expressed as place bands between rounds. The
+   engine lives in routing.js; this is the editing surface and the projection.
+   Held alongside the map because a pathway and a set of boundaries only mean
+   something together -- nine zones sending three each is a different
+   championship from six zones sending five. */
+function QR(){ return window.QualRouting; }
+
+function syncRouting(){
+  if (!QR()) return;
+  const n = S.levels.length;
+  if (!S.routing || !S.routing.length) S.routing = QR().defaultRouting(n - 1, n - 1);
+  while (S.routing.length < n) S.routing.push({rounds:[{key:'final'}], routes:[]});
+  S.routing.length = n;
+  S.routing.forEach(l => {
+    if (!l.rounds || !l.rounds.length) l.rounds = [{key:'final'}];
+    if (!l.routes) l.routes = [];
+    // A route pointing past the top of the structure would drop athletes.
+    l.routes = l.routes.filter(rt => !rt.to || rt.to.level < n);
+  });
+}
+
+/* Walk a group index up the tier chain, the way the map already nests areas. */
+function groupUp(fromL, g, toL){
+  let cur = g;
+  for (let L = fromL + 1; L <= toL; L++){
+    const of = (S.levels[L] && S.levels[L].of) || [];
+    cur = of[cur];
+    if (cur == null) return null;
+  }
+  return cur;
+}
+
+/* Project the current pathway over the current map. */
+function projectPathway(){
+  if (!QR() || !S.flow) return null;
+  syncRouting();
+  const cells = CELLS;
+  let conv = {};
+  try {
+    const k = window.JuniorFlow && window.JuniorFlow.constants
+            ? window.JuniorFlow.constants(S.year) : null;
+    if (k) (k.levels || []).forEach((lv, i) => { if (lv && lv.conv) conv[i] = lv.conv; });
+  } catch(e){ console.warn('take-up constants', e); }
+  return QR().project({
+    routing: S.routing,
+    entries0: (S.flow.levels[0] || {rows: []}).rows,
+    groupCount: L => groupCountAt(L),
+    groupOf: groupUp,
+    conv, cells,
+  });
+}
+
 /* ---------- naming areas from the level they sit under ----------
    Renaming a level should rename the areas beneath it: call level 1 "Zones"
    and its areas become Zone 1, Zone 2, and so on, rather than being typed by
@@ -657,6 +716,142 @@ function renumberAreas(lvl, force){
   return {renamed, kept, base};
 }
 
+
+/* ---------- pathway editor ---------- */
+function renderPathwayShell(){
+  const body = document.getElementById('bsBody');
+  if (!body) return;
+  body.innerHTML = `<div id="bsPathWrap"><div class="note">Working out the pathway&hellip;</div></div>`;
+  refreshFlow();
+}
+
+const ROUND_CHOICES = ['prelim','quarter','semi','final'];
+
+function renderPathway(){
+  const wrap = document.getElementById('bsPathWrap');
+  if (!wrap) return;
+  if (!QR()){ wrap.innerHTML = '<div class="note">Pathway engine not loaded.</div>'; return; }
+  if (!S.flow){ wrap.innerHTML = '<div class="note">Working out the pathway&hellip;</div>'; return; }
+  const res = projectPathway();
+  S.routeRes = res;
+  const RN = QR().ROUND_NAME;
+  const lvlOpts = (sel) => S.levels.map((l,i) =>
+    `<option value="${i}" ${i===sel?'selected':''}>${esc(tierName(i))}</option>`).join('');
+  const rndOpts = (sel) => ROUND_CHOICES.map(r =>
+    `<option value="${r}" ${r===sel?'selected':''}>${esc(RN[r])}</option>`).join('');
+
+  const levels = S.routing.map((lvl, L) => {
+    const rounds = QR().roundsOf(lvl);
+    const stops = groupCountAt(L);
+    const roundRows = rounds.map(r => {
+      const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
+      const size = QR().sizeAt(res, L, r.key, CELLS);
+      const routes = outs.map(({rt,ri}) => `
+        <div class="bs-route">
+          <span class="bs-rt-lbl">places</span>
+          <input class="bs-rt-in" type="number" min="1" max="200" data-rt="lo" data-l="${L}" data-i="${ri}" value="${rt.lo||1}">
+          <span class="bs-rt-lbl">to</span>
+          <input class="bs-rt-in" type="number" min="1" max="200" data-rt="hi" data-l="${L}" data-i="${ri}" value="${rt.hi==null?'':rt.hi}">
+          <span class="bs-rt-arrow">&rarr;</span>
+          <select class="sel bs-rt-sel" data-rt="lvl" data-l="${L}" data-i="${ri}">${lvlOpts(rt.to?rt.to.level:L)}</select>
+          <select class="sel bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
+          <button class="bs-x" data-rtdel="${ri}" data-l="${L}" title="Remove this route">&times;</button>
+        </div>`).join('');
+      return `<div class="bs-round">
+        <div class="bs-round-h"><b>${esc(RN[r.key]||r.key)}</b>
+          <span class="bs-round-n">${fmt(Math.round(size))} entries &middot; ${Math.round(size/Math.max(1,stops))} per stop</span>
+          <button class="tab bs-mini" data-rndel="${esc(r.key)}" data-l="${L}" ${rounds.length<=1?'disabled':''}>remove round</button></div>
+        ${routes || '<div class="note bs-rt-none">Nobody advances from here.</div>'}
+        <button class="tab bs-mini bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ add a route</button>
+      </div>`;
+    }).join('');
+    const spare = ROUND_CHOICES.filter(k => !rounds.some(r=>r.key===k));
+    return `<div class="bs-plevel">
+      <div class="bs-plevel-h"><b>${esc(tierName(L))}</b>
+        <span class="bs-round-n">${fmt(stops)} ${stops===1?'stop':'stops'}</span>
+        ${spare.length ? `<select class="sel bs-mini bs-rndadd" data-l="${L}">
+          <option value="">+ add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
+      </div>
+      ${roundRows}
+    </div>`;
+  }).join('');
+
+  const probs = (res.problems||[]).map(p =>
+    `<li class="bs-prob ${p.kind==='gap'?'warn':'bad'}">${esc(p.level!=null?tierName(p.level)+': ':'')}${esc(p.msg)}</li>`).join('');
+
+  wrap.innerHTML = `
+    <div class="bs-adv-head">
+      <span class="note">Places finishing a round, and where they go. Every route is a band of finishing
+        positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.</span>
+      <button class="tab bs-mini" id="bsPathReset">Load current rules</button>
+    </div>
+    ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
+    ${levels}
+    <p class="note" style="margin-top:12px">Entry counts include the take-up measured from the season we actually
+      ran &mdash; the published rules qualify more athletes than turn up. Places are counted, never simulated:
+      nothing here predicts who wins.</p>`;
+  wirePathway();
+}
+
+function wirePathway(){
+  const P = document.getElementById('bsPathWrap');
+  if (!P) return;
+  const touch = () => { S.dirty = true; repaintAll(); renderPathway(); };
+
+  P.querySelectorAll('.bs-rt-in').forEach(el => el.addEventListener('change', e => {
+    pushUndo();
+    const L = +e.target.dataset.l, i = +e.target.dataset.i, k = e.target.dataset.rt;
+    const v = e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value||1));
+    S.routing[L].routes[i][k] = v;
+    touch();
+  }));
+  P.querySelectorAll('.bs-rt-sel').forEach(el => el.addEventListener('change', e => {
+    pushUndo();
+    const L = +e.target.dataset.l, i = +e.target.dataset.i, rt = S.routing[L].routes[i];
+    rt.to = rt.to || {level:L, round:'prelim'};
+    if (e.target.dataset.rt === 'lvl') rt.to.level = +e.target.value;
+    else rt.to.round = e.target.value;
+    touch();
+  }));
+  P.querySelectorAll('[data-rtdel]').forEach(b => b.addEventListener('click', e => {
+    pushUndo();
+    const L = +e.currentTarget.dataset.l;
+    S.routing[L].routes.splice(+e.currentTarget.dataset.rtdel, 1);
+    touch();
+  }));
+  P.querySelectorAll('.bs-rtadd').forEach(b => b.addEventListener('click', e => {
+    pushUndo();
+    const L = +e.currentTarget.dataset.l, from = e.currentTarget.dataset.r;
+    const existing = S.routing[L].routes.filter(r => r.from === from);
+    const lo = existing.reduce((m,r) => Math.max(m, (r.hi==null?r.lo:r.hi) + 1), 1);
+    const up = Math.min(L + 1, S.levels.length - 1);
+    S.routing[L].routes.push({from, lo, hi: lo + 2,
+      to:{level: up, round: QR().entryRound(S.routing[up])}});
+    touch();
+  }));
+  P.querySelectorAll('.bs-rndadd').forEach(sel => sel.addEventListener('change', e => {
+    if (!e.target.value) return;
+    pushUndo();
+    S.routing[+e.target.dataset.l].rounds.push({key: e.target.value});
+    touch();
+  }));
+  P.querySelectorAll('[data-rndel]').forEach(b => b.addEventListener('click', e => {
+    pushUndo();
+    const L = +e.currentTarget.dataset.l, k = e.currentTarget.dataset.rndel;
+    S.routing[L].rounds = S.routing[L].rounds.filter(r => r.key !== k);
+    // Routes out of a round that no longer runs would be orphaned.
+    S.routing[L].routes = S.routing[L].routes.filter(r => r.from !== k);
+    touch();
+  }));
+  const rs = document.getElementById('bsPathReset');
+  if (rs) rs.addEventListener('click', () => {
+    if (!confirm('Replace the whole pathway with the current published rules?')) return;
+    pushUndo();
+    S.routing = QR().defaultRouting(S.levels.length - 1, S.levels.length - 1);
+    touch();
+  });
+}
+
 function renderAdvShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
@@ -702,7 +897,7 @@ async function doRefreshFlow(){
   } catch(e){
     console.error(e); S.flow = null; S.flowErr = e.message || String(e);
   }
-  renderAdvResults();
+  if (S.panelMode === 'pathway') renderPathway(); else renderAdvResults();
 }
 
 function renderAdvResults(){
@@ -1005,6 +1200,7 @@ function wirePanel(){
   bind('bsLgComp', ()=>{S.legendMode='comp'; renderNumbers();});
   bind('bsModeTally', ()=>{S.panelMode='tally'; renderPanel();});
   bind('bsModeAdv',   ()=>{S.panelMode='advance'; renderPanel(); refreshFlow();});
+  bind('bsModePath',  ()=>{S.panelMode='pathway'; renderPanel(); refreshFlow();});
 
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
@@ -1213,7 +1409,7 @@ async function saveScenario(asNew){
     }
   }
   syncLevels();
-  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year,
+  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
     await NEON.query(
@@ -1300,6 +1496,8 @@ async function loadScenario(id){
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
     S.year = d.year === 'y26' ? 'y26' : 'y25';
+    S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
+    syncRouting();
     S.levels = migrateLevels(d, S.regions.length);
     S.finalName = d.finalName || 'Junior Nationals';
     S.adv = d.adv && d.adv.steps ? d.adv : defaultAdv();

@@ -2188,6 +2188,17 @@ function computeFlowFor(struct){
 window.JuniorFlow = {
   ready: ensureFlowData,
   compute: computeFlowFor,
+  /* The frozen take-up constants for a season, so another module can project a
+     different pathway against the same measured behaviour rather than
+     re-deriving it (and re-deriving it on a painted map is exactly the mistake
+     that makes every hypothetical look like it changed nothing). */
+  constants: (y) => {
+    const cal = calForYear((y === 'y25' || y === 'y26') ? y : PS.year);
+    return {levels: (cal.levels || []).map(k => ({conv: Object.assign({}, k.conv),
+                                                  directAt: Object.assign({}, k.directAt)})),
+            observedAt: (cal.observedAt || []).slice(),
+            basis: cal.basis, year: cal.year, regions: cal.regions};
+  },
   defaultFlow,
   baseline: () => FLOW.baseline,
   stageForLevel,
