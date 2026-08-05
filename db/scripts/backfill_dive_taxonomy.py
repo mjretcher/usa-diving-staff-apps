@@ -136,13 +136,16 @@ try:
     log("\nBackfill complete.")
     cur.close(); conn.close()
 
-    # A clean run should now report zero rows updated: load_core.py classifies
-    # every dive as it writes, so this is a standing check that the two agree
-    # rather than the thing that puts the taxonomy there.
-    cur.execute("""SELECT COUNT(*) FROM core.dive_sheets
-                   WHERE dive_number IS NOT NULL AND dive_number <> ''
-                     AND dive_bucket IS NULL""")
-    log(f"\nrows still unclassified: {cur.fetchone()[0]:,}")
+    # Standing check rather than the thing that puts the taxonomy there:
+    # load_core.py classifies every dive as it writes, so a clean run should
+    # find only the genuinely unclassifiable codes. Its own connection because
+    # the body above closes cur and conn before reaching here.
+    _c = psycopg2.connect(DSN); _k = _c.cursor()
+    _k.execute("""SELECT COUNT(*) FROM core.dive_sheets
+                  WHERE dive_number IS NOT NULL AND dive_number <> ''
+                    AND dive_bucket IS NULL""")
+    log(f"\nrows still unclassified: {_k.fetchone()[0]:,}")
+    _k.close(); _c.close()
     _record_failure("")
 except Exception:
     import traceback
