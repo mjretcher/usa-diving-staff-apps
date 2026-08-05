@@ -1,11 +1,9 @@
 {
-  "generated": "2026-08-05T19:48:25Z",
+  "generated": "2026-08-05T19:50:26Z",
   "declared_tables": 44,
-  "live_tables": 72,
+  "live_tables": 73,
   "type_mismatches": [],
   "columns_missing_in_db": [],
-  "tables_missing_in_db": [
-    "membership.pathways"
-  ],
+  "tables_missing_in_db": [],
   "columns_not_in_file": []
 }
