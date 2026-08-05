@@ -15,4 +15,10 @@ jobs:
       - name: Backfill taxonomy
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: python db/scripts/backfill_dive_taxonomy.py | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          # Without pipefail the step reports tee's exit status, so a script
+          # that died still shows green. This job "succeeded" for a run that
+          # raised CardinalityViolation partway through.
+          set -o pipefail
+          python db/scripts/backfill_dive_taxonomy.py | tee -a "$GITHUB_STEP_SUMMARY"

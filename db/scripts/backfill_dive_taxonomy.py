@@ -93,7 +93,7 @@ try:
         log(f"  {min(i+B, len(mapping)):,}/{len(mapping):,} codes applied")
 
     log("Seeding core.dive_skills…")
-    rows = []
+    rows = {}
     for c in codes:
         r = classify(c)
         if r["bucket"] != "skill":
@@ -102,8 +102,15 @@ try:
         stem = s[:-1] if s and s[-1] in "ABCD" else s
         name, cite, plat = SKILL_NAMES.get(stem, ("Skill (unlisted)", "not in rulebook", False))
         pos = {"A": "Straight", "B": "Pike", "C": "Tuck", "D": "Free"}.get(s[-1])
-        rows.append((s, stem, s[-1] if pos else None,
-                     f"{name}{' — ' + pos if pos else ''}", cite, plat, None))
+        # Keyed by canonical code, not appended, because several raw codes
+        # normalise to one skill: '001B' arrives as '0001B', '001B' and 'OO1B'
+        # (letter O for zero, straight from DiveMeets). Folding them is correct
+        # — but proposing the same primary key twice in one INSERT is a
+        # CardinalityViolation, which is how this job was failing. classify()
+        # is deterministic, so every variant yields an identical payload and
+        # last-write-wins is safe.
+        rows[s] = (s, stem, s[-1] if pos else None,
+                   f"{name}{' — ' + pos if pos else ''}", cite, plat, None)
     if rows:
         psycopg2.extras.execute_values(cur, """
             INSERT INTO core.dive_skills
@@ -113,7 +120,7 @@ try:
               skill_name = EXCLUDED.skill_name,
               rulebook_cite = EXCLUDED.rulebook_cite,
               platform_only = EXCLUDED.platform_only
-        """, rows)
+        """, list(rows.values()))
         conn.commit()
     log(f"  {len(rows)} skill codes catalogued")
 
