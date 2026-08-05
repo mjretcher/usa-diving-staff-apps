@@ -66,6 +66,7 @@ const S = {
   routing: null,        // editable qualification pathway (see routing.js)
   mult: null,           // measured entries-per-athlete (athlete-multiplicity.json)
   routeRes: null,       // its projection
+  bdMode: 'stop',       // breakdown view: stop | total | qualified
   flowErr: null,
   adv: null,            // {pool, steps:[{a:{},d:{}}], focus:'all'}
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
@@ -668,16 +669,29 @@ async function ensureMult(){
   return S.mult;
 }
 
-function projectPathway(){
+/* Two projections of the same pathway. `qualified` is what the rules entitle
+   people to; `expected` applies the take-up measured from the season we ran,
+   because the published rules always qualify more athletes than turn up. Asked
+   "how many could register", the honest answer is both numbers. */
+function projectPathway(withTakeUp){
   if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
   const cells = CELLS;
   let conv = {};
-  try {
-    const k = window.JuniorFlow && window.JuniorFlow.constants
-            ? window.JuniorFlow.constants(S.year) : null;
-    if (k) (k.levels || []).forEach((lv, i) => { if (lv && lv.conv) conv[i] = lv.conv; });
-  } catch(e){ console.warn('take-up constants', e); }
+  S.takeUp = null;
+  if (withTakeUp !== false){
+    try {
+      const k = window.JuniorFlow && window.JuniorFlow.constants
+              ? window.JuniorFlow.constants(S.year) : null;
+      if (k){
+        S.takeUp = {basis:k.basis, usable:k.usable, fallback:k.fallbackBaseline};
+        // Only apply constants that actually measured something. All-ones is the
+        // absence of a measurement, and applying it while saying take-up is
+        // included would be a claim the numbers do not support.
+        if (k.usable) (k.levels || []).forEach((lv, i) => { if (lv && lv.conv) conv[i] = lv.conv; });
+      }
+    } catch(e){ console.warn('take-up constants', e); S.takeUp = {error:String(e.message||e)}; }
+  }
   return QR().project({
     routing: S.routing,
     entries0: (S.flow.levels[0] || {rows: []}).rows,
@@ -754,50 +768,83 @@ const DIS_LBL = {'1':'1m', '3':'3m', P:'Platform'};
 
 function renderPathwayBreakdown(res){
   if (!res) return '';
+  const mode = S.bdMode || 'stop';
+  const qual = (mode === 'qualified') ? projectPathway(false) : null;
+  const src = qual || res;
+
   const cols = [];
   S.routing.forEach((lvl, L) => QR().roundsOf(lvl).forEach(r => {
-    cols.push({L, key:r.key, name: tierName(L), round: QR().ROUND_NAME[r.key] || r.key});
+    cols.push({L, key:r.key, name: tierName(L), round: QR().ROUND_NAME[r.key] || r.key,
+               stops: groupCountAt(L)});
   }));
-  const val = (L, rk, cell) => {
-    const f = res.field[L] && res.field[L][rk];
-    if (!f) return 0;
-    return f.reduce((s,g) => s + (g[cell]||0), 0);
+
+  /* Across every stop, and at a single one. The per-stop figure is the field a
+     diver actually stands in and the session an official actually runs -- a
+     total spread over three championships tells you neither. */
+  const at = (c, cell) => {
+    const f = src.field[c.L] && src.field[c.L][c.key];
+    if (!f) return {tot:0, per:0, lo:0, hi:0};
+    const vals = f.map(g => g[cell] || 0);
+    const tot = vals.reduce((a,b)=>a+b, 0);
+    const live = vals.filter(v => v > 0);
+    return {tot, per: tot / Math.max(1, c.stops),
+            lo: live.length ? Math.min(...live) : 0,
+            hi: live.length ? Math.max(...live) : 0};
   };
+  const show = (v) => {
+    if (mode !== 'stop') return v.tot > 0.5 ? fmt(Math.round(v.tot)) : '<span class="bs-bd-0">·</span>';
+    if (v.tot <= 0.5) return '<span class="bs-bd-0">·</span>';
+    const spread = (v.hi - v.lo) > 1.5 && v.lo > 0
+      ? `<span class="bs-bd-rng">${Math.round(v.lo)}–${Math.round(v.hi)}</span>` : '';
+    return `${Math.round(v.per)}${spread}`;
+  };
+  const agg = (c, cells) => {
+    const t = cells.reduce((s,cell) => s + at(c, cell).tot, 0);
+    const lo = [], hi = [];
+    const f = src.field[c.L] && src.field[c.L][c.key];
+    if (f) f.forEach(g => { const n = cells.reduce((s,cell)=>s+(g[cell]||0),0); if (n>0){ lo.push(n); hi.push(n);} });
+    return {tot:t, per:t/Math.max(1,c.stops), lo: lo.length?Math.min(...lo):0, hi: hi.length?Math.max(...hi):0};
+  };
+
   const head = cols.map(c =>
-    `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}</th>`).join('');
+    `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}
+      <span class="bs-bd-s">${c.stops} ${c.stops===1?'stop':'stops'}</span></th>`).join('');
 
   const body = ['A','B','C','D'].map(ag => {
-    const sub = cols.map(c => {
-      let n = 0;
-      ['B','G'].forEach(gd => ['1','3','P'].forEach(d => { n += val(c.L, c.key, ag+gd+d); }));
-      return `<td class="num">${n>0.5?fmt(Math.round(n)):'<span class="bs-bd-0">·</span>'}</td>`;
-    }).join('');
-    const rows = ['B','G'].flatMap(gd => ['1','3','P'].map(d => {
-      const cell = ag+gd+d;
-      const tds = cols.map(c => {
-        const n = val(c.L, c.key, cell);
-        return `<td class="num">${n>0.5?fmt(Math.round(n)):'<span class="bs-bd-0">·</span>'}</td>`;
-      }).join('');
-      return `<tr><td class="bs-bd-cell">${esc(GEN_LBL[gd])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
+    const mine = ['B','G'].flatMap(g => ['1','3','P'].map(d => ag+g+d));
+    const sub = cols.map(c => `<td class="num">${show(agg(c, mine))}</td>`).join('');
+    const rows = ['B','G'].flatMap(g => ['1','3','P'].map(d => {
+      const cell = ag+g+d;
+      const tds = cols.map(c => `<td class="num">${show(at(c, cell))}</td>`).join('');
+      return `<tr><td class="bs-bd-cell">${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
     })).join('');
     return `<tr class="bs-bd-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
   }).join('');
 
-  const totals = cols.map(c => {
-    const n = CELLS.reduce((s,cell) => s + val(c.L, c.key, cell), 0);
-    return `<td class="num"><b>${fmt(Math.round(n))}</b></td>`;
-  }).join('');
+  const totals = cols.map(c => `<td class="num"><b>${show(agg(c, CELLS))}</b></td>`).join('');
+
+  const note = mode === 'stop'
+    ? 'One event at one meet &mdash; the field a diver stands in and the session an official runs. Where stops differ in size, the range is shown beside the average.'
+    : mode === 'qualified'
+      ? 'What the rules entitle athletes to, before take-up. Always higher than the field that turns up.'
+      : 'Every stop of a stage added together. Useful for fees and totals, not for planning a session.';
 
   return `<div class="bs-bd">
-    <div class="bs-bd-h"><b>Every event, every round</b>
-      <span class="note">Entries per age group, gender and board &mdash; the numbers a timetable and an
-        awards order are built from.</span></div>
+    <div class="bs-bd-h">
+      <b>Every event, every round</b>
+      <div class="seg bs-bdseg">
+        <button data-bd="stop" class="${mode==='stop'?'on':''}">At one stop</button>
+        <button data-bd="total" class="${mode==='total'?'on':''}">All stops</button>
+        <button data-bd="qualified" class="${mode==='qualified'?'on':''}">Qualified, before take-up</button>
+      </div>
+      <span class="note">${note}</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
       <thead><tr><th>Age group / event</th>${head}</tr></thead>
       <tbody>${body}<tr class="bs-bd-tot"><td><b>All events</b></td>${totals}</tr></tbody>
     </table></div>
   </div>`;
 }
+
 
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
@@ -880,9 +927,15 @@ function renderPathway(){
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
     ${renderPathwayBreakdown(res)}
-    <p class="note" style="margin-top:12px">Entry counts include the take-up measured from the season we actually
-      ran &mdash; the published rules qualify more athletes than turn up. Places are counted, never simulated:
-      nothing here predicts who wins.</p>
+    ${(S.takeUp && S.takeUp.usable)
+      ? `<p class="note" style="margin-top:12px">Entry counts include the take-up measured from
+          <b>${esc(S.takeUp.basis)}</b> &mdash; the published rules qualify more athletes than turn up.
+          Places are counted, never simulated: nothing here predicts who wins.</p>`
+      : `<div class="ps-warn" style="margin-top:12px"><b>These are qualified places, not expected entries.</b>
+          ${S.takeUp && S.takeUp.fallback
+            ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
+            : 'Take-up could not be measured for this season, so every figure here assumes every qualifier turns up.'}
+          Load the reference alignment on the map and reopen this panel to see expected entries instead.</div>`}
     <p class="note"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
       what a session costs and how long it runs, while divers tell you how many bodies need a lane, a bed and an award.
       Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
@@ -940,6 +993,9 @@ function wirePathway(){
     // Routes out of a round that no longer runs would be orphaned.
     S.routing[L].routes = S.routing[L].routes.filter(r => r.from !== k);
     touch();
+  }));
+  P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
+    S.bdMode = b.dataset.bd; renderPathway();
   }));
   const rs = document.getElementById('bsPathReset');
   if (rs) rs.addEventListener('click', () => {

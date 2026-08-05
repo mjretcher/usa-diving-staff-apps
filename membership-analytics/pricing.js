@@ -2232,8 +2232,13 @@ async function ensureFlowData(){
         }
       }
     } catch(e){ console.warn('flow baseline', e); }
+    // A stock structure with no county assignment cannot produce take-up: every
+    // area is empty, nothing advances, and every constant computes as exactly 1.
+    // That looks like "no athletes drop out" rather than "we could not measure",
+    // so it is flagged rather than left to be inferred.
     FLOW.baseline = base || {name:'Default 12 / 6 / 3', regions:defaultRegions(12), assign:{},
-                             levels:defaultLevels(12), finalName:'Junior Nationals'};
+                             levels:defaultLevels(12), finalName:'Junior Nationals',
+                             fallback:true};
   }
   FLOW.dataReady = true;
   return true;
@@ -2283,10 +2288,17 @@ window.JuniorFlow = {
      that makes every hypothetical look like it changed nothing). */
   constants: (y) => {
     const cal = calForYear((y === 'y25' || y === 'y26') ? y : PS.year);
-    return {levels: (cal.levels || []).map(k => ({conv: Object.assign({}, k.conv),
-                                                  directAt: Object.assign({}, k.directAt)})),
-            observedAt: (cal.observedAt || []).slice(),
-            basis: cal.basis, year: cal.year, regions: cal.regions};
+    const levels = (cal.levels || []).map(k => ({conv: Object.assign({}, k.conv),
+                                                 directAt: Object.assign({}, k.directAt)}));
+    // Constants that are all exactly 1 are not measured behaviour, they are the
+    // absence of it. A caller applying them would be applying nothing while
+    // believing otherwise.
+    const moved = levels.some(lv => Object.keys(lv.conv||{})
+                    .some(c => Math.abs((lv.conv[c] ?? 1) - 1) > 0.01));
+    return {levels, observedAt: (cal.observedAt || []).slice(),
+            basis: cal.basis, year: cal.year, regions: cal.regions,
+            fallbackBaseline: !!(FLOW.baseline && FLOW.baseline.fallback),
+            usable: moved};
   },
   defaultFlow,
   baseline: () => FLOW.baseline,
