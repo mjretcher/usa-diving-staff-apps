@@ -223,13 +223,21 @@
     const cumulative = withCarry >= Math.max(2, Math.ceil(divers.length * 0.6)) && flagged;
     if (!cumulative) divers.forEach((d) => { d.carry = 0; });
 
-    // Running total from the carry-in forward. Scraped running_total_points is
-    // within-stage where present, so the carry is added on top of it.
+    // Running total from the carry-in forward, always recomputed from the dive
+    // scores. The scraped running_total_points cannot be trusted here because
+    // its meaning is not consistent: on a World Aquatics semifinal it already
+    // includes the score carried in from the preliminary, so adding the carry
+    // on top double-counted it — the 2026 World Cup Super Final men's 10m
+    // semifinal showed LIAN Junjie on 816.05 against a posted 530.05.
+    //
+    // Summing the scores instead is deterministic and self-checking: carry is
+    // derived as posted minus the sum of this stage's dives, so carry plus
+    // that same sum returns the posted total by construction, whatever the
+    // scraper recorded.
     divers.forEach((d) => {
       let acc = d.carry;
       d.dives.forEach((r) => {
-        if (r.running_total_points != null) acc = d.carry + r.running_total_points;
-        else if (r.score != null) acc += r.score;
+        if (r.score != null) acc += r.score;
         r._run = acc;
       });
       d.total = d.dives.length ? d.dives[d.dives.length - 1]._run : null;

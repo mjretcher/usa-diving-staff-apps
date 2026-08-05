@@ -1290,3 +1290,8 @@ table.ae-dx .num { font: 700 13.5px 'JetBrains Mono', monospace; white-space: no
   background: var(--surface-2); border-color: var(--line);
   font-weight: 500; color: var(--ink-3);
 }
+.ae-thin {
+  margin-top: 11px; padding: 8px 12px; border-radius: 8px;
+  background: rgba(227,25,55,.07); border: 1px solid rgba(227,25,55,.28);
+  font: 600 11.5px Inter, sans-serif; color: var(--ink-2); line-height: 1.55;
+}

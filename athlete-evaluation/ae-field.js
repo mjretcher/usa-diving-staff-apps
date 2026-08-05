@@ -122,14 +122,10 @@
      depends on how completely the scraper has covered their meets, which is
      not equal across athletes. */
 
-  // Mirrors the CASE expression in build_analytics.py's rank_cost.
-  function phaseScope(p) {
-    if (p.competition_family === 'World Aquatics') return 'world';
-    if (p.competition_family === 'NCAA') return 'ncaa';
-    if (p.event_level === 'Senior' || p.event_level === 'Senior/Open') return 'us-senior';
-    if (p.event_level === 'Junior') return 'us-junior';
-    return 'us-open';
-  }
+  // One definition, in ae-data. This was a local copy of the SQL rule and it
+  // was already wrong: it returned 'world' for every World Aquatics result,
+  // American Cup included.
+  const phaseScope = window.AE.scopeOf;
 
   function athleteMark(scope, gender, discipline, diveCount) {
     const b = window.AE.state && window.AE.state.bundle;
@@ -218,7 +214,9 @@
     // his 3m. Execution marks are also not comparable across meet levels.
     // Coverage is the comparison selector's job, not a silent substitution.
     const use = usable.filter((p) => phaseScope(p) === scope);
-    if (!use.length) return null;
+    // One final is an anecdote. Two is the minimum from which "current form"
+    // means anything, and the count is always shown either way.
+    if (use.length < 2) return null;
 
     const recent = use.slice().sort((a, b2) => num(b2.meet_year) - num(a.meet_year)).slice(0, 3);
     const dd = window.AE.mean(recent.map((p) => num(p.phase_dd_sum)));
@@ -260,6 +258,8 @@
     if (noDD) bits.push(`${noDD} ${noDD === 1 ? 'has' : 'have'} no list DD recorded, so
       ${noDD === 1 ? 'it' : 'they'} cannot be split into difficulty and execution`);
     if (!inScope) bits.push(`none of what remains is in ${esc(scopeName(scope))}`);
+    else if (inScope < 2) bits.push(`only ${inScope} of what remains is in
+      ${esc(scopeName(scope))}, and one meet is an anecdote rather than current form`);
     return `${esc(nm)} has ${fin.length} final${fin.length === 1 ? '' : 's'} on record since 2018,
       but ${bits.join('; ')}. Switching the comparison field above may give a usable match.`;
   }
@@ -271,13 +271,24 @@
 
     const rows = profile.filter((r) => r.scope === scope);
     const cells = [];
+    // Events where the athlete has usable results but the comparison population
+    // does not. The reason the panel is empty differs completely between the
+    // two sides, and reporting the athlete-side reason when the podium is what
+    // is missing sends someone looking for a problem in the wrong place.
+    const thinPodium = [];
     ['Male', 'Female'].forEach((g) => ['1m', '3m', 'Platform'].forEach((d) => {
       const sub = rows.filter((r) => r.gender === g && r.discipline === d);
       if (!sub.length) return;
       const dc = dominantFormat(sub);
       const use = sub.filter((r) => r.dive_count === dc && r.band === 'podium');
       const n = use.reduce((a, r) => a + r.n, 0);
-      if (n < GUARD.cell) return;
+      // Below FLOOR there is nothing worth drawing. Between FLOOR and the
+      // normal guard the panel still renders, with the count stated and a
+      // warning attached — splitting the world scope correctly left the
+      // championship podium at 18 against a threshold of 20, and hiding the
+      // whole diagnostic over that tells the reader less, not more.
+      const FLOOR = 8;
+      if (n < FLOOR) { if (athleteSplit(scope, g, d, dc)) thinPodium.push({ g, d, n }); return; }
       const pod = {
         n,
         dd: use.reduce((a, r) => a + r.avg_list_dd * r.n, 0) / n,
@@ -298,8 +309,15 @@
     }));
 
     if (!cells.length) {
+      const why = thinPodium.length
+        ? `${esc(thinPodium[0].me || '')}There are results to compare, but
+           ${esc(scopeName(scope))} has too few podium finishes to compare them against —
+           ${thinPodium.map((x) => `${esc(G_LABEL[x.g] || x.g)} ${esc(EV_LABEL[x.d] || x.d)}
+             has ${x.n}`).join(', ')}. That is a limit of the field, not of the athlete.
+           A broader comparison field above will have more.`
+        : splitBlockers(scope);
       return `<section class="ae-card ae-fi-sec"><h3>Difficulty or execution?</h3>
-        <p class="ae-soft">${splitBlockers(scope)}</p></section>`;
+        <p class="ae-soft">${why}</p></section>`;
     }
 
     const verdict = (c) => {
@@ -321,7 +339,7 @@
       const dw = Math.abs(c.ddPart) / tot * w, ew = Math.abs(c.exPart) / tot * w;
       return `<tr>
         <td class="ae-dx-ev"><b>${esc(G_LABEL[c.g] || c.g)} ${esc(EV_LABEL[c.d] || c.d)}</b>
-          <span>${c.dc}-dive</span></td>
+          <span>${c.dc}-dive · vs ${c.pod.n} podium finishes${window.AE.ok(c.pod.n, 'cell') ? '' : ' ⚠'}</span></td>
         <td class="num">${c.me.dd.toFixed(1)}<span class="ae-dx-vs">vs ${c.pod.dd.toFixed(1)}</span></td>
         <td class="num">${c.me.exec.toFixed(2)}<span class="ae-dx-vs">vs ${c.pod.exec.toFixed(2)}</span></td>
         <td class="num ${c.total > 0 ? 'ae-dn' : 'ae-up'}">${c.total > 0 ? '−' : '+'}${Math.abs(c.total).toFixed(1)}</td>
@@ -350,8 +368,14 @@
         <tbody>${cells.map(row).join('')}</tbody></table></div>
       <div class="ae-legend"><span class="ae-key" style="background:${C.COLORS.NAVY}"></span>difficulty
         <span class="ae-key" style="background:${C.COLORS.POOL}"></span>execution</div>
-      <div class="ae-fi-foot">Athlete figures are the mean of their ${me0.n} most recent finals
-        (${me0.y0}–${me0.y1}${me0.scopes.length ? ' · ' + me0.scopes.map(esc).join(', ') : ''}), matched
+      ${cells.some((c) => !window.AE.ok(c.pod.n, 'cell'))
+        ? `<div class="ae-thin">Thin comparison: ${cells.filter((c) => !window.AE.ok(c.pod.n, 'cell'))
+            .map((c) => `${esc(G_LABEL[c.g] || c.g)} ${esc(EV_LABEL[c.d] || c.d)} rests on
+              ${c.pod.n} podium finishes, under the ${GUARD.cell} this normally wants. Read it as
+              indicative, not settled.`).join(' ')}</div>` : ''}
+      <div class="ae-fi-foot">Athlete figures are the mean of their ${me0.n} most recent
+        final${me0.n === 1 ? '' : 's'}
+ (${me0.y0}–${me0.y1}${me0.scopes.length ? ' · ' + me0.scopes.map(esc).join(', ') : ''}), matched
         to the podium on dive-count format so no two scoring formats are ever compared.
         ${dropped ? `${dropped} final${dropped === 1 ? '' : 's'} excluded for carrying a list DD that
           implies an impossible execution mark.` : ''}
@@ -519,7 +543,9 @@
       <b>${esc(mk.name)}</b> ${mk.recent.toFixed(1)} &rarr; ${where}
       ${gap != null && gap > 0 ? `<span class="ae-soft">&middot; ${gap.toFixed(1)} off the podium median</span>`
         : gap != null ? `<span class="ae-soft">&middot; ${Math.abs(gap).toFixed(1)} clear of it</span>` : ''}
-      <span class="ae-fi-mark-n">median of ${mk.nRecent} most recent of ${mk.n} finals, ${mk.y0}–${mk.y1}</span>
+      <span class="ae-fi-mark-n">${mk.n === 1
+        ? `their only ${esc(scopeName(cmp.b))} final on record, ${mk.y1}`
+        : `median of ${mk.nRecent} most recent of ${mk.n} finals, ${mk.y0}–${mk.y1}`}</span>
     </div>`;
   }
 

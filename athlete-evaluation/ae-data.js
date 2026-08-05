@@ -263,8 +263,33 @@
     { id: 'us-senior', label: 'US Senior' },
     { id: 'us-open',   label: 'US All levels' },
     { id: 'ncaa',      label: 'NCAA' },
-    { id: 'world',     label: 'World Aquatics' },
+    // World Aquatics splits by tier. Everything used to sit in one bucket,
+    // which put the World Championships and the American Cup in the same
+    // reference population — a 150-point spread in men's platform podium
+    // averages, pulling the world podium bar down by about 30.
+    { id: 'world',     label: 'World championship' },
+    { id: 'world-inv', label: 'World invitational' },
   ];
+
+  // Which tier a meet belongs to. This mirrors analytics.meet_scope, built by
+  // db/scripts/scopes.py, and the two MUST agree — ae-data has no way to run
+  // the SQL rule, so the agreement is asserted by a test rather than assumed.
+  // Unrecognised World Aquatics meets fall to the invitational side on
+  // purpose: a thin championship band shows as thin, contamination does not
+  // show at all.
+  const CHAMPIONSHIP_RX = /world aquatics championships|world championships|olympic|world cup/i;
+  function worldTier(meetName) {
+    return CHAMPIONSHIP_RX.test(String(meetName || '')) ? 'world' : 'world-inv';
+  }
+
+  // The scope of a single result row, matching the CASE in build_analytics.py.
+  function scopeOf(p) {
+    if (p.competition_family === 'World Aquatics') return worldTier(p.meet_name);
+    if (p.competition_family === 'NCAA') return 'ncaa';
+    if (p.event_level === 'Senior' || p.event_level === 'Senior/Open') return 'us-senior';
+    if (p.event_level === 'Junior') return 'us-junior';
+    return 'us-open';
+  }
   const NUMS_FGE = ['meet_year', 'n', 'n_divers', 'avg_exec', 'p25_exec',
     'p50_exec', 'p75_exec', 'p90_exec', 'fail_rate', 'avg_dd'];
 
@@ -561,7 +586,7 @@
   window.AE = {
     esc, escJsAttr, num, truthy, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
-    isRulebookDive, bucketOf, SCOPES, normGender, GUARD, ok, thinNote,
+    isRulebookDive, bucketOf, SCOPES, scopeOf, worldTier, normGender, GUARD, ok, thinNote,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,
