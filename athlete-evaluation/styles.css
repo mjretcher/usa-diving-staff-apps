@@ -1240,3 +1240,21 @@ tr.ae-fc-start b { color: var(--brand-blue); }
   color: var(--ink-4); padding: 9px 13px 4px; background: var(--surface-2);
   border-bottom: 1px solid var(--line-2); position: sticky; top: 0;
 }
+
+/* Selected athlete drawn onto the field distributions. The dashed red line is
+   the athlete; everything describing the population stays navy/pool, so the
+   two never read as the same kind of thing. */
+.ae-fi-mark {
+  margin-top: 6px; padding: 7px 10px; border-radius: 8px;
+  background: rgba(227,25,55,.06); border: 1px solid rgba(227,25,55,.22);
+  font: 600 12.5px Inter, sans-serif; color: var(--ink);
+}
+.ae-fi-mark b { color: var(--brand-blue); }
+.ae-fi-mark-n {
+  display: block; margin-top: 2px; font: 500 10.5px 'JetBrains Mono', monospace;
+  color: var(--ink-4);
+}
+.ae-fi-foot {
+  margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--line-2);
+  font: 500 11.5px Inter, sans-serif; color: var(--ink-3); line-height: 1.55;
+}

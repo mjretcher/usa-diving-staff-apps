@@ -41,27 +41,43 @@
       </div></section>`;
   }
 
-  async function bootstrap(force) {
-    if (booted && !force) return;
-    booted = true;
-    const root = document.getElementById('fieldRoot');
-    root.innerHTML = `<div class="ae-fi-skel">${'<div class="ae-skel"></div>'.repeat(4)}</div>`;
+  // The five field datasets describe populations and do not depend on who is
+  // selected, so they are fetched once and kept. Switching athlete or changing
+  // the comparison only repaints.
+  let cache = null;
 
+  function paint(root) {
+    root.innerHTML =
+      cmpBar() +
+      decompositionHtml(cache.profile) +
+      rankCostHtml(cache.rankCost) +
+      armsRaceHtml(cache.listDD) +
+      heatHtml(cache.groupExec) +
+      depthHtml(cache.depth);
+  }
+
+  async function render(root) {
+    root = root || document.getElementById('fieldRoot') || document.getElementById('view-field');
+    if (!root) return;
+    if (cache) { paint(root); return; }
+    root.innerHTML = `<div class="ae-fi-skel">${'<div class="ae-skel"></div>'.repeat(4)}</div>`;
     try {
       const [listDD, groupExec, depth, profile, rankCost] = await Promise.all([
         loadListDD(), loadGroupExec(), loadDepth(), loadProfile(), loadRankCost(),
       ]);
-      root.innerHTML =
-        cmpBar() +
-        decompositionHtml(profile) +
-        rankCostHtml(rankCost) +
-        armsRaceHtml(listDD) +
-        heatHtml(groupExec) +
-        depthHtml(depth);
+      cache = { listDD, groupExec, depth, profile, rankCost };
+      booted = true;
+      paint(root);
     } catch (e) {
       root.innerHTML = `<div class="ae-card"><div class="ae-empty" style="color:var(--brand-red)">Field Intel failed to load: ${esc(e.message || e)}</div></div>`;
       console.error('[AEField]', e);
     }
+  }
+
+  // Kept so anything still calling bootstrap() keeps working.
+  async function bootstrap(force) {
+    if (force) cache = null;
+    return render(null);
   }
 
   /* ---------------- data ---------------- */
@@ -86,6 +102,73 @@
     r.rows.forEach((x) => ['dive_count','place','n_meets','avg_score','p25_score',
       'p50_score','p75_score','sd_score'].forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
+  }
+
+  /* ---------------- the selected athlete, on the field ----------------
+     These charts describe a population. On their own they are reference
+     material: "the podium median is 445" is a fact about other people. The
+     point of putting the selected athlete on them is to turn each one into an
+     answer about a specific diver — what their current form actually buys.
+
+     Comparability is the whole risk here, so the athlete's marks are drawn
+     with EXACTLY the predicate analytics.rank_cost is built from: finals only,
+     non-cumulative, non-synchronized, 2018 onward, and the same scope, gender,
+     discipline and dive-count format. Anything else silently compares an
+     11-dive international total against a 6-dive age-group one, or a
+     cumulative carry against a single-round score.
+
+     Coaching context, not a selection metric: an athlete's position here
+     depends on how completely the scraper has covered their meets, which is
+     not equal across athletes. */
+
+  // Mirrors the CASE expression in build_analytics.py's rank_cost.
+  function phaseScope(p) {
+    if (p.competition_family === 'World Aquatics') return 'world';
+    if (p.competition_family === 'NCAA') return 'ncaa';
+    if (p.event_level === 'Senior' || p.event_level === 'Senior/Open') return 'us-senior';
+    if (p.event_level === 'Junior') return 'us-junior';
+    return 'us-open';
+  }
+
+  function athleteMark(scope, gender, discipline, diveCount) {
+    const b = window.AE.state && window.AE.state.bundle;
+    if (!b || !b.phases || !b.phases.length) return null;
+    const truthy = window.AE.truthy;
+    const rows = b.phases.filter((p) =>
+      p.round_stage === 'Final' &&
+      !truthy(p.score_is_cumulative) &&
+      !truthy(p.is_synchronized) &&
+      p.gender === gender && p.discipline === discipline &&
+      num(p.phase_dive_count) === diveCount &&
+      num(p.meet_year) >= 2018 &&
+      num(p.posted_score) != null &&
+      phaseScope(p) === scope);
+    if (!rows.length) return null;
+    const scores = rows.map((p) => num(p.posted_score)).sort((a, b2) => a - b2);
+    const years = rows.map((p) => num(p.meet_year));
+    // Recent form is the median of the last three finals, not the personal
+    // best: a best is one good day and consistently overstates where an
+    // athlete would land at the next meet.
+    const byRecent = rows.slice().sort((a, b2) => num(b2.meet_year) - num(a.meet_year)).slice(0, 3);
+    const rec = byRecent.map((p) => num(p.posted_score)).sort((a, b2) => a - b2);
+    return {
+      n: rows.length,
+      best: scores[scores.length - 1],
+      median: window.AE.quantile(scores, 0.5),
+      recent: window.AE.quantile(rec, 0.5),
+      nRecent: rec.length,
+      y0: Math.min(...years), y1: Math.max(...years),
+      name: (b.ident && b.ident.display_name) || 'Selected athlete',
+    };
+  }
+
+  // What place a given score has historically bought: the best place whose
+  // median is at or below it. Reported as approximate because it reads one
+  // number off a distribution built from several meets.
+  function placeFor(score, rows) {
+    if (score == null || !rows.length) return null;
+    for (const r of rows) if (score >= r.p50_score) return r.place;
+    return null;
   }
 
 
@@ -232,6 +315,45 @@
 
   /* ---------------- what a place costs ---------------- */
 
+  // Plain sentence under each chart: what this athlete's form currently buys,
+  // and how far the next rung is. The gap is the actionable half.
+  function markLine(ev) {
+    const mk = ev.mark;
+    if (!mk || mk.recent == null) return '';
+    const p = placeFor(mk.recent, ev.rows);
+    const podium = ev.rows.find((r) => r.place === 3);
+    const gap = podium ? podium.p50_score - mk.recent : null;
+    const where = p == null
+      ? `outside the top ${ev.rows[ev.rows.length - 1].place}`
+      : (p === 1 ? 'first' : `around ${p}${p === 2 ? 'nd' : p === 3 ? 'rd' : 'th'}`);
+    return `<div class="ae-fi-mark">
+      <b>${esc(mk.name)}</b> ${mk.recent.toFixed(1)} &rarr; ${where}
+      ${gap != null && gap > 0 ? `<span class="ae-soft">&middot; ${gap.toFixed(1)} off the podium median</span>`
+        : gap != null ? `<span class="ae-soft">&middot; ${Math.abs(gap).toFixed(1)} clear of it</span>` : ''}
+      <span class="ae-fi-mark-n">median of ${mk.nRecent} most recent of ${mk.n} finals, ${mk.y0}–${mk.y1}</span>
+    </div>`;
+  }
+
+  function athleteFoot(evs, scope) {
+    const has = evs.filter((e) => e.mark && e.mark.recent != null);
+    const b = window.AE.state && window.AE.state.bundle;
+    if (!b) {
+      return `<div class="ae-fi-foot">Search an athlete above to draw them across these curves and
+        see what their current form buys.</div>`;
+    }
+    const nm = (b.ident && b.ident.display_name) || 'this athlete';
+    if (!has.length) {
+      return `<div class="ae-fi-foot">No ${esc(scopeName(scope))} finals on record for ${esc(nm)} in
+        these formats since 2018, so there is nothing to place them against here. Try a different
+        comparison field above.</div>`;
+    }
+    return `<div class="ae-fi-foot">Dashed line is ${esc(nm)}. Drawn with the same rule these curves
+      are built from &mdash; finals only, non-cumulative, non-synchronized, ${esc(scopeName(scope))},
+      2018 onward, matched on dive-count format, so no two scoring formats are ever compared.
+      Coaching context: where an athlete lands here depends on how completely their meets have been
+      recorded, which is not equal across athletes, so this is not a selection metric.</div>`;
+  }
+
   function rankCostHtml(rankCost) {
     const scope = cmp.b;
     const evs = [];
@@ -241,7 +363,7 @@
       const dc = dominantFormat(sub.map((r) => ({ dive_count: r.dive_count, n: r.n_meets })));
       const use = sub.filter((r) => r.dive_count === dc && r.n_meets >= 3)
         .sort((a, b) => a.place - b.place);
-      if (use.length >= 4) evs.push({ g, d, dc, rows: use });
+      if (use.length >= 4) evs.push({ g, d, dc, rows: use, mark: athleteMark(scope, g, d, dc) });
     }));
     if (!evs.length) {
       return `<section class="ae-card ae-fi-sec"><h3>What a place costs</h3>
@@ -273,6 +395,24 @@
           + `middle half ${r.p25_score.toFixed(1)}–${r.p75_score.toFixed(1)} `
           + `across ${r.n_meets} meets</title></circle>`;
       });
+      // The selected athlete's recent form, drawn straight across the curve so
+      // the place it buys is read off where the two meet.
+      const mk = ev.mark;
+      if (mk && mk.recent != null) {
+        const inRange = mk.recent >= lo && mk.recent <= hi;
+        const y = Math.max(padT + 6, Math.min(h - padB - 2, Y(mk.recent)));
+        g += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${w - padR}" y2="${y.toFixed(1)}"
+               stroke="${C.COLORS.RED}" stroke-width="1.8" stroke-dasharray="5 3"/>`;
+        if (!inRange) {
+          // Clamped, so say so rather than implying the line sits on the axis.
+          g += `<text x="${w - padR - 3}" y="${(y + (mk.recent > hi ? 12 : -5)).toFixed(1)}"
+                 text-anchor="end" class="ae-mark">${mk.recent > hi ? 'above chart' : 'below chart'}
+                 ${mk.recent.toFixed(0)}</text>`;
+        } else {
+          g += `<text x="${w - padR - 3}" y="${(y - 5).toFixed(1)}" text-anchor="end"
+                 class="ae-mark">${mk.recent.toFixed(1)}</text>`;
+        }
+      }
       [rs[0].place, rs[Math.floor(rs.length / 2)].place, rs[rs.length - 1].place].forEach((p) => {
         g += `<text x="${X(p)}" y="${h - padB + 16}" text-anchor="middle" class="ae-tick">${p}</text>`;
       });
@@ -295,7 +435,9 @@
           &middot; final cut ${ev.rows.find((r) => r.place === 12)
           ? ev.rows.find((r) => r.place === 12).p25_score.toFixed(0) + '–'
             + ev.rows.find((r) => r.place === 12).p75_score.toFixed(0) : '—'}</div>
+        ${markLine(ev)}
       </div>`).join('')}</div>
+      ${athleteFoot(evs, scope)}
     </section>`;
   }
 
@@ -389,8 +531,9 @@
   }
 
   window.AEField = {
+    render,
     bootstrap,
-    setA(v) { cmp.a = v; bootstrap(true); },
-    setB(v) { cmp.b = v; bootstrap(true); },
+    setA(v) { cmp.a = v; render(); },
+    setB(v) { cmp.b = v; render(); },
   };
 })();

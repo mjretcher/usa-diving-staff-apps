@@ -31,7 +31,7 @@
     { id: 'podium',   section: 'compare', label: 'List vs the field',    el: 'view-podium',   athlete: true, mod: () => window.AEPodium },
     { id: 'medaltrack', section: 'compare', label: 'Junior to senior', el: 'view-medaltrack', athlete: false, mod: () => window.AECorridor },
 
-    { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: false },
+    { id: 'field',    section: 'fields',  label: 'Trends',             el: 'view-field',    athlete: true,  mod: () => window.AEField },
     { id: 'la28',     section: 'fields',  label: '2028 projection',    el: 'view-la28',     athlete: false, mod: () => window.AELa28 },
 
     { id: 'race',     section: 'meets',   label: 'Meet replay',        el: 'view-race',     athlete: false, mod: () => window.AEMeet },
@@ -62,10 +62,6 @@
     VIEWS.forEach((v) => { const el = document.getElementById(v.el); if (el) el.hidden = v.id !== id; });
     writeHash();
     const v = VIEWS.find((x) => x.id === id);
-    if (v.id === 'field') {
-      if (!state.fieldBooted) { state.fieldBooted = true; window.AEField.bootstrap(); }
-      return;
-    }
     rerender();
   }
 
