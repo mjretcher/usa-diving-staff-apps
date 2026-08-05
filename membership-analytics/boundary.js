@@ -742,6 +742,63 @@ function renumberAreas(lvl, force){
 
 
 /* ---------- pathway editor ---------- */
+
+/* ---------- the breakdown ----------
+   A stage total answers "how big is this meet". It does not answer "how many
+   14-15 girls will be on the 3-metre board in the semi-final", which is the
+   question that decides a timetable and an awards order. The projection
+   already carries every cell; this shows it. */
+const AGE_LBL = {A:'Group A', B:'Group B', C:'Group C', D:'Group D'};
+const GEN_LBL = {B:'Boys', G:'Girls'};
+const DIS_LBL = {'1':'1m', '3':'3m', P:'Platform'};
+
+function renderPathwayBreakdown(res){
+  if (!res) return '';
+  const cols = [];
+  S.routing.forEach((lvl, L) => QR().roundsOf(lvl).forEach(r => {
+    cols.push({L, key:r.key, name: tierName(L), round: QR().ROUND_NAME[r.key] || r.key});
+  }));
+  const val = (L, rk, cell) => {
+    const f = res.field[L] && res.field[L][rk];
+    if (!f) return 0;
+    return f.reduce((s,g) => s + (g[cell]||0), 0);
+  };
+  const head = cols.map(c =>
+    `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}</th>`).join('');
+
+  const body = ['A','B','C','D'].map(ag => {
+    const sub = cols.map(c => {
+      let n = 0;
+      ['B','G'].forEach(gd => ['1','3','P'].forEach(d => { n += val(c.L, c.key, ag+gd+d); }));
+      return `<td class="num">${n>0.5?fmt(Math.round(n)):'<span class="bs-bd-0">·</span>'}</td>`;
+    }).join('');
+    const rows = ['B','G'].flatMap(gd => ['1','3','P'].map(d => {
+      const cell = ag+gd+d;
+      const tds = cols.map(c => {
+        const n = val(c.L, c.key, cell);
+        return `<td class="num">${n>0.5?fmt(Math.round(n)):'<span class="bs-bd-0">·</span>'}</td>`;
+      }).join('');
+      return `<tr><td class="bs-bd-cell">${esc(GEN_LBL[gd])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
+    })).join('');
+    return `<tr class="bs-bd-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
+  }).join('');
+
+  const totals = cols.map(c => {
+    const n = CELLS.reduce((s,cell) => s + val(c.L, c.key, cell), 0);
+    return `<td class="num"><b>${fmt(Math.round(n))}</b></td>`;
+  }).join('');
+
+  return `<div class="bs-bd">
+    <div class="bs-bd-h"><b>Every event, every round</b>
+      <span class="note">Entries per age group, gender and board &mdash; the numbers a timetable and an
+        awards order are built from.</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
+      <thead><tr><th>Age group / event</th>${head}</tr></thead>
+      <tbody>${body}<tr class="bs-bd-tot"><td><b>All events</b></td>${totals}</tr></tbody>
+    </table></div>
+  </div>`;
+}
+
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
@@ -822,6 +879,7 @@ function renderPathway(){
     </div>
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
+    ${renderPathwayBreakdown(res)}
     <p class="note" style="margin-top:12px">Entry counts include the take-up measured from the season we actually
       ran &mdash; the published rules qualify more athletes than turn up. Places are counted, never simulated:
       nothing here predicts who wins.</p>

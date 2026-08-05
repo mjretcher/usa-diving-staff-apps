@@ -704,6 +704,33 @@ const BOUNDARY_SECTIONS = {
           divers decide beds, lanes and awards. Anything marked <i>est.</i> means this pathway has moved the mix
           of events away from what was measured, so read it as indicative.</p>
 
+        <h3 class="mr-h3">Every event, every round</h3>
+        ${(function(){
+          const AGE={A:'Group A',B:'Group B',C:'Group C',D:'Group D'};
+          const GEN={B:'Boys',G:'Girls'}, DIS={'1':'1m','3':'3m',P:'Platform'};
+          const cols=[];
+          routing.forEach((lvl,L)=>QRr.roundsOf(lvl).forEach(r=>
+            cols.push({L,key:r.key,name:nm(L),round:QRr.ROUND_NAME[r.key]||r.key})));
+          const val=(L,rk,cell)=>{const f=res.field[L]&&res.field[L][rk];
+            return f? f.reduce((s,g)=>s+(g[cell]||0),0) : 0;};
+          const head=cols.map(c=>`<th class="mr-num">${esc(c.name)}<br><span class="mr-soft">${esc(c.round)}</span></th>`).join('');
+          const body=['A','B','C','D'].map(ag=>{
+            const sub=cols.map(c=>{let n=0;['B','G'].forEach(g=>['1','3','P'].forEach(d=>{n+=val(c.L,c.key,ag+g+d);}));
+              return `<td class="mr-num">${n>0.5?fmt(Math.round(n)):'—'}</td>`;}).join('');
+            const rows=['B','G'].flatMap(g=>['1','3','P'].map(d=>{
+              const cell=ag+g+d;
+              const tds=cols.map(c=>{const n=val(c.L,c.key,cell);
+                return `<td class="mr-num">${n>0.5?fmt(Math.round(n)):'—'}</td>`;}).join('');
+              return `<tr><td style="padding-left:18px">${esc(GEN[g])} ${esc(DIS[d])}</td>${tds}</tr>`;})).join('');
+            return `<tr class="mr-sub"><td><b>${esc(AGE[ag])}</b></td>${sub}</tr>${rows}`;}).join('');
+          const tot=cols.map(c=>{const n=CELLS.reduce((s,cell)=>s+val(c.L,c.key,cell),0);
+            return `<td class="mr-num"><b>${fmt(Math.round(n))}</b></td>`;}).join('');
+          return `<table class="mr-table"><thead><tr><th>Age group / event</th>${head}</tr></thead>
+            <tbody>${body}<tr class="mr-tot"><td><b>All events</b></td>${tot}</tr></tbody></table>`;
+        })()}
+        <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
+          3-metre board in the semi-final — the number a timetable and an awards order are actually built from.</p>
+
         <h3 class="mr-h3">What actually gets billed</h3>
         <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Billable entries</th></tr></thead>
           <tbody>${billed}</tbody></table>
@@ -1976,6 +2003,8 @@ const STYLES = `
 #mr-output .mr-p{font-size:12px;color:#2d3450;margin:0 0 9px;line-height:1.55}
 #mr-output .mr-note{font-size:11px;color:#5a6480;margin:9px 0 0;line-height:1.55;
   background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0}
+.mr-sub td{background:#f4f8fd}
+
 .mr-bullets{margin:8px 0 12px;padding-left:20px;font-size:11px;line-height:1.6;color:#13213a}
 .mr-bullets li{margin-bottom:4px}
 
