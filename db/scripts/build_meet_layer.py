@@ -49,9 +49,15 @@ def rows(res):
     return [dict(zip(fields, r)) for r in res.get("rows", [])]
 
 
+import scopes  # the single definition of competitive scope
+
+
 def log(msg):
     print(msg, flush=True)
 
+
+scopes.ensure(sql)
+log("meet_scope built")
 
 # ------------------------------------------------------- dive population
 # What a given dive actually scores, per level. The point of this table is to
@@ -75,7 +81,8 @@ def log(msg):
 # binding selection criteria.
 sql("DROP TABLE IF EXISTS analytics.dive_population")
 sql("""CREATE TABLE analytics.dive_population AS
-SELECT CASE WHEN competition_family='World Aquatics' THEN 'world'
+SELECT CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
             WHEN competition_family='NCAA' THEN 'ncaa'
             WHEN event_name ILIKE '%senior%' THEN 'us-senior'
             WHEN event_name ILIKE 'group%' THEN 'us-junior'
@@ -134,7 +141,10 @@ SELECT s.meet_id,
                 s.meet_id) AS meet_name,
        m.start_date, m.end_date, m.venue,
        s.competition_family, s.meet_year, s.n_dives, s.n_events, s.n_divers,
-       CASE WHEN s.competition_family='World Aquatics' THEN 'world'
+       CASE WHEN s.competition_family='World Aquatics'
+                 AND s.meet_id IN (SELECT meet_id FROM analytics.meet_scope
+                                   WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN s.competition_family='World Aquatics' THEN 'world'
             WHEN s.competition_family='NCAA' THEN 'ncaa'
             WHEN s.has_senior THEN 'us-senior'
             WHEN s.has_junior THEN 'us-junior'

@@ -76,12 +76,18 @@ def esc(v):
         return "NULL"
     return "'" + str(v).replace("'", "''") + "'"
 
+import scopes  # the single definition of competitive scope
+
+
 def log(msg):
     print(f"[build_analytics] {msg}", flush=True)
 
 # ---------------------------------------------------------------- DDL
 log(f"endpoint: {ENDPOINT}")
 sql("CREATE SCHEMA IF NOT EXISTS analytics")
+
+scopes.ensure(sql)
+log("meet_scope built")
 
 sql("DROP TABLE IF EXISTS analytics.athlete_identity")
 sql("""CREATE TABLE analytics.athlete_identity (
@@ -288,7 +294,8 @@ log("benchmarks built")
 sql("DROP TABLE IF EXISTS analytics.field_group_exec")
 sql("""CREATE TABLE analytics.field_group_exec AS
 SELECT competition_family, meet_year, gender, discipline,
-       CASE WHEN competition_family='World Aquatics' THEN 'world'
+       CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
             WHEN competition_family='NCAA' THEN 'ncaa'
             WHEN event_name ILIKE '%senior%' THEN 'us-senior'
             WHEN event_name ILIKE 'group%' THEN 'us-junior'
@@ -320,7 +327,8 @@ sql("CREATE INDEX idx_fge_scope ON analytics.field_group_exec (scope, gender, di
 sql("DROP TABLE IF EXISTS analytics.field_group_exec_vo")
 sql("""CREATE TABLE analytics.field_group_exec_vo AS
 SELECT meet_year, gender, discipline,
-       CASE WHEN competition_family='World Aquatics' THEN 'world'
+       CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
             WHEN competition_family='NCAA' THEN 'ncaa'
             WHEN event_name ILIKE '%senior%' THEN 'us-senior'
             WHEN event_name ILIKE 'group%' THEN 'us-junior'
@@ -344,7 +352,8 @@ sql("DROP TABLE IF EXISTS analytics.field_list_dd")
 sql("""CREATE TABLE analytics.field_list_dd AS
 WITH lists AS (
   SELECT competition_family, meet_year, gender, discipline,
-         CASE WHEN competition_family='World Aquatics' THEN 'world'
+         CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
               WHEN competition_family='NCAA' THEN 'ncaa'
               WHEN event_name ILIKE '%senior%' THEN 'us-senior'
               WHEN event_name ILIKE 'group%' THEN 'us-junior'
@@ -590,7 +599,8 @@ sql("DROP TABLE IF EXISTS analytics.event_profile")
 sql("""CREATE TABLE analytics.event_profile AS
 WITH base AS (
   SELECT meet_year, gender, discipline, phase_dive_count AS dive_count,
-         CASE WHEN competition_family='World Aquatics' THEN 'world'
+         CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
               WHEN competition_family='NCAA' THEN 'ncaa'
               WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
               WHEN event_level = 'Junior' THEN 'us-junior'
@@ -627,7 +637,8 @@ sql("CREATE INDEX idx_evprof ON analytics.event_profile (scope, gender, discipli
 # across meets rather than one meet's number presented as a constant.
 sql("DROP TABLE IF EXISTS analytics.rank_cost")
 sql("""CREATE TABLE analytics.rank_cost AS
-SELECT CASE WHEN competition_family='World Aquatics' THEN 'world'
+SELECT CASE WHEN competition_family='World Aquatics' AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv') THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
             WHEN competition_family='NCAA' THEN 'ncaa'
             WHEN event_level IN ('Senior','Senior/Open') THEN 'us-senior'
             WHEN event_level = 'Junior' THEN 'us-junior'
