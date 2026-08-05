@@ -2059,7 +2059,15 @@ const GH_REPO=(window.USAD_CONFIG&&window.USAD_CONFIG.repo)||'mjretcher/usa-divi
 function ghToken(){return (window.USAD_CONFIG&&window.USAD_CONFIG.syncToken)||'';}
 async function ghFetch(path,opts={}){
   const res=await fetch(GH_API+path,{...opts,headers:{'Authorization':`Bearer ${ghToken()}`,'Accept':'application/vnd.github+json','Content-Type':'application/json',...(opts.headers||{})}});
-  if(!res.ok&&res.status!==204)throw new Error(`GitHub API ${res.status}`);
+  if(!res.ok&&res.status!==204){
+    // Surface GitHub's own explanation. A bare "GitHub API 422" said nothing
+    // about the workflow input having been renamed; the response body said so
+    // in as many words. Anything that goes wrong here should be readable from
+    // the toast alone, without anyone opening a browser console.
+    let detail='';
+    try{const b=await res.json();if(b&&b.message)detail=` — ${b.message}`;}catch(_){}
+    throw new Error(`GitHub API ${res.status}${detail}`);
+  }
   return res.status===204?null:res.json();
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -2068,37 +2076,52 @@ async function pullDivemeetsNow(){
   UI.entrySync=UI.entrySync||{};
   UI.entrySync.pulling=true;
   render();
-  const meetIds=[...new Set(getAllDivemeetsSources().map(c=>c.id))];
+  // The workflow takes ONE comma-separated `meet_ids` input and loops the list
+  // itself. It used to take a singular `meet_id`, and this button still sent
+  // that after the workflow changed — GitHub rejected every dispatch with
+  // 422 "Unexpected inputs provided", so "Pull now" had been dead since.
+  // Dispatch once for the whole list: it matches the workflow, and it is one
+  // run of a few minutes instead of N sequential runs.
+  const meetIds=[...new Set(getAllDivemeetsSources().map(c=>String(c.id||'').trim()))]
+    .filter(id=>/^\d+$/.test(id));
   try{
-    for(let i=0;i<meetIds.length;i++){
-      const meetId=meetIds[i];
-      const tag=meetIds.length>1?` (meet ${meetId}, ${i+1}/${meetIds.length})`:'';
-      UI.entrySync.pullMsg=`Requesting a fresh pull from DiveMeets${tag}…`;
-      render();
-      const dispatchedAt=Date.now();
-      await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
-        method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_id:meetId}})
-      });
-      let run=null;
-      for(let j=0;j<15&&!run;j++){
-        await sleep(4000);
-        const data=await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/runs?per_page=5`);
-        run=(data.workflow_runs||[]).find(r=>new Date(r.created_at).getTime()>=dispatchedAt-5000);
-      }
-      if(!run)throw new Error(`Could not find the triggered run for meet ${meetId} — check the Actions tab`);
-      UI.entrySync.pullMsg=`Pulling live entries from DiveMeets${tag} — usually 1–2 minutes…`;
-      render();
-      const started=Date.now();
-      while(run.status!=='completed'){
-        if(Date.now()-started>5*60*1000)throw new Error(`Meet ${meetId} still running after 5 minutes — it'll finish in the background; re-open this to check later`);
-        await sleep(5000);
-        run=await ghFetch(`/repos/${GH_REPO}/actions/runs/${run.id}`);
-      }
-      if(run.conclusion!=='success')throw new Error(`Pull for meet ${meetId} finished but failed (${run.conclusion}) — DiveMeets page structure may have changed`);
+    if(!meetIds.length)throw new Error('No DiveMeets meet numbers are configured for this schedule');
+    const tag=meetIds.length>1?` (meets ${meetIds.join(', ')})`:` (meet ${meetIds[0]})`;
+    UI.entrySync.pullMsg=`Requesting a fresh pull from DiveMeets${tag}…`;
+    render();
+    const dispatchedAt=Date.now();
+    await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/dispatches`,{
+      method:'POST',body:JSON.stringify({ref:'main',inputs:{meet_ids:meetIds.join(',')}})
+    });
+    // Filter to workflow_dispatch runs: this workflow also runs on a cron that
+    // fires mid-meet-week, and an unfiltered match would happily latch onto a
+    // scheduled run that started seconds earlier and report its result as ours.
+    let run=null;
+    for(let j=0;j<15&&!run;j++){
+      await sleep(4000);
+      const data=await ghFetch(`/repos/${GH_REPO}/actions/workflows/divemeets-entries.yml/runs?per_page=10&event=workflow_dispatch`);
+      run=(data.workflow_runs||[]).find(r=>new Date(r.created_at).getTime()>=dispatchedAt-5000);
     }
+    if(!run)throw new Error('Could not find the triggered run — check the Actions tab on GitHub');
+    UI.entrySync.pullMsg=`Pulling live entries from DiveMeets${tag} — usually 1–3 minutes…`;
+    render();
+    const started=Date.now();
+    while(run.status!=='completed'){
+      if(Date.now()-started>10*60*1000)throw new Error("Still running after 10 minutes — it'll finish in the background; re-open this to check later");
+      await sleep(5000);
+      run=await ghFetch(`/repos/${GH_REPO}/actions/runs/${run.id}`);
+    }
+    // A partial failure still leaves real, fresher numbers behind for the meets
+    // that did work — the workflow keeps going past a bad meet and only ends red
+    // at the finish. Reload either way and say plainly which happened, rather
+    // than throwing good data away.
     const sources=await loadAllDivemeetsSources();
     UI.entrySync={loading:false,sources,error:null,pulling:false,pullMsg:null};
-    toast(`Pulled fresh entries from ${meetIds.length} DiveMeets meet${meetIds.length===1?'':'s'}`);
+    if(run.conclusion!=='success'){
+      toast(`Pull finished with errors (${run.conclusion}) — some meets may not have updated. Check the run on GitHub.`);
+    }else{
+      toast(`Pulled fresh entries from ${meetIds.length} DiveMeets meet${meetIds.length===1?'':'s'}`);
+    }
   }catch(e){
     UI.entrySync.pulling=false;
     UI.entrySync.pullMsg=null;
