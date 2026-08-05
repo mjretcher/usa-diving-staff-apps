@@ -75,6 +75,24 @@ def main():
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
 
+    # Which of these columns actually exist? A failure here is almost always a
+    # column that is not there, and the log is not reachable from every
+    # environment, so find out first and say so.
+    cur.execute("""
+        SELECT column_name, data_type FROM information_schema.columns
+        WHERE table_schema='core' AND table_name='event_results' ORDER BY column_name""")
+    cols = {r[0]: r[1] for r in cur.fetchall()}
+    print("core.event_results columns:", ", ".join(sorted(cols)))
+    need = ['region','zone','ewc_meet','team','diver_id_dm','diver_first','diver_last','stage','year']
+    missing = [c for c in need if c not in cols]
+    if missing:
+        print("MISSING:", missing)
+        with open(TARGET, "w") as fh:
+            json.dump({"error":"missing columns","missing":missing,
+                       "available":sorted(cols)}, fh, indent=2)
+        cur.close(); conn.close(); return
+    print("types:", {c: cols[c] for c in need})
+
     cur.execute(PROBE)
     probe = [{"stage": r[0], "region": r[1], "zone": r[2], "ewc": r[3],
               "club": r[4], "rows": r[5]} for r in cur.fetchall()]
