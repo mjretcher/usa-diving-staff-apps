@@ -45,7 +45,11 @@ ATH = ("COALESCE(NULLIF(diver_id_dm,''), "
 SQL = """
 SELECT DISTINCT year, stage,
        {ath} AS athlete,
-       NULLIF(btrim(COALESCE(team,'')),'') AS club,
+       -- Prefer the DiveMeets team id: club NAMES vary in spelling between
+       -- meets, which would split one club into several and understate how
+       -- often its athletes stay together.
+       COALESCE(NULLIF(btrim(COALESCE(team_id_dm,'')),''),
+                NULLIF(btrim(COALESCE(team_name,'')),'')) AS club,
        COALESCE(NULLIF(btrim(COALESCE(region,'')::text),''),
                 NULLIF(btrim(COALESCE(zone,'')),''),
                 NULLIF(btrim(COALESCE(ewc_meet,'')),'')) AS where_competed
@@ -60,7 +64,7 @@ SELECT stage,
        count(*) FILTER (WHERE region IS NOT NULL)::int has_region,
        count(*) FILTER (WHERE zone IS NOT NULL)::int has_zone,
        count(*) FILTER (WHERE ewc_meet IS NOT NULL)::int has_ewc,
-       count(*) FILTER (WHERE team IS NOT NULL AND btrim(team) <> '')::int has_club,
+       count(*) FILTER (WHERE COALESCE(team_id_dm, team_name) IS NOT NULL)::int has_club,
        count(*)::int rows
 FROM core.event_results
 WHERE is_junior_circuit = TRUE AND year >= 2024
@@ -83,7 +87,8 @@ def main():
         WHERE table_schema='core' AND table_name='event_results' ORDER BY column_name""")
     cols = {r[0]: r[1] for r in cur.fetchall()}
     print("core.event_results columns:", ", ".join(sorted(cols)))
-    need = ['region','zone','ewc_meet','team','diver_id_dm','diver_first','diver_last','stage','year']
+    need = ['region','zone','ewc_meet','team_name','team_id_dm','diver_id_dm',
+            'diver_first','diver_last','stage','year']
     missing = [c for c in need if c not in cols]
     if missing:
         print("MISSING:", missing)
