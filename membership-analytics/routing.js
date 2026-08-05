@@ -204,6 +204,33 @@ function project(opts){
     });
   });
 
+  /* Athletes who JOIN at a stage without passing through the one below. Half
+     the real pathway works this way and none of it is expressible as a place
+     band, because those athletes are not at the level below to be banded:
+     Groups C and D enter at Zones directly, platform enters at Zones because it
+     is non-qualifying at Regionals, YMCA champions enter at E/W/C, the HP Squad
+     enters at the championships. Without this the engine cannot reproduce the
+     season we actually ran -- it comes out 37% light at Zones.
+
+     Spread across a level's stops in proportion to `share`, so redrawing the map
+     moves them the way it moves everyone else. */
+  routing.forEach((lvl, L) => {
+    const ent = lvl.entering;
+    if (!ent) return;
+    const rk = roundsOf(lvl)[0].key;
+    const n = Math.max(1, groupCount(L));
+    const sh = (opts.share && opts.share(L)) || null;
+    cells.forEach(c => {
+      const total = +ent[c] || 0;
+      if (!total || !offered(L, c)) return;
+      for (let g = 0; g < n; g++){
+        const w = sh ? (sh[g] && sh[g][c] != null ? sh[g][c] : 1/n) : 1/n;
+        const add = total * w;
+        if (add > 0 && field[L][rk][g]) field[L][rk][g][c] = (field[L][rk][g][c] || 0) + add;
+      }
+    });
+  });
+
   const flows = [], dropped = [];
   const add = (toL, toR, toG, cell, n) => {
     if (n <= 0) return;
