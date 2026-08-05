@@ -157,6 +157,7 @@ const PS = {
   lateRate:0,                         // % of entries paying the late fee
   counts:{}, countsYear:null,
   cal:null,                           // frozen flow constants (see deriveCalibration)
+  boundaryRouting:null,               // qualification pathway carried on the loaded structure
   levy:DIVEMEETS_LEVY,                // per-entry DiveMeets pass-through
   senior:null, seniorEntries:{}, seniorEventFields:{},
   qualCutoff:12,                      // Qualifier: top N of each event advance to Nationals
@@ -626,6 +627,7 @@ async function applyBoundary(id){
     PS.assign  = d.assign || {};
     PS.levels  = (d.levels && d.levels.length) ? d.levels : defaultLevels(PS.regions.length);
     PS.finalName = d.finalName || 'Junior Nationals';
+    PS.boundaryRouting = (d.routing && d.routing.length) ? d.routing : null;
     PS.boundaryId = id; PS.boundaryName = row.name;
     resizeCards();
     return true;
@@ -1197,6 +1199,93 @@ function renderCellGrid(L){
       <tbody>${body}</tbody></table>
     <p class="note">Set any cell independently &mdash; Group A 1-metre can send 12 while Group D platform sends 18. Highlighted cells differ from the level default.</p>
   </div>`;
+}
+
+/* ---------- pathway, from the loaded structure ----------
+   Boundary Studio scenarios can carry a qualification pathway: place bands
+   routing athletes between rounds and stops. When one is present this prices
+   it against the fee card on screen, so every fee edit here applies to it.
+
+   It is shown alongside rather than replacing the volume model above, because
+   the two index levels differently: this module treats the final championship
+   as one MORE level than the painted ones, while a hand-built scenario often
+   puts it inside them. Silently reconciling that would misalign the fee rows
+   and produce money that looks right. The mapping is therefore printed, so it
+   can be checked rather than trusted. */
+function renderPathwayMoney(){
+  const QR = window.QualRouting;
+  if (!QR || !PS.boundaryRouting) return '';
+  const routing = PS.boundaryRouting;
+  const NL = levelCount();
+
+  let res;
+  try {
+    const a0 = allocate(poolKey('Regionals'), 0);
+    const conv = {};
+    ((PS.cal && PS.cal.levels) || []).forEach((k,i) => { if (k && k.conv) conv[i] = k.conv; });
+    res = QR.project({
+      routing, entries0: a0.rows,
+      groupCount: L => groupCountAt(L),
+      groupOf: (fL,g,tL) => { let c = g;
+        for (let L = fL+1; L <= tL; L++){
+          const of = (PS.levels[L] && PS.levels[L].of) || [];
+          c = of[c]; if (c == null) return null; }
+        return c; },
+      conv, cells: CODES,
+    });
+    var seed = a0.rows;
+  } catch(e){
+    return `<div class="card"><div class="card-h"><h3>Pathway</h3></div><div class="card-b">
+      <p class="note">Could not price the pathway: <span class="mono">${esc(e.message||e)}</span></p></div></div>`;
+  }
+
+  // The last level holding a single stop is the championship; that is the row
+  // the final fee applies to.
+  const lastIsFinal = groupCountAt(routing.length - 1) === 1;
+  const feeIndex = L => (lastIsFinal && L === routing.length - 1) ? NL : Math.min(L, NL);
+  const fees = routing.map((_,L) => PS.fees[feeIndex(L)] || {qual:0, non:0});
+  const rev = QR.revenue(res, CODES, seed,
+    {fees, levy: PS.levy, isQual: (L,c) => isQualifying(feeIndex(L), c)});
+
+  const rows = rev.perLevel.map(p => {
+    const fee = PS.fees[feeIndex(p.level)] || {name:'—', qual:0};
+    return `<tr>
+      <td><b>${esc(levelName(p.level))}</b>
+        <span class="ps-rider">billed at the <b>${esc(fee.name)}</b> rate</span></td>
+      <td class="num">${fmt(groupCountAt(p.level))}</td>
+      <td class="num">${fmt(Math.round(p.entries))}</td>
+      <td class="num mono">${usd(fee.qual)}</td>
+      <td class="num mono">${usd(p.gross)}</td>
+      <td class="num mono ps-levy">&minus;${usd(p.levy)}</td>
+      <td class="num mono">${usd(p.net)}</td></tr>`;
+  }).join('');
+
+  const probs = (res.problems||[]).map(p =>
+    `<li>${esc(p.level!=null ? levelName(p.level)+': ' : '')}${esc(p.msg)}</li>`).join('');
+
+  return `<div class="card"><div class="card-h">
+      <h3>Pathway carried on this structure</h3>
+      <div class="note">${esc(PS.boundaryName)} carries a qualification pathway. Priced here against the fee card above, so every fee change applies to it.</div>
+    </div><div class="card-b">
+    ${probs ? `<div class="ps-warn"><b>The pathway has problems, so these figures are unsafe.</b><ul style="margin:6px 0 0 18px">${probs}</ul></div>` : ''}
+    <table class="ps-tbl"><thead><tr>
+      <th>Stage</th><th class="num">Stops</th><th class="num">Billable entries</th>
+      <th class="num">Fee</th><th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th>
+    </tr></thead><tbody>${rows}
+      <tr class="ps-tot"><td>Total</td><td></td><td class="num">${fmt(Math.round(rev.entries))}</td><td></td>
+        <td class="num mono">${usd(rev.gross)}</td>
+        <td class="num mono ps-levy">&minus;${usd(rev.levy)}</td>
+        <td class="num mono">${usd(rev.net)}</td></tr>
+    </tbody></table>
+    <p class="note ps-foot"><b>Billable entries, not round fields.</b> An athlete pays once per event at a meet
+      however many rounds they swim, so movement between rounds inside a stage bills nothing. Adding the round
+      fields together would charge the same diver two or three times.<br>
+      <b>Read the mapping above.</b> This module counts the championship as one level beyond the painted ones,
+      while a hand-built scenario often puts it inside them, so which fee row each stage is billed at is printed
+      rather than assumed. If a stage is on the wrong rate, the fee card order is what to fix.<br>
+      This sits alongside the volume model in the other sections rather than replacing it &mdash; the two are not
+      yet one engine, and reconciling them is a deliberate change, not a silent one.</p>
+    </div></div>`;
 }
 
 function renderCalibration(sim){
@@ -1841,7 +1930,7 @@ function render(){
       PS.section==='prices'   ? renderMemberPrices(base, sim) + renderEventFees(base, sim) + renderSenior(base, sim)
     : PS.section==='athletes' ? renderQualification(sim) + renderAthleteCost()
     : PS.section==='compare'  ? renderCompare()
-    :                           renderStructure(sim) + renderCalibration(sim);
+    :                           renderStructure(sim) + renderPathwayMoney() + renderCalibration(sim);
 
   host.innerHTML =
     renderScenarioBar() +

@@ -28,6 +28,9 @@ const GROUP_ORDER = ['D','C','B','A','19+'];
 const GROUP_LABEL = {D:'11 & under', C:'12–13', B:'14–15', A:'16–18', '19+':'19 & over'};
 
 const fmt  = n => Number(n||0).toLocaleString('en-US');
+/* Money, for the pathway's fee tables. */
+const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
+
 const fmt1 = n => (Number(n)||0).toFixed(1);
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function sq(s){ return "'" + String(s==null?'':s).replace(/'/g,"''") + "'"; }
@@ -616,6 +619,111 @@ function groupProfiles(){
 }
 
 const BOUNDARY_SECTIONS = {
+
+  boundary_pathway: {
+    label: 'Realignment — qualification pathway', group: 'Boundary Studio',
+    desc: 'Who advances at every stage and round, how many people that is, and what it bills.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — qualification pathway');
+      const api = B(), QRr = window.QualRouting;
+      if (!QRr) return `<section class="mr-section"><h2 class="mr-h2">Qualification pathway</h2>
+        <p class="mr-p mr-warn">The pathway engine is not loaded.</p></section>`;
+      await (api.ensureMult ? api.ensureMult() : Promise.resolve());
+      const routing = api.routing();
+      const res = api.pathway();
+      if (!res) return `<section class="mr-section"><h2 class="mr-h2">Qualification pathway</h2>
+        <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway
+        are worked out, then generate this report again.</p></section>`;
+
+      const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+      const mult = api.multiplicity();
+      const nm = i => api.tierName(i);
+      const seed = (function(){
+        // The entry level's own field, which is what it bills on.
+        const g = api.groupCountAt(0);
+        const rows = [];
+        for (let i=0;i<g;i++) rows.push(res.field[0][QRr.roundsOf(routing[0])[0].key][i] || {});
+        return rows;
+      })();
+
+      const rows = routing.map((lvl, L) => {
+        const stops = api.groupCountAt(L);
+        const rounds = QRr.roundsOf(lvl).map(r => {
+          const size = QRr.sizeAt(res, L, r.key, CELLS);
+          let people = '';
+          if (mult){
+            const d = QRr.diversAt(res, L, r.key, CELLS, mult, api.multBasis(L));
+            if (d && d.ok) people = fmt(Math.round(d.divers)) + (d.reliable ? '' : ' <span class="mr-soft">(est.)</span>');
+          }
+          return `<tr><td>${esc(nm(L))}</td><td>${esc(QRr.ROUND_NAME[r.key] || r.key)}</td>
+            <td class="mr-num">${fmt(stops)}</td>
+            <td class="mr-num">${fmt(Math.round(size))}</td>
+            <td class="mr-num">${fmt(Math.round(size / Math.max(1, stops)))}</td>
+            <td class="mr-num">${people || '—'}</td></tr>`;
+        }).join('');
+        return rounds;
+      }).join('');
+
+      const billed = routing.map((lvl, L) => {
+        const b = QRr.billableEntries(res, L, CELLS, seed);
+        const n = CELLS.reduce((s,c) => s + (b[c]||0), 0);
+        return `<tr><td>${esc(nm(L))}</td><td class="mr-num">${fmt(Math.round(n))}</td></tr>`;
+      }).join('');
+
+      // Published 2026 card. Pricing Studio owns what-if on fees; this is the
+      // standing rate applied to the pathway so the report is self-contained.
+      const CARD = [{qual:85,non:45},{qual:90,non:45},{qual:115,non:0},{qual:125,non:0}];
+      const fees = routing.map((_,L) => CARD[Math.min(L, CARD.length-1)]);
+      const isQual = (L, c) => L > 0 || (c[2] !== 'P');
+      const rev = QRr.revenue(res, CELLS, seed, {fees, levy:4.90, isQual});
+      const money = rev.perLevel.map(p => `<tr><td>${esc(nm(p.level))}</td>
+        <td class="mr-num">${fmt(Math.round(p.entries))}</td>
+        <td class="mr-num">${usd(fees[p.level].qual)}</td>
+        <td class="mr-num">${usd(p.gross)}</td>
+        <td class="mr-num">&minus;${usd(p.levy)}</td>
+        <td class="mr-num">${usd(p.net)}</td></tr>`).join('');
+
+      const routes = routing.map((lvl,L) =>
+        `<li><strong>${esc(nm(L))}</strong> — ${esc(QRr.describe(routing, L, nm))}</li>`).join('');
+      const probs = (res.problems||[]).map(p =>
+        `<li class="mr-warn">${esc(p.level!=null ? nm(p.level)+': ' : '')}${esc(p.msg)}</li>`).join('');
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Qualification pathway</h2>
+        <p class="mr-p">${esc(scenarioLine().replace(/<[^>]+>/g,''))}</p>
+        ${probs ? `<p class="mr-p mr-warn"><b>This pathway has problems that affect the numbers below.</b></p>
+          <ul class="mr-bullets">${probs}</ul>` : ''}
+        <ul class="mr-bullets">${routes}</ul>
+
+        <h3 class="mr-h3">Field at every stage and round</h3>
+        <table class="mr-table"><thead><tr><th>Stage</th><th>Round</th><th class="mr-num">Stops</th>
+          <th class="mr-num">Entries</th><th class="mr-num">Per stop</th><th class="mr-num">Divers</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
+          three events, so the two answer different questions — entries decide session length and fee income,
+          divers decide beds, lanes and awards. Anything marked <i>est.</i> means this pathway has moved the mix
+          of events away from what was measured, so read it as indicative.</p>
+
+        <h3 class="mr-h3">What actually gets billed</h3>
+        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Billable entries</th></tr></thead>
+          <tbody>${billed}</tbody></table>
+        <p class="mr-note">An athlete pays once per event at a meet however many rounds they swim, so moving
+          between rounds inside a stage bills nothing. Adding the round fields together would charge the same
+          diver two or three times over.</p>
+
+        <h3 class="mr-h3">Fee income at the published 2026 rates</h3>
+        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Entries</th>
+          <th class="mr-num">Fee</th><th class="mr-num">Gross</th><th class="mr-num">DiveMeets</th>
+          <th class="mr-num">Net</th></tr></thead><tbody>${money}
+          <tr class="mr-tot"><td>Total</td><td class="mr-num">${fmt(Math.round(rev.entries))}</td><td></td>
+            <td class="mr-num">${usd(rev.gross)}</td><td class="mr-num">&minus;${usd(rev.levy)}</td>
+            <td class="mr-num">${usd(rev.net)}</td></tr></tbody></table>
+        <p class="mr-note">Entry fees only, at the standing 2026 rates, with $4.90 per entry passed through to
+          DiveMeets. Membership dues, synchro and the senior circuit are not in this figure — Pricing Studio
+          carries those, and is where fees themselves can be changed.</p>
+      </section>`;
+    }
+  },
 
   boundary_overview: {
     label: 'Realignment — scenario overview', group: 'Boundary Studio',
@@ -1868,6 +1976,9 @@ const STYLES = `
 #mr-output .mr-p{font-size:12px;color:#2d3450;margin:0 0 9px;line-height:1.55}
 #mr-output .mr-note{font-size:11px;color:#5a6480;margin:9px 0 0;line-height:1.55;
   background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0}
+.mr-bullets{margin:8px 0 12px;padding-left:20px;font-size:11px;line-height:1.6;color:#13213a}
+.mr-bullets li{margin-bottom:4px}
+
 #mr-output .mr-warn{background:#fef3e2;border-left:3px solid #b45309;padding:9px 12px;border-radius:0 5px 5px 0;color:#7c4a06}
 #mr-output .mr-soft{color:#6b7390;font-size:10.5px}
 #mr-output .mr-mono{font-family:'JetBrains Mono',monospace;font-size:11px}
@@ -1945,6 +2056,13 @@ function injectCSS(){
 injectCSS();
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
 else mount();
+/* Exposed so a single section can be built without driving the whole modal --
+   used by the tests, and by anything that wants one section's html. */
+window.MAReports = {
+  sections: () => SECTIONS,
+  build: (id, opts) => SECTIONS[id] ? SECTIONS[id].build(opts) : Promise.resolve(''),
+};
+
 window.addEventListener('load', mount);
 
 })();

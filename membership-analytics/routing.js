@@ -382,10 +382,83 @@ function diversAt(res, level, round, cells, mult, stageKey){
   return estimateDivers(byCell, mult, stageKey);
 }
 
+
+/* ==========================================================================
+   WHAT GETS BILLED
+   --------------------------------------------------------------------------
+   Summing every round would charge an athlete three times for one meet. A
+   diver who swims prelims, semis and finals at the championships entered once
+   and paid once; the rounds are the competition, not separate entries.
+
+   So a billable entry is an arrival from ANOTHER level -- turning up at a new
+   meet -- while movement between rounds inside a level bills nothing. The
+   entry level is billed on its starting field.
+   ========================================================================== */
+function billableEntries(res, level, cells, seedRows){
+  const out = {};
+  if (level === 0){
+    (seedRows || []).forEach(row => cells.forEach(c => {
+      if (row[c]) out[c] = (out[c] || 0) + row[c];
+    }));
+    return out;
+  }
+  (res.flows || []).forEach(f => {
+    if (f.toLevel !== level || f.fromLevel === level) return;
+    out[f.cell] = (out[f.cell] || 0) + f.n;
+  });
+  return out;
+}
+
+/* Billable entries per group, in the shape the fee model already consumes. */
+function billableByGroup(res, level, cells, seedRows, groupCount){
+  const rows = Array.from({length: Math.max(1, groupCount(level))}, () => ({}));
+  if (level === 0){
+    (seedRows || []).forEach((row, g) => {
+      if (!rows[g]) return;
+      cells.forEach(c => { if (row[c]) rows[g][c] = (rows[g][c] || 0) + row[c]; });
+    });
+    return rows;
+  }
+  (res.flows || []).forEach(f => {
+    if (f.toLevel !== level || f.fromLevel === level) return;
+    if (!rows[f.toGroup]) return;
+    rows[f.toGroup][f.cell] = (rows[f.toGroup][f.cell] || 0) + f.n;
+  });
+  return rows;
+}
+
+/* Fee income for a pathway. fees[level] = {qual, non}; isQual(level, cell)
+   decides which applies; levy is the per-entry pass-through. */
+function revenue(res, cells, seedRows, opts){
+  const fees = opts.fees || [];
+  const isQual = opts.isQual || (() => true);
+  const levy = opts.levy || 0;
+  const per = [], n = res.field.length;
+  let gross = 0, entries = 0;
+  for (let L = 0; L < n; L++){
+    const b = billableEntries(res, L, cells, seedRows);
+    const f = fees[L] || {qual:0, non:0};
+    let q = 0, nq = 0, rev = 0;
+    cells.forEach(c => {
+      const e = b[c] || 0;
+      if (!e) return;
+      if (isQual(L, c)){ q += e; rev += e * (f.qual || 0); }
+      else { nq += e; rev += e * (f.non || 0); }
+    });
+    const ent = q + nq;
+    const lv = ent * levy;
+    per.push({level:L, entries:ent, qual:q, nonqual:nq, gross:rev, levy:lv, net:rev - lv});
+    gross += rev; entries += ent;
+  }
+  const levyTotal = entries * levy;
+  return {perLevel: per, entries, gross, levy: levyTotal, net: gross - levyTotal};
+}
+
 window.QualRouting = {
   ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound,
   defaultRouting, validate, project, sizeAt, describe,
   estimateDivers, diversAt, boardShare, meanEvents,
+  billableEntries, billableByGroup, revenue,
 };
 
 })();

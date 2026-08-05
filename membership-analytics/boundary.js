@@ -669,7 +669,7 @@ async function ensureMult(){
 }
 
 function projectPathway(){
-  if (!QR() || !S.flow) return null;
+  if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
   const cells = CELLS;
   let conv = {};
@@ -2795,6 +2795,15 @@ window.BoundaryAPI = {
   scenario:   () => ({ id: S.scenarioId, name: S.scenarioName, dirty: S.dirty }),
   compare:    () => S.compare,
   totals:     () => S.totals,
+  /* The qualification pathway and its projection. project() recomputes rather
+     than returning a cache, so a report never depends on whether the Pathway
+     panel happened to be open. */
+  routing:    () => { syncRouting(); return S.routing; },
+  pathway:    () => projectPathway(),
+  multiplicity: () => S.mult,
+  multBasis:  multBasisFor,
+  ensureMult,
+  groupCountAt,
 };
 
 function injectAutoCSS(){
