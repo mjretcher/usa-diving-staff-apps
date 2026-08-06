@@ -115,6 +115,71 @@ sql("CREATE INDEX idx_divepop ON analytics.dive_population (scope, gender, disci
 sql("CREATE INDEX idx_divepop_dive ON analytics.dive_population (dive_number)")
 log("dive_population built")
 
+
+# ------------------------------------------------------- round profile
+# The comparison population, rebuilt round by round from the dive sheets.
+#
+# analytics.event_profile is built from core.result_phases with
+# score_is_cumulative IS NOT TRUE, which sounds like a safety measure and is
+# actually a selection bias: it throws out every meet scored across prelim,
+# semi and final. For US seniors that removes Nationals and leaves the podium
+# band standing on club invitationals — Women 3m 5-dive podium averages of
+# 221.9 at the Lee Brennan Memorial, 187.5 at Lobo Diving Club, 152.7 at the
+# Chicago Dive Club Spring Invitational.
+#
+# Measuring an athlete's reconstructed Nationals final round against that
+# population would have shown Sarah Bacon 97 points clear of the "senior
+# podium", which says nothing except that Nationals is harder than a club meet.
+# Both sides have to come from the same place, so this table is derived the
+# same way the athlete's own form is: sum a diver's dives within one round.
+#
+# Placing is the rank of the round score inside its own round, not the meet's
+# official placing. At a cumulative meet those differ, and the round rank is
+# the right one here — the question is what a podium-standard round looks like,
+# not who won on aggregate.
+sql("DROP TABLE IF EXISTS analytics.round_profile")
+sql("""CREATE TABLE analytics.round_profile AS
+WITH r AS (
+  SELECT meet_id, event_id, round_stage, diver_id,
+         MAX(gender) AS gender, MAX(discipline) AS discipline,
+         MAX(meet_year) AS meet_year, MAX(competition_family) AS competition_family,
+         MAX(event_name) AS event_name,
+         SUM(score) AS score, SUM(dd) AS dd, COUNT(*) AS n_dives
+  FROM core.dive_sheets
+  WHERE discipline IN ('1m','3m','Platform')
+    AND score IS NOT NULL AND dd > 0 AND round_stage = 'Final'
+    AND event_name NOT ILIKE '%synchro%'
+  GROUP BY meet_id, event_id, round_stage, diver_id),
+e AS (
+  SELECT *, score / (3 * dd) AS exec FROM r WHERE score / (3 * dd) BETWEEN 2 AND 10),
+k AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY meet_id, event_id, round_stage ORDER BY score DESC) AS rk,
+         COUNT(*)     OVER (PARTITION BY meet_id, event_id, round_stage) AS field_n
+  FROM e)
+SELECT CASE WHEN competition_family='World Aquatics'
+                 AND meet_id IN (SELECT meet_id FROM analytics.meet_scope WHERE world_tier='world-inv')
+              THEN 'world-inv'
+            WHEN competition_family='World Aquatics' THEN 'world'
+            WHEN competition_family='NCAA' THEN 'ncaa'
+            WHEN event_name ILIKE '%senior%' THEN 'us-senior'
+            WHEN event_name ILIKE 'group%' THEN 'us-junior'
+            ELSE 'us-open' END AS scope,
+       gender, discipline, n_dives, meet_year,
+       CASE WHEN rk <= 3 THEN 'podium' WHEN rk <= 12 THEN 'finalist' ELSE 'field' END AS band,
+       COUNT(*) AS n,
+       COUNT(DISTINCT diver_id) AS n_divers,
+       COUNT(DISTINCT meet_id) AS n_meets,
+       ROUND(AVG(score)::numeric,2) AS avg_score,
+       ROUND(AVG(dd)::numeric,3) AS avg_list_dd,
+       ROUND(AVG(exec)::numeric,4) AS avg_exec,
+       ROUND((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY score))::numeric,2) AS p50_score
+FROM k
+WHERE field_n >= 4
+GROUP BY 1,2,3,4,5,6""")
+sql("CREATE INDEX idx_roundprof ON analytics.round_profile (scope, gender, discipline, n_dives, band)")
+log("round_profile built")
+
 # ------------------------------------------------------- meet directory
 # One searchable row per meet that has dive-level data, so the app can offer a
 # real search instead of a select element listing every meet ever scraped.
@@ -167,12 +232,14 @@ BEGIN
     GRANT USAGE ON SCHEMA analytics TO usad_app;
     GRANT SELECT ON analytics.dive_population TO usad_app;
     GRANT SELECT ON analytics.meet_directory  TO usad_app;
+    GRANT SELECT ON analytics.round_profile   TO usad_app;
+    GRANT SELECT ON analytics.meet_scope      TO usad_app;
   END IF;
 END $$""")
 log("usad_app SELECT granted")
 
 counts = {t: rows(sql("SELECT COUNT(*) AS n FROM analytics." + t))[0]["n"]
-          for t in ("dive_population", "meet_directory")}
+          for t in ("dive_population", "meet_directory", "round_profile")}
 log("done: %s" % counts)
 
 # A dive population row built from three attempts is noise wearing a
