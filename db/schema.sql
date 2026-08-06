@@ -245,9 +245,9 @@ CREATE SCHEMA IF NOT EXISTS core;
 CREATE TABLE IF NOT EXISTS core.event_results (
     id              BIGSERIAL PRIMARY KEY,
     -- DiveMeets identifiers
-    meet_id_dm      TEXT,
-    diver_id_dm     TEXT,
-    team_id_dm      TEXT,
+    meet_id_dm      INTEGER,
+    diver_id_dm     INTEGER,
+    team_id_dm      INTEGER,
     -- Raw fields (verbatim from DiveMeets)
     meet_name       TEXT NOT NULL,
     event_name      TEXT NOT NULL,
@@ -286,22 +286,11 @@ CREATE INDEX IF NOT EXISTS idx_ev_junior       ON core.event_results(year, is_ju
 CREATE INDEX IF NOT EXISTS idx_ev_athlete_year ON core.event_results(diver_id_dm, year);
 
 -- Athlete identity table (populated by import via INSERT...ON CONFLICT)
--- NOTE ON *_id_dm COLUMNS
--- DiveMeets identifiers are stored as TEXT throughout the `core` schema. That
--- is what the loaders write and what every working query assumes; the file
--- previously declared INTEGER, which was simply wrong and produced runtime
--- errors reading "operator does not exist: text = integer".
--- The same identifiers are INTEGER in the `divemeets` schema, so ANY join
--- across the two must cast:  core.event_results.meet_id_dm::text = divemeets.results.meet_id::text
--- Do not "fix" this by altering the live column types without a planned
--- migration: core.event_results is truncated and reloaded by neon-seed.yml and
--- is read by the junior qualification pipeline.
-
 CREATE TABLE IF NOT EXISTS core.divers (
-    diver_id_dm        TEXT PRIMARY KEY,
+    diver_id_dm        INTEGER PRIMARY KEY,
     first_name         TEXT,
     last_name          TEXT,
-    current_team_id_dm TEXT,
+    current_team_id_dm INTEGER,
     first_seen_year    SMALLINT,
     last_seen_year     SMALLINT,
     result_count       INT DEFAULT 0,
@@ -310,7 +299,7 @@ CREATE TABLE IF NOT EXISTS core.divers (
 );
 
 CREATE TABLE IF NOT EXISTS core.teams (
-    team_id_dm TEXT PRIMARY KEY,
+    team_id_dm INTEGER PRIMARY KEY,
     name       TEXT,
     code       TEXT,
     notes      JSONB,
@@ -774,6 +763,17 @@ CREATE TABLE IF NOT EXISTS divemeets.results (
 CREATE INDEX IF NOT EXISTS dm_results_meet    ON divemeets.results(meet_id);
 CREATE INDEX IF NOT EXISTS dm_results_profile ON divemeets.results(profile_id);
 CREATE INDEX IF NOT EXISTS dm_results_event   ON divemeets.results(meet_id, event_id, round);
+-- Synchronized placings list TWO athletes and TWO clubs on one row. The base
+-- diver_name/profile_id/team_name/team_id columns hold the first; these hold
+-- the partner, and are null on individual events. Added 2026-08-04: without
+-- them the crawler kept only one diver per synchro pair, which made synchro
+-- team points impossible to attribute (a pair is frequently cross-club, and
+-- the points are split between the two clubs).
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS diver2_name text;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS profile2_id integer;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_name  text;
+ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_id    integer;
+CREATE INDEX IF NOT EXISTS dm_results_profile2 ON divemeets.results(profile2_id);
 -- crawl bookkeeping on the registry
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note text;
 ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at timestamptz;
@@ -908,46 +908,6 @@ CREATE TABLE IF NOT EXISTS membership.ingest_log (
     row_count INT,
     loaded_at TIMESTAMPTZ DEFAULT now(),
     notes TEXT
-);
-
--- Parsed classification of DiveMeets event titles, keyed to (meet, event, round).
--- Deliberately NOT merged into core.event_results: that table drives the junior
--- qualification pipeline, and parser-classified invitational rows must not be
--- able to alter who advances. Consumers filter on sanction and in_circuit.
-CREATE TABLE IF NOT EXISTS divemeets.event_class (
-    meet_id       INTEGER NOT NULL,
-    event_id      INTEGER NOT NULL,
-    round         TEXT    NOT NULL,
-    title         TEXT,
-    sanction      TEXT,
-    meet_year     SMALLINT,
-    age_group     TEXT,
-    gender        TEXT,
-    discipline    TEXT,
-    round_label   TEXT,
-    is_synchro    BOOLEAN DEFAULT FALSE,
-    parsed_ok     BOOLEAN DEFAULT FALSE,
-    in_circuit    BOOLEAN DEFAULT FALSE,
-    classified_at TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (meet_id, event_id, round)
-);
-CREATE INDEX IF NOT EXISTS idx_evclass_sanction ON divemeets.event_class(sanction, meet_year);
-CREATE INDEX IF NOT EXISTS idx_evclass_cell ON divemeets.event_class(age_group, gender, discipline);
-
--- Saved qualification pathways, held apart from the maps they were drawn on.
--- A pathway (rounds, place bands, which events each stage contests, arrival
--- rates) is a rules question; a map is a geography question. Keeping them
--- separate means one pathway can be tried against many maps without being
--- rebuilt each time. Routes address levels by index, so loading one into a
--- structure with a different number of tiers adapts it -- and the adaptation is
--- reported rather than applied silently.
-CREATE TABLE IF NOT EXISTS membership.pathways (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    notes       TEXT,
-    levels      SMALLINT,
-    data        JSONB NOT NULL,
-    updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
 -- Boundary Studio scenarios (Membership Analytics)
@@ -1088,6 +1048,35 @@ BEGIN
     -- migration's job. Client code must never try to create one.
     ALTER DEFAULT PRIVILEGES IN SCHEMA schedule_builder
       GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO usad_app;
+
+    -- Membership Analytics. This schema had NO grant block at all: access to
+    -- membership.boundary_scenarios and membership.sales_ledger existed only
+    -- because someone ran the GRANTs by hand once. membership.pricing_scenarios
+    -- is created above in this same file and never got one, so Pricing Studio
+    -- fails in the browser with 'permission denied for table
+    -- pricing_scenarios' (SQLSTATE 42501) the moment anyone saves or loads a
+    -- scenario. Confirmed by attempting the read as usad_app, not by reading a
+    -- privilege function — has_table_privilege reports false for
+    -- membership.members here even though that table reads fine.
+    GRANT USAGE ON SCHEMA membership TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA membership TO usad_app;
+    -- Scenario tables are saved from the browser; the rest is read-only.
+    GRANT INSERT, UPDATE, DELETE ON
+      membership.boundary_scenarios,
+      membership.pricing_scenarios
+      TO usad_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
+    -- The default privilege is what stops this recurring: a table added later
+    -- is readable without anyone remembering to come back here.
+    ALTER DEFAULT PRIVILEGES IN SCHEMA membership
+      GRANT SELECT ON TABLES TO usad_app;
+
+    -- Season Calendar, same reasoning.
+    GRANT USAGE ON SCHEMA season_calendar TO usad_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA season_calendar TO usad_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA season_calendar TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA season_calendar
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO usad_app;
   END IF;
 END $$;
 
@@ -1156,39 +1145,3 @@ BEGIN
     GRANT SELECT ON core.nation_unresolved  TO usad_app;
   END IF;
 END $$;
-
--- Columns that exist in the database but were never declared here.
--- CREATE TABLE IF NOT EXISTS cannot add a column to a live table, so these
--- are written as explicit guards -- which is the only form that actually
--- applies to a table that already exists.
-
-ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_bucket TEXT;
-ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_code_norm TEXT;
-ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_group_code TEXT;
-ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS dive_group_label TEXT;
-ALTER TABLE core.dive_sheets ADD COLUMN IF NOT EXISTS nation_code TEXT;
-
-ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_id TEXT;
-ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_name TEXT;
-ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS team2_name TEXT;
-
-ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_attempts INTEGER;
-ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_crawled_at TIMESTAMPTZ;
-ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS results_note TEXT;
-ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_crawled_at TIMESTAMPTZ;
-ALTER TABLE divemeets.meets ADD COLUMN IF NOT EXISTS sheets_note TEXT;
-
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS diver2_name TEXT;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS profile2_id INTEGER;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_id INTEGER;
-ALTER TABLE divemeets.results ADD COLUMN IF NOT EXISTS team2_name TEXT;
-
-ALTER TABLE schedule_builder.schedules ADD COLUMN IF NOT EXISTS folder TEXT;
-
-ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_attempts INTEGER;
-ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_crawled_at TIMESTAMPTZ;
-ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_done BOOLEAN;
-ALTER TABLE scoresandmore.meets ADD COLUMN IF NOT EXISTS results_note TEXT;
-
-ALTER TABLE season_calendar.calendar ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
-
