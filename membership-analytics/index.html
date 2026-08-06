@@ -483,9 +483,15 @@ tr:hover td{background:#f7fafd}
 .bs-fee-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .bs-fee{display:flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;color:var(--navy)}
 .bs-fee .bs-rt-in{width:60px}
-.bs-auto-rank{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
-  border-radius:999px;background:var(--pool);color:#fff;font-size:10px;font-weight:800;
-  float:right;margin-left:6px}
+/* The rank badge sits in the button's own corner. It was floated right, which
+   pulls it into the first line of text and drags the label out of line -- a
+   float inside a button laid out as a block is a fight nobody wins. */
+.bs-auto-presets>button{position:relative}
+.bs-auto-presets>button.on{padding-right:34px}
+.bs-auto-rank{position:absolute;top:9px;right:10px;
+  display:flex;align-items:center;justify-content:center;width:19px;height:19px;line-height:1;
+  border-radius:999px;background:var(--pool);color:#fff;font-size:11px;font-weight:800;
+  font-family:var(--mono);letter-spacing:0}
 .bs-auto-note{background:#f4f8fd;border:1px solid var(--line);border-left:4px solid var(--pool);
   border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.5;color:var(--navy);margin-top:8px}
 /* ---- Pathway takes the whole page; the map drops below it ----
@@ -499,6 +505,14 @@ tr:hover td{background:#f7fafd}
 .bs-hostin{width:74px;text-align:right}
 .bs-hostin.set{border-color:var(--pool);background:#eff9fd;font-weight:800}
 .bs-mf-set{color:var(--pool) !important;font-weight:800}
+.bs-prov{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding:8px 12px;
+  background:#f7fafd;border:1px solid var(--line);border-radius:10px;font-size:10.5px;color:var(--muted)}
+.bs-prov b{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--navy)}
+.bs-prov code{font-family:var(--mono);background:#fff;border:1px solid var(--line);border-radius:5px;
+  padding:1px 5px;color:var(--navy)}
+.bs-prov-ok{color:#166534;font-weight:700}
+.bs-prov-warn{flex:1 1 100%;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;
+  padding:6px 9px;font-weight:700;line-height:1.45}
 </style>
 </head>
 <body>
@@ -549,7 +563,7 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="boundary.js?v=202608054900"></script>
+<script src="boundary.js?v=202608055100"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202608053300"></script>
 <script src="pricing.js?v=202608051700"></script>

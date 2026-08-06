@@ -77,6 +77,10 @@ const S = {
   hostPer: 15,          // dollars per entry
   hostMin: 0,           // guaranteed minimum, whichever model is used
   hostPer_stop: null,   // {levelIdx|groupIdx: dollars} — a negotiated figure for one meet
+  loadedStamps: null,   // the data build a loaded scenario was saved against
+  tripCost: null,       // per-stop travel and lodging
+  costEvents: 2,        // events an athlete contests
+  costElastic: null,    // how hard cost bites on take-up
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
   pathList: null,       // saved pathways
@@ -1285,6 +1289,152 @@ function financialsFor(map){
   }
 }
 
+
+/* ---------- what this scenario was computed from ----------
+   These numbers are drifting toward decisions about who competes, and the
+   arbitration record on selection is unambiguous: a metric survives challenge
+   when it can be reproduced from source data, when the exact inputs on the
+   decision date can be reconstructed, and when everyone's number came from the
+   same computation. A scenario that stores its rules but not the data build it
+   was priced against fails all three -- re-open it in three months, the numbers
+   have moved, and nothing records why.
+
+   So every save carries the build stamps of the files it was computed from. */
+function dataStamps(){
+  const st = {saved: new Date().toISOString()};
+  try {
+    const a = S.advData || {};
+    // build_advance_data.py stamps under meta, not at the top level.
+    st.advance_data = (a.meta && (a.meta.built || a.meta.generated)) || a.generated || null;
+    if (a.meta && a.meta.builder) st.advance_builder = a.meta.builder;
+  } catch(e){}
+  try { if (S.mult && S.mult.generated) st.multiplicity = S.mult.generated; } catch(e){}
+  try {
+    const k = window.JuniorFlow && window.JuniorFlow.constants
+            ? window.JuniorFlow.constants(S.year) : null;
+    if (k){ st.calibration_basis = k.basis; st.calibration_year = k.year;
+            st.calibration_regions = k.regions; }
+  } catch(e){}
+  st.year = S.year === 'y25' ? '2025' : '2026';
+  st.seed_pool = seedPoolKey();
+  return st;
+}
+
+
+/* ---------- what it costs a family, and what that does to the field ----------
+   Every financial figure here has been USA Diving's side of the ledger. A
+   structure that is revenue-neutral to the organisation but adds several
+   hundred dollars per family is a different proposal, and cost is not a
+   footnote to attendance -- it is most of the reason for it.
+
+   Which matters because the arrival rates the whole projection rests on are
+   measured constants borrowed from the structure we happen to run now. Add a
+   stop and they are wrong, in a direction the model cannot currently see. So
+   cost feeds back: a pathway that costs a family more than today's loses
+   take-up in proportion, at a sensitivity that is on screen and adjustable
+   rather than buried.
+
+   The elasticity is a judgement, not a measurement -- we have one structure and
+   therefore one observation, so nothing here can derive it. It is exposed and
+   defaulted to a deliberately modest figure so it is argued with rather than
+   trusted. */
+const TRAVEL_DEFAULT = {0: 250, 1: 450, 2: 700};   // per stop: travel, lodging, food
+
+function stopCost(L){
+  if (S.tripCost && S.tripCost[L] != null) return +S.tripCost[L];
+  const n = S.levels.length;
+  if (L === n - 1) return 700;                      // championship: furthest, longest
+  return TRAVEL_DEFAULT[Math.min(L, 2)];
+}
+
+/* What one athlete pays to travel the whole pathway, if they keep advancing.
+   Entry fees are per event, everything else is per trip. */
+function athletePathCost(events){
+  const ev = events || 2;
+  const rows = S.routing.map((_, L) => {
+    const fee = feeFor(L) * ev;
+    const trip = stopCost(L);
+    return {level:L, name:tierName(L), fee, trip, total:fee + trip};
+  });
+  return {rows, total: rows.reduce((a,r) => a + r.total, 0)};
+}
+
+/* Today's cost, as the reference the elasticity works against. Uses the same
+   fee ladder and trip costs over the 2026 structure: Regionals, Zones, E/W/C,
+   championship. */
+function referenceCost(events){
+  const ev = events || 2;
+  return [85,90,115,125].reduce((a,f,i) => a + f*ev + (TRAVEL_DEFAULT[Math.min(i,2)] || 700), 0);
+}
+
+/* The feedback. Above today's cost, fewer families travel. */
+function costTakeUp(events){
+  const now = athletePathCost(events).total;
+  const ref = referenceCost(events);
+  if (!ref) return {factor:1, now, ref, delta:0};
+  const delta = (now - ref) / ref;
+  const e = S.costElastic == null ? 0.35 : +S.costElastic;   // modest by default
+  return {factor: Math.max(0.4, Math.min(1.6, 1 - delta * e)), now, ref, delta, e};
+}
+
+function renderAthleteCost(){
+  const ev = S.costEvents || 2;
+  const c = athletePathCost(ev);
+  const t = costTakeUp(ev);
+  const rows = c.rows.map(r => `<tr>
+    <td><b>${esc(r.name)}</b></td>
+    <td class="num mono">${usd(r.fee)}<span class="bs-bd-rng">${ev} event${ev===1?'':'s'}</span></td>
+    <td class="num mono">$<input class="bs-rt-in" type="number" min="0" step="50"
+        data-trip="${r.level}" value="${stopCost(r.level)}"></td>
+    <td class="num mono"><b>${usd(r.total)}</b></td></tr>`).join('');
+  const up = t.delta > 0.01, dn = t.delta < -0.01;
+  return `<div class="bs-bd">
+    <div class="bs-bd-h"><b>What it costs a family</b>
+      <label class="bs-arr">events each
+        <input class="bs-rt-in" type="number" min="1" max="3" id="bsCostEv" value="${ev}"></label>
+      <label class="bs-arr">cost sensitivity
+        <input class="bs-rt-in" type="number" min="0" max="2" step="0.05" id="bsCostEl"
+          value="${S.costElastic == null ? 0.35 : S.costElastic}"></label>
+      <span class="note">One athlete travelling the whole pathway. Entry fees are per event; travel,
+        lodging and food are per trip and editable &mdash; they are placeholders, not measurements.</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
+      <thead><tr><th>Stop</th><th class="num">Entry fees</th><th class="num">Travel &amp; stay</th>
+        <th class="num">Total</th></tr></thead>
+      <tbody>${rows}
+        <tr class="bs-bd-tot"><td><b>Whole pathway</b></td><td></td><td></td>
+          <td class="num mono"><b>${usd(c.total)}</b></td></tr></tbody></table></div>
+    <div class="bs-costbox ${up?'ps-warn':'bs-auto-note'}" style="margin-top:10px">
+      <b>${usd(c.total)} against ${usd(t.ref)} on today's structure &mdash;
+        ${Math.abs(t.delta*100).toFixed(0)}% ${up?'more':dn?'less':'the same'}.</b>
+      ${(up||dn) ? `At a sensitivity of ${t.e}, that moves take-up by
+        ${((t.factor-1)*100).toFixed(0)}% &mdash; roughly ${Math.abs(Math.round((1-t.factor)*100))} in every 100
+        families ${up?'not making a trip they would have made':'making one they would not have'}.` : ''}
+      <br><span class="note">The sensitivity is a judgement, not a measurement. We run one structure, so
+      there is one observation and nothing to derive it from. It is here to be argued with.</span>
+    </div>
+  </div>`;
+}
+
+function renderProvenance(){
+  const st = S.loadedStamps;
+  const now = dataStamps();
+  const d = x => x ? String(x).slice(0,10) : '—';
+  const drifted = st && ((st.advance_data && st.advance_data !== now.advance_data) ||
+                         (st.multiplicity && st.multiplicity !== now.multiplicity) ||
+                         (st.calibration_basis && st.calibration_basis !== now.calibration_basis));
+  return `<div class="bs-prov">
+    <b>Computed from</b>
+    <span>entries <code>${d(now.advance_data)}</code></span>
+    <span>events per athlete <code>${d(now.multiplicity)}</code></span>
+    <span>take-up <code>${esc(now.calibration_basis||'—')}</code></span>
+    <span>season <code>${esc(now.year)}</code></span>
+    ${st ? (drifted
+      ? `<span class="bs-prov-warn">This scenario was saved against a different data build
+          (${d(st.advance_data)}). The figures on screen are not the figures it was saved with.</span>`
+      : `<span class="bs-prov-ok">Same data build as when it was saved.</span>`) : ''}
+  </div>`;
+}
+
 function renderFinancials(){
   const a = financialsFor(null);
   if (!a) return '';
@@ -1718,6 +1868,8 @@ function renderPathway(){
         ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
+    ${renderAthleteCost()}
+    ${renderProvenance()}
     ${renderFinancials()}
     ${renderMeetManifest(res)}
     ${renderPathwayBreakdown(res)}
@@ -1841,6 +1993,17 @@ function wirePathway(){
     if (!Object.keys(S.hostPer_stop).length) S.hostPer_stop = null;
     S.dirty = true; renderPathway();
   }));
+  P.querySelectorAll('input[data-trip]').forEach(el => el.addEventListener('change', e => {
+    S.tripCost = S.tripCost || {};
+    S.tripCost[+e.target.dataset.trip] = Math.max(0, +e.target.value || 0);
+    S.dirty = true; renderPathway();
+  }));
+  const ce = document.getElementById('bsCostEv');
+  if (ce) ce.addEventListener('change', () => {
+    S.costEvents = Math.max(1, Math.min(3, +ce.value || 2)); S.dirty = true; renderPathway(); });
+  const cl = document.getElementById('bsCostEl');
+  if (cl) cl.addEventListener('change', () => {
+    S.costElastic = Math.max(0, Math.min(2, +cl.value || 0)); S.dirty = true; renderPathway(); });
   const hc = document.getElementById('bsHostClear');
   if (hc) hc.addEventListener('click', () => {
     S.hostPer_stop = null; S.dirty = true; renderPathway();
@@ -2432,6 +2595,8 @@ async function saveScenario(asNew){
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
     fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
     hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
+    tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
+    stamps:dataStamps(),
     arrival:S.arrival, seedPool:S.seedPool,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
@@ -2531,6 +2696,10 @@ async function loadScenario(id){
     if (d.hostPer   != null) S.hostPer   = d.hostPer;
     if (d.hostMin   != null) S.hostMin   = d.hostMin;
     S.hostPer_stop = d.hostPer_stop || null;
+    S.loadedStamps = d.stamps || null;
+    S.tripCost = d.tripCost || null;
+    if (d.costEvents != null) S.costEvents = d.costEvents;
+    if (d.costElastic != null) S.costElastic = d.costElastic;
     S.arrival  = d.arrival  || null;
     S.seedPool = d.seedPool || null;
     syncRouting();
@@ -3543,8 +3712,9 @@ function renderAutoDialog(){
             ${AUTO_PRESETS.map(p=>{
               const rank = (AUTO.picks||[]).indexOf(p.k);
               return `<button class="${rank>=0?'on':''}" onclick="window._bsAutoPreset('${p.k}')">
-                ${rank>=0?`<span class="bs-auto-rank">${rank+1}</span>`:''}
-                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span></button>`;}).join('')}
+                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span>
+                ${rank>=0?`<span class="bs-auto-rank" title="Ranked ${rank+1} of ${AUTO.picks.length}">${rank+1}</span>`:''}
+                </button>`;}).join('')}
           </div>
         </div>
         <div class="bs-auto-row">
