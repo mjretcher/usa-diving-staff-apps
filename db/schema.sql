@@ -245,9 +245,9 @@ CREATE SCHEMA IF NOT EXISTS core;
 CREATE TABLE IF NOT EXISTS core.event_results (
     id              BIGSERIAL PRIMARY KEY,
     -- DiveMeets identifiers
-    meet_id_dm      INTEGER,
-    diver_id_dm     INTEGER,
-    team_id_dm      INTEGER,
+    meet_id_dm      TEXT,
+    diver_id_dm     TEXT,
+    team_id_dm      TEXT,
     -- Raw fields (verbatim from DiveMeets)
     meet_name       TEXT NOT NULL,
     event_name      TEXT NOT NULL,
@@ -286,11 +286,22 @@ CREATE INDEX IF NOT EXISTS idx_ev_junior       ON core.event_results(year, is_ju
 CREATE INDEX IF NOT EXISTS idx_ev_athlete_year ON core.event_results(diver_id_dm, year);
 
 -- Athlete identity table (populated by import via INSERT...ON CONFLICT)
+-- NOTE ON *_id_dm COLUMNS
+-- DiveMeets identifiers are stored as TEXT throughout the `core` schema. That
+-- is what the loaders write and what every working query assumes; the file
+-- previously declared INTEGER, which was simply wrong and produced runtime
+-- errors reading "operator does not exist: text = integer".
+-- The same identifiers are INTEGER in the `divemeets` schema, so ANY join
+-- across the two must cast:  core.event_results.meet_id_dm::text = divemeets.results.meet_id::text
+-- Do not "fix" this by altering the live column types without a planned
+-- migration: core.event_results is truncated and reloaded by neon-seed.yml and
+-- is read by the junior qualification pipeline.
+
 CREATE TABLE IF NOT EXISTS core.divers (
-    diver_id_dm        INTEGER PRIMARY KEY,
+    diver_id_dm        TEXT PRIMARY KEY,
     first_name         TEXT,
     last_name          TEXT,
-    current_team_id_dm INTEGER,
+    current_team_id_dm TEXT,
     first_seen_year    SMALLINT,
     last_seen_year     SMALLINT,
     result_count       INT DEFAULT 0,
@@ -299,7 +310,7 @@ CREATE TABLE IF NOT EXISTS core.divers (
 );
 
 CREATE TABLE IF NOT EXISTS core.teams (
-    team_id_dm INTEGER PRIMARY KEY,
+    team_id_dm TEXT PRIMARY KEY,
     name       TEXT,
     code       TEXT,
     notes      JSONB,
@@ -910,6 +921,37 @@ CREATE TABLE IF NOT EXISTS membership.ingest_log (
     notes TEXT
 );
 
+-- able to alter who advances. Consumers filter on sanction and in_circuit.
+CREATE TABLE IF NOT EXISTS divemeets.event_class (
+    meet_id       INTEGER NOT NULL,
+    event_id      INTEGER NOT NULL,
+    round         TEXT    NOT NULL,
+    title         TEXT,
+    sanction      TEXT,
+    meet_year     SMALLINT,
+    age_group     TEXT,
+    gender        TEXT,
+    discipline    TEXT,
+    round_label   TEXT,
+    is_synchro    BOOLEAN DEFAULT FALSE,
+    parsed_ok     BOOLEAN DEFAULT FALSE,
+    in_circuit    BOOLEAN DEFAULT FALSE,
+    classified_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (meet_id, event_id, round)
+);
+CREATE INDEX IF NOT EXISTS idx_evclass_sanction ON divemeets.event_class(sanction, meet_year);
+CREATE INDEX IF NOT EXISTS idx_evclass_cell ON divemeets.event_class(age_group, gender, discipline);
+
+-- reported rather than applied silently.
+CREATE TABLE IF NOT EXISTS membership.pathways (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    notes       TEXT,
+    levels      SMALLINT,
+    data        JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- Boundary Studio scenarios (Membership Analytics)
 CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     id TEXT PRIMARY KEY,
@@ -1145,3 +1187,9 @@ BEGIN
     GRANT SELECT ON core.nation_unresolved  TO usad_app;
   END IF;
 END $$;
+
+-- Columns that exist in the database but were not declared above.
+ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_id TEXT;
+ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_name TEXT;
+ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS team2_name TEXT;
+ALTER TABLE season_calendar.calendar ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
