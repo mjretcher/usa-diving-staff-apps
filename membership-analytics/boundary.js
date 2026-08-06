@@ -456,6 +456,10 @@ function renderPanel(){
 
   if (S.panelMode==='advance') renderAdvShell();
   if (S.panelMode==='pathway') renderPathwayShell();
+  // Pathway is a routing editor plus tables thirty columns wide; it takes the
+  // whole page and the map drops below it. Everything else keeps the sidebar.
+  const lay = document.querySelector('.bs-layout');
+  if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
   renderNumbers();
   wirePanel();
   loadScenarioList();

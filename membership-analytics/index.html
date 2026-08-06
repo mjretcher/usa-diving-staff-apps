@@ -432,7 +432,7 @@ tr:hover td{background:#f7fafd}
 .bs-namebar{flex-wrap:wrap}
 .bs-bd{margin-top:16px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
 .bs-bd-h{background:#f4f8fd;padding:9px 13px;border-bottom:1px solid var(--line)}
-.bs-bd-h b{font-family:var(--display);font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--navy);display:block}
+.bs-bd-h>b{font-family:var(--display);font-size:16px;letter-spacing:.03em;text-transform:uppercase;color:var(--navy);display:block}
 .bs-bd-h .note{margin-top:2px}
 .bs-bd-scroll{overflow-x:auto}
 .bs-bd-tbl{min-width:520px}
@@ -444,7 +444,7 @@ tr:hover td{background:#f7fafd}
 .bs-bd-tbl tr.bs-bd-tot td{background:#eef4fb;border-top:2px solid var(--navy)}
 .bs-bd-0{color:#c8d2e0}
 .bs-bd-h{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
-.bs-bd-h b{flex:0 0 auto}
+.bs-bd-h>b{flex:0 0 auto}
 .bs-bdseg{flex:0 0 auto}
 .bs-bdseg button{border:0;background:#fff;color:var(--navy);padding:4px 10px;font-size:11px;font-weight:700}
 .bs-bdseg button.on{background:var(--navy);color:#fff}
@@ -488,6 +488,13 @@ tr:hover td{background:#f7fafd}
   float:right;margin-left:6px}
 .bs-auto-note{background:#f4f8fd;border:1px solid var(--line);border-left:4px solid var(--pool);
   border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.5;color:var(--navy);margin-top:8px}
+/* ---- Pathway takes the whole page; the map drops below it ----
+   Restored after I overwrote it with a stale local copy. A routing editor plus
+   tables thirty columns wide does not belong in a sidebar. */
+.bs-layout.bs-wide{grid-template-columns:minmax(0,1fr)}
+.bs-layout.bs-wide>.card:first-child{order:2}
+.bs-layout.bs-wide>.card:first-child .card-b{max-width:840px;margin:0 auto;width:100%}
+.bs-layout.bs-wide>.card:last-child{order:1}
 </style>
 </head>
 <body>
@@ -538,7 +545,7 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="boundary.js?v=202608054300"></script>
+<script src="boundary.js?v=202608054700"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202608053300"></script>
 <script src="pricing.js?v=202608051700"></script>
