@@ -1,8 +1,18 @@
 name: Deploy to GitHub Pages
 
+# DORMANT, deliberately. This deploys with actions/deploy-pages, which only
+# works when the repository's Pages source is set to "GitHub Actions". It is
+# currently set to "Deploy from a branch" (main, /), so GitHub's own built-in
+# "pages build and deployment" does the real work and this workflow CANNOT
+# succeed -- it failed on every push from 15:31 on 6 August, which is a red
+# cross next to commits that deployed perfectly well.
+#
+# It is left in place rather than deleted so switching back is one edit: set
+# Pages source to GitHub Actions in repository settings, then restore the push
+# trigger below. Until then it runs only when asked for, so it stops reporting
+# failure for work that succeeded.
+
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
