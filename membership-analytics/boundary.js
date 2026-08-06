@@ -76,6 +76,7 @@ const S = {
   hostFlat: 3000,       // flat fee per meet
   hostPer: 15,          // dollars per entry
   hostMin: 0,           // guaranteed minimum, whichever model is used
+  hostPer_stop: null,   // {levelIdx|groupIdx: dollars} — a negotiated figure for one meet
   gender: null,         // gender-data.json
   evOpen: null,         // which level's events grid is expanded
   pathList: null,       // saved pathways
@@ -1138,21 +1139,33 @@ const LEVY = 4.90;
    problem -- fine for the small meet, trivial for the large one. Per-entry sits
    between. A guaranteed minimum on top of any of them is what actually makes a
    small meet biddable, so it is a separate lever rather than a fourth mode. */
+function meetKey(m){ return m.level + '|' + m.gi; }
+
 function meetMoney(m){
   const fee = feeFor(m.level);
   const gross = m.entries * fee;
   const levy = m.entries * LEVY;
   const net = gross - levy;
   const mode = S.hostMode || 'pct';
-  let host = mode === 'flat'      ? (+S.hostFlat || 0)
+  // A negotiated figure for one meet beats any formula. Hosts are dealt with
+  // individually -- a facility with its own board, a city bidding to attract a
+  // championship, a small stop that needs underwriting -- and a single rule
+  // across a tier that is 44x apart was never going to survive contact with
+  // that. The model stays as the default for every stop nobody has set.
+  const ov = S.hostPer_stop && S.hostPer_stop[meetKey(m)];
+  const overridden = ov != null && ov !== '';
+  let host = overridden ? (+ov || 0)
+           : mode === 'flat'      ? (+S.hostFlat || 0)
            : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
            :                        net * (S.hostShare || 0);
-  const floored = (+S.hostMin || 0) > host;
+  // A minimum is a floor under the MODEL, not a second-guess of a figure
+  // someone has agreed.
+  const floored = !overridden && (+S.hostMin || 0) > host;
   if (floored) host = +S.hostMin;
   // A host cut cannot exceed what the meet actually took.
   const capped = host > net;
   if (capped) host = net;
-  return {fee, gross, levy, net, host, usad: net - host, floored, capped,
+  return {fee, gross, levy, net, host, usad: net - host, floored, capped, overridden,
           pct: net > 0 ? host/net : 0};
 }
 
@@ -1365,10 +1378,12 @@ function renderMeetManifest(res){
       <td class="num">${fmt(m.biggest)}</td>
       <td class="num mono">${usd($.gross)}</td>
       <td class="num mono bs-mf-levy">&minus;${usd($.levy)}</td>
-      <td class="num mono"><b>${usd($.host)}</b>${
-        // The cap is reported first: when a meet cannot pay what the model asks,
-        // that it hit a floor is beside the point.
-        $.capped  ? '<span class="bs-bd-rng bs-mf-cap">all of net</span>'
+      <td class="num mono">
+        <span class="bs-hostcell">$<input class="bs-rt-in bs-hostin ${$.overridden?'set':''}" type="number"
+          min="0" step="100" data-host="${esc(meetKey(m))}"
+          value="${Math.round($.host)}" title="Type a figure to fix this meet's payout. Clear it to go back to the model."></span>
+        ${$.capped ? `<span class="bs-bd-rng bs-mf-cap">${$.overridden?'more than this meet takes':'all of net'}</span>`
+        : $.overridden ? `<span class="bs-bd-rng bs-mf-set">set for this meet &middot; ${Math.round($.pct*100)}% of net</span>`
         : $.floored ? '<span class="bs-bd-rng">at the minimum</span>'
         : `<span class="bs-bd-rng">${Math.round($.pct*100)}% of net</span>`}</td>
       <td class="num mono">${usd($.usad)}</td>
@@ -1402,6 +1417,8 @@ function renderMeetManifest(res){
       </label>
       <label class="bs-arr">minimum $<input class="bs-rt-in" id="bsHostMin" type="number" min="0" step="100"
         value="${+S.hostMin||0}"></label>
+      ${S.hostPer_stop && Object.keys(S.hostPer_stop).length
+        ? `<button class="tab bs-mini" id="bsHostClear">back to the model (${Object.keys(S.hostPer_stop).length} set)</button>` : ''}
       <button class="tab bs-mini" id="bsMfCsv">Export</button>
       <span class="note">One row per stop &mdash; the unit a schedule is actually built for.
         <b>Places</b> is what the bands entitle this meet to take; where it far exceeds the entries, the
@@ -1432,7 +1449,7 @@ function exportManifestCsv(){
     .concat(rl.map(r => 'in_' + r))
     .concat(['min_days_for_this_meet','meet_total_entries','entry_fee',
              'meet_gross','meet_divemeets_levy','meet_host_cut','host_cut_pct_of_net',
-             'meet_usad_keeps']);
+             'host_cut_set_for_this_meet','meet_usad_keeps']);
   const lines = [head.join(',')];
   meets.forEach(m => {
     const $ = meetMoney(m);
@@ -1441,7 +1458,8 @@ function exportManifestCsv(){
                   q(DIS_LBL[e.cell[2]]), e.n]
         .concat(rl.map(r => e.byRound[r] == null ? '' : e.byRound[r]))
         .concat([m.minDays, m.entries, $.fee, Math.round($.gross), Math.round($.levy),
-                 Math.round($.host), Math.round($.pct*100), Math.round($.usad)]).join(','));
+                 Math.round($.host), Math.round($.pct*100), $.overridden ? 'yes' : '',
+                 Math.round($.usad)]).join(','));
     });
   });
   download(lines.join('\n'), (S.scenarioName.trim()||'pathway') + '-meets.csv');
@@ -1814,6 +1832,19 @@ function wirePathway(){
   bind$('bsHostFlat',  el => { S.hostFlat = Math.max(0, +el.value||0); });
   bind$('bsHostPer',   el => { S.hostPer  = Math.max(0, +el.value||0); });
   bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
+  P.querySelectorAll('input[data-host]').forEach(el => el.addEventListener('change', e => {
+    const k = e.target.dataset.host, v = e.target.value;
+    S.hostPer_stop = S.hostPer_stop || {};
+    // Blank means "use the model again", not "pay nothing".
+    if (v === '' || v == null) delete S.hostPer_stop[k];
+    else S.hostPer_stop[k] = Math.max(0, +v || 0);
+    if (!Object.keys(S.hostPer_stop).length) S.hostPer_stop = null;
+    S.dirty = true; renderPathway();
+  }));
+  const hc = document.getElementById('bsHostClear');
+  if (hc) hc.addEventListener('click', () => {
+    S.hostPer_stop = null; S.dirty = true; renderPathway();
+  });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
   P.querySelectorAll('input[data-fee]').forEach(el => el.addEventListener('change', e => {
@@ -2400,7 +2431,8 @@ async function saveScenario(asNew){
   syncLevels();
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
     fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
-    hostPer:S.hostPer, hostMin:S.hostMin, arrival:S.arrival, seedPool:S.seedPool,
+    hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
+    arrival:S.arrival, seedPool:S.seedPool,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
     await NEON.query(
@@ -2498,6 +2530,7 @@ async function loadScenario(id){
     if (d.hostFlat  != null) S.hostFlat  = d.hostFlat;
     if (d.hostPer   != null) S.hostPer   = d.hostPer;
     if (d.hostMin   != null) S.hostMin   = d.hostMin;
+    S.hostPer_stop = d.hostPer_stop || null;
     S.arrival  = d.arrival  || null;
     S.seedPool = d.seedPool || null;
     syncRouting();
