@@ -67,7 +67,6 @@ const S = {
   mult: null,           // measured entries-per-athlete (athlete-multiplicity.json)
   routeRes: null,       // its projection
   bdMode: 'stop',       // breakdown view: stop | total | qualified
-  bdSplit: false,       // false = one column per stage+round; true = one column per MEET+round
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
@@ -457,12 +456,6 @@ function renderPanel(){
 
   if (S.panelMode==='advance') renderAdvShell();
   if (S.panelMode==='pathway') renderPathwayShell();
-  /* The pathway is tables thirty columns wide and a routing editor; squeezing
-     it into the right-hand column made every line wrap and turned it into a
-     very long scroll. It gets the full page, with the map moved beneath it --
-     nothing is painted while a pathway is being designed. */
-  const lay = document.querySelector('.bs-layout');
-  if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
   renderNumbers();
   wirePanel();
   loadScenarioList();
@@ -979,32 +972,16 @@ function renderEventGrid(L){
 function renderPathwayBreakdown(res){
   if (!res) return '';
   const mode = S.bdMode || 'stop';
-  const split = !!S.bdSplit;
   const qual = (mode === 'qualified') ? projectPathway(false) : null;
   const src = qual || res;
   const gsplit = (mode === 'members') ? genderSplit() : null;
   const pools = (mode === 'members') ? {} : null;
 
-  /* Combined, a column is a whole stage: "Zones, preliminaries, 3 stops" is
-     every zone added together. That total is the wrong unit for almost every
-     question actually asked of it -- Zone A and Zone F are not the same size,
-     and the whole point of drawing boundaries is to see where they differ.
-     Split, a column is ONE meet: Zone A's own preliminaries, on their own. */
   const cols = [];
-  S.routing.forEach((lvl, L) => {
-    const rounds = QR().roundsOf(lvl);
-    if (split){
-      tierGroupsAt(L).groups.forEach((g, gi) => rounds.forEach(r => {
-        cols.push({L, gi, key:r.key, name: g.name || ('Area ' + (gi+1)), stage: tierName(L),
-                   round: QR().ROUND_NAME[r.key] || r.key, stops: 1, nRounds: rounds.length});
-      }));
-    } else {
-      rounds.forEach(r => {
-        cols.push({L, gi:null, key:r.key, name: tierName(L), stage: tierName(L),
-                   round: QR().ROUND_NAME[r.key] || r.key, stops: groupCountAt(L)});
-      });
-    }
-  });
+  S.routing.forEach((lvl, L) => QR().roundsOf(lvl).forEach(r => {
+    cols.push({L, key:r.key, name: tierName(L), round: QR().ROUND_NAME[r.key] || r.key,
+               stops: groupCountAt(L)});
+  }));
 
   /* Across every stop, and at a single one. The per-stop figure is the field a
      diver actually stands in and the session an official actually runs -- a
@@ -1021,13 +998,7 @@ function renderPathwayBreakdown(res){
     if (!pools[c.L]) pools[c.L] = memberPool(c.L);
     const ag = cell[0], gd = cell[1], bd = cell[2];
     const rows = pools[c.L];
-    // memberPool is already per-area. Combined we add the areas up; split we
-    // take just this meet's own catchment, which is the number worth having --
-    // an area drawing on half the members of its neighbour is exactly the
-    // imbalance a boundary is being redrawn to fix.
-    const people = (c.gi == null)
-      ? rows.reduce((s,r) => s + (r[ag]||0), 0)
-      : ((rows[c.gi] && rows[c.gi][ag]) || 0);
+    const people = rows.reduce((s,r) => s + (r[ag]||0), 0);
     const gs = gsplit ? gsplit[ag] : [0.5,0.5];
     const share = gd === 'B' ? gs[0] : gs[1];
     // Of members, the share who compete; of competitors, the share on this board.
@@ -1041,21 +1012,10 @@ function renderPathwayBreakdown(res){
     return people * share * rate * boardShare;
   };
   const at = (c, cell) => {
-    if (mode === 'spots')   {
-      // capacityAt is a whole-stage figure; one meet gets its share of it.
-      const lv = capAt(c, cell);
-      const v = (c.gi == null) ? lv : lv / Math.max(1, groupCountAt(c.L));
-      return {tot:v, per:v/Math.max(1,c.stops), lo:0, hi:0};
-    }
+    if (mode === 'spots')   { const v = capAt(c, cell); return {tot:v, per:v/Math.max(1,c.stops), lo:0, hi:0}; }
     if (mode === 'members') { const v = memAt(c, cell); return {tot:v, per:v/Math.max(1,c.stops), lo:0, hi:0}; }
     const f = src.field[c.L] && src.field[c.L][c.key];
     if (!f) return {tot:0, per:0, lo:0, hi:0};
-    // Split: this meet's own field, straight out of the projection. No average
-    // and no range, because there is nothing left to average over.
-    if (c.gi != null){
-      const v = (f[c.gi] && f[c.gi][cell]) || 0;
-      return {tot:v, per:v, lo:0, hi:0};
-    }
     const vals = f.map(g => g[cell] || 0);
     const tot = vals.reduce((a,b)=>a+b, 0);
     const live = vals.filter(v => v > 0);
@@ -1072,7 +1032,7 @@ function renderPathwayBreakdown(res){
   };
   const agg = (c, cells) => {
     const t = cells.reduce((s,cell) => s + at(c, cell).tot, 0);
-    if (mode === 'spots' || mode === 'members' || c.gi != null)
+    if (mode === 'spots' || mode === 'members')
       return {tot:t, per:t/Math.max(1,c.stops), lo:0, hi:0};
     const lo = [], hi = [];
     const f = src.field[c.L] && src.field[c.L][c.key];
@@ -1080,47 +1040,23 @@ function renderPathwayBreakdown(res){
     return {tot:t, per:t/Math.max(1,c.stops), lo: lo.length?Math.min(...lo):0, hi: hi.length?Math.max(...hi):0};
   };
 
-  /* Combined: one header cell per stage+round. Split: two rows -- the meet
-     spanning its own rounds, then the rounds themselves -- so thirty columns
-     still read as "Zone A: prelims, finals" rather than a wall of numbers. */
-  let thead;
-  if (split){
-    let r1 = '<th rowspan="2">Age group / event</th>', r2 = '';
-    for (let i = 0; i < cols.length; ){
-      const c = cols[i], n = Math.max(1, c.nRounds);
-      r1 += `<th class="num bs-bd-mt bs-bd-stg${c.L % 2}" colspan="${n}">
-               <span class="bs-bd-l">${esc(c.stage)}</span>${esc(c.name)}</th>`;
-      for (let k = 0; k < n && cols[i+k]; k++)
-        r2 += `<th class="num bs-bd-stg${c.L % 2}${k===0?' bs-bd-mt':''}">${esc(cols[i+k].round)}</th>`;
-      i += n;
-    }
-    thead = `<tr>${r1}</tr><tr>${r2}</tr>`;
-  } else {
-    const head = cols.map(c =>
-      `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}
-        <span class="bs-bd-s">${c.stops} ${c.stops===1?'stop':'stops'}</span></th>`).join('');
-    thead = `<tr><th>Age group / event</th>${head}</tr>`;
-  }
-
-  // Stage tint and a rule at each meet boundary, carried down the body so a
-  // column can be traced back to its meet without scrolling up to the header.
-  const cls = (c, i) => split
-    ? ` bs-bd-stg${c.L % 2}${(i === 0 || cols[i-1].gi !== c.gi || cols[i-1].L !== c.L) ? ' bs-bd-mt' : ''}`
-    : '';
+  const head = cols.map(c =>
+    `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}
+      <span class="bs-bd-s">${c.stops} ${c.stops===1?'stop':'stops'}</span></th>`).join('');
 
   const body = ['A','B','C','D'].map(ag => {
     const mine = ['B','G'].flatMap(g => ['1','3','P'].map(d => ag+g+d));
-    const sub = cols.map((c,i) => `<td class="num${cls(c,i)}">${show(agg(c, mine))}</td>`).join('');
+    const sub = cols.map(c => `<td class="num">${show(agg(c, mine))}</td>`).join('');
     const rows = ['B','G'].flatMap(g => ['1','3','P'].map(d => {
       const cell = ag+g+d;
-      const tds = cols.map((c,i) => `<td class="num${cls(c,i)}">${show(at(c, cell))}</td>`).join('');
+      const tds = cols.map(c => `<td class="num">${show(at(c, cell))}</td>`).join('');
       const on = (S.bdCell === cell) ? ' class="bs-bd-on"' : '';
       return `<tr${on}><td class="bs-bd-cell">${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
     })).join('');
     return `<tr class="bs-bd-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
   }).join('');
 
-  const totals = cols.map((c,i) => `<td class="num${cls(c,i)}"><b>${show(agg(c, CELLS))}</b></td>`).join('');
+  const totals = cols.map(c => `<td class="num"><b>${show(agg(c, CELLS))}</b></td>`).join('');
 
   const cr = (mode === 'members') ? (S._cr || (S._cr = competeRate())) : null;
   const note = mode === 'spots'
@@ -1139,18 +1075,6 @@ function renderPathwayBreakdown(res){
       ? 'What the rules entitle athletes to, before take-up. Always higher than the field that turns up.'
       : 'Every stop of a stage added together. Useful for fees and totals, not for planning a session.';
 
-  /* Said plainly, because the two view choices interact: with every meet
-     broken out, a column is already a single meet, so "at one stop" and
-     "all stops" are the same figure and there is nothing left to range over. */
-  const splitNote = !split ? ''
-    : (mode === 'spots'
-        ? 'One column per meet &mdash; each meet gets an equal share of its stage\'s places, so these are level across a stage by construction. '
-      : mode === 'members'
-        ? 'One column per meet, drawing on its OWN catchment &mdash; this is where unequal boundaries show up as unequal numbers. '
-      : (mode === 'stop' || mode === 'total')
-        ? 'One column per meet, so this is that meet\'s own field &mdash; the same number under either of the first two buttons. '
-        : 'One column per meet, so this is that meet\'s own figure. ');
-
   return `<div class="bs-bd">
     <div class="bs-bd-h">
       <b>Every event, every round</b>
@@ -1161,13 +1085,9 @@ function renderPathwayBreakdown(res){
         <button data-bd="spots" class="${mode==='spots'?'on':''}">Spots the structure creates</button>
         <button data-bd="members" class="${mode==='members'?'on':''}">Membership pool</button>
       </div>
-      <div class="seg bs-bdsplit">
-        <button data-bdsplit="0" class="${split?'':'on'}">Combined by stage</button>
-        <button data-bdsplit="1" class="${split?'on':''}">Every meet separately</button>
-      </div>
-      <span class="note">${splitNote}${note}</span></div>
-    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl${split?' bs-bd-split':''}">
-      <thead>${thead}</thead>
+      <span class="note">${note}</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-cell-tbl">
+      <thead><tr><th>Age group / event</th>${head}</tr></thead>
       <tbody>${body}<tr class="bs-bd-tot"><td><b>All events</b></td>${totals}</tr></tbody>
     </table></div>
   </div>`;
@@ -1287,6 +1207,120 @@ function meetManifest(res){
     });
   });
   return out;
+}
+
+
+/* ---------- pricing a second scenario ----------
+   Comparing two maps on member counts says who is bigger. It does not say
+   whether either can be run: that turns on entries per meet, what those meets
+   bill, and whether one host cut works across a tier. So the comparison is
+   computed the same way the live one is -- same pathway engine, same fees, same
+   host model -- with the other map swapped in and put back afterwards.
+
+   The swap is why this is written with a finally: a comparison that left the
+   panel showing someone else's map would be worse than no comparison. */
+function financialsFor(map){
+  const snap = {regions:S.regions, assign:S.assign, levels:S.levels, routing:S.routing,
+                flow:S.flow, cr:S._cr, finalName:S.finalName};
+  try {
+    if (map){
+      S.regions = map.regions && map.regions.length ? map.regions : snap.regions;
+      S.assign  = map.assign || snap.assign;
+      if (map.levels && map.levels.length) S.levels = map.levels;
+      if (map.routing && map.routing.length) S.routing = map.routing;
+      if (map.finalName) S.finalName = map.finalName;
+      S._cr = null;
+      syncRouting();
+      S.flow = window.JuniorFlow.compute({
+        regions:S.regions, assign:S.assign, levels:S.levels,
+        finalName:S.finalName, year:S.year});
+    }
+    const res = projectPathway();
+    if (!res) return null;
+    const meets = meetManifest(res);
+    const tiers = {};
+    meets.forEach(m => {
+      const $ = meetMoney(m);
+      const t = tiers[m.level] || (tiers[m.level] = {
+        name: tierName(m.level), meets:0, entries:0, gross:0, levy:0, host:0, usad:0,
+        sizes:[], days:0});
+      t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy;
+      t.host += $.host; t.usad += $.usad; t.sizes.push(m.entries);
+      t.days = Math.max(t.days, m.minDays);
+    });
+    Object.values(tiers).forEach(t => {
+      const v = t.sizes.filter(x => x > 0);
+      t.lo = v.length ? Math.min(...v) : 0;
+      t.hi = v.length ? Math.max(...v) : 0;
+      t.ratio = t.lo ? t.hi/t.lo : 0;
+    });
+    const total = Object.values(tiers).reduce((a,t) => ({
+      meets:a.meets+t.meets, entries:a.entries+t.entries, gross:a.gross+t.gross,
+      levy:a.levy+t.levy, host:a.host+t.host, usad:a.usad+t.usad,
+    }), {meets:0,entries:0,gross:0,levy:0,host:0,usad:0});
+    return {tiers, total, meets};
+  } catch(e){
+    console.error('financialsFor', e); return null;
+  } finally {
+    S.regions = snap.regions; S.assign = snap.assign; S.levels = snap.levels;
+    S.routing = snap.routing; S.flow = snap.flow; S._cr = snap.cr;
+    S.finalName = snap.finalName;
+  }
+}
+
+function renderFinancials(){
+  const a = financialsFor(null);
+  if (!a) return '';
+  const b = S.compare ? financialsFor(S.compare) : null;
+  const money = v => usd(v);
+  const d = (x,y) => {
+    const v = x - y;
+    if (Math.abs(v) < 1) return '<span class="bs-fd0">same</span>';
+    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'−'}${usd(Math.abs(v))}</span>`;
+  };
+  const dn = (x,y) => {
+    const v = Math.round(x - y);
+    if (!v) return '<span class="bs-fd0">same</span>';
+    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'−'}${fmt(Math.abs(v))}</span>`;
+  };
+
+  const levels = Object.keys(a.tiers).sort((x,y)=>x-y);
+  const rows = levels.map(L => {
+    const t = a.tiers[L], o = b && b.tiers[L];
+    return `<tr>
+      <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span></td>
+      <td class="num">${fmt(Math.round(t.entries))}${o?`<span class="bs-bd-rng">${dn(t.entries,o.entries)}</span>`:''}</td>
+      <td class="num mono">${money(t.gross)}${o?`<span class="bs-bd-rng">${d(t.gross,o.gross)}</span>`:''}</td>
+      <td class="num mono">${money(t.host)}</td>
+      <td class="num mono"><b>${money(t.usad)}</b>${o?`<span class="bs-bd-rng">${d(t.usad,o.usad)}</span>`:''}</td>
+      <td class="num">${t.ratio ? t.ratio.toFixed(1)+'&times;' : '—'}
+        ${o&&o.ratio?`<span class="bs-bd-rng">${o.ratio.toFixed(1)}&times; there</span>`:''}</td>
+    </tr>`;
+  }).join('');
+
+  const tot = a.total, otot = b && b.total;
+  return `<div class="bs-bd">
+    <div class="bs-bd-h"><b>The money${b?` &mdash; against ${esc(S.compare.name)}`:''}</b>
+      <span class="note">${b
+        ? `Both priced the same way: same pathway engine, same fees, same host model, with only the map and its tiers changed. Deltas are this scenario against <b>${esc(S.compare.name)}</b>.`
+        : 'Load a comparison scenario on the map to price two side by side.'}</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
+      <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Entry income</th>
+        <th class="num">To hosts</th><th class="num">USA Diving keeps</th>
+        <th class="num">Biggest &divide; smallest</th></tr></thead>
+      <tbody>${rows}
+        <tr class="bs-bd-tot"><td><b>All tiers</b><span class="bs-mf-l">${fmt(tot.meets)} meets</span></td>
+          <td class="num"><b>${fmt(Math.round(tot.entries))}</b>${otot?`<span class="bs-bd-rng">${dn(tot.entries,otot.entries)}</span>`:''}</td>
+          <td class="num mono"><b>${money(tot.gross)}</b>${otot?`<span class="bs-bd-rng">${d(tot.gross,otot.gross)}</span>`:''}</td>
+          <td class="num mono"><b>${money(tot.host)}</b></td>
+          <td class="num mono"><b>${money(tot.usad)}</b>${otot?`<span class="bs-bd-rng">${d(tot.usad,otot.usad)}</span>`:''}</td>
+          <td class="num"></td></tr>
+      </tbody></table></div>
+    <p class="note">Entry fees only, at the published rate for each tier, less the DiveMeets pass-through.
+      Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
+      <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
+      cannot be paid by one rule, whatever the rule is.</p>
+  </div>`;
 }
 
 function renderMeetManifest(res){
@@ -1654,6 +1688,7 @@ function renderPathway(){
         ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
+    ${renderFinancials()}
     ${renderMeetManifest(res)}
     ${renderPathwayBreakdown(res)}
     ${(S.takeUp && S.takeUp.usable)
@@ -1732,9 +1767,6 @@ function wirePathway(){
   }));
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
-  }));
-  P.querySelectorAll('.bs-bdsplit button').forEach(b => b.addEventListener('click', () => {
-    S.bdSplit = b.dataset.bdsplit === '1'; renderPathway();
   }));
   const sp = document.getElementById('bsSeedPool');
   if (sp) sp.addEventListener('change', () => { S.seedPool = sp.value; S.dirty = true; renderPathway(); });
@@ -2379,7 +2411,11 @@ async function loadCompare(id){
     if (!res.rows.length){ msg('Scenario not found.'); return; }
     const row = res.rows[0];
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-    S.compare = {id, name: row.name, assign: d.assign || {}, regions: d.regions || []};
+    // Keep the whole scenario, not just the painted counties: pricing a
+    // comparison needs its tiers and its pathway too.
+    S.compare = {id, name: row.name, assign: d.assign || {}, regions: d.regions || [],
+                 levels: d.levels || null, routing: d.routing || null,
+                 finalName: d.finalName || null};
     renderPanel();
   } catch(e){ console.error(e); msg('Compare failed: ' + (e.message||e)); }
 }
