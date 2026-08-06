@@ -70,7 +70,7 @@ const S = {
   bdCell: 'all',        // which event+gender the panel is showing
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
-  fees: null,           // entry fee per level, for the per-meet financials
+  fees: null,           // entry fee per level; null means the published ladder
   hostShare: 0.25,      // share of net entry income going to the host
   hostMode: 'pct',      // pct | flat | per_entry
   hostFlat: 3000,       // flat fee per meet
@@ -1303,7 +1303,14 @@ function renderFinancials(){
     <div class="bs-bd-h"><b>The money${b?` &mdash; against ${esc(S.compare.name)}`:''}</b>
       <span class="note">${b
         ? `Both priced the same way: same pathway engine, same fees, same host model, with only the map and its tiers changed. Deltas are this scenario against <b>${esc(S.compare.name)}</b>.`
-        : 'Load a comparison scenario on the map to price two side by side.'}</span></div>
+        : 'Load a comparison scenario on the map to price two side by side.'}</span>
+      <div class="bs-feebar">
+        <span class="bs-fee-lbl">Entry fee per tier</span>
+        ${levels.map(L => `<label class="bs-fee">${esc(a.tiers[L].name)}
+          $<input class="bs-rt-in" type="number" min="0" step="5" data-fee="${L}"
+             value="${feeFor(+L)}"></label>`).join('')}
+        ${S.fees ? '<button class="tab bs-mini" id="bsFeeReset">back to published</button>' : ''}
+      </div></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
       <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Entry income</th>
         <th class="num">To hosts</th><th class="num">USA Diving keeps</th>
@@ -1316,7 +1323,8 @@ function renderFinancials(){
           <td class="num mono"><b>${money(tot.usad)}</b>${otot?`<span class="bs-bd-rng">${d(tot.usad,otot.usad)}</span>`:''}</td>
           <td class="num"></td></tr>
       </tbody></table></div>
-    <p class="note">Entry fees only, at the published rate for each tier, less the DiveMeets pass-through.
+    <p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
+      less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
       <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
       cannot be paid by one rule, whatever the rule is.</p>
@@ -1804,6 +1812,13 @@ function wirePathway(){
   bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
   const mc = document.getElementById('bsMfCsv');
   if (mc) mc.addEventListener('click', exportManifestCsv);
+  P.querySelectorAll('input[data-fee]').forEach(el => el.addEventListener('change', e => {
+    S.fees = S.fees || {};
+    S.fees[+e.target.dataset.fee] = Math.max(0, +e.target.value || 0);
+    S.dirty = true; renderPathway();
+  }));
+  const fr = document.getElementById('bsFeeReset');
+  if (fr) fr.addEventListener('click', () => { S.fees = null; S.dirty = true; renderPathway(); });
   const pl = document.getElementById('bsPathLoad');
   if (pl) pl.addEventListener('change', () => { if (pl.value) loadPathway(pl.value); });
   const pv = document.getElementById('bsPathSave');
@@ -2380,6 +2395,8 @@ async function saveScenario(asNew){
   }
   syncLevels();
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
+    fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
+    hostPer:S.hostPer, hostMin:S.hostMin, arrival:S.arrival, seedPool:S.seedPool,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
     await NEON.query(
@@ -2471,6 +2488,14 @@ async function loadScenario(id){
     S.assign = d.assign || {};
     S.year = d.year === 'y26' ? 'y26' : 'y25';
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
+    S.fees = d.fees || null;
+    if (d.hostMode)  S.hostMode  = d.hostMode;
+    if (d.hostShare != null) S.hostShare = d.hostShare;
+    if (d.hostFlat  != null) S.hostFlat  = d.hostFlat;
+    if (d.hostPer   != null) S.hostPer   = d.hostPer;
+    if (d.hostMin   != null) S.hostMin   = d.hostMin;
+    S.arrival  = d.arrival  || null;
+    S.seedPool = d.seedPool || null;
     syncRouting();
     S.levels = migrateLevels(d, S.regions.length);
     S.finalName = d.finalName || 'Junior Nationals';
@@ -2969,8 +2994,11 @@ function smartAssign(A, ctx, N, opts){
     }
     const continuity = base && baseTot > 0 ? 1 - sameBase/baseTot : 0;
 
-    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity
-                + (hostless/N) * 2.0;   // an area that cannot host is not a real option
+    // No hostless term. Travel is still measured to real candidate sites where
+    // they exist, and to the area centre where they do not, but an area is not
+    // scored down for lacking one -- that is a facilities judgement, not a
+    // boundary one, and it was silently discarding otherwise good maps.
+    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity;
     return {score, balance, travelMi, via, continuity, hostless, hostCount:H,
             chosenHost: Array.from(chosenHost),
             wsum:Array.from(wsum), ages, ctrX, ctrY,
@@ -3376,8 +3404,46 @@ const AUTO_PRESETS = [
    o:{wBalance:1.2, wTravel:0.7, wViability:0.8, viabilityFraction:0.8, wContinuity:0.8}, needsBase:true},
 ];
 
+/* Blending several objectives. Weights fall off by rank rather than splitting
+   evenly, because "even sizes first, travel second" should not come out as a
+   50/50 compromise -- that is what "Balanced blend" already is. First choice
+   carries about half again what the second does. */
+function rankWeight(i, n){
+  if (n <= 1) return 1;
+  const raw = []; let tot = 0;
+  for (let k = 0; k < n; k++){ const v = 1 / Math.pow(1.5, k); raw.push(v); tot += v; }
+  return raw[i] / tot;
+}
+function blendedOptions(){
+  const picks = (AUTO.picks && AUTO.picks.length) ? AUTO.picks : ['blend'];
+  if (picks.length === 1){
+    const p = AUTO_PRESETS.find(x => x.k === picks[0]);
+    return Object.assign({}, p ? p.o : {});
+  }
+  const out = {};
+  picks.forEach((k, i) => {
+    const p = AUTO_PRESETS.find(x => x.k === k);
+    if (!p) return;
+    const w = rankWeight(i, picks.length);
+    for (const key in p.o) out[key] = (out[key] || 0) + p.o[key] * w;
+  });
+  return out;
+}
+function picksNeedBase(){
+  return (AUTO.picks||[]).some(k => (AUTO_PRESETS.find(x=>x.k===k)||{}).needsBase);
+}
+
 const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null,
-               busy: false, locks: [], hostMin: 40, ladder: '12, 6, 3' };
+               busy: false, locks: [], ladder: '12, 6, 3', picks: ['blend'],
+               // Host sites are no longer a user choice, but the two things
+               // that control did are separable and only one of them should go.
+               // Measuring travel to a county that actually carries membership
+               // is a better proxy than the area's mathematical centre, which
+               // may be farmland -- so that stays on. PENALISING an area for
+               // having no such county does not: whether somewhere can host is
+               // a facilities question and Mike's to answer, not a reason for
+               // the optimiser to quietly rule a map out.
+               hostMin: 25, weights: null };
 
 function openAutoDialog(){
   AUTO.n = Math.max(2, S.regions.length || 12);
@@ -3437,9 +3503,25 @@ function renderAutoDialog(){
         <div class="bs-auto-row">
           <label class="bs-auto-lbl">What matters most</label>
           <div class="bs-auto-presets">
-            ${AUTO_PRESETS.map(p=>`
-              <button class="${AUTO.preset===p.k?'on':''}" onclick="window._bsAutoPreset('${p.k}')">
-                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span></button>`).join('')}
+            ${AUTO_PRESETS.map(p=>{
+              const rank = (AUTO.picks||[]).indexOf(p.k);
+              return `<button class="${rank>=0?'on':''}" onclick="window._bsAutoPreset('${p.k}')">
+                ${rank>=0?`<span class="bs-auto-rank">${rank+1}</span>`:''}
+                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span></button>`;}).join('')}
+          </div>
+        </div>
+        <div class="bs-auto-row">
+          <label class="bs-auto-lbl"></label>
+          <div class="bs-auto-hint" style="flex:1">
+            ${(AUTO.picks||[]).length > 1
+              ? `Blending <b>${(AUTO.picks||[]).map((k,i)=>{
+                   const p=AUTO_PRESETS.find(x=>x.k===k);
+                   return esc(p?p.label:k)+' ('+Math.round(rankWeight(i,AUTO.picks.length)*100)+'%)';}).join(' · ')}</b>.
+                 Click again to drop one, or click in a different order to change the ranking &mdash;
+                 the first counts most.`
+              : (AUTO.picks||[]).length === 1
+                ? 'Pick a second and a third if you want them blended. The order you click is the ranking.'
+                : 'Pick one, or several &mdash; the order you click them is the order they count.'}
           </div>
         </div>
 
@@ -3462,24 +3544,6 @@ function renderAutoDialog(){
             </div>
             <div class="bs-auto-hint" style="margin-top:4px">Pick any areas whose counties must not
               move. Everything else gets redrawn around them.</div>
-          </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Host sites</label>
-          <div style="flex:1">
-            <div class="bs-auto-chips">
-              <button class="sm ${AUTO.hostMin===Infinity?'on':''}"
-                onclick="window._bsAutoHost(-1)">Skip for now</button>
-              ${[25,40,60].map(h=>`<button class="sm ${AUTO.hostMin===h?'on':''}"
-                onclick="window._bsAutoHost(${h})">${h}+ members</button>`).join('')}
-            </div>
-            <div class="bs-auto-hint" style="margin-top:4px">${AUTO.hostMin===Infinity
-              ? 'Host sites ignored. Travel is measured to the centre of each area instead, and no area is flagged for being unable to host.'
-              : `Travel is measured to the single best
-              host county in each area`} &mdash; the site it would actually run the meet at &mdash; not
-              to an empty point in the middle. A county needs at least this many members to count as
-              able to host.</div>
           </div>
         </div>
 
@@ -3507,9 +3571,9 @@ function renderAutoDialog(){
               ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest ${esc(weakestGroup(r,true)||'age group')} field vs average <b>(estimated)</b></span></div>`:''}
               ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
             </div>
-            ${(r.stats.hostless>0)?`<div class="bs-auto-err"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county big enough to host.</b>
-              Either lower the host-site threshold or redraw &mdash; an area that cannot run its own
-              championship is not a workable area.</div>`:''}
+            ${(r.stats.hostless>0)?`<div class="bs-auto-note"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county carrying 25+ members.</b>
+               This does not count against the map &mdash; whether somewhere can host is a facilities question.
+              Worth knowing when you come to bid them out.</div>`:''}
             ${(r.stats.chosenHost&&r.stats.chosenHost.some(x=>x>=0))?`
               <div class="bs-auto-legend"><b>Likely host counties:</b>
               ${r.stats.chosenHost.map((ci,i)=>ci>=0?hostLabel(ci):null).filter(Boolean).join(' · ')}</div>`:''}
@@ -3585,8 +3649,16 @@ window._bsAutoLock = function(i){
   }
   AUTO.result = null; renderAutoDialog();
 };
-window._bsAutoHost = function(h){ AUTO.hostMin = (h < 0 ? Infinity : h); AUTO.result=null; renderAutoDialog(); };
-window._bsAutoPreset = function(k){ AUTO.preset=k; AUTO.result=null; renderAutoDialog(); };
+window._bsAutoPreset = function(k){
+  // Click to add, click again to drop. Order of clicking IS the ranking, so
+  // there is nothing extra to drag.
+  AUTO.picks = AUTO.picks || [];
+  const at = AUTO.picks.indexOf(k);
+  if (at >= 0) AUTO.picks.splice(at, 1); else AUTO.picks.push(k);
+  if (!AUTO.picks.length) AUTO.picks = ['blend'];
+  AUTO.preset = AUTO.picks[0];
+  AUTO.result = null; renderAutoDialog();
+};
 window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
 window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
 
@@ -3605,14 +3677,16 @@ window._bsAutoRun = function(){
         const a = S.age && S.age[f] ? S.age[f][y] : null;
         return a ? [a[0]||0, a[1]||0, a[2]||0, a[3]||0] : [0,0,0,0];
       });
-      const p = AUTO_PRESETS.find(x=>x.k===AUTO.preset) || AUTO_PRESETS[0];
+      // Any blended objective that measures against today's map needs a
+      // baseline, not just the first-ranked one.
+      const needsBase = picksNeedBase();
       if (AUTO.whole){
         AUTO.result = autoAssignStates(A, w, AUTO.n);
         AUTO.result.wholeStates = true;
       } else {
         // "Keep today's map" measures against whatever is currently painted.
         let baseline = null;
-        if (p.needsBase){
+        if (needsBase){
           baseline = A.fips.map(f => {
             const v = S.assign[f];
             return (v == null || v < 0 || v >= AUTO.n) ? -1 : v;
@@ -3635,7 +3709,7 @@ window._bsAutoRun = function(){
           }
         }
         AUTO.result = smartAssign(A, {weights:w, ages, baseline, locked}, AUTO.n,
-                                  Object.assign({restarts:4, hostMin:AUTO.hostMin}, p.o));
+                                  Object.assign({restarts:4, hostMin:AUTO.hostMin}, blendedOptions()));
       }
       AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
