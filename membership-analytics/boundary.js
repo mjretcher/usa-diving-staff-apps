@@ -77,6 +77,7 @@ const S = {
   hostPer: 15,          // dollars per entry
   hostMin: 0,           // guaranteed minimum, whichever model is used
   hostPer_stop: null,   // {levelIdx|groupIdx: dollars} — a negotiated figure for one meet
+  tiersOpen: false,     // whether Names & structure is open, because YOU opened it
   loadedStamps: null,   // the data build a loaded scenario was saved against
   tripCost: null,       // per-stop travel and lodging
   costEvents: 2,        // events an athlete contests
@@ -387,7 +388,56 @@ function applyZoom(){
 }
 
 /* ---------- panel ---------- */
+
+/* ---------- keeping your place across a panel redraw ----------
+   Third time this has bitten: Pricing Studio, the report builder, now here.
+   Any panel that rebuilds its own innerHTML throws away three things people
+   care about -- where they were on the page, which control they were in, and
+   which collapsible sections they had opened. Every edit here calls
+   renderPanel, so without this, changing one dropdown in Names & structure
+   closes the section and returns you to the top of the page.
+
+   Open/closed state especially: it was derived from S.tierView rather than
+   from whether anyone had opened it, so opening it by hand was never recorded
+   anywhere and the next redraw simply undid it. */
+function bsKeep(){
+  const host = document.getElementById('bsPanel') || document.body;
+  const el = document.activeElement;
+  const st = {scroll: window.pageYOffset || document.documentElement.scrollTop || 0,
+              key: null, sel: null};
+  if (host && el && host.contains(el) && el !== host){
+    if (el.id) st.key = '#' + el.id;
+    else {
+      const parts = [];
+      for (let i = 0; i < el.attributes.length; i++){
+        const a = el.attributes[i];
+        if (a.name.indexOf('data-') === 0)
+          parts.push('[' + a.name + '="' + String(a.value).replace(/"/g, '\\"') + '"]');
+      }
+      if (parts.length) st.key = el.tagName.toLowerCase() + parts.join('');
+    }
+    try { st.sel = [el.selectionStart, el.selectionEnd]; } catch(e){ st.sel = null; }
+  }
+  return st;
+}
+function bsRestore(st){
+  if (!st) return;
+  const host = document.getElementById('bsPanel');
+  if (st.key && host){
+    let el = null;
+    try { el = host.querySelector(st.key); } catch(e){}
+    if (el){
+      try { el.focus({preventScroll: true}); } catch(e){ try { el.focus(); } catch(e2){} }
+      if (st.sel && st.sel[0] != null){
+        try { el.setSelectionRange(st.sel[0], st.sel[1]); } catch(e){}
+      }
+    }
+  }
+  if (st.scroll) { try { window.scrollTo(0, st.scroll); } catch(e){} }
+}
+
 function renderPanel(){
+  const _place = bsKeep();
   const y = S.year;
 
   const tierBtns = Array.from({length:levelCount()}, (_,i)=>
@@ -467,6 +517,7 @@ function renderPanel(){
   if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
   renderNumbers();
   wirePanel();
+  bsRestore(_place);
   loadScenarioList();
 }
 
@@ -613,7 +664,7 @@ function renderNamesPanel(){
     `<label class="bs-tier-row"><span class="bs-lvl">Level ${i+1}</span>
       <input class="bs-name-in bs-lvlname" data-lvl="${i}" value="${esc(tierName(i))}"></label>`).join('');
 
-  return `<details class="bs-tiers" ${S.tierView>0?'open':''}>
+  return `<details class="bs-tiers" ${S.tiersOpen ? 'open' : ''}>
     <summary>Names &amp; structure — rename anything, add or remove levels, set what rolls up into what</summary>
     <div class="bs-namebar">
       <span class="bs-lvl">Levels</span>
@@ -2368,6 +2419,9 @@ function wireTallyRows(){
 }
 
 function wirePanel(){
+  // Record open/closed as the user sets it, so the next redraw honours it.
+  const det = document.querySelector('details.bs-tiers');
+  if (det) det.addEventListener('toggle', () => { S.tiersOpen = det.open; });
   const P = document.getElementById('bsPanel');
   const bind = (id,f)=>{ const b=document.getElementById(id); if(b) b.addEventListener('click',f); };
   bind('bsToolCounty', ()=>{S.tool='county'; renderPanel();});
