@@ -282,6 +282,68 @@
     return CHAMPIONSHIP_RX.test(String(meetName || '')) ? 'world' : 'world-inv';
   }
 
+  /* ---------------- single-round form, rebuilt from the dive sheets ----------
+     core.result_phases carries a posted_score that is sometimes a cumulative
+     total. A US Senior 3m final posts prelim + semi + final: Sarah Bacon's
+     2023 posted 648.00 against a list DD of 15.10, which implies an execution
+     of 14.3 out of 10. Those rows had to be discarded, and discarding them
+     removed most American seniors from any comparison against a field.
+
+     Nothing was missing though — only mis-shaped. The dives are all in
+     core.dive_sheets, tagged by round, and the athlete bundle already loads
+     them. Summing that athlete's own dives for one round returns the
+     single-round score and the exact list DD: Bacon's 2023 final is 320.25
+     over 5 dives, DD 15.10, execution 7.070, and 320.25 + 327.75 for the
+     semifinal reconstitutes the posted 648.00 to the cent.
+
+     Recovers 6,391 cumulative finals across 91 meets. The remaining gap —
+     74,656 finals with no list DD, three quarters of them USA Diving and the
+     rest NCAA — is not recoverable this way: only 131 of them have any dive
+     sheet at all. That is a crawl gap, not an arithmetic one. */
+  function athleteRounds(bundle) {
+    if (!bundle || !bundle.sheets) return [];
+    if (bundle._rounds) return bundle._rounds;
+
+    // Phases carry meet_name, event_level and is_synchronized; sheets do not.
+    const byKey = new Map();
+    (bundle.phases || []).forEach((p) => {
+      byKey.set([p.meet_id, p.event_id, p.round_stage].join('|'), p);
+    });
+
+    const agg = new Map();
+    bundle.sheets.forEach((s) => {
+      if (s.score == null || !(num(s.dd) > 0)) return;
+      const k = [s.meet_id, s.event_id, s.round_stage].join('|');
+      let a = agg.get(k);
+      if (!a) {
+        const p = byKey.get(k);
+        a = {
+          meet_id: s.meet_id, event_id: s.event_id, round_stage: s.round_stage,
+          gender: s.gender, discipline: s.discipline, meet_year: num(s.meet_year),
+          competition_family: s.competition_family, event_name: s.event_name,
+          meet_name: p ? p.meet_name : null,
+          event_level: p ? p.event_level : null,
+          // Fall back to the event name when no phase row matched, so a synchro
+          // sheet without a phase cannot leak into an individual comparison.
+          synchro: p ? truthy(p.is_synchronized) : /synchro/i.test(s.event_name || ''),
+          score: 0, dd: 0, nDives: 0,
+        };
+        agg.set(k, a);
+      }
+      a.score += num(s.score); a.dd += num(s.dd); a.nDives += 1;
+    });
+
+    const out = [];
+    agg.forEach((a) => {
+      if (a.synchro || !(a.dd > 0) || !a.nDives) return;
+      a.exec = a.score / (3 * a.dd);
+      a.scope = scopeOf(a);
+      out.push(a);
+    });
+    bundle._rounds = out;
+    return out;
+  }
+
   // The scope of a single result row, matching the CASE in build_analytics.py.
   function scopeOf(p) {
     if (p.competition_family === 'World Aquatics') return worldTier(p.meet_name);
@@ -586,7 +648,7 @@
   window.AE = {
     esc, escJsAttr, num, truthy, q,
     isIndiv, execOf, parseJudges, catOf, CAT_NAMES, CAT_ORDER,
-    isRulebookDive, bucketOf, SCOPES, scopeOf, worldTier, normGender, GUARD, ok, thinNote,
+    isRulebookDive, bucketOf, SCOPES, scopeOf, worldTier, athleteRounds, normGender, GUARD, ok, thinNote,
     mean, sd, quantile,
     searchAthletes, loadAthlete, diveStats,
     benchmarks, fieldGroupExec, fieldGroupExecVO, fieldListDD, buildMeta,

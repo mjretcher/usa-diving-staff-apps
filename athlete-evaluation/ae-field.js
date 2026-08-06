@@ -85,13 +85,20 @@
   // Score decomposed by finishing band: is the podium winning on difficulty
   // or on execution? Score = 3 x SUM(DD x execution), and result_phases
   // carries phase_dd_sum, so the split is exact rather than estimated.
+  // analytics.round_profile, not event_profile. event_profile drops every meet
+  // scored across prelim, semi and final, which for US seniors removes
+  // Nationals and leaves the podium band resting on club invitationals: the
+  // Women 3m 5-dive senior podium reads 211.4 there against 244.4 once the
+  // championship meets are included. round_profile is built the same way an
+  // athlete's own form now is — dives summed within a round — so both sides of
+  // every comparison on this page come from the same meets.
   async function loadProfile() {
-    const r = await q(`SELECT scope, gender, discipline, dive_count, meet_year, band,
-                              n, avg_score, avg_list_dd, avg_exec, p50_score, p90_score
-                       FROM analytics.event_profile
+    const r = await q(`SELECT scope, gender, discipline, n_dives AS dive_count, meet_year, band,
+                              n, avg_score, avg_list_dd, avg_exec, p50_score, n_meets
+                       FROM analytics.round_profile
                        WHERE meet_year >= 2018`);
     r.rows.forEach((x) => ['dive_count','meet_year','n','avg_score','avg_list_dd','avg_exec',
-      'p50_score','p90_score'].forEach((k) => { x[k] = num(x[k]); }));
+      'p50_score','n_meets'].forEach((k) => { x[k] = num(x[k]); }));
     return r.rows;
   }
 
@@ -129,25 +136,24 @@
 
   function athleteMark(scope, gender, discipline, diveCount) {
     const b = window.AE.state && window.AE.state.bundle;
-    if (!b || !b.phases || !b.phases.length) return null;
-    const truthy = window.AE.truthy;
-    const rows = b.phases.filter((p) =>
-      p.round_stage === 'Final' &&
-      !truthy(p.score_is_cumulative) &&
-      !truthy(p.is_synchronized) &&
-      p.gender === gender && p.discipline === discipline &&
-      num(p.phase_dive_count) === diveCount &&
-      num(p.meet_year) >= 2018 &&
-      num(p.posted_score) != null &&
-      phaseScope(p) === scope);
+    if (!b) return null;
+    // Rebuilt from the athlete's own dives rather than read off posted_score,
+    // so a cumulative posting is a single-round score here rather than a row
+    // that has to be thrown away.
+    const rows = window.AE.athleteRounds(b).filter((r) =>
+      r.round_stage === 'Final' &&
+      r.gender === gender && r.discipline === discipline &&
+      r.nDives === diveCount && r.meet_year >= 2018 &&
+      r.exec >= 2 && r.exec <= 10 &&
+      r.scope === scope);
     if (!rows.length) return null;
-    const scores = rows.map((p) => num(p.posted_score)).sort((a, b2) => a - b2);
-    const years = rows.map((p) => num(p.meet_year));
+    const scores = rows.map((r) => r.score).sort((a, b2) => a - b2);
+    const years = rows.map((r) => r.meet_year);
     // Recent form is the median of the last three finals, not the personal
     // best: a best is one good day and consistently overstates where an
     // athlete would land at the next meet.
-    const byRecent = rows.slice().sort((a, b2) => num(b2.meet_year) - num(a.meet_year)).slice(0, 3);
-    const rec = byRecent.map((p) => num(p.posted_score)).sort((a, b2) => a - b2);
+    const byRecent = rows.slice().sort((a, b2) => b2.meet_year - a.meet_year).slice(0, 3);
+    const rec = byRecent.map((r) => r.score).sort((a, b2) => a - b2);
     return {
       n: rows.length,
       best: scores[scores.length - 1],
@@ -191,20 +197,14 @@
   // than a remarkable dive. Those are dropped rather than averaged in.
   function athleteSplit(scope, gender, discipline, diveCount) {
     const b = window.AE.state && window.AE.state.bundle;
-    if (!b || !b.phases) return null;
-    const truthy = window.AE.truthy;
-    const base = b.phases.filter((p) =>
-      p.round_stage === 'Final' &&
-      !truthy(p.score_is_cumulative) && !truthy(p.is_synchronized) &&
-      p.gender === gender && p.discipline === discipline &&
-      num(p.phase_dive_count) === diveCount &&
-      num(p.meet_year) >= 2018 &&
-      num(p.posted_score) != null && num(p.phase_dd_sum) > 0);
-
-    const usable = base.filter((p) => {
-      const e = num(p.posted_score) / (3 * num(p.phase_dd_sum));
-      return e >= 2 && e <= 10;
-    });
+    if (!b) return null;
+    const base = window.AE.athleteRounds(b).filter((r) =>
+      r.round_stage === 'Final' &&
+      r.gender === gender && r.discipline === discipline &&
+      r.nDives === diveCount && r.meet_year >= 2018);
+    // The implausible-execution guard still earns its place: it now catches a
+    // partially scraped round rather than a cumulative posting.
+    const usable = base.filter((r) => r.exec >= 2 && r.exec <= 10);
     if (!usable.length) return null;
 
     // Strictly like-for-like. An earlier version widened to other fields when
@@ -213,55 +213,55 @@
     // against a world podium showed a 230-point gap that says nothing about
     // his 3m. Execution marks are also not comparable across meet levels.
     // Coverage is the comparison selector's job, not a silent substitution.
-    const use = usable.filter((p) => phaseScope(p) === scope);
+    const use = usable.filter((r) => r.scope === scope);
     // One final is an anecdote. Two is the minimum from which "current form"
     // means anything, and the count is always shown either way.
     if (use.length < 2) return null;
 
-    const recent = use.slice().sort((a, b2) => num(b2.meet_year) - num(a.meet_year)).slice(0, 3);
-    const dd = window.AE.mean(recent.map((p) => num(p.phase_dd_sum)));
-    const ex = window.AE.mean(recent.map((p) => num(p.posted_score) / (3 * num(p.phase_dd_sum))));
-    const scopes = [...new Set(recent.map((p) => scopeName(phaseScope(p))))];
+    const recent = use.slice().sort((a, b2) => b2.meet_year - a.meet_year).slice(0, 3);
+    const dd = window.AE.mean(recent.map((r) => r.dd));
+    const ex = window.AE.mean(recent.map((r) => r.exec));
+    const scopes = [...new Set(recent.map((r) => scopeName(r.scope)))];
     return {
       dd, exec: ex, score: 3 * dd * ex,
       n: recent.length, pool: use.length, scopes,
-      y0: Math.min(...recent.map((p) => num(p.meet_year))),
-      y1: Math.max(...recent.map((p) => num(p.meet_year))),
+      y0: Math.min(...recent.map((r) => r.meet_year)),
+      y1: Math.max(...recent.map((r) => r.meet_year)),
       dropped: base.length - usable.length,
       name: (b.ident && b.ident.display_name) || 'Selected athlete',
     };
   }
 
-  // "No data" is the wrong thing to tell someone who plainly has results. Sarah
-  // Bacon has a stack of US Senior finals; every one is cumulative, because
-  // that final is scored prelim plus semi plus final. Comparing her 639.00 to a
-  // world podium's 348 would show her 290 points clear of it. The exclusion is
-  // right — but saying which exclusion applied is what makes it trustworthy
-  // rather than just opaque.
+  // Naming the actual blocker, not a generic absence. Cumulative scoring used
+  // to be the usual answer here; those finals are now rebuilt from their dives,
+  // so what is left is genuinely missing data rather than mis-shaped data.
   function splitBlockers(scope) {
     const b = window.AE.state && window.AE.state.bundle;
     const nm = (b && b.ident && b.ident.display_name) || 'This athlete';
     const truthy = window.AE.truthy;
-    const fin = (b.phases || []).filter((p) =>
+    const finals = (b.phases || []).filter((p) =>
       p.round_stage === 'Final' && !truthy(p.is_synchronized) && num(p.meet_year) >= 2018);
-    if (!fin.length) return `No finals on record for ${esc(nm)} since 2018.`;
+    if (!finals.length) return `No finals on record for ${esc(nm)} since 2018.`;
 
-    const cum = fin.filter((p) => truthy(p.score_is_cumulative)).length;
-    const noDD = fin.filter((p) => !truthy(p.score_is_cumulative)
-      && !(num(p.phase_dd_sum) > 0 && num(p.phase_dive_count) > 0)).length;
-    const inScope = fin.filter((p) => !truthy(p.score_is_cumulative)
-      && num(p.phase_dd_sum) > 0 && phaseScope(p) === scope).length;
+    const rounds = window.AE.athleteRounds(b).filter((r) =>
+      r.round_stage === 'Final' && r.meet_year >= 2018);
+    const noSheet = finals.length - rounds.length;
+    const inScope = rounds.filter((r) => r.scope === scope && r.exec >= 2 && r.exec <= 10).length;
 
     const bits = [];
-    if (cum) bits.push(`${cum} ${cum === 1 ? 'is' : 'are'} scored cumulatively — a total carried
-      across prelims and semis is not a single-round score and cannot be set against a podium average`);
-    if (noDD) bits.push(`${noDD} ${noDD === 1 ? 'has' : 'have'} no list DD recorded, so
-      ${noDD === 1 ? 'it' : 'they'} cannot be split into difficulty and execution`);
-    if (!inScope) bits.push(`none of what remains is in ${esc(scopeName(scope))}`);
-    else if (inScope < 2) bits.push(`only ${inScope} of what remains is in
-      ${esc(scopeName(scope))}, and one meet is an anecdote rather than current form`);
-    return `${esc(nm)} has ${fin.length} final${fin.length === 1 ? '' : 's'} on record since 2018,
-      but ${bits.join('; ')}. Switching the comparison field above may give a usable match.`;
+    if (!rounds.length) {
+      bits.push(`none of them has a dive sheet on file, so there is no list DD to split a score
+        into difficulty and execution — that is a gap in what has been scraped, not in their diving`);
+    } else {
+      if (noSheet > 0) bits.push(`${noSheet} of them ${noSheet === 1 ? 'has' : 'have'} no dive
+        sheet on file, so ${noSheet === 1 ? 'it cannot' : 'they cannot'} be split`);
+      if (!inScope) bits.push(`none of the ${rounds.length} that can be split
+        ${rounds.length === 1 ? 'is' : 'are'} in ${esc(scopeName(scope))}`);
+      else if (inScope < 2) bits.push(`only ${inScope} of them is in ${esc(scopeName(scope))},
+        and one meet is an anecdote rather than current form`);
+    }
+    return `${esc(nm)} has ${finals.length} final${finals.length === 1 ? '' : 's'} on record since
+      2018, but ${bits.join('; ')}. Switching the comparison field above may give a usable match.`;
   }
 
   function diagnosisHtml(profile) {
