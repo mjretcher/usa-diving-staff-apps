@@ -44,6 +44,10 @@ FETCH_BUDGET = int(os.environ.get("FETCH_BUDGET") or 1100)
 # Mirrors dm_results.py: a meet is only "done" once it ended this many days
 # ago, so a crawl run mid-meet cannot latch the flag and strand the rest.
 QUIET_DAYS = int(os.environ.get("QUIET_DAYS") or 3)
+# How many passes a meet gets before its unreachable sheets are accepted as
+# gaps and it is let out of the queue. Without a ceiling one permanently
+# 500ing URL blocks every meet behind it indefinitely.
+MAX_SHEET_ATTEMPTS = int(os.environ.get("MAX_SHEET_ATTEMPTS") or 3)
 ONLY_MEET = (os.environ.get("MEET_ID") or "").strip()
 # Wall-clock deadline. FETCH_BUDGET alone is a poor proxy for time because
 # sheet counts per meet vary enormously, and at 2400 the run landed at 39-45
@@ -181,12 +185,27 @@ def crawl_meet(meet_id):
             continue
         for d in dives:
             all_rows.append((meet_id, event_id, rnd, profile_id, sheet_key) + d)
+    # Partial data is kept, and a failure no longer discards the run.
+    #
+    # This used to raise before the write, on any failure at all. Two things
+    # followed. A meet with 200 good sheets and one dead URL saved nothing.
+    # And because main() did not catch it, that one meet killed the whole
+    # batch — then sat at the head of the queue and killed the next one
+    # identically. divemeets.sheet_dives stopped growing on 2026-08-06 against
+    # `meet 2885: 1 sheet fetches failed; first: 311/9/34038: HTTP 500`, with
+    # 1,064 meets behind it holding crawled results and no dive sheets at all.
+    #
+    # A 500 on a 2013 sheet is not transient and will not clear on a rerun, so
+    # retrying it forever is just a stuck queue. Rows are written either way;
+    # the meet stays open for MAX_SHEET_ATTEMPTS more passes, then closes with
+    # the dead sheets named in sheets_note so the gap is on the record rather
+    # than silently absent.
+    note_bits = []
+    if empties:
+        note_bits.append(f"{empties} sheets with no dive rows")
     if failures:
-        # refuse to mark the meet done on fetch failures — rerun will retry
-        raise RuntimeError(
-            f"meet {meet_id}: {len(failures)} sheet fetches failed; "
-            f"first: {failures[0]}")
-    note = f"{empties} sheets with no dive rows" if empties else None
+        note_bits.append(f"{len(failures)} fetch failures: " + "; ".join(failures[:3]))
+    note = " | ".join(note_bits) or None
     conn = db(); conn.autocommit = False; cur = conn.cursor()
     cur.execute("DELETE FROM divemeets.sheet_dives WHERE meet_id=%s", (meet_id,))
     if all_rows:
@@ -202,16 +221,27 @@ def crawl_meet(meet_id):
     # was still being contested has not had all its sheets seen, and latching
     # the flag removes it from the queue for good. QUIET_DAYS matches the
     # results crawler so the two stay in step.
+    cur.execute("""ALTER TABLE divemeets.meets
+                   ADD COLUMN IF NOT EXISTS sheets_attempts int NOT NULL DEFAULT 0""")
     cur.execute(
         """UPDATE divemeets.meets
-           SET sheets_done = (coalesce(end_date, start_date) IS NOT NULL
-                              AND coalesce(end_date, start_date) <= current_date - %s::int),
+           SET sheets_attempts = sheets_attempts + 1,
+               sheets_done = (coalesce(end_date, start_date) IS NOT NULL
+                              AND coalesce(end_date, start_date) <= current_date - %s::int
+                              AND (%s = 0 OR sheets_attempts + 1 >= %s)),
                sheets_note = %s, sheets_crawled_at = now()
-           WHERE meet_id = %s""", (QUIET_DAYS, note, meet_id))
+           WHERE meet_id = %s""",
+        (QUIET_DAYS, len(failures), MAX_SHEET_ATTEMPTS, note, meet_id))
     conn.commit(); cur.close(); conn.close()
     return len(targets), len(all_rows), note
 
 def main():
+    # The queue orders on sheets_attempts, so it has to exist before the first
+    # SELECT, not merely before the first UPDATE.
+    _c = db(); _k = _c.cursor()
+    _k.execute("""ALTER TABLE divemeets.meets
+                  ADD COLUMN IF NOT EXISTS sheets_attempts int NOT NULL DEFAULT 0""")
+    _c.commit(); _k.close(); _c.close()
     meets_done = 0
 
     if ONLY_MEET:
@@ -234,7 +264,7 @@ def main():
                            WHERE r.meet_id=m.meet_id AND r.sheet_key IS NOT NULL)
                    FROM divemeets.meets m
                    WHERE {scope_sql} AND m.results_done AND NOT m.sheets_done
-                   ORDER BY m.start_date DESC, m.meet_id DESC""",
+                   ORDER BY coalesce(m.sheets_attempts, 0), m.start_date DESC, m.meet_id DESC""",
                 scope_params)
             # A meet must fit the run whole -- the transaction is per-meet, so a
             # meet cut off by the timeout is rolled back and re-fetched next
@@ -251,7 +281,25 @@ def main():
                     f"({time_left_s()/60:.1f} min left, {rate:.2f}s/fetch)")
                 break
             meet_id, name = pick
-            n_t, n_d, note = crawl_meet(meet_id)
+            # One meet must never take the batch down with it.
+            try:
+                n_t, n_d, note = crawl_meet(meet_id)
+            except Exception as e:
+                log(f"meet {meet_id} {name!r}: FAILED — {str(e)[:160]}")
+                try:
+                    c2 = db(); k2 = c2.cursor()
+                    k2.execute("""ALTER TABLE divemeets.meets
+                                  ADD COLUMN IF NOT EXISTS sheets_attempts int NOT NULL DEFAULT 0""")
+                    k2.execute("""UPDATE divemeets.meets
+                                  SET sheets_attempts = sheets_attempts + 1,
+                                      sheets_done = (sheets_attempts + 1 >= %s),
+                                      sheets_note = %s, sheets_crawled_at = now()
+                                  WHERE meet_id = %s""",
+                               (MAX_SHEET_ATTEMPTS, f"crawl error: {str(e)[:200]}", meet_id))
+                    c2.commit(); k2.close(); c2.close()
+                except Exception as e2:
+                    log(f"  (could not record the failure: {str(e2)[:100]})")
+                continue
             meets_done += 1
             log(f"meet {meet_id} {name!r}: {n_t} sheets -> {n_d} dives"
                 f"{' [' + note + ']' if note else ''}")
