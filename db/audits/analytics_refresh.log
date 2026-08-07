@@ -10,4 +10,4 @@
 [build_analytics] field judge spread built
 [build_analytics] la28 watch built
 [build_analytics] usad_app SELECT re-granted on analytics
-[build_analytics] done: {'athlete_identity': '28273', 'athlete_directory': '28273', 'benchmarks': '53076', 'field_group_exec': '2103', 'field_group_exec_vo': '3372', 'event_profile': '2591', 'rank_cost': '1855', 'field_list_dd': '280', 'cohort_seniors': '3837', 'corridor_marks': '3019', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '10436'}
+[build_analytics] done: {'athlete_identity': '28273', 'athlete_directory': '28273', 'benchmarks': '53076', 'field_group_exec': '2195', 'field_group_exec_vo': '3514', 'event_profile': '2674', 'rank_cost': '1855', 'field_list_dd': '291', 'cohort_seniors': '3837', 'corridor_marks': '3019', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '10555'}
