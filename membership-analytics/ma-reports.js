@@ -32,6 +32,19 @@ const fmt  = n => Number(n||0).toLocaleString('en-US');
 const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
 
 const fmt1 = n => (Number(n)||0).toFixed(1);
+/* If shared/usad-keepplace.js is not loaded, every redraw silently goes back to
+   throwing away your scroll position and open sections -- the exact bug it was
+   written to stop, reintroduced by a missing script tag and invisible. Say so
+   once. */
+let _keepWarned = false;
+function keepPlace(target){
+  if (window.KeepPlace) return KeepPlace.capture(target);
+  if (!_keepWarned){ _keepWarned = true;
+    console.warn('shared/usad-keepplace.js is not loaded — this panel will lose your scroll position and open sections on every redraw.'); }
+  return null;
+}
+function keepRestore(st, target){ if (window.KeepPlace) KeepPlace.restore(st, target); }
+
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function sq(s){ return "'" + String(s==null?'':s).replace(/'/g,"''") + "'"; }
 function pctS(a,b){ return b>0 ? (100*a/b).toFixed(1)+'%' : '—'; }
@@ -1606,44 +1619,12 @@ function pickTemplate(id, silent){
   if (!silent) renderBuilder();
 }
 
-/* ---------- keeping your place ----------
-   Every click here -- a template, a section, a year -- rebuilt the whole
-   modal's HTML, which discards focus and sends the scroll position back to the
-   top. With nine templates and five section groups that means scrolling back
-   down after every single choice. Record where you were and put you back. */
-function rbPlace(){
-  const m = document.getElementById('mr-modal');
-  const box = m && (m.querySelector('.mr-modal-body') || m.firstElementChild);
-  const el = document.activeElement;
-  let key = null;
-  if (m && el && m.contains(el)){
-    const parts = [];
-    for (let i = 0; i < el.attributes.length; i++){
-      const a = el.attributes[i];
-      if (a.name.indexOf('data-') === 0) parts.push(`[${a.name}="${String(a.value).replace(/"/g,'\\"')}"]`);
-    }
-    if (el.id) key = '#' + el.id;
-    else if (parts.length) key = el.tagName.toLowerCase() + parts.join('');
-  }
-  return {top: box ? box.scrollTop : 0, win: window.pageYOffset || 0, key};
-}
-function rbRestore(p){
-  if (!p) return;
-  const m = document.getElementById('mr-modal');
-  const box = m && (m.querySelector('.mr-modal-body') || m.firstElementChild);
-  if (box && p.top) box.scrollTop = p.top;
-  if (p.win) { try { window.scrollTo(0, p.win); } catch(e){} }
-  if (p.key && m){
-    let el = null;
-    try { el = m.querySelector(p.key); } catch(e){}
-    if (el) { try { el.focus({preventScroll:true}); } catch(e){ try{ el.focus(); }catch(e2){} } }
-  }
-}
+/* Keeping your place across a redraw lives in shared/usad-keepplace.js. */
 
 function renderBuilder(){
   const m = document.getElementById('mr-modal');
   if (!m) return;
-  const place = rbPlace();
+  const place = keepPlace('mr-modal');
   const sel = rbYears();
   const canGo = RB.sections.size > 0;
   const groups = {};
@@ -1757,7 +1738,7 @@ function renderBuilder(){
       </div>
     </div>
   </div>`;
-  rbRestore(place);
+  keepRestore(place, 'mr-modal');
 }
 
 window._mrClose = function(){ const m=document.getElementById('mr-modal'); if (m) m.remove(); };

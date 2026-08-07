@@ -104,6 +104,19 @@ const S = {
 const fmt = n => Number(n||0).toLocaleString('en-US');
 const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
 
+/* If shared/usad-keepplace.js is not loaded, every redraw silently goes back to
+   throwing away your scroll position and open sections -- the exact bug it was
+   written to stop, reintroduced by a missing script tag and invisible. Say so
+   once. */
+let _keepWarned = false;
+function keepPlace(target){
+  if (window.KeepPlace) return KeepPlace.capture(target);
+  if (!_keepWarned){ _keepWarned = true;
+    console.warn('shared/usad-keepplace.js is not loaded — this panel will lose your scroll position and open sections on every redraw.'); }
+  return null;
+}
+function keepRestore(st, target){ if (window.KeepPlace) KeepPlace.restore(st, target); }
+
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function defaultRegions(n){
@@ -389,55 +402,12 @@ function applyZoom(){
 
 /* ---------- panel ---------- */
 
-/* ---------- keeping your place across a panel redraw ----------
-   Third time this has bitten: Pricing Studio, the report builder, now here.
-   Any panel that rebuilds its own innerHTML throws away three things people
-   care about -- where they were on the page, which control they were in, and
-   which collapsible sections they had opened. Every edit here calls
-   renderPanel, so without this, changing one dropdown in Names & structure
-   closes the section and returns you to the top of the page.
-
-   Open/closed state especially: it was derived from S.tierView rather than
-   from whether anyone had opened it, so opening it by hand was never recorded
-   anywhere and the next redraw simply undid it. */
-function bsKeep(){
-  const host = document.getElementById('bsPanel') || document.body;
-  const el = document.activeElement;
-  const st = {scroll: window.pageYOffset || document.documentElement.scrollTop || 0,
-              key: null, sel: null};
-  if (host && el && host.contains(el) && el !== host){
-    if (el.id) st.key = '#' + el.id;
-    else {
-      const parts = [];
-      for (let i = 0; i < el.attributes.length; i++){
-        const a = el.attributes[i];
-        if (a.name.indexOf('data-') === 0)
-          parts.push('[' + a.name + '="' + String(a.value).replace(/"/g, '\\"') + '"]');
-      }
-      if (parts.length) st.key = el.tagName.toLowerCase() + parts.join('');
-    }
-    try { st.sel = [el.selectionStart, el.selectionEnd]; } catch(e){ st.sel = null; }
-  }
-  return st;
-}
-function bsRestore(st){
-  if (!st) return;
-  const host = document.getElementById('bsPanel');
-  if (st.key && host){
-    let el = null;
-    try { el = host.querySelector(st.key); } catch(e){}
-    if (el){
-      try { el.focus({preventScroll: true}); } catch(e){ try { el.focus(); } catch(e2){} }
-      if (st.sel && st.sel[0] != null){
-        try { el.setSelectionRange(st.sel[0], st.sel[1]); } catch(e){}
-      }
-    }
-  }
-  if (st.scroll) { try { window.scrollTo(0, st.scroll); } catch(e){} }
-}
+/* Keeping your place across a redraw lives in shared/usad-keepplace.js. The
+   open/closed state of Names & structure is handled there too, so S.tiersOpen
+   only has to record what the user chose. */
 
 function renderPanel(){
-  const _place = bsKeep();
+  const _place = keepPlace('bsPanel');
   const y = S.year;
 
   const tierBtns = Array.from({length:levelCount()}, (_,i)=>
@@ -517,7 +487,7 @@ function renderPanel(){
   if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
   renderNumbers();
   wirePanel();
-  bsRestore(_place);
+  keepRestore(_place, 'bsPanel');
   loadScenarioList();
 }
 

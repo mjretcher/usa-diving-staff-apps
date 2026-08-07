@@ -49,6 +49,19 @@ const MEMBER_TYPES = [
 ];
 
 /* ---------- event fee card (2026 Junior Circuit, Athlete Progression Guide) ---------- */
+/* If shared/usad-keepplace.js is not loaded, every redraw silently goes back to
+   throwing away your scroll position and open sections -- the exact bug it was
+   written to stop, reintroduced by a missing script tag and invisible. Say so
+   once. */
+let _keepWarned = false;
+function keepPlace(target){
+  if (window.KeepPlace) return KeepPlace.capture(target);
+  if (!_keepWarned){ _keepWarned = true;
+    console.warn('shared/usad-keepplace.js is not loaded — this panel will lose your scroll position and open sections on every redraw.'); }
+  return null;
+}
+function keepRestore(st, target){ if (window.KeepPlace) KeepPlace.restore(st, target); }
+
 function defaultFees(levelCount){
   // levelCount counts painted levels; the final championship is one more.
   const base = [
@@ -1865,57 +1878,13 @@ function provLegend(){
     '</div>';
 }
 
-/* ---------- keeping your place across a redraw ----------
-   Every edit rebuilds the panel's HTML, which in a browser discards focus AND
-   resets the scroll position: change a fee, press tab, and you are thrown back
-   to the top of an eight-card page. Rather than restructure eight tested cards
-   into a shell/numbers split, the redraw records which field you were in and
-   where you were on the page, then puts you back. Fields are identified by
-   their data-* attributes, which survive the rebuild because they are how the
-   handlers find them in the first place. */
-function fieldKey(el){
-  if (!el || !el.attributes || !el.tagName) return null;
-  if (el.id) return '#' + el.id;
-  const parts = [];
-  for (let i=0; i<el.attributes.length; i++){
-    const a = el.attributes[i];
-    if (a.name.indexOf('data-') === 0) parts.push('[' + a.name + '="' + String(a.value).replace(/"/g,'\\"') + '"]');
-  }
-  return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
-}
-function capturePlace(){
-  const host = document.getElementById('viewPricing');
-  const el = document.activeElement;
-  const st = {scroll: (window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0),
-              key:null, sel:null};
-  if (host && el && host.contains(el) && el !== host){
-    st.key = fieldKey(el);
-    // Number inputs throw on selectionStart in some browsers; the position is
-    // not worth an exception.
-    try { st.sel = [el.selectionStart, el.selectionEnd]; } catch(e){ st.sel = null; }
-  }
-  return st;
-}
-function restorePlace(st){
-  if (!st) return;
-  const host = document.getElementById('viewPricing');
-  if (st.key && host){
-    let el = null;
-    try { el = host.querySelector(st.key); } catch(e){ el = null; }
-    if (el){
-      try { el.focus({preventScroll:true}); } catch(e){ try { el.focus(); } catch(e2){} }
-      if (st.sel && st.sel[0] != null){
-        try { el.setSelectionRange(st.sel[0], st.sel[1]); } catch(e){}
-      }
-    }
-  }
-  if (st.scroll) { try { window.scrollTo(0, st.scroll); } catch(e){} }
-}
+/* Keeping your place across a redraw now lives in shared/usad-keepplace.js --
+   this was the first of three identical fixes in one day. */
 
 function render(){
   const host = document.getElementById('viewPricing');
   if (!host) return;
-  const place = capturePlace();
+  const place = keepPlace('viewPricing');
   if (PS.err){
     host.innerHTML = `<div class="card"><div class="card-b"><p><b>Pricing Studio could not load.</b></p>
       <p class="note mono">${esc(PS.err)}</p></div></div>`;
@@ -1940,7 +1909,7 @@ function render(){
     body;
 
   wire();
-  restorePlace(place);
+  keepRestore(place, 'viewPricing');
 }
 
 /* ---------- events ---------- */
