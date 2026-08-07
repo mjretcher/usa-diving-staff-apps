@@ -1,29 +1,29 @@
 {
-  "generated": "2026-08-06T12:12:29Z",
+  "generated": "2026-08-07T01:35:51Z",
   "meets": {
     "12923": {
       "entries": 719,
       "events": 24,
-      "fetched": "2026-08-06 12:10",
+      "fetched": "2026-08-07 01:33",
       "individual": 719,
       "max_round": "Prelim",
       "min_round": "Prelim",
       "synchro": 0
     },
     "12924": {
-      "entries": 98,
+      "entries": 97,
       "events": 6,
-      "fetched": "2026-08-06 12:11",
-      "individual": 98,
+      "fetched": "2026-08-07 01:35",
+      "individual": 97,
       "max_round": "Prelim",
       "min_round": "Prelim",
       "synchro": 0
     },
     "12925": {
-      "entries": 79,
+      "entries": 110,
       "events": 6,
-      "fetched": "2026-08-06 12:12",
-      "individual": 79,
+      "fetched": "2026-08-07 01:35",
+      "individual": 110,
       "max_round": "Prelim",
       "min_round": "Prelim",
       "synchro": 0
