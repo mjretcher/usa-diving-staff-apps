@@ -406,6 +406,118 @@ function applyZoom(){
    open/closed state of Names & structure is handled there too, so S.tiersOpen
    only has to record what the user chose. */
 
+
+/* ---------- time zones ----------
+   An area spanning two time zones is a scheduling problem before it is anything
+   else: warm-ups, session starts and travel days all have to be quoted in
+   something, and half the area reads it wrong. It also lengthens the real
+   travel day at one end without showing up in a mileage figure.
+
+   Most states sit wholly in one zone. Thirteen do not, and rather than pretend
+   otherwise the split ones are handled by name where the list is short and
+   exact, and by an east/west line through the state where it is long. The line
+   is drawn on the map's own projected coordinates, so it follows the map rather
+   than a longitude the map does not use.
+
+   This is good enough to plan around and NOT a legal boundary: the Navajo
+   Nation observes DST inside Arizona, a few counties straddle the line
+   properly, and no attempt is made to model either. It is labelled as
+   approximate wherever it is shown. */
+const TZ_STATE = {
+  CT:'ET', DE:'ET', DC:'ET', GA:'ET', ME:'ET', MD:'ET', MA:'ET', NH:'ET', NJ:'ET',
+  NY:'ET', NC:'ET', OH:'ET', PA:'ET', RI:'ET', SC:'ET', VT:'ET', VA:'ET', WV:'ET',
+  AL:'CT', AR:'CT', IL:'CT', IA:'CT', LA:'CT', MN:'CT', MS:'CT', MO:'CT', OK:'CT', WI:'CT',
+  AZ:'MT', CO:'MT', MT:'MT', NM:'MT', UT:'MT', WY:'MT',
+  CA:'PT', WA:'PT', NV:'PT',
+  AK:'AKT', HI:'HAT', PR:'AST', VI:'AST', GU:'ChT',
+  // Split states, listed by the zone MOST of the state keeps. Without these
+  // every county not named in an exception list below falls through with no
+  // zone at all -- 804 of them, including Houston, Miami and Detroit.
+  TX:'CT', FL:'ET', MI:'ET', IN:'ET', KS:'CT', NE:'CT', ND:'CT', SD:'CT',
+  OR:'PT', ID:'MT',
+};
+/* Short, exact county lists. */
+const TZ_COUNTY = {};
+[['MI','CT',['26053','26071','26043','26109']],                       // western UP
+ ['TX','MT',['48141','48229']],                                       // El Paso, Hudspeth
+ ['KS','MT',['20181','20199','20071','20075']],                       // NW corner
+ ['OR','MT',['41045']],                                               // Malheur
+ ['ID','PT',['16055','16017','16009','16021','16035','16057','16069','16079']],
+ ['FL','CT',['12005','12013','12033','12045','12059','12063','12091','12113','12131','12133']],
+ ['IN','CT',['18051','18173','18163','18129','18147','18123','18125','18037','18027','18083','18101','18089','18127','18091','18073','18111']],
+ ['NE','MT',['31007','31015','31029','31033','31045','31049','31057','31069','31091','31105','31123','31135','31157','31161','31165']],
+ ['ND','MT',['38007','38011','38013','38025','38033','38037','38041','38043','38053','38059','38065','38085','38087','38089']],
+ ['SD','MT',['46007','46019','46031','46033','46047','46055','46063','46071','46081','46093','46102','46103','46105','46113','46117','46137']],
+].forEach(([st,tz,list]) => list.forEach(f => { TZ_COUNTY[f] = tz; }));
+
+/* Long splits, drawn on the map's own x axis rather than a county list.
+   Threshold is a projected x in the viewBox; west of it is the earlier zone. */
+/* Calibrated against counties whose zone is not in doubt: in Kentucky the line
+   falls between Bowling Green (Central, x 670) and Louisville (Eastern, x 680);
+   in Tennessee between Nashville (Central, x 665) and Knoxville (Eastern,
+   x 717), which is roughly the Cumberland Plateau where the real line runs. */
+const TZ_LINE = { KY:{split:675, west:'CT', east:'ET'},
+                  TN:{split:692, west:'CT', east:'ET'} };
+
+const TZ_NAME = {ET:'Eastern', CT:'Central', MT:'Mountain', PT:'Pacific',
+                 AKT:'Alaska', HAT:'Hawaii', AST:'Atlantic', ChT:'Chamorro'};
+
+function tzOf(fips, st, cx){
+  if (TZ_COUNTY[fips]) return TZ_COUNTY[fips];
+  const line = TZ_LINE[st];
+  if (line && cx != null) return cx < line.split ? line.west : line.east;
+  return TZ_STATE[st] || null;
+}
+
+/* Which zones an area covers, and how its members split across them. */
+/* A per-county zone array in the optimiser's own index order, so scoring can
+   ask "same zone?" without a lookup per comparison. */
+function tzIndexFor(A){
+  if (!A || !A.fips) return null;
+  const codes = ['ET','CT','MT','PT','AKT','HAT','AST','ChT'];
+  const out = new Int8Array(A.fips.length);
+  for (let i = 0; i < A.fips.length; i++){
+    const z = tzOf(A.fips[i], A.st ? A.st[i] : null, A.cx ? A.cx[i] : null);
+    out[i] = z ? codes.indexOf(z) : -1;
+  }
+  return out;
+}
+
+function tzSpread(){
+  // auto-data.json carries the county list with state codes and projected
+  // centroids. It loads lazily, so this reports nothing until the auto-draw
+  // panel has been opened once -- which is honest, not a failure.
+  const A = (typeof autoData === 'function') ? autoData() : null;
+  const out = S.regions.map(() => ({}));
+  if (!A || !A.fips) return out;
+  for (let i = 0; i < A.fips.length; i++){
+    const f = A.fips[i];
+    const r = S.assign[f];
+    if (r == null || r < 0 || r >= out.length) continue;
+    const z = tzOf(f, A.st ? A.st[i] : null, A.cx ? A.cx[i] : null);
+    if (!z) continue;
+    const w = (S.geo && S.geo.stats && S.geo.stats[f] && S.geo.stats[f][S.year])
+            ? (S.geo.stats[f][S.year].m || 0) : 0;
+    out[r][z] = (out[r][z] || 0) + Math.max(w, 0.001);
+  }
+  return out;
+}
+
+function tzReport(){
+  const sp = tzSpread();
+  const split = [];
+  sp.forEach((z, r) => {
+    const keys = Object.keys(z);
+    if (keys.length <= 1) return;
+    const tot = keys.reduce((a,k)=>a+z[k], 0);
+    const sorted = keys.sort((a,b)=>z[b]-z[a]);
+    split.push({region:r, name:(S.regions[r]||{}).name || ('Area '+(r+1)),
+                zones:sorted.map(k=>({tz:k, name:TZ_NAME[k]||k, share:z[k]/tot})),
+                minority: 1 - z[sorted[0]]/tot});
+  });
+  return {split, total: sp.length};
+}
+
 function renderPanel(){
   const _place = keepPlace('bsPanel');
   const y = S.year;
@@ -1519,6 +1631,29 @@ function renderFinancials(){
   </div>`;
 }
 
+/* Which areas straddle a line, reported whether or not the draw was told to
+   care. A map painted by hand needs this more than one the optimiser drew. */
+function renderTimezones(){
+  const r = tzReport();
+  if (!r.total) return '';
+  const A = (typeof autoData === 'function') ? autoData() : null;
+  if (!A) return `<div class="bs-tzbox note">Time-zone check needs the county file &mdash;
+    open <b>Draw it for me</b> once and it will load.</div>`;
+  if (!r.split.length) return `<div class="bs-tzbox ok"><b>Every area sits in one time zone.</b>
+    Session times mean the same thing to everyone in an area.</div>`;
+  const rows = r.split.map(x => `<li><b>${esc(x.name)}</b> &mdash; ${
+    x.zones.map(z => `${esc(z.name)} ${Math.round(z.share*100)}%`).join(' / ')}
+    ${x.minority > 0.1 ? '<span class="bs-tz-bad">a real split</span>'
+                       : '<span class="bs-tz-mild">a handful of members</span>'}</li>`).join('');
+  return `<div class="bs-tzbox warn">
+    <b>${r.split.length} of ${r.total} areas span more than one time zone.</b>
+    Every warm-up and session start has to be quoted in something, and half the area reads it wrong.
+    <ul>${rows}</ul>
+    <span class="note">Shares are by members, not counties &mdash; three empty counties across a line is
+    not a scheduling problem and three hundred divers is. Approximate: state level with the thirteen
+    split states handled, and not a legal boundary.</span></div>`;
+}
+
 function renderMeetManifest(res){
   const meets = meetManifest(res);
   if (!meets.length) return '';
@@ -1889,6 +2024,7 @@ function renderPathway(){
         ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${levels}
+    ${renderTimezones()}
     ${renderAthleteCost()}
     ${renderProvenance()}
     ${renderFinancials()}
@@ -3224,11 +3360,40 @@ function smartAssign(A, ctx, N, opts){
     }
     const continuity = base && baseTot > 0 ? 1 - sameBase/baseTot : 0;
 
+    /* Time-zone purity. Weighted by MEMBERS in the minority zone rather than by
+       counties, because three empty counties on the wrong side of a line is not
+       a scheduling problem and three hundred divers is. Zero when every area
+       sits in one zone. */
+    let tzPen = 0;
+    if (opts.tzOf){
+      const zc = [];
+      for (let r = 0; r < N; r++) zc.push({});
+      for (let i = 0; i < n; i++){
+        const a = assign[i];
+        if (a < 0 || a >= N) continue;
+        const z = opts.tzOf[i];
+        if (z < 0) continue;
+        zc[a][z] = (zc[a][z] || 0) + (weights[i] || 0);
+      }
+      let minority = 0, total = 0;
+      for (let r = 0; r < N; r++){
+        const keys = Object.keys(zc[r]);
+        if (!keys.length) continue;
+        let big = 0, sum = 0;
+        for (let k = 0; k < keys.length; k++){ const v = zc[r][keys[k]]; sum += v; if (v > big) big = v; }
+        minority += sum - big; total += sum;
+      }
+      tzPen = total > 0 ? minority / total : 0;
+    }
+
     // No hostless term. Travel is still measured to real candidate sites where
     // they exist, and to the area centre where they do not, but an area is not
     // scored down for lacking one -- that is a facilities judgement, not a
     // boundary one, and it was silently discarding otherwise good maps.
-    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity;
+    // Heavy: asked for at all, it is close to a constraint rather than a
+    // preference, and a map that splits a zone is usually just wrong for
+    // scheduling however well it balances.
+    const score = wB*balance + wT*(travelMi/TRAVEL_REF) + wV*via + wC*continuity + tzPen*3.0;
     return {score, balance, travelMi, via, continuity, hostless, hostCount:H,
             chosenHost: Array.from(chosenHost),
             wsum:Array.from(wsum), ages, ctrX, ctrY,
@@ -3602,6 +3767,8 @@ const VIA_LABELS = ['Boys 11&under','Boys 12-13','Boys 14-15','Boys 16-18',
                     'Girls 11&under','Girls 12-13','Girls 14-15','Girls 16-18'];
 
 let _autoData = null, _autoLoading = null;
+/* Read-only access for anything that only wants the county geography. */
+function autoData(){ return _autoData; }
 function loadAutoData(){
   if (_autoData) return Promise.resolve(_autoData);
   if (_autoLoading) return _autoLoading;
@@ -3664,7 +3831,7 @@ function picksNeedBase(){
 }
 
 const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null,
-               busy: false, locks: [], ladder: '12, 6, 3', picks: ['blend'],
+               busy: false, locks: [], ladder: '12, 6, 3', picks: ['blend'], tz: false,
                // Host sites are no longer a user choice, but the two things
                // that control did are separable and only one of them should go.
                // Measuring travel to a county that actually carries membership
@@ -3880,6 +4047,7 @@ window._bsAutoLock = function(i){
   }
   AUTO.result = null; renderAutoDialog();
 };
+window._bsAutoTz = function(on){ AUTO.tz = !!on; AUTO.result = null; renderAutoDialog(); };
 window._bsAutoPreset = function(k){
   // Click to add, click again to drop. Order of clicking IS the ranking, so
   // there is nothing extra to drag.
@@ -3940,7 +4108,8 @@ window._bsAutoRun = function(){
           }
         }
         AUTO.result = smartAssign(A, {weights:w, ages, baseline, locked}, AUTO.n,
-                                  Object.assign({restarts:4, hostMin:AUTO.hostMin}, blendedOptions()));
+                                  Object.assign({restarts:4, hostMin:AUTO.hostMin, tzOf: AUTO.tz ? tzIndexFor(A) : null},
+                                                blendedOptions()));
       }
       AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
