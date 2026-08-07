@@ -353,6 +353,60 @@ function bcastIntrosDoneLabel(r) {
     label: 'FINALISTS ALREADY INTRODUCED — SEE ' + String(where).toUpperCase() + (when ? ', ' + when : ''),
   };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE NAMES READ DURING ATHLETE PRESENTATION
+   ───────────────────────────────────────────────────────────────────────
+   The run-of-show times the introductions. It does not know who is being
+   introduced until somebody loads the finals dive order — which is done on
+   the shared dive-order screen (sb-announcer.js), stored on the session the
+   athletes actually dive in, and read back here.
+
+   Resolved at RENDER time, never inside bcastRows(). bcastRows runs inside
+   the timing pass on every recalculation, and the club lookup reads the
+   DiveMeets entrant list held in UI state. Timing must not move because a
+   list finished loading, so the rundown carries identity only and the names
+   are attached to the page.
+═══════════════════════════════════════════════════════════════════════ */
+function bcastPresentGroups(r) {
+  if (!r || r.kind !== 'presentation') return [];
+  if (typeof annRoster !== 'function' || typeof annEntrantIndex !== 'function') return [];
+  let idx;
+  try { idx = annEntrantIndex(); } catch (e) { return []; }
+  const groups = [];
+  (r.introRefs || []).forEach(ref => {
+    const sess = (S.sessions || []).find(x => x.id === ref.sessId);
+    const ev = sess && (sess.events || []).find(e => e.id === ref.evId);
+    if (!ev) return;
+    let rows = [];
+    try { rows = annRoster(sess, ev, idx) || []; } catch (e) { return; }
+    if (rows.length) groups.push({ ev, rows });
+  });
+  if (!groups.length) return [];
+  // A split presentation reads a slice of the running order. Positions are
+  // counted across the whole read, the same way the row label numbers them.
+  const from = Number(r.introFrom) || 0, to = Number(r.introTo) || 0;
+  if (!from && !to) return groups;
+  const out = [];
+  let n = 0;
+  groups.forEach(g => {
+    const rows = [];
+    g.rows.forEach(x => { n++; if ((!from || n >= from) && (!to || n <= to)) rows.push(x); });
+    if (rows.length) out.push({ ev: g.ev, rows });
+  });
+  return out;
+}
+// Printed under the presentation row: number, name, club — reading order.
+function bcastPresentHtml(r) {
+  const groups = bcastPresentGroups(r);
+  if (!groups.length) return '';
+  const many = groups.length > 1;
+  return `<div class="bcr-ord">${groups.map(g =>
+    `${many ? `<div class="bcr-ord-ev">${esc(evName(g.ev))}</div>` : ''}
+     <ol class="bcr-ord-l">${g.rows.map(x =>
+      `<li><b>${x.no}</b>${esc(x.name)}${x.club ? `<span> — ${esc(x.club)}</span>` : ''}</li>`).join('')}</ol>`).join('')}</div>`;
+}
+
 function bcastRowLabel(r) {
   if (!r) return '';
   if (r.kind === 'handoff') return bcastHandoffLabel(r).label;
@@ -450,6 +504,12 @@ function bcastRows(sess) {
   const coverNext = bcastIntrosCoverNext(sess);
   const coveredBy = bcastIntrosCoveredBy(sess);
   const introEvs = evs.concat(coverNext ? bcastFinalsOf(coverNext) : []);
+  // Which events' dive orders are read during the presentation, and where each
+  // one is STORED. Identity only — the names themselves are resolved at render
+  // time (see bcastPresentGroups) so the timing pass never depends on whether
+  // the DiveMeets entrant list has finished loading.
+  const introRefs = evs.map(e => ({ sessId: sess.id, evId: e.id }))
+    .concat(coverNext ? bcastFinalsOf(coverNext).map(e => ({ sessId: coverNext.id, evId: e.id })) : []);
   const introLabel = introEvs.map(e => evName(e)).join(' & ');
   const totalDivers = introEvs.reduce((a, e) => a + entryValue(e), 0);
   const introSec = coveredBy ? 0
@@ -474,7 +534,7 @@ function bcastRows(sess) {
     push('reset', 'reset', resetName.toUpperCase(), resetSec, { evName: evLabel, breakLabel: resetName, resetPos });
   };
   const pushIntro = (label, divers, sec, cueKey, extra) =>
-    push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: introLabel || evLabel, divers, perSec: introPer }, extra || {}));
+    push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: introLabel || evLabel, divers, perSec: introPer, introRefs }, extra || {}));
 
   push('boardsclose', 'boardsClose', 'CLOSE BOARDS', closeSec, {
     evName: evLabel,
@@ -492,9 +552,9 @@ function bcastRows(sess) {
     // the rest. Time is apportioned by how many athletes are in each block.
     const cut = bcastResetSplit(c, totalDivers);
     const sec1 = Math.round(introSec * (cut / totalDivers));
-    pushIntro(`ATHLETE PRESENTATION (1–${cut})`, cut, sec1, null, { note: coverNext ? introLabel + ' — introduced together' : '' });
+    pushIntro(`ATHLETE PRESENTATION (1–${cut})`, cut, sec1, null, { note: coverNext ? introLabel + ' — introduced together' : '', introFrom: 1, introTo: cut });
     pushReset();
-    pushIntro(`ATHLETE PRESENTATION (${cut + 1}–${totalDivers})`, totalDivers - cut, introSec - sec1, 'presentationCont');
+    pushIntro(`ATHLETE PRESENTATION (${cut + 1}–${totalDivers})`, totalDivers - cut, introSec - sec1, 'presentationCont', { introFrom: cut + 1, introTo: totalDivers });
   } else {
     pushIntro(coverNext ? 'ATHLETE PRESENTATION — ALL FINALISTS' : 'ATHLETE PRESENTATION', totalDivers, introSec, null,
       { note: coverNext ? introLabel + ' — introduced together, once' : '' });
@@ -750,6 +810,21 @@ function renderBcastSessPanel(sess) {
       ${num('Intro seconds per athlete', 'introSecPer', c.introSecPer, 5, c.introFlatMin > 0 ? 'Overridden below' : 'Auto from entries')}
       ${num('Fixed intro length (min)', 'introFlatMin', c.introFlatMin, 1, '0 = use per-athlete')}
     </div>
+    ${(() => {
+    if (typeof annOrderStatus !== 'function') return '';
+    let st; try { st = annOrderStatus(sess); } catch (e) { return ''; }
+    if (!st.total) return '';
+    return `<div class="bc-f wide"><label>Finals dive order for the introductions <span class="bc-opt">the names read out loud</span></label>
+      <div class="chiprow">
+        <button type="button" class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
+      </div>
+      <span class="bc-hint">${st.filled
+        ? `Loaded for <strong>${st.filled} of ${st.total}</strong> event${st.total === 1 ? '' : 's'} — ${st.athletes} ${st.athletes === 1 ? 'name' : 'names'} print under Athlete presentation, in reading order, with each athlete's club.`
+        : 'Drop the printed dive order PDFs in and the names print under Athlete presentation, in reading order. Without them that row is still timed — it just has no names on it.'}</span>
+      ${st.mismatch.length ? `<span class="bc-hint warn">${st.mismatch.map(m => `${esc(evName(m.ev))}: the sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}. The read uses the sheet; the clock uses the entries.</span>` : ''}
+    </div>`;
+  })()}
+
     <div class="bc-f wide"><label>Reset break around introductions</label>
       <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
       ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
@@ -1285,7 +1360,7 @@ function renderBcastSheet(timedSessions, opts) {
       return `<tr class="bcr k-${r.kind}">
         <td class="bcr-t">${bclock(r.startSec)}</td>
         <td class="bcr-k">${BC_KIND_LABEL[r.kind] || ''}</td>
-        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcastRowNote(r) ? `<span class="bcr-note">${esc(bcastRowNote(r))}</span>` : ''}</td>
+        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcastRowNote(r) ? `<span class="bcr-note">${esc(bcastRowNote(r))}</span>` : ''}${bcastPresentHtml(r)}</td>
         <td class="bcr-p">${per}</td>
         <td class="bcr-d">${r.durSec ? bsec(r.durSec) : ''}</td>
         ${showCues ? `<td class="bcr-c">${esc(cue)}</td>` : ''}
@@ -1397,6 +1472,12 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .bcr.k-handoff td{background:#F5F2FA;color:var(--navy);font-style:italic}
 .bcr.k-introsdone td{background:#EAF6FB;color:var(--navy);font-style:italic}
 .bcs-plus{font-weight:600;color:var(--pool);font-size:11px}
+.bcr-ord{margin-top:4px;padding-top:4px;border-top:1px dashed #C8D0DE}
+.bcr-ord-ev{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pool);margin:3px 0 2px}
+.bcr-ord-l{margin:0;padding:0;list-style:none;column-count:3;column-gap:16px}
+.bcr-ord-l li{font-size:9px;font-weight:600;line-height:1.45;break-inside:avoid;color:#1a1c2e}
+.bcr-ord-l li b{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);margin-right:4px}
+.bcr-ord-l li span{font-weight:500;color:var(--gray)}
 .pp-empty{padding:40px;text-align:center;color:var(--gray)}
 `;
 
@@ -1451,6 +1532,25 @@ async function exportBroadcast() {
         });
         if (r.kind === 'round') row.getCell(3).font = { size: 10, bold: true, color: { argb: N } };
         if (r.kind === 'break' || r.kind === 'reset') row.getCell(3).font = { size: 10, bold: true, color: { argb: R } };
+        // The introductions carry the dive order, so the producer's copy and
+        // the printed run-of-show read the same names in the same order.
+        if (r.kind === 'presentation') {
+          const groups = bcastPresentGroups(r);
+          const many = groups.length > 1;
+          groups.forEach(g => {
+            const lines = (many ? [evName(g.ev).toUpperCase()] : [])
+              .concat(g.rows.map(x => `    ${x.no}.  ${x.name}${x.club ? '  —  ' + x.club : ''}`));
+            lines.forEach((txt, li) => {
+              const hdr = many && li === 0;
+              const nr = ws.addRow(['', '', txt, '', '', '']);
+              nr.eachCell({ includeEmpty: true }, c => {
+                c.border = BORD; c.fill = fill(GR);
+                c.font = { size: hdr ? 9 : 9.5, bold: hdr, color: { argb: hdr ? P : 'FF33374D' } };
+                c.alignment = { vertical: 'top' };
+              });
+            });
+          });
+        }
       });
       ws.addRow([]);
     });

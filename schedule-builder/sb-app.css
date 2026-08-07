@@ -1443,6 +1443,13 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bcr-note{display:block;font-size:9px;font-weight:500;color:#5F6062;margin-top:1px}
 .bcr-p,.bcr-d{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap;color:#33374d}
 .bcr-c{font-size:10px;color:#33374d;line-height:1.35;font-style:italic}
+/* Dive order printed under ATHLETE PRESENTATION on the run-of-show */
+.bcr-ord{margin-top:5px;padding-top:5px;border-top:1px dashed #C8D0DE}
+.bcr-ord-ev{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pool,#009AC7);margin:4px 0 2px}
+.bcr-ord-l{margin:0;padding:0;list-style:none;column-count:2;column-gap:18px}
+.bcr-ord-l li{font-size:10px;font-weight:600;line-height:1.5;break-inside:avoid;color:#1a1c2e}
+.bcr-ord-l li b{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);margin-right:5px}
+.bcr-ord-l li span{font-weight:500;color:#5F6062}
 .bcr.k-round{background:#EAF6FB}
 .bcr.k-round .bcr-l{color:var(--navy)}
 .bcr.k-break,.bcr.k-reset{background:#FFF6F8}

@@ -68,6 +68,66 @@ function annEvents(sess) {
     .map(x => x.ev);
 }
 
+// ── DIVE ORDER ON A BLOCK RUNNING THE BROADCAST CLOCK ─────────────────
+// The broadcast run-of-show replaces the announcer script's own intro block
+// and its timing. It does NOT replace the names. Somebody still stands at a
+// microphone and reads the finalists out in the order the meet software
+// printed, and that person needs the same page: number, name, club.
+//
+// So the dive-order screen is shared between the two, and so is the storage —
+// sess.announcer.order / .clubs / .imports either way. An order loaded while
+// broadcast timing is on is still there if broadcast is switched off later,
+// and the other way round. Nothing is duplicated and nothing is stranded.
+//
+// The event list is the only real difference:
+//   • announcer script — junior finals only, read 3-METER → TOWER → 1-METER
+//   • broadcast block  — EVERY final on the block, Senior included, read in
+//     the run-of-show's own presentation order, plus the next block's finals
+//     when this block introduces both (introMode "withNext").
+//
+// A target is { sess, sessId, ev, next }. `sess` is the session the order is
+// STORED on, which is not always the session being edited — when one block
+// introduces the next block's finalists, those orders belong to the block the
+// athletes actually dive in, so they are still right if the intro is moved.
+function annOwnOrderEvents(sess) {
+  if (!sess || sess.isPractice) return [];
+  if (typeof bcastOn === 'function' && bcastOn(sess) && typeof bcastFinalsOf === 'function') {
+    try { return bcastFinalsOf(sess); } catch (e) { return []; }
+  }
+  return annEvents(sess);
+}
+function annOrderTargets(sess) {
+  if (!sess) return [];
+  const own = annOwnOrderEvents(sess).map(ev => ({ sess, sessId: sess.id, ev, next: false }));
+  let nx = null;
+  try { nx = (typeof bcastIntrosCoverNext === 'function') ? bcastIntrosCoverNext(sess) : null; } catch (e) { }
+  if (!nx) return own;
+  const more = annOwnOrderEvents(nx).map(ev => ({ sess: nx, sessId: nx.id, ev, next: true }));
+  return own.concat(more);
+}
+// True when there is a dive order to load for this block at all — used to
+// decide whether to offer the screen, on the broadcast panel and elsewhere.
+function annHasOrderScreen(sess) {
+  return annOrderTargets(sess).length > 0;
+}
+// How many of this block's events have an order loaded, and whether any of
+// them disagrees with the field size the schedule is timed on. The count
+// mismatch is REPORTED, never acted on: the schedule is Mike's to change.
+function annOrderStatus(sess) {
+  const targets = annOrderTargets(sess);
+  let filled = 0, athletes = 0;
+  const mismatch = [];
+  targets.forEach(t => {
+    const rows = annParseOrder((annCfg(t.sess).order || {})[t.ev.id] || '');
+    if (!rows.length) return;
+    filled++; athletes += rows.length;
+    let sched = 0;
+    try { sched = Number(entryValue(t.ev)) || 0; } catch (e) { }
+    if (sched && sched !== rows.length) mismatch.push({ ev: t.ev, sheet: rows.length, sched });
+  });
+  return { targets, total: targets.length, filled, athletes, mismatch };
+}
+
 // ── DEFAULTS ──────────────────────────────────────────────────────────
 const ANN_DEFAULTS = {
   on: false,
@@ -472,7 +532,7 @@ function annAllFinalTargets() {
   const timed = (typeof allTimed === 'function') ? allTimed() : null;
   (S.sessions || []).forEach(s => {
     if (s.isPractice) return;
-    annEvents(s).forEach(ev => {
+    annOwnOrderEvents(s).forEach(ev => {
       let label = '';
       try { label = timed ? `Session ${getSessNum(s, timed)}` : ''; } catch (e) { }
       out.push({ sessId: s.id, sessLabel: label || (s.title || 'Session'), evId: ev.id, ev });
@@ -482,22 +542,27 @@ function annAllFinalTargets() {
 }
 // { ev, reason, elsewhere:[{sessId,sessLabel,evId,ev}] }
 function annMatchSheetToEvent(sess, meta) {
-  const out = { ev: null, reason: '', elsewhere: [] };
+  // sessId is the session the order gets WRITTEN to, which is this session
+  // unless the sheet belongs to a block whose finalists are introduced here.
+  const out = { ev: null, sessId: sess.id, reason: '', elsewhere: [] };
   if (!meta) { out.reason = 'There was no event title on this sheet.'; return out; }
+  const here = annOrderTargets(sess);
+  const take = t => { out.ev = t.ev; out.sessId = t.sessId; return out; };
   if (!meta.gender || !meta.apparatus) {
     out.reason = 'The title does not say which sex and board this event is in a way the app can read.';
   } else {
-    const fits = annEvents(sess).filter(ev => annSheetFits(meta, ev));
-    if (fits.length === 1) { out.ev = fits[0]; return out; }
+    const fits = here.filter(t => annSheetFits(meta, t.ev));
+    if (fits.length === 1) return take(fits[0]);
     if (fits.length > 1) {
-      const scored = fits.map(ev => ({ ev, s: annSheetScore(meta, ev) })).sort((a, b) => b.s - a.s);
-      if (scored[0].s > scored[1].s) { out.ev = scored[0].ev; return out; }
-      out.reason = `Two events in this session could be this sheet — ${scored.filter(x => x.s === scored[0].s).map(x => evName(x.ev)).join(' and ')}.`;
+      const scored = fits.map(t => ({ t, s: annSheetScore(meta, t.ev) })).sort((a, b) => b.s - a.s);
+      if (scored[0].s > scored[1].s) return take(scored[0].t);
+      out.reason = `Two events in this session could be this sheet — ${scored.filter(x => x.s === scored[0].s).map(x => evName(x.t.ev)).join(' and ')}.`;
     } else {
       out.reason = 'No finals event in this session matches this sheet.';
     }
   }
-  out.elsewhere = annAllFinalTargets().filter(t => t.sessId !== sess.id && annSheetFits(meta, t.ev));
+  const mine = new Set(here.map(t => t.sessId + '::' + t.ev.id));
+  out.elsewhere = annAllFinalTargets().filter(t => !mine.has(t.sessId + '::' + t.evId) && annSheetFits(meta, t.ev));
   return out;
 }
 
@@ -564,7 +629,7 @@ async function annImportFiles(sessId, fileList) {
         if (ord.problems.length) { log.push({ ok: false, msg: `${where}: ${ord.problems.join(' ')} Nothing was loaded from it — send the file over rather than trusting a partial read.` }); continue; }
         const sec = { file: f.name, meta: raw.meta, rows: ord.rows, boards: ord.boards };
         const hit = annMatchSheetToEvent(sess, raw.meta);
-        if (hit.ev) { log.push(annApplySection(sessId, hit.ev, sec)); continue; }
+        if (hit.ev) { log.push(annApplySection(hit.sessId || sessId, hit.ev, sec)); continue; }
         pending.push(Object.assign({
           id: 'imp' + Math.random().toString(36).slice(2, 9),
           reason: hit.reason, elsewhere: hit.elsewhere || [],
@@ -1019,33 +1084,25 @@ function annApplyFit(sessId) {
 }
 function openAnnouncer(sessId) {
   const sess = S.sessions.find(x => x.id === sessId);
+  const bc = Boolean(sess && typeof bcastOn === 'function' && bcastOn(sess));
   const kind = sess ? annSessKind(sess) : null;
   UI.annSessId = sessId; UI.modal = 'announcer';
-  UI.annTab = kind === 'session' ? 'notes' : 'order';
+  UI.annTab = (!bc && kind === 'session') ? 'notes' : 'order';
   render();
   // The morning read needs no entrant names — only the dive-order screen does.
-  if (kind === 'finals') annLoadEntrants(false);
+  if (bc || kind === 'finals') annLoadEntrants(false);
 }
 
 // ── EDITOR: SESSION PANEL ─────────────────────────────────────────────
 function renderAnnSessPanel(sess) {
+  // Checked FIRST, ahead of annSessKind(). A Senior finals block has no
+  // announcer-script "kind" at all — annSessHasFinals() excludes Senior on
+  // purpose — so anything behind that gate would never render for exactly the
+  // blocks most likely to be on the broadcast clock.
+  if (typeof bcastOn === 'function' && bcastOn(sess)) return renderAnnBcastSessPanel(sess);
   const kind = annSessKind(sess);
   if (!kind) return '';
   if (kind === 'session') return renderOpenSessPanel(sess);
-  // Broadcast timing owns this block — it introduces the athletes itself, so
-  // the announcer script stands down rather than running a second set.
-  if (typeof bcastOn === 'function' && bcastOn(sess)) {
-    return `
-    <div class="fdiv"></div>
-    <div class="fsec">Announcer script</div>
-    <div style="font-size:11px;color:var(--tx2);line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
-      This block is running on the <strong>broadcast clock</strong>, which introduces the
-      finalists as part of the run-of-show. The announcer script is switched off here so the
-      session does not get two sets of introductions.<br/>
-      Use <strong>Preview run-of-show</strong> above for the running order and the PA lines, or turn
-      broadcast timing off to go back to the announcer script.
-    </div>`;
-  }
   const c = annCfg(sess);
   const evs = annEvents(sess);
   const filled = evs.filter(ev => annParseOrder((c.order || {})[ev.id] || '').length).length;
@@ -1066,6 +1123,41 @@ function renderAnnSessPanel(sess) {
       Dive order typed in for <strong>${filled} of ${evs.length}</strong> event${evs.length === 1 ? '' : 's'}.
       ${over ? `<span style="color:var(--red);font-weight:700">Script runs ${annDur(st.needSec)} but the session only allows ${annDur(st.availSec)} before the first dive.</span>` : ''}
     </div>` : ''}`;
+}
+
+
+// ── EDITOR: SESSION PANEL, BROADCAST CLOCK ────────────────────────────
+// Broadcast timing runs the introductions itself, so the announcer SCRIPT
+// stands down — two sets of intros in one session is the bug that rule exists
+// to prevent. The NAMES are a different thing: whoever is on the microphone
+// still reads the finalists out in dive order, and now loads them here. They
+// print on the run-of-show under ATHLETE PRESENTATION, next to the PA lines.
+function renderAnnBcastSessPanel(sess) {
+  const st = annOrderStatus(sess);
+  if (!st.total) return '';
+  const done = st.filled === st.total;
+  return `
+    <div class="fdiv"></div>
+    <div class="fsec">Announcer script <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">on the broadcast clock</span></div>
+    <div style="font-size:11px;color:var(--tx2);line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
+      This block runs on the <strong>broadcast clock</strong>, so the run-of-show does the introductions
+      and the standalone announcer script stays off — one session, one set of intros.<br/>
+      Load the <strong>finals dive order</strong> below and the names print on the run-of-show under
+      <strong>Athlete presentation</strong>, in the order they are read, with each athlete's club.
+    </div>
+    <div class="fg" style="margin-top:10px"><label class="fl">Finals dive order for the introductions</label>
+      <div class="chiprow">
+        <button class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
+        <button class="chip" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:${done ? 'var(--tx2)' : 'var(--tx3)'};line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
+      ${st.filled
+      ? `Dive order loaded for <strong>${st.filled} of ${st.total}</strong> event${st.total === 1 ? '' : 's'} — ${st.athletes} ${st.athletes === 1 ? 'athlete' : 'athletes'} to read.`
+      : `No dive order loaded yet. The run-of-show still times the introductions; it just has no names to print.`}
+      ${st.mismatch.length ? `<br/><span style="color:var(--red);font-weight:700">${st.mismatch.map(m => `${esc(evName(m.ev))}: sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}.</span>
+      <span style="color:var(--tx3)">The read uses the sheet; the clock uses the entries. Change the entries if the field really has changed.</span>` : ''}
+    </div>`;
 }
 
 // ── EDITOR: FLOW TAB (shared by both script types) ────────────────────
@@ -1215,6 +1307,7 @@ function renderAnnModal() {
   const sess = S.sessions.find(x => x.id === UI.annSessId);
   if (!sess) return '';
   annEnsurePreviewCss();
+  if (typeof bcastOn === 'function' && bcastOn(sess)) return renderAnnBcastModal(sess);
   if (annSessKind(sess) === 'session') return renderOpenModal(sess);
   const timed = Object.assign({}, sess, { timing: calcSessTiming(sess) });
   const c = annCfg(sess);
@@ -1236,97 +1329,7 @@ function renderAnnModal() {
 
   let body = '';
   if (tab === 'order') {
-    const idx = annEntrantIndex();
-    const imp = UI.annImport || {};
-    body = `
-      <div class="ann-dz" ondragover="annDragOver(event)" ondragleave="annDragLeave(event)" ondrop="annDropFiles(event,'${sess.id}')"
-        style="border:2px dashed var(--bd2);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:14px;background:var(--surf2)">
-        <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">Drop the printed dive order PDFs here</div>
-        <div style="font-size:11.5px;color:var(--tx2);line-height:1.6">
-          Straight off the shared drive — as many files as you like, and one printout holding several events is fine.
-          File names are ignored: every event is read off its own title line, so it lands in the right place no matter
-          who ran the report or what they called it. Anything that cannot be placed with certainty is listed below for
-          you to point at the right event.
-        </div>
-        <input type="file" id="annFileInput" accept="application/pdf,.pdf" multiple style="display:none"
-          onchange="annPickFiles(this,'${sess.id}')"/>
-        <button class="btn btn-sm" style="margin-top:9px" onclick="document.getElementById('annFileInput').click()">Choose PDF files…</button>
-        ${imp.busy ? `<div style="margin-top:9px;font-size:12px;color:var(--tx2)">Reading…</div>` : ''}
-      </div>
-      ${(imp.log || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
-        ${imp.log.map(r => `<div style="font-size:12px;line-height:1.5;padding:7px 10px;border-radius:6px;
-          border:1px solid ${r.ok ? (r.warn ? 'var(--red)' : 'var(--bd)') : 'var(--red)'};
-          background:${r.ok && !r.warn ? 'var(--surf2)' : '#FFF5F7'};
-          color:${r.ok && !r.warn ? 'var(--tx)' : 'var(--red)'}">${r.ok && !r.warn ? '✓ ' : ''}${esc(r.msg)}</div>`).join('')}
-      </div>` : ''}
-      ${(imp.pending || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
-        ${imp.pending.map(p => {
-      const first = p.rows[0], last = p.rows[p.rows.length - 1];
-      const one = (p.elsewhere || []).length === 1 ? p.elsewhere[0] : null;
-      return `<div style="border:1px solid var(--wu-bd);background:var(--wu-bg);border-radius:var(--r);padding:10px 12px">
-          <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px">
-            “${esc(p.meta.title || 'Untitled event')}” — ${p.rows.length} ${first && first.pair ? 'pairs' : 'divers'} read, waiting for an event
-          </div>
-          <div style="font-size:11.5px;color:var(--tx2);line-height:1.6;margin-bottom:8px">
-            ${esc(p.reason || '')}
-            ${one ? ` This looks like <strong>${esc(evName(one.ev))}</strong> in ${esc(one.sessLabel)}, which is picked below — check it, then load it.` : ''}
-            <br/><span style="color:var(--tx3)">From ${esc(p.file)} · starts ${esc(first ? first.name : '')}${p.rows.length > 1 ? `, ends ${esc(last.name)}` : ''}.</span>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <select class="fi" id="annAssign-${p.id}" style="width:auto;max-width:100%;flex:1 1 260px;padding:6px 9px;font-size:12px">
-              ${annAssignOptions(sess, p)}
-            </select>
-            <button class="btn btn-p btn-sm" onclick="annAssignPending('${sess.id}','${p.id}')">Load it here</button>
-            <button class="chip" onclick="annSkipPending('${p.id}')">Skip this one</button>
-          </div>
-        </div>`;
-    }).join('')}
-      </div>` : ''}
-      <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
-        Or paste or type the dive order for each event, one athlete per line, in the order the meet software printed.
-        Numbers at the start of a line are ignored — the script always renumbers from 1.
-        Clubs are filled in from the DiveMeets entry list where the name matches exactly; anything it could not match is flagged
-        so you can type the club yourself.
-        ${ent.loading ? `<div style="margin-top:8px;color:var(--tx3)">Loading entrant names…</div>`
-        : ent.error ? `<div style="margin-top:8px;color:var(--red)">${esc(ent.error)}</div>`
-          : `<div style="margin-top:8px;color:var(--tx3)">${(ent.rows || []).length} entrant names available for club lookup ·
-             <button class="chip" style="height:24px;padding:0 9px" onclick="annLoadEntrants(true)">Refresh</button></div>`}
-      </div>
-      ${evs.map((ev, ei) => {
-      const roster = annRoster(sess, ev, idx);
-      const missing = roster.filter(r => !r.club).length;
-      return `<div style="border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin-bottom:14px">
-          <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap">
-            <span style="background:var(--navy);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px">${ei + 1}</span>
-            <strong style="font-size:14px;color:var(--navy)">${esc(evName(ev))} Final</strong>
-            <span style="font-size:11px;color:var(--tx3)">${roster.length} in the order${missing ? ` · ${missing} without a club` : ''}</span>
-          </div>
-          ${(() => {
-      const rec = (c.imports || {})[ev.id];
-      if (!rec) return '';
-      return `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--surf2);border:1px solid ${rec.roundWarn ? 'var(--red)' : 'var(--bd)'}">
-          Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} ${rec.pair ? 'pairs' : 'divers'}${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.${rec.byHand ? ' Placed on this event by hand.' : ''}
-          ${rec.schedCount ? `<span style="color:var(--tx3)">The schedule is timed on ${rec.schedCount} for this event — an exhibition diver in the cut would explain one more.</span>` : ''}
-          ${rec.roundWarn ? `<span style="color:var(--red);font-weight:700">This is the ${esc(rec.roundWarn)} sheet, not the ${esc(ev.round)} — check before printing.</span>` : ''}
-        </div>`;
-    })()}
-          <textarea class="fi" rows="${Math.min(16, Math.max(6, roster.length + 2))}" placeholder="1  Noah Horwitz&#10;2  Ivor Brown&#10;3  Rydan Russel"
-            style="resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7"
-            onchange="setAnnOrder('${sess.id}','${ev.id}',this.value)">${esc((c.order || {})[ev.id] || '')}</textarea>
-          ${roster.length ? `<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px">
-            <thead><tr style="text-align:left;color:var(--tx3);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em">
-              <th style="padding:4px 6px;width:34px">#</th><th style="padding:4px 6px">Athlete</th><th style="padding:4px 6px">Club / team</th></tr></thead>
-            <tbody>${roster.map((r, i) => `<tr style="border-top:1px solid var(--bd2)">
-              <td style="padding:4px 6px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums">${r.no}</td>
-              <td style="padding:4px 6px">${esc(r.name)}</td>
-              <td style="padding:4px 6px">
-                <input class="fi" style="padding:4px 7px;font-size:12px;${r.club ? '' : 'border-color:var(--red)'}"
-                  placeholder="${r.source === 'ambiguous' ? 'More than one club matched — type it' : 'No match — type the club'}"
-                  value="${esc(annClubOverride(sess, ev, i) || (r.source === 'typed' ? r.club : (r.club || '')))}"
-                  onchange="setAnnClub('${sess.id}','${ev.id}',${i},this.value)"/>
-              </td></tr>`).join('')}</tbody></table>` : ''}
-        </div>`;
-    }).join('')}`;
+    body = renderAnnOrderTab(sess, annOrderTargets(sess));
   } else if (tab === 'timing') {
     body = `
       <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
@@ -1826,3 +1829,201 @@ function annEnsurePreviewCss() {
     `\n.ann-dz.ann-dz-over{border-color:var(--pool)!important;background:#EAF6FB!important}`;
   document.head.appendChild(el);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE DIVE-ORDER SCREEN ON A BROADCAST BLOCK
+   ───────────────────────────────────────────────────────────────────────
+   Same screen, cut down to what the run-of-show actually uses. There is no
+   Timing tab (the show clock owns the timing), no Wording tab and no Flow tab
+   (the run-of-show has its own PA cue library and its own elements) — those
+   would each be a second place to set the same thing, which is how a session
+   ends up running two different scripts.
+
+   Print goes through the run-of-show sheet, so there is exactly one page and
+   the producer, the PA and the announcer are all reading it.
+═══════════════════════════════════════════════════════════════════════ */
+function renderAnnBcastModal(sess) {
+  annEnsurePreviewCss();
+  const targets = annOrderTargets(sess);
+  const st = annOrderStatus(sess);
+  const day = S.meet.days.find(d => d.id === sess.dayId);
+  const tab = UI.annTab === 'preview' ? 'preview' : 'order';
+  let n = ''; try { n = getSessNum(sess, allTimed()); } catch (e) { }
+  const tabBtn = (k, l) => `<button class="chip ${tab === k ? 'on' : ''}" onclick="UI.annTab='${k}';render()">${l}</button>`;
+  const body = tab === 'order' ? renderAnnOrderTab(sess, targets) : renderAnnPresentRead(sess, targets);
+
+  return `<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
+    <div class="modal-hd">
+      <div><span class="modal-title">Athlete presentation — ${n ? 'Session ' + n : 'this block'}</span>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">Broadcast clock · ${day ? esc(fullDate(day.date)) : ''} · ${esc(targets.map(t => evName(t.ev)).join('  ·  '))}</div></div>
+      <button class="modal-close" onclick="UI.modal=null;render()">×</button>
+    </div>
+    <div style="padding:12px 22px 0">
+      <div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('preview', 'The read')}</div>
+      <div style="font-size:11.5px;color:var(--tx2);line-height:1.6;margin-top:10px;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
+        These names are read during <strong>Athlete presentation</strong> on the run-of-show, and print there.
+        The show clock, the PA cue lines and the breaks are set on the <strong>broadcast timing</strong> panel — not here.
+        ${st.mismatch.length ? `<br/><span style="color:var(--red);font-weight:700">${st.mismatch.map(m => `${esc(evName(m.ev))}: sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}.</span>` : ''}
+      </div>
+    </div>
+    <div class="modal-body">${body}</div>
+    <div class="modal-foot">
+      <button class="btn btn-gh" onclick="UI.modal=null;render()">Close</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Run-of-show…</button>
+      <button class="btn btn-p" onclick="UI.bcastSessId='${sess.id}';printBroadcast()">Print / PDF</button>
+    </div>
+  </div>`;
+}
+
+// The read itself, in the order the run-of-show presents it. This is a preview
+// of what prints under ATHLETE PRESENTATION — same source, same order, so what
+// is checked here is what comes off the printer.
+function renderAnnPresentRead(sess, targets) {
+  const idx = annEntrantIndex();
+  const cue = (typeof paCues === 'function') ? paCues() : {};
+  const lead = String(cue.presentation || '')
+    .replace(/\{event\}/g, targets.map(t => evName(t.ev)).join(' & ') || 'this event')
+    .replace(/\{meet\}/g, (S.meet && S.meet.name) || 'USA Diving');
+  const blocks = targets.map(t => {
+    const rows = annRoster(t.sess, t.ev, idx);
+    return { ev: t.ev, next: t.next, rows };
+  });
+  const any = blocks.some(b => b.rows.length);
+  if (!any) {
+    return `<div style="font-size:12.5px;color:var(--tx2);line-height:1.7;padding:14px;border:1px dashed var(--bd2);border-radius:var(--r);background:var(--surf2)">
+      Nothing to read yet. Load the dive order on the <strong>Dive order</strong> tab — drop the printed PDFs in, or paste the
+      list — and the read appears here and on the run-of-show.
+    </div>`;
+  }
+  return `
+    ${lead ? `<div style="font-size:13.5px;line-height:1.7;font-weight:600;color:var(--navy);padding:11px 13px;border-left:3px solid var(--pool);background:var(--surf2);border-radius:0 var(--r) var(--r) 0;margin-bottom:16px">${esc(lead)}</div>` : ''}
+    ${blocks.map(b => `<div style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;padding-bottom:5px;border-bottom:2px solid var(--navy)">
+        <strong style="font-size:13px;color:var(--navy)">${esc(evName(b.ev))}</strong>
+        ${b.next ? `<span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--pool)">Next block</span>` : ''}
+        <span style="margin-left:auto;font-size:11px;color:var(--tx3)">${b.rows.length} to read</span>
+      </div>
+      ${b.rows.length ? `<ol style="margin:0;padding:0;list-style:none">
+        ${b.rows.map(r => `<li style="display:flex;gap:10px;padding:4px 2px;border-bottom:1px solid var(--bd2);font-size:13px;line-height:1.5">
+          <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);min-width:22px;text-align:right">${r.no}</span>
+          <span style="font-weight:600">${esc(r.name)}</span>
+          <span style="margin-left:auto;color:${r.club ? 'var(--tx2)' : 'var(--red)'};font-size:12px">${r.club ? esc(r.club) : 'no club — type it on the Dive order tab'}</span>
+        </li>`).join('')}
+      </ol>` : `<div style="font-size:12px;color:var(--tx3);padding:6px 2px">No order loaded for this event.</div>`}
+    </div>`).join('')}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE DIVE-ORDER SCREEN
+   ───────────────────────────────────────────────────────────────────────
+   One screen, two callers. The announcer script opens it for a junior finals
+   session; a block on the broadcast clock opens it for its own presented
+   finals. `targets` decides which events appear and, crucially, WHICH SESSION
+   each one is stored on — see annOrderTargets().
+═══════════════════════════════════════════════════════════════════════ */
+function renderAnnOrderTab(sess, targets) {
+  const idx = annEntrantIndex();
+  const imp = UI.annImport || {};
+  const ent = UI.annEntrants || {};
+  const bc = Boolean(typeof bcastOn === 'function' && bcastOn(sess));
+
+  const card = (t, ei) => {
+    const ev = t.ev, own = t.sess, c = annCfg(own);
+    const roster = annRoster(own, ev, idx);
+    const missing = roster.filter(r => !r.club).length;
+    const rec = (c.imports || {})[ev.id];
+    let sched = 0;
+    try { sched = Number(entryValue(ev)) || 0; } catch (e) { }
+    const off = roster.length && sched && sched !== roster.length ? sched : 0;
+    return `<div style="border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;flex-wrap:wrap">
+        <span style="background:var(--navy);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px">${ei + 1}</span>
+        <strong style="font-size:14px;color:var(--navy)">${esc(evName(ev))} ${esc(ev.round === 'Final' ? 'Final' : ev.round || '')}</strong>
+        ${t.next ? `<span style="font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--pool);background:rgba(0,154,199,.1);border:1px solid rgba(0,154,199,.3);padding:2px 7px;border-radius:4px">Next block — introduced here</span>` : ''}
+        <span style="font-size:11px;color:var(--tx3)">${roster.length} in the order${missing ? ` · ${missing} without a club` : ''}</span>
+      </div>
+      ${rec ? `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--surf2);border:1px solid ${rec.roundWarn ? 'var(--red)' : 'var(--bd)'}">
+        Imported from <strong>${esc(rec.file)}</strong> — sheet says ${esc(rec.label)}, ${rec.count} ${rec.pair ? 'pairs' : 'divers'}${rec.boards > 1 ? `, ${rec.boards} boards merged` : ''}.${rec.byHand ? ' Placed on this event by hand.' : ''}
+        ${rec.roundWarn ? `<span style="color:var(--red);font-weight:700">This is the ${esc(rec.roundWarn)} sheet, not the ${esc(ev.round)} — check before printing.</span>` : ''}
+      </div>` : ''}
+      ${off ? `<div style="font-size:11px;line-height:1.5;margin-bottom:8px;padding:6px 9px;border-radius:5px;background:var(--wu-bg);border:1px solid var(--wu-bd);color:var(--tx2)">
+        The sheet has <strong>${roster.length}</strong> ${roster.length === 1 ? 'name' : 'names'}, but this event is timed on <strong>${off}</strong>.
+        The read below uses the sheet. ${bc ? 'The show clock still uses ' + off + ' — change the entries if the field really has changed.' : 'Change the entries if the field really has changed.'}
+      </div>` : ''}
+      <textarea class="fi" rows="${Math.min(16, Math.max(6, roster.length + 2))}" placeholder="1  Noah Horwitz&#10;2  Ivor Brown&#10;3  Rydan Russel"
+        style="resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7"
+        onchange="setAnnOrder('${t.sessId}','${ev.id}',this.value)">${esc((c.order || {})[ev.id] || '')}</textarea>
+      ${roster.length ? `<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px">
+        <thead><tr style="text-align:left;color:var(--tx3);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em">
+          <th style="padding:4px 6px;width:34px">#</th><th style="padding:4px 6px">Athlete</th><th style="padding:4px 6px">Club / team</th></tr></thead>
+        <tbody>${roster.map((r, i) => `<tr style="border-top:1px solid var(--bd2)">
+          <td style="padding:4px 6px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums">${r.no}</td>
+          <td style="padding:4px 6px">${esc(r.name)}</td>
+          <td style="padding:4px 6px">
+            <input class="fi" style="padding:4px 7px;font-size:12px;${r.club ? '' : 'border-color:var(--red)'}"
+              placeholder="${r.source === 'ambiguous' ? 'More than one club matched — type it' : 'No match — type the club'}"
+              value="${esc(annClubOverride(own, ev, i) || (r.source === 'typed' ? r.club : (r.club || '')))}"
+              onchange="setAnnClub('${t.sessId}','${ev.id}',${i},this.value)"/>
+          </td></tr>`).join('')}</tbody></table>` : ''}
+    </div>`;
+  };
+
+  return `
+    <div class="ann-dz" ondragover="annDragOver(event)" ondragleave="annDragLeave(event)" ondrop="annDropFiles(event,'${sess.id}')"
+      style="border:2px dashed var(--bd2);border-radius:var(--r);padding:16px;text-align:center;margin-bottom:14px;background:var(--surf2)">
+      <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">Drop the printed dive order PDFs here</div>
+      <div style="font-size:11.5px;color:var(--tx2);line-height:1.6">
+        Straight off the shared drive — as many files as you like, and one printout holding several events is fine.
+        File names are ignored: every event is read off its own title line, so it lands in the right place no matter
+        who ran the report or what they called it. Anything that cannot be placed with certainty is listed below for
+        you to point at the right event.
+      </div>
+      <input type="file" id="annFileInput" accept="application/pdf,.pdf" multiple style="display:none"
+        onchange="annPickFiles(this,'${sess.id}')"/>
+      <button class="btn btn-sm" style="margin-top:9px" onclick="document.getElementById('annFileInput').click()">Choose PDF files…</button>
+      ${imp.busy ? `<div style="margin-top:9px;font-size:12px;color:var(--tx2)">Reading…</div>` : ''}
+    </div>
+    ${(imp.log || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+      ${imp.log.map(r => `<div style="font-size:12px;line-height:1.5;padding:7px 10px;border-radius:6px;
+        border:1px solid ${r.ok ? (r.warn ? 'var(--red)' : 'var(--bd)') : 'var(--red)'};
+        background:${r.ok && !r.warn ? 'var(--surf2)' : '#FFF5F7'};
+        color:${r.ok && !r.warn ? 'var(--tx)' : 'var(--red)'}">${r.ok && !r.warn ? '✓ ' : ''}${esc(r.msg)}</div>`).join('')}
+    </div>` : ''}
+    ${(imp.pending || []).length ? `<div style="margin-bottom:14px;display:flex;flex-direction:column;gap:8px">
+      ${imp.pending.map(p => {
+    const first = p.rows[0], last = p.rows[p.rows.length - 1];
+    const one = (p.elsewhere || []).length === 1 ? p.elsewhere[0] : null;
+    return `<div style="border:1px solid var(--wu-bd);background:var(--wu-bg);border-radius:var(--r);padding:10px 12px">
+        <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px">
+          “${esc(p.meta.title || 'Untitled event')}” — ${p.rows.length} ${first && first.pair ? 'pairs' : 'divers'} read, waiting for an event
+        </div>
+        <div style="font-size:11.5px;color:var(--tx2);line-height:1.6;margin-bottom:8px">
+          ${esc(p.reason || '')}
+          ${one ? ` This looks like <strong>${esc(evName(one.ev))}</strong> in ${esc(one.sessLabel)}, which is picked below — check it, then load it.` : ''}
+          <br/><span style="color:var(--tx3)">From ${esc(p.file)} · starts ${esc(first ? first.name : '')}${p.rows.length > 1 ? `, ends ${esc(last.name)}` : ''}.</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select class="fi" id="annAssign-${p.id}" style="width:auto;max-width:100%;flex:1 1 260px;padding:6px 9px;font-size:12px">
+            ${annAssignOptions(sess, p)}
+          </select>
+          <button class="btn btn-p btn-sm" onclick="annAssignPending('${sess.id}','${p.id}')">Load it here</button>
+          <button class="chip" onclick="annSkipPending('${p.id}')">Skip this one</button>
+        </div>
+      </div>`;
+  }).join('')}
+    </div>` : ''}
+    <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
+      Or paste or type the dive order for each event, one athlete per line, in the order the meet software printed.
+      Numbers at the start of a line are ignored — the ${bc ? 'run-of-show' : 'script'} always renumbers from 1.
+      Clubs are filled in from the DiveMeets entry list where the name matches exactly; anything it could not match is flagged
+      so you can type the club yourself.
+      ${ent.loading ? `<div style="margin-top:8px;color:var(--tx3)">Loading entrant names…</div>`
+      : ent.error ? `<div style="margin-top:8px;color:var(--red)">${esc(ent.error)}</div>`
+        : `<div style="margin-top:8px;color:var(--tx3)">${(ent.rows || []).length} entrant names available for club lookup ·
+           <button class="chip" style="height:24px;padding:0 9px" onclick="annLoadEntrants(true)">Refresh</button></div>`}
+    </div>
+    ${targets.length ? targets.map(card).join('') :
+      `<div style="font-size:12px;color:var(--tx3);padding:10px 0">No finals on this block yet.</div>`}`;
+}
+
