@@ -821,6 +821,58 @@ function annMoveItem(scope, kind, sessId, id, dir) {
     const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return arr;
   });
 }
+// One vocabulary for the two scopes, said the way Mike says it out loud:
+// "all finals" or "just this one". Every label on the Flow tab comes from here
+// so the section head, the chip on the item and the toast cannot drift apart.
+function annScopeWords(kind) {
+  const bc = kind === 'bcast', op = kind === 'session';
+  return {
+    everyChip: op ? 'All preliminary sessions' : bc ? 'All broadcast blocks' : 'All finals sessions',
+    oneChip: bc ? 'Just this block' : 'Just this session',
+    everySub: op ? 'written once, runs in every preliminary session'
+      : bc ? 'written once, runs in every block on the broadcast clock'
+        : 'written once, runs in every finals session',
+    everySay: op ? 'every preliminary session' : bc ? 'every block on the broadcast clock' : 'every finals session',
+    oneSay: bc ? 'this block only' : 'this session only',
+    unit: bc ? 'block' : 'session',
+    units: bc ? 'blocks' : 'sessions',
+  };
+}
+// Adding an element must never quietly commit it to the whole championship,
+// and changing your mind must not mean deleting it and typing it again. This
+// lifts the item out of one list and drops it in the other with everything on
+// it intact — one undo step, because it is one decision.
+function annSetItemScope(fromScope, kind, sessId, id, toScope) {
+  if (fromScope === toScope) return;
+  // Look before touching anything. A click that cannot find its item must not
+  // burn an undo step or mark the schedule dirty for no reason.
+  const cur = (S.sessions || []).find(x => x.id === sessId); if (!cur) return;
+  const srcList = fromScope === 'meet' ? annMeetFlow(kind) : annSessFlow(cur, kind);
+  if (!srcList.some(x => x.id === id)) return;
+  let moved = null;
+  upd(s => {
+    const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
+    s.meet.paScript = s.meet.paScript || {};
+    const a = annEnsure(sess);
+    const mk = annMeetFlowKey(kind), sk = annSessFlowKey(kind);
+    const read = sc => sc === 'meet'
+      ? (Array.isArray(s.meet.paScript[mk]) ? s.meet.paScript[mk].slice() : [])
+      : (Array.isArray(a[sk]) ? a[sk].slice() : []);
+    const write = (sc, arr) => { if (sc === 'meet') s.meet.paScript[mk] = arr; else a[sk] = arr; };
+    const from = read(fromScope);
+    const i = from.findIndex(x => x.id === id); if (i < 0) return;
+    moved = from[i];
+    write(fromScope, from.filter(x => x.id !== id));
+    const to = read(toScope); to.push(moved); write(toScope, to);
+  });
+  if (!moved) return;
+  const w = annScopeWords(kind);
+  const nm = String(moved.label || 'That item').trim() || 'That item';
+  toast(toScope === 'meet'
+    ? `“${nm}” now runs in ${w.everySay}.`
+    : `“${nm}” now runs in ${w.oneSay} — it has been taken out of the other ${w.units}.`, 4600);
+}
+
 // The one item Mike asked for by name, pre-filled so it is one click.
 function annAddCountdown(scope, kind, sessId) {
   annAddItem(scope, kind, sessId, {
@@ -1217,7 +1269,10 @@ function renderAnnBcastSessPanel(sess) {
 
 // ── EDITOR: FLOW TAB (shared by both script types) ────────────────────
 function renderFlowItemCard(it, scope, kind, sessId, i, n) {
+  const w = annScopeWords(kind);
   const up = (field, extra) => `annUpdItem('${scope}','${kind}','${sessId}','${it.id}','${field}',${extra || 'this.value'})`;
+  const scopeChip = (sc, label) => `<button class="chip ${scope === sc ? 'on' : ''}" style="padding:3px 9px;font-size:11px"
+    onclick="annSetItemScope('${scope}','${kind}','${sessId}','${it.id}','${sc}')">${esc(label)}</button>`;
   const slotChip = sl => `<button class="chip ${(it.slot || 'start') === sl.k ? 'on' : ''}" style="padding:3px 9px;font-size:11px"
     onclick="annUpdItem('${scope}','${kind}','${sessId}','${it.id}','slot','${sl.k}')">${esc(annSlotLabel(sl.k, kind))}</button>`;
   return `<div style="border:1px solid var(--bd);border-radius:var(--r);padding:11px;margin-bottom:10px;background:var(--surf)">
@@ -1228,7 +1283,9 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
       <button class="chip" style="padding:3px 9px" title="Move later" ${i === n - 1 ? 'disabled' : ''} onclick="annMoveItem('${scope}','${kind}','${sessId}','${it.id}',1)">↓</button>
       <button class="chip" style="padding:3px 9px;color:var(--red)" onclick="annDelItem('${scope}','${kind}','${sessId}','${it.id}')">Remove</button>
     </div>
-    <div class="fg" style="margin-bottom:9px"><label class="fl">Where it goes</label>
+    <div class="fg" style="margin-bottom:9px"><label class="fl">Runs in <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— switch it any time; nothing you have typed is lost</span></label>
+      <div class="chiprow">${scopeChip('meet', w.everyChip)}${scopeChip('sess', w.oneChip)}</div></div>
+    <div class="fg" style="margin-bottom:9px"><label class="fl">Where it goes <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— the point in the show it happens</span></label>
       <div class="chiprow">${annSlotsFor(kind).map(slotChip).join('')}</div></div>
     <div class="fg" style="margin-bottom:9px"><label class="fl">How long does it take? <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— seconds; 0 if it takes no time</span></label>
       <input class="fi" type="number" min="0" step="5" style="max-width:140px" value="${annFlowSec(it)}" onchange="${up('sec')}"/></div>
@@ -1241,9 +1298,10 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
 function renderFlowTab(sess, kind) {
   const meetList = annMeetFlow(kind), sessList = annSessFlow(sess, kind);
   const bc = kind === 'bcast';
-  const everyLabel = kind === 'session' ? 'every preliminary session'
-    : bc ? 'every block on the broadcast clock' : 'every finals session';
-  const everyHead = bc ? 'Every broadcast block' : 'Every finals session';
+  const w = annScopeWords(kind);
+  // Name the one-off list after the actual session on screen. "Just this
+  // session" is abstract; "Just Session 3" is the thing Mike is looking at.
+  let sessN = null; try { sessN = getSessNum(sess, allTimed()); } catch (e) { }
   const list = (arr, scope) => arr.length
     ? arr.map((it, i) => renderFlowItemCard(it, scope, kind, sess.id, i, arr.length)).join('')
     : `<div style="font-size:12px;color:var(--tx3);padding:10px 0">Nothing here yet.</div>`;
@@ -1252,9 +1310,13 @@ function renderFlowTab(sess, kind) {
   return `
     <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:16px">
       Anything extra that has to happen in the run of show — a countdown video, a moment of silence, a presentation,
-      a sponsor read. Give it a name, say where it goes and how long it takes. Whatever you put under
+      a sponsor read, an anthem. Give it a name, say where it goes and how long it takes. Whatever you put under
       <strong>What I say</strong> is ${bc ? 'printed in the PA column to read aloud' : 'printed to read aloud'};
       the <strong>cue</strong> is printed ${bc ? 'under the element for you and the crew, not read out' : 'in a box for you and the crew'}.
+      <br/><br/><strong>Every element runs in one place or everywhere — you choose.</strong>
+      Add it under <strong>${esc(w.everyChip)}</strong> and it runs in all of them. Add it under
+      <strong>${esc(w.oneChip)}</strong>${sessN ? ` (Session ${sessN})` : ''} and nothing else is touched. Each element shows which list it is on, and you can move it between the two
+      at any time without retyping it.
       ${bc ? `<br/><br/><strong>These make the show longer.</strong> The broadcast clock is the schedule for this block, so anything
         with a length on it pushes the run-of-show out by exactly that much and the rest of the day reflows around it.
         Put a sponsor read inside an existing break instead if you do not want the show to grow — breaks are named and timed
@@ -1270,19 +1332,19 @@ function renderFlowTab(sess, kind) {
       <div class="chiprow" style="margin-top:8px"><button class="chip" onclick="annCopyFinalsFlowToBcast()">Copy the finals items in</button></div>
     </div>` : ''}
 
-    <div class="fsec">${esc(everyHead)} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— write once, prints in ${esc(everyLabel)}</span></div>
+    <div class="fsec">${esc(w.everyChip)} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— ${esc(w.everySub)}</span></div>
     ${list(meetList, 'meet')}
     <div class="chiprow" style="margin-bottom:20px">
-      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('meet','${kind}','${sess.id}')">Add countdown video</button>` : ''}
-      <button class="chip" onclick="annAddItem('meet','${kind}','${sess.id}')">Add something else</button>
+      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('meet','${kind}','${sess.id}')">Add countdown video to all ${w.units}</button>` : ''}
+      <button class="chip" onclick="annAddItem('meet','${kind}','${sess.id}')">Add something else to all ${w.units}</button>
     </div>
 
     <div class="fdiv"></div>
-    <div class="fsec">Just this ${bc ? 'block' : 'session'} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— one-offs</span></div>
+    <div class="fsec">Just this ${bc ? 'block' : 'session'}${sessN ? ` <span style="font-family:'JetBrains Mono',monospace">(Session ${sessN})</span>` : ''} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— one-offs, no other ${w.unit} is affected</span></div>
     ${list(sessList, 'sess')}
     <div class="chiprow">
-      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('sess','${kind}','${sess.id}')">Add countdown video</button>` : ''}
-      <button class="chip" onclick="annAddItem('sess','${kind}','${sess.id}')">Add something else</button>
+      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('sess','${kind}','${sess.id}')">Add countdown video to this ${w.unit} only</button>` : ''}
+      <button class="chip" onclick="annAddItem('sess','${kind}','${sess.id}')">Add something else to this ${w.unit} only</button>
     </div>`;
 }
 
