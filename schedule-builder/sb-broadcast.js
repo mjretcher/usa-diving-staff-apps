@@ -1546,7 +1546,9 @@ function bcastSessScope(list, sessId) {
    the device does, rather than assuming 96.
 */
 const BCAST_FIT_STEPS = ['bcs-fit1', 'bcs-fit2', 'bcs-fit3'];
-const BCAST_PAGE_IN = { w: 10.3, h: 7.8 };
+const BCAST_FIT_FLOOR = 0.72;
+// Letter, 0.35in margins, whichever way up the paper ends up.
+const BCAST_PAGE_IN = { long: 10.3, short: 7.8 };
 // Given the height a page comes out at under each density, pick which to use:
 // the LOOSEST one that reaches the fewest pages.
 function bcastFitLevel(heights, avail) {
@@ -1558,8 +1560,32 @@ function bcastFitLevel(heights, avail) {
   }
   return best;
 }
+// What is left after the density steps is closed proportionally. Returns the
+// scale to try, or 0 when the page is genuinely more than a page and should be
+// left as two rather than shrunk into something nobody can read on deck.
+function bcastFitZoom(h, avail, floor) {
+  if (!h || !avail || h <= avail) return 0;
+  const need = avail / h;
+  return need >= (floor || BCAST_FIT_FLOOR) ? need * 0.985 : 0;
+}
+/* Fitting a day onto the paper.
+
+   A day running a page and a bit is the worst outcome \u2014 page two arrives half
+   empty and the stack doubles. But squeezing a day that was always going to need
+   two pages makes it hard to read for nothing. So: reclaim whitespace with the
+   density steps first, and only as far as that saves a page; then close whatever
+   gap is left proportionally, down to a floor.
+
+   THE PAGE IS MEASURED, NOT ASSUMED. This runs on beforeprint, where the document
+   is already laid out for the real paper, so the page's own rendered width tells
+   us which way up it is \u2014 the sheet asks for landscape but the print dialog can
+   and does overrule it, and sizing for a page 2.5in taller than the one actually
+   coming out is why a day that nearly fits still broke in two.
+
+   Idempotent: everything is cleared first, so printing twice behaves the same as
+   printing once. */
 function bcastFitPages(doc) {
-  if (!doc || !doc.body) return;
+  if (!doc || !doc.body || !doc.querySelectorAll) return;
   const pages = Array.prototype.slice.call(doc.querySelectorAll('.bcs-page'));
   if (!pages.length) return;
   const probe = doc.createElement('div');
@@ -1567,14 +1593,36 @@ function bcastFitPages(doc) {
   doc.body.appendChild(probe);
   const ppi = (probe.getBoundingClientRect && probe.getBoundingClientRect().height) || 96;
   if (probe.parentNode) probe.parentNode.removeChild(probe);
-  const avail = BCAST_PAGE_IN.h * ppi;
+
   pages.forEach(pg => {
-    const h = () => (pg.getBoundingClientRect ? pg.getBoundingClientRect().height : 0);
-    const heights = [h()];
-    BCAST_FIT_STEPS.forEach(c => { pg.classList.add(c); heights.push(h()); });
+    const box = () => (pg.getBoundingClientRect ? pg.getBoundingClientRect() : { width: 0, height: 0 });
+    BCAST_FIT_STEPS.forEach(c => pg.classList.remove(c));
+    pg.style.zoom = '';
+
+    const wIn = box().width / ppi;
+    if (!wIn) return;                                   // nothing measurable, leave it alone
+    const midIn = (BCAST_PAGE_IN.long + BCAST_PAGE_IN.short) / 2;
+    const avail = (wIn > midIn ? BCAST_PAGE_IN.short : BCAST_PAGE_IN.long) * ppi;
+
+    const heights = [box().height];
+    BCAST_FIT_STEPS.forEach(c => { pg.classList.add(c); heights.push(box().height); });
     BCAST_FIT_STEPS.forEach(c => pg.classList.remove(c));
     const lvl = bcastFitLevel(heights, avail);
     for (let i = 0; i < lvl; i++) pg.classList.add(BCAST_FIT_STEPS[i]);
+
+    if (box().height <= avail) return;
+    if (!('zoom' in pg.style)) return;
+    let z = bcastFitZoom(box().height, avail, BCAST_FIT_FLOOR);
+    if (!z) return;                                     // more than a page; leave it readable
+    for (let i = 0; i < 3; i++) {
+      pg.style.zoom = String(Math.max(BCAST_FIT_FLOOR, z));
+      const h = box().height;
+      if (h <= avail) return;
+      const next = z * (avail / h) * 0.99;
+      if (next < BCAST_FIT_FLOOR) break;
+      z = next;
+    }
+    if (box().height > avail) pg.style.zoom = '';       // could not reach it honestly
   });
 }
 
@@ -1592,10 +1640,15 @@ function printBroadcast(forCoaches) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>${BCAST_PRINT_CSS}</style></head><body>${html}</body></html>`);
   w.document.close();
-  // Fit before printing, and only once the fonts are in \u2014 measuring against
-  // fallback metrics would size the page for type that is about to be replaced.
+  // The real measurement happens on beforeprint, when the document is laid out for
+  // the paper that is actually coming out. Anything measured before that is a
+  // guess about the print dialog.
+  let fitted = false;
+  try { w.onbeforeprint = () => { fitted = true; try { bcastFitPages(w.document); } catch (e) { } }; } catch (e) { }
   const go = () => setTimeout(() => {
-    try { bcastFitPages(w.document); } catch (e) { }
+    // Browsers without beforeprint still get a fit, from the screen layout, which
+    // is rendered at the printable width for exactly this reason.
+    if (!fitted) { try { bcastFitPages(w.document); } catch (e) { } }
     try { w.focus(); w.print(); } catch (e) { }
   }, 120);
   try {
