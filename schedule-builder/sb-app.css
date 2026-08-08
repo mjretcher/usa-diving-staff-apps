@@ -1255,7 +1255,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 html[data-theme="deck"]{
   --bg:#0B1220;--surf:#131B2D;--surf2:#0F1626;--surf3:#1B2439;
   --bd:rgba(255,255,255,.07);--bd2:rgba(255,255,255,.14);--bd3:rgba(255,255,255,.25);
-  --tx:#EDF1F8;--tx2:#B9C3D4;--tx3:#71809A;
+  --tx:#EDF1F8;--tx2:#B9C3D4;--tx3:#5C6A82;
   --navy:#8FC3EA;--navy-700:#A8D2F2;
   --navy-soft:rgba(143,195,234,.09);--navy-mid:rgba(143,195,234,.16);
   --prac:#4ADE80;--prac-bg:#0D2318;--prac-bd:#1D4230;--prac-tint:#123122;
@@ -1945,3 +1945,45 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
 .rc-detail{font-size:12.5px;color:var(--tx2);line-height:1.5}
 .rc-cost{font-size:12.5px;color:var(--tx);margin-top:6px;line-height:1.5}
 .rc-how{font-size:11.5px;color:var(--tx3);margin-top:5px;font-style:italic}
+
+/* ══════════════════════════════════════════════════════════════════════
+   QUALITY FLOOR
+   Audited against WCAG 2.1 AA. Three gaps, all of them invisible until
+   they are not: no keyboard focus indicator of our own, no reduced-motion
+   honouring behind 93 transitions, and tap targets sized for a mouse on a
+   tool that gets used standing at a pool.
+   Brand rule holds throughout: red never sits on blue.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Where the keyboard is. :focus-visible only, so it never fires on a mouse
+   click. Pool blue on light ground; on navy the ring inverts to white with a
+   pool halo, because a navy ring on a navy chip is not a ring. */
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.btn:focus-visible,.chip:focus-visible,.lv-btn:focus-visible,.lv-adj-b:focus-visible,
+.lv-adj-ok:focus-visible,.modal-close:focus-visible,.lt-x:focus-visible,.lt-use:focus-visible,
+.gen-blk-tog:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.chip.on:focus-visible,.btn-p:focus-visible,.lv-btn.primary:focus-visible,
+.lv-adj-b.go:focus-visible{outline:2px solid #fff;outline-offset:-4px;box-shadow:0 0 0 3px var(--cyan)}
+.gen-blk:focus-within{background:var(--surf2);outline:2px solid var(--cyan);outline-offset:-2px}
+/* Inputs replace the native ring rather than removing it. */
+.fi:focus-visible,.dialog-input:focus-visible,.lv-adj-in:focus-visible,
+.lt-in:focus-visible,.evsearch:focus-visible{outline:none;border-color:var(--cyan);
+  box-shadow:0 0 0 3px rgba(0,154,199,.32)}
+
+/* Asked not to animate, do not animate. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;scroll-behavior:auto !important}
+}
+
+/* A finger is not a cursor. 44px on phone-width screens, where this gets used
+   on the deck rather than at the desk. */
+@media (max-width:760px){
+  .btn{height:44px;padding:0 18px}
+  .btn-sm{height:40px}
+  .chip{height:40px;padding:0 15px;font-size:12.5px}
+  .lv-btn{min-height:40px}
+  .modal-close{min-width:44px;min-height:44px}
+  .gen-blk{padding:9px 10px}
+  .gen-blk input{width:20px;height:20px}
+}

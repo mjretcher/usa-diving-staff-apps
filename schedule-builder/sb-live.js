@@ -996,7 +996,7 @@ function liveSaveTimes(){
 }
 function renderLiveTimesModal(){
   const sess=S.sessions.find(x=>x.id===UI.liveTimesSessId);
-  if(!sess)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Edit recorded times</span><button class="modal-close" onclick="closeLiveTimes()">&times;</button></div><div class="modal-body">That session is no longer in the schedule.</div></div>`;
+  if(!sess)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Edit recorded times</span><button class="modal-close" aria-label="Close" onclick="closeLiveTimes()">&times;</button></div><div class="modal-body">That session is no longer in the schedule.</div></div>`;
   const t=(typeof timedForDay==='function'?timedForDay(sess.dayId):[]).find(x=>x.id===sess.id);
   const rec=liveSess(sess.id)||{};
   const label=(typeof sessLabelOf==='function')?sessLabelOf(sess):(sess.title||'Session');
@@ -1047,7 +1047,7 @@ function renderLiveTimesModal(){
     <div class="modal-hd">
       <div><span class="modal-title">Edit recorded times</span>
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(label)}</div></div>
-      <button class="modal-close" onclick="closeLiveTimes()">&times;</button>
+      <button class="modal-close" aria-label="Close" onclick="closeLiveTimes()">&times;</button>
     </div>
     <div class="modal-body">
       <p class="lt-help">What actually happened, for anything you could not tap at the moment it did. An <b>empty box is not recorded</b>; a box with a time in it is. <b>Use planned</b> fills a box with the scheduled time so you can adjust rather than retype, and <b>Clear</b> empties it again. <b>Nothing here changes the published schedule.</b></p>
@@ -1258,7 +1258,7 @@ function renderLiveApproveModal(){
     <div class="modal-hd">
       <div><span class="modal-title">Approve run sheet times</span>
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(day?fullDate(day.date):'')}</div></div>
-      <button class="modal-close" onclick="closeLiveApprove()">&times;</button>
+      <button class="modal-close" aria-label="Close" onclick="closeLiveApprove()">&times;</button>
     </div>
     <div class="modal-body">${body}</div>
     <div class="modal-foot">
@@ -1329,7 +1329,7 @@ function renderLivePaceModal(){
   return`<div class="modal" onclick="event.stopPropagation()">
     <div class="modal-head"><div><span class="modal-title">Where are we in ${esc(evName(ev))}?</span>
       <div class="modal-sub">${divers} divers \u00b7 ${dives} dives each. Tell it the round and the diver, and it works out the real finish time from the rate this event is actually running at.</div></div>
-      <button class="modal-close" onclick="closeLivePace()">&times;</button></div>
+      <button class="modal-close" aria-label="Close" onclick="closeLivePace()">&times;</button></div>
     <div class="modal-body">
       <div class="lp-grid">
         <label class="lp-f"><span>Round now diving</span>

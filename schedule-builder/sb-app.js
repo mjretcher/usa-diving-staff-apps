@@ -1217,7 +1217,7 @@ function renderAddDayModal(){
         ${tpls.map(t=>`<div style="display:flex;gap:5px;align-items:stretch"><button class="move-btn ${UI.addDayTemplateId===t.id?'active':''}" style="flex:1" onclick="UI.addDayTemplateId='${t.id}';render()">${esc(t.name)} <span class="move-meta">${t.sessions.length} block${t.sessions.length===1?'':'s'}</span></button><button class="tl-iconbtn" style="height:auto" title="Delete template" onclick="deleteDayTemplate('${t.id}')">×</button></div>`).join('')}
       </div>`:'';
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" onclick="UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;render()">×</button></div>
     <div class="modal-body">
       <label class="fl">Where</label>
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
@@ -2346,7 +2346,7 @@ function applyBaselineProjections(){
 function renderEntrySyncModal(){
   const es=UI.entrySync||{};
   const configuredSources=getAllDivemeetsSources();
-  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${configuredSources.length} DiveMeets source${configuredSources.length===1?'':'s'} configured <a href="#" onclick="event.preventDefault();UI.modal='meet';render()" style="color:var(--cyan)">manage</a></div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>`;
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Sync actual entries</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${configuredSources.length} DiveMeets source${configuredSources.length===1?'':'s'} configured <a href="#" onclick="event.preventDefault();UI.modal='meet';render()" style="color:var(--cyan)">manage</a></div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button></div>`;
   if(es.loading)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading registered entries…</div></div>`;
   if(es.error)return`<div class="modal modal-lg" onclick="event.stopPropagation()">${hd}<div class="modal-body"><div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load entries: ${esc(es.error)}</div><button class="btn btn-p" onclick="openEntrySync()">Retry</button></div></div>`;
   const sources=es.sources||[];
@@ -2636,7 +2636,7 @@ function renderEditModal(timed){
   const body=isPrac?renderEditPrac(sess,t,flights,buf):renderEditComp(sess,t,timed,intro,buf,cat,sessUsed);
   return`<div class="modal-bg edit-bg" onclick="if(event.target===this)closeEdit()">
     <div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
-      <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" onclick="closeEdit()">×</button></div>
+      <div class="modal-hd"><div><span class="modal-title">${esc(title)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div><button class="modal-close" aria-label="Close" onclick="closeEdit()">×</button></div>
       <div class="modal-body" data-edit-body="1">${body}</div>
       <div class="modal-foot">
         <button class="btn btn-sm btn-gh" style="color:var(--red)" onclick="deleteSession('${sess.id}')">Delete session</button>
@@ -3089,7 +3089,7 @@ function renderExportModal(){
   const dayCount=S.meet.days.length;
   const blockCount=S.sessions.length;
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Export the meet</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${dayCount} day${dayCount===1?'':'s'} · ${blockCount} block${blockCount===1?'':'s'}</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Export the meet</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${dayCount} day${dayCount===1?'':'s'} · ${blockCount} block${blockCount===1?'':'s'}</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div style="display:flex;flex-direction:column;gap:8px">
         <button class="move-btn" onclick="closeModal();openMeetHandout()"><span><strong>Full meet handout</strong><br><span style="font-size:11px;color:var(--tx3)">Every day as a one-page sheet — use the print dialog's "Save as PDF" for a file</span></span></button>
@@ -3435,7 +3435,7 @@ function renderCombinePickerModal(){
   const isCombine=cp.mode==='combine';
   return`<div class="modal-bg" onclick="if(event.target===this){UI.combinePicker=null;render()}">
     <div class="modal modal-sm" onclick="event.stopPropagation()">
-      <div class="modal-hd"><span class="modal-title">${isCombine?'Combine events':'Run simultaneously'}</span><button class="modal-close" onclick="UI.combinePicker=null;render()">×</button></div>
+      <div class="modal-hd"><span class="modal-title">${isCombine?'Combine events':'Run simultaneously'}</span><button class="modal-close" aria-label="Close" onclick="UI.combinePicker=null;render()">×</button></div>
       <div class="modal-body">
         <p style="font-size:12.5px;color:var(--tx2);line-height:1.5;margin-bottom:12px">${isCombine?'Select 2–3 events to merge into one. They run together as a single event — each diver keeps their own dive count and the times add up. The first one you pick is the lead.':'Select events that run at the same time on separate boards. They share a start time — this is distinct from Combined, where events merge into one.'}</p>
         <div class="cpick-list">${sess.events.filter(e=>!e.combinedWith).map(ev=>{
@@ -4310,7 +4310,7 @@ function renderOverviewModal(){
     </div>`;
   }).join('');
   return`<div class="modal modal-xl" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Meet overview</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Drag blocks between days · click a block to open it · click a day header to go there</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Meet overview</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Drag blocks between days · click a block to open it · click a day header to go there</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button></div>
     <div class="modal-body ov-body-wrap"><div class="ov-board">${cols}</div></div>
   </div>`;
 }
@@ -4688,7 +4688,7 @@ async function executeImportBlocks(){
 function renderImportBlocksModal(){
   const st=UI.importState||{};
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Import blocks from another schedule</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Days are matched by date · missing days get created · nothing here is deleted unless you say so</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Import blocks from another schedule</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Days are matched by date · missing days get created · nothing here is deleted unless you say so</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button></div>
     <div class="modal-body">
       ${st.loading?`<div style="text-align:center;color:var(--tx3);padding:20px">Loading your cloud library…</div>`:
        st.error?`<div style="color:var(--red);font-size:12px">${esc(st.error)}</div>`:`
@@ -4891,7 +4891,7 @@ function renderCopyDayModal(){
   const targets=S.meet.days.filter(d=>d.id!==src.id);
   const chip=(id,label,sub)=>`<button class="move-btn ${UI.copyDayTargetId===id?'active':''}" onclick="UI.copyDayTargetId='${id}';render()">${label}${sub?` <span class="move-meta">${sub}</span>`:''}</button>`;
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Copy ${shortDate(src.date)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${srcCount} block${srcCount===1?'':'s'} will be copied with the same times</div></div><button class="modal-close" onclick="UI.modal=null;render()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Copy ${shortDate(src.date)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${srcCount} block${srcCount===1?'':'s'} will be copied with the same times</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button></div>
     <div class="modal-body">
       <label class="fl">Copy to</label>
       <div style="display:flex;flex-direction:column;gap:5px">
@@ -4989,7 +4989,7 @@ function renderMoveDialog(){
   const previewStart=computeMoveStartMinutes(S.sessions,sess,targetDay,UI.moveTargetPos);
   return`<div class="modal-bg" onclick="if(event.target===this)closeMoveDialog()" style="z-index:650">
     <div class="modal modal-sm" onclick="event.stopPropagation()">
-      <div class="modal-hd"><div><span class="modal-title">Move ${esc(moveLbl)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${shortDate(S.meet.days.find(d=>d.id===sess.dayId)?.date||'')} · pick a day, then tap where it should go</div></div><button class="modal-close" onclick="closeMoveDialog()">×</button></div>
+      <div class="modal-hd"><div><span class="modal-title">Move ${esc(moveLbl)}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${shortDate(S.meet.days.find(d=>d.id===sess.dayId)?.date||'')} · pick a day, then tap where it should go</div></div><button class="modal-close" aria-label="Close" onclick="closeMoveDialog()">×</button></div>
       <div class="modal-body">
         <label class="fl">Day</label>
         <div class="move-day-row">${dayChips}</div>
@@ -5052,13 +5052,13 @@ function renderDialog(){
 function renderFacilityHoursModal(){
   const dayId=UI.hoursDayId||UI.dayId;
   const day=(S.meet.days||[]).find(d=>d.id===dayId);
-  if(!day)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Facility hours</span><button class="modal-close" onclick="closeModal()">&times;</button></div><div class="modal-body">No day selected.</div></div>`;
+  if(!day)return`<div class="modal" onclick="event.stopPropagation()"><div class="modal-hd"><span class="modal-title">Facility hours</span><button class="modal-close" aria-label="Close" onclick="closeModal()">&times;</button></div><div class="modal-body">No day selected.</div></div>`;
   const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
   const bad=close<=open;
   const outside=blocksOutsideHours(dayId);
   const others=(S.meet.days||[]).length-1;
   return`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Facility hours</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(fullDate(day.date))}</div></div><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Facility hours</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(fullDate(day.date))}</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="hours-grid">
         <div class="fg"><label class="fl">Pool opens</label><input class="fi" type="time" value="${f24(open)}" onchange="setDayOpen('${dayId}',pt(this.value))"/></div>
@@ -5090,13 +5090,13 @@ function renderModal(timed){
 function renderProjectionsModal(){
   if(UI.projLoading){
     return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" aria-label="Close" onclick="closeProjections()">×</button></div>
       <div class="modal-body" style="text-align:center;color:var(--tx3);padding:40px 22px">Loading projections…</div>
     </div>`;
   }
   if(UI.projError){
     return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" aria-label="Close" onclick="closeProjections()">×</button></div>
       <div class="modal-body">
         <div style="color:var(--red);font-size:13px;margin-bottom:12px">Could not load projections: ${esc(UI.projError)}</div>
         <button class="btn btn-p" onclick="refreshProjectionsData()">Retry</button>
@@ -5106,7 +5106,7 @@ function renderProjectionsModal(){
   const rows=UI.projRows||[];
   if(!rows.length){
     return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+      <div class="modal-hd"><span class="modal-title">Athlete Projections</span><button class="modal-close" aria-label="Close" onclick="closeProjections()">×</button></div>
       <div class="modal-body" style="text-align:center;color:var(--tx3);padding:30px 22px">
         No projections published yet.<br/>Open Junior Results Audit and click "Publish to Schedule Builder," then refresh here.
       </div>
@@ -5122,7 +5122,7 @@ function renderProjectionsModal(){
   const bd=projBreakdown();
   const totGirls=bd.reduce((a,r)=>a+r.girls,0),totBoys=bd.reduce((a,r)=>a+r.boys,0);
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Athlete Projections — Junior Nationals</span><button class="modal-close" onclick="closeProjections()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Athlete Projections — Junior Nationals</span><button class="modal-close" aria-label="Close" onclick="closeProjections()">×</button></div>
     <div class="modal-body">
       <div style="font-size:11px;color:var(--tx3);margin-bottom:14px;display:flex;align-items:center;gap:8px">
         <span>${totalAthletes} athletes (Zone-direct + E/W/C + HPS) · published ${esc(publishedAt)}</span>
@@ -5151,7 +5151,7 @@ function renderProjectionsModal(){
 function renderAddBlockModal(){
   const chip=(key,label)=>`<button class="chip" onclick="closeModal();addPracticeBlock(UI.dayId,'${key}')">${esc(label)}</button>`;
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Add to schedule</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Add to schedule</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="choose-grid">
         <div class="choose-card" onclick="closeModal();addSession(UI.dayId,false)">
@@ -5195,7 +5195,7 @@ function renderConflictsModal(){
     </div>
     <p style="font-size:10.5px;color:var(--tx3);margin:6px 0 14px">Athlete impact is advisory, computed from the projected nationals field — it flags human cost, never changes your schedule.</p>`:'';
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--font-display,inherit);font-size:30px;font-weight:700;color:${scoreCls};line-height:1">${h.score}</span><div><span class="modal-title">Schedule health</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${conflicts.length?`${errs.length} error${errs.length===1?'':'s'} · ${warns.length} warning${warns.length===1?'':'s'} · ${infos.length} note${infos.length===1?'':'s'}`:'No issues — gold-medal shape'}</div></div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--font-display,inherit);font-size:30px;font-weight:700;color:${scoreCls};line-height:1">${h.score}</span><div><span class="modal-title">Schedule health</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${conflicts.length?`${errs.length} error${errs.length===1?'':'s'} · ${warns.length} warning${warns.length===1?'':'s'} · ${infos.length} note${infos.length===1?'':'s'}`:'No issues — gold-medal shape'}</div></div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${impactSection}
       ${conflicts.length?`<div class="conflicts-list">${ordered.map((c)=>{
@@ -5237,7 +5237,7 @@ function renderHistoryModal(){
     </div>`;
   })();
   return`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><div><span class="modal-title">Version history</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Every cloud save is a restore point · snapshots are named markers you create</div></div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><div><span class="modal-title">Version history</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Every cloud save is a restore point · snapshots are named markers you create</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${!S.currentLibraryId?`<div class="empty"><div class="empty-title">Save to cloud first</div><div class="empty-sub">Version history starts once you save this schedule to the cloud.</div></div>`:
         UI.historyLoading?`<div style="text-align:center;padding:24px;color:var(--tx3);font-size:13px">Loading history…</div>`:
@@ -5258,7 +5258,7 @@ function renderHistoryModal(){
 function renderShortcutsModal(){
   const rows=[['Undo','Cmd / Ctrl + Z'],['Redo','Cmd / Ctrl + Shift + Z'],['Save to cloud','Cmd / Ctrl + S'],['Close panel / modal','Esc'],['This cheat sheet','?']];
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Keyboard shortcuts</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Keyboard shortcuts</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${rows.map(([a,b])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bd)"><span style="font-size:13px;color:var(--tx2)">${a}</span><span style="font-size:11px;color:var(--tx3);font-weight:600">${b}</span></div>`).join('')}
     </div>
@@ -5271,7 +5271,7 @@ function renderMeetModal(){
   const tzOpts=TZS.map(t=>`<option value="${t.v}" ${S.meet.timezone===t.v?'selected':''}>${t.l}</option>`).join('');
   const typeOpts=Object.entries(MEET_TYPES).map(([k,v])=>`<option value="${k}" ${S.meet.meetType===k?'selected':''}>${v.l}</option>`).join('');
   return`<div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Meet setup</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Meet setup</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
       <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
@@ -5327,7 +5327,7 @@ function renderPickerModal(timed){
   const selRound=UI.pickerRound||rounds[0]||'';
   const n=getSessNum(sess,allTimed());
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Add event — Session ${n}</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Add event — Session ${n}</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <input class="ev-search-inp" placeholder="Search — Group A Girls, Platform, 3-Meter…" value="${esc(UI.pickerSearch)}" oninput="UI.pickerSearch=this.value;render()"/>
       <div class="ev-grid">${filtered.map(ev=>{const inSched=allUsed.has(`${ev.level}|${ev.gender}|${ev.apparatus}`);return`<div class="ev-pick-card ${ev.id===UI.pickerPreset?'sel':''}" onclick="UI.pickerPreset='${ev.id}';UI.pickerRound='';render()"><div class="epc-name">${esc(evName(ev))}</div><div class="epc-meta">${ev.defaultDives} dives default${ev.style==='Synchronized'?' · synchro pairs':''}</div><span class="epc-status ${inSched?'used':'avail'}">${inSched?'In schedule':'Available'}</span></div>`}).join('')}${!filtered.length?`<div style="grid-column:1/-1;padding:20px;text-align:center;font-size:12px;color:var(--tx3)">No events match</div>`:''}</div>
@@ -5353,7 +5353,7 @@ function renderLibraryModal(){
     body=renderLibrarySaves(local);
   }
   return`<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px);display:flex;flex-direction:column">
-    <div class="modal-hd"><span class="modal-title">Schedule library</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Schedule library</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body" style="overflow-y:auto;flex:1">
       ${topTabs}
       ${body}
@@ -5493,7 +5493,7 @@ function renderSaveDialogModal(){
   const name=UI.saveDialogName||'';
   const folderOpts=SAVE_FOLDERS.map(f=>`<button class="folder-pick ${folder===f?'active':''}" onclick="UI.saveDialogFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}</button>`).join('');
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Save schedule to cloud</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Save schedule to cloud</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Schedule name</label><input id="save-dialog-name" class="fi" value="${esc(name)}" oninput="UI.saveDialogName=this.value" placeholder="2026 USA Diving …" autofocus/></div>
       <div class="fg"><label class="fl">Save to folder</label><div class="folder-picker">${folderOpts}</div></div>
@@ -5639,7 +5639,7 @@ function renderGenerateModal(timed){
   const audDesc={public:'Clean public-facing schedule — event names and session times only.',athletes:'For competitors — adds warm-up windows and event start/end times.',judges:'Full detail for officials — entries, seconds per dive, and all timing.',internal:'Operations master — every field, for staff running the meet.',broadcast:'Second-by-second run-of-show for the streaming partner and the arena announcer — any final on the broadcast clock.'};
   const genTimed=genTimedForPreview(timed);
   return`<div class="modal modal-lg gen-modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Generate output</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="gen-layout">
         <div class="gen-controls">

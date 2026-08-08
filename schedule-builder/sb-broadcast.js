@@ -1270,7 +1270,7 @@ function renderBcastCopyModal() {
   return `<div class="modal modal-sm" onclick="event.stopPropagation()">
     <div class="modal-hd"><div><span class="modal-title">Copy broadcast setup</span>
       <div style="font-size:11px;color:var(--tx3);margin-top:2px">From ${esc(srcEv ? evName(srcEv) : '')} · ${esc(sessLabelOf(src, null))}</div></div>
-      <button class="modal-close" onclick="closeModal()">×</button></div>
+      <button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       ${evChips}
       <label class="fl" style="margin-top:${srcEvs.length > 1 ? '12' : '0'}px">What to copy</label>
@@ -1366,7 +1366,7 @@ function renderPaCueModal() {
     </div>`;
   }).join('');
   return `<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">PA announcements</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">PA announcements</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <p class="bc-help" style="margin-bottom:14px">These are the lines the arena announcer reads. They print on the run-of-show next to the time each one is due. Edit any of them — you can use <code>{event}</code>, <code>{round}</code>, <code>{rounds}</code>, <code>{divers}</code>, <code>{break}</code> and <code>{meet}</code> and they fill in automatically.</p>
       ${rows}
@@ -1510,7 +1510,7 @@ function renderBcastPreviewModal() {
   // no way to email the crew's cue sheet to a coach by mistake.
   const coaches = bcastForCoaches();
   return `<div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-hd"><span class="modal-title">Run-of-show</span><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-hd"><span class="modal-title">Run-of-show</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="chiprow" style="margin-bottom:6px">${bcastCopyChips()}</div>
       <p style="font-size:11.5px;color:var(--tx2);line-height:1.5;margin:0 0 12px">${bcastCopyNote()}</p>

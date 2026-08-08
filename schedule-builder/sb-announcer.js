@@ -1513,7 +1513,7 @@ function renderOpenModal(sess) {
     <div class="modal-hd">
       <div><span class="modal-title">Announcer script — Session ${n}</span>
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${day ? esc(fullDate(day.date)) : ''} · ${esc(ctx.daypart)} ${esc(ctx.roundword)}</div></div>
-      <button class="modal-close" onclick="UI.modal=null;render()">×</button>
+      <button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button>
     </div>
     <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('notes', 'This session')}${tabBtn('flow', 'Flow')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
     <div class="modal-body">${body}</div>
@@ -1638,7 +1638,7 @@ function renderAnnModal() {
     <div class="modal-hd">
       <div><span class="modal-title">Announcer script — Session ${n}</span>
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">${day ? esc(fullDate(day.date)) : ''} · ${esc(evs.map(evName).join('  ·  '))}</div></div>
-      <button class="modal-close" onclick="UI.modal=null;render()">×</button>
+      <button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button>
     </div>
     <div style="padding:12px 22px 0"><div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('timing', 'Timing')}${tabBtn('flow', 'Flow')}${tabBtn('words', 'Wording')}${tabBtn('preview', 'Preview')}</div></div>
     <div class="modal-body">${body}</div>
@@ -2208,7 +2208,7 @@ function renderAnnBcastModal(sess) {
     <div class="modal-hd">
       <div><span class="modal-title">Athlete presentation — ${n ? 'Session ' + n : 'this block'}</span>
         <div style="font-size:11px;color:var(--tx3);margin-top:2px">Broadcast clock · ${day ? esc(fullDate(day.date)) : ''} · ${esc(targets.map(t => evName(t.ev)).join('  ·  '))}</div></div>
-      <button class="modal-close" onclick="UI.modal=null;render()">×</button>
+      <button class="modal-close" aria-label="Close" onclick="UI.modal=null;render()">×</button>
     </div>
     <div style="padding:12px 22px 0">
       <div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('preview', 'The read')}${tabBtn('flow', 'Flow' + (added ? ` (+${bmmss(added)})` : ''))}</div>
