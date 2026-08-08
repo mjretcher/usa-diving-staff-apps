@@ -190,7 +190,7 @@ async function retryCloudSync(){
   if(l){l.textContent='Reconnecting…';}
   try{
     await nq('SELECT 1');
-    sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');toast('Back online ✓');
+    sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');toast('Back online');
     // Push any local saves that haven't made it to cloud yet
     pushPendingLocalSaves().catch(e=>console.warn('Pending push error:',e));
     // Push current working state if it has a save record
@@ -1953,7 +1953,7 @@ async function _doSaveSchedule(name,folder){
     localEntry.pendingSync=false;
     localEntry.syncedAt=new Date().toISOString();
     upsertLocalSave(localEntry);
-    toast('Saved to cloud ✓',2400);
+    toast('Saved to cloud',2400);
   }catch(e){
     // Cloud failed — local copy already saved with pendingSync:true
     console.warn('Cloud save failed (will retry when online):',e.message);
@@ -3083,7 +3083,7 @@ async function exportMeetExcel(){
   });
   const fname=`${(S.meet.name||'Schedule').replace(/[\\\/\?\*\[\]:]/g,'')} schedule.xlsx`;
   XLSX.writeFile(wb,fname);
-  toast('Excel workbook downloaded');
+  toast('Excel downloaded');
 }
 function renderExportModal(){
   const dayCount=S.meet.days.length;
@@ -4032,7 +4032,7 @@ function bindDrag(){
         cascadeSession(s,sessId);
         if(ev.round==='Prelim')relocateLinkedFinal(s,ev,toS.dayId);
       });
-      toast('Event moved to session');
+      toast('Event moved');
     });
   });
   // Session card drag → reorder within day OR drop on day tab for cross-day
@@ -5193,7 +5193,7 @@ function renderConflictsModal(){
       <div class="ai-stat ${impact.tripleDayDivers?'warn':''}"><div class="ai-num">${impact.tripleDayDivers}</div><div class="ai-lbl">divers with 3+ events in one day</div></div>
       <div class="ai-stat"><div class="ai-num">${impact.longestDay?fdur(impact.longestDay.span):'—'}</div><div class="ai-lbl">longest athlete day${impact.longestDay?` (${esc(impact.longestDay.name||'')})`:''}</div></div>
     </div>
-    <p style="font-size:10.5px;color:var(--tx3);margin:6px 0 14px">Athlete impact is advisory, computed from the projected nationals field — it flags human cost, never changes your schedule.</p>`:'';
+    <p style="font-size:11px;color:var(--tx3);margin:6px 0 14px">Athlete impact is advisory, computed from the projected nationals field — it flags human cost, never changes your schedule.</p>`:'';
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><div style="display:flex;align-items:center;gap:12px"><span style="font-family:var(--font-display,inherit);font-size:30px;font-weight:700;color:${scoreCls};line-height:1">${h.score}</span><div><span class="modal-title">Schedule health</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${conflicts.length?`${errs.length} error${errs.length===1?'':'s'} · ${warns.length} warning${warns.length===1?'':'s'} · ${infos.length} note${infos.length===1?'':'s'}`:'No issues — gold-medal shape'}</div></div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
@@ -5460,7 +5460,7 @@ async function pushOnePendingNow(id){
     // Refresh cloud list so the just-pushed item appears as cloud-synced
     UI.neonLibLoading=true;render();
     const cloudLib=await loadNeonLib();UI.neonLib=cloudLib;UI.neonLibLoading=false;
-    toast('Pushed to cloud ✓',2400);render();
+    toast('Pushed to cloud',2400);render();
   }catch(e){
     console.error('Push failed:',e);
     toast('Push failed: '+(e.message||'').slice(0,80),4000);
@@ -5649,7 +5649,7 @@ function renderGenerateModal(timed){
             ${EVENT_TAGS.map(t=>`<button class="chip ${genScopeOn(t.k)?'on':''}" onclick="toggleGenScope('${t.k}')">${t.l}</button>`).join('')}
             <button class="chip ${genScopeOn('shared')?'on':''}" onclick="toggleGenScope('shared')">Shared only</button>
           </div>
-          <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4"><b>Tap more than one to print them together</b> — e.g. Senior Nationals + National Qualifier comes out as one document. Only blocks tagged for the scopes you pick (plus Shared blocks) are included, and days with nothing in scope are skipped entirely. Every combination remembers its own title below, so switching back and forth doesn't lose what you typed.${genScopesOrdered().length>1?`<br/><b style="color:var(--cyan)">Printing ${esc(genScopeLabel())} together.</b>`:''}</p>
+          <p style="font-size:11px;color:var(--tx3);margin:4px 0 8px;line-height:1.4"><b>Tap more than one to print them together</b> — e.g. Senior Nationals + National Qualifier comes out as one document. Only blocks tagged for the scopes you pick (plus Shared blocks) are included, and days with nothing in scope are skipped entirely. Every combination remembers its own title below, so switching back and forth doesn't lose what you typed.${genScopesOrdered().length>1?`<br/><b style="color:var(--cyan)">Printing ${esc(genScopeLabel())} together.</b>`:''}</p>
           ${(()=>{
             // Days first, then blocks within them. Both are plain lists of the
             // thing on the schedule, not a query to compose.
@@ -5675,7 +5675,7 @@ function renderGenerateModal(timed){
           </div>
           <div class="gen-sec-lbl" style="margin-top:10px">Blocks
             <button class="gen-blk-tog" onclick="toggleGenBlockPicker()">${UI.genPickBlocks?'Hide the list':'Choose blocks\u2026'}</button></div>
-          <p style="font-size:10px;color:var(--tx3);margin:2px 0 6px;line-height:1.4">${picked.length
+          <p style="font-size:11px;color:var(--tx3);margin:2px 0 6px;line-height:1.4">${picked.length
             ? `<b style="color:var(--cyan)">${nShown} of ${pool.length} blocks</b> \u2014 <button class="gen-blk-tog" onclick="genPickAllBlocks()">put them all back</button>`
             : `All ${pool.length} block${pool.length===1?'':'s'} on the ${genDays().length?'chosen day'+(genDays().length===1?'':'s'):'whole meet'}. Changing the days puts every block back.`}</p>
           ${UI.genPickBlocks?`<div class="gen-blks">${pool.map(s=>`
@@ -5694,10 +5694,10 @@ function renderGenerateModal(timed){
           ${aud==='broadcast'?`
           <div class="gen-sec-lbl">Who is this run-of-show for?</div>
           <div class="chiprow">${typeof bcastCopyChips==='function'?bcastCopyChips('genRender()'):''}</div>
-          <p style="font-size:10px;color:var(--tx3);margin:6px 0 8px;line-height:1.45">${typeof bcastCopyNote==='function'?bcastCopyNote():''} This is the same choice as the one on the block's own run-of-show section \u2014 setting it in either place sets it in both.</p>
-          <p style="font-size:10px;color:var(--tx3);margin:6px 0 10px;line-height:1.4">Leave the PA column on for the arena announcer's copy. Switch it off for the clean version you hand the streaming partner.</p>
+          <p style="font-size:11px;color:var(--tx3);margin:6px 0 8px;line-height:1.45">${typeof bcastCopyNote==='function'?bcastCopyNote():''} This is the same choice as the one on the block's own run-of-show section \u2014 setting it in either place sets it in both.</p>
+          <p style="font-size:11px;color:var(--tx3);margin:6px 0 10px;line-height:1.4">Leave the PA column on for the arena announcer's copy. Switch it off for the clean version you hand the streaming partner.</p>
           <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
-          <p style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.4">Only Senior finals sessions with broadcast timing switched on appear here. Turn it on from the session editor.</p>
+          <p style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.4">Only Senior finals sessions with broadcast timing switched on appear here. Turn it on from the session editor.</p>
           `:`
           <div class="gen-sec-lbl">Show / hide</div>
           <div class="gen-toggles">
@@ -5713,7 +5713,7 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>Unsplit events: show split time</span><span class="tog"><input type="checkbox" ${cfg.showSplitAlt?'checked':''} onchange="AUD['${aud}'].showSplitAlt=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>"Combined" / "Simultaneous" labels</span><span class="tog"><input type="checkbox" ${showLbl?'checked':''} onchange="toggleCombineLabels()"><span class="togsl"></span></span></label>
           </div>
-          <p style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
+          <p style="font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.4">The split what-if figures are duration-only reference numbers for planning — they don't reflow the rest of the day's start/end times. Use the Operations audience for these; they're not meant for public-facing output.</p>
           `}
         </div>
         <div class="gen-preview">

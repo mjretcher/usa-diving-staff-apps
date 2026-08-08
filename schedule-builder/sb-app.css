@@ -1215,7 +1215,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pal-plus{width:22px;height:22px;border-radius:6px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0}
 .pal-kbd{margin-left:auto;font-size:11px;color:var(--tx3);border:1px solid var(--bd2);border-radius:4px;padding:1px 6px}
 .pal-empty{padding:18px;font-size:12px;color:var(--tx3);text-align:center}
-.pal-foot{padding:8px 16px;font-size:10px;color:var(--tx3);border-top:1px solid var(--bd)}
+.pal-foot{padding:8px 16px;font-size:11px;color:var(--tx3);line-height:1.45;border-top:1px solid var(--bd)}
 
 /* Presentation mode */
 .present{position:fixed;inset:0;z-index:900;background:linear-gradient(160deg,#0D1330 0%,#171F69 90%);color:#fff;display:flex;flex-direction:column;padding:48px 7vw 24px}
@@ -1282,7 +1282,7 @@ html[data-theme="deck"] .pal{box-shadow:0 24px 70px rgba(0,0,0,.7)}
 .es-who{display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 0 18px}
 .es-name{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--surf3);border:1px solid var(--bd);color:var(--tx2)}
 .es-name.new{background:rgba(217,119,6,.1);border-color:rgba(217,119,6,.4);color:var(--warn);font-weight:600}
-.es-legend{width:100%;font-size:10px;color:var(--tx3);margin-top:5px}
+.es-legend{width:100%;font-size:11px;color:var(--tx3);line-height:1.45;margin-top:5px}
 
 /* Multi-event: filter chips, tag pills, bar menu */
 .evf-row{display:flex;align-items:center;gap:4px;margin-left:10px}
@@ -1345,7 +1345,7 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bc-f{display:flex;flex-direction:column;gap:4px}
 .bc-f.wide{margin-bottom:10px}
 .bc-f label{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3)}
-.bc-hint{font-size:10px;color:var(--tx3);line-height:1.35}
+.bc-hint{font-size:11px;color:var(--tx3);line-height:1.45}
 .bc-hint.warn{color:var(--red);font-weight:600}
 .bc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--bd)}
 /* per-event block */
@@ -1363,7 +1363,7 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bc-br.last{opacity:.6}
 .bc-br-n{font-size:10px;font-weight:700;color:var(--tx3);min-width:96px}
 .bc-br-name{flex:1;min-width:140px;font-size:12px;padding:5px 8px}
-.bc-br-note{font-size:9.5px;color:var(--tx3);font-style:italic;width:100%;padding-left:103px}
+.bc-br-note{font-size:10.5px;color:var(--tx3);font-style:italic;line-height:1.45;width:100%;padding-left:103px}
 .bc-br.off .bc-br-name{opacity:.55}
 /* Seconds-accurate break length: quick picks + explicit min / sec boxes */
 .bc-br-hd{display:flex;align-items:baseline;gap:12px;margin-top:12px;flex-wrap:wrap}
