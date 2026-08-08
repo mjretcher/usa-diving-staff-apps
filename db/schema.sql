@@ -1102,6 +1102,36 @@ BEGIN
     -- membership.members here even though that table reads fine.
     GRANT USAGE ON SCHEMA membership TO usad_app;
     GRANT SELECT ON ALL TABLES IN SCHEMA membership TO usad_app;
+
+    -- ---- PII column scoping (must follow the blanket GRANT above) ---------
+    -- The GRANT above is TABLE-level, so it hands usad_app every column of
+    -- membership.members -- including first_name, last_name, birth_date, city
+    -- and zip. usad_app's credential ships in data/config.js on a PUBLIC repo,
+    -- so that exposed name + DOB + ZIP for 10,573 minors to anyone who read it.
+    -- membership.member_gender.match_name is the same class of exposure
+    -- (3,045 full names keyed to member_id) and no app code reads it.
+    --
+    -- This must live HERE, not be run by hand: neon-migrate.yml reruns this
+    -- file on every push to main, so a console-only REVOKE gets silently
+    -- undone by the next deploy.
+    --
+    -- Safe by design: ma-app.js:142 is the only browser query that reads
+    -- names, its own comment states the role "cannot read those by design",
+    -- and it already .catch()es to an empty roster. INSERT is a separate
+    -- privilege, so ma-import.js can still write names it cannot read back.
+    REVOKE SELECT ON membership.members FROM usad_app;
+    GRANT SELECT (
+      member_id, membership_year, membership_type, birth_date,
+      club, association, state, city, zip5, country,
+      start_date, exp_date, member_status, loaded_at
+    ) ON membership.members TO usad_app;
+    -- withheld: first_name, last_name, zip (raw ZIP+4; no query reads it)
+
+    REVOKE SELECT ON membership.member_gender FROM usad_app;
+    GRANT SELECT (
+      member_id, gender, source, derived_at
+    ) ON membership.member_gender TO usad_app;
+    -- withheld: match_name
     -- Scenario tables are saved from the browser; the rest is read-only.
     GRANT INSERT, UPDATE, DELETE ON
       membership.boundary_scenarios,
