@@ -1654,6 +1654,36 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
 .lv-btn.primary:hover{background:#0086AD;border-color:#0086AD;color:#fff}
 .lv-btn.ghost{border-style:dashed;color:var(--tx3,#8A90A2)}
 
+/* Backdating a stamp, on the row. Opens itself the moment a time is recorded,
+   because the tap almost never happens at the moment the thing did. */
+.lv-adj{flex-basis:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:7px;padding:8px 10px;border:1px solid #F0C77E;border-left:3px solid #F5A524;
+  border-radius:0 8px 8px 0;background:#FFFDF7}
+.lv-adj-q{font-size:11.5px;color:var(--tx2,#5A6072);white-space:nowrap}
+.lv-adj-q strong{font-family:var(--font-mono,monospace);font-weight:700;color:var(--navy,#171F69)}
+.lv-adj-set{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.lv-adj-b{height:27px;min-width:40px;padding:0 9px;border-radius:6px;border:1px solid var(--bd,#DDE1EC);
+  background:#fff;color:var(--navy,#171F69);font-family:var(--font-mono,monospace);font-size:11.5px;
+  font-weight:700;cursor:pointer;transition:.12s}
+.lv-adj-b:hover{border-color:var(--pool,#009AC7);color:var(--pool,#009AC7);background:rgba(0,154,199,.07)}
+.lv-adj-b.plus{color:var(--tx3,#8A90A2)}
+.lv-adj-b.go{background:var(--pool,#009AC7);border-color:var(--pool,#009AC7);color:#fff;
+  font-family:var(--font-ui,inherit);min-width:0}
+.lv-adj-b.go:hover{background:#0086AD;border-color:#0086AD;color:#fff}
+.lv-adj-in{height:27px;padding:0 7px;border-radius:6px;border:1px solid var(--bd,#DDE1EC);
+  background:#fff;font-family:var(--font-mono,monospace);font-size:11.5px;color:var(--navy,#171F69)}
+.lv-adj-ok{margin-left:auto;height:27px;padding:0 11px;border-radius:6px;border:1px solid transparent;
+  background:transparent;color:var(--tx3,#8A90A2);font-size:11px;font-weight:700;cursor:pointer;
+  font-family:var(--font-ui,inherit);white-space:nowrap}
+.lv-adj-ok:hover{color:var(--navy,#171F69);border-color:var(--bd,#DDE1EC);background:#fff}
+@media (max-width:760px){
+  .lv-adj{gap:7px}
+  .lv-adj-q{flex-basis:100%}
+  .lv-adj-b{height:34px;min-width:48px;font-size:13px}
+  .lv-adj-in{height:34px;font-size:13px;flex:1}
+  .lv-adj-ok{height:34px;margin-left:0;flex-basis:100%;border:1px solid var(--bd,#DDE1EC);background:#fff}
+}
+
 /* Edit recorded times — hand entry for the live run sheet */
 .lt-help{font-size:12px;color:var(--tx2);line-height:1.5;margin:0 0 12px}
 .lt-help b{color:var(--navy);font-weight:700}
@@ -1668,6 +1698,31 @@ html[data-theme="deck"] .tl-textbtn{background:rgba(255,255,255,.06);border-colo
 .lt-hand{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
   background:#EEF1F7;color:var(--tx2);padding:2px 6px;border-radius:4px}
 .lt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* A time box says whether it is a reading or an empty box. Nothing in between. */
+.lt-fld{display:flex;flex-direction:column;gap:4px}
+.lt-in{font-family:var(--font-mono,monospace)}
+.lt-fld:not(.is-set) .lt-in{background:var(--surf2,#F7F8FC)}
+.lt-fmeta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-height:19px}
+.lt-tag{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  padding:2px 6px;border-radius:4px;white-space:nowrap}
+.lt-tag.yes{background:#E7F7EE;color:#1B7F4B;border:1px solid #BFE8D1}
+.lt-tag.no{background:var(--surf2,#EEF1F7);color:var(--tx3,#8A90A2)}
+.lt-fld .lt-tag.yes,.lt-fld.is-set .lt-tag.no{display:none}
+.lt-fld.is-set .lt-tag.yes{display:inline}
+.lt-fld .lt-x{display:none}
+.lt-fld.is-set .lt-x{display:inline-block}
+.lt-fld.is-set .lt-use{display:none}
+.lt-x,.lt-use{border:none;background:none;padding:0;cursor:pointer;font-family:var(--font-ui,inherit);
+  font-size:10.5px;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.lt-x{color:var(--tx3,#8A90A2)}
+.lt-x:hover{color:#A3182C}
+.lt-use{color:var(--pool,#009AC7)}
+.lt-use:hover{color:#0086AD}
+@media (max-width:760px){
+  .lt-grid{grid-template-columns:1fr;gap:12px}
+  .lt-fmeta{min-height:22px}
+  .lt-x,.lt-use{font-size:12px}
+}
 /* The event row you tapped in from, so it's obvious which one you're correcting. */
 .lt-row.is-focus{background:rgba(0,154,199,.06);border:1px solid rgba(0,154,199,.35);
   border-radius:9px;padding:10px 11px;margin:-1px -11px 15px}

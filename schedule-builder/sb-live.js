@@ -115,6 +115,69 @@ function liveStartSess(sessId){
     r.st=now;r.stAt=new Date().toISOString();delete r.en;delete r.enAt;
   },'Session started at '+f12(now));
 }
+// What the big button does. Events inside a session are concurrent \u2014 the timing
+// engine treats them as boards running side by side \u2014 so "the session started"
+// and "the events started" were always the same moment, and making Mike say it
+// twice was the clunkiest thing on the deck. One tap says it once. If a board
+// genuinely went in later, its own time is still editable.
+function liveStartNow(sessId){
+  const sess=S.sessions.find(x=>x.id===sessId);
+  if(sess&&(sess.events||[]).length)liveStartAllEvs(sessId); else liveStartSess(sessId);
+  liveOpenAdj(sessId,'st');
+}
+function liveFinishNow(sessId){liveFinishSess(sessId);liveOpenAdj(sessId,'en');}
+
+/* ── \"It started twenty minutes ago and I only got back to the tablet now\" ──
+   Tapping the button at the moment something happens is the fast path; it is not
+   the common one. Being pulled away is. So every stamp opens a strip that walks
+   the time backwards a tap at a time, or takes it typed, without a modal and
+   without losing your place on the page.
+
+   A nudge moves the session AND everything that was stamped in the same instant
+   \u2014 events, boards \u2014 because they were all recorded by one tap and would
+   otherwise have to be corrected one at a time. Only records holding the exact
+   same minute move; anything recorded separately is left alone. */
+function liveOpenAdj(sessId,field){UI.liveAdj={sessId:sessId,field:field};render();}
+function liveCloseAdj(){UI.liveAdj=null;render();}
+function _liveMoveSess(sessId,field,to){
+  const sess=S.sessions.find(x=>x.id===sessId);
+  const rec=liveSess(sessId)||{};
+  const from=rec[field];
+  if(from==null)return;
+  if(to===from)return;
+  if(to<0||to>1439){toast('That time is outside the day');return;}
+  const other=field==='st'?rec.en:rec.st;
+  if(field==='st'&&other!=null&&to>other){toast('The start would be after the finish \u2014 fix the finish first');return;}
+  if(field==='en'&&other!=null&&to<other){toast('The finish would be before the start \u2014 fix the start first');return;}
+  const stamp=new Date().toISOString();
+  // Counted BEFORE the write: liveWrite takes its message as an argument, so a
+  // tally raised inside the callback is still zero by the time it is read.
+  const moved=(sess?sess.events:[]).filter(ev=>{const er=liveEv(ev.id);return er&&er[field]===from;}).length;
+  liveWrite(l=>{
+    const r=l.s[sessId]||(l.s[sessId]={});
+    r[field]=to;r[field+'At']=stamp;r[field+'M']=true;
+    (sess?sess.events:[]).forEach(ev=>{
+      const er=l.e[ev.id];
+      if(er&&er[field]===from){er[field]=to;er[field+'At']=stamp;er[field+'M']=true;}
+      [0,1].forEach(i=>{const br=l.b[boardKey(ev.id,i)];
+        if(br&&br[field]===from){br[field]=to;br[field+'At']=stamp;br[field+'M']=true;}});
+    });
+  },(field==='st'?'Started ':'Finished ')+f12(to)+(moved?' \u00b7 '+moved+' event'+(moved===1?'':'s')+' moved with it':''));
+}
+function liveNudge(sessId,field,delta){
+  const rec=liveSess(sessId)||{};
+  if(rec[field]==null)return;
+  _liveMoveSess(sessId,field,rec[field]+delta);
+}
+function liveSetAdjFromField(sessId,field){
+  const el=document.getElementById('lv-adj-in');
+  if(!el)return;
+  const v=(el.value||'').trim();
+  if(!v){toast('Type a time first');return;}
+  const m=pt(v);
+  if(isNaN(m)){toast('That is not a time');return;}
+  _liveMoveSess(sessId,field,m);
+}
 function liveFinishSess(sessId){
   const now=liveNowMin();
   const sess=S.sessions.find(x=>x.id===sessId);
@@ -544,29 +607,33 @@ function liveSessRow(sess,t){
   const row=liveProject(sess.dayId).find(r=>r.sess.id===sess.id);
   if(!row)return'';
   const openEvs=(sess.events||[]).filter(ev=>{const r=liveEv(ev.id);return !r||r.en==null}).length;
+  // One thing to press. Whatever the session needs next IS the button; everything
+  // else is a quiet second control or lives behind Edit times. The old row put
+  // five choices on the deck at once and made you read them all to find the one.
   let state,btns;
   if(rec.en!=null){
     state=`<span class="lv-badge done"${rec.enM?' title="This finish time was typed in by hand"':''}>Finished ${f12(rec.en)}${rec.enM?' \u00b7 by hand':''}</span>
            <span class="lv-chip ${liveDeltaCls(row.shift)}">${liveDelta(row.shift)}</span>`;
-    btns=`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartSess('${sess.id}')" title="Re-open this session and set its start to now">Re-open</button>`;
+    btns=`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveOpenAdj('${sess.id}','en')" title="Change the finish time right here">Change finish</button>
+      <button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();liveStartNow('${sess.id}')" title="Put this session back on the boards, starting now">Re-open</button>`;
   }else if(rec.st!=null){
     state=`<span class="lv-badge run"${rec.stM?' title="This start time was typed in by hand"':''}>Diving since ${f12(rec.st)}${rec.stM?' \u00b7 by hand':''}</span>
            <span class="lv-chip ${liveDeltaCls(row.shift)}">${liveDelta(row.shift)}</span>
            ${row.stale
              ?`<span class="lv-stale" title="${esc(row.basis)}">Still open \u2014 did this finish?</span>`
              :`<span class="lv-exp">ends about ${f12(row.projEnd)}</span>`}`;
-    btns=`${openEvs?`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartAllEvs('${sess.id}')" title="Mark every event in this session as starting now \u2014 for boards that genuinely go at the same time">Start all ${openEvs} events</button>`:''}
-      <button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveFinishSess('${sess.id}')">Finish session</button>`;
+    btns=`<button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveFinishNow('${sess.id}')" title="Last diver off the boards${openEvs?' \u2014 also closes the '+openEvs+' event'+(openEvs===1?'':'s')+' still running':''}">Finish</button>
+      <button class="lv-btn live-ctl" onclick="event.stopPropagation();liveOpenAdj('${sess.id}','st')" title="It went in earlier or later than this \u2014 change it here, without opening anything">Change start</button>`;
   }else{
     state=`<span class="lv-badge todo" title="Block opens ${f12(row.plannedStart)} \u00b7 first dive planned ${f12(row.plannedCompStart)}">First dive ${f12(row.plannedCompStart)}</span>${
       row.shift?`<span class="lv-chip ${liveDeltaCls(row.shift)}" title="${esc(row.basis)}">first dive now ${f12(row.projCompStart!=null?row.projCompStart:row.projStart)} \u00b7 ${liveDelta(row.shift)}</span>`:''}`;
-    btns=`<button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveStartSess('${sess.id}')" title="First diver on the board">Start competition</button>
-      ${(sess.events||[]).length?`<button class="lv-btn live-ctl" onclick="event.stopPropagation();liveStartAllEvs('${sess.id}')" title="Start the session and every event in it at the same moment">Start all events</button>`:''}`;
+    const n=(sess.events||[]).length;
+    btns=`<button class="lv-btn primary live-ctl" onclick="event.stopPropagation();liveStartNow('${sess.id}')" title="First diver on the board${n?' \u2014 starts this session and its '+n+' event'+(n===1?'':'s')+' together, because they go in together':''}">Start</button>`;
   }
-  const clear=(rec.st!=null||rec.en!=null)?`<button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();liveClearSess('${sess.id}')" title="Remove the recorded times for this session">Clear</button>`:'';
-  // Always offered, in every state: tapping the button at the moment something
-  // happens is the fast path, not the only path.
-  const edit=`<button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();openLiveTimes('${sess.id}')" title="Type in the real start or finish time by hand \u2014 for when you couldn't tap the button as it happened">Edit times</button>`;
+  const clear='';
+  // Warm-up, introductions, every event separately, and clearing what was
+  // recorded \u2014 all real, none of them the thing you are doing right now.
+  const edit=`<button class="lv-btn ghost live-ctl" onclick="event.stopPropagation();openLiveTimes('${sess.id}')" title="Warm-up and introductions, each event on its own, and clearing what was recorded">Edit times</button>`;
   // Warm-up and introductions: optional, one tap each, and never in the way of the
   // competition controls above them.
   const phases=LIVE_PHASES.map(ph=>{
@@ -585,7 +652,31 @@ function liveSessRow(sess,t){
   return`<div class="lv-sess ${rec.en!=null?'is-done':rec.st!=null?'is-run':''}" onclick="event.stopPropagation()">
     <div class="lv-sess-state">${state}</div>
     <div class="lv-sess-btns">${btns}${edit}${clear}</div>
+    ${liveAdjStrip(sess,rec)}
     <div class="lv-phases">${phases}</div>
+  </div>`;
+}
+
+// The strip that opens under a session the moment a time is stamped. It answers
+// the only question that follows a late tap \u2014 "yes, but when did it actually
+// go in" \u2014 in one more tap, on the row, without leaving the page.
+function liveAdjStrip(sess,rec){
+  const a=UI.liveAdj;
+  if(!a||a.sessId!==sess.id)return'';
+  const f=(a.field==='en')?'en':'st';
+  const v=rec[f];
+  if(v==null)return'';
+  const word=(f==='st')?'Started':'Finished';
+  const back=n=>`<button class="lv-adj-b live-ctl" onclick="event.stopPropagation();liveNudge('${sess.id}','${f}',${-n})" title="${n} minutes earlier than that">\u2212${n}</button>`;
+  return`<div class="lv-adj live-ctl" onclick="event.stopPropagation()">
+    <span class="lv-adj-q">${word} <strong>${f12(v)}</strong> \u2014 was it earlier?</span>
+    <span class="lv-adj-set">${[5,10,15,20,30,45].map(back).join('')}
+      <button class="lv-adj-b plus live-ctl" onclick="event.stopPropagation();liveNudge('${sess.id}','${f}',5)" title="5 minutes later than that">+5</button></span>
+    <span class="lv-adj-set">
+      <input id="lv-adj-in" class="lv-adj-in" type="time" value="${f24(v)}" title="Or type the time it actually happened"/>
+      <button class="lv-adj-b go live-ctl" onclick="event.stopPropagation();liveSetAdjFromField('${sess.id}','${f}')">Set</button>
+    </span>
+    <button class="lv-adj-ok live-ctl" onclick="event.stopPropagation();liveCloseAdj()" title="Leave it as it is">That\u2019s right</button>
   </div>`;
 }
 
@@ -795,20 +886,36 @@ function closeLiveTimes(){
 // A time box that is still showing its greyed planned time has not been filled
 // in — it is a starting point, not a reading. It reads as empty so that opening
 // this screen and pressing Save can never invent times that nobody observed.
-function liveSugClear(el){ if(!el)return; el.dataset.sug=''; el.style.color=''; }
+// A box used to show the PLANNED time in grey when nothing was recorded, on the
+// theory that adjusting beats retyping. In practice you could not tell, at a
+// glance, which boxes were readings and which were suggestions \u2014 the single
+// most confusing thing on this screen. Now a box is either empty or it holds a
+// time somebody stands behind, it says which out loud, and the planned time is
+// one labelled tap away.
+function ltFldTouch(el){
+  if(!el)return;
+  const w=el.closest?el.closest('.lt-fld'):null;
+  if(w)w.classList.toggle('is-set',!!(el.value||'').trim());
+}
+function ltFldUse(id,v){const el=document.getElementById(id);if(!el)return;el.value=v;ltFldTouch(el);}
+function ltFldClear(id){const el=document.getElementById(id);if(!el)return;el.value='';ltFldTouch(el);}
 function liveSugInput(id,val,plan){
-  if(val!=null)return`<input id="${id}" class="fi" type="time" value="${f24(val)}"/>`;
-  if(plan==null)return`<input id="${id}" class="fi" type="time" value=""/>`;
-  return`<input id="${id}" class="fi" type="time" value="${f24(plan)}" data-sug="1" style="color:var(--tx3)"
-    oninput="liveSugClear(this)"
-    title="This is the planned time, shown so you can adjust it. Nothing is recorded unless you change it."/>`;
+  const set=val!=null;
+  return`<div class="lt-fld${set?' is-set':''}">
+    <input id="${id}" class="fi lt-in" type="time" value="${set?f24(val):''}" oninput="ltFldTouch(this)"/>
+    <div class="lt-fmeta">
+      <span class="lt-tag yes">Recorded</span>
+      <span class="lt-tag no">Not recorded</span>
+      <button type="button" class="lt-x" onclick="ltFldClear('${id}')" title="Un-record this time">Clear</button>
+      ${plan==null?'':`<button type="button" class="lt-use" onclick="ltFldUse('${id}','${f24(plan)}')" title="Fill this box with the planned time, then adjust it">Use planned ${f12(plan)}</button>`}
+    </div>
+  </div>`;
 }
 function liveParseField(id){
   const el=document.getElementById(id);
   if(!el)return undefined;                 // field absent — leave untouched
-  if(el.dataset&&el.dataset.sug==='1')return null;   // still the planned suggestion
   const v=(el.value||'').trim();
-  if(!v)return null;                       // cleared on purpose
+  if(!v)return null;                       // empty means not recorded
   const m=pt(v);
   return (isNaN(m)||m<0||m>1439)?undefined:m;
 }
@@ -943,7 +1050,7 @@ function renderLiveTimesModal(){
       <button class="modal-close" onclick="closeLiveTimes()">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="lt-help">Type in what actually happened, for when you couldn't tap Start or Finish at the moment it did. Boxes still showing <span style="color:var(--tx3)">grey</span> are the planned times, there to adjust rather than retype &mdash; nothing is recorded from them until you change one. Clear a box to un-record it. <b>The published schedule is not changed by anything on this screen.</b></p>
+      <p class="lt-help">What actually happened, for anything you could not tap at the moment it did. An <b>empty box is not recorded</b>; a box with a time in it is. <b>Use planned</b> fills a box with the scheduled time so you can adjust rather than retype, and <b>Clear</b> empties it again. <b>Nothing here changes the published schedule.</b></p>
       ${UI.liveTimesErr?`<div class="lt-err">${esc(UI.liveTimesErr)}</div>`:''}
       ${LIVE_PHASES.map(ph=>`<div class="lt-row">
         <div class="lt-name">${ph.label}<span class="lt-optional">optional</span>
@@ -965,6 +1072,8 @@ function renderLiveTimesModal(){
     </div>
     <div class="modal-foot">
       <button class="btn btn-sm btn-gh" onclick="closeLiveTimes()">Cancel</button>
+      ${(rec.st!=null||rec.en!=null||LIVE_PHASES.some(p=>rec[p.st]!=null||rec[p.en]!=null))
+        ?`<button class="btn btn-sm btn-gh" style="color:var(--red)" onclick="closeLiveTimes();liveClearSess('${sess.id}')" title="Remove every recorded time for this session. The plan is not affected.">Clear this session</button>`:''}
       <div style="flex:1"></div>
       <button class="btn btn-p" onclick="liveSaveTimes()">Save times</button>
     </div>
