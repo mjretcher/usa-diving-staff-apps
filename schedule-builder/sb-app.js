@@ -5564,8 +5564,55 @@ function passesGenScope(sess){
   if(sc.length===1&&sc[0]==='shared')return!tags.length;
   return !tags.length||tags.some(t=>sc.includes(t));
 }
+/* Tag scope answers "which championship". These answer "which part of it" \u2014 one
+   day for the desk, tomorrow's two finals for a coach \u2014 without deleting blocks or
+   re-tagging anything. Empty means everything, so nothing changes for anyone who
+   never touches them. */
+function genDays(){return Array.isArray(UI.genDays)?UI.genDays:[]}
+function genDayOn(id){return genDays().includes(id)}
+function toggleGenDay(id){
+  const cur=genDays();
+  UI.genDays=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
+  // Block picks belong to the days they were made on. Keeping them across a day
+  // change is how you end up printing nothing and not knowing why.
+  UI.genSessIds=[];
+  genRender();
+}
+function clearGenDays(){UI.genDays=[];UI.genSessIds=[];genRender();}
+function genSessIds(){return Array.isArray(UI.genSessIds)?UI.genSessIds:[]}
+function genSessOn(id){const p=genSessIds();return !p.length||p.includes(id)}
+// Every block on the chosen days that also passes the tag scope, in the order the
+// meet runs. This is the list the checkboxes are drawn from and measured against.
+function genDayPool(){
+  const days=genDays();
+  const order=(S.meet.days||[]).map(d=>d.id);
+  return (typeof allTimed==='function'?allTimed():[])
+    .filter(s=>!days.length||days.includes(s.dayId))
+    .filter(passesGenScope)
+    .sort((a,b)=>(order.indexOf(a.dayId)-order.indexOf(b.dayId))
+      ||((a.timing?a.timing.warmupStartMinutes:0)-(b.timing?b.timing.warmupStartMinutes:0)));
+}
+function toggleGenSess(id){
+  const pool=genDayPool().map(s=>s.id);
+  let cur=genSessIds();
+  if(!cur.length)cur=pool.slice();          // "all" becomes explicit the moment one is dropped
+  UI.genSessIds=cur.includes(id)?cur.filter(x=>x!==id):[...cur,id];
+  if(UI.genSessIds.length>=pool.length)UI.genSessIds=[];   // back to all, stored as all
+  genRender();
+}
+function genPickAllBlocks(){UI.genSessIds=[];genRender();}
+function toggleGenBlockPicker(){UI.genPickBlocks=!UI.genPickBlocks;genRender();}
+function passesGenPick(sess){
+  const days=genDays();
+  if(days.length&&!days.includes(sess.dayId))return false;
+  const ids=genSessIds();
+  if(ids.length&&!ids.includes(sess.id))return false;
+  return true;
+}
 function genTimedForPreview(timed){
-  return genScopes().length?timed.filter(passesGenScope):timed;
+  const needTag=genScopes().length, needPick=genDays().length||genSessIds().length;
+  if(!needTag&&!needPick)return timed;
+  return timed.filter(s=>(!needTag||passesGenScope(s))&&passesGenPick(s));
 }
 function genTitleKey(){const sc=genScopesOrdered();return sc.length?sc.join('+'):'all';}
 function genTitle(){
@@ -5603,6 +5650,42 @@ function renderGenerateModal(timed){
             <button class="chip ${genScopeOn('shared')?'on':''}" onclick="toggleGenScope('shared')">Shared only</button>
           </div>
           <p style="font-size:10px;color:var(--tx3);margin:4px 0 8px;line-height:1.4"><b>Tap more than one to print them together</b> — e.g. Senior Nationals + National Qualifier comes out as one document. Only blocks tagged for the scopes you pick (plus Shared blocks) are included, and days with nothing in scope are skipped entirely. Every combination remembers its own title below, so switching back and forth doesn't lose what you typed.${genScopesOrdered().length>1?`<br/><b style="color:var(--cyan)">Printing ${esc(genScopeLabel())} together.</b>`:''}</p>
+          ${(()=>{
+            // Days first, then blocks within them. Both are plain lists of the
+            // thing on the schedule, not a query to compose.
+            const order=(S.meet.days||[]);
+            const pool=genDayPool();
+            const has=id=>timed.some(s=>s.dayId===id&&passesGenScope(s));
+            const dshort=d=>{const a=String(d||'').split('-').map(Number);
+              if(a.length<3||!a[0])return String(d||'');
+              return new Date(a[0],a[1]-1,a[2]).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
+            const days=order.filter(d=>has(d.id));
+            if(!days.length)return'';
+            const picked=genSessIds();
+            const nShown=pool.filter(s=>genSessOn(s.id)).length;
+            const blkName=s=>{
+              try{if(typeof sessLabelOf==='function'){const l=sessLabelOf(s,timed);if(l)return l;}}catch(e){}
+              return s.title||(s.events||[]).map(evName).join(' \u00b7 ')||'Block';
+            };
+            return `
+          <div class="gen-sec-lbl">Days</div>
+          <div class="chiprow">
+            <button class="chip ${!genDays().length?'on':''}" onclick="clearGenDays()" title="Every day of the meet">All days</button>
+            ${days.map(d=>`<button class="chip ${genDayOn(d.id)?'on':''}" onclick="toggleGenDay('${d.id}')">${esc(dshort(d.date))}</button>`).join('')}
+          </div>
+          <div class="gen-sec-lbl" style="margin-top:10px">Blocks
+            <button class="gen-blk-tog" onclick="toggleGenBlockPicker()">${UI.genPickBlocks?'Hide the list':'Choose blocks\u2026'}</button></div>
+          <p style="font-size:10px;color:var(--tx3);margin:2px 0 6px;line-height:1.4">${picked.length
+            ? `<b style="color:var(--cyan)">${nShown} of ${pool.length} blocks</b> \u2014 <button class="gen-blk-tog" onclick="genPickAllBlocks()">put them all back</button>`
+            : `All ${pool.length} block${pool.length===1?'':'s'} on the ${genDays().length?'chosen day'+(genDays().length===1?'':'s'):'whole meet'}. Changing the days puts every block back.`}</p>
+          ${UI.genPickBlocks?`<div class="gen-blks">${pool.map(s=>`
+            <label class="gen-blk"><input type="checkbox" ${genSessOn(s.id)?'checked':''} onchange="toggleGenSess('${s.id}')"/>
+              <span class="gen-blk-t">${esc(f12(s.timing?s.timing.warmupStartMinutes:0))}</span>
+              <span class="gen-blk-n">${esc(blkName(s))}</span>
+              <span class="gen-blk-d">${esc(dshort(((S.meet.days||[]).find(d=>d.id===s.dayId)||{}).date))}</span></label>`).join('')
+            ||'<div class="gen-blk-none">Nothing on these days matches the scope above.</div>'}</div>`:''}
+          <div class="fdiv"></div>`;
+          })()}
           <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);genRender()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
           <div class="fdiv"></div>
           <div class="gen-sec-lbl">Audience</div>
@@ -5804,7 +5887,10 @@ function renderPP(timed,cfg,titleOverride){
   // public-facing outputs. Only the Operations audience includes them, marked "internal".
   timed=timed.filter(s=>!s.hideFromPublic||cfg.showInternalBlocks);
   if(!S.meet.days.length||!timed.length){
-    const msg=(genScopes().length&&S.sessions.length)?`No blocks tagged for this scope yet — tag blocks via the editor ("Part of"), or switch scope.`:'No schedule to preview yet — add sessions and events first.';
+    const msg=!S.sessions.length?'No schedule to preview yet \u2014 add sessions and events first.'
+      :(genDays().length||genSessIds().length)?'Nothing to print for the days or blocks you picked \u2014 widen the selection above.'
+      :genScopes().length?'No blocks tagged for this scope yet \u2014 tag blocks via the editor ("Part of"), or switch scope.'
+      :'No schedule to preview yet \u2014 add sessions and events first.';
     return`<div class="pp"><div class="pp-empty">${esc(msg)}</div></div>`;
   }
   const showLbl=S.meet.showCombineLabels!==false;

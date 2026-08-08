@@ -1398,7 +1398,7 @@ function renderBcastSheet(timedSessions, opts) {
   const meetName = esc(opts.title || (S.meet && S.meet.name) || 'USA Diving');
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-  const blocks = timedSessions.map(sess => {
+  const sessHtml = sess => {
     const da = (sess.timing && sess.timing.deferredAwards) || null;
     // A block can appear here for two reasons: it runs on the broadcast clock,
     // or it is simply where an earlier block's medals are presented.
@@ -1436,19 +1436,41 @@ function renderBcastSheet(timedSessions, opts) {
         <tbody>${body}</tbody>
       </table>
     </div>`;
-  }).filter(Boolean).join('');
+  };
 
-  if (!blocks) {
+  // One day, one page. The sheet used to be a single running page and let the
+  // printer break wherever it landed, so a day started halfway down whatever page
+  // the day before happened to end on. Grouping by day and breaking between them
+  // is the difference between a stack of paper you can hand out per day and one
+  // you have to read to find your way into.
+  const byDay = new Map();
+  timedSessions.forEach(sess => {
+    const html = sessHtml(sess);
+    if (!html) return;
+    if (!byDay.has(sess.dayId)) byDay.set(sess.dayId, []);
+    byDay.get(sess.dayId).push(html);
+  });
+  const order = (S.meet.days || []).map(d => d.id);
+  const dayIds = order.filter(id => byDay.has(id))
+    .concat(Array.from(byDay.keys()).filter(id => order.indexOf(id) < 0));
+
+  if (!dayIds.length) {
     return `<div class="bcs"><div class="pp-empty">No broadcast sessions in this scope yet. Turn on broadcast timing on a Senior finals session.</div></div>`;
   }
-  return `<div class="bcs" id="bcastSheet">
-    <div class="bcs-page">
-      <header class="bcs-phd"><div class="bcs-pmeet">${meetName}<span>${forCoaches ? 'Run of show \u00b7 for coaches' : 'Broadcast run-of-show'}</span></div>
+  const sub = forCoaches ? 'Run of show \u00b7 for coaches' : 'Broadcast run-of-show';
+  const foot = forCoaches ? 'Run of show for coaches' : 'Broadcast run-of-show';
+  const note = forCoaches ? 'Planned times \u2014 the show moves, so check the board on the day' : 'Times are seconds-accurate';
+  const pages = dayIds.map((id, i) => {
+    const day = (S.meet.days || []).find(d => d.id === id);
+    return `<div class="bcs-page">
+      <header class="bcs-phd"><div class="bcs-pmeet">${meetName}<span>${sub}</span></div>
+        <div class="bcs-pday">${day ? esc(fullDate(day.date)) : ''}</div>
         <img class="bcs-plogo" src="../shared/images/logo-white-horizontal.png?v=202606250245" alt="USA Diving"/></header>
-      <div class="bcs-body">${blocks}</div>
-      <footer class="bcs-pft"><span>${meetName} \u00b7 ${forCoaches ? 'Run of show for coaches' : 'Broadcast run-of-show'}</span><span>${forCoaches ? 'Planned times \u2014 the show moves, so check the board on the day' : 'Times are seconds-accurate'} \u00b7 ${esc(today)}</span></footer>
-    </div>
-  </div>`;
+      <div class="bcs-body">${byDay.get(id).join('')}</div>
+      <footer class="bcs-pft"><span>${meetName} \u00b7 ${foot}</span><span>${note} \u00b7 ${esc(today)}${dayIds.length > 1 ? ` \u00b7 day ${i + 1} of ${dayIds.length}` : ''}</span></footer>
+    </div>`;
+  }).join('');
+  return `<div class="bcs" id="bcastSheet">${pages}</div>`;
 }
 
 /* Which copy the run-of-show is, is ONE setting. It shipped as two \u2014 one on the
@@ -1527,14 +1549,16 @@ const BCAST_PRINT_CSS = `
 :root{--navy:#171F69;--red:#E31937;--pool:#009AC7;--sky:#8FC3EA;--gray:#5F6062}
 html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @page{size:letter landscape;margin:0.35in}
-.bcs-page{display:flex;flex-direction:column}
+.bcs-page{display:flex;flex-direction:column;break-after:page;page-break-after:always}
+.bcs-page:last-child{break-after:auto;page-break-after:auto}
+.bcs-pday{font-size:10.5px;font-weight:700;color:var(--sky);letter-spacing:.02em;white-space:nowrap}
 .bcs-phd{background:var(--navy);color:#fff;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;position:relative}
 .bcs-phd::after{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--pool)}
 .bcs-pmeet{font-size:16px;font-weight:800;line-height:1.15}
 .bcs-pmeet span{display:block;font-size:9.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--sky);margin-top:2px}
 .bcs-plogo{height:30px}
 .bcs-body{padding:12px 16px 4px}
-.bcs-sess{margin-bottom:14px;break-inside:avoid}
+.bcs-sess{margin-bottom:14px;break-inside:avoid;page-break-inside:avoid}
 .bcs-hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding-bottom:4px;margin-bottom:5px;border-bottom:2px solid var(--navy)}
 .bcs-badge{font-size:8px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;background:var(--pool);color:#fff;padding:2px 7px;border-radius:4px}
 .bcs-nm{font-size:13px;font-weight:800;color:var(--navy)}
