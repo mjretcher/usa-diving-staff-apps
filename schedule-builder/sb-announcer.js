@@ -763,12 +763,36 @@ function annSessFlow(sess, kind) {
   const v = (sess && sess.announcer && sess.announcer[annSessFlowKey(kind)]) || [];
   return Array.isArray(v) ? v : [];
 }
-// Meet-level first, then this session's — the standing part of the show
-// before the one-off.
-function annFlowAt(sess, kind, slot) {
+// Everything sitting in the same part of the show runs in ONE order, whether
+// it is standing or a one-off — an anthem that only happens on finals night
+// still has to be able to run before a countdown video that happens every
+// night. So the two lists are merged and then sorted.
+//
+// A standing item takes its position from its own list: first, second, third.
+// A one-off stores where it sits relative to those — 1.5 means "after the
+// second standing item, before the third", −0.5 means "before all of them".
+// Only the one-off carries the number, which is what keeps ordering the show
+// in one session from disturbing the running order of any other session.
+// A one-off with no number written on it runs after the standing items, which
+// is exactly what everything did before ordering existed.
+function annSlotEntries(sess, kind, slot) {
   const dflt = annDefaultSlot(kind);
-  return annMeetFlow(kind).concat(annSessFlow(sess, kind)).filter(i => (i.slot || dflt) === slot);
+  const inSlot = it => (it.slot || dflt) === slot;
+  const meet = annMeetFlow(kind).filter(inSlot);
+  const ses = annSessFlow(sess, kind).filter(inSlot);
+  const rows = meet.map((it, i) => ({ it, scope: 'meet', i, ord: i }))
+    .concat(ses.map((it, i) => ({
+      it, scope: 'sess', i,
+      ord: Number.isFinite(Number(it.ord)) ? Number(it.ord) : (meet.length + i),
+    })));
+  rows.sort((a, b) => (a.ord - b.ord) || (a.scope === b.scope ? a.i - b.i : (a.scope === 'meet' ? -1 : 1)));
+  return rows;
 }
+function annFlowAt(sess, kind, slot) { return annSlotEntries(sess, kind, slot).map(r => r.it); }
+// Where a one-off has to sit to hold a given position in the merged order:
+// half a step behind the standing item that follows it, nudged by hundredths
+// so several one-offs in the same gap keep the order they were given.
+function annGapOrd(standingBefore, nthInGap) { return standingBefore - 0.5 + (nthInGap || 0) * 0.01; }
 // Everything scheduled on a broadcast block, in slot order — used by the
 // rundown and by the "how much longer does this make the show" line.
 function bcastFlowItems(sess) {
@@ -814,11 +838,46 @@ function annUpdItem(scope, kind, sessId, id, field, value) {
 function annDelItem(scope, kind, sessId, id) {
   annFlowWrite(scope, kind, sessId, arr => arr.filter(x => x.id !== id));
 }
-function annMoveItem(scope, kind, sessId, id, dir) {
-  annFlowWrite(scope, kind, sessId, arr => {
-    const i = arr.findIndex(x => x.id === id); if (i < 0) return arr;
-    const j = i + dir; if (j < 0 || j >= arr.length) return arr;
-    const t = arr[i]; arr[i] = arr[j]; arr[j] = t; return arr;
+// Move an element one place earlier or later in the part of the show it sits
+// in, regardless of which list it or its neighbour is on. Standing items are
+// reseated within their own list (and only within this slot, so nothing in
+// another part of the show shifts); one-offs get their position number
+// rewritten. Nothing else in the schedule is touched.
+function annMoveInSlot(kind, sessId, id, dir) {
+  const cur = (S.sessions || []).find(x => x.id === sessId); if (!cur) return;
+  const dflt = annDefaultSlot(kind);
+  const item = annMeetFlow(kind).find(x => x.id === id) || annSessFlow(cur, kind).find(x => x.id === id);
+  if (!item) return;
+  const slot = item.slot || dflt;
+  const rows = annSlotEntries(cur, kind, slot);
+  const p = rows.findIndex(r => r.it.id === id); if (p < 0) return;
+  const q = p + dir; if (q < 0 || q >= rows.length) return;
+  const seq = rows.slice(); const t = seq[p]; seq[p] = seq[q]; seq[q] = t;
+
+  const meetOrder = seq.filter(r => r.scope === 'meet').map(r => r.it.id);
+  const sessOrd = {};
+  let standingBefore = 0, nthInGap = 0;
+  seq.forEach(r => {
+    if (r.scope === 'meet') { standingBefore++; nthInGap = 0; }
+    else { sessOrd[r.it.id] = annGapOrd(standingBefore, nthInGap); nthInGap++; }
+  });
+
+  upd(s => {
+    const se = s.sessions.find(x => x.id === sessId); if (!se) return;
+    s.meet.paScript = s.meet.paScript || {};
+    const mk = annMeetFlowKey(kind);
+    const marr = Array.isArray(s.meet.paScript[mk]) ? s.meet.paScript[mk].slice() : [];
+    // Reseat this slot's standing items into their new relative order, leaving
+    // every other slot's items exactly where they were in the array.
+    const seats = []; marr.forEach((it, i) => { if ((it.slot || dflt) === slot) seats.push(i); });
+    const byId = {}; marr.forEach(it => { byId[it.id] = it; });
+    meetOrder.forEach((mid, k) => { if (seats[k] != null && byId[mid]) marr[seats[k]] = byId[mid]; });
+    s.meet.paScript[mk] = marr;
+
+    const a = annEnsure(se); const sk = annSessFlowKey(kind);
+    const sarr = Array.isArray(a[sk]) ? a[sk].slice() : [];
+    sarr.forEach(it => { if (sessOrd[it.id] != null) it.ord = sessOrd[it.id]; });
+    a[sk] = sarr;
   });
 }
 // One vocabulary for the two scopes, said the way Mike says it out loud:
@@ -848,7 +907,16 @@ function annSetItemScope(fromScope, kind, sessId, id, toScope) {
   // burn an undo step or mark the schedule dirty for no reason.
   const cur = (S.sessions || []).find(x => x.id === sessId); if (!cur) return;
   const srcList = fromScope === 'meet' ? annMeetFlow(kind) : annSessFlow(cur, kind);
-  if (!srcList.some(x => x.id === id)) return;
+  const item = srcList.find(x => x.id === id); if (!item) return;
+  // Count what runs ahead of it BEFORE anything is removed — read this after
+  // the removal and the item can no longer find itself, which silently sent
+  // every demoted element to the front of its part of the show.
+  const dflt = annDefaultSlot(kind);
+  const slot = item.slot || dflt;
+  const seqNow = annSlotEntries(cur, kind, slot);
+  const at = seqNow.findIndex(r => r.it.id === id);
+  let standingBefore = 0;
+  for (let z = 0; z < at; z++) if (seqNow[z].scope === 'meet') standingBefore++;
   let moved = null;
   upd(s => {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
@@ -863,7 +931,20 @@ function annSetItemScope(fromScope, kind, sessId, id, toScope) {
     const i = from.findIndex(x => x.id === id); if (i < 0) return;
     moved = from[i];
     write(fromScope, from.filter(x => x.id !== id));
-    const to = read(toScope); to.push(moved); write(toScope, to);
+    // Hold its place in the show. A standing element dropping to one session
+    // keeps the spot it was printing in; a one-off promoted to every session
+    // is seated in the standing list at the same point in the sequence, since
+    // standing elements take their order from that list alone.
+    if (toScope === 'sess') {
+      moved.ord = annGapOrd(standingBefore, 0);
+      const to = read('sess'); to.push(moved); write('sess', to);
+    } else {
+      delete moved.ord;
+      const to = read('meet');
+      const seats = []; to.forEach((it, ix) => { if ((it.slot || dflt) === slot) seats.push(ix); });
+      to.splice(seats[standingBefore] != null ? seats[standingBefore] : to.length, 0, moved);
+      write('meet', to);
+    }
   });
   if (!moved) return;
   const w = annScopeWords(kind);
@@ -1279,8 +1360,6 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px">
       <input class="fi" style="flex:1;font-weight:700" value="${esc(it.label || '')}" placeholder="What is it? e.g. Countdown video"
         onchange="${up('label')}"/>
-      <button class="chip" style="padding:3px 9px" title="Move earlier" ${i === 0 ? 'disabled' : ''} onclick="annMoveItem('${scope}','${kind}','${sessId}','${it.id}',-1)">↑</button>
-      <button class="chip" style="padding:3px 9px" title="Move later" ${i === n - 1 ? 'disabled' : ''} onclick="annMoveItem('${scope}','${kind}','${sessId}','${it.id}',1)">↓</button>
       <button class="chip" style="padding:3px 9px;color:var(--red)" onclick="annDelItem('${scope}','${kind}','${sessId}','${it.id}')">Remove</button>
     </div>
     <div class="fg" style="margin-bottom:9px"><label class="fl">Runs in <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— switch it any time; nothing you have typed is lost</span></label>
@@ -1295,6 +1374,36 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
       <textarea class="fi" rows="2" style="resize:vertical;line-height:1.5" onchange="${up('cue')}">${esc(it.cue || '')}</textarea></div>
   </div>`;
 }
+// The two lists on this tab are about WHERE an element lives; this panel is
+// about WHEN it runs. It is the only place the merged order is visible, so it
+// is the only place ordering happens — the cards no longer carry arrows that
+// could only ever move an item inside its own list.
+function renderFlowOrderPanel(sess, kind) {
+  const w = annScopeWords(kind);
+  const groups = annSlotsFor(kind)
+    .map(sl => ({ sl, rows: annSlotEntries(sess, kind, sl.k) }))
+    .filter(g => g.rows.length);
+  if (groups.reduce((a, g) => a + g.rows.length, 0) < 2) return '';
+  const row = (r, i, n) => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;${i ? 'border-top:1px solid var(--bd)' : ''}">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--pool);min-width:14px">${i + 1}</span>
+      <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--navy);line-height:1.35">${esc(r.it.label || 'Untitled')}</span>
+      <span style="font-size:10.5px;color:var(--tx3);white-space:nowrap">${esc(r.scope === 'meet' ? w.everyChip : w.oneChip)}</span>
+      <button class="chip" style="padding:2px 8px" title="Run this earlier" ${i === 0 ? 'disabled' : ''} onclick="annMoveInSlot('${kind}','${sess.id}','${r.it.id}',-1)">\u2191</button>
+      <button class="chip" style="padding:2px 8px" title="Run this later" ${i === n - 1 ? 'disabled' : ''} onclick="annMoveInSlot('${kind}','${sess.id}','${r.it.id}',1)">\u2193</button>
+    </div>`;
+  return `<div style="border:1px solid var(--bd);border-left:3px solid var(--pool);border-radius:0 var(--r) var(--r) 0;background:var(--surf2);padding:11px 13px;margin-bottom:18px">
+    <div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">The order they run in</div>
+    <div style="font-size:11.5px;color:var(--tx2);line-height:1.55;margin-top:3px">
+      This is the order printed on the ${kind === 'bcast' ? 'run-of-show' : 'script'}. Standing elements and one-offs
+      run in one sequence, so anything here can go before anything else in the same part of the show.
+    </div>
+    ${groups.map(g => `<div style="margin-top:11px">
+      <div style="font-size:11px;font-weight:700;color:var(--navy);padding-bottom:2px">${esc(annSlotLabel(g.sl.k, kind))}</div>
+      ${g.rows.map((r, i) => row(r, i, g.rows.length)).join('')}
+    </div>`).join('')}
+  </div>`;
+}
+
 function renderFlowTab(sess, kind) {
   const meetList = annMeetFlow(kind), sessList = annSessFlow(sess, kind);
   const bc = kind === 'bcast';
@@ -1315,7 +1424,8 @@ function renderFlowTab(sess, kind) {
       the <strong>cue</strong> is printed ${bc ? 'under the element for you and the crew, not read out' : 'in a box for you and the crew'}.
       <br/><br/><strong>Every element runs in one place or everywhere — you choose.</strong>
       Add it under <strong>${esc(w.everyChip)}</strong> and it runs in all of them. Add it under
-      <strong>${esc(w.oneChip)}</strong>${sessN ? ` (Session ${sessN})` : ''} and nothing else is touched. Each element shows which list it is on, and you can move it between the two
+      <strong>${esc(w.oneChip)}</strong>${sessN ? ` (Session ${sessN})` : ''} and nothing else is touched.
+      Which list an element is on does not decide when it runs — set that under <strong>The order they run in</strong>. Each element shows which list it is on, and you can move it between the two
       at any time without retyping it.
       ${bc ? `<br/><br/><strong>These make the show longer.</strong> The broadcast clock is the schedule for this block, so anything
         with a length on it pushes the run-of-show out by exactly that much and the rest of the day reflows around it.
@@ -1332,6 +1442,7 @@ function renderFlowTab(sess, kind) {
       <div class="chiprow" style="margin-top:8px"><button class="chip" onclick="annCopyFinalsFlowToBcast()">Copy the finals items in</button></div>
     </div>` : ''}
 
+    ${renderFlowOrderPanel(sess, kind)}
     <div class="fsec">${esc(w.everyChip)} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— ${esc(w.everySub)}</span></div>
     ${list(meetList, 'meet')}
     <div class="chiprow" style="margin-bottom:20px">
