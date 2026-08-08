@@ -808,6 +808,49 @@ CREATE TABLE IF NOT EXISTS membership.member_gender (
   derived_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- ============================================================
+-- Dive Live meet classification + AAU/USAD overlap
+-- Dive Live carries NO sanctioning field and only ~28% of meets name a body,
+-- so classification is name-evidence only and every row records the rule and
+-- rule_version that produced it. Rebuilt wholesale by build_aau_overlap.py.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS scoresandmore.meet_classification (
+  meet_id            integer PRIMARY KEY,
+  meet_name          text,
+  start_date         date,
+  body               text,     -- aau | ncaa | hs | ymca | masters | other | unknown
+  series             text,     -- aau_nationals | aau_rwb_qualifier | ...
+  rwb_color          text,     -- red | white | blue   (RWB series only)
+  rwb_region         text,     -- north | south | central
+  is_domestic_aau    boolean NOT NULL DEFAULT false,
+  rule               text,     -- which rule fired
+  rule_version       text,     -- bump on any rule change; makes rows reproducible
+  source_diver_count integer,  -- Dive Live catalog "# divers", available even
+                               -- for meets whose results are not yet crawled
+  classified_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS sm_mc_aau    ON scoresandmore.meet_classification(is_domestic_aau);
+CREATE INDEX IF NOT EXISTS sm_mc_series ON scoresandmore.meet_classification(series);
+CREATE INDEX IF NOT EXISTS sm_mc_date   ON scoresandmore.meet_classification(start_date);
+
+-- Aggregates ONLY. No name, member_id, or diver_id pairing is persisted: the
+-- match runs in CI under owner credentials and writes only these counts, so
+-- the publicly-readable role never gains a route back to member identities.
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_usad_overlap (
+  cohort_year    integer NOT NULL,
+  match_tier     text    NOT NULL,   -- exact | nickname | initial
+  aau_divers     integer NOT NULL,
+  matched_usad   integer NOT NULL,
+  match_pct      numeric,
+  method_version text,
+  rule_version   text,
+  computed_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (cohort_year, match_tier)
+);
+
+GRANT SELECT ON scoresandmore.meet_classification TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap    TO usad_app;
+
 CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
   meet_id  integer NOT NULL,
   event_id integer NOT NULL,
