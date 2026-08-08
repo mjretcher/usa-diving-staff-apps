@@ -1533,6 +1533,51 @@ function bcastSessScope(list, sessId) {
   return list.filter(s => s.id === sessId ||
     (s.timing && s.timing.deferredAwards && s.timing.deferredAwards.fromSessId === sessId));
 }
+/* Fitting a day onto the paper.
+
+   A day that runs a page and a bit is the worst outcome: page two arrives half
+   empty and the stack doubles. But squeezing a day that was always going to need
+   two pages just makes it hard to read for nothing. So the sheet measures itself
+   and tightens ONLY as far as tightening actually saves a page.
+
+   Measuring works because the print window renders each page at the real printable
+   width (10.3in \u2014 letter landscape less the 0.35in margins) on screen too, so
+   what is measured is what prints. The inch probe converts to pixels at whatever
+   the device does, rather than assuming 96.
+*/
+const BCAST_FIT_STEPS = ['bcs-fit1', 'bcs-fit2', 'bcs-fit3'];
+const BCAST_PAGE_IN = { w: 10.3, h: 7.8 };
+// Given the height a page comes out at under each density, pick which to use:
+// the LOOSEST one that reaches the fewest pages.
+function bcastFitLevel(heights, avail) {
+  if (!avail || !heights || !heights.length) return 0;
+  let best = 0, bestPages = Math.ceil(heights[0] / avail);
+  for (let i = 1; i < heights.length; i++) {
+    const n = Math.ceil(heights[i] / avail);
+    if (n < bestPages) { bestPages = n; best = i; }
+  }
+  return best;
+}
+function bcastFitPages(doc) {
+  if (!doc || !doc.body) return;
+  const pages = Array.prototype.slice.call(doc.querySelectorAll('.bcs-page'));
+  if (!pages.length) return;
+  const probe = doc.createElement('div');
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;width:1in;height:1in';
+  doc.body.appendChild(probe);
+  const ppi = (probe.getBoundingClientRect && probe.getBoundingClientRect().height) || 96;
+  if (probe.parentNode) probe.parentNode.removeChild(probe);
+  const avail = BCAST_PAGE_IN.h * ppi;
+  pages.forEach(pg => {
+    const h = () => (pg.getBoundingClientRect ? pg.getBoundingClientRect().height : 0);
+    const heights = [h()];
+    BCAST_FIT_STEPS.forEach(c => { pg.classList.add(c); heights.push(h()); });
+    BCAST_FIT_STEPS.forEach(c => pg.classList.remove(c));
+    const lvl = bcastFitLevel(heights, avail);
+    for (let i = 0; i < lvl; i++) pg.classList.add(BCAST_FIT_STEPS[i]);
+  });
+}
+
 function printBroadcast(forCoaches) {
   const list = UI.bcastSessId ? bcastSessScope(allTimed(), UI.bcastSessId) : bcastScopeSessions();
   const title = (typeof genTitle === 'function' && genTitle()) || S.meet.name || 'USA Diving';
@@ -1547,7 +1592,16 @@ function printBroadcast(forCoaches) {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>${BCAST_PRINT_CSS}</style></head><body>${html}</body></html>`);
   w.document.close();
-  setTimeout(() => { try { w.focus(); w.print(); } catch (e) { } }, 700);
+  // Fit before printing, and only once the fonts are in \u2014 measuring against
+  // fallback metrics would size the page for type that is about to be replaced.
+  const go = () => setTimeout(() => {
+    try { bcastFitPages(w.document); } catch (e) { }
+    try { w.focus(); w.print(); } catch (e) { }
+  }, 120);
+  try {
+    if (w.document.fonts && w.document.fonts.ready) w.document.fonts.ready.then(go, go);
+    else setTimeout(go, 700);
+  } catch (e) { setTimeout(go, 700); }
 }
 
 const BCAST_PRINT_CSS = `
@@ -1557,6 +1611,39 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 @page{size:letter landscape;margin:0.35in}
 .bcs-page{display:flex;flex-direction:column;break-after:page;page-break-after:always}
 .bcs-page:last-child{break-after:auto;page-break-after:auto}
+/* On screen the print window shows each page at the REAL printable width, so what
+   the fitter measures is what comes out of the printer \u2014 and the window doubles
+   as a page-accurate preview. */
+@media screen{
+  body{background:#EEF1F7;padding:18px 0}
+  .bcs-page{width:10.3in;min-height:7.8in;margin:0 auto 18px;background:#fff;box-shadow:0 2px 12px rgba(23,31,105,.16)}
+}
+@media print{ .bcs-page{width:auto;min-height:0;margin:0;box-shadow:none} }
+
+/* Three steps of tightening, applied only as far as they save a page. Cumulative:
+   fit2 assumes fit1, fit3 assumes both. Nothing drops below 8px. */
+.bcs-fit1 .bcs-tbl td{padding:2.5px 6px;font-size:10px}
+.bcs-fit1 .bcs-body{padding:8px 14px 2px}
+.bcs-fit1 .bcs-sess{margin-bottom:9px}
+.bcs-fit1 .bcr-c{font-size:9px;line-height:1.28}
+.bcs-fit1 .bcr-ordrow td{padding:3px 8px 5px}
+.bcs-fit1 .bcs-phd{padding:8px 16px}
+.bcs-fit1 .bcs-pmeet{font-size:14px}
+.bcs-fit1 .bcs-plogo{height:24px}
+.bcs-fit1 .bcs-pft{padding:5px 16px;margin-top:4px}
+.bcs-fit2 .bcs-tbl td{padding:1.5px 5px;font-size:9.5px}
+.bcs-fit2 .bcr-c{font-size:8.5px;line-height:1.22}
+.bcs-fit2 .bcs-sess{margin-bottom:6px}
+.bcs-fit2 .bcs-nm{font-size:12px}
+.bcs-fit2 .bcr-ord-l{columns:150px}
+.bcs-fit2 .bcr-ord-l li{font-size:8.5px;line-height:1.35}
+.bcs-fit3 .bcs-tbl td{padding:1px 4px;font-size:9px}
+.bcs-fit3 .bcr-c{font-size:8px;line-height:1.18}
+.bcs-fit3 .bcr-t{width:76px}
+.bcs-fit3 .bcr-p,.bcs-fit3 .bcr-d{width:66px;font-size:9px}
+.bcs-fit3 .bcr-note{font-size:8px}
+.bcs-fit3 .bcr-ord-l{columns:135px}
+.bcs-fit3 .bcr-ord-l li{font-size:8px;line-height:1.3}
 .bcs-pday{font-size:10.5px;font-weight:700;color:var(--sky);letter-spacing:.02em;white-space:nowrap}
 .bcs-phd{background:var(--navy);color:#fff;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;position:relative}
 .bcs-phd::after{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--pool)}
