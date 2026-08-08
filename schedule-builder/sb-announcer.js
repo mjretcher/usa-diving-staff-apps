@@ -722,29 +722,60 @@ const ANN_SLOTS = [
   { k: 'beforeEvents', l: 'After the welcome, before the introductions', lOpen: 'After the welcome, before the event rundown' },
   { k: 'beforeHandoff', l: 'Right before the pool is turned over', lOpen: 'Right before the pool is turned over' },
 ];
+// A run-of-show has no welcome, no anthem and no "the pool is yours" handoff,
+// so the announcer's three places do not exist on a broadcast block. These are
+// the three places on the broadcast spine, named for what the producer sees.
+const BCAST_SLOTS = [
+  { k: 'preIntros', l: 'After the boards close, before the introductions' },
+  { k: 'preRound1', l: 'After the introductions, before the first dive' },
+  { k: 'preAwards', l: 'After the last dive, before the awards' },
+];
+function annSlotsFor(kind) { return kind === 'bcast' ? BCAST_SLOTS : ANN_SLOTS; }
 function annSlotLabel(k, kind) {
-  const s = ANN_SLOTS.find(x => x.k === k) || ANN_SLOTS[0];
+  const list = annSlotsFor(kind);
+  const s = list.find(x => x.k === k) || list[0];
   return kind === 'session' ? s.lOpen : s.l;
 }
+function annDefaultSlot(kind) { return annSlotsFor(kind)[0].k; }
 function annNewItem(o) {
   return Object.assign({
     id: 'fi' + Math.random().toString(36).slice(2, 9),
     label: 'New item', slot: 'start', sec: 0, say: '', cue: '',
   }, o || {});
 }
-function annMeetFlowKey(kind) { return kind === 'session' ? 'flowOpen' : 'flowFinals'; }
+// Broadcast show elements are a SEPARATE list from the announcer script's, at
+// both levels. Two reasons, and the second is the important one:
+//   • the slots differ, so an item written for one has no honest place in the
+//     other ("right before the pool is turned over" means nothing on air);
+//   • sharing them would make every existing broadcast block in every saved
+//     schedule suddenly longer the moment this shipped, and the whole day
+//     would reflow around items nobody put there. An empty list adds zero
+//     seconds, so nothing moves until Mike adds something himself.
+// "Copy the finals items in" (annCopyFinalsFlowToBcast) covers the case where
+// he does want the same countdown in both, without retyping it.
+function annMeetFlowKey(kind) { return kind === 'session' ? 'flowOpen' : (kind === 'bcast' ? 'flowBcast' : 'flowFinals'); }
+function annSessFlowKey(kind) { return kind === 'bcast' ? 'bcastItems' : 'items'; }
 function annMeetFlow(kind) {
   const v = (S.meet && S.meet.paScript && S.meet.paScript[annMeetFlowKey(kind)]) || [];
   return Array.isArray(v) ? v : [];
 }
-function annSessFlow(sess) {
-  const v = (sess && sess.announcer && sess.announcer.items) || [];
+function annSessFlow(sess, kind) {
+  const v = (sess && sess.announcer && sess.announcer[annSessFlowKey(kind)]) || [];
   return Array.isArray(v) ? v : [];
 }
 // Meet-level first, then this session's — the standing part of the show
 // before the one-off.
 function annFlowAt(sess, kind, slot) {
-  return annMeetFlow(kind).concat(annSessFlow(sess)).filter(i => (i.slot || 'start') === slot);
+  const dflt = annDefaultSlot(kind);
+  return annMeetFlow(kind).concat(annSessFlow(sess, kind)).filter(i => (i.slot || dflt) === slot);
+}
+// Everything scheduled on a broadcast block, in slot order — used by the
+// rundown and by the "how much longer does this make the show" line.
+function bcastFlowItems(sess) {
+  return BCAST_SLOTS.reduce((a, sl) => a.concat(annFlowAt(sess, 'bcast', sl.k)), []);
+}
+function bcastFlowAddedSec(sess) {
+  return bcastFlowItems(sess).reduce((a, i) => a + annFlowSec(i), 0);
 }
 function annFlowSec(i) { return Math.max(0, Math.round(Number(i && i.sec) || 0)); }
 
@@ -758,19 +789,20 @@ function annWriteMeetFlow(kind, fn) {
     s.meet.paScript[k] = out || arr;
   });
 }
-function annWriteSessFlow(sessId, fn) {
+function annWriteSessFlow(sessId, kind, fn) {
   upd(s => {
     const sess = s.sessions.find(x => x.id === sessId); if (!sess) return;
     const a = annEnsure(sess);
-    const arr = Array.isArray(a.items) ? a.items.slice() : [];
-    a.items = fn(arr) || arr;
+    const k = annSessFlowKey(kind);
+    const arr = Array.isArray(a[k]) ? a[k].slice() : [];
+    a[k] = fn(arr) || arr;
   });
 }
 function annFlowWrite(scope, kind, sessId, fn) {
-  if (scope === 'meet') annWriteMeetFlow(kind, fn); else annWriteSessFlow(sessId, fn);
+  if (scope === 'meet') annWriteMeetFlow(kind, fn); else annWriteSessFlow(sessId, kind, fn);
 }
 function annAddItem(scope, kind, sessId, preset) {
-  annFlowWrite(scope, kind, sessId, arr => { arr.push(annNewItem(preset)); return arr; });
+  annFlowWrite(scope, kind, sessId, arr => { arr.push(annNewItem(Object.assign({ slot: annDefaultSlot(kind) }, preset || {}))); return arr; });
 }
 function annUpdItem(scope, kind, sessId, id, field, value) {
   annFlowWrite(scope, kind, sessId, arr => {
@@ -792,10 +824,29 @@ function annMoveItem(scope, kind, sessId, id, dir) {
 // The one item Mike asked for by name, pre-filled so it is one click.
 function annAddCountdown(scope, kind, sessId) {
   annAddItem(scope, kind, sessId, {
-    label: 'Countdown video', slot: 'beforeEvents', sec: 60,
+    label: 'Countdown video', slot: kind === 'bcast' ? 'preIntros' : 'beforeEvents', sec: 60,
     say: 'Please direct your attention to the video board.',
     cue: 'Roll the countdown video. Hold the microphone until it has finished and the room settles.',
   });
+}
+
+// Bringing the announcer script's standing finals items onto the broadcast
+// list. Offered, never automatic — see annMeetFlowKey() for why. The slots are
+// remapped because the two shows are not the same shape: everything the
+// announcer does before the introductions happens before the introductions on
+// air too, and the handoff slot becomes "before the first dive".
+const ANN_TO_BCAST_SLOT = { start: 'preIntros', beforeEvents: 'preIntros', beforeHandoff: 'preRound1' };
+function annCopyFinalsFlowToBcast() {
+  const src = annMeetFlow('finals');
+  if (!src.length) { toast('There are no every-finals items to copy.'); return; }
+  annWriteMeetFlow('bcast', arr => {
+    src.forEach(it => arr.push(annNewItem(Object.assign({}, it, {
+      id: 'fi' + Math.random().toString(36).slice(2, 9),
+      slot: ANN_TO_BCAST_SLOT[it.slot || 'start'] || 'preIntros',
+    }))));
+    return arr;
+  });
+  toast(`Copied ${src.length} item${src.length === 1 ? '' : 's'} — check the timing, the show is now longer.`);
 }
 
 // ── DIVE ORDER PARSING ────────────────────────────────────────────────
@@ -1135,6 +1186,8 @@ function renderAnnSessPanel(sess) {
 function renderAnnBcastSessPanel(sess) {
   const st = annOrderStatus(sess);
   if (!st.total) return '';
+  const flow = bcastFlowItems(sess);
+  const flowSec = bcastFlowAddedSec(sess);
   const done = st.filled === st.total;
   return `
     <div class="fdiv"></div>
@@ -1148,6 +1201,7 @@ function renderAnnBcastSessPanel(sess) {
     <div class="fg" style="margin-top:10px"><label class="fl">Finals dive order for the introductions</label>
       <div class="chiprow">
         <button class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
+        <button class="chip" onclick="UI.annSessId='${sess.id}';UI.annTab='flow';UI.modal='announcer';render()">Show elements${flowSec ? ` (+${bmmss(flowSec)})` : '…'}</button>
         <button class="chip" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
       </div>
     </div>
@@ -1157,6 +1211,7 @@ function renderAnnBcastSessPanel(sess) {
       : `No dive order loaded yet. The run-of-show still times the introductions; it just has no names to print.`}
       ${st.mismatch.length ? `<br/><span style="color:var(--red);font-weight:700">${st.mismatch.map(m => `${esc(evName(m.ev))}: sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}.</span>
       <span style="color:var(--tx3)">The read uses the sheet; the clock uses the entries. Change the entries if the field really has changed.</span>` : ''}
+      ${flow.length ? `<br/><strong>${flow.length} show element${flow.length === 1 ? '' : 's'}</strong> — ${esc(flow.map(i => i.label || 'Untitled').join(', '))}${flowSec ? `, adding <span style="font-family:'JetBrains Mono',monospace;font-weight:700">${bmmss(flowSec)}</span> to this block.` : ', none of them taking time.'}` : ''}
     </div>`;
 }
 
@@ -1174,7 +1229,7 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
       <button class="chip" style="padding:3px 9px;color:var(--red)" onclick="annDelItem('${scope}','${kind}','${sessId}','${it.id}')">Remove</button>
     </div>
     <div class="fg" style="margin-bottom:9px"><label class="fl">Where it goes</label>
-      <div class="chiprow">${ANN_SLOTS.map(slotChip).join('')}</div></div>
+      <div class="chiprow">${annSlotsFor(kind).map(slotChip).join('')}</div></div>
     <div class="fg" style="margin-bottom:9px"><label class="fl">How long does it take? <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— seconds; 0 if it takes no time</span></label>
       <input class="fi" type="number" min="0" step="5" style="max-width:140px" value="${annFlowSec(it)}" onchange="${up('sec')}"/></div>
     <div class="fg" style="margin-bottom:9px"><label class="fl">What I say <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— leave blank if I say nothing</span></label>
@@ -1184,31 +1239,49 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
   </div>`;
 }
 function renderFlowTab(sess, kind) {
-  const meetList = annMeetFlow(kind), sessList = annSessFlow(sess);
-  const everyLabel = kind === 'session' ? 'every preliminary session' : 'every finals session';
+  const meetList = annMeetFlow(kind), sessList = annSessFlow(sess, kind);
+  const bc = kind === 'bcast';
+  const everyLabel = kind === 'session' ? 'every preliminary session'
+    : bc ? 'every block on the broadcast clock' : 'every finals session';
+  const everyHead = bc ? 'Every broadcast block' : 'Every finals session';
   const list = (arr, scope) => arr.length
     ? arr.map((it, i) => renderFlowItemCard(it, scope, kind, sess.id, i, arr.length)).join('')
     : `<div style="font-size:12px;color:var(--tx3);padding:10px 0">Nothing here yet.</div>`;
+  const added = bc ? bcastFlowAddedSec(sess) : 0;
+  const canCopy = bc && !meetList.length && annMeetFlow('finals').length;
   return `
     <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:16px">
       Anything extra that has to happen in the run of show — a countdown video, a moment of silence, a presentation,
       a sponsor read. Give it a name, say where it goes and how long it takes. Whatever you put under
-      <strong>What I say</strong> is printed to read aloud; the <strong>cue</strong> is printed in a box for you and the crew.
-      Items that take time are counted in the timing check, so the script still tells you honestly whether it all fits.
+      <strong>What I say</strong> is ${bc ? 'printed in the PA column to read aloud' : 'printed to read aloud'};
+      the <strong>cue</strong> is printed ${bc ? 'under the element for you and the crew, not read out' : 'in a box for you and the crew'}.
+      ${bc ? `<br/><br/><strong>These make the show longer.</strong> The broadcast clock is the schedule for this block, so anything
+        with a length on it pushes the run-of-show out by exactly that much and the rest of the day reflows around it.
+        Put a sponsor read inside an existing break instead if you do not want the show to grow — breaks are named and timed
+        on the broadcast panel.` : `Items that take time are counted in the timing check, so the script still tells you honestly whether it all fits.`}
     </div>
+    ${bc && added ? `<div style="font-size:12px;font-weight:700;color:var(--navy);background:var(--surf2);border:1px solid var(--bd);border-left:3px solid var(--pool);border-radius:0 var(--r) var(--r) 0;padding:9px 12px;margin-bottom:16px">
+      These add <span style="font-family:'JetBrains Mono',monospace">${bmmss(added)}</span> to this block's show.
+    </div>` : ''}
+    ${canCopy ? `<div style="font-size:11.5px;color:var(--tx2);line-height:1.6;background:var(--wu-bg);border:1px solid var(--wu-bd);border-radius:var(--r);padding:10px 12px;margin-bottom:16px">
+      You already have <strong>${annMeetFlow('finals').length}</strong> standing item${annMeetFlow('finals').length === 1 ? '' : 's'} on the announcer script's finals list.
+      Broadcast blocks keep their own list on purpose — nothing is pulled across by itself, because it would make every
+      broadcast block longer without you asking.
+      <div class="chiprow" style="margin-top:8px"><button class="chip" onclick="annCopyFinalsFlowToBcast()">Copy the finals items in</button></div>
+    </div>` : ''}
 
-    <div class="fsec">Every finals session <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— write once, prints in ${esc(everyLabel)}</span></div>
+    <div class="fsec">${esc(everyHead)} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— write once, prints in ${esc(everyLabel)}</span></div>
     ${list(meetList, 'meet')}
     <div class="chiprow" style="margin-bottom:20px">
-      ${kind === 'finals' ? `<button class="chip" onclick="annAddCountdown('meet','${kind}','${sess.id}')">Add countdown video</button>` : ''}
+      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('meet','${kind}','${sess.id}')">Add countdown video</button>` : ''}
       <button class="chip" onclick="annAddItem('meet','${kind}','${sess.id}')">Add something else</button>
     </div>
 
     <div class="fdiv"></div>
-    <div class="fsec">Just this session <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— one-offs</span></div>
+    <div class="fsec">Just this ${bc ? 'block' : 'session'} <span style="font-weight:600;color:var(--tx3);text-transform:none;letter-spacing:0">— one-offs</span></div>
     ${list(sessList, 'sess')}
     <div class="chiprow">
-      ${kind === 'finals' ? `<button class="chip" onclick="annAddCountdown('sess','${kind}','${sess.id}')">Add countdown video</button>` : ''}
+      ${kind === 'finals' || bc ? `<button class="chip" onclick="annAddCountdown('sess','${kind}','${sess.id}')">Add countdown video</button>` : ''}
       <button class="chip" onclick="annAddItem('sess','${kind}','${sess.id}')">Add something else</button>
     </div>`;
 }
@@ -1847,10 +1920,13 @@ function renderAnnBcastModal(sess) {
   const targets = annOrderTargets(sess);
   const st = annOrderStatus(sess);
   const day = S.meet.days.find(d => d.id === sess.dayId);
-  const tab = UI.annTab === 'preview' ? 'preview' : 'order';
+  const tab = ['preview', 'flow'].includes(UI.annTab) ? UI.annTab : 'order';
   let n = ''; try { n = getSessNum(sess, allTimed()); } catch (e) { }
   const tabBtn = (k, l) => `<button class="chip ${tab === k ? 'on' : ''}" onclick="UI.annTab='${k}';render()">${l}</button>`;
-  const body = tab === 'order' ? renderAnnOrderTab(sess, targets) : renderAnnPresentRead(sess, targets);
+  const added = bcastFlowAddedSec(sess);
+  const body = tab === 'order' ? renderAnnOrderTab(sess, targets)
+    : tab === 'flow' ? renderFlowTab(sess, 'bcast')
+      : renderAnnPresentRead(sess, targets);
 
   return `<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px)">
     <div class="modal-hd">
@@ -1859,10 +1935,13 @@ function renderAnnBcastModal(sess) {
       <button class="modal-close" onclick="UI.modal=null;render()">×</button>
     </div>
     <div style="padding:12px 22px 0">
-      <div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('preview', 'The read')}</div>
+      <div class="chiprow">${tabBtn('order', 'Dive order')}${tabBtn('preview', 'The read')}${tabBtn('flow', 'Flow' + (added ? ` (+${bmmss(added)})` : ''))}</div>
       <div style="font-size:11.5px;color:var(--tx2);line-height:1.6;margin-top:10px;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
-        These names are read during <strong>Athlete presentation</strong> on the run-of-show, and print there.
-        The show clock, the PA cue lines and the breaks are set on the <strong>broadcast timing</strong> panel — not here.
+        ${tab === 'flow'
+      ? `Extra things that have to happen in the show — a countdown video, a moment of silence, a presentation. They print
+         on the run-of-show in place, and <strong>they make the block longer</strong>.`
+      : `These names are read during <strong>Athlete presentation</strong> on the run-of-show, and print there.
+         The show clock, the PA cue lines and the breaks are set on the <strong>broadcast timing</strong> panel — not here.`}
         ${st.mismatch.length ? `<br/><span style="color:var(--red);font-weight:700">${st.mismatch.map(m => `${esc(evName(m.ev))}: sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}.</span>` : ''}
       </div>
     </div>

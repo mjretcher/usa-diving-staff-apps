@@ -1450,6 +1450,9 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 .bcr-ord-l li{font-size:10px;font-weight:600;line-height:1.5;break-inside:avoid;color:#1a1c2e}
 .bcr-ord-l li b{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);margin-right:5px}
 .bcr-ord-l li span{font-weight:500;color:#5F6062}
+/* Show elements added on the Flow tab — countdown video, moment of silence */
+.bcs .bcr.k-item{background:#FFFBEF}
+.bcs .bcr.k-item .bcr-l{color:#8A6100}
 .bcr.k-round{background:#EAF6FB}
 .bcr.k-round .bcr-l{color:var(--navy)}
 .bcr.k-break,.bcr.k-reset{background:#FFF6F8}

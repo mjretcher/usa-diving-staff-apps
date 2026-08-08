@@ -464,6 +464,10 @@ const RESET_CUE_BY_POS = {
   afterIntros: PA_CUE_DEFAULTS.reset,
 };
 function paCueFor(row, cues) {
+  // A show element carries the words its author wrote. There is no library cue
+  // for a countdown video or a moment of silence, and inventing one would put
+  // words in the PA's mouth that nobody signed off.
+  if (row && row.kind === 'item') return String(row.paText || '');
   let tpl = cues[row.cueKey] || '';
   const userSet = S.meet && S.meet.paCues && S.meet.paCues.reset;
   if (row.cueKey === 'reset' && row.resetPos && !userSet) tpl = RESET_CUE_BY_POS[row.resetPos] || tpl;
@@ -533,6 +537,26 @@ function bcastRows(sess) {
     if (resetSec <= 0) return;
     push('reset', 'reset', resetName.toUpperCase(), resetSec, { evName: evLabel, breakLabel: resetName, resetPos });
   };
+  // Show elements — countdown video, moment of silence, presentation. Set on
+  // the Flow tab of the dive-order screen; stored on their own list so no
+  // existing block grew when this shipped (see annMeetFlowKey). Each one ADDS
+  // its length to the show: the broadcast clock is the schedule for this block,
+  // so a 60-second countdown really does push the day out 60 seconds. Nothing
+  // is absorbed silently — a sponsor read that must not lengthen the show goes
+  // inside a named break instead.
+  const pushFlow = (slot) => {
+    if (typeof annFlowAt !== 'function') return;
+    let items = [];
+    try { items = annFlowAt(sess, 'bcast', slot) || []; } catch (e) { return; }
+    items.forEach(it => {
+      const sec = (typeof annFlowSec === 'function') ? annFlowSec(it) : Math.max(0, Math.round(Number(it.sec) || 0));
+      push('item', 'item', String(it.label || 'Show element').toUpperCase(), sec, {
+        evName: evLabel, slot, itemId: it.id,
+        paText: String(it.say || ''),
+        note: it.cue ? 'CUE — ' + String(it.cue) : '',
+      });
+    });
+  };
   const pushIntro = (label, divers, sec, cueKey, extra) =>
     push('presentation', cueKey || 'presentation', label, sec, Object.assign({ evName: introLabel || evLabel, divers, perSec: introPer, introRefs }, extra || {}));
 
@@ -542,6 +566,7 @@ function bcastRows(sess) {
   });
 
   if (inBoards || resetPos === 'beforeIntros') pushReset();
+  pushFlow('preIntros');
 
   if (coveredBy) {
     // Marker only — no time. Label resolved at render time (see bcastRowLabel).
@@ -560,6 +585,7 @@ function bcastRows(sess) {
       { note: coverNext ? introLabel + ' — introduced together, once' : '' });
     if (resetPos === 'afterIntros' || (resetPos === 'midIntros' && resetSec > 0)) pushReset();
   }
+  pushFlow('preRound1');
 
   // ── Competition segments ────────────────────────────────────────────
   const interleaved = Boolean(c.interleave) && evs.length > 1;
@@ -613,6 +639,11 @@ function bcastRows(sess) {
 
     const isEvLastRound = sg.round === nRounds;
     const isLastSeg = i === segs.length - 1;
+
+    // Placed here rather than after the loop so it lands ahead of the back of
+    // show in BOTH branches — before the last ceremony when ceremonies follow
+    // each event, and before the interviews and medals when they do not.
+    if (isLastSeg) pushFlow('preAwards');
 
     if (isEvLastRound && ceremonyAfterEach) { pushCeremony(ev); return; }
     if (isEvLastRound) deferred.push(ev);
@@ -817,6 +848,7 @@ function renderBcastSessPanel(sess) {
     return `<div class="bc-f wide"><label>Finals dive order for the introductions <span class="bc-opt">the names read out loud</span></label>
       <div class="chiprow">
         <button type="button" class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
+        <button type="button" class="chip" onclick="UI.annSessId='${sess.id}';UI.annTab='flow';UI.modal='announcer';render()">Show elements…</button>
       </div>
       <span class="bc-hint">${st.filled
         ? `Loaded for <strong>${st.filled} of ${st.total}</strong> event${st.total === 1 ? '' : 's'} — ${st.athletes} ${st.athletes === 1 ? 'name' : 'names'} print under Athlete presentation, in reading order, with each athlete's club.`
@@ -1334,6 +1366,7 @@ function renderPaCueModal() {
 const BC_KIND_LABEL = {
   boardsclose: 'Boards', presentation: 'Intros', reset: 'Break', round: 'Round',
   break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End', handoff: 'Awards', introsdone: 'Intros',
+  item: 'Show',
 };
 function renderBcastSheet(timedSessions, opts) {
   opts = opts || {};
@@ -1466,6 +1499,8 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .bcr.k-break .bcr-l,.bcr.k-reset .bcr-l{color:var(--red)}
 .bcr.k-ceremony,.bcr.k-ceremonyprep,.bcr.k-flash{background:#F5F2FA}
 .bcr.k-boardsclose,.bcr.k-presentation{background:#F2F4F8}
+.bcr.k-item{background:#FFFBEF}
+.bcr.k-item .bcr-l{color:#8A6100}
 .bcr.k-finish{background:var(--navy)}
 .bcr.k-finish td{color:#fff;font-weight:800}
 .bcs-pft{display:flex;justify-content:space-between;padding:8px 18px;border-top:2px solid var(--navy);font-size:9px;color:var(--gray);margin-top:6px}
@@ -1488,7 +1523,7 @@ async function exportBroadcast() {
   if (typeof ExcelJS === 'undefined') { toast('Excel engine not loaded — use Print / PDF'); return; }
   const title = (typeof genTitle === 'function' && genTitle()) || S.meet.name || 'USA Diving';
   const cues = paCues();
-  const N = 'FF171F69', P = 'FF009AC7', R = 'FFE31937', W = 'FFFFFFFF', SKY = 'FFEAF6FB', PK = 'FFFFF6F8', GR = 'FFF2F4F8', LAV = 'FFF5F2FA';
+  const N = 'FF171F69', P = 'FF009AC7', R = 'FFE31937', W = 'FFFFFFFF', SKY = 'FFEAF6FB', PK = 'FFFFF6F8', GR = 'FFF2F4F8', LAV = 'FFF5F2FA', ITM = 'FFFFFBEF';
   try {
     const wb = new ExcelJS.Workbook(); wb.creator = 'USA Diving'; wb.created = new Date();
     const ws = wb.addWorksheet('Run of Show', { views: [{ state: 'frozen', ySplit: 3 }] });
@@ -1522,7 +1557,8 @@ async function exportBroadcast() {
       rows.forEach(r => {
         const bg = r.kind === 'round' ? SKY : (r.kind === 'break' || r.kind === 'reset') ? PK
           : (r.kind === 'ceremony' || r.kind === 'ceremonyprep' || r.kind === 'flash') ? LAV
-            : r.kind === 'finish' ? N : GR;
+            : r.kind === 'item' ? ITM
+              : r.kind === 'finish' ? N : GR;
         const per = r.kind === 'round' || (r.kind === 'presentation' && r.perSec) ? `${r.divers} × ${bmmss(r.perSec)}` : '';
         const row = ws.addRow([bclock(r.startSec), BC_KIND_LABEL[r.kind] || '', bcastRowLabel(r), per, r.durSec ? bsec(r.durSec) : '', paCueFor(r, cues)]);
         row.eachCell({ includeEmpty: true }, (c, i) => {
