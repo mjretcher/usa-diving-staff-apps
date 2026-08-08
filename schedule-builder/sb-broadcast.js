@@ -986,9 +986,16 @@ function renderBcastSessPanel(sess) {
       </div>`;
   })()}</div>
 
+    <div class="bc-pos">
+      <span class="bc-pos-l">Who this run-of-show is for</span>
+      <div class="chiprow">${bcastCopyChips()}</div>
+      <span class="bc-hint">${bcastCopyNote()}</span>
+    </div>
+
     <div class="bc-actions">
       <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
       <button class="btn btn-sm" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
+      <button class="btn btn-sm btn-p" onclick="UI.bcastSessId='${sess.id}';printBroadcast()" title="Print or save this block's run-of-show as it is set above">Print / PDF</button>
       ${bcastAllFinals().length > 1 ? `<button class="btn btn-sm" onclick="openBcastCopy('${sess.id}',null)">Copy setup to other finals…</button>` : ''}
     </div>
   </div>`;
@@ -1444,25 +1451,41 @@ function renderBcastSheet(timedSessions, opts) {
   </div>`;
 }
 
-function setBcastCopyFor(v) { UI.bcastForCoaches = (v === 'coaches'); render(); }
+/* Which copy the run-of-show is, is ONE setting. It shipped as two \u2014 one on the
+   preview, one on the Generate screen \u2014 which meant choosing "coaches" in the
+   place you happened to be standing did not change the place you weren't, and the
+   Generate preview honoured neither. One value now, offered wherever the sheet is,
+   so the choice reads the same from every direction.
+   The caller does its own re-render: the Generate screen has its own. */
+function bcastForCoaches() { return !!(AUD.broadcast && AUD.broadcast.forCoaches); }
+function setBcastCopyFor(v) {
+  const on = (v === 'coaches');
+  if (AUD.broadcast) { AUD.broadcast.forCoaches = on; AUD.broadcast.showCues = !on; }
+}
+// The choice itself, so it is worded identically in all three places it appears.
+function bcastCopyChips() {
+  const c = bcastForCoaches(), after = arguments[0] || 'render()';
+  const t = (k, l, tip) => `<button type="button" class="chip ${((k === 'coaches') === c) ? 'on' : ''}" title="${tip}" onclick="event.stopPropagation();setBcastCopyFor('${k}');${after}">${l}</button>`;
+  return t('crew', 'Crew copy', 'Everything the show runs on \u2014 the PA read and the cues under each element. For the announcer, the producer and the deck.')
+    + t('coaches', "Coaches' copy", 'Times, elements and dive order only. No PA read, no crew cues \u2014 the copy you send out.');
+}
+function bcastCopyNote() {
+  return bcastForCoaches()
+    ? "The copy you send out. A coach sees when each round goes, how long every break is, and the dive order \u2014 not what the announcer says or when to roll tape."
+    : 'For the announcer, the producer and the deck. Includes the PA read and the cues underneath each element.';
+}
 function renderBcastPreviewModal() {
   const sess = S.sessions.find(x => x.id === UI.bcastSessId);
   if (!sess) return '';
   const timed = bcastSessScope(allTimed(), sess.id);
   // Which copy you are looking at is which copy prints. One preview, one button,
   // no way to email the crew's cue sheet to a coach by mistake.
-  const coaches = !!UI.bcastForCoaches;
-  const tab = (k, l, t) => `<button class="chip ${((k === 'coaches') === coaches) ? 'on' : ''}" title="${t}" onclick="setBcastCopyFor('${k}')">${l}</button>`;
+  const coaches = bcastForCoaches();
   return `<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Run-of-show</span><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="chiprow" style="margin-bottom:6px">
-        ${tab('crew', 'Crew copy', 'Everything \u2014 the PA read and the cues under each element. For the announcer, the producer and the deck.')}
-        ${tab('coaches', "Coaches' copy", 'Times, elements and dive order only. No PA read, no crew cues \u2014 the copy you send out.')}
-      </div>
-      <p style="font-size:11.5px;color:var(--tx2);line-height:1.5;margin:0 0 12px">${coaches
-        ? "What a coach needs: when each round goes, how long every break is, and the dive order. The announcer's script and the crew cues are left out."
-        : 'Everything the show runs on, including what is read aloud and the cues underneath.'}</p>
+      <div class="chiprow" style="margin-bottom:6px">${bcastCopyChips()}</div>
+      <p style="font-size:11.5px;color:var(--tx2);line-height:1.5;margin:0 0 12px">${bcastCopyNote()}</p>
       ${renderBcastSheet(timed, { forCoaches: coaches, showCues: !coaches })}
     </div>
     <div class="modal-foot"><button class="btn btn-gh" onclick="closeModal()">Close</button><div style="flex:1"></div>

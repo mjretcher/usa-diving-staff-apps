@@ -5610,13 +5610,8 @@ function renderGenerateModal(timed){
           <p class="gen-aud-desc">${audDesc[aud]||''}</p>
           ${aud==='broadcast'?`
           <div class="gen-sec-lbl">Who is this run-of-show for?</div>
-          <div class="chiprow">
-            <button class="chip ${cfg.forCoaches?'':'on'}" title="Everything the show runs on \u2014 the PA read and the cues under each element." onclick="AUD['broadcast'].forCoaches=false;AUD['broadcast'].showCues=true;genRender()">Crew copy</button>
-            <button class="chip ${cfg.forCoaches?'on':''}" title="Times, elements and dive order only. No PA read, no crew cues." onclick="AUD['broadcast'].forCoaches=true;AUD['broadcast'].showCues=false;genRender()">Coaches' copy</button>
-          </div>
-          <p style="font-size:10px;color:var(--tx3);margin:6px 0 8px;line-height:1.45">${cfg.forCoaches
-            ? "The copy you send out. A coach sees when each round goes, how long every break is, and the dive order \u2014 not what the announcer says or when to roll tape."
-            : 'For the announcer, the producer and the deck. Includes the PA read and the cues underneath each element.'}</p>
+          <div class="chiprow">${typeof bcastCopyChips==='function'?bcastCopyChips('genRender()'):''}</div>
+          <p style="font-size:10px;color:var(--tx3);margin:6px 0 8px;line-height:1.45">${typeof bcastCopyNote==='function'?bcastCopyNote():''} This is the same choice as the one on the block's own run-of-show section \u2014 setting it in either place sets it in both.</p>
           <p style="font-size:10px;color:var(--tx3);margin:6px 0 10px;line-height:1.4">Leave the PA column on for the arena announcer's copy. Switch it off for the clean version you hand the streaming partner.</p>
           <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
           <p style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.4">Only Senior finals sessions with broadcast timing switched on appear here. Turn it on from the session editor.</p>
@@ -5641,7 +5636,7 @@ function renderGenerateModal(timed){
         <div class="gen-preview">
           <div class="gen-sec-lbl">Preview — ${esc(genScopeLabel())} <span class="pp-scrollhint">scroll to see full schedule</span></div>
           ${aud==='broadcast'
-            ?renderBcastSheet(genTimed.filter(s=>s.timing&&((bcastOn(s)&&s.timing.bcastRows)||s.timing.deferredAwards)),{title:genTitle(),showCues:cfg.showCues!==false})
+            ?renderBcastSheet(genTimed.filter(s=>s.timing&&((bcastOn(s)&&s.timing.bcastRows)||s.timing.deferredAwards)),{title:genTitle(),showCues:!cfg.forCoaches&&cfg.showCues!==false,forCoaches:!!cfg.forCoaches})
             :renderPP(genTimed,cfg,genTitle())}
         </div>
       </div>
@@ -5650,8 +5645,8 @@ function renderGenerateModal(timed){
       <button class="btn btn-gh" onclick="closeModal()">Close</button>
       <div style="flex:1"></div>
       ${aud==='broadcast'
-        ?`<button class="btn" onclick="UI.bcastSessId=null;exportBroadcast()">Run-of-show (.xlsx)</button>
-           <button class="btn btn-p" onclick="UI.bcastSessId=null;printBroadcast()">Print / PDF</button>`
+        ?`${cfg.forCoaches?'':`<button class="btn" onclick="UI.bcastSessId=null;exportBroadcast()">Run-of-show (.xlsx)</button>`}
+           <button class="btn btn-p" onclick="UI.bcastSessId=null;printBroadcast()">${cfg.forCoaches?"Coaches' copy \u2014 Print / PDF":'Print / PDF'}</button>`
         :`<button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xlsx)</button>
            <button class="btn" onclick="exportExcel()">Excel</button>
            <button class="btn btn-p" onclick="printReport()">Print / PDF</button>`}
