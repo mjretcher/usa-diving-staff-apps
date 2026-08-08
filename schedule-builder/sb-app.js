@@ -1544,6 +1544,48 @@ function normalizeAllDays(stateSnap){
     const _t=entryValue(ev);
     if(Number(ev.numberOfDivers||0)!==_t)ev.numberOfDivers=_t;
   }));
+  dedupeEventIds(st);
+}
+
+// Two events may not share an id, and some saved schedules break that.
+// Every built-in seed that pairs a prelim with a final names its events for
+// WHAT they are ("senior-men-1-meter-individual") rather than uniquely, so the
+// Senior Men 1-Meter prelim and the Senior Men 1-Meter final carry the same id.
+// The run sheet keys actual times by event id, so recording the prelim start
+// marked the final as diving too \u2014 hours before it went in, on a live
+// run-of-show. Open pool blocks repeated across days had the same problem.
+//
+// Repaired on every load. The FIRST occurrence keeps the id, because that is
+// the prelim and it is the one holding the times that were really recorded;
+// every later occurrence is re-minted. Anything keyed by the old id INSIDE
+// that session \u2014 announcer dive order, club names \u2014 moves with it, so a
+// loaded finals dive order is never orphaned. S.live is deliberately not
+// touched: its records stay attached to the first occurrence, which is where
+// they belong.
+function dedupeEventIds(st){
+  if(!st||!Array.isArray(st.sessions))return 0;
+  const seen=new Set();let fixed=0;
+  st.sessions.forEach(sess=>{
+    (sess.events||[]).forEach(ev=>{
+      if(!ev||!ev.id)return;
+      if(!seen.has(ev.id)){seen.add(ev.id);return;}
+      const oldId=ev.id;
+      let nid;do{nid=uid()}while(seen.has(nid));
+      ev.id=nid;seen.add(nid);fixed++;
+      const a=sess.announcer;
+      if(a){
+        if(a.order&&Object.prototype.hasOwnProperty.call(a.order,oldId)){
+          a.order[nid]=a.order[oldId];delete a.order[oldId];
+        }
+        if(a.clubs&&Object.prototype.hasOwnProperty.call(a.clubs,oldId)){
+          a.clubs[nid]=a.clubs[oldId];delete a.clubs[oldId];
+        }
+      }
+      // A pairing that pointed at this exact event within this session follows it.
+      (sess.events||[]).forEach(o=>{if(o!==ev&&o.linkedPrelimId===oldId)o.linkedPrelimId=nid;});
+    });
+  });
+  return fixed;
 }
 
 // Explicit, user-initiated re-stack of ONE day: every session starts as soon as the
