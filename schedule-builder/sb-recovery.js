@@ -140,7 +140,7 @@ function renderRecoveryModal(){
     <div class="modal-sub">${p && p.shift > 0
       ? `Running ${p.shift} min late. Here is what you can actually do about it, and what each one costs.`
       : 'The day is on or ahead of plan — this is here so you can see the levers before you need them.'}</div></div>
-    <button class="modal-close" onclick="closeRecovery()">&times;</button></div>`;
+    <button class="modal-close" aria-label="Close" onclick="closeRecovery()">&times;</button></div>`;
 
   if (!p) return `<div class="modal" onclick="event.stopPropagation()">${head}
     <div class="modal-body"><div class="lt-help">There are no competition blocks on this day.</div></div>

@@ -1214,7 +1214,7 @@ function renderAddDayModal(){
       <label class="fl" style="margin-top:14px">Start from a template <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">(optional)</span></label>
       <div style="display:flex;flex-direction:column;gap:5px">
         <button class="move-btn ${!UI.addDayTemplateId?'active':''}" onclick="UI.addDayTemplateId=null;render()">Empty day</button>
-        ${tpls.map(t=>`<div style="display:flex;gap:5px;align-items:stretch"><button class="move-btn ${UI.addDayTemplateId===t.id?'active':''}" style="flex:1" onclick="UI.addDayTemplateId='${t.id}';render()">${esc(t.name)} <span class="move-meta">${t.sessions.length} block${t.sessions.length===1?'':'s'}</span></button><button class="tl-iconbtn" style="height:auto" title="Delete template" onclick="deleteDayTemplate('${t.id}')">×</button></div>`).join('')}
+        ${tpls.map(t=>`<div style="display:flex;gap:5px;align-items:stretch"><button class="move-btn ${UI.addDayTemplateId===t.id?'active':''}" style="flex:1" onclick="UI.addDayTemplateId='${t.id}';render()">${esc(t.name)} <span class="move-meta">${t.sessions.length} block${t.sessions.length===1?'':'s'}</span></button><button class="tl-iconbtn" style="height:auto" aria-label="Delete template" title="Delete template" onclick="deleteDayTemplate('${t.id}')">×</button></div>`).join('')}
       </div>`:'';
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
     <div class="modal-hd"><div><span class="modal-title">Add a day</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">e.g. a practice day before the meet starts</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;UI.addDayTemplateId=null;UI.addDayEventTag=null;render()">×</button></div>
@@ -2733,7 +2733,7 @@ function renderBar(timed){
       <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
     </div>
     <div class="bar-days-row">
-      <div class="bar-days">${days}<button class="dp-add" onclick="addDay()" title="Add day">+</button></div>
+      <div class="bar-days">${days}<button class="dp-add" aria-label="Add day" onclick="addDay()" title="Add day">+</button></div>
       <div class="bar-days-right">
         <button class="bb icon-only" onclick="undo()" title="Undo (Cmd+Z)" ${undoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg></button>
         <button class="bb icon-only" onclick="redo()" title="Redo (Cmd+Shift+Z)" ${redoStack.length?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 019-9 9 9 0 016 2.3L21 13"/></svg></button>
@@ -2859,7 +2859,7 @@ function renderTimelineScale(sessions,timed){
     const dur=t.sessionEndMinutes-t.warmupStartMinutes;
     const resizable=isPrac&&!(sess.flights||[]).length&&!sess.fitToClose;
     return`<div class="${cls}" style="top:${top}px;height:${h}px;${lane}" data-ts-sess="${sess.id}" data-ts-dur="${dur}" onclick="openEdit('${sess.id}')" title="${esc(name)} · ${f12(t.warmupStartMinutes)}–${f12(t.sessionEndMinutes)}${along?' · runs at the same time as another block':''} · click to open">
-      <div class="ts-card-name">${esc(name)}${along?' <span class="ts-along-flag">same time</span>':''}${overlaps?' <span class="ts-overlap-flag">⚠ overlaps</span>':''}</div>
+      <div class="ts-card-name">${esc(name)}${along?' <span class="ts-along-flag">same time</span>':''}${overlaps?' <span class="ts-overlap-flag">Overlaps</span>':''}</div>
       ${h>=52&&detail?`<div class="ts-card-detail">${esc(detail)}</div>`:''}
       <div class="ts-card-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(dur)}</div>
       ${resizable?`<div class="ts-resize" title="Drag to change duration"></div>`:''}
@@ -3248,7 +3248,7 @@ function renderCardEvents(sess,t){
       ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
       ${split&&(isPlatform(ev.apparatus)||ev.round==='Final'||ev._combined)?`<span class="ev-badge split">Split</span>`:''}
       <span class="ev-time">${f12r(ev.eventStartMinutes,ev.eventEndMinutes)}</span>
-      <button class="ev-rm" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
+      <button class="ev-rm" aria-label="Remove this event" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
     </div>`;
   }).join('')}</div>`;
 }
@@ -3268,7 +3268,7 @@ function renderEditPanel(timed){
   return`<div class="edit-panel open">
     <div class="ep-head">
       <div><div class="ep-title">${esc(title)}</div><div class="ep-sub">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)} · ${fdur(t.sessionEndMinutes-t.warmupStartMinutes)}</div></div>
-      <button class="ep-close" onclick="closeEdit()">×</button>
+      <button class="ep-close" aria-label="Close" onclick="closeEdit()">×</button>
     </div>
     <div class="ep-body" data-edit-body="1">${body}</div>
     <div class="ep-foot">
@@ -3347,7 +3347,7 @@ function renderEditPrac(sess,t,flights,buf){
       <div class="fitclose-toggle-row" style="margin-top:6px">
         <label class="fitclose-label" title="Keeps this block on your working schedule and the Operations output, but leaves it off the Public, Athletes, and Judges schedules"><input type="checkbox" ${sess.hideFromPublic?'checked':''} onchange="toggleHideFromPublic('${sess.id}')"/> Internal only — leave off the public schedule</label>
       </div>
-      ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">⚠ Starts after close — no time left.</strong>':''}</div>`:''}
+      ${sess.fitToClose?`<div class="fitclose-note">Ends at ${f12(dayCloseFor(sess.dayId))} — duration adjusts automatically as earlier events shift.${(t.fitDur||0)<=0?' <strong style="color:var(--red)">Starts after close — no time left.</strong>':''}</div>`:''}
     </div>
     ${renderParallelBox(sess)}
     <div class="fg"><label class="fl">Buffer after this block</label><div class="chiprow">${bufChips}<button class="chip" onclick="askPrompt({title:'Buffer after this block (min)',message:'Minutes before the next session starts.',inputType:'number',defaultValue:sess.bufferMinutes||0,confirmText:'Set',onConfirm:(v)=>{if(v!=='')setBuffer('${sess.id}',Number(v)||0)}})">Custom</button></div></div>
@@ -3365,7 +3365,7 @@ function renderEditPrac(sess,t,flights,buf){
       <span style="font-size:10px;color:var(--tx3)">min</span>
       ${[45,60,90].map(v=>`<button class="fdur-chip ${Number(f.durationMinutes)===v?'on':''}" onclick="updFlight('${sess.id}','${f.id}','durationMinutes',${v})">${v}</button>`).join('')}
       <div class="flight-time-lbl">${ft.startMinutes!==undefined?`${f12(ft.startMinutes)}–${f12(ft.endMinutes)}`:''}</div>
-      <button class="flight-rm" onclick="removeFlight('${sess.id}','${f.id}')">×</button>
+      <button class="flight-rm" aria-label="Remove this flight" onclick="removeFlight('${sess.id}','${f.id}')">×</button>
     </div>
     <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:3px 0 10px 20px">
       <span style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em">Zone</span>
@@ -3500,7 +3500,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <span style="font-size:12.5px;font-weight:600;color:var(--tx);flex:1">${esc(evName(ev))}</span>
           ${evRound(ev)?`<span class="ev-badge ${rc}">${esc(evRound(ev))}</span>`:''}
-          <button class="ev-rm" onclick="removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
+          <button class="ev-rm" aria-label="Remove this event" onclick="removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Divers</div><input class="ep-inp" type="number" min="0" value="${ev.numberOfDivers||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDivers',this.value)"/></div>
@@ -4451,11 +4451,11 @@ function renderPresentation(timed){
     <div class="pr-accent"></div>
     <div class="pr-list">${rows||'<div class="pr-empty">Nothing scheduled this day</div>'}</div>
     <div class="pr-foot">
-      <button class="pr-nav" onclick="UI.present.i=Math.max(0,UI.present.i-1);render()" ${i===0?'disabled':''}>←</button>
+      <button class="pr-nav" aria-label="Previous day" onclick="UI.present.i=Math.max(0,UI.present.i-1);render()" ${i===0?'disabled':''}>←</button>
       <span>Day ${i+1} of ${days.length} · ← → to move · Esc to exit</span>
-      <button class="pr-nav" onclick="UI.present.i=Math.min(${days.length-1},UI.present.i+1);render()" ${i===days.length-1?'disabled':''}>→</button>
+      <button class="pr-nav" aria-label="Next day" onclick="UI.present.i=Math.min(${days.length-1},UI.present.i+1);render()" ${i===days.length-1?'disabled':''}>→</button>
     </div>
-    <button class="pr-close" onclick="UI.present=null;render()">×</button>
+    <button class="pr-close" aria-label="Close the presentation" onclick="UI.present=null;render()">×</button>
   </div>`;
 }
 // ── DECK MODE (dark theme) ────────────────────────────────────────────
@@ -5288,7 +5288,7 @@ function renderMeetModal(){
                 <option value="registered" ${src.role==='registered'?'selected':''}>Registered (live)</option>
                 <option value="projected" ${src.role==='projected'?'selected':''}>Projected baseline</option>
               </select>
-              <button class="btn btn-sm btn-gh" style="margin-left:auto" onclick="removeDivemeetsSource(${i})">×</button>
+              <button class="btn btn-sm btn-gh" aria-label="Remove this source" style="margin-left:auto" onclick="removeDivemeetsSource(${i})">×</button>
             </div>
             <div style="font-size:11px;color:var(--tx3)">Applies to these event levels — click to toggle:</div>
             <div class="chiprow">${scheduleLevels.length?scheduleLevels.map(lvl=>`<button class="chip ${active.has(lvl)?'on':''}" onclick="toggleDivemeetsSourceLevel(${i},'${esc(lvl).replace(/'/g,"\\'")}')" type="button">${esc(lvl)}</button>`).join(''):'<span style="font-size:12px;color:var(--tx3)">No event levels in this schedule yet — add sessions first.</span>'}</div>
@@ -5343,7 +5343,7 @@ function renderLibraryModal(){
   // Top-level tabs
   const topTabs=`
     <div class="lib-toptabs">
-      <button class="lib-toptab ${tab==='templates'?'active':''}" onclick="UI.libTab='templates';render()">📚 Templates</button>
+      <button class="lib-toptab ${tab==='templates'?'active':''}" onclick="UI.libTab='templates';render()">Templates</button>
       <button class="lib-toptab ${tab==='saves'?'active':''}" onclick="UI.libTab='saves';render()">📁 My Saved Meets${UI.neonLib.length?` <span class="lib-count">${UI.neonLib.length+local.length}</span>`:local.length?` <span class="lib-count">${local.length}</span>`:''}</button>
     </div>`;
   let body='';
@@ -5416,7 +5416,7 @@ function renderLibrarySaves(local){
       const statusLine=isPending?`<span class="lib-pending-badge">Not on cloud yet</span>`:item.source==='cloud'?'Cloud':'Local only';
       const loadCall=isPending||item.source==='local'?`loadLocalSaveById('${esc(item.id)}')`:`loadFromNeon('${esc(item.id)}')`;
       const delCall=isPending||item.source==='local'?`deleteLocalSaveById('${esc(item.id)}')`:`deleteCloudSave('${esc(item.id)}','${esc(item.name).replace(/'/g,"\\'")}')`;
-      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" onclick="event.stopPropagation();pushOnePendingNow('${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" onclick="${delCall}" title="Delete">✕</button></div></div>`;
+      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" aria-label="Push to cloud now" onclick="event.stopPropagation();pushOnePendingNow('${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" aria-label="Delete this schedule" onclick="${delCall}" title="Delete">✕</button></div></div>`;
     }).join('')}</div>`;
   }else if(!UI.neonLibLoading){
     listHtml+=`<div class="empty"><div class="empty-title">No saved meets ${UI.savesFolder==='all'?'yet':'in this folder'}</div><div class="empty-sub">${UI.savesFolder==='all'?'Click "Save current to cloud" below after editing a schedule.':'Try "All" to see saves in other folders.'}</div></div>`;
