@@ -407,6 +407,16 @@ function bcastPresentHtml(r) {
       `<li><b>${x.no}</b>${esc(x.name)}${x.club ? `<span> — ${esc(x.club)}</span>` : ''}</li>`).join('')}</ol>`).join('')}</div>`;
 }
 
+// A flow item's note is the crew instruction \u2014 "roll the countdown video, hold
+// the microphone until it has finished" \u2014 written into the row rather than the
+// cue column. It is the one piece of crew copy that would survive dropping the
+// PA column, so it is dropped by name.
+function bcNote(r, forCoaches) {
+  const n = bcastRowNote(r);
+  if (!n) return '';
+  if (forCoaches && /^\s*CUE\b/i.test(n)) return '';
+  return n;
+}
 function bcastRowLabel(r) {
   if (!r) return '';
   if (r.kind === 'handoff') return bcastHandoffLabel(r).label;
@@ -1368,9 +1378,15 @@ const BC_KIND_LABEL = {
   break: 'Break', flash: 'Flash', ceremonyprep: 'Prep', ceremony: 'Awards', finish: 'End', handoff: 'Awards', introsdone: 'Intros',
   item: 'Show',
 };
+// The same sheet, twice. The crew copy carries the PA read and the cues under
+// each element; the coaches' copy carries neither \u2014 a coach needs to know when
+// their diver is on and how long the break is, not what the announcer says or
+// when to roll tape. Dive order stays: it is the most useful thing on the page
+// for a coach, and it is the same list that goes up at the desk.
 function renderBcastSheet(timedSessions, opts) {
   opts = opts || {};
-  const showCues = opts.showCues !== false;
+  const forCoaches = !!opts.forCoaches;
+  const showCues = forCoaches ? false : (opts.showCues !== false);
   const cues = paCues();
   const meetName = esc(opts.title || (S.meet && S.meet.name) || 'USA Diving');
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -1393,7 +1409,7 @@ function renderBcastSheet(timedSessions, opts) {
       return `<tr class="bcr k-${r.kind}">
         <td class="bcr-t">${bclock(r.startSec)}</td>
         <td class="bcr-k">${BC_KIND_LABEL[r.kind] || ''}</td>
-        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcastRowNote(r) ? `<span class="bcr-note">${esc(bcastRowNote(r))}</span>` : ''}${bcastPresentHtml(r)}</td>
+        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcNote(r, forCoaches) ? `<span class="bcr-note">${esc(bcNote(r, forCoaches))}</span>` : ''}${bcastPresentHtml(r)}</td>
         <td class="bcr-p">${per}</td>
         <td class="bcr-d">${r.durSec ? bsec(r.durSec) : ''}</td>
         ${showCues ? `<td class="bcr-c">${esc(cue)}</td>` : ''}
@@ -1420,24 +1436,38 @@ function renderBcastSheet(timedSessions, opts) {
   }
   return `<div class="bcs" id="bcastSheet">
     <div class="bcs-page">
-      <header class="bcs-phd"><div class="bcs-pmeet">${meetName}<span>Broadcast run-of-show</span></div>
+      <header class="bcs-phd"><div class="bcs-pmeet">${meetName}<span>${forCoaches ? 'Run of show \u00b7 for coaches' : 'Broadcast run-of-show'}</span></div>
         <img class="bcs-plogo" src="../shared/images/logo-white-horizontal.png?v=202606250245" alt="USA Diving"/></header>
       <div class="bcs-body">${blocks}</div>
-      <footer class="bcs-pft"><span>${meetName} · Broadcast run-of-show</span><span>Times are seconds-accurate · ${esc(today)}</span></footer>
+      <footer class="bcs-pft"><span>${meetName} \u00b7 ${forCoaches ? 'Run of show for coaches' : 'Broadcast run-of-show'}</span><span>${forCoaches ? 'Planned times \u2014 the show moves, so check the board on the day' : 'Times are seconds-accurate'} \u00b7 ${esc(today)}</span></footer>
     </div>
   </div>`;
 }
 
+function setBcastCopyFor(v) { UI.bcastForCoaches = (v === 'coaches'); render(); }
 function renderBcastPreviewModal() {
   const sess = S.sessions.find(x => x.id === UI.bcastSessId);
   if (!sess) return '';
   const timed = bcastSessScope(allTimed(), sess.id);
+  // Which copy you are looking at is which copy prints. One preview, one button,
+  // no way to email the crew's cue sheet to a coach by mistake.
+  const coaches = !!UI.bcastForCoaches;
+  const tab = (k, l, t) => `<button class="chip ${((k === 'coaches') === coaches) ? 'on' : ''}" title="${t}" onclick="setBcastCopyFor('${k}')">${l}</button>`;
   return `<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Run-of-show</span><button class="modal-close" onclick="closeModal()">×</button></div>
-    <div class="modal-body">${renderBcastSheet(timed, { showCues: true })}</div>
+    <div class="modal-body">
+      <div class="chiprow" style="margin-bottom:6px">
+        ${tab('crew', 'Crew copy', 'Everything \u2014 the PA read and the cues under each element. For the announcer, the producer and the deck.')}
+        ${tab('coaches', "Coaches' copy", 'Times, elements and dive order only. No PA read, no crew cues \u2014 the copy you send out.')}
+      </div>
+      <p style="font-size:11.5px;color:var(--tx2);line-height:1.5;margin:0 0 12px">${coaches
+        ? "What a coach needs: when each round goes, how long every break is, and the dive order. The announcer's script and the crew cues are left out."
+        : 'Everything the show runs on, including what is read aloud and the cues underneath.'}</p>
+      ${renderBcastSheet(timed, { forCoaches: coaches, showCues: !coaches })}
+    </div>
     <div class="modal-foot"><button class="btn btn-gh" onclick="closeModal()">Close</button><div style="flex:1"></div>
-      <button class="btn" onclick="exportBroadcast()">Run-of-show (.xlsx)</button>
-      <button class="btn btn-p" onclick="printBroadcast()">Print / PDF</button></div>
+      ${coaches ? '' : `<button class="btn" onclick="exportBroadcast()">Run-of-show (.xlsx)</button>`}
+      <button class="btn btn-p" onclick="printBroadcast(${coaches})">${coaches ? "Coaches' copy \u2014 Print / PDF" : 'Print / PDF'}</button></div>
   </div>`;
 }
 
@@ -1452,14 +1482,17 @@ function bcastSessScope(list, sessId) {
   return list.filter(s => s.id === sessId ||
     (s.timing && s.timing.deferredAwards && s.timing.deferredAwards.fromSessId === sessId));
 }
-function printBroadcast() {
+function printBroadcast(forCoaches) {
   const list = UI.bcastSessId ? bcastSessScope(allTimed(), UI.bcastSessId) : bcastScopeSessions();
   const title = (typeof genTitle === 'function' && genTitle()) || S.meet.name || 'USA Diving';
-  const showCues = !(AUD.broadcast && AUD.broadcast.showCues === false);
-  const html = renderBcastSheet(list, { title, showCues });
+  // Called with no argument from the Generate screen, where the choice is a
+  // setting; called with one from the preview, where it is what you are looking at.
+  const coaches = (forCoaches === undefined) ? !!(AUD.broadcast && AUD.broadcast.forCoaches) : !!forCoaches;
+  const showCues = coaches ? false : !(AUD.broadcast && AUD.broadcast.showCues === false);
+  const html = renderBcastSheet(list, { title, showCues, forCoaches: coaches });
   const w = window.open('', '_blank');
   if (!w) { alert('Pop-up blocked — allow pop-ups for this site and try again'); return; }
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)} — Broadcast run-of-show</title>
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)} — ${coaches ? 'Run of show for coaches' : 'Broadcast run-of-show'}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>${BCAST_PRINT_CSS}</style></head><body>${html}</body></html>`);
   w.document.close();

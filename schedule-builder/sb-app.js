@@ -86,7 +86,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true,showCues:true}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true,showCues:true,forCoaches:false}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -5609,10 +5609,14 @@ function renderGenerateModal(timed){
           <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';genRender()"><div class="audname">${a.l}</div></button>`).join('')}</div>
           <p class="gen-aud-desc">${audDesc[aud]||''}</p>
           ${aud==='broadcast'?`
-          <div class="gen-sec-lbl">Run-of-show options</div>
-          <div class="gen-toggles">
-            <label class="togrow"><span>PA announcement column</span><span class="tog"><input type="checkbox" ${cfg.showCues!==false?'checked':''} onchange="AUD['broadcast'].showCues=this.checked;genRender()"><span class="togsl"></span></span></label>
+          <div class="gen-sec-lbl">Who is this run-of-show for?</div>
+          <div class="chiprow">
+            <button class="chip ${cfg.forCoaches?'':'on'}" title="Everything the show runs on \u2014 the PA read and the cues under each element." onclick="AUD['broadcast'].forCoaches=false;AUD['broadcast'].showCues=true;genRender()">Crew copy</button>
+            <button class="chip ${cfg.forCoaches?'on':''}" title="Times, elements and dive order only. No PA read, no crew cues." onclick="AUD['broadcast'].forCoaches=true;AUD['broadcast'].showCues=false;genRender()">Coaches' copy</button>
           </div>
+          <p style="font-size:10px;color:var(--tx3);margin:6px 0 8px;line-height:1.45">${cfg.forCoaches
+            ? "The copy you send out. A coach sees when each round goes, how long every break is, and the dive order \u2014 not what the announcer says or when to roll tape."
+            : 'For the announcer, the producer and the deck. Includes the PA read and the cues underneath each element.'}</p>
           <p style="font-size:10px;color:var(--tx3);margin:6px 0 10px;line-height:1.4">Leave the PA column on for the arena announcer's copy. Switch it off for the clean version you hand the streaming partner.</p>
           <button class="btn btn-sm" onclick="UI.modal='pa-cues';render()">Edit PA announcements</button>
           <p style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.4">Only Senior finals sessions with broadcast timing switched on appear here. Turn it on from the session editor.</p>
