@@ -1336,6 +1336,7 @@ function renderAnnBcastSessPanel(sess) {
         <button class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
         <button class="chip" onclick="UI.annSessId='${sess.id}';UI.annTab='flow';UI.modal='announcer';render()">Show elements${flowSec ? ` (+${bmmss(flowSec)})` : '…'}</button>
         <button class="chip" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Preview run-of-show</button>
+        <button class="chip" onclick="printAnnouncer('${sess.id}')" title="The same show, set for reading aloud \u2014 large type, the dive order as names and clubs, cues kept separate from what is read">Print announcer script</button>
       </div>
     </div>
     <div style="font-size:11px;color:${done ? 'var(--tx2)' : 'var(--tx3)'};line-height:1.6;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r);padding:9px 11px">
@@ -1995,14 +1996,116 @@ function cueBlock(title, text) {
 }
 
 // ── PRINT ─────────────────────────────────────────────────────────────
+/* THE ANNOUNCER'S COPY OF A BROADCAST BLOCK
+
+   A Senior finals block on the broadcast clock had a run-of-show and nothing to
+   read from. The run-of-show is a crew document \u2014 a wide table, seconds-accurate,
+   PA copy squeezed into a column \u2014 and nobody can read a name off it standing at
+   a microphone under arena light.
+
+   So: one clock, two documents. This walks the SAME bcastRows the run-of-show
+   walks, in the same order, off the same timing, and sets them the way the junior
+   announcer script is set \u2014 large type, the read on its own line, the dive order
+   as a table of names and clubs. It computes no timing of its own, which is the
+   thing annOn() was guarding against when it kept the announcer off broadcast
+   blocks. Nothing here can move the show.
+
+   Rows with nothing to say are one line, not a section. An announcer needs to see
+   that Round 3 and a commercial come next, but does not need half a page for it. */
+// Moments the announcer works, copy or no copy.
+const ANN_BCAST_OWED = { presentation: 1, boardsclose: 1, ceremony: 1, finish: 1, handoff: 1 };
+function annBcastSubtitle(r, hasSay) {
+  if (r.kind === 'presentation') return 'INTRODUCE THE FINALISTS \u2014 DIVE ORDER';
+  if (r.kind === 'boardsclose') return 'BOARDS CLOSE \u2014 LINE UP THE FINALISTS';
+  if (r.kind === 'ceremony') return 'MEDAL CEREMONY';
+  if (r.kind === 'ceremonyprep') return 'AWARDS AREA BEING SET';
+  if (r.kind === 'handoff') return 'AWARDS PRESENTED IN ANOTHER BLOCK';
+  if (r.kind === 'finish') return 'END OF SHOW';
+  return hasSay ? 'READ ALOUD' : 'CUE ONLY';
+}
+function renderAnnBcastScript(sess) {
+  const rows = (sess && sess.timing && sess.timing.bcastRows) || [];
+  if (!rows.length) return `<div class="ans"><div class="ans-empty">This block has no broadcast run-of-show yet.</div></div>`;
+  const cues = (typeof paCues === 'function') ? paCues() : {};
+  const day = S.meet.days.find(d => d.id === sess.dayId);
+  const meetName = (S.meet && S.meet.name) || 'USA Diving';
+  const n = getSessNum(sess, allTimed());
+  const evs = (sess.events || []).filter(e => (typeof isBcastEv === 'function') ? isBcastEv(sess, e) : true);
+  const cue = (title, text) => `<div class="ans-cue"><strong>${esc(title)}</strong>${text ? ` <em>${esc(text)}</em>` : ''}</div>`;
+
+  let seq = 0;
+  const body = rows.map(r => {
+    const say = (typeof paCueFor === 'function') ? (paCueFor(r, cues) || '') : '';
+    const note = (typeof bcastRowNote === 'function') ? (bcastRowNote(r) || '') : '';
+    const groups = (typeof bcastPresentGroups === 'function') ? bcastPresentGroups(r) : [];
+    const when = `${annClock(r.startSec)}${r.durSec ? ' \u00b7 ' + annDur(r.durSec) : ''}`;
+    const label = (typeof bcastRowLabel === 'function') ? bcastRowLabel(r) : (r.label || '');
+    // Some moments are the announcer's job whether or not anyone has written copy
+    // for them \u2014 the walk-outs, the medals, the close. Those always get a section,
+    // and an empty one says so, which is how a missing PA line gets noticed on
+    // paper the day before instead of at the microphone.
+    const owed = ANN_BCAST_OWED[r.kind];
+    // Nothing to read, nothing to do, nobody's job: a single line to keep your place by.
+    if (!say && !note && !groups.length && !owed) {
+      return cue(`${annClock(r.startSec)} \u00b7 ${esc(label)}`, r.durSec ? annDur(r.durSec) + ' \u00b7 no read' : 'no read');
+    }
+    seq++;
+    const rosterHtml = groups.map(g => {
+      const rs = g.rows || [];
+      return `${groups.length > 1 ? `<div class="ans-msgh" style="margin-top:8px">${esc(evName(g.ev))}</div>` : ''}
+      ${rs.length ? `<table class="ans-tbl">
+        <thead><tr><th class="ans-tno">#</th><th>Athlete</th><th>Club / Team</th></tr></thead>
+        <tbody>${rs.map(a => `<tr><td class="ans-tno">${a.no}</td><td class="ans-tnm">${esc(a.name)}</td><td class="ans-tcl${a.club ? '' : ' ans-blank'}">${a.club ? esc(a.club) : '________________'}</td></tr>`).join('')}</tbody>
+      </table>` : `<div class="ans-warn">No dive order loaded for this event yet.</div>`}`;
+    }).join('');
+    return `<section class="ans-sec">
+      <h2 class="ans-h2"><span class="ans-num">${seq}</span> ${esc(label)}
+        <span class="ans-h2sub">${annBcastSubtitle(r, !!say)}</span>
+        <span class="ans-h2t">${when}</span></h2>
+      ${note ? cue('CUE', note.replace(/^\s*CUE\s*\u2014\s*/i, '')) : ''}
+      ${say ? `<p class="ans-read">${esc(annFill(say))}</p>` : ''}
+      ${rosterHtml}
+      ${groups.length ? cue('READ FOR EACH ROW', '"[Athlete name], representing [club or team]."') : ''}
+      ${(!say && !note && !groups.length)
+        ? cue('NO COPY SET FOR THIS', 'Nothing is written for this moment on the PA cue sheet. Ad lib, or add the wording under Edit PA announcements.')
+        : ''}
+    </section>`;
+  }).join('');
+
+  const first = rows[0], last = rows[rows.length - 1];
+  return `<div class="ans" id="annScript">
+    <div class="ans-page">
+      <header class="ans-phd">
+        <div class="ans-pmeet">${esc(meetName)}<span>Announcer script \u00b7 broadcast block</span></div>
+        <img class="ans-plogo" src="../shared/images/logo-white-horizontal.png?v=202606250245" alt="USA Diving"/>
+      </header>
+      <div class="ans-sub">
+        <div class="ans-subt">Session ${n}${evs.length ? ' \u2014 ' + esc(evs.map(evName).join('  &  ')) : ''}${day ? ` \u2014 ${esc(fullDate(day.date))}` : ''}</div>
+        <div class="ans-flow">${annClock(first.startSec)} \u2013 ${annClock(last.endSec)}</div>
+      </div>
+      <div class="ans-body">
+        <section class="ans-sec">
+          <h2 class="ans-h2">Before you start <span class="ans-h2sub">HOW THIS PAGE WORKS</span></h2>
+          ${cue('THE SHOW CLOCK RUNS THIS BLOCK', 'Every time on this page comes from the broadcast run-of-show \u2014 the same clock, the same order. If the show moves, the producer moves it; follow the floor, not the printed minute.')}
+          ${cue('LINES IN LARGE TYPE ARE READ ALOUD', 'Anything in a grey CUE box is for you and the crew, and is never read.')}
+        </section>
+        ${body}
+      </div>
+    </div>
+  </div>`;
+}
+
 function printAnnouncer(sessId) {
   const raw = S.sessions.find(x => x.id === (sessId || UI.annSessId));
   if (!raw) { toast('Session not found'); return; }
   const sess = Object.assign({}, raw, { timing: calcSessTiming(raw) });
-  const kind = annSessKind(sess);
+  const bc = (typeof bcastOn === 'function') && bcastOn(sess)
+    && ((sess.timing && sess.timing.bcastRows) || []).length;
+  const kind = bc ? 'bcast' : annSessKind(sess);
   if (!kind) { toast('Nothing to announce in this session'); return; }
   const title = (S.meet && S.meet.name) || 'USA Diving';
-  const html = kind === 'finals' ? renderAnnScript(sess, {}) : renderOpenScript(sess);
+  const html = bc ? renderAnnBcastScript(sess)
+    : (kind === 'finals' ? renderAnnScript(sess, {}) : renderOpenScript(sess));
   const w = window.open('', '_blank');
   if (!w) { alert('Pop-up blocked — allow pop-ups for this site and try again'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)} — Announcer script</title>
@@ -2123,7 +2226,8 @@ function renderAnnBcastModal(sess) {
       <button class="btn btn-gh" onclick="UI.modal=null;render()">Close</button>
       <div style="flex:1"></div>
       <button class="btn" onclick="UI.modal='bcast-preview';UI.bcastSessId='${sess.id}';render()">Run-of-show…</button>
-      <button class="btn btn-p" onclick="UI.bcastSessId='${sess.id}';printBroadcast()">Print / PDF</button>
+      <button class="btn" onclick="printAnnouncer('${sess.id}')" title="The same show, set for reading aloud">Announcer script (PDF)</button>
+      <button class="btn btn-p" onclick="UI.bcastSessId='${sess.id}';printBroadcast()">Run-of-show (PDF)</button>
     </div>
   </div>`;
 }
