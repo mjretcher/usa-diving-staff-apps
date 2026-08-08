@@ -1464,8 +1464,11 @@ html[data-theme="deck"] .tag-pill{color:#0B1220}
 /* Dive order printed under ATHLETE PRESENTATION on the run-of-show */
 .bcr-ord{margin-top:5px;padding-top:5px;border-top:1px dashed #C8D0DE}
 .bcr-ord-ev{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pool,#009AC7);margin:4px 0 2px}
-.bcr-ord-l{margin:0;padding:0;list-style:none;column-count:2;column-gap:18px}
-.bcr-ord-l li{font-size:10px;font-weight:600;line-height:1.5;break-inside:avoid;color:#1a1c2e}
+/* The dive order gets the full width of the sheet, not the Element column. */
+.bcr-ordrow td{padding:5px 11px 8px;border-top:none}
+.bcr-ordrow .bcr-ord{margin-top:0;padding-top:0;border-top:none}
+.bcr-ord-l{margin:0;padding:0;list-style:none;columns:190px;column-gap:20px}
+.bcr-ord-l li{font-size:10px;font-weight:600;line-height:1.5;break-inside:avoid;color:#1a1c2e;padding-left:16px;text-indent:-16px}
 .bcr-ord-l li b{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);margin-right:5px}
 .bcr-ord-l li span{font-weight:500;color:#5F6062}
 /* Show elements added on the Flow tab — countdown video, moment of silence */

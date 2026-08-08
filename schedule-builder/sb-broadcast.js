@@ -1413,14 +1413,20 @@ function renderBcastSheet(timedSessions, opts) {
       const cue = showCues ? paCueFor(r, cues) : '';
       const per = r.kind === 'round' ? `${r.divers} × ${bmmss(r.perSec)}`
         : (r.kind === 'presentation' && r.perSec ? `${r.divers} × ${bmmss(r.perSec)}` : '');
+      // The dive order used to live inside the Element cell, which is the narrowest
+      // column on the page. Twelve names went down four hundred vertical pixels in
+      // two cramped columns \u2014 every name broken over three lines \u2014 while the
+      // three columns to its right sat empty for that row. It gets its own
+      // full-width row now and reads across the page instead of down a gutter.
+      const ord = bcastPresentHtml(r);
       return `<tr class="bcr k-${r.kind}">
         <td class="bcr-t">${bclock(r.startSec)}</td>
         <td class="bcr-k">${BC_KIND_LABEL[r.kind] || ''}</td>
-        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcNote(r, forCoaches) ? `<span class="bcr-note">${esc(bcNote(r, forCoaches))}</span>` : ''}${bcastPresentHtml(r)}</td>
+        <td class="bcr-l">${esc(bcastRowLabel(r))}${bcNote(r, forCoaches) ? `<span class="bcr-note">${esc(bcNote(r, forCoaches))}</span>` : ''}</td>
         <td class="bcr-p">${per}</td>
         <td class="bcr-d">${r.durSec ? bsec(r.durSec) : ''}</td>
         ${showCues ? `<td class="bcr-c">${esc(cue)}</td>` : ''}
-      </tr>`;
+      </tr>${ord ? `<tr class="bcr bcr-ordrow k-${r.kind}"><td colspan="${showCues ? 6 : 5}">${ord}</td></tr>` : ''}`;
     }).join('');
     return `<div class="bcs-sess">
       <div class="bcs-hd">
@@ -1588,9 +1594,12 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .bcr.k-introsdone td{background:#EAF6FB;color:var(--navy);font-style:italic}
 .bcs-plus{font-weight:600;color:var(--pool);font-size:11px}
 .bcr-ord{margin-top:4px;padding-top:4px;border-top:1px dashed #C8D0DE}
+.bcr-ordrow td{padding:5px 10px 7px;border-top:none}
+.bcr-ordrow .bcr-ord{margin-top:0;padding-top:0;border-top:none}
 .bcr-ord-ev{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pool);margin:3px 0 2px}
-.bcr-ord-l{margin:0;padding:0;list-style:none;column-count:3;column-gap:16px}
-.bcr-ord-l li{font-size:9px;font-weight:600;line-height:1.45;break-inside:avoid;color:#1a1c2e}
+/* Column WIDTH, not count: the list fills whatever width the page gives it. */
+.bcr-ord-l{margin:0;padding:0;list-style:none;columns:165px;column-gap:18px}
+.bcr-ord-l li{font-size:9px;font-weight:600;line-height:1.45;break-inside:avoid;color:#1a1c2e;padding-left:15px;text-indent:-15px}
 .bcr-ord-l li b{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--navy);margin-right:4px}
 .bcr-ord-l li span{font-weight:500;color:var(--gray)}
 .pp-empty{padding:40px;text-align:center;color:var(--gray)}
