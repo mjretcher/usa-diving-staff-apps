@@ -2080,7 +2080,7 @@ function renderAnnBcastScript(sess) {
         <img class="ans-plogo" src="../shared/images/logo-white-horizontal.png?v=202606250245" alt="USA Diving"/>
       </header>
       <div class="ans-sub">
-        <div class="ans-subt">Session ${n}${evs.length ? ' \u2014 ' + esc(evs.map(evName).join('  &  ')) : ''}${day ? ` \u2014 ${esc(fullDate(day.date))}` : ''}</div>
+        <div class="ans-subt">Session ${n}${evs.length ? ' \u2014 ' + esc(typeof bcastBlockTitle === 'function' ? bcastBlockTitle(evs) : evs.map(evName).join('  &  ')) : ''}${day ? ` \u2014 ${esc(fullDate(day.date))}` : ''}</div>
         <div class="ans-flow">${annClock(first.startSec)} \u2013 ${annClock(last.endSec)}</div>
       </div>
       <div class="ans-body">

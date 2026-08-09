@@ -68,6 +68,36 @@ function isBcastEv(sess, ev) {
 }
 // Medals are only given out after a final. A prelim block gets the pacing and the
 // run-of-show; it does not get a ceremony, a prep window or a results flash.
+/* Naming the block on the sheet.
+
+   Event names carry level, gender and apparatus but not the round, which was
+   fine while only finals ran on this clock. Now that a synchro prelim can too,
+   "Senior Synchro Men 3-Meter & Senior Synchro Women 10-Meter" is the same title
+   on both days of the meet, and the sheet on the desk does not say which one you
+   are holding.
+
+   One round shared across the block is said once at the end \u2014 repeating it after
+   every event name is noise. A block holding different rounds says it per event,
+   because there the round is the thing telling them apart. */
+const BCAST_ROUND_WORD = { Prelim: ['Prelim', 'Prelims'], Semifinal: ['Semifinal', 'Semifinals'], Final: ['Final', 'Finals'] };
+function bcastRoundWord(round, plural) {
+  const w = BCAST_ROUND_WORD[round];
+  return w ? w[plural ? 1 : 0] : '';
+}
+function bcastBlockTitle(evs, sep) {
+  const list = (evs || []).filter(Boolean);
+  if (!list.length) return '';
+  const join = sep || '  &  ';
+  const rounds = Array.from(new Set(list.map(e => e.round).filter(Boolean)));
+  if (rounds.length === 1) {
+    const w = bcastRoundWord(rounds[0], list.length > 1);
+    return list.map(evName).join(join) + (w ? ' \u2014 ' + w : '');
+  }
+  return list.map(e => {
+    const w = bcastRoundWord(e.round, false);
+    return evName(e) + (w ? ' ' + w : '');
+  }).join(join);
+}
 function bcastHasFinal(sess) {
   return ((sess && sess.events) || []).some(e => isBcastEv(sess, e) && e.round === 'Final');
 }
@@ -1490,7 +1520,7 @@ function renderBcastSheet(timedSessions, opts) {
         <span class="bcs-badge">${awardsOnly ? 'Awards' : 'Broadcast'}</span>
         <span class="bcs-nm">${awardsOnly
       ? esc((typeof sessLabelOf === 'function' ? sessLabelOf(sess, null) : 'Next block') + ' — awards for ' + da.evNames)
-      : esc(evs.map(evName).join('  &  ')) + (da ? ` <span class="bcs-plus">+ awards for ${esc(da.evNames)}</span>` : '')}</span>
+      : esc(bcastBlockTitle(evs)) + (da ? ` <span class="bcs-plus">+ awards for ${esc(da.evNames)}</span>` : '')}</span>
         <span class="bcs-day">${day ? esc(fullDate(day.date)) : ''}</span>
         <span class="bcs-win">${bclockShort(rows[0].startSec)} – ${bclockShort(rows[rows.length - 1].endSec)} · ${bsec(total)}</span>
       </div>
@@ -1836,7 +1866,7 @@ async function exportBroadcast() {
       const day = S.meet.days.find(d => d.id === sess.dayId);
       const evs = (sess.events || []).filter(e => isBcastEv(sess, e));
       const da2 = sess.timing.deferredAwards;
-      const nmLine = (evs.length ? evs.map(evName).join('  &  ') : (typeof sessLabelOf === 'function' ? sessLabelOf(sess, null) : ''))
+      const nmLine = (evs.length ? bcastBlockTitle(evs) : (typeof sessLabelOf === 'function' ? sessLabelOf(sess, null) : ''))
         + (da2 ? (evs.length ? '  +  ' : '  ') + 'AWARDS FOR ' + da2.evNames : '');
       const total = rows[rows.length - 1].endSec - rows[0].startSec;
       band(`${day ? String(fullDate(day.date)).toUpperCase() : ''}  ·  ${nmLine.toUpperCase()}  ·  ${bclockShort(rows[0].startSec)}–${bclockShort(rows[rows.length - 1].endSec)}  (${bsec(total)})`, N);
