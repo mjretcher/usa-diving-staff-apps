@@ -17,6 +17,18 @@ on:
         description: "Set to 1 to report counts without writing"
         required: false
         default: ""
+      include_duals:
+        description: "Set to 1 to ALSO queue dual/tri meets (division NOT verifiable by name)"
+        required: false
+        default: ""
+      dual_year_from:
+        description: "Earliest dual meet date, YYYY-MM-DD"
+        required: false
+        default: "2026-01-01"
+      dual_limit:
+        description: "Cap on duals queued this run (0 = no cap)"
+        required: false
+        default: "0"
 
 concurrency:
   group: divemeets-queue-ncaa
@@ -43,4 +55,7 @@ jobs:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
           YEAR_FROM: ${{ github.event.inputs.year_from }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
+          INCLUDE_DUALS: ${{ github.event.inputs.include_duals }}
+          DUAL_YEAR_FROM: ${{ github.event.inputs.dual_year_from }}
+          DUAL_LIMIT: ${{ github.event.inputs.dual_limit }}
         run: python db/scripts/queue_ncaa_targets.py

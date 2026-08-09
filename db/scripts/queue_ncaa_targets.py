@@ -44,6 +44,23 @@ DB_URL = os.environ["DATABASE_URL"]
 YEAR_FROM = int(os.environ.get("YEAR_FROM") or 2015)
 DRY_RUN = bool((os.environ.get("DRY_RUN") or "").strip())
 
+# ---- dual/tri/invitational expansion (added 2026-08-09) -------------------
+# Scope agreed 2026-07-27 was championships only. Duals are opt-in per run.
+#
+# There is NO name-based division filter for duals. Their DiveMeets names are
+# opaque school-code pairs -- "NAVY vs GW", "Gannon vs Clarion" (both D2),
+# "COLG vs HAM" (D1 vs D3), "TCNJ vs SWRM" (both D3). The NOT_D1 regex never
+# fires and the D1_CONF whitelist never matches, so anything queued here is
+# every division indiscriminately. Division is only knowable AFTER the crawl,
+# from core.result_phases.ncaa_division and the resolved team_id.
+#
+# Tagged separately and deliberately verbosely so the whole set can be dropped
+# with one DELETE ... WHERE tag = 'ncaa_dual_unverified_division'.
+INCLUDE_DUALS = bool((os.environ.get("INCLUDE_DUALS") or "").strip())
+DUAL_YEAR_FROM = os.environ.get("DUAL_YEAR_FROM") or "2026-01-01"
+DUAL_LIMIT = int(os.environ.get("DUAL_LIMIT") or 0)
+DUAL_TAG = "ncaa_dual_unverified_division"
+
 # ---------------------------------------------------------------- classifier
 D1_CONF = [
     (r"\bACC\b|atlantic coast", "ACC"),
@@ -133,6 +150,25 @@ def main():
             picked[int(meet_id)] = (tag, label)
     for meet_id, (tag, label) in MANUAL_ADDS.items():
         picked.setdefault(meet_id, (tag, label))
+
+    if INCLUDE_DUALS:
+        # Only meets the championship classifier explicitly declined, so a
+        # championship can never be demoted to a dual by this pass.
+        cur.execute(
+            """SELECT meet_id, meet_name FROM divemeets.meets
+                WHERE sanction ILIKE '%%National Collegiate%%'
+                  AND meet_type = 'NCAA Non Championship'
+                  AND start_date >= %s
+                  AND NOT results_done
+                ORDER BY start_date DESC""",
+            (DUAL_YEAR_FROM,))
+        duals = [r for r in cur.fetchall() if int(r[0]) not in picked]
+        if DUAL_LIMIT:
+            duals = duals[:DUAL_LIMIT]
+        for meet_id, name in duals:
+            picked[int(meet_id)] = (DUAL_TAG, "dual/tri - division unverified")
+        print(f"duals: queued {len(duals)} from {DUAL_YEAR_FROM}"
+              f"{f' (limit {DUAL_LIMIT})' if DUAL_LIMIT else ''}")
 
     counts = {}
     for tag, _ in picked.values():
