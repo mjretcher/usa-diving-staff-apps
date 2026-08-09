@@ -97,6 +97,7 @@ const BCAST_DEFAULTS = {
   resetName: 'Commercial break',
   resetPos: 'afterIntros', // inBoards | beforeIntros | midIntros | afterIntros
   resetSplitAfter: 0,      // midIntros only — athlete number to break after (0 = halfway)
+  introsOn: true,          // false = no walk-out at all; the block goes straight to diving
   introMode: 'own',        // own | withNext — introduce the next block's finalists here too
   interleave: true,        // two finals in one session alternate round by round
   awardsMode: 'end',       // 'after' = ceremony follows each event | 'end' = both at the end
@@ -112,8 +113,9 @@ const BCAST_DEFAULTS = {
 // a printed page, and the name is the one default that cannot be inferred later.
 function bcastTurnOn(sessId) {
   const sess = S.sessions.find(x => x.id === sessId);
-  if (sess && !bcastHasFinal(sess) && !(sess.bcast && sess.bcast.resetName)) {
-    setBcast(sessId, 'resetName', 'Break');
+  if (sess && !bcastHasFinal(sess)) {
+    if (!(sess.bcast && sess.bcast.resetName)) setBcast(sessId, 'resetName', 'Break');
+    if (!(sess.bcast && sess.bcast.introsOn !== undefined)) setBcast(sessId, 'introsOn', false);
   }
   setBcast(sessId, 'on', true);
 }
@@ -554,13 +556,17 @@ function bcastRows(sess) {
     .concat(coverNext ? bcastFinalsOf(coverNext).map(e => ({ sessId: coverNext.id, evId: e.id })) : []);
   const introLabel = introEvs.map(e => evName(e)).join(' & ');
   const totalDivers = introEvs.reduce((a, e) => a + entryValue(e), 0);
-  const introSec = coveredBy ? 0
+  // Introductions switched off entirely. A prelim does not walk athletes out —
+  // it is being paced, not presented — and this is the difference between the
+  // clock being useful there and being a costume.
+  const introsOff = c.introsOn === false;
+  const introSec = (coveredBy || introsOff) ? 0
     : (Number(c.introFlatMin) > 0 ? Number(c.introFlatMin) * 60 : totalDivers * Number(c.introSecPer || 0));
   const introPer = Number(c.introSecPer || 0);
   const resetSec = bcastResetSec(c);
   // With no introductions in this block there is nothing to sit before, after
   // or in the middle of, so the break simply runs ahead of round one.
-  const resetPos = coveredBy
+  const resetPos = (coveredBy || introsOff)
     ? (bcastResetPos(c) === 'inBoards' ? 'inBoards' : 'beforeIntros')
     : bcastResetPos(c);
   const resetName = c.resetName || 'Commercial break';
@@ -606,7 +612,10 @@ function bcastRows(sess) {
   if (inBoards || resetPos === 'beforeIntros') pushReset();
   pushFlow('preIntros');
 
-  if (coveredBy) {
+  if (introsOff) {
+    // Nothing at all. Not even a row saying there is nothing — a sheet that
+    // narrates its own absences is a sheet nobody reads to the end.
+  } else if (coveredBy) {
     // Marker only — no time. Label resolved at render time (see bcastRowLabel).
     push('introsdone', 'introsMoved', 'FINALISTS ALREADY INTRODUCED', 0, { evName: evLabel, prevSessId: coveredBy.id });
     // (time of those introductions is resolved at render time — see bcastIntrosDoneLabel)
@@ -937,7 +946,15 @@ function renderBcastSessPanel(sess) {
   })() : ''}
 
     <div class="bc-f wide"><label>Athlete introductions</label>
-      ${(() => {
+      <div class="chiprow" style="margin-bottom:6px">
+        <button class="chip ${c.introsOn === false ? '' : 'on'}" onclick="setBcast('${sess.id}','introsOn',true)"
+          title="Athletes walk out and are read in before round one">Introduce the athletes</button>
+        <button class="chip ${c.introsOn === false ? 'on' : ''}" onclick="setBcast('${sess.id}','introsOn',false)"
+          title="No walk-out. Boards close, then straight into round one.">No introductions</button>
+      </div>
+      ${c.introsOn === false
+        ? `<span class="bc-hint">Boards close and the block goes straight into round one. Nothing is read in, and the time the walk-out would have taken comes out of the block.</span>`
+        : (() => {
     const cov = bcastIntrosCoveredBy(sess);
     if (cov) {
       const lbl = typeof sessLabelOf === 'function' ? sessLabelOf(cov, null) : 'the block before';
@@ -1212,7 +1229,7 @@ function resetPaCues() {
 // Almost always the next final on the sheet should run identically. This lifts
 // the whole setup onto any other finals you pick, in the same order the meet
 // runs, so nothing has to be retyped.
-const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introSecPer', 'introFlatMin', 'resetSec', 'resetMin',
+const BCAST_SHOW_KEYS = ['boardsCloseMin', 'introsOn', 'introSecPer', 'introFlatMin', 'resetSec', 'resetMin',
   'resetName', 'resetPos', 'resetSplitAfter', 'introMode', 'interleave', 'awardsMode', 'flashMin', 'ceremonyPrepMin', 'ceremonyMin',
   'awardsBreakSec', 'awardsBreakName', 'awardsBreakPos'];
 
