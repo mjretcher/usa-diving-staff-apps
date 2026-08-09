@@ -3348,7 +3348,7 @@ function renderEditPrac(sess,t,flights,buf){
   const zoneChip=(f,v)=>`<button class="chip ${f.zone===v?'on':''}" style="height:24px;padding:0 8px;font-size:10px" onclick="updFlightTag('${sess.id}','${f.id}','zone','${f.zone===v?'':v}')">${v}</button>`;
   const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
   return`
-    <div class="fg"><label class="fl">Block name</label><input id="ep-title-${sess.id}" class="fi" value="${esc(sess.title||'')}" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
+    <div class="fg"><label class="fl">Block name</label><input id="ep-title-${sess.id}" class="fi" value="${esc(sess.title||'')}" aria-label="Block name" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
     <div class="fg2" style="grid-template-columns:1.1fr .8fr 1.1fr">
       <div class="fg"><label class="fl">Start time</label><input id="ep-start-${sess.id}" class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
       <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input id="ep-dur-${sess.id}" class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
@@ -3378,7 +3378,7 @@ function renderEditPrac(sess,t,flights,buf){
     <p style="font-size:11px;color:var(--tx3);margin-bottom:10px">e.g. "Zone C — 45 min" then "Zone D — 45 min" — tag a flight below and its count fills in automatically</p>
     ${flights.length?`<div style="margin-bottom:8px">${flights.map((f,i)=>{const ft=(t.flightTimes||[])[i]||{};const cr=athleteCountForFlight(f);const cntLbl=cr==null?(UI.projRows==null?'Loading counts…':'Tag a zone or E/W/C to see a count'):`${cr.total} athlete${cr.total===1?'':'s'}${cr.registered!=null?` · ${cr.registered} registered`:''}`;return`<div class="flight-row">
       <div class="flight-bar" style="background:${f.color||'#171F69'}"></div>
-      <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
+      <input id="flight-name-${f.id}" class="flight-name-inp" value="${esc(f.name)}" aria-label="Flight name" placeholder="Flight name" onchange="updFlight('${sess.id}','${f.id}','name',this.value)"/>
       <input id="flight-dur-${f.id}" class="flight-dur-inp" type="number" min="5" step="5" value="${f.durationMinutes||45}" onchange="updFlight('${sess.id}','${f.id}','durationMinutes',this.value)"/>
       <span style="font-size:10px;color:var(--tx3)">min</span>
       ${[45,60,90].map(v=>`<button class="fdur-chip ${Number(f.durationMinutes)===v?'on':''}" onclick="updFlight('${sess.id}','${f.id}','durationMinutes',${v})">${v}</button>`).join('')}
@@ -3583,14 +3583,14 @@ function renderEntriesPanel(timed){
       const advCap=advOk?advanceInCappedBy(ev):null;
       rowsHtml+=`<tr data-ev-id="${ev.id}" data-sess-id="${sess.id}">
         <td class="feg-name">${esc(evName(ev))}<span class="ev-badge ${rc}" style="margin-left:6px">${esc(ev.round||'')}</span></td>
-        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-proj" aria-label="Projected divers for ${esc(evName(ev))}" class="feg-inp proj ${projSet?'on':''}" value="${projSet?proj:''}" placeholder="—" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','projectedDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
-        <td class="feg-cell">${advOk?`<input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-adv" class="feg-inp adv ${advSet?'on':''}${advCap!=null?' capped':''}" value="${advSet?advVal:''}" placeholder="—" tabindex="${tabIndex++}"
+        <td class="feg-cell">${advOk?`<input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-adv" aria-label="Divers advancing from ${esc(evName(ev))}" class="feg-inp adv ${advSet?'on':''}${advCap!=null?' capped':''}" value="${advSet?advVal:''}" placeholder="—" tabindex="${tabIndex++}"
           title="${advCap!=null?`Only ${advCap} entered in the qualifier, so ${advCap} is being used instead of ${advVal}. This lifts on its own if more enter.`:'Divers arriving from an earlier event at this meet'}"
           oninput="setEntry('${sess.id}','${ev.id}','advanceIn',this.value)"
           onkeydown="entryKey(event,this)"/>${advCap!=null?`<div class="feg-cap" title="The qualifier has only ${advCap} entered, so at most ${advCap} can advance">using ${advCap}</div>`:''}`:'<span style="color:var(--tx3);font-size:10px">N/A</span>'}</td>
-        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
+        <td class="feg-cell"><input ${dayLocked(sess.dayId)?'disabled ':''}type="number" min="0" inputmode="numeric" id="feg-${ev.id}-final" aria-label="Divers in the final for ${esc(evName(ev))}" class="feg-inp final ${finlSet?'on':''}" value="${finlSet?finl:''}" placeholder="${projSet?proj:'—'}" tabindex="${tabIndex++}"
           oninput="setEntry('${sess.id}','${ev.id}','finalDivers',this.value)"
           onkeydown="entryKey(event,this)"/></td>
         <td class="feg-total"><span class="feg-total-num ${advSet?'plus':''}" id="feg-${ev.id}-total">${effective||'—'}</span><div class="feg-total-math">${advSet?`${entryBase(ev)??0} + ${advanceInValue(ev)}`:''}</div></td>
@@ -4434,7 +4434,7 @@ function renderPalette(){
   ].join('');
   return`<div class="pal-bg" onclick="if(event.target===this)closePalette()">
     <div class="pal">
-      <input id="palette-input" class="pal-input" placeholder='Type a command, or "Open training 7-11am friday"…' value="${esc(UI.palette.q||'')}" oninput="UI.palette.q=this.value;render()" onkeydown="if(event.key==='Enter'){event.preventDefault();const f=document.querySelector('.pal-row');if(f)f.click();}"/>
+      <input aria-label="Type a command, or search the schedule" id="palette-input" class="pal-input" placeholder='Type a command, or "Open training 7-11am friday"…' value="${esc(UI.palette.q||'')}" oninput="UI.palette.q=this.value;render()" onkeydown="if(event.key==='Enter'){event.preventDefault();const f=document.querySelector('.pal-row');if(f)f.click();}"/>
       <div class="pal-list">${rows||`<div class="pal-empty">No matches — try "overview", "export", or a block like "Warm-ups 1-3pm"</div>`}</div>
       <div class="pal-foot">↵ runs the first result · Esc closes</div>
     </div>
@@ -4921,7 +4921,7 @@ function renderCopyDayModal(){
       <label class="fl">Or save this day as a reusable template</label>
       <p style="font-size:11px;color:var(--tx3);margin:2px 0 8px">Name it (e.g. "Standard prelims day") and stamp it onto any new day later, in this or a future meet.</p>
       <div style="display:flex;gap:6px">
-        <input id="copy-day-tpl-name" class="fi" style="flex:1" placeholder="Template name" onkeydown="if(event.key==='Enter')saveDayTemplate('${src.id}')"/>
+        <input id="copy-day-tpl-name" class="fi" style="flex:1" aria-label="Template name" placeholder="Template name" onkeydown="if(event.key==='Enter')saveDayTemplate('${src.id}')"/>
         <button class="btn btn-sm" onclick="saveDayTemplate('${src.id}')">Save template</button>
       </div>
     </div>
@@ -5056,7 +5056,7 @@ function renderDialog(){
     <div class="dialog" onclick="event.stopPropagation()">
       <div class="dialog-title">${esc(d.title)}</div>
       ${d.message?`<div class="dialog-msg">${esc(d.message)}</div>`:''}
-      ${isPrompt?`<input id="dialog-input" class="dialog-input" type="${d.inputType}" value="${esc(d.defaultValue)}" placeholder="${esc(d.placeholder)}" onkeydown="if(event.key==='Enter'){event.preventDefault();dialogConfirm()}if(event.key==='Escape')closeDialog()"/>`:''}
+      ${isPrompt?`<input aria-label="${esc(d.title || 'Value')}" id="dialog-input" class="dialog-input" type="${d.inputType}" value="${esc(d.defaultValue)}" placeholder="${esc(d.placeholder)}" onkeydown="if(event.key==='Enter'){event.preventDefault();dialogConfirm()}if(event.key==='Escape')closeDialog()"/>`:''}
       <div class="dialog-actions">
         <button class="btn btn-sm btn-gh" onclick="closeDialog()">${esc(d.cancelText||'Cancel')}</button>
         <button class="btn btn-sm ${d.danger?'btn-danger':'btn-p'}" onclick="dialogConfirm()">${esc(d.confirmText)}</button>
@@ -5292,7 +5292,7 @@ function renderMeetModal(){
     <div class="modal-hd"><span class="modal-title">Meet setup</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Meet name</label><input class="fi" value="${esc(S.meet.name)}" onchange="upd(s=>s.meet.name=this.value)"/></div>
-      <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
+      <div class="fg"><label class="fl">DiveMeets meet ID <span style="font-weight:400;color:var(--tx3)">— powers "Sync actual entries" (Projections). Find it in the meet's DiveMeets URL, e.g. divemeets.com/MeetInfo/<b>12923</b></span></label><input class="fi" aria-label="DiveMeets meet ID" placeholder="e.g. 12923 — leave blank for ${DEFAULT_DIVEMEETS_MEET_ID} (2026 Jr Nationals)" value="${esc(S.meet.divemeetsId||'')}" onchange="upd(s=>s.meet.divemeetsId=this.value.trim())"/></div>
       <div class="fg"><label class="fl">Additional DiveMeets sources <span style="font-weight:400;color:var(--tx3)">— pull entries from other meets into specific event levels (e.g. a separate Qualifier + Nationals meet in a combined schedule, or a past meet used as a projection baseline).</span></label>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">${(S.meet.divemeetsSources||[]).map((src,i)=>{
           const scheduleLevels=distinctScheduleLevels();
@@ -5301,7 +5301,7 @@ function renderMeetModal(){
           return`
           <div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--bd);border-radius:8px">
             <div style="display:flex;gap:6px;align-items:center">
-              <input class="fi" style="width:90px;flex-shrink:0" placeholder="Meet ID" value="${esc(src.id||'')}" onchange="updateDivemeetsSource(${i},'id',this.value.trim())"/>
+              <input class="fi" style="width:90px;flex-shrink:0" aria-label="DiveMeets meet ID" placeholder="Meet ID" value="${esc(src.id||'')}" onchange="updateDivemeetsSource(${i},'id',this.value.trim())"/>
               <select class="fi" style="width:150px;flex-shrink:0;cursor:pointer" onchange="updateDivemeetsSource(${i},'role',this.value)">
                 <option value="registered" ${src.role==='registered'?'selected':''}>Registered (live)</option>
                 <option value="projected" ${src.role==='projected'?'selected':''}>Projected baseline</option>
@@ -5347,7 +5347,7 @@ function renderPickerModal(timed){
   return`<div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Add event — Session ${n}</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <input class="ev-search-inp" placeholder="Search — Group A Girls, Platform, 3-Meter…" value="${esc(UI.pickerSearch)}" oninput="UI.pickerSearch=this.value;render()"/>
+      <input class="ev-search-inp" aria-label="Search events" placeholder="Search — Group A Girls, Platform, 3-Meter…" value="${esc(UI.pickerSearch)}" oninput="UI.pickerSearch=this.value;render()"/>
       <div class="ev-grid">${filtered.map(ev=>{const inSched=allUsed.has(`${ev.level}|${ev.gender}|${ev.apparatus}`);return`<div class="ev-pick-card ${ev.id===UI.pickerPreset?'sel':''}" onclick="UI.pickerPreset='${ev.id}';UI.pickerRound='';render()"><div class="epc-name">${esc(evName(ev))}</div><div class="epc-meta">${ev.defaultDives} dives default${ev.style==='Synchronized'?' · synchro pairs':''}</div><span class="epc-status ${inSched?'used':'avail'}">${inSched?'In schedule':'Available'}</span></div>`}).join('')}${!filtered.length?`<div style="grid-column:1/-1;padding:20px;text-align:center;font-size:12px;color:var(--tx3)">No events match</div>`:''}</div>
       ${sel?`<div class="fg"><label class="fl">Round</label><div class="round-btns">${rounds.map(r=>{const used=sessUsed.has(`${sel.level}|${sel.gender}|${sel.apparatus}|${r}`);return`<button class="round-btn ${r===selRound?'active':''} ${used?'used':''}" ${used?'disabled':''} onclick="UI.pickerRound='${r}';render()">${r}${used?' ✓':''}</button>`}).join('')}</div></div>`:''}
     </div>
@@ -5513,7 +5513,7 @@ function renderSaveDialogModal(){
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Save schedule to cloud</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="fg"><label class="fl">Schedule name</label><input id="save-dialog-name" class="fi" value="${esc(name)}" oninput="UI.saveDialogName=this.value" placeholder="2026 USA Diving …" autofocus/></div>
+      <div class="fg"><label class="fl">Schedule name</label><input id="save-dialog-name" class="fi" value="${esc(name)}" oninput="UI.saveDialogName=this.value" aria-label="Schedule name" placeholder="2026 USA Diving …" autofocus/></div>
       <div class="fg"><label class="fl">Save to folder</label><div class="folder-picker">${folderOpts}</div></div>
       <div style="font-size:11px;color:var(--tx3);margin-top:8px">After saving, autosave will keep this save record current.</div>
     </div>
@@ -5704,7 +5704,7 @@ function renderGenerateModal(timed){
             ||'<div class="gen-blk-none">Nothing on these days matches the scope above.</div>'}</div>`:''}
           <div class="fdiv"></div>`;
           })()}
-          <div class="fg"><label class="fl">Title for this printout</label><input class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);genRender()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
+          <div class="fg"><label class="fl">Title for this printout</label><input aria-label="Title for this printout" class="fi" value="${esc(genTitle())}" onchange="setGenTitle(this.value);genRender()" placeholder="${esc(S.meet.name||'Meet name')}"/></div>
           <div class="fdiv"></div>
           <div class="gen-sec-lbl">Audience</div>
           <div class="audgrid">${Object.entries(AUD).map(([k,a])=>`<button class="audcard ${aud===k?'sel':''}" onclick="UI.genAud='${k}';genRender()"><div class="audname">${a.l}</div></button>`).join('')}</div>
@@ -6172,7 +6172,7 @@ function exportOpsTimelineLegacy(){
       (t.events||[]).forEach(ev=>{const dur=calcEvDur(ev);const split=ev.manualSplit&&!isPlatform(ev.apparatus);const rBg=ev.round==='Final'?'#FEF2F2':ev.round==='Prelim'?'#F0FDF4':'#EEF3FD';rows+=`<tr style="background:${bg}">${td('')}${td(evRound(ev),`background:${rBg};font-weight:700;font-size:10px`)}${tdL(evName(ev)+(split?' (Split)':''))}${td(split?'Split':'')}${tdL(split?splitPanelRot(ev):'')}${td(ev.numberOfDives||ev.defaultDives||0,`background:${G};font-weight:700`)}${td(ev.numberOfDivers||0,`background:${G};font-weight:700`)}${td(ev.secondsPerDive||ev.defaultSpd||0,`background:${G};font-weight:700`)}${td(fd1(dur.evMin))}${td('')}${td('')}${td(sess.warmupMinutes||0,'font-weight:700')}${td(f12(t.warmupStartMinutes),'font-weight:700')}${td(f12(t.warmupEndMinutes),'font-weight:700')}${td(f12(ev.eventStartMinutes),`font-weight:700;background:${C};color:${W}`)}${td(f12(ev.eventEndMinutes),`font-weight:700;background:${C};color:${W}`)}</tr>`});
     });
   });
-  const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11px}table{border-collapse:collapse;width:100%}</style></head><body><div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:3px solid ${N};margin-bottom:12px"><img src="../shared/images/logo-color-horizontal.png" style="height:40px"/><div><div style="font-size:18px;font-weight:700;color:${N}">${esc(title)}</div><div style="font-size:12px;color:#666">Operations Timeline</div></div></div><table><thead><tr>${th('Day/Session')}${th('Round')}${th('Event','text-align:left')}${th('Format')}${th('Panel Rotation','text-align:left')}${th('# Dives',`background:${C}`)}${th('# Divers',`background:${C}`)}${th('Sec/Dive',`background:${C}`)}${th('Event Min')}${th('Prac Start')}${th('Prac End')}${th('WU Min')}${th('WU Start')}${th('WU End')}${th('Ev Start',`background:${R}`)}${th('Ev End',`background:${R}`)}</tr></thead><tbody>${rows}</tbody></table><div style="margin-top:12px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">USA Diving · ${esc(title)} · ${new Date().toLocaleDateString()}</div></body></html>`;
+  const html=`<html><head><meta charset="UTF-8"><style>body{font-family:Arial;font-size:11px}table{border-collapse:collapse;width:100%}</style></head><body><div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:3px solid ${N};margin-bottom:12px"><img alt="USA Diving" src="../shared/images/logo-color-horizontal.png" style="height:40px"/><div><div style="font-size:18px;font-weight:700;color:${N}">${esc(title)}</div><div style="font-size:12px;color:#666">Operations Timeline</div></div></div><table><thead><tr>${th('Day/Session')}${th('Round')}${th('Event','text-align:left')}${th('Format')}${th('Panel Rotation','text-align:left')}${th('# Dives',`background:${C}`)}${th('# Divers',`background:${C}`)}${th('Sec/Dive',`background:${C}`)}${th('Event Min')}${th('Prac Start')}${th('Prac End')}${th('WU Min')}${th('WU Start')}${th('WU End')}${th('Ev Start',`background:${R}`)}${th('Ev End',`background:${R}`)}</tr></thead><tbody>${rows}</tbody></table><div style="margin-top:12px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px">USA Diving · ${esc(title)} · ${new Date().toLocaleDateString()}</div></body></html>`;
   dl(html,'application/vnd.ms-excel',`${title.replace(/[^a-z0-9]/gi,'-')}-ops-timeline.xls`);
   toast('Operations timeline downloaded');
 }

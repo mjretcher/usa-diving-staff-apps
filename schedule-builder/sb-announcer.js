@@ -1359,7 +1359,7 @@ function renderFlowItemCard(it, scope, kind, sessId, i, n) {
     onclick="annUpdItem('${scope}','${kind}','${sessId}','${it.id}','slot','${sl.k}')">${esc(annSlotLabel(sl.k, kind))}</button>`;
   return `<div style="border:1px solid var(--bd);border-radius:var(--r);padding:11px;margin-bottom:10px;background:var(--surf)">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:9px">
-      <input class="fi" style="flex:1;font-weight:700" value="${esc(it.label || '')}" placeholder="What is it? e.g. Countdown video"
+      <input class="fi" style="flex:1;font-weight:700" value="${esc(it.label || '')}" aria-label="What this element is" placeholder="What is it? e.g. Countdown video"
         onchange="${up('label')}"/>
       <button class="chip" style="padding:3px 9px;color:var(--red)" onclick="annDelItem('${scope}','${kind}','${sessId}','${it.id}')">Remove</button>
     </div>
@@ -2315,7 +2315,7 @@ function renderAnnOrderTab(sess, targets) {
           <td style="padding:4px 6px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums">${r.no}</td>
           <td style="padding:4px 6px">${esc(r.name)}</td>
           <td style="padding:4px 6px">
-            <input class="fi" style="padding:4px 7px;font-size:12px;${r.club ? '' : 'border-color:var(--red)'}"
+            <input aria-label="Club or team" class="fi" style="padding:4px 7px;font-size:12px;${r.club ? '' : 'border-color:var(--red)'}"
               placeholder="${r.source === 'ambiguous' ? 'More than one club matched — type it' : 'No match — type the club'}"
               value="${esc(annClubOverride(own, ev, i) || (r.source === 'typed' ? r.club : (r.club || '')))}"
               onchange="setAnnClub('${t.sessId}','${ev.id}',${i},this.value)"/>

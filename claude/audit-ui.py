@@ -151,6 +151,67 @@ for k, v in toasts.items():
         hits.append(' | '.join(sorted(words))[:96])
 total += report('5. ONE ACTION, MORE THAN ONE WORDING', hits)
 
+# ── 6. Images without alt text (ui-ux-pro-max: Accessibility / Alt Text) ──
+hits = []
+for p, s in SRC.items():
+    for m in re.finditer(r'<img(?![^>]*\balt=)[^>]*>', s):
+        hits.append('%-22s %s' % (p.split('/')[-1], m.group(0)[:70]))
+total += report('6. IMAGES WITH NO alt ATTRIBUTE', hits)
+
+# ── 7. Inputs labelled only by placeholder (Accessibility / Form Labels) ──
+# A placeholder disappears the moment you type, so it is not a label. Only flag
+# inputs that have one and nothing else: no aria-label, no title, no id a label
+# could point at.
+hits = []
+for p, s in SRC.items():
+    for m in re.finditer(r'<input(?![^>]*aria-label)(?![^>]*\btitle=)[^>]*placeholder=[^>]*>', s):
+        tag = m.group(0)
+        idm = re.search(r'id="([^"]+)"', tag)
+        if idm and ('for="%s"' % idm.group(1)) in s:
+            continue
+        if 'type="hidden"' in tag or 'type="checkbox"' in tag:
+            continue
+        hits.append('%-22s %s' % (p.split('/')[-1], tag[:74]))
+total += report('7. INPUTS LABELLED ONLY BY A PLACEHOLDER', hits)
+
+# ── 8. Arbitrary z-index (Layout / Z-Index Management) ──
+# ui-ux-pro-max asks for a z-index scale and suggests 10/20/30/50. This app has
+# its own consistent ladder (6, 8, 300 for the bar, 550/700/800 for overlays),
+# and renumbering a live stacking context to match somebody else's ladder is
+# risk with no user-visible payoff. What the rule actually protects against is
+# the 9999 escape hatch, so that is what gets checked.
+hits = []
+for m in re.finditer(r'z-index:\s*(-?\d+)', CSSTXT):
+    v = int(m.group(1))
+    if v > 1000:
+        hits.append('z-index:%d  (arbitrary escape hatch)' % v)
+seen = defaultdict(int)
+for h in hits: seen[h] += 1
+hits = ['%s  x%d' % (k, v) if v > 1 else k for k, v in sorted(seen.items())]
+total += report('8. ARBITRARY z-index ESCAPE HATCHES (>1000)', hits)
+
+# ── 9. Destructive actions with no confirmation (Interaction) ──
+# Anything whose handler deletes, clears or resets should route through a
+# confirm. Reversible moves and per-item removes on a form are not in scope.
+hits = []
+DESTRUCTIVE = re.compile(r'onclick="[^"]*\b(deleteSchedule|resetDay|clearAll|wipe|purge|deleteMeet|removeAllEvents)\w*\(')
+for p, s in SRC.items():
+    for m in DESTRUCTIVE.finditer(s):
+        seg = s[m.start():m.start() + 260]
+        if 'askConfirm' in seg or 'confirm(' in seg:
+            continue
+        hits.append('%-22s %s' % (p.split('/')[-1], m.group(0)[:64]))
+total += report('9. DESTRUCTIVE ACTIONS WITH NO CONFIRMATION', hits)
+
+# ── 10. Status messages screen readers never hear (Accessibility) ──
+hits = []
+toast_html = re.findall(r'<div[^>]*id="toast"[^>]*>', ' '.join(SRC.values()) + CSSTXT)
+for p, s in SRC.items():
+    for m in re.finditer(r'id="(toast|toastWrap|liveMsg)"[^>]*', s):
+        if 'aria-live' not in m.group(0) and 'role=' not in m.group(0):
+            hits.append('%-22s %s' % (p.split('/')[-1], m.group(0)[:64]))
+total += report('10. STATUS MESSAGES WITH NO aria-live / role=alert', hits)
+
 print('\n' + '=' * 74)
 print('TOTAL FINDINGS: %d' % total)
 print('=' * 74)

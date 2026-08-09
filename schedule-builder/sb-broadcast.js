@@ -982,7 +982,7 @@ function renderBcastSessPanel(sess) {
   })()}
 
     <div class="bc-f wide"><label>${c.introsOn === false ? 'Break before round one' : 'Reset break around introductions'}</label>
-      <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
+      <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" aria-label="Name of the break" placeholder="Commercial break"/>
       ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
       ${(() => {
     // With no walk-out there is nothing to be before, after or in the middle of,
@@ -1070,7 +1070,7 @@ function renderBcastSessPanel(sess) {
   })()}
 
     <div class="bc-f wide"><label>Break around the awards <span class="bc-opt">optional</span></label>
-      <input class="fi" value="${esc(c.awardsBreakName || 'Commercial break')}" onchange="setBcast('${sess.id}','awardsBreakName',this.value)" placeholder="Commercial break"/>
+      <input class="fi" value="${esc(c.awardsBreakName || 'Commercial break')}" onchange="setBcast('${sess.id}','awardsBreakName',this.value)" aria-label="Name of the break" placeholder="Commercial break"/>
       ${bcDurCtl(bcastAwardsSec(c), `setBcastAwardsSec('${sess.id}',`, `setBcastAwardsPart('${sess.id}',`)}
       ${(() => {
     const aSec = bcastAwardsSec(c);
@@ -1123,7 +1123,7 @@ function renderBcastEvPanel(sess, ev) {
     const sec = brkSec(b, 0);
     return `<div class="bc-br ${last ? 'last' : ''} ${sec === 0 ? 'off' : ''}">
       <span class="bc-br-n">After round ${i + 1}</span>
-      <input class="fi bc-br-name" value="${esc(b.name)}" placeholder="Break name" onchange="setBcastBreak('${sess.id}','${ev.id}',${i},'name',this.value)"/>
+      <input class="fi bc-br-name" value="${esc(b.name)}" aria-label="Name of the break" placeholder="Break name" onchange="setBcastBreak('${sess.id}','${ev.id}',${i},'name',this.value)"/>
       ${bcDurCtl(sec, `setBcastBreakSec('${sess.id}','${ev.id}',${i},`, `setBcastBreakPart('${sess.id}','${ev.id}',${i},`)}
       <span class="bc-br-v">${sec === 0 ? 'no break' : bmmss(sec)}</span>
       ${last ? `<span class="bc-br-note">last round — only used if another event follows</span>` : ''}
