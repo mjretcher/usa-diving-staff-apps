@@ -162,7 +162,13 @@ def main():
                   AND NOT results_done
                 ORDER BY start_date DESC""",
             (DUAL_YEAR_FROM,))
-        duals = [r for r in cur.fetchall() if int(r[0]) not in picked]
+        # classify() declines a meet for two different reasons -- "not a
+        # championship" and "explicitly not D1". Only the first is a candidate
+        # here, so NOT_D1 must be re-applied or D2/D3 meets whose names DO
+        # carry a division marker (e.g. "NCAA Division III Region 1 Diving
+        # Championships") get queued as duals. Caught in production 2026-08-09.
+        duals = [r for r in cur.fetchall()
+                 if int(r[0]) not in picked and not NOT_D1.search(r[1] or "")]
         if DUAL_LIMIT:
             duals = duals[:DUAL_LIMIT]
         for meet_id, name in duals:
@@ -188,6 +194,25 @@ def main():
            ON CONFLICT (meet_id) DO UPDATE
              SET tag = EXCLUDED.tag, label = EXCLUDED.label""",
         [(mid, t, l) for mid, (t, l) in sorted(picked.items())])
+    conn.commit()
+
+    # Self-heal: purge any dual-tagged meet whose name DOES carry a non-D1
+    # marker. The first release of the dual pass skipped NOT_D1 and queued the
+    # 2026 D3 Region 1-4 championships. Idempotent; safe on every run.
+    cur.execute(
+        """DELETE FROM divemeets.crawl_targets t
+             USING divemeets.meets m
+             WHERE t.meet_id = m.meet_id AND t.tag = %s
+               AND m.meet_name ~* %s""",
+        (DUAL_TAG,
+         r'(division\s*iii|division\s*ii\y|\yd-?iii\y|\yNCAC\y|\yMIAC\y'
+         r'|\ySCIAC\y|\yWIAC\y|\yUAA\y|liberal arts|landmark'
+         r'|new jersey athletic|\yNJAC\y|midwest conference|\ySCAC\y|\ySAA\y'
+         r'|\yAMCC\y|\yNAIA\y|\yGLVC\y|\yRMAC\y|rocky mountain|\yNSIC\y'
+         r'|\yGMAC\y|\yMEC\y|collegiate club|\yPCSC\y|pacific collegiate'
+         r'|region\s*[1-4]\y)'))
+    if cur.rowcount:
+        print(f"purged {cur.rowcount} non-D1 meets wrongly tagged {DUAL_TAG}")
     conn.commit()
 
     cur.execute(
