@@ -47,11 +47,31 @@
 // opt-in per session (sess.bcast.on), so nothing changes for any block until
 // it is switched on by hand. National Qualifier events carry round
 // "Qualifier" and so never qualify.
+/* WHAT CAN RUN ON THE BROADCAST CLOCK
+
+   Finals, always \u2014 that is what this was built for.
+
+   And senior preliminary rounds, because a synchro prelim has the same problem a
+   final does: left alone it runs faster than the building can follow, and there
+   is no way to pace it out or hand anyone a run-of-show. There is no television
+   involved here; the clock is being used for what it actually is, a way to slow
+   a session down and write down the shape of it.
+
+   Junior prelims are deliberately excluded. The Junior Circuit runs long fields
+   on tight facility windows, where pacing out is the opposite of what the day
+   needs, and the junior announcer script already covers that block. */
 function isBcastEv(sess, ev) {
   if (!ev || ev.style === 'Custom Block') return false;
-  return ev.round === 'Final';
+  if (ev.round === 'Final') return true;
+  if (ev.round === 'Prelim' || ev.round === 'Semifinal') return isSeniorish(sess, ev);
+  return false;
 }
-// Senior-ness no longer gates anything — it only shades the wording on the
+// Medals are only given out after a final. A prelim block gets the pacing and the
+// run-of-show; it does not get a ceremony, a prep window or a results flash.
+function bcastHasFinal(sess) {
+  return ((sess && sess.events) || []).some(e => isBcastEv(sess, e) && e.round === 'Final');
+}
+// Gates preliminary rounds onto the clock, and shades the wording on the
 // off-state panel so a Zone final does not get sold a television show.
 function isSeniorish(sess, ev) {
   if (/^senior/i.test((ev && ev.level) || '')) return true;
@@ -87,6 +107,16 @@ const BCAST_DEFAULTS = {
   awardsBreakName: 'Commercial break',
   awardsBreakPos: 'inPrep',     // inPrep | beforePrep | beforeCeremony
 };
+// Switching on seeds the break with a name that fits the block. A prelim sheet
+// that says COMMERCIAL BREAK when nothing is being broadcast is a wrong fact on
+// a printed page, and the name is the one default that cannot be inferred later.
+function bcastTurnOn(sessId) {
+  const sess = S.sessions.find(x => x.id === sessId);
+  if (sess && !bcastHasFinal(sess) && !(sess.bcast && sess.bcast.resetName)) {
+    setBcast(sessId, 'resetName', 'Break');
+  }
+  setBcast(sessId, 'on', true);
+}
 function bcastCfg(sess) {
   return Object.assign({}, BCAST_DEFAULTS, sess.bcast || {});
 }
@@ -273,7 +303,7 @@ function bcastAwardsPos(c) {
 // THIS session or be handed to the next block without the two ever drifting.
 function bcastAwardsRows(sess, evs, startSec) {
   const c = bcastCfg(sess);
-  const list = (evs || []).filter(Boolean);
+  const list = (evs || []).filter(Boolean).filter(e => e.round === 'Final');
   if (!list.length) return [];
   const awSec = bcastAwardsSec(c);
   const awPos = bcastAwardsPos(c);
@@ -815,10 +845,11 @@ function renderBcastSessPanel(sess) {
       && typeof annSessHasFinals === 'function' && annSessHasFinals(sess);
     return `<div class="bc-panel off">
       <div class="bc-hd"><span class="bc-dot"></span><span class="bc-title">Broadcast timing</span>
-        <button class="chip" onclick="setBcast('${sess.id}','on',true)">Turn on</button></div>
-      <p class="bc-help">Runs ${multi ? 'these finals' : 'this final'} as a presented show instead of straight through: athletes introduced,
-      a slower ${bcastEvSpd(evs[0])} seconds per diver, and a named break after every round that you set yourself.
-      Off by default — nothing changes until you turn it on. <strong>When you do, the whole day reflows around it.</strong></p>
+        <button class="chip" onclick="bcastTurnOn('${sess.id}')">Turn on</button></div>
+      <p class="bc-help">${bcastHasFinal(sess)
+        ? `Runs ${multi ? 'these finals' : 'this final'} as a presented show instead of straight through: athletes introduced, a slower ${bcastEvSpd(evs[0])} seconds per diver, and a named break after every round that you set yourself.`
+        : `Paces ${multi ? 'these rounds' : 'this round'} out instead of running them straight through: a slower ${bcastEvSpd(evs[0])} seconds per diver and a named break after every round, so the block holds a shape you can hand to somebody. No ceremony and no results flash \u2014 those belong to a final.`}
+      Off by default \u2014 nothing changes until you turn it on. <strong>When you do, the whole day reflows around it.</strong></p>
       ${annLive ? `<p class="bc-help">This block currently uses the <strong>announcer script</strong>. Turning broadcast timing on
       switches that off, because the run-of-show does the introductions itself.</p>` : ''}
     </div>`;
