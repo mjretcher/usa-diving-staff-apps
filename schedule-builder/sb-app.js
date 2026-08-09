@@ -2562,19 +2562,38 @@ function prefillProjections(){
 }
 
 // ── RENDER CORE ───────────────────────────────────────────────────────
+// Every container the stylesheet gives an overflow to, plus an opt-in hook.
+const SCROLL_KEEP='.modal,.modal-body,.tl-body,.enp-body,.rp-body,.lib-body,'
+  +'.bcc-list,.gen-blks,.gen-controls,.gen-modal,.ep-body,.ev-grid,.evgrid,'
+  +'.hist-diff,.ov-col-body,.pal-list,.pr-list,.pp,.bcs,[data-keepscroll]';
+// Keyed by class and its index AMONG ELEMENTS OF THAT CLASS, not its index in
+// the whole match list. The old global index shifted whenever the number of
+// matched elements changed — opening a modal renumbered everything behind it
+// and the restored positions landed on the wrong containers.
+let _scrollSeen={};
+function _scrollKey(el,seen){
+  const cn=(typeof el.className==='string'?el.className:'')||el.tagName.toLowerCase();
+  const cls=cn.split(' ')[0]||el.tagName.toLowerCase();
+  seen[cls]=(seen[cls]||0)+1;
+  return cls+':'+seen[cls];
+}
 function render(){
   initUI();
   UI.draggedSessId=UI.draggedSessId||null;
-  // Capture scroll positions of EVERY scrollable surface by a stable selector,
-  // so nothing jumps when the DOM is rebuilt (timeline, entries, edit modal, etc).
-  // NOTE: .modal is in this list because it — not .modal-body — is the actual
-  // scroll container (overflow-y:auto lives on .modal in the CSS).
+  // Capture scroll positions before the DOM is rebuilt, so nothing jumps.
+  //
+  // This list used to be six selectors written from memory, and the CSS has
+  // seventeen containers that scroll. The eleven nobody remembered included the
+  // "Copy broadcast setup" target list and the Generate block picker — both of
+  // them long checkbox lists you scroll down, tick, and get thrown back to the
+  // top of. SCROLL_KEEP is now derived from every overflow:auto rule in the
+  // stylesheet; anything new can opt in with data-keepscroll rather than by
+  // being remembered.
   const _scroll={};
-  document.querySelectorAll('.modal,.tl-body,.enp-body,.modal-body,.rp-body,.lib-body').forEach((el,i)=>{
-    // key by class + index so we can match the same element after re-render
-    const cls=el.className.split(' ')[0];
-    _scroll[cls+':'+i]=el.scrollTop;
+  document.querySelectorAll(SCROLL_KEEP).forEach(el=>{
+    if(el.scrollTop>0)_scroll[_scrollKey(el,_scrollSeen)]=el.scrollTop;
   });
+  _scrollSeen={};
   // Remember focused input + caret
   const _act=document.activeElement;
   const _actId=_act&&_act.id?_act.id:null;
@@ -2614,12 +2633,11 @@ function render(){
   // Restore scroll for every matched surface — force instant restore (scrollBehavior
   // 'auto') so no CSS smooth-scroll setting can animate from 0, which reads as a
   // "jump to top" flash on every re-render.
-  const sel=document.querySelectorAll('.modal,.tl-body,.enp-body,.modal-body,.rp-body,.lib-body');
-  sel.forEach((el,i)=>{
-    const cls=el.className.split(' ')[0];
-    const v=_scroll[cls+':'+i];
+  document.querySelectorAll(SCROLL_KEEP).forEach(el=>{
+    const v=_scroll[_scrollKey(el,_scrollSeen)];
     if(v!=null){const prev=el.style.scrollBehavior;el.style.scrollBehavior='auto';el.scrollTop=v;el.style.scrollBehavior=prev;}
   });
+  _scrollSeen={};
   // Restore focus + caret
   if(_actId){const el=document.getElementById(_actId);if(el){try{el.focus({preventScroll:true});if(_selStart!=null&&el.setSelectionRange)el.setSelectionRange(_selStart,_selStart);}catch(e){}}}
 }
