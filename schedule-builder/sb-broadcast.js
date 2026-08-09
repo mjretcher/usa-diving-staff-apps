@@ -282,7 +282,6 @@ function bcastAwardsRows(sess, evs, startSec) {
   const inPrep = awPos === 'inPrep' && awSec > 0;
   const prepShown = inPrep ? Math.max(0, prepSec - awSec) : prepSec;
   const label = list.map(e => evName(e)).join(' & ');
-  const many = list.length > 1;
 
   let t = Math.max(0, Math.round(startSec));
   const rows = [];
@@ -298,8 +297,7 @@ function bcastAwardsRows(sess, evs, startSec) {
 
   if (awPos === 'beforePrep') pushBreak();
   if (prepShown > 0) push('ceremonyprep', 'ceremonyPrep', 'CEREMONY PREP', prepShown, Object.assign({
-    note: (inPrep ? 'Awards area is set, then we go to break' : '') +
-      (many ? (inPrep ? ' — ' : '') + 'Set once for ' + list.length + ' ceremonies' : ''),
+    note: inPrep ? 'Awards area is set, then we go to break' : '',
   }, meta));
   if (awPos === 'inPrep' || awPos === 'beforeCeremony') pushBreak();
   list.forEach(ev => {
