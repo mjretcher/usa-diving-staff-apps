@@ -84,6 +84,16 @@ function bcastRoundWord(round, plural) {
   const w = BCAST_ROUND_WORD[round];
   return w ? w[plural ? 1 : 0] : '';
 }
+// Does anything on this block end in a medal? Two ways it can be no: the block
+// holds no final (a prelim gives out nothing), or awards have been switched off
+// for it. Everything downstream of a ceremony \u2014 the prep window, the break
+// around it, the flash interviews \u2014 hangs off this one answer, so the settings
+// for those can disappear when the answer is no instead of sitting there
+// collecting numbers that will never be used.
+function bcastAwardsHappen(sess) {
+  if (!bcastHasFinal(sess)) return false;
+  return bcastCfg(sess).awardsMode !== 'none';
+}
 function bcastBlockTitle(evs, sep) {
   const list = (evs || []).filter(Boolean);
   if (!list.length) return '';
@@ -335,6 +345,7 @@ function bcastAwardsPos(c) {
 // THIS session or be handed to the next block without the two ever drifting.
 function bcastAwardsRows(sess, evs, startSec) {
   const c = bcastCfg(sess);
+  if (c.awardsMode === 'none') return [];
   const list = (evs || []).filter(Boolean).filter(e => e.round === 'Final');
   if (!list.length) return [];
   const awSec = bcastAwardsSec(c);
@@ -693,6 +704,7 @@ function bcastRows(sess) {
   // they never travel. The awards block is built by bcastAwardsRows() and can
   // run here or be handed to the next block on the day.
   const pushFlash = (ev) => {
+    if (!bcastAwardsHappen(sess)) return;   // nothing to interview anyone about
     if (Number(c.flashMin) > 0) push('flash', 'flash', 'FLASH INTERVIEWS', Number(c.flashMin) * 60, { evName: evName(ev), evId: ev.id });
   };
   // One run of ceremonies = one prep, one break, then the medals back to back.
@@ -1019,8 +1031,11 @@ function renderBcastSessPanel(sess) {
         : `<span class="bc-hint warn">This runs <strong>${esc(evName(evs[0]))}</strong> start to finish and only then starts <strong>${esc(evName(evs[1]))}</strong>. Combined finals normally alternate — round 1 of the bigger field, round 1 of the other, then round 2 of each. Choose <strong>Alternate rounds</strong> for that.</span>`}</div>`;
   })() : ''}
 
+    ${!bcastHasFinal(sess) ? '' : `
     <div class="bc-f wide"><label>Awards</label>
       <div class="chiprow">
+        <button class="chip ${c.awardsMode === 'none' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','none')"
+          title="No medal ceremony in this block at all">No awards here</button>
         <button class="chip ${c.awardsMode === 'after' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','after')">After each event</button>
         <button class="chip ${c.awardsMode === 'end' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','end')">${multi ? 'Both at the end' : 'At the end of this block'}</button>
         <button class="chip ${c.awardsMode === 'next' ? 'on' : ''}" onclick="setBcast('${sess.id}','awardsMode','next')">After the next block</button>
@@ -1036,6 +1051,7 @@ function renderBcastSessPanel(sess) {
   })()}
     </div>
 
+    ${c.awardsMode === 'none' ? '' : `
     <div class="bc-grid">
       ${num('Flash interviews (min)', 'flashMin', c.flashMin, 1)}
       ${num('Ceremony prep (min)', 'ceremonyPrepMin', c.ceremonyPrepMin, 1)}
@@ -1072,6 +1088,8 @@ function renderBcastSessPanel(sess) {
         ${c.awardsMode === 'after' ? `<span class="bc-hint">Awards run after each event, so this break runs before each ceremony.</span>` : ''}
       </div>`;
   })()}</div>
+    `}
+    `}
 
     <div class="bc-pos">
       <span class="bc-pos-l">Who this run-of-show is for</span>
