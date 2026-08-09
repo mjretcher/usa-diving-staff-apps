@@ -604,6 +604,24 @@ function toggleDayLock(dayId){
 // including the undo entry it created. Guarding here rather than at each of the ~65 call
 // sites means a locked day is safe from every existing path — drag-and-drop, delete,
 // re-stack, copy-day, prefill, DiveMeets entry sync — and from any path added later.
+// An async action fired twice does the work twice: two pushes to the cloud, two
+// workbooks, two dispatches. Nothing stopped a second tap while the first was
+// still running, and on a slow connection at a pool that second tap is the
+// normal thing to do. Keyed by function and arguments rather than by the button
+// element, because the button is often replaced by a re-render mid-flight.
+const _busyKeys=new Set();
+async function busy(el,fn,...args){
+  if(typeof fn!=='function')return;
+  const key=(fn.name||'fn')+':'+args.join(',');
+  if(_busyKeys.has(key))return;
+  _busyKeys.add(key);
+  if(el&&el.classList){el.classList.add('is-busy');el.setAttribute('aria-busy','true');}
+  try{ await fn.apply(null,args); }
+  finally{
+    _busyKeys.delete(key);
+    if(el&&el.classList){el.classList.remove('is-busy');el.removeAttribute('aria-busy');}
+  }
+}
 function upd(fn){
   const guard=anyLocked()?snapshot():null;
   pushUndo();
@@ -5434,7 +5452,7 @@ function renderLibrarySaves(local){
       const statusLine=isPending?`<span class="lib-pending-badge">Not on cloud yet</span>`:item.source==='cloud'?'Cloud':'Local only';
       const loadCall=isPending||item.source==='local'?`loadLocalSaveById('${esc(item.id)}')`:`loadFromNeon('${esc(item.id)}')`;
       const delCall=isPending||item.source==='local'?`deleteLocalSaveById('${esc(item.id)}')`:`deleteCloudSave('${esc(item.id)}','${esc(item.name).replace(/'/g,"\\'")}')`;
-      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" aria-label="Push to cloud now" onclick="event.stopPropagation();pushOnePendingNow('${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" aria-label="Delete this schedule" onclick="${delCall}" title="Delete">✕</button></div></div>`;
+      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" aria-label="Push to cloud now" onclick="event.stopPropagation();busy(this,pushOnePendingNow,'${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" aria-label="Delete this schedule" onclick="${delCall}" title="Delete">✕</button></div></div>`;
     }).join('')}</div>`;
   }else if(!UI.neonLibLoading){
     listHtml+=`<div class="empty"><div class="empty-title">No saved meets ${UI.savesFolder==='all'?'yet':'in this folder'}</div><div class="empty-sub">${UI.savesFolder==='all'?'Click "Save current to cloud" below after editing a schedule.':'Try "All" to see saves in other folders.'}</div></div>`;
@@ -5746,10 +5764,10 @@ function renderGenerateModal(timed){
       <button class="btn btn-gh" onclick="closeModal()">Close</button>
       <div style="flex:1"></div>
       ${aud==='broadcast'
-        ?`${cfg.forCoaches?'':`<button class="btn" onclick="UI.bcastSessId=null;exportBroadcast()">Run-of-show (.xlsx)</button>`}
+        ?`${cfg.forCoaches?'':`<button class="btn" onclick="UI.bcastSessId=null;busy(this,exportBroadcast)">Run-of-show (.xlsx)</button>`}
            <button class="btn btn-p" onclick="UI.bcastSessId=null;printBroadcast()">${cfg.forCoaches?"Coaches' copy \u2014 Print / PDF":'Print / PDF'}</button>`
-        :`<button class="btn" onclick="exportOpsTimeline()">Ops Timeline (.xlsx)</button>
-           <button class="btn" onclick="exportExcel()">Excel</button>
+        :`<button class="btn" onclick="busy(this,exportOpsTimeline)">Ops Timeline (.xlsx)</button>
+           <button class="btn" onclick="busy(this,exportExcel)">Excel</button>
            <button class="btn btn-p" onclick="printReport()">Print / PDF</button>`}
     </div>
   </div>`;

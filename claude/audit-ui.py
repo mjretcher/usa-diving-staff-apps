@@ -212,6 +212,18 @@ for p, s in SRC.items():
             hits.append('%-22s %s' % (p.split('/')[-1], m.group(0)[:64]))
 total += report('10. STATUS MESSAGES WITH NO aria-live / role=alert', hits)
 
+# ── 11. Async actions fired straight from onclick (Interaction / Loading) ──
+# Anything that talks to the network or builds a file has to go through busy(),
+# or an impatient second tap does the work twice.
+ASYNC_ACTIONS = ['exportExcel', 'exportBroadcast', 'exportOpsTimeline', 'pushOnePendingNow',
+                 'pushAllPending', 'saveToCloud']
+hits = []
+for p, s in SRC.items():
+    for a in ASYNC_ACTIONS:
+        for m in re.finditer(r'onclick="[^"]*?(?<!busy\(this,)\b' + a + r'\(', s):
+            hits.append('%-22s %s' % (p.split('/')[-1], m.group(0)[-56:]))
+total += report('11. ASYNC ACTIONS NOT GUARDED AGAINST A SECOND TAP', hits)
+
 print('\n' + '=' * 74)
 print('TOTAL FINDINGS: %d' % total)
 print('=' * 74)

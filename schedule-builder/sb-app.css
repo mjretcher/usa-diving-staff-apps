@@ -1987,3 +1987,36 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
   .gen-blk{padding:9px 10px}
   .gen-blk input{width:20px;height:20px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PRESSED AND BUSY
+   Two rules out of the ui-ux-pro-max set that matter here more than they
+   would in an office: "add a pressed state" and "never rely on hover for
+   an important action". There were 118 :hover rules and three :active
+   ones, two of which only change a drag cursor. On a tablet at the pool
+   there IS no hover — you tap a control and nothing acknowledges it until
+   the app finishes re-rendering, which on a big schedule is long enough to
+   tap again.
+   ══════════════════════════════════════════════════════════════════════ */
+.btn:active:not(:disabled),.chip:active:not(:disabled),.lv-btn:active:not(:disabled),
+.lv-adj-b:active,.lv-adj-ok:active,.bb:active,.gen-blk-tog:active,.lt-x:active,.lt-use:active,
+.modal-close:active,.lib-act:active,.ev-rm:active,.dp-add:active,.tl-iconbtn:active,
+.flight-rm:active,.pr-nav:active,.ep-close:active{
+  transform:translateY(1px) scale(.985);
+  filter:brightness(.94);
+}
+.gen-blk:active{background:var(--surf3)}
+/* The press must land instantly; the release can ease. */
+.btn,.chip,.lv-btn,.lv-adj-b,.bb{transition:background .14s,border-color .14s,color .14s,
+  transform .09s ease-out,filter .09s ease-out}
+
+/* An action that talks to the network or builds a file cannot be fired twice
+   by an impatient second tap. */
+.is-busy{opacity:.62;pointer-events:none;position:relative}
+.is-busy::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:0 0 6px 6px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  background-size:200% 100%;animation:busyslide 1s linear infinite}
+@keyframes busyslide{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){
+  .is-busy::after{animation:none;background:var(--cyan);opacity:.5}
+}

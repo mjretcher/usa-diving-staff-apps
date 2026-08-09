@@ -1622,7 +1622,7 @@ function renderBcastPreviewModal() {
       ${renderBcastSheet(timed, { forCoaches: coaches, showCues: !coaches })}
     </div>
     <div class="modal-foot"><button class="btn btn-gh" onclick="closeModal()">Close</button><div style="flex:1"></div>
-      ${coaches ? '' : `<button class="btn" onclick="exportBroadcast()">Run-of-show (.xlsx)</button>`}
+      ${coaches ? '' : `<button class="btn" onclick="busy(this,exportBroadcast)">Run-of-show (.xlsx)</button>`}
       <button class="btn btn-p" onclick="printBroadcast(${coaches})">${coaches ? "Coaches' copy \u2014 Print / PDF" : 'Print / PDF'}</button></div>
   </div>`;
 }
