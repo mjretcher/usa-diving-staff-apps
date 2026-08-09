@@ -885,66 +885,11 @@ function renderBcastSessPanel(sess) {
     </div>
 
     <div class="bc-grid">
-      ${num('Boards close → intros (min)', 'boardsCloseMin', c.boardsCloseMin, 1, 'Deck clears, judges seat')}
-      ${num('Intro seconds per athlete', 'introSecPer', c.introSecPer, 5, c.introFlatMin > 0 ? 'Overridden below' : 'Auto from entries')}
-      ${num('Fixed intro length (min)', 'introFlatMin', c.introFlatMin, 1, '0 = use per-athlete')}
+      ${num(c.introsOn === false ? 'Boards close → round one (min)' : 'Boards close → intros (min)',
+        'boardsCloseMin', c.boardsCloseMin, 1, 'Deck clears, judges seat')}
+      ${c.introsOn === false ? '' : num('Intro seconds per athlete', 'introSecPer', c.introSecPer, 5, c.introFlatMin > 0 ? 'Overridden below' : 'Auto from entries')}
+      ${c.introsOn === false ? '' : num('Fixed intro length (min)', 'introFlatMin', c.introFlatMin, 1, '0 = use per-athlete')}
     </div>
-    ${(() => {
-    if (typeof annOrderStatus !== 'function') return '';
-    let st; try { st = annOrderStatus(sess); } catch (e) { return ''; }
-    if (!st.total) return '';
-    return `<div class="bc-f wide"><label>Finals dive order for the introductions <span class="bc-opt">the names read out loud</span></label>
-      <div class="chiprow">
-        <button type="button" class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
-        <button type="button" class="chip" onclick="UI.annSessId='${sess.id}';UI.annTab='flow';UI.modal='announcer';render()">Show elements…</button>
-      </div>
-      <span class="bc-hint">${st.filled
-        ? `Loaded for <strong>${st.filled} of ${st.total}</strong> event${st.total === 1 ? '' : 's'} — ${st.athletes} ${st.athletes === 1 ? 'name' : 'names'} print under Athlete presentation, in reading order, with each athlete's club.`
-        : 'Drop the printed dive order PDFs in and the names print under Athlete presentation, in reading order. Without them that row is still timed — it just has no names on it.'}</span>
-      ${st.mismatch.length ? `<span class="bc-hint warn">${st.mismatch.map(m => `${esc(evName(m.ev))}: the sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}. The read uses the sheet; the clock uses the entries.</span>` : ''}
-    </div>`;
-  })()}
-
-    <div class="bc-f wide"><label>Reset break around introductions</label>
-      <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
-      ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
-      ${(() => {
-    const pos = bcastResetPos(c);
-    const rSec = bcastResetSec(c);
-    const nAth = evs.reduce((a, e) => a + entryValue(e), 0);
-    const cut = bcastResetSplit(c, nAth);
-    const bSec = Math.max(0, Number(c.boardsCloseMin || 0) * 60);
-    const chips = BCAST_RESET_POS.map(k =>
-      `<button type="button" class="chip ${pos === k ? 'on' : ''}" onclick="setBcast('${sess.id}','resetPos','${k}')">${BCAST_RESET_POS_LABEL[k]}</button>`).join('');
-    const over = pos === 'inBoards' && rSec > bSec;
-    return `<div class="bc-pos">
-        <span class="bc-pos-l">Where it goes</span>
-        <div class="chiprow">${chips}</div>
-        <span class="bc-hint">${BCAST_RESET_POS_HINT[pos]}</span>
-        ${over ? `<span class="bc-hint warn">The break is longer than the ${bmmss(bSec)} boards-close gap, so the gap is used up and the show still gets ${bmmss(rSec - bSec)} longer.</span>` : ''}
-        ${pos === 'midIntros' ? `<div class="bc-split"><span>Break after athlete</span>
-          <input class="ep-inp bc-dur-i" type="number" min="1" max="${Math.max(1, nAth - 1)}" step="1" value="${cut}" onchange="setBcast('${sess.id}','resetSplitAfter',this.value)"/>
-          <span>of ${nAth}</span>
-          <button type="button" class="bc-dp ghost" onclick="setBcast('${sess.id}','resetSplitAfter',0)">Halfway</button></div>` : ''}
-      </div>`;
-  })()}
-      ${bcastResetSec(c) === 0 ? `<span class="bc-hint">Set to None — no break will appear on the run-of-show.</span>` : ''}</div>
-
-    ${multi ? (() => {
-    const ord = bcastDiveOrder(evs);
-    const lead = ord[0], follow = ord[1];
-    const leadN = entryValue(lead), followN = entryValue(follow);
-    const tied = leadN === followN;
-    return `<div class="bc-f wide"><label>Two finals in this session</label>
-      <div class="chiprow">
-        <button class="chip ${c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',true)">Alternate rounds</button>
-        <button class="chip ${!c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',false)">One event, then the other</button>
-      </div>
-      ${c.interleave
-        ? `<span class="bc-hint">Round 1 of <strong>${esc(evName(lead))}</strong>${tied ? '' : ` (the bigger field, ${leadN})`}, then round 1 of <strong>${esc(evName(follow))}</strong>${tied ? '' : ` (${followN})`}, then round 2 of each, and so on.${bcastDives(lead) !== bcastDives(follow) ? ` ${esc(evName(bcastDives(lead) > bcastDives(follow) ? lead : follow))} has the extra round and finishes on its own.` : ''}</span>`
-        : `<span class="bc-hint warn">This runs <strong>${esc(evName(evs[0]))}</strong> start to finish and only then starts <strong>${esc(evName(evs[1]))}</strong>. Combined finals normally alternate — round 1 of the bigger field, round 1 of the other, then round 2 of each. Choose <strong>Alternate rounds</strong> for that.</span>`}</div>`;
-  })() : ''}
-
     <div class="bc-f wide"><label>Athlete introductions</label>
       <div class="chiprow" style="margin-bottom:6px">
         <button class="chip ${c.introsOn === false ? '' : 'on'}" onclick="setBcast('${sess.id}','introsOn',true)"
@@ -977,6 +922,72 @@ function renderBcastSessPanel(sess) {
         : `<span class="bc-hint">${mine} finalists, about ${bmmss(mine * Number(c.introSecPer || 0))} at ${c.introSecPer}s each.${nxFinals.length ? ` ${esc(lbl)} introduces its own separately.` : ''}</span>`}`;
   })()}
     </div>
+
+    ${(c.introsOn === false) ? '' : (() => {
+    if (typeof annOrderStatus !== 'function') return '';
+    let st; try { st = annOrderStatus(sess); } catch (e) { return ''; }
+    if (!st.total) return '';
+    return `<div class="bc-f wide"><label>Finals dive order for the introductions <span class="bc-opt">the names read out loud</span></label>
+      <div class="chiprow">
+        <button type="button" class="chip" onclick="openAnnouncer('${sess.id}')">${st.filled ? 'Dive order…' : 'Load the dive order…'}</button>
+        <button type="button" class="chip" onclick="UI.annSessId='${sess.id}';UI.annTab='flow';UI.modal='announcer';render()">Show elements…</button>
+      </div>
+      <span class="bc-hint">${st.filled
+        ? `Loaded for <strong>${st.filled} of ${st.total}</strong> event${st.total === 1 ? '' : 's'} — ${st.athletes} ${st.athletes === 1 ? 'name' : 'names'} print under Athlete presentation, in reading order, with each athlete's club.`
+        : 'Drop the printed dive order PDFs in and the names print under Athlete presentation, in reading order. Without them that row is still timed — it just has no names on it.'}</span>
+      ${st.mismatch.length ? `<span class="bc-hint warn">${st.mismatch.map(m => `${esc(evName(m.ev))}: the sheet has ${m.sheet}, the show is timed on ${m.sched}`).join(' · ')}. The read uses the sheet; the clock uses the entries.</span>` : ''}
+    </div>`;
+  })()}
+
+    <div class="bc-f wide"><label>${c.introsOn === false ? 'Break before round one' : 'Reset break around introductions'}</label>
+      <input class="fi" value="${esc(c.resetName)}" onchange="setBcast('${sess.id}','resetName',this.value)" placeholder="Commercial break"/>
+      ${bcDurCtl(bcastResetSec(c), `setBcastResetSec('${sess.id}',`, `setBcastResetPart('${sess.id}',`)}
+      ${(() => {
+    // With no walk-out there is nothing to be before, after or in the middle of,
+    // so only the two positions that still mean something are offered \u2014 and the
+    // one that survives is renamed for what it actually is. Offering \"Middle of
+    // intros\" on a block with no intros is how a setting ends up meaning nothing.
+    const introsOff = c.introsOn === false;
+    const posKeys = introsOff ? ['inBoards', 'beforeIntros'] : BCAST_RESET_POS;
+    const pos = introsOff ? (bcastResetPos(c) === 'inBoards' ? 'inBoards' : 'beforeIntros') : bcastResetPos(c);
+    const posLabel = k => (introsOff && k === 'beforeIntros') ? 'Before round one' : BCAST_RESET_POS_LABEL[k];
+    const posHint = (introsOff && pos === 'beforeIntros')
+      ? 'Boards close, then the break, then round one.'
+      : BCAST_RESET_POS_HINT[pos];
+    const rSec = bcastResetSec(c);
+    const nAth = evs.reduce((a, e) => a + entryValue(e), 0);
+    const cut = bcastResetSplit(c, nAth);
+    const bSec = Math.max(0, Number(c.boardsCloseMin || 0) * 60);
+    const chips = posKeys.map(k =>
+      `<button type="button" class="chip ${pos === k ? 'on' : ''}" onclick="setBcast('${sess.id}','resetPos','${k}')">${posLabel(k)}</button>`).join('');
+    const over = pos === 'inBoards' && rSec > bSec;
+    return `<div class="bc-pos">
+        <span class="bc-pos-l">Where it goes</span>
+        <div class="chiprow">${chips}</div>
+        <span class="bc-hint">${posHint}</span>
+        ${over ? `<span class="bc-hint warn">The break is longer than the ${bmmss(bSec)} boards-close gap, so the gap is used up and the show still gets ${bmmss(rSec - bSec)} longer.</span>` : ''}
+        ${pos === 'midIntros' ? `<div class="bc-split"><span>Break after athlete</span>
+          <input class="ep-inp bc-dur-i" type="number" min="1" max="${Math.max(1, nAth - 1)}" step="1" value="${cut}" onchange="setBcast('${sess.id}','resetSplitAfter',this.value)"/>
+          <span>of ${nAth}</span>
+          <button type="button" class="bc-dp ghost" onclick="setBcast('${sess.id}','resetSplitAfter',0)">Halfway</button></div>` : ''}
+      </div>`;
+  })()}
+      ${bcastResetSec(c) === 0 ? `<span class="bc-hint">Set to None — no break will appear on the run-of-show.</span>` : ''}</div>
+
+    ${multi ? (() => {
+    const ord = bcastDiveOrder(evs);
+    const lead = ord[0], follow = ord[1];
+    const leadN = entryValue(lead), followN = entryValue(follow);
+    const tied = leadN === followN;
+    return `<div class="bc-f wide"><label>Two finals in this session</label>
+      <div class="chiprow">
+        <button class="chip ${c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',true)">Alternate rounds</button>
+        <button class="chip ${!c.interleave ? 'on' : ''}" onclick="setBcast('${sess.id}','interleave',false)">One event, then the other</button>
+      </div>
+      ${c.interleave
+        ? `<span class="bc-hint">Round 1 of <strong>${esc(evName(lead))}</strong>${tied ? '' : ` (the bigger field, ${leadN})`}, then round 1 of <strong>${esc(evName(follow))}</strong>${tied ? '' : ` (${followN})`}, then round 2 of each, and so on.${bcastDives(lead) !== bcastDives(follow) ? ` ${esc(evName(bcastDives(lead) > bcastDives(follow) ? lead : follow))} has the extra round and finishes on its own.` : ''}</span>`
+        : `<span class="bc-hint warn">This runs <strong>${esc(evName(evs[0]))}</strong> start to finish and only then starts <strong>${esc(evName(evs[1]))}</strong>. Combined finals normally alternate — round 1 of the bigger field, round 1 of the other, then round 2 of each. Choose <strong>Alternate rounds</strong> for that.</span>`}</div>`;
+  })() : ''}
 
     <div class="bc-f wide"><label>Awards</label>
       <div class="chiprow">
