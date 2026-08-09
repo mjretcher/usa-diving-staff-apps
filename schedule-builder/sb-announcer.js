@@ -171,7 +171,7 @@ const ANN_OPEN_DEFAULTS = {
 function annMeetCfg() {
   return Object.assign({}, ANN_MEET_DEFAULTS, ANN_OPEN_DEFAULTS, (S.meet && S.meet.paScript) || {});
 }
-// Tokens: {venue} {meet} {city} always; {divers} {daypart} {roundword} when a
+// Tokens: {venue} {meet} {city} {divers} always; {daypart} {roundword} when a
 // session context is supplied. Everything else is literal.
 // The meet's venue field usually already ends with the city ("... at Mylan
 // Park, Morgantown, WV"), which makes "welcome to {venue}" read twice over and
@@ -1495,7 +1495,8 @@ function renderOpenModal(sess) {
       <div style="font-size:12px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
         This wording is saved with the schedule and reused for every prelim session, so you write it once per championship.
         Tokens: <strong>{venue}</strong> <strong>{meet}</strong> <strong>{city}</strong> <strong>{divers}</strong>
-        <strong>{daypart}</strong> <strong>{roundword}</strong> — the last three change by session on their own.
+        <strong>{daypart}</strong> <strong>{roundword}</strong> — the last two change by session on their own.
+        {divers} reads “divers”; if you want “junior divers” or anything else, write it here.
       </div>
       ${txtFld('Venue welcome', 'pWelcome', 4)}
       ${txtFld('Sportsmanship, phones, flash photography', 'pSport', 4)}
@@ -1829,18 +1830,15 @@ function annDaypart(mins) {
   if (h < 17) return 'afternoon';
   return 'evening';
 }
-// "junior divers" / "senior divers" / plain "divers" for a combined session.
-function annDiverWord(evs) {
-  let jr = false, sr = false;
-  evs.forEach(ev => {
-    const l = ev.level || '';
-    if (/^(Senior|National Qualifier)/i.test(l)) sr = true;
-    else if (/^(Group|Junior)/i.test(l)) jr = true;
-  });
-  if (jr && !sr) return 'junior divers';
-  if (sr && !jr) return 'senior divers';
-  return 'divers';
-}
+// {divers} reads "divers". It used to read "senior divers" or "junior divers",
+// inferred from the events in the block — so a script that said {divers} came out
+// of the announcer's mouth with a word nobody had written into it.
+//
+// The wording is saved per championship, not per session, so there is nothing to
+// infer anyway: a Junior Nationals schedule has its own copy of this text and can
+// simply say "junior divers" in it. A token that quietly edits what you wrote is
+// worse than no token.
+function annDiverWord() { return 'divers'; }
 // "preliminary" / "qualifying" / "semifinal" — plain word for the read.
 function annRoundWord(evs) {
   const set = new Set(evs.map(e => e.round));
@@ -1864,7 +1862,7 @@ function annOpenCtx(sess, evs) {
   const t = sess.timing || calcSessTiming(sess);
   return {
     daypart: annDaypart(t.eventStartMinutes),
-    divers: annDiverWord(evs),
+    divers: annDiverWord(),
     roundword: annRoundWord(evs),
   };
 }
