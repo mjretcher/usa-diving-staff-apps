@@ -907,6 +907,20 @@ function buildWarnings(dayId){
 // ── CONFLICT DETECTION (comprehensive) ────────────────────────────────
 function detectConflicts(){
   const issues=[];
+  // Note text saved on blocks before the Note field existed. It is not printed
+  // until it has been looked at, because several of these no longer match the
+  // block they sit on. Listed here so they can be worked through in one pass.
+  (function(){
+    const stale=typeof blocksWithUnreviewedNotes==='function'?blocksWithUnreviewedNotes():[];
+    if(!stale.length)return;
+    const names=stale.slice(0,4).map(x=>x.title||'Untitled block').join(', ');
+    issues.push({
+      sev:'info',
+      title:`${stale.length} block${stale.length===1?'':'s'} ${stale.length===1?'has':'have'} older note text waiting to be checked`,
+      detail:`${names}${stale.length>4?` and ${stale.length-4} more`:''}. These were written against the block's old name and some no longer match it, so nothing is printed until you open the block and either use the note or leave it off.`,
+      loc:'Notes'
+    });
+  })();
   ensureProjDataLoaded(); // athlete-aware checks activate once the projected field arrives
   ensureEntrantsLoaded(); // secondary "how many have actually registered" figure for flight counts
   const timed=allTimed();
@@ -1598,6 +1612,110 @@ function deleteSession(id){
     toast('Deleted');
   }});
 }
+// ==== BLOCK NOTES ====
+// A short line that rides along with a block — "Deck opens 30 minutes before",
+// "Zone A 1:00-3:00, Zone B 3:00-5:00" — so it stops having to be crammed into
+// the block's name. Stored on the session as `note`.
+//
+// Blocks saved before this field existed kept that kind of text on the block's
+// first event (`events[0].notes`), which the coach handout and the Excel export
+// already read. sessNote() falls back to it so those schedules light up with no
+// migration and no rewrite of anything already saved.
+//
+// Two things are deliberately NOT promoted from the legacy field:
+//   • Competition sessions. Their event notes are per-event planning reminders
+//     ("Review split board / flow", "Review platform load") — true of one event,
+//     wrong printed as a note on the whole session.
+//   • Filler that only restates the block's own name. The seed templates carry
+//     "Open practice block." on blocks already titled "Open Training", which
+//     would put a redundant line under a third of the schedule.
+const NOTE_FILLER=new Set(['open practice','open practice block','open training','open training block','flighted warm up block','flighted warm ups','practice','custom block','technical meeting','open pool']);
+const normNote=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function sessNote(sess){
+  return sess&&typeof sess.note==='string'?sess.note.trim():'';
+}
+// The old text, offered in the editor only — never printed until it has been
+// looked at and accepted.
+//
+// It is NOT read straight through onto the schedule, and that is deliberate.
+// These notes were seeded from templates and the blocks have been retitled since
+// without the notes following. On the live Morgantown schedule two of them now
+// contradict the block they sit on outright — a block titled "USA Diving JUNIOR
+// National Championships Participants ONLY" carrying "Restricted: USA Nationals /
+// National Qualifier entrants only.", and "Junior Nationals open Training"
+// carrying "USA Nationals senior open training." The coach handout has been
+// printing both. Wrong information on an athlete-facing sheet is the one thing
+// this app must not do, so nothing legacy reaches an output until it is adopted.
+function legacyNote(sess){
+  if(!sess||!sess.isPractice)return'';
+  if(typeof sess.note==='string')return'';
+  const legacy=String((sess.events&&sess.events[0]&&sess.events[0].notes)||'').trim();
+  if(!legacy)return'';
+  const n=normNote(legacy);
+  if(!n||n===normNote(sess.title)||NOTE_FILLER.has(n))return'';
+  return legacy;
+}
+function adoptLegacyNote(id){
+  const sess=S.sessions.find(x=>x.id===id);
+  const t=legacyNote(sess);
+  if(!t)return;
+  setSessNote(id,t);
+  toast('Note added — it now shows on the schedule. Edit it above if it needs changing.',3600);
+}
+function dismissLegacyNote(id){
+  setSessNote(id,'');
+  toast('Left off. The block keeps its name; nothing prints.',2800);
+}
+// Blocks still holding an un-reviewed note. Surfaced in Schedule health so they
+// can be dealt with in one pass instead of found block by block.
+function blocksWithUnreviewedNotes(){return (S.sessions||[]).filter(s=>legacyNote(s))}
+// What a given audience should see. A note marked staff-only follows the same
+// rule the app already uses for internal-only blocks: Operations and Broadcast
+// see it, Public / Athletes / Judges do not. Called with no cfg (the timeline,
+// the editor) it always shows — those are Mike's own working views.
+function sessNoteFor(sess,cfg){
+  const n=sessNote(sess);
+  if(!n)return'';
+  if(sess&&sess.noteInternal&&cfg&&!cfg.showInternalBlocks)return'';
+  return n;
+}
+function hasStaffOnlyNote(sess){return !!(sess&&sess.noteInternal&&sessNote(sess))}
+// The note as it appears on the working timeline. Mike's own view always shows
+// it — a staff-only note is flagged there rather than hidden, so it is obvious
+// which notes the athletes will not be getting.
+function sessNoteRow(sess){
+  const n=sessNote(sess);
+  if(!n)return'';
+  const staff=!!sess.noteInternal;
+  return`<div class="sc-note ${staff?'staff':''}" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Click to edit this note">
+    <span class="sc-note-icon" aria-hidden="true"></span>
+    <span class="sc-note-txt">${esc(n)}</span>
+    ${staff?`<span class="sc-note-tag">Staff only</span>`:''}
+  </div>`;
+}
+function setSessNote(id,v){updSess(id,'note',String(v==null?'':v))}
+function toggleNoteInternal(id){
+  const sess=S.sessions.find(x=>x.id===id);
+  updSess(id,'noteInternal',!(sess&&sess.noteInternal));
+}
+// The editor field, shared by the practice and competition panels so the two
+// cannot drift apart.
+function noteField(sess){
+  const n=typeof sess.note==='string'?sess.note:sessNote(sess);
+  const staff=!!sess.noteInternal;
+  const old=legacyNote(sess);
+  return`<div class="fg"><label class="fl">Note <span style="font-weight:400;color:var(--tx3);text-transform:none;letter-spacing:0">— shows under this block on the schedule, so it does not have to go in the name</span></label>
+    <input id="ep-note-${sess.id}" class="fi" value="${esc(n)}" aria-label="Note for this block" placeholder="e.g. Deck opens 30 minutes before" onchange="setSessNote('${sess.id}',this.value)"/>
+    ${old?`<div class="note-old">
+      <div class="note-old-hd">There is older note text saved on this block</div>
+      <div class="note-old-txt">“${esc(old)}”</div>
+      <div class="note-old-warn">Check it still matches this block before using it — block names have been changed since these were written.</div>
+      <div class="note-old-acts"><button class="btn btn-sm btn-p" onclick="adoptLegacyNote('${sess.id}')">Use this note</button><button class="btn btn-sm" onclick="dismissLegacyNote('${sess.id}')">Leave it off</button></div>
+    </div>`:''}
+    <label class="note-staff"><input type="checkbox" ${staff?'checked':''} onchange="toggleNoteInternal('${sess.id}')"/> Staff only — keep this note off the Public, Athletes and Judges schedules</label>
+  </div>`;
+}
+
 function updSess(id,field,value){
   upd(s=>{
     const sess=s.sessions.find(x=>x.id===id);if(!sess)return;
@@ -3273,13 +3391,14 @@ function buildHandoutDayHTML(day,timed,os){
     if(sess.isPractice){
       const ft=t.flightTimes||[];
       const flights=ft.length?`<div class="hd-flights">${ft.map(f=>`<div class="hd-flight"><span class="hd-flight-bar" style="background:${f.color||'#171F69'}"></span>${esc(f.name)} <span class="hd-flight-time">${f12(f.startMinutes)}–${f12(f.endMinutes)}</span></div>`).join('')}</div>`:'';
-      const note=(sess.events&&sess.events[0]&&sess.events[0].notes)||'';
-      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}${handoutAlongTag(sess,timed)}</div>${flights}${note&&note!==sess.title?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
+      const note=sessNoteFor(sess,os);
+      return`<tr class="hd-prac"><td class="hd-time">${f12(t.warmupStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">${esc(sess.title||'Practice')}${handoutAlongTag(sess,timed)}</div>${flights}${note?`<div class="hd-note">${esc(note)}</div>`:''}</td></tr>`;
     }
     const n=getSessNum(sess,timed);
     const evs=(t.events||[]).map(ev=>`<div class="hd-ev"><span>${esc(evName(ev))}</span><span class="hd-ev-time">${f12(ev.eventStartMinutes)}</span></div>`).join('');
     const wu=os.showWarmup!==false?`<div class="hd-wu">Warm-up ${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)}</div>`:'';
-    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${handoutAlongTag(sess,timed)}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${wu}${evs}</td></tr>`;
+    const cnote=sessNoteFor(sess,os);
+    return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${handoutAlongTag(sess,timed)}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${cnote?`<div class="hd-note">${esc(cnote)}</div>`:''}${wu}${evs}</td></tr>`;
   }).join('');
   return`<div class="hd-page">
 <div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
@@ -3419,11 +3538,11 @@ async function exportMeetExcel(){
     ds.forEach(sess=>{
       const t=sess.timing;
       if(sess.isPractice){
-        aoa.push([f12(t.warmupStartMinutes),f12(t.sessionEndMinutes),sess.title||'Practice','',fdur(t.sessionEndMinutes-t.warmupStartMinutes),(sess.events?.[0]?.notes&&sess.events[0].notes!==sess.title)?sess.events[0].notes:'']);
+        aoa.push([f12(t.warmupStartMinutes),f12(t.sessionEndMinutes),sess.title||'Practice','',fdur(t.sessionEndMinutes-t.warmupStartMinutes),sessNoteFor(sess,os)]);
         (t.flightTimes||[]).forEach(f=>aoa.push([f12(f.startMinutes),f12(f.endMinutes),'','  '+f.name,fdur(f.endMinutes-f.startMinutes),'']));
       }else{
         const n=getSessNum(sess,timed);
-        aoa.push([f12(t.eventStartMinutes),f12(t.sessionEndMinutes),`Session ${n}${sess.awardsEnabled?' (+ Awards)':''}`,os.showWarmup!==false?`Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}`:'',fdur(t.sessionEndMinutes-t.warmupStartMinutes),'']);
+        aoa.push([f12(t.eventStartMinutes),f12(t.sessionEndMinutes),`Session ${n}${sess.awardsEnabled?' (+ Awards)':''}`,os.showWarmup!==false?`Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}`:'',fdur(t.sessionEndMinutes-t.warmupStartMinutes),sessNoteFor(sess,os)]);
         (t.events||[]).forEach(ev=>aoa.push([f12(ev.eventStartMinutes),'','','  '+evName(ev)+(entryValue(ev)?` — ${entryValue(ev)} divers`:''),'','']));
       }
     });
@@ -3515,6 +3634,7 @@ function renderCard(sess,timed,warns){
           <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         </div>
       </div>
+      ${sessNoteRow(sess)}
       ${typeof liveSessRow==='function'?liveSessRow(sess,t):''}
       ${flights.length?`<div class="pcard-flights">${flights.map(f=>`<div class="pcard-flight"><div class="pcard-flight-bar" style="background:${f.color||typeColor}"></div><div class="pcard-flight-name">${esc(f.name)}</div><div class="pcard-flight-time">${f12(f.startMinutes)} – ${f12(f.endMinutes)}</div><div class="pcard-flight-dur">${fdur(f.durationMinutes)}</div></div>`).join('')}</div>`:''}
     </div>`;
@@ -3556,6 +3676,7 @@ function renderCard(sess,timed,warns){
         <button class="sc-act" onclick="event.stopPropagation();openEdit('${sess.id}')" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </div>
     </div>
+    ${sessNoteRow(sess)}
     <div class="sc-wu"><div class="sc-wu-icon"></div><span class="sc-wu-lbl">Warm-up</span><span class="sc-wu-time">${f12(t.warmupStartMinutes)} – ${f12(t.warmupEndMinutes)} · ${sess.warmupMinutes||55} min</span></div>
     ${sess.events.length?renderCardEvents(sess,t):`<div style="padding:12px 18px;font-size:12px;color:var(--tx3)">No events yet — add one below</div>`}
     ${warn?`<div class="sc-warn clickable" onclick="resolveCardWarning('${sess.id}')"><div class="sc-warn-icon"></div><span class="sc-warn-txt">${esc(warn.msg)}</span><button class="sc-warn-fix" onclick="event.stopPropagation();resolveCardWarning('${sess.id}')">Fix →</button><button class="sc-warn-ack" onclick="event.stopPropagation();ackWarn('${warn.key}')">Dismiss</button></div>`:''}
@@ -3682,6 +3803,7 @@ function renderEditPrac(sess,t,flights,buf){
   const bufChips=[0,5,10,15].map(v=>`<button class="chip ${buf===v?'on-g':''}" onclick="setBuffer('${sess.id}',${v})">${v===0?'None':v+'m'}</button>`).join('');
   return`
     <div class="fg"><label class="fl">Block name</label><input id="ep-title-${sess.id}" class="fi" value="${esc(sess.title||'')}" aria-label="Block name" placeholder="Open Training" onchange="updSess('${sess.id}','title',this.value)"/></div>
+    ${noteField(sess)}
     <div class="fg2" style="grid-template-columns:1.1fr .8fr 1.1fr">
       <div class="fg"><label class="fl">Start time</label><input id="ep-start-${sess.id}" class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
       <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input id="ep-dur-${sess.id}" class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
@@ -3815,6 +3937,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
   </div>`;
   return`
     ${sessSummary}
+    ${noteField(sess)}
     <div class="fg2">
       <div class="fg"><label class="fl">Warm-up start</label><input class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
       <div class="fg"><label class="fl">Warm-up length</label>
@@ -6164,6 +6287,9 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
 .pp-prac-name{font-size:11.5px;font-weight:700;color:var(--navy)}
 .pp-prac-time{margin-left:auto;font-size:10.5px;font-weight:600;color:var(--gray)}
 .pp-prac-flights{margin-top:3px;display:flex;flex-direction:column;gap:1px}
+/* Block note — printed under the block it belongs to, quiet enough not to
+   compete with the times but readable at arm's length on a printed sheet. */
+.pp-note{font-size:10.5px;line-height:1.4;color:#475569;margin-top:3px;padding-left:9px;border-left:2px solid #C9D2E3}
 .pp-prac-f{display:flex;justify-content:space-between;font-size:10px;color:var(--gray);font-weight:500;max-width:320px}
 /* Footer */
 .pp-ft{display:flex;justify-content:space-between;align-items:center;padding:8px 22px;border-top:2px solid var(--navy);font-size:9px;font-weight:600;color:var(--gray);margin-top:auto}
@@ -6323,6 +6449,7 @@ function renderPP(timed,cfg,titleOverride){
     const closeNote=sess.fitToClose?'  •  until facility close':'';
     return`<div class="pp-prac">
       <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}${sess.hideFromPublic?` <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;vertical-align:middle">Internal — not on public schedule</span>`:''}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
+      ${(()=>{const nt=sessNoteFor(sess,cfg);return nt?`<div class="pp-note">${esc(nt)}</div>`:''})()}
       ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
         const cr=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
         return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cr!=null?` · ${cr.total} athlete${cr.total===1?'':'s'}${cr.registered!=null?` (${cr.registered} registered)`:''}`:''}</span></div>`;
@@ -6347,6 +6474,7 @@ function renderPP(timed,cfg,titleOverride){
         <span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
         ${cfg.showWU?`<span class="pp-sess-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</span>`:''}
       </div>
+      ${(()=>{const nt=sessNoteFor(sess,cfg);return nt?`<div class="pp-note">${esc(nt)}</div>`:''})()}
       ${cfg.showIntros!==false?ceremonyRow(cw.intro,'intro'):''}
       <table class="pp-tbl"><tbody>${(t.events||[]).map(evRow).join('')}</tbody></table>
       ${cfg.showAwards!==false?ceremonyRow(cw.awards,'awards'):''}
