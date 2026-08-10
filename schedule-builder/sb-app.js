@@ -111,8 +111,36 @@ const evName=ev=>{if(ev.style==='Custom Block')return ev.customLabel||ev.title||
 // National Qualifier events run as a single combined list — no Prelim/Final round
 // designation is ever shown on them (the event name already says "National Qualifier").
 const evRound=ev=>ev.level==='National Qualifier'?'':(ev.round||'');
-const shortDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})};
-const fullDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})};
+// ── DATES, AND SCHEDULES BUILT BEFORE THE DATES ARE KNOWN ─────────────
+// A schedule is routinely built as "Day 1, Day 2, Day 3" months before the host
+// confirms actual calendar dates. Rather than make day.date nullable — every
+// timing, sorting, export, run-sheet, broadcast and announcer path in this app
+// already reads it, and many of them do date arithmetic on it — a day ALWAYS
+// carries a real ISO date. While the real dates are unknown those dates come
+// from a sentinel year far outside any plausible meet, and S.meet.datesPending
+// switches every DISPLAY of them to "Day 1, Day 2…".
+//
+// Setting the real dates later rewrites that same field and clears the flag.
+// Nothing downstream is keyed on the date — sessions carry dayId — so the
+// switch moves no times, no blocks, and no recorded run-sheet actuals.
+const PENDING_ANCHOR='2000-01-01';
+function datesPending(){try{return !!(S&&S.meet&&S.meet.datesPending)}catch(e){return false}}
+// The nth placeholder date, counting from 0.
+function pendingDateFor(i){const d=new Date(`${PENDING_ANCHOR}T00:00:00`);d.setDate(d.getDate()+Number(i||0));return d.toISOString().slice(0,10)}
+// 1-based position of a date string among this schedule's days, or 0 when it is
+// not one of them (a save timestamp, the live clock's real date, anything else).
+function dayNumberOf(ds){try{const days=(S&&S.meet&&S.meet.days)||[];const i=days.findIndex(d=>d.date===ds);return i<0?0:i+1}catch(e){return 0}}
+const _shortDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})};
+const _fullDate=ds=>{const d=new Date(`${ds}T00:00:00`);return isNaN(d)?ds:d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})};
+// These two are what every module already calls to print a day. Routing the
+// placeholder swap through them is what keeps a fake calendar date out of the
+// print sheets, Excel tab names, club itineraries, broadcast run-of-show and
+// announcer script without any of those having to know this feature exists.
+const shortDate=ds=>{const n=datesPending()?dayNumberOf(ds):0;return n?`Day ${n}`:_shortDate(ds)};
+const fullDate=ds=>{const n=datesPending()?dayNumberOf(ds):0;return n?`Day ${n}`:_fullDate(ds)};
+// Real calendar text whatever the mode — used to preview what the dates WILL be.
+const realShortDate=ds=>_shortDate(ds);
+const realFullDate=ds=>_fullDate(ds);
 const toast=(msg,dur=2400)=>{const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur)};
 
 // ── NEON ──────────────────────────────────────────────────────────────
@@ -278,7 +306,7 @@ async function doSave(){
     // of this payload is what stops recording on the deck from ever rewriting the
     // plan, and it keeps this blob from growing all meet.
     const {live:_liveOmitted,...planOnly}=S;
-    const args=[S.currentLibraryId,S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(planOnly)];
+    const args=[S.currentLibraryId,S.meet.name,S.meet.meetType,scheduleYear(),S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(planOnly)];
     if(guard)args.push(guard);
     const r=await nq(sql,args);
 
@@ -328,12 +356,22 @@ async function doSave(){
 async function archiveLocalVersion(id,label){
   await nq(`INSERT INTO schedule_builder.schedule_versions(schedule_id,label,data,created_at)VALUES($1,$2,$3::jsonb,now())`,[id,label,JSON.stringify(S)]);
 }
+// The `year` column is a filing/index field. Taking it off day one only makes
+// sense once day one is a real date — a schedule still numbered Day 1, Day 2
+// would otherwise be filed under the sentinel year 2000.
+function scheduleYear(){
+  if(!datesPending()){
+    const y=parseInt((S.meet.days[0]||{}).date,10);
+    if(y>=2000&&y<=2100)return y;
+  }
+  return new Date().getFullYear();
+}
 async function saveToNeon(name,folder){
   const id=S.currentLibraryId||uid();S.currentLibraryId=id;
   if(folder)S.libraryFolder=folder;
   setSyncDot('saving');
   try{
-    const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[id,name||S.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
+    const r=await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,now())ON CONFLICT(id)DO UPDATE SET name=EXCLUDED.name,meet_type=EXCLUDED.meet_type,publish_status=EXCLUDED.publish_status,folder=EXCLUDED.folder,data=EXCLUDED.data,updated_at=now() RETURNING updated_at`,[id,name||S.meet.name,S.meet.meetType,scheduleYear(),S.publishStatus||'draft',S.libraryFolder||null,JSON.stringify(S)]);
     sync.ok=true;sync.err=null;saveS();markSynced(r.rows?.[0]?.[0]);setSyncDot('ok');startSync();saveVersion('Manual save').catch(e=>console.warn('Snapshot after save failed:',e&&e.message));
     return true;
   }catch(e){
@@ -1184,6 +1222,272 @@ function toggleEntriesSess(id){const i=UI.entriesExpanded.indexOf(id);if(i>=0)UI
 // date it is — e.g. adding a practice day before the meet begins. The date
 // pre-fills sensibly (day before the first / day after the last) and stays
 // editable for gaps or non-adjacent dates. Days are kept in date order.
+// ==== RELATIVE DAYS: "Day 1, Day 2..." AND SETTING THE REAL DATES LATER ====
+// Whole days between each day and the first one. Offsets are what get carried
+// through a conversion, so a deliberate gap (a rest day, a travel day) keeps
+// its shape whether the schedule is numbered or dated.
+function dayOffsets(days){
+  const list=days||[];
+  if(!list.length)return[];
+  const base=new Date(`${list[0].date}T00:00:00`);
+  if(isNaN(base))return list.map((_,i)=>i);
+  return list.map((d,i)=>{
+    const t=new Date(`${d.date}T00:00:00`);
+    if(isNaN(t))return i;
+    return Math.round((t-base)/86400000);
+  });
+}
+function addDaysISO(ds,n){const d=new Date(`${ds}T00:00:00`);if(isNaN(d))return ds;d.setDate(d.getDate()+Number(n||0));return d.toISOString().slice(0,10)}
+const isISODate=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''));
+
+// Give a numbered schedule its real calendar dates. Day 1 anchors it; every
+// other day keeps its existing offset from Day 1.
+function applyRealDates(startISO){
+  const start=String(startISO||'').trim();
+  if(!isISODate(start)){toast('Pick the date of Day 1 first');return;}
+  if(anyLocked()){lockRefused();return;}
+  const offs=dayOffsets(S.meet.days);
+  UI.modal=null;
+  upd(s=>{
+    s.meet.days.forEach((d,i)=>{d.date=addDaysISO(start,offs[i]||0)});
+    s.meet.datesPending=false;
+  });
+  const first=S.meet.days[0];
+  toast(first?`Dates set \u2014 Day 1 is ${realShortDate(first.date)}`:'Dates set',3600);
+}
+// The reverse. Real dates are replaced by placeholders that keep the same
+// spacing, so the schedule reads Day 1, Day 2... again with nothing else moved.
+function revertToRelativeDays(){
+  if(anyLocked()){lockRefused();return;}
+  askConfirm({
+    title:'Go back to Day 1, Day 2\u2026?',
+    message:'The calendar dates come off and the days are numbered again. Block times, events, entries and any recorded run-sheet times are untouched \u2014 you can set real dates again at any point.',
+    confirmText:'Number the days',
+    onConfirm:()=>{
+      const offs=dayOffsets(S.meet.days);
+      upd(s=>{
+        s.meet.days.forEach((d,i)=>{d.date=pendingDateFor(offs[i]||0)});
+        s.meet.datesPending=true;
+      });
+      toast('Days are numbered again \u2014 set real dates any time from Meet setup',3600);
+    }
+  });
+}
+function openSetDates(){
+  if(anyLocked()){lockRefused();return;}
+  const d=new Date();d.setDate(d.getDate()+1);
+  UI.setDatesStart=UI.setDatesStart||d.toISOString().slice(0,10);
+  UI.modal='setDates';
+  render();
+}
+function renderSetDatesModal(){
+  const days=S.meet.days||[];
+  const offs=dayOffsets(days);
+  const start=UI.setDatesStart||'';
+  const valid=isISODate(start);
+  const rows=days.map((d,i)=>`<div class="sd-row"><span class="sd-num">Day ${i+1}</span><span class="sd-arrow">\u2192</span><span class="sd-date">${valid?esc(realShortDate(addDaysISO(start,offs[i]||0))):'\u2014'}</span></div>`).join('');
+  return`<div class="modal modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-hd"><div><span class="modal-title">Set the meet dates</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">This schedule is numbered Day 1 \u2013 Day ${days.length}</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">\u00d7</button></div>
+    <div class="modal-body">
+      <label class="fl">What is the real date of Day 1?</label>
+      <input id="set-dates-start" class="fi" type="date" value="${esc(start)}" onchange="UI.setDatesStart=this.value;render()"/>
+      <p style="font-size:11px;color:var(--tx3);margin:8px 0 0">Every other day follows from it, keeping the gaps you already have.</p>
+      <div class="sd-list">${rows}</div>
+      <p style="font-size:11px;color:var(--tx3);margin:12px 0 0;line-height:1.5">Nothing else changes. Block times, events, entry counts and any times already recorded on the run sheet stay exactly where they are.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeModal()">Cancel</button><button class="btn btn-sm btn-p" ${valid?'':'disabled'} onclick="applyRealDates(document.getElementById('set-dates-start').value)">Set dates</button></div>
+  </div>`;
+}
+// Shown above the timeline whenever a schedule is still numbered, so nobody
+// prints a run-of-show believing the dates were simply left blank.
+function renderPendingDatesBanner(){
+  if(!datesPending())return'';
+  const n=(S.meet.days||[]).length;
+  return`<div class="dates-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+    <div class="db-txt">
+      <b>This schedule is numbered Day 1 \u2013 Day ${n} \u2014 no calendar dates yet</b>
+      <span>Build it exactly as normal. Everything prints and exports as "Day 1, Day 2\u2026" until you set the real dates, and setting them later moves nothing.</span>
+    </div>
+    <button class="db-btn" onclick="openSetDates()">Set the dates</button>
+  </div>`;
+}
+
+// ==== START A NEW SCHEDULE ====
+// One screen. Name it, say what kind of meet it is, choose blank or a template,
+// say how long it runs, and say whether the dates are known yet.
+function newWizDefaults(){
+  const d=new Date();d.setDate(d.getDate()+30);
+  return{
+    name:'',
+    meetType:'zone',
+    venue:'Competition Pool',
+    city:'',
+    timezone:(S&&S.meet&&S.meet.timezone)||'America/New_York',
+    dayCount:4,
+    dateMode:'relative',
+    startDate:d.toISOString().slice(0,10),
+    sourceId:''
+  };
+}
+function openNewSchedule(sourceId){
+  UI.newWiz=newWizDefaults();
+  if(sourceId){
+    const t=BUILTIN_SCHEDULES.find(x=>x.id===sourceId);
+    if(t){UI.newWiz.sourceId=sourceId;UI.newWiz.meetType=t.schedule.meet.meetType||'custom';UI.newWiz.timezone=t.schedule.meet.timezone||UI.newWiz.timezone;}
+  }
+  UI.modal='newSchedule';
+  render();
+}
+function newWizSet(k,v){
+  if(!UI.newWiz)UI.newWiz=newWizDefaults();
+  UI.newWiz[k]=v;
+  render();
+}
+function newWizPickSource(id){
+  if(!UI.newWiz)UI.newWiz=newWizDefaults();
+  UI.newWiz.sourceId=id||'';
+  const t=id?BUILTIN_SCHEDULES.find(x=>x.id===id):null;
+  if(t){
+    UI.newWiz.meetType=t.schedule.meet.meetType||UI.newWiz.meetType;
+    UI.newWiz.timezone=t.schedule.meet.timezone||UI.newWiz.timezone;
+  }
+  render();
+}
+function newWizDayCount(){
+  const w=UI.newWiz||newWizDefaults();
+  if(w.sourceId){
+    const t=BUILTIN_SCHEDULES.find(x=>x.id===w.sourceId);
+    if(t)return t.schedule.meet.days.length;
+  }
+  return Math.max(1,Math.min(30,Number(w.dayCount)||1));
+}
+function newWizBumpDays(delta){
+  if(!UI.newWiz)UI.newWiz=newWizDefaults();
+  UI.newWiz.dayCount=Math.max(1,Math.min(30,(Number(UI.newWiz.dayCount)||1)+delta));
+  render();
+}
+// The only place a whole schedule is replaced from the wizard. Warns first if
+// there is unsaved work sitting in the editor.
+function createNewSchedule(){
+  const w=UI.newWiz||newWizDefaults();
+  const name=(w.name||'').trim();
+  if(!name){toast('Give the meet a name first');return;}
+  if(w.dateMode==='dates'&&!isISODate(w.startDate)){toast('Pick the first day\u2019s date, or choose \u201cNot yet\u201d');return;}
+  const dirty=(S.sessions||[]).length>0&&!S.currentLibraryId;
+  const go=()=>_doCreateNewSchedule(w,name);
+  if(dirty){
+    askConfirm({
+      title:'Replace what\u2019s open?',
+      message:'The schedule currently open has blocks in it and has never been saved to the cloud. Starting a new one replaces it. Save it first if you want to keep it.',
+      confirmText:'Start new anyway',
+      danger:true,
+      onConfirm:go
+    });
+  }else go();
+}
+function _doCreateNewSchedule(w,name){
+  const relative=w.dateMode!=='dates';
+  const start=relative?PENDING_ANCHOR:w.startDate;
+  const tpl=w.sourceId?BUILTIN_SCHEDULES.find(x=>x.id===w.sourceId):null;
+  let next;
+  if(tpl){
+    // A fresh editable copy, re-dated onto the new start day. The template's own
+    // day-to-day gaps are preserved; the template itself is never touched.
+    next=JSON.parse(JSON.stringify(tpl.schedule));
+    const offs=dayOffsets(next.meet.days);
+    next.meet.days.forEach((d,i)=>{d.date=addDaysISO(start,offs[i]||0);delete d.locked;});
+    next.locked=false;
+  }else{
+    next=mkInitial();
+    const n=Math.max(1,Math.min(30,Number(w.dayCount)||1));
+    next.meet.days=Array.from({length:n},(_,i)=>({id:uid(),date:addDaysISO(start,i),openMinutes:390,closeMinutes:1200}));
+    next.sessions=[];
+  }
+  next.meet.name=name;
+  next.meet.meetType=w.meetType||next.meet.meetType||'custom';
+  next.meet.timezone=w.timezone||next.meet.timezone;
+  if(w.venue)next.meet.venue=w.venue;
+  next.meet.city=w.city||'';
+  next.meet.datesPending=relative;
+  next.publishStatus='draft';
+  // Blank so this is a brand-new record: nothing autosaves over the template or
+  // over whatever save was open a moment ago until it is explicitly saved.
+  next.currentLibraryId='';
+  next.libraryFolder='';
+  next.acknowledgedWarnings=[];
+  next.live={on:false,s:{},e:{},b:{}};
+  delete next.updatedAt;
+  S=next;
+  normalizeAllDays(S);
+  undoStack=[];redoStack=[];
+  UI.modal=null;UI.newWiz=null;UI.dayId=null;UI.editSessId=null;UI.entriesOpen=false;UI.previewOpen=false;
+  saveS();
+  initUI();
+  render();
+  toast(`"${name}" created \u2014 ${S.meet.days.length} day${S.meet.days.length===1?'':'s'}${relative?', numbered Day 1 onwards':''}. Click Save to keep it.`,4600);
+}
+function renderNewScheduleModal(){
+  const w=UI.newWiz||(UI.newWiz=newWizDefaults());
+  const tzOpts=TZS.map(t=>`<option value="${t.v}" ${w.timezone===t.v?'selected':''}>${t.l}</option>`).join('');
+  const typeOpts=Object.entries(MEET_TYPES).map(([k,v])=>`<option value="${k}" ${w.meetType===k?'selected':''}>${v.l}</option>`).join('');
+  const tplCards=Object.keys(LIB_FOLDERS).map(folder=>{
+    const cfg=LIB_FOLDERS[folder];
+    const seen=new Set();
+    const items=(cfg.ids||[]).map(id=>BUILTIN_SCHEDULES.find(x=>x.id===id)).filter(x=>x&&!seen.has(x.id)&&seen.add(x.id));
+    if(!items.length)return'';
+    return`<div class="nw-tplgroup"><div class="nw-tplhd">${cfg.icon} ${esc(folder)}</div>${items.map(t=>{
+      const sc=t.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;
+      return`<button class="move-btn ${w.sourceId===t.id?'active':''}" onclick="newWizPickSource('${t.id}')"><span>${esc(t.name)}</span> <span class="move-meta">${sc.meet.days.length} days \u00b7 ${comp} comp sessions</span></button>`;
+    }).join('')}</div>`;
+  }).join('');
+  const n=newWizDayCount();
+  const fromTpl=!!w.sourceId;
+  const dayPreview=w.dateMode==='dates'&&isISODate(w.startDate)
+    ?`Day 1 ${esc(realShortDate(w.startDate))} \u2192 Day ${n} ${esc(realShortDate(addDaysISO(w.startDate,n-1)))}`
+    :`Day 1 \u2013 Day ${n}`;
+  return`<div class="modal modal-lg" onclick="event.stopPropagation()" style="max-height:calc(100vh - 48px);display:flex;flex-direction:column">
+    <div class="modal-hd"><div><span class="modal-title">Start a new schedule</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Blank, or a copy of a past meet you can edit freely</div></div><button class="modal-close" aria-label="Close" onclick="UI.modal=null;UI.newWiz=null;render()">\u00d7</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+
+      <div class="fg"><label class="fl">Meet name</label><input class="fi" id="nw-name" placeholder="e.g. 2027 USA Diving Zone B Championship" value="${esc(w.name)}" oninput="UI.newWiz.name=this.value"/></div>
+
+      <div class="fg2">
+        <div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="newWizSet('meetType',this.value)">${typeOpts}</select></div>
+        <div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="newWizSet('timezone',this.value)">${tzOpts}</select></div>
+      </div>
+
+      <div class="fg2">
+        <div class="fg"><label class="fl">Venue</label><input class="fi" value="${esc(w.venue)}" oninput="UI.newWiz.venue=this.value"/></div>
+        <div class="fg"><label class="fl">City / state</label><input class="fi" placeholder="optional" value="${esc(w.city)}" oninput="UI.newWiz.city=this.value"/></div>
+      </div>
+
+      <label class="fl" style="margin-top:16px">Start from</label>
+      <div class="nw-src">
+        <button class="move-btn ${!w.sourceId?'active':''}" onclick="newWizPickSource('')"><span><strong>Blank schedule</strong></span> <span class="move-meta">empty days, build it yourself</span></button>
+        ${tplCards}
+      </div>
+
+      <label class="fl" style="margin-top:18px">How long is it?</label>
+      ${fromTpl
+        ?`<div class="nw-fixed">${n} days \u2014 taken from the template. Add or remove days afterwards from the day bar.</div>`
+        :`<div class="nw-stepper"><button class="nw-step" aria-label="One day fewer" onclick="newWizBumpDays(-1)">\u2212</button><span class="nw-count">${n}</span><button class="nw-step" aria-label="One day more" onclick="newWizBumpDays(1)">+</button><span class="nw-steplbl">day${n===1?'':'s'}</span></div>`}
+
+      <label class="fl" style="margin-top:18px">When is it?</label>
+      <div class="nw-when">
+        <button class="move-btn ${w.dateMode==='relative'?'active':''}" onclick="newWizSet('dateMode','relative')"><span><strong>Not decided yet \u2014 number the days</strong></span> <span class="move-meta">Day 1, Day 2, Day 3\u2026</span></button>
+        <button class="move-btn ${w.dateMode==='dates'?'active':''}" onclick="newWizSet('dateMode','dates')"><span><strong>I know the dates</strong></span> <span class="move-meta">pick the first day</span></button>
+      </div>
+      ${w.dateMode==='dates'
+        ?`<div class="fg" style="margin-top:10px"><label class="fl">First day</label><input class="fi" type="date" style="width:180px" value="${esc(w.startDate)}" onchange="newWizSet('startDate',this.value)"/></div>`
+        :`<p style="font-size:11.5px;color:var(--tx3);margin-top:8px;line-height:1.5">Everything works exactly the same \u2014 blocks, times, entries, reports. The schedule reads "Day 1, Day 2\u2026" everywhere until you set real dates, which you can do at any point from Meet setup without moving anything.</p>`}
+
+      <div class="nw-summary">${esc(dayPreview)}</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="UI.modal=null;UI.newWiz=null;render()">Cancel</button><button class="btn btn-sm btn-p" onclick="UI.newWiz.name=(document.getElementById('nw-name')||{}).value||UI.newWiz.name;createNewSchedule()">Create schedule</button></div>
+  </div>`;
+}
+
 function addDay(){
   UI.addDayPos='end';
   UI.addDayDate=suggestedAddDayDate('end');
@@ -1193,7 +1497,7 @@ function addDay(){
 }
 function suggestedAddDayDate(pos){
   const days=S.meet.days;
-  if(!days.length)return new Date().toISOString().slice(0,10);
+  if(!days.length)return datesPending()?PENDING_ANCHOR:new Date().toISOString().slice(0,10);
   const ref=pos==='start'?days[0]:days[days.length-1];
   const d=new Date(`${ref.date}T00:00:00`);
   d.setDate(d.getDate()+(pos==='start'?-1:1));
@@ -1242,9 +1546,15 @@ function renderAddDayModal(){
         <button class="move-btn ${pos==='start'?'active':''}" onclick="setAddDayPos('start')">Before the first day${first?` <span class="move-meta">currently ${shortDate(first.date)}</span>`:''}</button>
         <button class="move-btn ${pos==='end'?'active':''}" onclick="setAddDayPos('end')">After the last day${last?` <span class="move-meta">currently ${shortDate(last.date)}</span>`:''}</button>
       </div>
+      ${datesPending()?`
+      <label class="fl">Which day is it?</label>
+      <div class="day-num-chip lg">${pos==='start'?'Day 1 — the rest shift up one':'Day '+(days.length+1)}</div>
+      <p style="font-size:11px;color:var(--tx3);margin-top:8px">This schedule is numbered rather than dated. Set the real dates whenever they are confirmed — Meet setup, then Set the dates.</p>
+      `:`
       <label class="fl">Date</label>
       <input id="add-day-date" class="fi" type="date" value="${date}" onchange="UI.addDayDate=this.value"/>
       <p style="font-size:11px;color:var(--tx3);margin-top:8px">Pre-filled with the ${pos==='start'?'day before':'day after'} — change it if you need a gap.</p>
+      `}
       ${eventChips}
       ${tplChips}
     </div>
@@ -2623,7 +2933,7 @@ function render(){
   document.getElementById('app').innerHTML=`
     ${renderBar(timed)}
     <div class="workspace">
-      <div class="tl-wrap ${dayLocked(UI.dayId)?'day-locked':''}">${renderTlBar(timed)}${typeof liveStrip==='function'?liveStrip():''}${renderLockBanner()}${renderTimeline(timed)}</div>
+      <div class="tl-wrap ${dayLocked(UI.dayId)?'day-locked':''}">${renderTlBar(timed)}${typeof liveStrip==='function'?liveStrip():''}${renderPendingDatesBanner()}${renderLockBanner()}${renderTimeline(timed)}</div>
       ${rightPanel}
     </div>
     ${UI.editSessId?renderEditModal(timed):''}
@@ -2723,7 +3033,10 @@ function renderPreviewPanel(timed){
 function renderBar(timed){
   const tz=TZS.find(t=>t.v===S.meet.timezone)||TZS[0];
   const st=S.publishStatus||'draft';
-  const days=S.meet.days.map(d=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'});const dn=isNaN(dd)?'':dd.getDate();const dlk=dayLocked(d.id);return`<button class="dp ${d.id===UI.dayId?'active':''} ${dlk?'locked':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}${dlk?' — locked, read-only':''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span>${dlk?`<span class="dp-lock" aria-label="locked">\u{1F512}</span>`:''}</button>`}).join('');
+  // While the schedule is still numbered the pill reads DAY / 1 rather than a
+  // weekday and a calendar number that would be pure fiction.
+  const _dpend=datesPending();
+  const days=S.meet.days.map((d,di)=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=_dpend?'DAY':(isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'}));const dn=_dpend?(di+1):(isNaN(dd)?'':dd.getDate());const dlk=dayLocked(d.id);return`<button class="dp ${d.id===UI.dayId?'active':''} ${dlk?'locked':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}${dlk?' — locked, read-only':''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span>${dlk?`<span class="dp-lock" aria-label="locked">\u{1F512}</span>`:''}</button>`}).join('');
   const conflicts=detectConflicts();
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
@@ -2738,6 +3051,8 @@ function renderBar(timed){
         <div class="bar-menu-wrap">
           <button class="bb icon-only ${UI.barMenu?'active':''}" onclick="UI.barMenu=!UI.barMenu;render()" title="Menu — overview, export, presentation, deck mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="19" r="1.6" fill="currentColor"/></svg></button>
           ${UI.barMenu?`<div class="bar-menu" onclick="event.stopPropagation()">
+            <button class="bm-item" onclick="UI.barMenu=false;openNewSchedule()">Start a new schedule…</button>
+            ${datesPending()?`<button class="bm-item" onclick="UI.barMenu=false;openSetDates()">Set the meet dates…</button>`:''}
             <button class="bm-item" onclick="UI.barMenu=false;render();liveToggle()">${typeof liveOn==='function'&&liveOn()?'Turn off the live run sheet':'Live run sheet \u2014 record what actually happens'}</button>
             <button class="bm-item" onclick="UI.barMenu=false;UI.modal='overview';render()">Meet overview board</button>
             <button class="bm-item" onclick="UI.barMenu=false;UI.modal='export';render()">Export…</button>
@@ -2760,7 +3075,7 @@ function renderBar(timed){
         <div class="bar-sep"></div>
         <button class="bb" onclick="openEntries()">Entries</button>
         <button class="bb" onclick="openProjections()">Projections</button>
-        <button class="bb" onclick="openLibrary()">Library</button>
+        <button class="bb" onclick="openNewSchedule()" title="Start a new schedule — blank or from a template">New</button><button class="bb" onclick="openLibrary()">Library</button>
         <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
         <div class="bar-sep"></div>
         <button class="bb" onclick="saveSchedule()">Save</button>
@@ -4410,6 +4725,8 @@ function executeQuickAdd(parsedJson){
 function paletteCommands(){
   const cmds=[];
   S.meet.days.forEach(d=>cmds.push({label:'Go to '+fullDate(d.date),hint:'day',run:()=>{UI.palette=null;selectDay(d.id)}}));
+  cmds.push({label:'Start a new schedule…',hint:'new',run:()=>{UI.palette=null;openNewSchedule()}});
+  if(datesPending())cmds.push({label:'Set the meet dates…',hint:'new',run:()=>{UI.palette=null;openSetDates()}});
   cmds.push({label:'Meet overview board',hint:'view',run:()=>{UI.palette=null;UI.modal='overview';render()}});
   cmds.push({label:(UI.timeScale?'Switch to list view':'Switch to time-scale view'),hint:'view',run:()=>{UI.palette=null;UI.timeScale=!UI.timeScale;render()}});
   cmds.push({label:'Presentation mode',hint:'view',run:()=>{UI.palette=null;openPresentation()}});
@@ -4757,7 +5074,7 @@ async function splitByEvent(){
       clone.publishStatus='draft';
       try{
         await nq(`INSERT INTO schedule_builder.schedules(id,name,meet_type,year,publish_status,folder,data,updated_at)VALUES($1,$2,$3,$4,'draft',$5,$6::jsonb,now())ON CONFLICT(id)DO UPDATE SET data=EXCLUDED.data,updated_at=now()`,
-          [clone.currentLibraryId,clone.meet.name,S.meet.meetType,parseInt(S.meet.days[0]?.date)||2026,S.libraryFolder||null,JSON.stringify(clone)]);
+          [clone.currentLibraryId,clone.meet.name,S.meet.meetType,scheduleYear(),S.libraryFolder||null,JSON.stringify(clone)]);
         made++;
       }catch(e){toast(`Split failed on ${t.l}: ${e.message||'error'}`);return;}
     }
@@ -5112,7 +5429,7 @@ function renderFacilityHoursModal(){
 }
 
 function renderModal(timed){
-  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
+  const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,newSchedule:renderNewScheduleModal,setDates:renderSetDatesModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
     ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{}),
@@ -5336,8 +5653,12 @@ function renderMeetModal(){
       </div>
       <div class="fg2"><div class="fg"><label class="fl">Venue</label><input class="fi" value="${esc(S.meet.venue)}" onchange="upd(s=>s.meet.venue=this.value)"/></div><div class="fg"><label class="fl">City / state</label><input class="fi" value="${esc(S.meet.city||'')}" onchange="upd(s=>s.meet.city=this.value)"/></div></div>
       <div class="fg2"><div class="fg"><label class="fl">Meet type</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.meetType=this.value)">${typeOpts}</select></div><div class="fg"><label class="fl">Time zone</label><select class="fi" style="cursor:pointer" onchange="upd(s=>s.meet.timezone=this.value)">${tzOpts}</select></div></div>
-      <div class="fg"><label class="fl">Days</label><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
-        <div style="display:flex;align-items:center;gap:4px"><input class="fi" type="date" style="width:160px;padding:6px 8px" value="${d.date}" onchange="upd(s=>s.meet.days[${i}].date=this.value)"/><button class="btn btn-sm btn-gh" onclick="upd(s=>s.meet.days.splice(${i},1))">×</button></div>
+      <div class="fg"><label class="fl">Days</label>
+      <div class="dates-mode">${datesPending()
+        ?`<span class="dm-state"><b>Numbered</b> — Day 1 to Day ${S.meet.days.length}. No calendar dates yet.</span><button class="btn btn-sm btn-p" onclick="openSetDates()">Set the dates…</button>`
+        :`<span class="dm-state"><b>Dated</b> — ${esc(realShortDate((S.meet.days[0]||{}).date||''))} onwards.</span><button class="btn btn-sm" onclick="revertToRelativeDays()">Number the days instead</button>`}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">${S.meet.days.map((d,i)=>{const dt=dayEventTagOf(d);return`<div style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--bd);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:4px">${datesPending()?`<span class="day-num-chip">Day ${i+1}</span>`:`<input class="fi" type="date" style="width:160px;padding:6px 8px" value="${d.date}" onchange="upd(s=>s.meet.days[${i}].date=this.value)"/>`}<button class="btn btn-sm btn-gh" onclick="upd(s=>s.meet.days.splice(${i},1))">×</button></div>
         <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tx3)">
           <span>Pool open</span>
           <input class="fi-sm" type="time" value="${f24(dayOpenFor(d.id))}" onchange="setDayOpen('${d.id}',pt(this.value))"/>
@@ -5404,9 +5725,13 @@ function renderLibraryTemplates(){
   const cfg=LIB_FOLDERS[UI.libFolder]||Object.values(LIB_FOLDERS)[0];
   const seen=new Set();const items=(cfg.ids||[]).map(id=>byId[id]).filter(x=>x&&!seen.has(x.id)&&seen.add(x.id));
   return`
-    <div class="lib-note">Read-only meet templates. Loading one creates a fresh editable copy — your work won't change the template.</div>
+    <button class="lib-newcard" onclick="openNewSchedule()">
+      <span class="lnc-plus">+</span>
+      <span class="lnc-txt"><b>Start a new schedule</b><span>Blank or from a template — name it, set how many days, and choose real dates or Day 1, Day 2…</span></span>
+    </button>
+    <div class="lib-note">Read-only meet templates. Either button makes a fresh editable copy — your work never changes the template. <b>New from this</b> also renames and re-dates it in one step.</div>
     <div class="lib-folder-tabs">${folderTabs}</div>
-    ${items.length?`<div class="lib-list">${items.map(item=>{const sc=item.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;return`<div class="lib-card"><div class="lib-card-icon">${cfg.icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${sc.meet.days.length} days · ${comp} comp sessions · template</div></div><div class="lib-card-acts"><button class="lib-act p" onclick="loadBuiltin('${item.id}')">Load</button></div></div>`}).join('')}</div>`:`<div class="empty"><div class="empty-title">No templates in this folder</div></div>`}
+    ${items.length?`<div class="lib-list">${items.map(item=>{const sc=item.schedule;const comp=sc.sessions.filter(s=>!s.isPractice).length;return`<div class="lib-card"><div class="lib-card-icon">${cfg.icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${sc.meet.days.length} days · ${comp} comp sessions · template</div></div><div class="lib-card-acts"><button class="lib-act" onclick="openNewSchedule('${item.id}')" title="Copy it, rename it and re-date it in one step">New from this</button><button class="lib-act p" onclick="loadBuiltin('${item.id}')">Load as-is</button></div></div>`}).join('')}</div>`:`<div class="empty"><div class="empty-title">No templates in this folder</div></div>`}
   `;
 }
 function renderLibrarySaves(local){
@@ -5692,7 +6017,7 @@ function renderGenerateModal(timed){
             const order=(S.meet.days||[]);
             const pool=genDayPool();
             const has=id=>timed.some(s=>s.dayId===id&&passesGenScope(s));
-            const dshort=d=>{const a=String(d||'').split('-').map(Number);
+            const dshort=d=>{const _n=datesPending()?dayNumberOf(d):0;if(_n)return`Day ${_n}`;const a=String(d||'').split('-').map(Number);
               if(a.length<3||!a[0])return String(d||'');
               return new Date(a[0],a[1]-1,a[2]).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});};
             const days=order.filter(d=>has(d.id));

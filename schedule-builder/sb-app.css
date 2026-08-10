@@ -2020,3 +2020,84 @@ html[data-theme="deck"] .lt-hand{background:rgba(255,255,255,.10);color:rgba(255
 @media (prefers-reduced-motion:reduce){
   .is-busy::after{animation:none;background:var(--cyan);opacity:.5}
 }
+
+/* ════ NEW SCHEDULE + RELATIVE DAYS ════
+   A schedule is often built as "Day 1, Day 2…" long before the host confirms
+   dates. These are the surfaces that say so, plus the wizard that starts one. */
+
+/* Banner above the timeline whenever the schedule is still numbered. Pool blue,
+   not the amber the lock banner owns — this is information, not a restriction. */
+.dates-banner{display:flex;align-items:center;gap:12px;margin:10px 14px 0;padding:11px 14px;
+  border:1px solid #A8DCEE;border-left:4px solid var(--cyan);border-radius:9px;background:#F0FAFD}
+.dates-banner>svg{width:20px;height:20px;color:#046C8C;flex-shrink:0}
+.dates-banner .db-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dates-banner .db-txt b{font-size:12.5px;font-weight:700;color:#05536B}
+.dates-banner .db-txt span{font-size:11.5px;line-height:1.45;color:#046C8C}
+.dates-banner .db-btn{flex-shrink:0;height:30px;padding:0 13px;border-radius:8px;border:1px solid #046C8C;
+  background:#fff;color:#05536B;font-size:11.5px;font-weight:700;cursor:pointer;transition:.14s}
+.dates-banner .db-btn:hover{background:#046C8C;color:#fff}
+
+/* Numbered / dated switch at the top of Meet setup's day list. */
+.dates-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding:9px 11px;
+  border:1px solid var(--bd2);border-radius:9px;background:var(--surf2)}
+.dates-mode .dm-state{flex:1;min-width:180px;font-size:11.5px;line-height:1.45;color:var(--tx2)}
+.dates-mode .dm-state b{color:var(--tx);font-weight:700}
+
+/* "Day 3" standing in for a date field that would otherwise be fiction. */
+.day-num-chip{display:inline-flex;align-items:center;justify-content:center;width:160px;height:32px;
+  border-radius:8px;border:1px dashed var(--bd3);background:var(--surf3);
+  font-family:'Barlow Condensed',var(--font-ui,inherit);font-weight:700;font-size:15px;
+  letter-spacing:.03em;text-transform:uppercase;color:var(--navy)}
+.day-num-chip.lg{width:100%;height:40px;font-size:17px;margin-top:2px}
+
+/* Set-the-dates preview: Day N → real date, one row each. */
+.sd-list{margin-top:12px;border:1px solid var(--bd);border-radius:9px;overflow:hidden;
+  max-height:210px;overflow-y:auto;background:var(--surf2)}
+.sd-row{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--bd)}
+.sd-row:last-child{border-bottom:none}
+.sd-num{font-family:'Barlow Condensed',var(--font-ui,inherit);font-weight:700;font-size:14px;
+  letter-spacing:.03em;text-transform:uppercase;color:var(--navy);width:56px;flex-shrink:0}
+.sd-arrow{color:var(--tx3);flex-shrink:0}
+.sd-date{font-size:12.5px;font-weight:600;color:var(--tx)}
+
+/* Library front door. */
+.lib-newcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;margin-bottom:12px;
+  padding:13px 15px;border:1px solid var(--navy-mid);border-radius:var(--r-lg);
+  background:linear-gradient(180deg,#fff,var(--surf2));box-shadow:var(--sh-xs);transition:.14s;cursor:pointer}
+.lib-newcard:hover{border-color:var(--navy);box-shadow:var(--sh-md);transform:translateY(-1px)}
+.lib-newcard .lnc-plus{flex-shrink:0;width:34px;height:34px;border-radius:9px;background:var(--navy);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:600;line-height:1}
+.lib-newcard .lnc-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lib-newcard .lnc-txt b{font-size:13.5px;font-weight:700;color:var(--tx)}
+.lib-newcard .lnc-txt span{font-size:11.5px;line-height:1.45;color:var(--tx2)}
+
+/* New-schedule wizard. */
+.nw-src,.nw-when{display:flex;flex-direction:column;gap:5px}
+.nw-tplgroup{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.nw-tplhd{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--tx3);padding:2px 2px 1px}
+.nw-fixed{font-size:12px;line-height:1.5;color:var(--tx2);padding:9px 11px;border:1px solid var(--bd);
+  border-radius:9px;background:var(--surf2)}
+.nw-stepper{display:flex;align-items:center;gap:9px}
+.nw-step{width:34px;height:34px;border-radius:9px;border:1px solid var(--bd2);background:var(--surf);
+  font-size:19px;font-weight:600;line-height:1;color:var(--navy);transition:.14s}
+.nw-step:hover{border-color:var(--navy);background:var(--navy-soft)}
+.nw-count{font-family:'Barlow Condensed',var(--font-ui,inherit);font-size:26px;font-weight:700;
+  color:var(--navy);min-width:34px;text-align:center;line-height:1}
+.nw-steplbl{font-size:12px;color:var(--tx2)}
+.nw-summary{margin-top:16px;padding:10px 13px;border-radius:9px;background:var(--navy);color:#fff;
+  font-family:'Barlow Condensed',var(--font-ui,inherit);font-size:16px;font-weight:600;letter-spacing:.02em}
+
+/* Deck (dark) mode. */
+html[data-theme="deck"] .dates-banner{background:rgba(0,154,199,.11);border-color:rgba(0,154,199,.4)}
+html[data-theme="deck"] .dates-banner .db-txt b{color:#8FD8ED}
+html[data-theme="deck"] .dates-banner .db-txt span,
+html[data-theme="deck"] .dates-banner>svg{color:#7FC9E0}
+html[data-theme="deck"] .dates-banner .db-btn{background:transparent;color:#8FD8ED;border-color:#4E9BB5}
+html[data-theme="deck"] .dates-banner .db-btn:hover{background:#4E9BB5;color:#fff}
+html[data-theme="deck"] .day-num-chip,
+html[data-theme="deck"] .nw-count,
+html[data-theme="deck"] .sd-num{color:#8FC3EA}
+html[data-theme="deck"] .lib-newcard{background:var(--surf2)}
+html[data-theme="deck"] .lib-newcard .lnc-plus{background:var(--cyan)}
+html[data-theme="deck"] .nw-summary{background:var(--cyan)}

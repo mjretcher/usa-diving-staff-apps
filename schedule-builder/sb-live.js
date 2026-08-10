@@ -101,6 +101,16 @@ function liveWrite(fn,msg){
 function liveToggle(){
   liveState();
   const turningOn=!S.live.on;
+  // The run sheet is a record of what actually happened, and every projection it
+  // makes is anchored to "is this day today" \u2014 liveIsToday() compares day.date to
+  // the real clock. A schedule still numbered Day 1, Day 2 has placeholder dates, so
+  // that test can never pass and the run sheet would look on but do nothing. Refuse
+  // and name the fix rather than leave it half working with a meet in progress.
+  if(turningOn&&typeof datesPending==='function'&&datesPending()){
+    toast('This schedule is still numbered Day 1, Day 2\u2026 \u2014 set the real meet dates first (Meet setup, then Set the dates) and the run sheet can track the day.',6000);
+    if(typeof openSetDates==='function')openSetDates();
+    return;
+  }
   liveWrite(l=>{l.on=turningOn},turningOn
     ?'Run sheet on \u2014 tap Start when a session or event actually begins'
     :'Run sheet off \u2014 the schedule shows planned times only');

@@ -169,6 +169,13 @@ function nowParts(){
 }
 function shortDate(d){
   if(!d) return '';
+  // A schedule can be published while it is still numbered Day 1, Day 2 — the
+  // builder stores sentinel dates and sets meet.datesPending. Show the number,
+  // never the sentinel, or this page would announce a meet on 1 Jan 2000.
+  if(S && S.meet && S.meet.datesPending){
+    const i = ((S.meet.days)||[]).findIndex(x => x.date === d);
+    if(i >= 0) return 'Day ' + (i+1);
+  }
   const [y,m,dd] = d.split('-').map(Number);
   return new Date(y, m-1, dd).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 }
