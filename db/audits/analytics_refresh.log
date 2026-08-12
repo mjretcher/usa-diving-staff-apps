@@ -1,7 +1,7 @@
 [build_analytics] endpoint: https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql
 [build_analytics] meet_scope built
-[build_analytics] fetched 28391 DiveMeets athletes, 290 WA individual athletes
-[build_analytics] identities: 28602 total, 79 DM<->WA links auto-accepted
+[build_analytics] fetched 28395 DiveMeets athletes, 290 WA individual athletes
+[build_analytics] identities: 28606 total, 79 DM<->WA links auto-accepted
 [build_analytics] athlete_identity inserted
 [build_analytics] athlete_directory built
 [build_analytics] benchmarks built
@@ -10,4 +10,4 @@
 [build_analytics] field judge spread built
 [build_analytics] la28 watch built
 [build_analytics] usad_app SELECT re-granted on analytics
-[build_analytics] done: {'athlete_identity': '28602', 'athlete_directory': '28602', 'benchmarks': '54155', 'field_group_exec': '2637', 'field_group_exec_vo': '4189', 'event_profile': '2921', 'rank_cost': '1998', 'field_list_dd': '344', 'cohort_seniors': '3857', 'corridor_marks': '3041', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '11894'}
+[build_analytics] done: {'athlete_identity': '28606', 'athlete_directory': '28606', 'benchmarks': '54223', 'field_group_exec': '2640', 'field_group_exec_vo': '4194', 'event_profile': '2923', 'rank_cost': '2000', 'field_list_dd': '344', 'cohort_seniors': '3857', 'corridor_marks': '3041', 'corridor': '48', 'field_judge_spread': '7', 'la28_watch': '11918'}
