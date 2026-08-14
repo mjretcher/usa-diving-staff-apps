@@ -2093,85 +2093,110 @@ function diveSpecFor(L){
   };
 }
 
-function renderScheduleInspector(res){
+/* ---------- schedule feasibility ----------
+   ONE computation, two consumers: the Schedule inspector and the report
+   section both read this. If they each did their own, they would eventually
+   disagree, and a committee paper would say something the screen does not. */
+function computeSchedule(res){
   const E = window.ScenarioScheduleEngine;
-  if (!E || typeof E.simulateStop !== 'function')
-    return `<div class="ps-warn"><b>The schedule engine is not loaded.</b>
-      Add <code>scenario-schedule-engine.js</code> to the page to see whether these meets fit.</div>`;
-  if (!res || !res.field) return `<div class="note">Working out the pathway first&hellip;</div>`;
-
+  if (!E || typeof E.simulateStop !== 'function') return {error:'engine-missing', stops:[]};
+  if (!res || !res.field || !S.routing) return {error:'no-pathway', stops:[]};
   const stops = [];
   for (let L = 0; L < S.routing.length; L++){
     const lvl = res.field[L]; if (!lvl) continue;
     const nG = Math.max(1, groupCountAt(L));
+    const spec = diveSpecFor(L);
     for (let g = 0; g < nG; g++){
       // The projection carries compact cell keys (AG1). The engine reads
-      // group|gender|discipline, and decides warm-up from the group name.
-      const rounds = [];
-      let entries = 0;
+      // group|gender|discipline and decides warm-up from the group name; the
+      // round rides in a 4th part the engine ignores but diveSpec reads.
+      const rounds = []; let entries = 0, unknown = 0;
       QR().roundsOf(S.routing[L]).forEach(r => {
         const src = (lvl[r.key] && lvl[r.key][g]) || {};
         const cells = {}; let any = false;
         for (const c in src){
           const n = src[c]; if (!n || n < 0.5) continue;
-          cells[`${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_LBL[c[2]]}|${r.key}`] = n;
-          entries += n; any = true;
+          const key = `${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_LBL[c[2]]}|${r.key}`;
+          cells[key] = n; entries += n; any = true;
+          if (!DIVE_TABLE[`${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_APPARATUS[DIS_LBL[c[2]]] || DIS_LBL[c[2]]}`]) unknown++;
         }
         if (any) rounds.push({key: r.key, cells});
       });
       if (!rounds.length) continue;
       const name = (tierGroupsAt(L).groups[g] || {}).name || (tierName(L) + ' ' + (g+1));
       let sim = null, err = null;
-      try { sim = E.simulateStop({stopName: name, rounds}, diveSpecFor(L), S.schedRules || undefined); }
+      try { sim = E.simulateStop({stopName: name, rounds}, spec, S.schedRules || undefined); }
       catch(e){ err = e.message || String(e); }
-      const unknown = rounds.reduce((a,r)=>a+Object.keys(r.cells).filter(k=>{
-        const p=k.split('|'); return !DIVE_TABLE[`${p[0]}|${p[1]}|${DIS_APPARATUS[p[2]]||p[2]}`];
-      }).length, 0);
-      stops.push({name, level: tierName(L), entries, sim, err, unknown});
+      const d = (sim && sim.days) || [];
+      stops.push({
+        name, level: tierName(L), levelIndex: L, entries, unknown, err, sim,
+        events:      sim ? sim.totalEvents : 0,
+        days:        sim ? sim.totalDays : 0,
+        autoSplit:   d.reduce((a,x)=>a+((x.splitEvents||[]).length), 0),
+        review:      d.reduce((a,x)=>a+((x.reviewSplitFlags||[]).length), 0),
+        daysOver:    d.filter(x=>x.overCapacity).length,
+        longestDayMin: d.reduce((a,x)=>Math.max(a,
+                        (x.sessions||[]).reduce((t,ss)=>t+(ss.occupiedMinutes||0),0)), 0),
+      });
     }
   }
-  if (!stops.length) return `<div class="note">No stops to lay out yet. Draw a map and set a pathway first.</div>`;
+  return {stops, rules: Object.assign({}, E.DEFAULT_RULES, S.schedRules || {})};
+}
 
-  const rows = stops.map(st => {
+function renderScheduleInspector(res){
+  const out = computeSchedule(res);
+  if (out.error === 'engine-missing')
+    return `<div class="ps-warn"><b>The schedule engine is not loaded.</b>
+      Add <code>scenario-schedule-engine.js</code> to the page to see whether these meets fit.</div>`;
+  if (out.error) return `<div class="note">Working out the pathway first&hellip;</div>`;
+  if (!out.stops.length) return `<div class="note">No stops to lay out yet. Draw a map and set a pathway first.</div>`;
+  const R = out.rules;
+  const hh = m => Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+
+  const rows = out.stops.map(st => {
     if (st.err) return `<tr><td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}</div></td>
-      <td class="num">${fmt(Math.round(st.entries))}</td><td colspan="5" class="under">${esc(st.err)}</td></tr>`;
-    const d = st.sim.days || [];
-    const over = d.filter(x => x.overCapacity).length;
-    const splits = d.reduce((a,x)=>a+((x.reviewSplitFlags||[]).length), 0);
-    const longest = d.reduce((a,x)=>Math.max(a, x.occupiedMinutes||0), 0);
+      <td class="num">${fmt(Math.round(st.entries))}</td><td colspan="6" class="under">${esc(st.err)}</td></tr>`;
     const warn = st.unknown ? ` <span class="bs-arr-m warn">${st.unknown} event${st.unknown>1?'s':''} with no dive count &mdash; not timed</span>` : '';
     return `<tr>
       <td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}${warn}</div></td>
       <td class="num">${fmt(Math.round(st.entries))}</td>
-      <td class="num">${st.sim.totalEvents}</td>
-      <td class="num">${st.sim.totalDays}</td>
-      <td class="num">${longest ? (Math.round(longest/60*10)/10)+' h' : '&mdash;'}</td>
-      <td class="num ${splits?'over':'ok'}">${splits||'&mdash;'}</td>
-      <td class="${over?'under':'ok'}">${over ? over+' day'+(over>1?'s':'')+' over' : 'fits'}</td>
+      <td class="num">${st.events}</td>
+      <td class="num">${st.days}</td>
+      <td class="num">${st.longestDayMin ? (st.longestDayMin/60).toFixed(1)+' h' : '&mdash;'}</td>
+      <td class="num">${st.autoSplit || '&mdash;'}</td>
+      <td class="num ${st.review?'over':''}">${st.review || '&mdash;'}</td>
+      <td class="${st.daysOver?'under':'ok'}">${st.daysOver ? st.daysOver+' day'+(st.daysOver>1?'s':'')+' over' : 'fits'}</td>
     </tr>`;
   }).join('');
-  const bad = stops.filter(x => x.sim && (x.sim.days||[]).some(d=>d.overCapacity)).length;
-  const R = ((stops.find(x=>x.sim)||{}).sim || {}).rules || E.DEFAULT_RULES;
-  const hh = m => Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+  const bad = out.stops.filter(x => x.daysOver).length;
 
   return `<div class="bs-tier-h">Does each meet fit?</div>
     <table class="bs-drill"><thead><tr><th>Stop</th><th class="num">Entries</th>
       <th class="num">Events</th><th class="num">Days</th><th class="num">Longest day</th>
-      <th class="num">Review to split</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>
+      <th class="num" title="Over ${R.splitAutoThresholdMin} min whole, so the simulation splits them">Split</th>
+      <th class="num" title="Over ${R.splitReviewThresholdMin} min but under ${R.splitAutoThresholdMin} — the host decides">Look at</th>
+      <th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>
     ${bad ? `<div class="bs-spread under"><b>${bad}</b> ${bad===1?'meet runs':'meets run'} past the facility day assumed here.
         Either those areas are too big, or those hosts need another day.</div>`
           : `<div class="bs-spread ok">Every meet fits the facility day assumed here.</div>`}
     <div class="bs-prov"><b>Assuming</b>
       <span>pool open <code>${hh(R.facilityOpenMin)}&ndash;${hh(R.facilityCloseMin)}</code></span>
-      <span>warm-up Groups A/B <code>${R.warmupSeniorGroupsMin} min</code></span>
-      <span>warm-up Groups C/D <code>scales with entries</code></span>
-      <span>flag to split over <code>${R.splitReviewThresholdMin} min</code></span>
+      <span>warm-up Groups A/B <code>${R.warmupSeniorGroupsMin} min</code>, C/D scales with entries</span>
+      <span>one warm-up per session &mdash; the longest any event in it needs</span>
+      <span>split over <code>${R.splitAutoThresholdMin} min</code>, flag over <code>${R.splitReviewThresholdMin} min</code></span>
+      <span>split adds <code>${R.panelChangesOnSplit}&times;${R.minutesPerPanelChange} min</code> panel changes</span>
+      <span>platform never splits</span>
       <span>one discipline per age group and gender per day</span>
       <span>dive counts <code>2026 Zone &amp; Junior National schedules</code></span>
     </div>
-    <p class="note">Nothing here splits a board or moves a session &mdash; it flags what a host should look at, and
-      the host decides. Their equipment and pool hours outrank this. Hosts also open at different times and may run
-      one age group earlier or later; this assumes one standard day so stops can be compared against each other.</p>`;
+    <p class="note"><b>Split</b> counts events over ${R.splitAutoThresholdMin} minutes whole. Those are split here the way
+      they would be in practice &mdash; two boards, so roughly half the time, plus ${R.panelChangesOnSplit} panel changes.
+      <b>Look at</b> counts events past ${R.splitReviewThresholdMin} minutes but short of that line: long enough to be worth
+      a decision, not long enough to make it for you. Platform never splits, so a long platform event always lands
+      in <b>Look at</b>.</p>
+    <p class="note">This never moves a session or changes a real schedule. Hosts open at different times and may run
+      one age group earlier or later; this assumes one standard day so stops can be compared with each other. Their
+      equipment and pool hours outrank anything here.</p>`;
 }
 
 /* ---------- report tab ----------
@@ -4336,6 +4361,9 @@ window.BoundaryAPI = {
   multBasis:  multBasisFor,
   ensureMult,
   groupCountAt,
+  /* One schedule computation, shared by the Schedule inspector and the report
+     section, so the paper cannot say something the screen does not. */
+  scheduleAll: () => computeSchedule(S.routeRes || projectPathway()),
 };
 
 function injectAutoCSS(){

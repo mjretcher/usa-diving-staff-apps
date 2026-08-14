@@ -61,9 +61,24 @@
   // override any of these without touching the engine itself.
   // ---------------------------------------------------------------------
   var DEFAULT_RULES = {
-    // Anything estimated over this many minutes gets flagged for a human
-    // to decide whether to split — this NEVER auto-splits.
+    // Two thresholds, both Mike's numbers:
+    //   review  — long enough to be worth a look, but the host decides.
+    //   auto    — long enough that it gets split as a matter of course, so the
+    //             simulation splits it rather than reporting a day nobody would
+    //             ever actually run.
+    // Splitting halves the contest time and adds the panel-change overhead.
     splitReviewThresholdMin: 120,
+    splitAutoThresholdMin: 150,
+
+    // Panel-change overhead applied when an event splits. 3 changes at 3.0 min
+    // is what 48 of the 54 split events in the committed 2026 Zone and Junior
+    // National schedules actually use; the rest use 2 at 3.0.
+    panelChangesOnSplit: 3,
+    minutesPerPanelChange: 3.0,
+
+    // Platform never splits — matching isPlatform() in schedule-builder/
+    // sb-app.js, where the split option is withheld from platform outright.
+    neverSplitDisciplines: ['Platform', '10m', '10-Meter'],
 
     // Groups A and B: warm-up is fixed regardless of entry count.
     warmupSeniorGroupsMin: 55,
@@ -76,13 +91,13 @@
       { maxEntries: Infinity, minutes: 55 }
     ],
 
-    // When a session mixes groups (e.g. Group B + Group C events together),
-    // warm-up is set once per session, not per event. 'mostSenior' means:
-    // if any event in the session belongs to Group A or B, the session runs
-    // the fixed 55-minute warm-up even though a Group C/D event alone might
-    // only need 35/45. This is OUR inferred default (Mike didn't state it
-    // explicitly) — flag if wrong.
-    mixedSessionWarmupPolicy: 'mostSenior',
+    // A session has ONE warm-up: every event in it starts at the same time, so
+    // the session must run the longest warm-up any of its events needs. That is
+    // Mike's reasoning, and 'longest' states it directly rather than inferring
+    // it from seniority. ('mostSenior' is kept for comparison; on today's
+    // numbers the two agree, because 55 min is both the Group A/B figure and
+    // the ceiling of the Group C/D scale.)
+    mixedSessionWarmupPolicy: 'longest',
 
     // Smallest contiguous block (before/between/after sessions) that counts
     // as real, usable open-practice time. Anything shorter is real time on
@@ -138,9 +153,17 @@
   // deliberately: if that formula ever changes, this one must change with
   // it, or simulated and real durations will silently disagree.
   // ---------------------------------------------------------------------
-  function eventDuration(divers, dives, secondsPerDive) {
+  function eventDuration(divers, dives, secondsPerDive, splits, rules) {
     var rawMin = (Math.max(0, divers) * Math.max(0, dives) * Math.max(0, secondsPerDive)) / 60;
-    return { rawMin: rawMin, evMin: rawMin }; // evMin === rawMin: this engine never auto-splits.
+    if (!splits) return { rawMin: rawMin, evMin: rawMin, panelMin: 0 };
+    // Same shape as calcEvDur(): two boards run concurrently, so the contest
+    // halves, and the panel changes that a split needs are added back.
+    var panelMin = Math.max(0, rules.panelChangesOnSplit) * Math.max(0, rules.minutesPerPanelChange);
+    return { rawMin: rawMin, evMin: rawMin / 2 + panelMin, panelMin: panelMin };
+  }
+
+  function canSplit(discipline, rules) {
+    return (rules.neverSplitDisciplines || []).indexOf(discipline) < 0;
   }
 
   // spec: { cell, group, gender, discipline, round, divers, diveSpec }
@@ -148,7 +171,10 @@
     var resolved = spec.diveSpec(spec.cell) || {};
     var dives = Number(resolved.dives || 0);
     var secondsPerDive = Number(resolved.secondsPerDive || 0);
-    var d = eventDuration(spec.divers, dives, secondsPerDive);
+    var probe = eventDuration(spec.divers, dives, secondsPerDive, false, rules);
+    var eligible = canSplit(spec.discipline, rules);
+    var willSplit = eligible && probe.rawMin > rules.splitAutoThresholdMin;
+    var d = eventDuration(spec.divers, dives, secondsPerDive, willSplit, rules);
     return {
       cell: spec.cell,
       group: spec.group,
@@ -158,8 +184,14 @@
       divers: spec.divers,
       dives: dives,
       secondsPerDive: secondsPerDive,
+      unsplitMinutes: Math.ceil(probe.rawMin),
       estimatedMinutes: Math.ceil(d.evMin),
-      reviewSplit: d.rawMin > rules.splitReviewThresholdMin
+      split: willSplit,
+      panelMinutes: d.panelMin,
+      // Flagged but NOT split: long enough to look at, short of the line where
+      // it splits on its own. Platform is never split, so a long platform event
+      // is always a review flag however long it runs.
+      reviewSplit: !willSplit && probe.rawMin > rules.splitReviewThresholdMin
     };
   }
 
@@ -312,15 +344,21 @@
   function summarizeDay(dayEvents, rules) {
     var laid = layoutDay(dayEvents, rules);
     var reviewFlags = dayEvents.filter(function (e) { return e.reviewSplit; });
+    var splitEvents = dayEvents.filter(function (e) { return e.split; });
+    var brief = function (e) {
+      return { cell: e.cell, group: e.group, gender: e.gender, discipline: e.discipline,
+               minutes: e.estimatedMinutes, unsplitMinutes: e.unsplitMinutes };
+    };
     return {
       sessions: laid.sessions,
       practiceWindows: laid.practiceWindows,
       usablePracticeMinutes: laid.usablePracticeMinutes,
       overCapacity: laid.overCapacity,
       overCapacityByMinutes: laid.overCapacityByMinutes,
-      reviewSplitFlags: reviewFlags.map(function (e) {
-        return { cell: e.cell, group: e.group, gender: e.gender, discipline: e.discipline, minutes: e.estimatedMinutes };
-      })
+      // Flagged for a look, still running whole.
+      reviewSplitFlags: reviewFlags.map(brief),
+      // Split by the engine because they passed the auto threshold.
+      splitEvents: splitEvents.map(brief)
     };
   }
 
@@ -329,8 +367,9 @@
   // output for that stop) -> full day/session/practice-time simulation.
   //
   //   stopPathway: { stopName, rounds: [ { key, label, cells: { 'A|Girls|1M': divers, ... } } ] }
-  //   diveSpec: (cellKey) => { dives, secondsPerDive } — sourced from
-  //     junior-data.js by the caller. NEVER invented in this module.
+  //   diveSpec: (cellKey) => { dives, secondsPerDive } — supplied by the
+  //     caller (DIVE_TABLE in boundary.js, lifted from the committed 2026 Zone
+  //     and Junior National schedules). NEVER invented in this module.
   //   rulesOverride: partial DEFAULT_RULES to merge in.
   // ---------------------------------------------------------------------
   function simulateStop(stopPathway, diveSpec, rulesOverride) {
@@ -356,8 +395,13 @@
       if (d.overCapacity) {
         warnings.push('Day ' + d.dayNumber + ' exceeds the facility window by ' + d.overCapacityByMinutes + ' min.');
       }
+      d.splitEvents.forEach(function (f) {
+        warnings.push('Day ' + d.dayNumber + ': ' + f.cell + ' runs ' + f.unsplitMinutes +
+          ' min whole, so it is split — ' + f.minutes + ' min on two boards.');
+      });
       d.reviewSplitFlags.forEach(function (f) {
-        warnings.push('Day ' + d.dayNumber + ': ' + f.cell + ' (~' + f.minutes + ' min) — review for split.');
+        warnings.push('Day ' + d.dayNumber + ': ' + f.cell + ' (~' + f.minutes +
+          ' min) — long, but under the line where it splits on its own. Host decides.');
       });
     });
     return {

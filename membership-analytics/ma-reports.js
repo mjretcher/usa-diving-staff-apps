@@ -633,6 +633,85 @@ function groupProfiles(){
 
 const BOUNDARY_SECTIONS = {
 
+  boundary_schedule: {
+    label: 'Realignment — does each meet fit', group: 'Boundary Studio',
+    desc: 'For every stop this pathway creates: entries, events, days needed, the longest day, '
+        + 'which events split, and which run past the facility day.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — does each meet fit');
+      const api = B(), QRr = window.QualRouting, E = window.ScenarioScheduleEngine;
+      if (!QRr || !E || typeof E.simulateStop !== 'function')
+        return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+          <p class="mr-p mr-warn">The schedule engine is not loaded.</p></section>`;
+      const res = api.pathway();
+      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+        <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway are
+        worked out, then generate this report again.</p></section>`;
+      const sched = api.scheduleAll ? api.scheduleAll() : null;
+      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+        <p class="mr-p mr-warn">No stops to lay out. Draw a map and set a pathway first.</p></section>`;
+
+      const R = sched.rules;
+      const maxDay = Math.max(1, ...sched.stops.map(x => x.longestDayMin || 0));
+      const cap = R.facilityCloseMin - R.facilityOpenMin;
+      const rows = sched.stops.map(x => {
+        const overCls = x.daysOver ? 'mr-warn' : '';
+        return `<tr>
+          <td>${esc(x.name)}<div class="mr-soft">${esc(x.level)}</div></td>
+          <td class="mr-num">${fmt(Math.round(x.entries))}</td>
+          <td class="mr-num">${fmt(x.events)}</td>
+          <td class="mr-num">${fmt(x.days)}</td>
+          <td class="mr-num">${x.longestDayMin ? (x.longestDayMin/60).toFixed(1)+' h' : '—'}</td>
+          <td style="width:16%">${bar(x.longestDayMin||0, maxDay, x.daysOver ? RED : POOL)}</td>
+          <td class="mr-num">${x.autoSplit || '—'}</td>
+          <td class="mr-num">${x.review || '—'}</td>
+          <td class="${overCls}">${x.daysOver ? x.daysOver+' day'+(x.daysOver>1?'s':'')+' over' : 'fits'}</td>
+        </tr>`;
+      }).join('');
+
+      const bad = sched.stops.filter(x => x.daysOver);
+      const untimed = sched.stops.reduce((a,x)=>a+(x.unknown||0), 0);
+      const verdict = bad.length
+        ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} stops run past the assumed
+             facility day.</strong> ${esc(bad.map(x=>x.name).join(', '))}. Either those areas carry too many
+             entries for one venue, or those hosts need an extra day.</p>`
+        : `<p class="mr-p">Every stop fits inside the assumed facility day.</p>`;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Does each meet fit</h2>
+        <p class="mr-p">Each area this map and pathway create becomes a real meet that a host club has to run
+          inside its own pool hours. This lays every stop out against one standard day so they can be compared
+          with each other — a map can be perfectly balanced on paper and still produce a meet nobody can run.</p>
+        ${verdict}
+        <table class="mr-table"><thead><tr>
+          <th>Stop</th><th class="mr-num">Entries</th><th class="mr-num">Events</th>
+          <th class="mr-num">Days</th><th class="mr-num">Longest day</th><th>&nbsp;</th>
+          <th class="mr-num">Split</th><th class="mr-num">Look at</th><th>Verdict</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        ${untimed ? `<p class="mr-note mr-warn">${fmt(untimed)} event${untimed>1?'s have':' has'} no dive count on
+          record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown.</p>` : ''}
+        <h3 class="mr-h3">What this assumes</h3>
+        <ul class="mr-list">
+          <li>Pool open ${Math.floor(R.facilityOpenMin/60)}:00 to ${Math.floor(R.facilityCloseMin/60)}:00,
+              a ${(cap/60).toFixed(1)}-hour day, the same for every host.</li>
+          <li>Warm-up is once per session, not per event, because every event in a session starts together:
+              ${R.warmupSeniorGroupsMin} minutes wherever a Group A or B event is in the session, and the longest
+              warm-up any event needs otherwise.</li>
+          <li>An event running over ${R.splitAutoThresholdMin} minutes whole is split — two boards, so roughly half
+              the time, plus ${R.panelChangesOnSplit} panel changes at ${R.minutesPerPanelChange} minutes.
+              Between ${R.splitReviewThresholdMin} and ${R.splitAutoThresholdMin} minutes it is flagged for the host
+              to decide, not split.</li>
+          <li>Platform is never split, so a long platform event is always a flag rather than a split.</li>
+          <li>One discipline per age group and gender per day.</li>
+          <li>Dive counts come from the 2026 Zone and Junior National schedules as actually run.</li>
+        </ul>
+        <p class="mr-note">Hosts open at different times and may run one age group earlier or later; this assumes
+          one standard day purely so stops can be compared. Nothing here sets a real schedule — a host's equipment,
+          pool hours and judgement outrank all of it.</p>
+      </section>`;
+    }
+  },
+
   boundary_pathway: {
     label: 'Realignment — qualification pathway', group: 'Boundary Studio',
     desc: 'Who advances at every stage and round, how many people that is, and what it bills.',
@@ -1733,7 +1812,7 @@ function renderBuilder(){
         <div style="margin-left:auto;display:flex;gap:8px">
           <button class="mr-btn" onclick="window._mrClose()">Cancel</button>
           <button class="mr-btn mr-btn-p ${canGo?'':'is-dim'}" ${canGo?'':'disabled'}
-                  onclick="window._mrGenerate()">📄 Generate report</button>
+                  onclick="window._mrGenerate()">Generate report</button>
         </div>
       </div>
     </div>
@@ -1918,11 +1997,11 @@ function mount(){
   bar.className = 'mr-bar';
   bar.innerHTML = `
     <span class="mr-bar-lbl">Reports</span>
-    <button class="mr-bar-btn mr-bar-prim" onclick="window._mrOpenBuilder()">📄 Build a report</button>
+    <button class="mr-bar-btn mr-bar-prim" onclick="window._mrOpenBuilder()">Build a report</button>
     <button class="mr-bar-btn" onclick="window._mrOpenBuilder('__boundary__')"
-            title="Open the builder with the map templates first — nothing is chosen for you">🗺️ Report on this map</button>
+            title="Open the builder with the map templates first — nothing is chosen for you">Report on this map</button>
     <button class="mr-bar-btn" onclick="window._mrShare()"
-            title="Copy a link that opens this same view">🔗 Share this view</button>
+            title="Copy a link that opens this same view">Share this view</button>
     <span class="mr-bar-note">Every report prints straight to PDF.</span>`;
   tabs.parentNode.insertBefore(bar, tabs.nextSibling);
   window._mrOpenBuilder = function(preset){ openBuilder(preset); };
