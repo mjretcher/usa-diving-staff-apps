@@ -566,6 +566,7 @@ function renderPanel(){
     </div>
     <div class="bs-chips">${chips}
       <button class="bs-chip add" id="bsAddRegion">+ Add area</button>
+      <button class="bs-chip add" id="bsSepColors" title="Give any two areas that share a border colours you can actually tell apart">Separate touching colours</button>
     </div>
     <div class="bs-row bs-mergebar">
       <span class="bs-lvl">Combine</span>
@@ -607,6 +608,7 @@ function renderPanel(){
   if (lay) lay.classList.remove('bs-wide');
   renderNumbers();
   wirePanel();
+  wireCrossHighlight();
   keepRestore(_place, 'bsPanel');
   loadScenarioList();
 }
@@ -629,6 +631,7 @@ function renderNumbers(){
     refreshFlow();
   }
   renderLegend(t, mappableTotal, yLabel);
+  renderConsequenceStrip();
 }
 
 function renderTallyTable(t, mappableTotal, yLabel){
@@ -1890,7 +1893,13 @@ async function listPathways(){
 }
 
 async function savePathway(){
-  const name = (prompt('Name this pathway', S.pathName || (S.scenarioName || 'Pathway')) || '').trim();
+  const name = await bsPrompt({
+    title: 'Save this pathway to the library',
+    body: `<p class="bs-dlg-p">It can then be loaded onto any map, including ones with a different number
+      of levels &mdash; those get fitted and the changes named.</p>
+      <div class="bs-dlg-facts"><span>${fmt(S.routing.length)} levels</span>
+      <span>${fmt(S.routing.reduce((a,l)=>a+((l.routes||[]).length),0))} routes</span></div>`,
+    label: 'Name', value: S.pathName || (S.scenarioName || 'Pathway'), okLabel: 'Save pathway'});
   if (!name) return;
   const id = 'pw-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
   try {
@@ -1930,7 +1939,9 @@ async function deletePathway(){
   const id = (document.getElementById('bsPathLoad') || {}).value;
   if (!id) { msg('Choose a saved pathway first.'); return; }
   const nm = (S.pathList || []).find(p => p.id === id);
-  if (!confirm(`Delete "${nm ? nm.name : id}"? Maps that used it keep their own copy.`)) return;
+  if (!await bsConfirm({title:'Delete this saved pathway?', danger:true, okLabel:'Delete',
+    body:`<p class="bs-dlg-p">Removes <b>${esc(nm ? nm.name : id)}</b> from the library. Maps that used it keep
+      their own copy, so nothing already saved changes.</p>`})) return;
   try {
     await NEON.query(`DELETE FROM membership.pathways WHERE id=$1`, [id]);
     S.pathList = await listPathways(); renderPathway();
@@ -1968,6 +1979,7 @@ function renderInspectorShell(){
 
 /* Single dispatch point after the flow recomputes. */
 function renderInspector(){
+  renderConsequenceStrip();      // live regardless of which inspector is open
   if (S.panelMode === 'map'){
     const slot = document.getElementById('bsBalance');
     if (slot) slot.outerHTML = renderBalanceStrip();
@@ -1998,7 +2010,7 @@ function renderBalanceStrip(){
   const bars = TG.groups.map((g,gi)=>{
     const share = 100*totals[gi]/grand, diff = share-equal;
     const dc = Math.abs(diff) < equal*0.15 ? 'ok' : (diff>0?'over':'under');
-    return `<tr><td><span class="sw" style="background:${tierColorAt(i,gi)}"></span>${esc(g.name)}</td>
+    return `<tr data-hl="${gi}"><td><span class="sw" style="background:${tierColorAt(i,gi)}"></span>${esc(g.name)}</td>
       <td class="num">${fmt(Math.round(totals[gi]))}</td>
       <td><span class="bs-bar"><i style="width:${Math.max(2,Math.round(100*totals[gi]/Math.max(...totals)))}%;background:${tierColorAt(i,gi)}"></i></span></td>
       <td class="num ${dc}">${diff>=0?'+':''}${diff.toFixed(1)} pp</td></tr>`;
@@ -2151,7 +2163,7 @@ function computeSchedule(res){
       catch(e){ err = e.message || String(e); }
       const d = (sim && sim.days) || [];
       stops.push({
-        name, level: tierName(L), levelIndex: L, entries, unknown, err, sim,
+        name, level: tierName(L), levelIndex: L, groupIndex: g, entries, unknown, err, sim,
         events:      sim ? sim.totalEvents : 0,
         days:        sim ? sim.totalDays : 0,
         autoSplit:   d.reduce((a,x)=>a+((x.splitEvents||[]).length), 0),
@@ -2179,7 +2191,7 @@ function renderScheduleInspector(res){
     if (st.err) return `<tr><td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}</div></td>
       <td class="num">${fmt(Math.round(st.entries))}</td><td colspan="6" class="under">${esc(st.err)}</td></tr>`;
     const warn = st.unknown ? ` <span class="bs-arr-m warn">${st.unknown} event${st.unknown>1?'s':''} with no dive count &mdash; not timed</span>` : '';
-    return `<tr>
+    return `<tr${st.levelIndex===0?` data-hl="${st.groupIndex}"`:''}>
       <td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}${warn}</div></td>
       <td class="num">${fmt(Math.round(st.entries))}</td>
       <td class="num">${st.events}</td>
@@ -2420,6 +2432,215 @@ function renderCompareInspector(){
 }
 
 /* ============================================================================
+   THE CONSEQUENCE STRIP
+   Splitting the old seven-panel scroll into inspectors fixed the scrolling and
+   created a new problem: paint a county now and you cannot see what it broke
+   unless you happen to be standing on the tab that knows. Make an area too big
+   and Schedule knows the meet will not run -- but you will not, until you think
+   to go and look. So four numbers live under the map and never leave.
+   ========================================================================= */
+function renderConsequenceStrip(){
+  const el = document.getElementById('bsStrip');
+  if (!el) return;
+  const cell = (label, value, cls, hint) => `<div class="bs-str-c ${cls||''}" ${hint?`title="${esc(hint)}"`:''}>
+    <span class="bs-str-v">${value}</span><span class="bs-str-l">${esc(label)}</span></div>`;
+  const nAreas = groupCountAt(S.tierView);
+  let out = cell(tierName(S.tierView) + (nAreas===1?'':'s'), fmt(nAreas), '');
+  if (S.flow && S.flow.levels){
+    const i = Math.min(S.tierView, S.flow.levels.length-1);
+    const rows = (S.flow.levels[i] && S.flow.levels[i].rows) || [];
+    const totals = tierGroupsAt(i).groups.map((_,gi)=>CELLS.reduce((a,c)=>a+((rows[gi]||{})[c]||0),0));
+    const grand = totals.reduce((a,b)=>a+b,0);
+    if (grand > 0 && totals.length > 1){
+      const equal = 100/totals.length;
+      const spread = 100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand;
+      const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'warn' : 'bad');
+      out += cell('widest gap', spread.toFixed(1)+' pp', cls,
+        'How far the biggest area is from the smallest, as a share of everyone competing.');
+    }
+  } else out += cell('widest gap', '&hellip;', '');
+  const res = S.routeRes;
+  if (res && res.field){
+    let sched = null;
+    try { sched = computeSchedule(res); } catch(e){}
+    if (sched && sched.stops && sched.stops.length){
+      const bad = sched.stops.filter(x=>x.daysOver).length;
+      out += cell(bad===1?'meet does not fit':'meets do not fit', fmt(bad), bad?'bad':'ok',
+        'Meets running past a standard facility day. Open Schedule for which ones.');
+    }
+    try {
+      const last = S.routing.length-1;
+      const n = QR().sizeAt(res, last, QR().roundsOf(S.routing[last])[0].key, CELLS);
+      out += cell('reach ' + (S.finalName||'the final'), fmt(Math.round(n)), '');
+    } catch(e){}
+  } else out += cell('meets', '&hellip;', '') + cell('championship field', '&hellip;', '');
+  el.innerHTML = out;
+}
+
+/* ============================================================================
+   CROSS-HIGHLIGHTING
+   Reading "East runs three days over" and then hunting for East by eye against
+   a colour key is the slowest thing about these screens. Hovering any row that
+   names an area lights that area on the map and fades the rest. Purely a class
+   on the <svg>: the county paths already carry everything the CSS needs.
+   ========================================================================= */
+function highlightArea(gi){
+  const svg = document.getElementById('bsSvg');
+  if (!svg) return;
+  if (gi == null || gi < 0 || isNaN(gi)){
+    svg.classList.remove('bs-hl');
+    svg.querySelectorAll('path.bcty.on').forEach(el => el.classList.remove('on'));
+    return;
+  }
+  svg.classList.add('bs-hl');
+  const of = tierGroups().of;
+  svg.querySelectorAll('path.bcty').forEach(el => {
+    const ri = S.assign[el.dataset.f];
+    const g = (ri != null && ri >= 0) ? of[ri] : null;
+    el.classList.toggle('on', g === gi);
+  });
+}
+
+/* One delegated listener for the whole inspector rather than one per table. */
+function wireCrossHighlight(){
+  const P = document.getElementById('bsPanel');
+  if (!P || P._xh) return;
+  P._xh = true;
+  P.addEventListener('mouseover', e => {
+    const t = e.target.closest && e.target.closest('[data-hl]');
+    if (t) highlightArea(+t.dataset.hl);
+  });
+  P.addEventListener('mouseout', e => {
+    const t = e.target.closest && e.target.closest('[data-hl]');
+    if (!t) return;
+    const to = e.relatedTarget;
+    if (!to || !to.closest || !to.closest('[data-hl]')) highlightArea(null);
+  });
+  P.addEventListener('mouseleave', () => highlightArea(null));
+}
+
+/* ============================================================================
+   ADJACENCY-AWARE COLOURS
+   groupColor() hands out a fixed palette by index with no idea which areas
+   touch. Several pairs in that list are hard to separate at map scale
+   (#009AC7 / #0891b2, #171F69 / #1d4ed8, #8FC3EA / #009AC7) and nothing stopped
+   two of them landing side by side. In a printed board pack two near-identical
+   neighbours read as one area -- a wrong conclusion drawn from a correct map,
+   in the artefact that leaves the building.
+   ========================================================================= */
+function colorDistance(a, b){
+  const hex = h => { const v = String(h||'').replace('#',''); return [0,2,4].map(i=>parseInt(v.slice(i,i+2),16)||0); };
+  const c1 = hex(a), c2 = hex(b), rm = (c1[0]+c2[0])/2;
+  // Weighted RGB — the cheap approximation of perceived difference. Good enough
+  // to separate two blues, which is the entire job here.
+  return Math.sqrt((2+rm/256)*(c1[0]-c2[0])**2 + 4*(c1[1]-c2[1])**2 + (2+(255-rm)/256)*(c1[2]-c2[2])**2);
+}
+
+/* Which painted areas share a border, from the county adjacency the auto-draw
+   already walks. */
+async function areaAdjacency(){
+  let A = null;
+  try { A = await loadAutoData(); } catch(e){ return null; }
+  if (!A || !A.adj || !A.fips) return null;
+  const n = S.regions.length;
+  const adj = Array.from({length:n}, () => new Set());
+  for (let i = 0; i < A.adj.length; i++){
+    const ra = S.assign[A.fips[i]];
+    if (ra == null || ra < 0 || ra >= n) continue;
+    for (const j of A.adj[i]){
+      const rb = S.assign[A.fips[j]];
+      if (rb == null || rb < 0 || rb >= n || rb === ra) continue;
+      adj[ra].add(rb); adj[rb].add(ra);
+    }
+  }
+  return adj;
+}
+
+async function separateAdjacentColors(){
+  const adj = await areaAdjacency();
+  if (!adj){ msg('Could not work out which areas touch each other.'); return; }
+  const MIN = 190;                 // below this, two fills read as one at map scale
+  const chosen = S.regions.map(r => r.color);
+  let changed = 0, stuck = 0;
+  for (let i = 0; i < S.regions.length; i++){
+    const clash = c => [...adj[i]].some(j => colorDistance(c, chosen[j]) < MIN);
+    if (!clash(chosen[i])) continue;
+    const alt = PALETTE.find(c => !clash(c) && chosen.indexOf(c) < 0) || PALETTE.find(c => !clash(c));
+    if (alt){ chosen[i] = alt; changed++; } else stuck++;
+  }
+  if (!changed && !stuck){ msg('Every pair of touching areas is already easy to tell apart.'); return; }
+  pushUndo();
+  S.regions.forEach((r,i) => { r.color = chosen[i]; });
+  S.dirty = true; repaintAll(); renderPanel();
+  msg(`Recoloured ${changed} area${changed===1?'':'s'} so no two touching areas look alike.`
+    + (stuck ? ` ${stuck} could not be separated \u2014 more neighbours than distinct colours.` : ''));
+}
+
+/* ============================================================================
+   DIALOGS
+   Replaces window.prompt / window.confirm. Those are unstyled, off-brand,
+   unusable one-handed at the side of a pool, and -- the reason that actually
+   matters -- structurally incapable of showing you what you are about to do.
+   Freezing a scenario should put the figures you are recording in front of you
+   BEFORE you commit them; a browser prompt cannot.
+
+   Promise-based so call sites read the same as the calls they replace:
+     const name = await bsPrompt({title, label, value});      // null if cancelled
+     if (!await bsConfirm({title, body})) return;
+   ========================================================================= */
+function bsDialog(opts){
+  return new Promise(resolve => {
+    const prev = document.activeElement;
+    const wrap = document.createElement('div');
+    wrap.className = 'bs-dlg-back';
+    const danger = opts.danger ? ' danger' : '';
+    wrap.innerHTML = `
+      <div class="bs-dlg${danger}" role="dialog" aria-modal="true" aria-label="${esc(opts.title||'')}">
+        <div class="bs-dlg-h">${esc(opts.title||'')}</div>
+        <div class="bs-dlg-b">
+          ${opts.body || ''}
+          ${opts.input ? `<label class="bs-dlg-lbl">${esc(opts.input.label||'')}
+            <input class="bs-dlg-in" id="bsDlgIn" value="${esc(opts.input.value||'')}"
+              placeholder="${esc(opts.input.placeholder||'')}" maxlength="120"></label>` : ''}
+        </div>
+        <div class="bs-dlg-f">
+          <button class="tab" data-dlg="cancel">${esc(opts.cancelLabel||'Cancel')}</button>
+          <button class="tab bs-dlg-go${danger}" data-dlg="ok">${esc(opts.okLabel||'OK')}</button>
+        </div>
+      </div>`;
+    const done = v => {
+      document.removeEventListener('keydown', key, true);
+      wrap.remove();
+      if (prev && prev.focus) try { prev.focus(); } catch(e){}
+      resolve(v);
+    };
+    const val = () => {
+      const el = wrap.querySelector('#bsDlgIn');
+      return opts.input ? (el ? el.value.trim() : '') : true;
+    };
+    const key = e => {
+      if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); done(null); }
+      else if (e.key === 'Enter' && (!opts.input || document.activeElement === wrap.querySelector('#bsDlgIn'))){
+        e.preventDefault(); e.stopPropagation();
+        const v = val(); done(opts.input && !v ? null : v);
+      }
+    };
+    wrap.addEventListener('click', e => {
+      if (e.target === wrap) return done(null);          // click the backdrop to dismiss
+      const b = e.target.closest('[data-dlg]'); if (!b) return;
+      if (b.dataset.dlg === 'cancel') return done(null);
+      const v = val(); done(opts.input && !v ? null : v);
+    });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(wrap);
+    const focusEl = wrap.querySelector('#bsDlgIn') || wrap.querySelector('[data-dlg="ok"]');
+    if (focusEl){ focusEl.focus(); if (focusEl.select) focusEl.select(); }
+  });
+}
+const bsPrompt  = o => bsDialog(Object.assign({okLabel:'Save'}, o, {input: o.input || {label:o.label, value:o.value, placeholder:o.placeholder}}));
+const bsConfirm = o => bsDialog(o).then(v => v !== null);
+
+/* ============================================================================
    FREEZING A SCENARIO
    Once numbers have been in front of a committee they stop being a working
    model and become part of a record. The arbitration standard on selection is
@@ -2464,21 +2685,44 @@ function freezeFigures(){
   } catch(e){ console.error('freezeFigures', e); return null; }
 }
 
-function freezeScenario(){
+async function freezeScenario(){
   if (!S.scenarioId){ msg('Save the scenario first — a freeze has to attach to something.'); return; }
   const figures = freezeFigures();
   if (!figures){ msg('Could not read the figures to freeze. Open Projection once, then try again.'); return; }
-  const note = (prompt('What was this shown to, or shown for? (goes in the record)', S.frozen ? S.frozen.note : '') || '').trim();
-  S.frozen = {at: new Date().toISOString(), note, stamps: dataStamps(), figures};
+  const st = dataStamps();
+  const note = await bsPrompt({
+    title: 'Freeze this scenario as presented',
+    okLabel: 'Freeze',
+    body: `<p class="bs-dlg-p">This records what the scenario says right now, so if the entry data is rebuilt
+        underneath it the difference shows instead of hiding. Check the figures before committing them &mdash;
+        these are what the record will say you presented.</p>
+      <table class="bs-dlg-t"><tbody>
+        <tr><td>Pathway</td><td>${esc(figures.pathway||'—')}</td></tr>
+        ${figures.finalField!=null?`<tr><td>Reaching the championship</td>
+          <td><b>${fmt(Math.round(figures.finalField))}</b></td></tr>`:''}
+        ${(figures.levelEntries||[]).map(l=>`<tr><td>${esc(l.name)} &mdash; entries</td>
+          <td>${fmt(l.entries)}</td></tr>`).join('')}
+        <tr><td>Meets to run</td><td>${fmt(figures.meets||0)}</td></tr>
+        <tr><td>Meets that do not fit</td><td>${figures.meetsOverDay
+          ? `<b class="bs-dlg-bad">${fmt(figures.meetsOverDay)}</b>` : '0'}</td></tr>
+        <tr><td>Entry data build</td><td>${esc(String(st.advance_data||'—').slice(0,10))}</td></tr>
+      </tbody></table>`,
+    label: 'What was this shown to, or shown for?',
+    value: S.frozen ? S.frozen.note : '',
+    placeholder: 'CCE, 10 August'});
+  if (note === null) return;
+  S.frozen = {at: new Date().toISOString(), note, stamps: st, figures};
   S.dirty = true;
   msg('Frozen. Save the scenario to write the record.');
   renderPanel();
 }
 
-function unfreezeScenario(){
+async function unfreezeScenario(){
   if (!S.frozen) return;
-  if (!confirm('Remove the freeze? The record of what this said when it was presented is deleted, '
-             + 'and the scenario becomes a working model again.')) return;
+  if (!await bsConfirm({title:'Remove the freeze?', danger:true, okLabel:'Remove the freeze',
+    body:`<p class="bs-dlg-p">The record of what this said when it was presented is deleted, and the scenario
+      becomes a working model again. If it has already been in front of a committee, keep the freeze and save a
+      copy to work in instead.</p>`})) return;
   S.frozen = null; S.dirty = true;
   msg('Freeze removed.');
   renderPanel();
@@ -2883,12 +3127,48 @@ function wirePathway(){
   const fc = document.getElementById('bsPathFocus');
   if (fc) fc.addEventListener('change', () => { S.bdCell = fc.value; renderPathway(); });
   const rs = document.getElementById('bsPathReset');
-  if (rs) rs.addEventListener('click', () => {
-    if (!confirm('Replace the whole pathway with the current published rules?')) return;
+  if (rs) rs.addEventListener('click', async () => {
+    if (!await bsConfirm({title:'Back to the published rules?', okLabel:'Replace the pathway',
+      body:'<p class="bs-dlg-p">Replaces every round and route with the current published rules. '
+         + 'Undo will bring this one back.</p>'})) return;
     pushUndo();
     S.routing = QR().defaultRouting(S.levels.length - 1, S.levels.length - 1);
     touch();
   });
+}
+
+/* Recompute the flow for the current map. Cheap after the first call: the
+   calibration is derived once per season and cached inside JuniorFlow.
+
+   These two were deleted by accident along with the "Who moves up" panel they
+   happened to sit between, which left five live callers pointing at nothing.
+   Restored verbatim, with the one tail line repointed at renderInspector()
+   since renderAdvResults() is genuinely gone. */
+let flowBusy = false, flowAgain = false;
+async function refreshFlow(){
+  if (flowBusy){ flowAgain = true; return; }   // painting fires this rapidly
+  flowBusy = true;
+  try { await doRefreshFlow(); }
+  finally {
+    flowBusy = false;
+    if (flowAgain){ flowAgain = false; refreshFlow(); }
+  }
+}
+async function doRefreshFlow(){
+  if (!window.JuniorFlow){ S.flowErr = 'Pricing engine not loaded.'; renderInspector(); return; }
+  try {
+    await window.JuniorFlow.ready();
+    await ensureMult();
+    S.flow = window.JuniorFlow.compute({
+      regions:S.regions, assign:S.assign, levels:S.levels,
+      finalName:S.finalName, year:S.year,
+    });
+    S.flowErr = null;
+  } catch(e){
+    console.error(e); S.flow = null; S.flowErr = e.message || String(e);
+  }
+  renderInspector();
+  renderConsequenceStrip();
 }
 
 /* The old "Who moves up" panel lived here. Its balance read -- are the areas
@@ -3162,7 +3442,7 @@ function wirePanel(){
         (n === 1 ? r.base : `${r.base} 1–${n}`) +
         (r.kept ? ` · kept ${r.kept} you named yourself` : ''));
   }));
-  P.querySelectorAll('.bs-renum').forEach(b => b.addEventListener('click', ()=>{
+  P.querySelectorAll('.bs-renum').forEach(b => b.addEventListener('click', async ()=>{
     const lvl = +b.dataset.lvl;
     const base = singulariseLevel(tierName(lvl));
     if (!base){
@@ -3172,10 +3452,12 @@ function wirePanel(){
     const areas = areasAtLevel(lvl);
     const custom = areas.filter(g => !looksGenerated(g.name)).map(g => g.name);
     // Forcing overwrites deliberate names, so say exactly which ones first.
-    if (custom.length && !confirm(
-        `Rename all ${areas.length} areas to ${base} 1–${areas.length}?\n\n` +
-        `This will overwrite ${custom.length} name${custom.length===1?'':'s'} you chose: ` +
-        custom.slice(0,6).join(', ') + (custom.length>6 ? ', …' : ''))) return;
+    if (custom.length && !await bsConfirm({
+        title: `Rename all ${areas.length} areas to ${esc(base)} 1\u2013${areas.length}?`,
+        danger: true, okLabel: 'Rename them all',
+        body: `<p class="bs-dlg-p">This overwrites ${custom.length} name${custom.length===1?'':'s'} you chose
+          yourself:</p><div class="bs-dlg-facts">${custom.slice(0,10).map(n=>`<span>${esc(n)}</span>`).join('')}
+          ${custom.length>10?`<span>and ${custom.length-10} more</span>`:''}</div>`})) return;
     pushUndo();
     const r = renumberAreas(lvl, true);
     S.dirty = true;
@@ -3213,6 +3495,7 @@ function wirePanel(){
     S.active = +ch.dataset.ri;
     P.querySelectorAll('.bs-chip[data-ri]').forEach(x=>x.classList.toggle('on', +x.dataset.ri===S.active));
   }));
+  bind('bsSepColors', separateAdjacentColors);
   bind('bsAddRegion', ()=>{
     pushUndo();
     S.regions.push({name:'Region '+(S.regions.length+1), color:PALETTE[S.regions.length%PALETTE.length]});
@@ -3255,8 +3538,10 @@ function wirePanel(){
   const cmp = document.getElementById('bsCompare');
   if (cmp) cmp.addEventListener('change', ()=>{ if (cmp.value) loadCompare(cmp.value); });
   bind('bsCompareOff', ()=>{ S.compare=null; renderPanel(); });
-  bind('bsNew', ()=>{
-    if (S.dirty && !confirm('Discard unsaved changes and start a new scenario?')) return;
+  bind('bsNew', async ()=>{
+    if (S.dirty && !await bsConfirm({title:'Start a new scenario?', danger:true, okLabel:'Discard and start new',
+      body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'this scenario')}</b>.
+        Starting a new one discards them.</p>`})) return;
     pushUndo();
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
@@ -3285,8 +3570,11 @@ async function saveScenario(asNew){
   const frozenChanged = !!(S.frozen && freezeDrift());
   const forking = asNew || !S.scenarioId || isSeed(S.scenarioId) || frozenChanged;
   if (frozenChanged && !asNew){
-    if (!confirm('This scenario is frozen and no longer computes what it said when it was presented.\n\n'
-               + 'Saving will create a copy so the frozen version stays as the committee saw it. Continue?')) return;
+    if (!await bsConfirm({title:'This frozen scenario has changed', okLabel:'Save a copy',
+      body:`<p class="bs-dlg-p"><b>${esc(S.scenarioName)}</b> was frozen on
+        ${esc(String(S.frozen.at||'').slice(0,10))} and no longer computes what it said then.</p>
+        <p class="bs-dlg-p">Saving creates a copy so the frozen version stays exactly as the committee saw it.
+        The copy is a working model again.</p>`})) return;
   }
   if (forking){
     S.scenarioId = newScenarioId();
@@ -3320,7 +3608,9 @@ async function saveScenario(asNew){
 
 async function deleteScenario(){
   if (!S.scenarioId || isSeed(S.scenarioId)){ msg('Reference maps cannot be deleted.'); return; }
-  if (!confirm('Delete "' + S.scenarioName + '" permanently?')) return;
+  if (!await bsConfirm({title:'Delete this scenario?', danger:true, okLabel:'Delete permanently',
+    body:`<p class="bs-dlg-p">Deletes <b>${esc(S.scenarioName)}</b> and everything saved with it &mdash; the map,
+      its pathway, and any frozen record of what it said. This cannot be undone.</p>`})) return;
   try {
     await NEON.query('DELETE FROM membership.boundary_scenarios WHERE id=$1', [S.scenarioId]);
     scenarioListCache = null;
@@ -3386,7 +3676,9 @@ function migrateLevels(d, nRegions){
 }
 
 async function loadScenario(id){
-  if (S.dirty && !confirm('Discard unsaved changes and load this scenario?')) return;
+  if (S.dirty && !await bsConfirm({title:'Load over unsaved changes?', danger:true, okLabel:'Discard and load',
+    body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'the current scenario')}</b>.
+      Loading another discards them.</p>`})) return;
   try {
     const res = await NEON.query(`SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`, [id]);
     if (!res.rows.length){ msg('Scenario not found.'); return; }
@@ -4814,6 +5106,7 @@ window.renderBoundary = async function(){
     <div class="bs-layout">
       <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
         <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
+        <div id="bsStrip" class="bs-strip"></div>
         <div id="bsLegend" class="bs-legend"></div>
       </div></div>
       <div class="card" style="margin-bottom:0"><div class="card-b" id="bsPanel"></div></div>
