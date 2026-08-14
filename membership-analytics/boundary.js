@@ -4607,6 +4607,9 @@ window.BoundaryAPI = {
   /* The built comparison, if one is on screen. The report shows what you are
      looking at rather than silently rebuilding a different one. */
   comparison: () => S.cmpRes,
+  /* What the figures were computed from. The scenario summary prints these, so
+     a committee paper can be traced back to its inputs months later. */
+  stamps: dataStamps,
   pathwayLabel: currentPathwayLabel,
 };
 

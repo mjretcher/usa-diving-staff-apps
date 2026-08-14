@@ -631,9 +631,125 @@ function groupProfiles(){
   return {P, un, TG};
 }
 
+/* One map renderer for every boundary section. Two copies would eventually
+   disagree about a colour or an unassigned county, and the report is the
+   artefact that leaves the building. */
+const BMAP_FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d',
+                       '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+function boundaryMapSvg(L){
+  const api = B(), geo = api.geo();
+  const assign = api.assign(), regions = api.regions();
+  const TG = api.tierGroupsAt(L), of = TG.of, nG = TG.groups.length;
+  const colorOf = gi => {
+    const g = TG.groups[gi];
+    if (g && g.colors && g.colors.length && g.colors[0]) return g.colors[0];
+    return BMAP_FALLBACK[gi % BMAP_FALLBACK.length];
+  };
+  const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+  const dParts = Array.from({length:nG}, ()=>[]), unParts = [];
+  for (const c of geo.counties){
+    const ri = assign[c.f];
+    const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+    if (gi == null || gi < 0 || gi >= nG) unParts.push(c.d); else dParts[gi].push(c.d);
+  }
+  const paths = dParts.map((parts, gi) => parts.length
+      ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '').join('')
+    + (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+  return {
+    svg: `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">${paths}
+      <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
+      <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/></svg>`,
+    colorOf, nameOf, nG,
+  };
+}
+
 const BOUNDARY_SECTIONS = {
 
-  boundary_compare: {
+  boundary_summary: {
+    label: 'Realignment — scenario summary (start here)', group: 'Boundary Studio',
+    desc: 'One page: the map, the structure in a sentence, who reaches the championship, '
+        + 'whether every meet runs, and exactly what it was computed from.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — scenario summary');
+      const api = B(), QRr = window.QualRouting;
+      const nLev = api.levelCount ? api.levelCount() : 1;
+      const routing = api.routing ? api.routing() : null;
+      const res = api.pathway ? api.pathway() : null;
+      const M = boundaryMapSvg(0);
+      const t = api.tallies();
+      const stamps = api.stamps ? api.stamps() : null;
+      const finalNm = api.finalName ? api.finalName() : 'the championship';
+
+      // The structure as one readable sentence, which is how it gets described
+      // out loud in the room anyway.
+      const chain = [];
+      for (let L = 0; L < nLev; L++) chain.push(`${fmt(api.groupCountAt(L))} ${esc(api.tierName(L))}`);
+      const sentence = chain.join(' &rarr; ') + ' &rarr; ' + esc(finalNm);
+
+      let field = null, levelRows = '', schedLine = '', probLine = '';
+      if (routing && res && QRr){
+        const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+        levelRows = routing.map((lvl, L) => {
+          const stops = api.groupCountAt(L);
+          const n = QRr.sizeAt(res, L, QRr.roundsOf(lvl)[0].key, CELLS);
+          return `<tr><td>${esc(api.tierName(L))}</td><td class="mr-num">${fmt(stops)}</td>
+            <td class="mr-num">${fmt(Math.round(n))}</td>
+            <td class="mr-num">${fmt(Math.round(n/Math.max(1,stops)))}</td></tr>`;
+        }).join('');
+        const last = routing.length - 1;
+        field = QRr.sizeAt(res, last, QRr.roundsOf(routing[last])[0].key, CELLS);
+        const nProb = (res.problems||[]).length;
+        probLine = nProb ? `<p class="mr-p mr-warn"><strong>${nProb} problem${nProb===1?'':'s'} in this
+          pathway.</strong> Open Boundary Studio &rarr; Structure and clear them before this goes further.</p>` : '';
+      }
+      const sched = api.scheduleAll ? api.scheduleAll() : null;
+      if (sched && sched.stops && sched.stops.length){
+        const bad = sched.stops.filter(x=>x.daysOver);
+        schedLine = bad.length
+          ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} meets do not fit a standard
+             facility day.</strong> ${esc(bad.map(x=>x.name).join(', '))}.</p>`
+          : `<p class="mr-p">All ${sched.stops.length} meets fit inside a standard facility day.</p>`;
+      }
+      const key = Array.from({length:M.nG}, (_,gi)=>`<span class="mr-mapkey">
+        <span class="mr-sw" style="background:${M.colorOf(gi)}"></span>${esc(M.nameOf(gi))}</span>`).join('');
+      const assignedM = t.rows.reduce((a2,r)=>a2+r.m,0);
+      const scName = (api.scenario && api.scenario() && api.scenario().name) || 'Scenario';
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${esc(scName)} &mdash; summary</h2>
+        <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
+        <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
+        <div class="mr-map">${M.svg}</div>
+        <div class="mr-mapkeys">${key}</div>
+        <table class="mr-table"><tbody>
+          <tr><td>Members in the mapped area</td><td class="mr-num">${fmt(assignedM)}</td></tr>
+          ${field!=null?`<tr><td><strong>Reaching ${esc(finalNm)}</strong></td>
+            <td class="mr-num"><strong>${fmt(Math.round(field))}</strong></td></tr>`:''}
+        </tbody></table>
+        ${levelRows?`<h3 class="mr-h3">Every stage</h3>
+        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Meets</th>
+          <th class="mr-num">Entries</th><th class="mr-num">Per meet</th></tr></thead>
+          <tbody>${levelRows}</tbody></table>`:''}
+        ${schedLine}${probLine}
+        <h3 class="mr-h3">What this was computed from</h3>
+        <p class="mr-p">Every figure above should be reproducible from this alone. If one is not, it does not
+          belong in a decision.</p>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Season</td><td>${esc(api.yearLabel())}</td></tr>
+          ${stamps?`<tr><td>Entry data build</td><td>${esc(String(stamps.advance_data||'—').slice(0,10))}</td></tr>
+          <tr><td>Events per athlete</td><td>${esc(String(stamps.multiplicity||'—').slice(0,10))}</td></tr>
+          <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
+          <tr><td>First stop fed by</td><td>${esc(stamps.seed_pool||'—')}</td></tr>`:''}
+        </tbody></table>
+        <p class="mr-note">Entries are not people: athletes commonly contest two or three events, so an entry count
+          tells you what a session costs and how long it runs, not how many bodies need a bed. Projected figures are
+          qualified places carried up by the published rules and the take-up measured on the alignment that season
+          was actually run under &mdash; they are not a forecast of who wins.</p>
+      </section>`;
+    }
+  },
+
+  boundary_pathways_compared: {
     label: 'Realignment — pathways compared', group: 'Boundary Studio',
     desc: 'Saved pathways side by side on the same map: championship field, meet sizes, days, and what does not fit.',
     build: async function(o){
@@ -1661,7 +1777,7 @@ const TEMPLATES = [
 
   { id:'realignment_proposal', label:'Realignment Proposal',
     desc:'The full case: the map, size balance, what it takes to advance in each area, tier rollups and a profile of every area.',
-    sections:['boundary_map','boundary_overview','boundary_balance','boundary_equity',
+    sections:['boundary_summary','boundary_map','boundary_overview','boundary_balance','boundary_equity',
               'boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
@@ -1675,12 +1791,12 @@ const TEMPLATES = [
 
   { id:'realignment_compare', label:'Realignment — Before & After',
     desc:'What changes versus the currently loaded comparison scenario: counties moved, members affected, and the balance either side.',
-    sections:['boundary_map','boundary_overview','boundary_compare','boundary_club_moves',
+    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_pathways_compared','boundary_club_moves',
               'boundary_balance'], years:[2025,2026], boundary:true },
 
   { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',
     desc:'The document a rulebook edit needs: area definitions, profiles, and the full zip code appendix.',
-    sections:['boundary_map','boundary_overview','boundary_region_profiles',
+    sections:['boundary_summary','boundary_map','boundary_overview','boundary_region_profiles',
               'boundary_club_moves','boundary_zips'], years:[2025,2026], boundary:true },
 ];
 
@@ -2226,6 +2342,26 @@ const STYLES = `
   @page{margin:.55in}
 }
 `;
+
+
+/* A duplicate key in a section object is silent in JavaScript -- the later one
+   wins and the earlier section vanishes with no error. That happened once
+   (boundary_compare was added on top of an existing section of the same name,
+   which killed the county-churn report until it was caught). Counting the keys
+   in the source is not possible at runtime, so instead every section registry
+   is checked for collisions as the registries are merged. */
+function assertNoDuplicateSections(){
+  const seen = {}, dupes = [];
+  [['SECTIONS', SECTIONS], ['BOUNDARY_SECTIONS', BOUNDARY_SECTIONS],
+   ['EQUITY_SECTIONS', EQUITY_SECTIONS]].forEach(([nm, reg]) => {
+    Object.keys(reg || {}).forEach(k => {
+      if (seen[k]) dupes.push(`${k} (in ${seen[k]} and ${nm})`);
+      else seen[k] = nm;
+    });
+  });
+  if (dupes.length) console.error('Report sections collide, so one of each pair is unreachable:', dupes);
+  return dupes;
+}
 
 function injectCSS(){
   if (document.getElementById('mr-css')) return;
