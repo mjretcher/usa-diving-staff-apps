@@ -1014,6 +1014,24 @@ CREATE TABLE IF NOT EXISTS membership.pricing_scenarios (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Scenario Schedule Studio (Membership Analytics / Boundary Studio): simulated
+-- per-stop schedules attached to a boundary scenario, so a scenario's regions,
+-- pathway, financials, and schedule save/load/report as one project. `data`
+-- deliberately mirrors schedule_builder.schedules.data (meet/days/sessions/
+-- events) 1:1 so a simulated stop schedule can be copied into
+-- schedule_builder.schedules with no transformation if it's ever promoted
+-- from a what-if scenario into a real working schedule.
+CREATE TABLE IF NOT EXISTS membership.scenario_schedules (
+    id                    TEXT PRIMARY KEY,
+    boundary_scenario_id  TEXT NOT NULL REFERENCES membership.boundary_scenarios(id) ON DELETE CASCADE,
+    stop_name             TEXT NOT NULL,
+    name                  TEXT NOT NULL,
+    data                  JSONB NOT NULL,
+    created_at            TIMESTAMPTZ DEFAULT now(),
+    updated_at            TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_scenario_schedules_scenario ON membership.scenario_schedules(boundary_scenario_id);
+
 -- Accounting same-period membership sales ledger (source: accountant xlsx, Dec-Jun windows)
 CREATE TABLE IF NOT EXISTS membership.sales_ledger (
     year INT NOT NULL,
@@ -1176,9 +1194,14 @@ BEGIN
     ) ON membership.member_gender TO usad_app;
     -- withheld: match_name
     -- Scenario tables are saved from the browser; the rest is read-only.
+    -- scenario_schedules added alongside its parent boundary_scenarios/
+    -- pricing_scenarios so Scenario Schedule Studio can save without a
+    -- separate hand-run GRANT (the exact bug that silently broke Pricing
+    -- Studio saves before this list existed).
     GRANT INSERT, UPDATE, DELETE ON
       membership.boundary_scenarios,
-      membership.pricing_scenarios
+      membership.pricing_scenarios,
+      membership.scenario_schedules
       TO usad_app;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
     -- The default privilege is what stops this recurring: a table added later
