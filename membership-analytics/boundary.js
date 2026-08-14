@@ -1529,12 +1529,16 @@ function meetManifest(res){
       let entries = 0, spots = 0;
       const blocks = {};
       CELLS.forEach(cell => {
-        // The field at the first round is the meet's entry list for that event;
-        // later rounds are the same people again.
-        const first = rounds[0].key;
-        const f = res.field[L] && res.field[L][first];
-        const n = f && f[gi] ? (f[gi][cell] || 0) : 0;
+        /* An entry is a person JOINING this meet, wherever they join it.
+           Qualifying out of the prelim into the final of the same meet is not a
+           second entry and carries no second fee -- but an athlete seeded
+           straight into a later round from the stage below IS entering, and the
+           2026 rules do exactly that. Reading the first round alone was short
+           by everyone who skipped a stage; summing the rounds would have
+           charged the finalists twice. Arrivals are neither. */
+        const n = QR().entriesCellAt(res, L, gi, cell);
         if (n < 0.5) return;
+        const first = rounds[0].key;
         const byRound = {};
         rounds.forEach(r => {
           const ff = res.field[L] && res.field[L][r.key];
@@ -1724,10 +1728,11 @@ function renderAthleteCost(){
       <label class="bs-arr">cost sensitivity
         <input class="bs-rt-in" type="number" min="0" max="2" step="0.05" id="bsCostEl"
           value="${S.costElastic == null ? 0.35 : S.costElastic}"></label>
-      <span class="note">One athlete travelling the whole pathway. Entry fees are per event; travel,
-        lodging and food are per trip and editable &mdash; they are placeholders, not measurements.</span></div>
+      <span class="note">One athlete travelling the whole pathway. Entry fees are per event, charged once per
+        meet &mdash; qualifying out of a prelim into that meet's final is not a second entry and carries no second
+        fee. Travel, lodging and food are per trip and editable; they are placeholders, not measurements.</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
-      <thead><tr><th>Stop</th><th class="num">Entry fees</th><th class="num">Travel &amp; stay</th>
+      <thead><tr><th>Stop</th><th class="num" title="One fee per meet. Qualifying from a prelim into that meet's final is not a second entry.">Entry fees</th><th class="num">Travel &amp; stay</th>
         <th class="num">Total</th></tr></thead>
       <tbody>${rows}
         <tr class="bs-bd-tot"><td><b>Whole pathway</b></td><td></td><td></td>
@@ -2467,7 +2472,10 @@ function summariseRouting(routing, label, notes){
     const levels = routing.map((lvl, L) => {
       const stops = Math.max(1, groupCountAt(L));
       const rounds = QR().roundsOf(lvl);
-      const entry = QR().sizeAt(res, L, rounds[0].key, cells);
+      // People AT this stage, which is everyone who joins it at any round --
+      // not the size of its first round, which misses anyone seeded past it.
+      let entry = 0;
+      for (let g = 0; g < stops; g++) entry += QR().entriesAt(res, L, g, cells);
       return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
               rounds: rounds.length};
     });
@@ -2475,7 +2483,8 @@ function summariseRouting(routing, label, notes){
     const lastRounds = QR().roundsOf(routing[last]);
     // The headline a committee actually argues about: how many reach the
     // championship. Read off its entry round, not the reduced final.
-    const finalField = QR().sizeAt(res, last, lastRounds[0].key, cells);
+    let finalField = 0;
+    for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) finalField += QR().entriesAt(res, last, g, cells);
     const st = sched.stops || [];
     return {
       label, notes,
@@ -2840,7 +2849,8 @@ function renderConsequenceStrip(){
     }
     try {
       const last = S.routing.length-1;
-      const n = QR().sizeAt(res, last, QR().roundsOf(S.routing[last])[0].key, CELLS);
+      let n = 0;
+      for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, CELLS);
       out += cell('reach ' + (S.finalName||'the final'), fmt(Math.round(n)), '');
     } catch(e){}
   } else out += cell('meets', '&hellip;', '') + cell('championship field', '&hellip;', '');

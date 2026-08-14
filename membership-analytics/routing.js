@@ -195,12 +195,38 @@ function project(opts){
     return f;
   });
 
+  /* arrivals[L][round][group][cell] -- the people who JOIN this meet at this
+     round, as opposed to those already at it who qualified through from an
+     earlier round of the same meet.
+
+     This is the distinction an entry fee turns on. An athlete pays once, when
+     they enter a meet. Qualifying out of the prelim into the final of the same
+     meet is not a second entry and is not charged again. But an athlete seeded
+     straight into a later round from somewhere else -- which the published 2026
+     rules do, sending Zone places 1-3 directly into the championship prelim
+     past the stage below -- IS an entry, and has to be counted, or the meet's
+     revenue is short by everyone who skipped a stage. */
+  const arrivals = routing.map((lvl, L) => {
+    const f = {};
+    roundsOf(lvl).forEach(r => {
+      f[r.key] = Array.from({length: Math.max(1, groupCount(L))}, () => ({}));
+    });
+    return f;
+  });
+  const arrive = (L, r, g, cell, n) => {
+    const a = arrivals[L] && arrivals[L][r] && arrivals[L][r][g];
+    if (a) a[cell] = (a[cell] || 0) + n;
+  };
+
   // Seed the entry level.
   const firstRound = roundsOf(routing[0])[0].key;
   entries0.forEach((row, g) => {
     if (!field[0][firstRound][g]) return;
     cells.forEach(c => {
-      if (row[c] && offered(0, c)) field[0][firstRound][g][c] = row[c];
+      if (row[c] && offered(0, c)){
+        field[0][firstRound][g][c] = row[c];
+        arrive(0, firstRound, g, c, row[c]);       // the seed is an entry
+      }
     });
   });
 
@@ -226,13 +252,16 @@ function project(opts){
       for (let g = 0; g < n; g++){
         const w = sh ? (sh[g] && sh[g][c] != null ? sh[g][c] : 1/n) : 1/n;
         const add = total * w;
-        if (add > 0 && field[L][rk][g]) field[L][rk][g][c] = (field[L][rk][g][c] || 0) + add;
+        if (add > 0 && field[L][rk][g]){
+          field[L][rk][g][c] = (field[L][rk][g][c] || 0) + add;
+          arrive(L, rk, g, c, add);                 // joining at this stage is an entry
+        }
       }
     });
   });
 
   const flows = [], dropped = [];
-  const add = (toL, toR, toG, cell, n) => {
+  const add = (toL, toR, toG, cell, n, fromL) => {
     if (n <= 0) return;
     if (!offered(toL, cell)) return;
     const lvl = field[toL];
@@ -245,6 +274,9 @@ function project(opts){
     }
     const k = (conv[toL] && conv[toL][cell] != null) ? conv[toL][cell] : 1;
     lvl[toR][toG][cell] = (lvl[toR][toG][cell] || 0) + n * k;
+    // Arriving from a DIFFERENT level is joining a new meet, so it is an entry.
+    // Moving between rounds of the same level is qualifying, and is not.
+    if (fromL !== toL) arrive(toL, toR, toG, cell, n * k);
   };
 
   // Levels in order; rounds within a level in competition order. A route may
@@ -263,7 +295,7 @@ function project(opts){
             const toL = rt.to.level;
             const toG = (toL === L) ? g : groupOf(L, g, toL);
             if (toG == null) return;
-            add(toL, rt.to.round, toG, cell, n);
+            add(toL, rt.to.round, toG, cell, n, L);
             flows.push({fromLevel:L, fromRound:r.key, fromGroup:g,
                         toLevel:toL, toRound:rt.to.round, toGroup:toG,
                         cell, n});
@@ -280,10 +312,35 @@ function project(opts){
       msg:`${Math.round(n)} athlete place(s) were routed somewhere that does not exist and ` +
           `have been lost from the projection — fix the routes before reading these numbers`});
   }
-  return {field, flows, dropped, problems};
+  return {field, arrivals, flows, dropped, problems};
 }
 
 /* Total athletes entering a level's given round, across groups and cells. */
+/* How many people ENTER a meet -- summed across every round they can join at,
+   so someone seeded straight into a later round is counted once, and someone
+   qualifying prelim-to-final is not counted twice. This is the number an entry
+   fee multiplies, and it is NOT the same as the size of any single round. */
+function entriesAt(res, level, group, cells){
+  const a = res && res.arrivals && res.arrivals[level];
+  if (!a) return 0;
+  let t = 0;
+  for (const rk in a){
+    const g = a[rk][group];
+    if (!g) continue;
+    (cells || Object.keys(g)).forEach(c => { t += g[c] || 0; });
+  }
+  return t;
+}
+
+/* Per-cell version, for a meet's event list. */
+function entriesCellAt(res, level, group, cell){
+  const a = res && res.arrivals && res.arrivals[level];
+  if (!a) return 0;
+  let t = 0;
+  for (const rk in a){ const g = a[rk][group]; if (g) t += g[cell] || 0; }
+  return t;
+}
+
 function sizeAt(res, level, round, cells){
   const lvl = res.field[level];
   if (!lvl || !lvl[round]) return 0;
@@ -528,7 +585,7 @@ function capacityTotal(routing, L, round, groupCount, cells){
 
 window.QualRouting = {
   ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound,
-  defaultRouting, validate, project, sizeAt, describe,
+  defaultRouting, validate, project, sizeAt, entriesAt, entriesCellAt, describe,
   estimateDivers, diversAt, boardShare, meanEvents,
   billableEntries, billableByGroup, revenue,
   capacityAt, capacityTotal,

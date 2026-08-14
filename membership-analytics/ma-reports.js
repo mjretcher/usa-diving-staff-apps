@@ -703,13 +703,17 @@ const BOUNDARY_SECTIONS = {
         const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
         levelRows = routing.map((lvl, L) => {
           const stops = api.groupCountAt(L);
-          const n = QRr.sizeAt(res, L, QRr.roundsOf(lvl)[0].key, CELLS);
+          // Everyone who joins this stage at any round. Reading the first round
+          // alone misses athletes seeded past it, which the 2026 rules do.
+          let n = 0;
+          for (let g = 0; g < stops; g++) n += QRr.entriesAt(res, L, g, CELLS);
           return `<tr><td>${esc(api.tierName(L))}</td><td class="mr-num">${fmt(stops)}</td>
             <td class="mr-num">${fmt(Math.round(n))}</td>
             <td class="mr-num">${fmt(Math.round(n/Math.max(1,stops)))}</td></tr>`;
         }).join('');
         const last = routing.length - 1;
-        field = QRr.sizeAt(res, last, QRr.roundsOf(routing[last])[0].key, CELLS);
+        field = 0;
+        for (let g = 0; g < Math.max(1, api.groupCountAt(last)); g++) field += QRr.entriesAt(res, last, g, CELLS);
         const nProb = (res.problems||[]).length;
         probLine = nProb ? `<p class="mr-p mr-warn"><strong>${nProb} problem${nProb===1?'':'s'} in this
           pathway.</strong> Open Boundary Studio &rarr; Structure and clear them before this goes further.</p>` : '';
