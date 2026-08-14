@@ -21,6 +21,24 @@
 //     left for practice, reported before / between / after. A block under
 //     60 minutes is real time on the clock but doesn't count as usable
 //     practice time.
+//   - Practice time is DISTRIBUTED, not dumped at the end of the day. A
+//     day's slack (facility window minus everything competition needs) is
+//     spent reserving a real block before the first session and a real
+//     block between each pair of sessions (up to minPracticeBlockMin each)
+//     before anything is left "after." This matches how every real
+//     built-in schedule in Schedule Builder is actually built: Zone
+//     schedules open every competition day with a dedicated "Flighted
+//     Warm-Ups" / "Open Training" block before session 1 (e.g. Zone B day
+//     3 runs a 60-min Flighted Warm-Ups block, then three back-to-back
+//     sessions with only the 5-min competition buffer between them —
+//     the practice time is banked up front, not scattered mid-day).
+//     Junior Nationals does the same at meet scale: day 2 runs a 450-min
+//     "Open training — before 2 PM competition start" block, then the
+//     day's sessions run back-to-back. When slack can't cover every
+//     reservable gap at the floor, "before" is filled first (mirroring
+//     that pattern) and whatever's left is spread across the between-gaps;
+//     nothing is banked "after" in that squeezed case, since a real host
+//     would rather protect the pre-competition warm-up window.
 //
 // This module deliberately does NOT know how many dives an event requires
 // or what seconds-per-dive to assume for it — those are governed by
@@ -168,75 +186,138 @@
   }
 
   // ---------------------------------------------------------------------
-  // Session packing within a day. Phase 1 is single-lane / worst-case
+  // Session grouping within a day. Phase 1 is single-lane / worst-case
   // sequential (it does not model parallel apparatus lanes the way
   // Schedule Builder's calcSessTiming does) — the conservative choice for
   // a feasibility check. A schedule promoted into the real Schedule
   // Builder gets the full parallel-lane treatment there.
   // ---------------------------------------------------------------------
-  function layoutDay(dayEvents, rules) {
+  function groupIntoSessions(dayEvents, rules) {
     var size = rules.eventsPerSession;
-    var sessions = [];
+    var groups = [];
     for (var i = 0; i < dayEvents.length; i += size) {
-      sessions.push(dayEvents.slice(i, i + size));
+      groups.push(dayEvents.slice(i, i + size));
     }
-    var cursor = rules.facilityOpenMin;
-    return sessions.map(function (evs, idx) {
+    return groups.map(function (evs) {
       var warmup = sessionWarmup(
         evs.map(function (e) { return { group: e.group, totalEntries: e.divers }; }),
         rules
       );
-      var start = cursor;
-      var warmupEnd = start + warmup;
       var compMinutes = evs.reduce(function (sum, e) { return sum + e.estimatedMinutes; }, 0);
-      var end = warmupEnd + compMinutes;
-      cursor = end + rules.interSessionBufferMin;
+      return { events: evs, warmupMinutes: warmup, compMinutes: compMinutes, occupiedMinutes: warmup + compMinutes };
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Distributed day layout: reserve real practice blocks BEFORE the first
+  // session and BETWEEN each pair of sessions before anything is left
+  // "after" the last one — approved 2026-08-14 in place of the pack-tight
+  // version, to match how host clubs actually run these days (see the
+  // header comment for the real-schedule evidence). Sessions themselves
+  // still run back-to-back once started, with only interSessionBufferMin
+  // between them, same as every real seed schedule.
+  //
+  // Reservation rule: with n sessions there are n reservable gaps (1
+  // before + (n-1) between). If the day's slack covers all of them at
+  // minPracticeBlockMin, each gets exactly that floor and every leftover
+  // minute banks "after". If slack is tighter than that, "before" is
+  // filled first (up to the floor), then whatever remains is spread
+  // across the between-gaps in order; "after" gets nothing in that
+  // squeezed case rather than starving the pre-competition warm-up
+  // window a host actually needs.
+  // ---------------------------------------------------------------------
+  function layoutDay(dayEvents, rules) {
+    var sessionMeta = groupIntoSessions(dayEvents, rules);
+    var n = sessionMeta.length;
+    var windowTotal = rules.facilityCloseMin - rules.facilityOpenMin;
+
+    if (n === 0) {
+      return {
+        sessions: [],
+        practiceWindows: [{ position: 'after', minutes: windowTotal, usable: windowTotal >= rules.minPracticeBlockMin }],
+        usablePracticeMinutes: windowTotal >= rules.minPracticeBlockMin ? windowTotal : 0,
+        overCapacity: false,
+        overCapacityByMinutes: 0
+      };
+    }
+
+    var occupiedTotal = sessionMeta.reduce(function (s, m) { return s + m.occupiedMinutes; }, 0)
+      + (n - 1) * rules.interSessionBufferMin;
+    var slack = windowTotal - occupiedTotal;
+    var overCapacity = slack < 0;
+
+    // gapMinutes[0] = before session 1; gapMinutes[1..n-1] = between sessions;
+    // gapMinutes[n] = after the last session.
+    var gapMinutes = new Array(n + 1).fill(0);
+
+    if (!overCapacity) {
+      var reservableGaps = n; // 1 before + (n-1) between
+      var idealReserved = reservableGaps * rules.minPracticeBlockMin;
+      if (slack >= idealReserved) {
+        for (var g = 0; g < reservableGaps; g++) gapMinutes[g] = rules.minPracticeBlockMin;
+        gapMinutes[n] = slack - idealReserved;
+      } else {
+        var remaining = slack;
+        var beforeFill = Math.min(remaining, rules.minPracticeBlockMin);
+        gapMinutes[0] = beforeFill;
+        remaining -= beforeFill;
+        var betweenCount = n - 1;
+        if (betweenCount > 0 && remaining > 0) {
+          var per = Math.floor(remaining / betweenCount);
+          var extra = remaining - per * betweenCount;
+          for (var b = 1; b <= betweenCount; b++) {
+            gapMinutes[b] = per + (b <= extra ? 1 : 0);
+          }
+        }
+        // gapMinutes[n] ('after') stays 0 — protect the pre-competition
+        // window over a trailing block when the day is this tight.
+      }
+    }
+
+    var cursor = rules.facilityOpenMin + gapMinutes[0];
+    var timedSessions = sessionMeta.map(function (m, idx) {
+      var warmupStart = cursor;
+      var warmupEnd = warmupStart + m.warmupMinutes;
+      var end = warmupEnd + m.compMinutes;
+      cursor = end;
+      if (idx < n - 1) cursor += rules.interSessionBufferMin + gapMinutes[idx + 1];
       return {
         index: idx + 1,
-        events: evs,
-        warmupStartMinutes: start,
-        warmupMinutes: warmup,
+        events: m.events,
+        warmupStartMinutes: warmupStart,
+        warmupMinutes: m.warmupMinutes,
         competitiveEnd: end,
         sessionEndMinutes: end
       };
     });
-  }
 
-  // ---------------------------------------------------------------------
-  // Practice-time capacity check: before / between / after, each block
-  // only counted as usable if >= minPracticeBlockMin.
-  // ---------------------------------------------------------------------
-  function practiceWindows(timedSessions, rules) {
-    var windows = [];
-    var cursor = rules.facilityOpenMin;
-    timedSessions.forEach(function (s, i) {
-      var gap = s.warmupStartMinutes - cursor;
-      windows.push({
-        position: i === 0 ? 'before' : 'between',
-        minutes: gap,
-        usable: gap >= rules.minPracticeBlockMin
-      });
-      cursor = s.sessionEndMinutes;
-    });
-    var tail = rules.facilityCloseMin - cursor;
-    windows.push({ position: 'after', minutes: tail, usable: tail >= rules.minPracticeBlockMin });
-    return windows;
-  }
+    var lastEnd = timedSessions[timedSessions.length - 1].sessionEndMinutes;
+    var afterMinutes = overCapacity ? 0 : (rules.facilityCloseMin - lastEnd);
 
-  function summarizeDay(dayEvents, rules) {
-    var timedSessions = layoutDay(dayEvents, rules);
-    var windows = practiceWindows(timedSessions, rules);
-    var lastEnd = timedSessions.length
-      ? timedSessions[timedSessions.length - 1].sessionEndMinutes
-      : rules.facilityOpenMin;
-    var overCapacity = lastEnd > rules.facilityCloseMin;
-    var reviewFlags = dayEvents.filter(function (e) { return e.reviewSplit; });
+    var windows = [{ position: 'before', minutes: gapMinutes[0], usable: gapMinutes[0] >= rules.minPracticeBlockMin }];
+    for (var bi = 1; bi < n; bi++) {
+      windows.push({ position: 'between', minutes: gapMinutes[bi], usable: gapMinutes[bi] >= rules.minPracticeBlockMin });
+    }
+    windows.push({ position: 'after', minutes: afterMinutes, usable: afterMinutes >= rules.minPracticeBlockMin });
+
     return {
       sessions: timedSessions,
       practiceWindows: windows,
       usablePracticeMinutes: windows.reduce(function (s, w) { return s + (w.usable ? w.minutes : 0); }, 0),
       overCapacity: overCapacity,
-      overCapacityByMinutes: overCapacity ? lastEnd - rules.facilityCloseMin : 0,
+      overCapacityByMinutes: overCapacity ? -slack : 0
+    };
+  }
+
+  function summarizeDay(dayEvents, rules) {
+    var laid = layoutDay(dayEvents, rules);
+    var reviewFlags = dayEvents.filter(function (e) { return e.reviewSplit; });
+    return {
+      sessions: laid.sessions,
+      practiceWindows: laid.practiceWindows,
+      usablePracticeMinutes: laid.usablePracticeMinutes,
+      overCapacity: laid.overCapacity,
+      overCapacityByMinutes: laid.overCapacityByMinutes,
       reviewSplitFlags: reviewFlags.map(function (e) {
         return { cell: e.cell, group: e.group, gender: e.gender, discipline: e.discipline, minutes: e.estimatedMinutes };
       })
@@ -296,8 +377,8 @@
     eventDuration: eventDuration,
     buildEvent: buildEvent,
     assignDays: assignDays,
+    groupIntoSessions: groupIntoSessions,
     layoutDay: layoutDay,
-    practiceWindows: practiceWindows,
     summarizeDay: summarizeDay,
     simulateStop: simulateStop
   };
