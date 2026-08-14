@@ -633,6 +633,58 @@ function groupProfiles(){
 
 const BOUNDARY_SECTIONS = {
 
+  boundary_compare: {
+    label: 'Realignment — pathways compared', group: 'Boundary Studio',
+    desc: 'Saved pathways side by side on the same map: championship field, meet sizes, days, and what does not fit.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Realignment — pathways compared');
+      const api = B();
+      const C = api.comparison ? api.comparison() : null;
+      if (!C || !C.length) return `<section class="mr-section"><h2 class="mr-h2">Pathways compared</h2>
+        <p class="mr-p mr-warn">No comparison has been built. Open <strong>Boundary Studio &rarr; Compare</strong>,
+        tick the saved pathways you want beside the one on screen, press Compare, then generate this report again.
+        This section deliberately reports the comparison you looked at rather than quietly building a different one.</p>
+        </section>`;
+      const base = C[0];
+      const head = C.map((c,i)=>`<th class="mr-num">${esc(c.label)}${i===0?'<div class="mr-soft">on screen</div>':''}</th>`).join('');
+      const delta = (v,b) => (b==null||v==null||Math.round(v)===Math.round(b)) ? ''
+        : ` <span class="mr-soft">(${v-b>0?'+':''}${fmt(Math.round(v-b))})</span>`;
+      const row = (label, get, hint) => `<tr><td>${esc(label)}${hint?`<div class="mr-soft">${esc(hint)}</div>`:''}</td>` +
+        C.map((c,i)=>{
+          if (c.error) return `<td class="mr-num mr-warn">${esc(c.error)}</td>`;
+          const v=get(c); if (v==null) return '<td class="mr-num">—</td>';
+          return `<td class="mr-num">${fmt(Math.round(v))}${i>0?delta(v,get(base)):''}</td>`;
+        }).join('') + '</tr>';
+      const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
+      const levelRows = Array.from({length:nLev}, (_,L) =>
+        row(((base.levels&&base.levels[L])?base.levels[L].name:'Level '+(L+1)) + ' — entries',
+            c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null,
+            (base.levels&&base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')).join('');
+      const noted = C.filter(c=>c.notes && c.notes.length);
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Pathways compared</h2>
+        <p class="mr-p">The same map, run under each pathway. Only the rules differ between columns — the boundaries,
+          the field each pathway starts from, and the measured behaviour are held still, so every difference below is
+          caused by the rules and nothing else.</p>
+        <table class="mr-table"><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>
+          ${row('Championship field', c=>c.finalField, 'who reaches the top meet')}
+          ${levelRows}
+          ${row('Meets to run', c=>c.meets)}
+          ${row('Competition days, all meets', c=>c.daysTotal)}
+          ${row('Meets that do not fit', c=>c.over)}
+          ${row('Events split', c=>c.autoSplit)}
+          ${row('Events to look at', c=>c.review)}
+        </tbody></table>
+        ${noted.length ? `<p class="mr-note mr-warn">${noted.map(c=>
+          `<strong>${esc(c.label)}</strong> was saved for a different structure and was fitted onto this one. ${
+          c.notes.map(n=>esc(n)).join(' ')}`).join('<br>')}</p>` : ''}
+        <p class="mr-note">Each route band sets the size of the meet it feeds. Widening how many leave the first
+          stop changes how big the next meet is; it does not change the championship field, which is capped by the
+          last route into it. A top line that has not moved means the change was upstream of what sets it.</p>
+      </section>`;
+    }
+  },
+
   boundary_schedule: {
     label: 'Realignment — does each meet fit', group: 'Boundary Studio',
     desc: 'For every stop this pathway creates: entries, events, days needed, the longest day, '
