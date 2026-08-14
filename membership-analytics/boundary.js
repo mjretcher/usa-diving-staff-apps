@@ -61,7 +61,11 @@ const S = {
   tierView: 0,          // which level the map + tallies are showing
   finalName: 'Junior Nationals',
   legendMode: 'members',// members | age | comp
-  panelMode: 'tally',   // tally | advance
+  // Which inspector the right-hand panel is showing. The map is always on
+  // screen; only this changes. map | structure | projection | money | schedule | report
+  panelMode: 'map',
+  pathSaved: null,      // {id,name} when the live pathway came from the library
+  pathDirty: false,     // edited since it was loaded/saved
   flow: null,           // cached JuniorFlow result for the current map
   routing: null,        // editable qualification pathway (see routing.js)
   mult: null,           // measured entries-per-athlete (athlete-multiplicity.json)
@@ -567,12 +571,9 @@ function renderPanel(){
       <span class="note">Hands every county in the first area to the second, then deletes the first.</span>
     </div>
     <div class="seg bs-modeseg">
-      <button id="bsModeTally" class="${S.panelMode==='tally'?'on':''}">Who lives here</button>
-      <button id="bsModeAdv" class="${S.panelMode==='advance'?'on':''}">Who moves up</button>
-      <button id="bsModePath" class="${S.panelMode==='pathway'?'on':''}">Pathway</button>
+      ${INSPECTORS.map(t=>`<button data-insp="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}</button>`).join('')}
     </div>
     <div id="bsBody"></div>
-    ${renderNamesPanel()}
     <div class="bs-row" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
       <input class="search" id="bsName" placeholder="Scenario name&hellip;" value="${esc(S.scenarioName)}" style="min-width:180px">
       <button class="tab" id="bsSave">${S.dirty?'Save*':'Save'}</button>
@@ -591,12 +592,12 @@ function renderPanel(){
     ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="note" style="margin-top:6px"><b>${esc(S.scenarioName)}</b> is a reference map. Saving will create a copy so the original stays intact.</div>` : ''}
     <div class="note" id="bsMsg"></div>`;
 
-  if (S.panelMode==='advance') renderAdvShell();
-  if (S.panelMode==='pathway') renderPathwayShell();
-  // Pathway is a routing editor plus tables thirty columns wide; it takes the
-  // whole page and the map drops below it. Everything else keeps the sidebar.
+  if (S.panelMode!=='map') renderInspectorShell();
+  // The map never leaves the screen. It used to be pushed below the fold
+  // whenever the pathway was open, which is exactly when you most want to see
+  // which area you are reading numbers for.
   const lay = document.querySelector('.bs-layout');
-  if (lay) lay.classList.toggle('bs-wide', S.panelMode === 'pathway');
+  if (lay) lay.classList.remove('bs-wide');
   renderNumbers();
   wirePanel();
   keepRestore(_place, 'bsPanel');
@@ -612,10 +613,11 @@ function renderNumbers(){
   const assignedM = t.rows.reduce((s,r)=>s+r.m,0);
   const mappableTotal = assignedM + t.un.m;
 
-  if (S.panelMode==='tally'){
+  if (S.panelMode==='map'){
     const body = document.getElementById('bsBody');
-    if (body) body.innerHTML = renderTallyTable(t, mappableTotal, yLabel);
+    if (body) body.innerHTML = renderTallyTable(t, mappableTotal, yLabel) + renderBalanceStrip();
     wireTallyRows();
+    refreshFlow();          // the balance strip needs the flow too
   } else {
     refreshFlow();
   }
@@ -777,6 +779,14 @@ function renderNamesPanel(){
    something together -- nine zones sending three each is a different
    championship from six zones sending five. */
 function QR(){ return window.QualRouting; }
+
+/* Any edit to the routing means the pathway on screen is no longer the one
+   that was loaded from the library. Say so rather than let a changed pathway
+   keep a saved pathway's name on a committee paper. */
+function markPathwayEdited(){
+  if (S.pathSaved) S.pathDirty = true;
+  S.dirty = true;
+}
 
 function syncRouting(){
   if (!QR()) return;
@@ -1870,8 +1880,9 @@ async function savePathway(){
       `INSERT INTO membership.pathways (id,name,levels,data,updated_at)
        VALUES ($1,$2,$3,$4::jsonb, now())`,
       [id, name, S.routing.length, JSON.stringify(pathwayPayload())]);
-    S.pathName = name; S.pathList = await listPathways();
-    msg(`Saved "${name}" — it can be loaded onto any map.`);
+    S.pathName = name; S.pathSaved = {id, name}; S.pathDirty = false;
+    S.pathList = await listPathways();
+    msg(`Saved "${name}" — it can now be loaded onto any map.`);
     renderPathway();
   } catch(e){ msg('Could not save: ' + (e.message || e)); }
 }
@@ -1888,6 +1899,8 @@ async function loadPathway(id){
     if (p.arrival) S.arrival = p.arrival;
     if (p.seedPool) S.seedPool = p.seedPool;
     S.pathName = r.rows[0].name;
+    S.pathSaved = {id, name: r.rows[0].name};
+    S.pathDirty = false;
     S.pathNotes = fit.notes;
     S.dirty = true;
     syncRouting(); repaintAll(); renderPathway();
@@ -1907,6 +1920,286 @@ async function deletePathway(){
   } catch(e){ msg('Could not delete: ' + (e.message || e)); }
 }
 
+
+/* ============================================================================
+   THE INSPECTOR
+   The map is always on screen. This is everything you read *about* the map,
+   one subject at a time, so no single view is a thirty-column scroll.
+   ========================================================================= */
+
+const INSPECTORS = [
+  {k:'map',        label:'Map',        hint:'Who lives in each area, and whether the areas are even'},
+  {k:'structure',  label:'Structure',  hint:'Levels, names, and the qualification pathway'},
+  {k:'projection', label:'Projection', hint:'How many people are at each meet'},
+  {k:'money',      label:'Money',      hint:'Entry income, host payouts, athlete cost'},
+  {k:'schedule',   label:'Schedule',   hint:'Whether each meet actually fits in the days available'},
+  {k:'report',     label:'Report',     hint:'Where these numbers come from, and how to export them'},
+];
+
+function renderInspectorShell(){
+  const body = document.getElementById('bsBody');
+  if (!body) return;
+  body.innerHTML = `<div id="bsPathWrap"><div class="note">Working the numbers&hellip;</div></div>`;
+  if (!S.pathList) listPathways().then(l => { S.pathList = l; renderInspector(); });
+  refreshFlow();
+}
+
+/* Single dispatch point after the flow recomputes. */
+function renderInspector(){
+  if (S.panelMode === 'map'){
+    const slot = document.getElementById('bsBalance');
+    if (slot) slot.outerHTML = renderBalanceStrip();
+    return;
+  }
+  renderPathway();
+}
+
+/* ---------- map tab: is this map even? ----------
+   This is the half of the old "Who moves up" panel that was actually about the
+   map. It answers "have I drawn areas of comparable size", which is a question
+   you ask while painting -- so it belongs beside the paint tools, not behind a
+   mode switch that hides the tallies. */
+function renderBalanceStrip(){
+  if (!S.flow) return `<div id="bsBalance" class="note">Working out how even the areas are&hellip;</div>`;
+  const i = Math.min(S.tierView, S.flow.levels.length-1);
+  const TG = tierGroupsAt(i);
+  const rows = (S.flow.levels[i] && S.flow.levels[i].rows) || [];
+  const tot = g => CELLS.reduce((a,c)=>a+((rows[g]||{})[c]||0), 0);
+  const totals = TG.groups.map((_,gi)=>tot(gi));
+  const grand = totals.reduce((a,b)=>a+b,0);
+  if (!grand) return `<div id="bsBalance"></div>`;
+  const n = TG.groups.length, equal = n ? 100/n : 0;
+  const spread = n>1 ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
+  const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'over' : 'under');
+  const word = spread <= equal*0.30 ? 'evenly balanced'
+             : spread <= equal*0.60 ? 'somewhat uneven' : 'markedly uneven';
+  const bars = TG.groups.map((g,gi)=>{
+    const share = 100*totals[gi]/grand, diff = share-equal;
+    const dc = Math.abs(diff) < equal*0.15 ? 'ok' : (diff>0?'over':'under');
+    return `<tr><td><span class="sw" style="background:${tierColorAt(i,gi)}"></span>${esc(g.name)}</td>
+      <td class="num">${fmt(Math.round(totals[gi]))}</td>
+      <td><span class="bs-bar"><i style="width:${Math.max(2,Math.round(100*totals[gi]/Math.max(...totals)))}%;background:${tierColorAt(i,gi)}"></i></span></td>
+      <td class="num ${dc}">${diff>=0?'+':''}${diff.toFixed(1)} pp</td></tr>`;
+  }).join('');
+  return `<div id="bsBalance" class="bs-balance">
+    <div class="bs-tier-h">Are the areas even? &mdash; entries that actually competed, by ${esc(tierName(i))}</div>
+    <table class="bs-drill"><thead><tr><th>${esc(tierName(i))}</th>
+      <th class="num">Competing</th><th></th><th class="num">vs even split</th></tr></thead>
+      <tbody>${bars}</tbody></table>
+    <div class="bs-spread ${cls}">Widest gap: <b>${spread.toFixed(1)} percentage points</b> &mdash; ${word}.</div>
+  </div>`;
+}
+
+/* ---------- the pathway library ----------
+   A pathway and a map are separate things that only mean something together:
+   the same nine-zone map run at three-per-zone is a different championship
+   from the same map at five. Keeping two libraries lets one good map be tried
+   against every structure the committee floats, without redrawing anything.
+
+   A map still carries a copy of the pathway it was last saved with, so opening
+   a map on its own restores what you had. The library is for reuse across
+   maps, not a replacement for that. */
+function renderPathwayLibrary(){
+  const embedded = !!(S.routing && S.routing.length);
+  const inLib    = !!(S.pathSaved && S.pathSaved.id);
+  const label = inLib
+    ? `<b>${esc(S.pathSaved.name)}</b>${S.pathDirty ? ' <span class="bs-arr-m warn">edited since loaded</span>' : ' <span class="bs-arr-m">from the library</span>'}`
+    : embedded
+      ? `<b>${esc(S.scenarioName || 'this map')}&rsquo;s own pathway</b> <span class="bs-arr-m warn">not in the library</span>`
+      : `<b>Current published rules</b> <span class="bs-arr-m warn">nothing saved &mdash; built from defaults</span>`;
+  return `<div class="bs-pwbar">
+    <div class="bs-pwbar-h">Pathway in use &mdash; ${label}</div>
+    <div class="bs-pwbar-r">
+      <select class="sel" id="bsPathLoad">
+        <option value="">Load a saved pathway&hellip;</option>
+        ${(S.pathList||[]).map(p=>`<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} &middot; ${p.levels} levels &middot; ${esc(p.u||'')}</option>`).join('')}
+      </select>
+      <button class="tab bs-mini" id="bsPathSave">${inLib && !S.pathDirty ? 'Save a copy' : 'Save this pathway'}</button>
+      <button class="tab bs-mini" id="bsPathDel" title="Delete the selected saved pathway">Delete saved</button>
+      <button class="tab bs-mini" id="bsPathReset">Back to published rules</button>
+    </div>
+    <div class="note">Saved pathways can be loaded onto any map. Loading one onto a different
+      number of levels fits it bottom&#8209;up and names every adjustment before you read the numbers.</div>
+  </div>`;
+}
+
+
+/* ---------- schedule tab ----------
+   Wires scenario-schedule-engine.js: does each meet this pathway creates
+   actually fit in the days a host has? A map can be perfectly balanced and
+   still produce a zone meet nobody can run. */
+/* ---------- dive counts ----------
+   The schedule engine deliberately refuses to guess how many dives an event
+   requires, and it is right to: a wrong dive count makes every duration wrong,
+   which makes every "does this meet fit" verdict wrong.
+
+   This table is not invented. It is lifted verbatim from the 2026 Zone and
+   Junior National schedules committed in schedule-builder/sb-app.js -- meets
+   that were actually run -- and it independently reproduces the dive-count
+   change effective 1 Jan 2024: Group A one dive down across the board, Group C
+   Girls springboard one optional down, Group B unchanged, Group D consolidated
+   to a single 6-dive list. That agreement is why it is trusted here.
+
+   [dives, secondsPerDive] per round shape:
+     full   -- a standalone contest with no prelim before it (a Zone final that
+               is the only round is a full list, not a 5-dive final)
+     prelim -- the prelim of a two-round meet
+     final  -- the reduced final list, which only means anything after a prelim
+*/
+const DIVE_TABLE = {
+  'Group A|Boys|1-Meter':{full:[10,32],prelim:[10,35],final:[5,35]},
+  'Group A|Boys|3-Meter':{full:[10,32],prelim:[10,35],final:[5,35]},
+  'Group A|Boys|Platform':{full:[9,38],prelim:[9,33],final:[5,45]},
+  'Group A|Girls|1-Meter':{full:[9,32],prelim:[9,35],final:[4,35]},
+  'Group A|Girls|3-Meter':{full:[9,32],prelim:[9,35],final:[4,35]},
+  'Group A|Girls|Platform':{full:[8,38],prelim:[8,32],final:[4,45]},
+  'Group B|Boys|1-Meter':{full:[9,33],prelim:[9,35],final:[4,35]},
+  'Group B|Boys|3-Meter':{full:[9,33],prelim:[9,35],final:[4,35]},
+  'Group B|Boys|Platform':{full:[8,42],prelim:[8,35],final:[4,45]},
+  'Group B|Girls|1-Meter':{full:[8,34],prelim:[8,35],final:[3,35]},
+  'Group B|Girls|3-Meter':{full:[8,34],prelim:[8,35],final:[3,35]},
+  'Group B|Girls|Platform':{full:[7,42],prelim:[7,34],final:[3,45]},
+  'Group C|Boys|1-Meter':{full:[8,35],prelim:[8,35],final:[4,35]},
+  'Group C|Boys|3-Meter':{full:[8,35],prelim:[8,35],final:[4,35]},
+  'Group C|Boys|Platform':{full:[7,45],prelim:[7,30],final:[4,45]},
+  'Group C|Girls|1-Meter':{full:[7,35],prelim:[7,35],final:[3,35]},
+  'Group C|Girls|3-Meter':{full:[7,35],prelim:[7,35],final:[3,35]},
+  'Group C|Girls|Platform':{full:[6,45],prelim:[6,36],final:[3,45]},
+  'Group D|Boys|1-Meter':{full:[6,35],prelim:[6,35],final:[3,35]},
+  'Group D|Boys|3-Meter':{full:[6,35],prelim:[6,35],final:[3,35]},
+  'Group D|Boys|Platform':{full:[6,45],prelim:[6,30],final:[3,45]},
+  'Group D|Girls|1-Meter':{full:[6,35],prelim:[6,35],final:[3,35]},
+  'Group D|Girls|3-Meter':{full:[6,35],prelim:[6,35],final:[3,35]},
+  'Group D|Girls|Platform':{full:[6,45],prelim:[6,30],final:[3,45]},};
+
+const DIS_APPARATUS = {'1m':'1-Meter', '3m':'3-Meter', 'Platform':'Platform'};
+
+/* Which list an event swims depends on whether anything precedes it at this
+   stop. Derived from the routing itself, never assumed: a level holding one
+   round is a standalone contest and swims the full list; a level holding a
+   prelim and a final swims the reduced list in the final. */
+function diveSpecFor(L){
+  const rounds = QR().roundsOf(S.routing[L]).map(r => r.key);
+  const standalone = rounds.length <= 1;
+  // The engine reads only parts 0-2 of a cell key, so the round rides along in
+  // part 3 -- the alternative is one simulateStop per round, which would stop
+  // the day assignment seeing the whole meet at once.
+  return (cellKey) => {
+    const p = String(cellKey).split('|');            // Group A|Girls|1m|final
+    const row = DIVE_TABLE[`${p[0]}|${p[1]}|${DIS_APPARATUS[p[2]] || p[2]}`];
+    if (!row) return {dives: 0, secondsPerDive: 0};  // unknown -> zero, never a guess
+    const shape = standalone ? row.full : (p[3] === 'final' ? row.final : row.prelim);
+    return {dives: shape[0], secondsPerDive: shape[1]};
+  };
+}
+
+function renderScheduleInspector(res){
+  const E = window.ScenarioScheduleEngine;
+  if (!E || typeof E.simulateStop !== 'function')
+    return `<div class="ps-warn"><b>The schedule engine is not loaded.</b>
+      Add <code>scenario-schedule-engine.js</code> to the page to see whether these meets fit.</div>`;
+  if (!res || !res.field) return `<div class="note">Working out the pathway first&hellip;</div>`;
+
+  const stops = [];
+  for (let L = 0; L < S.routing.length; L++){
+    const lvl = res.field[L]; if (!lvl) continue;
+    const nG = Math.max(1, groupCountAt(L));
+    for (let g = 0; g < nG; g++){
+      // The projection carries compact cell keys (AG1). The engine reads
+      // group|gender|discipline, and decides warm-up from the group name.
+      const rounds = [];
+      let entries = 0;
+      QR().roundsOf(S.routing[L]).forEach(r => {
+        const src = (lvl[r.key] && lvl[r.key][g]) || {};
+        const cells = {}; let any = false;
+        for (const c in src){
+          const n = src[c]; if (!n || n < 0.5) continue;
+          cells[`${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_LBL[c[2]]}|${r.key}`] = n;
+          entries += n; any = true;
+        }
+        if (any) rounds.push({key: r.key, cells});
+      });
+      if (!rounds.length) continue;
+      const name = (tierGroupsAt(L).groups[g] || {}).name || (tierName(L) + ' ' + (g+1));
+      let sim = null, err = null;
+      try { sim = E.simulateStop({stopName: name, rounds}, diveSpecFor(L), S.schedRules || undefined); }
+      catch(e){ err = e.message || String(e); }
+      const unknown = rounds.reduce((a,r)=>a+Object.keys(r.cells).filter(k=>{
+        const p=k.split('|'); return !DIVE_TABLE[`${p[0]}|${p[1]}|${DIS_APPARATUS[p[2]]||p[2]}`];
+      }).length, 0);
+      stops.push({name, level: tierName(L), entries, sim, err, unknown});
+    }
+  }
+  if (!stops.length) return `<div class="note">No stops to lay out yet. Draw a map and set a pathway first.</div>`;
+
+  const rows = stops.map(st => {
+    if (st.err) return `<tr><td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}</div></td>
+      <td class="num">${fmt(Math.round(st.entries))}</td><td colspan="5" class="under">${esc(st.err)}</td></tr>`;
+    const d = st.sim.days || [];
+    const over = d.filter(x => x.overCapacity).length;
+    const splits = d.reduce((a,x)=>a+((x.reviewSplitFlags||[]).length), 0);
+    const longest = d.reduce((a,x)=>Math.max(a, x.occupiedMinutes||0), 0);
+    const warn = st.unknown ? ` <span class="bs-arr-m warn">${st.unknown} event${st.unknown>1?'s':''} with no dive count &mdash; not timed</span>` : '';
+    return `<tr>
+      <td><b>${esc(st.name)}</b><div class="bs-lg-sub">${esc(st.level)}${warn}</div></td>
+      <td class="num">${fmt(Math.round(st.entries))}</td>
+      <td class="num">${st.sim.totalEvents}</td>
+      <td class="num">${st.sim.totalDays}</td>
+      <td class="num">${longest ? (Math.round(longest/60*10)/10)+' h' : '&mdash;'}</td>
+      <td class="num ${splits?'over':'ok'}">${splits||'&mdash;'}</td>
+      <td class="${over?'under':'ok'}">${over ? over+' day'+(over>1?'s':'')+' over' : 'fits'}</td>
+    </tr>`;
+  }).join('');
+  const bad = stops.filter(x => x.sim && (x.sim.days||[]).some(d=>d.overCapacity)).length;
+  const R = ((stops.find(x=>x.sim)||{}).sim || {}).rules || E.DEFAULT_RULES;
+  const hh = m => Math.floor(m/60) + ':' + String(m%60).padStart(2,'0');
+
+  return `<div class="bs-tier-h">Does each meet fit?</div>
+    <table class="bs-drill"><thead><tr><th>Stop</th><th class="num">Entries</th>
+      <th class="num">Events</th><th class="num">Days</th><th class="num">Longest day</th>
+      <th class="num">Review to split</th><th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>
+    ${bad ? `<div class="bs-spread under"><b>${bad}</b> ${bad===1?'meet runs':'meets run'} past the facility day assumed here.
+        Either those areas are too big, or those hosts need another day.</div>`
+          : `<div class="bs-spread ok">Every meet fits the facility day assumed here.</div>`}
+    <div class="bs-prov"><b>Assuming</b>
+      <span>pool open <code>${hh(R.facilityOpenMin)}&ndash;${hh(R.facilityCloseMin)}</code></span>
+      <span>warm-up Groups A/B <code>${R.warmupSeniorGroupsMin} min</code></span>
+      <span>warm-up Groups C/D <code>scales with entries</code></span>
+      <span>flag to split over <code>${R.splitReviewThresholdMin} min</code></span>
+      <span>one discipline per age group and gender per day</span>
+      <span>dive counts <code>2026 Zone &amp; Junior National schedules</code></span>
+    </div>
+    <p class="note">Nothing here splits a board or moves a session &mdash; it flags what a host should look at, and
+      the host decides. Their equipment and pool hours outrank this. Hosts also open at different times and may run
+      one age group earlier or later; this assumes one standard day so stops can be compared against each other.</p>`;
+}
+
+/* ---------- report tab ----------
+   Renamed from "provenance", which was jargon of my own invention. What it
+   answers is: if someone on the committee asks where a figure came from, can
+   you tell them without opening the code? */
+function renderReportInspector(){
+  const p = (S.pathSaved && S.pathSaved.name) || (S.routing && S.routing.length ? 'this map\u2019s own pathway' : 'published rules');
+  return `<div class="bs-tier-h">Where these numbers come from</div>
+    ${renderProvenance()}
+    <div class="bs-prov">
+      <b>This scenario</b>
+      <span>map <code>${esc(S.scenarioName || 'unsaved')}</code></span>
+      <span>pathway <code>${esc(p)}</code></span>
+      <span>first stop fed by <code>${esc(seedStage())} ${S.year==='y25'?'2025':'2026'}</code></span>
+      <span>${fmt(seedTotal())} entries in that pool</span>
+    </div>
+    <p class="note">Anything you put in front of a committee should be reproducible from this line alone:
+      the map, the pathway, the season the field came from, and the data build. If a figure on screen cannot be
+      traced back to those, do not put it in a paper.</p>
+    <div class="bs-pwbar-r" style="margin-top:10px">
+      <button class="tab" id="bsGoReport">Open the report builder</button>
+      <button class="tab" id="bsCsvManifest">Export the meet list (CSV)</button>
+    </div>
+    <p class="note">The report builder has the Boundary Studio sections &mdash; scenario overview and
+      qualification pathway &mdash; and prints to PDF.</p>`;
+}
+
 function renderPathwayShell(){
   const body = document.getElementById('bsBody');
   if (!body) return;
@@ -1924,13 +2217,14 @@ function renderPathway(){
   if (!S.flow){ wrap.innerHTML = '<div class="note">Working out the pathway&hellip;</div>'; return; }
   const res = projectPathway();
   S.routeRes = res;
+  const M = S.panelMode;          // which inspector is on screen
   const RN = QR().ROUND_NAME;
   const lvlOpts = (sel) => S.levels.map((l,i) =>
     `<option value="${i}" ${i===sel?'selected':''}>${esc(tierName(i))}</option>`).join('');
   const rndOpts = (sel) => ROUND_CHOICES.map(r =>
     `<option value="${r}" ${r===sel?'selected':''}>${esc(RN[r])}</option>`).join('');
 
-  const levels = S.routing.map((lvl, L) => {
+  const levels = (M !== 'structure') ? '' : S.routing.map((lvl, L) => {
     const rounds = QR().roundsOf(lvl);
     const stops = groupCountAt(L);
     const roundRows = rounds.map(r => {
@@ -1992,9 +2286,11 @@ function renderPathway(){
     `<li class="bs-prob ${p.kind==='gap'?'warn':'bad'}">${esc(p.level!=null?tierName(p.level)+': ':'')}${esc(p.msg)}</li>`).join('');
 
   wrap.innerHTML = `
+    ${M==='structure' ? renderNamesPanel() : ''}
     <div class="bs-adv-head">
-      <span class="note">Places finishing a round, and where they go. Every route is a band of finishing
-        positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.</span>
+      <span class="note">${M==='structure'
+        ? 'Places finishing a round, and where they go. Every route is a band of finishing positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.'
+        : 'Reading the pathway now on screen. Change it under <b>Structure</b>.'}</span>
       <label class="bs-focus">First stop&rsquo;s field
         <select class="sel" id="bsSeedPool">
           ${SEED_STAGES.map(x=>`<option value="${x}" ${seedStage()===x?'selected':''}>${esc(x)} ${(S.year==='y25'?'2025':'2026')}</option>`).join('')}
@@ -2008,29 +2304,17 @@ function renderPathway(){
               return `<option value="${c}" ${S.bdCell===c?'selected':''}>${esc(AGE_LBL[a])} ${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</option>`;
             }).join('')).join('') + '</optgroup>').join('')}
         </select></label>
-      <button class="tab bs-mini" id="bsPathReset">Load current rules</button>
-      <span class="bs-pwlib">
-        <select class="sel bs-mini" id="bsPathLoad">
-          <option value="">Saved pathways&hellip;</option>
-          ${(S.pathList||[]).map(p => `<option value="${esc(p.id)}" ${S.pathName===p.name?'selected':''}>
-            ${esc(p.name)} &middot; ${p.levels} tiers &middot; ${esc(p.u||'')}</option>`).join('')}
-        </select>
-        <button class="tab bs-mini" id="bsPathSave">Save this pathway</button>
-        <button class="tab bs-mini" id="bsPathDel" title="Delete the selected saved pathway">&times;</button>
-      </span>
     </div>
     ${S.pathNotes && S.pathNotes.length ? `<ul class="bs-probs">
       <li class="bs-prob warn"><b>Loaded "${esc(S.pathName)}" onto a different structure.</b>
         ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</li></ul>` : ''}
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
-    ${levels}
-    ${renderTimezones()}
-    ${renderAthleteCost()}
-    ${renderProvenance()}
-    ${renderFinancials()}
-    ${renderMeetManifest(res)}
-    ${renderPathwayBreakdown(res)}
-    ${(S.takeUp && S.takeUp.usable)
+    ${M==='structure' ? renderPathwayLibrary() + levels : ''}
+    ${M==='projection' ? renderPathwayBreakdown(res) + renderMeetManifest(res) : ''}
+    ${M==='money'      ? renderFinancials() + `<details class="bs-tiers"><summary>What it costs an athlete to go</summary>${renderAthleteCost()}</details>` : ''}
+    ${M==='schedule'   ? renderScheduleInspector(res) : ''}
+    ${M==='report'     ? renderReportInspector() : ''}
+    ${(M==='projection' || M==='schedule') && (S.takeUp && S.takeUp.usable)
       ? `<p class="note" style="margin-top:12px">The <b>arrive</b> figure on each level is how big that field
           actually turns out to be against the size the rules alone would send &mdash; above 100% means athletes
           arrive by the average-score route as well as the bands; below means qualified athletes decline.
@@ -2041,18 +2325,21 @@ function renderPathway(){
             ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
             : 'Take-up could not be measured for this season, so every figure here assumes every qualifier turns up.'}
           Load the reference alignment on the map and reopen this panel to see expected entries instead.</div>`}
-    <p class="note"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
+    ${M==='structure' || M==='projection' || M==='schedule' ? `<p class="note"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
       what a session costs and how long it runs, while divers tell you how many bodies need a lane, a bed and an award.
       Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
       gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
-      measured, so treat the headcount as indicative rather than a count.</p>`;
+      measured, so treat the headcount as indicative rather than a count.</p>` : ''}`;
   wirePathway();
 }
 
 function wirePathway(){
+  const _b=(id,fn)=>{const e=document.getElementById(id); if(e) e.addEventListener('click',fn);};
+  _b('bsGoReport', ()=>{ const t=document.querySelector('[data-view="reports"]'); if(t) t.click(); });
+  _b('bsCsvManifest', exportManifestCsv);
   const P = document.getElementById('bsPathWrap');
   if (!P) return;
-  const touch = () => { S.dirty = true; repaintAll(); renderPathway(); };
+  const touch = () => { markPathwayEdited(); repaintAll(); renderPathway(); };
 
   P.querySelectorAll('.bs-rt-in').forEach(el => el.addEventListener('change', e => {
     pushUndo();
@@ -2191,161 +2478,11 @@ function wirePathway(){
   });
 }
 
-function renderAdvShell(){
-  const body = document.getElementById('bsBody');
-  if (!body) return;
-  const focusOpts = ['<option value="all">every event and age group</option>']
-    .concat(CELLS.map(c=>`<option value="${c}" ${S.adv && S.adv.focus===c?'selected':''}>${esc(cellLabel(c))}</option>`))
-    .join('');
-  body.innerHTML = `
-    <div class="bs-adv-head">
-      <span class="bs-lvl">Show</span>
-      <select class="sel" id="bsAdvFocus">${focusOpts}</select>
-      <span class="note">Entries that actually competed, carried up the pathway by the published rules and the take-up measured from the season we ran.</span>
-    </div>
-    <div id="bsAdvResults"><div class="note">Working out the pathway&hellip;</div></div>`;
-  wirePanelAdv();
-}
-
-function wirePanelAdv(){
-  const f = document.getElementById('bsAdvFocus');
-  if (f) f.addEventListener('change', ()=>{ S.adv = S.adv||{}; S.adv.focus = f.value; renderAdvResults(); });
-}
-
-/* Recompute the flow for the current map. Cheap after the first call: the
-   calibration is derived once per season and cached inside JuniorFlow. */
-let flowBusy = false, flowAgain = false;
-async function refreshFlow(){
-  if (flowBusy){ flowAgain = true; return; }   // painting fires this rapidly
-  flowBusy = true;
-  try { await doRefreshFlow(); }
-  finally {
-    flowBusy = false;
-    if (flowAgain){ flowAgain = false; refreshFlow(); }
-  }
-}
-async function doRefreshFlow(){
-  if (!window.JuniorFlow){ S.flowErr = 'Pricing engine not loaded.'; renderAdvResults(); return; }
-  try {
-    await window.JuniorFlow.ready();
-    await ensureMult();
-    S.flow = window.JuniorFlow.compute({
-      regions:S.regions, assign:S.assign, levels:S.levels,
-      finalName:S.finalName, year:S.year,
-    });
-    S.flowErr = null;
-  } catch(e){
-    console.error(e); S.flow = null; S.flowErr = e.message || String(e);
-  }
-  if (S.panelMode === 'pathway') renderPathway(); else renderAdvResults();
-}
-
-function renderAdvResults(){
-  const el = document.getElementById('bsAdvResults');
-  if (!el) return;
-  if (S.flowErr){
-    el.innerHTML = `<div class="note"><b>Could not work out the pathway.</b> ${esc(S.flowErr)}</div>`;
-    return;
-  }
-  if (!S.flow){ el.innerHTML = '<div class="note">Working out the pathway&hellip;</div>'; return; }
-
-  const JF = window.JuniorFlow;
-  const focus = (S.adv && S.adv.focus) || 'all';
-  const cellSum = row => focus==='all'
-    ? CELLS.reduce((s,c)=>s+(row[c]||0), 0)
-    : (row[focus]||0);
-
-  const i = Math.min(S.tierView, S.flow.levels.length-1);
-  const TG = tierGroupsAt(i);
-  const rowsAtLevel = S.flow.levels[i] ? S.flow.levels[i].rows : [];
-  const totals = TG.groups.map((_,gi)=>cellSum(rowsAtLevel[gi]||{}));
-  const grand = totals.reduce((s,x)=>s+x,0);
-  const nFrom = TG.groups.length;
-  const equal = nFrom>0 ? 100/nFrom : 0;
-  const maxT = Math.max(1, ...totals);
-
-  const body = TG.groups.map((g,gi)=>{
-    const pool = totals[gi];
-    const share = grand>0 ? 100*pool/grand : 0;
-    const diff = share - equal;
-    const bar = Math.max(2, Math.round(100*pool/maxT));
-    const diffCls = Math.abs(diff) < equal*0.15 ? 'ok' : (diff>0 ? 'over' : 'under');
-    return `<tr>
-      <td><span class="sw" style="background:${tierColorAt(i,gi)}"></span><b>${esc(g.name)}</b></td>
-      <td class="num">${fmt(Math.round(pool))}</td>
-      <td><span class="bs-bar"><i style="width:${bar}%;background:${tierColorAt(i,gi)}"></i></span></td>
-      <td class="num">${share.toFixed(1)}%</td>
-      <td class="num ${diffCls}">${diff>=0?'+':''}${diff.toFixed(1)} pp</td>
-    </tr>`;
-  }).join('');
-
-  const spread = totals.length>1 && grand>0
-    ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
-  const spreadCls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'over' : 'under');
-
-  // Pipeline across every level, from real entries.
-  const pipe = S.flow.levels.map((l,j)=>{
-    const n = l.rows.reduce((s,r)=>s+cellSum(r), 0);
-    const stops = l.rows.length;
-    const tag = l.source==='observed' ? 'measured'
-              : l.source==='calibrated' ? 'measured' : 'projected';
-    return `<div class="bs-pipe-card">
-      <span class="bs-pipe-nm">${esc(tierName(j))}</span>
-      <span class="bs-pipe-big">${fmt(Math.round(n))}</span>
-      <span class="bs-lg-sub">${stops} ${stops===1?'stop':'stops'} &middot; ${Math.round(n/Math.max(1,stops))} per stop &middot; ${tag}</span>
-    </div>`;
-  }).join('');
-  const ffTotal = focus==='all'
-    ? CELLS.reduce((s,c)=>s+(S.flow.final[c]||0),0)
-    : (S.flow.final[focus]||0);
-
-  const byEvent = DISCS.map(d=>{
-    const n = CELLS.filter(c=>c[2]===d.k).reduce((s,c)=>s+(S.flow.final[c]||0),0);
-    return `<span class="bs-ev"><b>${fmt(Math.round(n))}</b> ${d.label}</span>`;
-  }).join('');
-  const byAge = AGES.map(a=>{
-    const n = CELLS.filter(c=>c[0]===a.k).reduce((s,c)=>s+(S.flow.final[c]||0),0);
-    return `<span class="bs-ev"><b>${fmt(Math.round(n))}</b> ${a.label}</span>`;
-  }).join('');
-
-  // Take-up, straight from the calibration decomposition.
-  const takeup = (S.flow.calib||[]).map(k=>{
-    if (!k.wasObserved || k.rules<=0) return '';
-    const pct = k.conv/k.rules*100;
-    const word = k.conv < 0 ? 'do not take up their place' : 'added by clearing the score bar';
-    return `<span class="bs-ev"><b>${pct>=0?'+':''}${pct.toFixed(0)}%</b> into ${esc(k.name)} &mdash; ${word}</span>`;
-  }).filter(Boolean).join('');
-
-  const base = JF && JF.baseline ? JF.baseline() : null;
-  const cov = S.advData && S.advData.totals && S.advData.totals[(S.year==='y25'?'2025':'2026')+'|Regionals'];
-
-  el.innerHTML = `
-    <div class="bs-pipe">${pipe}
-      <div class="bs-pipe-card final">
-        <span class="bs-pipe-nm">${esc(S.finalName)} field</span>
-        <span class="bs-pipe-big">${fmt(Math.round(ffTotal))}</span>
-        <span class="bs-lg-sub">places created by this map</span>
-      </div>
-    </div>
-    <div class="bs-evrow"><span class="bs-evh">By event</span>${byEvent}</div>
-    <div class="bs-evrow"><span class="bs-evh">By age group</span>${byAge}</div>
-    ${takeup?`<div class="bs-evrow"><span class="bs-evh">Take-up</span>${takeup}</div>`:''}
-    <table class="bs-drill"><thead><tr>
-      <th>${esc(tierName(i))}</th><th class="num">Competing here</th><th></th>
-      <th class="num">Share</th><th class="num">vs even split</th>
-    </tr></thead><tbody>${body}</tbody></table>
-    <div class="bs-spread ${spreadCls}">Widest gap between ${esc(tierName(i))}: <b>${spread.toFixed(1)} percentage points</b>
-      ${spread <= equal*0.30 ? '&mdash; evenly balanced.' : (spread <= equal*0.60 ? '&mdash; somewhat uneven.' : '&mdash; markedly uneven.')}</div>
-    <p class="note" style="margin-top:10px">
-      Entries are athletes who actually competed, not registered members. Levels marked <b>measured</b> reconcile
-      to real entry data on the alignment that season was run under; <b>projected</b> levels have no results behind
-      them and follow the rules alone. Take-up and score-bar behaviour are held fixed from that alignment while you
-      redraw &mdash; re-measuring them on every map would let them absorb your change and nothing would ever appear to move.
-      ${base?`Behaviour measured on <b>${esc(base.name)}</b>.`:''}
-      ${cov?`${fmt(cov.mapped)} of ${fmt(cov.total)} entries carry a mappable address (${(100*cov.mapped/cov.total).toFixed(1)}%).`:''}
-      Changing the qualifier counts themselves is done in Pricing Studio.
-    </p>`;
-}
+/* The old "Who moves up" panel lived here. Its balance read -- are the areas
+   evenly sized -- moved onto the Map inspector, where you are actually looking
+   when the answer matters. Its per-meet totals asked the same question the
+   Pathway projection already answers, from a different engine, which is what
+   let the two disagree. There is one answer now. */
 
 function tierColorAt(level, gi){
   if (level===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
@@ -2541,9 +2678,8 @@ function wirePanel(){
   bind('bsLgMembers', ()=>{S.legendMode='members'; renderNumbers();});
   bind('bsLgAge', ()=>{S.legendMode='age'; renderNumbers();});
   bind('bsLgComp', ()=>{S.legendMode='comp'; renderNumbers();});
-  bind('bsModeTally', ()=>{S.panelMode='tally'; renderPanel();});
-  bind('bsModeAdv',   ()=>{S.panelMode='advance'; renderPanel(); refreshFlow();});
-  bind('bsModePath',  ()=>{S.panelMode='pathway'; renderPanel(); refreshFlow();});
+  P.querySelectorAll('#bsModeSeg [data-insp], .bs-modeseg [data-insp]').forEach(b=>
+    b.addEventListener('click', ()=>{ S.panelMode = b.dataset.insp; renderPanel(); refreshFlow(); }));
 
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
@@ -2567,19 +2703,7 @@ function wirePanel(){
     if ((S.adv.step||0) >= levelCount()) S.adv.step = levelCount()-1;
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   });
-  P.querySelectorAll('#bsAdvSteps [data-step]').forEach(b=>b.addEventListener('click',()=>{
-    S.adv.step = +b.dataset.step;
-    P.querySelectorAll('#bsAdvSteps [data-step]').forEach(x=>x.classList.toggle('on', +x.dataset.step===S.adv.step));
-    renderAdvResults();
-  }));
-  const poolSel = document.getElementById('bsAdvPool');
-  if (poolSel) poolSel.addEventListener('change', ()=>{
-    S.adv.pool = poolSel.value;
-    if (poolIsMembers() && S.adv.focus!=='all' && S.adv.focus.length>1) S.adv.focus='all';
-    S.dirty=true; renderPanel();
-  });
-  const focSel = document.getElementById('bsAdvFocus');
-  if (focSel) focSel.addEventListener('change', ()=>{ S.adv.focus = focSel.value; renderAdvResults(); });
+  // (The advancement-panel handlers were removed with the panel itself.)
 
   // --- renaming: live, never re-renders the input you are typing in ---
   const nameBind = (sel, apply)=>{
@@ -2849,6 +2973,7 @@ async function loadScenario(id){
     S.assign = d.assign || {};
     S.year = d.year === 'y26' ? 'y26' : 'y25';
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
+    S.pathSaved = null; S.pathDirty = false;   // this is the map's own copy, not a library pathway
     S.fees = d.fees || null;
     if (d.hostMode)  S.hostMode  = d.hostMode;
     if (d.hostShare != null) S.hostShare = d.hostShare;

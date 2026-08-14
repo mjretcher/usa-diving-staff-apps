@@ -497,10 +497,19 @@ tr:hover td{background:#f7fafd}
 /* ---- Pathway takes the whole page; the map drops below it ----
    Restored after I overwrote it with a stale local copy. A routing editor plus
    tables thirty columns wide does not belong in a sidebar. */
-.bs-layout.bs-wide{grid-template-columns:minmax(0,1fr)}
-.bs-layout.bs-wide>.card:first-child{order:2}
-.bs-layout.bs-wide>.card:first-child .card-b{max-width:840px;margin:0 auto;width:100%}
-.bs-layout.bs-wide>.card:last-child{order:1}
+/* The map is never pushed off screen any more; .bs-wide is retired. */
+/* --- inspector --- */
+.bs-modeseg{margin-bottom:10px;flex-wrap:wrap}
+.bs-modeseg button{font-family:'Barlow Condensed',sans-serif;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
+/* --- map tab: are the areas even --- */
+.bs-balance{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+/* --- pathway library --- */
+.bs-pwbar{border:1px solid var(--line);border-left:3px solid #009AC7;border-radius:6px;
+  padding:10px 12px;margin-bottom:12px;background:#f8fafc}
+.bs-pwbar-h{font-family:'Barlow Condensed',sans-serif;font-size:16px;text-transform:uppercase;
+  letter-spacing:.03em;color:#171F69;margin-bottom:8px}
+.bs-pwbar-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bs-pwbar .note{margin-top:8px}
 .bs-hostcell{display:inline-flex;align-items:center;gap:2px;justify-content:flex-end}
 .bs-hostin{width:74px;text-align:right}
 .bs-hostin.set{border-color:var(--pool);background:#eff9fd;font-weight:800}
@@ -572,7 +581,8 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="boundary.js?v=202608055700"></script>
+<script src="scenario-schedule-engine.js?v=202608141748"></script>
+<script src="boundary.js?v=202608141748"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202608055500"></script>
 <script src="pricing.js?v=202608055500"></script>
