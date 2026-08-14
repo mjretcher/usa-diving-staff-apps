@@ -64,6 +64,7 @@ const S = {
   // Which inspector the right-hand panel is showing. The map is always on
   // screen; only this changes. map | structure | projection | money | schedule | report
   panelMode: 'map',
+  brush: 0,             // 0 = one county; N = everything within N borders
   cmpAxis: 'pathway',   // which thing varies between columns: pathway | map
   mapList: null,        // saved maps, for the map axis
   cmpIds: null,         // saved pathways or maps picked for side-by-side
@@ -155,6 +156,7 @@ function groupCountAt(level){
 }
 
 function syncLevels(){
+  tallyInvalidate();
   if (!S.levels || !S.levels.length) S.levels = defaultLevels(S.regions.length);
   if (!S.levels[0]) S.levels[0] = {name:'Regions'};
   syncRouting();
@@ -286,27 +288,138 @@ function removeArea(i, into){
 }
 
 /* ---------- tallies ---------- */
-function computeTallies(){
+/* ============================================================================
+   INCREMENTAL TALLIES
+   The old computeTallies() walked all ~3,143 counties on every repaint, which
+   is why painting needed a 180ms debounce and why the numbers arrived after
+   your hand had already moved on.
+
+   A stroke is not a new world. Moving one county from area A to area B is a
+   two-area delta: subtract its statistics from A, add them to B. So the totals
+   are kept as a live accumulator and maintained on assignment, rather than
+   rebuilt by scanning. A stroke costs a fixed handful of arithmetic instead of
+   a full pass, which is what lets the debounce go and the numbers move with
+   the pointer.
+
+   tallyBatch() -- the original full scan -- is kept deliberately. It is the
+   oracle the incremental path is tested against: any divergence between the
+   two is a bug in the accumulator, and a harness asserts they agree.
+   ========================================================================= */
+
+function emptyBucket(){
+  return {m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,countiesAssigned:0,ag:[0,0,0,0,0]};
+}
+
+/* Everything one county contributes, computed once and cached. This is the
+   part that was being recomputed 3,143 times per repaint. */
+function countyStat(fips){
+  const cache = S._cstat || (S._cstat = {});
+  const key = fips + '|' + S.year;
+  if (cache[key]) return cache[key];
+  const st = S.geo.stats[fips];
+  const v = st && st[S.year];
+  if (!v){ return (cache[key] = null); }
+  const ag = S.age && S.age[fips] ? S.age[fips][S.year] : null;
+  const rec = {
+    m: v.m, a: v.a, c: v.c, cl: v.cl,
+    zips: Object.keys(st.z).filter(z => st.z[z][S.year==='y25'?0:1] > 0).length,
+    counted: v.m > 0 ? 1 : 0,
+    ag: ag ? [0,1,2,3,4].map(j => ag[j]||0) : [0,0,0,0,0],
+  };
+  return (cache[key] = rec);
+}
+
+function addStat(tgt, rec, sign){
+  if (!rec) return;
+  tgt.m += sign*rec.m; tgt.a += sign*rec.a; tgt.c += sign*rec.c;
+  tgt.zips += sign*rec.zips; tgt.counties += sign*rec.counted;
+  for (let j=0;j<5;j++) tgt.ag[j] += sign*rec.ag[j];
+  // Club sets cannot be decremented -- a club present in two counties is still
+  // present when one leaves. Membership of the set is rebuilt for the two areas
+  // an edit touches, which is bounded work, not a full scan.
+  if (sign > 0) rec.cl.forEach(i => tgt.cl.add(i));
+}
+
+/* Rebuild the club set for one area only. Called for the two areas an edit
+   touches, so it stays O(counties in those areas) rather than O(all). */
+function rebuildClubs(gi, TG){
+  const set = new Set();
+  let assigned = 0;
+  for (const fips in S.assign){
+    const ri = S.assign[fips];
+    if (ri==null || ri<0 || ri>=S.regions.length) continue;
+    if (TG.of[ri] !== gi) continue;
+    assigned++;
+    const rec = countyStat(fips);
+    if (rec) rec.cl.forEach(i => set.add(i));
+  }
+  return {cl:set, countiesAssigned:assigned};
+}
+
+/* The full scan. Correct by construction, used to seed the accumulator and as
+   the oracle in tests. Never called on the paint path. */
+function tallyBatch(){
   const y = S.year;
   const TG = tierGroups();
-  const rows = TG.groups.map(()=>({m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,countiesAssigned:0,ag:[0,0,0,0,0]}));
-  const un = {m:0,a:0,c:0,cl:new Set(),zips:0,counties:0,ag:[0,0,0,0,0]};
+  const rows = TG.groups.map(()=>emptyBucket());
+  const un = emptyBucket();
   for (const [fips, st] of Object.entries(S.geo.stats)){
     const v = st[y]; if (!v) continue;
     const ri = S.assign[fips];
     const gi = (ri==null || ri<0 || ri>=S.regions.length) ? -1 : TG.of[ri];
     const tgt = gi<0 ? un : rows[gi];
-    tgt.m += v.m; tgt.a += v.a; tgt.c += v.c;
-    v.cl.forEach(i=>tgt.cl.add(i));
-    tgt.zips += Object.keys(st.z).filter(z => st.z[z][y==='y25'?0:1] > 0).length;
-    if (v.m>0) tgt.counties++;
-    const ag = S.age && S.age[fips] ? S.age[fips][y] : null;
-    if (ag) for (let j=0;j<5;j++) tgt.ag[j] += (ag[j]||0);
+    addStat(tgt, countyStat(fips), 1);
   }
   Object.values(S.assign).forEach(ri => {
     if (ri>=0 && ri<S.regions.length) rows[TG.of[ri]].countiesAssigned++;
   });
   return {rows, un, TG};
+}
+
+/* The live accumulator. Invalidated whenever something the delta cannot track
+   changes -- the season, the level structure, which tier is on screen. */
+function tallyInvalidate(){ S._tally = null; }
+
+function computeTallies(){
+  const TG = tierGroups();
+  const sig = S.year + '|' + S.tierView + '|' + TG.groups.length + '|' + S.regions.length;
+  if (S._tally && S._tally.sig === sig) return S._tally.val;
+  const val = tallyBatch();
+  S._tally = {sig, val};
+  return val;
+}
+
+/* Apply one county's move to the live totals. Returns false when the caller
+   must fall back to a full rebuild. */
+function tallyMove(fips, fromRi, toRi){
+  const t = S._tally;
+  if (!t) return false;                       // nothing to update yet
+  const {rows, un, TG} = t.val;
+  const rec = countyStat(fips);
+  const bucket = ri => (ri==null || ri<0 || ri>=S.regions.length) ? un : rows[TG.of[ri]];
+  const from = bucket(fromRi), to = bucket(toRi);
+  if (from === to) return true;
+  addStat(from, rec, -1);
+  addStat(to,   rec, +1);
+  const gFrom = (fromRi!=null && fromRi>=0 && fromRi<S.regions.length) ? TG.of[fromRi] : -1;
+  const gTo   = (toRi  !=null && toRi  >=0 && toRi  <S.regions.length) ? TG.of[toRi]   : -1;
+  // Club membership and assigned-county counts are set operations, so they are
+  // recomputed for exactly the two areas involved.
+  [gFrom, gTo].forEach(gi => {
+    if (gi < 0) return;
+    const r = rebuildClubs(gi, TG);
+    rows[gi].cl = r.cl; rows[gi].countiesAssigned = r.countiesAssigned;
+  });
+  if (gFrom < 0 || gTo < 0){
+    const set = new Set();
+    for (const f in S.geo.stats){
+      const ri = S.assign[f];
+      if (ri!=null && ri>=0 && ri<S.regions.length) continue;
+      const rc = countyStat(f); if (rc) rc.cl.forEach(i=>set.add(i));
+    }
+    un.cl = set;
+  }
+  return true;
 }
 
 /* ---------- competitor pools ---------- */
@@ -379,28 +492,84 @@ function fillFor(fips, maxM){
   return heatTint(st ? st[S.year].m : 0, maxM);
 }
 
+/* Which colour slot a county belongs to. u = unassigned. */
+function countyClass(fips){
+  const ri = S.assign[fips];
+  if (ri==null || ri<0 || ri>=S.regions.length) return 'a-u';
+  const of = S._of || (S._of = tierGroups().of);
+  return 'a-' + of[ri];
+}
+
+/* Cached element lookup -- querySelector per county was a measurable share of
+   the paint cost during a drag. */
+function countyEl(fips){
+  const m = S._els || (S._els = new Map());
+  let el = m.get(fips);
+  if (el && el.isConnected) return el;
+  el = document.querySelector(`path.bcty[data-f="${fips}"]`);
+  if (el) m.set(fips, el);
+  return el;
+}
+
 function paintCountyEl(fips){
-  const el = document.querySelector(`path.bcty[data-f="${fips}"]`);
-  if (el) el.setAttribute('fill', fillFor(fips, S._maxM));
+  const el = countyEl(fips);
+  if (!el) return;
+  const want = countyClass(fips);
+  if (el._ac === want) return;                 // already right; skip the write
+  if (el._ac) el.classList.remove(el._ac);
+  el.classList.add(want); el._ac = want;
+  if (want === 'a-u') el.style.fill = fillFor(fips, S._maxM);   // heat tint is per-county
+  else if (el.style.fill) el.style.fill = '';
+}
+
+/* Push the palette into CSS variables. This is the whole repaint for a colour
+   or tier change: a dozen writes instead of three thousand. */
+function syncPalette(){
+  const svg = document.getElementById('bsSvg');
+  if (!svg) return;
+  S._of = tierGroups().of;
+  const n = groupCountAt(S.tierView);
+  for (let gi=0; gi<n; gi++) svg.style.setProperty('--a'+gi, groupColor(gi));
+  svg.style.setProperty('--a-u', UNASSIGNED_BASE);
+  // Retire variables from a structure with more areas than this one.
+  for (let gi=n; gi<n+24; gi++) svg.style.removeProperty('--a'+gi);
 }
 
 function renderMapOnce(){
   const geo = S.geo;
   S._maxM = Math.max(1, ...Object.values(geo.stats).map(s=>s[S.year].m));
   S._of = tierGroups().of;
+  // Fill comes from a CSS variable chosen by the area class, not an inline
+  // attribute. Repainting the whole map is then a dozen variable writes rather
+  // than 3,143 DOM mutations, and a single county move is one class swap.
   const paths = geo.counties.map(c=>
-    `<path class="bcty" data-f="${c.f}" d="${c.d}" fill="${fillFor(c.f, S._maxM)}"/>`).join('');
+    `<path class="bcty ${countyClass(c.f)}" data-f="${c.f}" d="${c.d}"/>`).join('');
+  syncPalette();
   document.getElementById('bsSvgG').innerHTML = paths +
     `<path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="1.4" pointer-events="none"/>` +
     `<path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="1" pointer-events="none"/>`;
+  S._els = null;                 // element cache is stale after a full re-render
+  document.querySelectorAll('path.bcty').forEach(el=>{
+    el._ac = countyClass(el.dataset.f);
+    if (el._ac === 'a-u') el.style.fill = fillFor(el.dataset.f, S._maxM);
+  });
   applyZoom();
 }
 
 function repaintAll(){
   S._maxM = Math.max(1, ...Object.values(S.geo.stats).map(s=>s[S.year].m));
   S._of = tierGroups().of;
+  syncPalette();
+  // Only counties whose slot actually changed are touched.
   document.querySelectorAll('path.bcty').forEach(el=>{
-    el.setAttribute('fill', fillFor(el.dataset.f, S._maxM));
+    const want = countyClass(el.dataset.f);
+    if (el._ac === want){
+      if (want === 'a-u') el.style.fill = fillFor(el.dataset.f, S._maxM);
+      return;
+    }
+    if (el._ac) el.classList.remove(el._ac);
+    el.classList.add(want); el._ac = want;
+    el.style.fill = (want === 'a-u') ? fillFor(el.dataset.f, S._maxM) : '';
   });
 }
 
@@ -546,6 +715,11 @@ function renderPanel(){
         <button id="bsToolState" class="${S.tool==='state'?'on':''}">Paint whole state</button>
         <button id="bsToolPan" class="${S.tool==='pan'?'on':''}">Pan</button>
       </div>
+      <div class="bs-brush" title="How wide the paint brush is. [ and ] change it.">
+        <button class="tab bs-mini" id="bsBrushDown">&minus;</button>
+        <span class="bs-brush-l">Brush <b id="bsBrushLbl">${S.brush===0?'single county':S.brush+' deep'}</b></span>
+        <button class="tab bs-mini" id="bsBrushUp">+</button>
+      </div>
       <div class="seg">
         <button id="bsY25" class="${y==='y25'?'on':''}">2025</button>
         <button id="bsY26" class="${y==='y26'?'on':''}">2026 YTD</button>
@@ -566,6 +740,7 @@ function renderPanel(){
     </div>
     <div class="bs-chips">${chips}
       <button class="bs-chip add" id="bsAddRegion">+ Add area</button>
+      <button class="bs-chip add" id="bsPalOpen" title="Search every action, map, pathway and area (Ctrl+K)">Search actions &#8984;K</button>
       <button class="bs-chip add" id="bsSepColors" title="Give any two areas that share a border colours you can actually tell apart">Separate touching colours</button>
     </div>
     <div class="bs-row bs-mergebar">
@@ -799,6 +974,7 @@ function markPathwayEdited(){
 }
 
 function syncRouting(){
+  tallyInvalidate();
   if (!QR()) return;
   const n = S.levels.length;
   if (!S.routing || !S.routing.length) S.routing = QR().defaultRouting(n - 1, n - 1);
@@ -2431,6 +2607,200 @@ function renderCompareInspector(){
     ${table}`;
 }
 
+
+/* ============================================================================
+   BRUSH INTELLIGENCE
+   One county per click is a mouse-sized tool for a country-sized job. The
+   brush walks the same county adjacency graph the auto-draw uses, so a radius
+   of 2 paints the cursor county and everything within two borders of it.
+   ========================================================================= */
+let _brushAdj = null, _brushIdx = null;
+function ensureBrushGraph(){
+  if (_brushAdj) return true;
+  if (!_autoData || !_autoData.adj || !_autoData.fips) { loadAutoData().catch(()=>{}); return false; }
+  _brushAdj = _autoData.adj;
+  _brushIdx = {}; _autoData.fips.forEach((f,i)=>{ _brushIdx[f] = i; });
+  return true;
+}
+
+/* Counties within `r` borders of `fips`, breadth-first. */
+function brushDisc(fips, r){
+  if (!ensureBrushGraph() || _brushIdx[fips] == null) return [fips];
+  const start = _brushIdx[fips], seen = new Set([start]);
+  let frontier = [start];
+  for (let d = 0; d < r; d++){
+    const next = [];
+    for (const u of frontier) for (const v of (_brushAdj[u]||[])){
+      if (!seen.has(v)){ seen.add(v); next.push(v); }
+    }
+    frontier = next;
+    if (!frontier.length) break;
+  }
+  return [...seen].map(i => _autoData.fips[i]);
+}
+
+function paintBrush(fips){
+  brushDisc(fips, S.brush).forEach(f => assignCounty(f));
+}
+
+function setBrush(r){
+  S.brush = Math.max(0, Math.min(6, r));
+  if (S.brush > 0) ensureBrushGraph();
+  const el = document.getElementById('bsBrushLbl');
+  if (el) el.textContent = S.brush === 0 ? 'single county' : `${S.brush} deep`;
+  msg(S.brush === 0 ? 'Brush: single county' : `Brush: everything within ${S.brush} border${S.brush>1?'s':''}`);
+}
+
+/* ============================================================================
+   PREDICTIVE HOVER
+   The accumulator makes a speculative tally cheap enough to run on every
+   pointer move, which means the consequence of a stroke can be shown BEFORE it
+   is committed. Hover a county with a brush loaded and the strip reports what
+   the map would become, not what it is. You stop painting-then-checking and
+   start steering.
+   ========================================================================= */
+function previewMove(fips){
+  if (S.active == null) return null;
+  const cur = S.assign[fips];
+  const to  = S.active === -1 ? null : S.active;
+  if ((cur == null && to == null) || cur === to) return null;
+  const before = computeTallies();
+  const TG = before.TG;
+  const rec = countyStat(fips);
+  if (!rec) return null;
+  const gi = ri => (ri==null || ri<0 || ri>=S.regions.length) ? -1 : TG.of[ri];
+  const gFrom = gi(cur), gTo = gi(to);
+  if (gFrom === gTo) return null;
+
+  // Speculative totals: copy only the two areas that move, never the whole set.
+  const tot = before.rows.map(r => r.m);
+  const unM = before.un.m;
+  const adj = (g, sign) => { if (g >= 0) tot[g] += sign*rec.m; };
+  adj(gFrom, -1); adj(gTo, +1);
+  const grand = tot.reduce((a,b)=>a+b, 0);
+  const spreadOf = arr => {
+    const g = arr.reduce((a,b)=>a+b,0);
+    return (g > 0 && arr.length > 1) ? (100*Math.max(...arr)/g - 100*Math.min(...arr)/g) : 0;
+  };
+  const wasArr = before.rows.map(r=>r.m);
+  return {
+    fips,
+    toName:   gTo   >= 0 ? (TG.groups[gTo]||{}).name   : 'unassigned',
+    fromName: gFrom >= 0 ? (TG.groups[gFrom]||{}).name : 'unassigned',
+    members: rec.m,
+    spreadWas: spreadOf(wasArr),
+    spreadNow: spreadOf(tot),
+  };
+}
+
+/* Draw the preview into the strip without disturbing the committed numbers. */
+function showPreview(fips){
+  const el = document.getElementById('bsStrip');
+  if (!el) return;
+  const p = fips == null ? null : previewMove(fips);
+  if (!p){
+    if (S._preview){ S._preview = null; renderConsequenceStrip(); }
+    return;
+  }
+  S._preview = p;
+  const d = p.spreadNow - p.spreadWas;
+  const better = d < -0.05, worse = d > 0.05;
+  const arrow = better ? '&darr;' : (worse ? '&uarr;' : '&rarr;');
+  el.innerHTML = `<div class="bs-str-c pre">
+      <span class="bs-str-v">+${fmt(p.members)}</span>
+      <span class="bs-str-l">members to ${esc(p.toName)}</span></div>
+    <div class="bs-str-c pre ${better?'ok':(worse?'bad':'')}">
+      <span class="bs-str-v">${p.spreadWas.toFixed(1)} ${arrow} ${p.spreadNow.toFixed(1)}</span>
+      <span class="bs-str-l">widest gap, pp</span></div>
+    <div class="bs-str-c pre"><span class="bs-str-v">&mdash;</span>
+      <span class="bs-str-l">release to apply</span></div>`;
+}
+
+/* ============================================================================
+   COMMAND PALETTE
+   Six inspectors, two libraries, a dozen actions and every area by name. For
+   someone running this one-handed from a station beside the pool, typing three
+   letters beats hunting through tabs.
+   ========================================================================= */
+function paletteItems(){
+  const out = [];
+  const add = (label, hint, run, group) => out.push({label, hint, run, group});
+  INSPECTORS.forEach(t => add('Go to ' + t.label, t.hint,
+    ()=>{ S.panelMode=t.k; renderPanel(); refreshFlow(); }, 'Navigate'));
+  (S.pathList||[]).forEach(pw => add('Load pathway: ' + pw.name,
+    `${pw.levels} levels`, ()=>loadPathway(pw.id), 'Pathways'));
+  (S.mapList||[]).forEach(mp => add('Load map: ' + mp.name, '', ()=>loadScenario(mp.id), 'Maps'));
+  const TG = tierGroups();
+  TG.groups.forEach((g, gi) => add('Highlight ' + g.name, tierName(S.tierView),
+    ()=>{ highlightArea(gi); setTimeout(()=>highlightArea(null), 2600); }, 'Areas'));
+  add('Separate touching colours', 'No two neighbours look alike', separateAdjacentColors, 'Map');
+  add('Freeze this scenario', 'Record what it says right now', freezeScenario, 'Record');
+  add('Save the scenario', '', ()=>saveScenario(false), 'Record');
+  add('Undo', 'Ctrl+Z', ()=>doUndo(), 'Edit');
+  [0,1,2,3,4].forEach(r => add('Brush: ' + (r===0?'single county':r+' deep'),
+    r===0?'One county per click':'Everything within '+r+' border'+(r>1?'s':''), ()=>setBrush(r), 'Brush'));
+  return out;
+}
+
+function openPalette(){
+  if (document.getElementById('bsPal')) return;
+  const items = paletteItems();
+  const wrap = document.createElement('div');
+  wrap.className = 'bs-dlg-back'; wrap.id = 'bsPal';
+  wrap.innerHTML = `<div class="bs-pal" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input class="bs-pal-in" id="bsPalIn" placeholder="Type to search actions, maps, pathways, areas&hellip;"
+      autocomplete="off" spellcheck="false">
+    <div class="bs-pal-list" id="bsPalList"></div>
+    <div class="bs-pal-f">Enter to run &middot; Esc to close</div></div>`;
+  document.body.appendChild(wrap);
+  const inp = wrap.querySelector('#bsPalIn'), list = wrap.querySelector('#bsPalList');
+  let shown = items, sel = 0;
+
+  // Subsequence match, so "gtsc" finds "Go to Schedule" the way an editor would.
+  const score = (q, s2) => {
+    if (!q) return 0;
+    const a = q.toLowerCase(), b = s2.toLowerCase();
+    const direct = b.indexOf(a);
+    if (direct >= 0) return 1000 - direct;
+    let i = 0, hits = 0, last = -1, gap = 0;
+    for (let j = 0; j < b.length && i < a.length; j++){
+      if (b[j] === a[i]){ if (last >= 0) gap += j - last - 1; last = j; i++; hits++; }
+    }
+    return i === a.length ? 500 - gap : -1;
+  };
+  const draw = () => {
+    list.innerHTML = shown.length ? shown.map((it,i)=>`<div class="bs-pal-i ${i===sel?'on':''}" data-i="${i}">
+      <span class="bs-pal-g">${esc(it.group)}</span>
+      <span class="bs-pal-l">${esc(it.label)}</span>
+      ${it.hint?`<span class="bs-pal-h">${esc(it.hint)}</span>`:''}</div>`).join('')
+      : '<div class="bs-pal-none">Nothing matches.</div>';
+    const on = list.querySelector('.bs-pal-i.on');
+    if (on && on.scrollIntoView) on.scrollIntoView({block:'nearest'});
+  };
+  const close = () => { document.removeEventListener('keydown', key, true); wrap.remove(); };
+  const run = () => { const it = shown[sel]; close(); if (it) try { it.run(); } catch(e){ msg(e.message||String(e)); } };
+  const key = e => {
+    if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === 'ArrowDown'){ e.preventDefault(); sel = Math.min(sel+1, shown.length-1); draw(); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); sel = Math.max(sel-1, 0); draw(); }
+    else if (e.key === 'Enter'){ e.preventDefault(); run(); }
+  };
+  inp.addEventListener('input', ()=>{
+    const q = inp.value.trim();
+    shown = !q ? items
+      : items.map(it=>({it, s:Math.max(score(q,it.label), score(q,it.group)-200)}))
+             .filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).map(x=>x.it);
+    sel = 0; draw();
+  });
+  list.addEventListener('click', e=>{
+    const t = e.target.closest('[data-i]'); if (!t) return;
+    sel = +t.dataset.i; run();
+  });
+  wrap.addEventListener('click', e=>{ if (e.target===wrap) close(); });
+  document.addEventListener('keydown', key, true);
+  draw(); inp.focus();
+}
+
 /* ============================================================================
    THE CONSEQUENCE STRIP
    Splitting the old seven-panel scroll into inspectors fixed the scrolling and
@@ -3257,19 +3627,59 @@ function renderLegend(t, mappableTotal, yLabel){
 /* ---------- interactions ---------- */
 function assignCounty(fips){
   const cur = S.assign[fips];
-  if (S.active === -1){ if (cur!=null){ delete S.assign[fips]; paintCountyEl(fips); S.dirty=true; } return; }
-  if (cur !== S.active){ S.assign[fips] = S.active; paintCountyEl(fips); S.dirty = true; }
+  if (S.active === -1){
+    if (cur!=null){
+      delete S.assign[fips];
+      if (!tallyMove(fips, cur, null)) tallyInvalidate();
+      paintCountyEl(fips); S.dirty=true;
+    }
+    return;
+  }
+  if (cur !== S.active){
+    S.assign[fips] = S.active;
+    if (!tallyMove(fips, cur, S.active)) tallyInvalidate();
+    paintCountyEl(fips); S.dirty = true;
+  }
 }
 function assignState(abbr){
   S.geo.counties.forEach(c=>{ if (c.st===abbr){
+    const cur = S.assign[c.f];
     if (S.active===-1) delete S.assign[c.f]; else S.assign[c.f] = S.active;
+    if (!tallyMove(c.f, cur, S.active===-1 ? null : S.active)) tallyInvalidate();
   }});
   S.dirty = true;
   repaintAll();
 }
 
-let tallyTimer = null;
-function tallySoon(){ clearTimeout(tallyTimer); tallyTimer = setTimeout(renderNumbers, 180); }
+/* The tallies are now maintained incrementally, so the numbers under the map
+   can be redrawn on the stroke itself. Anything genuinely expensive downstream
+   (the flow model, the projection, the meet simulation) still coalesces onto
+   an animation frame, so a fast drag paints at pointer rate and settles once
+   rather than queueing a job per pixel. */
+let tallyRaf = 0, heavyTimer = null;
+function tallySoon(){
+  if (!tallyRaf) tallyRaf = requestAnimationFrame(()=>{ tallyRaf = 0; renderNumbersLight(); });
+  clearTimeout(heavyTimer);
+  heavyTimer = setTimeout(()=>{ heavyTimer = null; renderNumbers(); }, 220);
+}
+
+/* The cheap half: the strip and the legend, straight off the accumulator. No
+   flow model, no projection, no meet simulation. */
+function renderNumbersLight(){
+  const t = computeTallies();
+  const yLabel = S.year==='y25' ? '2025' : '2026';
+  const mappableTotal = t.rows.reduce((a,r)=>a+r.m,0) + t.un.m;
+  renderLegend(t, mappableTotal, yLabel);
+  renderConsequenceStrip();
+  if (S.panelMode === 'map'){
+    const body = document.getElementById('bsBody');
+    if (body){
+      const bal = document.getElementById('bsBalance');
+      body.innerHTML = renderTallyTable(t, mappableTotal, yLabel) + (bal ? bal.outerHTML : '<div id="bsBalance"></div>');
+      wireTallyRows();
+    }
+  }
+}
 
 function wireMap(){
   const svg = document.getElementById('bsSvg');
@@ -3292,8 +3702,15 @@ function wireMap(){
       applyZoom(); return;
     }
     const t = e.target.closest('path.bcty');
+    if (!t) showPreview(null);
     if (t){
-      if (S.painting && S.tool==='county'){ assignCounty(t.dataset.f); tallySoon(); }
+      if (S.painting && S.tool==='county'){
+        // Brush radius: paint everything within N steps of the cursor county.
+        if (S.brush > 0) paintBrush(t.dataset.f); else assignCounty(t.dataset.f);
+        tallySoon();
+      } else if (S.tool==='county'){
+        showPreview(t.dataset.f);        // not painting: show what a stroke WOULD do
+      }
       const c = S.geo.counties.find(x=>x.f===t.dataset.f);
       const st = S.geo.stats[t.dataset.f];
       const v = st ? st[S.year] : null;
@@ -3496,6 +3913,9 @@ function wirePanel(){
     P.querySelectorAll('.bs-chip[data-ri]').forEach(x=>x.classList.toggle('on', +x.dataset.ri===S.active));
   }));
   bind('bsSepColors', separateAdjacentColors);
+  bind('bsPalOpen',   openPalette);
+  bind('bsBrushUp',   ()=>setBrush(S.brush+1));
+  bind('bsBrushDown', ()=>setBrush(S.brush-1));
   bind('bsAddRegion', ()=>{
     pushUndo();
     S.regions.push({name:'Region '+(S.regions.length+1), color:PALETTE[S.regions.length%PALETTE.length]});
@@ -5116,9 +5536,17 @@ window.renderBoundary = async function(){
   wireMap();
   renderPanel();
   document.addEventListener('keydown', e=>{
-    if (!(e.ctrlKey || e.metaKey) || (e.key||'').toLowerCase() !== 'z') return;
     const view = document.getElementById('viewBoundary');
-    if (!view || view.offsetParent === null) return;          // Boundary tab not showing
+    const live = view && view.offsetParent !== null;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target||{}).tagName||'');
+    if (live && !typing && (e.ctrlKey || e.metaKey) && (e.key||'').toLowerCase() === 'k'){
+      e.preventDefault(); openPalette(); return;
+    }
+    if (live && !typing && !e.ctrlKey && !e.metaKey && (e.key === '[' || e.key === ']')){
+      e.preventDefault(); setBrush(S.brush + (e.key === ']' ? 1 : -1)); return;
+    }
+    if (!(e.ctrlKey || e.metaKey) || (e.key||'').toLowerCase() !== 'z') return;
+    if (!live) return;                                        // Boundary tab not showing
     const t = e.target;
     if (t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)) return;
     e.preventDefault();

@@ -518,6 +518,52 @@ tr:hover td{background:#f7fafd}
 .bs-cmp-d{font-family:'JetBrains Mono',monospace;font-size:11px;padding:1px 4px;border-radius:3px;margin-left:4px}
 .bs-cmp-d.up{background:#e6f4ea;color:#0f6b33}
 .bs-cmp-d.down{background:#fdeaec;color:#9b1c2c}
+/* --- command palette --- */
+.bs-pal{background:#fff;border-radius:10px;max-width:600px;width:100%;max-height:70vh;
+  display:flex;flex-direction:column;box-shadow:0 22px 60px rgba(23,31,105,.32);
+  border-top:4px solid #171F69;overflow:hidden}
+.bs-pal-in{border:0;border-bottom:1px solid #eef1f6;padding:15px 18px;font:inherit;font-size:17px;outline:none}
+.bs-pal-list{overflow-y:auto;padding:6px}
+.bs-pal-i{display:flex;align-items:baseline;gap:10px;padding:8px 12px;border-radius:6px;cursor:pointer}
+.bs-pal-i.on{background:#eef7fb}
+.bs-pal-i:hover{background:#f4f7fa}
+.bs-pal-g{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;
+  min-width:70px;flex:0 0 70px}
+.bs-pal-l{font-size:14px;color:#171F69;font-weight:600}
+.bs-pal-h{font-size:12px;color:#64748b;margin-left:auto;text-align:right}
+.bs-pal-none{padding:18px;color:#64748b;font-size:14px;text-align:center}
+.bs-pal-f{border-top:1px solid #eef1f6;padding:8px 18px;font-size:11px;color:#94a3b8;
+  text-transform:uppercase;letter-spacing:.05em}
+
+/* --- brush --- */
+.bs-brush{display:flex;align-items:center;gap:6px}
+.bs-brush-l{font-size:12px;color:#64748b;white-space:nowrap}
+.bs-brush-l b{color:#171F69;font-family:'JetBrains Mono',monospace;font-size:11px}
+
+/* --- predictive hover: the strip shows what a stroke WOULD do --- */
+.bs-str-c.pre{border-left-color:#8FC3EA;background:#f2f9fd;
+  box-shadow:inset 0 0 0 1px rgba(143,195,234,.55)}
+.bs-str-c.pre .bs-str-v{color:#0e6f96}
+.bs-str-c.pre.ok .bs-str-v{color:#0f6b33}
+.bs-str-c.pre.bad .bs-str-v{color:#9b1c2c}
+
+/* --- area fills come from CSS variables, not inline attributes ---
+   Repainting the map is then a dozen variable writes on the <svg> rather than
+   one setAttribute per county. A single paint stroke is one class swap. */
+#bsSvg path.bcty{fill:var(--a-u,#eef1f6)}
+#bsSvg path.bcty.a-0{fill:var(--a0)}   #bsSvg path.bcty.a-1{fill:var(--a1)}
+#bsSvg path.bcty.a-2{fill:var(--a2)}   #bsSvg path.bcty.a-3{fill:var(--a3)}
+#bsSvg path.bcty.a-4{fill:var(--a4)}   #bsSvg path.bcty.a-5{fill:var(--a5)}
+#bsSvg path.bcty.a-6{fill:var(--a6)}   #bsSvg path.bcty.a-7{fill:var(--a7)}
+#bsSvg path.bcty.a-8{fill:var(--a8)}   #bsSvg path.bcty.a-9{fill:var(--a9)}
+#bsSvg path.bcty.a-10{fill:var(--a10)} #bsSvg path.bcty.a-11{fill:var(--a11)}
+#bsSvg path.bcty.a-12{fill:var(--a12)} #bsSvg path.bcty.a-13{fill:var(--a13)}
+#bsSvg path.bcty.a-14{fill:var(--a14)} #bsSvg path.bcty.a-15{fill:var(--a15)}
+#bsSvg path.bcty.a-16{fill:var(--a16)} #bsSvg path.bcty.a-17{fill:var(--a17)}
+#bsSvg path.bcty.a-18{fill:var(--a18)} #bsSvg path.bcty.a-19{fill:var(--a19)}
+#bsSvg path.bcty.a-20{fill:var(--a20)} #bsSvg path.bcty.a-21{fill:var(--a21)}
+#bsSvg path.bcty.a-22{fill:var(--a22)} #bsSvg path.bcty.a-23{fill:var(--a23)}
+
 /* --- dialogs (replacing prompt/confirm) --- */
 .bs-dlg-back{position:fixed;inset:0;background:rgba(23,31,105,.45);z-index:9000;
   display:flex;align-items:center;justify-content:center;padding:20px}
@@ -681,10 +727,10 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="scenario-schedule-engine.js?v=202608141939"></script>
-<script src="boundary.js?v=202608141939"></script>
+<script src="scenario-schedule-engine.js?v=202608142316"></script>
+<script src="boundary.js?v=202608142316"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202608141939"></script>
+<script src="ma-reports.js?v=202608142316"></script>
 <script src="pricing.js?v=202608055500"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>
