@@ -86,6 +86,7 @@ const S = {
   hostMin: 0,           // guaranteed minimum, whichever model is used
   hostPer_stop: null,   // {levelIdx|groupIdx: dollars} — a negotiated figure for one meet
   tiersOpen: false,     // whether Names & structure is open, because YOU opened it
+  frozen: null,         // {at, note, stamps, figures} once presented — see freezeScenario()
   loadedStamps: null,   // the data build a loaded scenario was saved against
   tripCost: null,       // per-stop travel and lodging
   costEvents: 2,        // events an athlete contests
@@ -594,6 +595,8 @@ function renderPanel(){
       <button class="tab" id="bsCsvAdv">Export advancement CSV</button>
     </div>
     ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="note" style="margin-top:6px"><b>${esc(S.scenarioName)}</b> is a reference map. Saving will create a copy so the original stays intact.</div>` : ''}
+    ${S.frozen ? `<div class="note bs-frozen-tag"><b>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}</b>${
+      S.frozen.note?` &mdash; ${esc(S.frozen.note)}`:''}. What it said then is recorded; see <b>Report</b>.</div>` : ''}
     <div class="note" id="bsMsg"></div>`;
 
   if (S.panelMode!=='map') renderInspectorShell();
@@ -2416,6 +2419,148 @@ function renderCompareInspector(){
     ${table}`;
 }
 
+/* ============================================================================
+   FREEZING A SCENARIO
+   Once numbers have been in front of a committee they stop being a working
+   model and become part of a record. The arbitration standard on selection is
+   specific about what makes a figure defensible: an independent party has to be
+   able to reconstruct the exact inputs as they stood on the decision date.
+
+   Recording the inputs alone does not achieve that. The entry data is rebuilt
+   nightly and the calibration moves with it, so a scenario that stores only
+   "computed from the 3 August build" cannot be recomputed once that build is
+   gone -- and the figures on screen will quietly differ from the ones in the
+   paper with nothing to show it happened.
+
+   So a freeze stores BOTH: what it was computed from, and what it actually
+   said. Re-open it later and the tool puts the two side by side.
+
+   Freezing does not lock anything. Mike keeps the map. What it does is make
+   divergence impossible to miss, and stop a frozen record being overwritten in
+   place -- saving a changed frozen scenario forks a copy, the same way a
+   reference map already does.
+   ========================================================================= */
+
+/* The figures as presented. Deliberately the headline set a committee actually
+   discusses, not every number on screen -- a snapshot nobody reads is not a
+   record, it is a haystack. */
+function freezeFigures(){
+  try {
+    const res = S.routeRes || projectPathway();
+    if (!res) return null;
+    const sum = summariseRouting(S.routing, currentPathwayLabel(), null);
+    const t = computeTallies();
+    return {
+      pathway:       currentPathwayLabel(),
+      structure:     S.levels.map((l,i) => ({name: tierName(i), stops: groupCountAt(i)})),
+      members:       t.rows.reduce((a,r)=>a+r.m, 0),
+      finalField:    sum.finalField,
+      levelEntries:  (sum.levels||[]).map(l => ({name:l.name, entries:Math.round(l.entries)})),
+      meets:         sum.meets,
+      meetsOverDay:  sum.over,
+      eventsSplit:   sum.autoSplit,
+      eventsToWatch: sum.review,
+    };
+  } catch(e){ console.error('freezeFigures', e); return null; }
+}
+
+function freezeScenario(){
+  if (!S.scenarioId){ msg('Save the scenario first — a freeze has to attach to something.'); return; }
+  const figures = freezeFigures();
+  if (!figures){ msg('Could not read the figures to freeze. Open Projection once, then try again.'); return; }
+  const note = (prompt('What was this shown to, or shown for? (goes in the record)', S.frozen ? S.frozen.note : '') || '').trim();
+  S.frozen = {at: new Date().toISOString(), note, stamps: dataStamps(), figures};
+  S.dirty = true;
+  msg('Frozen. Save the scenario to write the record.');
+  renderPanel();
+}
+
+function unfreezeScenario(){
+  if (!S.frozen) return;
+  if (!confirm('Remove the freeze? The record of what this said when it was presented is deleted, '
+             + 'and the scenario becomes a working model again.')) return;
+  S.frozen = null; S.dirty = true;
+  msg('Freeze removed.');
+  renderPanel();
+}
+
+/* What has moved since it was frozen. Returns null when nothing has. */
+function freezeDrift(){
+  if (!S.frozen || !S.frozen.figures) return null;
+  const now = freezeFigures();
+  if (!now) return null;
+  const rows = [];
+  const cmp = (label, a, b) => {
+    if (a == null || b == null) return;
+    if (Math.round(a) !== Math.round(b)) rows.push({label, then: a, now: b});
+  };
+  const f = S.frozen.figures;
+  cmp('Members in the mapped area', f.members, now.members);
+  cmp('Reaching the championship', f.finalField, now.finalField);
+  (f.levelEntries||[]).forEach((l,i) => {
+    const n = (now.levelEntries||[])[i];
+    if (n && n.name === l.name) cmp(l.name + ' — entries', l.entries, n.entries);
+  });
+  cmp('Meets to run', f.meets, now.meets);
+  cmp('Meets that do not fit', f.meetsOverDay, now.meetsOverDay);
+  cmp('Events split', f.eventsSplit, now.eventsSplit);
+
+  const st = S.frozen.stamps || {}, ns = dataStamps();
+  const inputs = [];
+  const ic = (label, a, b) => { if (a && b && a !== b) inputs.push({label, then:a, now:b}); };
+  ic('Entry data build', st.advance_data, ns.advance_data);
+  ic('Events per athlete', st.multiplicity, ns.multiplicity);
+  ic('Take-up measured on', st.calibration_basis, ns.calibration_basis);
+  ic('First stop fed by', st.seed_pool, ns.seed_pool);
+  ic('Pathway', (S.frozen.figures||{}).pathway, currentPathwayLabel());
+  return (rows.length || inputs.length) ? {figures: rows, inputs} : null;
+}
+
+function renderFreezePanel(){
+  const F = S.frozen;
+  if (!F) return `<div class="bs-freeze">
+    <div class="bs-pwbar-h">Freeze this scenario</div>
+    <p class="note">Once these numbers have been in front of a committee, freeze them. That records both what
+      they were computed from and what they actually said, so if the entry data is rebuilt underneath you, the
+      difference shows rather than hides. It does not lock the map &mdash; it stops the record being overwritten
+      without you noticing.</p>
+    <button class="tab" id="bsFreeze" ${S.scenarioId?'':'disabled'}>Freeze as presented&hellip;</button>
+    ${S.scenarioId?'':'<span class="bs-arr-m warn">Save the scenario first.</span>'}</div>`;
+
+  const d = freezeDrift();
+  const when = String(F.at||'').slice(0,10);
+  const fig = F.figures || {};
+  return `<div class="bs-freeze ${d?'drift':'ok'}">
+    <div class="bs-pwbar-h">Frozen ${esc(when)}${F.note?` &mdash; ${esc(F.note)}`:''}</div>
+    <div class="bs-prov">
+      <b>As presented</b>
+      <span>pathway <code>${esc(fig.pathway||'—')}</code></span>
+      ${fig.finalField!=null?`<span>championship field <code>${fmt(Math.round(fig.finalField))}</code></span>`:''}
+      ${fig.meets!=null?`<span>${fmt(fig.meets)} meets</span>`:''}
+      <span>entry build <code>${esc(String((F.stamps||{}).advance_data||'—').slice(0,10))}</code></span>
+    </div>
+    ${d ? `<div class="ps-warn" style="margin-top:8px">
+      <b>This no longer computes what it said when it was frozen.</b>
+      ${d.inputs.length?`<div class="note" style="margin-top:6px">Inputs that changed:
+        ${d.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} &rarr; ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>`:''}
+      ${d.figures.length?`<table class="bs-drill" style="margin-top:8px"><thead><tr>
+        <th>Figure</th><th class="num">As presented</th><th class="num">Now</th><th class="num">Change</th>
+        </tr></thead><tbody>${d.figures.map(r=>`<tr><td>${esc(r.label)}</td>
+          <td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td>
+          <td class="num ${r.now>r.then?'over':'under'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td>
+        </tr>`).join('')}</tbody></table>
+        <p class="note" style="margin-top:6px">The frozen column is what the committee saw. Do not quietly
+          republish the new figures under the old date &mdash; either explain the change or freeze again.</p>`
+        :'<div class="note" style="margin-top:6px">The headline figures still match; only the inputs moved.</div>'}
+      </div>`
+    : `<div class="note" style="margin-top:8px">Everything still computes exactly what it said when it was frozen.</div>`}
+    <div class="bs-pwbar-r" style="margin-top:10px">
+      <button class="tab bs-mini" id="bsFreeze">Re-freeze as it stands now</button>
+      <button class="tab bs-mini" id="bsUnfreeze">Remove the freeze</button>
+    </div>
+  </div>`;
+}
+
 /* ---------- report tab ----------
    Renamed from "provenance", which was jargon of my own invention. What it
    answers is: if someone on the committee asks where a figure came from, can
@@ -2434,6 +2579,7 @@ function renderReportInspector(){
     <p class="note">Anything you put in front of a committee should be reproducible from this line alone:
       the map, the pathway, the season the field came from, and the data build. If a figure on screen cannot be
       traced back to those, do not put it in a paper.</p>
+    ${renderFreezePanel()}
     <div class="bs-pwbar-r" style="margin-top:10px">
       <button class="tab" id="bsGoReport">Open the report builder</button>
       <button class="tab" id="bsCsvManifest">Export the meet list (CSV)</button>
@@ -2581,6 +2727,8 @@ function wirePathway(){
   _b('bsGoReport', ()=>{ const t=document.querySelector('[data-view="reports"]'); if(t) t.click(); });
   _b('bsCsvManifest', exportManifestCsv);
   _b('bsCmpClear', ()=>{ S.cmpRes=null; renderPathway(); });
+  _b('bsFreeze', freezeScenario);
+  _b('bsUnfreeze', unfreezeScenario);
   (document.getElementById('bsPathWrap')||document).querySelectorAll('[data-cmpaxis]').forEach(b=>
     b.addEventListener('click', ()=>{
       S.cmpAxis = b.dataset.cmpaxis; S.cmpIds = []; S.cmpRes = null;
@@ -3130,22 +3278,32 @@ function newScenarioId(){
 
 async function saveScenario(asNew){
   if (!S.scenarioName.trim()){ msg('Give the scenario a name first.'); return; }
-  // Reference maps are never overwritten — saving one forks it instead.
-  const forking = asNew || !S.scenarioId || isSeed(S.scenarioId);
+  // Reference maps are never overwritten — saving one forks it instead. A frozen
+  // record gets the same protection the moment it stops matching what it said:
+  // the version a committee saw has to stay recoverable, so the edit forks and
+  // the frozen original is left where it is.
+  const frozenChanged = !!(S.frozen && freezeDrift());
+  const forking = asNew || !S.scenarioId || isSeed(S.scenarioId) || frozenChanged;
+  if (frozenChanged && !asNew){
+    if (!confirm('This scenario is frozen and no longer computes what it said when it was presented.\n\n'
+               + 'Saving will create a copy so the frozen version stays as the committee saw it. Continue?')) return;
+  }
   if (forking){
     S.scenarioId = newScenarioId();
     if (isSeed(S.scenarioId)) S.scenarioId = newScenarioId();
     const base = S.scenarioName.trim();
-    if (asNew || /^(Official 2026 Alignment|Current 2026 Alignment)/.test(base)){
+    if (asNew || frozenChanged || /^(Official 2026 Alignment|Current 2026 Alignment)/.test(base)){
       S.scenarioName = base.replace(/ \(copy( \d+)?\)$/, '') + ' (copy)';
     }
+    // The copy is a working model again; the freeze belongs to the original.
+    if (frozenChanged) S.frozen = null;
   }
   syncLevels();
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
     fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
     hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
-    stamps:dataStamps(),
+    stamps:dataStamps(), frozen:S.frozen,
     arrival:S.arrival, seedPool:S.seedPool,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
@@ -3239,6 +3397,7 @@ async function loadScenario(id){
     S.year = d.year === 'y26' ? 'y26' : 'y25';
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
     S.pathSaved = null; S.pathDirty = false;   // this is the map's own copy, not a library pathway
+    S.frozen = d.frozen || null;
     S.fees = d.fees || null;
     if (d.hostMode)  S.hostMode  = d.hostMode;
     if (d.hostShare != null) S.hostShare = d.hostShare;
@@ -4610,6 +4769,10 @@ window.BoundaryAPI = {
   /* What the figures were computed from. The scenario summary prints these, so
      a committee paper can be traced back to its inputs months later. */
   stamps: dataStamps,
+  /* The frozen record and whatever has moved since, so a report can say plainly
+     that it no longer matches the version a committee was shown. */
+  frozen: () => S.frozen,
+  frozenDrift: freezeDrift,
   pathwayLabel: currentPathwayLabel,
 };
 

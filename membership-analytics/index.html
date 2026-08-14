@@ -518,6 +518,11 @@ tr:hover td{background:#f7fafd}
 .bs-cmp-d{font-family:'JetBrains Mono',monospace;font-size:11px;padding:1px 4px;border-radius:3px;margin-left:4px}
 .bs-cmp-d.up{background:#e6f4ea;color:#0f6b33}
 .bs-cmp-d.down{background:#fdeaec;color:#9b1c2c}
+/* --- frozen record --- */
+.bs-freeze{border:1px solid var(--line);border-left:3px solid #009AC7;border-radius:6px;
+  padding:12px;margin:14px 0;background:#f8fafc}
+.bs-freeze.drift{border-left-color:#E31937;background:#fffafa}
+.bs-frozen-tag{margin-top:6px;border-left:3px solid #009AC7;padding-left:8px}
 
 /* --- poolside / mobile ---------------------------------------------------
    These are read from a station overlooking the pool as often as from a desk.
@@ -541,6 +546,7 @@ tr:hover td{background:#f7fafd}
   .bs-cmp-picks{flex-direction:column;gap:8px}
   .bs-cmp-pick{padding:4px 0}          /* a real touch target, not a 13px line */
   .bs-cmp-pick input{width:18px;height:18px}
+  .bs-freeze{padding:10px}
   .bs-mergebar{flex-wrap:wrap}
   .bs-mergebar .sel{flex:1 1 42%;min-width:0}
 }
@@ -622,10 +628,10 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="scenario-schedule-engine.js?v=202608141909"></script>
-<script src="boundary.js?v=202608141909"></script>
+<script src="scenario-schedule-engine.js?v=202608141923"></script>
+<script src="boundary.js?v=202608141923"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202608141909"></script>
+<script src="ma-reports.js?v=202608141923"></script>
 <script src="pricing.js?v=202608055500"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

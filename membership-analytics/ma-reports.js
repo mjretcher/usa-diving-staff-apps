@@ -679,6 +679,18 @@ const BOUNDARY_SECTIONS = {
       const t = api.tallies();
       const stamps = api.stamps ? api.stamps() : null;
       const finalNm = api.finalName ? api.finalName() : 'the championship';
+      const frozen = api.frozen ? api.frozen() : null;
+      const drift = (frozen && api.frozenDrift) ? api.frozenDrift() : null;
+      const freezeBlock = !frozen ? '' : (drift
+        ? `<p class="mr-p mr-warn"><strong>This scenario was frozen on
+             ${esc(String(frozen.at||'').slice(0,10))}${frozen.note?` (${esc(frozen.note)})`:''} and no longer
+             computes what it said then.</strong> ${drift.figures.length
+             ? drift.figures.map(r=>`${esc(r.label)} was ${fmt(Math.round(r.then))}, now ${fmt(Math.round(r.now))}`).join('; ')+'.'
+             : 'The headline figures still match; the inputs behind them have moved.'}
+             Do not circulate these numbers under the earlier date without saying so.</p>`
+        : `<p class="mr-p"><strong>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
+             frozen.note?` — ${esc(frozen.note)}`:''}.</strong> Everything below still computes exactly what it
+             said when it was presented.</p>`);
 
       // The structure as one readable sentence, which is how it gets described
       // out loud in the room anyway.
@@ -717,6 +729,7 @@ const BOUNDARY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">${esc(scName)} &mdash; summary</h2>
+        ${freezeBlock}
         <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
         <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
         <div class="mr-map">${M.svg}</div>
@@ -736,6 +749,8 @@ const BOUNDARY_SECTIONS = {
           belong in a decision.</p>
         <table class="mr-table mr-table-sm"><tbody>
           <tr><td>Season</td><td>${esc(api.yearLabel())}</td></tr>
+          ${frozen?`<tr><td>Frozen</td><td>${esc(String(frozen.at||'').slice(0,10))}${
+            frozen.note?' — '+esc(frozen.note):''}${drift?' <strong>(figures have moved since)</strong>':''}</td></tr>`:''}
           ${stamps?`<tr><td>Entry data build</td><td>${esc(String(stamps.advance_data||'—').slice(0,10))}</td></tr>
           <tr><td>Events per athlete</td><td>${esc(String(stamps.multiplicity||'—').slice(0,10))}</td></tr>
           <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
