@@ -173,9 +173,16 @@
     var secondsPerDive = Number(resolved.secondsPerDive || 0);
     var probe = eventDuration(spec.divers, dives, secondsPerDive, false, rules);
     var eligible = canSplit(spec.discipline, rules);
-    var willSplit = eligible && probe.rawMin > rules.splitAutoThresholdMin;
+    // A manual decision beats the threshold in either direction -- the host may
+    // know their pool can take a long event whole, or that a shorter one has to
+    // split for a reason the model cannot see. Platform still never splits.
+    var manual = spec.forceSplit;
+    var willSplit = manual == null
+      ? (eligible && probe.rawMin > rules.splitAutoThresholdMin)
+      : (eligible && !!manual);
     var d = eventDuration(spec.divers, dives, secondsPerDive, willSplit, rules);
     return {
+      id: spec.id || spec.cell,
       cell: spec.cell,
       group: spec.group,
       gender: spec.gender,
@@ -187,6 +194,8 @@
       unsplitMinutes: Math.ceil(probe.rawMin),
       estimatedMinutes: Math.ceil(d.evMin),
       split: willSplit,
+      splitManual: manual != null,
+      splitEligible: eligible,
       panelMinutes: d.panelMin,
       // Flagged but NOT split: long enough to look at, short of the line where
       // it splits on its own. Platform is never split, so a long platform event
@@ -202,18 +211,49 @@
   // grouping, not THE optimal one; the UI (and the chat layer re-running
   // this with an override) is where a person adjusts it.
   // ---------------------------------------------------------------------
-  function assignDays(events) {
-    var days = []; // [{ used: {'A|Girls': true}, events: [...] }]
+  /* Assign events to days.
+
+     `dayOf` is the manual layer: a map of eventId -> 1-based day number that a
+     person has set deliberately. Those are placed exactly where they were put,
+     INCLUDING when that breaks the one-discipline-per-age-group-and-gender
+     rule -- the conflict is reported, not silently corrected. Moving an event
+     somewhere the model would not have chosen is the entire point of being able
+     to move it; the tool's job is to say what that costs, not to undo it.
+
+     Everything without a manual placement is auto-placed into the first day
+     that does not already hold that age group and gender. */
+  function assignDays(events, dayOf, minDays) {
+    var manual = dayOf || {};
+    var days = [];
+    var ensure = function (n) {
+      while (days.length < n) days.push({ used: {}, events: [], conflicts: [] });
+      return days[n - 1];
+    };
+    var placed = [], auto = [];
     events.forEach(function (ev) {
+      var d = manual[ev.id];
+      if (d && d > 0) placed.push({ ev: ev, day: d }); else auto.push(ev);
+    });
+    // Manual first, so auto-placement fills around fixed points rather than
+    // shunting them.
+    placed.forEach(function (p) {
+      var day = ensure(p.day);
+      var key = p.ev.group + '|' + p.ev.gender;
+      if (day.used[key]) day.conflicts.push(key);
+      day.used[key] = true;
+      day.events.push(p.ev);
+    });
+    auto.forEach(function (ev) {
       var key = ev.group + '|' + ev.gender;
       var day = null;
       for (var i = 0; i < days.length; i++) {
         if (!days[i].used[key]) { day = days[i]; break; }
       }
-      if (!day) { day = { used: {}, events: [] }; days.push(day); }
+      if (!day) { days.push({ used: {}, events: [], conflicts: [] }); day = days[days.length - 1]; }
       day.used[key] = true;
       day.events.push(ev);
     });
+    if (minDays) ensure(minDays);
     return days;
   }
 
@@ -346,7 +386,7 @@
     var reviewFlags = dayEvents.filter(function (e) { return e.reviewSplit; });
     var splitEvents = dayEvents.filter(function (e) { return e.split; });
     var brief = function (e) {
-      return { cell: e.cell, group: e.group, gender: e.gender, discipline: e.discipline,
+      return { id: e.id, cell: e.cell, group: e.group, gender: e.gender, discipline: e.discipline,
                minutes: e.estimatedMinutes, unsplitMinutes: e.unsplitMinutes };
     };
     return {
@@ -372,8 +412,9 @@
   //     and Junior National schedules). NEVER invented in this module.
   //   rulesOverride: partial DEFAULT_RULES to merge in.
   // ---------------------------------------------------------------------
-  function simulateStop(stopPathway, diveSpec, rulesOverride) {
+  function simulateStop(stopPathway, diveSpec, rulesOverride, plan) {
     var rules = Object.assign({}, DEFAULT_RULES, rulesOverride || {});
+    var P = plan || {};
     var events = [];
     (stopPathway.rounds || []).forEach(function (round) {
       var cells = round.cells || {};
@@ -381,14 +422,19 @@
         var divers = cells[cellKey];
         if (!divers) return;
         var parts = cellKey.split('|');
+        // A stable id, so a manual placement survives the numbers changing
+        // underneath it. The cell already carries the round.
+        var id = cellKey;
         events.push(buildEvent({
-          cell: cellKey, group: parts[0], gender: parts[1], discipline: parts[2],
-          round: round.key, divers: divers, diveSpec: diveSpec
+          id: id, cell: cellKey, group: parts[0], gender: parts[1], discipline: parts[2],
+          round: round.key, divers: divers, diveSpec: diveSpec,
+          forceSplit: P.split && P.split[id] != null ? P.split[id] : null
         }, rules));
       });
     });
-    var days = assignDays(events).map(function (d, i) {
-      return Object.assign({ dayNumber: i + 1 }, summarizeDay(d.events, rules));
+    var days = assignDays(events, P.dayOf, P.minDays).map(function (d, i) {
+      return Object.assign({ dayNumber: i + 1, conflicts: d.conflicts || [] },
+                           summarizeDay(d.events, rules));
     });
     var warnings = [];
     days.forEach(function (d) {
@@ -424,7 +470,11 @@
     groupIntoSessions: groupIntoSessions,
     layoutDay: layoutDay,
     summarizeDay: summarizeDay,
-    simulateStop: simulateStop
+    simulateStop: simulateStop,
+    assignDays: assignDays,
+    layoutDay: layoutDay,
+    eventDuration: eventDuration,
+    canSplit: canSplit
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ScenarioScheduleEngine;
