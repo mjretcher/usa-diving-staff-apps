@@ -64,7 +64,9 @@ const S = {
   // Which inspector the right-hand panel is showing. The map is always on
   // screen; only this changes. map | structure | projection | money | schedule | report
   panelMode: 'map',
-  cmpIds: null,         // saved pathways picked for side-by-side
+  cmpAxis: 'pathway',   // which thing varies between columns: pathway | map
+  mapList: null,        // saved maps, for the map axis
+  cmpIds: null,         // saved pathways or maps picked for side-by-side
   cmpRes: null,         // the built comparison
   pathSaved: null,      // {id,name} when the live pathway came from the library
   pathDirty: false,     // edited since it was loaded/saved
@@ -1864,6 +1866,17 @@ function adaptPathway(p){
   return {routing: out, notes};
 }
 
+/* The saved maps, for the map axis of Compare. Same source the Load dropdown
+   uses; kept separately so switching axis does not disturb that control. */
+async function loadMapList(){
+  try {
+    const r = await NEON.query(
+      `SELECT id, name FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 50`);
+    S.mapList = r.rows || [];
+  } catch(e){ console.warn('mapList', e); S.mapList = []; }
+  return S.mapList;
+}
+
 async function listPathways(){
   try {
     const r = await NEON.query(
@@ -1944,6 +1957,9 @@ function renderInspectorShell(){
   if (!body) return;
   body.innerHTML = `<div id="bsPathWrap"><div class="note">Working the numbers&hellip;</div></div>`;
   if (!S.pathList) listPathways().then(l => { S.pathList = l; renderInspector(); });
+  // Compare can open straight onto the map axis; its list has to be there too.
+  if (S.panelMode === 'compare' && S.cmpAxis === 'map' && !S.mapList)
+    loadMapList().then(() => renderInspector());
   refreshFlow();
 }
 
@@ -1986,9 +2002,9 @@ function renderBalanceStrip(){
   }).join('');
   return `<div id="bsBalance" class="bs-balance">
     <div class="bs-tier-h">Are the areas even? &mdash; entries that actually competed, by ${esc(tierName(i))}</div>
-    <table class="bs-drill"><thead><tr><th>${esc(tierName(i))}</th>
+    <div class="bs-scroll"><table class="bs-drill"><thead><tr><th>${esc(tierName(i))}</th>
       <th class="num">Competing</th><th></th><th class="num">vs even split</th></tr></thead>
-      <tbody>${bars}</tbody></table>
+      <tbody>${bars}</tbody></table></div>
     <div class="bs-spread ${cls}">Widest gap: <b>${spread.toFixed(1)} percentage points</b> &mdash; ${word}.</div>
   </div>`;
 }
@@ -2174,11 +2190,11 @@ function renderScheduleInspector(res){
   const bad = out.stops.filter(x => x.daysOver).length;
 
   return `<div class="bs-tier-h">Does each meet fit?</div>
-    <table class="bs-drill"><thead><tr><th>Stop</th><th class="num">Entries</th>
+    <div class="bs-scroll"><table class="bs-drill"><thead><tr><th>Stop</th><th class="num">Entries</th>
       <th class="num">Events</th><th class="num">Days</th><th class="num">Longest day</th>
       <th class="num" title="Over ${R.splitAutoThresholdMin} min whole, so the simulation splits them">Split</th>
       <th class="num" title="Over ${R.splitReviewThresholdMin} min but under ${R.splitAutoThresholdMin} — the host decides">Look at</th>
-      <th>Verdict</th></tr></thead><tbody>${rows}</tbody></table>
+      <th>Verdict</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${bad ? `<div class="bs-spread under"><b>${bad}</b> ${bad===1?'meet runs':'meets run'} past the facility day assumed here.
         Either those areas are too big, or those hosts need another day.</div>`
           : `<div class="bs-spread ok">Every meet fits the facility day assumed here.</div>`}
@@ -2223,6 +2239,33 @@ function withRouting(routing, fn){
   finally { S.routing = snap; }
 }
 
+/* Swap the map, run something, put it back. Take-up is read from
+   JuniorFlow.constants(), not from the map, so it stays fixed across the swap
+   -- which is the same choice the advancement figures already make: re-measuring
+   behaviour on every map would let it absorb the change and nothing would ever
+   appear to move. */
+function withMap(map, fn){
+  const snap = {regions:S.regions, assign:S.assign, levels:S.levels,
+                finalName:S.finalName, routing:S.routing};
+  try {
+    S.regions = (map.regions && map.regions.length) ? map.regions : snap.regions;
+    S.assign  = map.assign || snap.assign;
+    if (map.levels && map.levels.length) S.levels = map.levels;
+    if (map.finalName) S.finalName = map.finalName;
+    // A map with a different number of levels cannot take the current routing
+    // as-is -- routes point at level indices. Fit it, and hand back the notes.
+    let notes = [];
+    if (S.levels.length !== snap.routing.length){
+      const fit = adaptPathway({routing: snap.routing});
+      S.routing = fit.routing; notes = fit.notes;
+    }
+    return fn(notes);
+  } finally {
+    S.regions = snap.regions; S.assign = snap.assign; S.levels = snap.levels;
+    S.finalName = snap.finalName; S.routing = snap.routing;
+  }
+}
+
 /* Everything a column needs, measured the same way for every variant. */
 function summariseRouting(routing, label, notes){
   return withRouting(routing, () => {
@@ -2260,19 +2303,31 @@ function summariseRouting(routing, label, notes){
 
 /* Build every column. The first is always what is on screen, so a comparison
    is always anchored to something you can see. */
-async function buildComparison(ids){
+async function buildComparison(ids, axis){
   if (!QR() || !S.flow || !S.routing) return null;
-  const cols = [summariseRouting(S.routing, currentPathwayLabel(), null)];
+  const onPathways = (axis || 'pathway') === 'pathway';
+  const baseLabel = onPathways ? currentPathwayLabel() : (S.scenarioName || 'This map');
+  const cols = [summariseRouting(S.routing, baseLabel, null)];
+
   for (const id of (ids||[])){
     let row = null;
     try {
-      const r = await NEON.query('SELECT name, data FROM membership.pathways WHERE id=$1', [id]);
-      if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
-      const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
-      // Fit it onto the structure now on screen, and carry the adjustment notes
-      // into the column so a fitted pathway never reads as a clean like-for-like.
-      const fit = adaptPathway(p);
-      row = summariseRouting(fit.routing, r.rows[0].name, fit.notes);
+      if (onPathways){
+        const r = await NEON.query('SELECT name, data FROM membership.pathways WHERE id=$1', [id]);
+        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        // Fit onto the structure now on screen; carry the notes into the column
+        // so a fitted pathway never reads as a clean like-for-like.
+        const fit = adaptPathway(p);
+        row = summariseRouting(fit.routing, r.rows[0].name, fit.notes);
+      } else {
+        const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id]);
+        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        const map = {regions: d.regions, assign: d.assign,
+                     levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName};
+        row = withMap(map, notes => summariseRouting(S.routing, r.rows[0].name, notes.length ? notes : null));
+      }
     } catch(e){ row = {label:'(error)', error: e.message || String(e)}; }
     cols.push(row);
   }
@@ -2287,45 +2342,52 @@ function currentPathwayLabel(){
 
 /* ---------- compare tab ---------- */
 function renderCompareInspector(){
-  const lib = S.pathList || [];
-  if (!lib.length) return `<div class="bs-tier-h">Compare pathways</div>
-    <div class="ps-warn"><b>Nothing saved to compare against yet.</b> Save the pathway you have now under
-      <b>Structure</b>, change it, save that too &mdash; then this puts them side by side on the same map.</div>
-    <p class="note">Only the pathway changes between columns. The map, the field it starts from and the measured
-      behaviour are held still, so any difference you see is caused by the rules and nothing else.</p>`;
+  const axis = S.cmpAxis || 'pathway';
+  const onPath = axis === 'pathway';
+  const lib = onPath ? (S.pathList || []) : (S.mapList || []).filter(m => m.id !== S.scenarioId);
+  const anchor = onPath ? currentPathwayLabel() : (S.scenarioName || 'the map on screen');
+
+  const axisSeg = `<div class="seg" style="margin-bottom:10px">
+    <button data-cmpaxis="pathway" class="${onPath?'on':''}">Same map, different pathways</button>
+    <button data-cmpaxis="map" class="${!onPath?'on':''}">Same pathway, different maps</button></div>`;
+
+  const held = onPath
+    ? 'The boundaries, the field each pathway starts from and the measured behaviour are held still.'
+    : 'The pathway, the season and the measured behaviour are held still.';
+
+  if (!lib.length) return `<div class="bs-tier-h">Compare</div>${axisSeg}
+    <div class="ps-warn"><b>${onPath
+      ? 'Nothing saved to compare against yet.' : 'No other saved maps to compare against yet.'}</b>
+      ${onPath
+        ? 'Save the pathway you have now under <b>Structure</b>, change it, save that too &mdash; then this puts them side by side on the same map.'
+        : 'Save another map under the scenario controls below the inspector, then this runs your pathway across both.'}</div>
+    <p class="note">Only the ${onPath?'pathway':'map'} changes between columns. ${esc(held)}</p>`;
 
   const picks = S.cmpIds || [];
   const chooser = lib.map(p => `<label class="bs-cmp-pick">
     <input type="checkbox" data-cmp="${esc(p.id)}" ${picks.indexOf(p.id)>=0?'checked':''}>
-    ${esc(p.name)} <span class="bs-arr-m">${p.levels} levels</span></label>`).join('');
+    ${esc(p.name)}${onPath?` <span class="bs-arr-m">${p.levels} levels</span>`:''}</label>`).join('');
 
   const C = S.cmpRes;
-  let table = '<div class="note">Choose one or more saved pathways to put beside the one on screen.</div>';
+  let table = `<div class="note">Choose one or more saved ${onPath?'pathways':'maps'} to put beside ${esc(anchor)}.</div>`;
   if (C && C.length){
     const head = C.map((c,i)=>`<th class="num">${esc(c.label)}${i===0?' <span class="bs-arr-m">on screen</span>':''}</th>`).join('');
     const base = C[0];
-    const delta = (v, b) => {
-      if (b == null || v == null || !isFinite(v-b) || Math.round(v)===Math.round(b)) return '';
-      const d = v - b;
-      return ` <span class="bs-cmp-d ${d>0?'up':'down'}">${d>0?'+':''}${fmt(Math.round(d))}</span>`;
-    };
-    const row = (label, get, fmtv, hint) => `<tr><td>${esc(label)}${hint?`<div class="bs-lg-sub">${esc(hint)}</div>`:''}</td>` +
+    const delta = (v,b) => (b==null||v==null||!isFinite(v-b)||Math.round(v)===Math.round(b)) ? ''
+      : ` <span class="bs-cmp-d ${v-b>0?'up':'down'}">${v-b>0?'+':''}${fmt(Math.round(v-b))}</span>`;
+    const row = (label,get,fmtv,hint) => `<tr><td>${esc(label)}${hint?`<div class="bs-lg-sub">${esc(hint)}</div>`:''}</td>` +
       C.map((c,i)=>{
         if (c.error) return `<td class="num under">${esc(c.error)}</td>`;
-        const v = get(c);
-        return `<td class="num">${fmtv?fmtv(v):fmt(Math.round(v))}${i>0?delta(v, get(base)):''}</td>`;
+        const v=get(c); if (v==null) return '<td class="num">&mdash;</td>';
+        return `<td class="num">${fmtv?fmtv(v):fmt(Math.round(v))}${i>0?delta(v,get(base)):''}</td>`;
       }).join('') + '</tr>';
-
-    const nLev = Math.max(...C.filter(c=>c.levels).map(c=>c.levels.length), 0);
+    const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
     const levelRows = Array.from({length:nLev}, (_,L) =>
-      row((base.levels && base.levels[L] ? base.levels[L].name : 'Level '+(L+1)) + ' \u2014 entries',
-          c => (c.levels && c.levels[L]) ? c.levels[L].entries : null,
-          null,
-          (base.levels && base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')
-    ).join('');
-
+      row(((base.levels&&base.levels[L])?base.levels[L].name:'Level '+(L+1)) + ' \u2014 entries',
+          c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null, null,
+          (base.levels&&base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')).join('');
     const noted = C.filter(c=>c.notes && c.notes.length);
-    table = `<table class="bs-drill bs-cmp"><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>
+    table = `<div class="bs-scroll"><table class="bs-drill bs-cmp"><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>
       ${row('Championship field', c=>c.finalField, null, 'who reaches the top meet')}
       ${levelRows}
       ${row('Meets to run', c=>c.meets)}
@@ -2334,20 +2396,20 @@ function renderCompareInspector(){
       ${row('Events split', c=>c.autoSplit)}
       ${row('Events to look at', c=>c.review)}
       ${row('Pathway problems', c=>c.problems, v=>v?`<span class="under">${v}</span>`:'0')}
-    </tbody></table>
+    </tbody></table></div>
     ${noted.length ? `<ul class="bs-probs">${noted.map(c=>`<li class="bs-prob warn">
-      <b>${esc(c.label)}</b> was saved for a different structure and was fitted onto this one.
-      ${c.notes.map(n=>esc(n)).join(' ')}</li>`).join('')}</ul>` : ''}
-    <p class="note">Only the pathway differs between columns &mdash; same map, same starting field, same measured
-      behaviour. A change against the column on screen is caused by the rules and nothing else.</p>
+      <b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was
+      fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</li>`).join('')}</ul>` : ''}
+    <p class="note">Only the ${onPath?'pathway':'map'} differs between columns. ${esc(held)} A change against the
+      column on screen is caused by that one thing and nothing else.</p>
     <p class="note"><b>Reading this without being caught out.</b> Each route band sets the size of the meet it feeds,
-      so widening how many leave the Zones changes how big ${esc(tierName(Math.min(1, levelCount()-1)))} is
-      &mdash; it does <i>not</i> change the championship field, which is capped by the last route into it.
-      If the top line has not moved, the change you made was upstream of what sets it.</p>`;
+      so widening how many leave the first stop changes how big the next meet is &mdash; it does <i>not</i> change the
+      championship field, which is capped by the last route into it. If the top line has not moved, the change you
+      made was upstream of what sets it.</p>`;
   }
 
-  return `<div class="bs-tier-h">Compare pathways on this map</div>
-    <div class="bs-pwbar"><div class="bs-pwbar-h">Put beside &ldquo;${esc(currentPathwayLabel())}&rdquo;</div>
+  return `<div class="bs-tier-h">Compare</div>${axisSeg}
+    <div class="bs-pwbar"><div class="bs-pwbar-h">Put beside &ldquo;${esc(anchor)}&rdquo;</div>
       <div class="bs-cmp-picks">${chooser}</div>
       <div class="bs-pwbar-r"><button class="tab bs-mini" id="bsCmpRun">Compare</button>
         ${C?`<button class="tab bs-mini" id="bsCmpClear">Clear</button>`:''}</div></div>
@@ -2519,13 +2581,20 @@ function wirePathway(){
   _b('bsGoReport', ()=>{ const t=document.querySelector('[data-view="reports"]'); if(t) t.click(); });
   _b('bsCsvManifest', exportManifestCsv);
   _b('bsCmpClear', ()=>{ S.cmpRes=null; renderPathway(); });
+  (document.getElementById('bsPathWrap')||document).querySelectorAll('[data-cmpaxis]').forEach(b=>
+    b.addEventListener('click', ()=>{
+      S.cmpAxis = b.dataset.cmpaxis; S.cmpIds = []; S.cmpRes = null;
+      if (S.cmpAxis === 'map' && !S.mapList){
+        loadMapList().then(()=>renderPathway());
+      } else renderPathway();
+    }));
   _b('bsCmpRun', async ()=>{
     const P0=document.getElementById('bsPathWrap');
     S.cmpIds = Array.from((P0||document).querySelectorAll('[data-cmp]:checked')).map(x=>x.dataset.cmp);
     if (!S.cmpIds.length){ msg('Tick at least one saved pathway to compare against.'); return; }
     const btn=document.getElementById('bsCmpRun');
     if (btn){ btn.disabled=true; btn.textContent='Comparing\u2026'; }
-    try { S.cmpRes = await buildComparison(S.cmpIds); }
+    try { S.cmpRes = await buildComparison(S.cmpIds, S.cmpAxis || 'pathway'); }
     catch(e){ msg('Could not compare: '+(e.message||e)); S.cmpRes=null; }
     renderPathway();
   });

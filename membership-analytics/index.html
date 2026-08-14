@@ -518,6 +518,39 @@ tr:hover td{background:#f7fafd}
 .bs-cmp-d{font-family:'JetBrains Mono',monospace;font-size:11px;padding:1px 4px;border-radius:3px;margin-left:4px}
 .bs-cmp-d.up{background:#e6f4ea;color:#0f6b33}
 .bs-cmp-d.down{background:#fdeaec;color:#9b1c2c}
+
+/* --- poolside / mobile ---------------------------------------------------
+   These are read from a station overlooking the pool as often as from a desk.
+   The wide tables (Schedule is 8 columns, Compare grows a column per variant)
+   must scroll on their own rather than stretching the page sideways, and the
+   inspector must stay reachable with a thumb. */
+.bs-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -2px;padding:0 2px}
+.bs-scroll table{min-width:560px}
+.bs-cmp{min-width:520px}
+@media(max-width:820px){
+  /* Inspector tabs: two scrollable rows beat seven cramped ones. */
+  .bs-modeseg{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;
+    scrollbar-width:none;padding-bottom:2px}
+  .bs-modeseg::-webkit-scrollbar{display:none}
+  .bs-modeseg button{flex:0 0 auto;white-space:nowrap;font-size:14px;padding:8px 11px}
+  /* Any data table becomes independently scrollable. */
+  .bs-drill,.bs-cmp{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  .bs-prov{flex-wrap:wrap}
+  .bs-pwbar-r{flex-direction:column;align-items:stretch}
+  .bs-pwbar-r .tab{width:100%}
+  .bs-cmp-picks{flex-direction:column;gap:8px}
+  .bs-cmp-pick{padding:4px 0}          /* a real touch target, not a 13px line */
+  .bs-cmp-pick input{width:18px;height:18px}
+  .bs-mergebar{flex-wrap:wrap}
+  .bs-mergebar .sel{flex:1 1 42%;min-width:0}
+}
+@media(max-width:560px){
+  .bs-modeseg button{font-size:13px;padding:7px 9px}
+  .bs-tier-h{font-size:15px}
+  /* Stop the toolbar segments from squeezing into unreadable slivers. */
+  .bs-row{gap:6px}
+  .bs-row .seg{flex:0 0 auto}
+}
 .bs-hostcell{display:inline-flex;align-items:center;gap:2px;justify-content:flex-end}
 .bs-hostin{width:74px;text-align:right}
 .bs-hostin.set{border-color:var(--pool);background:#eff9fd;font-weight:800}
@@ -589,10 +622,10 @@ tr:hover td{background:#f7fafd}
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608053100"></script>
-<script src="scenario-schedule-engine.js?v=202608141838"></script>
-<script src="boundary.js?v=202608141838"></script>
+<script src="scenario-schedule-engine.js?v=202608141905"></script>
+<script src="boundary.js?v=202608141905"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202608141838"></script>
+<script src="ma-reports.js?v=202608141905"></script>
 <script src="pricing.js?v=202608055500"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>
