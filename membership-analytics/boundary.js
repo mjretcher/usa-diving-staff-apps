@@ -2646,9 +2646,14 @@ function renderScheduleInspector(res){
 
   const overview = out.stops.map(x => {
     const k = stopKeyOf(x);
-    return `<button class="bs-sc-pill ${k===S.schedStop?'on':''} ${x.daysOver?'bad':'ok'}"
-      data-stop="${esc(k)}" title="${esc(x.level)}">${esc(x.name)}
-      <b>${x.days}d</b>${x.daysOver?` <span>${x.daysOver} over</span>`:''}</button>`;
+    // data-hl lights this stop's area on the map on hover, the way every other
+    // table here does -- reading "East runs long" and then hunting for East by
+    // eye was the thing cross-highlighting exists to stop.
+    const hl = x.levelIndex === 0 ? ` data-hl="${x.groupIndex}"` : '';
+    return `<button class="bs-sc-pill ${k===S.schedStop?'on':''} ${x.unknown?'untimed':(x.daysOver?'bad':'ok')}"
+      data-stop="${esc(k)}"${hl} title="${esc(x.level)}${x.unknown?` — ${x.unknown} event(s) not timed`:''}">${esc(x.name)}
+      <b>${x.days}d</b>${x.daysOver?` <span>${x.daysOver} over</span>`:''}${
+        x.unknown?` <span class="bs-sc-untimed">${x.unknown} untimed</span>`:''}</button>`;
   }).join('');
 
   if (st.err) return `<div class="ps-warn">${esc(st.err)}</div>`;
@@ -2671,7 +2676,8 @@ function renderScheduleInspector(res){
             <span class="bs-sc-evm">${e.estimatedMinutes}m</span>
           </div>
           <div class="bs-sc-evb">
-            <span>${fmt(Math.round(e.divers))} divers &middot; ${e.dives} dives</span>
+            <span>${fmt(Math.round(e.divers))} divers &middot; ${e.dives ? e.dives + ' dives'
+              : '<b class="bs-sc-untimed">no dive count &mdash; not timed</b>'}</span>
             ${e.split?`<span class="bs-sc-tag">split${e.splitManual?' (yours)':''}</span>`:''}
             ${!e.split && e.unsplitMinutes > R.splitReviewThresholdMin
                ? `<span class="bs-sc-tag warn">long</span>`:''}
@@ -2735,8 +2741,14 @@ function renderScheduleInspector(res){
         ? 'You have moved things on this meet. Your placements are kept and beat the model.'
         : 'Laid out by the model. Move an event to another day, or split one, and your choice sticks.'}</div>
     </div>
+    ${st.unknown ? `<div class="ps-warn"><b>${fmt(st.unknown)} event${st.unknown===1?' has':'s have'} no dive count
+        on record, and ${st.unknown===1?'is':'are'} therefore timed as zero minutes here.</b> This meet will run
+        longer than shown, and the verdict below cannot be relied on until those events have a dive count.
+        Everything else on the day is timed normally.</div>` : ''}
     ${bad?`<div class="bs-spread under">${bad} of ${dayCount} day${dayCount===1?'':'s'} runs past closing.</div>`
-         :`<div class="bs-spread ok">Every day fits inside the pool hours.</div>`}
+         :`<div class="bs-spread ${st.unknown?'':'ok'}">${st.unknown
+             ? 'Every day fits — but only counting the events that could be timed.'
+             : 'Every day fits inside the pool hours.'}</div>`}
     <div class="bs-sc-grid">${dayCols}
       <div class="bs-sc-newday" data-day="${dayCount+1}" data-occ="0" data-win="${R.facilityCloseMin-R.facilityOpenMin}">
         <span>Drop here to start<br>day ${dayCount+1}</span></div>
