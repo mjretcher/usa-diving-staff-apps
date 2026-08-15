@@ -2474,6 +2474,93 @@ const EVLBL = id => {
 
 /* Every control on the Schedule tab. Each one records a decision and re-lays
    the meet out around it; none of them silently correct anything. */
+
+/* ---------- dragging a session around ----------
+   HTML5 drag events do not fire on touch, so this is the desktop path only and
+   the day selector on each card stays as the way it is done on a phone and with
+   a keyboard. Neither is a fallback for the other; they are two inputs to the
+   same decision.
+
+   While a card is in the air, each day is costed live: the day under the cursor
+   shows what it would total with this event added, and turns red if that would
+   run past closing. Knowing before you let go is the whole point -- otherwise
+   it is drop, read, undo. */
+function wireScheduleDnD(){
+  const P = document.getElementById('bsPathWrap');
+  if (!P) return;
+  const grid = P.querySelector('.bs-sc-grid');
+  if (!grid) return;
+  let dragId = null, dragMin = 0, dragFrom = 0;
+
+  const clearMarks = () => {
+    grid.querySelectorAll('.drop,.drop-bad').forEach(el => el.classList.remove('drop','drop-bad'));
+    grid.querySelectorAll('.bs-sc-ghost').forEach(el => el.remove());
+  };
+
+  const cost = (zone) => {
+    const occ = +zone.dataset.occ || 0, win = +zone.dataset.win || 1;
+    const day = +zone.dataset.day;
+    const would = day === dragFrom ? occ : occ + dragMin;
+    return {would, win, over: would > win};
+  };
+
+  grid.querySelectorAll('.bs-sc-ev').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      dragId = card.dataset.ev;
+      dragMin = +card.dataset.min || 0;
+      dragFrom = +card.dataset.day || 0;
+      try {
+        e.dataTransfer.setData('text/plain', dragId);
+        e.dataTransfer.effectAllowed = 'move';
+      } catch(err){}
+      card.classList.add('bs-drag-src');
+      grid.classList.add('bs-dragging');
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('bs-drag-src');
+      grid.classList.remove('bs-dragging');
+      clearMarks();
+      dragId = null;
+    });
+  });
+
+  grid.querySelectorAll('.bs-sc-day, .bs-sc-newday').forEach(zone => {
+    zone.addEventListener('dragover', e => {
+      if (!dragId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch(err){}
+      if (zone.classList.contains('drop') || zone.classList.contains('drop-bad')) return;
+      clearMarks();
+      const c = cost(zone);
+      zone.classList.add(c.over ? 'drop-bad' : 'drop');
+      const g = document.createElement('div');
+      g.className = 'bs-sc-ghost' + (c.over ? ' bad' : '');
+      g.textContent = +zone.dataset.day === dragFrom
+        ? 'Already on this day'
+        : `${(c.would/60).toFixed(1)}h of ${(c.win/60).toFixed(1)}h` + (c.over ? ' — runs past closing' : '');
+      zone.appendChild(g);
+    });
+    zone.addEventListener('dragleave', e => {
+      if (zone.contains(e.relatedTarget)) return;
+      zone.classList.remove('drop','drop-bad');
+      zone.querySelectorAll('.bs-sc-ghost').forEach(el => el.remove());
+    });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      const id = dragId || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
+      clearMarks();
+      grid.classList.remove('bs-dragging');
+      if (!id) return;
+      const to = +zone.dataset.day;
+      if (!to || to === dragFrom) return;
+      const plan = planFor(S.schedStop);
+      plan.dayOf[id] = to;
+      S.dirty = true;
+      renderPathway();
+    });
+  });
+}
+
 function wireSchedule(){
   const P = document.getElementById('bsPathWrap');
   if (!P) return;
@@ -2487,7 +2574,7 @@ function wireSchedule(){
     b.addEventListener('click', ()=>{ S.schedStop = b.dataset.stop; renderPathway(); }));
 
   // Move an event to another day.
-  P.querySelectorAll('.bs-sc-day[data-ev]').forEach(sel =>
+  P.querySelectorAll('.bs-sc-daysel[data-ev]').forEach(sel =>
     sel.addEventListener('change', ()=>{
       const plan = planFor(S.schedStop);
       plan.dayOf[sel.dataset.ev] = +sel.value;
@@ -2523,6 +2610,8 @@ function wireSchedule(){
     plan.minDays = ((st && st.days) || 0) + 1;
     redraw();
   });
+
+  wireScheduleDnD();
 
   const reset = P.querySelector('#bsSchedReset');
   if (reset) reset.addEventListener('click', async ()=>{
@@ -2572,8 +2661,12 @@ function renderScheduleInspector(res){
     const sessions = (d.sessions||[]).map(ss => {
       const evs = ss.events.map(e => {
         const canSplit = (R.neverSplitDisciplines||[]).indexOf(e.discipline) < 0;
-        return `<div class="bs-sc-ev ${e.split?'split':''}" data-ev="${esc(e.id)}" data-hl-ev="1">
+        return `<div class="bs-sc-ev ${e.split?'split':''}" data-ev="${esc(e.id)}"
+             data-min="${e.estimatedMinutes}" data-day="${d.dayNumber}"
+             draggable="true" tabindex="0" role="button"
+             aria-label="${esc(EVLBL(e.id))}, ${e.estimatedMinutes} minutes, day ${d.dayNumber}. Drag to another day, or use the day selector.">
           <div class="bs-sc-evh">
+            <span class="bs-sc-grip" aria-hidden="true">&#8942;&#8942;</span>
             <span class="bs-sc-evn">${esc(EVLBL(e.id))}</span>
             <span class="bs-sc-evm">${e.estimatedMinutes}m</span>
           </div>
@@ -2584,8 +2677,8 @@ function renderScheduleInspector(res){
                ? `<span class="bs-sc-tag warn">long</span>`:''}
           </div>
           <div class="bs-sc-eva">
-            <label>Day
-              <select class="sel bs-sc-day" data-ev="${esc(e.id)}">
+            <label title="Drag the card on a desktop, or use this on a phone or with a keyboard">Day
+              <select class="sel bs-sc-daysel" data-ev="${esc(e.id)}">
                 ${Array.from({length: Math.max(dayCount, 1) + 1}, (_,i)=>i+1).map(n=>
                   `<option value="${n}" ${n===d.dayNumber?'selected':''}>${n}${n>dayCount?' (new)':''}</option>`).join('')}
               </select></label>
@@ -2606,7 +2699,8 @@ function renderScheduleInspector(res){
     const pct = Math.min(100, Math.round(100*occupied/Math.max(1,windowMin)));
     const practice = (d.practiceWindows||[]).filter(x=>x.usable)
       .map(x=>`${x.position} ${x.minutes}m`).join(' · ');
-    return `<div class="bs-sc-day ${over?'over':''}" data-day="${d.dayNumber}">
+    return `<div class="bs-sc-day ${over?'over':''}" data-day="${d.dayNumber}"
+        data-occ="${Math.round(occupied)}" data-win="${Math.round(windowMin)}">
       <div class="bs-sc-dh">Day ${d.dayNumber}
         <span class="bs-sc-dm">${(occupied/60).toFixed(1)}h of ${(windowMin/60).toFixed(1)}h</span></div>
       <div class="bs-sc-bar"><i style="width:${pct}%"></i></div>
@@ -2635,13 +2729,18 @@ function renderScheduleInspector(res){
         <button class="tab bs-mini" id="bsSchedAddDay">Add a day</button>
         ${planDirty(key)?`<button class="tab bs-mini" id="bsSchedReset">Undo my changes to this meet</button>`:''}
       </div>
+      <div class="note bs-sc-hint">Drag a card to another day. On a phone or with a keyboard, use the day
+        selector on the card.</div>
       <div class="note">${planDirty(key)
         ? 'You have moved things on this meet. Your placements are kept and beat the model.'
         : 'Laid out by the model. Move an event to another day, or split one, and your choice sticks.'}</div>
     </div>
     ${bad?`<div class="bs-spread under">${bad} of ${dayCount} day${dayCount===1?'':'s'} runs past closing.</div>`
          :`<div class="bs-spread ok">Every day fits inside the pool hours.</div>`}
-    <div class="bs-sc-grid">${dayCols}</div>
+    <div class="bs-sc-grid">${dayCols}
+      <div class="bs-sc-newday" data-day="${dayCount+1}" data-occ="0" data-win="${R.facilityCloseMin-R.facilityOpenMin}">
+        <span>Drop here to start<br>day ${dayCount+1}</span></div>
+    </div>
     <div class="bs-prov"><b>Assuming</b>
       <span>warm-up A/B <code>${R.warmupSeniorGroupsMin} min</code>, C/D scales with entries</span>
       <span>one warm-up per session &mdash; the longest any event in it needs</span>
