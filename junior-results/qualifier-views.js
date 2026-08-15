@@ -1211,11 +1211,13 @@
       window.renderNationalsResultsPanel(document.getElementById('qvNatResults'));
     }
 
-    // Reconciles the qualifier list against the field that actually competed,
-    // and — only when results exist — promotes results above the list.
-    if (window.renderNatReconciliation) {
-      window.renderNatReconciliation(document.getElementById('qvNatRecon'));
-    }
+    // Reconciliation is NOT rendered here. It moved to Junior Circuit Analytics
+    // under Qual / Reg / Att (reports-view.js), for the reason given above: this
+    // stage is the championship, and opening it on a June invitation list was
+    // wrong. The call that used to sit here passed getElementById('qvNatRecon'),
+    // a div this function stopped creating when the panel moved -- so it handed
+    // the renderer null on every load and the renderer returned immediately.
+    // Harmless, but it read as though this stage still rendered reconciliation.
 
     // Frame the stage: sticky rail + provenance chips. Panels render async, so
     // the shell debounces and re-frames as each one lands.

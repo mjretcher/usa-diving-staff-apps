@@ -422,7 +422,11 @@
 
   window._hpsToggleNearMiss = function () {
     state.showNearMiss = !state.showNearMiss;
-    var w = document.getElementById('rptPanelWrap');
+    // The panel host is created with a CLASS, not an id -- reports-view.js does
+    // panelWrap.className = 'rpt-panel-wrap' and never sets an id. Looking up
+    // getElementById('rptPanelWrap') therefore always returned null and the
+    // guard swallowed it, so this toggle did nothing at all.
+    var w = document.querySelector('.rpt-panel-wrap');
     if (w) window.renderHpsTrackerPanel(w);
   };
 })();

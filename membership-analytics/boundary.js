@@ -4175,7 +4175,9 @@ function wirePanel(){
   bind('bsLgMembers', ()=>{S.legendMode='members'; renderNumbers();});
   bind('bsLgAge', ()=>{S.legendMode='age'; renderNumbers();});
   bind('bsLgComp', ()=>{S.legendMode='comp'; renderNumbers();});
-  P.querySelectorAll('#bsModeSeg [data-insp], .bs-modeseg [data-insp]').forEach(b=>
+  // (There is no #bsModeSeg -- the inspector strip is .bs-modeseg. The id half
+  //  of this selector was dead weight of my own making.)
+  P.querySelectorAll('.bs-modeseg [data-insp]').forEach(b=>
     b.addEventListener('click', ()=>{ S.panelMode = b.dataset.insp; renderPanel(); refreshFlow(); }));
 
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
