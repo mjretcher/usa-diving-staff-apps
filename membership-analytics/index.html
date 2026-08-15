@@ -596,18 +596,58 @@ tr:hover td{background:#f7fafd}
    Repainting the map is then a dozen variable writes on the <svg> rather than
    one setAttribute per county. A single paint stroke is one class swap. */
 #bsSvg path.bcty{fill:var(--a-u,#eef1f6)}
-#bsSvg path.bcty.a-0{fill:var(--a0)}   #bsSvg path.bcty.a-1{fill:var(--a1)}
-#bsSvg path.bcty.a-2{fill:var(--a2)}   #bsSvg path.bcty.a-3{fill:var(--a3)}
-#bsSvg path.bcty.a-4{fill:var(--a4)}   #bsSvg path.bcty.a-5{fill:var(--a5)}
-#bsSvg path.bcty.a-6{fill:var(--a6)}   #bsSvg path.bcty.a-7{fill:var(--a7)}
-#bsSvg path.bcty.a-8{fill:var(--a8)}   #bsSvg path.bcty.a-9{fill:var(--a9)}
-#bsSvg path.bcty.a-10{fill:var(--a10)} #bsSvg path.bcty.a-11{fill:var(--a11)}
-#bsSvg path.bcty.a-12{fill:var(--a12)} #bsSvg path.bcty.a-13{fill:var(--a13)}
-#bsSvg path.bcty.a-14{fill:var(--a14)} #bsSvg path.bcty.a-15{fill:var(--a15)}
-#bsSvg path.bcty.a-16{fill:var(--a16)} #bsSvg path.bcty.a-17{fill:var(--a17)}
-#bsSvg path.bcty.a-18{fill:var(--a18)} #bsSvg path.bcty.a-19{fill:var(--a19)}
-#bsSvg path.bcty.a-20{fill:var(--a20)} #bsSvg path.bcty.a-21{fill:var(--a21)}
-#bsSvg path.bcty.a-22{fill:var(--a22)} #bsSvg path.bcty.a-23{fill:var(--a23)}
+#bsSvg path.bcty.a-0{fill:var(--a0)}
+#bsSvg path.bcty.a-1{fill:var(--a1)}
+#bsSvg path.bcty.a-2{fill:var(--a2)}
+#bsSvg path.bcty.a-3{fill:var(--a3)}
+#bsSvg path.bcty.a-4{fill:var(--a4)}
+#bsSvg path.bcty.a-5{fill:var(--a5)}
+#bsSvg path.bcty.a-6{fill:var(--a6)}
+#bsSvg path.bcty.a-7{fill:var(--a7)}
+#bsSvg path.bcty.a-8{fill:var(--a8)}
+#bsSvg path.bcty.a-9{fill:var(--a9)}
+#bsSvg path.bcty.a-10{fill:var(--a10)}
+#bsSvg path.bcty.a-11{fill:var(--a11)}
+#bsSvg path.bcty.a-12{fill:var(--a12)}
+#bsSvg path.bcty.a-13{fill:var(--a13)}
+#bsSvg path.bcty.a-14{fill:var(--a14)}
+#bsSvg path.bcty.a-15{fill:var(--a15)}
+#bsSvg path.bcty.a-16{fill:var(--a16)}
+#bsSvg path.bcty.a-17{fill:var(--a17)}
+#bsSvg path.bcty.a-18{fill:var(--a18)}
+#bsSvg path.bcty.a-19{fill:var(--a19)}
+#bsSvg path.bcty.a-20{fill:var(--a20)}
+#bsSvg path.bcty.a-21{fill:var(--a21)}
+#bsSvg path.bcty.a-22{fill:var(--a22)}
+#bsSvg path.bcty.a-23{fill:var(--a23)}
+/* Counties with no members, athletes or coaches this season. Same area colour,
+   mixed toward white by an amount solved per colour so every area separates by
+   about the same visible amount. Readable as a gap on a scan; never mistaken
+   for a different area, and never for unassigned. */
+#bsSvg path.bcty.a-0.e{fill:var(--a0e)}
+#bsSvg path.bcty.a-1.e{fill:var(--a1e)}
+#bsSvg path.bcty.a-2.e{fill:var(--a2e)}
+#bsSvg path.bcty.a-3.e{fill:var(--a3e)}
+#bsSvg path.bcty.a-4.e{fill:var(--a4e)}
+#bsSvg path.bcty.a-5.e{fill:var(--a5e)}
+#bsSvg path.bcty.a-6.e{fill:var(--a6e)}
+#bsSvg path.bcty.a-7.e{fill:var(--a7e)}
+#bsSvg path.bcty.a-8.e{fill:var(--a8e)}
+#bsSvg path.bcty.a-9.e{fill:var(--a9e)}
+#bsSvg path.bcty.a-10.e{fill:var(--a10e)}
+#bsSvg path.bcty.a-11.e{fill:var(--a11e)}
+#bsSvg path.bcty.a-12.e{fill:var(--a12e)}
+#bsSvg path.bcty.a-13.e{fill:var(--a13e)}
+#bsSvg path.bcty.a-14.e{fill:var(--a14e)}
+#bsSvg path.bcty.a-15.e{fill:var(--a15e)}
+#bsSvg path.bcty.a-16.e{fill:var(--a16e)}
+#bsSvg path.bcty.a-17.e{fill:var(--a17e)}
+#bsSvg path.bcty.a-18.e{fill:var(--a18e)}
+#bsSvg path.bcty.a-19.e{fill:var(--a19e)}
+#bsSvg path.bcty.a-20.e{fill:var(--a20e)}
+#bsSvg path.bcty.a-21.e{fill:var(--a21e)}
+#bsSvg path.bcty.a-22.e{fill:var(--a22e)}
+#bsSvg path.bcty.a-23.e{fill:var(--a23e)}
 
 /* --- dialogs (replacing prompt/confirm) --- */
 .bs-dlg-back{position:fixed;inset:0;background:rgba(23,31,105,.45);z-index:9000;
@@ -642,6 +682,8 @@ tr:hover td{background:#f7fafd}
 }
 
 /* --- the consequence strip: always under the map, never hidden by a tab --- */
+.bs-emptykey{font-size:11px;color:#64748b;margin-top:8px;line-height:1.45}
+.bs-emptykey b{color:#171F69}
 .bs-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:10px;
   border-top:1px solid var(--line)}
 .bs-str-c{flex:1 1 110px;min-width:0;border-radius:6px;padding:7px 10px;background:#f8fafc;
@@ -771,11 +813,11 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
 <script src="ma-app.js?v=202608054500"></script>
-<script src="routing.js?v=202608142359"></script>
-<script src="scenario-schedule-engine.js?v=202608142359"></script>
-<script src="boundary.js?v=202608142359"></script>
+<script src="routing.js?v=202608150013"></script>
+<script src="scenario-schedule-engine.js?v=202608150013"></script>
+<script src="boundary.js?v=202608150013"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202608142359"></script>
+<script src="ma-reports.js?v=202608150013"></script>
 <script src="pricing.js?v=202608055500"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

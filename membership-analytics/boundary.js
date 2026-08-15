@@ -495,12 +495,22 @@ function fillFor(fips, maxM){
   return heatTint(st ? st[S.year].m : 0, maxM);
 }
 
-/* Which colour slot a county belongs to. u = unassigned. */
+/* No membership of any kind for the season on screen -- no members, no
+   athletes, no coaches. Not the same as unassigned: an empty county can sit in
+   the middle of an area and still count toward its size on a map while
+   contributing nobody to it. Worth seeing while you are drawing. */
+function countyEmpty(fips){
+  const r = countyStat(fips);
+  return !r || (!r.m && !r.a && !r.c);
+}
+
+/* Which colour slot a county belongs to. u = unassigned. An empty county keeps
+   its area's colour, lightened, so it still reads as part of the area. */
 function countyClass(fips){
   const ri = S.assign[fips];
   if (ri==null || ri<0 || ri>=S.regions.length) return 'a-u';
   const of = S._of || (S._of = tierGroups().of);
-  return 'a-' + of[ri];
+  return 'a-' + of[ri] + (countyEmpty(fips) ? ' e' : '');
 }
 
 /* Cached element lookup -- querySelector per county was a measurable share of
@@ -514,28 +524,94 @@ function countyEl(fips){
   return el;
 }
 
+/* The class is a pair now -- the area slot plus an optional empty marker -- so
+   swap on the whole string rather than a single token. */
+function setCountyClass(el, want){
+  if (el._ac === want) return false;
+  if (el._ac) el._ac.split(' ').forEach(c => c && el.classList.remove(c));
+  want.split(' ').forEach(c => c && el.classList.add(c));
+  el._ac = want;
+  return true;
+}
+
 function paintCountyEl(fips){
   const el = countyEl(fips);
   if (!el) return;
   const want = countyClass(fips);
-  if (el._ac === want) return;                 // already right; skip the write
-  if (el._ac) el.classList.remove(el._ac);
-  el.classList.add(want); el._ac = want;
+  if (!setCountyClass(el, want)) return;
   if (want === 'a-u') el.style.fill = fillFor(fips, S._maxM);   // heat tint is per-county
   else if (el.style.fill) el.style.fill = '';
 }
 
 /* Push the palette into CSS variables. This is the whole repaint for a colour
    or tier change: a dozen writes instead of three thousand. */
+/* ---------- the empty-county tint ----------
+   Counties with nobody in them keep their area's colour, lightened. The amount
+   cannot be a fixed mix: lightening a near-black navy by 40% is an enormous
+   jump that reads as a second area, while the same 40% on the pale sky blue is
+   invisible. Measured across the brand palette a flat 0.42 mix ranged from
+   1.32x to 3.69x apparent difference -- inconsistent in both directions.
+
+   So it is solved per colour for a constant apparent difference instead. Every
+   area separates by about the same amount, which is what makes it read as one
+   signal rather than sixteen. */
+function mixWhite(hex, t){
+  const v = String(hex||'').replace('#','');
+  if (v.length !== 6) return hex;
+  const p = [0,2,4].map(i => parseInt(v.slice(i,i+2),16) || 0);
+  return '#' + p.map(c => Math.round(c + (255-c)*t).toString(16).padStart(2,'0')).join('');
+}
+function relLum(hex){
+  const v = String(hex||'').replace('#','');
+  const p = [0,2,4].map(i => (parseInt(v.slice(i,i+2),16)||0)/255)
+    .map(c => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
+  return 0.2126*p[0] + 0.7152*p[1] + 0.0722*p[2];
+}
+function lumRatio(a, b){
+  const la = relLum(a), lb = relLum(b);
+  return (Math.max(la,lb) + 0.05) / (Math.min(la,lb) + 0.05);
+}
+const EMPTY_RATIO = 1.62;    // noticed on a scan, never mistaken for another area
+const EMPTY_MAX_MIX = 0.62;  // a very light area cannot reach it -- cap rather than bleach
+const UNASSIGNED_FLOOR = 190;// below this, two fills read as the same colour
+const _emptyTint = {};
+function emptyTint(hex){
+  if (_emptyTint[hex]) return _emptyTint[hex];
+  let lo = 0.05, hi = EMPTY_MAX_MIX;
+  for (let i = 0; i < 24; i++){
+    const m = (lo + hi) / 2;
+    if (lumRatio(hex, mixWhite(hex, m)) < EMPTY_RATIO) lo = m; else hi = m;
+  }
+  let mix = Math.min(EMPTY_MAX_MIX, (lo + hi) / 2);
+
+  /* An already-pale area is the awkward case: lightening the sky blue enough to
+     read as "emptier" walks it straight into the grey used for unassigned, and
+     an empty county reading as UNASSIGNED is a worse error than one that is
+     merely subtle -- it changes what the map says rather than how loudly it
+     says it. So back the mix off until the tint is clearly not that grey, even
+     at the cost of the signal. If it cannot separate at all, leave the colour
+     alone rather than print something misleading. */
+  while (mix > 0.02 && colorDistance(mixWhite(hex, mix), UNASSIGNED_BASE) < UNASSIGNED_FLOOR) mix -= 0.02;
+  if (colorDistance(mixWhite(hex, mix), UNASSIGNED_BASE) < UNASSIGNED_FLOOR) mix = 0;
+  return (_emptyTint[hex] = mixWhite(hex, mix));
+}
+
 function syncPalette(){
   const svg = document.getElementById('bsSvg');
   if (!svg) return;
   S._of = tierGroups().of;
   const n = groupCountAt(S.tierView);
-  for (let gi=0; gi<n; gi++) svg.style.setProperty('--a'+gi, groupColor(gi));
+  for (let gi=0; gi<n; gi++){
+    const c = groupColor(gi);
+    svg.style.setProperty('--a'+gi, c);
+    svg.style.setProperty('--a'+gi+'e', emptyTint(c));
+  }
   svg.style.setProperty('--a-u', UNASSIGNED_BASE);
   // Retire variables from a structure with more areas than this one.
-  for (let gi=n; gi<n+24; gi++) svg.style.removeProperty('--a'+gi);
+  for (let gi=n; gi<n+24; gi++){
+    svg.style.removeProperty('--a'+gi);
+    svg.style.removeProperty('--a'+gi+'e');
+  }
 }
 
 function renderMapOnce(){
@@ -566,12 +642,10 @@ function repaintAll(){
   // Only counties whose slot actually changed are touched.
   document.querySelectorAll('path.bcty').forEach(el=>{
     const want = countyClass(el.dataset.f);
-    if (el._ac === want){
+    if (!setCountyClass(el, want)){
       if (want === 'a-u') el.style.fill = fillFor(el.dataset.f, S._maxM);
       return;
     }
-    if (el._ac) el.classList.remove(el._ac);
-    el.classList.add(want); el._ac = want;
     el.style.fill = (want === 'a-u') ? fillFor(el.dataset.f, S._maxM) : '';
   });
 }
@@ -2343,8 +2417,8 @@ function computeSchedule(res){
       if (!rounds.length) continue;
       const name = (tierGroupsAt(L).groups[g] || {}).name || (tierName(L) + ' ' + (g+1));
       let sim = null, err = null;
-      const key = L + ':' + g;
-      const plan = (S.schedPlans && S.schedPlans[key]) || null;
+      const pkey = L + ':' + g;
+      const plan = (S.schedPlans && S.schedPlans[pkey]) || null;
       try { sim = E.simulateStop({stopName: name, rounds}, spec, S.schedRules || undefined, plan); }
       catch(e){ err = e.message || String(e); }
       const d = (sim && sim.days) || [];
@@ -2579,6 +2653,777 @@ function renderScheduleInspector(res){
       and between each pair before anything is left at the end. This is a single-lane worst case &mdash; it does not
       model two boards running different events at once, so a real day usually comes in shorter. Nothing here
       changes a real schedule; it is a plan to argue with.</p>`;
+}
+
+/* ============================================================================
+   COMPARE PATHWAYS ON ONE MAP
+   Separating maps from pathways only pays off if you can put the variants next
+   to each other. The committee question is not "is this map balanced" -- it is
+   "nine zones sending three, or six sending five?" -- and answering it used to
+   mean editing the routing, writing the numbers on paper, editing it back, and
+   trusting yourself to have written them down right.
+
+   Only the routing is swapped. The map, the seed field and the measured
+   behaviour are held still, so every column differs by exactly one thing.
+   ========================================================================= */
+
+/* Swap the routing, run something, put it back whatever happens. Same shape as
+   financialsFor(), and for the same reason: the routing is global state for the
+   duration, so these must never be run concurrently. */
+function withRouting(routing, fn){
+  const snap = S.routing;
+  try { S.routing = routing; return fn(); }
+  finally { S.routing = snap; }
+}
+
+/* Swap the map, run something, put it back. Take-up is read from
+   JuniorFlow.constants(), not from the map, so it stays fixed across the swap
+   -- which is the same choice the advancement figures already make: re-measuring
+   behaviour on every map would let it absorb the change and nothing would ever
+   appear to move. */
+function withMap(map, fn){
+  const snap = {regions:S.regions, assign:S.assign, levels:S.levels,
+                finalName:S.finalName, routing:S.routing};
+  try {
+    S.regions = (map.regions && map.regions.length) ? map.regions : snap.regions;
+    S.assign  = map.assign || snap.assign;
+    if (map.levels && map.levels.length) S.levels = map.levels;
+    if (map.finalName) S.finalName = map.finalName;
+    // A map with a different number of levels cannot take the current routing
+    // as-is -- routes point at level indices. Fit it, and hand back the notes.
+    let notes = [];
+    if (S.levels.length !== snap.routing.length){
+      const fit = adaptPathway({routing: snap.routing});
+      S.routing = fit.routing; notes = fit.notes;
+    }
+    return fn(notes);
+  } finally {
+    S.regions = snap.regions; S.assign = snap.assign; S.levels = snap.levels;
+    S.finalName = snap.finalName; S.routing = snap.routing;
+  }
+}
+
+/* Everything a column needs, measured the same way for every variant. */
+function summariseRouting(routing, label, notes){
+  return withRouting(routing, () => {
+    const res = projectPathway();
+    if (!res) return {label, notes, error: 'could not project'};
+    const sched = computeSchedule(res);
+    const cells = CELLS;
+    const levels = routing.map((lvl, L) => {
+      const stops = Math.max(1, groupCountAt(L));
+      const rounds = QR().roundsOf(lvl);
+      // People AT this stage, which is everyone who joins it at any round --
+      // not the size of its first round, which misses anyone seeded past it.
+      let entry = 0;
+      for (let g = 0; g < stops; g++) entry += QR().entriesAt(res, L, g, cells);
+      return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
+              rounds: rounds.length};
+    });
+    const last = routing.length - 1;
+    const lastRounds = QR().roundsOf(routing[last]);
+    // The headline a committee actually argues about: how many reach the
+    // championship. Read off its entry round, not the reduced final.
+    let finalField = 0;
+    for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) finalField += QR().entriesAt(res, last, g, cells);
+    const st = sched.stops || [];
+    return {
+      label, notes,
+      levels, finalField,
+      meets:     st.length,
+      daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
+      over:      st.filter(x=>x.daysOver).length,
+      autoSplit: st.reduce((a,x)=>a+(x.autoSplit||0), 0),
+      review:    st.reduce((a,x)=>a+(x.review||0), 0),
+      problems:  (res.problems||[]).length,
+      stops: st.map(x=>({name:x.name, level:x.level, entries:x.entries,
+                         days:x.days, daysOver:x.daysOver})),
+    };
+  });
+}
+
+/* Build every column. The first is always what is on screen, so a comparison
+   is always anchored to something you can see. */
+async function buildComparison(ids, axis){
+  if (!QR() || !S.flow || !S.routing) return null;
+  const onPathways = (axis || 'pathway') === 'pathway';
+  const baseLabel = onPathways ? currentPathwayLabel() : (S.scenarioName || 'This map');
+  const cols = [summariseRouting(S.routing, baseLabel, null)];
+
+  for (const id of (ids||[])){
+    let row = null;
+    try {
+      if (onPathways){
+        const r = await NEON.query('SELECT name, data FROM membership.pathways WHERE id=$1', [id]);
+        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        // Fit onto the structure now on screen; carry the notes into the column
+        // so a fitted pathway never reads as a clean like-for-like.
+        const fit = adaptPathway(p);
+        row = summariseRouting(fit.routing, r.rows[0].name, fit.notes);
+      } else {
+        const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id]);
+        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        const map = {regions: d.regions, assign: d.assign,
+                     levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName};
+        row = withMap(map, notes => summariseRouting(S.routing, r.rows[0].name, notes.length ? notes : null));
+      }
+    } catch(e){ row = {label:'(error)', error: e.message || String(e)}; }
+    cols.push(row);
+  }
+  return cols;
+}
+
+function currentPathwayLabel(){
+  if (S.pathSaved) return S.pathSaved.name + (S.pathDirty ? ' (edited)' : '');
+  if (S.routing && S.routing.length) return (S.scenarioName || 'This map') + '\u2019s own';
+  return 'Published rules';
+}
+
+/* ---------- compare tab ---------- */
+function renderCompareInspector(){
+  const axis = S.cmpAxis || 'pathway';
+  const onPath = axis === 'pathway';
+  const lib = onPath ? (S.pathList || []) : (S.mapList || []).filter(m => m.id !== S.scenarioId);
+  const anchor = onPath ? currentPathwayLabel() : (S.scenarioName || 'the map on screen');
+
+  const axisSeg = `<div class="seg" style="margin-bottom:10px">
+    <button data-cmpaxis="pathway" class="${onPath?'on':''}">Same map, different pathways</button>
+    <button data-cmpaxis="map" class="${!onPath?'on':''}">Same pathway, different maps</button></div>`;
+
+  const held = onPath
+    ? 'The boundaries, the field each pathway starts from and the measured behaviour are held still.'
+    : 'The pathway, the season and the measured behaviour are held still.';
+
+  if (!lib.length) return `<div class="bs-tier-h">Compare</div>${axisSeg}
+    <div class="ps-warn"><b>${onPath
+      ? 'Nothing saved to compare against yet.' : 'No other saved maps to compare against yet.'}</b>
+      ${onPath
+        ? 'Save the pathway you have now under <b>Structure</b>, change it, save that too &mdash; then this puts them side by side on the same map.'
+        : 'Save another map under the scenario controls below the inspector, then this runs your pathway across both.'}</div>
+    <p class="note">Only the ${onPath?'pathway':'map'} changes between columns. ${esc(held)}</p>`;
+
+  const picks = S.cmpIds || [];
+  const chooser = lib.map(p => `<label class="bs-cmp-pick">
+    <input type="checkbox" data-cmp="${esc(p.id)}" ${picks.indexOf(p.id)>=0?'checked':''}>
+    ${esc(p.name)}${onPath?` <span class="bs-arr-m">${p.levels} levels</span>`:''}</label>`).join('');
+
+  const C = S.cmpRes;
+  let table = `<div class="note">Choose one or more saved ${onPath?'pathways':'maps'} to put beside ${esc(anchor)}.</div>`;
+  if (C && C.length){
+    const head = C.map((c,i)=>`<th class="num">${esc(c.label)}${i===0?' <span class="bs-arr-m">on screen</span>':''}</th>`).join('');
+    const base = C[0];
+    const delta = (v,b) => (b==null||v==null||!isFinite(v-b)||Math.round(v)===Math.round(b)) ? ''
+      : ` <span class="bs-cmp-d ${v-b>0?'up':'down'}">${v-b>0?'+':''}${fmt(Math.round(v-b))}</span>`;
+    const row = (label,get,fmtv,hint) => `<tr><td>${esc(label)}${hint?`<div class="bs-lg-sub">${esc(hint)}</div>`:''}</td>` +
+      C.map((c,i)=>{
+        if (c.error) return `<td class="num under">${esc(c.error)}</td>`;
+        const v=get(c); if (v==null) return '<td class="num">&mdash;</td>';
+        return `<td class="num">${fmtv?fmtv(v):fmt(Math.round(v))}${i>0?delta(v,get(base)):''}</td>`;
+      }).join('') + '</tr>';
+    const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
+    const levelRows = Array.from({length:nLev}, (_,L) =>
+      row(((base.levels&&base.levels[L])?base.levels[L].name:'Level '+(L+1)) + ' \u2014 entries',
+          c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null, null,
+          (base.levels&&base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')).join('');
+    const noted = C.filter(c=>c.notes && c.notes.length);
+    table = `<div class="bs-scroll"><table class="bs-drill bs-cmp"><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>
+      ${row('Championship field', c=>c.finalField, null, 'who reaches the top meet')}
+      ${levelRows}
+      ${row('Meets to run', c=>c.meets)}
+      ${row('Competition days, all meets', c=>c.daysTotal)}
+      ${row('Meets that do not fit', c=>c.over, v=>v?`<span class="under">${v}</span>`:'0')}
+      ${row('Events split', c=>c.autoSplit)}
+      ${row('Events to look at', c=>c.review)}
+      ${row('Pathway problems', c=>c.problems, v=>v?`<span class="under">${v}</span>`:'0')}
+    </tbody></table></div>
+    ${noted.length ? `<ul class="bs-probs">${noted.map(c=>`<li class="bs-prob warn">
+      <b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was
+      fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</li>`).join('')}</ul>` : ''}
+    <p class="note">Only the ${onPath?'pathway':'map'} differs between columns. ${esc(held)} A change against the
+      column on screen is caused by that one thing and nothing else.</p>
+    <p class="note"><b>Reading this without being caught out.</b> Each route band sets the size of the meet it feeds,
+      so widening how many leave the first stop changes how big the next meet is &mdash; it does <i>not</i> change the
+      championship field, which is capped by the last route into it. If the top line has not moved, the change you
+      made was upstream of what sets it.</p>`;
+  }
+
+  return `<div class="bs-tier-h">Compare</div>${axisSeg}
+    <div class="bs-pwbar"><div class="bs-pwbar-h">Put beside &ldquo;${esc(anchor)}&rdquo;</div>
+      <div class="bs-cmp-picks">${chooser}</div>
+      <div class="bs-pwbar-r"><button class="tab bs-mini" id="bsCmpRun">Compare</button>
+        ${C?`<button class="tab bs-mini" id="bsCmpClear">Clear</button>`:''}</div></div>
+    ${table}`;
+}
+
+
+/* ============================================================================
+   BRUSH INTELLIGENCE
+   One county per click is a mouse-sized tool for a country-sized job. The
+   brush walks the same county adjacency graph the auto-draw uses, so a radius
+   of 2 paints the cursor county and everything within two borders of it.
+   ========================================================================= */
+let _brushAdj = null, _brushIdx = null;
+function ensureBrushGraph(){
+  if (_brushAdj) return true;
+  if (!_autoData || !_autoData.adj || !_autoData.fips) { loadAutoData().catch(()=>{}); return false; }
+  _brushAdj = _autoData.adj;
+  _brushIdx = {}; _autoData.fips.forEach((f,i)=>{ _brushIdx[f] = i; });
+  return true;
+}
+
+/* Counties within `r` borders of `fips`, breadth-first. */
+function brushDisc(fips, r){
+  if (!ensureBrushGraph() || _brushIdx[fips] == null) return [fips];
+  const start = _brushIdx[fips], seen = new Set([start]);
+  let frontier = [start];
+  for (let d = 0; d < r; d++){
+    const next = [];
+    for (const u of frontier) for (const v of (_brushAdj[u]||[])){
+      if (!seen.has(v)){ seen.add(v); next.push(v); }
+    }
+    frontier = next;
+    if (!frontier.length) break;
+  }
+  return [...seen].map(i => _autoData.fips[i]);
+}
+
+function paintBrush(fips){
+  brushDisc(fips, S.brush).forEach(f => assignCounty(f));
+}
+
+function setBrush(r){
+  S.brush = Math.max(0, Math.min(6, r));
+  if (S.brush > 0) ensureBrushGraph();
+  const el = document.getElementById('bsBrushLbl');
+  if (el) el.textContent = S.brush === 0 ? 'single county' : `${S.brush} deep`;
+  msg(S.brush === 0 ? 'Brush: single county' : `Brush: everything within ${S.brush} border${S.brush>1?'s':''}`);
+}
+
+/* ============================================================================
+   PREDICTIVE HOVER
+   The accumulator makes a speculative tally cheap enough to run on every
+   pointer move, which means the consequence of a stroke can be shown BEFORE it
+   is committed. Hover a county with a brush loaded and the strip reports what
+   the map would become, not what it is. You stop painting-then-checking and
+   start steering.
+   ========================================================================= */
+function previewMove(fips){
+  if (S.active == null) return null;
+  const cur = S.assign[fips];
+  const to  = S.active === -1 ? null : S.active;
+  if ((cur == null && to == null) || cur === to) return null;
+  const before = computeTallies();
+  const TG = before.TG;
+  const rec = countyStat(fips);
+  if (!rec) return null;
+  const gi = ri => (ri==null || ri<0 || ri>=S.regions.length) ? -1 : TG.of[ri];
+  const gFrom = gi(cur), gTo = gi(to);
+  if (gFrom === gTo) return null;
+
+  // Speculative totals: copy only the two areas that move, never the whole set.
+  const tot = before.rows.map(r => r.m);
+  const unM = before.un.m;
+  const adj = (g, sign) => { if (g >= 0) tot[g] += sign*rec.m; };
+  adj(gFrom, -1); adj(gTo, +1);
+  const grand = tot.reduce((a,b)=>a+b, 0);
+  const spreadOf = arr => {
+    const g = arr.reduce((a,b)=>a+b,0);
+    return (g > 0 && arr.length > 1) ? (100*Math.max(...arr)/g - 100*Math.min(...arr)/g) : 0;
+  };
+  const wasArr = before.rows.map(r=>r.m);
+  return {
+    fips,
+    toName:   gTo   >= 0 ? (TG.groups[gTo]||{}).name   : 'unassigned',
+    fromName: gFrom >= 0 ? (TG.groups[gFrom]||{}).name : 'unassigned',
+    members: rec.m,
+    spreadWas: spreadOf(wasArr),
+    spreadNow: spreadOf(tot),
+  };
+}
+
+/* Draw the preview into the strip without disturbing the committed numbers. */
+function showPreview(fips){
+  const el = document.getElementById('bsStrip');
+  if (!el) return;
+  const p = fips == null ? null : previewMove(fips);
+  if (!p){
+    if (S._preview){ S._preview = null; renderConsequenceStrip(); }
+    return;
+  }
+  S._preview = p;
+  const d = p.spreadNow - p.spreadWas;
+  const better = d < -0.05, worse = d > 0.05;
+  const arrow = better ? '&darr;' : (worse ? '&uarr;' : '&rarr;');
+  el.innerHTML = `<div class="bs-str-c pre">
+      <span class="bs-str-v">+${fmt(p.members)}</span>
+      <span class="bs-str-l">members to ${esc(p.toName)}</span></div>
+    <div class="bs-str-c pre ${better?'ok':(worse?'bad':'')}">
+      <span class="bs-str-v">${p.spreadWas.toFixed(1)} ${arrow} ${p.spreadNow.toFixed(1)}</span>
+      <span class="bs-str-l">widest gap, pp</span></div>
+    <div class="bs-str-c pre"><span class="bs-str-v">&mdash;</span>
+      <span class="bs-str-l">release to apply</span></div>`;
+}
+
+/* ============================================================================
+   COMMAND PALETTE
+   Six inspectors, two libraries, a dozen actions and every area by name. For
+   someone running this one-handed from a station beside the pool, typing three
+   letters beats hunting through tabs.
+   ========================================================================= */
+function paletteItems(){
+  const out = [];
+  const add = (label, hint, run, group) => out.push({label, hint, run, group});
+  INSPECTORS.forEach(t => add('Go to ' + t.label, t.hint,
+    ()=>{ S.panelMode=t.k; renderPanel(); refreshFlow(); }, 'Navigate'));
+  (S.pathList||[]).forEach(pw => add('Load pathway: ' + pw.name,
+    `${pw.levels} levels`, ()=>loadPathway(pw.id), 'Pathways'));
+  (S.mapList||[]).forEach(mp => add('Load map: ' + mp.name, '', ()=>loadScenario(mp.id), 'Maps'));
+  const TG = tierGroups();
+  TG.groups.forEach((g, gi) => add('Highlight ' + g.name, tierName(S.tierView),
+    ()=>{ highlightArea(gi); setTimeout(()=>highlightArea(null), 2600); }, 'Areas'));
+  add('Separate touching colours', 'No two neighbours look alike', separateAdjacentColors, 'Map');
+  add('Freeze this scenario', 'Record what it says right now', freezeScenario, 'Record');
+  add('Save the scenario', '', ()=>saveScenario(false), 'Record');
+  add('Undo', 'Ctrl+Z', ()=>doUndo(), 'Edit');
+  [0,1,2,3,4].forEach(r => add('Brush: ' + (r===0?'single county':r+' deep'),
+    r===0?'One county per click':'Everything within '+r+' border'+(r>1?'s':''), ()=>setBrush(r), 'Brush'));
+  return out;
+}
+
+function openPalette(){
+  if (document.getElementById('bsPal')) return;
+  const items = paletteItems();
+  const wrap = document.createElement('div');
+  wrap.className = 'bs-dlg-back'; wrap.id = 'bsPal';
+  wrap.innerHTML = `<div class="bs-pal" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input class="bs-pal-in" id="bsPalIn" placeholder="Type to search actions, maps, pathways, areas&hellip;"
+      autocomplete="off" spellcheck="false">
+    <div class="bs-pal-list" id="bsPalList"></div>
+    <div class="bs-pal-f">Enter to run &middot; Esc to close</div></div>`;
+  document.body.appendChild(wrap);
+  const inp = wrap.querySelector('#bsPalIn'), list = wrap.querySelector('#bsPalList');
+  let shown = items, sel = 0;
+
+  // Subsequence match, so "gtsc" finds "Go to Schedule" the way an editor would.
+  const score = (q, s2) => {
+    if (!q) return 0;
+    const a = q.toLowerCase(), b = s2.toLowerCase();
+    const direct = b.indexOf(a);
+    if (direct >= 0) return 1000 - direct;
+    let i = 0, hits = 0, last = -1, gap = 0;
+    for (let j = 0; j < b.length && i < a.length; j++){
+      if (b[j] === a[i]){ if (last >= 0) gap += j - last - 1; last = j; i++; hits++; }
+    }
+    return i === a.length ? 500 - gap : -1;
+  };
+  const draw = () => {
+    list.innerHTML = shown.length ? shown.map((it,i)=>`<div class="bs-pal-i ${i===sel?'on':''}" data-i="${i}">
+      <span class="bs-pal-g">${esc(it.group)}</span>
+      <span class="bs-pal-l">${esc(it.label)}</span>
+      ${it.hint?`<span class="bs-pal-h">${esc(it.hint)}</span>`:''}</div>`).join('')
+      : '<div class="bs-pal-none">Nothing matches.</div>';
+    const on = list.querySelector('.bs-pal-i.on');
+    if (on && on.scrollIntoView) on.scrollIntoView({block:'nearest'});
+  };
+  const close = () => { document.removeEventListener('keydown', key, true); wrap.remove(); };
+  const run = () => { const it = shown[sel]; close(); if (it) try { it.run(); } catch(e){ msg(e.message||String(e)); } };
+  const key = e => {
+    if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === 'ArrowDown'){ e.preventDefault(); sel = Math.min(sel+1, shown.length-1); draw(); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); sel = Math.max(sel-1, 0); draw(); }
+    else if (e.key === 'Enter'){ e.preventDefault(); run(); }
+  };
+  inp.addEventListener('input', ()=>{
+    const q = inp.value.trim();
+    shown = !q ? items
+      : items.map(it=>({it, s:Math.max(score(q,it.label), score(q,it.group)-200)}))
+             .filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).map(x=>x.it);
+    sel = 0; draw();
+  });
+  list.addEventListener('click', e=>{
+    const t = e.target.closest('[data-i]'); if (!t) return;
+    sel = +t.dataset.i; run();
+  });
+  wrap.addEventListener('click', e=>{ if (e.target===wrap) close(); });
+  document.addEventListener('keydown', key, true);
+  draw(); inp.focus();
+}
+
+/* ============================================================================
+   THE CONSEQUENCE STRIP
+   Splitting the old seven-panel scroll into inspectors fixed the scrolling and
+   created a new problem: paint a county now and you cannot see what it broke
+   unless you happen to be standing on the tab that knows. Make an area too big
+   and Schedule knows the meet will not run -- but you will not, until you think
+   to go and look. So four numbers live under the map and never leave.
+   ========================================================================= */
+function renderConsequenceStrip(){
+  const el = document.getElementById('bsStrip');
+  if (!el) return;
+  const cell = (label, value, cls, hint) => `<div class="bs-str-c ${cls||''}" ${hint?`title="${esc(hint)}"`:''}>
+    <span class="bs-str-v">${value}</span><span class="bs-str-l">${esc(label)}</span></div>`;
+  const nAreas = groupCountAt(S.tierView);
+  let out = cell(tierName(S.tierView) + (nAreas===1?'':'s'), fmt(nAreas), '');
+  if (S.flow && S.flow.levels){
+    const i = Math.min(S.tierView, S.flow.levels.length-1);
+    const rows = (S.flow.levels[i] && S.flow.levels[i].rows) || [];
+    const totals = tierGroupsAt(i).groups.map((_,gi)=>CELLS.reduce((a,c)=>a+((rows[gi]||{})[c]||0),0));
+    const grand = totals.reduce((a,b)=>a+b,0);
+    if (grand > 0 && totals.length > 1){
+      const equal = 100/totals.length;
+      const spread = 100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand;
+      const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'warn' : 'bad');
+      out += cell('widest gap', spread.toFixed(1)+' pp', cls,
+        'How far the biggest area is from the smallest, as a share of everyone competing.');
+    }
+  } else out += cell('widest gap', '&hellip;', '');
+  const res = S.routeRes;
+  if (res && res.field){
+    let sched = null;
+    try { sched = computeSchedule(res); } catch(e){}
+    if (sched && sched.stops && sched.stops.length){
+      const bad = sched.stops.filter(x=>x.daysOver).length;
+      out += cell(bad===1?'meet does not fit':'meets do not fit', fmt(bad), bad?'bad':'ok',
+        'Meets running past a standard facility day. Open Schedule for which ones.');
+    }
+    try {
+      const last = S.routing.length-1;
+      let n = 0;
+      for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, CELLS);
+      out += cell('reach ' + (S.finalName||'the final'), fmt(Math.round(n)), '');
+    } catch(e){}
+  } else out += cell('meets', '&hellip;', '') + cell('championship field', '&hellip;', '');
+  el.innerHTML = out;
+}
+
+/* ============================================================================
+   CROSS-HIGHLIGHTING
+   Reading "East runs three days over" and then hunting for East by eye against
+   a colour key is the slowest thing about these screens. Hovering any row that
+   names an area lights that area on the map and fades the rest. Purely a class
+   on the <svg>: the county paths already carry everything the CSS needs.
+   ========================================================================= */
+function highlightArea(gi){
+  const svg = document.getElementById('bsSvg');
+  if (!svg) return;
+  if (gi == null || gi < 0 || isNaN(gi)){
+    svg.classList.remove('bs-hl');
+    svg.querySelectorAll('path.bcty.on').forEach(el => el.classList.remove('on'));
+    return;
+  }
+  svg.classList.add('bs-hl');
+  const of = tierGroups().of;
+  svg.querySelectorAll('path.bcty').forEach(el => {
+    const ri = S.assign[el.dataset.f];
+    const g = (ri != null && ri >= 0) ? of[ri] : null;
+    el.classList.toggle('on', g === gi);
+  });
+}
+
+/* One delegated listener for the whole inspector rather than one per table. */
+function wireCrossHighlight(){
+  const P = document.getElementById('bsPanel');
+  if (!P || P._xh) return;
+  P._xh = true;
+  P.addEventListener('mouseover', e => {
+    const t = e.target.closest && e.target.closest('[data-hl]');
+    if (t) highlightArea(+t.dataset.hl);
+  });
+  P.addEventListener('mouseout', e => {
+    const t = e.target.closest && e.target.closest('[data-hl]');
+    if (!t) return;
+    const to = e.relatedTarget;
+    if (!to || !to.closest || !to.closest('[data-hl]')) highlightArea(null);
+  });
+  P.addEventListener('mouseleave', () => highlightArea(null));
+}
+
+/* ============================================================================
+   ADJACENCY-AWARE COLOURS
+   groupColor() hands out a fixed palette by index with no idea which areas
+   touch. Several pairs in that list are hard to separate at map scale
+   (#009AC7 / #0891b2, #171F69 / #1d4ed8, #8FC3EA / #009AC7) and nothing stopped
+   two of them landing side by side. In a printed board pack two near-identical
+   neighbours read as one area -- a wrong conclusion drawn from a correct map,
+   in the artefact that leaves the building.
+   ========================================================================= */
+function colorDistance(a, b){
+  const hex = h => { const v = String(h||'').replace('#',''); return [0,2,4].map(i=>parseInt(v.slice(i,i+2),16)||0); };
+  const c1 = hex(a), c2 = hex(b), rm = (c1[0]+c2[0])/2;
+  // Weighted RGB — the cheap approximation of perceived difference. Good enough
+  // to separate two blues, which is the entire job here.
+  return Math.sqrt((2+rm/256)*(c1[0]-c2[0])**2 + 4*(c1[1]-c2[1])**2 + (2+(255-rm)/256)*(c1[2]-c2[2])**2);
+}
+
+/* Which painted areas share a border, from the county adjacency the auto-draw
+   already walks. */
+async function areaAdjacency(){
+  let A = null;
+  try { A = await loadAutoData(); } catch(e){ return null; }
+  if (!A || !A.adj || !A.fips) return null;
+  const n = S.regions.length;
+  const adj = Array.from({length:n}, () => new Set());
+  for (let i = 0; i < A.adj.length; i++){
+    const ra = S.assign[A.fips[i]];
+    if (ra == null || ra < 0 || ra >= n) continue;
+    for (const j of A.adj[i]){
+      const rb = S.assign[A.fips[j]];
+      if (rb == null || rb < 0 || rb >= n || rb === ra) continue;
+      adj[ra].add(rb); adj[rb].add(ra);
+    }
+  }
+  return adj;
+}
+
+async function separateAdjacentColors(){
+  const adj = await areaAdjacency();
+  if (!adj){ msg('Could not work out which areas touch each other.'); return; }
+  const MIN = 190;                 // below this, two fills read as one at map scale
+  const chosen = S.regions.map(r => r.color);
+  let changed = 0, stuck = 0;
+  for (let i = 0; i < S.regions.length; i++){
+    const clash = c => [...adj[i]].some(j => colorDistance(c, chosen[j]) < MIN);
+    if (!clash(chosen[i])) continue;
+    const alt = PALETTE.find(c => !clash(c) && chosen.indexOf(c) < 0) || PALETTE.find(c => !clash(c));
+    if (alt){ chosen[i] = alt; changed++; } else stuck++;
+  }
+  if (!changed && !stuck){ msg('Every pair of touching areas is already easy to tell apart.'); return; }
+  pushUndo();
+  S.regions.forEach((r,i) => { r.color = chosen[i]; });
+  S.dirty = true; repaintAll(); renderPanel();
+  msg(`Recoloured ${changed} area${changed===1?'':'s'} so no two touching areas look alike.`
+    + (stuck ? ` ${stuck} could not be separated \u2014 more neighbours than distinct colours.` : ''));
+}
+
+/* ============================================================================
+   DIALOGS
+   Replaces window.prompt / window.confirm. Those are unstyled, off-brand,
+   unusable one-handed at the side of a pool, and -- the reason that actually
+   matters -- structurally incapable of showing you what you are about to do.
+   Freezing a scenario should put the figures you are recording in front of you
+   BEFORE you commit them; a browser prompt cannot.
+
+   Promise-based so call sites read the same as the calls they replace:
+     const name = await bsPrompt({title, label, value});      // null if cancelled
+     if (!await bsConfirm({title, body})) return;
+   ========================================================================= */
+function bsDialog(opts){
+  return new Promise(resolve => {
+    const prev = document.activeElement;
+    const wrap = document.createElement('div');
+    wrap.className = 'bs-dlg-back';
+    const danger = opts.danger ? ' danger' : '';
+    wrap.innerHTML = `
+      <div class="bs-dlg${danger}" role="dialog" aria-modal="true" aria-label="${esc(opts.title||'')}">
+        <div class="bs-dlg-h">${esc(opts.title||'')}</div>
+        <div class="bs-dlg-b">
+          ${opts.body || ''}
+          ${opts.input ? `<label class="bs-dlg-lbl">${esc(opts.input.label||'')}
+            <input class="bs-dlg-in" id="bsDlgIn" value="${esc(opts.input.value||'')}"
+              placeholder="${esc(opts.input.placeholder||'')}" maxlength="120"></label>` : ''}
+        </div>
+        <div class="bs-dlg-f">
+          <button class="tab" data-dlg="cancel">${esc(opts.cancelLabel||'Cancel')}</button>
+          <button class="tab bs-dlg-go${danger}" data-dlg="ok">${esc(opts.okLabel||'OK')}</button>
+        </div>
+      </div>`;
+    const done = v => {
+      document.removeEventListener('keydown', key, true);
+      wrap.remove();
+      if (prev && prev.focus) try { prev.focus(); } catch(e){}
+      resolve(v);
+    };
+    const val = () => {
+      const el = wrap.querySelector('#bsDlgIn');
+      return opts.input ? (el ? el.value.trim() : '') : true;
+    };
+    const key = e => {
+      if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); done(null); }
+      else if (e.key === 'Enter' && (!opts.input || document.activeElement === wrap.querySelector('#bsDlgIn'))){
+        e.preventDefault(); e.stopPropagation();
+        const v = val(); done(opts.input && !v ? null : v);
+      }
+    };
+    wrap.addEventListener('click', e => {
+      if (e.target === wrap) return done(null);          // click the backdrop to dismiss
+      const b = e.target.closest('[data-dlg]'); if (!b) return;
+      if (b.dataset.dlg === 'cancel') return done(null);
+      const v = val(); done(opts.input && !v ? null : v);
+    });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(wrap);
+    const focusEl = wrap.querySelector('#bsDlgIn') || wrap.querySelector('[data-dlg="ok"]');
+    if (focusEl){ focusEl.focus(); if (focusEl.select) focusEl.select(); }
+  });
+}
+const bsPrompt  = o => bsDialog(Object.assign({okLabel:'Save'}, o, {input: o.input || {label:o.label, value:o.value, placeholder:o.placeholder}}));
+const bsConfirm = o => bsDialog(o).then(v => v !== null);
+
+/* ============================================================================
+   FREEZING A SCENARIO
+   Once numbers have been in front of a committee they stop being a working
+   model and become part of a record. The arbitration standard on selection is
+   specific about what makes a figure defensible: an independent party has to be
+   able to reconstruct the exact inputs as they stood on the decision date.
+
+   Recording the inputs alone does not achieve that. The entry data is rebuilt
+   nightly and the calibration moves with it, so a scenario that stores only
+   "computed from the 3 August build" cannot be recomputed once that build is
+   gone -- and the figures on screen will quietly differ from the ones in the
+   paper with nothing to show it happened.
+
+   So a freeze stores BOTH: what it was computed from, and what it actually
+   said. Re-open it later and the tool puts the two side by side.
+
+   Freezing does not lock anything. Mike keeps the map. What it does is make
+   divergence impossible to miss, and stop a frozen record being overwritten in
+   place -- saving a changed frozen scenario forks a copy, the same way a
+   reference map already does.
+   ========================================================================= */
+
+/* The figures as presented. Deliberately the headline set a committee actually
+   discusses, not every number on screen -- a snapshot nobody reads is not a
+   record, it is a haystack. */
+function freezeFigures(){
+  try {
+    const res = S.routeRes || projectPathway();
+    if (!res) return null;
+    const sum = summariseRouting(S.routing, currentPathwayLabel(), null);
+    const t = computeTallies();
+    return {
+      pathway:       currentPathwayLabel(),
+      structure:     S.levels.map((l,i) => ({name: tierName(i), stops: groupCountAt(i)})),
+      members:       t.rows.reduce((a,r)=>a+r.m, 0),
+      finalField:    sum.finalField,
+      levelEntries:  (sum.levels||[]).map(l => ({name:l.name, entries:Math.round(l.entries)})),
+      meets:         sum.meets,
+      meetsOverDay:  sum.over,
+      eventsSplit:   sum.autoSplit,
+      eventsToWatch: sum.review,
+    };
+  } catch(e){ console.error('freezeFigures', e); return null; }
+}
+
+async function freezeScenario(){
+  if (!S.scenarioId){ msg('Save the scenario first — a freeze has to attach to something.'); return; }
+  const figures = freezeFigures();
+  if (!figures){ msg('Could not read the figures to freeze. Open Projection once, then try again.'); return; }
+  const st = dataStamps();
+  const note = await bsPrompt({
+    title: 'Freeze this scenario as presented',
+    okLabel: 'Freeze',
+    body: `<p class="bs-dlg-p">This records what the scenario says right now, so if the entry data is rebuilt
+        underneath it the difference shows instead of hiding. Check the figures before committing them &mdash;
+        these are what the record will say you presented.</p>
+      <table class="bs-dlg-t"><tbody>
+        <tr><td>Pathway</td><td>${esc(figures.pathway||'—')}</td></tr>
+        ${figures.finalField!=null?`<tr><td>Reaching the championship</td>
+          <td><b>${fmt(Math.round(figures.finalField))}</b></td></tr>`:''}
+        ${(figures.levelEntries||[]).map(l=>`<tr><td>${esc(l.name)} &mdash; entries</td>
+          <td>${fmt(l.entries)}</td></tr>`).join('')}
+        <tr><td>Meets to run</td><td>${fmt(figures.meets||0)}</td></tr>
+        <tr><td>Meets that do not fit</td><td>${figures.meetsOverDay
+          ? `<b class="bs-dlg-bad">${fmt(figures.meetsOverDay)}</b>` : '0'}</td></tr>
+        <tr><td>Entry data build</td><td>${esc(String(st.advance_data||'—').slice(0,10))}</td></tr>
+      </tbody></table>`,
+    label: 'What was this shown to, or shown for?',
+    value: S.frozen ? S.frozen.note : '',
+    placeholder: 'CCE, 10 August'});
+  if (note === null) return;
+  S.frozen = {at: new Date().toISOString(), note, stamps: st, figures};
+  S.dirty = true;
+  msg('Frozen. Save the scenario to write the record.');
+  renderPanel();
+}
+
+async function unfreezeScenario(){
+  if (!S.frozen) return;
+  if (!await bsConfirm({title:'Remove the freeze?', danger:true, okLabel:'Remove the freeze',
+    body:`<p class="bs-dlg-p">The record of what this said when it was presented is deleted, and the scenario
+      becomes a working model again. If it has already been in front of a committee, keep the freeze and save a
+      copy to work in instead.</p>`})) return;
+  S.frozen = null; S.dirty = true;
+  msg('Freeze removed.');
+  renderPanel();
+}
+
+/* What has moved since it was frozen. Returns null when nothing has. */
+function freezeDrift(){
+  if (!S.frozen || !S.frozen.figures) return null;
+  const now = freezeFigures();
+  if (!now) return null;
+  const rows = [];
+  const cmp = (label, a, b) => {
+    if (a == null || b == null) return;
+    if (Math.round(a) !== Math.round(b)) rows.push({label, then: a, now: b});
+  };
+  const f = S.frozen.figures;
+  cmp('Members in the mapped area', f.members, now.members);
+  cmp('Reaching the championship', f.finalField, now.finalField);
+  (f.levelEntries||[]).forEach((l,i) => {
+    const n = (now.levelEntries||[])[i];
+    if (n && n.name === l.name) cmp(l.name + ' — entries', l.entries, n.entries);
+  });
+  cmp('Meets to run', f.meets, now.meets);
+  cmp('Meets that do not fit', f.meetsOverDay, now.meetsOverDay);
+  cmp('Events split', f.eventsSplit, now.eventsSplit);
+
+  const st = S.frozen.stamps || {}, ns = dataStamps();
+  const inputs = [];
+  const ic = (label, a, b) => { if (a && b && a !== b) inputs.push({label, then:a, now:b}); };
+  ic('Entry data build', st.advance_data, ns.advance_data);
+  ic('Events per athlete', st.multiplicity, ns.multiplicity);
+  ic('Take-up measured on', st.calibration_basis, ns.calibration_basis);
+  ic('First stop fed by', st.seed_pool, ns.seed_pool);
+  ic('Pathway', (S.frozen.figures||{}).pathway, currentPathwayLabel());
+  return (rows.length || inputs.length) ? {figures: rows, inputs} : null;
+}
+
+function renderFreezePanel(){
+  const F = S.frozen;
+  if (!F) return `<div class="bs-freeze">
+    <div class="bs-pwbar-h">Freeze this scenario</div>
+    <p class="note">Once these numbers have been in front of a committee, freeze them. That records both what
+      they were computed from and what they actually said, so if the entry data is rebuilt underneath you, the
+      difference shows rather than hides. It does not lock the map &mdash; it stops the record being overwritten
+      without you noticing.</p>
+    <button class="tab" id="bsFreeze" ${S.scenarioId?'':'disabled'}>Freeze as presented&hellip;</button>
+    ${S.scenarioId?'':'<span class="bs-arr-m warn">Save the scenario first.</span>'}</div>`;
+
+  const d = freezeDrift();
+  const when = String(F.at||'').slice(0,10);
+  const fig = F.figures || {};
+  return `<div class="bs-freeze ${d?'drift':'ok'}">
+    <div class="bs-pwbar-h">Frozen ${esc(when)}${F.note?` &mdash; ${esc(F.note)}`:''}</div>
+    <div class="bs-prov">
+      <b>As presented</b>
+      <span>pathway <code>${esc(fig.pathway||'—')}</code></span>
+      ${fig.finalField!=null?`<span>championship field <code>${fmt(Math.round(fig.finalField))}</code></span>`:''}
+      ${fig.meets!=null?`<span>${fmt(fig.meets)} meets</span>`:''}
+      <span>entry build <code>${esc(String((F.stamps||{}).advance_data||'—').slice(0,10))}</code></span>
+    </div>
+    ${d ? `<div class="ps-warn" style="margin-top:8px">
+      <b>This no longer computes what it said when it was frozen.</b>
+      ${d.inputs.length?`<div class="note" style="margin-top:6px">Inputs that changed:
+        ${d.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} &rarr; ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>`:''}
+      ${d.figures.length?`<table class="bs-drill" style="margin-top:8px"><thead><tr>
+        <th>Figure</th><th class="num">As presented</th><th class="num">Now</th><th class="num">Change</th>
+        </tr></thead><tbody>${d.figures.map(r=>`<tr><td>${esc(r.label)}</td>
+          <td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td>
+          <td class="num ${r.now>r.then?'over':'under'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td>
+        </tr>`).join('')}</tbody></table>
+        <p class="note" style="margin-top:6px">The frozen column is what the committee saw. Do not quietly
+          republish the new figures under the old date &mdash; either explain the change or freeze again.</p>`
+        :'<div class="note" style="margin-top:6px">The headline figures still match; only the inputs moved.</div>'}
+      </div>`
+    : `<div class="note" style="margin-top:8px">Everything still computes exactly what it said when it was frozen.</div>`}
+    <div class="bs-pwbar-r" style="margin-top:10px">
+      <button class="tab bs-mini" id="bsFreeze">Re-freeze as it stands now</button>
+      <button class="tab bs-mini" id="bsUnfreeze">Remove the freeze</button>
+    </div>
+  </div>`;
 }
 
 /* ---------- report tab ----------
@@ -3133,8 +3978,9 @@ function wireMap(){
       tip.style.display='block';
       tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY+14)+'px';
       tip.innerHTML = `<b>${esc(c.n)} County, ${esc(c.st)}</b><br>` +
-        (v ? `${fmt(v.m)} members · ${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips`
-           : 'No members') + grpHtml;
+        (v && (v.m || v.a || v.c)
+           ? `${fmt(v.m)} members · ${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips`
+           : '<b>Nobody registered here this season</b>') + grpHtml;
     } else tip.style.display='none';
   });
   const stop = ()=>{
@@ -4938,6 +5784,8 @@ window.renderBoundary = async function(){
       <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
         <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
         <div id="bsStrip" class="bs-strip"></div>
+        <div class="bs-emptykey">Paler counties inside an area have <b>no members, athletes or coaches</b>
+          this season &mdash; they still count toward the area's size, but contribute nobody to it.</div>
         <div id="bsLegend" class="bs-legend"></div>
       </div></div>
       <div class="card" style="margin-bottom:0"><div class="card-b" id="bsPanel"></div></div>
