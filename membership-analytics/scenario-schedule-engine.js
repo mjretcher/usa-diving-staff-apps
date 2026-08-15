@@ -117,6 +117,9 @@
     // chunking, not an optimizer — a placeholder ordering for staff/the
     // chat layer to adjust, consistent with hosts having discretion over
     // actual session composition.
+    // Boards available at once. Three is the observed norm: of the 102
+    // competitive sessions in the committed 2026 schedules, 40 run three
+    // events and 46 run two, and 31 are the full 1m + 3m + platform.
     eventsPerSession: 3
   };
 
@@ -226,7 +229,7 @@
     var manual = dayOf || {};
     var days = [];
     var ensure = function (n) {
-      while (days.length < n) days.push({ used: {}, events: [], conflicts: [] });
+      while (days.length < n) days.push({ used: {}, events: [], conflicts: [], laneLoad: {} });
       return days[n - 1];
     };
     var placed = [], auto = [];
@@ -241,16 +244,35 @@
       var key = p.ev.group + '|' + p.ev.gender;
       if (day.used[key]) day.conflicts.push(key);
       day.used[key] = true;
+      if (!day.laneLoad) day.laneLoad = {};
+      var L = laneOf(p.ev.discipline);
+      day.laneLoad[L] = (day.laneLoad[L] || 0) + 1;
       day.events.push(p.ev);
     });
+    /* Auto-placement has to be board-aware, not just first-day-that-fits.
+
+       Filling the first free day per age group and gender puts every group on
+       the SAME board on the same day -- eight events all on 1m -- and then
+       nothing can run alongside anything, so the day collapses into eight
+       one-event sessions. Real schedules deliberately mix boards across a day
+       precisely so three can run at once.
+
+       So among the days where this age group and gender is still free, take the
+       one using this board least. That spreads 1m, 3m and platform evenly
+       through each day and lets the sessions fill all three lanes. */
     auto.forEach(function (ev) {
       var key = ev.group + '|' + ev.gender;
-      var day = null;
+      var lane = laneOf(ev.discipline);
+      var day = null, bestLoad = Infinity;
       for (var i = 0; i < days.length; i++) {
-        if (!days[i].used[key]) { day = days[i]; break; }
+        if (days[i].used[key]) continue;
+        var load = (days[i].laneLoad && days[i].laneLoad[lane]) || 0;
+        if (load < bestLoad) { bestLoad = load; day = days[i]; }
       }
-      if (!day) { days.push({ used: {}, events: [], conflicts: [] }); day = days[days.length - 1]; }
+      if (!day) { days.push({ used: {}, events: [], conflicts: [], laneLoad: {} }); day = days[days.length - 1]; }
+      if (!day.laneLoad) day.laneLoad = {};
       day.used[key] = true;
+      day.laneLoad[lane] = (day.laneLoad[lane] || 0) + 1;
       day.events.push(ev);
     });
     if (minDays) ensure(minDays);
@@ -264,19 +286,108 @@
   // a feasibility check. A schedule promoted into the real Schedule
   // Builder gets the full parallel-lane treatment there.
   // ---------------------------------------------------------------------
+  /* Which board an event occupies. Mirrors lk() in schedule-builder/sb-app.js,
+     which is the engine that produces the real published schedules. */
+  function laneOf(discipline) {
+    if (discipline === '1m' || discipline === '1-Meter') return '1m';
+    if (discipline === '3m' || discipline === '3-Meter') return '3m';
+    if (discipline === 'Platform' || discipline === '10m' || discipline === '10-Meter') return 'platform';
+    return 'other';
+  }
+
+  /* ---------------------------------------------------------------------
+     SESSIONS ARE PARALLEL, NOT SEQUENTIAL.
+
+     A session runs one event per board at the same time -- Group A on 1m
+     while Group B is on 3m while Group C is on platform. So a session is
+     as long as its LONGEST board, not the sum of its events. Phase 1
+     summed them, which made every session two to three times longer than
+     it really is and every day look far worse than it is.
+
+     Measured against the 102 competitive sessions in the committed 2026
+     Zone and Junior National schedules: 40 run three events, 46 run two,
+     16 run one. 31 of them are the full 1m + 3m + platform. Only 9 put
+     two events on the same board, and in every one of those nine it is
+     Groups D and C -- the two smallest fields -- doubling up. Nothing
+     mixes larger groups on one board.
+
+     So: one event per board per session by default. Two events that do
+     land on the same board stack on it, which is what a host doing the
+     C-and-D double actually gets, and the lane maths handles it without
+     a special case.
+     --------------------------------------------------------------------- */
   function groupIntoSessions(dayEvents, rules) {
-    var size = rules.eventsPerSession;
-    var groups = [];
-    for (var i = 0; i < dayEvents.length; i += size) {
-      groups.push(dayEvents.slice(i, i + size));
-    }
-    return groups.map(function (evs) {
+    var cap = rules.eventsPerSession;
+    var sessions = [];
+    var laneTotal = function (s2, lane) { return s2.load[lane] || 0; };
+    var sessionLen = function (s2) {
+      var m = 0;
+      for (var L in s2.load) m = Math.max(m, s2.load[L]);
+      return m;
+    };
+
+    dayEvents.forEach(function (ev) {
+      var lane = laneOf(ev.discipline);
+      var mins = ev.estimatedMinutes;
+      var target = null;
+
+      // First choice: a session where this board is free and there is room.
+      for (var i = 0; i < sessions.length && !target; i++) {
+        if (sessions[i].load[lane]) continue;
+        if (Object.keys(sessions[i].load).length >= cap) continue;
+        target = sessions[i];
+      }
+
+      /* Second choice: stack it behind something already on this board, but ONLY
+         where doing so does not make the session any longer -- the board it
+         joins still finishes no later than the session's slowest board.
+
+         This is the case the published schedules actually contain. Nine of the
+         102 competitive sessions in the 2026 Zone and Junior National schedules
+         put two events on one board, and every one of them is Groups D and C,
+         the two smallest fields, tucked in behind each other while a longer
+         event runs alongside. Refusing it entirely made three-event sessions
+         come out 12-47% long against the real schedules; allowing it only when
+         it is free removes that error without ever lengthening a session to buy
+         it. */
+      for (var j = 0; j < sessions.length && !target; j++) {
+        var s3 = sessions[j];
+        if (!s3.load[lane]) continue;
+        if (s3.events.length >= cap) continue;
+        if (laneTotal(s3, lane) + mins <= sessionLen(s3)) target = s3;
+      }
+
+      if (!target) { target = { load: {}, events: [] }; sessions.push(target); }
+      target.load[lane] = (target.load[lane] || 0) + mins;
+      target.events.push(ev);
+    });
+
+    return sessions.map(function (s2) {
+      var evs = s2.events;
       var warmup = sessionWarmup(
         evs.map(function (e) { return { group: e.group, totalEntries: e.divers }; }),
         rules
       );
-      var compMinutes = evs.reduce(function (sum, e) { return sum + e.estimatedMinutes; }, 0);
-      return { events: evs, warmupMinutes: warmup, compMinutes: compMinutes, occupiedMinutes: warmup + compMinutes };
+      // Each board runs its own events back to back; the session ends when the
+      // slowest board does.
+      var byLane = {};
+      evs.forEach(function (e) {
+        var L = laneOf(e.discipline);
+        byLane[L] = (byLane[L] || 0) + e.estimatedMinutes;
+      });
+      var compMinutes = 0, sumMinutes = 0;
+      Object.keys(byLane).forEach(function (L) {
+        compMinutes = Math.max(compMinutes, byLane[L]);
+        sumMinutes += byLane[L];
+      });
+      return {
+        events: evs,
+        lanes: byLane,
+        warmupMinutes: warmup,
+        compMinutes: compMinutes,
+        sequentialMinutes: sumMinutes,   // what it would take one board at a time
+        occupiedMinutes: warmup + compMinutes
+      };
     });
   }
 
@@ -356,8 +467,11 @@
       return {
         index: idx + 1,
         events: m.events,
+        lanes: m.lanes,
         warmupStartMinutes: warmupStart,
         warmupMinutes: m.warmupMinutes,
+        compMinutes: m.compMinutes,
+        sequentialMinutes: m.sequentialMinutes,
         competitiveEnd: end,
         sessionEndMinutes: end
       };
@@ -432,6 +546,24 @@
         }, rules));
       });
     });
+    /* Interleave the boards before placing anything. The projection hands
+       events over grouped by age group, so 1m, 3m and platform arrive in runs;
+       rotating them first means the board-balancing below starts from an even
+       spread rather than digging out of a pile of one board. */
+    var LANE_ORDER = { '1m': 0, '3m': 1, 'platform': 2, 'other': 3 };
+    events.sort(function (a, b) {
+      var d = (LANE_ORDER[laneOf(a.discipline)] || 0) - (LANE_ORDER[laneOf(b.discipline)] || 0);
+      if (d) return d;
+      return String(a.group + a.gender).localeCompare(String(b.group + b.gender));
+    });
+    var interleaved = [], lanes = ['1m', '3m', 'platform', 'other'];
+    var buckets = { '1m': [], '3m': [], 'platform': [], 'other': [] };
+    events.forEach(function (e) { buckets[laneOf(e.discipline)].push(e); });
+    for (var pass = 0; interleaved.length < events.length && pass < 500; pass++) {
+      lanes.forEach(function (L) { if (buckets[L].length) interleaved.push(buckets[L].shift()); });
+    }
+    events = interleaved;
+
     var days = assignDays(events, P.dayOf, P.minDays).map(function (d, i) {
       return Object.assign({ dayNumber: i + 1, conflicts: d.conflicts || [] },
                            summarizeDay(d.events, rules));

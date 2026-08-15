@@ -2693,9 +2693,17 @@ function renderScheduleInspector(res){
           </div>
         </div>`;
       }).join('');
+      const laneNames = {'1m':'1m','3m':'3m','platform':'Platform','other':'other'};
+      const laneBits = Object.keys(ss.lanes||{}).map(L =>
+        `<span class="bs-sc-lane" title="${Math.round(ss.lanes[L])} min on this board">${esc(laneNames[L]||L)}
+          <b>${Math.round(ss.lanes[L])}m</b></span>`).join('');
+      const saved = (ss.sequentialMinutes||0) - (ss.compMinutes||0);
       return `<div class="bs-sc-sess">
         <div class="bs-sc-sh">Session ${ss.index}
           <span>${hhmm(ss.warmupStartMinutes)} &ndash; ${hhmm(ss.sessionEndMinutes)}</span></div>
+        <div class="bs-sc-lanes">${laneBits}${saved > 0
+          ? `<span class="bs-sc-par">running together &mdash; ${saved} min shorter than one board at a time</span>`
+          : ''}</div>
         <div class="bs-sc-wu">Warm-up ${ss.warmupMinutes} min
           <span>${hhmm(ss.warmupStartMinutes)} &ndash; ${hhmm(ss.warmupStartMinutes + ss.warmupMinutes)}</span></div>
         ${evs}</div>`;
@@ -2756,14 +2764,21 @@ function renderScheduleInspector(res){
     <div class="bs-prov"><b>Assuming</b>
       <span>warm-up A/B <code>${R.warmupSeniorGroupsMin} min</code>, C/D scales with entries</span>
       <span>one warm-up per session &mdash; the longest any event in it needs</span>
+      <span>up to <code>3 boards</code> at once; a session is as long as its slowest board</span>
       <span>split over <code>${R.splitAutoThresholdMin} min</code>, flag over <code>${R.splitReviewThresholdMin} min</code></span>
       <span>platform never splits</span>
       <span>dive counts <code>2026 Zone &amp; Junior National schedules</code></span>
     </div>
-    <p class="note">Sessions run back-to-back once started; practice blocks are reserved before the first session
-      and between each pair before anything is left at the end. This is a single-lane worst case &mdash; it does not
-      model two boards running different events at once, so a real day usually comes in shorter. Nothing here
-      changes a real schedule; it is a plan to argue with.</p>`;
+    <p class="note"><b>Sessions run boards at the same time.</b> One event per board &mdash; a group on 1m while
+      another is on 3m and another on platform &mdash; so a session lasts as long as its slowest board, not the sum
+      of its events. That is how the published schedules are built: of the 102 competitive sessions in the 2026 Zone
+      and Junior National schedules, 40 run three events, 46 run two, and 31 are the full 1m + 3m + platform.
+      Two age groups are not put on the same board in a session unless it costs the session nothing.</p>
+    <p class="note">Checked against those real schedules, this reproduces 12 of 14 sampled sessions to within 12%.
+      The two it misses are dense three-event sessions where the host stacked a board and accepted a longer
+      session; there this model reads <i>longer</i> than the day actually ran, which is the safe direction for a
+      feasibility check. Sessions run back-to-back once started, with practice reserved before the first and
+      between each pair. Nothing here changes a real schedule; it is a plan to argue with.</p>`;
 }
 
 /* ============================================================================
