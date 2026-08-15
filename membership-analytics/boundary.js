@@ -3715,7 +3715,15 @@ function renderPathway(){
 
 function wirePathway(){
   const _b=(id,fn)=>{const e=document.getElementById(id); if(e) e.addEventListener('click',fn);};
-  _b('bsGoReport', ()=>{ const t=document.querySelector('[data-view="reports"]'); if(t) t.click(); });
+  /* The report builder is a modal opened by ma-reports.js, not a tab. This
+     used to click [data-view="reports"], a selector that does not exist --
+     there is no reports tab -- so the guard swallowed it and the button did
+     nothing at all. '__boundary__' opens the builder showing the map templates
+     first, which is what you want arriving from here. */
+  _b('bsGoReport', ()=>{
+    if (typeof window._mrOpenBuilder === 'function') window._mrOpenBuilder('__boundary__');
+    else msg('The report builder has not loaded yet. Give the page a moment and try again.');
+  });
   _b('bsCsvManifest', exportManifestCsv);
   _b('bsCmpClear', ()=>{ S.cmpRes=null; renderPathway(); });
   _b('bsFreeze', freezeScenario);
