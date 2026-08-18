@@ -152,6 +152,141 @@ function bar(v, max, color){
   const w = max > 0 ? Math.max(1, Math.round(100 * v / max)) : 0;
   return `<span class="mr-bar"><span class="mr-bar-f" style="width:${w}%;background:${color||POOL}"></span></span>`;
 }
+
+/* =====================================================================
+   POTENTIAL-SCHEDULE RENDERING — shared by the "does each meet fit" report
+   section. Turns one stop's ScenarioScheduleEngine.simulateStop() output
+   (days -> sessions -> events) into a printable, session-by-session
+   schedule, in the same board/warm-up/practice-time terms Boundary Studio's
+   live Schedule tab uses, so the paper says what the screen says.
+   ===================================================================== */
+const SCHED_BOARD_DISPLAY = {'1m':'1-Meter', '3m':'3-Meter', 'Platform':'Platform',
+                              'platform':'Platform', 'other':'Other'};
+
+/* Minutes-since-midnight -> "8:05am". Mirrors hhmm() in boundary.js's live
+   Schedule tab so a clock time in the report matches the clock time on
+   screen. */
+function hhmmSched(m){
+  const h = Math.floor(m/60), mm = Math.round(m%60);
+  const ap = h >= 12 ? 'pm' : 'am', h12 = ((h + 11) % 12) + 1;
+  return h12 + ':' + String(mm).padStart(2,'0') + ap;
+}
+
+/* One line per event, inside a session's table. */
+function schedEventRow(e){
+  const QRr = window.QualRouting;
+  const board = SCHED_BOARD_DISPLAY[e.discipline] || e.discipline;
+  const round = QRr && QRr.ROUND_NAME && QRr.ROUND_NAME[e.round];
+  const label = `${esc(e.group)} ${esc(e.gender)} ${esc(board)}` + (round ? ` &middot; ${esc(round)}` : '');
+  const flags = [];
+  if (!e.dives) flags.push('<span class="mr-warn">no dive count on record &mdash; not timed</span>');
+  if (e.split) flags.push(`split across two boards${e.splitManual ? ' (set by staff)' : ''}`);
+  if (e.reviewSplit) flags.push('<span class="mr-warn">flagged for review &mdash; long, but the host decides</span>');
+  return `<tr><td>${label}</td>
+    <td class="mr-num">${fmt(Math.round(e.divers))}</td>
+    <td class="mr-num">${e.dives || '—'}</td>
+    <td class="mr-num">${e.dives ? fmt(e.estimatedMinutes) : '—'}</td>
+    <td>${flags.join('; ') || '—'}</td></tr>`;
+}
+
+/* One session: the clock window, which boards run at once, the shared
+   warm-up, and every event in it. */
+function schedSessionCard(ss){
+  const boardBits = Object.keys(ss.lanes||{})
+    .map(L => `${esc(SCHED_BOARD_DISPLAY[L]||L)} ${Math.round(ss.lanes[L])} min`).join(' &middot; ');
+  const saved = (ss.sequentialMinutes||0) - (ss.compMinutes||0);
+  const evRows = (ss.events||[]).map(schedEventRow).join('');
+  return `<div class="mr-sched-sess">
+    <div class="mr-sched-sess-h">Session ${ss.index}
+      <span class="mr-soft">${hhmmSched(ss.warmupStartMinutes)} &ndash; ${hhmmSched(ss.sessionEndMinutes)}</span></div>
+    <p class="mr-sched-boards">${boardBits || '—'}${saved > 0
+      ? ` &mdash; these boards run at the same time, ${saved} min shorter than running one board after another`
+      : ''}</p>
+    <p class="mr-sched-wu">Warm-up ${ss.warmupMinutes} min, ${hhmmSched(ss.warmupStartMinutes)}
+      &ndash; ${hhmmSched(ss.warmupStartMinutes + ss.warmupMinutes)} — every event in this session starts
+      together, so the session runs the longest warm-up any one of them needs.</p>
+    <table class="mr-table mr-table-sm"><thead><tr>
+      <th>Event</th><th class="mr-num">Divers</th><th class="mr-num">Dives</th>
+      <th class="mr-num">Minutes</th><th>Notes</th>
+    </tr></thead><tbody>${evRows}</tbody></table>
+  </div>`;
+}
+
+/* The open-practice-time sentence for one day, naming which gap (before the
+   first session, between two named sessions, or after the last) each usable
+   block sits in. windows[] is [before, between(1,2), between(2,3), ...,
+   after] exactly as ScenarioScheduleEngine.layoutDay() returns it. */
+function schedPracticeLine(windows, sessCount){
+  const list = windows || [];
+  const usable = list.filter(w => w.usable);
+  if (!usable.length) return 'No usable open-practice window on this day &mdash; every gap between sessions is under the 60-minute floor that counts as real practice time.';
+  const parts = list.map((w, i) => {
+    if (!w.usable) return null;
+    if (w.position === 'before') return `${w.minutes} min before session 1`;
+    if (w.position === 'after') return `${w.minutes} min after session ${sessCount}`;
+    return `${w.minutes} min between sessions ${i} and ${i+1}`;
+  }).filter(Boolean);
+  return 'Open practice time: ' + parts.join('; ') + '.';
+}
+
+/* One day: the pool-hours bar, any capacity or placement warnings, the
+   practice-time sentence, and every session scheduled that day. */
+function schedDayCard(d, windowMin){
+  const occupied = (d.sessions||[]).reduce((a,ss) => a + (ss.sessionEndMinutes - ss.warmupStartMinutes), 0);
+  const sessCount = (d.sessions||[]).length;
+  const sessCards = (d.sessions||[]).map(schedSessionCard).join('');
+  return `<div class="mr-sched-day ${d.overCapacity ? 'over' : ''}">
+    <div class="mr-sched-day-h">
+      <span>Day ${d.dayNumber}</span>
+      <span class="mr-soft">${(occupied/60).toFixed(1)}h of ${(windowMin/60).toFixed(1)}h pool time used</span>
+    </div>
+    ${bar(occupied, windowMin, d.overCapacity ? RED : POOL)}
+    ${d.overCapacity ? `<p class="mr-note mr-warn">Runs ${d.overCapacityByMinutes} min past the assumed closing
+        time on this layout — this day needs fewer entries, an earlier open, a later close, or a second day.</p>` : ''}
+    ${(d.conflicts||[]).length ? `<p class="mr-note mr-warn">Two events for the same age group and gender are
+        placed on this day (${esc(d.conflicts.join(', '))}). The model would not place them together on its own;
+        a person moved one here deliberately, and that placement is kept.</p>` : ''}
+    ${sessCards || '<p class="mr-note">Nothing is scheduled on this day.</p>'}
+    <p class="mr-sched-practice">${schedPracticeLine(d.practiceWindows, sessCount)}</p>
+  </div>`;
+}
+
+/* One stop, start to finish: header, headline status, and every day it
+   would take to run under this pathway. */
+function schedStopCard(x, windowMin){
+  if (x.err) return `<div class="mr-sched-stop">
+      <div class="mr-sched-stop-h"><span class="mr-sched-stop-name">${esc(x.name)}</span>
+        <span class="mr-soft">${esc(x.level)}</span></div>
+      <p class="mr-p mr-warn">This stop could not be laid out: ${esc(x.err)}</p>
+    </div>`;
+  const days = (x.sim && x.sim.days) || [];
+  if (!days.length) return `<div class="mr-sched-stop">
+      <div class="mr-sched-stop-h"><span class="mr-sched-stop-name">${esc(x.name)}</span>
+        <span class="mr-soft">${esc(x.level)}</span></div>
+      <p class="mr-p mr-warn">No events project onto this stop under the current pathway, so there is nothing
+        to schedule.</p>
+    </div>`;
+  const status = x.daysOver
+    ? `<span class="mr-over">${x.daysOver} of ${days.length} day${days.length===1?'':'s'} run past the
+        assumed closing time</span>`
+    : `<span class="mr-under">Every day fits inside the assumed pool hours</span>`;
+  return `<div class="mr-sched-stop">
+    <div class="mr-sched-stop-h">
+      <span class="mr-sched-stop-name">${esc(x.name)}</span>
+      <span class="mr-soft">${esc(x.level)}</span>
+    </div>
+    <div class="mr-sched-stop-kpis">
+      <span>${fmt(Math.round(x.entries))} entries</span>
+      <span>${fmt(x.events)} event${x.events===1?'':'s'}</span>
+      <span>${days.length} day${days.length===1?'':'s'}</span>
+      ${status}
+    </div>
+    ${x.unknown ? `<p class="mr-note mr-warn">${fmt(x.unknown)} event${x.unknown===1?' has':'s have'} no dive
+      count on record and ${x.unknown===1?'is':'are'} timed here as zero minutes. This meet will run longer
+      than the schedule below shows, until those events have a dive count.</p>` : ''}
+    ${days.map(d => schedDayCard(d, windowMin)).join('')}
+  </div>`;
+}
 /* =====================================================================
    SECTION REGISTRY — membership sections (live Neon)
    Each section: {label, desc, group, build(opts) -> HTML string}
@@ -821,26 +956,28 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_schedule: {
-    label: 'Realignment — does each meet fit', group: 'Boundary Studio',
-    desc: 'For every stop this pathway creates: entries, events, days needed, the longest day, '
-        + 'which events split, and which run past the facility day.',
+    label: 'Realignment — potential schedules', group: 'Boundary Studio',
+    desc: 'A proposed day-by-day, session-by-session schedule for every stop this pathway creates — boards, '
+        + 'warm-ups, splits and practice time — so the committee sees how each meet would actually run, not '
+        + 'just whether a summary number says it fits.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — does each meet fit');
+      if (!boundaryReady()) return notReady('Realignment — potential schedules');
       const api = B(), QRr = window.QualRouting, E = window.ScenarioScheduleEngine;
       if (!QRr || !E || typeof E.simulateStop !== 'function')
-        return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+        return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
           <p class="mr-p mr-warn">The schedule engine is not loaded.</p></section>`;
       const res = api.pathway();
-      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
         <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway are
         worked out, then generate this report again.</p></section>`;
       const sched = api.scheduleAll ? api.scheduleAll() : null;
-      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">Does each meet fit</h2>
+      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
         <p class="mr-p mr-warn">No stops to lay out. Draw a map and set a pathway first.</p></section>`;
 
       const R = sched.rules;
+      const windowMin = R.facilityCloseMin - R.facilityOpenMin;
       const maxDay = Math.max(1, ...sched.stops.map(x => x.longestDayMin || 0));
-      const cap = R.facilityCloseMin - R.facilityOpenMin;
+
       const rows = sched.stops.map(x => {
         const overCls = x.daysOver ? 'mr-warn' : '';
         return `<tr>
@@ -852,7 +989,7 @@ const BOUNDARY_SECTIONS = {
           <td style="width:16%">${bar(x.longestDayMin||0, maxDay, x.daysOver ? RED : POOL)}</td>
           <td class="mr-num">${x.autoSplit || '—'}</td>
           <td class="mr-num">${x.review || '—'}</td>
-          <td class="${overCls}">${x.daysOver ? x.daysOver+' day'+(x.daysOver>1?'s':'')+' over' : 'fits'}</td>
+          <td class="${overCls}">${x.daysOver ? x.daysOver+' day'+(x.daysOver>1?'s':'')+' over' : 'Fits'}</td>
         </tr>`;
       }).join('');
 
@@ -860,15 +997,47 @@ const BOUNDARY_SECTIONS = {
       const untimed = sched.stops.reduce((a,x)=>a+(x.unknown||0), 0);
       const verdict = bad.length
         ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} stops run past the assumed
-             facility day.</strong> ${esc(bad.map(x=>x.name).join(', '))}. Either those areas carry too many
-             entries for one venue, or those hosts need an extra day.</p>`
-        : `<p class="mr-p">Every stop fits inside the assumed facility day.</p>`;
+             facility day on this layout.</strong> ${esc(bad.map(x=>x.name).join(', '))}. Either those areas
+             carry too many entries for one venue, or those hosts need an extra day — the full proposed
+             schedule for each stop, below, shows exactly which day and which session.</p>`
+        : `<p class="mr-p">Every stop fits inside the assumed facility day on this layout.</p>`;
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Does each meet fit</h2>
-        <p class="mr-p">Each area this map and pathway create becomes a real meet that a host club has to run
-          inside its own pool hours. This lays every stop out against one standard day so they can be compared
-          with each other — a map can be perfectly balanced on paper and still produce a meet nobody can run.</p>
+        <h2 class="mr-h2">Potential schedules</h2>
+        <p class="mr-p">Every area this map and pathway create becomes a real meet that a host club has to run
+          inside its own pool hours. Rather than a single word for whether it fits, this section proposes an
+          actual schedule for every stop — which events share a session, what time each session starts and ends,
+          how long warm-up runs, when a board splits, and how much open practice time is left over — the same
+          detail a host would need to plan the day, and the same computation Boundary Studio's own Schedule tab
+          shows on screen.</p>
+
+        <h3 class="mr-h3">How to read a potential schedule</h3>
+        <ul class="mr-list">
+          <li><strong>Boards, not lanes.</strong> Diving runs on 1-Meter springboard, 3-Meter springboard and
+              Platform. Up to three boards can run at the same time, so a session's length is set by its
+              <em>slowest</em> board, not the sum of every event in it.</li>
+          <li><strong>A session is one shared start time.</strong> Every event placed in a session begins
+              together, so the session's warm-up is the longest warm-up any one of its events needs — Groups A
+              and B always warm up ${R.warmupSeniorGroupsMin} minutes; Groups C and D scale with entries.</li>
+          <li><strong>Splitting is a size rule, not a judgment call.</strong> An event running over
+              ${R.splitAutoThresholdMin} minutes whole is split across two boards automatically — roughly half
+              the time, plus ${R.panelChangesOnSplit} panel changes at ${R.minutesPerPanelChange} minutes each.
+              Between ${R.splitReviewThresholdMin} and ${R.splitAutoThresholdMin} minutes it is only flagged —
+              the host decides whether to split it, and nothing is changed automatically. Platform is never
+              split, so a long platform event is always a flag, never a split.</li>
+          <li><strong>Practice time is protected, not left over.</strong> Whatever pool time is not needed for
+              competition is reserved as a real block before the first session and between sessions, up to
+              60 minutes each, before anything is banked after the last session — matching how host clubs
+              actually run these days today.</li>
+          <li><strong>One discipline per age group and gender per day,</strong> and dive counts are taken from
+              the 2026 Zone and Junior National schedules as actually run — never invented for this projection.</li>
+        </ul>
+        <p class="mr-note">This is a proposal, not a real schedule. A host club's own equipment, pool hours and
+          judgement outrank every figure on this page — the point of laying it out this fully is to let the
+          committee and the board see where a proposal would strain a host <em>before</em> that host is asked
+          to run it, not to hand down a fixed itinerary.</p>
+
+        <h3 class="mr-h3">Summary — does each meet fit</h3>
         ${verdict}
         <table class="mr-table"><thead><tr>
           <th>Stop</th><th class="mr-num">Entries</th><th class="mr-num">Events</th>
@@ -876,25 +1045,16 @@ const BOUNDARY_SECTIONS = {
           <th class="mr-num">Split</th><th class="mr-num">Look at</th><th>Verdict</th>
         </tr></thead><tbody>${rows}</tbody></table>
         ${untimed ? `<p class="mr-note mr-warn">${fmt(untimed)} event${untimed>1?'s have':' has'} no dive count on
-          record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown.</p>` : ''}
-        <h3 class="mr-h3">What this assumes</h3>
-        <ul class="mr-list">
-          <li>Pool open ${Math.floor(R.facilityOpenMin/60)}:00 to ${Math.floor(R.facilityCloseMin/60)}:00,
-              a ${(cap/60).toFixed(1)}-hour day, the same for every host.</li>
-          <li>Warm-up is once per session, not per event, because every event in a session starts together:
-              ${R.warmupSeniorGroupsMin} minutes wherever a Group A or B event is in the session, and the longest
-              warm-up any event needs otherwise.</li>
-          <li>An event running over ${R.splitAutoThresholdMin} minutes whole is split — two boards, so roughly half
-              the time, plus ${R.panelChangesOnSplit} panel changes at ${R.minutesPerPanelChange} minutes.
-              Between ${R.splitReviewThresholdMin} and ${R.splitAutoThresholdMin} minutes it is flagged for the host
-              to decide, not split.</li>
-          <li>Platform is never split, so a long platform event is always a flag rather than a split.</li>
-          <li>One discipline per age group and gender per day.</li>
-          <li>Dive counts come from the 2026 Zone and Junior National schedules as actually run.</li>
-        </ul>
-        <p class="mr-note">Hosts open at different times and may run one age group earlier or later; this assumes
-          one standard day purely so stops can be compared. Nothing here sets a real schedule — a host's equipment,
-          pool hours and judgement outrank all of it.</p>
+          record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown, both above
+          and in the proposed schedules below.</p>` : ''}
+        <p class="mr-note">Pool assumed open ${Math.floor(R.facilityOpenMin/60)}:00 to
+          ${Math.floor(R.facilityCloseMin/60)}:00 — a ${(windowMin/60).toFixed(1)}-hour day, the same for every
+          host, purely so stops can be compared on one ruler. Hosts open at different times in practice and may
+          run one age group earlier or later than another.</p>
+
+        <h3 class="mr-h3">Proposed schedule, stop by stop</h3>
+        <p class="mr-p">Every day, every session, every event — for every stop this pathway creates.</p>
+        ${sched.stops.map(x => schedStopCard(x, windowMin)).join('')}
       </section>`;
     }
   },
@@ -980,7 +1140,7 @@ const BOUNDARY_SECTIONS = {
           <tbody>${rows}</tbody></table>
         <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
           three events, so the two answer different questions — entries decide session length and fee income,
-          divers decide beds, lanes and awards. Anything marked <i>est.</i> means this pathway has moved the mix
+          divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
           of events away from what was measured, so read it as indicative.</p>
 
         <h3 class="mr-h3">Every event, every round</h3>
@@ -1008,12 +1168,12 @@ const BOUNDARY_SECTIONS = {
             <tbody>${body}<tr class="mr-tot"><td><b>All events</b></td>${tot}</tr></tbody></table>`;
         })()}
         <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
-          3-metre board in the semi-final — the number a timetable and an awards order are actually built from.</p>
+          3-meter board in the semi-final — the number a timetable and an awards order are actually built from.</p>
 
         <h3 class="mr-h3">What actually gets billed</h3>
         <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Billable entries</th></tr></thead>
           <tbody>${billed}</tbody></table>
-        <p class="mr-note">An athlete pays once per event at a meet however many rounds they swim, so moving
+        <p class="mr-note">An athlete pays once per event at a meet however many rounds they dive, so moving
           between rounds inside a stage bills nothing. Adding the round fields together would charge the same
           diver two or three times over.</p>
 
@@ -1795,14 +1955,14 @@ const TEMPLATES = [
     sections:['clubs','geography_assoc','retention'], years:[2024,2025,2026] },
 
   { id:'realignment_proposal', label:'Realignment Proposal',
-    desc:'The full case: the map, size balance, what it takes to advance in each area, tier rollups and a profile of every area.',
+    desc:'The full case: the map, size balance, what it takes to advance in each area, whether every meet fits, tier rollups and a profile of every area.',
     sections:['boundary_summary','boundary_map','boundary_overview','boundary_balance','boundary_equity',
-              'boundary_tiers','boundary_region_profiles'],
+              'boundary_schedule','boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
   { id:'realignment_board', label:'Realignment — Board Packet',
-    desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, and what it takes to advance. No appendices.',
-    sections:['boundary_map','boundary_balance','boundary_equity'], years:[2025,2026], boundary:true },
+    desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, what it takes to advance, and whether every meet this creates can actually be run. No appendices.',
+    sections:['boundary_map','boundary_balance','boundary_equity','boundary_schedule'], years:[2025,2026], boundary:true },
 
   { id:'realignment_equity', label:'Realignment — Fairness Case',
     desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
@@ -2347,6 +2507,30 @@ const STYLES = `
 #mr-output .mr-mapkey{font-size:10.5px;color:#2d3450;white-space:nowrap}
 #mr-output .mr-foot-note{margin-top:20px;padding-top:10px;border-top:1px solid #e5e9f2;
   font-size:9.5px;color:#6b7390}
+
+/* ---- potential-schedule cards (boundary_schedule report section) ---- */
+#mr-output .mr-sched-stop{border:1px solid #e2e8f2;border-radius:9px;padding:13px 15px;margin:14px 0;
+  page-break-inside:avoid}
+#mr-output .mr-sched-stop-h{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+#mr-output .mr-sched-stop-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.02em}
+#mr-output .mr-sched-stop-kpis{display:flex;flex-wrap:wrap;gap:5px 16px;font-size:11px;color:#5a6480;
+  margin:2px 0 9px}
+#mr-output .mr-sched-stop-kpis .mr-over{color:#b45309;font-weight:700}
+#mr-output .mr-sched-stop-kpis .mr-under{color:#15803d;font-weight:700}
+#mr-output .mr-sched-day{background:#f8fafc;border:1px solid #e2e8f2;border-radius:7px;padding:10px 12px;
+  margin:9px 0;page-break-inside:avoid}
+#mr-output .mr-sched-day.over{border-color:#f0c48a;background:#fef8f0}
+#mr-output .mr-sched-day-h{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13.5px;color:#171F69;
+  text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px}
+#mr-output .mr-sched-sess{background:#fff;border:1px solid #e9edf5;border-radius:6px;padding:8px 10px;
+  margin:8px 0;page-break-inside:avoid}
+#mr-output .mr-sched-sess-h{display:flex;justify-content:space-between;font-weight:700;font-size:12px;
+  color:#171F69;margin-bottom:3px}
+#mr-output .mr-sched-boards{font-size:10.5px;color:#0e6f96;margin:0 0 3px;font-weight:600}
+#mr-output .mr-sched-wu{font-size:10.5px;color:#5a6480;margin:0 0 6px;font-style:italic}
+#mr-output .mr-sched-practice{font-size:10.5px;color:#5a6480;margin-top:6px}
 @media print{
   body *{visibility:hidden !important}
   #mr-output,#mr-output *{visibility:visible !important}

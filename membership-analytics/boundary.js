@@ -1269,7 +1269,7 @@ function renumberAreas(lvl, force){
 
 /* ---------- the breakdown ----------
    A stage total answers "how big is this meet". It does not answer "how many
-   14-15 girls will be on the 3-metre board in the semi-final", which is the
+   14-15 girls will be on the 3-meter board in the semi-final", which is the
    question that decides a timetable and an awards order. The projection
    already carries every cell; this shows it. */
 const AGE_LBL = {A:'Group A', B:'Group B', C:'Group C', D:'Group D'};
@@ -3706,7 +3706,7 @@ function renderPathway(){
             : 'Take-up could not be measured for this season, so every figure here assumes every qualifier turns up.'}
           Load the reference alignment on the map and reopen this panel to see expected entries instead.</div>`}
     ${M==='structure' || M==='projection' || M==='schedule' ? `<p class="note"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
-      what a session costs and how long it runs, while divers tell you how many bodies need a lane, a bed and an award.
+      what a session costs and how long it runs, while divers tell you how many bodies need a bed and an award.
       Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
       gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
       measured, so treat the headcount as indicative rather than a count.</p>` : ''}`;

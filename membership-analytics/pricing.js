@@ -30,7 +30,7 @@ GROUPS.forEach(g => GENDERS.forEach(x => BOARDS.forEach(b => CODES.push(g+x+b)))
 const codeGroup  = c => c[0];
 const codeGender = c => c[1];
 const codeBoard  = c => c[2];
-const BOARD_NAME = {'1':'1-metre','3':'3-metre','P':'Platform'};
+const BOARD_NAME = {'1':'1-meter','3':'3-meter','P':'Platform'};
 const GENDER_NAME = {B:'Boys', G:'Girls'};
 
 /* ---------- membership price card (mirrors ma-clubs.js CLUB_FEES) ---------- */
@@ -972,7 +972,7 @@ function renderSenior(base, sim){
         Capped at field size &mdash; a short event cannot send a full twelve. Athletes who advance this way have the Championships late fee waived, so raising the cutoff does not raise late-fee income.</span>
     </div>
     <p class="note ps-foot">Counted as athlete-and-event pairs, because a pathway qualifies an athlete for a specific event &mdash;
-      a 3-metre champion is prequalified on 3-metre, not across the board &mdash; and that is also the unit entry fees bill in.
+      a 3-meter champion is prequalified on 3-meter, not across the board &mdash; and that is also the unit entry fees bill in.
       Synchronised events sit outside all of this: the criteria set no qualification protocol for them, only a minimum degree of
       difficulty, and a diver may pair with up to two partners. So synchro does not move when you change a pathway &mdash; but it is
       still billed, once per team. <b>Synchro team counts must be typed in:</b> the DiveMeets entries sync excludes synchro by
@@ -1210,7 +1210,7 @@ function renderCellGrid(L){
     <table class="ps-tbl ps-cg"><thead>
       <tr><th></th>${head}</tr><tr><th></th>${sub}</tr></thead>
       <tbody>${body}</tbody></table>
-    <p class="note">Set any cell independently &mdash; Group A 1-metre can send 12 while Group D platform sends 18. Highlighted cells differ from the level default.</p>
+    <p class="note">Set any cell independently &mdash; Group A 1-meter can send 12 while Group D platform sends 18. Highlighted cells differ from the level default.</p>
   </div>`;
 }
 
@@ -1291,7 +1291,7 @@ function renderPathwayMoney(){
         <td class="num mono">${usd(rev.net)}</td></tr>
     </tbody></table>
     <p class="note ps-foot"><b>Billable entries, not round fields.</b> An athlete pays once per event at a meet
-      however many rounds they swim, so movement between rounds inside a stage bills nothing. Adding the round
+      however many rounds they dive, so movement between rounds inside a stage bills nothing. Adding the round
       fields together would charge the same diver two or three times.<br>
       <b>Read the mapping above.</b> This module counts the championship as one level beyond the painted ones,
       while a hand-built scenario often puts it inside them, so which fee row each stage is billed at is printed
