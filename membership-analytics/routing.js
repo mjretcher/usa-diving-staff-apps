@@ -272,7 +272,11 @@ function project(opts){
                     why: !lvl ? 'no such level' : !lvl[toR] ? 'no such round' : 'no such group'});
       return;
     }
-    const k = (conv[toL] && conv[toL][cell] != null) ? conv[toL][cell] : 1;
+    // conv is take-up behaviour on JOINING a level from elsewhere -- the same
+    // distinction arrive() draws below. Re-applying it on an internal round
+    // transition (prelim -> that level's own final) would convert the same
+    // arrived athletes twice for no reason: they already took up their place.
+    const k = (fromL !== toL && conv[toL] && conv[toL][cell] != null) ? conv[toL][cell] : 1;
     lvl[toR][toG][cell] = (lvl[toR][toG][cell] || 0) + n * k;
     // Arriving from a DIFFERENT level is joining a new meet, so it is an entry.
     // Moving between rounds of the same level is qualifying, and is not.
