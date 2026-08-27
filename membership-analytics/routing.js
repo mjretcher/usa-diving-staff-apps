@@ -290,7 +290,11 @@ function project(opts){
           const size = here[cell] || 0;
           if (size <= 0) return;
           outs.forEach(rt => {
-            const n = bandCount(size, rt.lo, rt.hi);
+            // A route's band is per-level by default. rt.byCell[cell] lets one
+            // cell override lo/hi without a second model — Group A 1-meter can
+            // send 12 while the route's level default sends 15 to everyone else.
+            const ov = rt.byCell && rt.byCell[cell];
+            const n = bandCount(size, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi);
             if (!n || !rt.to) return;
             const toL = rt.to.level;
             const toG = (toL === L) ? g : groupOf(L, g, toL);
@@ -570,7 +574,9 @@ function capacityAt(routing, L, round, groupCount, cell){
       if (!rt.to || rt.to.level !== L || rt.to.round !== round) return;
       const no = routing[L] && routing[L].notOffered;
       if (cell && no && no.indexOf(cell) >= 0) return;
-      const width = (rt.hi == null) ? Infinity : Math.max(0, rt.hi - (rt.lo || 1) + 1);
+      const ov = cell && rt.byCell && rt.byCell[cell];
+      const lo = ov ? ov.lo : rt.lo, hi = ov ? ov.hi : rt.hi;
+      const width = (hi == null) ? Infinity : Math.max(0, hi - (lo || 1) + 1);
       if (!isFinite(width)) { unbounded = true; return; }
       cap += width * Math.max(1, groupCount(from));
     });
