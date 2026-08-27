@@ -5955,4 +5955,14 @@ window.renderBoundary = async function(){
   if (seedBtn) seedBtn.addEventListener('click', ()=>loadScenario('seed-2026-alignment'));
   S.booted = true;
 };
+
+/* Inspection hook, matching the pattern in routing.js (window.QualRouting) and
+   pricing.js (window.__PRICING): lets the pathway editor's actual state
+   mutations be exercised and verified headlessly instead of only being
+   reachable by clicking through the UI. */
+window.__BOUNDARY = {
+  S, syncRouting, projectPathway, pushUndo, groupCountAt, groupUp, seedRows,
+  meetManifest, meetMoney, tierGroupsAt, tierName,
+};
+
 })();
