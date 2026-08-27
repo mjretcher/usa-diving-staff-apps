@@ -406,9 +406,109 @@ function deriveCalibration(){
             regions:PS.regions.length, stops:structureStops()};
 }
 
+/* Volume via the general routing engine, for a scenario that carries an
+   explicit qualification pathway (PS.boundaryRouting) instead of Pricing
+   Studio's own {advance,direct} shape. Reuses the SAME calibration
+   (PS.cal, derived once against the real season) so take-up behaviour is
+   identical either way -- only the structure differs.
+
+   PS.levels and the routing array are allowed to disagree on level count:
+   a hand-built scenario often counts the championship as its own routing
+   level while Pricing Studio counts it as one past the painted ones. Both
+   groupCount and groupOf below floor at 1 / land on group 0 for any level
+   PS.levels doesn't know about, so that extra level resolves to "the
+   final" instead of silently vanishing. */
+function computeVolumeFromRouting(routing){
+  const QR = window.QualRouting;
+  const NL = levelCount();
+  const gcAt = L => Math.max(1, (L===0 ? PS.regions.length
+    : ((PS.levels[L] && PS.levels[L].groups) || []).length));
+  const groupOfAny = (fL, g, tL) => {
+    let c = g;
+    for (let L = fL+1; L <= tL; L++){
+      if (gcAt(L) === 1){ c = 0; continue; }
+      const of = (PS.levels[L] && PS.levels[L].of) || [];
+      c = of[c]; if (c == null) return null;
+    }
+    return c;
+  };
+
+  const a0 = allocate(poolKey('Regionals'), 0);
+  const conv = {};
+  ((PS.cal && PS.cal.levels) || []).forEach((k,i) => { if (k && k.conv) conv[i] = k.conv; });
+
+  // Direct-entry cohorts (Platform, Groups C/D at Zones in 2026): the same
+  // calibrated total, spread by the same real observed geography, as
+  // buildLevel()/shareFor() already do for the non-routing path.
+  const shareCache = {};
+  const shareFn = (L) => {
+    if (shareCache[L] !== undefined) return shareCache[L];
+    const stage = stageForLevel(L);
+    const pool = stage ? (PS.adv && PS.adv.pools ? PS.adv.pools[poolKey(stage)] : null) : null;
+    if (!pool) return (shareCache[L] = null);
+    const tot = {};
+    for (const f in pool) for (const c in pool[f]) tot[c] = (tot[c]||0) + pool[f][c];
+    const n = gcAt(L);
+    const w = Array.from({length:n}, () => ({}));
+    for (const f in pool){
+      const ri = PS.assign[f];
+      if (ri==null || ri<0 || ri>=PS.regions.length) continue;
+      const g = groupOfRegion(L, ri);
+      if (g==null || g>=n) continue;
+      for (const c in pool[f]) w[g][c] = (w[g][c]||0) + pool[f][c];
+    }
+    for (const c in tot) for (let g=0; g<n; g++) if (tot[c]) w[g][c] = (w[g][c]||0) / tot[c];
+    return (shareCache[L] = w);
+  };
+  routing.forEach((rlvl, rL) => {
+    const cal = (PS.cal.levels||[])[rL];
+    if (!cal || !cal.directAt) return;
+    const total = {};
+    let any = false;
+    for (const c in cal.directAt){ if (cal.directAt[c]){ total[c] = cal.directAt[c]; any = true; } }
+    if (any) rlvl.entering = Object.assign({}, rlvl.entering, total);
+  });
+
+  const res = QR.project({
+    routing, entries0: a0.rows,
+    groupCount: gcAt, groupOf: groupOfAny, conv, cells: CODES, share: shareFn,
+  });
+
+  const lastIsFinal = gcAt(routing.length - 1) === 1;
+  const feeIndex = L => (lastIsFinal && L === routing.length - 1) ? NL : Math.min(L, NL);
+
+  const lvl = [];
+  for (let L = 0; L < NL; L++){
+    const rows = Array.from({length: gcAt(L)}, () => ({}));
+    routing.forEach((rlvl, rL) => {
+      if (feeIndex(rL) !== L) return;
+      for (let g = 0; g < gcAt(L); g++) CODES.forEach(c => {
+        rows[g][c] = (rows[g][c]||0) + QR.entriesAt(res, rL, g, [c]);
+      });
+    });
+    lvl.push({rows, un:{}, source:'routed'});
+  }
+  const finalCells = {};
+  routing.forEach((rlvl, rL) => {
+    if (feeIndex(rL) !== NL) return;
+    for (let g = 0; g < gcAt(rL); g++) CODES.forEach(c => {
+      finalCells[c] = (finalCells[c]||0) + QR.entriesAt(res, rL, g, [c]);
+    });
+  });
+  const finalTotalBefore = CODES.reduce((s,c)=>s+(finalCells[c]||0),0);
+  if (PS.prequal > 0 && finalTotalBefore > 0){
+    CODES.forEach(c => { finalCells[c] = (finalCells[c]||0) + PS.prequal * ((finalCells[c]||0)/finalTotalBefore); });
+  }
+
+  return { levels: lvl, final: finalCells, calib: [], problems: res.problems, routed: true };
+}
+
 /* Core volume model. Returns entries per level per group per cell, plus the
    calibration residuals. */
 function computeVolume(){
+  if (PS.boundaryRouting && PS.boundaryRouting.length && window.QualRouting){
+    return computeVolumeFromRouting(PS.boundaryRouting);
+  }
   const NL = levelCount();
   const flow = PS.flow;
   const cal = PS.cal || {levels:[], observedAt:[]};
@@ -2154,7 +2254,7 @@ function q(s){ return '"' + String(s==null?'':s).replace(/"/g,'""') + '"'; }
 /* Inspection hook: lets the engine be exercised headlessly in the test harness
    and poked at from the browser console without opening the UI. */
 window.__PRICING = {
-  PS, CODES, computeVolume, computeRevenue, allocate, isQualifying,
+  PS, CODES, computeVolume, computeVolumeFromRouting, computeRevenue, allocate, isQualifying,
   bootstrap, applyBoundary, resizeCards, defaultRegions, defaultLevels,
   defaultFees, defaultFlow, calibratePrequal, totalCells, deriveCalibration,
   defaultSenior, loadSeniorEntries, DIVEMEETS_LEVY, defaultSynchro, loadNationalActual, natActual,
