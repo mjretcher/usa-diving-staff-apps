@@ -2621,6 +2621,23 @@ function wireSchedule(){
     delete S.schedPlans[S.schedStop];
     redraw();
   });
+
+  const tplPick = P.querySelector('#bsTemplatePick');
+  if (tplPick && !S._templateOptions){
+    loadScheduleTemplates().then(list => { S._templateOptions = list; renderPathway(); });
+  }
+  const genBtn = P.querySelector('#bsGenSchedule');
+  if (genBtn) genBtn.addEventListener('click', async ()=>{
+    const tid = (P.querySelector('#bsTemplatePick')||{}).value;
+    const src = (P.querySelector('#bsTemplateSource')||{}).value || 'projected';
+    const startDate = (P.querySelector('#bsTemplateStart')||{}).value;
+    if (!tid){ msg('Pick a template first.'); return; }
+    if (!startDate){ msg('Pick a start date first \u2014 the template needs one to lay out real calendar days.'); return; }
+    S._templateStart = startDate;
+    genBtn.disabled = true; genBtn.textContent = 'Generating\u2026';
+    try { await generateScheduleFromTemplate(tid, src, startDate); }
+    finally { genBtn.disabled = false; genBtn.textContent = 'Generate real schedule\u2026'; }
+  });
 }
 
 function renderScheduleInspector(res){
@@ -2743,6 +2760,25 @@ function renderScheduleInspector(res){
         <button class="tab bs-mini" id="bsSchedAddDay">Add a day</button>
         ${planDirty(key)?`<button class="tab bs-mini" id="bsSchedReset">Undo my changes to this meet</button>`:''}
       </div>
+      <div class="bs-pwbar-r" style="margin-top:8px">
+        <label class="bs-arr">Template
+          <select class="sel" id="bsTemplatePick">${(S._templateOptions||[]).map(t=>
+            `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('') || '<option value="">Loading&hellip;</option>'}</select></label>
+        <label class="bs-arr">Entries
+          <select class="sel" id="bsTemplateSource">
+            <option value="projected">Today's calibrated projection</option>
+            <option value="max">Maximum capacity (no calibration)</option>
+            <option value="y25">Real 2025 entries</option>
+            <option value="y26">Real 2026 entries</option>
+          </select></label>
+        <label class="bs-arr">Start date
+          <input class="bs-rt-in" type="date" id="bsTemplateStart" value="${esc(S._templateStart || '')}"></label>
+        <button class="tab bs-mini" id="bsGenSchedule">Generate real schedule&hellip;</button>
+      </div>
+      <div class="note bs-sc-hint">Builds a full Schedule Builder file from the picked template and entry source
+        &mdash; training days, session-by-session timing, the works &mdash; and saves it there to open and refine
+        with the real timing engine, boards, and broadcast tools. This tab stays the quick feasibility check;
+        that is where a proposal becomes an actual working schedule.</div>
       <div class="note bs-sc-hint">Drag a card to another day. On a phone or with a keyboard, use the day
         selector on the card.</div>
       <div class="note">${planDirty(key)
@@ -2800,6 +2836,194 @@ function withRouting(routing, fn){
   const snap = S.routing;
   try { S.routing = routing; return fn(); }
   finally { S.routing = snap; }
+}
+
+/* Structural ceiling, not a forecast: every band saturated as if the real
+   field were infinite, no calibration applied (take-up behaviour is a fact
+   about real turnout, meaningless against a hypothetical maximum). Reuses
+   project() itself rather than re-deriving capacity by hand, so it can never
+   quietly disagree with what a real, populated projection would do. */
+function maxCapacityEntries(){
+  const n = groupCountAt(0);
+  const HUGE = 999999;
+  const rows = Array.from({length: n}, () => {
+    const r = {}; CELLS.forEach(c => r[c] = HUGE); return r;
+  });
+  return QR().project({
+    routing: S.routing, entries0: rows,
+    groupCount: groupCountAt, groupOf: groupUp, conv: {}, cells: CELLS,
+  });
+}
+
+/* One place that answers "which entries feed this schedule" for all three
+   sources the generator offers, so the UI picker and any future caller read
+   the exact same definitions. Uses BoundaryAPI's own withYear (async) rather
+   than a second one -- that property already existed before this feature. */
+async function entriesForSource(source){
+  if (source === 'max') return maxCapacityEntries();
+  if (source === 'y25') return window.BoundaryAPI.withYear('y25', () => projectPathway());
+  if (source === 'y26') return window.BoundaryAPI.withYear('y26', () => projectPathway());
+  return projectPathway(); // 'projected': today's loaded year, calibrated
+}
+
+/* ============================================================================
+   TEMPLATE -> REAL SCHEDULE
+   A template names the WEEK'S SHAPE (training days, which groups compete
+   which days, where a synchro or other special event sits) independent of
+   any one scenario's numbers. Applying one to a projection is what actually
+   produces a schedule -- output shaped to drop straight into
+   schedule_builder.schedules, per the promotion path scenario_schedules was
+   built for from the start.
+   ========================================================================= */
+function buildScheduleFromTemplate(template, res, meetInfo){
+  const last = S.routing.length - 1;
+  const spec = diveSpecFor(last);
+  const E = window.ScenarioScheduleEngine;
+  if (!E) throw new Error('scenario-schedule-engine.js is not loaded');
+
+  function cellsFor(groupLetters){
+    const prelim = {}, final = {};
+    groupLetters.forEach(g => ['B','G'].forEach(x => ['1','3','P'].forEach(d => {
+      const code = g + x + d;
+      let n = 0;
+      for (let gi = 0; gi < Math.max(1, groupCountAt(last)); gi++) n += QR().entriesAt(res, last, gi, [code]);
+      n = Math.round(n); if (!n) return;
+      const key = `${AGE_LBL[g]}|${GEN_LBL[x]}|${DIS_LBL[d]}`;
+      prelim[`${key}|prelim`] = n;
+      final[`${key}|final`] = Math.min(12, n);
+    })));
+    return [{key:'prelim', cells: prelim}, {key:'final', cells: final}];
+  }
+  function simDiveSpec(cellKey){
+    // spec() expects Group X|Gender|Discipline|round with the LONG apparatus
+    // name; DIS_LBL gives the short one, so translate exactly as computeSchedule() does.
+    const p = cellKey.split('|');
+    return spec(`${p[0]}|${p[1]}|${DIS_APPARATUS[p[2]]||p[2]}|${p[3]}`);
+  }
+
+  const blocks = template.blocks;
+  const cdBlocks = blocks.filter(b => b.type === 'competition' && b.groups && b.groups.includes('C'));
+  const abBlocks = blocks.filter(b => b.type === 'competition' && b.groups && b.groups.includes('A'));
+  const cdSim = E.simulateStop({stopName:'C/D', rounds: cellsFor(['C','D'])}, simDiveSpec, null, {minDays: cdBlocks.length});
+  const abSim = E.simulateStop({stopName:'A/B', rounds: cellsFor(['A','B'])}, simDiveSpec, null, {minDays: abBlocks.length});
+
+  const days = [], sessions = [];
+  let sc = 1;
+  const base = new Date(meetInfo.startDate);
+  const dateFor = n => { const d = new Date(base); d.setDate(d.getDate()+n-1); return d.toISOString().slice(0,10); };
+
+  function trainingDay(n, label, openMin, closeMin, notes){
+    days.push({id:`day-${n}`, date:dateFor(n), openMinutes:openMin, closeMinutes:closeMin, locked:false});
+    sessions.push({id:`open-practice-${n}`, dayId:`day-${n}`, title:label, isOpenPracticeSession:true,
+      warmupStartMinutes:openMin, warmupMinutes:0, transitionBufferMinutes:0, roundingIncrementMinutes:5,
+      awardsEnabled:false, locked:false, collapsed:false,
+      events:[{id:`training-${n}`, level:'Schedule', gender:'Open', apparatus:'Pool', style:'Custom Block',
+        display:label, round:'Custom Block', blockTitle:label, customDurationMinutes:closeMin-openMin,
+        numberOfDives:0, numberOfDivers:0, secondsPerDive:0, notes: notes||''}]});
+  }
+  function synchroSession(n, extraEvents, warmupStart){
+    if (!extraEvents || !extraEvents.length) return;
+    const evs = extraEvents.map(x => {
+      const d = x.apparatus === '3-Meter' ? {dives:5, secondsPerDive:35} : {dives:5, secondsPerDive:45};
+      return {id:`synchro-${x.gender}-${x.apparatus}`.toLowerCase().replace(/\s+/g,'-'), level:'14-18',
+        gender:x.gender, apparatus:x.apparatus, style:'Synchronized', display:`14-18 ${x.gender} Synchro ${x.apparatus}`,
+        round:'Final', numberOfDives:d.dives, defaultNumberOfDives:d.dives, numberOfDivers:12,
+        secondsPerDive:d.secondsPerDive, notes:'Fixed field (12 teams) -- does not scale with proposal.'};
+    });
+    sessions.push({id:`session-${sc++}`, dayId:`day-${n}`, title:'Synchro', isOpenPracticeSession:false,
+      warmupStartMinutes:warmupStart, warmupMinutes:60, transitionBufferMinutes:5, roundingIncrementMinutes:5,
+      awardsEnabled:true, locked:false, collapsed:false, events:evs});
+  }
+  function compDay(n, simDay){
+    days.push({id:`day-${n}`, date:dateFor(n), openMinutes:390, closeMinutes:1200, locked:false});
+    (simDay.sessions||[]).forEach(sess => {
+      const evs = sess.events.map(e => ({
+        id:`${e.group}-${e.gender}-${e.discipline}-${e.round}`.toLowerCase().replace(/\s+/g,'-'),
+        level:e.group, gender:e.gender, apparatus:e.discipline, style:'Individual',
+        display:`${e.group} ${e.gender} ${e.discipline}`, round: e.round==='prelim'?'Prelim':'Final',
+        numberOfDives:e.dives, defaultNumberOfDives:e.dives, numberOfDivers:e.divers,
+        secondsPerDive:e.secondsPerDive, notes: e.split?'Split board (auto)':(e.reviewSplit?'Flagged for split review':''),
+      }));
+      sessions.push({id:`session-${sc++}`, dayId:`day-${n}`, title:`Session ${sc-1}`, isOpenPracticeSession:false,
+        warmupStartMinutes:null, warmupMinutes:sess.warmupMinutes, transitionBufferMinutes:5,
+        roundingIncrementMinutes:5, awardsEnabled:true, locked:false, collapsed:false, events:evs});
+    });
+  }
+
+  let n = 1;
+  blocks.forEach(b => {
+    if (b.type === 'training'){ trainingDay(n, b.label, b.hours ? 480 : 390, b.hours ? 480+b.hours*60 : 1200, b.notes); n++; return; }
+    if (b.type === 'mixed'){ trainingDay(n, b.label, 390, 1200, b.notes||''); synchroSession(n, b.extraEvents, 580); n++; return; }
+    // competition
+    const isC = b.groups.includes('C');
+    const sim = isC ? cdSim : abSim;
+    const idx = (isC?cdBlocks:abBlocks).indexOf(b);
+    compDay(n, sim.days[idx]);
+    if (b.extraEvents) synchroSession(n, b.extraEvents, 780);
+    n++;
+  });
+
+  return {
+    id: meetInfo.id, name: meetInfo.name, updatedAt: new Date().toISOString(),
+    meet_type: 'custom', year: meetInfo.year || null,
+    schedule: {
+      updatedAt: new Date().toISOString(),
+      meet: {name: meetInfo.name, venue: meetInfo.venue||'', timezone:'America/New_York', meetType:'custom', days},
+      profile: {id:'custom', label:'Custom', description: meetInfo.description||'',
+        allowedRounds:['Qualifier','Prelim','Semifinal','Final','Custom Block','Open Practice'],
+        roundRelationships:[], events:[]},
+      sessions,
+      outputSettings: {publicShowWarmups:true, publicShowOpenPracticeNotes:true, publicPreset:'clean',
+        showEndTimes:true, showSubjectToChange:true},
+      theme: 'classic', entryMode: 'projected', locks: {entries:false, sessionOrder:false}, publishStatus: 'draft',
+    }
+  };
+}
+
+let _templateListCache = null;
+async function loadScheduleTemplates(){
+  if (_templateListCache) return _templateListCache;
+  try {
+    const r = await NEON.query('SELECT id, name, notes, data FROM membership.schedule_templates ORDER BY name', []);
+    _templateListCache = r.rows.map(row => ({...row, data: typeof row.data==='string'?JSON.parse(row.data):row.data}));
+  } catch(e){ console.error(e); _templateListCache = []; }
+  return _templateListCache;
+}
+
+async function generateScheduleFromTemplate(templateId, source, startDate){
+  const templates = await loadScheduleTemplates();
+  const t = templates.find(x => x.id === templateId);
+  if (!t) { msg('Template not found.'); return; }
+  if (!startDate) { msg('A start date is required.'); return; }
+  const res = await entriesForSource(source);
+  const sourceLabel = {max:'maximum capacity (no calibration)', y25:'real 2025 entries', y26:'real 2026 entries',
+    projected:'today\u2019s calibrated projection'}[source] || source;
+  const name = `${S.scenarioName || 'Untitled scenario'} \u2014 ${t.name} \u2014 ${sourceLabel}`;
+  const schedule = buildScheduleFromTemplate(t.data, res, {
+    id: 'sched-' + Math.random().toString(36).slice(2,10),
+    name, venue: 'Peak Health Aquatic Center at Mylan Park, Morgantown, WV',
+    description: `Generated from Boundary Studio scenario "${S.scenarioName||''}" (${S.scenarioId||'unsaved'}) `
+      + `via template "${t.name}" (${t.id}), entries: ${sourceLabel}. Generated ${new Date().toISOString()}. `
+      + `Projected entries, not synced from DiveMeets -- verify before publishing.`,
+    year: S.year === 'y25' ? 2025 : 2026,
+    startDate,
+  });
+  try {
+    if (S.scenarioId){
+      await NEON.query(
+        `INSERT INTO membership.scenario_schedules (id, boundary_scenario_id, stop_name, name, data)
+         VALUES ($1,$2,$3,$4,$5::jsonb)
+         ON CONFLICT (id) DO UPDATE SET name=$4, data=$5::jsonb, updated_at=now()`,
+        [schedule.id, S.scenarioId, t.name, name, JSON.stringify(schedule.schedule)]);
+    }
+    await NEON.query(
+      `INSERT INTO schedule_builder.schedules (id, name, meet_type, year, is_builtin, publish_status, data)
+       VALUES ($1,$2,'custom',$3,false,'draft',$4::jsonb)
+       ON CONFLICT (id) DO UPDATE SET name=$2, data=$4::jsonb, updated_at=now()`,
+      [schedule.id, name, schedule.year, JSON.stringify(schedule)]);
+    msg(`Generated "${name}" \u2014 open it in Schedule Builder to refine timing, boards, and broadcast.`);
+  } catch(e){ console.error(e); msg('Could not save the generated schedule: ' + (e.message||e)); }
+  return schedule;
 }
 
 /* Swap the map, run something, put it back. Take-up is read from
@@ -5893,6 +6117,8 @@ window.BoundaryAPI = {
      pipeline the Compare tab itself runs on, so a named comparison and an
      on-screen one can never quietly disagree. */
   withMap, withRouting, summariseRouting,
+  maxCapacityEntries, entriesForSource, buildScheduleFromTemplate,
+  loadScheduleTemplates, generateScheduleFromTemplate,
   AGES, GENS, DISCS, CELLS,
 };
 
