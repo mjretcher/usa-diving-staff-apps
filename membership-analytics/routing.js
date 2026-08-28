@@ -9,7 +9,7 @@
      proposals do not look like that. A worked example:
 
        Of the top 24 in East/West/Central prelims, the top 8 go straight to the
-       SEMI-FINALS at Junior Nationals. Places 9-24 swim the E/W/C final, and
+       SEMI-FINALS at Junior Nationals. Places 9-24 dive the E/W/C final, and
        the top 8 of those go to the PRELIMS at Junior Nationals.
 
      Two things there are new. Athletes are routed out of a stop MID-COMPETITION

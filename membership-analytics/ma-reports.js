@@ -1514,14 +1514,15 @@ const BOUNDARY_SECTIONS = {
       let rows;
       try {
         rows = await NEON.query(
-          `SELECT id, name, data FROM membership.boundary_scenarios WHERE id IN ($1,$2,$3)`,
+          `SELECT id, name, data, updated_at FROM membership.boundary_scenarios WHERE id IN ($1,$2,$3)`,
           [OLD_SEED_ID, CCE_ID, COUNTER_ID]);
       } catch(e){
         return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
           <p class="mr-p mr-warn">Could not load the comparison scenarios: ${esc(e.message||e)}</p></section>`;
       }
       const byId = {};
-      (rows.rows||[]).forEach(r => byId[r.id] = {name:r.name, data: typeof r.data==='string'?JSON.parse(r.data):r.data});
+      (rows.rows||[]).forEach(r => byId[r.id] = {name:r.name, updatedAt:r.updated_at,
+        data: typeof r.data==='string'?JSON.parse(r.data):r.data});
       const missing = [OLD_SEED_ID, CCE_ID, COUNTER_ID].filter(id => !byId[id]);
       if (missing.length) return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
         <p class="mr-p mr-warn">Missing saved scenario(s): ${missing.map(esc).join(', ')}. This section names
@@ -1594,6 +1595,13 @@ const BOUNDARY_SECTIONS = {
           final also qualifies — currently set to the top ${DEFAULT_CAP}. The two proposals sit on the identical
           9-zone map, so every difference between them below is the rule, not the geography. Volume for both
           is the real 2026 Zone-level field, redrawn onto that map — no invented numbers.</p>
+        <p class="mr-note mr-soft"><b>Computed from:</b>
+          "${esc(byId[OLD_SEED_ID].name)}" (${esc(OLD_SEED_ID)}, saved ${esc(String(byId[OLD_SEED_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          "${esc(byId[CCE_ID].name)}" (${esc(CCE_ID)}, saved ${esc(String(byId[CCE_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          "${esc(byId[COUNTER_ID].name)}" (${esc(COUNTER_ID)}, saved ${esc(String(byId[COUNTER_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC).
+          Report generated ${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC. If any of these three
+          scenarios has been edited since the timestamp shown for it, the numbers above no longer reflect what's
+          currently saved — regenerate this section rather than trust a printed copy.</p>
 
         <h3 class="mr-h3">Junior Nationals prelim field</h3>
         <table class="mr-table"><thead><tr><th>System</th><th></th>
@@ -2081,7 +2089,7 @@ const TEMPLATES = [
   { id:'realignment_proposal', label:'Realignment Proposal',
     desc:'The full case: the map, size balance, what it takes to advance in each area, whether every meet fits, tier rollups and a profile of every area.',
     sections:['boundary_summary','boundary_map','boundary_overview','boundary_balance','boundary_equity',
-              'boundary_schedule','boundary_circuit_delta','boundary_tiers','boundary_region_profiles'],
+              'boundary_pathway','boundary_schedule','boundary_circuit_delta','boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
   { id:'realignment_board', label:'Realignment — Board Packet',
