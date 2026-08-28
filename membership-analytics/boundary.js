@@ -2636,6 +2636,7 @@ function wireSchedule(){
     S._templateStart = startDate;
     genBtn.disabled = true; genBtn.textContent = 'Generating\u2026';
     try { await generateScheduleFromTemplate(tid, src, startDate); }
+    catch(e){ console.error(e); /* generateScheduleFromTemplate already called msg() with the specific reason */ }
     finally { genBtn.disabled = false; genBtn.textContent = 'Generate real schedule\u2026'; }
   });
 }
@@ -2993,8 +2994,8 @@ async function loadScheduleTemplates(){
 async function generateScheduleFromTemplate(templateId, source, startDate){
   const templates = await loadScheduleTemplates();
   const t = templates.find(x => x.id === templateId);
-  if (!t) { msg('Template not found.'); return; }
-  if (!startDate) { msg('A start date is required.'); return; }
+  if (!t) { msg('Template not found.'); throw new Error('generateScheduleFromTemplate: no template with id ' + templateId); }
+  if (!startDate) { msg('A start date is required.'); throw new Error('generateScheduleFromTemplate: startDate is required'); }
   const res = await entriesForSource(source);
   const sourceLabel = {max:'maximum capacity (no calibration)', y25:'real 2025 entries', y26:'real 2026 entries',
     projected:'today\u2019s calibrated projection'}[source] || source;
@@ -3008,6 +3009,7 @@ async function generateScheduleFromTemplate(templateId, source, startDate){
     year: S.year === 'y25' ? 2025 : 2026,
     startDate,
   });
+  schedule.saved = false;
   try {
     if (S.scenarioId){
       await NEON.query(
@@ -3021,8 +3023,14 @@ async function generateScheduleFromTemplate(templateId, source, startDate){
        VALUES ($1,$2,'custom',$3,false,'draft',$4::jsonb)
        ON CONFLICT (id) DO UPDATE SET name=$2, data=$4::jsonb, updated_at=now()`,
       [schedule.id, name, schedule.year, JSON.stringify(schedule)]);
+    schedule.saved = true;
     msg(`Generated "${name}" \u2014 open it in Schedule Builder to refine timing, boards, and broadcast.`);
-  } catch(e){ console.error(e); msg('Could not save the generated schedule: ' + (e.message||e)); }
+  } catch(e){
+    console.error(e);
+    msg('Could not save the generated schedule: ' + (e.message||e));
+    // schedule.saved stays false -- built successfully, not persisted. A caller
+    // checking truthiness alone would otherwise read this as a full success.
+  }
   return schedule;
 }
 
