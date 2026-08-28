@@ -995,6 +995,24 @@ CREATE TABLE IF NOT EXISTS membership.pathways (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- Schedule templates (Boundary Studio / Scenario Schedule Studio): the day-by-
+-- day STRUCTURE of a meet week -- training days, which age groups compete
+-- which days, where a synchro or other special event sits -- independent of
+-- any one scenario's entry counts. A template's `data.blocks[]` is ordered
+-- day-blocks ({type: training|competition|mixed, groups, label, notes,
+-- extraEvents}); applying a template to a scenario's projected (or real
+-- historical) per-cell entries is what actually produces a schedule. Same
+-- reasoning as membership.pathways: reusable across scenarios rather than
+-- redrawn by hand each time one is needed.
+CREATE TABLE IF NOT EXISTS membership.schedule_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    notes       TEXT,
+    data        JSONB NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
 -- Boundary Studio scenarios (Membership Analytics)
 CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     id TEXT PRIMARY KEY,
@@ -1201,7 +1219,8 @@ BEGIN
     GRANT INSERT, UPDATE, DELETE ON
       membership.boundary_scenarios,
       membership.pricing_scenarios,
-      membership.scenario_schedules
+      membership.scenario_schedules,
+      membership.schedule_templates
       TO usad_app;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
     -- The default privilege is what stops this recurring: a table added later
