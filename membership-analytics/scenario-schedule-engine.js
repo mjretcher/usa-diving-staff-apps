@@ -260,7 +260,48 @@
        So among the days where this age group and gender is still free, take the
        one using this board least. That spreads 1m, 3m and platform evenly
        through each day and lets the sessions fill all three lanes. */
+    // Prelim and its final are the same event twice, not two events: the real
+    // 2026 schedule runs both on the same day without exception (26 sessions
+    // checked, 0 split across days). Treated as independent items, the
+    // existing "day already used for this group+gender" rule actively pushes
+    // them APART the moment the first round claims a day -- the opposite of
+    // what actually happens. Pair them so they're placed as one unit.
+    var byPairKey = {};
+    var singles = [];
     auto.forEach(function (ev) {
+      if (ev.round !== 'prelim' && ev.round !== 'final') { singles.push(ev); return; }
+      var pk = ev.group + '|' + ev.gender + '|' + ev.discipline;
+      (byPairKey[pk] = byPairKey[pk] || []).push(ev);
+    });
+    var pairs = [], leftover = [];
+    Object.keys(byPairKey).forEach(function (pk) {
+      var group = byPairKey[pk];
+      var prelim = group.filter(function (e) { return e.round === 'prelim'; });
+      var final = group.filter(function (e) { return e.round === 'final'; });
+      if (prelim.length && final.length) pairs.push(prelim.concat(final));
+      else leftover = leftover.concat(group); // only one round exists -- place alone
+    });
+
+    pairs.forEach(function (evs) {
+      var key = evs[0].group + '|' + evs[0].gender;
+      var day = null, bestLoad = Infinity;
+      for (var i = 0; i < days.length; i++) {
+        if (days[i].used[key]) continue;
+        var load = 0;
+        evs.forEach(function (e) { load += (days[i].laneLoad && days[i].laneLoad[laneOf(e.discipline)]) || 0; });
+        if (load < bestLoad) { bestLoad = load; day = days[i]; }
+      }
+      if (!day) { days.push({ used: {}, events: [], conflicts: [], laneLoad: {} }); day = days[days.length - 1]; }
+      if (!day.laneLoad) day.laneLoad = {};
+      day.used[key] = true;
+      evs.forEach(function (e) {
+        var lane = laneOf(e.discipline);
+        day.laneLoad[lane] = (day.laneLoad[lane] || 0) + 1;
+        day.events.push(e);
+      });
+    });
+
+    singles.concat(leftover).forEach(function (ev) {
       var key = ev.group + '|' + ev.gender;
       var lane = laneOf(ev.discipline);
       var day = null, bestLoad = Infinity;
