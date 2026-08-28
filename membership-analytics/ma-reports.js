@@ -1501,6 +1501,130 @@ const BOUNDARY_SECTIONS = {
     }
   },
 
+  boundary_circuit_delta: {
+    label: 'New Junior Circuit — old vs. proposed', group: 'Boundary Studio',
+    desc: 'Today\u2019s real qualification field against both 9-zone proposals, on the same map, by age group and gender, with the E/W/C cap shown at 3/4/5.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('New Junior Circuit — old vs. proposed');
+      const api = B();
+      const OLD_SEED_ID = 'seed-2026-official';
+      const CCE_ID = 'bs-msg2vatz-5q86m';
+      const COUNTER_ID = 'bs-msix7ibe-nij21';
+
+      let rows;
+      try {
+        rows = await NEON.query(
+          `SELECT id, name, data FROM membership.boundary_scenarios WHERE id IN ($1,$2,$3)`,
+          [OLD_SEED_ID, CCE_ID, COUNTER_ID]);
+      } catch(e){
+        return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+          <p class="mr-p mr-warn">Could not load the comparison scenarios: ${esc(e.message||e)}</p></section>`;
+      }
+      const byId = {};
+      (rows.rows||[]).forEach(r => byId[r.id] = {name:r.name, data: typeof r.data==='string'?JSON.parse(r.data):r.data});
+      const missing = [OLD_SEED_ID, CCE_ID, COUNTER_ID].filter(id => !byId[id]);
+      if (missing.length) return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+        <p class="mr-p mr-warn">Missing saved scenario(s): ${missing.map(esc).join(', ')}. This section names
+        specific scenarios rather than whatever happens to be on screen, so it cannot substitute another one.</p></section>`;
+
+      const oldData = byId[OLD_SEED_ID].data, cceData = byId[CCE_ID].data, cntData = byId[COUNTER_ID].data;
+
+      // OLD: the real 2026 structure on the real, currently-published 12-region
+      // map -- what actually happened, not a hypothetical.
+      const oldLevels = [{name:'Regions'},
+        {name:'Zones', groups:Array.from({length:6},(_,i)=>({name:'Zone '+String.fromCharCode(65+i)})),
+         of:[0,0,1,1,2,2,3,3,4,4,5,5]},
+        {name:'E / W / C', groups:[{name:'East'},{name:'Central'},{name:'West'}], of:[0,0,1,1,2,2]},
+        {name:'Junior Nationals', groups:[{name:'Junior Nationals'}], of:[0,0,0]}];
+      const oldSummary = api.withMap(
+        {regions: Array.from({length:12},(_,i)=>({name:'Region '+(i+1)})), assign: oldData.assign, levels: oldLevels},
+        () => api.summariseRouting(window.QualRouting.defaultRouting(3,3), 'Today\u2019s real system', null));
+
+      // CCE and the counter-proposal share one map (the counter-proposal's,
+      // the more developed of the two) -- only the rules differ between them,
+      // so every difference below is caused by the rules and nothing else.
+      const sharedMap = {regions: cntData.regions, assign: cntData.assign, levels: cntData.levels};
+      const cceSummary = api.withMap(sharedMap, () => api.summariseRouting(cceData.routing, 'CCE proposal', null));
+
+      const CAPS = [3,4,5];
+      const capSummaries = {};
+      CAPS.forEach(cap => {
+        const routing = JSON.parse(JSON.stringify(cntData.routing));
+        const rt = routing[1].routes.find(r => r.from === 'final');
+        if (rt) rt.hi = cap;
+        capSummaries[cap] = api.withMap(sharedMap,
+          () => api.summariseRouting(routing, `Counter-proposal (E/W/C final top ${cap})`, null));
+      });
+      const DEFAULT_CAP = 4;
+      const cntSummary = capSummaries[DEFAULT_CAP];
+
+      const cols = [oldSummary, cceSummary, cntSummary];
+      const maxField = Math.max(...cols.map(c=>c.finalField));
+      const pctVs = (v, base) => base > 0 ? (100*(v-base)/base) : null;
+      const pctStr = p => p == null ? '—' : `${p>0?'+':''}${p.toFixed(0)}%`;
+
+      const headlineRows = cols.map((c,i) => `<tr>
+        <td><b>${esc(c.label)}</b>${i===2?` <span class="mr-soft">(E/W/C final cap = ${DEFAULT_CAP})</span>`:''}</td>
+        <td style="width:32%">${bar(c.finalField, maxField, i===0?SKY:(i===1?POOL:NAVY))}</td>
+        <td class="mr-num">${fmt(c.finalField)}</td>
+        <td class="mr-num">${i===0?'—':pctStr(pctVs(c.finalField, cols[0].finalField))}</td>
+      </tr>`).join('');
+
+      const groupRows = oldSummary.byGroup.map((g,i) => {
+        const oldV = g.field, cceV = cceSummary.byGroup[i].field, cntV = cntSummary.byGroup[i].field;
+        return `<tr><td>${esc(g.label)}</td>
+          <td class="mr-num">${fmt(oldV)}</td>
+          <td class="mr-num">${fmt(cceV)} <span class="mr-soft">${pctStr(pctVs(cceV, oldV))}</span></td>
+          <td class="mr-num">${fmt(cntV)} <span class="mr-soft">${pctStr(pctVs(cntV, oldV))}</span></td>
+        </tr>`;
+      }).join('');
+
+      const capRows = CAPS.map(cap => `<tr>${cap===DEFAULT_CAP?'<td><b>':'<td>'}Top ${cap}${cap===DEFAULT_CAP?' (current default)</b>':''}</td>
+        <td class="mr-num">${fmt(capSummaries[cap].finalField)}</td>
+        <td class="mr-num">${pctStr(pctVs(capSummaries[cap].finalField, cols[0].finalField))}</td></tr>`).join('');
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+        <p class="mr-note"><b>How to read this.</b> "Today's real system" is the 2026 season as it actually ran:
+          12 Regions → 6 Zones → East/Central/West → Junior Nationals, real entries, real results. Both proposals
+          replace that with 9 Zones feeding East/Central/West directly — no Regional round. CCE's proposal sends
+          the top 12 from each Zone to E/W/C and the top 9 from each E/W/C meet straight to Nationals. The
+          counter-proposal sends the top 15/16 from each Zone to an E/W/C <em>prelim</em>: the top 8 of that
+          qualify straight to Nationals, places 9\u201324 continue to an E/W/C <em>final</em>, and the top of that
+          final also qualifies — currently set to the top ${DEFAULT_CAP}. The two proposals sit on the identical
+          9-zone map, so every difference between them below is the rule, not the geography. Volume for both
+          is the real 2026 Zone-level field, redrawn onto that map — no invented numbers.</p>
+
+        <h3 class="mr-h3">Junior Nationals prelim field</h3>
+        <table class="mr-table"><thead><tr><th>System</th><th></th>
+          <th class="mr-num">Athletes</th><th class="mr-num">vs. today</th></tr></thead>
+          <tbody>${headlineRows}</tbody></table>
+
+        <h3 class="mr-h3">By age group and gender</h3>
+        <table class="mr-table"><thead><tr><th>Group</th>
+          <th class="mr-num">Today</th><th class="mr-num">CCE proposal</th>
+          <th class="mr-num">Counter-proposal</th></tr></thead>
+          <tbody>${groupRows}</tbody></table>
+        <p class="mr-note">Percentages are each proposal against today's real field for that group, not against
+          the other proposal.</p>
+
+        <h3 class="mr-h3">Counter-proposal — sensitivity to the E/W/C final cap</h3>
+        <p class="mr-p">The cap on how many qualify out of the E/W/C final is not yet decided. This is the whole
+          field's sensitivity to that one number, everything else held the same.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th>E/W/C final qualifiers</th>
+          <th class="mr-num">Nationals field</th><th class="mr-num">vs. today</th></tr></thead>
+          <tbody>${capRows}</tbody></table>
+
+        <p class="mr-note mr-warn"><b>What this is and is not.</b> This projects real 2026 entry volume through
+          each rule set on the same map — it is not a prediction of who will actually enter under a new circuit,
+          and it does not yet account for behaviour change (a bigger or smaller field can itself change how many
+          athletes choose to compete). Today's system starts its count at Regionals because Regions exist there;
+          both proposals start at Zones because Regions do not exist in either. That is a real structural
+          difference between old and new, not a gap in the comparison.</p>
+      </section>`;
+    }
+  },
+
   boundary_zips: {
     label: 'Realignment — zip code appendix', group: 'Boundary Studio',
     desc: 'Every zip code in every area with its member count — the appendix a rulebook edit needs.',
@@ -1957,12 +2081,12 @@ const TEMPLATES = [
   { id:'realignment_proposal', label:'Realignment Proposal',
     desc:'The full case: the map, size balance, what it takes to advance in each area, whether every meet fits, tier rollups and a profile of every area.',
     sections:['boundary_summary','boundary_map','boundary_overview','boundary_balance','boundary_equity',
-              'boundary_schedule','boundary_tiers','boundary_region_profiles'],
+              'boundary_schedule','boundary_circuit_delta','boundary_tiers','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
   { id:'realignment_board', label:'Realignment — Board Packet',
     desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, what it takes to advance, and whether every meet this creates can actually be run. No appendices.',
-    sections:['boundary_map','boundary_balance','boundary_equity','boundary_schedule'], years:[2025,2026], boundary:true },
+    sections:['boundary_map','boundary_balance','boundary_equity','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
 
   { id:'realignment_equity', label:'Realignment — Fairness Case',
     desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
@@ -1970,7 +2094,7 @@ const TEMPLATES = [
 
   { id:'realignment_compare', label:'Realignment — Before & After',
     desc:'What changes versus the currently loaded comparison scenario: counties moved, members affected, and the balance either side.',
-    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_pathways_compared','boundary_club_moves',
+    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_pathways_compared','boundary_circuit_delta','boundary_club_moves',
               'boundary_balance'], years:[2025,2026], boundary:true },
 
   { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',

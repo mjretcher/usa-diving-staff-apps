@@ -2852,10 +2852,19 @@ function summariseRouting(routing, label, notes){
     // championship. Read off its entry round, not the reduced final.
     let finalField = 0;
     for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) finalField += QR().entriesAt(res, last, g, cells);
+    // Same number, split by age group x gender (summed across the three
+    // disciplines) -- the cut a committee actually asks for, not just the
+    // aggregate. Additive: existing callers reading finalField are unaffected.
+    const byGroup = AGES.map(a => GENS.map(gd => {
+      const subset = DISCS.map(d => a.k + gd.k + d.k);
+      let n = 0;
+      for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, subset);
+      return {age: a.k, gender: gd.k, label: `${a.label} ${gd.label}`, field: Math.round(n*100)/100};
+    })).flat();
     const st = sched.stops || [];
     return {
       label, notes,
-      levels, finalField,
+      levels, finalField, byGroup,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
       over:      st.filter(x=>x.daysOver).length,
@@ -5879,6 +5888,12 @@ window.BoundaryAPI = {
   frozen: () => S.frozen,
   frozenDrift: freezeDrift,
   pathwayLabel: currentPathwayLabel,
+  /* For a report that names specific scenarios/pathways to compare (not just
+     "whatever is on screen"): the same withMap/withRouting/summariseRouting
+     pipeline the Compare tab itself runs on, so a named comparison and an
+     on-screen one can never quietly disagree. */
+  withMap, withRouting, summariseRouting,
+  AGES, GENS, DISCS, CELLS,
 };
 
 function injectAutoCSS(){
