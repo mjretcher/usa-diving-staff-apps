@@ -1368,6 +1368,13 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-p">Each level of the structure is rolled up from the painted county map. Balance
         usually improves as levels combine — a lopsided bottom tier can still produce even upper tiers,
         and that is worth checking before signing off on a structure.</p>
+        <p class="mr-note"><b>How to read this.</b> <em>Share</em> is this area's percentage of the
+        level's total membership — areas at a level should sum to 100%. <em>Deviation</em> compares an
+        area to what an exactly even split would look like at that level (total members ÷ number of
+        areas): a deviation of +20% means this area has a fifth more members than an equal share would
+        give it, not a fifth more than any other specific area. Compare the same level's deviation
+        column across areas to see which ones are furthest from even; compare deviation at one area
+        across levels to see whether combining areas is smoothing out or compounding an imbalance.</p>
         ${blocks}
       </section>`;
     }
