@@ -110,7 +110,7 @@ WITH base AS (
     SELECT
         r.meet_id_dm, r.event_key, r.year,
         r.age_group, r.gender, r.discipline,
-        r.place, r.score,
+        r.place, r.score, r.region,
         lower(btrim(r.diver_first)) AS f,
         lower(btrim(r.diver_last))  AS l
     FROM core.event_results r
@@ -141,7 +141,7 @@ mem AS (
     FROM membership.members
     GROUP BY 1, 2
 )
-SELECT k.age_group, k.gender, k.discipline, k.year, m.zip5, k.score
+SELECT k.age_group, k.gender, k.discipline, k.year, m.zip5, k.score, k.region
 FROM kept k
 LEFT JOIN mem m ON m.f = k.f AND m.l = k.l
 """
@@ -206,13 +206,17 @@ def main():
 
     try:
         cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
+        direct_region_cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
         mapped, unmapped, skipped_disc = 0, 0, 0
-        for ag, gen, disc, yr, zip5, score in rows:
+        region_agree, region_disagree = 0, 0
+        for ag, gen, disc, yr, zip5, score, region in rows:
             b = board_label(disc)
             if not b:
                 skipped_disc += 1
                 continue
             key = f"{ag}|{gen}|{b}"
+            if region is not None:
+                direct_region_cells[key][str(region)][str(yr)].append(float(score))
             fips = z2f.get(zip5) if zip5 else None
             if fips is None:
                 unmapped += 1
@@ -224,6 +228,10 @@ def main():
             for fips in cells[key]:
                 for yr in cells[key][fips]:
                     cells[key][fips][yr].sort(reverse=True)
+        for key in direct_region_cells:
+            for region in direct_region_cells[key]:
+                for yr in direct_region_cells[key][region]:
+                    direct_region_cells[key][region][yr].sort(reverse=True)
 
         match_rate = mapped / (mapped + unmapped) * 100 if (mapped + unmapped) else 0
         report.update(mapped=mapped, unmapped=unmapped, skipped_disc=skipped_disc,
@@ -263,6 +271,32 @@ def main():
                     checked += 1
                     if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
                         failures.append(f"{key} region {region} {yr}: {old_cut:.1f} -> {new_cut:.1f}")
+
+        # Diagnostic-only: the SAME gate, but bucketed by the region already
+        # recorded on the result, bypassing zip/county entirely. If this
+        # passes cleanly while the county-derived one above doesn't, the gap
+        # is specifically "home county differs from historically-competed
+        # region" -- a real, useful finding -- not a bug in the exclusion
+        # logic shared by both.
+        dr_failures, dr_checked = [], 0
+        for key, byRegion in direct_region_cells.items():
+            prior_region_years = (prior.get("cells") or {}).get(key, {})
+            for region, byYear in byRegion.items():
+                for yr, scores in byYear.items():
+                    if len(scores) < ADVANCE_RANK:
+                        continue
+                    new_cut = scores[ADVANCE_RANK - 1]  # already sorted desc above
+                    old_list = (prior_region_years.get(region) or {}).get(yr) or []
+                    if len(old_list) < ADVANCE_RANK:
+                        continue
+                    old_cut = sorted(old_list, reverse=True)[ADVANCE_RANK - 1]
+                    dr_checked += 1
+                    if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
+                        dr_failures.append(f"{key} region {region} {yr}: {old_cut:.1f} -> {new_cut:.1f}")
+        report.update(direct_region_gate_checked=dr_checked, direct_region_gate_failures=len(dr_failures),
+                       direct_region_gate_examples=dr_failures[:10])
+        print(f"[diagnostic] direct-region gate (bypasses zip/county): "
+              f"{dr_checked} checked, {len(dr_failures)} failures")
 
         report.update(gate_checked=checked, gate_failures=len(failures), gate_examples=failures[:10])
         print(f"\nregression gate: checked {checked} (cell, region, year) rank-15 cutoffs against the live file")
