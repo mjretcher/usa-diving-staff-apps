@@ -159,114 +159,149 @@ def board_label(discipline):
     return None  # Platform already excluded upstream; anything else is unexpected and skipped, not guessed at
 
 
+def write_run_report(dsn, report):
+    """Same pattern as build_aau_overlap.py's aau_overlap_last_run: a plain
+    JSON diagnostic blob, no names or IDs in it, written to a table the
+    ordinary browser role can already read -- so a run's outcome is checkable
+    without needing raw workflow-log access."""
+    import datetime
+    conn = psycopg2.connect(dsn)
+    cur = conn.cursor()
+    cur.execute("""INSERT INTO app_meta.config (key, value, description)
+        VALUES (%s,%s,'qual-data county rebuild -- last run report')
+        ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()""",
+        ("qual_data_county_last_run",
+         json.dumps({**report, "at": datetime.datetime.now(datetime.timezone.utc).isoformat()})))
+    conn.commit(); cur.close(); conn.close()
+
+
 def main():
     dsn = os.environ.get("DATABASE_URL")
     if not dsn:
         sys.exit("DATABASE_URL not set")
 
-    z2f, clashes = zip_to_fips()
-    fips_order = county_order()
-    print(f"zip -> county: {len(z2f)} zips, {clashes} clashes")
+    report = {"stage": "starting"}
+    try:
+        z2f, clashes = zip_to_fips()
+        fips_order = county_order()
+        report.update(zips_mapped=len(z2f), zip_clashes=clashes, county_index_len=len(fips_order))
+        print(f"zip -> county: {len(z2f)} zips, {clashes} clashes")
 
-    conn = psycopg2.connect(dsn)
-    cur = conn.cursor()
-    cur.execute(FIELD_PROBE, (list(YEARS),))
-    n_events, n_rows = cur.fetchone()
-    print(f"Regionals {YEARS}: {n_events} distinct (meet,event) pairs, {n_rows} rows before exclusion")
+        conn = psycopg2.connect(dsn)
+        cur = conn.cursor()
+        cur.execute(FIELD_PROBE, (list(YEARS),))
+        n_events, n_rows = cur.fetchone()
+        report.update(events_before_exclusion=n_events, rows_before_exclusion=n_rows)
+        print(f"Regionals {YEARS}: {n_events} distinct (meet,event) pairs, {n_rows} rows before exclusion")
 
-    cur.execute(SQL, (list(YEARS), MIN_FINISHERS))
-    rows = cur.fetchall()
-    cur.close(); conn.close()
-    print(f"rows surviving field-size + no-shared-place exclusion: {len(rows)}")
+        cur.execute(SQL, (list(YEARS), MIN_FINISHERS))
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        report["rows_surviving_exclusion"] = len(rows)
+        print(f"rows surviving field-size + no-shared-place exclusion: {len(rows)}")
+    except Exception as e:
+        report.update(stage="query_failed", error=f"{type(e).__name__}: {e}")
+        write_run_report(dsn, report)
+        raise
 
-    cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
-    mapped, unmapped, skipped_disc = 0, 0, 0
-    for ag, gen, disc, yr, zip5, score in rows:
-        b = board_label(disc)
-        if not b:
-            skipped_disc += 1
-            continue
-        key = f"{ag}|{gen}|{b}"
-        fips = z2f.get(zip5) if zip5 else None
-        if fips is None:
-            unmapped += 1
-            continue
-        mapped += 1
-        cells[key][fips][str(yr)].append(float(score))
-
-    for key in cells:
-        for fips in cells[key]:
-            for yr in cells[key][fips]:
-                cells[key][fips][yr].sort(reverse=True)
-
-    match_rate = mapped / (mapped + unmapped) * 100 if (mapped + unmapped) else 0
-    print(f"scores mapped to a county: {mapped}   unmapped: {unmapped}   "
-          f"skipped (unexpected discipline): {skipped_disc}   match rate: {match_rate:.1f}%")
-
-    # --- regression gate ------------------------------------------------
-    if not os.path.exists(TARGET):
-        sys.exit("No existing qual-data.json to gate against -- refusing to write a first version blind.")
-    with open(TARGET) as fh:
-        prior = json.load(fh)
-    prior_official = prior.get("officialRegion") or []
-    fips_to_region = {fips: prior_official[i] for i, fips in enumerate(fips_order) if i < len(prior_official)}
-
-    failures, checked = [], 0
-    for key, byFips in cells.items():
-        byRegionYear = collections.defaultdict(lambda: collections.defaultdict(list))
-        for fips, byYear in byFips.items():
-            r = fips_to_region.get(fips)
-            if r is None:
+    try:
+        cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
+        mapped, unmapped, skipped_disc = 0, 0, 0
+        for ag, gen, disc, yr, zip5, score in rows:
+            b = board_label(disc)
+            if not b:
+                skipped_disc += 1
                 continue
-            for yr, scores in byYear.items():
-                byRegionYear[str(r)][yr].extend(scores)
-        prior_region_years = (prior.get("cells") or {}).get(key, {})
-        for region, byYear in byRegionYear.items():
-            for yr, scores in byYear.items():
-                scores_sorted = sorted(scores, reverse=True)
-                if len(scores_sorted) < ADVANCE_RANK:
-                    continue
-                new_cut = scores_sorted[ADVANCE_RANK - 1]
-                old_list = (prior_region_years.get(region) or {}).get(yr) or []
-                if len(old_list) < ADVANCE_RANK:
-                    continue
-                old_cut = sorted(old_list, reverse=True)[ADVANCE_RANK - 1]
-                checked += 1
-                if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
-                    failures.append(f"{key} region {region} {yr}: rank-15 cutoff {old_cut:.1f} -> "
-                                     f"{new_cut:.1f} (rebuilt via counties, re-aggregated to today's regions)")
+            key = f"{ag}|{gen}|{b}"
+            fips = z2f.get(zip5) if zip5 else None
+            if fips is None:
+                unmapped += 1
+                continue
+            mapped += 1
+            cells[key][fips][str(yr)].append(float(score))
 
-    print(f"\nregression gate: checked {checked} (cell, region, year) rank-15 cutoffs against the live file")
-    if failures:
-        print("REBUILD REJECTED -- would not reproduce the trusted region-level cutoffs:")
-        for f in failures[:20]:
-            print("   " + f)
-        if len(failures) > 20:
-            print(f"   ...and {len(failures)-20} more")
-        sys.exit(1)
-    if checked == 0:
-        sys.exit("REBUILD REJECTED -- the gate found nothing to compare, which means something is "
-                 "wrong with the join or the region mapping, not that the rebuild is trustworthy.")
-    print(f"gate passed: all {checked} comparable cutoffs matched within {ADVANCE_TOLERANCE} points.")
+        for key in cells:
+            for fips in cells[key]:
+                for yr in cells[key][fips]:
+                    cells[key][fips][yr].sort(reverse=True)
 
-    out = {
-        "advanceRank": ADVANCE_RANK,
-        "years": list(YEARS),
-        "stage": "Regionals",
-        "scope": prior.get("scope"),
-        "basis": prior.get("basis"),
-        "exclusions": prior.get("exclusions", "") + (
-            " Athletes whose competition result could not be matched to a membership record with a "
-            f"zip code are excluded from county attribution ({match_rate:.1f}% matched) -- not silently "
-            "dropped from awareness, but they cannot be placed on the map."),
-        "keyedBy": "county FIPS (was region number in the prior version of this file)",
-        "matchRate": round(match_rate, 1),
-        "officialRegion": prior_official,
-        "cells": {k: {fips: dict(byYear) for fips, byYear in v.items()} for k, v in cells.items()},
-    }
-    with open(TARGET, "w") as fh:
-        json.dump(out, fh, separators=(",", ":"), sort_keys=True)
-    print(f"\nwrote {TARGET} ({os.path.getsize(TARGET)} bytes)")
+        match_rate = mapped / (mapped + unmapped) * 100 if (mapped + unmapped) else 0
+        report.update(mapped=mapped, unmapped=unmapped, skipped_disc=skipped_disc,
+                       match_rate=round(match_rate, 1), event_keys=len(cells))
+        print(f"scores mapped to a county: {mapped}   unmapped: {unmapped}   "
+              f"skipped (unexpected discipline): {skipped_disc}   match rate: {match_rate:.1f}%")
+
+        if not os.path.exists(TARGET):
+            report.update(stage="rejected", reason="no_existing_file_to_gate_against")
+            write_run_report(dsn, report)
+            sys.exit("No existing qual-data.json to gate against -- refusing to write a first version blind.")
+        with open(TARGET) as fh:
+            prior = json.load(fh)
+        prior_official = prior.get("officialRegion") or []
+        fips_to_region = {fips: prior_official[i] for i, fips in enumerate(fips_order) if i < len(prior_official)}
+
+        failures, checked = [], 0
+        for key, byFips in cells.items():
+            byRegionYear = collections.defaultdict(lambda: collections.defaultdict(list))
+            for fips, byYear in byFips.items():
+                r = fips_to_region.get(fips)
+                if r is None:
+                    continue
+                for yr, scores in byYear.items():
+                    byRegionYear[str(r)][yr].extend(scores)
+            prior_region_years = (prior.get("cells") or {}).get(key, {})
+            for region, byYear in byRegionYear.items():
+                for yr, scores in byYear.items():
+                    scores_sorted = sorted(scores, reverse=True)
+                    if len(scores_sorted) < ADVANCE_RANK:
+                        continue
+                    new_cut = scores_sorted[ADVANCE_RANK - 1]
+                    old_list = (prior_region_years.get(region) or {}).get(yr) or []
+                    if len(old_list) < ADVANCE_RANK:
+                        continue
+                    old_cut = sorted(old_list, reverse=True)[ADVANCE_RANK - 1]
+                    checked += 1
+                    if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
+                        failures.append(f"{key} region {region} {yr}: {old_cut:.1f} -> {new_cut:.1f}")
+
+        report.update(gate_checked=checked, gate_failures=len(failures), gate_examples=failures[:10])
+        print(f"\nregression gate: checked {checked} (cell, region, year) rank-15 cutoffs against the live file")
+        if failures:
+            print("REBUILD REJECTED -- would not reproduce the trusted region-level cutoffs:")
+            for f in failures[:20]:
+                print("   " + f)
+            report["stage"] = "rejected_gate_failed"
+            write_run_report(dsn, report)
+            sys.exit(1)
+        if checked == 0:
+            report.update(stage="rejected", reason="gate_found_nothing_to_compare")
+            write_run_report(dsn, report)
+            sys.exit("REBUILD REJECTED -- the gate found nothing to compare, which means something is "
+                     "wrong with the join or the region mapping, not that the rebuild is trustworthy.")
+        print(f"gate passed: all {checked} comparable cutoffs matched within {ADVANCE_TOLERANCE} points.")
+
+        out = {
+            "advanceRank": ADVANCE_RANK, "years": list(YEARS), "stage": "Regionals",
+            "scope": prior.get("scope"), "basis": prior.get("basis"),
+            "exclusions": prior.get("exclusions", "") + (
+                " Athletes whose competition result could not be matched to a membership record with a "
+                f"zip code are excluded from county attribution ({match_rate:.1f}% matched) -- not silently "
+                "dropped from awareness, but they cannot be placed on the map."),
+            "keyedBy": "county FIPS (was region number in the prior version of this file)",
+            "matchRate": round(match_rate, 1), "officialRegion": prior_official,
+            "cells": {k: {fips: dict(byYear) for fips, byYear in v.items()} for k, v in cells.items()},
+        }
+        with open(TARGET, "w") as fh:
+            json.dump(out, fh, separators=(",", ":"), sort_keys=True)
+        report["stage"] = "written"
+        write_run_report(dsn, report)
+        print(f"\nwrote {TARGET} ({os.path.getsize(TARGET)} bytes)")
+    except SystemExit:
+        raise
+    except Exception as e:
+        report.update(stage="build_failed", error=f"{type(e).__name__}: {e}")
+        write_run_report(dsn, report)
+        raise
 
 
 if __name__ == "__main__":
