@@ -1109,9 +1109,18 @@ const BOUNDARY_SECTIONS = {
         return `<tr><td>${esc(nm(L))}</td><td class="mr-num">${fmt(Math.round(n))}</td></tr>`;
       }).join('');
 
-      // Published 2026 card. Pricing Studio owns what-if on fees; this is the
-      // standing rate applied to the pathway so the report is self-contained.
-      const CARD = [{qual:85,non:45},{qual:90,non:45},{qual:115,non:0},{qual:125,non:0}];
+      // Published 2026 card. Pricing Studio owns fees and is the single source
+      // of truth for them; read its live PS.fees rather than keep a second
+      // copy here that would silently go stale the moment a fee actually
+      // changes -- the same class of gap the pricing.js/routing.js merge
+      // closed earlier, just in a different spot. Fall back only if Pricing
+      // Studio genuinely hasn't loaded, and say so plainly either way.
+      const livePSFees = (window.__PRICING && window.__PRICING.PS && window.__PRICING.PS.fees && window.__PRICING.PS.fees.length)
+        ? window.__PRICING.PS.fees : null;
+      const CARD = livePSFees || [{qual:85,non:45},{qual:90,non:45},{qual:115,non:0},{qual:125,non:0}];
+      const feeSourceNote = livePSFees
+        ? 'Fees read live from Pricing Studio.'
+        : 'Pricing Studio has not loaded in this session, so this used a fallback 2026 fee card -- confirm it still matches Pricing Studio before relying on this figure.';
       const fees = routing.map((_,L) => CARD[Math.min(L, CARD.length-1)]);
       const isQual = (L, c) => L > 0 || (c[2] !== 'P');
       const rev = QRr.revenue(res, CELLS, seed, {fees, levy:4.90, isQual});
@@ -1186,7 +1195,7 @@ const BOUNDARY_SECTIONS = {
             <td class="mr-num">${usd(rev.net)}</td></tr></tbody></table>
         <p class="mr-note">Entry fees only, at the standing 2026 rates, with $4.90 per entry passed through to
           DiveMeets. Membership dues, synchro and the senior circuit are not in this figure — Pricing Studio
-          carries those, and is where fees themselves can be changed.</p>
+          carries those, and is where fees themselves can be changed. ${esc(feeSourceNote)}</p>
       </section>`;
     }
   },
