@@ -237,6 +237,20 @@
       var d = manual[ev.id];
       if (d && d > 0) placed.push({ ev: ev, day: d }); else auto.push(ev);
     });
+    var placedPairDay = {};
+    placed.forEach(function (p) {
+      if (p.ev.round !== 'prelim' && p.ev.round !== 'final') return;
+      placedPairDay[p.ev.group + '|' + p.ev.gender + '|' + p.ev.discipline] = p.day;
+    });
+    var stillAuto = [];
+    auto.forEach(function (ev) {
+      if (ev.round === 'prelim' || ev.round === 'final') {
+        var pk = ev.group + '|' + ev.gender + '|' + ev.discipline;
+        if (placedPairDay[pk] != null) { placed.push({ ev: ev, day: placedPairDay[pk] }); return; }
+      }
+      stillAuto.push(ev);
+    });
+    auto = stillAuto;
     // Manual first, so auto-placement fills around fixed points rather than
     // shunting them.
     placed.forEach(function (p) {
