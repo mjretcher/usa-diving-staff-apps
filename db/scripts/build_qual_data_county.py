@@ -206,9 +206,8 @@ def main():
 
     try:
         cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
-        direct_region_cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
+        region_cells = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
         mapped, unmapped, skipped_disc = 0, 0, 0
-        region_agree, region_disagree = 0, 0
         for ag, gen, disc, yr, zip5, score, region in rows:
             b = board_label(disc)
             if not b:
@@ -216,7 +215,7 @@ def main():
                 continue
             key = f"{ag}|{gen}|{b}"
             if region is not None:
-                direct_region_cells[key][str(region)][str(yr)].append(float(score))
+                region_cells[key][str(region)][str(yr)].append(float(score))
             fips = z2f.get(zip5) if zip5 else None
             if fips is None:
                 unmapped += 1
@@ -224,14 +223,11 @@ def main():
             mapped += 1
             cells[key][fips][str(yr)].append(float(score))
 
-        for key in cells:
-            for fips in cells[key]:
-                for yr in cells[key][fips]:
-                    cells[key][fips][yr].sort(reverse=True)
-        for key in direct_region_cells:
-            for region in direct_region_cells[key]:
-                for yr in direct_region_cells[key][region]:
-                    direct_region_cells[key][region][yr].sort(reverse=True)
+        for store in (cells, region_cells):
+            for key in store:
+                for k2 in store[key]:
+                    for yr in store[key][k2]:
+                        store[key][k2][yr].sort(reverse=True)
 
         match_rate = mapped / (mapped + unmapped) * 100 if (mapped + unmapped) else 0
         report.update(mapped=mapped, unmapped=unmapped, skipped_disc=skipped_disc,
@@ -245,25 +241,21 @@ def main():
             sys.exit("No existing qual-data.json to gate against -- refusing to write a first version blind.")
         with open(TARGET) as fh:
             prior = json.load(fh)
-        prior_official = prior.get("officialRegion") or []
-        fips_to_region = {fips: prior_official[i] for i, fips in enumerate(fips_order) if i < len(prior_official)}
 
+        # --- gate 1: region_cells must exactly reproduce the current file.
+        # This is the right comparison -- both answer "where did this athlete
+        # actually compete," so they SHOULD match. (Home county and competing
+        # region answering different questions is the whole point of also
+        # keeping both; forcing them to agree would erase the region-choice
+        # signal rather than measure it.)
         failures, checked = [], 0
-        for key, byFips in cells.items():
-            byRegionYear = collections.defaultdict(lambda: collections.defaultdict(list))
-            for fips, byYear in byFips.items():
-                r = fips_to_region.get(fips)
-                if r is None:
-                    continue
+        for key, byRegion in region_cells.items():
+            prior_region_years = (prior.get("cellsByRegion") or prior.get("cells") or {}).get(key, {})
+            for region, byYear in byRegion.items():
                 for yr, scores in byYear.items():
-                    byRegionYear[str(r)][yr].extend(scores)
-            prior_region_years = (prior.get("cells") or {}).get(key, {})
-            for region, byYear in byRegionYear.items():
-                for yr, scores in byYear.items():
-                    scores_sorted = sorted(scores, reverse=True)
-                    if len(scores_sorted) < ADVANCE_RANK:
+                    if len(scores) < ADVANCE_RANK:
                         continue
-                    new_cut = scores_sorted[ADVANCE_RANK - 1]
+                    new_cut = scores[ADVANCE_RANK - 1]
                     old_list = (prior_region_years.get(region) or {}).get(yr) or []
                     if len(old_list) < ADVANCE_RANK:
                         continue
@@ -271,48 +263,48 @@ def main():
                     checked += 1
                     if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
                         failures.append(f"{key} region {region} {yr}: {old_cut:.1f} -> {new_cut:.1f}")
-
-        # Diagnostic-only: the SAME gate, but bucketed by the region already
-        # recorded on the result, bypassing zip/county entirely. If this
-        # passes cleanly while the county-derived one above doesn't, the gap
-        # is specifically "home county differs from historically-competed
-        # region" -- a real, useful finding -- not a bug in the exclusion
-        # logic shared by both.
-        dr_failures, dr_checked = [], 0
-        for key, byRegion in direct_region_cells.items():
-            prior_region_years = (prior.get("cells") or {}).get(key, {})
-            for region, byYear in byRegion.items():
-                for yr, scores in byYear.items():
-                    if len(scores) < ADVANCE_RANK:
-                        continue
-                    new_cut = scores[ADVANCE_RANK - 1]  # already sorted desc above
-                    old_list = (prior_region_years.get(region) or {}).get(yr) or []
-                    if len(old_list) < ADVANCE_RANK:
-                        continue
-                    old_cut = sorted(old_list, reverse=True)[ADVANCE_RANK - 1]
-                    dr_checked += 1
-                    if abs(new_cut - old_cut) > ADVANCE_TOLERANCE:
-                        dr_failures.append(f"{key} region {region} {yr}: {old_cut:.1f} -> {new_cut:.1f}")
-        report.update(direct_region_gate_checked=dr_checked, direct_region_gate_failures=len(dr_failures),
-                       direct_region_gate_examples=dr_failures[:10])
-        print(f"[diagnostic] direct-region gate (bypasses zip/county): "
-              f"{dr_checked} checked, {len(dr_failures)} failures")
-
-        report.update(gate_checked=checked, gate_failures=len(failures), gate_examples=failures[:10])
-        print(f"\nregression gate: checked {checked} (cell, region, year) rank-15 cutoffs against the live file")
-        if failures:
-            print("REBUILD REJECTED -- would not reproduce the trusted region-level cutoffs:")
+        report.update(region_gate_checked=checked, region_gate_failures=len(failures), region_gate_examples=failures[:10])
+        print(f"region gate (must reproduce the current file exactly): {checked} checked, {len(failures)} failures")
+        if failures or checked == 0:
+            report["stage"] = "rejected_region_gate_failed"
+            write_run_report(dsn, report)
+            print("REBUILD REJECTED -- the region-keyed reproduction does not match the trusted file:")
             for f in failures[:20]:
                 print("   " + f)
-            report["stage"] = "rejected_gate_failed"
-            write_run_report(dsn, report)
             sys.exit(1)
-        if checked == 0:
-            report.update(stage="rejected", reason="gate_found_nothing_to_compare")
+
+        # --- county data gets sanity checks appropriate to what it actually
+        # is: a new measure, not a reproduction. It should capture a
+        # comparable VOLUME of scores (same underlying rows, different
+        # bucketing), and every county-region leakage number here IS the
+        # region-choice signal, not an error to eliminate.
+        county_total = sum(len(scores) for byFips in cells.values() for byYear in byFips.values() for scores in byYear.values())
+        region_total = sum(len(scores) for byRegion in region_cells.values() for byYear in byRegion.values() for scores in byYear.values())
+        volume_ratio = county_total / region_total if region_total else 0
+        report.update(county_total_scores=county_total, region_total_scores=region_total,
+                       county_region_volume_ratio=round(volume_ratio, 3))
+        print(f"county total scores: {county_total}   region total scores: {region_total}   "
+              f"ratio: {volume_ratio:.3f} (expect close to 1.0, minus the {unmapped} unmatched-to-a-member rows)")
+        if not (0.85 <= volume_ratio <= 1.0):
+            report["stage"] = "rejected_volume_sanity_failed"
             write_run_report(dsn, report)
-            sys.exit("REBUILD REJECTED -- the gate found nothing to compare, which means something is "
-                     "wrong with the join or the region mapping, not that the rebuild is trustworthy.")
-        print(f"gate passed: all {checked} comparable cutoffs matched within {ADVANCE_TOLERANCE} points.")
+            sys.exit(f"REBUILD REJECTED -- county/region volume ratio {volume_ratio:.3f} is outside "
+                     f"the sane range; something beyond ordinary unmatched-member loss is happening.")
+
+        # region-choice.json already measures this properly (club-modal-
+        # location method, non-circular) -- surface its headline number here
+        # rather than recompute it, so this file carries "the important
+        # stat line" without a second implementation to keep in sync.
+        region_choice_summary = None
+        rc_path = os.path.join(ROOT, "membership-analytics", "region-choice.json")
+        if os.path.exists(rc_path):
+            with open(rc_path) as fh:
+                rc = json.load(fh)
+            region_choice_summary = {
+                "source": "region-choice.json (club-modal-location method)",
+                "generated": rc.get("generated"),
+                "regionals": rc.get("stages", {}).get("Regionals"),
+            }
 
         out = {
             "advanceRank": ADVANCE_RANK, "years": list(YEARS), "stage": "Regionals",
@@ -321,9 +313,19 @@ def main():
                 " Athletes whose competition result could not be matched to a membership record with a "
                 f"zip code are excluded from county attribution ({match_rate:.1f}% matched) -- not silently "
                 "dropped from awareness, but they cannot be placed on the map."),
-            "keyedBy": "county FIPS (was region number in the prior version of this file)",
-            "matchRate": round(match_rate, 1), "officialRegion": prior_official,
-            "cells": {k: {fips: dict(byYear) for fips, byYear in v.items()} for k, v in cells.items()},
+            "officialRegion": prior.get("officialRegion"),
+            "cellsByCounty": {k: {fips: dict(byYear) for fips, byYear in v.items()} for k, v in cells.items()},
+            "cellsByRegion": {k: {r: dict(byYear) for r, byYear in v.items()} for k, v in region_cells.items()},
+            "cells": {k: {r: dict(byYear) for r, byYear in v.items()} for k, v in region_cells.items()},  # back-compat alias
+            "matchRate": round(match_rate, 1),
+            "regionChoice": region_choice_summary,
+            "notes": "cellsByCounty is keyed by home county (from membership zip) -- use this for any "
+                     "boundary/area redraw, since it answers 'which new area would this athlete fall into.' "
+                     "cellsByRegion is keyed by the region the athlete actually competed in (identical to "
+                     "this file before this rebuild) -- keep using this for anything about today's real "
+                     "regions as drawn. The two do not agree for every athlete BY DESIGN: region choice lets "
+                     "an athlete compete somewhere other than their geography would suggest, and that gap is "
+                     "exactly what regionChoice measures, not an error in either column.",
         }
         with open(TARGET, "w") as fh:
             json.dump(out, fh, separators=(",", ":"), sort_keys=True)
