@@ -1698,12 +1698,15 @@ function devBar(d, maxAbs){
    springboard event, so the 15th-place score IS the bar, and it is
    directly measurable from historical results.
 
-   For a PROPOSED map we cannot know future scores, so each area is
-   expressed as shares of today's regions (results are tagged by region),
-   the corresponding shares of each region's historical score list are
-   pooled, and the 15th best of the pooled field is read off. Merging two
-   regions into one area therefore correctly raises the bar: the same
-   athletes now compete for one set of 15 places instead of two.
+   For a PROPOSED map, qual-data.json's cellsByCounty carries each athlete's
+   real historical score under their home county, so every county the
+   current map assigns to an area contributes its own field directly --
+   no estimation, since a county belongs to exactly one area (this used to
+   pool fractional shares of whole regions before qual-data.json learned to
+   carry county; see git history on pooledCut if that estimation logic is
+   ever needed again). Merging counties into one area correctly raises the
+   bar: the same athletes now compete for one set of 15 places instead of
+   several.
    =================================================================== */
 let _qual = null, _qualLoading = null;
 function loadQual(){
@@ -1894,6 +1897,12 @@ const EQUITY_SECTIONS = {
               results &mdash; the rest could not be attributed to a membership record with a zip code
               and are excluded from the "under this map" estimate below, though not from the "today"
               table, which uses the region already on record.</li>` : ''}
+            <li><b>If this structure has no Regions:</b> these figures are still built from Regionals-level
+              historical scores, because that is the historical data that exists. Neither new-circuit
+              proposal has a Regionals stage &mdash; the actual first gate becomes Zone &rarr; E/W/C. Using
+              Regionals scores as the stand-in is reasonable because dive lists are unchanged, but it is a
+              real interpretive step: this section estimates what the bar would have looked like at the old
+              first gate if it were redrawn, not a direct measurement of the new first gate.</li>
           </ul>
           Every figure here is computed from those fields and nothing else. Gates beyond Regionals
           &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
@@ -2720,6 +2729,19 @@ const STYLES = `
   #mr-output .mr-table thead{display:table-header-group}
   #mr-output tr{page-break-inside:avoid}
   @page{margin:.55in}
+}
+
+/* No mobile breakpoint existed anywhere in this file before. Two fixes, both
+   standard and low-risk: the document's fixed 34px/46px padding leaves very
+   little usable width once the viewport itself is only a few hundred px, and
+   report tables run 5-9 columns wide, which will not reflow sanely at any
+   width -- letting them scroll horizontally is the safe, well-established
+   fix, not attempting to reflow columns nobody has seen rendered. */
+@media (max-width: 600px){
+  #mr-output .mr-doc{padding:18px 14px}
+  #mr-output .mr-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    white-space:nowrap;max-width:100%}
+  #mr-output .mr-map svg,#mr-output .mr-stagemap{max-width:100%}
 }
 `;
 
