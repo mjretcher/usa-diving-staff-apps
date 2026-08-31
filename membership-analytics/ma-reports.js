@@ -1721,59 +1721,44 @@ function loadAutoFips(){
     .then(j => { _autoFips = j; return j; });
 }
 
-/* Member share of each official region falling inside each proposed area. */
-function areaRegionShares(Q, AD){
-  const api = B(), geo = api.geo(), y = api.year();
-  const assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
-  const nA = TG.groups.length;
-  const regTotal = {}, share = {};
-  for (let i=0;i<AD.fips.length;i++){
-    const f = AD.fips[i], orig = Q.officialRegion[i];
-    if (!orig) continue;
-    const st = geo.stats[f]; const m = st && st[y] ? st[y].m : 0;
-    if (m <= 0) continue;
-    regTotal[orig] = (regTotal[orig]||0) + m;
-    const ri = assign[f];
-    if (ri == null || ri < 0 || ri >= regions.length) continue;
-    const a = TG.of[ri];
-    if (a == null) continue;
-    (share[a] = share[a] || {});
-    share[a][orig] = (share[a][orig]||0) + m;
-  }
-  for (const a of Object.keys(share))
-    for (const r of Object.keys(share[a])) share[a][r] /= (regTotal[r]||1);
-  return {share, nA, regTotal};
-}
-
-/* Pool score lists by share and read off the advancement bar. */
-function pooledCut(Q, cellKey, sharesForArea, rank){
-  const cell = Q.cells[cellKey];
+/* Sum every county's real per-year score lists directly into whichever area
+   the CURRENT map assigns it to. No share/overlap estimation needed now that
+   qual-data.json is itself keyed by county: a county belongs to exactly one
+   area, unlike a region, which used to have to be split fractionally by
+   population share. Simpler and exact where the old method was an estimate. */
+function pooledCutByCounty(Q, cellKey, areaIndex, rank){
+  const api = B(), assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
+  const cell = Q.cellsByCounty && Q.cellsByCounty[cellKey];
   if (!cell) return null;
   const pool = [];
-  let contributingRegions = 0;
-  for (const [rg, sh] of Object.entries(sharesForArea||{})){
-    const yrs = cell[rg]; if (!yrs || sh <= 0) continue;
-    // Average the per-year field so one unusually deep season cannot dominate.
-    const years = Object.keys(yrs);
+  let contributingCounties = 0;
+  for (const [fips, byYear] of Object.entries(cell)){
+    const ri = assign[fips];
+    if (ri == null || ri < 0 || ri >= regions.length) continue;
+    const a = TG.of[ri];
+    if (a !== areaIndex) continue;
+    const years = Object.keys(byYear);
     if (!years.length) continue;
-    contributingRegions++;
-    const perYear = years.map(yr => yrs[yr]);
-    const longest = perYear.reduce((a,b)=>a.length>=b.length?a:b);
+    contributingCounties++;
+    // Average the per-year field so one unusually deep season cannot dominate.
+    const perYear = years.map(yr => byYear[yr]);
+    const longest = perYear.reduce((x,y)=>x.length>=y.length?x:y);
     const avg = longest.map((_,i) => {
       const vals = perYear.map(l=>l[i]).filter(v=>v!=null);
       return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
     }).filter(v=>v!=null);
-    const take = Math.max(1, Math.round(sh * avg.length));
-    for (let i=0;i<take && i<avg.length;i++) pool.push(avg[i]);
+    pool.push(...avg);
   }
-  if (pool.length < rank) return {cut:null, field:pool.length, regions:contributingRegions};
+  if (pool.length < rank) return {cut:null, field:pool.length, counties:contributingCounties};
   pool.sort((a,b)=>b-a);
-  return {cut: pool[rank-1], field: pool.length, regions: contributingRegions};
+  return {cut: pool[rank-1], field: pool.length, counties: contributingCounties};
 }
 
-/* Today's actual bar per region, averaged across the stored years. */
+/* Today's actual bar per region, averaged across the stored years. Reads the
+   region-keyed half of qual-data.json -- the same data that was there before
+   this file also learned to carry county. */
 function todaysCuts(Q, cellKey, rank){
-  const cell = Q.cells[cellKey]; if (!cell) return [];
+  const cell = (Q.cellsByRegion || Q.cells || {})[cellKey]; if (!cell) return [];
   const out = [];
   for (const [rg, yrs] of Object.entries(cell)){
     const vals = Object.values(yrs).filter(l=>l.length>=rank).map(l=>l[rank-1]);
@@ -1789,16 +1774,16 @@ const EQUITY_SECTIONS = {
     desc: 'What score it actually takes to advance in each area, versus today. The fairness test that headcount cannot show.',
     build: async function(o){
       if (!boundaryReady()) return notReady('Realignment — competitive equity');
-      let Q, AD;
-      try { [Q, AD] = await Promise.all([loadQual(), loadAutoFips()]); }
+      let Q;
+      try { Q = await loadQual(); }
       catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — competitive equity</h2>
         <p class="mr-p mr-warn">Could not load the historical results data: ${esc(String(e.message||e))}</p></section>`; }
       const rank = Q.advanceRank || 15;
-      const {share, nA} = areaRegionShares(Q, AD);
       const api = B(), TG = api.tierGroups();
+      const nA = TG.groups.length;
       const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
 
-      const events = Object.keys(Q.cells)
+      const events = Object.keys(Q.cellsByRegion || Q.cells || {})
         .filter(k => !/Platform$/.test(k))
         .sort();
 
@@ -1819,13 +1804,14 @@ const EQUITY_SECTIONS = {
           <td class="mr-num">${(100*r.gap/r.lo.cut).toFixed(0)}%</td></tr>`;
       }).join('');
 
-      // Proposed map: estimated bar per area for the worst few events.
+      // Proposed map: bar per area for the worst few events, pooled directly
+      // from every county the current map assigns to that area.
       const focus = todayRows.slice(0, 6).map(r => r.k);
       const propBlocks = focus.map(k => {
         const [ag, gd, dc] = k.split('|');
         const rows = [];
         for (let a=0;a<nA;a++){
-          const res = pooledCut(Q, k, share[a], rank);
+          const res = pooledCutByCounty(Q, k, a, rank);
           rows.push({a, res});
         }
         const valid = rows.filter(r=>r.res && r.res.cut != null);
@@ -1859,6 +1845,40 @@ const EQUITY_SECTIONS = {
             <tbody>${body}</tbody></table>`;
       }).join('');
 
+      const rc = (function(){
+        const byYear = Q.regionChoice && Q.regionChoice.regionals;
+        if (!byYear) return null;
+        const yrs = (Q.years||[]).map(String).filter(y => byYear[y]);
+        if (!yrs.length) return null;
+        const athletes = yrs.reduce((s,y)=>s+(byYear[y].athletes||0), 0);
+        const away = yrs.reduce((s,y)=>s+(byYear[y].competing_away||0), 0);
+        const clubs = Math.max(...yrs.map(y=>byYear[y].clubs||0));
+        const clubsSplit = Math.max(...yrs.map(y=>byYear[y].clubs_split||0));
+        if (!athletes) return null;
+        return {
+          athletes, competing_away: away, leakage_pct: Math.round(away/athletes*1000)/10,
+          clubs, clubs_split: clubsSplit,
+          clubs_split_pct: clubs ? Math.round(clubsSplit/clubs*1000)/10 : 0,
+          years: yrs,
+        };
+      })();
+      const regionChoiceBlock = rc ? `
+        <h3 class="mr-h3">Region choice — how much the map itself explains</h3>
+        <p class="mr-p">An athlete may begin the pathway in any region and must then stay in that
+          region's route. Every number above assumes people compete where the map sends them; this
+          is how often that assumption doesn't hold, measured against each club's own usual region
+          rather than any drawn boundary, so it can't be circular.</p>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Athletes competing outside their club's usual region</td>
+            <td class="mr-num">${rc.leakage_pct}%</td><td class="mr-soft">${fmt(rc.competing_away)} of ${fmt(rc.athletes)}</td></tr>
+          <tr><td>Clubs whose athletes don't all go to one region</td>
+            <td class="mr-num">${rc.clubs_split_pct}%</td><td class="mr-soft">${fmt(rc.clubs_split)} of ${fmt(rc.clubs)} clubs</td></tr>
+        </tbody></table>
+        <p class="mr-note">A modest overall rate can still move a specific bar substantially where a
+          handful of strong athletes cluster near the cutoff — this is a real, rule-permitted pattern,
+          not noise to average away, and it's the honest reason today's-bar and under-this-map numbers
+          above can diverge from what a purely geographic model would predict.</p>` : '';
+
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — competitive equity</h2>
         <p class="mr-p">${scenarioLine()}</p>
@@ -1870,6 +1890,10 @@ const EQUITY_SECTIONS = {
             <li><b>Gate modelled:</b> ${esc(Q.scope || '')}</li>
             <li><b>Years used:</b> ${esc(Q.basis || '')}</li>
             <li><b>Excluded:</b> ${esc(Q.exclusions || '')}</li>
+            ${Q.matchRate!=null ? `<li><b>Matched to a home county:</b> ${Q.matchRate}% of qualifying
+              results &mdash; the rest could not be attributed to a membership record with a zip code
+              and are excluded from the "under this map" estimate below, though not from the "today"
+              table, which uses the region already on record.</li>` : ''}
           </ul>
           Every figure here is computed from those fields and nothing else. Gates beyond Regionals
           &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
@@ -1890,17 +1914,22 @@ const EQUITY_SECTIONS = {
           (${(100*todayRows[0].gap/todayRows[0].lo.cut).toFixed(0)}%). This compares the
           ${rank}th-place score in each region's own field across ${esc((Q.years||[]).join(' and '))};
           it is not a statement about any individual athlete.</p>` : ''}
+        ${regionChoiceBlock}
 
         <h3 class="mr-h3">Under this map — estimated bar to advance</h3>
-        <p class="mr-p">Each proposed area is expressed as shares of today's regions, and the matching
-        shares of each region's historical field are pooled. Combining regions correctly raises the bar,
-        because the same athletes then compete for one set of ${rank} places instead of two.</p>
-        ${propBlocks || '<p class="mr-p mr-warn">Not enough overlap between this map and the published regions to estimate.</p>'}
+        <p class="mr-p">Every county the current map assigns to an area contributes its own real
+        historical field directly &mdash; no fractional overlap or sampling, since a county belongs to
+        exactly one area. This works for any structure, including one with no Regions at all.
+        Combining counties into fewer, larger areas correctly raises the bar, because the same
+        athletes then compete for one set of ${rank} places instead of several.</p>
+        ${propBlocks || '<p class="mr-p mr-warn">Not enough counties with usable history fall inside this map to estimate.</p>'}
         <p class="mr-note"><b>What this is and is not:</b> an estimate built from
-        ${esc((Q.years||[]).join(' and '))} Regionals results, assuming the same athletes competing
-        under different boundaries. It cannot predict who will actually enter, it says nothing about
-        athletes who change clubs, and it models only the Regionals gate. Treat it as the relative
-        ordering of areas, not a forecast of any score.</p>
+        ${esc((Q.years||[]).join(' and '))} Regionals results, keyed to each athlete's home county and
+        assuming the same athletes competing under different boundaries. It cannot predict who will
+        actually enter, it says nothing about athletes who change clubs, and it models only the
+        Regionals gate. The region-choice figures above are the honest measure of how far that
+        assumption can be wrong. Treat it as the relative ordering of areas, not a forecast of any
+        score.</p>
       </section>`;
     }
   },
