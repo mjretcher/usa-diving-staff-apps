@@ -3869,7 +3869,13 @@ function renderPathway(){
           <span class="bs-rt-lbl">places</span>
           <input class="bs-rt-in" type="number" min="1" max="200" data-rt="lo" data-l="${L}" data-i="${ri}" value="${rt.lo||1}">
           <span class="bs-rt-lbl">to</span>
-          <input class="bs-rt-in" type="number" min="1" max="200" data-rt="hi" data-l="${L}" data-i="${ri}" value="${rt.hi==null?'':rt.hi}">
+          <input class="bs-rt-in bs-rt-hi" type="number" min="1" max="200" data-rt="hi" data-l="${L}" data-i="${ri}" value="${rt.hi==null?'':rt.hi}">
+          <span class="bs-rt-step" style="display:inline-flex;gap:2px;margin:0 4px">
+            <button class="bs-rt-stepbtn" data-step="-1" data-l="${L}" data-i="${ri}" title="One fewer" ${rt.hi==null||rt.hi<=1?'disabled':''}
+              style="width:22px;height:22px;border:1px solid #cdd6e4;border-radius:5px;background:#fff;color:#171F69;font-weight:700;cursor:pointer;line-height:1;padding:0">&minus;</button>
+            <button class="bs-rt-stepbtn" data-step="1" data-l="${L}" data-i="${ri}" title="One more"
+              style="width:22px;height:22px;border:1px solid #cdd6e4;border-radius:5px;background:#fff;color:#171F69;font-weight:700;cursor:pointer;line-height:1;padding:0">&plus;</button>
+          </span>
           <span class="bs-rt-arrow">&rarr;</span>
           <select class="sel bs-rt-sel" data-rt="lvl" data-l="${L}" data-i="${ri}">${lvlOpts(rt.to?rt.to.level:L)}</select>
           <select class="sel bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
@@ -4001,6 +4007,18 @@ function wirePathway(){
     const v = e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value||1));
     S.routing[L].routes[i][k] = v;
     touch();
+  }));
+  // Quick +/-1 on a route's hi value -- for comparing nearby thresholds (is
+  // the cap 3, 4, or 5?) without retyping a number each time. Drives the
+  // same hi input and fires the same change event above, so there is one
+  // update path, not two.
+  P.querySelectorAll('.bs-rt-stepbtn').forEach(b => b.addEventListener('click', e => {
+    const L = e.currentTarget.dataset.l, i = e.currentTarget.dataset.i, step = +e.currentTarget.dataset.step;
+    const input = P.querySelector(`.bs-rt-hi[data-l="${L}"][data-i="${i}"]`);
+    if (!input) return;
+    const cur = input.value === '' ? 0 : +input.value;
+    input.value = Math.max(1, cur + step);
+    input.dispatchEvent(new Event('change', {bubbles:true}));
   }));
   P.querySelectorAll('.bs-rt-sel').forEach(el => el.addEventListener('change', e => {
     pushUndo();
