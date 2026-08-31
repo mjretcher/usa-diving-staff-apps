@@ -1,0 +1,60 @@
+name: Build qual-data (county grain)
+
+# Rebuilds membership-analytics/qual-data.json at county grain instead of
+# region, so the equity section works under any structure (including the
+# Regions-eliminated 9-zone new-circuit proposals), not just region-shaped
+# ones. Runs here rather than in the browser because matching needs member
+# names, which the public browser role deliberately cannot read -- same
+# constraint as build-aau-overlap.yml, same reasoning.
+#
+# Manual dispatch only for now. No schedule: this touches a file that feeds
+# a fairness argument in front of CCE, and whether it becomes a recurring
+# job is worth deciding after the first real run's regression-gate result
+# and match rate have actually been reviewed, not before.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-qual-data-county
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Rebuild qual-data.json at county grain
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Build
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/build_qual_data_county.py
+
+      - name: Show diff summary
+        run: git --no-pager diff --stat -- membership-analytics/qual-data.json || true
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- membership-analytics/qual-data.json; then
+            echo "No change -- gate passed but output is identical, or nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add membership-analytics/qual-data.json
+          git commit -m "qual-data.json: rebuilt at county grain [skip ci]"
+          git push
