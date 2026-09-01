@@ -592,6 +592,33 @@ body {
 .btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow); background: var(--brand-blue-700); }
 .btn-primary:active { transform: translateY(0); }
 .btn-sm:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
+/* Keyboard focus indicator, matching usad-overlays.css's proven pattern for
+   .usad-modal-btn -- extended here since none of these had ANY focus-visible
+   rule and were falling back to whatever the browser happens to do by
+   default. :focus-visible only fires for keyboard navigation in every
+   current browser, so this changes nothing for a mouse or touch user. */
+.btn-primary:focus-visible, .btn-sm:focus-visible, .btn-ghost:focus-visible,
+.btn-link:focus-visible, .topbar-btn:focus-visible, .topbar-nav-link:focus-visible,
+button:focus-visible, a.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,154,199,.32);
+}
+
+/* Skip-navigation link (WCAG 2.4.1). Off-screen (not display:none, which
+   would remove it from the tab order) until a keyboard user tabs to it, at
+   which point it snaps into view at the top of the page so they can jump
+   past the header/nav straight to content. A mouse user never sees this. */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 10000;
+  background: var(--brand-blue, #171f69); color: #fff;
+  padding: 10px 18px; border-radius: 0 0 6px 0;
+  font-family: var(--font-ui, 'Inter', sans-serif); font-weight: 600; font-size: 14px;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 0;
+}
 .topbar-btn.primary:hover { box-shadow: 0 5px 16px rgba(227,25,55,.38); }
 
 /* KPI cards — softer rounding, lift on hover */

@@ -16,6 +16,8 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui)}
 button,input,select{font:inherit}button{cursor:pointer}
+.skip-link{position:absolute;left:-9999px;top:0;z-index:10000;background:var(--navy);color:#fff;padding:10px 18px;border-radius:0 0 6px 0;font-family:var(--ui);font-weight:600;font-size:14px;text-decoration:none}
+.skip-link:focus{left:0}
 .top{background:linear-gradient(135deg,var(--navy),#0c1349);border-bottom:6px solid var(--red);color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:16px}
 .brand-logo{display:flex;align-items:center;text-decoration:none;flex-shrink:0}
@@ -799,6 +801,7 @@ tr[data-hl]:hover{background:#eef7fb}
 </style>
 </head>
 <body>
+<a href="#mainWrap" class="skip-link">Skip to main content</a>
 <div class="top">
   <div class="brand">
     <a class="brand-logo" href="../index.html" title="USA Diving Staff Apps home" aria-label="USA Diving Staff Apps home">
@@ -815,7 +818,7 @@ tr[data-hl]:hover{background:#eef7fb}
   </div>
 </div>
 
-<div class="wrap">
+<div class="wrap" id="mainWrap">
   <div class="view-tabs" id="tabs">
     <button class="tab active" data-view="overview">Overview</button>
     <button class="tab" data-view="map">Membership Map</button>
@@ -849,9 +852,9 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="ma-app.js?v=202608054500"></script>
 <script src="routing.js?v=202608281600"></script>
 <script src="scenario-schedule-engine.js?v=202608281800"></script>
-<script src="boundary.js?v=202609011620"></script>
+<script src="boundary.js?v=202609012100"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202609011530"></script>
+<script src="ma-reports.js?v=202609012100"></script>
 <script src="pricing.js?v=202609011429"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

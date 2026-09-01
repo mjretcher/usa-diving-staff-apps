@@ -140,10 +140,10 @@ function yearTable(opts){
     years.map(y => `<td class="mr-num">${fmt(totals[y])}</td>`).join('') +
     (prev ? `<td>${delta(totals[last], totals[prev])}</td>` : '') +
     `<td class="mr-num">100%</td></tr>`;
-  return `<table class="mr-table"><thead><tr><th>${esc(label)}</th>` +
-    years.map(y => `<th class="mr-num">${y}${y===CUR_YEAR?' YTD':''}</th>`).join('') +
-    (prev ? `<th>Change ${prev}→${last}</th>` : '') +
-    `<th class="mr-num">Share ${last}</th></tr></thead><tbody>${body}${foot}</tbody></table>`;
+  return `<table class="mr-table"><thead><tr><th scope="col">${esc(label)}</th>` +
+    years.map(y => `<th scope="col" class="mr-num">${y}${y===CUR_YEAR?' YTD':''}</th>`).join('') +
+    (prev ? `<th scope="col">Change ${prev}→${last}</th>` : '') +
+    `<th scope="col" class="mr-num">Share ${last}</th></tr></thead><tbody>${body}${foot}</tbody></table>`;
 }
 
 /* Inline horizontal bar — used inside report tables so printed output still
@@ -206,8 +206,8 @@ function schedSessionCard(ss){
       &ndash; ${hhmmSched(ss.warmupStartMinutes + ss.warmupMinutes)} — every event in this session starts
       together, so the session runs the longest warm-up any one of them needs.</p>
     <table class="mr-table mr-table-sm"><thead><tr>
-      <th>Event</th><th class="mr-num">Divers</th><th class="mr-num">Dives</th>
-      <th class="mr-num">Minutes</th><th>Notes</th>
+      <th scope="col">Event</th><th scope="col" class="mr-num">Divers</th><th scope="col" class="mr-num">Dives</th>
+      <th scope="col" class="mr-num">Minutes</th><th scope="col">Notes</th>
     </tr></thead><tbody>${evRows}</tbody></table>
   </div>`;
 }
@@ -343,7 +343,7 @@ const SECTIONS = {
         The sales ledger is the honest like-for-like read: it covers December–June of each membership
         year and is net of refunds.</p>
         <table class="mr-table">
-          <thead><tr><th>Dec–Jun, membership year</th><th class="mr-num">2025</th><th class="mr-num">2026</th><th>Change</th></tr></thead>
+          <thead><tr><th scope="col">Dec–Jun, membership year</th><th scope="col" class="mr-num">2025</th><th scope="col" class="mr-num">2026</th><th scope="col">Change</th></tr></thead>
           <tbody>
             <tr><td>Memberships sold</td><td class="mr-num">${fmt(L[2025].n)}</td><td class="mr-num">${fmt(L[2026].n)}</td><td>${delta(L[2026].n, L[2025].n)}</td></tr>
             <tr><td>Athlete memberships</td><td class="mr-num">${fmt(L[2025].ath)}</td><td class="mr-num">${fmt(L[2026].ath)}</td><td>${delta(L[2026].ath, L[2025].ath)}</td></tr>
@@ -444,9 +444,9 @@ const SECTIONS = {
       return `<section class="mr-section">
         <h2 class="mr-h2">Geography — by association</h2>
         <p class="mr-p">All membership types. The athlete column is a subset of the member column.</p>
-        <table class="mr-table mr-table-sm"><thead><tr><th>Association</th>
-          ${o.years.map(y=>`<th class="mr-num">${y}${y===CUR_YEAR?' YTD':''}</th>`).join('')}
-          <th class="mr-num">${last} athletes</th>${prev?`<th>Change</th>`:''}<th class="mr-num">Share</th>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Association</th>
+          ${o.years.map(y=>`<th scope="col" class="mr-num">${y}${y===CUR_YEAR?' YTD':''}</th>`).join('')}
+          <th scope="col" class="mr-num">${last} athletes</th>${prev?`<th scope="col">Change</th>`:''}<th scope="col" class="mr-num">Share</th>
         </tr></thead><tbody>${body}
         <tr class="mr-total"><td>Total</td>
           ${o.years.map(y=>`<td class="mr-num">${fmt(order.reduce((s,k)=>s+(A[k][y]||0),0))}</td>`).join('')}
@@ -528,17 +528,17 @@ const SECTIONS = {
         <p class="mr-p">A member counts as renewed if the same member ID appears in the following
         membership year. Because 2026 is still in progress, its lapse figure is a
         <em>not-yet-renewed</em> count, not a final churn number.</p>
-        <table class="mr-table"><thead><tr><th>Transition</th><th class="mr-num">Starting base</th>
-          <th class="mr-num">Renewed</th><th class="mr-num">Renewal rate</th>
-          <th class="mr-num">Not renewed</th><th class="mr-num">New</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Transition</th><th scope="col" class="mr-num">Starting base</th>
+          <th scope="col" class="mr-num">Renewed</th><th scope="col" class="mr-num">Renewal rate</th>
+          <th scope="col" class="mr-num">Not renewed</th><th scope="col" class="mr-num">New</th></tr></thead>
           <tbody>${flowRows}</tbody></table>
         <h3 class="mr-h3">Where athletes are lost — by age group (2025 → 2026)</h3>
-        <table class="mr-table"><thead><tr><th>Age group</th><th class="mr-num">2025 athletes</th>
-          <th class="mr-num">Not renewed</th><th class="mr-num">Rate</th><th>&nbsp;</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Age group</th><th scope="col" class="mr-num">2025 athletes</th>
+          <th scope="col" class="mr-num">Not renewed</th><th scope="col" class="mr-num">Rate</th><th scope="col">&nbsp;</th></tr></thead>
           <tbody>${grpRows}</tbody></table>
         <h3 class="mr-h3">Where members are lost — by association (2025 → 2026)</h3>
-        <table class="mr-table mr-table-sm"><thead><tr><th>Association</th><th class="mr-num">2025 members</th>
-          <th class="mr-num">Not renewed</th><th class="mr-num">Rate</th><th>&nbsp;</th></tr></thead>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Association</th><th scope="col" class="mr-num">2025 members</th>
+          <th scope="col" class="mr-num">Not renewed</th><th scope="col" class="mr-num">Rate</th><th scope="col">&nbsp;</th></tr></thead>
           <tbody>${assocRows}</tbody></table>
       </section>`;
     }
@@ -569,9 +569,9 @@ const SECTIONS = {
         <h2 class="mr-h2">Club leaderboard</h2>
         <p class="mr-p">Top ${order.length} clubs by ${last} membership. Members with no club recorded
         are pooled into a single “(no club listed)” row rather than dropped, so the totals reconcile.</p>
-        <table class="mr-table mr-table-sm"><thead><tr><th class="mr-num">#</th><th>Club</th><th>&nbsp;</th>
-          ${o.years.map(y=>`<th class="mr-num">${y}</th>`).join('')}
-          <th class="mr-num">Athletes</th><th class="mr-num">Coaches</th>${prev?'<th>Change</th>':''}
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col" class="mr-num">#</th><th scope="col">Club</th><th scope="col">&nbsp;</th>
+          ${o.years.map(y=>`<th scope="col" class="mr-num">${y}</th>`).join('')}
+          <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Coaches</th>${prev?'<th scope="col">Change</th>':''}
         </tr></thead><tbody>${body}</tbody></table>
       </section>`;
     }
@@ -603,8 +603,8 @@ const SECTIONS = {
         This is the accounting record, independent of the Webpoint roster export, and is the
         authoritative same-period comparison across years. Fee and donation lines are excluded;
         club/organisation memberships are included and have no counterpart in the people roster.</p>
-        <table class="mr-table"><thead><tr><th>Month of membership year</th>
-          ${yrs.map(y=>`<th class="mr-num">${y}</th>`).join('')}<th>Change</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Month of membership year</th>
+          ${yrs.map(y=>`<th scope="col" class="mr-num">${y}</th>`).join('')}<th scope="col">Change</th></tr></thead>
           <tbody>${body}<tr class="mr-total"><td>Dec–Jun total</td>
           ${totals.map(t=>`<td class="mr-num">${fmt(t)}</td>`).join('')}
           <td>${delta(totals[totals.length-1], totals[0])}</td></tr></tbody></table>
@@ -643,15 +643,15 @@ const SECTIONS = {
         <p class="mr-p">Sanctioned meet counts from the DiveMeets catalogue. This measures where
         competition <em>opportunity</em> sits, which is the leading indicator for where membership
         follows.</p>
-        <table class="mr-table"><thead><tr><th class="mr-num">Year</th>
-          <th class="mr-num">USA Diving</th><th>&nbsp;</th><th class="mr-num">AAU</th><th>&nbsp;</th>
-          <th class="mr-num">AAU share</th></tr></thead><tbody>${body}</tbody></table>
+        <table class="mr-table"><thead><tr><th scope="col" class="mr-num">Year</th>
+          <th scope="col" class="mr-num">USA Diving</th><th scope="col">&nbsp;</th><th scope="col" class="mr-num">AAU</th><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">AAU share</th></tr></thead><tbody>${body}</tbody></table>
         <h3 class="mr-h3">Results-crawl coverage</h3>
         <p class="mr-p">Meet <em>results</em> are crawled separately from the catalogue. Athlete-level
         AAU comparison is only possible for meets whose results have been crawled.</p>
-        <table class="mr-table"><thead><tr><th>Sanctioning body</th><th class="mr-num">Meets catalogued</th>
-          <th class="mr-num">Results crawled</th><th class="mr-num">Coverage</th>
-          <th class="mr-num">Parked (failed)</th></tr></thead><tbody>${covRows}</tbody></table>
+        <table class="mr-table"><thead><tr><th scope="col">Sanctioning body</th><th scope="col" class="mr-num">Meets catalogued</th>
+          <th scope="col" class="mr-num">Results crawled</th><th scope="col" class="mr-num">Coverage</th>
+          <th scope="col" class="mr-num">Parked (failed)</th></tr></thead><tbody>${covRows}</tbody></table>
         <p class="mr-note"><b>Status:</b> ${fmt(aauRow.done)} of ${fmt(aauRow.meets)} AAU meets
         (${pctS(+aauRow.done, +aauRow.meets)}) have results crawled. Until that reaches full coverage,
         treat AAU athlete-level comparisons as partial.</p>
@@ -879,8 +879,8 @@ const BOUNDARY_SECTIONS = {
             <td class="mr-num"><strong>${fmt(Math.round(field))}</strong></td></tr>`:''}
         </tbody></table>
         ${levelRows?`<h3 class="mr-h3">Every stage</h3>
-        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Meets</th>
-          <th class="mr-num">Entries</th><th class="mr-num">Per meet</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Meets</th>
+          <th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Per meet</th></tr></thead>
           <tbody>${levelRows}</tbody></table>`:''}
         ${schedLine}${probLine}
         <h3 class="mr-h3">What this was computed from</h3>
@@ -916,7 +916,7 @@ const BOUNDARY_SECTIONS = {
         This section deliberately reports the comparison you looked at rather than quietly building a different one.</p>
         </section>`;
       const base = C[0];
-      const head = C.map((c,i)=>`<th class="mr-num">${esc(c.label)}${i===0?'<div class="mr-soft">on screen</div>':''}</th>`).join('');
+      const head = C.map((c,i)=>`<th scope="col" class="mr-num">${esc(c.label)}${i===0?'<div class="mr-soft">on screen</div>':''}</th>`).join('');
       const delta = (v,b) => (b==null||v==null||Math.round(v)===Math.round(b)) ? ''
         : ` <span class="mr-soft">(${v-b>0?'+':''}${fmt(Math.round(v-b))})</span>`;
       const row = (label, get, hint) => `<tr><td>${esc(label)}${hint?`<div class="mr-soft">${esc(hint)}</div>`:''}</td>` +
@@ -936,7 +936,7 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-p">The same map, run under each pathway. Only the rules differ between columns — the boundaries,
           the field each pathway starts from, and the measured behaviour are held still, so every difference below is
           caused by the rules and nothing else.</p>
-        <table class="mr-table"><thead><tr><th>&nbsp;</th>${head}</tr></thead><tbody>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${row('Championship field', c=>c.finalField, 'who reaches the top meet')}
           ${levelRows}
           ${row('Meets to run', c=>c.meets)}
@@ -1040,9 +1040,9 @@ const BOUNDARY_SECTIONS = {
         <h3 class="mr-h3">Summary — does each meet fit</h3>
         ${verdict}
         <table class="mr-table"><thead><tr>
-          <th>Stop</th><th class="mr-num">Entries</th><th class="mr-num">Events</th>
-          <th class="mr-num">Days</th><th class="mr-num">Longest day</th><th>&nbsp;</th>
-          <th class="mr-num">Split</th><th class="mr-num">Look at</th><th>Verdict</th>
+          <th scope="col">Stop</th><th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Events</th>
+          <th scope="col" class="mr-num">Days</th><th scope="col" class="mr-num">Longest day</th><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Split</th><th scope="col" class="mr-num">Look at</th><th scope="col">Verdict</th>
         </tr></thead><tbody>${rows}</tbody></table>
         ${untimed ? `<p class="mr-note mr-warn">${fmt(untimed)} event${untimed>1?'s have':' has'} no dive count on
           record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown, both above
@@ -1144,8 +1144,8 @@ const BOUNDARY_SECTIONS = {
         <ul class="mr-bullets">${routes}</ul>
 
         <h3 class="mr-h3">Field at every stage and round</h3>
-        <table class="mr-table"><thead><tr><th>Stage</th><th>Round</th><th class="mr-num">Stops</th>
-          <th class="mr-num">Entries</th><th class="mr-num">Per stop</th><th class="mr-num">Divers</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th><th scope="col" class="mr-num">Stops</th>
+          <th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Divers</th></tr></thead>
           <tbody>${rows}</tbody></table>
         <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
           three events, so the two answer different questions — entries decide session length and fee income,
@@ -1161,7 +1161,7 @@ const BOUNDARY_SECTIONS = {
             cols.push({L,key:r.key,name:nm(L),round:QRr.ROUND_NAME[r.key]||r.key})));
           const val=(L,rk,cell)=>{const f=res.field[L]&&res.field[L][rk];
             return f? f.reduce((s,g)=>s+(g[cell]||0),0) : 0;};
-          const head=cols.map(c=>`<th class="mr-num">${esc(c.name)}<br><span class="mr-soft">${esc(c.round)}</span></th>`).join('');
+          const head=cols.map(c=>`<th scope="col" class="mr-num">${esc(c.name)}<br><span class="mr-soft">${esc(c.round)}</span></th>`).join('');
           const body=['A','B','C','D'].map(ag=>{
             const sub=cols.map(c=>{let n=0;['B','G'].forEach(g=>['1','3','P'].forEach(d=>{n+=val(c.L,c.key,ag+g+d);}));
               return `<td class="mr-num">${n>0.5?fmt(Math.round(n)):'—'}</td>`;}).join('');
@@ -1173,23 +1173,23 @@ const BOUNDARY_SECTIONS = {
             return `<tr class="mr-sub"><td><b>${esc(AGE[ag])}</b></td>${sub}</tr>${rows}`;}).join('');
           const tot=cols.map(c=>{const n=CELLS.reduce((s,cell)=>s+val(c.L,c.key,cell),0);
             return `<td class="mr-num"><b>${fmt(Math.round(n))}</b></td>`;}).join('');
-          return `<table class="mr-table"><thead><tr><th>Age group / event</th>${head}</tr></thead>
+          return `<table class="mr-table"><thead><tr><th scope="col">Age group / event</th>${head}</tr></thead>
             <tbody>${body}<tr class="mr-tot"><td><b>All events</b></td>${tot}</tr></tbody></table>`;
         })()}
         <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
           3-meter board in the semi-final — the number a timetable and an awards order are actually built from.</p>
 
         <h3 class="mr-h3">What actually gets billed</h3>
-        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Billable entries</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Billable entries</th></tr></thead>
           <tbody>${billed}</tbody></table>
         <p class="mr-note">An athlete pays once per event at a meet however many rounds they dive, so moving
           between rounds inside a stage bills nothing. Adding the round fields together would charge the same
           diver two or three times over.</p>
 
         <h3 class="mr-h3">Fee income at the published 2026 rates</h3>
-        <table class="mr-table"><thead><tr><th>Stage</th><th class="mr-num">Entries</th>
-          <th class="mr-num">Fee</th><th class="mr-num">Gross</th><th class="mr-num">DiveMeets</th>
-          <th class="mr-num">Net</th></tr></thead><tbody>${money}
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Entries</th>
+          <th scope="col" class="mr-num">Fee</th><th scope="col" class="mr-num">Gross</th><th scope="col" class="mr-num">DiveMeets</th>
+          <th scope="col" class="mr-num">Net</th></tr></thead><tbody>${money}
           <tr class="mr-tot"><td>Total</td><td class="mr-num">${fmt(Math.round(rev.entries))}</td><td></td>
             <td class="mr-num">${usd(rev.gross)}</td><td class="mr-num">&minus;${usd(rev.levy)}</td>
             <td class="mr-num">${usd(rev.net)}</td></tr></tbody></table>
@@ -1236,10 +1236,10 @@ const BOUNDARY_SECTIONS = {
         level currently shown on the map. “Deviation” is how far an area sits from an equal share of
         members — an equal split would put ${fmt(Math.round(equal))} members in each of the
         ${P.length} areas.</p>
-        <table class="mr-table"><thead><tr><th>Area</th><th class="mr-num">Members</th><th>&nbsp;</th>
-          <th class="mr-num">Athletes</th><th class="mr-num">Coaches</th><th class="mr-num">Clubs</th>
-          <th class="mr-num">Counties</th><th class="mr-num">Share</th>
-          <th class="mr-num">Deviation</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
+          <th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th>
+          <th scope="col" class="mr-num">Deviation</th></tr></thead>
           <tbody>${body}${unRow}
           <tr class="mr-total"><td>Total assigned</td><td class="mr-num">${fmt(total)}</td><td></td>
             <td class="mr-num">${fmt(P.reduce((s,g)=>s+g.a,0))}</td>
@@ -1308,10 +1308,10 @@ const BOUNDARY_SECTIONS = {
             <div class="mr-kpi-s">${fmt(mS.total)} members ÷ ${P.length} areas</div></div>
         </div>
         <h3 class="mr-h3">Distribution by measure</h3>
-        <table class="mr-table"><thead><tr><th>Measure</th><th class="mr-num">Total</th>
-          <th class="mr-num">Average</th><th class="mr-num">Smallest</th><th class="mr-num">Largest</th>
-          <th class="mr-num">Max ÷ min</th><th class="mr-num">Spread</th><th class="mr-num">Gini</th>
-          <th>Read</th></tr></thead><tbody>${rows}
+        <table class="mr-table"><thead><tr><th scope="col">Measure</th><th scope="col" class="mr-num">Total</th>
+          <th scope="col" class="mr-num">Average</th><th scope="col" class="mr-num">Smallest</th><th scope="col" class="mr-num">Largest</th>
+          <th scope="col" class="mr-num">Max ÷ min</th><th scope="col" class="mr-num">Spread</th><th scope="col" class="mr-num">Gini</th>
+          <th scope="col">Read</th></tr></thead><tbody>${rows}
           <tr><td>Distinct clubs</td><td class="mr-num">${fmt(clubStats.total)}</td>
             <td class="mr-num">${fmt(Math.round(clubStats.mean))}</td>
             <td class="mr-num">${fmt(clubStats.min)}</td><td class="mr-num">${fmt(clubStats.max)}</td>
@@ -1328,9 +1328,9 @@ const BOUNDARY_SECTIONS = {
         <h3 class="mr-h3">Deviation from an equal share</h3>
         <p class="mr-p">Bars to the right of the centre line are larger than an equal share; bars to the
         left are smaller.</p>
-        <table class="mr-table"><thead><tr><th>Area</th><th class="mr-num">Members</th>
-          <th style="width:34%">Versus equal share</th><th class="mr-num">Difference</th>
-          <th class="mr-num">%</th></tr></thead><tbody>${devRows}</tbody></table>
+        <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th>
+          <th scope="col" style="width:34%">Versus equal share</th><th scope="col" class="mr-num">Difference</th>
+          <th scope="col" class="mr-num">%</th></tr></thead><tbody>${devRows}</tbody></table>
       </section>`;
     }
   },
@@ -1366,9 +1366,9 @@ const BOUNDARY_SECTIONS = {
           <p class="mr-p">Average ${fmt(Math.round(s.mean))} members per area ·
              largest ÷ smallest ${isFinite(s.ratio)?s.ratio.toFixed(2)+'×':'—'} ·
              spread ${(100*s.cv).toFixed(1)}% · <strong>${esc(balanceVerdict(s.cv)[0])}</strong></p>
-          <table class="mr-table"><thead><tr><th>Area</th><th class="mr-num">Members</th><th>&nbsp;</th>
-            <th class="mr-num">Athletes</th><th class="mr-num">Clubs</th><th class="mr-num">Share</th>
-            <th class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
+          <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th>
+            <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Share</th>
+            <th scope="col" class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
           ${unM>0 && li===0 ? `<p class="mr-note">${fmt(unM)} members are in unassigned counties and are excluded.</p>`:''}`;
       }).join('');
       return `<section class="mr-section">
@@ -1425,8 +1425,8 @@ const BOUNDARY_SECTIONS = {
             </div>
           </div>
           <table class="mr-table mr-table-sm"><thead><tr>
-            ${AG.map(a=>`<th class="mr-num">${esc(a.label)}</th>`).join('')}
-            <th class="mr-num">Total</th></tr></thead>
+            ${AG.map(a=>`<th scope="col" class="mr-num">${esc(a.label)}</th>`).join('')}
+            <th scope="col" class="mr-num">Total</th></tr></thead>
             <tbody><tr>${ageCells}<td class="mr-num"><b>${fmt(ageTot)}</b></td></tr></tbody></table>
           <div class="mr-stack">${ageBar}</div>
           <div class="mr-kv"><span class="mr-kv-k">States</span>
@@ -1505,11 +1505,11 @@ const BOUNDARY_SECTIONS = {
             <div class="mr-kpi-s">Each origin/destination pairing</div></div>
         </div>
         <h3 class="mr-h3">Member flows between areas</h3>
-        <table class="mr-table"><thead><tr><th>Move</th><th class="mr-num">Counties</th>
-          <th class="mr-num">Members affected</th></tr></thead><tbody>${flowRows || '<tr><td colspan="3">No differences.</td></tr>'}</tbody></table>
+        <table class="mr-table"><thead><tr><th scope="col">Move</th><th scope="col" class="mr-num">Counties</th>
+          <th scope="col" class="mr-num">Members affected</th></tr></thead><tbody>${flowRows || '<tr><td colspan="3">No differences.</td></tr>'}</tbody></table>
         <h3 class="mr-h3">Counties that move (those containing members)</h3>
-        <table class="mr-table mr-table-sm"><thead><tr><th>County</th><th>State</th><th>From</th>
-          <th>To</th><th class="mr-num">Members</th></tr></thead>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">County</th><th scope="col">State</th><th scope="col">From</th>
+          <th scope="col">To</th><th scope="col" class="mr-num">Members</th></tr></thead>
           <tbody>${moveRows || '<tr><td colspan="5">No member-carrying county changes area.</td></tr>'}</tbody></table>
         <p class="mr-note">Counties with no recorded members can still change area; they are counted in
         the headline figure above but omitted from the detail table to keep it readable.</p>
@@ -1620,14 +1620,14 @@ const BOUNDARY_SECTIONS = {
           currently saved — regenerate this section rather than trust a printed copy.</p>
 
         <h3 class="mr-h3">Junior Nationals prelim field</h3>
-        <table class="mr-table"><thead><tr><th>System</th><th></th>
-          <th class="mr-num">Athletes</th><th class="mr-num">vs. today</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
+          <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
           <tbody>${headlineRows}</tbody></table>
 
         <h3 class="mr-h3">By age group and gender</h3>
-        <table class="mr-table"><thead><tr><th>Group</th>
-          <th class="mr-num">Today</th><th class="mr-num">CCE proposal</th>
-          <th class="mr-num">Counter-proposal</th></tr></thead>
+        <table class="mr-table"><thead><tr><th scope="col">Group</th>
+          <th scope="col" class="mr-num">Today</th><th scope="col" class="mr-num">CCE proposal</th>
+          <th scope="col" class="mr-num">Counter-proposal</th></tr></thead>
           <tbody>${groupRows}</tbody></table>
         <p class="mr-note">Percentages are each proposal against today's real field for that group, not against
           the other proposal.</p>
@@ -1635,8 +1635,8 @@ const BOUNDARY_SECTIONS = {
         <h3 class="mr-h3">Counter-proposal — sensitivity to the E/W/C final cap</h3>
         <p class="mr-p">The cap on how many qualify out of the E/W/C final is not yet decided. This is the whole
           field's sensitivity to that one number, everything else held the same.</p>
-        <table class="mr-table mr-table-sm"><thead><tr><th>E/W/C final qualifiers</th>
-          <th class="mr-num">Nationals field</th><th class="mr-num">vs. today</th></tr></thead>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">E/W/C final qualifiers</th>
+          <th scope="col" class="mr-num">Nationals field</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
           <tbody>${capRows}</tbody></table>
 
         <p class="mr-note mr-warn"><b>What this is and is not.</b> This projects real 2026 entry volume through
@@ -1660,8 +1660,8 @@ const BOUNDARY_SECTIONS = {
           <td>${esc(z.county)}</td><td>${esc(z.st)}</td><td class="mr-num">${fmt(z.n)}</td></tr>`).join('');
         return `<h3 class="mr-h3"><span class="mr-sw" style="background:${g.color}"></span>${esc(g.name)}
           <span class="mr-soft">— ${fmt(g.zips.length)} zip codes, ${fmt(g.m)} members</span></h3>
-          <table class="mr-table mr-table-sm mr-zip"><thead><tr><th>Zip</th><th>County</th><th>State</th>
-            <th class="mr-num">Members</th></tr></thead><tbody>${rows ||
+          <table class="mr-table mr-table-sm mr-zip"><thead><tr><th scope="col">Zip</th><th scope="col">County</th><th scope="col">State</th>
+            <th scope="col" class="mr-num">Members</th></tr></thead><tbody>${rows ||
             '<tr><td colspan="4">No zip codes with members.</td></tr>'}</tbody></table>`;
       }).join('');
       return `<section class="mr-section">
@@ -1842,9 +1842,9 @@ const EQUITY_SECTIONS = {
               ${(hi-lo) < today.gap
                  ? `<span class="mr-up">This map narrows it by ${(today.gap-(hi-lo)).toFixed(1)}.</span>`
                  : `<span class="mr-down">This map widens it by ${((hi-lo)-today.gap).toFixed(1)}.</span>`}` : ''}</p>
-          <table class="mr-table mr-table-sm"><thead><tr><th>Area</th>
-            <th class="mr-num">Bar to advance</th><th class="mr-num">Field size</th>
-            <th>&nbsp;</th><th class="mr-num">vs easiest</th></tr></thead>
+          <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Area</th>
+            <th scope="col" class="mr-num">Bar to advance</th><th scope="col" class="mr-num">Field size</th>
+            <th scope="col">&nbsp;</th><th scope="col" class="mr-num">vs easiest</th></tr></thead>
             <tbody>${body}</tbody></table>`;
       }).join('');
 
@@ -1911,10 +1911,10 @@ const EQUITY_SECTIONS = {
         <h3 class="mr-h3">Today's inequity — the bar to advance, by region</h3>
         <p class="mr-p">Average ${rank}th-place score in each region's own Regionals field,
         ${esc((Q.years||[]).join(' and '))}. Only fields meeting the exclusions above are counted.</p>
-        <table class="mr-table mr-table-sm"><thead><tr><th>Event</th>
-          <th class="mr-num">Easiest bar</th><th>Where</th>
-          <th class="mr-num">Hardest bar</th><th>Where</th>
-          <th class="mr-num">Gap</th><th class="mr-num">Harder by</th></tr></thead>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Event</th>
+          <th scope="col" class="mr-num">Easiest bar</th><th scope="col">Where</th>
+          <th scope="col" class="mr-num">Hardest bar</th><th scope="col">Where</th>
+          <th scope="col" class="mr-num">Gap</th><th scope="col" class="mr-num">Harder by</th></tr></thead>
           <tbody>${todayTable}</tbody></table>
         ${todayRows[0] ? `<p class="mr-note"><b>Largest measured gap:</b>
           ${esc(todayRows[0].k.split('|').join(' '))} &mdash; ${todayRows[0].lo.cut.toFixed(1)} in
@@ -2023,11 +2023,11 @@ const EQUITY_SECTIONS = {
             spread ${mean>0 ? (100*sd/mean).toFixed(1) : '0.0'}%</p>
           <div class="mr-map">${svg}</div>
           <div class="mr-mapkeys">${key}</div>
-          <table class="mr-table mr-table-sm"><thead><tr><th>Area</th>
-            <th class="mr-num">Members</th><th>&nbsp;</th><th class="mr-num">Athletes</th>
-            <th class="mr-num">Coaches</th><th class="mr-num">Clubs</th>
-            <th class="mr-num">Counties</th><th class="mr-num">Share</th>
-            <th class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
+          <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Area</th>
+            <th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th><th scope="col" class="mr-num">Athletes</th>
+            <th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
+            <th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th>
+            <th scope="col" class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
           ${unM > 0 && L === 0 ? `<p class="mr-note">${fmt(unM)} members sit in ${fmt(unN)}
             unassigned counties, shown pale grey and excluded from every figure above.</p>` : ''}
         </div>`);
@@ -2100,8 +2100,8 @@ const EQUITY_SECTIONS = {
             <div class="mr-kpi-l">Clubs staying put</div>
             <div class="mr-kpi-s">${pctS(stay, rows.length)} of all clubs</div></div>
         </div>
-        <table class="mr-table mr-table-sm"><thead><tr><th>Club</th>
-          <th class="mr-num">Members nearby</th><th>Today</th><th>Proposed</th></tr></thead>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Club</th>
+          <th scope="col" class="mr-num">Members nearby</th><th scope="col">Today</th><th scope="col">Proposed</th></tr></thead>
           <tbody>${body || '<tr><td colspan="4">No club changes area under this map.</td></tr>'}</tbody></table>
         <p class="mr-note">A club is placed where most of its members live. Clubs drawing members
         across a county line may show a move that only affects part of their roster, so treat this as

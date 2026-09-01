@@ -793,16 +793,16 @@ function renderPanel(){
         <button id="bsToolPan" class="${S.tool==='pan'?'on':''}">Pan</button>
       </div>
       <div class="bs-brush" title="How wide the paint brush is. [ and ] change it.">
-        <button class="tab bs-mini" id="bsBrushDown">&minus;</button>
+        <button class="tab bs-mini" id="bsBrushDown" aria-label="Decrease paint brush size">&minus;</button>
         <span class="bs-brush-l">Brush <b id="bsBrushLbl">${S.brush===0?'single county':S.brush+' deep'}</b></span>
-        <button class="tab bs-mini" id="bsBrushUp">+</button>
+        <button class="tab bs-mini" id="bsBrushUp" aria-label="Increase paint brush size">+</button>
       </div>
       <div class="seg">
         <button id="bsY25" class="${y==='y25'?'on':''}">2025</button>
         <button id="bsY26" class="${y==='y26'?'on':''}">2026 YTD</button>
       </div>
       <div class="seg">
-        <button id="bsZoomIn">+</button><button id="bsZoomOut">&minus;</button><button id="bsZoomReset">Reset view</button>
+        <button id="bsZoomIn" aria-label="Zoom in on map">+</button><button id="bsZoomOut" aria-label="Zoom out on map">&minus;</button><button id="bsZoomReset">Reset view</button>
       </div>
       <div class="seg">
         <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Ctrl+Z">&#8630; Undo</button>
@@ -1128,27 +1128,24 @@ async function ensureMult(){
    the cells that WERE measured, and shown on the panel. A number this
    consequential should not be invisible. */
 /* Which real advancement stage a Boundary Studio level actually IS --
-   Regionals, Zones, EWC or Nationals -- inferred from its own name, the same
-   way seedStage() already infers the first stop's feeder pool. This exists
-   because Pricing Studio's calibration is keyed by a FIXED position (0
-   Regionals, 1 Zones, 2 EWC) but a Boundary Studio scenario is free to drop a
-   level -- a pathway that starts at Zones is one level shorter than the
-   reference structure, and reading calibration by raw index would silently
-   hand EWC's arrival rate to Zones, or Zones' rate to EWC. Naming the stage
-   and looking it up by name instead of position is what keeps the two arrays
-   honest about each other regardless of how many levels either one has.
-   Nationals resolves to a name here but never to a Pricing Studio conv rate --
-   that scheme only calibrates arrival INTO Regionals/Zones/EWC, never into the
-   championship. What identifying the stage as "Nationals" enables instead is
-   nationalTotals() below: substituting the real championship field in place
-   of the modelled one, the same way level 0 is seeded from a real pool rather
-   than built up from a rate. */
+   Regionals, Zones or EWC -- inferred from its own name, the same way
+   seedStage() already infers the first stop's feeder pool. This exists because
+   Pricing Studio's calibration is keyed by a FIXED position (0 Regionals,
+   1 Zones, 2 EWC) but a Boundary Studio scenario is free to drop a level --
+   a pathway that starts at Zones is one level shorter than the reference
+   structure, and reading calibration by raw index would silently hand EWC's
+   arrival rate to Zones, or Zones' rate to EWC. Naming the stage and looking
+   it up by name instead of position is what keeps the two arrays honest
+   about each other regardless of how many levels either one has.
+   National / the championship matches nothing here on purpose: Pricing
+   Studio's conv/directAt scheme never modelled arrival into the championship
+   (that comes from real Nationals entries loaded separately), so a level
+   named "National" correctly finds no stage and reports unmeasured. */
 function stageNameForLevel(L){
   const n = String(tierName(L) || '').toLowerCase();
   if (/region/.test(n)) return 'Regionals';
   if (/zone/.test(n)) return 'Zones';
   if (/east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n)) return 'EWC';
-  if (/national|championship/.test(n)) return 'Nationals';
   return null;
 }
 
@@ -1164,25 +1161,6 @@ function measuredArrival(L){
     if (!vals.length) return null;
     return vals.reduce((a,b)=>a+b, 0) / vals.length;
   } catch(e){ return null; }
-}
-
-/* The real championship field for a season, by event cell, summed across
-   every county -- Nationals is one nationwide meet, not a zone-level stage,
-   so unlike Regionals/Zones/EWC there is nothing to reallocate by redrawing
-   the map. Returns null when the season has no real field recorded (a
-   season not yet run, or a data build that predates it), so a caller can
-   tell "zero athletes" from "no record" and never mistakes one for the
-   other. */
-function nationalTotals(year){
-  const key = (year === 'y25' ? '2025' : '2026') + '|Nationals';
-  const P = S.advData && S.advData.pools ? S.advData.pools[key] : null;
-  if (!P) return null;
-  const out = {};
-  for (const fips in P){
-    const cells = P[fips];
-    for (const c in cells) out[c] = (out[c] || 0) + (cells[c] || 0);
-  }
-  return out;
 }
 
 function arrivalRate(L){
@@ -1643,36 +1621,9 @@ function tierSpread(meets){
 function meetManifest(res){
   if (!res) return [];
   const out = [];
-  const lastLevel = S.routing.length - 1;
   S.routing.forEach((lvl, L) => {
     const TG = tierGroupsAt(L);
     const rounds = QR().roundsOf(lvl);
-
-    /* Where a real championship field exists for the season in view, the
-       terminal level's entries are the ACTUAL field, not the modelled
-       projection through the bands above it -- the same principle that
-       already seeds level 0 from a real pool instead of a rate. This never
-       touches res.field/res.arrivals (every other pathway calculation in
-       this file reads the modelled shape), it only substitutes what gets
-       billed and reported here. Restricted to the LAST level as well as the
-       name, so a mid-pathway level a person happens to call "Nationals" for
-       some other reason can't accidentally pick up the championship pool. */
-    const natReal = (L === lastLevel && stageNameForLevel(L) === 'Nationals')
-      ? nationalTotals(S.year) : null;
-    let natShare = null;
-    if (natReal){
-      // How the model split each cell across this level's groups, so the
-      // real total is redistributed in that same proportion rather than
-      // dumped onto group 0. Nearly every Nationals level has exactly one
-      // group, in which case this is just 1.
-      natShare = {};
-      CELLS.forEach(cell => {
-        const perGroup = TG.groups.map((g, gi) => QR().entriesCellAt(res, L, gi, cell));
-        const tot = perGroup.reduce((a,b) => a+b, 0);
-        natShare[cell] = perGroup.map(v => tot > 0 ? v / tot : 1 / Math.max(1, TG.groups.length));
-      });
-    }
-
     TG.groups.forEach((g, gi) => {
       const events = [];
       let entries = 0, spots = 0;
@@ -1685,25 +1636,13 @@ function meetManifest(res){
            2026 rules do exactly that. Reading the first round alone was short
            by everyone who skipped a stage; summing the rounds would have
            charged the finalists twice. Arrivals are neither. */
-        const modelled = QR().entriesCellAt(res, L, gi, cell);
-        let n = modelled;
-        if (natReal && natReal[cell] != null){
-          n = natReal[cell] * (natShare[cell][gi] != null ? natShare[cell][gi] : 1 / Math.max(1, TG.groups.length));
-        }
+        const n = QR().entriesCellAt(res, L, gi, cell);
         if (n < 0.5) return;
         const first = rounds[0].key;
-        // Round-by-round field sizes came out of the model, at model scale.
-        // Rescaling them to the real total keeps a schedule builder honest
-        // about how big each round actually is instead of sizing sessions to
-        // a fabricated capacity; where the model had no basis at all
-        // (modelled 0) there is no shape to rescale, so it is left at 0
-        // rather than invented.
-        const scale = (natReal && modelled > 0) ? (n / modelled) : 1;
         const byRound = {};
         rounds.forEach(r => {
           const ff = res.field[L] && res.field[L][r.key];
-          const v = ff && ff[gi] ? (ff[gi][cell] || 0) : 0;
-          byRound[r.key] = Math.round(v * scale);
+          byRound[r.key] = ff && ff[gi] ? Math.round(ff[gi][cell] || 0) : 0;
         });
         events.push({cell, n: Math.round(n), byRound});
         entries += n;
@@ -1718,7 +1657,7 @@ function meetManifest(res){
                 rounds: rounds.map(r => r.key),
                 events, entries: Math.round(entries), spots: Math.round(spots),
                 biggest: events.length ? Math.max(...events.map(e => e.n)) : 0,
-                minDays, blocks, entriesReal: !!natReal});
+                minDays, blocks});
     });
   });
   return out;
@@ -1758,12 +1697,11 @@ function financialsFor(map){
       const $ = meetMoney(m);
       const t = tiers[m.level] || (tiers[m.level] = {
         name: tierName(m.level), meets:0, entries:0, gross:0, levy:0, host:0, usad:0,
-        sizes:[], days:0, spots:0, entriesReal:false});
+        sizes:[], days:0, spots:0});
       t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy;
       t.host += $.host; t.usad += $.usad; t.sizes.push(m.entries);
       t.days = Math.max(t.days, m.minDays);
       t.spots += m.spots;
-      if (m.entriesReal) t.entriesReal = true;
     });
     Object.values(tiers).forEach(t => {
       const v = t.sizes.filter(x => x > 0);
@@ -1774,13 +1712,11 @@ function financialsFor(map){
     // Whether this tier's entries reflect measured, real-season attrition or
     // (silently, otherwise) assume every qualifier turns up. Level 0 is always
     // the real seeded pool for the chosen season -- not a rate applied to a
-    // model -- so it carries no separate "measured" question of its own; a
-    // tier meetManifest substituted the real championship field into is
-    // equally real, just arrived at by substitution instead of a rate.
+    // model -- so it carries no separate "measured" question of its own.
     Object.keys(tiers).forEach(L => {
       const l = +L;
       const t = tiers[L];
-      t.measured = l === 0 ? true : (t.entriesReal || measuredArrival(l) != null);
+      t.measured = l === 0 ? true : (measuredArrival(l) != null);
       t.fill = t.spots ? t.entries / t.spots : null;
     });
     const total = Object.values(tiers).reduce((a,t) => ({
@@ -2040,9 +1976,7 @@ function renderFinancials(){
       less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
       <b>Filled</b> is entries against the places the rules make available at that tier &mdash; capacity, not a
-      forecast, so a tier can run over 100% two ways: the rules admit extra qualifiers by average score, or
-      (the championship, where entries is the real field) this proposal's places simply fall short of how many
-      actually showed up.
+      forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
       <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
       cannot be paid by one rule, whatever the rule is.</p>
   </div>`;
@@ -2050,10 +1984,10 @@ function renderFinancials(){
 
 /* This map's zones, run against 2025's and 2026's actual entries instead of
    the model's take-up estimate -- the same map twice, not two maps. Where a
-   season really ran a stage the number is the real reallocated or
-   substituted field (Regionals, Zones and Nationals in both eras; EWC only
-   from 2026); where it did not, that is said plainly rather than guessed
-   at. */
+   season really ran a stage (Regionals and Zones in both eras) the number is
+   the real reallocated field; where it did not (2025 had no East/West/Central
+   round, and no season here calibrates arrival into the championship) that is
+   said plainly rather than guessed at. */
 function renderYearFill(){
   if (!S.advData || !S.advData.pools) return '';
   const fy25 = financialsForYear('y25');
@@ -2071,9 +2005,8 @@ function renderYearFill(){
     const l = +L;
     const stage = stageNameForLevel(l);
     // Level 0 is always the real seeded pool for that season if the pool
-    // exists at all; above that, "real" means either the arrival rate was
-    // measured against that season, or (Nationals) the modelled field was
-    // replaced outright with the real championship count.
+    // exists at all; above that, "real" means the arrival rate was actually
+    // measured against that season, not just left at full take-up.
     const real = l === 0 ? stageExists(stage || seedStage(), year) : t.measured;
     const fillPct = t.spots ? `<span class="bs-bd-rng">${Math.round(t.fill*100)}% of places</span>` : '';
     const flag = real ? '' : ' <span class="bs-arr-m warn">modelled</span>';
@@ -2091,11 +2024,10 @@ function renderYearFill(){
   return `<div class="bs-bd" style="margin-top:16px">
     <div class="bs-bd-h"><b>Real participation by season</b>
       <span class="note">This map's zones, seeded from 2025's and 2026's actual entries reallocated
-        county by county, with the championship tier's field replaced by the real Nationals count for
-        that season &mdash; the same map run against two real seasons, not two different maps.
-        <b>Modelled</b> marks a tier that season has no recorded field for at all (2025 ran no
-        East/West/Central round under the old system), so that figure assumes every qualifier turns up
-        rather than measuring who actually did.</span></div>
+        county by county &mdash; the same map run against two real seasons, not two different maps.
+        <b>Modelled</b> marks a tier that season has no recorded field for (2025 ran no East/West/Central
+        round, and no season here has a measured rate into the championship), so that figure assumes
+        every qualifier turns up rather than measuring who actually did.</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
       <thead><tr><th>Tier</th><th class="num">2025</th><th class="num">2026</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
@@ -5971,7 +5903,7 @@ function renderAutoDialog(){
       <div class="bs-auto-head">
         <div><div class="bs-auto-eyebrow">Boundary Studio</div>
              <h2>Auto-draw the map</h2></div>
-        <button class="bs-auto-x" onclick="window._bsAutoClose()">&#10005;</button>
+        <button class="bs-auto-x" onclick="window._bsAutoClose()" aria-label="Close">&#10005;</button>
       </div>
       <div class="bs-auto-body">
         <p class="bs-auto-p">Pick how many areas you want and this will divide the whole
@@ -5982,10 +5914,10 @@ function renderAutoDialog(){
         <div class="bs-auto-row">
           <label class="bs-auto-lbl">How many areas?</label>
           <div class="bs-auto-nrow">
-            <button onclick="window._bsAutoN(-1)">&minus;</button>
+            <button onclick="window._bsAutoN(-1)" aria-label="One fewer area">&minus;</button>
             <input id="bsAutoN" type="number" min="2" max="24" value="${AUTO.n}"
                    onchange="window._bsAutoSetN(this.value)">
-            <button onclick="window._bsAutoN(1)">+</button>
+            <button onclick="window._bsAutoN(1)" aria-label="One more area">+</button>
             <span class="bs-auto-hint">2 to 24</span>
           </div>
         </div>
