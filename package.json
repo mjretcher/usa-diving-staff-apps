@@ -1,0 +1,11 @@
+{
+  "name": "usa-diving-staff-apps",
+  "private": true,
+  "description": "Internal staff web applications for USA Diving. This package.json exists only to pin the dependency the regression-guard test scripts need (membership-analytics/test-*.js) -- there is no build step and no runtime dependency for the apps themselves, which are vanilla JS with no bundler.",
+  "scripts": {
+    "test": "cd membership-analytics && node test-billing.js && node test-studio.js && node test-route-step.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

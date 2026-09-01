@@ -1,0 +1,5 @@
+# Verified against actual imports across every file in db/scripts/ (including
+# db/scripts/seedgen/) -- psycopg2 is the only genuinely third-party
+# dependency any of these scripts use. Everything else imported is either the
+# standard library or a sibling module within db/scripts/ itself.
+psycopg2-binary>=2.9

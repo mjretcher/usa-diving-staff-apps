@@ -28,13 +28,11 @@ on:
   workflow_dispatch:
 
 jobs:
+jobs:
   test:
-    name: node membership-analytics/test-*.js
+    name: npm test
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: membership-analytics
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,15 +41,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: Install jsdom
-        run: npm install jsdom --no-save
+      - name: npm ci
+        run: npm ci
 
-      - name: test-billing.js
-        run: node test-billing.js
-
-      - name: test-studio.js
-        run: node test-studio.js
-
-      - name: test-route-step.js
-        run: node test-route-step.js
+      - name: npm test
+        run: npm test
