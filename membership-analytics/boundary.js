@@ -3094,13 +3094,13 @@ function buildScheduleFromTemplate(template, res, meetInfo){
     meet_type: 'custom', year: meetInfo.year || null,
     schedule: {
       updatedAt: new Date().toISOString(),
-      meet: {name: meetInfo.name, venue: meetInfo.venue||'', timezone:'America/New_York', meetType:'custom', days},
+      meet: {name: meetInfo.name, venue: meetInfo.venue||'', city:'', timezone:'America/New_York',
+        meetType:'custom', divemeetsId:'', divemeetsSources:[], days},
       profile: {id:'custom', label:'Custom', description: meetInfo.description||'',
         allowedRounds:['Qualifier','Prelim','Semifinal','Final','Custom Block','Open Practice'],
         roundRelationships:[], events:[]},
       sessions,
-      outputSettings: {publicShowWarmups:true, publicShowOpenPracticeNotes:true, publicPreset:'clean',
-        showEndTimes:true, showSubjectToChange:true},
+      outputSettings: {showWarmup:true, showEndTimes:true, showSubjectToChange:true},
       theme: 'classic', entryMode: 'projected', locks: {entries:false, sessionOrder:false}, publishStatus: 'draft',
     }
   };
