@@ -1,0 +1,57 @@
+name: Run regression tests
+
+# Three regression-guard scripts exist in membership-analytics/
+# (test-billing.js, test-studio.js, test-route-step.js) and none of them were
+# wired into anything -- they only ran if a person remembered to type the
+# command. This runs all three on every push and pull request touching the
+# files they guard, so a future edit that reintroduces a fixed bug fails
+# loudly here instead of shipping silently.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'membership-analytics/routing.js'
+      - 'membership-analytics/pricing.js'
+      - 'membership-analytics/boundary.js'
+      - 'membership-analytics/scenario-schedule-engine.js'
+      - 'membership-analytics/ma-reports.js'
+      - 'membership-analytics/test-*.js'
+  pull_request:
+    paths:
+      - 'membership-analytics/routing.js'
+      - 'membership-analytics/pricing.js'
+      - 'membership-analytics/boundary.js'
+      - 'membership-analytics/scenario-schedule-engine.js'
+      - 'membership-analytics/ma-reports.js'
+      - 'membership-analytics/test-*.js'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: node membership-analytics/test-*.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: membership-analytics
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install jsdom
+        run: npm install jsdom --no-save
+
+      - name: test-billing.js
+        run: node test-billing.js
+
+      - name: test-studio.js
+        run: node test-studio.js
+
+      - name: test-route-step.js
+        run: node test-route-step.js
