@@ -12,7 +12,14 @@ WHY THIS EXISTS
 WHAT IT PRODUCES
     pools["{year}|{stage}"][county_fips][event_code] = number of entries
     event_code is [A-D][B|G][1|3|P] -- age group, gender, board.
-    Stages: Regionals, Zones, EWC. Years: 2025, 2026.
+    Stages: Regionals, Zones, EWC, Nationals. Years: 2025, 2026.
+
+    Nationals is a single nationwide meet, not a per-zone stage like the
+    other three -- it is pooled by county anyway, for two reasons: it keeps
+    one shape across every stage instead of a special case, and it lets a
+    future per-region breakdown of the championship (e.g. travel-cost
+    reporting) reuse this file without a second extraction. Boundary Studio
+    sums across counties to get the real national total per event cell.
 
 COUNTY RESOLUTION
     Deliberately does NOT re-geocode. membership-analytics/boundary-data.json
@@ -32,7 +39,10 @@ ENTRY COUNTING
 SAFETY
     Refuses to write if the rebuilt Regionals/Zones pools drift from the
     existing file by more than TOLERANCE. A rebuild that cannot reproduce the
-    pools we already trust must not be allowed to overwrite them.
+    pools we already trust must not be allowed to overwrite them. This only
+    guards stages already present in the prior file -- adding a new stage
+    (Nationals, the first time this runs after this change) is not checked
+    against anything, since there is nothing prior to compare it to.
 
 Env: DATABASE_URL (Neon). Run by .github/workflows/build-advance-data.yml.
 """
@@ -56,6 +66,9 @@ STAGE_ALIASES = {
     "EWC": "EWC",
     "E/W/C": "EWC",
     "East/West/Central": "EWC",
+    "Nationals": "Nationals",
+    "National": "Nationals",
+    "Junior Nationals": "Nationals",
 }
 GROUP_CODE = {"Group A": "A", "Group B": "B", "Group C": "C", "Group D": "D"}
 GENDER_CODE = {"Boys": "B", "Girls": "G"}
