@@ -28,7 +28,6 @@ on:
   workflow_dispatch:
 
 jobs:
-jobs:
   test:
     name: npm test
     runs-on: ubuntu-latest
