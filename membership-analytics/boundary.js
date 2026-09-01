@@ -1127,12 +1127,35 @@ async function ensureMult(){
    So it is now one visible, editable rate per level, defaulted from the mean of
    the cells that WERE measured, and shown on the panel. A number this
    consequential should not be invisible. */
+/* Which real advancement stage a Boundary Studio level actually IS --
+   Regionals, Zones or EWC -- inferred from its own name, the same way
+   seedStage() already infers the first stop's feeder pool. This exists because
+   Pricing Studio's calibration is keyed by a FIXED position (0 Regionals,
+   1 Zones, 2 EWC) but a Boundary Studio scenario is free to drop a level --
+   a pathway that starts at Zones is one level shorter than the reference
+   structure, and reading calibration by raw index would silently hand EWC's
+   arrival rate to Zones, or Zones' rate to EWC. Naming the stage and looking
+   it up by name instead of position is what keeps the two arrays honest
+   about each other regardless of how many levels either one has.
+   National / the championship matches nothing here on purpose: Pricing
+   Studio's conv/directAt scheme never modelled arrival into the championship
+   (that comes from real Nationals entries loaded separately), so a level
+   named "National" correctly finds no stage and reports unmeasured. */
+function stageNameForLevel(L){
+  const n = String(tierName(L) || '').toLowerCase();
+  if (/region/.test(n)) return 'Regionals';
+  if (/zone/.test(n)) return 'Zones';
+  if (/east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n)) return 'EWC';
+  return null;
+}
+
 function measuredArrival(L){
   try {
     const k = window.JuniorFlow && window.JuniorFlow.constants
             ? window.JuniorFlow.constants(S.year) : null;
     if (!k || !k.usable) return null;
-    const lv = k.levels[L];
+    const stage = stageNameForLevel(L);
+    const lv = stage && k.byStage ? k.byStage[stage] : null;
     if (!lv || !lv.conv) return null;
     const vals = Object.keys(lv.conv).map(c => lv.conv[c]).filter(v => v > 0);
     if (!vals.length) return null;
@@ -1674,16 +1697,27 @@ function financialsFor(map){
       const $ = meetMoney(m);
       const t = tiers[m.level] || (tiers[m.level] = {
         name: tierName(m.level), meets:0, entries:0, gross:0, levy:0, host:0, usad:0,
-        sizes:[], days:0});
+        sizes:[], days:0, spots:0});
       t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy;
       t.host += $.host; t.usad += $.usad; t.sizes.push(m.entries);
       t.days = Math.max(t.days, m.minDays);
+      t.spots += m.spots;
     });
     Object.values(tiers).forEach(t => {
       const v = t.sizes.filter(x => x > 0);
       t.lo = v.length ? Math.min(...v) : 0;
       t.hi = v.length ? Math.max(...v) : 0;
       t.ratio = t.lo ? t.hi/t.lo : 0;
+    });
+    // Whether this tier's entries reflect measured, real-season attrition or
+    // (silently, otherwise) assume every qualifier turns up. Level 0 is always
+    // the real seeded pool for the chosen season -- not a rate applied to a
+    // model -- so it carries no separate "measured" question of its own.
+    Object.keys(tiers).forEach(L => {
+      const l = +L;
+      const t = tiers[L];
+      t.measured = l === 0 ? true : (measuredArrival(l) != null);
+      t.fill = t.spots ? t.entries / t.spots : null;
     });
     const total = Object.values(tiers).reduce((a,t) => ({
       meets:a.meets+t.meets, entries:a.entries+t.entries, gross:a.gross+t.gross,
@@ -1697,6 +1731,37 @@ function financialsFor(map){
     S.routing = snap.routing; S.flow = snap.flow; S._cr = snap.cr;
     S.finalName = snap.finalName;
   }
+}
+
+/* Same map, same rules, a different season's real entries seeded into it --
+   priced the way financialsFor(map) prices a different MAP: swap, compute,
+   restore. This is what lets "how would this map's zones actually have
+   filled" be answered for 2025 and 2026 side by side without the two calls
+   disturbing whichever season is live on the rest of the screen. */
+function financialsForYear(year){
+  const snap = {year: S.year, flow: S.flow};
+  try {
+    S.year = year;
+    S.flow = window.JuniorFlow.compute({
+      regions:S.regions, assign:S.assign, levels:S.levels,
+      finalName:S.finalName, year:S.year});
+    return financialsFor(null);
+  } catch(e){
+    console.error('financialsForYear', e); return null;
+  } finally {
+    S.year = snap.year; S.flow = snap.flow;
+  }
+}
+
+/* Does advance-data.json actually carry a real field for this stage in this
+   season? Regionals and Zones ran in both eras; East/West/Central is new to
+   2026 and 2025 has no such round to have measured. Checking the data rather
+   than hard-coding the rule year means this stays correct if the data build
+   ever back-fills more seasons. */
+function stageExists(stageName, year){
+  if (!stageName) return false;
+  const key = (year === 'y25' ? '2025' : '2026') + '|' + stageName;
+  return !!(S.advData && S.advData.pools && S.advData.pools[key]);
 }
 
 
@@ -1865,9 +1930,14 @@ function renderFinancials(){
   const levels = Object.keys(a.tiers).sort((x,y)=>x-y);
   const rows = levels.map(L => {
     const t = a.tiers[L], o = b && b.tiers[L];
+    const fillCell = t.spots
+      ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>`
+      : '<span class="bs-bd-0">no cap</span>';
     return `<tr>
-      <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span></td>
+      <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span>
+        ${t.measured ? '' : '<span class="bs-arr-m warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</td>
       <td class="num">${fmt(Math.round(t.entries))}${o?`<span class="bs-bd-rng">${dn(t.entries,o.entries)}</span>`:''}</td>
+      <td class="num">${fillCell}</td>
       <td class="num mono">${money(t.gross)}${o?`<span class="bs-bd-rng">${d(t.gross,o.gross)}</span>`:''}</td>
       <td class="num mono">${money(t.host)}</td>
       <td class="num mono"><b>${money(t.usad)}</b>${o?`<span class="bs-bd-rng">${d(t.usad,o.usad)}</span>`:''}</td>
@@ -1890,12 +1960,13 @@ function renderFinancials(){
         ${S.fees ? '<button class="tab bs-mini" id="bsFeeReset">back to published</button>' : ''}
       </div></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
-      <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Entry income</th>
+      <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Filled</th><th class="num">Entry income</th>
         <th class="num">To hosts</th><th class="num">USA Diving keeps</th>
         <th class="num">Biggest &divide; smallest</th></tr></thead>
       <tbody>${rows}
         <tr class="bs-bd-tot"><td><b>All tiers</b><span class="bs-mf-l">${fmt(tot.meets)} meets</span></td>
           <td class="num"><b>${fmt(Math.round(tot.entries))}</b>${otot?`<span class="bs-bd-rng">${dn(tot.entries,otot.entries)}</span>`:''}</td>
+          <td class="num"></td>
           <td class="num mono"><b>${money(tot.gross)}</b>${otot?`<span class="bs-bd-rng">${d(tot.gross,otot.gross)}</span>`:''}</td>
           <td class="num mono"><b>${money(tot.host)}</b></td>
           <td class="num mono"><b>${money(tot.usad)}</b>${otot?`<span class="bs-bd-rng">${d(tot.usad,otot.usad)}</span>`:''}</td>
@@ -1904,8 +1975,62 @@ function renderFinancials(){
     <p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
       less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
+      <b>Filled</b> is entries against the places the rules make available at that tier &mdash; capacity, not a
+      forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
       <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
       cannot be paid by one rule, whatever the rule is.</p>
+  </div>`;
+}
+
+/* This map's zones, run against 2025's and 2026's actual entries instead of
+   the model's take-up estimate -- the same map twice, not two maps. Where a
+   season really ran a stage (Regionals and Zones in both eras) the number is
+   the real reallocated field; where it did not (2025 had no East/West/Central
+   round, and no season here calibrates arrival into the championship) that is
+   said plainly rather than guessed at. */
+function renderYearFill(){
+  if (!S.advData || !S.advData.pools) return '';
+  const fy25 = financialsForYear('y25');
+  const fy26 = financialsForYear('y26');
+  if (!fy25 && !fy26) return '';
+  const levels = Array.from(new Set([
+    ...(fy25 ? Object.keys(fy25.tiers) : []),
+    ...(fy26 ? Object.keys(fy26.tiers) : []),
+  ])).sort((x,y) => x-y);
+  if (!levels.length) return '';
+
+  const cell = (f, L, year) => {
+    const t = f && f.tiers[L];
+    if (!t || !(t.entries > 0)) return '<span class="bs-bd-0">—</span>';
+    const l = +L;
+    const stage = stageNameForLevel(l);
+    // Level 0 is always the real seeded pool for that season if the pool
+    // exists at all; above that, "real" means the arrival rate was actually
+    // measured against that season, not just left at full take-up.
+    const real = l === 0 ? stageExists(stage || seedStage(), year) : t.measured;
+    const fillPct = t.spots ? `<span class="bs-bd-rng">${Math.round(t.fill*100)}% of places</span>` : '';
+    const flag = real ? '' : ' <span class="bs-arr-m warn">modelled</span>';
+    return `${fmt(Math.round(t.entries))}${fillPct}${flag}`;
+  };
+
+  const rows = levels.map(L => {
+    const name = (fy26 && fy26.tiers[L] && fy26.tiers[L].name) ||
+                 (fy25 && fy25.tiers[L] && fy25.tiers[L].name) || tierName(+L);
+    return `<tr><td><b>${esc(name)}</b></td>
+      <td class="num">${cell(fy25, L, 'y25')}</td>
+      <td class="num">${cell(fy26, L, 'y26')}</td></tr>`;
+  }).join('');
+
+  return `<div class="bs-bd" style="margin-top:16px">
+    <div class="bs-bd-h"><b>Real participation by season</b>
+      <span class="note">This map's zones, seeded from 2025's and 2026's actual entries reallocated
+        county by county &mdash; the same map run against two real seasons, not two different maps.
+        <b>Modelled</b> marks a tier that season has no recorded field for (2025 ran no East/West/Central
+        round, and no season here has a measured rate into the championship), so that figure assumes
+        every qualifier turns up rather than measuring who actually did.</span></div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
+      <thead><tr><th>Tier</th><th class="num">2025</th><th class="num">2026</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
   </div>`;
 }
 
@@ -3937,16 +4062,17 @@ function renderPathway(){
     ${probs ? `<ul class="bs-probs">${probs}</ul>` : ''}
     ${M==='structure' ? renderPathwayLibrary() + levels : ''}
     ${M==='projection' ? renderPathwayBreakdown(res) + renderMeetManifest(res) : ''}
-    ${M==='money'      ? renderFinancials() + `<details class="bs-tiers"><summary>What it costs an athlete to go</summary>${renderAthleteCost()}</details>` : ''}
+    ${M==='money'      ? renderFinancials() + renderYearFill() + `<details class="bs-tiers"><summary>What it costs an athlete to go</summary>${renderAthleteCost()}</details>` : ''}
     ${M==='schedule'   ? renderScheduleInspector(res) : ''}
     ${M==='compare'    ? renderCompareInspector() : ''}
     ${M==='report'     ? renderReportInspector() : ''}
-    ${(M==='projection' || M==='schedule') && (S.takeUp && S.takeUp.usable)
+    ${(M==='projection' || M==='schedule' || M==='money') && (S.takeUp && S.takeUp.usable)
       ? `<p class="note" style="margin-top:12px">The <b>arrive</b> figure on each level is how big that field
           actually turns out to be against the size the rules alone would send &mdash; above 100% means athletes
           arrive by the average-score route as well as the bands; below means qualified athletes decline.
           Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden. Places are counted,
-          never simulated: nothing here predicts who wins.</p>`
+          never simulated: nothing here predicts who wins.
+          ${M==='money' ? ' A tier still marked <b>not measured</b> below has no real season to check it against and assumes full turnout &mdash; treat that figure as a ceiling, not a forecast.' : ''}</p>`
       : `<div class="ps-warn" style="margin-top:12px"><b>These are qualified places, not expected entries.</b>
           ${S.takeUp && S.takeUp.fallback
             ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'

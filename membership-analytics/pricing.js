@@ -2364,7 +2364,20 @@ window.JuniorFlow = {
     // believing otherwise.
     const moved = levels.some(lv => Object.keys(lv.conv||{})
                     .some(c => Math.abs((lv.conv[c] ?? 1) - 1) > 0.01));
-    return {levels, observedAt: (cal.observedAt || []).slice(),
+    // Calibration is keyed by POSITION in Pricing Studio's own fixed structure
+    // (0 Regionals, 1 Zones, 2 EWC). A caller with a different level count or
+    // order -- Boundary Studio lets a scenario drop Regionals entirely and
+    // start at Zones -- must not read `levels[L]` by its own index, or it picks
+    // up a neighbouring stage's rate instead of the one it actually runs. This
+    // exposes the same numbers keyed by STAGE NAME instead, so a caller can
+    // look up "the rate for whichever stage this level actually is" regardless
+    // of where that stage sits in either side's array.
+    const byStage = {};
+    (cal.levels || []).forEach((k, L) => {
+      const st = stageForLevel(L);
+      if (st) byStage[st] = {conv: Object.assign({}, k.conv), directAt: Object.assign({}, k.directAt)};
+    });
+    return {levels, byStage, observedAt: (cal.observedAt || []).slice(),
             basis: cal.basis, year: cal.year, regions: cal.regions,
             fallbackBaseline: !!(FLOW.baseline && FLOW.baseline.fallback),
             usable: moved};
