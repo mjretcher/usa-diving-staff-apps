@@ -2154,10 +2154,11 @@ const TEMPLATES = [
     desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
     sections:['boundary_map','boundary_equity','boundary_balance'], years:[2025,2026], boundary:true },
 
-  { id:'realignment_compare', label:'Realignment — Before & After',
-    desc:'What changes versus the currently loaded comparison scenario: counties moved, members affected, and the balance either side.',
-    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_pathways_compared','boundary_circuit_delta','boundary_club_moves',
-              'boundary_balance'], years:[2025,2026], boundary:true },
+  { id:'realignment_compare', label:'Realignment — Before & After (full)',
+    desc:'The complete case for the loaded scenario -- map, structure, balance, competitive equity, tier rollups, the full qualification pathway and its billing, and the full schedule -- plus every delta against the currently loaded comparison scenario: counties moved, members affected, and pathways and field sizes set side by side.',
+    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_club_moves',
+              'boundary_balance','boundary_equity','boundary_tiers','boundary_pathway',
+              'boundary_pathways_compared','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
 
   { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',
     desc:'The document a rulebook edit needs: area definitions, profiles, and the full zip code appendix.',
