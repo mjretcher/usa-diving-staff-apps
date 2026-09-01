@@ -12,13 +12,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <!-- Shared config: sets window.USAD_CONFIG. On GitHub Pages this loads the real
-     data/config.js (unused by anything else in this file — safe no-op here).
-     On the Vercel read-only deployment, vercel.json rewrites this request to
-     the sanitized data/config.vercel.js instead, which sets neon.proxy = true
-     so the nq() function below (see "NEON" section) routes through the
-     server-side read-only proxy at /api/neon instead of the credential
-     hardcoded further down in this file. -->
+     data/config.js. Also read directly by usad-error-log.js just below; not
+     otherwise used by this file's own Neon calls (see "NEON" section, which
+     has its own credential), except that on the Vercel read-only deployment,
+     vercel.json rewrites this request to the sanitized data/config.vercel.js
+     instead, which sets neon.proxy = true so the nq() function below routes
+     through the server-side read-only proxy at /api/neon instead of the
+     credential hardcoded further down in this file. -->
 <script src="../data/config.js?v=202607262115"></script>
+<script src="../shared/usad-error-log.js?v=202609012030"></script>
 <link rel="stylesheet" href="sb-app.css?v=202608101639">
 </head>
 <body>

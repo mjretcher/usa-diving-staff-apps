@@ -1308,3 +1308,32 @@ ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_id TEXT;
 ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS diver2_name TEXT;
 ALTER TABLE core.result_phases ADD COLUMN IF NOT EXISTS team2_name TEXT;
 ALTER TABLE season_calendar.calendar ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+
+-- Client-side error monitoring (shared/usad-error-log.js). No app had any way
+-- to know a staff member hit a JS error in production unless they happened to
+-- mention it. INSERT-only for usad_app -- a browser can report an error but
+-- cannot read what other sessions have reported, matching the existing
+-- minimal-privilege pattern for this role rather than granting SELECT by default.
+CREATE TABLE IF NOT EXISTS app_meta.client_errors (
+    id          BIGSERIAL PRIMARY KEY,
+    app         TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    source      TEXT,
+    line        INTEGER,
+    col         INTEGER,
+    stack       TEXT,
+    url         TEXT,
+    user_agent  TEXT,
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_client_errors_occurred ON app_meta.client_errors(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_client_errors_app ON app_meta.client_errors(app);
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA app_meta TO usad_app;
+    GRANT INSERT ON app_meta.client_errors TO usad_app;
+    GRANT USAGE ON SEQUENCE app_meta.client_errors_id_seq TO usad_app;
+  END IF;
+END $$;
