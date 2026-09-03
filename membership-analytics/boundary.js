@@ -1249,7 +1249,7 @@ function renderSeedPoolPicker(){
     ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
   </div>`;
 }
-function seedPoolKey(){ return (S.year==='y25'?'2025':'2026') + '|' + seedStage(); }
+function seedPoolKey(){ return (S.year==='y24'?'2024':S.year==='y25'?'2025':'2026') + '|' + seedStage(); }
 function seedRows(){
   const n = Math.max(1, groupCountAt(0));
   const rows = Array.from({length:n}, () => ({}));
@@ -3165,6 +3165,7 @@ function maxCapacityEntries(){
    than a second one -- that property already existed before this feature. */
 async function entriesForSource(source){
   if (source === 'max') return maxCapacityEntries();
+  if (source === 'y24') return window.BoundaryAPI.withYear('y24', () => projectPathway());
   if (source === 'y25') return window.BoundaryAPI.withYear('y25', () => projectPathway());
   if (source === 'y26') return window.BoundaryAPI.withYear('y26', () => projectPathway());
   return projectPathway(); // 'projected': today's loaded year, calibrated

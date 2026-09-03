@@ -237,7 +237,7 @@ function allocate(poolKey, L){
   return {rows, un};
 }
 
-const yearNum  = () => (PS.year === 'y25' ? '2025' : '2026');
+const yearNum  = () => (PS.year === 'y24' ? '2024' : PS.year === 'y25' ? '2025' : '2026');
 const poolKey  = stage => yearNum() + '|' + stage;
 
 /* ==========================================================================
@@ -2333,7 +2333,7 @@ function calForYear(y){
 function computeFlowFor(struct){
   const saved = snapshotState();
   try {
-    const y = (struct.year === 'y25' || struct.year === 'y26') ? struct.year : PS.year;
+    const y = (struct.year === 'y24' || struct.year === 'y25' || struct.year === 'y26') ? struct.year : PS.year;
     const cal = calForYear(y);
     PS.regions = struct.regions || PS.regions;
     PS.assign  = struct.assign  || PS.assign;
@@ -2356,7 +2356,7 @@ window.JuniorFlow = {
      re-deriving it (and re-deriving it on a painted map is exactly the mistake
      that makes every hypothetical look like it changed nothing). */
   constants: (y) => {
-    const cal = calForYear((y === 'y25' || y === 'y26') ? y : PS.year);
+    const cal = calForYear((y === 'y24' || y === 'y25' || y === 'y26') ? y : PS.year);
     const levels = (cal.levels || []).map(k => ({conv: Object.assign({}, k.conv),
                                                  directAt: Object.assign({}, k.directAt)}));
     // Constants that are all exactly 1 are not measured behaviour, they are the

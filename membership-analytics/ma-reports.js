@@ -1193,6 +1193,7 @@ const BOUNDARY_SECTIONS = {
       let sourceRows = '';
       try {
         const maxRes = await api.entriesForSource('max');
+        const y24Res = await api.entriesForSource('y24');
         const y25Res = await api.entriesForSource('y25');
         const y26Res = await api.entriesForSource('y26');
         const stageOf = (L, rk) => {
@@ -1200,7 +1201,7 @@ const BOUNDARY_SECTIONS = {
             const f = R && R.field && R.field[L] && R.field[L][rk];
             return f ? f.reduce((s,g) => s + CELLS.reduce((s2,c) => s2+(g[c]||0), 0), 0) : null;
           };
-          return {max: total(maxRes), y25: total(y25Res), y26: total(y26Res)};
+          return {max: total(maxRes), y24: total(y24Res), y25: total(y25Res), y26: total(y26Res)};
         };
         const srows = [];
         routing.forEach((lvl2, L) => QRr.roundsOf(lvl2).forEach(r => {
@@ -1215,6 +1216,7 @@ const BOUNDARY_SECTIONS = {
             : (s.max!=null?fmt(Math.round(s.max)):'—');
           srows.push(`<tr><td>${esc(nm(L))}</td><td>${esc(QRr.ROUND_NAME[r.key] || r.key)}</td>
             <td class="mr-num">${maxCell}</td>
+            <td class="mr-num">${s.y24!=null?fmt(Math.round(s.y24)):'<span class="mr-soft">no 2024 data</span>'}</td>
             <td class="mr-num">${s.y25!=null?fmt(Math.round(s.y25)):'<span class="mr-soft">no 2025 data</span>'}</td>
             <td class="mr-num">${s.y26!=null?fmt(Math.round(s.y26)):'<span class="mr-soft">no 2026 data</span>'}</td></tr>`);
         }));
@@ -1273,18 +1275,20 @@ const BOUNDARY_SECTIONS = {
           divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
           of events away from what was measured, so read it as indicative.</p>
 
-        <h3 class="mr-h3">The same field, three ways</h3>
-        <p class="mr-p">These are three different kinds of number, not three estimates of the same one.
+        <h3 class="mr-h3">The same field, four ways</h3>
+        <p class="mr-p">These are four different kinds of number, not four estimates of the same one.
           <b>Max available</b> is a structural ceiling — every band saturated as if the real field were
           infinite, useful for sizing a venue's worst case, not for predicting turnout. It only means
           something for a stage a <em>rule</em> caps; the entry level itself has no such rule, so it shows
-          as not applicable rather than a number. <b>2025</b> and <b>2026</b> are what actually happened
-          those seasons, each calibrated to that season's own measured take-up where a real measurement
-          exists for that stage. A stage marked "no data" did not exist, or was not separately measured,
-          in that season.</p>
+          as not applicable rather than a number. <b>2024</b>, <b>2025</b>, and <b>2026</b> are what actually
+          happened those seasons, each calibrated to that season's own measured take-up where a real
+          measurement exists for that stage. 2024 is the last season the real system ran a genuine 3-stage
+          path — Region → Zone → Nationals, no E/W/C tier — which is structurally closer to what a 9-zone
+          proposal replaces it with than the real 2026 season is, even though the specific stages differ.
+          A stage marked "no data" did not exist, or was not separately measured, in that season.</p>
         <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th>
-          <th scope="col" class="mr-num">Max available</th><th scope="col" class="mr-num">2025</th>
-          <th scope="col" class="mr-num">2026</th></tr></thead>
+          <th scope="col" class="mr-num">Max available</th><th scope="col" class="mr-num">2024</th>
+          <th scope="col" class="mr-num">2025</th><th scope="col" class="mr-num">2026</th></tr></thead>
           <tbody>${sourceRows}</tbody></table>
 
         <h3 class="mr-h3">Every event, every round</h3>
