@@ -3460,9 +3460,27 @@ function summariseRouting(routing, label, notes){
       t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy; t.host += $.host; t.usad += $.usad;
       return acc;
     }, {gross:0, levy:0, host:0, usad:0});
+    // Places the rules entitle, before take-up -- the "qualifiers" a band sends.
+    let resQ = null;
+    try { resQ = projectPathway(false); } catch(e){ resQ = null; }
     const levels = routing.map((lvl, L) => {
       const stops = Math.max(1, groupCountAt(L));
       const rounds = QR().roundsOf(lvl);
+      let qualified = null;
+      if (L > 0 && resQ){ qualified = 0; for (let g = 0; g < stops; g++) qualified += QR().entriesAt(resQ, L, g, cells); }
+      const detail = rounds.map(r => {
+        const size = QR().sizeAt(res, L, r.key, cells);
+        const f = res.field[L] && res.field[L][r.key];
+        const routes = (lvl.routes || []).filter(rt => rt.from === r.key).map(rt => {
+          let sends = 0;
+          if (f) f.forEach(g => cells.forEach(c => { const ov = rt.byCell && rt.byCell[c]; sends += QR().bandCount(g[c] || 0, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi); }));
+          return {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi,
+                  toLevel: rt.to ? tierName(rt.to.level) : null, toIdx: rt.to ? rt.to.level : null,
+                  toRound: rt.to ? (QR().ROUND_NAME[rt.to.round] || rt.to.round) : null, sends};
+        });
+        return {key: r.key, name: QR().ROUND_NAME[r.key] || r.key, size, perStop: size / stops, routes};
+      });
+      const offered = cells.length - ((lvl.notOffered || []).length);
       // People AT this stage, which is everyone who joins it at any round --
       // not the size of its first round, which misses anyone seeded past it.
       let entry = 0;
@@ -3477,7 +3495,8 @@ function summariseRouting(routing, label, notes){
               // real field of the stage this level stands in for -- so a
               // projection is never shown without the actual beside it
               arrive: L === 0 ? null : arrivalRate(L), measured: L === 0 ? null : measuredArrival(L),
-              stage, actual: realStageField(stage, S.year)};
+              stage, actual: realStageField(stage, S.year),
+              qualified, detail, offered};
     });
     const sanityFlags = levels.filter(l => l.flagged);
     const last = routing.length - 1;
@@ -8058,6 +8077,19 @@ function atlasCompareHtml(){
       row('USA Diving keeps', 'entry fees only — membership dues are a separate stream', c => c.finance && c.finance.usad, usd),
     ].join('');
   }
+  // Structure & pathway: stops, rounds, qualifiers and the route bands, level by level.
+  const trow = (label, hint, get) => `<div class="name first">${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</div>` + C.map((c,i) => `<div class="txt ${i===C.length-1?'last':''}">${c.error ? '—' : (get(c) || '—')}</div>`).join('');
+  const nLevS = Math.max(0, ...C.map(c => (c.levels||[]).length));
+  const structRows = Array.from({length:nLevS}, (_,L) => {
+    const nm = (C.map(c => c.levels && c.levels[L] && c.levels[L].name).find(Boolean)) || ('Level ' + (L+1));
+    return trow(nm, 'stops · rounds · events offered', c => { const l = c.levels && c.levels[L]; return l ? `${esc(l.name)} · ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}` : null; })
+         + (L > 0 ? row(nm + ' — qualified places', 'what the bands send, before take-up', c => c.levels && c.levels[L] ? c.levels[L].qualified : null, fi) : '')
+         + row(nm + ' — entries', L > 0 ? 'after take-up' : 'the seeded field', c => c.levels && c.levels[L] ? c.levels[L].entries : null, fi)
+         + (L > 0 ? trow(nm + ' — take-up', '', c => { const l = c.levels && c.levels[L]; return l && l.arrive != null ? `${Math.round(l.arrive*100)}% ${l.measured != null ? 'measured' : 'assumed'}` : null; }) : '')
+         + trow(nm + ' — actual ' + yearNumBoundary(S.year), 'the real field of this stage', c => { const l = c.levels && c.levels[L]; return l && l.actual != null ? fmt(l.actual) : null; })
+         + trow(nm + ' — routes out', 'each band and how many it qualifies', c => { const l = c.levels && c.levels[L]; if (!l || !l.detail) return null; const rts = l.detail.flatMap(r => r.routes.map(rt => `${esc(r.name)}: ${esc(routeText(rt))} (${fi(rt.sends)})`)); return rts.length ? rts.join('<br>') : 'nobody advances'; });
+  }).join('');
+  const structHead = nLevS ? `<div class="name first strong" style="grid-column:1 / -1;background:#f4f5f8">Structure &amp; pathway<small>qualified places are what the bands entitle; entries are who is expected after take-up</small></div>` : '';
   // Money by tier: the side-by-side financials, one row per level for income and for what USA Diving keeps.
   const nLevMoney = Math.max(0, ...C.map(c => (c.financeByLevel||[]).length));
   const moneyRows = Array.from({length:nLevMoney}, (_,L) => {
@@ -8074,13 +8106,20 @@ function atlasCompareHtml(){
     <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : asSaved ? 'each scenario as saved — its own map, pathway, fees and host model; only the season and the measured behaviour are shared' : 'same pathway, same fees, same season — only the map differs'} · Δ against ${esc(aShort)}</span></div>
     <div class="atl-scroll"><div class="atl-tbl atl-cmp-tbl" style="grid-template-columns:minmax(300px,1.8fr) repeat(${C.length},minmax(0,1fr));min-width:${300 + C.length*170}px">
       <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}" title="${esc(c.name)}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="atl-th-name">${esc(c.name)}</span></div>`).join('')}
-      ${rows}${moneyHead}${moneyRows}</div></div>
+      ${rows}${structHead}${structRows}${moneyHead}${moneyRows}</div></div>
     ${flags ? `<div class="atl-probs">${flags}</div>` : ''}${noted ? `<div class="atl-probs">${noted}</div>` : ''}
     <p class="atl-note" style="margin-top:12px">${onPath
       ? 'Each route band sets the size of the meet it feeds, so widening how many leave the first stop changes how big the next meet is — it does <i>not</i> change the championship field, which is capped by the last route into it. If the top line has not moved, the change you made was upstream of what sets it.'
       : asSaved ? `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} can come from the map, the pathway or the fees — open Maps only or Pathways only to isolate one.`
     : `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} is caused by the map and nothing else.`}</p></div>`;
   return bar + maps + table;
+}
+
+/* "places 1–12 → East, West, Central preliminaries" */
+function routeText(rt){
+  const band = rt.hi == null ? `places ${rt.lo} and below` : rt.lo === rt.hi ? `place ${rt.lo}` : `places ${rt.lo}–${rt.hi}`;
+  if (!rt.toLevel) return band + ' out';
+  return `${band} → ${rt.toLevel} ${String(rt.toRound||'').toLowerCase()}`;
 }
 
 /* One column of figures per scenario, laid out like the Overview's KPI tiles:
@@ -8098,7 +8137,7 @@ function atlasScorecardHtml(C, cols, axis){
     return ` <span class="delta ${(inverse ? !up : up) ? 'up' : 'down'}">${up?'+':'−'}${f(Math.abs(v-b))}</span>`;
   };
   const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
-  const tile = (o) => `<div class="atl-kpi ${o.sm?'sm':''}" style="--c:${o.c}">${o.label ? `<div class="lbl">${o.label}</div>` : ''}<div class="big">${o.big}</div>${o.chip ? `<span class="chip ${o.chipCls||''}">${o.chip}</span>` : ''}${o.sub ? `<div class="sub">${o.sub}</div>` : ''}</div>`;
+  const tile = (o) => `<div class="atl-kpi ${o.sm?'sm':''}" style="--c:${o.c}">${o.label ? `<div class="lbl">${o.label}</div>` : ''}<div class="big">${o.big}</div>${o.chip ? `<span class="chip ${o.chipCls||''}">${o.chip}</span>` : ''}${o.sub ? `<div class="sub">${o.sub}</div>` : ''}${o.extra ? `<div class="rnds">${o.extra}</div>` : ''}</div>`;
 
   // The season that actually ran.
   const stages = [['Regionals','Regionals'],['Zones','Zones'],['EWC','East / West / Central'],['Nationals', S.finalName || 'Nationals']];
@@ -8117,7 +8156,10 @@ function atlasScorecardHtml(C, cols, axis){
       const a = A.levels && A.levels[L];
       const take = L === 0 ? 'open entry' : (l.measured != null ? `take-up ${pct(l.arrive)} measured` : `take-up ${pct(l.arrive)} assumed`);
       const actual = l.actual != null ? ` · actual ${yr}: <b>${fmt(l.actual)}</b>` : '';
-      return tile({c: tag, sm:true, label: esc(l.name) + ` <span class="c-faint">· ${l.stops} ${l.stops===1?'stop':'stops'}</span>`, big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : ''), sub: take + actual});
+      const qual = (L > 0 && l.qualified != null) ? `qualified places <b>${fi(l.qualified)}</b>${i ? dl(l.qualified, a && a.qualified, fi) : ''} · ` : '';
+      const rounds = (l.detail || []).map(r => `<div class="rnd"><span>${esc(r.name)} · <b>${fi(r.perStop)}</b> per stop</span>${r.routes.length ? r.routes.map(rt => `<div class="rt">${esc(routeText(rt))} <b>${fi(rt.sends)}</b> qualify</div>`).join('') : `<div class="rt c-faint">nobody advances${L === lv.length-1 ? ' — the championship final' : ''}</div>`}</div>`).join('');
+      return tile({c: tag, sm:true, label: esc(l.name) + ` <span class="c-faint">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'} · ${l.offered != null ? l.offered + ' events' : ''}</span>`,
+        big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : ''), sub: qual + take + actual, extra: rounds});
     }).join('');
     return `<div class="atl-kpi-col">
       <div class="atl-kpi-head"><span class="atl-let" style="background:${tag}">${CMP_LET[i]}</span><b title="${esc(col.name)}">${esc(col.name)}</b><small>${i === 0 ? 'baseline for every delta' : 'Δ against ' + esc(cols[0].name.length > 28 ? cols[0].name.slice(0,26) + '…' : cols[0].name)}</small></div>
@@ -8191,7 +8233,7 @@ function atlasReportHtml(res){
   const paperId = 'CC-' + new Date().toISOString().slice(0,7);
   const C = (S.cmpRes && S.cmpRes.length >= 2 && (S.cmpAxis||'scenario') !== 'pathway') ? S.cmpRes : null;
   const cmpAsSaved = (S.cmpAxis||'scenario') === 'scenario';
-  const nPages = C ? 5 : 4;
+  const nPages = C ? 6 : 4;
   const mx = maxCapacitySummary();
   const yf = yearFillRows();
   const n = S.regions.length;
@@ -8316,14 +8358,32 @@ function atlasReportHtml(res){
       row('Competition days, all meets', c => c.daysTotal, fi, true),
       row('Entry income, season', c => c.finance && c.finance.gross, usd),
       row('USA Diving keeps', c => c.finance && c.finance.usad, usd),
+      ...Array.from({length: Math.max(0, ...C.map(c => (c.levels||[]).length))}, (_,L) => {
+        const nm = (C.map(c => c.levels && c.levels[L] && c.levels[L].name).find(Boolean)) || ('Level ' + (L+1));
+        return (L > 0 ? row(nm + ' — qualified places', c => c.levels && c.levels[L] ? c.levels[L].qualified : null, fi) : '')
+             + row(nm + ' — entries', c => c.levels && c.levels[L] ? c.levels[L].entries : null, fi);
+      }),
       ...Array.from({length: Math.max(0, ...C.map(c => (c.financeByLevel||[]).length))}, (_,L) => {
         const nm = (C.map(c => c.financeByLevel && c.financeByLevel[L] && c.financeByLevel[L].name).find(Boolean)) || ('Level ' + (L+1));
         return row(nm + ' — entry income', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].gross : null, usd)
              + row(nm + ' — USA Diving keeps', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].usad : null, usd);
       }),
     ].join('');
-    pC = `<article class="atl-pg" data-screen-label="Report exhibit C">${head2('Exhibit C')}
-      ${rt('exC', 'Exhibit C. Scenarios side by side', 'div', 'atl-ex')}
+    const nLevC = Math.max(0, ...C.map(c => (c.levels||[]).length));
+    const structCols = `<div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:0;border:1px solid #c9d0dc;margin-top:12px;font-size:9pt;line-height:1.35">${cols.map((col,i) => { const c = col.c; return `<div style="padding:8px 10px;border-right:1px solid #c9d0dc;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;color:#171f69"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(col.name)}</span></div>
+        ${c.error ? `<div style="color:#b3122b">${esc(c.error)}</div>` : (c.levels||[]).map((l,L) => `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eceff4">
+          <div style="font-weight:600;color:#0f1633">${esc(l.name)} <span style="color:#6b7385;font-weight:400">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}</span></div>
+          <div><span class="mono">${fmt(Math.round(l.entries))}</span> entries${L > 0 && l.qualified != null ? ` from <span class="mono">${fmt(Math.round(l.qualified))}</span> qualified places at take-up ${Math.round((l.arrive||1)*100)}% ${l.measured != null ? '(measured)' : '(assumed)'}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span>` : ''}</div>
+          ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify</div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
+        </div>`).join('')}</div>`; }).join('')}</div>`;
+    pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C')}
+      ${rt('exC1', 'Exhibit C. Scenarios side by side — structure and pathway', 'div', 'atl-ex')}
+      ${rt('exC1s', 'Each column is a scenario\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Entries are who is expected to arrive after take-up; the actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
+      ${structCols}
+      ${pageFoot(4)}</article>
+    <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}
+      ${rt('exC', 'Exhibit C, continued. Maps and figures', 'div', 'atl-ex')}
       ${rt('exCs', `${cmpAsSaved ? 'Each scenario exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.`, 'div', 'atl-exs')}
       <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
       <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
@@ -8331,7 +8391,7 @@ function atlasReportHtml(res){
         ${rows}
       </div>
       ${rt('exCf', `Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against ${esc(aShort)} is better or worse for that line.`, 'p', 'atl-fn')}
-      ${pageFoot(4)}</article>`;
+      ${pageFoot(5)}</article>`;
   }
 
   // Page 4/5 -- changes + methodology
