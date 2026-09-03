@@ -4053,8 +4053,8 @@ function renderPathway(){
         ${L>0 ? `<label class="bs-arr">arrive
           <input class="bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}"
             value="${Math.round(arrivalRate(L)*100)}">%
-          ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}%</span>`
-            : `<span class="bs-arr-m warn">not measured</span>`}</label>` : ''}
+          ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))})</span>`
+            : `<span class="bs-arr-m warn">not measured${stageNameForLevel(L)?'':` — name "${esc(tierName(L))}" does not match a real stage`}</span>`}</label>` : ''}
         ${spare.length ? `<select class="sel bs-mini bs-rndadd" data-l="${L}">
           <option value="">+ add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
       </div>
