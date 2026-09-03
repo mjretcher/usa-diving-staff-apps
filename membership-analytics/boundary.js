@@ -3891,6 +3891,17 @@ async function freezeScenario(){
   if (note === null) return;
   S.frozen = {at: new Date().toISOString(), note, stamps: st, figures};
   S.dirty = true;
+  // The freeze on S.frozen lives inside the scenario row and can be removed
+  // by unfreezeScenario() -- appropriate for a working model, wrong for a
+  // record of what a committee was actually shown. This copy is independent
+  // of the scenario, INSERT-only, and survives an unfreeze, a re-freeze, or
+  // the scenario being deleted outright.
+  try {
+    await NEON.query(
+      `INSERT INTO app_meta.decision_ledger (app, kind, ref_id, label, inputs, outputs) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb)`,
+      ['boundary_studio', 'scenario_freeze', S.scenarioId, S.scenarioName.trim(),
+       JSON.stringify({note, stamps: st}), JSON.stringify(figures)]);
+  } catch(e){ console.error('decision_ledger write failed (freeze itself still succeeded):', e); }
   msg('Frozen. Save the scenario to write the record.');
   renderPanel();
 }
@@ -3979,8 +3990,32 @@ function renderFreezePanel(){
     <div class="bs-pwbar-r" style="margin-top:10px">
       <button class="tab bs-mini" id="bsFreeze">Re-freeze as it stands now</button>
       <button class="tab bs-mini" id="bsUnfreeze">Remove the freeze</button>
+      <button class="tab bs-mini" id="bsLedgerHist">Permanent record&hellip;</button>
     </div>
+    <div id="bsLedgerHistBox"></div>
   </div>`;
+}
+
+async function showLedgerHistory(){
+  const box = document.getElementById('bsLedgerHistBox');
+  if (!box || !S.scenarioId) return;
+  box.innerHTML = '<p class="note">Loading&hellip;</p>';
+  try {
+    const res = await NEON.query(
+      `SELECT label, outputs, recorded_at FROM app_meta.decision_ledger
+       WHERE app='boundary_studio' AND kind='scenario_freeze' AND ref_id=$1
+       ORDER BY recorded_at DESC LIMIT 20`, [S.scenarioId]);
+    const rows = res.rows || [];
+    box.innerHTML = `<div class="note" style="margin-top:8px"><b>Every freeze ever recorded for this scenario
+      &mdash; independent of "Remove the freeze" above, this list cannot be edited or deleted from the app.</b></div>
+      ${rows.length ? `<table class="bs-drill" style="margin-top:6px"><thead><tr>
+        <th>When</th><th>Note</th><th class="num">Championship field</th></tr></thead><tbody>
+        ${rows.map(r=>{
+          const o = typeof r.outputs==='string' ? JSON.parse(r.outputs) : (r.outputs||{});
+          return `<tr><td>${esc(String(r.recorded_at).slice(0,16).replace('T',' '))}</td>
+            <td>${esc(r.label||'')}</td><td class="num">${o.finalField!=null?fmt(Math.round(o.finalField)):'—'}</td></tr>`;
+        }).join('')}</tbody></table>` : '<p class="note">Nothing recorded yet for this scenario.</p>'}`;
+  } catch(e){ box.innerHTML = `<p class="note bs-warn">Could not load: ${esc(e.message||e)}</p>`; }
 }
 
 /* ---------- report tab ----------
@@ -4165,6 +4200,7 @@ function wirePathway(){
   _b('bsCsvManifest', exportManifestCsv);
   _b('bsCmpClear', ()=>{ S.cmpRes=null; renderPathway(); });
   _b('bsFreeze', freezeScenario);
+  _b('bsLedgerHist', showLedgerHistory);
   wireSchedule();
   _b('bsUnfreeze', unfreezeScenario);
   (document.getElementById('bsPathWrap')||document).querySelectorAll('[data-cmpaxis]').forEach(b=>

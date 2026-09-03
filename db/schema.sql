@@ -1329,12 +1329,42 @@ CREATE TABLE IF NOT EXISTS app_meta.client_errors (
 CREATE INDEX IF NOT EXISTS idx_client_errors_occurred ON app_meta.client_errors(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_client_errors_app ON app_meta.client_errors(app);
 
+-- ---------------------------------------------------------------------------
+-- Selection-integrity ledger. arbitration-precedent.md is explicit about what
+-- survives a Section 9 challenge: a number is only defensible if the exact
+-- inputs on the decision date can be reconstructed. Nothing in this system
+-- currently does that -- every analysis this season has lived in a chat
+-- transcript or a screenshot. This table is the fix: an append-only record of
+-- what a scenario looked like and what it projected, at the moment someone
+-- saved it. Not a report -- a permanent, timestamped, un-editable log.
+--
+-- INSERT and SELECT only, deliberately. No UPDATE, no DELETE granted to the
+-- browser role -- a record that could be edited after the fact is not a
+-- record. This does not make the table tamper-proof against someone with
+-- owner-level DB access; it does make it tamper-resistant against every
+-- ordinary path the app itself offers, which is the same bar client_errors
+-- already sets for itself above.
+CREATE TABLE IF NOT EXISTS app_meta.decision_ledger (
+    id          BIGSERIAL PRIMARY KEY,
+    app         TEXT NOT NULL,             -- 'boundary_studio', 'criteria_simulator', etc.
+    kind        TEXT NOT NULL,             -- 'scenario_save', 'criteria_publish', ...
+    ref_id      TEXT,                      -- the scenario/criteria id this snapshot belongs to
+    label       TEXT,                      -- human name at the time (names can be renamed later)
+    inputs      JSONB NOT NULL,            -- exact scenario data (assign/levels/routing/fees) as saved
+    outputs     JSONB,                     -- computed summary at save time (field sizes, sanity flags)
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_decision_ledger_ref  ON app_meta.decision_ledger(app, ref_id, recorded_at);
+CREATE INDEX IF NOT EXISTS idx_decision_ledger_kind ON app_meta.decision_ledger(kind, recorded_at);
+
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
     GRANT USAGE ON SCHEMA app_meta TO usad_app;
     GRANT INSERT ON app_meta.client_errors TO usad_app;
     GRANT USAGE ON SEQUENCE app_meta.client_errors_id_seq TO usad_app;
+    GRANT INSERT, SELECT ON app_meta.decision_ledger TO usad_app;
+    GRANT USAGE, SELECT ON SEQUENCE app_meta.decision_ledger_id_seq TO usad_app;
   END IF;
 END $$;
 
