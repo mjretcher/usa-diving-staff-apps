@@ -2118,6 +2118,11 @@ function renderMeetManifest(res){
   const meets = meetManifest(res);
   if (!meets.length) return '';
   const spread = tierSpread(meets);
+  const grand = meets.reduce((a,m) => {
+    const $ = meetMoney(m);
+    a.entries += m.entries; a.gross += $.gross; a.levy += $.levy; a.host += $.host; a.usad += $.usad;
+    return a;
+  }, {entries:0, gross:0, levy:0, host:0, usad:0});
   const COLS = 10;
   let lastLevel = null;
   const rows = meets.map(m => {
@@ -2199,7 +2204,15 @@ function renderMeetManifest(res){
         <th class="num">Entry income</th><th class="num">DiveMeets</th>
         <th class="num">Host cut</th><th class="num">USA Diving keeps</th>
         <th class="num">Days</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="bs-mf-grand">
+        <td><b>Whole season &mdash; every tier</b></td><td></td>
+        <td class="num mono"><b>${fmt(grand.entries)}</b></td><td></td><td></td>
+        <td class="num mono"><b>${usd(grand.gross)}</b></td>
+        <td class="num mono">&minus;${usd(grand.levy)}</td>
+        <td class="num mono">${usd(grand.host)}</td>
+        <td class="num mono"><b>${usd(grand.usad)}</b></td><td></td>
+      </tr></tfoot></table></div>
   </div>`;
 }
 
@@ -3250,6 +3263,16 @@ function summariseRouting(routing, label, notes){
     if (!res) return {label, notes, error: 'could not project'};
     const sched = computeSchedule(res);
     const cells = CELLS;
+    // Same meetMoney() the "Every meet" table and its CSV export already use --
+    // summed across every stop in the whole season, not reimplemented here.
+    // This is the number that answers "what does this proposal net USA Diving,
+    // all in" without cross-referencing Pricing Studio by hand.
+    const manifest = meetManifest(res);
+    const finance = manifest.reduce((acc, m) => {
+      const $ = meetMoney(m);
+      acc.gross += $.gross; acc.levy += $.levy; acc.host += $.host; acc.usad += $.usad;
+      return acc;
+    }, {gross:0, levy:0, host:0, usad:0});
     const levels = routing.map((lvl, L) => {
       const stops = Math.max(1, groupCountAt(L));
       const rounds = QR().roundsOf(lvl);
@@ -3282,7 +3305,7 @@ function summariseRouting(routing, label, notes){
     const st = sched.stops || [];
     return {
       label, notes,
-      levels, finalField, byGroup, sanityFlags,
+      levels, finalField, byGroup, sanityFlags, finance,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
       over:      st.filter(x=>x.daysOver).length,
@@ -3391,6 +3414,10 @@ function renderCompareInspector(){
       ${row('Events to look at', c=>c.review)}
       ${row('Pathway problems', c=>c.problems, v=>v?`<span class="under">${v}</span>`:'0')}
       ${row('Sanity check vs. real history', c=>(c.sanityFlags||[]).length, v=>v?`<span class="under">${v} above real ceiling</span>`:'clear')}
+      ${row('Entry income (season, all stops)', c=>c.finance&&c.finance.gross, v=>usd(v), 'published fee \u00d7 real entries, every stop')}
+      ${row('DiveMeets levy', c=>c.finance&&c.finance.levy, v=>'\u2212'+usd(v))}
+      ${row('Host cut', c=>c.finance&&c.finance.host, v=>usd(v), 'per the host-cut model on screen')}
+      ${row('USA Diving keeps (entry fees only)', c=>c.finance&&c.finance.usad, v=>usd(v), 'does not include membership dues \u2014 a separate revenue stream, shown for context in Membership Analytics')}
     </tbody></table></div>
     ${C.some(c=>(c.sanityFlags||[]).length) ? `<ul class="bs-probs">${C.filter(c=>(c.sanityFlags||[]).length).map(c=>`<li class="bs-prob warn">
       <b>${esc(c.label)}</b>: ${c.sanityFlags.map(f=>`${esc(f.name)} projects ${fmt(Math.round(f.entries))}, the highest real ${esc(f.refStage)} field ever run is ${fmt(f.historicalMax)}`).join('; ')}.
