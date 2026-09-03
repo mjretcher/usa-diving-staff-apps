@@ -232,6 +232,10 @@
       while (days.length < n) days.push({ used: {}, events: [], conflicts: [], laneLoad: {} });
       return days[n - 1];
     };
+    // A requested day count (the UI's "Add a day") has to exist before
+    // anything is placed, or the board-aware placement below never sees the
+    // extra day and it comes back empty every time.
+    if (minDays) ensure(minDays);
     var placed = [], auto = [];
     events.forEach(function (ev) {
       var d = manual[ev.id];
@@ -330,7 +334,6 @@
       day.laneLoad[lane] = (day.laneLoad[lane] || 0) + 1;
       day.events.push(ev);
     });
-    if (minDays) ensure(minDays);
     return days;
   }
 

@@ -7053,7 +7053,7 @@ function atlasPlaceSvg(){
 function atlasMapHtml(){
   const tv = S.tierView;
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
-  const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}">${esc(tierName(i))}</button>`).join('');
+  const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}" title="${esc(tierName(i))}">${esc(tierName(i))}</button>`).join('');
   const metric = S.atlMetric || 'members';
   const metricOpts = [['members','Members'],['athletes','Athletes'],['entries','Competing entries'],['coaches','Coaches'],['clubs','Clubs'],['zips','Zip codes'],['counties','Counties'],['age','Athletes by age group'],['comp','Competitors by event']]
     .map(([k,l]) => `<option value="${k}" ${metric===k?'selected':''}>${l}</option>`).join('');

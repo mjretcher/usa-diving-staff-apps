@@ -116,5 +116,26 @@ console.log('\n=== 5. conv (take-up rate) is not applied twice on an internal ro
   check('conv applied once (not twice) through a multi-round level: 3 arrive at Nationals, not ~1.5', nationalsArrivals === 3);
 })();
 
+console.log('\n=== 6. "Add a day" (minDays above what the meet needs) actually spreads events onto the new day ===');
+(function () {
+  const AGE = { A: 'Group A', B: 'Group B', C: 'Group C', D: 'Group D' }, GEN = { B: 'Boys', G: 'Girls' };
+  const DIS = { '1': '1-Meter', '3': '3-Meter', P: 'Platform' };
+  const cells = [];
+  ['A', 'B', 'C', 'D'].forEach(g => ['B', 'G'].forEach(x => ['1', '3', 'P'].forEach(d => cells.push(g + x + d))));
+  const rounds = [
+    { key: 'prelim', cells: Object.fromEntries(cells.map(c => [`${AGE[c[0]]}|${GEN[c[1]]}|${DIS[c[2]]}|prelim`, 60])) },
+    { key: 'final', cells: Object.fromEntries(cells.map(c => [`${AGE[c[0]]}|${GEN[c[1]]}|${DIS[c[2]]}|final`, 12])) },
+  ];
+  const spec = k => (k.split('|')[3] === 'final' ? { dives: 4, secondsPerDive: 35 } : { dives: 8, secondsPerDive: 35 });
+  const base = E.simulateStop({ stopName: 'test', rounds }, spec, null, null);
+  const more = E.simulateStop({ stopName: 'test', rounds }, spec, null, { minDays: base.totalDays + 1 });
+  const lastDay = more.days[more.days.length - 1];
+  const onLast = (lastDay.sessions || []).reduce((a, s) => a + s.events.length, 0);
+  check(`the added day (${more.totalDays} of them now) holds events, not nothing (${onLast} placed there)`, more.totalDays === base.totalDays + 1 && onLast > 0);
+  const dayOf = {};
+  more.days.forEach((day, di) => day.sessions.forEach(s => s.events.forEach(ev => { const pk = ev.group + '|' + ev.gender + '|' + ev.discipline; dayOf[pk] = dayOf[pk] || {}; dayOf[pk][ev.round] = di + 1; })));
+  check('prelim/final pairs still share a day after the spread', Object.values(dayOf).every(d => !(d.prelim && d.final) || d.prelim === d.final));
+})();
+
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);

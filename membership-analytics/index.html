@@ -823,8 +823,8 @@ tr[data-hl]:hover{background:#eef7fb}
    ========================================================================== */
 .atl{margin:0 -20px;background:#f4f5f8;color:#0f1633;font-family:'Inter',system-ui,sans-serif;font-size:14px;
   -webkit-font-smoothing:antialiased;min-height:calc(100vh - 56px);display:flex;flex-direction:column;position:relative}
-.atl button{font:inherit;cursor:pointer;color:inherit;border:0;background:none;padding:0;border-radius:0;box-shadow:none}
-.atl input,.atl select,.atl textarea{font:inherit;color:#0f1633}
+:where(.atl) button{font:inherit;cursor:pointer;color:inherit;border:0;background:none;padding:0;border-radius:0;box-shadow:none}
+:where(.atl) input,:where(.atl) select,:where(.atl) textarea{font:inherit;color:#0f1633}
 .atl a{color:#009ac7}
 .atl .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
 .atl .disp{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700}
@@ -943,10 +943,10 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-rail-id .mono{color:#171f69;overflow:hidden;text-overflow:ellipsis}
 .atl-rail-name{display:block;width:100%;margin-top:4px;border:0;padding:0;background:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;line-height:1.05;color:#0f1633;outline:none}
 .atl-rail-top .atl-seg{margin-top:14px}
-.atl-rail-top .atl-seg button{padding:7px 0}
+.atl-rail-top .atl-seg button{padding:7px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .atl-rail-sub{display:flex;align-items:center;justify-content:space-between;padding:14px 22px 6px;font-size:12.5px;color:#6b7385;gap:8px}
 .atl-rail-sub>span{white-space:nowrap;display:flex;align-items:center;gap:4px}
-.atl-rail-sub .atl-sel.quiet{padding-right:14px;font-size:12.5px}
+.atl-rail-sub .atl-sel.quiet{padding-right:14px;font-size:12.5px;flex:0 0 auto;width:auto;min-width:max-content}
 .atl-rail-sub>.atl-sel:not(.quiet){flex:0 1 auto;max-width:55%;overflow:hidden;text-overflow:ellipsis}
 .atl-rail-sub .atl-sel{padding:4px 8px;font-size:12.5px}
 .atl-rail-list{flex:1;overflow:auto;padding:0 12px 12px;min-height:0}
