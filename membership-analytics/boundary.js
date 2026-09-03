@@ -33,6 +33,20 @@ const GENS  = [{k:'B',label:'Boys'},{k:'G',label:'Girls'}];
 const DISCS = [{k:'1',label:'1 meter'},{k:'3',label:'3 meter'},{k:'P',label:'Platform'}];
 const CELLS = [];
 AGES.forEach(a=>GENS.forEach(g=>DISCS.forEach(d=>CELLS.push(a.k+g.k+d.k))));
+const BOARDS = [{k:'1', label:'1 meter', short:'1m'}, {k:'3', label:'3 meter', short:'3m'}, {k:'P', label:'Platform', short:'platform'}];
+const boardCells = b => CELLS.filter(c => c[2] === b);
+/* The band a route applies to one board: the per-cell override if the board
+   carries one (routing.js rt.byCell), else the route's own lo/hi. */
+function boardBand(rt, b){
+  const ov = rt.byCell ? boardCells(b).map(c => rt.byCell[c]).find(Boolean) : null;
+  return ov ? {lo: ov.lo || 1, hi: ov.hi == null ? null : ov.hi, own: true}
+            : {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi, own: false};
+}
+function routeSplitByBoard(rt){
+  if (!rt.byCell) return false;
+  const bands = BOARDS.map(b => boardBand(rt, b.k));
+  return bands.some(x => x.lo !== bands[0].lo || x.hi !== bands[0].hi);
+}
 const cellLabel = c => `${AGES.find(a=>a.k===c[0]).label} ${GENS.find(g=>g.k===c[1]).label} ${DISCS.find(d=>d.k===c[2]).label}`;
 
 const POOLS = [
@@ -2472,6 +2486,7 @@ function adaptPathway(p){
                  notOffered: (from.notOffered || []).slice(), routes: []};
     (from.routes || []).forEach(rt => {
       const copy = {from: rt.from, lo: rt.lo, hi: rt.hi};
+      if (rt.byCell) copy.byCell = JSON.parse(JSON.stringify(rt.byCell));
       if (rt.to){
         const to = mapLevel(rt.to.level);
         if (rt.to.level !== to && rt.to.level !== N - 1 && !seen['r'+L]){
@@ -3472,11 +3487,12 @@ function summariseRouting(routing, label, notes){
         const size = QR().sizeAt(res, L, r.key, cells);
         const f = res.field[L] && res.field[L][r.key];
         const routes = (lvl.routes || []).filter(rt => rt.from === r.key).map(rt => {
-          let sends = 0;
-          if (f) f.forEach(g => cells.forEach(c => { const ov = rt.byCell && rt.byCell[c]; sends += QR().bandCount(g[c] || 0, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi); }));
+          let sends = 0; const byBoard = {'1':0, '3':0, 'P':0};
+          if (f) f.forEach(g => cells.forEach(c => { const ov = rt.byCell && rt.byCell[c]; const n = QR().bandCount(g[c] || 0, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi); sends += n; byBoard[c[2]] += n; }));
           return {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi,
+                  bands: BOARDS.map(b => Object.assign({board: b.k}, boardBand(rt, b.k))), split: routeSplitByBoard(rt),
                   toLevel: rt.to ? tierName(rt.to.level) : null, toIdx: rt.to ? rt.to.level : null,
-                  toRound: rt.to ? (QR().ROUND_NAME[rt.to.round] || rt.to.round) : null, sends};
+                  toRound: rt.to ? (QR().ROUND_NAME[rt.to.round] || rt.to.round) : null, sends, byBoard};
         });
         return {key: r.key, name: QR().ROUND_NAME[r.key] || r.key, size, perStop: size / stops, routes};
       });
@@ -7476,7 +7492,7 @@ function atlasPathwayHtml(res){
       const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
       const size = QR().sizeAt(res, L, r.key, focus);
       const routes = outs.map(({rt,ri}) => `<div class="atl-route">
-          <span>places</span>
+          <span>${rt.byCell ? 'default places' : 'places'}</span>
           <input class="bs-rt-in" type="number" min="1" max="200" data-rt="lo" data-l="${L}" data-i="${ri}" value="${rt.lo||1}">
           <span>to</span>
           <span class="atl-step">
@@ -7489,7 +7505,16 @@ function atlasPathwayHtml(res){
           <span class="c-faint">·</span>
           <select class="bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
           <button class="bs-x" data-rtdel="${ri}" data-l="${L}" title="Remove this route">×</button>
-        </div>`).join('');
+          <button class="atl-link ${rt.byCell ? '' : 'quiet'}" data-rtboard="${L}|${ri}" title="${rt.byCell ? 'Back to one band for every board' : 'Give 1 meter, 3 meter and platform their own bands'}">${rt.byCell ? 'one band for all boards' : 'by board…'}</button>
+        </div>${rt.byCell ? BOARDS.map(b => { const bd = boardBand(rt, b.k); return `<div class="atl-route atl-route-board">
+          <span class="atl-board">${b.label}</span><span>places</span>
+          <input class="atl-in mono" type="number" min="1" max="200" data-rtb="lo" data-l="${L}" data-i="${ri}" data-board="${b.k}" value="${bd.lo}">
+          <span>to</span>
+          <span class="atl-step">
+            <button data-rtbstep="-1" data-l="${L}" data-i="${ri}" data-board="${b.k}" title="One fewer" ${bd.hi==null||bd.hi<=1?'disabled':''}>−</button>
+            <input class="atl-in mono bs-rt-hi-b" type="number" min="1" max="200" data-rtb="hi" data-l="${L}" data-i="${ri}" data-board="${b.k}" value="${bd.hi==null?'':bd.hi}" placeholder="∞">
+            <button data-rtbstep="1" data-l="${L}" data-i="${ri}" data-board="${b.k}" title="One more">+</button>
+          </span></div>`; }).join('') : ''}`).join('');
       const none = !outs.length ? `<div class="atl-none">${L === S.routing.length-1 && r === rounds[rounds.length-1]
         ? 'Nobody advances from here — this is the championship final.' : 'Nobody advances from here.'}</div>` : '';
       return `<div class="atl-round">
@@ -8087,7 +8112,7 @@ function atlasCompareHtml(){
          + row(nm + ' — entries', L > 0 ? 'after take-up' : 'the seeded field', c => c.levels && c.levels[L] ? c.levels[L].entries : null, fi)
          + (L > 0 ? trow(nm + ' — take-up', '', c => { const l = c.levels && c.levels[L]; return l && l.arrive != null ? `${Math.round(l.arrive*100)}% ${l.measured != null ? 'measured' : 'assumed'}` : null; }) : '')
          + trow(nm + ' — actual ' + yearNumBoundary(S.year), 'the real field of this stage', c => { const l = c.levels && c.levels[L]; return l && l.actual != null ? fmt(l.actual) : null; })
-         + trow(nm + ' — routes out', 'each band and how many it qualifies', c => { const l = c.levels && c.levels[L]; if (!l || !l.detail) return null; const rts = l.detail.flatMap(r => r.routes.map(rt => `${esc(r.name)}: ${esc(routeText(rt))} (${fi(rt.sends)})`)); return rts.length ? rts.join('<br>') : 'nobody advances'; });
+         + trow(nm + ' — routes out', 'each band and how many it qualifies', c => { const l = c.levels && c.levels[L]; if (!l || !l.detail) return null; const rts = l.detail.flatMap(r => r.routes.map(rt => `${esc(r.name)}: ${esc(routeText(rt))} · ${sendsText(rt)}`)); return rts.length ? rts.join('<br>') : 'nobody advances'; });
   }).join('');
   const structHead = nLevS ? `<div class="name first strong" style="grid-column:1 / -1;background:#f4f5f8">Structure &amp; pathway<small>qualified places are what the bands entitle; entries are who is expected after take-up</small></div>` : '';
   // Money by tier: the side-by-side financials, one row per level for income and for what USA Diving keeps.
@@ -8116,10 +8141,19 @@ function atlasCompareHtml(){
 }
 
 /* "places 1–12 → East, West, Central preliminaries" */
+function bandText(lo, hi){ return hi == null ? `places ${lo} and below` : lo === hi ? `place ${lo}` : `places ${lo}–${hi}`; }
 function routeText(rt){
-  const band = rt.hi == null ? `places ${rt.lo} and below` : rt.lo === rt.hi ? `place ${rt.lo}` : `places ${rt.lo}–${rt.hi}`;
+  const band = rt.split && rt.bands
+    ? rt.bands.map(b => `${bandText(b.lo, b.hi)} ${BOARDS.find(x => x.k === b.board).short}`).join(' / ')
+    : bandText(rt.lo, rt.hi);
   if (!rt.toLevel) return band + ' out';
   return `${band} → ${rt.toLevel} ${String(rt.toRound||'').toLowerCase()}`;
+}
+
+/* "1,338 qualify (1m 520 · 3m 520 · platform 298)" */
+function sendsText(rt){
+  const bb = rt.byBoard || {};
+  return `<b>${fmt(Math.round(rt.sends))}</b> qualify <span class="c-faint">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round(bb[b.k] || 0))).join(' · ')})</span>`;
 }
 
 /* One column of figures per scenario, laid out like the Overview's KPI tiles:
@@ -8157,7 +8191,7 @@ function atlasScorecardHtml(C, cols, axis){
       const take = L === 0 ? 'open entry' : (l.measured != null ? `take-up ${pct(l.arrive)} measured` : `take-up ${pct(l.arrive)} assumed`);
       const actual = l.actual != null ? ` · actual ${yr}: <b>${fmt(l.actual)}</b>` : '';
       const qual = (L > 0 && l.qualified != null) ? `qualified places <b>${fi(l.qualified)}</b>${i ? dl(l.qualified, a && a.qualified, fi) : ''} · ` : '';
-      const rounds = (l.detail || []).map(r => `<div class="rnd"><span>${esc(r.name)} · <b>${fi(r.perStop)}</b> per stop</span>${r.routes.length ? r.routes.map(rt => `<div class="rt">${esc(routeText(rt))} <b>${fi(rt.sends)}</b> qualify</div>`).join('') : `<div class="rt c-faint">nobody advances${L === lv.length-1 ? ' — the championship final' : ''}</div>`}</div>`).join('');
+      const rounds = (l.detail || []).map(r => `<div class="rnd"><span>${esc(r.name)} · <b>${fi(r.perStop)}</b> per stop</span>${r.routes.length ? r.routes.map(rt => `<div class="rt">${esc(routeText(rt))} ${sendsText(rt)}</div>`).join('') : `<div class="rt c-faint">nobody advances${L === lv.length-1 ? ' — the championship final' : ''}</div>`}</div>`).join('');
       return tile({c: tag, sm:true, label: esc(l.name) + ` <span class="c-faint">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'} · ${l.offered != null ? l.offered + ' events' : ''}</span>`,
         big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : ''), sub: qual + take + actual, extra: rounds});
     }).join('');
@@ -8375,7 +8409,7 @@ function atlasReportHtml(res){
         ${c.error ? `<div style="color:#b3122b">${esc(c.error)}</div>` : (c.levels||[]).map((l,L) => `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eceff4">
           <div style="font-weight:600;color:#0f1633">${esc(l.name)} <span style="color:#6b7385;font-weight:400">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}</span></div>
           <div><span class="mono">${fmt(Math.round(l.entries))}</span> entries${L > 0 && l.qualified != null ? ` from <span class="mono">${fmt(Math.round(l.qualified))}</span> qualified places at take-up ${Math.round((l.arrive||1)*100)}% ${l.measured != null ? '(measured)' : '(assumed)'}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span>` : ''}</div>
-          ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify</div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
+          ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify <span style="color:#9aa5b8">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round((rt.byBoard||{})[b.k] || 0))).join(' · ')})</span></div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
         </div>`).join('')}</div>`; }).join('')}</div>`;
     pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C')}
       ${rt('exC1', 'Exhibit C. Scenarios side by side — structure and pathway', 'div', 'atl-ex')}
@@ -8505,6 +8539,35 @@ function atlasMain(){
 function wireAtlasMain(main){
   const M = S.panelMode;
   const on = (sel, ev, fn) => main.querySelectorAll(sel).forEach(el => el.addEventListener(ev, fn));
+  if (M === 'structure'){
+    const touch = () => { markPathwayEdited(); repaintAll(); renderPathway(); };
+    // Split a route's band by board, or fold it back to one band. Splitting
+    // copies the current band to every board, so nothing moves until edited.
+    on('[data-rtboard]', 'click', e => {
+      const [L, i] = e.currentTarget.dataset.rtboard.split('|').map(Number);
+      const rt = S.routing[L] && S.routing[L].routes[i]; if (!rt) return;
+      pushUndo();
+      if (rt.byCell) delete rt.byCell;
+      else { rt.byCell = {}; CELLS.forEach(c => { rt.byCell[c] = {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi}; }); }
+      touch();
+    });
+    on('input[data-rtb]', 'change', e => {
+      const el = e.currentTarget, L = +el.dataset.l, i = +el.dataset.i, b = el.dataset.board, k = el.dataset.rtb;
+      const rt = S.routing[L] && S.routing[L].routes[i]; if (!rt) return;
+      pushUndo();
+      rt.byCell = rt.byCell || {};
+      const v = el.value === '' ? null : Math.max(1, Math.round(+el.value || 1));
+      boardCells(b).forEach(c => { const cur = rt.byCell[c] || {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi}; cur[k] = v; if (k === 'lo' && v == null) cur.lo = 1; rt.byCell[c] = cur; });
+      touch();
+    });
+    on('[data-rtbstep]', 'click', e => {
+      const b = e.currentTarget;
+      const input = main.querySelector(`input[data-rtb="hi"][data-l="${b.dataset.l}"][data-i="${b.dataset.i}"][data-board="${b.dataset.board}"]`);
+      if (!input) return;
+      input.value = Math.max(1, (input.value === '' ? 0 : +input.value) + (+b.dataset.rtbstep));
+      input.dispatchEvent(new Event('change', {bubbles:true}));
+    });
+  }
   if (M === 'projection'){
     on('[data-atlbdl]', 'click', e => { S.atlBdL = +e.currentTarget.dataset.atlbdl; S.atlBdR = null; atlasMain(); });
     on('[data-atlbdr]', 'click', e => { S.atlBdR = e.currentTarget.dataset.atlbdr; atlasMain(); });
