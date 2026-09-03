@@ -3003,8 +3003,14 @@ const STYLES = `
   #mr-output,#mr-output *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;
     color-adjust:exact !important}
   #mr-output .mr-h2{page-break-after:avoid}
+  #mr-output .mr-h3{page-break-after:avoid}
+  #mr-output table{page-break-after:auto}
   #mr-output .mr-table thead{display:table-header-group}
   #mr-output tr{page-break-inside:avoid}
+  #mr-output .mr-table{table-layout:auto;max-width:100%;font-size:10px}
+  #mr-output .mr-fg-tbl,#mr-output .bs-fg-tbl{font-size:8.5px}
+  #mr-output .mr-rules-grid{display:block}
+  #mr-output .mr-rules-col{margin-bottom:8px;page-break-inside:avoid}
   @page{margin:.55in}
 }
 
@@ -3013,8 +3019,12 @@ const STYLES = `
    little usable width once the viewport itself is only a few hundred px, and
    report tables run 5-9 columns wide, which will not reflow sanely at any
    width -- letting them scroll horizontally is the safe, well-established
-   fix, not attempting to reflow columns nobody has seen rendered. */
-@media (max-width: 600px){
+   fix, not attempting to reflow columns nobody has seen rendered.
+   Explicitly screen-only: overflow-x:auto does nothing useful on a printed
+   page (there is no scrolling), and leaving this unscoped risked being part
+   of why report tables were bleeding past the printed page edge instead of
+   shrinking or wrapping. */
+@media screen and (max-width: 600px){
   #mr-output .mr-doc{padding:18px 14px}
   #mr-output .mr-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;
     white-space:nowrap;max-width:100%}
