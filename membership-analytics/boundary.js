@@ -5232,13 +5232,14 @@ async function loadScenarioList(){
       parts.push(r.has_schedule ? 'schedule \u2713' : 'no schedule');
       return ` \u2014 ${parts.join(', ')}`;
     };
-    const sel = document.getElementById('bsLoad');
-    if (sel){
+    ['bsLoad', 'bsLoadRail'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
       const cur = sel.value;
-      sel.innerHTML = '<option value="">Load scenario&hellip;</option>' +
+      sel.innerHTML = `<option value="">${id === 'bsLoadRail' ? 'Open a saved scenario&hellip;' : 'Load scenario&hellip;'}</option>` +
         scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})${completeness(r)}</option>`).join('');
       if (cur && !S.scenarioId) sel.value = cur;
-    }
+    });
     const csel = document.getElementById('bsCompare');
     if (csel){
       csel.innerHTML = '<option value="">nothing&hellip;</option>' +
@@ -6904,6 +6905,7 @@ function atlasHeader(){
       <div><b>Boundary Studio</b><span>USA Diving · Membership Analytics</span></div></div>
     <nav class="atl-nav">${INSPECTORS.map(t => `<button data-atlnav="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}${t.k==='schedule'?'<span id="atlSchedBadge"></span>':''}</button>`).join('')}</nav>
     <div class="atl-head-r">
+      <button class="atl-btn" id="atlOpenBtn" title="Open a saved scenario, start a new one, export, season">Open ▾</button>
       <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Scenario menu: open, copy, delete, export, season">
         <span class="atl-dot"></span><span class="mono">${esc(S.scenarioId || 'unsaved')}</span>
         <span id="atlStatusText">${S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet')}</span>
@@ -6943,8 +6945,10 @@ function atlasHeader(){
   h.querySelectorAll('[data-atlnav]').forEach(b => b.addEventListener('click', () => {
     S.panelMode = b.dataset.atlnav; S.atlMenu = false; renderPanel(); refreshFlow();
   }));
-  const chip = $id('atlChip');
-  if (chip) chip.addEventListener('click', e => { e.stopPropagation(); S.atlMenu = !S.atlMenu; $id('atlMenu').hidden = !S.atlMenu; });
+  const toggle = e => { e.stopPropagation(); S.atlMenu = !S.atlMenu; $id('atlMenu').hidden = !S.atlMenu; if (S.atlMenu){ const l = $id('bsLoad'); if (l) l.focus(); } };
+  const chip = $id('atlChip'), ob = $id('atlOpenBtn');
+  if (chip) chip.addEventListener('click', toggle);
+  if (ob) ob.addEventListener('click', toggle);
   const menu = $id('atlMenu');
   if (menu) menu.addEventListener('click', e => e.stopPropagation());
   if (!S._atlDocClick){
@@ -7061,6 +7065,7 @@ function atlasMapHtml(){
       <div class="atl-rail-top">
         <div class="atl-rail-id"><span class="mono">${esc(S.scenarioId || 'unsaved')}</span><span>·</span><span>${S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}</span></div>
         <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
+        <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
       <div class="atl-rail-sub">
@@ -7217,6 +7222,9 @@ function wireAtlasMap(){
   }));
   const yr = $id('atlYear');
   if (yr) yr.addEventListener('change', () => { S.year = yr.value; repaintAll(); renderPanel(); });
+  const lr = $id('bsLoadRail');
+  if (lr) lr.addEventListener('change', () => { if (lr.value) loadScenario(lr.value); });
+  loadScenarioList();
   const mt = $id('atlMetric');
   if (mt) mt.addEventListener('change', () => { S.atlMetric = mt.value; atlasRailRows(computeTallies()); });
   main.querySelectorAll('[data-atltool]').forEach(b => b.addEventListener('click', () => {
