@@ -777,6 +777,15 @@ function renderPanel(){
   const _place = keepPlace('bsPanel');
   const y = S.year;
 
+  // Map and Structure are the two modes where the map itself is being
+  // actively worked with -- painting counties, watching areas update live.
+  // Every other tab is reading numbers derived from a map that's already
+  // set, so the map only needs to stay visible for reference, not compete
+  // for width with a table that has real columns to show.
+  const WIDE_MODES = ['projection','money','schedule','compare','report'];
+  const layoutEl = document.querySelector('.bs-layout');
+  if (layoutEl) layoutEl.classList.toggle('bs-layout-wide', WIDE_MODES.includes(S.panelMode));
+
   const tierBtns = Array.from({length:levelCount()}, (_,i)=>
     `<button data-tierv="${i}" class="${S.tierView===i?'on':''}">${esc(tierName(i))}</button>`).join('');
 
@@ -1548,7 +1557,7 @@ function renderPathwayBreakdown(res){
       const on = (S.bdCell === cell) ? ' class="bs-bd-on"' : '';
       return `<tr${on}><td class="bs-bd-cell">${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</td>${tds}</tr>`;
     })).join('');
-    return `<tr class="bs-bd-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
+    return `<tr class="bs-fg-grp"><td><b>${esc(AGE_LBL[ag])}</b></td>${sub}</tr>${rows}`;
   }).join('');
 
   const totals = cols.map(c => `<td class="num"><b>${show(agg(c, CELLS))}</b></td>`).join('');
@@ -1976,68 +1985,158 @@ function renderFinancials(){
   const d = (x,y) => {
     const v = x - y;
     if (Math.abs(v) < 1) return '<span class="bs-fd0">same</span>';
-    return `<span class="bs-fd-there">${usd(y)} there</span>
-      <span class="${v>0?'bs-fdup':'bs-fddn'}">(${v>0?'+':'\u2212'}${usd(Math.abs(v))})</span>`;
+    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'\u2212'}${usd(Math.abs(v))}</span>`;
   };
   const dn = (x,y) => {
     const v = Math.round(x - y);
     if (!v) return '<span class="bs-fd0">same</span>';
-    return `<span class="bs-fd-there">${fmt(y)} there</span>
-      <span class="${v>0?'bs-fdup':'bs-fddn'}">(${v>0?'+':'\u2212'}${fmt(Math.abs(v))})</span>`;
+    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'\u2212'}${fmt(Math.abs(v))}</span>`;
   };
 
   const levels = Object.keys(a.tiers).sort((x,y)=>x-y);
-  const rows = levels.map(L => {
-    const t = a.tiers[L], o = b && b.tiers[L];
-    const fillCell = t.spots
-      ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>`
-      : '<span class="bs-bd-0">no cap</span>';
-    return `<tr>
-      <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span>
-        ${t.measured ? '' : '<span class="bs-arr-m warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</td>
-      <td class="num">${fmt(Math.round(t.entries))}${o?`<span class="bs-bd-rng">${dn(t.entries,o.entries)}</span>`:''}</td>
-      <td class="num">${fillCell}</td>
-      <td class="num mono">${money(t.gross)}${o?`<span class="bs-bd-rng">${d(t.gross,o.gross)}</span>`:''}</td>
-      <td class="num mono">${money(t.host)}</td>
-      <td class="num mono"><b>${money(t.usad)}</b>${o?`<span class="bs-bd-rng">${d(t.usad,o.usad)}</span>`:''}</td>
-      <td class="num">${t.ratio ? t.ratio.toFixed(1)+'&times;' : '—'}
-        ${o&&o.ratio?`<span class="bs-bd-rng">${o.ratio.toFixed(1)}&times; there</span>`:''}</td>
-    </tr>`;
-  }).join('');
-
-  const tot = a.total, otot = b && b.total;
-  return `<div class="bs-bd">
-    <div class="bs-bd-h"><b>The money${b?` &mdash; against ${esc(S.compare.name)}`:''}</b>
-      <span class="note">${b
-        ? `Both priced the same way: same pathway engine, same fees, same host model, with only the map and its tiers changed. Deltas are this scenario against <b>${esc(S.compare.name)}</b>.`
-        : 'Load a comparison scenario on the map to price two side by side.'}</span>
-      <div class="bs-feebar">
+  const feeBar = `<div class="bs-feebar">
         <span class="bs-fee-lbl">Entry fee per tier</span>
         ${levels.map(L => `<label class="bs-fee">${esc(a.tiers[L].name)}
           $<input class="bs-rt-in" type="number" min="0" step="5" data-fee="${L}"
              value="${feeFor(+L)}"></label>`).join('')}
         ${S.fees ? '<button class="tab bs-mini" id="bsFeeReset">back to published</button>' : ''}
-      </div></div>
-    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
-      <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Filled</th><th class="num">Entry income</th>
-        <th class="num">To hosts</th><th class="num">USA Diving keeps</th>
-        <th class="num">Biggest &divide; smallest</th></tr></thead>
-      <tbody>${rows}
-        <tr class="bs-bd-tot"><td><b>All tiers</b><span class="bs-mf-l">${fmt(tot.meets)} meets</span></td>
-          <td class="num"><b>${fmt(Math.round(tot.entries))}</b>${otot?`<span class="bs-bd-rng">${dn(tot.entries,otot.entries)}</span>`:''}</td>
-          <td class="num"></td>
-          <td class="num mono"><b>${money(tot.gross)}</b>${otot?`<span class="bs-bd-rng">${d(tot.gross,otot.gross)}</span>`:''}</td>
-          <td class="num mono"><b>${money(tot.host)}</b></td>
-          <td class="num mono"><b>${money(tot.usad)}</b>${otot?`<span class="bs-bd-rng">${d(tot.usad,otot.usad)}</span>`:''}</td>
-          <td class="num"></td></tr>
-      </tbody></table></div>
-    <p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
+      </div>`;
+  const caveat = `<p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
       less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
       <b>Filled</b> is entries against the places the rules make available at that tier &mdash; capacity, not a
       forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
       <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
-      cannot be paid by one rule, whatever the rule is.</p>
+      cannot be paid by one rule, whatever the rule is.</p>`;
+
+  // No comparison loaded: the original single-scenario table, unchanged --
+  // grouped columns only mean something once there's a second scenario to
+  // put beside the first.
+  if (!b){
+    const rows = levels.map(L => {
+      const t = a.tiers[L];
+      const fillCell = t.spots
+        ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>`
+        : '<span class="bs-bd-0">no cap</span>';
+      return `<tr>
+        <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span>
+          ${t.measured ? '' : '<span class="bs-arr-m warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</td>
+        <td class="num">${fmt(Math.round(t.entries))}</td>
+        <td class="num">${fillCell}</td>
+        <td class="num mono">${money(t.gross)}</td>
+        <td class="num mono">${money(t.host)}</td>
+        <td class="num mono"><b>${money(t.usad)}</b></td>
+        <td class="num">${t.ratio ? t.ratio.toFixed(1)+'&times;' : '—'}</td>
+      </tr>`;
+    }).join('');
+    const tot = a.total;
+    return `<div class="bs-bd">
+      <div class="bs-bd-h"><b>The money</b>
+        <span class="note">Load a comparison scenario on the map to price two side by side.</span>
+        ${feeBar}</div>
+      <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
+        <thead><tr><th>Tier</th><th class="num">Entries</th><th class="num">Filled</th><th class="num">Entry income</th>
+          <th class="num">To hosts</th><th class="num">USA Diving keeps</th>
+          <th class="num">Biggest &divide; smallest</th></tr></thead>
+        <tbody>${rows}
+          <tr class="bs-bd-tot"><td><b>All tiers</b><span class="bs-mf-l">${fmt(tot.meets)} meets</span></td>
+            <td class="num"><b>${fmt(Math.round(tot.entries))}</b></td>
+            <td class="num"></td>
+            <td class="num mono"><b>${money(tot.gross)}</b></td>
+            <td class="num mono"><b>${money(tot.host)}</b></td>
+            <td class="num mono"><b>${money(tot.usad)}</b></td>
+            <td class="num"></td></tr>
+        </tbody></table></div>
+      ${caveat}
+    </div>`;
+  }
+
+  // A comparison is loaded: grouped columns, each scenario gets its own full
+  // set of figures side by side, rather than one column carrying this
+  // scenario's value with the other scenario's value and a delta both
+  // squeezed into the same cell. Needs real width to work, which is why
+  // renderPanel() puts the Money tab (and every other reading-only tab) in
+  // the wide layout, map demoted to a compact strip above instead of
+  // competing for width beside it.
+  const scenCols = (t, o) => {
+    const fillCell = t.spots
+      ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>`
+      : '<span class="bs-bd-0">no cap</span>';
+    return `<td class="num">${fmt(Math.round(t.entries))}</td>
+      <td class="num">${fillCell}</td>
+      <td class="num mono">${money(t.gross)}</td>
+      <td class="num mono">${money(t.host)}</td>
+      <td class="num mono"><b>${money(t.usad)}</b></td>
+      <td class="num">${t.ratio ? t.ratio.toFixed(1)+'&times;' : '—'}</td>`;
+  };
+  const deltaCols = (t, o) => `<td class="num bs-bd-rng">${dn(t.entries,o.entries)}</td>
+      <td class="num"></td>
+      <td class="num mono bs-bd-rng">${d(t.gross,o.gross)}</td>
+      <td class="num mono bs-bd-rng">${d(t.host,o.host)}</td>
+      <td class="num mono bs-bd-rng"><b>${d(t.usad,o.usad)}</b></td>
+      <td class="num bs-bd-rng">${(t.ratio&&o.ratio) ? d3(t.ratio-o.ratio) : ''}</td>`;
+  function d3(v){
+    if (Math.abs(v) < 0.05) return '<span class="bs-fd0">same</span>';
+    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'\u2212'}${Math.abs(v).toFixed(1)}&times;</span>`;
+  }
+
+  const rows2 = levels.map(L => {
+    const t = a.tiers[L], o = b.tiers[L];
+    return `<tr>
+      <td><b>${esc(t.name)}</b><span class="bs-mf-l">${fmt(t.meets)} ${t.meets===1?'meet':'meets'}</span>
+        ${t.measured ? '' : '<span class="bs-arr-m warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</td>
+      ${scenCols(t)}
+      <td class="bs-fg-sep"></td>
+      ${o ? scenCols(o) : '<td class="num" colspan="6">—</td>'}
+      <td class="bs-fg-sep"></td>
+      ${o ? deltaCols(t,o) : '<td class="num" colspan="6">—</td>'}
+    </tr>`;
+  }).join('');
+
+  const tot = a.total, otot = b.total;
+  const grandDelta = otot ? `<td class="num mono bs-bd-rng"><b>${dn(tot.entries,otot.entries)}</b></td><td></td>
+      <td class="num mono bs-bd-rng"><b>${d(tot.gross,otot.gross)}</b></td>
+      <td class="num mono bs-bd-rng"><b>${d(tot.host,otot.host)}</b></td>
+      <td class="num mono bs-bd-rng"><b>${d(tot.usad,otot.usad)}</b></td><td></td>` : '<td colspan="6"></td>';
+
+  return `<div class="bs-bd">
+    <div class="bs-bd-h"><b>The money &mdash; against ${esc(S.compare.name)}</b>
+      <span class="note">Both priced the same way: same pathway engine, same fees, same host model, with only
+        the map and its tiers changed.</span>
+      ${feeBar}</div>
+    <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl bs-fg-tbl">
+      <thead>
+        <tr><th></th>
+          <th colspan="6" class="bs-fg-grp bs-fg-a">${esc(S.scenarioName || 'This scenario')} <span class="bs-soft">on screen</span></th>
+          <th class="bs-fg-sep"></th>
+          <th colspan="6" class="bs-fg-grp bs-fg-b">${esc(S.compare.name)}</th>
+          <th class="bs-fg-sep"></th>
+          <th colspan="6" class="bs-fg-grp bs-fg-d">Difference</th>
+        </tr>
+        <tr class="bs-fg-sub"><th>Tier</th>
+          <th class="num">Entries</th><th class="num">Filled</th><th class="num">Income</th><th class="num">Hosts</th><th class="num">Keeps</th><th class="num">Ratio</th>
+          <th class="bs-fg-sep"></th>
+          <th class="num">Entries</th><th class="num">Filled</th><th class="num">Income</th><th class="num">Hosts</th><th class="num">Keeps</th><th class="num">Ratio</th>
+          <th class="bs-fg-sep"></th>
+          <th class="num">Entries</th><th class="num">Filled</th><th class="num">Income</th><th class="num">Hosts</th><th class="num">Keeps</th><th class="num">Ratio</th>
+        </tr>
+      </thead>
+      <tbody>${rows2}
+        <tr class="bs-bd-tot"><td><b>All tiers</b><span class="bs-mf-l">${fmt(tot.meets)} meets</span></td>
+          <td class="num mono"><b>${fmt(Math.round(tot.entries))}</b></td><td></td>
+          <td class="num mono"><b>${money(tot.gross)}</b></td>
+          <td class="num mono"><b>${money(tot.host)}</b></td>
+          <td class="num mono"><b>${money(tot.usad)}</b></td><td></td>
+          <td class="bs-fg-sep"></td>
+          <td class="num mono"><b>${otot?fmt(Math.round(otot.entries)):'—'}</b></td><td></td>
+          <td class="num mono"><b>${otot?money(otot.gross):'—'}</b></td>
+          <td class="num mono"><b>${otot?money(otot.host):'—'}</b></td>
+          <td class="num mono"><b>${otot?money(otot.usad):'—'}</b></td><td></td>
+          <td class="bs-fg-sep"></td>
+          ${grandDelta}
+        </tr>
+      </tbody></table></div>
+    ${caveat}
   </div>`;
 }
 

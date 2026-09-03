@@ -1912,6 +1912,27 @@ function todaysCuts(Q, cellKey, rank){
   return out.sort((a,b)=>a.cut-b.cut);
 }
 
+/* The real "how many advance out of this level" cutoff, read from whatever
+   scenario is actually on screen -- not a number baked into qual-data.json
+   at build time, which reflected the old top-15-from-Regions rule and has
+   no way to know a proposal now advances a different number. A level can
+   have more than one route leaving it (a prelim/final split sends some
+   people straight through and others via a second round with a different
+   cutoff); in that case there is no single clean "the bar," so this takes
+   the widest cutoff among routes that actually leave the level -- the last
+   rank with any path forward at all -- and flags that it's a simplification
+   rather than silently presenting it as one clean rule. */
+function realAdvanceRank(routing, level){
+  const lvl = routing && routing[level];
+  if (!lvl || !lvl.routes) return null;
+  const outRoutes = lvl.routes.filter(r => r.to && r.to.level > level && r.hi != null);
+  if (!outRoutes.length) return null;
+  const QRr = window.QualRouting;
+  const rounds = QRr ? QRr.roundsOf(lvl) : (lvl.rounds || []);
+  const simple = rounds.length <= 1 && outRoutes.length === 1;
+  return {rank: Math.max(...outRoutes.map(r => r.hi)), simple, routeCount: outRoutes.length};
+}
+
 const EQUITY_SECTIONS = {
 
   boundary_equity: {
@@ -1923,8 +1944,21 @@ const EQUITY_SECTIONS = {
       try { Q = await loadQual(); }
       catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — competitive equity</h2>
         <p class="mr-p mr-warn">Could not load the historical results data: ${esc(String(e.message||e))}</p></section>`; }
-      const rank = Q.advanceRank || 15;
-      const api = B(), TG = api.tierGroups();
+      const api = B();
+      const liveRank = realAdvanceRank(api.routing(), api.tierView());
+      const rank = liveRank ? liveRank.rank : (Q.advanceRank || 15);
+      const rankNote = !liveRank
+        ? `<p class="mr-note mr-warn">This level has no route advancing to a later one under the pathway on
+             screen, so there is no real "how many advance" figure to read here &mdash; showing the ${rank}th
+             place bar from the underlying data file instead. Switch to a level that actually advances
+             somewhere before trusting the numbers below.</p>`
+        : !liveRank.simple
+        ? `<p class="mr-note">This level sends people forward through ${liveRank.routeCount} different routes
+             (for example, a prelim/final split), so there is no single cutoff rank in the strict sense. The
+             ${rank}th place score below is the widest cutoff among those routes &mdash; the last rank with any
+             path forward at all, not a claim that everyone in ${esc(fmt(rank))}th place actually advances.</p>`
+        : '';
+      const TG = api.tierGroups();
       const nA = TG.groups.length;
       const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
 
@@ -2028,8 +2062,9 @@ const EQUITY_SECTIONS = {
         <h2 class="mr-h2">Realignment — competitive equity</h2>
         ${scenarioLine()}
         <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
-        experiences is the score they must post to get out of their Regional, and the top ${rank}
-        per springboard event advance. That bar is directly measurable.</p>
+        experiences is the score they must post to get out of ${esc((api.levels()[api.tierView()] && api.levels()[api.tierView()].name) || 'this stage')}, and the top
+        ${rank} advance. That bar is directly measurable.</p>
+        ${rankNote}
         <div class="mr-note"><b>Scope of this section — read before using any number below.</b>
           <ul style="margin:6px 0 0 16px;padding:0">
             <li><b>Gate modelled:</b> ${esc(Q.scope || '')}</li>
@@ -2044,7 +2079,9 @@ const EQUITY_SECTIONS = {
               proposal has a Regionals stage &mdash; the actual first gate becomes Zone &rarr; E/W/C. Using
               Regionals scores as the stand-in is reasonable because dive lists are unchanged, but it is a
               real interpretive step: this section estimates what the bar would have looked like at the old
-              first gate if it were redrawn, not a direct measurement of the new first gate.</li>
+              first gate if it were redrawn, not a direct measurement of the new first gate. The cutoff rank
+              used throughout (top ${rank}) is read from the pathway on screen's own advancement rule for
+              this stage, not a fixed historical constant, so it matches whatever the scenario actually says.</li>
           </ul>
           Every figure here is computed from those fields and nothing else. Gates beyond Regionals
           &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
