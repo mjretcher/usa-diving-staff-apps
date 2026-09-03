@@ -1023,6 +1023,15 @@ const BOUNDARY_SECTIONS = {
           ${levelRows}
         </tbody></table>
 
+        <h3 class="mr-h3">Championship field by age group and gender</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
+          ${(base.byGroup||[]).map((g,i) =>
+            row(g.label, c => (c.byGroup && c.byGroup[i]) ? c.byGroup[i].field : null)).join('')}
+        </tbody></table>
+        <p class="mr-note">The same "who reaches the top meet" figure as the headline above, split into the
+          eight groups a committee actually asks about, so a change concentrated in one group doesn't hide
+          inside a total that looks stable.</p>
+
         <h3 class="mr-h3">Money — entry fees only</h3>
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${financeRow('Entry income (gross)', f=>f.gross)}
