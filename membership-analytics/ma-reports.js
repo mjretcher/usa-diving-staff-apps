@@ -2586,7 +2586,17 @@ window._mrGenerate = async function(){
           Membership year(s): ${esc(opts.years.join(', '))}<br>
           Scope: <strong>${esc(scopeSummary(opts))}</strong><br>
           Sections: ${esc(ids.map(i => SECTIONS[i].label).join(' · '))}<br>
-          Data source: live Neon — membership.members, membership.sales_ledger, divemeets.meets
+          Data source: ${(() => {
+            const groups = new Set(ids.map(i => SECTIONS[i] && SECTIONS[i].group));
+            const hasMembership = groups.has('Membership');
+            const hasBoundary = groups.has('Boundary Studio');
+            const parts = [];
+            if (hasMembership) parts.push(`pulled live from USA Diving's membership and results records
+              (membership.members, membership.sales_ledger, divemeets.meets)`);
+            if (hasBoundary) parts.push(`the scenario and pathway open in Boundary Studio when this was
+              generated, plus historical results data for any section measuring real attrition`);
+            return esc(parts.join('; and '));
+          })()}
         </div>
       </div>
       <div id="mr-doc-body">
