@@ -1880,6 +1880,15 @@ function financialsForYear(year){
    2026 and 2025 has no such round to have measured. Checking the data rather
    than hard-coding the rule year means this stays correct if the data build
    ever back-fills more seasons. */
+function realChampionshipField(year){
+  const P = S.advData && S.advData.pools ? S.advData.pools[yearNumBoundary(year) + '|Nationals'] : null;
+  if (!P) return null;
+  let t = 0; for (const f in P) for (const c in P[f]) t += P[f][c];
+  return t;
+}
+/* Is this level the championship: the top level, with no real stage name of its own. */
+function isChampionshipLevel(L){ return L === S.routing.length - 1 && !stageNameForLevel(L); }
+
 function stageExists(stageName, year){
   if (!stageName) return false;
   const key = yearNumBoundary(year) + '|' + stageName;
@@ -2501,7 +2510,7 @@ async function savePathway(){
     S.pathList = await listPathways();
     msg(`Saved "${name}" — it can now be loaded onto any map.`);
     renderPathway();
-  } catch(e){ msg('Could not save: ' + (e.message || e)); }
+  } catch(e){ msg('Could not save the pathway: ' + neonMsg(e)); }
 }
 
 async function loadPathway(id){
@@ -2522,7 +2531,7 @@ async function loadPathway(id){
     S.dirty = true;
     syncRouting(); repaintAll(); renderPathway();
     msg(`Loaded "${r.rows[0].name}"` + (fit.notes.length ? ` — ${fit.notes.length} adjustment(s), see the panel.` : ''));
-  } catch(e){ msg('Could not load: ' + (e.message || e)); }
+  } catch(e){ msg('Could not load the pathway: ' + neonMsg(e)); }
 }
 
 async function deletePathway(){
@@ -2536,7 +2545,7 @@ async function deletePathway(){
     await NEON.query(`DELETE FROM membership.pathways WHERE id=$1`, [id]);
     S.pathList = await listPathways(); renderPathway();
     msg('Deleted.');
-  } catch(e){ msg('Could not delete: ' + (e.message || e)); }
+  } catch(e){ msg('Could not delete the pathway: ' + neonMsg(e)); }
 }
 
 
@@ -3396,6 +3405,24 @@ function withMap(map, fn){
   }
 }
 
+/* Run something with another scenario's fees, host model, arrival overrides,
+   seed pool and schedule decisions in force, then put everything back. Used
+   by the "as saved" comparison, where each column is a proposal exactly as
+   its author left it -- not one thing held still. */
+const SCENARIO_SETTINGS = ['fees','hostMode','hostShare','hostFlat','hostPer','hostMin','hostPer_stop',
+                           'arrival','seedPool','schedPlans','schedRules','tripCost','costEvents','costElastic'];
+function withScenarioSettings(d, fn){
+  const snap = {}; SCENARIO_SETTINGS.forEach(k => { snap[k] = S[k]; }); snap._cr = S._cr;
+  try {
+    SCENARIO_SETTINGS.forEach(k => { if (d[k] !== undefined) S[k] = d[k]; });
+    if (!S.schedPlans) S.schedPlans = {};
+    S._cr = null;
+    return fn();
+  } finally {
+    SCENARIO_SETTINGS.forEach(k => { S[k] = snap[k]; }); S._cr = snap._cr;
+  }
+}
+
 /* Everything a column needs, measured the same way for every variant. */
 function summariseRouting(routing, label, notes){
   return withRouting(routing, () => {
@@ -3408,9 +3435,12 @@ function summariseRouting(routing, label, notes){
     // This is the number that answers "what does this proposal net USA Diving,
     // all in" without cross-referencing Pricing Studio by hand.
     const manifest = meetManifest(res);
+    const financeByLevel = [];
     const finance = manifest.reduce((acc, m) => {
       const $ = meetMoney(m);
       acc.gross += $.gross; acc.levy += $.levy; acc.host += $.host; acc.usad += $.usad;
+      const t = financeByLevel[m.level] || (financeByLevel[m.level] = {name: m.levelName, meets:0, entries:0, gross:0, levy:0, host:0, usad:0});
+      t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy; t.host += $.host; t.usad += $.usad;
       return acc;
     }, {gross:0, levy:0, host:0, usad:0});
     const levels = routing.map((lvl, L) => {
@@ -3445,7 +3475,7 @@ function summariseRouting(routing, label, notes){
     const st = sched.stops || [];
     return {
       label, notes, routing,
-      levels, finalField, byGroup, sanityFlags, finance,
+      levels, finalField, byGroup, sanityFlags, finance, financeByLevel,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
       over:      st.filter(x=>x.daysOver).length,
@@ -3463,6 +3493,7 @@ function summariseRouting(routing, label, notes){
 async function buildComparison(ids, axis){
   if (!QR() || !S.flow || !S.routing) return null;
   const onPathways = (axis || 'pathway') === 'pathway';
+  const asSaved = axis === 'scenario';
   const baseLabel = onPathways ? currentPathwayLabel() : (S.scenarioName || 'This map');
   const cols = [summariseRouting(S.routing, baseLabel, null)];
 
@@ -3477,6 +3508,27 @@ async function buildComparison(ids, axis){
         // so a fitted pathway never reads as a clean like-for-like.
         const fit = adaptPathway(p);
         row = summariseRouting(fit.routing, r.rows[0].name, fit.notes);
+      } else if (asSaved){
+        // The scenario as its author left it: its own map, its own pathway,
+        // its own fees and host model. Nothing from the screen leaks in except
+        // the season and the measured behaviour, which are facts, not choices.
+        const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id]);
+        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        const map = {regions: d.regions, assign: d.assign,
+                     levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName};
+        const own = !!(d.routing && d.routing.length);
+        const routing = own ? JSON.parse(JSON.stringify(d.routing)) : null;
+        row = withScenarioSettings(d, () => withMap(map, notes => {
+          const rt = routing || S.routing;
+          const nn = (notes || []).concat(own ? [] : ['no pathway was saved with this scenario, so it runs under the pathway on screen']);
+          return summariseRouting(rt, r.rows[0].name, nn.length ? nn : null);
+        }));
+        if (row && !row.error){
+          row.map = map; row.asSaved = true;
+          try { Object.assign(row, withScenarioSettings(d, () => withRouting(routing || S.routing, () => mapExtras(map)))); }
+          catch(e){ console.warn('mapExtras', e); }
+        }
       } else {
         const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id]);
         if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
@@ -4409,7 +4461,7 @@ function wirePathway(){
   (document.getElementById('bsPathWrap')||document).querySelectorAll('[data-cmpaxis]').forEach(b=>
     b.addEventListener('click', ()=>{
       S.cmpAxis = b.dataset.cmpaxis; S.cmpIds = []; S.cmpRes = null;
-      if (S.cmpAxis === 'map' && !S.mapList){
+      if (S.cmpAxis !== 'pathway' && !S.mapList){
         loadMapList().then(()=>renderPathway());
       } else renderPathway();
     }));
@@ -5128,6 +5180,20 @@ function wireScenarioControls(P){
 }
 
 /* ---------- persistence ---------- */
+/* Neon returns its error as a JSON blob inside the message. Say the one thing
+   that matters in plain words; a permission failure names the table and says
+   where the grant lives, because that is the fix. */
+function neonMsg(e){
+  const raw = String((e && e.message) || e || '');
+  let m = raw, code = null;
+  try { const j = JSON.parse(raw.replace(/^.*?(\{.*\}).*$/s, '$1')); if (j && j.message){ m = j.message; code = j.code; } } catch(err){}
+  if (code === '42501' || /permission denied/i.test(m)){
+    const t = (m.match(/for (?:table|relation) (\S+)/) || [])[1];
+    return `the app's database role cannot write to ${t ? 'the ' + t + ' table' : 'this table'} yet. The grant is in db/schema.sql and applies on the next deploy.`;
+  }
+  return m;
+}
+
 function msg(t){
   if (atlasOn()){ atlasToast(t, /^(Saved|Frozen|Loaded|Deleted|Generated|Recoloured|Drew)/.test(t)); return; }
   const m=document.getElementById('bsMsg'); if(m){ m.textContent=t; setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, 4000);} }
@@ -5180,7 +5246,7 @@ async function saveScenario(asNew){
     scenarioListCache = null;
     msg((forking ? 'Saved a new scenario "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
-  } catch(e){ console.error(e); msg('Save failed: ' + (e.message||e)); }
+  } catch(e){ console.error(e); msg('Save failed: ' + neonMsg(e)); }
 }
 
 async function deleteScenario(){
@@ -5194,7 +5260,7 @@ async function deleteScenario(){
     msg('Deleted "' + S.scenarioName + '".');
     S.scenarioId = null; S.scenarioName = ''; S.dirty = true;
     renderPanel();
-  } catch(e){ console.error(e); msg('Delete failed: ' + (e.message||e)); }
+  } catch(e){ console.error(e); msg('Delete failed: ' + neonMsg(e)); }
 }
 
 async function loadCompare(id){
@@ -7363,7 +7429,7 @@ function atlasPathwayHtml(res){
     }
     const arrive = L > 0 ? `<div class="atl-arrive">Arrive <input class="atl-in mono bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}" value="${Math.round(arrivalRate(L)*100)}">%
         ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))})</span>`
-          : `<span class="bs-arr-m warn">not measured — assumes full turnout${stageNameForLevel(L)?'':` · "${esc(tierName(L))}" does not match a real stage`}</span>`}</div>` : '';
+          : `<span class="bs-arr-m warn">not measured — assumes full turnout${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field was ${fmt(realChampionshipField(S.year))} entries` : (stageNameForLevel(L)?'':` · "${esc(tierName(L))}" does not match a real stage`)}</span>`}</div>` : '';
     const roundRows = rounds.map(r => {
       const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
       const size = QR().sizeAt(res, L, r.key, focus);
@@ -7475,7 +7541,7 @@ function atlasProjectionHtml(res){
     return `<div class="atl-pipe-c">
       <div class="atl-pn">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
       <div class="atl-pv">${fmt(Math.round(entries))}</div>
-      <div class="atl-pd">entries${d && d.ok ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' · estimate'}` : ''}${t && !t.measured && L > 0 ? ' · <span class="c-warn">assumes full turnout</span>' : ''}</div>
+      <div class="atl-pd">entries${d && d.ok ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' · estimate'}` : ''}${t && !t.measured && L > 0 ? ' · <span class="c-warn">take-up not measured</span>' : ''}${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field <span class="mono c-navy">${fmt(realChampionshipField(S.year))}</span>` : ''}</div>
       <div class="atl-pf"><span>${t && t.spots ? `${Math.round(t.fill*100)}% of ${fmt(Math.round(t.spots))} places` : 'no cap — open entry'}</span>
         <span>biggest ÷ smallest <span class="mono">${t && t.ratio ? t.ratio.toFixed(1)+'×' : '—'}</span></span></div>
       ${L < nL-1 ? '<span class="atl-pipe-arrow">→</span>' : ''}
@@ -7564,7 +7630,7 @@ function atlasMoneyHtml(res){
   const tierRows = (f) => levels.map(L => {
     const t = f.tiers[L];
     if (!t) return `<div class="sub first pad">${esc(tierName(+L))}</div>${'<div class="num pad">—</div>'.repeat(6)}`;
-    return `<div class="sub first pad"><b style="font-weight:600">${esc(t.name)}</b><small>${fmt(t.meets)} ${t.meets===1?'meet':'meets'}${t.measured?'':' · <span class="c-warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</small></div>
+    return `<div class="sub first pad"><b style="font-weight:600">${esc(t.name)}</b><small>${fmt(t.meets)} ${t.meets===1?'meet':'meets'}${t.measured?'':' · <span class="c-warn" title="No measured take-up rate into this tier — this assumes every qualifier turns up.">take-up not measured</span>'}${isChampionshipLevel(+L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field ${fmt(realChampionshipField(S.year))}` : ''}</small></div>
       <div class="num pad">${fmt(Math.round(t.entries))}</div>
       <div class="num pad dim">${t.spots ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>` : '<span class="bs-bd-0">no cap</span>'}</div>
       <div class="num pad">${usd(t.gross)}</div>
@@ -7653,10 +7719,33 @@ function atlasMoneyHtml(res){
     <div class="atl-scroll"><div class="atl-tbl atl-hostmeet" style="min-width:600px">
       <div class="th first">Meet</div><div class="th num">Entries</div><div class="th num">Income</div><div class="th num">DiveMeets</div><div class="th num">Host cut</div><div class="th num last">Keeps</div>${hostRows}</div></div></details>`;
 
+  // Side by side, from whatever is pinned under Compare.
+  let side = '';
+  const CR = (S.cmpRes && S.cmpRes.length >= 2) ? S.cmpRes : null;
+  if (CR){
+    const axis = S.cmpAxis || 'scenario';
+    const names = CR.map((c,i) => i === 0 ? (axis === 'pathway' ? currentPathwayLabel() : scenarioLabel()) : c.label);
+    const nL = Math.max(0, ...CR.map(c => (c.financeByLevel||[]).length));
+    const cellD = (v, b, inv) => { if (b == null || v == null || Math.round(v) === Math.round(b)) return ''; const up = v > b; return `<span class="bs-bd-rng ${(inv ? !up : up) ? 'c-ok' : 'c-bad'}">${up?'+':'−'}${usd(Math.abs(v-b))}</span>`; };
+    const cellN = (v, b) => { if (b == null || v == null || Math.round(v) === Math.round(b)) return ''; const up = v > b; return `<span class="bs-bd-rng ${up ? 'c-ok' : 'c-bad'}">${up?'+':'−'}${fmt(Math.round(Math.abs(v-b)))}</span>`; };
+    const g = (c, L, k) => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L][k] : null;
+    const head = `<div class="th first">Tier</div>` + CR.map((c,i) => `<div class="th" style="grid-column:span 4;text-align:center;border-bottom:1px solid #dfe3ea"><span class="atl-let sm" style="background:${CMP_TAG[i]};vertical-align:middle;margin-right:6px">${CMP_LET[i]}</span>${esc(names[i])}</div>`).join('')
+      + `<div class="th first"></div>` + CR.map((c,i) => `<div class="th num">Entries</div><div class="th num">Income</div><div class="th num">Hosts</div><div class="th num ${i===CR.length-1?'last':''}">Keeps</div>`).join('');
+    const rowsS = Array.from({length:nL}, (_,L) => {
+      const nm = CR.map(c => g(c, L, 'name')).find(Boolean) || ('Level ' + (L+1));
+      return `<div class="first sub"><b style="font-weight:600">${esc(nm)}</b></div>` + CR.map((c,i) => c.error ? `<div class="c-bad" style="grid-column:span 4;font-size:12px">${esc(c.error)}</div>`
+        : `<div class="num">${g(c,L,'entries')==null?'—':fmt(Math.round(g(c,L,'entries')))}${i?cellN(g(c,L,'entries'), g(CR[0],L,'entries')):''}</div><div class="num">${g(c,L,'gross')==null?'—':usd(g(c,L,'gross'))}${i?cellD(g(c,L,'gross'), g(CR[0],L,'gross')):''}</div><div class="num dim">${g(c,L,'host')==null?'—':usd(g(c,L,'host'))}${i?cellD(g(c,L,'host'), g(CR[0],L,'host'), true):''}</div><div class="num c-navy ${i===CR.length-1?'last':''}" style="font-weight:600">${g(c,L,'usad')==null?'—':usd(g(c,L,'usad'))}${i?cellD(g(c,L,'usad'), g(CR[0],L,'usad')):''}</div>`).join('');
+    }).join('');
+    const tot = `<div class="tot first">All tiers</div>` + CR.map((c,i) => c.error ? '<div class="tot" style="grid-column:span 4"></div>' : `<div class="num tot">${fmt(Math.round((c.levels||[]).reduce((s,l)=>s+(l.entries||0),0)))}</div><div class="num tot">${usd(c.finance.gross)}${i?cellD(c.finance.gross, CR[0].finance.gross):''}</div><div class="num tot dim">${usd(c.finance.host)}${i?cellD(c.finance.host, CR[0].finance.host, true):''}</div><div class="num tot c-navy ${i===CR.length-1?'last':''}">${usd(c.finance.usad)}${i?cellD(c.finance.usad, CR[0].finance.usad):''}</div>`).join('');
+    side = `<div class="atl-h" style="margin-top:28px"><b>Side by side</b><span>${axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each scenario as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps'} · Δ against ${esc(names[0])} · pinned under Compare</span></div>
+      <div class="atl-scroll"><div class="atl-tbl" style="grid-template-columns:1.2fr repeat(${CR.length*4},minmax(88px,1fr));min-width:${300 + CR.length*360}px">${head}${rowsS}${tot}</div></div>`;
+  } else {
+    side = `<p class="atl-note" style="margin-top:22px"><b>Side by side.</b> Pin one or two saved scenarios under <button class="atl-link" data-atlnav-go="compare">Compare</button> and their entries, income, host payouts and what USA Diving keeps appear here tier by tier, with the difference against this scenario.</p>`;
+  }
   return `<div class="atl-page"><div class="atl-money-grid">
     <div>
       <div class="atl-h"><b>Entry income by tier</b><span>published fee × projected entries, less the DiveMeets pass-through</span></div>
-      ${table(a)}${caveat}${hostTable}${cmp}${cost}${yearFill}${atlasTakeUpNote('money')}
+      ${table(a)}${caveat}${side}${hostTable}${cmp}${cost}${yearFill}${atlasTakeUpNote('money')}
     </div>
     <aside class="atl-side">
       <div class="atl-navy"><div class="atl-nl">USA Diving keeps, entry fees only · season</div><div class="atl-nv">${usd(a.total.usad)}</div>
@@ -7682,8 +7771,14 @@ function yearFillRows(){
   if (!levels.length) return null;
   const cell = (f, L, year) => {
     const t = f && f.tiers[L];
+    const l = +L;
+    if (isChampionshipLevel(l)){
+      const real = realChampionshipField(year);
+      if (real != null) return {entries: real, real: true, actual: true,
+        html: `${fmt(real)}<span class="bs-bd-rng">actual entries</span>`};
+    }
     if (!t || !(t.entries > 0)) return {html:'<span class="bs-bd-0">—</span>', entries:null};
-    const l = +L, stage = stageNameForLevel(l);
+    const stage = stageNameForLevel(l);
     const real = l === 0 ? stageExists(stage || seedStage(), year) : t.measured;
     return {entries:t.entries, real,
       html: `${fmt(Math.round(t.entries))}${t.spots ? `<span class="bs-bd-rng">${Math.round(t.fill*100)}% of places</span>` : ''}${real ? '' : ' <span class="bs-arr-m warn">modelled</span>'}`};
@@ -7804,7 +7899,7 @@ function atlasScheduleHtml(res){
 const CMP_LET = ['A','B','C'], CMP_TAG = ['#171f69','#009ac7','#6b7385'];
 
 function atlasCompareHtml(){
-  const axis = S.cmpAxis || 'map', onPath = axis === 'pathway';
+  const axis = S.cmpAxis || 'scenario', onPath = axis === 'pathway', asSaved = axis === 'scenario';
   const lib = onPath ? (S.pathList || []) : (S.mapList || []).filter(x => x.id !== S.scenarioId);
   const C = S.cmpRes || [];
   const ids = S.cmpIds || [];
@@ -7814,6 +7909,7 @@ function atlasCompareHtml(){
       const lib1 = lib.find(x => x.id === id);
       return {id, name: (C[i+1] && C[i+1].label) || (lib1 && lib1.name) || id, live:false, row: C[i+1] || null};
     }));
+  const aName = cols[0].name, aShort = aName.length > 34 ? aName.slice(0,32).trim() + '…' : aName;
   const pins = cols.map((c,i) => `<div class="atl-pin ${i===0?'a':''}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
 <span class="atl-pn" title="${esc(c.name)}">${esc(c.name)}</span>
       ${i>0 ? `<button class="atl-x" data-unpin="${esc(c.id)}" title="Unpin">×</button>` : ''}</div>`).join('');
@@ -7823,15 +7919,16 @@ function atlasCompareHtml(){
     : (cols.length >= 3 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another scenario from the header menu'}.</span>`);
   const view = S.cmpView || 'side';
   const bar = `<div class="atl-cmp-bar">${pins}${pinSel}
-      <div class="atl-seg sm" style="margin-left:auto"><button data-cmpaxis="map" class="${!onPath?'on':''}">Maps</button><button data-cmpaxis="pathway" class="${onPath?'on':''}">Pathways</button></div>
+      <div class="atl-seg sm" style="margin-left:auto" title="What is allowed to differ between columns"><button data-cmpaxis="scenario" class="${asSaved?'on':''}" title="Each scenario exactly as saved: its own map, pathway, fees and host model">Scenarios as saved</button><button data-cmpaxis="map" class="${axis==='map'?'on':''}" title="Only the map differs; the pathway on screen runs over every map">Maps only</button><button data-cmpaxis="pathway" class="${onPath?'on':''}" title="Only the pathway differs; every column runs on this map">Pathways only</button></div>
       ${!onPath ? `<div class="atl-seg sm"><button data-atlcmpview="side" class="${view==='side'?'on':''}">Side by side</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Single map</button></div>
-      <label><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs A</label>` : ''}
+      <label title="Outline the counties that sit in a different area than in ${esc(aName)}"><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs ${esc(aShort)}</label>` : ''}
       <button class="atl-btn" id="atlGoReport">Build report →</button>
       ${S._cmpBusy ? '<span class="atl-note">Comparing…</span>' : ''}</div>`;
 
   if (cols.length < 2)
     return bar + `<div class="atl-cmp-empty">${onPath
       ? 'Pin one or two saved pathways to put beside the one on screen. Only the pathway changes between columns: the boundaries, the field each pathway starts from and the measured behaviour are held still.'
+      : asSaved ? 'Pin one or two saved scenarios. Each column is that scenario exactly as it was saved — its own map, pathway, fees and host model — so the comparison reads the way the proposals were written. Use Maps only or Pathways only to change one thing at a time.'
       : 'Pin one or two saved scenarios to put beside this map. Only the map changes between columns: the pathway, the season and the measured behaviour are held still.'}</div>`;
   if (!C.length || C.length < cols.length) return bar + '<div class="atl-cmp-empty">Comparing…</div>';
 
@@ -7865,8 +7962,8 @@ function atlasCompareHtml(){
     if (view === 'side'){
       maps = `<div class="atl-cmp-maps" style="grid-template-columns:repeat(${cols.length},1fr)">${cols.map((c,i) => {
         const r = C[i];
-        const cap = i === 0 ? 'baseline' : r.error ? esc(r.error) : (r.churn && r.churn.sameStructure)
-          ? `${fmt(r.churn.moved)} counties · ${fmt(r.churn.movedM)} members move vs A` : 'different structure — county moves not comparable';
+        const cap = i === 0 ? 'the baseline the others are measured against' : r.error ? esc(r.error) : (r.churn && r.churn.sameStructure)
+          ? `${fmt(r.churn.moved)} counties · ${fmt(r.churn.movedM)} members move vs ${esc(aShort)}` : 'different structure — county moves not comparable';
         const capCls = i === 0 ? 'c-muted' : (r.churn && r.churn.sameStructure) ? 'c-bad' : 'c-warn';
         return `<div class="atl-cmp-map"><div class="atl-mt"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><b>${esc(c.name)}</b></div>
           <svg viewBox="0 0 975 610" class="atl-static">${svgFor(i)}</svg><div class="atl-mc ${capCls}">${cap}</div></div>`;
@@ -7877,7 +7974,7 @@ function atlasCompareHtml(){
         <div class="atl-xlist"><span>Showing on the map</span>
           ${cols.map((c,i) => { const r = C[i]; return `<button class="atl-xrow ${i===xi?'on':''}" data-atlx="${i}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
             <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} ${esc(tierName(0).toLowerCase())} · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
-          <span class="faint">Hover a scenario to crossfade the fills. Counties that move vs A are outlined in red.</span></div></div>`;
+          <span class="faint">Hover a scenario to crossfade the fills. Counties that sit in a different area than in ${esc(aShort)} are outlined in red.</span></div></div>`;
     }
   }
 
@@ -7936,17 +8033,28 @@ function atlasCompareHtml(){
       row('USA Diving keeps', 'entry fees only — membership dues are a separate stream', c => c.finance && c.finance.usad, usd),
     ].join('');
   }
+  // Money by tier: the side-by-side financials, one row per level for income and for what USA Diving keeps.
+  const nLevMoney = Math.max(0, ...C.map(c => (c.financeByLevel||[]).length));
+  const moneyRows = Array.from({length:nLevMoney}, (_,L) => {
+    const nm = (C.map(c => c.financeByLevel && c.financeByLevel[L] && c.financeByLevel[L].name).find(Boolean)) || ('Level ' + (L+1));
+    return row(nm + ' — entries', 'people joining this tier', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].entries : null, fi)
+         + row(nm + ' — entry income', '', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].gross : null, usd)
+         + row(nm + ' — to hosts', '', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].host : null, usd)
+         + row(nm + ' — USA Diving keeps', '', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].usad : null, usd);
+  }).join('');
+  const moneyHead = nLevMoney ? `<div class="name first strong" style="grid-column:1 / -1;background:#f4f5f8">Money by tier<small>published fee × entries less the DiveMeets pass-through; host cut per each column's own model</small></div>` : '';
   const flags = C.filter(c => (c.sanityFlags||[]).length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b>: ${c.sanityFlags.map(f=>`${esc(f.name)} projects ${fmt(Math.round(f.entries))}, the highest real ${esc(f.refStage)} field ever run is ${fmt(f.historicalMax)}`).join('; ')}. Check the seed pool and route bands before using this number.</div>`).join('');
   const noted = C.filter(c => c.notes && c.notes.length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</div>`).join('');
   const table = `<div class="atl-cmp-body">
-    <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : 'same pathway, same fees, same season — only the map differs'} · Δ against A</span></div>
+    <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : asSaved ? 'each scenario as saved — its own map, pathway, fees and host model; only the season and the measured behaviour are shared' : 'same pathway, same fees, same season — only the map differs'} · Δ against ${esc(aShort)}</span></div>
     <div class="atl-scroll"><div class="atl-tbl atl-cmp-tbl" style="grid-template-columns:minmax(300px,1.8fr) repeat(${C.length},minmax(0,1fr));min-width:${300 + C.length*170}px">
       <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}" title="${esc(c.name)}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="atl-th-name">${esc(c.name)}</span></div>`).join('')}
-      ${rows}</div></div>
+      ${rows}${moneyHead}${moneyRows}</div></div>
     ${flags ? `<div class="atl-probs">${flags}</div>` : ''}${noted ? `<div class="atl-probs">${noted}</div>` : ''}
     <p class="atl-note" style="margin-top:12px">${onPath
       ? 'Each route band sets the size of the meet it feeds, so widening how many leave the first stop changes how big the next meet is — it does <i>not</i> change the championship field, which is capped by the last route into it. If the top line has not moved, the change you made was upstream of what sets it.'
-      : 'Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against A is caused by the map and nothing else.'}</p></div>`;
+      : asSaved ? `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} can come from the map, the pathway or the fees — open Maps only or Pathways only to isolate one.`
+    : `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} is caused by the map and nothing else.`}</p></div>`;
   return bar + maps + table;
 }
 
@@ -8004,7 +8112,8 @@ function atlasReportHtml(res){
   const id = S.scenarioId || 'unsaved';
   const name = scenarioLabel();
   const paperId = 'CC-' + new Date().toISOString().slice(0,7);
-  const C = (S.cmpRes && S.cmpRes.length >= 2 && (S.cmpAxis||'map') === 'map') ? S.cmpRes : null;
+  const C = (S.cmpRes && S.cmpRes.length >= 2 && (S.cmpAxis||'scenario') !== 'pathway') ? S.cmpRes : null;
+  const cmpAsSaved = (S.cmpAxis||'scenario') === 'scenario';
   const nPages = C ? 5 : 4;
   const mx = maxCapacitySummary();
   const yf = yearFillRows();
@@ -8083,7 +8192,7 @@ function atlasReportHtml(res){
                                : (L === S.routing.length-1 ? 'Championship final — nobody advances' : 'No route out of this level');
     const arrive = L === 0 ? `Open entry: real ${esc(seedStage())} ${yearNumBoundary(S.year)} field`
       : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))})`
-      : `Take-up ${Math.round(arrivalRate(L)*100)}%, not measured (ceiling)`;
+      : `Take-up ${Math.round(arrivalRate(L)*100)}%, not measured (ceiling)${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? `; real ${yearNumBoundary(S.year)} field ${fmt(realChampionshipField(S.year))}` : ''}`;
     const nMeets = t ? t.meets : groupCountAt(L);
     return `<div><div class="atl-en">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
       <div class="atl-ev">${fmt(Math.round(entries))}</div><div class="atl-ed">entries${d && d.ok ? ` · ${fmt(Math.round(d.divers))} divers${d.reliable?'':' (estimate)'}` : ''}</div>
@@ -8099,9 +8208,9 @@ function atlasReportHtml(res){
     <div class="atl-rt" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 1fr;margin-top:14px">
       <div class="th first">Entries by level</div><div class="th num">Projected</div><div class="th num">Maximum</div><div class="th num">Real 2024</div><div class="th num">Real 2025</div><div class="th num last">Real 2026</div>
       ${S.routing.map((lvl, L) => { let e = 0; for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) e += QR().entriesAt(res, L, g, CELLS); const y = yf && yf[L]; const cell = (i) => { const c = y && y.cells[i]; return c && c.entries != null ? fmt(Math.round(c.entries)) + (c.real ? '' : '<span style="color:#b45309"> mod.</span>') : '—'; }; return `<div class="first">${esc(tierName(L))}</div><div class="num">${fmt(Math.round(e))}</div><div class="num">${mx.maxLevels && mx.maxLevels[L] != null ? fmt(Math.round(mx.maxLevels[L])) : '<span style="color:#6b7385">no cap</span>'}</div><div class="num">${cell(0)}</div><div class="num">${cell(1)}</div><div class="num last">${cell(2)}</div>`; }).join('')}
-      <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div><div class="num">—</div><div class="num">—</div><div class="num last">—</div>
+      <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div>${['y24','y25','y26'].map((y,i) => { const r = realChampionshipField(y); return `<div class="num ${i===2?'last':''}">${r != null ? fmt(r) : '—'}</div>`; }).join('')}
     </div>
-    <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout.</p>
+    <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout. The championship's real columns are the actual ${esc(S.finalName||'championship')} entries, one meet, no reallocation — the projection has no measured take-up into the championship, so judge it against those.</p>
     ${rt('h3', '3. Meets, days and entry income', 'div', 'atl-sec m26')}
     <div class="atl-rt" style="grid-template-columns:1.6fr .9fr .8fr .8fr 1fr 1fr">
       <div class="th first">Tier</div><div class="th num">Entries</div><div class="th num">Meets</div><div class="th num">Do not fit</div><div class="th num">Entry income</div><div class="th num last">USA Diving keeps</div>
@@ -8116,6 +8225,7 @@ function atlasReportHtml(res){
   let pC = '';
   if (C){
     const cols = C.map((c,i) => ({name: i === 0 ? name : c.label, c}));
+    const aShort = name.length > 34 ? name.slice(0,32).trim() + '…' : name;
     const svgFor = (i) => { const c = C[i]; if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED); if (!c.map) return ''; const same = c.churn && c.churn.sameStructure; const changed = same ? (f => { const a = S.assign[f], b = c.map.assign[f]; const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name; const bn = (b==null||b<0||!c.map.regions[b]) ? null : c.map.regions[b].name; return an !== bn; }) : null; return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed}); };
     const dl = (v, b, f, inverse) => { if (b == null || v == null || !isFinite(v-b) || Math.round(v*10) === Math.round(b*10)) return ''; const up = v > b; return ` <span style="font-size:8.5pt;color:${(inverse ? !up : up) ? '#15803d' : '#b3122b'}">${up?'+':'−'}${f(Math.abs(v-b))}</span>`; };
     const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
@@ -8129,16 +8239,21 @@ function atlasReportHtml(res){
       row('Competition days, all meets', c => c.daysTotal, fi, true),
       row('Entry income, season', c => c.finance && c.finance.gross, usd),
       row('USA Diving keeps', c => c.finance && c.finance.usad, usd),
+      ...Array.from({length: Math.max(0, ...C.map(c => (c.financeByLevel||[]).length))}, (_,L) => {
+        const nm = (C.map(c => c.financeByLevel && c.financeByLevel[L] && c.financeByLevel[L].name).find(Boolean)) || ('Level ' + (L+1));
+        return row(nm + ' — entry income', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].gross : null, usd)
+             + row(nm + ' — USA Diving keeps', c => c.financeByLevel && c.financeByLevel[L] ? c.financeByLevel[L].usad : null, usd);
+      }),
     ].join('');
     pC = `<article class="atl-pg" data-screen-label="Report exhibit C">${head2('Exhibit C')}
       ${rt('exC', 'Exhibit C. Scenarios side by side', 'div', 'atl-ex')}
-      ${rt('exCs', 'The same pathway, fees and season run over each map; only the boundaries differ. Counties outlined in red move relative to A. Changes are shown against A.', 'div', 'atl-exs')}
-      <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline for the deltas' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs A` : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
+      ${rt('exCs', `${cmpAsSaved ? 'Each scenario exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.`, 'div', 'atl-exs')}
+      <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
       <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
-        <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span></div>`).join('')}
+        <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Inter',sans-serif">${esc(c.name)}</span></div>`).join('')}
         ${rows}
       </div>
-      ${rt('exCf', 'Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against A is better or worse for that line.', 'p', 'atl-fn')}
+      ${rt('exCf', `Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against ${esc(aShort)} is better or worse for that line.`, 'p', 'atl-fn')}
       ${pageFoot(4)}</article>`;
   }
 
@@ -8259,6 +8374,7 @@ function wireAtlasMain(main){
     // [data-bd] mode buttons are bound by wirePathway() (.bs-bdseg) in classic; here they need their own.
     on('[data-bd]', 'click', e => { S.bdMode = e.currentTarget.dataset.bd; atlasMain(); });
   }
+  main.querySelectorAll('[data-atlnav-go]').forEach(b => b.addEventListener('click', () => { S.panelMode = b.dataset.atlnavGo; renderPanel(); refreshFlow(); }));
   if (M === 'compare'){
     // The classic [data-cmpaxis] handler (wirePathway) resets picks and re-renders; add the atlas rebuild.
     const pin = $id('atlPin');
@@ -8279,7 +8395,7 @@ function wireAtlasMain(main){
     const rp = $id('atlReportPins');
     if (rp) rp.addEventListener('click', () => { S.panelMode = 'compare'; renderPanel(); refreshFlow(); });
     // A baseline loaded but nothing pinned yet: build the side-by-side from it once.
-    if (!S.cmpRes && S.compare && !S._repCmpTried){ S._repCmpTried = S.compare.id; S.cmpAxis = 'map'; S.cmpIds = [S.compare.id]; atlasRebuildCompare().then(() => { if (S.panelMode === 'report') atlasMain(); }); }
+    if (!S.cmpRes && S.compare && !S._repCmpTried){ S._repCmpTried = S.compare.id; S.cmpAxis = 'scenario'; S.cmpIds = [S.compare.id]; atlasRebuildCompare().then(() => { if (S.panelMode === 'report') atlasMain(); }); }
     else if (S.compare && S._repCmpTried && S._repCmpTried !== S.compare.id){ S._repCmpTried = null; }
     const pr = $id('atlPrint');
     if (pr) pr.addEventListener('click', () => window.print());
@@ -8308,7 +8424,7 @@ function atlasKeys(e){
 
 /* Boot either presentation into #viewBoundary. */
 function atlasBootView(el){
-  S.cmpAxis = S.cmpAxis === 'pathway' && S.cmpRes ? 'pathway' : 'map';
+  if (!S.cmpRes) S.cmpAxis = 'scenario';
   atlasBoot(el);
   renderMapOnce();
   wireMap();

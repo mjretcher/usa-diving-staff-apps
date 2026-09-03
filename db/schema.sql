@@ -1216,11 +1216,15 @@ BEGIN
     -- pricing_scenarios so Scenario Schedule Studio can save without a
     -- separate hand-run GRANT (the exact bug that silently broke Pricing
     -- Studio saves before this list existed).
+    -- membership.pathways is the saved-pathway library Boundary Studio writes
+    -- from the browser ("Save this pathway"). It was created above but never
+    -- listed here, so every save failed with 42501 in the browser.
     GRANT INSERT, UPDATE, DELETE ON
       membership.boundary_scenarios,
       membership.pricing_scenarios,
       membership.scenario_schedules,
-      membership.schedule_templates
+      membership.schedule_templates,
+      membership.pathways
       TO usad_app;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
     -- The default privilege is what stops this recurring: a table added later
