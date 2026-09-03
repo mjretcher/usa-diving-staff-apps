@@ -1778,6 +1778,8 @@ const BOUNDARY_SECTIONS = {
         }).join('') + '</tr>';
       };
 
+      const ds = api.stamps ? api.stamps() : null;
+
       return `<section class="mr-section">
         <h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
         <div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
@@ -1790,14 +1792,20 @@ const BOUNDARY_SECTIONS = {
           qualify straight to Nationals, places 9\u201324 continue to an E/W/C <em>final</em>, and the top of that
           final also qualifies — currently set to the top ${DEFAULT_CAP}. The two proposals sit on the identical
           9-zone map, so every difference between them below is the rule, not the geography. Volume for both
-          is the real 2026 Zone-level field, redrawn onto that map — no invented numbers.</p>
+          is the real 2026 Zone-level field, redrawn onto that map, <b>then calibrated to that season's own
+          measured take-up</b> — the share of qualifiers at each stage who actually showed up, not a structural
+          ceiling assuming every one of them does. A stage with no real measurement to calibrate against would
+          say so; none does here.</p>
         <p class="mr-note mr-soft"><b>Computed from:</b>
           "${esc(byId[OLD_SEED_ID].name)}" (${esc(OLD_SEED_ID)}, saved ${esc(String(byId[OLD_SEED_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
           "${esc(byId[CCE_ID].name)}" (${esc(CCE_ID)}, saved ${esc(String(byId[CCE_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
-          "${esc(byId[COUNTER_ID].name)}" (${esc(COUNTER_ID)}, saved ${esc(String(byId[COUNTER_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC).
+          "${esc(byId[COUNTER_ID].name)}" (${esc(COUNTER_ID)}, saved ${esc(String(byId[COUNTER_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          real entry data built ${esc(ds && ds.advance_data ? String(ds.advance_data).slice(0,10) : 'unknown')}.
           Report generated ${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC. If any of these three
           scenarios has been edited since the timestamp shown for it, the numbers above no longer reflect what's
-          currently saved — regenerate this section rather than trust a printed copy.</p>
+          currently saved — regenerate this section rather than trust a printed copy. Because the real entry data
+          is rebuilt as results keep coming in, regenerating this same report on a different day can legitimately
+          show different figures without either version being wrong.</p>
 
         <h3 class="mr-h3">Junior Nationals prelim field</h3>
         <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
