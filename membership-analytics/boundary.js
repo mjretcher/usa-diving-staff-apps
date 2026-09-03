@@ -1022,6 +1022,7 @@ function renderNamesPanel(){
     <div class="bs-namebar">${lvlInputs}</div>
     <div class="bs-tier-grid">${cols.join('')}</div>
     <div class="note" style="margin-top:6px">Level 1 is the map you paint. Everything above it is just grouping — name the levels whatever the committee is calling them.</div>
+    ${renderSeedPoolPicker()}
   </details>`;
 }
 
@@ -1175,13 +1176,42 @@ function arrivalRate(L){
    girls 25 platform entries where the real Zone field is 136. Inferred from the
    level's own name, and shown so it can be corrected. */
 const SEED_STAGES = ['Regionals','Zones','EWC','Nationals'];
-function seedStage(){
-  if (S.seedPool) return S.seedPool;
+function seedStageInferred(){
   const n = String(tierName(0)||'').toLowerCase();
   if (/zone/.test(n)) return 'Zones';
   if (/east|west|central|e\/w\/c/.test(n)) return 'EWC';
   if (/national/.test(n)) return 'Nationals';
   return 'Regionals';
+}
+function seedStage(){
+  if (S.seedPool) return S.seedPool;
+  return seedStageInferred();
+}
+
+/* Which real field seeds Level 1 used to be guessed silently from Level 1's
+   name -- right for a scenario that keeps Regionals as-is and only redraws
+   Zones-and-up, wrong for a scenario that DELETES a stage and has Level 1
+   absorb its job (a "Zones" that is really doing Regionals' old work gets
+   seeded from the real, already-filtered Zone field, which is too small by
+   construction and understates every number above it). Surfacing the choice
+   here, instead of leaving it to a name match, is the fix: whoever builds the
+   scenario sees it and can correct it, rather than the tool guessing wrong in
+   a way nobody notices until the numbers don't add up. */
+function renderSeedPoolPicker(){
+  const inferred = seedStageInferred();
+  const effective = seedStage();
+  const overridden = !!S.seedPool;
+  const total = seedTotal();
+  return `<div class="note bs-seedpool" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bs-line,#e5e7eb)">
+    <label class="bs-tier-row"><span class="bs-lvl">Seed Level 1 (${esc(tierName(0))}) from</span>
+      <select class="sel" id="bsSeedPool">
+        <option value="" ${!overridden?'selected':''}>Auto (currently: ${inferred})</option>
+        ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
+      </select>
+    </label>
+    <div style="margin-top:4px">Currently seeding from real <b>${effective} ${S.year==='y25'?'2025':'2026'}</b> data — ${total.toLocaleString()} real entries, before this level's own advancement rule is applied.
+    ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
+  </div>`;
 }
 function seedPoolKey(){ return (S.year==='y25'?'2025':'2026') + '|' + seedStage(); }
 function seedRows(){
@@ -4663,6 +4693,17 @@ function wirePanel(){
     clearTimeout(S._nameT); S._nameT = setTimeout(renderNumbers, 200);
   });
 
+  const seedSel = document.getElementById('bsSeedPool');
+  if (seedSel) seedSel.addEventListener('change', ()=>{
+    pushUndo();
+    S.seedPool = seedSel.value || null;   // '' -> back to auto-detect
+    S.dirty = true;
+    refreshFlow(); repaintAll(); renderPanel();
+    msg(seedSel.value
+      ? `Level 1 will seed from real ${seedSel.value} data.`
+      : `Level 1 seed pool set back to auto-detect (currently: ${seedStageInferred()}).`);
+  });
+
   P.querySelectorAll('.bs-psel').forEach(sel=>sel.addEventListener('change',()=>{
     pushUndo();
     S.levels[+sel.dataset.lvl].of[+sel.dataset.gi] = +sel.value;
@@ -4926,7 +4967,12 @@ function exportCsv(){
 }
 
 function exportAdvCsv(){
-  if (!S.flow){ msg('Open "Who moves up" first so the pathway is worked out.'); return; }
+  if (!S.flow){
+    msg(S.flowErr
+      ? `Pathway hasn't computed: ${S.flowErr}`
+      : 'Pathway is still working out — give it a second and try again.');
+    return;
+  }
   const q = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
   const lines = ['level,group,age_group,gender,event,entries_competing,provenance'];
   S.flow.levels.forEach((l,i)=>{
