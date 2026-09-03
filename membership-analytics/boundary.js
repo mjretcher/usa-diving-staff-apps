@@ -111,7 +111,19 @@ const S = {
   mergeFrom: 0, mergeTo: 1,
   dirty: false,
   booted: false,
-  totals: {y25: 5881, y26: 4755},
+  // Every member of the season, mappable or not. 2024: 5,825 resolved to a
+  // county plus 687 at zips the zip list never covered (boundary-data.json
+  // meta.y24_added) -- without it the "not mappable" note read NaN on 2024.
+  totals: {y24: 6512, y25: 5881, y26: 4755},
+  // Presentation. 'atlas' is the redesigned seven-workspace view; 'classic'
+  // is the two-card panel it replaces, kept reachable until parity is signed off.
+  ui: 'atlas',
+  savedAt: null,        // when this scenario was last written, for the status chip
+  atlMetric: 'members', // what the Map rail's rows count
+  atlBdL: 0, atlBdR: null,   // Projection: which level / round the breakdown shows
+  cmpView: 'side', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
+  reportText: {},       // edited wording on the board paper (unfrozen); frozen text lives on S.frozen
+  atlMenu: false,
 };
 
 const fmt = n => Number(n||0).toLocaleString('en-US');
@@ -133,7 +145,8 @@ function keepRestore(st, target){ if (window.KeepPlace) KeepPlace.restore(st, ta
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function defaultRegions(n){
-  return Array.from({length:n}, (_,i)=>({name:'Region '+(i+1), color:PALETTE[i%PALETTE.length]}));
+  const pal = atlasOn() ? ATLAS_RAMP : PALETTE;
+  return Array.from({length:n}, (_,i)=>({name:'Region '+(i+1), color:pal[i%pal.length]}));
 }
 
 function defaultAdv(){
@@ -205,28 +218,42 @@ function tierName(i){ return (S.levels[i] && S.levels[i].name) || ('Level '+(i+1
 
 // Color for a group index in the CURRENT level view.
 function groupColor(gi){
-  if (gi==null || gi<0) return UNASSIGNED_BASE;
-  if (S.tierView===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
+  if (gi==null || gi<0) return unassignedBase();
+  if (S.tierView===0) return (S.regions[gi] && S.regions[gi].color) || unassignedBase();
+  if (atlasOn()) return atlasLevelColor(S.tierView, gi);
   const ramp = RAMPS[(S.tierView-1) % RAMPS.length];
   return ramp[gi % ramp.length];
 }
 
+/* Unassigned counties tinted toward navy by how many members live there, so
+   the membership itself shows where the lines want to go. The base is the
+   presentation's unassigned grey. */
 function heatTint(m, maxM){
-  if (!m) return UNASSIGNED_BASE;
+  const base = unassignedBase();
+  if (!m) return base;
   const t = Math.pow(Math.min(1, m/maxM), 0.45);
-  const mix=(a,b)=>Math.round(a+(b-a)*t*0.55); // cap at 55% toward navy so it reads as "unassigned but populated"
-  return `rgb(${mix(238,23)},${mix(241,31)},${mix(246,105)})`;
+  const b = [0,2,4].map(i => parseInt(base.slice(1+i, 3+i), 16));
+  const mix=(a,c)=>Math.round(a+(c-a)*t*0.55); // cap at 55% toward navy so it reads as "unassigned but populated"
+  return `rgb(${mix(b[0],23)},${mix(b[1],31)},${mix(b[2],105)})`;
 }
 
 /* ---------- undo / redo ---------- */
 const SEED_IDS = ['seed-2026-official','seed-2026-alignment'];
 const isSeed = id => SEED_IDS.includes(id);
 
+/* The pathway editor calls pushUndo() before every route edit and the
+   "Back to published rules" dialog promises "Undo will bring this one back",
+   but the snapshot only ever carried the map -- so Undo after a routing edit
+   restored nothing and silently ate a step. The routing, arrival overrides
+   and seed pool ride along now. */
 function snapshot(){
   return {assign:Object.assign({}, S.assign),
           regions:JSON.parse(JSON.stringify(S.regions)),
           levels:JSON.parse(JSON.stringify(S.levels)),
-          finalName:S.finalName};
+          finalName:S.finalName,
+          routing: S.routing ? JSON.parse(JSON.stringify(S.routing)) : null,
+          arrival: S.arrival ? JSON.parse(JSON.stringify(S.arrival)) : null,
+          seedPool: S.seedPool || null};
 }
 function sameAssign(a, b){
   const ka = Object.keys(a);
@@ -245,6 +272,10 @@ function pushUndo(key){
 }
 function applySnap(sn){
   S.assign = sn.assign; S.regions = sn.regions; S.levels = sn.levels; S.finalName = sn.finalName;
+  if ('routing' in sn){
+    if (sn.routing && S.routing && JSON.stringify(sn.routing) !== JSON.stringify(S.routing)) markPathwayEdited();
+    S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool;
+  }
   syncLevels();
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
   S.detailRegion = null; S.palOpen = null;
@@ -361,9 +392,10 @@ function rebuildClubs(gi, TG){
 
 /* The full scan. Correct by construction, used to seed the accumulator and as
    the oracle in tests. Never called on the paint path. */
-function tallyBatch(){
+function tallyBatch(){ return tallyBatchAt(S.tierView); }
+function tallyBatchAt(level){
   const y = S.year;
-  const TG = tierGroups();
+  const TG = tierGroupsAt(level);
   const rows = TG.groups.map(()=>emptyBucket());
   const un = emptyBucket();
   for (const [fips, st] of Object.entries(S.geo.stats)){
@@ -492,7 +524,9 @@ function fillFor(fips, maxM){
     return groupColor(of[ri]);
   }
   const st = S.geo.stats[fips];
-  return heatTint(st ? st[S.year].m : 0, maxM);
+  // 121 of the 612 county stat records carry no 2024 entry at all; reading
+  // .m off a missing season threw and left the whole map unpainted on 2024.
+  return heatTint((st && st[S.year]) ? st[S.year].m : 0, maxM);
 }
 
 /* No membership of any kind for the season on screen -- no members, no
@@ -576,7 +610,8 @@ const EMPTY_MAX_MIX = 0.62;  // a very light area cannot reach it -- cap rather 
 const UNASSIGNED_FLOOR = 190;// below this, two fills read as the same colour
 const _emptyTint = {};
 function emptyTint(hex){
-  if (_emptyTint[hex]) return _emptyTint[hex];
+  const ck = hex + '|' + unassignedBase();
+  if (_emptyTint[ck]) return _emptyTint[ck];
   let lo = 0.05, hi = EMPTY_MAX_MIX;
   for (let i = 0; i < 24; i++){
     const m = (lo + hi) / 2;
@@ -591,9 +626,9 @@ function emptyTint(hex){
      says it. So back the mix off until the tint is clearly not that grey, even
      at the cost of the signal. If it cannot separate at all, leave the colour
      alone rather than print something misleading. */
-  while (mix > 0.02 && colorDistance(mixWhite(hex, mix), UNASSIGNED_BASE) < UNASSIGNED_FLOOR) mix -= 0.02;
-  if (colorDistance(mixWhite(hex, mix), UNASSIGNED_BASE) < UNASSIGNED_FLOOR) mix = 0;
-  return (_emptyTint[hex] = mixWhite(hex, mix));
+  while (mix > 0.02 && colorDistance(mixWhite(hex, mix), unassignedBase()) < UNASSIGNED_FLOOR) mix -= 0.02;
+  if (colorDistance(mixWhite(hex, mix), unassignedBase()) < UNASSIGNED_FLOOR) mix = 0;
+  return (_emptyTint[ck] = mixWhite(hex, mix));
 }
 
 function syncPalette(){
@@ -604,9 +639,11 @@ function syncPalette(){
   for (let gi=0; gi<n; gi++){
     const c = groupColor(gi);
     svg.style.setProperty('--a'+gi, c);
-    svg.style.setProperty('--a'+gi+'e', emptyTint(c));
+    // Atlas shows an empty county as the same colour at 60% opacity (CSS);
+    // classic mixes toward white by a per-colour amount.
+    svg.style.setProperty('--a'+gi+'e', atlasOn() ? c : emptyTint(c));
   }
-  svg.style.setProperty('--a-u', UNASSIGNED_BASE);
+  svg.style.setProperty('--a-u', unassignedBase());
   // Retire variables from a structure with more areas than this one.
   for (let gi=n; gi<n+24; gi++){
     svg.style.removeProperty('--a'+gi);
@@ -616,7 +653,7 @@ function syncPalette(){
 
 function renderMapOnce(){
   const geo = S.geo;
-  S._maxM = Math.max(1, ...Object.values(geo.stats).map(s=>s[S.year].m));
+  S._maxM = Math.max(1, ...Object.values(geo.stats).map(s=>s[S.year] ? s[S.year].m : 0));
   S._of = tierGroups().of;
   // Fill comes from a CSS variable chosen by the area class, not an inline
   // attribute. Repainting the whole map is then a dozen variable writes rather
@@ -625,8 +662,8 @@ function renderMapOnce(){
     `<path class="bcty ${countyClass(c.f)}" data-f="${c.f}" d="${c.d}"/>`).join('');
   syncPalette();
   document.getElementById('bsSvgG').innerHTML = paths +
-    `<path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="1.4" pointer-events="none"/>` +
-    `<path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="1" pointer-events="none"/>`;
+    `<path class="bs-mesh bs-mesh-st" d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="1.4" pointer-events="none"/>` +
+    `<path class="bs-mesh bs-mesh-nat" d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="1" pointer-events="none"/>`;
   S._els = null;                 // element cache is stale after a full re-render
   document.querySelectorAll('path.bcty').forEach(el=>{
     el._ac = countyClass(el.dataset.f);
@@ -636,7 +673,7 @@ function renderMapOnce(){
 }
 
 function repaintAll(){
-  S._maxM = Math.max(1, ...Object.values(S.geo.stats).map(s=>s[S.year].m));
+  S._maxM = Math.max(1, ...Object.values(S.geo.stats).map(s=>s[S.year] ? s[S.year].m : 0));
   S._of = tierGroups().of;
   syncPalette();
   // Only counties whose slot actually changed are touched.
@@ -774,6 +811,7 @@ function tzReport(){
 }
 
 function renderPanel(){
+  if (atlasOn()){ atlasRender(); return; }
   const _place = keepPlace('bsPanel');
   const y = S.year;
 
@@ -878,6 +916,7 @@ function renderPanel(){
 // Everything that changes as you paint. Never touches name inputs or the
 // advancement grid, so typing focus is never stolen.
 function renderNumbers(){
+  if (atlasOn()){ atlasRailRows(computeTallies()); renderConsequenceStrip(); refreshFlow(); return; }
   const t = computeTallies();
   const y = S.year;
   const yLabel = yearLabelBoundary(y);
@@ -931,23 +970,7 @@ function renderTallyTable(t, mappableTotal, yLabel){
 /* ---------- comparison ---------- */
 function compareChurn(){
   if (!S.compare) return null;
-  const y = S.year;
-  const nameCur = ri => (ri==null || ri<0 || !S.regions[ri]) ? '\u2014 unassigned \u2014' : S.regions[ri].name;
-  const nameOth = ri => (ri==null || ri<0 || !S.compare.regions[ri]) ? '\u2014 unassigned \u2014' : S.compare.regions[ri].name;
-  const rows = new Map();
-  let moved = 0, movedM = 0, totM = 0;
-  for (const c of S.geo.counties){
-    const f = c.f;
-    const an = nameCur(S.assign[f]), bn = nameOth(S.compare.assign[f]);
-    const m = S.geo.stats[f] ? S.geo.stats[f][y].m : 0;
-    totM += m;
-    if (an !== bn){ moved++; movedM += m; }
-    if (!rows.has(an)) rows.set(an, new Map());
-    const inner = rows.get(an);
-    const rec = inner.get(bn) || {c:0, m:0};
-    rec.c++; rec.m += m; inner.set(bn, rec);
-  }
-  return {rows, moved, movedM, totM};
+  return churnBetween({assign:S.assign, regions:S.regions}, S.compare);
 }
 
 function renderCompare(){
@@ -1298,8 +1321,12 @@ function projectPathway(withTakeUp){
   syncRouting();
   const cells = CELLS;
   const conv = {};
-  S.takeUp = null;
+  // The "qualified, before take-up" breakdown projects with withTakeUp=false
+  // while the panel is being drawn; resetting S.takeUp here too made the
+  // footer flip to "take-up could not be measured" every time that mode was
+  // chosen. Only a real projection records what take-up it applied.
   if (withTakeUp !== false){
+    S.takeUp = null;
     let anyMeasured = false;
     for (let L = 1; L < S.routing.length; L++){
       const r = arrivalRate(L);
@@ -1495,9 +1522,9 @@ function renderEventGrid(L){
   </div>`;
 }
 
-function renderPathwayBreakdown(res){
-  if (!res) return '';
-  const mode = S.bdMode || 'stop';
+/* The breakdown's arithmetic, separated from its table so the classic grid and
+   the Atlas "Who is at" grid read the same cells. */
+function breakdownEngine(res, mode){
   const qual = (mode === 'qualified') ? projectPathway(false) : null;
   const src = qual || res;
   const gsplit = (mode === 'members') ? genderSplit() : null;
@@ -1566,6 +1593,30 @@ function renderPathwayBreakdown(res){
     return {tot:t, per:t/Math.max(1,c.stops), lo: lo.length?Math.min(...lo):0, hi: hi.length?Math.max(...hi):0};
   };
 
+  const cr = (mode === 'members') ? (S._cr || (S._cr = competeRate())) : null;
+  const note = mode === 'spots'
+    ? 'Places the bands create, before any athlete exists. The entry stop is blank because nothing routes into it — its size is whoever enters. A round with far more places than field is a formality rather than a selection.'
+    : mode === 'members'
+      ? (cr ? `Everyone holding a junior membership where each stop draws from, converted at the measured
+              ${Math.round(cr.rate*100)}% of members who compete (${fmt(Math.round(cr.members))} members,
+              about ${fmt(Math.round(cr.competitors))} competing) and the measured share contesting each board.
+              This is who COULD be there, not who would. Membership does not thin as you climb the pathway
+              &mdash; above the entry stop the population is whoever qualified, so only the per-stop figure
+              means anything here: it is the catchment each meet draws from.`
+            : 'Membership pool could not be worked out.')
+    : mode === 'stop'
+    ? 'One event at one meet &mdash; the field a diver stands in and the session an official runs. Where stops differ in size, the range is shown beside the average.'
+    : mode === 'qualified'
+      ? 'What the rules entitle athletes to, before take-up. Always higher than the field that turns up.'
+      : 'Every stop of a stage added together. Useful for fees and totals, not for planning a session.';
+  return {mode, cols, at, agg, show, note, cr};
+}
+
+function renderPathwayBreakdown(res){
+  if (!res) return '';
+  const mode = S.bdMode || 'stop';
+  const {cols, at, agg, show, note} = breakdownEngine(res, mode);
+
   const head = cols.map(c =>
     `<th class="num"><span class="bs-bd-l">${esc(c.name)}</span>${esc(c.round)}
       <span class="bs-bd-s">${c.stops} ${c.stops===1?'stop':'stops'}</span></th>`).join('');
@@ -1583,23 +1634,6 @@ function renderPathwayBreakdown(res){
   }).join('');
 
   const totals = cols.map(c => `<td class="num"><b>${show(agg(c, CELLS))}</b></td>`).join('');
-
-  const cr = (mode === 'members') ? (S._cr || (S._cr = competeRate())) : null;
-  const note = mode === 'spots'
-    ? 'Places the bands create, before any athlete exists. The entry stop is blank because nothing routes into it — its size is whoever enters. A round with far more places than field is a formality rather than a selection.'
-    : mode === 'members'
-      ? (cr ? `Everyone holding a junior membership where each stop draws from, converted at the measured
-              ${Math.round(cr.rate*100)}% of members who compete (${fmt(Math.round(cr.members))} members,
-              about ${fmt(Math.round(cr.competitors))} competing) and the measured share contesting each board.
-              This is who COULD be there, not who would. Membership does not thin as you climb the pathway
-              &mdash; above the entry stop the population is whoever qualified, so only the per-stop figure
-              means anything here: it is the catchment each meet draws from.`
-            : 'Membership pool could not be worked out.')
-    : mode === 'stop'
-    ? 'One event at one meet &mdash; the field a diver stands in and the session an official runs. Where stops differ in size, the range is shown beside the average.'
-    : mode === 'qualified'
-      ? 'What the rules entitle athletes to, before take-up. Always higher than the field that turns up.'
-      : 'Every stop of a stage added together. Useful for fees and totals, not for planning a session.';
 
   return `<div class="bs-bd">
     <div class="bs-bd-h">
@@ -2170,42 +2204,10 @@ function renderFinancials(){
    arrival into the championship) that is said plainly rather than guessed
    at. */
 function renderYearFill(){
-  if (!S.advData || !S.advData.pools) return '';
-  const fy24 = financialsForYear('y24');
-  const fy25 = financialsForYear('y25');
-  const fy26 = financialsForYear('y26');
-  if (!fy24 && !fy25 && !fy26) return '';
-  const levels = Array.from(new Set([
-    ...(fy24 ? Object.keys(fy24.tiers) : []),
-    ...(fy25 ? Object.keys(fy25.tiers) : []),
-    ...(fy26 ? Object.keys(fy26.tiers) : []),
-  ])).sort((x,y) => x-y);
-  if (!levels.length) return '';
-
-  const cell = (f, L, year) => {
-    const t = f && f.tiers[L];
-    if (!t || !(t.entries > 0)) return '<span class="bs-bd-0">—</span>';
-    const l = +L;
-    const stage = stageNameForLevel(l);
-    // Level 0 is always the real seeded pool for that season if the pool
-    // exists at all; above that, "real" means the arrival rate was actually
-    // measured against that season, not just left at full take-up.
-    const real = l === 0 ? stageExists(stage || seedStage(), year) : t.measured;
-    const fillPct = t.spots ? `<span class="bs-bd-rng">${Math.round(t.fill*100)}% of places</span>` : '';
-    const flag = real ? '' : ' <span class="bs-arr-m warn">modelled</span>';
-    return `${fmt(Math.round(t.entries))}${fillPct}${flag}`;
-  };
-
-  const rows = levels.map(L => {
-    const name = (fy26 && fy26.tiers[L] && fy26.tiers[L].name) ||
-                 (fy25 && fy25.tiers[L] && fy25.tiers[L].name) ||
-                 (fy24 && fy24.tiers[L] && fy24.tiers[L].name) || tierName(+L);
-    return `<tr><td><b>${esc(name)}</b></td>
-      <td class="num">${cell(fy24, L, 'y24')}</td>
-      <td class="num">${cell(fy25, L, 'y25')}</td>
-      <td class="num">${cell(fy26, L, 'y26')}</td></tr>`;
-  }).join('');
-
+  const yf = yearFillRows();
+  if (!yf) return '';
+  const rows = yf.map(r => `<tr><td><b>${esc(r.name)}</b></td>
+      ${r.cells.map(c => `<td class="num">${c.html}</td>`).join('')}</tr>`).join('');
   return `<div class="bs-bd" style="margin-top:16px">
     <div class="bs-bd-h"><b>Real participation by season</b>
       <span class="note">This map's zones, seeded from 2024's, 2025's, and 2026's actual entries reallocated
@@ -2567,6 +2569,16 @@ function renderInspectorShell(){
 
 /* Single dispatch point after the flow recomputes. */
 function renderInspector(){
+  if (atlasOn()){
+    // Every workspace reads the projection, and the readout bar needs it on
+    // the Map too, so it is refreshed here rather than only when an inspector
+    // happened to be open.
+    if (S.flow && QR()){ try { S.routeRes = projectPathway(); } catch(e){ console.error(e); } }
+    renderConsequenceStrip();
+    atlasSchedBadge();
+    if (S.panelMode === 'map') atlasRailRows(computeTallies()); else atlasMain();
+    return;
+  }
   renderConsequenceStrip();      // live regardless of which inspector is open
   if (S.panelMode === 'map'){
     const slot = document.getElementById('bsBalance');
@@ -2583,32 +2595,23 @@ function renderInspector(){
    mode switch that hides the tallies. */
 function renderBalanceStrip(){
   if (!S.flow) return `<div id="bsBalance" class="note">Working out how even the areas are&hellip;</div>`;
-  const i = Math.min(S.tierView, S.flow.levels.length-1);
-  const TG = tierGroupsAt(i);
-  const rows = (S.flow.levels[i] && S.flow.levels[i].rows) || [];
-  const tot = g => CELLS.reduce((a,c)=>a+((rows[g]||{})[c]||0), 0);
-  const totals = TG.groups.map((_,gi)=>tot(gi));
-  const grand = totals.reduce((a,b)=>a+b,0);
-  if (!grand) return `<div id="bsBalance"></div>`;
-  const n = TG.groups.length, equal = n ? 100/n : 0;
-  const spread = n>1 ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
-  const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'over' : 'under');
-  const word = spread <= equal*0.30 ? 'evenly balanced'
-             : spread <= equal*0.60 ? 'somewhat uneven' : 'markedly uneven';
+  const B = balanceAt(S.tierView);
+  if (!B || !B.grand) return `<div id="bsBalance"></div>`;
+  const i = B.level, TG = B.TG, totals = B.totals;
   const bars = TG.groups.map((g,gi)=>{
-    const share = 100*totals[gi]/grand, diff = share-equal;
-    const dc = Math.abs(diff) < equal*0.15 ? 'ok' : (diff>0?'over':'under');
+    const p = B.per[gi];
     return `<tr data-hl="${gi}"><td><span class="sw" style="background:${tierColorAt(i,gi)}"></span>${esc(g.name)}</td>
       <td class="num">${fmt(Math.round(totals[gi]))}</td>
       <td><span class="bs-bar"><i style="width:${Math.max(2,Math.round(100*totals[gi]/Math.max(...totals)))}%;background:${tierColorAt(i,gi)}"></i></span></td>
-      <td class="num ${dc}">${diff>=0?'+':''}${diff.toFixed(1)} pp</td></tr>`;
+      <td class="num ${p.dc}">${p.diff>=0?'+':''}${p.diff.toFixed(1)} pp</td></tr>`;
   }).join('');
+  const cls = B.cls === 'warn' ? 'over' : B.cls === 'bad' ? 'under' : 'ok';
   return `<div id="bsBalance" class="bs-balance">
     <div class="bs-tier-h">Are the areas even? &mdash; entries that actually competed, by ${esc(tierName(i))}</div>
     <div class="bs-scroll"><table class="bs-drill"><thead><tr><th>${esc(tierName(i))}</th>
       <th class="num">Competing</th><th></th><th class="num">vs even split</th></tr></thead>
       <tbody>${bars}</tbody></table></div>
-    <div class="bs-spread ${cls}">Widest gap: <b>${spread.toFixed(1)} percentage points</b> &mdash; ${word}.</div>
+    <div class="bs-spread ${cls}">Widest gap: <b>${B.spread.toFixed(1)} percentage points</b> &mdash; ${B.word}.</div>
   </div>`;
 }
 
@@ -3481,6 +3484,13 @@ async function buildComparison(ids, axis){
         const map = {regions: d.regions, assign: d.assign,
                      levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName};
         row = withMap(map, notes => summariseRouting(S.routing, r.rows[0].name, notes.length ? notes : null));
+        // The Atlas Compare workspace draws each map and reads its gap, its
+        // per-region members and how many counties move against the map on
+        // screen. Additive; the classic table reads none of it.
+        if (row && !row.error){
+          row.map = map;
+          try { Object.assign(row, mapExtras(map)); } catch(e){ console.warn('mapExtras', e); }
+        }
       }
     } catch(e){ row = {label:'(error)', error: e.message || String(e)}; }
     cols.push(row);
@@ -3702,6 +3712,12 @@ function showPreview(fips){
   const d = p.spreadNow - p.spreadWas;
   const better = d < -0.05, worse = d > 0.05;
   const arrow = better ? '&darr;' : (worse ? '&uarr;' : '&rarr;');
+  if (atlasOn()){
+    el.innerHTML = `<div class="atl-ro-h pre"><b>+${fmt(p.members)}</b><span>members to ${esc(p.toName)}</span></div>
+      <div class="atl-ro-h pre"><b class="${better?'c-ok':(worse?'c-bad':'')}">${p.spreadWas.toFixed(1)} ${arrow} ${p.spreadNow.toFixed(1)} pp</b><span>widest gap</span></div>
+      <div class="atl-ro-h pre"><b>&mdash;</b><span>release to apply</span></div>`;
+    return;
+  }
   el.innerHTML = `<div class="bs-str-c pre">
       <span class="bs-str-v">+${fmt(p.members)}</span>
       <span class="bs-str-l">members to ${esc(p.toName)}</span></div>
@@ -3730,6 +3746,21 @@ function paletteItems(){
   TG.groups.forEach((g, gi) => add('Highlight ' + g.name, tierName(S.tierView),
     ()=>{ highlightArea(gi); setTimeout(()=>highlightArea(null), 2600); }, 'Areas'));
   add('Separate touching colours', 'No two neighbours look alike', separateAdjacentColors, 'Map');
+  add('Recolour areas with the Atlas ramp', 'Give a scenario saved under the old palette the design colours (Undo puts them back)', recolourWithRamp, 'Map');
+  add('Auto-draw the map…', 'Divide the country into N connected, even areas', openAutoDialog, 'Map');
+  add('Load official 2026 alignment', 'The published Regional Championship map', ()=>loadScenario('seed-2026-official'), 'Maps');
+  add('Load attendance-based map', 'The older draft, from which Regional each club attended', ()=>loadScenario('seed-2026-alignment'), 'Maps');
+  add('Reset the map view', 'Zoom back out', ()=>{ S.zoom={k:1,x:0,y:0}; applyZoom(); }, 'Map');
+  [['y24','2024'],['y25','2025'],['y26','2026 YTD']].forEach(([k,l]) => add('Season: ' + l, 'Count members from this season',
+    ()=>{ S.year = k; repaintAll(); renderPanel(); }, 'Season'));
+  add('Save as a copy', 'A new scenario with the same map', ()=>saveScenario(true), 'Record');
+  add('New scenario', 'Start from a blank map', ()=>{ const b = document.getElementById('bsNew'); if (b) b.click(); }, 'Record');
+  add('Export zips CSV', '', exportCsv, 'Export');
+  add('Export advancement CSV', '', exportAdvCsv, 'Export');
+  add('Export meet list CSV', '', exportManifestCsv, 'Export');
+  add('Export county changes CSV', 'Every county, with the baseline it moved from', exportChangesCsv, 'Export');
+  add(atlasOn() ? 'Switch to the classic view' : 'Switch to the Atlas view', 'The other presentation of the same scenario',
+    ()=>setUiMode(atlasOn() ? 'classic' : 'atlas'), 'View');
   add('Freeze this scenario', 'Record what it says right now', freezeScenario, 'Record');
   add('Save the scenario', '', ()=>saveScenario(false), 'Record');
   add('Undo', 'Ctrl+Z', ()=>doUndo(), 'Edit');
@@ -3806,42 +3837,15 @@ function openPalette(){
    to go and look. So four numbers live under the map and never leave.
    ========================================================================= */
 function renderConsequenceStrip(){
+  const cells = consequenceCells();
   const el = document.getElementById('bsStrip');
-  if (!el) return;
-  const cell = (label, value, cls, hint) => `<div class="bs-str-c ${cls||''}" ${hint?`title="${esc(hint)}"`:''}>
-    <span class="bs-str-v">${value}</span><span class="bs-str-l">${esc(label)}</span></div>`;
-  const nAreas = groupCountAt(S.tierView);
-  let out = cell(tierName(S.tierView) + (nAreas===1?'':'s'), fmt(nAreas), '');
-  if (S.flow && S.flow.levels){
-    const i = Math.min(S.tierView, S.flow.levels.length-1);
-    const rows = (S.flow.levels[i] && S.flow.levels[i].rows) || [];
-    const totals = tierGroupsAt(i).groups.map((_,gi)=>CELLS.reduce((a,c)=>a+((rows[gi]||{})[c]||0),0));
-    const grand = totals.reduce((a,b)=>a+b,0);
-    if (grand > 0 && totals.length > 1){
-      const equal = 100/totals.length;
-      const spread = 100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand;
-      const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'warn' : 'bad');
-      out += cell('widest gap', spread.toFixed(1)+' pp', cls,
-        'How far the biggest area is from the smallest, as a share of everyone competing.');
-    }
-  } else out += cell('widest gap', '&hellip;', '');
-  const res = S.routeRes;
-  if (res && res.field){
-    let sched = null;
-    try { sched = computeSchedule(res); } catch(e){}
-    if (sched && sched.stops && sched.stops.length){
-      const bad = sched.stops.filter(x=>x.daysOver).length;
-      out += cell(bad===1?'meet does not fit':'meets do not fit', fmt(bad), bad?'bad':'ok',
-        'Meets running past a standard facility day. Open Schedule for which ones.');
-    }
-    try {
-      const last = S.routing.length-1;
-      let n = 0;
-      for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, CELLS);
-      out += cell('reach ' + (S.finalName||'the final'), fmt(Math.round(n)), '');
-    } catch(e){}
-  } else out += cell('meets', '&hellip;', '') + cell('championship field', '&hellip;', '');
-  el.innerHTML = out;
+  if (el){
+    el.innerHTML = atlasOn()
+      ? cells.map(c => `<div class="atl-ro-h" ${c.hint?`title="${esc(c.hint)}"`:''}><b class="${c.cls?'c-'+c.cls:''}">${c.value}</b><span>${esc(c.label)}</span></div>`).join('')
+      : cells.map(c => `<div class="bs-str-c ${c.cls||''}" ${c.hint?`title="${esc(c.hint)}"`:''}>
+    <span class="bs-str-v">${c.value}</span><span class="bs-str-l">${esc(c.label)}</span></div>`).join('');
+  }
+  atlasReadout();
 }
 
 /* ============================================================================
@@ -3921,6 +3925,15 @@ async function areaAdjacency(){
     }
   }
   return adj;
+}
+
+/* Scenarios saved before the redesign carry the old palette. This hands every
+   area the Atlas ramp colour for its index, in one undo step. */
+function recolourWithRamp(){
+  pushUndo();
+  S.regions.forEach((r,i) => { r.color = ATLAS_RAMP[i % ATLAS_RAMP.length]; });
+  S.dirty = true; repaintAll(); renderPanel();
+  msg(`Recoloured ${S.regions.length} areas with the Atlas ramp.`);
 }
 
 async function separateAdjacentColors(){
@@ -4245,6 +4258,7 @@ function renderPathwayShell(){
 const ROUND_CHOICES = ['prelim','quarter','semi','final'];
 
 function renderPathway(){
+  if (atlasOn()){ atlasMain(); return; }
   const wrap = document.getElementById('bsPathWrap');
   if (!wrap) return;
   if (!QR()){ wrap.innerHTML = '<div class="note">Pathway engine not loaded.</div>'; return; }
@@ -4332,7 +4346,7 @@ function renderPathway(){
         ? 'Places finishing a round, and where they go. Every route is a band of finishing positions &mdash; a band wider than the field simply sends fewer, the way a short field does today.'
         : 'Reading the pathway now on screen. Change it under <b>Structure</b>.'}</span>
       <label class="bs-focus">First stop&rsquo;s field
-        <select class="sel" id="bsSeedPool">
+        <select class="sel" id="bsSeedPool2">
           ${SEED_STAGES.map(x=>`<option value="${x}" ${seedStage()===x?'selected':''}>${esc(x)} ${yearNumBoundary(S.year)}</option>`).join('')}
         </select><span class="bs-arr-m">${fmt(seedTotal())} entries</span></label>
       <label class="bs-focus">Showing
@@ -4417,7 +4431,11 @@ function wirePathway(){
   if (!P) return;
   const touch = () => { markPathwayEdited(); repaintAll(); renderPathway(); };
 
-  P.querySelectorAll('.bs-rt-in').forEach(el => el.addEventListener('change', e => {
+  // Only the route band inputs. Every other numeric input in the inspector
+  // (arrival %, fees, trip costs, host cuts, pool hours) shares the .bs-rt-in
+  // class for styling, and binding them here threw on S.routing[NaN] and
+  // pushed an empty undo step on every edit.
+  P.querySelectorAll('.bs-rt-in[data-rt]').forEach(el => el.addEventListener('change', e => {
     pushUndo();
     const L = +e.target.dataset.l, i = +e.target.dataset.i, k = e.target.dataset.rt;
     const v = e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value||1));
@@ -4482,8 +4500,10 @@ function wirePathway(){
   P.querySelectorAll('.bs-bdseg button').forEach(b => b.addEventListener('click', () => {
     S.bdMode = b.dataset.bd; renderPathway();
   }));
-  const sp = document.getElementById('bsSeedPool');
-  if (sp) sp.addEventListener('change', () => { S.seedPool = sp.value; S.dirty = true; renderPathway(); });
+  // This select shared an id with the one in Names & structure, so
+  // getElementById found that one and this control never did anything.
+  const sp = document.getElementById('bsSeedPool2');
+  if (sp) sp.addEventListener('change', () => { pushUndo(); S.seedPool = sp.value; S.dirty = true; refreshFlow(); renderPathway(); });
   P.querySelectorAll('[data-evtog]').forEach(b => b.addEventListener('click', e => {
     const L = +e.currentTarget.dataset.evtog;
     S.evOpen = (S.evOpen === L) ? null : L; renderPathway();
@@ -4624,7 +4644,8 @@ async function doRefreshFlow(){
    let the two disagree. There is one answer now. */
 
 function tierColorAt(level, gi){
-  if (level===0) return (S.regions[gi] && S.regions[gi].color) || UNASSIGNED_BASE;
+  if (level===0) return (S.regions[gi] && S.regions[gi].color) || unassignedBase();
+  if (atlasOn()) return atlasLevelColor(level, gi);
   const ramp = RAMPS[(level-1) % RAMPS.length];
   return ramp[gi % ramp.length];
 }
@@ -4742,8 +4763,11 @@ function tallySoon(){
 /* The cheap half: the strip and the legend, straight off the accumulator. No
    flow model, no projection, no meet simulation. */
 function renderNumbersLight(){
+  if (atlasOn()){ atlasRailRows(computeTallies()); renderConsequenceStrip(); return; }
   const t = computeTallies();
-  const yLabel = yearNumBoundary(S.year);
+  // The same label renderNumbers() uses; this used to pass the bare year, so
+  // the legend header flickered between "2026" and "2026 (year to date)" mid-stroke.
+  const yLabel = yearLabelBoundary(S.year);
   const mappableTotal = t.rows.reduce((a,r)=>a+r.m,0) + t.un.m;
   renderLegend(t, mappableTotal, yLabel);
   renderConsequenceStrip();
@@ -4801,6 +4825,24 @@ function wireMap(){
       }
       tip.style.display='block';
       tip.style.left = (e.clientX+14)+'px'; tip.style.top = (e.clientY+14)+'px';
+      if (atlasOn()){
+        const suffix = /Parish|Borough|city|Census Area|Municipality/.test(c.n) ? '' : ' County';
+        const target = S.active === -1 ? 'Unassigned' : ((S.regions[S.active]||{}).name || '');
+        const regionNow = (ri!=null && S.regions[ri]) ? S.regions[ri].name : 'Unassigned';
+        let cur = 'Unassigned';
+        if (ri!=null && S.regions[ri]){
+          const TG = tierGroups(); const gi = TG.of[ri];
+          cur = (TG.groups[gi] && TG.groups[gi].name) || S.regions[ri].name;
+          if (S.tierView>0) cur += ' · ' + S.regions[ri].name;
+        }
+        tip.innerHTML = `<b>${esc(c.n)}${suffix}, ${esc(c.st)}</b>
+          <div class="atl-tip-z">${esc(cur)} · <span class="mono">${fmt(v?v.m:0)}</span> members</div>` +
+          (v && (v.m || v.a || v.c)
+            ? `<div class="atl-tip-s">${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips</div>`
+            : '<div class="atl-tip-s">Nobody registered here this season</div>') +
+          (S.tool !== 'pan' && S.tierView === 0 && target !== regionNow ? `<div class="atl-tip-p">Paint → <b>${esc(target)}</b></div>` : '');
+        return;
+      }
       tip.innerHTML = `<b>${esc(c.n)} County, ${esc(c.st)}</b><br>` +
         (v && (v.m || v.a || v.c)
            ? `${fmt(v.m)} members · ${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips`
@@ -4874,6 +4916,38 @@ function wirePanel(){
   P.querySelectorAll('#bsTierSeg [data-tierv]').forEach(b=>b.addEventListener('click',()=>{
     S.tierView = +b.dataset.tierv; S.detailRegion=null; repaintAll(); renderPanel();
   }));
+  wireStructureControls(P);
+
+  P.querySelectorAll('.bs-chip[data-ri]').forEach(ch=>ch.addEventListener('click',()=>{
+    S.active = +ch.dataset.ri;
+    P.querySelectorAll('.bs-chip[data-ri]').forEach(x=>x.classList.toggle('on', +x.dataset.ri===S.active));
+  }));
+  bind('bsSepColors', separateAdjacentColors);
+  bind('bsPalOpen',   openPalette);
+  bind('bsBrushUp',   ()=>setBrush(S.brush+1));
+  bind('bsBrushDown', ()=>setBrush(S.brush-1));
+  bind('bsUndo', doUndo);
+  bind('bsRedo', doRedo);
+  const mf = document.getElementById('bsMergeFrom'), mt = document.getElementById('bsMergeTo');
+  if (mf) mf.addEventListener('change', ()=>{ S.mergeFrom = +mf.value; });
+  if (mt) mt.addEventListener('change', ()=>{ S.mergeTo = +mt.value; });
+  bind('bsMergeGo', ()=>{
+    if (S.regions.length<=1) return;
+    if (S.mergeFrom === S.mergeTo){ msg('Pick two different areas to combine.'); return; }
+    const a = S.regions[S.mergeFrom] && S.regions[S.mergeFrom].name;
+    const b = S.regions[S.mergeTo] && S.regions[S.mergeTo].name;
+    removeArea(S.mergeFrom, S.mergeTo);
+    msg(`Combined ${a} into ${b}.`);
+  });
+  wireScenarioControls(P);
+}
+
+/* Levels, names, roll-ups, colours, the top meet and the seed pool. Shared by
+   the classic Names & structure panel and the Atlas Structure sidebar / Map
+   rail, which carry the same classes and data-attributes. */
+function wireStructureControls(P){
+  if (!P) return;
+  const bind = (id,f)=>{ const b=P.querySelector('#'+id); if(b) b.addEventListener('click',f); };
   bind('bsAddLevel', ()=>{
     if (levelCount() >= MAX_LEVELS) return;
     pushUndo();
@@ -4893,7 +4967,6 @@ function wirePanel(){
     if ((S.adv.step||0) >= levelCount()) S.adv.step = levelCount()-1;
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   });
-  // (The advancement-panel handlers were removed with the panel itself.)
 
   // --- renaming: live, never re-renders the input you are typing in ---
   const nameBind = (sel, apply)=>{
@@ -4922,8 +4995,7 @@ function wirePanel(){
   nameBind('.bs-lvlname', inp=>{
     const lvl = +inp.dataset.lvl;
     S.levels[lvl].name = inp.value;
-    const tb = P.querySelector(`#bsTierSeg [data-tierv="${lvl}"]`);
-    if (tb) tb.textContent = inp.value;
+    document.querySelectorAll(`#bsTierSeg [data-tierv="${lvl}"], #atlTierSeg [data-tierv="${lvl}"]`).forEach(tb => { tb.textContent = inp.value; });
   });
   /* Renaming the level renames the areas under it -- but on commit, not on
      every keystroke, or typing "Zones" would march the areas through
@@ -4961,7 +5033,7 @@ function wirePanel(){
     syncLevels(); repaintAll(); renderPanel();
     msg(`Renamed ${r.renamed} area${r.renamed===1?'':'s'} to ${base} 1–${areas.length}`);
   }));
-  const fin = document.getElementById('bsFinalName');
+  const fin = P.querySelector('#bsFinalName');
   if (fin) fin.addEventListener('input', ()=>{
     pushUndo('finalName');
     refreshHistoryButtons();
@@ -4969,7 +5041,7 @@ function wirePanel(){
     clearTimeout(S._nameT); S._nameT = setTimeout(renderNumbers, 200);
   });
 
-  const seedSel = document.getElementById('bsSeedPool');
+  const seedSel = P.querySelector('#bsSeedPool');
   if (seedSel) seedSel.addEventListener('change', ()=>{
     pushUndo();
     S.seedPool = seedSel.value || null;   // '' -> back to auto-detect
@@ -4998,22 +5070,12 @@ function wirePanel(){
     S.levels[k].groups.pop();
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   }));
-
-  P.querySelectorAll('.bs-chip[data-ri]').forEach(ch=>ch.addEventListener('click',()=>{
-    S.active = +ch.dataset.ri;
-    P.querySelectorAll('.bs-chip[data-ri]').forEach(x=>x.classList.toggle('on', +x.dataset.ri===S.active));
-  }));
-  bind('bsSepColors', separateAdjacentColors);
-  bind('bsPalOpen',   openPalette);
-  bind('bsBrushUp',   ()=>setBrush(S.brush+1));
-  bind('bsBrushDown', ()=>setBrush(S.brush-1));
   bind('bsAddRegion', ()=>{
     pushUndo();
-    S.regions.push({name:'Region '+(S.regions.length+1), color:PALETTE[S.regions.length%PALETTE.length]});
+    const pal = atlasOn() ? ATLAS_RAMP : PALETTE;
+    S.regions.push({name:'Region '+(S.regions.length+1), color:pal[S.regions.length%pal.length]});
     syncLevels(); S.dirty=true; renderPanel();
   });
-  bind('bsUndo', doUndo);
-  bind('bsRedo', doRedo);
   P.querySelectorAll('[data-delarea]').forEach(b=>b.addEventListener('click', e=>{
     e.preventDefault();
     removeArea(+b.dataset.delarea, null);
@@ -5030,23 +5092,21 @@ function wirePanel(){
     S.regions[+b.dataset.setcol].color = b.dataset.col;
     S.palOpen = null; S.dirty=true; repaintAll(); renderPanel();
   }));
-  const mf = document.getElementById('bsMergeFrom'), mt = document.getElementById('bsMergeTo');
-  if (mf) mf.addEventListener('change', ()=>{ S.mergeFrom = +mf.value; });
-  if (mt) mt.addEventListener('change', ()=>{ S.mergeTo = +mt.value; });
-  bind('bsMergeGo', ()=>{
-    if (S.regions.length<=1) return;
-    if (S.mergeFrom === S.mergeTo){ msg('Pick two different areas to combine.'); return; }
-    const a = S.regions[S.mergeFrom] && S.regions[S.mergeFrom].name;
-    const b = S.regions[S.mergeTo] && S.regions[S.mergeTo].name;
-    removeArea(S.mergeFrom, S.mergeTo);
-    msg(`Combined ${a} into ${b}.`);
-  });
-  const nameI = document.getElementById('bsName');
-  nameI.addEventListener('input', ()=>{ S.scenarioName = nameI.value; S.dirty=true; });
+}
+
+/* Save / load / delete / compare / export. Shared by the classic scenario
+   bar and the Atlas header. Each control is optional -- the Atlas header has
+   no name input (that lives on the Map rail) and the classic bar has no
+   county-changes export. */
+function wireScenarioControls(P){
+  if (!P) return;
+  const bind = (id,f)=>{ const b=P.querySelector('#'+id); if(b) b.addEventListener('click',f); };
+  const nameI = P.querySelector('#bsName');
+  if (nameI) nameI.addEventListener('input', ()=>{ S.scenarioName = nameI.value; S.dirty=true; });
   bind('bsSave', ()=>saveScenario(false));
   bind('bsSaveNew', ()=>saveScenario(true));
   bind('bsDelete', deleteScenario);
-  const cmp = document.getElementById('bsCompare');
+  const cmp = P.querySelector('#bsCompare');
   if (cmp) cmp.addEventListener('change', ()=>{ if (cmp.value) loadCompare(cmp.value); });
   bind('bsCompareOff', ()=>{ S.compare=null; renderPanel(); });
   bind('bsNew', async ()=>{
@@ -5056,17 +5116,21 @@ function wirePanel(){
     pushUndo();
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
+    S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
+    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null;
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
   });
   bind('bsCsv', exportCsv);
   bind('bsCsvAdv', exportAdvCsv);
-  const loadSel = document.getElementById('bsLoad');
-  loadSel.addEventListener('change', ()=>{ if (loadSel.value) loadScenario(loadSel.value); });
+  const loadSel = P.querySelector('#bsLoad');
+  if (loadSel) loadSel.addEventListener('change', ()=>{ if (loadSel.value) loadScenario(loadSel.value); });
 }
 
 /* ---------- persistence ---------- */
-function msg(t){ const m=document.getElementById('bsMsg'); if(m){ m.textContent=t; setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, 4000);} }
+function msg(t){
+  if (atlasOn()){ atlasToast(t, /^(Saved|Frozen|Loaded|Deleted|Generated|Recoloured|Drew)/.test(t)); return; }
+  const m=document.getElementById('bsMsg'); if(m){ m.textContent=t; setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, 4000);} }
 
 function newScenarioId(){
   return 'bs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
@@ -5104,7 +5168,7 @@ async function saveScenario(asNew){
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
-    arrival:S.arrival, seedPool:S.seedPool,
+    arrival:S.arrival, seedPool:S.seedPool, reportText:S.reportText,
     levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
   try {
     await NEON.query(
@@ -5112,6 +5176,7 @@ async function saveScenario(asNew){
        ON CONFLICT (id) DO UPDATE SET name=$2, data=$3::jsonb, updated_at=now()`,
       [S.scenarioId, S.scenarioName.trim(), data]);
     S.dirty = false;
+    S.savedAt = nowStamp();
     scenarioListCache = null;
     msg((forking ? 'Saved a new scenario "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
@@ -5140,8 +5205,10 @@ async function loadCompare(id){
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
     // Keep the whole scenario, not just the painted counties: pricing a
     // comparison needs its tiers and its pathway too.
+    // A v2/v3 scenario stores its tiers as {zones, ewc, ...}, not a levels
+    // array; pricing it side by side needs the same migration loadScenario does.
     S.compare = {id, name: row.name, assign: d.assign || {}, regions: d.regions || [],
-                 levels: d.levels || null, routing: d.routing || null,
+                 levels: migrateLevels(d, (d.regions||[]).length), routing: d.routing || null,
                  finalName: d.finalName || null};
     renderPanel();
   } catch(e){ console.error(e); msg('Compare failed: ' + (e.message||e)); }
@@ -5203,10 +5270,13 @@ async function loadScenario(id){
     body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'the current scenario')}</b>.
       Loading another discards them.</p>`})) return;
   try {
-    const res = await NEON.query(`SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`, [id]);
+    const res = await NEON.query(`SELECT name, data, to_char(updated_at,'Mon DD · HH24:MI') u FROM membership.boundary_scenarios WHERE id=$1`, [id]);
     if (!res.rows.length){ msg('Scenario not found.'); return; }
     const row = res.rows[0];
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    S.savedAt = row.u || null;
+    S.reportText = d.reportText || {};
+    S.cmpIds = []; S.cmpRes = null;
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
     S.year = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
@@ -6618,10 +6688,1599 @@ function injectAutoCSS(){
   document.head.appendChild(el);
 }
 
+
+/* ============================================================================
+   ATLAS -- the redesigned presentation of Boundary Studio.
+
+   Seven equal workspaces under one top navigation, a persistent scenario/
+   status bar, and a four-page board paper. This block changes how the tool is
+   PRESENTED, not what it computes: every figure on screen is read from the
+   same functions the classic panel reads (computeTallies, the flow, the
+   pathway projection, meetManifest, financialsFor, computeSchedule,
+   buildComparison, freezeScenario). Nothing here does arithmetic of its own.
+
+   The classic panel stays reachable from the header menu ("Switch to classic
+   view") until the parity check has been signed off; both share S, the
+   engines, persistence and the wiring functions. Wherever the classic
+   renderers bind handlers by id or data-attribute (wirePathway, wireSchedule,
+   wireStructureControls, wireScenarioControls) the Atlas markup carries the
+   same hooks, so there is one update path per control, not two.
+   ========================================================================= */
+
+/* Zone ramp from the design tokens (oklch, constant-ish L/C), as hex so the
+   colour helpers that read hex -- emptyTint, colorDistance, the tooltip --
+   keep working. Zones use indices 0/5/9. The PALETTE picker stays for user
+   overrides; saved scenarios keep whatever colours they were saved with. */
+const ATLAS_RAMP = ['#434baa','#cf7b26','#009ba3','#a44a94','#6c9539','#b18e15',
+                    '#0c82bf','#0a9068','#714ca6','#ca5551','#57acc5','#007570'];
+const ATLAS_UNASSIGNED = '#dfe8f2';
+const ATLAS_INK = {navy:'#171f69', red:'#e31937', pool:'#009ac7', muted:'#6b7385',
+                   ok:'#15803d', warn:'#b45309', bad:'#b3122b'};
+const atlasOn = () => S.ui === 'atlas';
+const unassignedBase = () => atlasOn() ? ATLAS_UNASSIGNED : UNASSIGNED_BASE;
+
+function atlasLevelColor(level, gi){
+  if (level === 0) return (S.regions[gi] && S.regions[gi].color) || ATLAS_UNASSIGNED;
+  if (level === 1) return ATLAS_RAMP[gi < 3 ? [0,5,9][gi] : (gi*4 + 2) % ATLAS_RAMP.length];
+  return ATLAS_RAMP[(gi*3 + level) % ATLAS_RAMP.length];
+}
+
+const nowStamp = () => {
+  const d = new Date();
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' · ' +
+         d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+};
+const $id = id => document.getElementById(id);
+
+/* ---------- the balance, measured once ----------
+   renderBalanceStrip and renderConsequenceStrip each carried a copy of the
+   same share-vs-even-split arithmetic. One function now, three readers. */
+function balanceFrom(flow, level){
+  if (!flow || !flow.levels || !flow.levels.length) return null;
+  const i = Math.min(level, flow.levels.length - 1);
+  const TG = tierGroupsAt(i);
+  const rows = (flow.levels[i] && flow.levels[i].rows) || [];
+  const totals = TG.groups.map((_,gi)=>CELLS.reduce((a,c)=>a+((rows[gi]||{})[c]||0),0));
+  const grand = totals.reduce((a,b)=>a+b,0);
+  const n = TG.groups.length, equal = n ? 100/n : 0;
+  const spread = (grand > 0 && n > 1) ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
+  const cls = spread <= equal*0.30 ? 'ok' : (spread <= equal*0.60 ? 'warn' : 'bad');
+  const word = spread <= equal*0.30 ? 'evenly balanced'
+             : spread <= equal*0.60 ? 'somewhat uneven' : 'markedly uneven';
+  const per = totals.map(t => {
+    const share = grand > 0 ? 100*t/grand : 0, diff = share - equal;
+    return {share, diff, dc: Math.abs(diff) < equal*0.15 ? 'ok' : (diff > 0 ? 'over' : 'under')};
+  });
+  return {level:i, TG, totals, grand, n, equal, spread, cls, word, per};
+}
+const balanceAt = level => balanceFrom(S.flow, level);
+
+/* Everyone reaching the top meet: the championship's entry field. */
+function reachFinal(res){
+  if (!res || !res.field || !S.routing) return null;
+  const last = S.routing.length - 1;
+  let n = 0;
+  for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, CELLS);
+  return n;
+}
+
+/* The four consequence numbers, computed once for the classic strip, the Map
+   readout bar and the context strip. */
+function consequenceCells(){
+  const nAreas = groupCountAt(S.tierView);
+  // "Regions" is already plural: the old label read "Regionss".
+  const tn = tierName(S.tierView);
+  const areasLabel = nAreas === 1 ? (singulariseLevel(tn) || tn) : (/s$/i.test(tn) ? tn : tn + 's');
+  const out = [{k:'areas', label: areasLabel, value: fmt(nAreas), cls:''}];
+  const bal = balanceAt(S.tierView);
+  if (bal){
+    if (bal.grand > 0 && bal.n > 1)
+      out.push({k:'gap', label:'widest gap', value: bal.spread.toFixed(1) + ' pp', cls: bal.cls,
+                hint:'How far the biggest area is from the smallest, as a share of everyone competing.'});
+  } else out.push({k:'gap', label:'widest gap', value:'&hellip;', cls:''});
+  const res = S.routeRes;
+  if (res && res.field){
+    let sched = null;
+    try { sched = computeSchedule(res); } catch(e){}
+    if (sched && sched.stops && sched.stops.length){
+      const bad = sched.stops.filter(x=>x.daysOver).length;
+      out.push({k:'fit', label: bad===1?'meet does not fit':'meets do not fit', value: fmt(bad), cls: bad?'bad':'ok',
+                hint:'Meets running past a standard facility day. Open Schedule for which ones.'});
+    }
+    try {
+      const n = reachFinal(res);
+      if (n != null) out.push({k:'reach', label:'reach ' + (S.finalName||'the final'), value: fmt(Math.round(n)), cls:''});
+    } catch(e){}
+  } else {
+    out.push({k:'fit', label:'meets', value:'&hellip;', cls:''});
+    out.push({k:'reach', label:'championship field', value:'&hellip;', cls:''});
+  }
+  return out;
+}
+
+/* ---------- a static map, for compare columns and the board paper ---------- */
+function atlasStaticSvg(assignOf, colorOf, opts){
+  opts = opts || {};
+  const geo = S.geo, parts = [];
+  for (const c of geo.counties){
+    const ri = assignOf(c.f);
+    const on = ri != null && ri >= 0;
+    const fill = on ? colorOf(ri) : ATLAS_UNASSIGNED;
+    const empty = on && countyEmpty(c.f);
+    parts.push(`<path d="${c.d}" fill="${fill}"${empty?' fill-opacity=".6"':''} stroke="#fff" stroke-width=".4"${opts.dataF?` data-f="${c.f}"`:''}/>`);
+  }
+  parts.push(`<path d="${geo.stateMesh}" fill="none" stroke="#171f69" stroke-width=".7" stroke-opacity=".45" pointer-events="none"/>`);
+  if (opts.changed){
+    const d = geo.counties.filter(c => opts.changed(c.f)).map(c => c.d).join('');
+    if (d) parts.push(`<path d="${d}" fill="none" stroke="#e31937" stroke-width="1.1" pointer-events="none"/>`);
+  }
+  return parts.join('');
+}
+
+/* ---------- churn between any two maps ----------
+   compareChurn() compared the live map with the Compare-with slot. The same
+   walk, generalised, so the Compare workspace can do it for every pinned map
+   and the board paper for its baseline. Matched by area name, as before. */
+function churnBetween(A, B){
+  const y = S.year;
+  const nameOf = (map, ri) => (ri==null || ri<0 || !map.regions[ri]) ? '— unassigned —' : map.regions[ri].name;
+  const rows = new Map();
+  const changes = [];
+  let moved = 0, movedM = 0, totM = 0;
+  for (const c of S.geo.counties){
+    const f = c.f;
+    const an = nameOf(A, A.assign[f]), bn = nameOf(B, B.assign[f]);
+    const st = S.geo.stats[f];
+    const m = (st && st[y]) ? st[y].m : 0;
+    totM += m;
+    if (an !== bn){
+      moved++; movedM += m;
+      changes.push({f, county:c.n, st:c.st, from:bn, to:an, m});
+    }
+    if (!rows.has(an)) rows.set(an, new Map());
+    const inner = rows.get(an);
+    const rec = inner.get(bn) || {c:0, m:0};
+    rec.c++; rec.m += m; inner.set(bn, rec);
+  }
+  changes.sort((a,b) => b.m - a.m || a.county.localeCompare(b.county));
+  return {rows, moved, movedM, totM, changes,
+          sameStructure: A.regions.length === B.regions.length};
+}
+
+/* What a column of the Compare workspace and the board paper need from a map
+   that is not on screen: its widest gap, its per-region tallies, and how many
+   counties move against the map that IS on screen. Same swap-compute-restore
+   shape as financialsFor(), for the same reason. */
+function mapExtras(map){
+  const live = {assign: S.assign, regions: S.regions};
+  return withMap(map, () => {
+    let gap = null, bal = null;
+    try {
+      const flow = window.JuniorFlow.compute({regions:S.regions, assign:S.assign, levels:S.levels,
+                                              finalName:S.finalName, year:S.year});
+      bal = balanceFrom(flow, 0);
+      gap = bal ? bal.spread : null;
+    } catch(e){}
+    const t = tallyBatchAt(0);
+    const regionRows = S.regions.map((r,i) => ({
+      name: r.name, color: r.color,
+      m: t.rows[i] ? t.rows[i].m : 0, a: t.rows[i] ? t.rows[i].a : 0,
+      entries: bal ? bal.totals[i] : null,
+      diff: bal ? bal.per[i].diff : null, dc: bal ? bal.per[i].dc : null,
+    }));
+    const churn = churnBetween(live, {assign:S.assign, regions:S.regions});
+    return {gap, regionRows, churn, regionCount: S.regions.length, unM: t.un.m};
+  });
+}
+
+/* ---------- shell ---------- */
+function atlasBoot(el){
+  el.innerHTML = `
+    <div class="atl" id="bsPanel">
+      <header class="atl-head" id="atlHead"></header>
+      <div id="atlCtx"></div>
+      <main id="atlMain" class="atl-main"></main>
+      <div id="bsTip" class="atl-tip"></div>
+      <div id="atlToast" class="atl-toast" hidden></div>
+      <div id="bsMsg" hidden></div>
+      <div id="atlSvgStore" hidden><svg id="bsSvg" viewBox="0 0 975 610"><g id="bsSvgG"></g></svg></div>
+    </div>`;
+}
+
+function atlasRender(){
+  if (!$id('atlHead')) return;
+  atlasHeader();
+  atlasContext();
+  atlasMain();
+  renderNumbers();
+  loadScenarioList();
+}
+
+function atlasHeader(){
+  const h = $id('atlHead'); if (!h) return;
+  const menuOpen = !!S.atlMenu;
+  h.innerHTML = `
+    <div class="atl-brand"><img src="../shared/images/diver-mark.svg" alt="">
+      <div><b>Boundary Studio</b><span>USA Diving · Membership Analytics</span></div></div>
+    <nav class="atl-nav">${INSPECTORS.map(t => `<button data-atlnav="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}${t.k==='schedule'?'<span id="atlSchedBadge"></span>':''}</button>`).join('')}</nav>
+    <div class="atl-head-r">
+      <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Scenario menu: open, copy, delete, export, season">
+        <span class="atl-dot"></span><span class="mono">${esc(S.scenarioId || 'unsaved')}</span>
+        <span id="atlStatusText">${S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet')}</span>
+        <span class="atl-caret">▾</span></button>
+      <button class="atl-save ${S.dirty?'dirty':''}" id="bsSave" title="Ctrl/⌘ S">${S.dirty ? 'Save scenario' : 'Saved'}</button>
+      <div class="atl-menu" id="atlMenu" ${menuOpen?'':'hidden'}>
+        <label>Open <select class="atl-sel" id="bsLoad"><option value="">Load scenario…</option></select></label>
+        <label>Baseline <select class="atl-sel" id="bsCompare" title="Loaded beside this scenario: Money prices both, Report shows the changes against it"><option value="">nothing…</option></select></label>
+        ${S.compare ? `<div class="atl-menu-row"><span></span><span class="atl-note">Against <b>${esc(S.compare.name)}</b></span><button class="atl-link quiet" id="bsCompareOff">Stop comparing</button></div>` : ''}
+        <hr>
+        <div class="atl-menu-row"><span>Scenario</span>
+          <button class="atl-link" id="bsNew">New</button>
+          <button class="atl-link" id="bsSaveNew">Save as a copy</button>
+          <button class="atl-link quiet" id="bsDelete" ${(!S.scenarioId||isSeed(S.scenarioId))?'disabled':''}>Delete</button></div>
+        <div class="atl-menu-row"><span>Start from</span>
+          <button class="atl-link" id="atlLoadOfficial">Official 2026 alignment</button>
+          <button class="atl-link" id="atlAutoOpen">Auto-draw…</button>
+          <button class="atl-link quiet" id="atlLoadSeed">Attendance-based map</button></div>
+        <div class="atl-menu-row"><span>Colours</span>
+          <button class="atl-link" id="atlRecolour" title="Give a scenario saved under the old palette the design colours">Recolour with the Atlas ramp</button>
+          <button class="atl-link quiet" id="bsSepColors">Separate touching colours</button></div>
+        <div class="atl-menu-row"><span>Season</span>
+          <div class="atl-seg sm"><button data-atlyear="y24" class="${S.year==='y24'?'on':''}">2024</button><button data-atlyear="y25" class="${S.year==='y25'?'on':''}">2025</button><button data-atlyear="y26" class="${S.year==='y26'?'on':''}">2026 YTD</button></div></div>
+        <div class="atl-menu-row"><span>Export</span>
+          <button class="atl-link" id="bsCsv">Zips CSV</button>
+          <button class="atl-link" id="bsCsvAdv">Advancement CSV</button>
+          <button class="atl-link" id="bsCsvManifest">Meet list CSV</button>
+          <button class="atl-link" id="atlCsvChanges">County changes CSV</button></div>
+        <hr>
+        <div class="atl-menu-row">
+          <button class="atl-link" id="bsPalOpen">Search every action ⌘K</button>
+          <button class="atl-link quiet" id="atlClassic">Switch to classic view</button></div>
+        ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="atl-note"><b>${esc(S.scenarioName)}</b> is a reference map. Saving creates a copy so the original stays intact.</div>` : ''}
+        ${S.frozen ? `<div class="atl-note"><b>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}</b>${S.frozen.note?` — ${esc(S.frozen.note)}`:''}. What it said then is recorded; see Report.</div>` : ''}
+      </div>
+    </div>`;
+  h.querySelectorAll('[data-atlnav]').forEach(b => b.addEventListener('click', () => {
+    S.panelMode = b.dataset.atlnav; S.atlMenu = false; renderPanel(); refreshFlow();
+  }));
+  const chip = $id('atlChip');
+  if (chip) chip.addEventListener('click', e => { e.stopPropagation(); S.atlMenu = !S.atlMenu; $id('atlMenu').hidden = !S.atlMenu; });
+  const menu = $id('atlMenu');
+  if (menu) menu.addEventListener('click', e => e.stopPropagation());
+  if (!S._atlDocClick){
+    S._atlDocClick = true;
+    document.addEventListener('click', () => { if (S.atlMenu){ S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; } });
+  }
+  wireScenarioControls(h);
+  const bind = (id, f) => { const b = h.querySelector('#'+id); if (b) b.addEventListener('click', f); };
+  bind('atlLoadOfficial', () => loadScenario('seed-2026-official'));
+  bind('atlLoadSeed', () => loadScenario('seed-2026-alignment'));
+  bind('atlAutoOpen', () => { S.atlMenu = false; openAutoDialog(); });
+  bind('bsPalOpen', () => { S.atlMenu = false; $id('atlMenu').hidden = true; openPalette(); });
+  bind('bsCsvManifest', exportManifestCsv);
+  bind('atlCsvChanges', exportChangesCsv);
+  bind('atlClassic', () => setUiMode('classic'));
+  bind('atlRecolour', () => { S.atlMenu = false; recolourWithRamp(); });
+  bind('bsSepColors', () => { S.atlMenu = false; separateAdjacentColors(); });
+  h.querySelectorAll('[data-atlyear]').forEach(b => b.addEventListener('click', () => {
+    S.year = b.dataset.atlyear; S.atlMenu = false; repaintAll(); renderPanel();
+  }));
+  atlasSchedBadge();
+}
+
+function atlasSchedBadge(){
+  const b = $id('atlSchedBadge'); if (!b) return;
+  let n = 0;
+  try { if (S.routeRes) n = (computeSchedule(S.routeRes).stops||[]).filter(x=>x.daysOver).length; } catch(e){}
+  b.innerHTML = n ? `<span class="atl-badge">${n}</span>` : '';
+}
+
+/* The status chip and Save button, without rebuilding the header. */
+function atlasStatus(){
+  const chip = $id('atlChip'), save = $id('bsSave'), txt = $id('atlStatusText');
+  if (chip) chip.classList.toggle('dirty', !!S.dirty);
+  if (save){ save.classList.toggle('dirty', !!S.dirty); save.textContent = S.dirty ? 'Save scenario' : 'Saved'; }
+  if (txt) txt.textContent = S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + S.savedAt : 'Not saved yet');
+}
+
+function atlasToast(text, ok){
+  const t = $id('atlToast'); if (!t) return;
+  t.innerHTML = (ok ? '<i>✓</i>' : '') + `<span>${esc(text)}</span>`;
+  t.hidden = false;
+  clearTimeout(S._atlToastT);
+  S._atlToastT = setTimeout(() => { t.hidden = true; }, ok ? 2600 : 4200);
+}
+
+function setUiMode(mode){
+  S.ui = mode;
+  try { localStorage.setItem('bsUi', mode); } catch(e){}
+  const el = $id('viewBoundary');
+  if (!el) return;
+  S.booted = false;
+  S._els = null; S._of = null;
+  if (mode === 'atlas') atlasBootView(el); else classicBootView(el);
+  S.booted = true;
+}
+
+/* Context strip: Structure, Projection, Money and Schedule carry it; the Map
+   has its own readout bar and the Report its own masthead. */
+function atlasContext(){
+  const c = $id('atlCtx'); if (!c) return;
+  atlasParkSvg();                       // the mini-map may be inside what is about to be replaced
+  const show = ['structure','projection','money','schedule'].includes(S.panelMode);
+  if (!show){ c.innerHTML = ''; return; }
+  c.innerHTML = `<div class="atl-ctx">
+    <div class="atl-ctx-name">
+      <input id="atlName2" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
+      <span>Pathway: ${esc(currentPathwayLabel())} · field from ${esc(seedStage())} ${yearNumBoundary(S.year)}</span>
+    </div>
+    <div class="atl-ctx-ro" id="atlReadout"></div>
+    <div class="atl-mini" id="atlMini"></div>
+  </div>`;
+  const nm = $id('atlName2');
+  if (nm) nm.addEventListener('input', () => { S.scenarioName = nm.value; S.dirty = true; atlasStatus(); const r = $id('bsName'); if (r && r !== nm) r.value = nm.value; });
+  atlasReadout();
+  atlasPlaceSvg();
+}
+
+function atlasReadout(){
+  const ro = $id('atlReadout'); if (!ro) return;
+  ro.innerHTML = consequenceCells().map(x =>
+    `<div class="atl-ro" ${x.hint?`title="${esc(x.hint)}"`:''}><b class="${x.cls?'c-'+x.cls:''}">${x.value}</b><span>${esc(x.label)}</span></div>`).join('');
+}
+
+/* One #bsSvg, moved between the Map workspace, the context strip's mini-map
+   and a hidden store, so the paint handlers, the CSS-variable palette and
+   cross-highlighting keep pointing at the same element. */
+function atlasParkSvg(){
+  const svg = $id('bsSvg'), store = $id('atlSvgStore');
+  if (svg && store && svg.parentNode !== store) store.appendChild(svg);
+}
+function atlasPlaceSvg(){
+  const svg = $id('bsSvg'); if (!svg) return;
+  const slot = (S.panelMode === 'map' && $id('atlMapSlot')) || $id('atlMini') || $id('atlSvgStore');
+  if (!slot) return;
+  if (svg.parentNode !== slot) slot.appendChild(svg);
+}
+
+/* ============================================================================
+   MAP WORKSPACE
+   ========================================================================= */
+function atlasMapHtml(){
+  const tv = S.tierView;
+  const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
+  const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}">${esc(tierName(i))}</button>`).join('');
+  const metric = S.atlMetric || 'members';
+  const metricOpts = [['members','Members'],['athletes','Athletes'],['entries','Competing entries'],['coaches','Coaches'],['clubs','Clubs'],['zips','Zip codes'],['counties','Counties'],['age','Athletes by age group'],['comp','Competitors by event']]
+    .map(([k,l]) => `<option value="${k}" ${metric===k?'selected':''}>${l}</option>`).join('');
+  const yearOpts = [['y24','2024'],['y25','2025'],['y26','2026 YTD']].map(([k,l]) => `<option value="${k}" ${S.year===k?'selected':''}>${l}</option>`).join('');
+  const addBtn = tv === 0 ? `<button class="atl-link" id="bsAddRegion">+ Add ${esc(tierLabel)}</button>`
+                          : `<button class="atl-link bs-addgrp" data-lvl="${tv}">+ Add ${esc(tierLabel)}</button>`;
+  return `
+    <aside class="atl-rail">
+      <div class="atl-rail-top">
+        <div class="atl-rail-id"><span class="mono">${esc(S.scenarioId || 'unsaved')}</span><span>·</span><span>${S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}</span></div>
+        <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
+        <div class="atl-seg" id="atlTierSeg">${seg}</div>
+      </div>
+      <div class="atl-rail-sub">
+        <span>${esc(tierName(tv))} · <select class="atl-sel quiet" id="atlYear" title="Season the tallies are counted from">${yearOpts}</select></span>
+        <select class="atl-sel" id="atlMetric" title="What the rows count">${metricOpts}</select>
+      </div>
+      <div class="atl-rail-list">
+        <div id="atlRows"></div>
+        <button class="atl-row atl-row-erase ${S.active===-1?'on':''}" data-ri="-1" title="Paint counties out of every area (E)">
+          <span class="atl-sw"></span><span>Unassign<span class="atl-key">E</span></span></button>
+        <div class="atl-rail-foot">${addBtn}<span class="mono" id="atlUnassigned"></span></div>
+        <div class="atl-rail-note" id="atlRailNote"></div>
+      </div>
+    </aside>
+    <section class="atl-mapsec">
+      <div class="atl-mapslot ${S.tool==='pan'?'tool-pan':''} ${S.active===-1?'erase':''}" id="atlMapSlot"></div>
+      <div class="atl-tools">
+        <div class="atl-seg">
+          <button data-atltool="county" class="${S.tool==='county'?'on':''}">County</button>
+          <button data-atltool="state" class="${S.tool==='state'?'on':''}">Whole state</button>
+          <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to pan; scroll to zoom">Pan</button>
+        </div>
+        <span class="atl-vr"></span>
+        <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Ctrl/⌘ Z">↶ Undo</button>
+        <button id="bsRedo" ${S.redo.length?'':'disabled'} title="Ctrl/⌘ ⇧ Z">Redo ↷</button>
+        <span class="atl-vr"></span>
+        <span class="atl-brush" title="How wide the brush is. [ and ] change it."><button id="bsBrushDown" aria-label="Narrower brush">−</button>Brush <b id="bsBrushLbl">${S.brush===0?'single county':S.brush+' deep'}</b><button id="bsBrushUp" aria-label="Wider brush">+</button></span>
+        <span class="atl-vr"></span>
+        <button id="atlZoomReset" title="Reset the view">Reset view</button>
+      </div>
+      <div class="atl-readout"><div id="bsStrip" class="atl-strip"></div>
+        <span class="atl-hint">Click or drag to paint · 1–9 pick a ${esc(tierLabel)} · E unassign · ⌘Z undo · ⌘S save · double-click a row for its zip codes</span></div>
+    </section>`;
+}
+
+/* The classic legend's two breakdown modes, as rail rows: a stacked bar of
+   athletes by age group, or of competing entries by board. Same data the
+   legend cards read (tally .ag and poolCells), same colours. */
+function atlasRailBreakdown(t, metric){
+  const box = $id('atlRows');
+  const pooled = metric === 'comp' ? poolCells(S.tierView) : null;
+  const DC = ['#009AC7','#171F69','#E31937'];
+  box.innerHTML = t.rows.map((r,gi) => {
+    const col = groupColor(gi);
+    const on = S.tierView === 0 && S.active === gi;
+    let total, segs, nums;
+    if (metric === 'age'){
+      const ag = r.ag; total = ag.reduce((s,x)=>s+x,0);
+      segs = ag.map((v,j) => v>0 ? `<i style="flex:${v};background:${AGE_GROUPS[j].color}" title="${AGE_GROUPS[j].k} (${AGE_GROUPS[j].label}): ${fmt(v)}"></i>` : '').join('');
+      nums = AGE_GROUPS.map((g,j) => `<span><b style="color:${g.color==='#8FC3EA'?'#0b6ea0':g.color}">${g.k}</b>${fmt(ag[j])}</span>`).join('');
+    } else {
+      const c = pooled.rows[gi] || {};
+      const per = DISCS.map(d => CELLS.filter(k=>k[2]===d.k).reduce((s,k)=>s+(c[k]||0),0));
+      total = per.reduce((s,x)=>s+x,0);
+      const boys = CELLS.filter(k=>k[1]==='B').reduce((s,k)=>s+(c[k]||0),0);
+      segs = per.map((n,j) => n>0 ? `<i style="flex:${n};background:${DC[j]}" title="${DISCS[j].label}: ${fmt(n)}"></i>` : '').join('');
+      nums = per.map((n,j) => `<span><b style="color:${j===0?'#0b6ea0':DC[j]}">${DISCS[j].k==='P'?'PL':DISCS[j].k+'M'}</b>${fmt(n)}</span>`).join('')
+           + `<span><b style="color:#64748b">B/G</b>${fmt(boys)}/${fmt(total-boys)}</span>`;
+    }
+    return `<button class="atl-row ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}">
+      <span class="atl-sw" style="background:${col}"></span>
+      <span class="atl-row-name">${esc(t.TG.groups[gi].name)}</span>
+      <span class="atl-row-val mono">${fmt(total)}</span>
+      <span class="atl-row-bar"><span class="atl-bar atl-bar-stack">${segs || '<i style="flex:1;background:#eceff4"></i>'}</span></span>
+      <span class="atl-row-nums mono">${nums}</span>
+    </button>`;
+  }).join('');
+  const note = $id('atlRailNote');
+  if (note) note.innerHTML = metric === 'age'
+    ? `Athletes by AQUA age group (as of Dec 31): ${AGE_GROUPS.map(g=>`<b>${g.k}</b> ${g.label}`).join(' · ')}. ${esc(yearLabelBoundary(S.year))}.`
+    : `${esc((POOLS.find(p=>p.k===S.adv.pool)||{}).label || 'Competitors')} by board: <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls.`;
+}
+
+function atlasRailRows(t){
+  const box = $id('atlRows'); if (!box || !t) return;
+  const metric = S.atlMetric || 'members';
+  if (metric === 'age' || metric === 'comp'){
+    atlasRailBreakdown(t, metric);
+    const un = $id('atlUnassigned');
+    const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
+    if (un) un.textContent = unC > 0 ? `${fmt(unC)} counties · ${fmt(t.un.m)} members unassigned` : 'every county assigned';
+    box.querySelectorAll('.atl-row').forEach(b => {
+      b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+      b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
+    });
+    return;
+  }
+  const bal = metric === 'entries' ? balanceAt(S.tierView) : null;
+  const vals = t.rows.map((r,gi) =>
+    metric === 'entries'  ? (bal ? bal.totals[gi] : null)
+  : metric === 'athletes' ? r.a
+  : metric === 'coaches'  ? r.c
+  : metric === 'clubs'    ? r.cl.size
+  : metric === 'zips'     ? r.zips
+  : metric === 'counties' ? r.countiesAssigned
+  :                          r.m);
+  const known = vals.every(v => v != null);
+  const sum = known ? vals.reduce((a,b)=>a+b, 0) : 0;
+  const n = t.rows.length, equal = n ? 100/n : 0;
+  const shares = vals.map(v => (known && sum > 0) ? 100*v/sum : 0);
+  const maxShare = Math.max(...shares, equal, 0.0001) * 1.15;
+  box.innerHTML = t.rows.map((r,gi) => {
+    const share = shares[gi], diff = share - equal;
+    const dc = (!known || sum <= 0) ? '' : Math.abs(diff) < equal*0.15 ? '' : (diff > 0 ? 'c-warn' : 'c-bad');
+    const on = S.tierView === 0 && S.active === gi;
+    const col = groupColor(gi);
+    return `<button class="atl-row ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Double-click for its zip codes'}">
+      <span class="atl-sw" style="background:${col}"></span>
+      <span class="atl-row-name">${esc(t.TG.groups[gi].name)}</span>
+      <span class="atl-row-val mono">${known ? fmt(Math.round(vals[gi])) : '…'}</span>
+      <span class="atl-row-bar"><span class="atl-bar"><i style="width:${(100*share/maxShare).toFixed(1)}%;background:${col}"></i><b style="left:${(100*equal/maxShare).toFixed(1)}%"></b></span>
+        <span class="atl-dev mono ${dc}">${(known && sum > 0) ? (diff>=0?'+':'−') + Math.abs(diff).toFixed(1) + ' pp' : '—'}</span></span>
+    </button>`;
+  }).join('');
+  const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
+  const un = $id('atlUnassigned');
+  if (un) un.textContent = unC > 0 ? `${fmt(unC)} counties · ${fmt(t.un.m)} members unassigned` : 'every county assigned';
+  const note = $id('atlRailNote');
+  if (note){
+    const word = {members:'members', athletes:'athletes', entries:'competing entries', coaches:'coaches', clubs:'clubs', zips:'zip codes', counties:'counties'}[metric] || metric;
+    const unmappable = S.totals[S.year] - (t.rows.reduce((a,r)=>a+r.m,0) + t.un.m);
+    note.innerHTML = `Bar = share of ${esc(word)}; the tick is an even split. Deviation in percentage points. Tallies: ${esc(yearLabelBoundary(S.year))}.`
+      + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
+  }
+  box.querySelectorAll('.atl-row').forEach(b => {
+    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+    b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
+  });
+}
+
+function atlasSetActive(ri){
+  S.active = ri;
+  document.querySelectorAll('.atl-row[data-ri]').forEach(x => x.classList.toggle('on', x.dataset.ri !== '' && +x.dataset.ri === S.active));
+  const slot = $id('atlMapSlot'); if (slot) slot.classList.toggle('erase', S.active === -1);
+}
+
+/* The zip drill-down, as a dialog rather than a table under the map. */
+function atlasZipDialog(gi){
+  const t = computeTallies();
+  const g = t.TG.groups[gi]; if (!g) return;
+  const zips = regionZips(gi);
+  bsDialog({title: `${g.name} — ${fmt(zips.length)} zip codes pooled`, okLabel:'Close', cancelLabel:'Export zips CSV',
+    body: `<p class="bs-dlg-p">${esc(yearLabelBoundary(S.year))}. Members per zip, largest first.</p>
+      <div class="bs-zips" style="max-height:300px">${zips.map(z=>`<span class="bs-zip" title="${esc(z.county)} County, ${esc(z.st)}"><b>${z.zip}</b> ${z.m}</span>`).join('') || '<span class="note">No members in this area yet.</span>'}</div>`})
+    .then(v => { if (v === null) exportCsv(); });
+}
+
+function wireAtlasMap(){
+  const main = $id('atlMain'); if (!main) return;
+  const nm = $id('bsName');
+  if (nm) nm.addEventListener('input', () => { S.scenarioName = nm.value; S.dirty = true; atlasStatus(); });
+  main.querySelectorAll('#atlTierSeg [data-tierv]').forEach(b => b.addEventListener('click', () => {
+    S.tierView = +b.dataset.tierv; S.detailRegion = null; repaintAll(); renderPanel();
+  }));
+  const yr = $id('atlYear');
+  if (yr) yr.addEventListener('change', () => { S.year = yr.value; repaintAll(); renderPanel(); });
+  const mt = $id('atlMetric');
+  if (mt) mt.addEventListener('change', () => { S.atlMetric = mt.value; atlasRailRows(computeTallies()); });
+  main.querySelectorAll('[data-atltool]').forEach(b => b.addEventListener('click', () => {
+    S.tool = b.dataset.atltool;
+    main.querySelectorAll('[data-atltool]').forEach(x => x.classList.toggle('on', x.dataset.atltool === S.tool));
+    const slot = $id('atlMapSlot'); if (slot) slot.classList.toggle('tool-pan', S.tool === 'pan');
+  }));
+  const erase = main.querySelector('.atl-row-erase');
+  if (erase) erase.addEventListener('click', () => atlasSetActive(-1));
+  const bind = (id, f) => { const b = $id(id); if (b) b.addEventListener('click', f); };
+  bind('bsUndo', doUndo);
+  bind('bsRedo', doRedo);
+  bind('bsBrushUp',   () => setBrush(S.brush + 1));
+  bind('bsBrushDown', () => setBrush(S.brush - 1));
+  bind('atlZoomReset', () => { S.zoom = {k:1, x:0, y:0}; applyZoom(); });
+  wireStructureControls(main);     // + Add region / + Add group live in the rail
+}
+
+/* ============================================================================
+   STRUCTURE WORKSPACE
+   Left: levels, names and roll-ups (the classic Names & structure panel,
+   re-laid). Right: the qualification pathway, one card per level. Every
+   control keeps the classic hook (class or data-attribute) so wirePathway()
+   and wireStructureControls() drive it unchanged.
+   ========================================================================= */
+function atlasStructureHtml(res){
+  const N = levelCount();
+  const lvlRows = Array.from({length:N}, (_,i) => {
+    const n = groupCountAt(i);
+    const what = n === 1 && i === N-1 ? 'meet' : (n === 1 ? 'stop' : (singulariseLevel(tierName(i)) ? tierName(i).toLowerCase() : 'stops'));
+    return `<div class="atl-lvl"><span class="mono">${i+1}</span>
+      <input class="atl-in bs-lvlname" data-lvl="${i}" value="${esc(tierName(i))}">
+      <span class="mono">${fmt(n)} ${esc(what)}</span></div>`;
+  }).join('');
+
+  const rollBlocks = [];
+  for (let k = 1; k < N; k++){
+    const L = S.levels[k];
+    const rows = Array.from({length:groupCountAt(k-1)}, (_,gi) => {
+      const sw = k===1 ? `<button class="bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '<span></span>';
+      const nm = k===1 ? S.regions[gi].name : S.levels[k-1].groups[gi].name;
+      const del = k===1 ? `<button class="bs-x" data-delarea="${gi}" title="Delete this area" ${S.regions.length<=1?'disabled':''}>×</button>` : '<span></span>';
+      const pal = (k===1 && S.palOpen===gi) ? `<div class="atl-pal">${ATLAS_RAMP.concat(PALETTE).map(c =>
+          `<button data-setcol="${gi}" data-col="${esc(c)}" style="background:${c}" title="${esc(c)}"></button>`).join('')}</div>` : '';
+      return `<div class="atl-roll">${sw}
+        <input class="atl-in bs-gname" data-lvl="${k-1}" data-gi="${gi}" value="${esc(nm)}">
+        <select class="atl-sel bs-psel" data-lvl="${k}" data-gi="${gi}">${L.groups.map((g,j)=>`<option value="${j}" ${L.of[gi]===j?'selected':''}>${esc(g.name)}</option>`).join('')}</select>
+        ${del}</div>${pal}`;
+    }).join('');
+    rollBlocks.push(`<div class="atl-h" style="margin-top:${k===1?0:22}px"><b>${esc(tierName(k-1))} → ${esc(tierName(k))}</b>
+        <span class="atl-right"><button class="atl-link quiet bs-renum" data-lvl="${k-1}" title="Rename every ${esc(tierName(k-1).toLowerCase())} from the level name">Renumber</button>
+        <button class="atl-link bs-addgrp" data-lvl="${k}">+ ${esc(singulariseLevel(tierName(k)) || 'group')}</button>
+        <button class="atl-link quiet bs-remgrp" data-lvl="${k}" ${L.groups.length<=1?'disabled':''}>− remove</button></span></div>
+      <div class="atl-sub">Rename any ${esc(tierName(k-1).toLowerCase())}; choose which ${esc((singulariseLevel(tierName(k))||'group').toLowerCase())} it rolls into.</div>
+      ${rows}`);
+  }
+  const top = N-1;
+  const topRows = Array.from({length:groupCountAt(top)}, (_,gi) => {
+    const sw = top===0 ? `<button class="bs-swbtn" data-pal="${gi}" style="background:${S.regions[gi].color}" title="Change colour"></button>` : '<span></span>';
+    const nm = top===0 ? S.regions[gi].name : S.levels[top].groups[gi].name;
+    const del = top===0 ? `<button class="bs-x" data-delarea="${gi}" ${S.regions.length<=1?'disabled':''}>×</button>` : '<span></span>';
+    const pal = (top===0 && S.palOpen===gi) ? `<div class="atl-pal">${ATLAS_RAMP.concat(PALETTE).map(c =>
+        `<button data-setcol="${gi}" data-col="${esc(c)}" style="background:${c}"></button>`).join('')}</div>` : '';
+    return `<div class="atl-roll noroll">${sw}<input class="atl-in bs-gname" data-lvl="${top}" data-gi="${gi}" value="${esc(nm)}">${del}</div>${pal}`;
+  }).join('');
+  rollBlocks.push(`<div class="atl-h" style="margin-top:22px"><b>${esc(tierName(top))} names</b>
+      <span class="atl-right"><button class="atl-link quiet bs-renum" data-lvl="${top}">Renumber</button>
+      ${top===0 ? `<button class="atl-link" id="bsAddRegion">+ ${esc(singulariseLevel(tierName(0))||'area')}</button>` : ''}</span></div>${topRows}`);
+
+  const inferred = seedStageInferred(), effective = seedStage(), overridden = !!S.seedPool;
+  const seed = `<div class="atl-seed"><label>Seed ${esc(tierName(0))} from
+      <select class="atl-sel" id="bsSeedPool">
+        <option value="" ${!overridden?'selected':''}>Auto (currently: ${esc(inferred)})</option>
+        ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
+      </select></label>
+    <div class="atl-note">Seeding from real <b>${esc(effective)} ${yearNumBoundary(S.year)}</b> entries — ${fmt(seedTotal())} before this level's own advancement rule is applied.${overridden ? '' : ' If Level 1 has taken over a stage this map used to have below it, auto-detect will seed it from the wrong, already-filtered field — pick the right one explicitly.'}</div></div>`;
+
+  const left = `<aside class="atl-sidebar">
+    <div class="atl-hh">Levels &amp; names</div>
+    <div class="atl-sub">Level 1 is the map you paint. Everything above it is grouping.</div>
+    ${lvlRows}
+    <div class="atl-links"><button class="atl-link" id="bsAddLevel" ${N>=MAX_LEVELS?'disabled':''}>+ Add a level on top</button><button class="atl-link quiet" id="bsRemLevel" ${N<=1?'disabled':''}>Remove top level</button></div>
+    ${rollBlocks.join('')}
+    <div class="atl-topmeet"><span>Top meet</span><input class="atl-in" id="bsFinalName" value="${esc(S.finalName)}" placeholder="Junior Nationals"></div>
+    ${seed}
+  </aside>`;
+
+  return left + `<section class="atl-pathway">${atlasPathwayHtml(res)}</section>`;
+}
+
+function atlasPathwayHtml(res){
+  const RN = QR().ROUND_NAME;
+  const inLib = !!(S.pathSaved && S.pathSaved.id);
+  const lib = `<select class="atl-sel" id="bsPathLoad"><option value="">Load a saved pathway…</option>
+      ${(S.pathList||[]).map(p=>`<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} · ${p.levels} levels · ${esc(p.u||'')}</option>`).join('')}</select>`;
+  const probsAll = (res.problems||[]).map(p => ({kind:p.kind, msg:(p.level!=null?tierName(p.level)+': ':'') + p.msg}));
+  const probs = probsAll.slice(0,4).map(p => `<div class="atl-warn ${p.kind==='gap'?'amber':''}">${esc(p.msg)}</div>`).join('')
+    + (probsAll.length > 4 ? `<div class="atl-note">and ${probsAll.length-4} more — see Schedule</div>` : '');
+  const lvlOpts = sel => S.levels.map((l,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(tierName(i))}</option>`).join('');
+  const rndOpts = sel => ROUND_CHOICES.map(r=>`<option value="${r}" ${r===sel?'selected':''}>${esc(RN[r])}</option>`).join('');
+  const focus = focusCells();
+
+  const cards = S.routing.map((lvl, L) => {
+    const rounds = QR().roundsOf(lvl);
+    const stops = groupCountAt(L);
+    let entries = 0;
+    for (let g = 0; g < Math.max(1, stops); g++) entries += QR().entriesAt(res, L, g, focus);
+    let divers = '';
+    if (entries > 0.5 && focus.length === 1) divers = `${fmt(Math.round(entries))} divers`;
+    else if (S.mult && entries > 0.5){
+      const d = QR().diversAt(res, L, rounds[0].key, focus, S.mult, multBasisFor(L));
+      if (d && d.ok) divers = `${fmt(Math.round(d.divers))} divers` + (d.reliable ? '' :
+        `<span class="bs-est" title="${esc(d.boards_dropped
+          ? 'A board that is normally contested has no entries here, so the measured mix no longer describes this field.'
+          : 'The boards disagree about how many people this is, which means the mix of events has moved away from what was measured.')}">estimate</span>`);
+    }
+    const arrive = L > 0 ? `<div class="atl-arrive">Arrive <input class="atl-in mono bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}" value="${Math.round(arrivalRate(L)*100)}">%
+        ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))})</span>`
+          : `<span class="bs-arr-m warn">not measured — assumes full turnout${stageNameForLevel(L)?'':` · "${esc(tierName(L))}" does not match a real stage`}</span>`}</div>` : '';
+    const roundRows = rounds.map(r => {
+      const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
+      const size = QR().sizeAt(res, L, r.key, focus);
+      const routes = outs.map(({rt,ri}) => `<div class="atl-route">
+          <span>places</span>
+          <input class="bs-rt-in" type="number" min="1" max="200" data-rt="lo" data-l="${L}" data-i="${ri}" value="${rt.lo||1}">
+          <span>to</span>
+          <span class="atl-step">
+            <button class="bs-rt-stepbtn" data-step="-1" data-l="${L}" data-i="${ri}" title="One fewer" ${rt.hi==null||rt.hi<=1?'disabled':''}>−</button>
+            <input class="bs-rt-in bs-rt-hi" type="number" min="1" max="200" data-rt="hi" data-l="${L}" data-i="${ri}" value="${rt.hi==null?'':rt.hi}" placeholder="∞">
+            <button class="bs-rt-stepbtn" data-step="1" data-l="${L}" data-i="${ri}" title="One more">+</button>
+          </span>
+          <span class="atl-arrow">→</span>
+          <select class="bs-rt-sel" data-rt="lvl" data-l="${L}" data-i="${ri}">${lvlOpts(rt.to?rt.to.level:L)}</select>
+          <span class="c-faint">·</span>
+          <select class="bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
+          <button class="bs-x" data-rtdel="${ri}" data-l="${L}" title="Remove this route">×</button>
+        </div>`).join('');
+      const none = !outs.length ? `<div class="atl-none">${L === S.routing.length-1 && r === rounds[rounds.length-1]
+        ? 'Nobody advances from here — this is the championship final.' : 'Nobody advances from here.'}</div>` : '';
+      return `<div class="atl-round">
+        <div class="atl-round-h"><b>${esc(RN[r.key]||r.key)}</b>
+          <span><span class="mono">${fmt(Math.round(size/Math.max(1,stops)))}</span> per stop · ${fmt(Math.round(size))} across ${stops} ${stops===1?'stop':'stops'}
+            ${rounds.length>1 ? `<button class="atl-link quiet" data-rndel="${esc(r.key)}" data-l="${L}" style="margin-left:8px">remove round</button>` : ''}</span></div>
+        ${routes}${none}
+        <div class="atl-route" style="margin-top:8px"><button class="atl-link bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ Add a route</button></div>
+      </div>`;
+    }).join('');
+    const spare = ROUND_CHOICES.filter(k => !rounds.some(r=>r.key===k));
+    const off = (S.routing[L].notOffered||[]).length;
+    return `<div class="atl-card">
+      <div class="atl-card-h">
+        <div class="atl-t"><b>${esc(tierName(L))}</b><span>${fmt(stops)} ${stops===1?'stop':'stops'}</span></div>
+        <div class="atl-big"><b>${fmt(Math.round(entries))}</b><span>entries${divers ? ' · ' + divers : ''}</span></div>
+        ${arrive}
+      </div>
+      ${S.evOpen===L ? atlasEventGrid(L) : ''}
+      ${roundRows}
+      <div class="atl-card-f">
+        ${spare.length ? `<select class="atl-sel bs-rndadd" data-l="${L}"><option value="">+ Add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
+        <button class="atl-link" data-evtog="${L}">${S.evOpen===L?'Hide events':'Events'}${off ? `<span class="atl-tag pool">${off} off</span>` : ''}</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="atl-h"><b>Qualification pathway</b>
+      <span>Places finishing a round and where they go. A band wider than the field simply sends fewer.</span>
+      <div class="atl-right">Library ${lib}
+        <button class="atl-btn sm" id="bsPathSave">${inLib && !S.pathDirty ? 'Save a copy' : 'Save this pathway'}</button>
+        <button class="atl-link quiet" id="bsPathDel" title="Delete the selected saved pathway">Delete saved</button>
+        <button class="atl-link quiet" id="bsPathReset">Back to published rules</button></div>
+    </div>
+    <div class="atl-note">Pathway in use: <b>${esc(currentPathwayLabel())}</b>${inLib ? (S.pathDirty ? ' <span class="atl-tag amber">edited since loaded</span>' : ' <span class="atl-tag">from the library</span>') : ' <span class="atl-tag amber">not in the library</span>'}
+      · <span class="atl-focus" style="display:inline-flex">Showing <select class="atl-sel" id="bsPathFocus" style="padding:3px 6px">
+          <option value="all" ${(!S.bdCell||S.bdCell==='all')?'selected':''}>every event and age group</option>
+          ${['A','B','C','D'].map(a=>`<optgroup label="${esc(AGE_LBL[a])}">` + ['G','B'].map(g=>['1','3','P'].map(d=>{
+            const c=a+g+d; return `<option value="${c}" ${S.bdCell===c?'selected':''}>${esc(AGE_LBL[a])} ${esc(GEN_LBL[g])} ${esc(DIS_LBL[d])}</option>`;
+          }).join('')).join('') + '</optgroup>').join('')}</select></span></div>
+    ${S.pathNotes && S.pathNotes.length ? `<div class="atl-probs"><div class="atl-warn amber"><b>Loaded "${esc(S.pathName)}" onto a different structure.</b> ${S.pathNotes.map(n=>esc(n)).join(' ')} Check the routes before reading the numbers.</div></div>` : ''}
+    ${probs ? `<div class="atl-probs">${probs}</div>` : ''}
+    <div class="atl-cards">${cards}</div>
+    <p class="atl-foot-p"><b>Entries are not people.</b> Athletes commonly contest two or three events, so entries tell you
+      what a session costs and how long it runs, while divers tell you how many bodies need a bed and an award.
+      Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
+      gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
+      measured, so treat the headcount as indicative rather than a count. Places are counted, never simulated — nothing here predicts who wins.</p>`;
+}
+
+function atlasEventGrid(L){
+  const off = new Set(S.routing[L].notOffered || []);
+  const head = ['A','B','C','D'].map(a=>`<th colspan="2">${esc(AGE_LBL[a])}</th>`).join('');
+  const sub  = ['A','B','C','D'].map(()=>'<th>Boys</th><th>Girls</th>').join('');
+  const body = ['1','3','P'].map(d => `<tr><td>${esc(DIS_LBL[d])}</td>${['A','B','C','D'].flatMap(a => ['B','G'].map(g => {
+      const c = a+g+d;
+      return `<td><input type="checkbox" data-ev="${c}" data-evl="${L}" ${off.has(c)?'':'checked'}></td>`;
+    })).join('')}</tr>`).join('');
+  return `<div class="atl-evgrid">
+    <div class="atl-note"><span>Events contested at <b>${esc(tierName(L))}</b>. Unticking one means this stage does not hold it; athletes are not carried into an event a stage does not run.</span>
+      <span><button class="atl-link" data-evall="${L}">all on</button> · <button class="atl-link quiet" data-evnone="${L}" title="Turn platform off for every age group">platform off</button></span></div>
+    <table><thead><tr><th></th>${head}</tr><tr><th></th>${sub}</tr></thead><tbody>${body}</tbody></table>
+  </div>`;
+}
+
+/* ============================================================================
+   PROJECTION WORKSPACE
+   ========================================================================= */
+function meetDivers(m){
+  if (!S.mult || !m.events.length) return null;
+  const byCell = {};
+  m.events.forEach(e => { byCell[e.cell] = e.n; });
+  try { const d = QR().estimateDivers(byCell, S.mult, multBasisFor(m.level)); return d && d.ok ? d : null; }
+  catch(e){ return null; }
+}
+const stopFor = (sched, m) => (sched.stops||[]).find(s => s.levelIndex === m.level && s.groupIndex === m.gi);
+
+function atlasProjectionHtml(res){
+  const fin = financialsFor(null);
+  const sched = computeSchedule(res);
+  const meets = meetManifest(res);
+  const nL = S.routing.length;
+
+  const pipe = S.routing.map((lvl, L) => {
+    const t = fin && fin.tiers[L];
+    const rounds = QR().roundsOf(lvl);
+    let entries = 0;
+    for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) entries += QR().entriesAt(res, L, g, CELLS);
+    const d = (S.mult && entries > 0.5) ? QR().diversAt(res, L, rounds[0].key, CELLS, S.mult, multBasisFor(L)) : null;
+    const nMeets = t ? t.meets : groupCountAt(L);
+    return `<div class="atl-pipe-c">
+      <div class="atl-pn">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
+      <div class="atl-pv">${fmt(Math.round(entries))}</div>
+      <div class="atl-pd">entries${d && d.ok ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' · estimate'}` : ''}${t && !t.measured && L > 0 ? ' · <span class="c-warn">assumes full turnout</span>' : ''}</div>
+      <div class="atl-pf"><span>${t && t.spots ? `${Math.round(t.fill*100)}% of ${fmt(Math.round(t.spots))} places` : 'no cap — open entry'}</span>
+        <span>biggest ÷ smallest <span class="mono">${t && t.ratio ? t.ratio.toFixed(1)+'×' : '—'}</span></span></div>
+      ${L < nL-1 ? '<span class="atl-pipe-arrow">→</span>' : ''}
+    </div>`;
+  }).join('');
+
+  const rows = meets.map(m => {
+    const st = stopFor(sched, m);
+    const d = meetDivers(m);
+    const hl = m.level === S.tierView ? ` data-hl="${m.gi}"` : '';
+    const days = st ? `${st.days}d${st.daysOver ? ` · ${st.daysOver} over` : ''}${st.unknown ? ' · untimed' : ''}` : '—';
+    return `<div class="name first"${hl}><span class="atl-sw" style="background:${atlasLevelColor(m.level, m.gi)}"></span>${esc(m.name)} <small>${esc(m.levelName)}</small></div>
+      <div class="num"${hl}>${fmt(m.entries)}</div>
+      <div class="num dim"${hl}>${d ? fmt(Math.round(d.divers)) + (d.reliable ? '' : '<span class="bs-est" title="Mix of events has moved from what was measured">est.</span>') : '—'}</div>
+      <div class="num dim"${hl}>${fmt(m.events.length)}</div>
+      <div class="num dim"${hl}>${fmt(m.biggest)}</div>
+      <div class="num last ${st && st.daysOver ? 'c-bad' : 'dim'}"${hl}>${days}</div>`;
+  }).join('');
+
+  return `<div class="atl-page">
+    <div class="atl-pipe" style="grid-template-columns:repeat(${nL},1fr)">${pipe}</div>
+    <div class="atl-two">
+      <div>
+        <div class="atl-h"><b>Every meet</b><span>hover a row to find it on the map</span></div>
+        <div class="atl-scroll"><div class="atl-tbl" style="grid-template-columns:1.6fr .8fr .8fr .8fr .8fr .9fr;min-width:560px">
+          <div class="th first">Meet</div><div class="th num">Entries</div><div class="th num">Divers</div><div class="th num">Events</div><div class="th num">Biggest</div><div class="th num last">Days</div>
+          ${rows}
+        </div></div>
+        <p class="atl-note" style="margin-top:10px"><b>Days</b> is what the schedule engine lays out: prelims and finals of an event share a day, and an age group and gender does not contest more than one event in a day. <b>over</b> counts days that run past closing. Host payouts per meet are under Money.</p>
+      </div>
+      <div>${atlasBreakdownHtml(res)}</div>
+    </div>
+    ${atlasTakeUpNote('projection')}
+  </div>`;
+}
+
+const AGE_RANGE = {A:'16–18', B:'14–15', C:'12–13', D:'11 & under'};
+function atlasBreakdownHtml(res){
+  const mode = S.bdMode || 'stop';
+  const E = breakdownEngine(res, mode);
+  const L = Math.min(S.atlBdL || 0, S.routing.length - 1);
+  const colsL = E.cols.filter(c => c.L === L);
+  const col = colsL.find(c => c.key === S.atlBdR) || colsL[0];
+  if (!col) return '';
+  const tabs = S.routing.map((_,i) => `<button data-atlbdl="${i}" class="${i===L?'on':''}">${esc(tierName(i))}</button>`).join('');
+  const rseg = colsL.length > 1 ? `<div class="atl-seg sm">${colsL.map(c => `<button data-atlbdr="${esc(c.key)}" class="${c.key===col.key?'on':''}">${esc(c.round)}</button>`).join('')}</div>` : '';
+  const modes = [['stop','At one stop'],['total','All stops'],['qualified','Qualified, before take-up'],['spots','Spots the structure creates'],['members','Membership pool']];
+  const mseg = `<div class="atl-seg sm">${modes.map(([k,l]) => `<button data-bd="${k}" class="${mode===k?'on':''}">${l}</button>`).join('')}</div>`;
+  const gens = ['G','B'];
+  const head = gens.flatMap(g => ['1','3','P'].map(d => `<div class="th num">${esc(GEN_LBL[g])}<br>${esc(DISCS.find(x=>x.k===d).label)}</div>`)).join('');
+  const body = ['A','B','C','D'].map(a => `<div class="sub first">${esc(AGE_LBL[a])}<small>${AGE_RANGE[a]}</small></div>` +
+    gens.flatMap(g => ['1','3','P'].map(d => `<div class="num">${E.show(E.at(col, a+g+d))}</div>`)).join('')).join('');
+  const tots = gens.flatMap(g => ['1','3','P'].map(d => `<div class="num tot c-navy">${E.show(E.agg(col, ['A','B','C','D'].map(a=>a+g+d)))}</div>`)).join('');
+  return `<div class="atl-h"><b>Who is at ${esc(tierName(L))}</b><div class="atl-right"><div class="atl-seg sm">${tabs}</div>${rseg}</div></div>
+    <div class="atl-h" style="margin-top:-2px"><span>${esc(col.round)} · ${col.stops} ${col.stops===1?'stop':'stops'}</span><div class="atl-right">${mseg}</div></div>
+    <div class="atl-scroll"><div class="atl-tbl atl-bd" style="min-width:560px">
+      <div class="th first"></div>${head}${body}
+      <div class="tot first">All groups</div>${tots}
+    </div></div>
+    <p class="atl-note" style="margin-top:12px">${E.note}</p>`;
+}
+
+function atlasTakeUpNote(M){
+  if (S.takeUp && S.takeUp.usable)
+    return `<p class="atl-note" style="margin-top:22px">The <b>arrive</b> figure on each level is how big that field
+      actually turns out to be against the size the rules alone would send — above 100% means athletes
+      arrive by the average-score route as well as the bands; below means qualified athletes decline.
+      Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden under Structure. Places are counted,
+      never simulated: nothing here predicts who wins.${M==='money' ? ' A tier marked <b>not measured</b> has no real season to check it against and assumes full turnout — treat that figure as a ceiling, not a forecast.' : ''}</p>`;
+  return `<div class="atl-warn" style="margin-top:22px"><b>These are qualified places, not expected entries.</b>
+      ${S.takeUp && S.takeUp.fallback
+        ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
+        : 'Take-up could not be measured for this season, so every figure here assumes every qualifier turns up.'}
+      Load the reference alignment on the map and reopen this workspace to see expected entries instead.</div>`;
+}
+
+/* ============================================================================
+   MONEY WORKSPACE
+   ========================================================================= */
+function atlasMoneyHtml(res){
+  const a = financialsFor(null);
+  if (!a) return '<div class="atl-page"><div class="atl-note">Working the numbers…</div></div>';
+  const levels = Object.keys(a.tiers).sort((x,y)=>x-y);
+  const sched = computeSchedule(res);
+  const meets = meetManifest(res);
+  const tierRows = (f) => levels.map(L => {
+    const t = f.tiers[L];
+    if (!t) return `<div class="sub first pad">${esc(tierName(+L))}</div>${'<div class="num pad">—</div>'.repeat(6)}`;
+    return `<div class="sub first pad"><b style="font-weight:600">${esc(t.name)}</b><small>${fmt(t.meets)} ${t.meets===1?'meet':'meets'}${t.measured?'':' · <span class="c-warn" title="No real season to check this tier\'s attrition against — this assumes every qualifier turns up.">not measured</span>'}</small></div>
+      <div class="num pad">${fmt(Math.round(t.entries))}</div>
+      <div class="num pad dim">${t.spots ? `${Math.round(t.fill*100)}%<span class="bs-bd-rng">of ${fmt(Math.round(t.spots))} places</span>` : '<span class="bs-bd-0">no cap</span>'}</div>
+      <div class="num pad">${usd(t.gross)}</div>
+      <div class="num pad dim">${usd(t.host)}</div>
+      <div class="num pad c-navy" style="font-weight:600">${usd(t.usad)}</div>
+      <div class="num pad last ${t.ratio > 2 ? 'c-warn' : 'dim'}">${t.ratio ? t.ratio.toFixed(1)+'×' : '—'}</div>`;
+  }).join('');
+  const totRow = (f) => `<div class="tot first sub pad">All tiers<small>${fmt(f.total.meets)} meets</small></div>
+      <div class="num tot pad">${fmt(Math.round(f.total.entries))}</div><div class="tot pad"></div>
+      <div class="num tot pad">${usd(f.total.gross)}</div><div class="num tot pad dim">${usd(f.total.host)}</div>
+      <div class="num tot pad c-navy">${usd(f.total.usad)}</div><div class="tot pad last"></div>`;
+  const head = `<div class="th first">Tier</div><div class="th num">Entries</div><div class="th num">Filled</div><div class="th num">Entry income</div><div class="th num">To hosts</div><div class="th num">USA Diving keeps</div><div class="th num last">Big ÷ small</div>`;
+  const table = (f) => `<div class="atl-scroll"><div class="atl-tbl atl-fin" style="min-width:640px">${head}${tierRows(f)}${totRow(f)}</div></div>`;
+
+  let cmp = '';
+  if (S.compare){
+    const b = financialsFor(S.compare);
+    if (b){
+      const dv = (x,y) => { const v = x - y; if (Math.abs(v) < 1) return '<span class="c-faint">same</span>'; return `<span class="${v>0?'c-ok':'c-bad'}">${v>0?'+':'−'}${usd(Math.abs(v))}</span>`; };
+      cmp = `<div class="atl-h" style="margin-top:28px"><b>Against ${esc(S.compare.name)}</b><span>priced the same way: same pathway engine, same fees, same host model, only the map and its tiers changed</span></div>
+        ${table(b)}
+        <p class="atl-note" style="margin-top:8px">USA Diving keeps, this scenario against ${esc(S.compare.name)}: <span class="mono">${dv(a.total.usad, b.total.usad)}</span> · entry income ${dv(a.total.gross, b.total.gross)} · to hosts ${dv(a.total.host, b.total.host)}.</p>`;
+    }
+  }
+
+  const caveat = `<p class="atl-note" style="margin-top:12px">Entry fees ${S.fees ? '<b>as typed at right</b>' : 'at the published rate for each tier'}, less the DiveMeets pass-through ($${LEVY.toFixed(2)} per entry).
+      <b>Filled</b> is entries against the places the rules make available at that tier — capacity, not a forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
+      <b>Biggest ÷ smallest</b> is the number a single host cut lives or dies on: a tier far from 1× cannot be paid by one rule, whatever the rule is.
+      Membership dues and the senior circuit are in Pricing Studio, not here.</p>`;
+
+  // What it costs an athlete to go
+  const ev = S.costEvents || 2;
+  const c = athletePathCost(ev), tk = costTakeUp(ev);
+  const up = tk.delta > 0.01, dn = tk.delta < -0.01;
+  const costCards = c.rows.map(r => `<div class="atl-card">
+      <div class="atl-cn">${esc(r.name)}</div>
+      <div class="atl-cv">${usd(r.total)}</div>
+      <div class="atl-cd"><span class="mono">${usd(r.fee)}</span> entries (${ev} event${ev===1?'':'s'}) · $<input class="atl-in mono bs-rt-in" type="number" min="0" step="50" data-trip="${r.level}" value="${stopCost(r.level)}"> travel &amp; stay</div>
+    </div>`).join('');
+  const cost = `<div class="atl-h" style="margin-top:28px"><b>What it costs an athlete to go</b><span>${ev} event${ev===1?'':'s'}, full pathway, one trip per stop — travel figures are placeholders, not measurements</span></div>
+    <div class="atl-cost">${costCards}<div class="atl-card"><div class="atl-cn">Whole pathway</div><div class="atl-cv">${usd(c.total)}</div>
+      <div class="atl-cd">against <span class="mono">${usd(tk.ref)}</span> on today's structure — ${Math.abs(tk.delta*100).toFixed(0)}% ${up?'more':dn?'less':'the same'}</div></div></div>
+    <div class="atl-costctl"><label>events each <input class="atl-in mono bs-rt-in" type="number" min="1" max="3" id="bsCostEv" value="${ev}"></label>
+      <label>cost sensitivity <input class="atl-in mono bs-rt-in" type="number" min="0" max="2" step="0.05" id="bsCostEl" value="${S.costElastic == null ? 0.35 : S.costElastic}"></label>
+      <span class="atl-note">${(up||dn) ? `At a sensitivity of ${tk.e}, that moves take-up by ${((tk.factor-1)*100).toFixed(0)}% — roughly ${Math.abs(Math.round((1-tk.factor)*100))} in every 100 families ${up?'not making a trip they would have made':'making one they would not have'}.` : 'Same cost as today, so no take-up feedback.'} The sensitivity is a judgement, not a measurement; it is here to be argued with.</span></div>`;
+
+  // Real participation by season
+  const yf = yearFillRows();
+  const yearFill = yf ? `<div class="atl-h" style="margin-top:28px"><b>Real participation by season</b><span>this map's zones seeded from each season's actual entries, reallocated county by county — the same map run against three real seasons</span></div>
+    <div class="atl-tbl" style="grid-template-columns:1.4fr 1fr 1fr 1fr"><div class="th first">Tier</div><div class="th num">2024</div><div class="th num">2025</div><div class="th num last">2026</div>
+      ${yf.map(r => `<div class="first sub"><b style="font-weight:600">${esc(r.name)}</b></div>${r.cells.map((cell,i) => `<div class="num ${i===2?'last':''}">${cell.html}</div>`).join('')}`).join('')}</div>
+    <p class="atl-note" style="margin-top:8px"><b>Modelled</b> marks a tier that season has no recorded field for (only 2026 ran an East/West/Central round, and no season here has a measured rate into the championship), so that figure assumes every qualifier turns up rather than measuring who actually did.</p>` : '';
+
+  // Right column
+  const feeRows = levels.map(L => `<div class="atl-fees"><span style="justify-content:flex-start">${esc(a.tiers[L].name)}</span>
+      <span>$<input class="atl-in mono bs-rt-in" type="number" min="0" step="5" data-fee="${L}" value="${feeFor(+L)}"></span>
+      <span class="mono c-muted" title="What the hosts at this tier are paid under the model at left">${usd(a.tiers[L].host)}</span></div>`).join('');
+  const mode = S.hostMode || 'pct';
+  const hostCtl = `<div class="atl-host"><label>Host cut <select class="atl-sel" id="bsHostMode">
+        <option value="pct" ${mode==='pct'?'selected':''}>% of net</option><option value="flat" ${mode==='flat'?'selected':''}>flat per meet</option><option value="per_entry" ${mode==='per_entry'?'selected':''}>per entry</option></select></label>
+      ${mode==='pct' ? `<label><input class="atl-in mono bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1" value="${Math.round((S.hostShare||0)*100)}">%</label>`
+       : mode==='flat' ? `<label>$<input class="atl-in mono bs-rt-in" id="bsHostFlat" type="number" min="0" step="100" value="${+S.hostFlat||0}"></label>`
+       : `<label>$<input class="atl-in mono bs-rt-in" id="bsHostPer" type="number" min="0" step="1" value="${+S.hostPer||0}">/entry</label>`}
+      <label>minimum $<input class="atl-in mono bs-rt-in" id="bsHostMin" type="number" min="0" step="100" value="${+S.hostMin||0}"></label></div>`;
+
+  let lastLevel = null;
+  const hostRows = meets.map(m => {
+    const $ = meetMoney(m);
+    let head = '';
+    if (m.level !== lastLevel){
+      lastLevel = m.level;
+      const kin = meets.filter(x => x.level === m.level);
+      head = `<div class="first sub" style="grid-column:1 / -1;background:#f4f5f8;padding:8px 10px 8px 0"><b style="font-weight:600">${esc(m.levelName)}</b> · ${kin.length} ${kin.length===1?'meet':'meets'}
+        <span class="atl-bulk" style="float:right">set every host cut to $<input class="atl-in mono" type="number" min="0" step="100" data-bulklevelin="${m.level}" placeholder="0"><button class="atl-link" data-bulklevel="${m.level}">Apply to this level</button></span></div>`;
+    }
+    return head + `<div class="first" data-hl="${m.level===S.tierView?m.gi:''}"><b style="font-weight:600">${esc(m.name)}</b></div>
+      <div class="num">${fmt(m.entries)}</div><div class="num dim">${usd($.gross)}</div><div class="num dim">−${usd($.levy)}</div>
+      <div class="num"><span style="display:inline-flex;align-items:center;gap:2px">$<input class="atl-in mono bs-rt-in bs-hostin ${$.overridden?'set':''}" type="number" min="0" step="100" data-host="${esc(meetKey(m))}" value="${Math.round($.host)}" title="Type a figure to fix this meet's payout. Clear it to go back to the model."></span>
+        <span class="bs-bd-rng">${$.capped ? ($.overridden?'more than this meet takes':'all of net') : $.overridden ? `set for this meet · ${Math.round($.pct*100)}% of net` : $.floored ? 'at the minimum' : `${Math.round($.pct*100)}% of net`}</span></div>
+      <div class="num last c-navy">${usd($.usad)}</div>`;
+  }).join('');
+  const hostTable = `<details style="margin-top:14px"><summary>Host payout per meet${S.hostPer_stop && Object.keys(S.hostPer_stop).length ? ` · ${Object.keys(S.hostPer_stop).length} set by hand` : ''}</summary>
+    <div class="atl-note" style="margin-bottom:8px">A negotiated figure for one meet beats the model. Blank means "use the model again", not "pay nothing".
+      ${S.hostPer_stop && Object.keys(S.hostPer_stop).length ? `<button class="atl-link" id="bsHostClear">Back to the model for every meet</button>` : ''}
+      <button class="atl-link quiet" id="bsMfCsv">Export meet list CSV</button></div>
+    <div class="atl-scroll"><div class="atl-tbl atl-hostmeet" style="min-width:600px">
+      <div class="th first">Meet</div><div class="th num">Entries</div><div class="th num">Income</div><div class="th num">DiveMeets</div><div class="th num">Host cut</div><div class="th num last">Keeps</div>${hostRows}</div></div></details>`;
+
+  return `<div class="atl-page"><div class="atl-money">
+    <div>
+      <div class="atl-h"><b>Entry income by tier</b><span>published fee × projected entries, less the DiveMeets pass-through</span></div>
+      ${table(a)}${caveat}${cmp}${cost}${yearFill}${atlasTakeUpNote('money')}
+    </div>
+    <aside class="atl-side">
+      <div class="atl-navy"><div class="atl-nl">USA Diving keeps, entry fees only · season</div><div class="atl-nv">${usd(a.total.usad)}</div>
+        <div class="atl-ns">of <span class="mono">${usd(a.total.gross)}</span> gross · <span class="mono">${usd(a.total.levy)}</span> DiveMeets · <span class="mono">${usd(a.total.host)}</span> to hosts</div></div>
+      <div class="atl-panel"><div class="atl-ph">Fees &amp; host model</div>
+        ${feeRows}
+        <div class="atl-fees hd"><span></span><span>entry fee</span><span>to hosts</span></div>
+        ${hostCtl}
+        ${S.fees ? '<button class="atl-link" id="bsFeeReset" style="margin-top:12px">Back to published fees</button>' : ''}
+        ${hostTable}
+      </div>
+    </aside>
+  </div></div>`;
+}
+
+/* The three-season table's cells, as data, shared by the classic and Atlas
+   renderers so the two can never disagree about which figure is real. */
+function yearFillRows(){
+  if (!S.advData || !S.advData.pools) return null;
+  const fy = {y24: financialsForYear('y24'), y25: financialsForYear('y25'), y26: financialsForYear('y26')};
+  if (!fy.y24 && !fy.y25 && !fy.y26) return null;
+  const levels = Array.from(new Set(['y24','y25','y26'].flatMap(y => fy[y] ? Object.keys(fy[y].tiers) : []))).sort((x,y)=>x-y);
+  if (!levels.length) return null;
+  const cell = (f, L, year) => {
+    const t = f && f.tiers[L];
+    if (!t || !(t.entries > 0)) return {html:'<span class="bs-bd-0">—</span>', entries:null};
+    const l = +L, stage = stageNameForLevel(l);
+    const real = l === 0 ? stageExists(stage || seedStage(), year) : t.measured;
+    return {entries:t.entries, real,
+      html: `${fmt(Math.round(t.entries))}${t.spots ? `<span class="bs-bd-rng">${Math.round(t.fill*100)}% of places</span>` : ''}${real ? '' : ' <span class="bs-arr-m warn">modelled</span>'}`};
+  };
+  return levels.map(L => ({
+    name: ['y26','y25','y24'].map(y => fy[y] && fy[y].tiers[L] && fy[y].tiers[L].name).find(Boolean) || tierName(+L),
+    cells: ['y24','y25','y26'].map(y => cell(fy[y], L, y)),
+  }));
+}
+
+/* ============================================================================
+   SCHEDULE WORKSPACE
+   Same engine, same manual placements (S.schedPlans), same drag-between-days;
+   the classes wireSchedule() and wireScheduleDnD() look for are kept.
+   ========================================================================= */
+function atlasScheduleHtml(res){
+  const out = computeSchedule(res);
+  if (out.error === 'engine-missing') return `<div class="atl-page"><div class="atl-warn"><b>The schedule engine is not loaded.</b> Add scenario-schedule-engine.js to the page.</div></div>`;
+  if (out.error) return `<div class="atl-page"><div class="atl-note">Working out the pathway first…</div></div>`;
+  if (!out.stops.length) return `<div class="atl-page"><div class="atl-note">No stops to lay out yet. Draw a map and set a pathway first.</div></div>`;
+  if (!S.schedStop || !out.stops.some(x => stopKeyOf(x) === S.schedStop))
+    S.schedStop = stopKeyOf(out.stops.find(x => x.daysOver) || out.stops[0]);
+  const st = out.stops.find(x => stopKeyOf(x) === S.schedStop) || out.stops[0];
+  const R = out.rules, key = stopKeyOf(st), plan = planFor(key);
+  const meets = meetManifest(res);
+  const m = meets.find(x => x.level === st.levelIndex && x.gi === st.groupIndex);
+  const d = m ? meetDivers(m) : null;
+
+  const pills = out.stops.map(x => {
+    const k = stopKeyOf(x);
+    const hl = x.levelIndex === S.tierView ? ` data-hl="${x.groupIndex}"` : '';
+    return `<button class="atl-pill ${k===S.schedStop?'on':''} ${x.unknown?'untimed':(x.daysOver?'bad':'')}" data-stop="${esc(k)}"${hl} title="${esc(x.level)}${x.unknown?` — ${x.unknown} event(s) not timed`:''}">
+      <span>${esc(x.name)}</span><span class="mono">${x.days}d${x.daysOver ? ` · ${x.daysOver} over` : ''}${x.unknown ? ` · ${x.unknown} untimed` : ''}</span></button>`;
+  }).join('');
+
+  if (st.err) return `<div class="atl-page"><div class="atl-pills">${pills}</div><div class="atl-warn" style="margin-top:14px">${esc(st.err)}</div></div>`;
+  const sim = st.sim, days = (sim && sim.days) || [];
+  const dayCount = days.length;
+  const windowMin = R.facilityCloseMin - R.facilityOpenMin;
+  const bad = days.filter(x => x.overCapacity).length;
+  const verdict = bad ? `${bad} of ${dayCount} day${dayCount===1?'':'s'} runs past closing.`
+                : (st.unknown ? 'Every day fits — but only counting the events that could be timed.' : 'Every day fits inside the pool hours.');
+  const tm = mins => `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;
+
+  const dayCols = days.map(dd => {
+    const over = dd.overCapacity;
+    const clash = (dd.conflicts||[]).length;
+    const sessions = (dd.sessions||[]).map(ss => {
+      const evs = ss.events.map(e => {
+        const canSplit = (R.neverSplitDisciplines||[]).indexOf(e.discipline) < 0;
+        return `<div class="bs-sc-ev ${e.split?'split':''}" data-ev="${esc(e.id)}" data-min="${e.estimatedMinutes}" data-day="${dd.dayNumber}" draggable="true" tabindex="0" role="button"
+             aria-label="${esc(EVLBL(e.id))}, ${e.estimatedMinutes} minutes, day ${dd.dayNumber}. Drag to another day, or use the day selector.">
+          <div class="atl-evh"><b>${esc(EVLBL(e.id))}</b><span>${fmt(Math.round(e.divers))} · ${e.estimatedMinutes}m</span></div>
+          <div class="atl-evb">
+            <span>${e.dives ? e.dives + ' dives' : '<b class="c-warn">no dive count — not timed</b>'}</span>
+            ${e.split ? `<span class="atl-tag pool" style="margin:0">split${e.splitManual?' (yours)':''}</span>` : ''}
+            ${!e.split && e.unsplitMinutes > R.splitReviewThresholdMin ? '<span class="atl-tag amber" style="margin:0">long</span>' : ''}
+            <label style="margin-left:auto" title="Drag the card on a desktop, or use this on a phone or with a keyboard">Day <select class="atl-sel bs-sc-daysel" data-ev="${esc(e.id)}">
+              ${Array.from({length: Math.max(dayCount,1)+1}, (_,i)=>i+1).map(n=>`<option value="${n}" ${n===dd.dayNumber?'selected':''}>${n}${n>dayCount?' (new)':''}</option>`).join('')}</select></label>
+            ${canSplit ? `<button class="bs-sc-split" data-ev="${esc(e.id)}" title="${e.split?'Run this whole instead':'Split this across two boards'}">${e.split?'Run whole':'Split'}</button>` : ''}
+          </div></div>`;
+      }).join('');
+      const laneNames = {'1m':'1m','3m':'3m','platform':'Platform','other':'other'};
+      const lanes = Object.keys(ss.lanes||{}).map(L => `${laneNames[L]||L} ${Math.round(ss.lanes[L])}m`).join(' · ');
+      const saved = (ss.sequentialMinutes||0) - (ss.compMinutes||0);
+      return `<div class="bs-sc-sess">
+        <div class="atl-sh">Session ${ss.index}<span>${hhmm(ss.warmupStartMinutes)} – ${hhmm(ss.sessionEndMinutes)}</span></div>
+        <div class="atl-wu"><span>Warm-up ${ss.warmupMinutes} min${lanes ? ' · ' + esc(lanes) : ''}</span>${saved > 0 ? `<span class="mono" title="Boards run together">−${saved} min</span>` : ''}</div>
+        ${evs}</div>`;
+    }).join('');
+    const occupied = (dd.sessions||[]).reduce((a,ss)=>a+(ss.sessionEndMinutes-ss.warmupStartMinutes),0);
+    const pct = Math.min(100, Math.round(100*occupied/Math.max(1,windowMin)));
+    const practice = (dd.practiceWindows||[]).filter(x=>x.usable).map(x=>`${x.position} ${x.minutes}m`).join(' · ');
+    return `<div class="bs-sc-day ${over?'over':''}" data-day="${dd.dayNumber}" data-occ="${Math.round(occupied)}" data-win="${Math.round(windowMin)}">
+      <div class="atl-dh"><b>Day ${dd.dayNumber}</b><span>${(occupied/60).toFixed(1)} h of ${(windowMin/60).toFixed(1)} h</span></div>
+      <div class="bs-sc-bar"><i style="width:${pct}%"></i></div>
+      ${over ? `<div class="bs-sc-warn">Runs ${dd.overCapacityByMinutes} min past closing.</div>` : ''}
+      ${clash ? `<div class="bs-sc-warn">Two events for the same age group and gender on one day (${esc((dd.conflicts||[]).join(', '))}). You put them here; the model would not have.</div>` : ''}
+      ${sessions || '<div class="atl-note" style="padding:10px 14px">Nothing on this day.</div>'}
+      ${practice ? `<div class="bs-sc-pr">Practice: ${esc(practice)}</div>` : '<div class="bs-sc-pr warn">No usable practice window.</div>'}
+    </div>`;
+  }).join('');
+
+  return `<div class="atl-page">
+    <div class="atl-h"><b>Does each meet fit?</b><span>Pool open ${(windowMin/60).toFixed(0)} h (${hhmm(R.facilityOpenMin)}–${hhmm(R.facilityCloseMin)}) · up to ${R.eventsPerSession} events a session · boards run in parallel · warm-up A/B ${R.warmupSeniorGroupsMin} min, C/D scales with entries · dive counts from the 2026 Zone &amp; Junior National schedules · split over ${R.splitAutoThresholdMin} min, flag over ${R.splitReviewThresholdMin} min, platform never splits</span></div>
+    <div class="atl-pills">${pills}</div>
+    <div class="atl-sched-h">
+      <span class="atl-mn">${esc(st.name)}</span>
+      <span class="atl-ms">${esc(st.level)} · <span class="mono">${fmt(Math.round(st.entries))}</span> entries${d ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' (estimate)'}` : ''} · <span class="mono">${fmt(st.events)}</span> events</span>
+      <span class="atl-mv ${bad?'c-bad':(st.unknown?'c-warn':'c-ok')}">${verdict}</span>
+      <div class="atl-right">Pool opens <input class="atl-in mono bs-rt-in" type="time" id="bsSchedOpen" value="${tm(R.facilityOpenMin)}"> closes <input class="atl-in mono bs-rt-in" type="time" id="bsSchedClose" value="${tm(R.facilityCloseMin)}">
+        <label title="Events per session">per session <input class="atl-in mono bs-rt-in" type="number" min="1" max="12" id="bsSchedEPS" value="${R.eventsPerSession}"></label>
+        <button class="atl-btn sm" id="bsSchedAddDay">Add a day</button>
+        ${planDirty(key) ? `<button class="atl-link quiet" id="bsSchedReset">Undo my changes to this meet</button>` : ''}</div>
+    </div>
+    ${st.unknown ? `<div class="atl-warn amber" style="margin-bottom:12px"><b>${fmt(st.unknown)} event${st.unknown===1?' has':'s have'} no dive count on record</b> and ${st.unknown===1?'is':'are'} timed as zero minutes here. This meet will run longer than shown, and the verdict cannot be relied on until those events have a dive count.</div>` : ''}
+    <div class="bs-sc-grid">${dayCols}
+      <div class="bs-sc-newday" data-day="${dayCount+1}" data-occ="0" data-win="${windowMin}"><span>Drop here to start<br>day ${dayCount+1}</span></div>
+    </div>
+    <p class="atl-note" style="margin-top:14px">Drag an event to another day; use Add a day to test a longer meet. A prelim and its final always land on the same day. ${planDirty(key) ? 'You have moved things on this meet: your placements are kept and beat the model.' : 'Laid out by the model. Move an event, or split one, and your choice sticks.'}</p>
+    <div class="atl-gen"><div class="atl-ph">Generate a real schedule</div>
+      <div class="atl-gen-r"><label>Template <select class="atl-sel" id="bsTemplatePick">${(S._templateOptions||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('') || '<option value="">Loading…</option>'}</select></label>
+        <label>Entries <select class="atl-sel" id="bsTemplateSource"><option value="projected">Today's calibrated projection</option><option value="max">Maximum capacity (no calibration)</option><option value="y24">Real 2024 entries</option><option value="y25">Real 2025 entries</option><option value="y26">Real 2026 entries</option></select></label>
+        <label>Start date <input class="atl-in mono bs-rt-in" type="date" id="bsTemplateStart" value="${esc(S._templateStart || '')}"></label>
+        <button class="atl-btn sm prim" id="bsGenSchedule">Generate real schedule…</button></div>
+      <p class="atl-note" style="margin:8px 0 0">Builds a full Schedule Builder file from the template and entry source — training days, session-by-session timing, the works — and saves it there to refine with the real timing engine. This workspace stays the quick feasibility check.</p></div>
+    <p class="atl-note" style="margin-top:14px"><b>Sessions run boards at the same time.</b> One event per board, so a session lasts as long as its slowest board, not the sum of its events. Checked against the real 2026 Zone and Junior National schedules this reproduces 12 of 14 sampled sessions to within 12%; where it misses it reads longer than the day actually ran, which is the safe direction for a feasibility check.</p>
+  </div>`;
+}
+
+/* ============================================================================
+   COMPARE WORKSPACE
+   Pinned scenarios A/B/C. A is always what is on screen. Map axis: side-by-
+   side maps with the counties that move outlined, or one map that crossfades.
+   Pathway axis: the same map under different rule sets. The table is built
+   from buildComparison() either way.
+   ========================================================================= */
+const CMP_LET = ['A','B','C'], CMP_TAG = ['#171f69','#009ac7','#6b7385'];
+
+function atlasCompareHtml(){
+  const axis = S.cmpAxis || 'map', onPath = axis === 'pathway';
+  const lib = onPath ? (S.pathList || []) : (S.mapList || []).filter(x => x.id !== S.scenarioId);
+  const C = S.cmpRes || [];
+  const ids = S.cmpIds || [];
+  const baseLabel = onPath ? currentPathwayLabel() : (S.scenarioName || 'This map');
+  const cols = [{id: S.scenarioId || 'unsaved', name: baseLabel, live:true, row: C[0] || null}]
+    .concat(ids.map((id,i) => {
+      const lib1 = lib.find(x => x.id === id);
+      return {id, name: (C[i+1] && C[i+1].label) || (lib1 && lib1.name) || id, live:false, row: C[i+1] || null};
+    }));
+  const pins = cols.map((c,i) => `<div class="atl-pin ${i===0?'a':''}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
+      <span class="mono">${esc(String(c.id).replace(/^bs-/,''))}</span><span class="atl-pn" title="${esc(c.name)}">${esc(c.name)}</span>
+      ${i>0 ? `<button class="atl-x" data-unpin="${esc(c.id)}" title="Unpin">×</button>` : ''}</div>`).join('');
+  const pinnable = lib.filter(x => ids.indexOf(x.id) < 0);
+  const canPin = cols.length < 3 && pinnable.length > 0;
+  const pinSel = canPin ? `<select class="atl-pinsel" id="atlPin"><option value="">+ Pin a saved ${onPath?'pathway':'scenario'}</option>${pinnable.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}${onPath?` · ${x.levels} levels`:''}</option>`).join('')}</select>`
+    : (cols.length >= 3 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another scenario from the header menu'}.</span>`);
+  const view = S.cmpView || 'side';
+  const bar = `<div class="atl-cmp-bar">${pins}${pinSel}
+      <div class="atl-seg sm" style="margin-left:auto"><button data-cmpaxis="map" class="${!onPath?'on':''}">Maps</button><button data-cmpaxis="pathway" class="${onPath?'on':''}">Pathways</button></div>
+      ${!onPath ? `<div class="atl-seg sm"><button data-atlcmpview="side" class="${view==='side'?'on':''}">Side by side</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Single map</button></div>
+      <label><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs A</label>` : ''}
+      <button class="atl-btn" id="atlGoReport">Build report →</button>
+      ${S._cmpBusy ? '<span class="atl-note">Comparing…</span>' : ''}</div>`;
+
+  if (cols.length < 2)
+    return bar + `<div class="atl-cmp-empty">${onPath
+      ? 'Pin one or two saved pathways to put beside the one on screen. Only the pathway changes between columns: the boundaries, the field each pathway starts from and the measured behaviour are held still.'
+      : 'Pin one or two saved scenarios to put beside this map. Only the map changes between columns: the pathway, the season and the measured behaviour are held still.'}</div>`;
+  if (!C.length || C.length < cols.length) return bar + '<div class="atl-cmp-empty">Comparing…</div>';
+
+  // Live column extras, measured the same way mapExtras() measures the others.
+  const A = C[0];
+  if (!onPath && !A.regionRows){
+    const bal = balanceAt(0), t = tallyBatchAt(0);
+    A.gap = bal ? bal.spread : null;
+    A.regionRows = S.regions.map((r,i) => ({name:r.name, color:r.color, m:t.rows[i]?t.rows[i].m:0}));
+    A.regionCount = S.regions.length;
+  }
+
+  let maps = '';
+  if (!onPath){
+    const outline = S.cmpOutline !== false;
+    const svgFor = (i) => {
+      const c = C[i];
+      if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {dataF:true});
+      if (!c.map) return '';
+      const same = c.churn && c.churn.sameStructure;
+      const changed = outline && same ? (f => {
+        const a = S.assign[f], b = c.map.assign[f];
+        const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name;
+        const bn = (b==null||b<0||!c.map.regions[b]) ? null : c.map.regions[b].name;
+        return an !== bn;
+      }) : null;
+      return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed, dataF:true});
+    };
+    if (view === 'side'){
+      maps = `<div class="atl-cmp-maps" style="grid-template-columns:repeat(${cols.length},1fr)">${cols.map((c,i) => {
+        const r = C[i];
+        const cap = i === 0 ? 'baseline' : r.error ? esc(r.error) : (r.churn && r.churn.sameStructure)
+          ? `${fmt(r.churn.moved)} counties · ${fmt(r.churn.movedM)} members move vs A` : 'different structure — county moves not comparable';
+        const capCls = i === 0 ? 'c-muted' : (r.churn && r.churn.sameStructure) ? 'c-bad' : 'c-warn';
+        return `<div class="atl-cmp-map"><div class="atl-mt"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><b>${esc(c.name)}</b></div>
+          <svg viewBox="0 0 975 610" class="atl-static">${svgFor(i)}</svg><div class="atl-mc ${capCls}">${cap}</div></div>`;
+      }).join('')}</div>`;
+    } else {
+      const xi = Math.min(S.cmpX || 0, cols.length - 1);
+      maps = `<div class="atl-xfade"><div><svg viewBox="0 0 975 610" class="atl-static" id="atlXfade">${svgFor(xi)}</svg></div>
+        <div class="atl-xlist"><span>Showing on the map</span>
+          ${cols.map((c,i) => { const r = C[i]; return `<button class="atl-xrow ${i===xi?'on':''}" data-atlx="${i}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
+            <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} regions · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
+          <span class="faint">Hover a scenario to crossfade the fills. Counties that move vs A are outlined in red.</span></div></div>`;
+    }
+  }
+
+  // The table.
+  const dlt = (v, b, f, inverse) => {
+    if (b == null || v == null || !isFinite(v-b) || Math.round(v*10) === Math.round(b*10)) return '';
+    const up = v > b;
+    return `<small class="${(inverse ? !up : up) ? 'c-ok' : 'c-bad'}">${up?'+':'−'}${f(Math.abs(v-b))}</small>`;
+  };
+  const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
+  const row = (name, hint, get, f, inverse, opts) => {
+    opts = opts || {};
+    const base = get(C[0]);
+    const cells = C.map((c,i) => {
+      if (c.error) return `<div class="num c-bad ${opts.strong?'strong':''}" style="font-size:12px">${esc(c.error)}</div>`;
+      const v = get(c);
+      return `<div class="num ${opts.strong?'strong':''} ${i===C.length-1?'last':''}">${v==null ? '<span class="c-faint">—</span>' : f(v)}${i>0 ? dlt(v, base, f, inverse) : ''}</div>`;
+    }).join('');
+    return `<div class="name first ${opts.strong?'strong':''}">${opts.color ? `<span class="atl-sw" style="background:${opts.color}"></span>` : ''}${esc(name)}${hint ? `<small>${esc(hint)}</small>` : ''}</div>${cells}`;
+  };
+  let rows;
+  if (!onPath){
+    const names = [...new Set(C.flatMap(c => (c.regionRows||[]).map(r => r.name)))];
+    rows = [
+      row('Regions', '', c => c.regionCount != null ? c.regionCount : (c.levels && c.levels[0] ? c.levels[0].stops : null), fi, false, {strong:true}),
+      row('Championship field', `entries reaching ${S.finalName||'the final'}`, c => c.finalField, fi),
+      row('Widest gap, competing entries', 'largest region vs smallest', c => c.gap, fpp, true),
+      row('Meets that do not fit', 'run past closing', c => c.over, fi, true),
+      row('Competition days, all meets', '', c => c.daysTotal, fi, true),
+      row('Entry income, season', 'all stops', c => c.finance && c.finance.gross, usd),
+      row('USA Diving keeps', 'entry fees only', c => c.finance && c.finance.usad, usd),
+      ...names.map(name => {
+        const src = C.map(c => (c.regionRows||[]).find(r => r.name === name)).find(Boolean);
+        return row(name, 'members', c => { const r = (c.regionRows||[]).find(x => x.name === name); return r ? r.m : null; }, fmt, false, {color: src ? src.color : '#c9d0dc'});
+      }),
+    ].join('');
+  } else {
+    const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
+    rows = [
+      row('Championship field', 'who reaches the top meet', c => c.finalField, fi, false, {strong:true}),
+      ...Array.from({length:nLev}, (_,L) => row(((C[0].levels&&C[0].levels[L])?C[0].levels[L].name:'Level '+(L+1)) + ' — entries',
+        (C[0].levels&&C[0].levels[L]) ? `${C[0].levels[L].stops} stop${C[0].levels[L].stops===1?'':'s'}` : '',
+        c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null, fi)),
+      row('Meets to run', '', c => c.meets, fi),
+      row('Competition days, all meets', '', c => c.daysTotal, fi, true),
+      row('Meets that do not fit', '', c => c.over, fi, true),
+      row('Events split', '', c => c.autoSplit, fi, true),
+      row('Events to look at', '', c => c.review, fi, true),
+      row('Pathway problems', '', c => c.problems, fi, true),
+      row('Sanity check vs. real history', 'levels above the highest real field ever run', c => (c.sanityFlags||[]).length, v => v ? `${v} above ceiling` : 'clear', true),
+      row('Entry income, season', 'published fee × real entries, every stop', c => c.finance && c.finance.gross, usd),
+      row('DiveMeets levy', '', c => c.finance && c.finance.levy, v => '−' + usd(v), true),
+      row('Host cut', 'per the host-cut model on screen', c => c.finance && c.finance.host, usd),
+      row('USA Diving keeps', 'entry fees only — membership dues are a separate stream', c => c.finance && c.finance.usad, usd),
+    ].join('');
+  }
+  const flags = C.filter(c => (c.sanityFlags||[]).length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b>: ${c.sanityFlags.map(f=>`${esc(f.name)} projects ${fmt(Math.round(f.entries))}, the highest real ${esc(f.refStage)} field ever run is ${fmt(f.historicalMax)}`).join('; ')}. Check the seed pool and route bands before using this number.</div>`).join('');
+  const noted = C.filter(c => c.notes && c.notes.length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</div>`).join('');
+  const table = `<div class="atl-cmp-body">
+    <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : 'same pathway, same fees, same season — only the map differs'} · Δ against A</span></div>
+    <div class="atl-scroll"><div class="atl-tbl atl-cmp-tbl" style="grid-template-columns:minmax(300px,1.8fr) repeat(${C.length},minmax(0,1fr));min-width:${300 + C.length*170}px">
+      <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="mono">${esc(String(c.id).replace(/^bs-/,''))}</span></div>`).join('')}
+      ${rows}</div></div>
+    ${flags ? `<div class="atl-probs">${flags}</div>` : ''}${noted ? `<div class="atl-probs">${noted}</div>` : ''}
+    <p class="atl-note" style="margin-top:12px">${onPath
+      ? 'Each route band sets the size of the meet it feeds, so widening how many leave the first stop changes how big the next meet is — it does <i>not</i> change the championship field, which is capped by the last route into it. If the top line has not moved, the change you made was upstream of what sets it.'
+      : 'Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against A is caused by the map and nothing else.'}</p></div>`;
+  return bar + maps + table;
+}
+
+async function atlasRebuildCompare(){
+  const ids = S.cmpIds || [];
+  if (!ids.length){ S.cmpRes = null; S._cmpBusy = false; atlasMain(); return; }
+  S._cmpBusy = true; atlasMain();
+  try { S.cmpRes = await buildComparison(ids, S.cmpAxis || 'map'); }
+  catch(e){ msg('Could not compare: ' + (e.message||e)); S.cmpRes = null; }
+  S._cmpBusy = false;
+  if (S.panelMode === 'compare') atlasMain();
+}
+
+function atlasXfadeTo(i){
+  const C = S.cmpRes || [];
+  const svg = $id('atlXfade'); if (!svg || !C[i]) return;
+  S.cmpX = i;
+  const c = C[i];
+  const assignOf = i === 0 ? (f => S.assign[f]) : (f => c.map ? c.map.assign[f] : null);
+  const regs = i === 0 ? S.regions : (c.map ? c.map.regions : []);
+  svg.querySelectorAll('path[data-f]').forEach(p => {
+    const ri = assignOf(p.dataset.f);
+    p.setAttribute('fill', (ri != null && ri >= 0 && regs[ri]) ? regs[ri].color : ATLAS_UNASSIGNED);
+  });
+  document.querySelectorAll('.atl-xrow').forEach(b => b.classList.toggle('on', +b.dataset.atlx === i));
+}
+
+/* ============================================================================
+   REPORT WORKSPACE -- the board paper
+   Four US Letter pages, printable as they stand. Prose is editable until
+   export; figures are not. Wording lives with the frozen record when there is
+   one, so the PDF and the ledger agree; re-freezing resets it.
+   ========================================================================= */
+function reportTextStore(){
+  if (S.frozen){ if (!S.frozen.text) S.frozen.text = {}; return S.frozen.text; }
+  return S.reportText || (S.reportText = {});
+}
+function rt(key, dflt, tag, cls){
+  const store = reportTextStore();
+  const html = store[key] != null ? store[key] : dflt;
+  return `<${tag||'div'} class="${cls||''}" contenteditable="true" spellcheck="false" data-rt="${key}">${html}</${tag||'div'}>`;
+}
+const mono = v => `<span class="mono">${v}</span>`;
+const longDate = d => (d ? new Date(d) : new Date()).toLocaleDateString('en-US', {day:'numeric', month:'long', year:'numeric'});
+
+function atlasReportHtml(res){
+  const base = S.compare || null;
+  const bx = base ? mapExtras(base) : null;
+  const t0 = tallyBatchAt(0);
+  const bal = balanceAt(0);
+  const fin = financialsFor(null);
+  const sched = computeSchedule(res);
+  const stamps = dataStamps();
+  const d10 = x => x ? String(x).slice(0,10) : '—';
+  const id = S.scenarioId || 'unsaved';
+  const paperId = 'CC-' + new Date().toISOString().slice(0,7);
+  const n = S.regions.length;
+  const churn = bx ? bx.churn : null;
+  const champ = reachFinal(res);
+  const unmappable = S.totals[S.year] - (t0.rows.reduce((a,r)=>a+r.m,0) + t0.un.m);
+  const mappedM = t0.rows.reduce((a,r)=>a+r.m,0), mappedA = t0.rows.reduce((a,r)=>a+r.a,0);
+  const overStops = (sched.stops||[]).filter(x => x.daysOver);
+  const baseName = base ? base.name : null;
+  const vs = baseName ? `vs ${esc(baseName)}` : '';
+  const devCol = dc => dc === 'over' ? 'c-warn' : dc === 'under' ? 'c-bad' : 'c-muted';
+  const pageFoot = p => `<div class="atl-pfoot"><span class="mono">Page ${p} of 4</span></div>`;
+  const head2 = label => `<div class="atl-ph2"><span class="mono">${esc(paperId)} · ${esc(id)}</span><span>${label}</span></div>`;
+
+  // Page 1
+  const regRows = S.regions.map((r,i) => {
+    const m = t0.rows[i] ? t0.rows[i].m : 0, a = t0.rows[i] ? t0.rows[i].a : 0;
+    const e = bal ? bal.totals[i] : null;
+    const per = bal ? bal.per[i] : null;
+    const br = bx ? bx.regionRows.find(x => x.name === r.name) : null;
+    const dm = !bx ? null : (br ? m - br.m : 'new');
+    const dTxt = dm == null ? '—' : dm === 'new' ? 'new' : dm === 0 ? '—' : (dm > 0 ? '+' : '−') + fmt(Math.abs(dm));
+    const dCls = dm == null || dm === 'new' || dm === 0 ? 'c-muted' : (dm > 0 ? 'c-ok' : 'c-bad');
+    return `<div class="sw first"><i style="background:${r.color}"></i></div><div>${esc(r.name)}</div>
+      <div class="num">${fmt(m)}</div><div class="num">${fmt(a)}</div><div class="num">${e==null?'—':fmt(Math.round(e))}</div>
+      <div class="num ${per?devCol(per.dc):''}">${per ? (per.diff>=0?'+':'−') + Math.abs(per.diff).toFixed(1) + ' pp' : '—'}</div>
+      <div class="num last ${dCls}">${dTxt}</div>`;
+  }).join('');
+  const totDelta = bx ? (mappedM === bx.regionRows.reduce((a,r)=>a+r.m,0) ? '—' : ((mappedM > bx.regionRows.reduce((a,r)=>a+r.m,0) ? '+' : '−') + fmt(Math.abs(mappedM - bx.regionRows.reduce((a,r)=>a+r.m,0))))) : '—';
+  const recDefault = `That the Committee approve scenario ${mono(esc(id))}, a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under the pathway "${esc(currentPathwayLabel())}".`
+    + (churn ? ` Relative to ${esc(baseName)} it moves ${mono(fmt(churn.moved))} counties and ${mono(fmt(churn.movedM))} members` + (bx.gap != null && bal ? `, and ${bal.spread <= bx.gap ? 'narrows' : 'widens'} the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} from ${mono(bx.gap.toFixed(1))} to ${mono(bal.spread.toFixed(1))} percentage points` : '') + '.' : '')
+    + (champ != null ? ` The championship field is ${mono(fmt(Math.round(champ)))} entries.` : '')
+    + (overStops.length ? ` ${mono(fmt(overStops.length))} ${overStops.length===1?'meet does':'meets do'} not fit a standard pool day.` : ' Every meet fits a standard pool day.');
+  const p1 = `<article class="atl-pg" data-screen-label="Report p1">
+    <div class="atl-mast"><div class="atl-ml"><img src="../shared/images/diver-mark.svg" alt=""><div><div class="atl-mb">USA Diving</div><div class="atl-ms">High Performance Operations</div></div></div>
+      <div class="atl-mr"><div>Competition Committee · Board paper</div><div class="mono">${esc(paperId)} · ${esc(id)}</div></div></div>
+    ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled scenario')}`, 'h1')}
+    ${rt('meta', `Recommendation for approval · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
+    <div class="atl-rec">${rt('h1', '1. Recommendation', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
+    ${rt('h2', `2. ${esc(tierName(0))} under the recommended alignment`, 'div', 'atl-sec')}
+    <div class="atl-rt" style="grid-template-columns:18px 1.5fr 1fr 1fr 1fr 1fr 1fr">
+      <div class="th first"></div><div class="th">${esc(singulariseLevel(tierName(0))||'Region')}</div><div class="th num">Members</div><div class="th num">Athletes</div><div class="th num">Entries</div><div class="th num">vs even split</div><div class="th num last">Δ members ${baseName ? 'vs baseline' : '(no baseline)'}</div>
+      ${regRows}
+      <div class="tot first"></div><div class="tot">Total mapped</div><div class="tot num">${fmt(mappedM)}</div><div class="tot num">${fmt(mappedA)}</div><div class="tot num">${bal ? fmt(Math.round(bal.grand)) : '—'}</div><div class="tot num">${bal ? bal.spread.toFixed(1) + ' pp gap' : '—'}</div><div class="tot num last">${totDelta}</div>
+    </div>
+    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline scenario is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
+    ${pageFoot(1)}</article>`;
+
+  // Page 2 -- Exhibit A
+  const changedVs = churn ? (f => { const a = S.assign[f], b = base.assign[f];
+    const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name;
+    const bn = (b==null||b<0||!base.regions[b]) ? null : base.regions[b].name;
+    return an !== bn; }) : null;
+  const p2 = `<article class="atl-pg" data-screen-label="Report p2">${head2('Exhibit A')}
+    ${rt('exA', `Exhibit A. Recommended ${esc(tierName(0).toLowerCase())} boundaries by county`, 'div', 'atl-ex')}
+    ${rt('exAs', `Every U.S. county is assigned to exactly one ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}.${churn ? ` Counties outlined in red change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} relative to ${esc(baseName)}.` : ''}`, 'div', 'atl-exs')}
+    <svg viewBox="0 0 975 610" class="atl-static">${atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed: changedVs})}</svg>
+    <div class="atl-sum"><span>${mono(fmt(n))} ${esc(tierName(0).toLowerCase())}</span>
+      ${churn ? `<span>${mono(fmt(churn.moved))} counties change ${vs}</span><span>${mono(fmt(churn.movedM))} members affected</span>` : ''}
+      ${bal ? `<span>widest gap ${mono((bx && bx.gap != null ? bx.gap.toFixed(1) + ' → ' : '') + bal.spread.toFixed(1) + ' pp')}</span>` : ''}
+      ${t0.un.m > 0 ? `<span>${mono(fmt(t0.un.m))} members unassigned</span>` : ''}</div>
+    <div class="atl-leg">${S.regions.map((r,i) => `<div><span><i style="background:${r.color}"></i>${esc(r.name)}</span><span class="mono">${fmt(t0.rows[i]?t0.rows[i].m:0)}</span></div>`).join('')}</div>
+    ${pageFoot(2)}</article>`;
+
+  // Page 3 -- Exhibit B + section 3
+  const RN = QR().ROUND_NAME;
+  const exb = S.routing.map((lvl, L) => {
+    const t = fin && fin.tiers[L];
+    const rounds = QR().roundsOf(lvl);
+    let entries = 0;
+    for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) entries += QR().entriesAt(res, L, g, CELLS);
+    const d = (S.mult && entries > 0.5) ? QR().diversAt(res, L, rounds[0].key, CELLS, S.mult, multBasisFor(L)) : null;
+    const routes = (lvl.routes||[]).filter(r => r.to);
+    const band = routes.length ? routes.map(r => `Places ${r.lo||1}–${r.hi==null?'∞':r.hi} of ${(RN[r.from]||r.from).toLowerCase()} advance to ${esc(tierName(r.to.level))} ${(RN[r.to.round]||r.to.round).toLowerCase()}`).join('; ')
+                               : (L === S.routing.length-1 ? 'Championship final — nobody advances' : 'No route out of this level');
+    const arrive = L === 0 ? `Open entry: real ${esc(seedStage())} ${yearNumBoundary(S.year)} field`
+      : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))})`
+      : `Take-up ${Math.round(arrivalRate(L)*100)}%, not measured (ceiling)`;
+    const nMeets = t ? t.meets : groupCountAt(L);
+    return `<div><div class="atl-en">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
+      <div class="atl-ev">${fmt(Math.round(entries))}</div><div class="atl-ed">entries${d && d.ok ? ` · ${fmt(Math.round(d.divers))} divers${d.reliable?'':' (estimate)'}` : ''}</div>
+      <div class="atl-eb">${band}.</div><div class="atl-ed">${arrive}</div></div>`;
+  }).join('');
+  const levels = fin ? Object.keys(fin.tiers).sort((x,y)=>x-y) : [];
+  const tierRows = levels.map(L => { const t = fin.tiers[L]; const ov = overStops.filter(x => x.levelIndex === +L).length;
+    return `<div class="first">${esc(t.name)}</div><div class="num">${fmt(Math.round(t.entries))}</div><div class="num">${fmt(t.meets)}</div><div class="num ${ov?'c-bad':''}">${fmt(ov)}</div><div class="num">${usd(t.gross)}</div><div class="num last">${usd(t.usad)}</div>`; }).join('');
+  const p3 = `<article class="atl-pg" data-screen-label="Report p3">${head2('Exhibit B · Section 3')}
+    ${rt('exB', 'Exhibit B. Pathway, projected fields and meets', 'div', 'atl-ex')}
+    ${rt('exBs', `"${esc(currentPathwayLabel())}" applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
+    <div class="atl-exb" style="grid-template-columns:repeat(${S.routing.length},1fr)">${exb}</div>
+    ${rt('h3', '3. Meets, days and entry income', 'div', 'atl-sec m26')}
+    <div class="atl-rt" style="grid-template-columns:1.6fr .9fr .8fr .8fr 1fr 1fr">
+      <div class="th first">Tier</div><div class="th num">Entries</div><div class="th num">Meets</div><div class="th num">Do not fit</div><div class="th num">Entry income</div><div class="th num last">USA Diving keeps</div>
+      ${tierRows}
+      ${fin ? `<div class="tot first">All tiers</div><div class="tot num">${fmt(Math.round(fin.total.entries))}</div><div class="tot num">${fmt(fin.total.meets)}</div><div class="tot num ${overStops.length?'c-bad':''}">${fmt(overStops.length)}</div><div class="tot num">${usd(fin.total.gross)}</div><div class="tot num last">${usd(fin.total.usad)}</div>` : ''}
+    </div>
+    ${rt('foot3', `A meet "does not fit" when the schedule engine cannot lay its events out inside the pool day (${hhmm(sched.rules.facilityOpenMin)}–${hhmm(sched.rules.facilityCloseMin)}) with a prelim and its final on the same day. Entry income is the published fee × entries less the DiveMeets pass-through; host payouts follow the host-cut model in force when this paper was built. Membership dues are not included.`, 'p', 'atl-fn')}
+    ${overStops.length ? `<div class="atl-over"><b>Meets that do not fit:</b> ${overStops.map(x => `${esc(x.name)} (${esc(x.level)}, ${x.days} days, ${x.daysOver} over)`).join('; ')}.</div>` : ''}
+    ${pageFoot(3)}</article>`;
+
+  // Page 4 -- changes + methodology
+  const changes = churn ? churn.changes : [];
+  const shown = changes.slice(0, 16);
+  const chgRows = shown.map(c => `<div class="first">${esc(c.county)} <span class="atl-fips">${esc(c.f)}</span></div><div>${esc(c.st)}</div><div class="c-muted">${esc(c.from)}</div><div>${esc(c.to)}</div><div class="num last">${fmt(c.m)}</div>`).join('');
+  const chgSummary = !churn ? 'No baseline scenario is loaded, so there is nothing to compare against. Choose one in the toolbar above.'
+    : changes.length > 16 ? `${fmt(changes.length)} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} in total; the 16 with the most members are listed. The complete list is the CSV appendix.`
+    : changes.length ? `${fmt(changes.length)} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}; every one is listed above.`
+    : 'No county changes ' + esc((singulariseLevel(tierName(0))||'region').toLowerCase()) + ' against the baseline.';
+  const p4 = `<article class="atl-pg" data-screen-label="Report p4">${head2('Sections 4–5')}
+    ${rt('h4', `4. Counties that change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} ${vs}`, 'div', 'atl-sec m26b')}
+    <div class="atl-rt" style="grid-template-columns:1.5fr .5fr 1fr 1fr .7fr">
+      <div class="th first">County</div><div class="th">State</div><div class="th">From</div><div class="th">To</div><div class="th num last">Members</div>${chgRows}</div>
+    ${rt('foot4', chgSummary, 'p', 'atl-fn')}
+    ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
+    ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
+    ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands in "${esc(currentPathwayLabel())}"; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
+    ${rt('m3', S.frozen ? `Figures were frozen from Boundary Studio scenario ${mono(esc(id))} on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
+                       : `Figures are live from Boundary Studio scenario ${mono(esc(id))} and have not yet been frozen. Freeze the scenario before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
+    ${pageFoot(4)}</article>`;
+
+  // Toolbar
+  const drift = S.frozen ? freezeDrift() : null;
+  const fz = !S.frozen ? `<div class="atl-fz none"><span class="atl-dot"></span><span>Not frozen · figures are live; freeze before presenting. Click any heading or paragraph to edit its wording.</span><button id="bsFreeze" ${S.scenarioId?'':'disabled'} title="${S.scenarioId?'':'Save the scenario first'}">Freeze as presented…</button></div>`
+    : `<div class="atl-fz ${drift?'drift':''}"><span class="atl-dot"></span><span>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}${S.frozen.note?` — ${esc(S.frozen.note)}`:''} · ${drift ? 'figures have moved since; re-freeze or explain the change' : 'figures match the record; click any heading or paragraph to edit its wording before export'}</span>
+       <button id="bsFreeze">Re-freeze</button><button class="quiet" id="bsLedgerHist">Permanent record</button><button class="quiet" id="bsUnfreeze">Remove freeze</button></div>`;
+  const baseSel = `<select class="atl-sel" id="atlReportBase" title="The scenario this paper compares against"><option value="">Compare against…</option>${(S.mapList||[]).filter(x=>x.id!==S.scenarioId).map(x=>`<option value="${esc(x.id)}" ${base&&base.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+  const tool = `<div class="atl-rtool">${fz}<div class="atl-rbtns">${baseSel}<button class="atl-btn" id="atlCsvAppendix">CSV appendix</button><button class="atl-btn" id="bsGoReport" title="The wider report builder, with the Boundary Studio sections">Report builder</button><button class="atl-btn prim" id="atlPrint">Export PDF</button></div></div>
+    ${drift ? `<div class="atl-rbox"><b style="color:#b3122b">This no longer computes what it said when it was frozen.</b>
+      ${drift.inputs.length ? `<div>Inputs that changed: ${drift.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} → ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>` : ''}
+      ${drift.figures.length ? `<table><thead><tr><th>Figure</th><th style="text-align:right">As presented</th><th style="text-align:right">Now</th><th style="text-align:right">Change</th></tr></thead><tbody>${drift.figures.map(r=>`<tr><td>${esc(r.label)}</td><td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td><td class="num ${r.now>r.then?'c-warn':'c-bad'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td></tr>`).join('')}</tbody></table>
+      <div style="margin-top:6px">The frozen column is what the committee saw. Do not quietly republish the new figures under the old date — either explain the change or freeze again.</div>` : '<div>The headline figures still match; only the inputs moved.</div>'}</div>` : ''}
+    <div class="atl-rbox" id="bsLedgerHistBox" hidden></div>`;
+  return tool + p1 + p2 + p3 + p4;
+}
+
+function exportChangesCsv(){
+  const q = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const base = S.compare;
+  const nameOf = (map, ri) => (ri==null || ri<0 || !map.regions[ri]) ? '' : map.regions[ri].name;
+  const lines = ['county,state,fips,' + (base ? `from (${base.name.replace(/,/g,' ')}),` : '') + 'to,members,changed'];
+  const y = S.year;
+  for (const c of S.geo.counties){
+    const st = S.geo.stats[c.f];
+    const m = (st && st[y]) ? st[y].m : 0;
+    const to = nameOf({regions:S.regions}, S.assign[c.f]);
+    const from = base ? nameOf(base, base.assign[c.f]) : null;
+    const changed = base ? (from !== to ? 'yes' : '') : '';
+    lines.push([q(c.n), c.st, c.f].concat(base ? [q(from)] : []).concat([q(to), m, changed]).join(','));
+  }
+  download(lines.join('\n'), (S.scenarioName.trim()||'boundary-scenario') + '-county-changes.csv');
+}
+
+/* ============================================================================
+   MAIN: which workspace, and the wiring that is specific to Atlas. Everything
+   with a classic hook is wired by wirePathway(), wireSchedule() and
+   wireStructureControls() exactly as before.
+   ========================================================================= */
+function atlasMain(){
+  const main = $id('atlMain'); if (!main) return;
+  const M = S.panelMode;
+  const place = keepPlace('atlMain');
+  atlasParkSvg();                       // never let innerHTML take the one #bsSvg with it
+  main.className = 'atl-main atl-' + M;
+  if (M === 'map'){
+    main.innerHTML = atlasMapHtml();
+    atlasPlaceSvg();
+    wireAtlasMap();
+    atlasRailRows(computeTallies());
+    renderConsequenceStrip();
+    keepRestore(place, 'atlMain');
+    return;
+  }
+  // The libraries the classic inspector shell fetched on open: saved pathways
+  // (Structure, Compare) and saved maps (Compare, Report). Re-render once they land.
+  if (!S.pathList && !S._pathListBusy){ S._pathListBusy = true; listPathways().then(l => { S.pathList = l; S._pathListBusy = false; if (atlasOn() && S.panelMode !== 'map') atlasMain(); }); }
+  if (!S.mapList && !S._mapListBusy && (M === 'compare' || M === 'report')){ S._mapListBusy = true; loadMapList().then(() => { S._mapListBusy = false; if (atlasOn() && S.panelMode !== 'map') atlasMain(); }); }
+  let inner, res = null;
+  if (!QR()) inner = '<div class="atl-page"><div class="atl-note">Pathway engine not loaded.</div></div>';
+  else if (!S.flow) inner = `<div class="atl-page"><div class="atl-note">${S.flowErr ? esc(S.flowErr) : 'Working out the pathway…'}</div></div>`;
+  else {
+    res = projectPathway();
+    S.routeRes = res;
+    if (!res) inner = '<div class="atl-page"><div class="atl-note">Could not project the pathway.</div></div>';
+    else {
+      try {
+        inner = M === 'structure'  ? atlasStructureHtml(res)
+              : M === 'projection' ? atlasProjectionHtml(res)
+              : M === 'money'      ? atlasMoneyHtml(res)
+              : M === 'schedule'   ? atlasScheduleHtml(res)
+              : M === 'compare'    ? atlasCompareHtml()
+              : M === 'report'     ? atlasReportHtml(res)
+              : '';
+      } catch(e){ console.error('atlas render', e); inner = `<div class="atl-page"><div class="atl-warn">Could not draw this workspace: ${esc(e.message||e)}</div></div>`; }
+    }
+  }
+  main.innerHTML = `<div id="bsPathWrap">${inner}</div>`;
+  atlasPlaceSvg();
+  if (res){
+    wirePathway();
+    if (M === 'structure') wireStructureControls(main);
+    wireAtlasMain(main);
+  }
+  atlasSchedBadge();
+  atlasReadout();
+  keepRestore(place, 'atlMain');
+}
+
+function wireAtlasMain(main){
+  const M = S.panelMode;
+  const on = (sel, ev, fn) => main.querySelectorAll(sel).forEach(el => el.addEventListener(ev, fn));
+  if (M === 'projection'){
+    on('[data-atlbdl]', 'click', e => { S.atlBdL = +e.currentTarget.dataset.atlbdl; S.atlBdR = null; atlasMain(); });
+    on('[data-atlbdr]', 'click', e => { S.atlBdR = e.currentTarget.dataset.atlbdr; atlasMain(); });
+    // [data-bd] mode buttons are bound by wirePathway() (.bs-bdseg) in classic; here they need their own.
+    on('[data-bd]', 'click', e => { S.bdMode = e.currentTarget.dataset.bd; atlasMain(); });
+  }
+  if (M === 'compare'){
+    // The classic [data-cmpaxis] handler (wirePathway) resets picks and re-renders; add the atlas rebuild.
+    const pin = $id('atlPin');
+    if (pin) pin.addEventListener('change', () => { if (!pin.value) return; S.cmpIds = (S.cmpIds||[]).concat([pin.value]).slice(0,2); atlasRebuildCompare(); });
+    on('[data-unpin]', 'click', e => { S.cmpIds = (S.cmpIds||[]).filter(x => x !== e.currentTarget.dataset.unpin); atlasRebuildCompare(); });
+    on('[data-atlcmpview]', 'click', e => { S.cmpView = e.currentTarget.dataset.atlcmpview; atlasMain(); });
+    const ol = $id('atlCmpOutline');
+    if (ol) ol.addEventListener('change', () => { S.cmpOutline = ol.checked; atlasMain(); });
+    on('[data-atlx]', 'mouseenter', e => atlasXfadeTo(+e.currentTarget.dataset.atlx));
+    on('[data-atlx]', 'click', e => atlasXfadeTo(+e.currentTarget.dataset.atlx));
+    const go = $id('atlGoReport');
+    if (go) go.addEventListener('click', () => { S.panelMode = 'report'; renderPanel(); refreshFlow(); });
+  }
+  if (M === 'report'){
+    on('[data-rt]', 'input', e => { reportTextStore()[e.currentTarget.dataset.rt] = e.currentTarget.innerHTML; S.dirty = true; atlasStatus(); });
+    const bs = $id('atlReportBase');
+    if (bs) bs.addEventListener('change', () => { if (bs.value) loadCompare(bs.value); });
+    const pr = $id('atlPrint');
+    if (pr) pr.addEventListener('click', () => window.print());
+    const ap = $id('atlCsvAppendix');
+    if (ap) ap.addEventListener('click', exportChangesCsv);
+    if (!S.compare && !S._baseTried){ S._baseTried = true; loadCompare('seed-2026-official'); }
+    const lh = $id('bsLedgerHist');
+    if (lh) lh.addEventListener('click', () => { const b = $id('bsLedgerHistBox'); if (b) b.hidden = false; });
+  }
+}
+
+/* Keyboard: paint shortcuts and save, on top of the classic ⌘K / [ ] / ⌘Z. */
+function atlasKeys(e){
+  if (!atlasOn()) return false;
+  const t = e.target;
+  const typing = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||'') || t.isContentEditable);
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && (e.key||'').toLowerCase() === 's'){ e.preventDefault(); saveScenario(false); return true; }
+  if (typing || mod || e.altKey) return false;
+  if (e.key === 'Escape' && S.atlMenu){ S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; return true; }
+  if (S.panelMode !== 'map') return false;
+  if ((e.key||'').toLowerCase() === 'e'){ atlasSetActive(-1); return true; }
+  if (/^[1-9]$/.test(e.key) && S.tierView === 0 && +e.key - 1 < S.regions.length){ atlasSetActive(+e.key - 1); return true; }
+  return false;
+}
+
+/* Boot either presentation into #viewBoundary. */
+function atlasBootView(el){
+  S.cmpAxis = S.cmpAxis === 'pathway' && S.cmpRes ? 'pathway' : 'map';
+  atlasBoot(el);
+  renderMapOnce();
+  wireMap();
+  atlasRender();
+}
+function classicBootView(el){
+  el.innerHTML = classicShellHtml();
+  renderMapOnce();
+  wireMap();
+  renderPanel();
+  const offBtn = $id('bsLoadOfficial');
+  if (offBtn) offBtn.addEventListener('click', ()=>loadScenario('seed-2026-official'));
+  const autoBtn = $id('bsAutoOpen');
+  if (autoBtn) autoBtn.addEventListener('click', openAutoDialog);
+  const seedBtn = $id('bsLoadSeed');
+  if (seedBtn) seedBtn.addEventListener('click', ()=>loadScenario('seed-2026-alignment'));
+  const atlBtn = $id('bsAtlasOpen');
+  if (atlBtn) atlBtn.addEventListener('click', ()=>setUiMode('atlas'));
+}
+
+/* The classic two-card layout, unchanged apart from the button that switches
+   to the Atlas presentation. */
+function classicShellHtml(){
+  return `
+    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape.
+    <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
+      <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
+    <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>
+      <span class="note">Choose how many areas you want and it divides the country into that many connected, evenly-sized areas. A starting point &mdash; edit anything afterwards, or Undo.</span></div>
+    <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
+      <span class="note">The older draft, built from which Regional meet each club actually attended. Useful for comparison, but it is not the published alignment.</span></div>
+    <div class="bs-seedrow"><button class="tab" id="bsAtlasOpen">Switch to the Atlas view</button>
+      <span class="note">The redesigned presentation: seven workspaces, one header, and a board paper you can print. Same scenario, same numbers.</span></div></div>
+    <div class="bs-layout">
+      <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
+        <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
+        <div id="bsStrip" class="bs-strip"></div>
+        <div class="bs-emptykey">Paler counties inside an area have <b>no members, athletes or coaches</b>
+          this season &mdash; they still count toward the area's size, but contribute nobody to it.</div>
+        <div id="bsLegend" class="bs-legend"></div>
+      </div></div>
+      <div class="card" style="margin-bottom:0"><div class="card-b" id="bsPanel"></div></div>
+    </div>
+    <div id="bsTip" class="tooltip-fixed"></div>`;
+}
+
 window.renderBoundary = async function(){
   injectAutoCSS();
   const el = document.getElementById('viewBoundary');
   if (S.booted) return;
+  try { S.ui = localStorage.getItem('bsUi') === 'classic' ? 'classic' : 'atlas'; } catch(e){ S.ui = 'atlas'; }
   el.innerHTML = '<div class="loading">Loading county map&hellip;</div>';
   try {
     S.geo = await (await fetch('boundary-data.json?v=202609041900')).json();
@@ -6637,31 +8296,11 @@ window.renderBoundary = async function(){
   S.levels = defaultLevels(12);
   S.adv = defaultAdv();
   syncLevels();
-  el.innerHTML = `
-    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape.
-    <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
-      <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
-    <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>
-      <span class="note">Choose how many areas you want and it divides the country into that many connected, evenly-sized areas. A starting point &mdash; edit anything afterwards, or Undo.</span></div>
-    <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
-      <span class="note">The older draft, built from which Regional meet each club actually attended. Useful for comparison, but it is not the published alignment.</span></div></div>
-    <div class="bs-layout">
-      <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
-        <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>
-        <div id="bsStrip" class="bs-strip"></div>
-        <div class="bs-emptykey">Paler counties inside an area have <b>no members, athletes or coaches</b>
-          this season &mdash; they still count toward the area's size, but contribute nobody to it.</div>
-        <div id="bsLegend" class="bs-legend"></div>
-      </div></div>
-      <div class="card" style="margin-bottom:0"><div class="card-b" id="bsPanel"></div></div>
-    </div>
-    <div id="bsTip" class="tooltip-fixed"></div>`;
-  renderMapOnce();
-  wireMap();
-  renderPanel();
+  if (atlasOn()) atlasBootView(el); else classicBootView(el);
   document.addEventListener('keydown', e=>{
     const view = document.getElementById('viewBoundary');
     const live = view && view.offsetParent !== null;
+    if (live && atlasKeys(e)) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target||{}).tagName||'');
     if (live && !typing && (e.ctrlKey || e.metaKey) && (e.key||'').toLowerCase() === 'k'){
       e.preventDefault(); openPalette(); return;
@@ -6676,12 +8315,6 @@ window.renderBoundary = async function(){
     e.preventDefault();
     if (e.shiftKey) doRedo(); else doUndo();
   });
-  const offBtn = document.getElementById('bsLoadOfficial');
-  if (offBtn) offBtn.addEventListener('click', ()=>loadScenario('seed-2026-official'));
-  const autoBtn = document.getElementById('bsAutoOpen');
-  if (autoBtn) autoBtn.addEventListener('click', openAutoDialog);
-  const seedBtn = document.getElementById('bsLoadSeed');
-  if (seedBtn) seedBtn.addEventListener('click', ()=>loadScenario('seed-2026-alignment'));
   S.booted = true;
 };
 
