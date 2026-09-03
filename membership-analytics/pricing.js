@@ -238,6 +238,7 @@ function allocate(poolKey, L){
 }
 
 const yearNum  = () => (PS.year === 'y24' ? '2024' : PS.year === 'y25' ? '2025' : '2026');
+const yearLabelPricing = () => (PS.year === 'y26' ? `${yearNum()} (year to date)` : `${yearNum()} (complete)`);
 const poolKey  = stage => yearNum() + '|' + stage;
 
 /* ==========================================================================
@@ -832,7 +833,7 @@ function squad(key){
 }
 
 async function loadCounts(){
-  const y = PS.year==='y25' ? 2025 : 2026;
+  const y = +yearNum();
   if (PS.countsYear === y) return;
   try {
     const r = await NEON.query(
@@ -1207,7 +1208,7 @@ function renderMemberPrices(base, sim){
   const dTot = sim.memberRev - base.memberRev;
   return `<div class="card"><div class="card-h">
       <h3>Membership dues</h3>
-      <div class="note">Counts are live from <span class="mono">membership.members</span> for ${PS.year==='y25'?'2025 (complete)':'2026 (year to date)'}. Response = % of members lost per 10% dues increase.</div>
+      <div class="note">Counts are live from <span class="mono">membership.members</span> for ${yearLabelPricing()}. Response = % of members lost per 10% dues increase.</div>
     </div><div class="card-b">
     <table class="ps-tbl"><thead><tr>
       <th>Membership type</th><th class="num">Members</th><th class="num">Current</th>
@@ -1486,6 +1487,7 @@ function renderScenarioBar(){
     <div class="ps-bar-g">
       <label>Season</label>
       <div class="seg ps-seg">
+        <button data-year="y24" class="${PS.year==='y24'?'on':''}">2024 complete</button>
         <button data-year="y25" class="${PS.year==='y25'?'on':''}">2025 complete</button>
         <button data-year="y26" class="${PS.year==='y26'?'on':''}">2026 YTD</button>
       </div>
@@ -2193,8 +2195,9 @@ async function loadScenario(id){
     if (!r.rows.length){ msg('Scenario not found.'); return; }
     const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
     if (d.boundaryId && d.boundaryId !== PS.boundaryId) await applyBoundary(d.boundaryId);
-    const yearChanged = (d.year === 'y25' ? 'y25' : 'y26') !== PS.year;
-    PS.year = d.year === 'y25' ? 'y25' : 'y26';
+    const newYear = (d.year === 'y24' || d.year === 'y25') ? d.year : 'y26';
+    const yearChanged = newYear !== PS.year;
+    PS.year = newYear;
     await loadCounts();
     resizeCards();
     if (yearChanged || !PS.cal) deriveCalibration();
@@ -2223,7 +2226,7 @@ function exportCsv(){
   L.push('USA Diving Pricing Studio export');
   L.push('scenario,' + q(PS.scenarioName||'(unnamed)'));
   L.push('structure,' + q(PS.boundaryName));
-  L.push('season,' + (PS.year==='y25'?'2025 complete':'2026 YTD'));
+  L.push('season,' + (PS.year==='y26' ? yearNum()+' YTD' : yearNum()+' complete'));
   L.push('divemeets levy per entry,' + PS.levy.toFixed(2));
   L.push('');
   L.push('section,item,volume,current_price,simulated_price,gross,divemeets_levy,net,baseline_net,delta_net,provenance');

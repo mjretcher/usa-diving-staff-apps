@@ -50,7 +50,7 @@ const S = {
   assign: {},           // fips -> region index
   active: 0,            // active region index (-1 = eraser)
   tool: 'county',       // county | state | pan
-  year: 'y25',          // y25 (complete) | y26 (YTD)
+  year: 'y25',          // y24 (complete) | y25 (complete) | y26 (YTD)
   zoom: {k:1, x:0, y:0},
   painting: false,
   detailRegion: null,   // group index (in current tier view) for zip drill-down
@@ -325,7 +325,7 @@ function countyStat(fips){
   const ag = S.age && S.age[fips] ? S.age[fips][S.year] : null;
   const rec = {
     m: v.m, a: v.a, c: v.c, cl: v.cl,
-    zips: Object.keys(st.z).filter(z => st.z[z][S.year==='y25'?0:1] > 0).length,
+    zips: Object.keys(st.z).filter(z => st.z[z][zIndexForYear(S.year)] > 0).length,
     counted: v.m > 0 ? 1 : 0,
     ag: ag ? [0,1,2,3,4].map(j => ag[j]||0) : [0,0,0,0,0],
   };
@@ -476,7 +476,7 @@ function regionZips(gi){
     if (ri==null || ri<0 || ri>=S.regions.length || TG.of[ri] !== gi) continue;
     const county = S.geo.counties.find(c=>c.f===fips);
     for (const [zip, mm] of Object.entries(st.z)){
-      const m = mm[y==='y25'?0:1];
+      const m = mm[zIndexForYear(y)];
       if (m>0) out.push({zip, m, county: county?county.n:'', st: county?county.st:''});
     }
   }
@@ -807,6 +807,7 @@ function renderPanel(){
         <button class="tab bs-mini" id="bsBrushUp" aria-label="Increase paint brush size">+</button>
       </div>
       <div class="seg">
+        <button id="bsY24" class="${y==='y24'?'on':''}">2024</button>
         <button id="bsY25" class="${y==='y25'?'on':''}">2025</button>
         <button id="bsY26" class="${y==='y26'?'on':''}">2026 YTD</button>
       </div>
@@ -879,7 +880,7 @@ function renderPanel(){
 function renderNumbers(){
   const t = computeTallies();
   const y = S.year;
-  const yLabel = y==='y25' ? '2025 (complete year)' : '2026 (YTD)';
+  const yLabel = yearLabelBoundary(y);
   const assignedM = t.rows.reduce((s,r)=>s+r.m,0);
   const mappableTotal = assignedM + t.un.m;
 
@@ -1094,7 +1095,7 @@ function groupUp(fromL, g, toL){
    invisible. */
 function multBasisFor(L){
   const n = S.levels.length;
-  const yr = S.year === 'y25' ? '2025' : '2026';
+  const yr = yearNumBoundary(S.year);
   const stage = (L === 0) ? 'Regionals'
               : (L === n - 1) ? 'Nationals'
               : (L === 1) ? 'Zones' : 'EWC';
@@ -1186,6 +1187,27 @@ function arrivalRate(L){
    level's own name, and shown so it can be corrected. */
 const SEED_STAGES = ['Regionals','Zones','EWC','Nationals'];
 
+/* Single source of truth for turning a year code into its number/label.
+   Every place that used to branch on S.year==='y25' by hand is now a call
+   through here -- a three-way mistake can only happen once, not be
+   silently repeated (and inconsistently) at a dozen call sites. */
+function yearNumBoundary(y){
+  y = y || S.year;
+  return y === 'y24' ? '2024' : y === 'y25' ? '2025' : '2026';
+}
+function yearLabelBoundary(y){
+  y = y || S.year;
+  if (y === 'y24') return '2024 (complete year)';
+  if (y === 'y25') return '2025 (complete year)';
+  return '2026 (year to date)';
+}
+/* stats[fips].z[zip] is a fixed array: index 0/1 are y25/y26 (original,
+   preserved for backward compatibility), index 2 is y24 (appended later). */
+function zIndexForYear(y){
+  y = y || S.year;
+  return y === 'y26' ? 1 : y === 'y24' ? 2 : 0;
+}
+
 /* The highest real, ever-observed entry total for a stage, across every year
    advance-data.json carries. This is the check that would have caught the
    seedStage bug automatically: a "Zones" seeded from the wrong pool produced
@@ -1245,7 +1267,7 @@ function renderSeedPoolPicker(){
         ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
       </select>
     </label>
-    <div style="margin-top:4px">Currently seeding from real <b>${effective} ${S.year==='y25'?'2025':'2026'}</b> data — ${total.toLocaleString()} real entries, before this level's own advancement rule is applied.
+    <div style="margin-top:4px">Currently seeding from real <b>${effective} ${yearNumBoundary(S.year)}</b> data — ${total.toLocaleString()} real entries, before this level's own advancement rule is applied.
     ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
   </div>`;
 }
@@ -1826,7 +1848,7 @@ function financialsForYear(year){
    ever back-fills more seasons. */
 function stageExists(stageName, year){
   if (!stageName) return false;
-  const key = (year === 'y25' ? '2025' : '2026') + '|' + stageName;
+  const key = yearNumBoundary(year) + '|' + stageName;
   return !!(S.advData && S.advData.pools && S.advData.pools[key]);
 }
 
@@ -1856,7 +1878,7 @@ function dataStamps(){
     if (k){ st.calibration_basis = k.basis; st.calibration_year = k.year;
             st.calibration_regions = k.regions; }
   } catch(e){}
-  st.year = S.year === 'y25' ? '2025' : '2026';
+  st.year = yearNumBoundary(S.year);
   st.seed_pool = seedPoolKey();
   return st;
 }
@@ -2140,18 +2162,21 @@ function renderFinancials(){
   </div>`;
 }
 
-/* This map's zones, run against 2025's and 2026's actual entries instead of
-   the model's take-up estimate -- the same map twice, not two maps. Where a
-   season really ran a stage (Regionals and Zones in both eras) the number is
-   the real reallocated field; where it did not (2025 had no East/West/Central
-   round, and no season here calibrates arrival into the championship) that is
-   said plainly rather than guessed at. */
+/* This map's zones, run against 2024's, 2025's, and 2026's actual entries
+   instead of the model's take-up estimate -- the same map three times, not
+   three maps. Where a season really ran a stage (Regionals and Zones in all
+   three eras) the number is the real reallocated field; where it did not
+   (only 2026 had an East/West/Central round, and no season here calibrates
+   arrival into the championship) that is said plainly rather than guessed
+   at. */
 function renderYearFill(){
   if (!S.advData || !S.advData.pools) return '';
+  const fy24 = financialsForYear('y24');
   const fy25 = financialsForYear('y25');
   const fy26 = financialsForYear('y26');
-  if (!fy25 && !fy26) return '';
+  if (!fy24 && !fy25 && !fy26) return '';
   const levels = Array.from(new Set([
+    ...(fy24 ? Object.keys(fy24.tiers) : []),
     ...(fy25 ? Object.keys(fy25.tiers) : []),
     ...(fy26 ? Object.keys(fy26.tiers) : []),
   ])).sort((x,y) => x-y);
@@ -2173,21 +2198,23 @@ function renderYearFill(){
 
   const rows = levels.map(L => {
     const name = (fy26 && fy26.tiers[L] && fy26.tiers[L].name) ||
-                 (fy25 && fy25.tiers[L] && fy25.tiers[L].name) || tierName(+L);
+                 (fy25 && fy25.tiers[L] && fy25.tiers[L].name) ||
+                 (fy24 && fy24.tiers[L] && fy24.tiers[L].name) || tierName(+L);
     return `<tr><td><b>${esc(name)}</b></td>
+      <td class="num">${cell(fy24, L, 'y24')}</td>
       <td class="num">${cell(fy25, L, 'y25')}</td>
       <td class="num">${cell(fy26, L, 'y26')}</td></tr>`;
   }).join('');
 
   return `<div class="bs-bd" style="margin-top:16px">
     <div class="bs-bd-h"><b>Real participation by season</b>
-      <span class="note">This map's zones, seeded from 2025's and 2026's actual entries reallocated
-        county by county &mdash; the same map run against two real seasons, not two different maps.
-        <b>Modelled</b> marks a tier that season has no recorded field for (2025 ran no East/West/Central
+      <span class="note">This map's zones, seeded from 2024's, 2025's, and 2026's actual entries reallocated
+        county by county &mdash; the same map run against three real seasons, not three different maps.
+        <b>Modelled</b> marks a tier that season has no recorded field for (only 2026 ran an East/West/Central
         round, and no season here has a measured rate into the championship), so that figure assumes
         every qualifier turns up rather than measuring who actually did.</span></div>
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl">
-      <thead><tr><th>Tier</th><th class="num">2025</th><th class="num">2026</th></tr></thead>
+      <thead><tr><th>Tier</th><th class="num">2024</th><th class="num">2025</th><th class="num">2026</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
   </div>`;
 }
@@ -3072,6 +3099,7 @@ function renderScheduleInspector(res){
           <select class="sel" id="bsTemplateSource">
             <option value="projected">Today's calibrated projection</option>
             <option value="max">Maximum capacity (no calibration)</option>
+            <option value="y24">Real 2024 entries</option>
             <option value="y25">Real 2025 entries</option>
             <option value="y26">Real 2026 entries</option>
           </select></label>
@@ -3301,7 +3329,7 @@ async function generateScheduleFromTemplate(templateId, source, startDate){
   if (!t) { msg('Template not found.'); throw new Error('generateScheduleFromTemplate: no template with id ' + templateId); }
   if (!startDate) { msg('A start date is required.'); throw new Error('generateScheduleFromTemplate: startDate is required'); }
   const res = await entriesForSource(source);
-  const sourceLabel = {max:'maximum capacity (no calibration)', y25:'real 2025 entries', y26:'real 2026 entries',
+  const sourceLabel = {max:'maximum capacity (no calibration)', y24:'real 2024 entries', y25:'real 2025 entries', y26:'real 2026 entries',
     projected:'today\u2019s calibrated projection'}[source] || source;
   const name = `${S.scenarioName || 'Untitled scenario'} \u2014 ${t.name} \u2014 ${sourceLabel}`;
   const schedule = buildScheduleFromTemplate(t.data, res, {
@@ -3310,7 +3338,7 @@ async function generateScheduleFromTemplate(templateId, source, startDate){
     description: `Generated from Boundary Studio scenario "${S.scenarioName||''}" (${S.scenarioId||'unsaved'}) `
       + `via template "${t.name}" (${t.id}), entries: ${sourceLabel}. Generated ${new Date().toISOString()}. `
       + `Projected entries, not synced from DiveMeets -- verify before publishing.`,
-    year: S.year === 'y25' ? 2025 : 2026,
+    year: +yearNumBoundary(S.year),
     startDate,
   });
   schedule.saved = false;
@@ -4191,7 +4219,7 @@ function renderReportInspector(){
       <b>This scenario</b>
       <span>map <code>${esc(S.scenarioName || 'unsaved')}</code></span>
       <span>pathway <code>${esc(p)}</code></span>
-      <span>first stop fed by <code>${esc(seedStage())} ${S.year==='y25'?'2025':'2026'}</code></span>
+      <span>first stop fed by <code>${esc(seedStage())} ${yearNumBoundary(S.year)}</code></span>
       <span>${fmt(seedTotal())} entries in that pool</span>
     </div>
     <p class="note">Anything you put in front of a committee should be reproducible from this line alone:
@@ -4305,7 +4333,7 @@ function renderPathway(){
         : 'Reading the pathway now on screen. Change it under <b>Structure</b>.'}</span>
       <label class="bs-focus">First stop&rsquo;s field
         <select class="sel" id="bsSeedPool">
-          ${SEED_STAGES.map(x=>`<option value="${x}" ${seedStage()===x?'selected':''}>${esc(x)} ${(S.year==='y25'?'2025':'2026')}</option>`).join('')}
+          ${SEED_STAGES.map(x=>`<option value="${x}" ${seedStage()===x?'selected':''}>${esc(x)} ${yearNumBoundary(S.year)}</option>`).join('')}
         </select><span class="bs-arr-m">${fmt(seedTotal())} entries</span></label>
       <label class="bs-focus">Showing
         <select class="sel" id="bsPathFocus">
@@ -4715,7 +4743,7 @@ function tallySoon(){
    flow model, no projection, no meet simulation. */
 function renderNumbersLight(){
   const t = computeTallies();
-  const yLabel = S.year==='y25' ? '2025' : '2026';
+  const yLabel = yearNumBoundary(S.year);
   const mappableTotal = t.rows.reduce((a,r)=>a+r.m,0) + t.un.m;
   renderLegend(t, mappableTotal, yLabel);
   renderConsequenceStrip();
@@ -4829,6 +4857,7 @@ function wirePanel(){
   bind('bsToolCounty', ()=>{S.tool='county'; renderPanel();});
   bind('bsToolState', ()=>{S.tool='state'; renderPanel();});
   bind('bsToolPan', ()=>{S.tool='pan'; renderPanel();});
+  bind('bsY24', ()=>{S.year='y24'; repaintAll(); renderPanel();});
   bind('bsY25', ()=>{S.year='y25'; repaintAll(); renderPanel();});
   bind('bsY26', ()=>{S.year='y26'; repaintAll(); renderPanel();});
   bind('bsZoomIn', ()=>{S.zoom.k=Math.min(14,S.zoom.k*1.4); applyZoom();});
@@ -5180,7 +5209,7 @@ async function loadScenario(id){
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
-    S.year = d.year === 'y26' ? 'y26' : 'y25';
+    S.year = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
     S.pathSaved = null; S.pathDirty = false;   // this is the map's own copy, not a library pathway
     S.frozen = d.frozen || null;
@@ -5221,7 +5250,7 @@ function exportCsv(){
   S.regions.forEach((r,i)=>{
     regionZips(i).forEach(z=>lines.push(`"${r.name.replace(/"/g,'""')}",${z.zip},${z.m},"${z.county.replace(/"/g,'""')}",${z.st}`));
   });
-  download(lines.join('\n'), (S.scenarioName.trim()||'boundary-scenario') + '-' + (y==='y25'?'2025':'2026') + '-zips.csv');
+  download(lines.join('\n'), (S.scenarioName.trim()||'boundary-scenario') + '-' + yearNumBoundary(y) + '-zips.csv');
 }
 
 function exportAdvCsv(){
@@ -6297,8 +6326,8 @@ function renderAutoDialog(){
           </label>
         </div>
 
-        <div class="bs-auto-note">Using <b>${S.year==='y25'?'2025 (complete year)':'2026 (year to date)'}</b>
-          membership &mdash; switch the year on the map before drawing if you want the other one.</div>
+        <div class="bs-auto-note">Using <b>${yearLabelBoundary(S.year)}</b>
+          membership &mdash; switch the year on the map before drawing if you want a different one.</div>
 
         ${AUTO.error ? `<div class="bs-auto-err">Could not load the map data: ${esc(AUTO.error)}</div>` : ''}
 
@@ -6516,11 +6545,13 @@ window.BoundaryAPI = {
   clubs:      () => (S.geo ? S.geo.clubs : []),
   counties:   () => (S.geo ? S.geo.counties : []),
   year:       () => S.year,
-  yearLabel:  (y) => ((y || S.year) === 'y25' ? '2025 (complete year)' : '2026 (year to date)'),
-  /* Which membership years the boundary data actually covers. The geocoded
-     county statistics only carry y25 and y26, so a report asking for 2024 can
-     be told plainly rather than silently shown the wrong year. */
-  availableYears: () => ['y25', 'y26'],
+  yearLabel:  (y) => yearLabelBoundary(y),
+  /* Which membership years the boundary data actually covers. Now includes
+     y24 (added 2026-09-03, see boundary-data.json's meta.y24_added for the
+     build's method and its one documented gap: ~10.5% of 2024 members are
+     at zip codes stats[*].z never covered, since that zip list was built
+     once from 2025/2026 members only -- excluded, not guessed at). */
+  availableYears: () => ['y24', 'y25', 'y26'],
   /* Run something with the map temporarily set to another year, then put it
      back. Every boundary computation reads S.year through shared helpers, so
      this is how a report renders more than one year without nine section
@@ -6593,12 +6624,12 @@ window.renderBoundary = async function(){
   if (S.booted) return;
   el.innerHTML = '<div class="loading">Loading county map&hellip;</div>';
   try {
-    S.geo = await (await fetch('boundary-data.json?v=202607202100')).json();
+    S.geo = await (await fetch('boundary-data.json?v=202609041900')).json();
   } catch(e){
     el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Boundary data failed to load.</b> ${esc(e.message||e)}</div></div></div>`;
     return;
   }
-  try { S.age = await (await fetch('age-data.json?v=202607210030')).json(); }
+  try { S.age = await (await fetch('age-data.json?v=202609041900')).json(); }
   catch(e){ S.age = {}; }
   try { S.advData = await (await fetch('advance-data.json?v=202607231600')).json(); }
   catch(e){ S.advData = {pools:{}, totals:{}}; }
