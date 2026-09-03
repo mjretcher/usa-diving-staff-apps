@@ -1023,15 +1023,6 @@ const BOUNDARY_SECTIONS = {
           ${levelRows}
         </tbody></table>
 
-        <h3 class="mr-h3">Championship field by age group and gender</h3>
-        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
-          ${(base.byGroup||[]).map((g,i) =>
-            row(g.label, c => (c.byGroup && c.byGroup[i]) ? c.byGroup[i].field : null)).join('')}
-        </tbody></table>
-        <p class="mr-note">The same "who reaches the top meet" figure as the headline above, split into the
-          eight groups a committee actually asks about, so a change concentrated in one group doesn't hide
-          inside a total that looks stable.</p>
-
         <h3 class="mr-h3">Money — entry fees only</h3>
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${financeRow('Entry income (gross)', f=>f.gross)}
@@ -1696,6 +1687,36 @@ const BOUNDARY_SECTIONS = {
         <td class="mr-num">${fmt(capSummaries[cap].finalField)}</td>
         <td class="mr-num">${pctStr(pctVs(capSummaries[cap].finalField, cols[0].finalField))}</td></tr>`).join('');
 
+      // Financials, in the same two-part shape as the athlete-count sections
+      // above: a headline bar-chart on the one number that matters most
+      // (what USA Diving actually keeps), then every line of the breakdown.
+      // finance was already computed by summariseRouting() for all three
+      // systems -- same "already there, just never rendered" situation as
+      // byGroup was.
+      const usdSigned = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      const maxUsad = Math.max(...cols.map(c => c.finance ? c.finance.usad : 0));
+      const finHeadlineRows = cols.map((c,i) => {
+        const v = c.finance ? c.finance.usad : null;
+        return `<tr>
+          <td><b>${esc(c.label)}</b>${i===2?` <span class="mr-soft">(E/W/C final cap = ${DEFAULT_CAP})</span>`:''}</td>
+          <td style="width:32%">${v!=null ? bar(v, maxUsad, i===0?SKY:(i===1?POOL:NAVY)) : ''}</td>
+          <td class="mr-num mono">${v!=null ? usdSigned(v) : '—'}</td>
+          <td class="mr-num">${i===0 || v==null ? '—' : pctStr(pctVs(v, cols[0].finance ? cols[0].finance.usad : null))}</td>
+        </tr>`;
+      }).join('');
+
+      const pctVsSigned = (v, base) => (base == null || Math.abs(base) < 0.5) ? null
+        : (100*(Math.abs(v)-Math.abs(base))/Math.abs(base));
+      const finRow = (label, get) => {
+        const oldV = cols[0].finance ? get(cols[0].finance) : null;
+        return `<tr><td>${esc(label)}</td>` + cols.map((c,i) => {
+          const v = c.finance ? get(c.finance) : null;
+          if (v == null) return '<td class="mr-num">—</td>';
+          const pct = i===0 ? '' : ` <span class="mr-soft">${pctStr(pctVsSigned(v, oldV))}</span>`;
+          return `<td class="mr-num mono">${usdSigned(v)}${pct}</td>`;
+        }).join('') + '</tr>';
+      };
+
       return `<section class="mr-section">
         <h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
         <div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
@@ -1737,12 +1758,35 @@ const BOUNDARY_SECTIONS = {
           <th scope="col" class="mr-num">Nationals field</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
           <tbody>${capRows}</tbody></table>
 
+        <h3 class="mr-h3">USA Diving keeps (entry fees only)</h3>
+        <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
+          <th scope="col" class="mr-num">Net to USA Diving</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
+          <tbody>${finHeadlineRows}</tbody></table>
+        <p class="mr-note">Priced at today's standing fee card for all three systems — the same card CCE and the
+          counter-proposal are already compared under — so a financial difference below is caused by how many
+          athletes and meets the rules produce, not by a different fee schedule. This is not what 2026 actually
+          collected under the old rules; it is what today's fee card would collect on that old structure's field,
+          held constant on purpose so the comparison isolates the rule change.</p>
+
+        <h3 class="mr-h3">Financial breakdown</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Today</th><th scope="col" class="mr-num">CCE proposal</th>
+          <th scope="col" class="mr-num">Counter-proposal</th></tr></thead><tbody>
+          ${finRow('Entry income (gross)', f=>f.gross)}
+          ${finRow('DiveMeets pass-through', f=>-f.levy)}
+          ${finRow('To hosts', f=>f.host)}
+          ${finRow('USA Diving keeps', f=>f.usad)}
+        </tbody></table>
+        <p class="mr-note">Membership dues, synchro and the senior circuit are not here — entry fees only, same
+          as every other financial comparison in this report family.</p>
+
         <p class="mr-note mr-warn"><b>What this is and is not.</b> This projects real 2026 entry volume through
           each rule set on the same map — it is not a prediction of who will actually enter under a new circuit,
           and it does not yet account for behaviour change (a bigger or smaller field can itself change how many
           athletes choose to compete). Today's system starts its count at Regionals because Regions exist there;
           both proposals start at Zones because Regions do not exist in either. That is a real structural
-          difference between old and new, not a gap in the comparison.</p>
+          difference between old and new, not a gap in the comparison. The financial figures carry the same
+          caveat: they are entry-fee volume under today's rate card, not a revenue forecast.</p>
       </section>`;
     }
   },
