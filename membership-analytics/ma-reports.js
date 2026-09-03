@@ -1181,6 +1181,47 @@ const BOUNDARY_SECTIONS = {
         return rounds;
       }).join('');
 
+      // Three genuinely different kinds of number, easy to conflate unless
+      // each row says which one it is: what the rules would admit if every
+      // qualifier turned up (a ceiling, not a forecast), and what the field
+      // actually was in each of the last two real seasons (calibrated to
+      // that season's own measured take-up, where a real one exists at all).
+      // entriesForSource() and withYear() already existed for exactly this
+      // -- built for the schedule generator, never wired into a report until
+      // now. Sequential, not Promise.all: withYear mutates S.year for its
+      // duration, and its own comment warns against overlapping calls.
+      let sourceRows = '';
+      try {
+        const maxRes = await api.entriesForSource('max');
+        const y25Res = await api.entriesForSource('y25');
+        const y26Res = await api.entriesForSource('y26');
+        const stageOf = (L, rk) => {
+          const total = (R) => {
+            const f = R && R.field && R.field[L] && R.field[L][rk];
+            return f ? f.reduce((s,g) => s + CELLS.reduce((s2,c) => s2+(g[c]||0), 0), 0) : null;
+          };
+          return {max: total(maxRes), y25: total(y25Res), y26: total(y26Res)};
+        };
+        const srows = [];
+        routing.forEach((lvl2, L) => QRr.roundsOf(lvl2).forEach(r => {
+          const s = stageOf(L, r.key);
+          // Level 0 is the entry pool itself, not a stage anything advances
+          // INTO -- there is no rule capping it, so "max available" has no
+          // real meaning there. maxCapacityEntries() seeds it with an
+          // arbitrary huge placeholder to make the projection math work,
+          // which is not a number to show anyone; say plainly why instead.
+          const maxCell = L === 0
+            ? '<span class="mr-soft">n/a — entry pool, not capped by a rule</span>'
+            : (s.max!=null?fmt(Math.round(s.max)):'—');
+          srows.push(`<tr><td>${esc(nm(L))}</td><td>${esc(QRr.ROUND_NAME[r.key] || r.key)}</td>
+            <td class="mr-num">${maxCell}</td>
+            <td class="mr-num">${s.y25!=null?fmt(Math.round(s.y25)):'<span class="mr-soft">no 2025 data</span>'}</td>
+            <td class="mr-num">${s.y26!=null?fmt(Math.round(s.y26)):'<span class="mr-soft">no 2026 data</span>'}</td></tr>`);
+        }));
+        sourceRows = srows.join('');
+      } catch(e){ sourceRows = `<tr><td colspan="5" class="mr-warn">Could not compute the max/2025/2026
+        comparison: ${esc(e.message||String(e))}</td></tr>`; }
+
       const billed = routing.map((lvl, L) => {
         const b = QRr.billableEntries(res, L, CELLS, seed);
         const n = CELLS.reduce((s,c) => s + (b[c]||0), 0);
@@ -1222,6 +1263,8 @@ const BOUNDARY_SECTIONS = {
         <ul class="mr-bullets">${routes}</ul>
 
         <h3 class="mr-h3">Field at every stage and round</h3>
+        <p class="mr-note">Calibrated to ${esc(api.yearLabel())}'s measured take-up where a real one exists;
+          bands with no real measurement assume every qualifier turns up.</p>
         <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th><th scope="col" class="mr-num">Stops</th>
           <th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Divers</th></tr></thead>
           <tbody>${rows}</tbody></table>
@@ -1229,6 +1272,20 @@ const BOUNDARY_SECTIONS = {
           three events, so the two answer different questions — entries decide session length and fee income,
           divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
           of events away from what was measured, so read it as indicative.</p>
+
+        <h3 class="mr-h3">The same field, three ways</h3>
+        <p class="mr-p">These are three different kinds of number, not three estimates of the same one.
+          <b>Max available</b> is a structural ceiling — every band saturated as if the real field were
+          infinite, useful for sizing a venue's worst case, not for predicting turnout. It only means
+          something for a stage a <em>rule</em> caps; the entry level itself has no such rule, so it shows
+          as not applicable rather than a number. <b>2025</b> and <b>2026</b> are what actually happened
+          those seasons, each calibrated to that season's own measured take-up where a real measurement
+          exists for that stage. A stage marked "no data" did not exist, or was not separately measured,
+          in that season.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th>
+          <th scope="col" class="mr-num">Max available</th><th scope="col" class="mr-num">2025</th>
+          <th scope="col" class="mr-num">2026</th></tr></thead>
+          <tbody>${sourceRows}</tbody></table>
 
         <h3 class="mr-h3">Every event, every round</h3>
         ${(function(){
@@ -2586,17 +2643,7 @@ window._mrGenerate = async function(){
           Membership year(s): ${esc(opts.years.join(', '))}<br>
           Scope: <strong>${esc(scopeSummary(opts))}</strong><br>
           Sections: ${esc(ids.map(i => SECTIONS[i].label).join(' · '))}<br>
-          Data source: ${(() => {
-            const groups = new Set(ids.map(i => SECTIONS[i] && SECTIONS[i].group));
-            const hasMembership = groups.has('Membership');
-            const hasBoundary = groups.has('Boundary Studio');
-            const parts = [];
-            if (hasMembership) parts.push(`pulled live from USA Diving's membership and results records
-              (membership.members, membership.sales_ledger, divemeets.meets)`);
-            if (hasBoundary) parts.push(`the scenario and pathway open in Boundary Studio when this was
-              generated, plus historical results data for any section measuring real attrition`);
-            return esc(parts.join('; and '));
-          })()}
+          Data source: live Neon — membership.members, membership.sales_ledger, divemeets.meets
         </div>
       </div>
       <div id="mr-doc-body">
