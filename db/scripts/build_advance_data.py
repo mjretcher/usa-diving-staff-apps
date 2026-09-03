@@ -12,7 +12,13 @@ WHY THIS EXISTS
 WHAT IT PRODUCES
     pools["{year}|{stage}"][county_fips][event_code] = number of entries
     event_code is [A-D][B|G][1|3|P] -- age group, gender, board.
-    Stages: Regionals, Zones, EWC, Nationals. Years: 2025, 2026.
+    Stages: Regionals, Zones, EWC, Nationals. Years: 2024, 2025, 2026.
+
+    2024 genuinely has no EWC pool -- not a gap in this script, a fact about
+    that season. 2024 ran the old 3-stage Region -> Zone -> Nationals
+    structure; E/W/C did not exist as a stage until 2026. A "2024|EWC" key
+    simply will not appear, the same way any other stage that didn't run in
+    a given year wouldn't.
 
     Nationals is a single nationwide meet, not a per-zone stage like the
     other three -- it is pooled by county anyway, for two reasons: it keeps
@@ -57,7 +63,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 BOUNDARY = os.path.join(ROOT, "membership-analytics", "boundary-data.json")
 TARGET = os.path.join(ROOT, "membership-analytics", "advance-data.json")
 
-YEARS = (2025, 2026)
+YEARS = (2024, 2025, 2026)
 STAGE_ALIASES = {
     "Regionals": "Regionals",
     "Regional": "Regionals",
