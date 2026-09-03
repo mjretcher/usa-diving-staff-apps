@@ -2137,7 +2137,14 @@ function renderMeetManifest(res){
       const money = kin.reduce((s2,x) => s2 + meetMoney(x).net, 0);
       head = `<tr class="bs-mf-tier"><td colspan="${COLS}">
         <b>${esc(m.levelName)}</b> &middot; ${fmt(kin.length)} ${kin.length===1?'meet':'meets'}
-        &middot; ${fmt(Math.round(tot))} entries &middot; ${usd(money)} net</td></tr>`;
+        &middot; ${fmt(Math.round(tot))} entries &middot; ${usd(money)} net
+        <span class="bs-mf-bulk">
+          set every ${esc(m.levelName)} host cut to
+          $<input class="bs-rt-in bs-mini" type="number" min="0" step="100"
+            data-bulklevelin="${m.level}" placeholder="0">
+          <button class="tab bs-mini" data-bulklevel="${m.level}"
+            title="Sets this figure for all ${kin.length} ${kin.length===1?'meet':'meets'} in ${esc(m.levelName)} -- each stays individually editable afterward">Apply to this level</button>
+        </span></td></tr>`;
     }
     return head + `<tr>
       <td><b>${esc(m.name)}</b></td>
@@ -4354,6 +4361,21 @@ function wirePathway(){
   bind$('bsHostFlat',  el => { S.hostFlat = Math.max(0, +el.value||0); });
   bind$('bsHostPer',   el => { S.hostPer  = Math.max(0, +el.value||0); });
   bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
+  P.querySelectorAll('button[data-bulklevel]').forEach(el => el.addEventListener('click', e => {
+    const level = +e.target.dataset.bulklevel;
+    const input = P.querySelector(`input[data-bulklevelin="${level}"]`);
+    const v = input ? input.value : '';
+    if (v === '' || v == null){ msg('Type a dollar figure first.'); return; }
+    const value = Math.max(0, +v || 0);
+    const res = S.routeRes || projectPathway();
+    const levelMeets = meetManifest(res).filter(x => x.level === level);
+    if (!levelMeets.length) return;
+    S.hostPer_stop = S.hostPer_stop || {};
+    levelMeets.forEach(m => { S.hostPer_stop[meetKey(m)] = value; });
+    S.dirty = true;
+    msg(`Set to $${fmt(value)} for all ${levelMeets.length} meets -- each one is still individually editable below.`);
+    renderPathway();
+  }));
   P.querySelectorAll('input[data-host]').forEach(el => el.addEventListener('change', e => {
     const k = e.target.dataset.host, v = e.target.value;
     S.hostPer_stop = S.hostPer_stop || {};
