@@ -121,7 +121,7 @@ const S = {
   savedAt: null,        // when this scenario was last written, for the status chip
   atlMetric: 'members', // what the Map rail's rows count
   atlBdL: 0, atlBdR: null,   // Projection: which level / round the breakdown shows
-  cmpView: 'side', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
+  cmpView: 'card', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
   reportText: {},       // edited wording on the board paper (unfrozen); frozen text lives on S.frozen
   atlMenu: false,
 };
@@ -1175,6 +1175,23 @@ async function ensureMult(){
    Studio's conv/directAt scheme never modelled arrival into the championship
    (that comes from real Nationals entries loaded separately), so a level
    named "National" correctly finds no stage and reports unmeasured. */
+function stageForName(name){
+  const n = String(name || '').toLowerCase();
+  if (/region/.test(n)) return 'Regionals';
+  if (/zone/.test(n)) return 'Zones';
+  if (/east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n)) return 'EWC';
+  return null;
+}
+/* The real field for a stage in a season, straight from the results build.
+   National totals, so they do not depend on any map; null where that season
+   never ran the stage. */
+function realStageField(stage, year){
+  if (!stage) return null;
+  const P = S.advData && S.advData.pools ? S.advData.pools[yearNumBoundary(year) + '|' + stage] : null;
+  if (!P) return null;
+  let t = 0; for (const f in P) for (const c in P[f]) t += P[f][c];
+  return t;
+}
 function stageNameForLevel(L){
   const n = String(tierName(L) || '').toLowerCase();
   if (/region/.test(n)) return 'Regionals';
@@ -3453,8 +3470,14 @@ function summariseRouting(routing, label, notes){
       const refStage = L === 0 ? seedStage() : stageNameForLevel(L);
       const ceiling = historicalCeiling(refStage);
       const flagged = ceiling != null && entry > ceiling * SANITY_HEADROOM;
+      const stage = L === routing.length - 1 ? 'Nationals' : stageNameForLevel(L);
       return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
-              rounds: rounds.length, refStage, historicalMax: ceiling, flagged};
+              rounds: rounds.length, refStage, historicalMax: ceiling, flagged,
+              // take-up applied at this level, whether it was measured, and the
+              // real field of the stage this level stands in for -- so a
+              // projection is never shown without the actual beside it
+              arrive: L === 0 ? null : arrivalRate(L), measured: L === 0 ? null : measuredArrival(L),
+              stage, actual: realStageField(stage, S.year)};
     });
     const sanityFlags = levels.filter(l => l.flagged);
     const last = routing.length - 1;
@@ -7541,7 +7564,7 @@ function atlasProjectionHtml(res){
     return `<div class="atl-pipe-c">
       <div class="atl-pn">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
       <div class="atl-pv">${fmt(Math.round(entries))}</div>
-      <div class="atl-pd">entries${d && d.ok ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' · estimate'}` : ''}${t && !t.measured && L > 0 ? ' · <span class="c-warn">take-up not measured</span>' : ''}${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field <span class="mono c-navy">${fmt(realChampionshipField(S.year))}</span>` : ''}</div>
+      <div class="atl-pd">entries${d && d.ok ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' · estimate'}` : ''}${L > 0 ? (t && !t.measured ? ` · <span class="c-warn">take-up ${Math.round(arrivalRate(L)*100)}% assumed</span>` : ` · take-up <span class="mono">${Math.round(arrivalRate(L)*100)}%</span> measured`) : ''}${!isChampionshipLevel(L) && stageNameForLevel(L) && realStageField(stageNameForLevel(L), S.year) != null ? ` · real ${yearNumBoundary(S.year)} field <span class="mono c-navy">${fmt(realStageField(stageNameForLevel(L), S.year))}</span>` : ''}${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field <span class="mono c-navy">${fmt(realChampionshipField(S.year))}</span>` : ''}</div>
       <div class="atl-pf"><span>${t && t.spots ? `${Math.round(t.fill*100)}% of ${fmt(Math.round(t.spots))} places` : 'no cap — open entry'}</span>
         <span>biggest ÷ smallest <span class="mono">${t && t.ratio ? t.ratio.toFixed(1)+'×' : '—'}</span></span></div>
       ${L < nL-1 ? '<span class="atl-pipe-arrow">→</span>' : ''}
@@ -7896,7 +7919,7 @@ function atlasScheduleHtml(res){
    Pathway axis: the same map under different rule sets. The table is built
    from buildComparison() either way.
    ========================================================================= */
-const CMP_LET = ['A','B','C'], CMP_TAG = ['#171f69','#009ac7','#6b7385'];
+const CMP_LET = ['A','B','C','D'], CMP_TAG = ['#171f69','#009ac7','#6b7385','#b45309'];
 
 function atlasCompareHtml(){
   const axis = S.cmpAxis || 'scenario', onPath = axis === 'pathway', asSaved = axis === 'scenario';
@@ -7914,14 +7937,14 @@ function atlasCompareHtml(){
 <span class="atl-pn" title="${esc(c.name)}">${esc(c.name)}</span>
       ${i>0 ? `<button class="atl-x" data-unpin="${esc(c.id)}" title="Unpin">×</button>` : ''}</div>`).join('');
   const pinnable = lib.filter(x => ids.indexOf(x.id) < 0);
-  const canPin = cols.length < 3 && pinnable.length > 0;
-  const pinSel = canPin ? `<select class="atl-pinsel" id="atlPin"><option value="">+ Pin a saved ${onPath?'pathway':'scenario'}</option>${pinnable.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}${onPath?` · ${x.levels} levels`:''}</option>`).join('')}</select>`
-    : (cols.length >= 3 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another scenario from the header menu'}.</span>`);
-  const view = S.cmpView || 'side';
+  const canPin = cols.length < 4 && pinnable.length > 0;
+  const pinSel = canPin ? `<select class="atl-pinsel" id="atlPin"><option value="">+ Pin a saved ${onPath?'pathway':'scenario'} (up to 3)</option>${pinnable.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}${onPath?` · ${x.levels} levels`:''}</option>`).join('')}</select>`
+    : (cols.length >= 4 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another scenario from the header menu'}.</span>`);
+  const view = S.cmpView || 'card';
   const bar = `<div class="atl-cmp-bar">${pins}${pinSel}
       <div class="atl-seg sm" style="margin-left:auto" title="What is allowed to differ between columns"><button data-cmpaxis="scenario" class="${asSaved?'on':''}" title="Each scenario exactly as saved: its own map, pathway, fees and host model">Scenarios as saved</button><button data-cmpaxis="map" class="${axis==='map'?'on':''}" title="Only the map differs; the pathway on screen runs over every map">Maps only</button><button data-cmpaxis="pathway" class="${onPath?'on':''}" title="Only the pathway differs; every column runs on this map">Pathways only</button></div>
-      ${!onPath ? `<div class="atl-seg sm"><button data-atlcmpview="side" class="${view==='side'?'on':''}">Side by side</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Single map</button></div>
-      <label title="Outline the counties that sit in a different area than in ${esc(aName)}"><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs ${esc(aShort)}</label>` : ''}
+      <div class="atl-seg sm"><button data-atlcmpview="card" class="${view==='card'?'on':''}" title="One column of figures per scenario">Scorecard</button>${!onPath ? `<button data-atlcmpview="side" class="${view==='side'?'on':''}">Maps</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Crossfade</button>` : ''}</div>
+      ${!onPath ? `<label title="Outline the counties that sit in a different area than in ${esc(aName)}"><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs ${esc(aShort)}</label>` : ''}
       <button class="atl-btn" id="atlGoReport">Build report →</button>
       ${S._cmpBusy ? '<span class="atl-note">Comparing…</span>' : ''}</div>`;
 
@@ -7944,7 +7967,9 @@ function atlasCompareHtml(){
   if (onPath) C.forEach(c => { if (!c.error && c.routing && c.maxFinal == null) Object.assign(c, withRouting(c.routing, maxCapacitySummary)); });
 
   let maps = '';
-  if (!onPath){
+  if (view === 'card'){
+    maps = atlasScorecardHtml(C, cols, axis);
+  } else if (!onPath){
     const outline = S.cmpOutline !== false;
     const svgFor = (i) => {
       const c = C[i];
@@ -8056,6 +8081,58 @@ function atlasCompareHtml(){
       : asSaved ? `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} can come from the map, the pathway or the fees — open Maps only or Pathways only to isolate one.`
     : `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} is caused by the map and nothing else.`}</p></div>`;
   return bar + maps + table;
+}
+
+/* One column of figures per scenario, laid out like the Overview's KPI tiles:
+   big number, chip, one line of context. A leading column carries the real
+   season -- the fields that actually ran -- so every projection has the
+   actual beside it and the comparison is never a projection against a
+   best case. Deltas are against the first scenario column. */
+function atlasScorecardHtml(C, cols, axis){
+  const yr = yearNumBoundary(S.year);
+  const A = C[0];
+  const pct = v => Math.round(v*100) + '%';
+  const dl = (v, b, f, inverse) => {
+    if (b == null || v == null || !isFinite(v-b) || Math.round(v*10) === Math.round(b*10)) return '';
+    const up = v > b;
+    return ` <span class="delta ${(inverse ? !up : up) ? 'up' : 'down'}">${up?'+':'−'}${f(Math.abs(v-b))}</span>`;
+  };
+  const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
+  const tile = (o) => `<div class="atl-kpi ${o.sm?'sm':''}" style="--c:${o.c}">${o.label ? `<div class="lbl">${o.label}</div>` : ''}<div class="big">${o.big}</div>${o.chip ? `<span class="chip ${o.chipCls||''}">${o.chip}</span>` : ''}${o.sub ? `<div class="sub">${o.sub}</div>` : ''}</div>`;
+
+  // The season that actually ran.
+  const stages = [['Regionals','Regionals'],['Zones','Zones'],['EWC','East / West / Central'],['Nationals', S.finalName || 'Nationals']];
+  const k = (() => { try { return window.JuniorFlow.constants(S.year); } catch(e){ return null; } })();
+  const measuredFor = stage => { const lv = k && k.byStage && k.byStage[stage]; if (!lv || !lv.conv) return null; const v = Object.values(lv.conv).filter(x => x > 0); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+  const actualTiles = stages.map(([st, label]) => { const real = realStageField(st, S.year); if (real == null) return ''; const m = st === 'Regionals' ? null : measuredFor(st);
+    return tile({c:'#0f1633', sm:true, label: esc(label), big: fmt(real), chip: 'actual', chipCls:'ink', sub: m != null ? `take-up ${pct(m)} measured (real field ÷ what the bands sent)` : (st === 'Regionals' ? 'open entry' : 'take-up not measured')}); }).filter(Boolean).join('');
+  const actualCol = actualTiles ? `<div class="atl-kpi-col"><div class="atl-kpi-head"><span class="atl-let" style="background:#0f1633">${yr.slice(2)}</span><b>Actual ${yr}</b><small>${S.year==='y26' ? 'season to date' : 'complete season'} · the structure that ran</small></div>${actualTiles}${tile({c:'#0f1633', sm:true, label:'Real entries', big: fmt(stages.reduce((a,[st])=>a+(realStageField(st,S.year)||0),0)), sub:'every stage, every meet'})}</div>` : '';
+
+  const scen = cols.map((col, i) => {
+    const c = C[i]; const tag = CMP_TAG[i];
+    if (!c || c.error) return `<div class="atl-kpi-col"><div class="atl-kpi-head"><span class="atl-let" style="background:${tag}">${CMP_LET[i]}</span><b>${esc(col.name)}</b></div><div class="atl-warn">${esc((c && c.error) || 'not built')}</div></div>`;
+    const lv = c.levels || [];
+    const meets = c.meets;
+    const levelTiles = lv.map((l, L) => {
+      const a = A.levels && A.levels[L];
+      const take = L === 0 ? 'open entry' : (l.measured != null ? `take-up ${pct(l.arrive)} measured` : `take-up ${pct(l.arrive)} assumed`);
+      const actual = l.actual != null ? ` · actual ${yr}: <b>${fmt(l.actual)}</b>` : '';
+      return tile({c: tag, sm:true, label: esc(l.name) + ` <span class="c-faint">· ${l.stops} ${l.stops===1?'stop':'stops'}</span>`, big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : ''), sub: take + actual});
+    }).join('');
+    return `<div class="atl-kpi-col">
+      <div class="atl-kpi-head"><span class="atl-let" style="background:${tag}">${CMP_LET[i]}</span><b title="${esc(col.name)}">${esc(col.name)}</b><small>${i === 0 ? 'baseline for every delta' : 'Δ against ' + esc(cols[0].name.length > 28 ? cols[0].name.slice(0,26) + '…' : cols[0].name)}</small></div>
+      ${tile({c: tag, big: fi(c.finalField||0) + (i ? dl(c.finalField, A.finalField, fi) : ''), chip: 'reach ' + esc(S.finalName||'the final'), sub: `calibrated · ceiling ${c.maxFinal != null ? fmt(Math.round(c.maxFinal)) : '—'}${realChampionshipField(S.year) != null ? ` · actual ${yr}: <b>${fmt(realChampionshipField(S.year))}</b>` : ''}`})}
+      <div class="atl-kpi-row">
+        ${tile({c: tag, sm:true, label:'Widest gap', big: c.gap != null ? fpp(c.gap) + (i ? dl(c.gap, A.gap, fpp, true) : '') : '—', sub:'competing entries, largest vs smallest'})}
+        ${tile({c: tag, sm:true, label:'Do not fit', big: fi(c.over||0) + (i ? dl(c.over, A.over, fi, true) : ''), sub:`of ${fmt(meets)} meets · ${fmt(c.daysTotal||0)} competition days`})}
+      </div>
+      ${tile({c: tag, big: usd(c.finance ? c.finance.usad : 0) + (i ? dl(c.finance && c.finance.usad, A.finance && A.finance.usad, usd) : ''), chip:'USA Diving keeps', chipCls:'navy', sub:`of ${usd(c.finance ? c.finance.gross : 0)} entry income${i ? dl(c.finance && c.finance.gross, A.finance && A.finance.gross, usd) : ''} · ${usd(c.finance ? c.finance.host : 0)} to hosts`})}
+      ${levelTiles}
+    </div>`;
+  }).join('');
+  const note = axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each scenario as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps';
+  return `<div class="atl-kpis" style="grid-template-columns:repeat(${cols.length + (actualCol ? 1 : 0)},minmax(0,1fr))">${actualCol}${scen}</div>
+    <p class="atl-note" style="padding:0 28px 18px;margin:0">${note}. <b>Actual</b> is the season that ran, straight from results; a projection's <b>take-up</b> is measured where that season ran the stage and assumed at 100% where it did not. Ceiling is maximum capacity with no take-up.</p>`;
 }
 
 async function atlasRebuildCompare(){
@@ -8378,7 +8455,7 @@ function wireAtlasMain(main){
   if (M === 'compare'){
     // The classic [data-cmpaxis] handler (wirePathway) resets picks and re-renders; add the atlas rebuild.
     const pin = $id('atlPin');
-    if (pin) pin.addEventListener('change', () => { if (!pin.value) return; S.cmpIds = (S.cmpIds||[]).concat([pin.value]).slice(0,2); atlasRebuildCompare(); });
+    if (pin) pin.addEventListener('change', () => { if (!pin.value) return; S.cmpIds = (S.cmpIds||[]).concat([pin.value]).slice(0,3); atlasRebuildCompare(); });
     on('[data-unpin]', 'click', e => { S.cmpIds = (S.cmpIds||[]).filter(x => x !== e.currentTarget.dataset.unpin); atlasRebuildCompare(); });
     on('[data-atlcmpview]', 'click', e => { S.cmpView = e.currentTarget.dataset.atlcmpview; atlasMain(); });
     const ol = $id('atlCmpOutline');
