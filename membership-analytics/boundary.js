@@ -3364,6 +3364,31 @@ function currentPathwayLabel(){
   return 'Published rules';
 }
 
+/* Compares the working scenario against whatever is loaded in the map tab's
+   Compare-with slot (S.compare) -- each scenario's OWN map and OWN routing
+   together, not one axis held fixed. buildComparison()'s two axes (same map,
+   different pathway; or same pathway, different map) never produce this
+   combination, and it's the one a person setting up "Compare with" on the
+   map tab reasonably expects: two real, saved proposals, each run as itself. */
+function comparisonFromCompareSlot(){
+  if (!S.compare) return null;
+  const baseLabel = S.scenarioName || 'This map';
+  const cols = [summariseRouting(S.routing, baseLabel, null)];
+  const cmp = S.compare;
+  const map = {regions: cmp.regions, assign: cmp.assign, levels: cmp.levels, finalName: cmp.finalName};
+  let row;
+  try {
+    row = withMap(map, () => {
+      const routing = cmp.routing && cmp.routing.length ? cmp.routing : S.routing;
+      const notes = (cmp.routing && cmp.routing.length) ? null
+        : ['this scenario had no pathway of its own saved with it -- run here with the routing on screen'];
+      return summariseRouting(routing, cmp.name || cmp.id || 'Compared scenario', notes);
+    });
+  } catch(e){ row = {label: cmp.name || 'Compared scenario', error: e.message || String(e)}; }
+  cols.push(row);
+  return cols;
+}
+
 /* ---------- compare tab ---------- */
 function renderCompareInspector(){
   const axis = S.cmpAxis || 'pathway';
@@ -6417,6 +6442,7 @@ window.BoundaryAPI = {
   finalName:  () => S.finalName,
   scenario:   () => ({ id: S.scenarioId, name: S.scenarioName, dirty: S.dirty }),
   compare:    () => S.compare,
+  comparisonFromCompareSlot,
   totals:     () => S.totals,
   /* The qualification pathway and its projection. project() recomputes rather
      than returning a cache, so a report never depends on whether the Pathway

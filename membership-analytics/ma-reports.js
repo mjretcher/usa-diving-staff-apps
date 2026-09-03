@@ -922,11 +922,16 @@ const BOUNDARY_SECTIONS = {
     build: async function(o){
       if (!boundaryReady()) return notReady('Realignment — pathways compared');
       const api = B();
-      const C = api.comparison ? api.comparison() : null;
+      let C = api.comparison ? api.comparison() : null;
+      let fromCompareSlot = false;
+      if (!C || !C.length){
+        C = api.comparisonFromCompareSlot ? api.comparisonFromCompareSlot() : null;
+        fromCompareSlot = !!(C && C.length);
+      }
       if (!C || !C.length) return `<section class="mr-section"><h2 class="mr-h2">Pathways compared</h2>
-        <p class="mr-p mr-warn">No comparison has been built. Open <strong>Boundary Studio &rarr; Compare</strong>,
-        tick the saved pathways you want beside the one on screen, press Compare, then generate this report again.
-        This section deliberately reports the comparison you looked at rather than quietly building a different one.</p>
+        <p class="mr-p mr-warn">No comparison is loaded. Either open <strong>Boundary Studio &rarr; Compare with</strong>
+        and load a saved scenario there, or use <strong>Boundary Studio &rarr; Compare</strong> to tick saved
+        pathways or maps against the one on screen, then generate this report again.</p>
         </section>`;
       const base = C[0];
       const head = C.map((c,i)=>`<th scope="col" class="mr-num">${esc(c.label)}${i===0?'<div class="mr-soft">on screen</div>':''}</th>`).join('');
@@ -944,11 +949,16 @@ const BOUNDARY_SECTIONS = {
             c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null,
             (base.levels&&base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')).join('');
       const noted = C.filter(c=>c.notes && c.notes.length);
+      const introText = fromCompareSlot
+        ? `Two full scenarios, each run exactly as saved &mdash; its own map and its own pathway together.
+           Nothing is held fixed between columns; every difference below reflects everything that differs
+           between the two proposals, not one isolated rule change.`
+        : `The same map, run under each pathway. Only the rules differ between columns — the boundaries,
+           the field each pathway starts from, and the measured behaviour are held still, so every difference
+           below is caused by the rules and nothing else.`;
       return `<section class="mr-section">
         <h2 class="mr-h2">Pathways compared</h2>
-        <p class="mr-p">The same map, run under each pathway. Only the rules differ between columns — the boundaries,
-          the field each pathway starts from, and the measured behaviour are held still, so every difference below is
-          caused by the rules and nothing else.</p>
+        <p class="mr-p">${introText}</p>
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${row('Championship field', c=>c.finalField, 'who reaches the top meet')}
           ${levelRows}
