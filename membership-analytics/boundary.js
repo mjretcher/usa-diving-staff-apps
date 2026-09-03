@@ -1976,12 +1976,14 @@ function renderFinancials(){
   const d = (x,y) => {
     const v = x - y;
     if (Math.abs(v) < 1) return '<span class="bs-fd0">same</span>';
-    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'−'}${usd(Math.abs(v))}</span>`;
+    return `<span class="bs-fd-there">${usd(y)} there</span>
+      <span class="${v>0?'bs-fdup':'bs-fddn'}">(${v>0?'+':'\u2212'}${usd(Math.abs(v))})</span>`;
   };
   const dn = (x,y) => {
     const v = Math.round(x - y);
     if (!v) return '<span class="bs-fd0">same</span>';
-    return `<span class="${v>0?'bs-fdup':'bs-fddn'}">${v>0?'+':'−'}${fmt(Math.abs(v))}</span>`;
+    return `<span class="bs-fd-there">${fmt(y)} there</span>
+      <span class="${v>0?'bs-fdup':'bs-fddn'}">(${v>0?'+':'\u2212'}${fmt(Math.abs(v))})</span>`;
   };
 
   const levels = Object.keys(a.tiers).sort((x,y)=>x-y);
