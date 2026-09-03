@@ -6726,6 +6726,12 @@ function atlasLevelColor(level, gi){
   return ATLAS_RAMP[(gi*3 + level) % ATLAS_RAMP.length];
 }
 
+/* What a person calls this scenario. The record id (bs-…) is a database key
+   and stays out of the interface except where a record has to be cited. */
+const scenarioLabel = () => (S.scenarioName || '').trim() || 'Unsaved scenario';
+/* How the paper names the pathway in a sentence. */
+const pathwayPhrase = () => S.pathSaved ? `the saved pathway "${S.pathSaved.name}"${S.pathDirty ? ' (edited)' : ''}` : ((S.routing && S.routing.length) ? 'its own qualification pathway' : 'the published rules');
+
 const nowStamp = () => {
   const d = new Date();
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' · ' +
@@ -6852,10 +6858,23 @@ function churnBetween(A, B){
    that is not on screen: its widest gap, its per-region tallies, and how many
    counties move against the map that IS on screen. Same swap-compute-restore
    shape as financialsFor(), for the same reason. */
+/* The structural ceiling: every band saturated, no take-up applied. */
+function maxCapacitySummary(){
+  try {
+    const res = maxCapacityEntries();
+    // An uncapped level (open entry, no route feeds it) carries the saturating
+    // placeholder, not a ceiling: report it as no cap rather than a number.
+    const cap = n => (n == null || n >= 900000) ? null : n;
+    const levels = S.routing.map((_,L) => { let n = 0; for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) n += QR().entriesAt(res, L, g, CELLS); return cap(n); });
+    return {maxLevels: levels, maxFinal: cap(reachFinal(res))};
+  } catch(e){ return {maxLevels: null, maxFinal: null}; }
+}
+
 function mapExtras(map){
   const live = {assign: S.assign, regions: S.regions};
   return withMap(map, () => {
     let gap = null, bal = null;
+    const mx = maxCapacitySummary();
     try {
       const flow = window.JuniorFlow.compute({regions:S.regions, assign:S.assign, levels:S.levels,
                                               finalName:S.finalName, year:S.year});
@@ -6870,7 +6889,7 @@ function mapExtras(map){
       diff: bal ? bal.per[i].diff : null, dc: bal ? bal.per[i].dc : null,
     }));
     const churn = churnBetween(live, {assign:S.assign, regions:S.regions});
-    return {gap, regionRows, churn, regionCount: S.regions.length, unM: t.un.m};
+    return {gap, regionRows, churn, regionCount: S.regions.length, unM: t.un.m, maxLevels: mx.maxLevels, maxFinal: mx.maxFinal};
   });
 }
 
@@ -6907,7 +6926,7 @@ function atlasHeader(){
     <div class="atl-head-r">
       <button class="atl-btn" id="atlOpenBtn" title="Open a saved scenario, start a new one, export, season">Open ▾</button>
       <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Scenario menu: open, copy, delete, export, season">
-        <span class="atl-dot"></span><span class="mono">${esc(S.scenarioId || 'unsaved')}</span>
+        <span class="atl-dot"></span><span class="atl-chip-name" title="${esc(scenarioLabel())}">${esc(scenarioLabel())}</span>
         <span id="atlStatusText">${S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet')}</span>
         <span class="atl-caret">▾</span></button>
       <button class="atl-save ${S.dirty?'dirty':''}" id="bsSave" title="Ctrl/⌘ S">${S.dirty ? 'Save scenario' : 'Saved'}</button>
@@ -6939,6 +6958,7 @@ function atlasHeader(){
           <button class="atl-link" id="bsPalOpen">Search every action ⌘K</button>
           <button class="atl-link quiet" id="atlClassic">Switch to classic view</button></div>
         ${S.scenarioId && isSeed(S.scenarioId) ? `<div class="atl-note"><b>${esc(S.scenarioName)}</b> is a reference map. Saving creates a copy so the original stays intact.</div>` : ''}
+        ${S.scenarioId ? `<div class="atl-note">Record id <span class="mono">${esc(S.scenarioId)}</span> — cited in the board paper so the figures can be traced.</div>` : ''}
         ${S.frozen ? `<div class="atl-note"><b>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}</b>${S.frozen.note?` — ${esc(S.frozen.note)}`:''}. What it said then is recorded; see Report.</div>` : ''}
       </div>
     </div>`;
@@ -7063,7 +7083,7 @@ function atlasMapHtml(){
   return `
     <aside class="atl-rail">
       <div class="atl-rail-top">
-        <div class="atl-rail-id"><span class="mono">${esc(S.scenarioId || 'unsaved')}</span><span>·</span><span>${S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}</span></div>
+        <div class="atl-rail-id"><span>${S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet'}</span>${S.scenarioId && isSeed(S.scenarioId) ? '<span>·</span><span>reference map</span>' : ''}</div>
         <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
         <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
@@ -7789,13 +7809,13 @@ function atlasCompareHtml(){
   const C = S.cmpRes || [];
   const ids = S.cmpIds || [];
   const baseLabel = onPath ? currentPathwayLabel() : (S.scenarioName || 'This map');
-  const cols = [{id: S.scenarioId || 'unsaved', name: baseLabel, live:true, row: C[0] || null}]
+  const cols = [{id: S.scenarioId || 'unsaved', name: onPath ? baseLabel : scenarioLabel(), live:true, row: C[0] || null}]
     .concat(ids.map((id,i) => {
       const lib1 = lib.find(x => x.id === id);
       return {id, name: (C[i+1] && C[i+1].label) || (lib1 && lib1.name) || id, live:false, row: C[i+1] || null};
     }));
   const pins = cols.map((c,i) => `<div class="atl-pin ${i===0?'a':''}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
-      <span class="mono">${esc(String(c.id).replace(/^bs-/,''))}</span><span class="atl-pn" title="${esc(c.name)}">${esc(c.name)}</span>
+<span class="atl-pn" title="${esc(c.name)}">${esc(c.name)}</span>
       ${i>0 ? `<button class="atl-x" data-unpin="${esc(c.id)}" title="Unpin">×</button>` : ''}</div>`).join('');
   const pinnable = lib.filter(x => ids.indexOf(x.id) < 0);
   const canPin = cols.length < 3 && pinnable.length > 0;
@@ -7822,7 +7842,9 @@ function atlasCompareHtml(){
     A.gap = bal ? bal.spread : null;
     A.regionRows = S.regions.map((r,i) => ({name:r.name, color:r.color, m:t.rows[i]?t.rows[i].m:0}));
     A.regionCount = S.regions.length;
+    Object.assign(A, maxCapacitySummary());
   }
+  if (onPath) C.forEach(c => { if (!c.error && c.routing && c.maxFinal == null) Object.assign(c, withRouting(c.routing, maxCapacitySummary)); });
 
   let maps = '';
   if (!onPath){
@@ -7854,7 +7876,7 @@ function atlasCompareHtml(){
       maps = `<div class="atl-xfade"><div><svg viewBox="0 0 975 610" class="atl-static" id="atlXfade">${svgFor(xi)}</svg></div>
         <div class="atl-xlist"><span>Showing on the map</span>
           ${cols.map((c,i) => { const r = C[i]; return `<button class="atl-xrow ${i===xi?'on':''}" data-atlx="${i}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
-            <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} regions · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
+            <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} ${esc(tierName(0).toLowerCase())} · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
           <span class="faint">Hover a scenario to crossfade the fills. Counties that move vs A are outlined in red.</span></div></div>`;
     }
   }
@@ -7881,7 +7903,8 @@ function atlasCompareHtml(){
     const names = [...new Set(C.flatMap(c => (c.regionRows||[]).map(r => r.name)))];
     rows = [
       row('Regions', '', c => c.regionCount != null ? c.regionCount : (c.levels && c.levels[0] ? c.levels[0].stops : null), fi, false, {strong:true}),
-      row('Championship field', `entries reaching ${S.finalName||'the final'}`, c => c.finalField, fi),
+      row('Championship field', `entries reaching ${S.finalName||'the final'}, calibrated take-up`, c => c.finalField, fi),
+      row('Championship field at maximum capacity', 'every band saturated, no take-up — the structural ceiling', c => c.maxFinal, fi),
       row('Widest gap, competing entries', 'largest region vs smallest', c => c.gap, fpp, true),
       row('Meets that do not fit', 'run past closing', c => c.over, fi, true),
       row('Competition days, all meets', '', c => c.daysTotal, fi, true),
@@ -7895,7 +7918,8 @@ function atlasCompareHtml(){
   } else {
     const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
     rows = [
-      row('Championship field', 'who reaches the top meet', c => c.finalField, fi, false, {strong:true}),
+      row('Championship field', 'who reaches the top meet, calibrated take-up', c => c.finalField, fi, false, {strong:true}),
+      row('Championship field at maximum capacity', 'every band saturated, no take-up — the structural ceiling', c => c.maxFinal, fi),
       ...Array.from({length:nLev}, (_,L) => row(((C[0].levels&&C[0].levels[L])?C[0].levels[L].name:'Level '+(L+1)) + ' — entries',
         (C[0].levels&&C[0].levels[L]) ? `${C[0].levels[L].stops} stop${C[0].levels[L].stops===1?'':'s'}` : '',
         c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null, fi)),
@@ -7917,7 +7941,7 @@ function atlasCompareHtml(){
   const table = `<div class="atl-cmp-body">
     <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : 'same pathway, same fees, same season — only the map differs'} · Δ against A</span></div>
     <div class="atl-scroll"><div class="atl-tbl atl-cmp-tbl" style="grid-template-columns:minmax(300px,1.8fr) repeat(${C.length},minmax(0,1fr));min-width:${300 + C.length*170}px">
-      <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="mono">${esc(String(c.id).replace(/^bs-/,''))}</span></div>`).join('')}
+      <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}" title="${esc(c.name)}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="atl-th-name">${esc(c.name)}</span></div>`).join('')}
       ${rows}</div></div>
     ${flags ? `<div class="atl-probs">${flags}</div>` : ''}${noted ? `<div class="atl-probs">${noted}</div>` : ''}
     <p class="atl-note" style="margin-top:12px">${onPath
@@ -7933,7 +7957,7 @@ async function atlasRebuildCompare(){
   try { S.cmpRes = await buildComparison(ids, S.cmpAxis || 'map'); }
   catch(e){ msg('Could not compare: ' + (e.message||e)); S.cmpRes = null; }
   S._cmpBusy = false;
-  if (S.panelMode === 'compare') atlasMain();
+  if (S.panelMode === 'compare' || S.panelMode === 'report') atlasMain();
 }
 
 function atlasXfadeTo(i){
@@ -7978,7 +8002,12 @@ function atlasReportHtml(res){
   const stamps = dataStamps();
   const d10 = x => x ? String(x).slice(0,10) : '—';
   const id = S.scenarioId || 'unsaved';
+  const name = scenarioLabel();
   const paperId = 'CC-' + new Date().toISOString().slice(0,7);
+  const C = (S.cmpRes && S.cmpRes.length >= 2 && (S.cmpAxis||'map') === 'map') ? S.cmpRes : null;
+  const nPages = C ? 5 : 4;
+  const mx = maxCapacitySummary();
+  const yf = yearFillRows();
   const n = S.regions.length;
   const churn = bx ? bx.churn : null;
   const champ = reachFinal(res);
@@ -7988,8 +8017,8 @@ function atlasReportHtml(res){
   const baseName = base ? base.name : null;
   const vs = baseName ? `vs ${esc(baseName)}` : '';
   const devCol = dc => dc === 'over' ? 'c-warn' : dc === 'under' ? 'c-bad' : 'c-muted';
-  const pageFoot = p => `<div class="atl-pfoot"><span class="mono">Page ${p} of 4</span></div>`;
-  const head2 = label => `<div class="atl-ph2"><span class="mono">${esc(paperId)} · ${esc(id)}</span><span>${label}</span></div>`;
+  const pageFoot = p => `<div class="atl-pfoot"><span class="mono">Page ${p} of ${nPages}</span></div>`;
+  const head2 = label => `<div class="atl-ph2"><span><span class="mono">${esc(paperId)}</span> · ${esc(name)}</span><span>${label}</span></div>`;
 
   // Page 1
   const regRows = S.regions.map((r,i) => {
@@ -8006,13 +8035,13 @@ function atlasReportHtml(res){
       <div class="num last ${dCls}">${dTxt}</div>`;
   }).join('');
   const totDelta = bx ? (mappedM === bx.regionRows.reduce((a,r)=>a+r.m,0) ? '—' : ((mappedM > bx.regionRows.reduce((a,r)=>a+r.m,0) ? '+' : '−') + fmt(Math.abs(mappedM - bx.regionRows.reduce((a,r)=>a+r.m,0))))) : '—';
-  const recDefault = `That the Committee approve scenario ${mono(esc(id))}, a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under the pathway "${esc(currentPathwayLabel())}".`
+  const recDefault = `That the Committee approve the scenario "${esc(name)}", a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under ${esc(pathwayPhrase())}.`
     + (churn ? ` Relative to ${esc(baseName)} it moves ${mono(fmt(churn.moved))} counties and ${mono(fmt(churn.movedM))} members` + (bx.gap != null && bal ? `, and ${bal.spread <= bx.gap ? 'narrows' : 'widens'} the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} from ${mono(bx.gap.toFixed(1))} to ${mono(bal.spread.toFixed(1))} percentage points` : '') + '.' : '')
     + (champ != null ? ` The championship field is ${mono(fmt(Math.round(champ)))} entries.` : '')
     + (overStops.length ? ` ${mono(fmt(overStops.length))} ${overStops.length===1?'meet does':'meets do'} not fit a standard pool day.` : ' Every meet fits a standard pool day.');
   const p1 = `<article class="atl-pg" data-screen-label="Report p1">
     <div class="atl-mast"><div class="atl-ml"><img src="../shared/images/diver-mark.svg" alt=""><div><div class="atl-mb">USA Diving</div><div class="atl-ms">High Performance Operations</div></div></div>
-      <div class="atl-mr"><div>Competition Committee · Board paper</div><div class="mono">${esc(paperId)} · ${esc(id)}</div></div></div>
+      <div class="atl-mr"><div>Competition Committee · Board paper</div><div><span class="mono">${esc(paperId)}</span> · ${esc(name)}</div></div></div>
     ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled scenario')}`, 'h1')}
     ${rt('meta', `Recommendation for approval · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
     <div class="atl-rec">${rt('h1', '1. Recommendation', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
@@ -8065,8 +8094,14 @@ function atlasReportHtml(res){
     return `<div class="first">${esc(t.name)}</div><div class="num">${fmt(Math.round(t.entries))}</div><div class="num">${fmt(t.meets)}</div><div class="num ${ov?'c-bad':''}">${fmt(ov)}</div><div class="num">${usd(t.gross)}</div><div class="num last">${usd(t.usad)}</div>`; }).join('');
   const p3 = `<article class="atl-pg" data-screen-label="Report p3">${head2('Exhibit B · Section 3')}
     ${rt('exB', 'Exhibit B. Pathway, projected fields and meets', 'div', 'atl-ex')}
-    ${rt('exBs', `"${esc(currentPathwayLabel())}" applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
+    ${rt('exBs', `${esc(pathwayPhrase().replace(/^its/, 'The scenario\u2019s').replace(/^the /, 'The '))} applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
     <div class="atl-exb" style="grid-template-columns:repeat(${S.routing.length},1fr)">${exb}</div>
+    <div class="atl-rt" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 1fr;margin-top:14px">
+      <div class="th first">Entries by level</div><div class="th num">Projected</div><div class="th num">Maximum</div><div class="th num">Real 2024</div><div class="th num">Real 2025</div><div class="th num last">Real 2026</div>
+      ${S.routing.map((lvl, L) => { let e = 0; for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) e += QR().entriesAt(res, L, g, CELLS); const y = yf && yf[L]; const cell = (i) => { const c = y && y.cells[i]; return c && c.entries != null ? fmt(Math.round(c.entries)) + (c.real ? '' : '<span style="color:#b45309"> mod.</span>') : '—'; }; return `<div class="first">${esc(tierName(L))}</div><div class="num">${fmt(Math.round(e))}</div><div class="num">${mx.maxLevels && mx.maxLevels[L] != null ? fmt(Math.round(mx.maxLevels[L])) : '<span style="color:#6b7385">no cap</span>'}</div><div class="num">${cell(0)}</div><div class="num">${cell(1)}</div><div class="num last">${cell(2)}</div>`; }).join('')}
+      <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div><div class="num">—</div><div class="num">—</div><div class="num last">—</div>
+    </div>
+    <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout.</p>
     ${rt('h3', '3. Meets, days and entry income', 'div', 'atl-sec m26')}
     <div class="atl-rt" style="grid-template-columns:1.6fr .9fr .8fr .8fr 1fr 1fr">
       <div class="th first">Tier</div><div class="th num">Entries</div><div class="th num">Meets</div><div class="th num">Do not fit</div><div class="th num">Entry income</div><div class="th num last">USA Diving keeps</div>
@@ -8077,7 +8112,37 @@ function atlasReportHtml(res){
     ${overStops.length ? `<div class="atl-over"><b>Meets that do not fit:</b> ${overStops.map(x => `${esc(x.name)} (${esc(x.level)}, ${x.days} days, ${x.daysOver} over)`).join('; ')}.</div>` : ''}
     ${pageFoot(3)}</article>`;
 
-  // Page 4 -- changes + methodology
+  // Exhibit C -- the scenarios pinned under Compare, side by side
+  let pC = '';
+  if (C){
+    const cols = C.map((c,i) => ({name: i === 0 ? name : c.label, c}));
+    const svgFor = (i) => { const c = C[i]; if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED); if (!c.map) return ''; const same = c.churn && c.churn.sameStructure; const changed = same ? (f => { const a = S.assign[f], b = c.map.assign[f]; const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name; const bn = (b==null||b<0||!c.map.regions[b]) ? null : c.map.regions[b].name; return an !== bn; }) : null; return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed}); };
+    const dl = (v, b, f, inverse) => { if (b == null || v == null || !isFinite(v-b) || Math.round(v*10) === Math.round(b*10)) return ''; const up = v > b; return ` <span style="font-size:8.5pt;color:${(inverse ? !up : up) ? '#15803d' : '#b3122b'}">${up?'+':'−'}${f(Math.abs(v-b))}</span>`; };
+    const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
+    const row = (label, get, f, inverse, strong) => `<div class="first" style="${strong?'font-weight:600':''}">${label}</div>` + C.map((c,i) => `<div class="num ${i===C.length-1?'last':''}" style="${strong?'font-weight:600':''}">${c.error ? '—' : (get(c) == null ? '—' : f(get(c)))}${i > 0 && !c.error ? dl(get(c), get(C[0]), f, inverse) : ''}</div>`).join('');
+    const rows = [
+      row(tierName(0), c => c.regionCount != null ? c.regionCount : (c.levels && c.levels[0] ? c.levels[0].stops : null), fi, false, true),
+      row('Championship field, calibrated', c => c.finalField, fi),
+      row('Championship field, maximum capacity', c => c.maxFinal, fi),
+      row('Widest gap, competing entries', c => c.gap, fpp, true),
+      row('Meets that do not fit', c => c.over, fi, true),
+      row('Competition days, all meets', c => c.daysTotal, fi, true),
+      row('Entry income, season', c => c.finance && c.finance.gross, usd),
+      row('USA Diving keeps', c => c.finance && c.finance.usad, usd),
+    ].join('');
+    pC = `<article class="atl-pg" data-screen-label="Report exhibit C">${head2('Exhibit C')}
+      ${rt('exC', 'Exhibit C. Scenarios side by side', 'div', 'atl-ex')}
+      ${rt('exCs', 'The same pathway, fees and season run over each map; only the boundaries differ. Counties outlined in red move relative to A. Changes are shown against A.', 'div', 'atl-exs')}
+      <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline for the deltas' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs A` : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
+      <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
+        <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span></div>`).join('')}
+        ${rows}
+      </div>
+      ${rt('exCf', 'Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against A is better or worse for that line.', 'p', 'atl-fn')}
+      ${pageFoot(4)}</article>`;
+  }
+
+  // Page 4/5 -- changes + methodology
   const changes = churn ? churn.changes : [];
   const shown = changes.slice(0, 16);
   const chgRows = shown.map(c => `<div class="first">${esc(c.county)} <span class="atl-fips">${esc(c.f)}</span></div><div>${esc(c.st)}</div><div class="c-muted">${esc(c.from)}</div><div>${esc(c.to)}</div><div class="num last">${fmt(c.m)}</div>`).join('');
@@ -8092,24 +8157,25 @@ function atlasReportHtml(res){
     ${rt('foot4', chgSummary, 'p', 'atl-fn')}
     ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
     ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
-    ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands in "${esc(currentPathwayLabel())}"; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
-    ${rt('m3', S.frozen ? `Figures were frozen from Boundary Studio scenario ${mono(esc(id))} on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
-                       : `Figures are live from Boundary Studio scenario ${mono(esc(id))} and have not yet been frozen. Freeze the scenario before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
-    ${pageFoot(4)}</article>`;
+    ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
+    ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio scenario "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
+                       : `Figures are live from the Boundary Studio scenario "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the scenario before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
+    ${pageFoot(nPages)}</article>`;
 
   // Toolbar
   const drift = S.frozen ? freezeDrift() : null;
   const fz = !S.frozen ? `<div class="atl-fz none"><span class="atl-dot"></span><span>Not frozen · figures are live; freeze before presenting. Click any heading or paragraph to edit its wording.</span><button id="bsFreeze" ${S.scenarioId?'':'disabled'} title="${S.scenarioId?'':'Save the scenario first'}">Freeze as presented…</button></div>`
     : `<div class="atl-fz ${drift?'drift':''}"><span class="atl-dot"></span><span>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}${S.frozen.note?` — ${esc(S.frozen.note)}`:''} · ${drift ? 'figures have moved since; re-freeze or explain the change' : 'figures match the record; click any heading or paragraph to edit its wording before export'}</span>
        <button id="bsFreeze">Re-freeze</button><button class="quiet" id="bsLedgerHist">Permanent record</button><button class="quiet" id="bsUnfreeze">Remove freeze</button></div>`;
-  const baseSel = `<select class="atl-sel" id="atlReportBase" title="The scenario this paper compares against"><option value="">Compare against…</option>${(S.mapList||[]).filter(x=>x.id!==S.scenarioId).map(x=>`<option value="${esc(x.id)}" ${base&&base.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+  const cmpNote = C ? `<span class="atl-note">Exhibit C compares ${C.length} pinned scenarios</span>` : `<button class="atl-link" id="atlReportPins" title="Pin scenarios under Compare and they appear as Exhibit C">Add a side-by-side exhibit…</button>`;
+  const baseSel = cmpNote + `<select class="atl-sel" id="atlReportBase" title="The scenario this paper compares against"><option value="">Compare against…</option>${(S.mapList||[]).filter(x=>x.id!==S.scenarioId).map(x=>`<option value="${esc(x.id)}" ${base&&base.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
   const tool = `<div class="atl-rtool">${fz}<div class="atl-rbtns">${baseSel}<button class="atl-btn" id="atlCsvAppendix">CSV appendix</button><button class="atl-btn" id="bsGoReport" title="The wider report builder, with the Boundary Studio sections">Report builder</button><button class="atl-btn prim" id="atlPrint">Export PDF</button></div></div>
     ${drift ? `<div class="atl-rbox"><b style="color:#b3122b">This no longer computes what it said when it was frozen.</b>
       ${drift.inputs.length ? `<div>Inputs that changed: ${drift.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} → ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>` : ''}
       ${drift.figures.length ? `<table><thead><tr><th>Figure</th><th style="text-align:right">As presented</th><th style="text-align:right">Now</th><th style="text-align:right">Change</th></tr></thead><tbody>${drift.figures.map(r=>`<tr><td>${esc(r.label)}</td><td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td><td class="num ${r.now>r.then?'c-warn':'c-bad'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td></tr>`).join('')}</tbody></table>
       <div style="margin-top:6px">The frozen column is what the committee saw. Do not quietly republish the new figures under the old date — either explain the change or freeze again.</div>` : '<div>The headline figures still match; only the inputs moved.</div>'}</div>` : ''}
     <div class="atl-rbox" id="bsLedgerHistBox" hidden></div>`;
-  return tool + p1 + p2 + p3 + p4;
+  return tool + p1 + p2 + p3 + pC + p4;
 }
 
 function exportChangesCsv(){
@@ -8210,6 +8276,11 @@ function wireAtlasMain(main){
     on('[data-rt]', 'input', e => { reportTextStore()[e.currentTarget.dataset.rt] = e.currentTarget.innerHTML; S.dirty = true; atlasStatus(); });
     const bs = $id('atlReportBase');
     if (bs) bs.addEventListener('change', () => { if (bs.value) loadCompare(bs.value); });
+    const rp = $id('atlReportPins');
+    if (rp) rp.addEventListener('click', () => { S.panelMode = 'compare'; renderPanel(); refreshFlow(); });
+    // A baseline loaded but nothing pinned yet: build the side-by-side from it once.
+    if (!S.cmpRes && S.compare && !S._repCmpTried){ S._repCmpTried = S.compare.id; S.cmpAxis = 'map'; S.cmpIds = [S.compare.id]; atlasRebuildCompare().then(() => { if (S.panelMode === 'report') atlasMain(); }); }
+    else if (S.compare && S._repCmpTried && S._repCmpTried !== S.compare.id){ S._repCmpTried = null; }
     const pr = $id('atlPrint');
     if (pr) pr.addEventListener('click', () => window.print());
     const ap = $id('atlCsvAppendix');

@@ -613,7 +613,7 @@ td.bs-fg-sep{border-left:1px solid var(--line);border-right:1px solid var(--line
 
 /* --- command palette --- */
 .bs-pal{background:#fff;border-radius:10px;max-width:600px;width:100%;max-height:70vh;
-  display:flex;flex-direction:column;box-shadow:0 22px 60px rgba(23,31,105,.32);
+  display:flex;flex-direction:column;flex-wrap:nowrap;padding:0;gap:0;box-shadow:0 22px 60px rgba(23,31,105,.32);
   border-top:4px solid #171F69;overflow:hidden}
 .bs-pal-in{border:0;border-bottom:1px solid #eef1f6;padding:15px 18px;font:inherit;font-size:17px;outline:none}
 .bs-pal-list{overflow-y:auto;padding:6px}
@@ -891,12 +891,14 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-nav button{padding:0 12px;height:56px;font-size:14px;font-weight:500;color:#4b5568;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;display:flex;align-items:center;gap:7px}
 .atl-nav button.on{font-weight:600;color:#171f69;border-bottom-color:#171f69}
 .atl-badge{font-family:'JetBrains Mono',monospace;font-size:11px;color:#fff;background:#e31937;border-radius:3px;padding:1px 5px;font-weight:500}
-.atl-head-r{margin-left:auto;display:flex;align-items:center;gap:12px;position:relative}
+.atl-head-r{margin-left:auto;display:flex;align-items:center;gap:12px;position:relative;min-width:0;flex-shrink:1}
+.atl-nav{flex-shrink:0}.atl-brand{flex-shrink:1}.atl-chip{min-width:0}
+@media(max-width:1280px){.atl-chip #atlStatusText{display:none}}
 .atl-chip{display:flex;align-items:center;gap:8px;font-size:13px;color:#4b5568;padding:6px 12px;border:1px solid #dfe3ea;border-radius:4px;background:#fff;white-space:nowrap;height:36px}
 .atl-chip:hover{border-color:#c9d0dc}
 .atl-chip .atl-dot{width:8px;height:8px;border-radius:50%;background:#009ac7;flex-shrink:0}
 .atl-chip.dirty .atl-dot{background:#e31937}
-.atl-chip .mono{font-size:12.5px;color:#171f69;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.atl-chip .atl-chip-name{font-weight:600;color:#171f69;max-width:clamp(90px,14vw,220px);overflow:hidden;text-overflow:ellipsis}
 .atl-chip .atl-caret{font-size:10px;color:#9aa5b8}
 .atl-save{height:36px;padding:0 16px;border-radius:4px;border:1px solid #171f69;background:#fff;color:#171f69;font-weight:600;font-size:13.5px;white-space:nowrap}
 .atl-save.dirty{background:#171f69;color:#fff}
@@ -922,7 +924,7 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-mini #bsSvg{width:210px;height:auto;display:block;pointer-events:none}
 @media(max-width:1160px){.atl-ctx{grid-template-columns:1fr auto}.atl-mini{display:none}
   .atl-head{gap:14px;padding:0 16px}.atl-brand{min-width:0}.atl-brand span{display:none}
-  .atl-nav button{padding:0 8px}.atl-chip #atlStatusText,.atl-chip .atl-caret{display:none}.atl-chip .mono{max-width:110px}}
+  .atl-nav button{padding:0 8px}.atl-chip #atlStatusText,.atl-chip .atl-caret{display:none}.atl-chip .atl-chip-name{max-width:140px}}
 @media(max-width:900px){.atl-head{overflow-x:auto}.atl-head-r{flex-shrink:0}}
 
 /* --- shared map styling (the one #bsSvg is moved between slots) --- */
@@ -1255,6 +1257,7 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-cmp-body{padding:20px 28px 40px;background:#fff;flex:1}
 .atl-cmp-tbl>div.th{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:10px 12px 8px}
 .atl-cmp-tbl>div.th.first{justify-content:flex-start}
+.atl-cmp-tbl .atl-th-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0f1633;font-weight:500}
 .atl-cmp-tbl>div{padding:9px 12px}
 .atl-cmp-tbl>div.num{font-size:14px}
 .atl-cmp-tbl>div.num small{font-size:12px;margin-left:8px;font-weight:400;font-family:'JetBrains Mono',monospace}
