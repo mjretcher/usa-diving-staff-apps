@@ -334,10 +334,10 @@ function renderRetention(){
   const kpis = `
   <div class="kpi-band">
     <div class="kpi navy"><div class="big">${fmt(r.r2425)}</div><span class="chip navy">2024 &rarr; 2025 Retained</span>
-      <div class="sub">${fmt(r.lost2425)} lost (${pct(r.lost2425, +D.byYear.find(x=>+x.y===2024).n).toFixed(1)}% churn) &middot; ${fmt(r.new25)} new in 2025<br><span class="scope-tag all">All membership types</span></div></div>
+      <div class="sub">${fmt(r.lost2425)} lost (${pct(r.lost2425, +(D.byYear.find(x=>+x.y===2024)||{n:0}).n).toFixed(1)}% churn) &middot; ${fmt(r.new25)} new in 2025<br><span class="scope-tag all">All membership types</span></div></div>
     <div class="kpi pool"><div class="big">${fmt(r.r2526)}</div><span class="chip pool">2025 &rarr; 2026 Renewed So Far</span>
       <div class="sub">${fmt(r.lost2526)} not yet renewed &middot; ${fmt(r.new26)} new in 2026<br><span class="scope-tag all">All membership types</span></div></div>
-    <div class="kpi red"><div class="big">${pct(r.r2526, +D.byYear.find(x=>+x.y===2025).n).toFixed(0)}%</div><span class="chip">2026 Renewal Rate (YTD)</span>
+    <div class="kpi red"><div class="big">${pct(r.r2526, +(D.byYear.find(x=>+x.y===2025)||{n:0}).n).toFixed(0)}%</div><span class="chip">2026 Renewal Rate (YTD)</span>
       <div class="sub">Share of all 2025 members who have a 2026 membership so far. Will rise through the season.<br><span class="scope-tag all">All membership types</span></div></div>
   </div>`;
 

@@ -1337,3 +1337,33 @@ BEGIN
     GRANT USAGE ON SEQUENCE app_meta.client_errors_id_seq TO usad_app;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- junior_results / hp_analytics: usad_app has been reading these schemas in
+-- production with NO grant anywhere in this file -- confirmed by direct query,
+-- not by has_table_privilege (unreliable on this setup, see membership above).
+-- Someone applied it by hand at the console at some point. That is exactly the
+-- membership.boundary_scenarios / pricing_scenarios failure mode this file
+-- exists to prevent: a hand-applied grant has no record, survives until the
+-- next full schema.sql rebuild, and then silently breaks Junior Results Audit
+-- and Schedule Builder's athlete-load pre-fill with no error a person would
+-- see coming. Names in junior_results are already public competition results
+-- (published on DiveMeets, announced at meets), so this is not the PII class
+-- membership.members required column-scoping for.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA junior_results, hp_analytics TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA junior_results TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA hp_analytics   TO usad_app;
+    -- schedule-builder-export.js republishes this table wholesale on each
+    -- publish (see its own column comment) -- the one table in this schema
+    -- the browser actually writes, not just reads.
+    GRANT INSERT, UPDATE, DELETE ON junior_results.projected_nationals_field TO usad_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA junior_results, hp_analytics TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA junior_results
+      GRANT SELECT ON TABLES TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA hp_analytics
+      GRANT SELECT ON TABLES TO usad_app;
+  END IF;
+END $$;

@@ -1176,6 +1176,33 @@ function arrivalRate(L){
    girls 25 platform entries where the real Zone field is 136. Inferred from the
    level's own name, and shown so it can be corrected. */
 const SEED_STAGES = ['Regionals','Zones','EWC','Nationals'];
+
+/* The highest real, ever-observed entry total for a stage, across every year
+   advance-data.json carries. This is the check that would have caught the
+   seedStage bug automatically: a "Zones" seeded from the wrong pool produced
+   an E/W/C field several times larger than E/W/C has ever actually run, and
+   nothing said so until it was found by hand. Real data only -- never a
+   projection compared against another projection. */
+function historicalCeiling(stageName){
+  if (!stageName || !S.advData || !S.advData.pools) return null;
+  let max = null;
+  for (const key in S.advData.pools){
+    const [, stage] = key.split('|');
+    if (stage !== stageName) continue;
+    const P = S.advData.pools[key];
+    let total = 0;
+    for (const fips in P) for (const c in P[fips]) total += P[fips][c];
+    if (max == null || total > max) max = total;
+  }
+  return max;
+}
+/* How far over the real historical ceiling counts as "look at this before you
+   trust it" rather than ordinary season-to-season variation. Real fields move
+   10-20% year to year; a real proposal can legitimately run larger once
+   qualification cuts change. 75% headroom is generous on purpose -- this is a
+   tripwire for a wrong seed pool or an unintended band, not a policy opinion
+   about how big a stage should be. */
+const SANITY_HEADROOM = 1.75;
 function seedStageInferred(){
   const n = String(tierName(0)||'').toLowerCase();
   if (/zone/.test(n)) return 'Zones';
@@ -3230,9 +3257,13 @@ function summariseRouting(routing, label, notes){
       // not the size of its first round, which misses anyone seeded past it.
       let entry = 0;
       for (let g = 0; g < stops; g++) entry += QR().entriesAt(res, L, g, cells);
+      const refStage = L === 0 ? seedStage() : stageNameForLevel(L);
+      const ceiling = historicalCeiling(refStage);
+      const flagged = ceiling != null && entry > ceiling * SANITY_HEADROOM;
       return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
-              rounds: rounds.length};
+              rounds: rounds.length, refStage, historicalMax: ceiling, flagged};
     });
+    const sanityFlags = levels.filter(l => l.flagged);
     const last = routing.length - 1;
     const lastRounds = QR().roundsOf(routing[last]);
     // The headline a committee actually argues about: how many reach the
@@ -3251,7 +3282,7 @@ function summariseRouting(routing, label, notes){
     const st = sched.stops || [];
     return {
       label, notes,
-      levels, finalField, byGroup,
+      levels, finalField, byGroup, sanityFlags,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
       over:      st.filter(x=>x.daysOver).length,
@@ -3359,7 +3390,11 @@ function renderCompareInspector(){
       ${row('Events split', c=>c.autoSplit)}
       ${row('Events to look at', c=>c.review)}
       ${row('Pathway problems', c=>c.problems, v=>v?`<span class="under">${v}</span>`:'0')}
+      ${row('Sanity check vs. real history', c=>(c.sanityFlags||[]).length, v=>v?`<span class="under">${v} above real ceiling</span>`:'clear')}
     </tbody></table></div>
+    ${C.some(c=>(c.sanityFlags||[]).length) ? `<ul class="bs-probs">${C.filter(c=>(c.sanityFlags||[]).length).map(c=>`<li class="bs-prob warn">
+      <b>${esc(c.label)}</b>: ${c.sanityFlags.map(f=>`${esc(f.name)} projects ${fmt(Math.round(f.entries))}, the highest real ${esc(f.refStage)} field ever run is ${fmt(f.historicalMax)}`).join('; ')}.
+      Check the seed pool and route bands before using this number.</li>`).join('')}</ul>` : ''}
     ${noted.length ? `<ul class="bs-probs">${noted.map(c=>`<li class="bs-prob warn">
       <b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was
       fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</li>`).join('')}</ul>` : ''}
@@ -4875,14 +4910,25 @@ let scenarioListCache = null;
 async function loadScenarioList(){
   try {
     if (!scenarioListCache || scenarioListCache.t < Date.now()-15000){
-      const res = await NEON.query(`SELECT id, name, to_char(updated_at,'Mon DD HH24:MI') u FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 50`);
+      const res = await NEON.query(`
+        SELECT bs.id, bs.name, to_char(bs.updated_at,'Mon DD HH24:MI') u,
+               (bs.data ? 'fees' AND bs.data->'fees' IS NOT NULL AND bs.data->'fees' != 'null'::jsonb) AS has_fees,
+               EXISTS(SELECT 1 FROM membership.scenario_schedules ss WHERE ss.boundary_scenario_id = bs.id) AS has_schedule
+        FROM membership.boundary_scenarios bs
+        ORDER BY bs.updated_at DESC LIMIT 50`);
       scenarioListCache = {t: Date.now(), rows: res.rows};
     }
+    const completeness = r => {
+      const parts = [];
+      parts.push(r.has_fees ? 'fees \u2713' : 'no fees');
+      parts.push(r.has_schedule ? 'schedule \u2713' : 'no schedule');
+      return ` \u2014 ${parts.join(', ')}`;
+    };
     const sel = document.getElementById('bsLoad');
     if (sel){
       const cur = sel.value;
       sel.innerHTML = '<option value="">Load scenario&hellip;</option>' +
-        scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})</option>`).join('');
+        scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})${completeness(r)}</option>`).join('');
       if (cur && !S.scenarioId) sel.value = cur;
     }
     const csel = document.getElementById('bsCompare');
