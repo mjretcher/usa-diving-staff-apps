@@ -1803,9 +1803,12 @@ const BOUNDARY_SECTIONS = {
           real entry data built ${esc(ds && ds.advance_data ? String(ds.advance_data).slice(0,10) : 'unknown')}.
           Report generated ${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC. If any of these three
           scenarios has been edited since the timestamp shown for it, the numbers above no longer reflect what's
-          currently saved — regenerate this section rather than trust a printed copy. Because the real entry data
-          is rebuilt as results keep coming in, regenerating this same report on a different day can legitimately
-          show different figures without either version being wrong.</p>
+          currently saved — regenerate this section rather than trust a printed copy. The real entry data only
+          changes when someone explicitly rebuilds it — the crawlers and the build step are on-demand, not a
+          running schedule. With the 2026 season's meets complete and none scheduled for the next two months,
+          this figure should reproduce exactly if you regenerate this section later; a different number then
+          would mean the underlying data was deliberately rebuilt (check the repo's commit history), not that
+          results quietly accumulated in the background.</p>
 
         <h3 class="mr-h3">Junior Nationals prelim field</h3>
         <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
