@@ -7626,17 +7626,17 @@ function atlasMoneyHtml(res){
         <span class="bs-bd-rng">${$.capped ? ($.overridden?'more than this meet takes':'all of net') : $.overridden ? `set for this meet · ${Math.round($.pct*100)}% of net` : $.floored ? 'at the minimum' : `${Math.round($.pct*100)}% of net`}</span></div>
       <div class="num last c-navy">${usd($.usad)}</div>`;
   }).join('');
-  const hostTable = `<details style="margin-top:14px"><summary>Host payout per meet${S.hostPer_stop && Object.keys(S.hostPer_stop).length ? ` · ${Object.keys(S.hostPer_stop).length} set by hand` : ''}</summary>
+  const hostTable = `<details style="margin-top:22px"><summary>Host payout per meet${S.hostPer_stop && Object.keys(S.hostPer_stop).length ? ` · ${Object.keys(S.hostPer_stop).length} set by hand` : ''}</summary>
     <div class="atl-note" style="margin-bottom:8px">A negotiated figure for one meet beats the model. Blank means "use the model again", not "pay nothing".
       ${S.hostPer_stop && Object.keys(S.hostPer_stop).length ? `<button class="atl-link" id="bsHostClear">Back to the model for every meet</button>` : ''}
       <button class="atl-link quiet" id="bsMfCsv">Export meet list CSV</button></div>
     <div class="atl-scroll"><div class="atl-tbl atl-hostmeet" style="min-width:600px">
       <div class="th first">Meet</div><div class="th num">Entries</div><div class="th num">Income</div><div class="th num">DiveMeets</div><div class="th num">Host cut</div><div class="th num last">Keeps</div>${hostRows}</div></div></details>`;
 
-  return `<div class="atl-page"><div class="atl-money">
+  return `<div class="atl-page"><div class="atl-money-grid">
     <div>
       <div class="atl-h"><b>Entry income by tier</b><span>published fee × projected entries, less the DiveMeets pass-through</span></div>
-      ${table(a)}${caveat}${cmp}${cost}${yearFill}${atlasTakeUpNote('money')}
+      ${table(a)}${caveat}${hostTable}${cmp}${cost}${yearFill}${atlasTakeUpNote('money')}
     </div>
     <aside class="atl-side">
       <div class="atl-navy"><div class="atl-nl">USA Diving keeps, entry fees only · season</div><div class="atl-nv">${usd(a.total.usad)}</div>
@@ -7646,7 +7646,7 @@ function atlasMoneyHtml(res){
         <div class="atl-fees hd"><span></span><span>entry fee</span><span>to hosts</span></div>
         ${hostCtl}
         ${S.fees ? '<button class="atl-link" id="bsFeeReset" style="margin-top:12px">Back to published fees</button>' : ''}
-        ${hostTable}
+        <div class="atl-note" style="margin-top:12px">Per-meet host payouts, including a figure set by hand for one meet, are under the tier table at left.</div>
       </div>
     </aside>
   </div></div>`;
