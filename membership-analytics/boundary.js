@@ -3313,7 +3313,7 @@ function summariseRouting(routing, label, notes){
     })).flat();
     const st = sched.stops || [];
     return {
-      label, notes,
+      label, notes, routing,
       levels, finalField, byGroup, sanityFlags, finance,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),

@@ -706,8 +706,27 @@ function notReady(title){
 function scenarioLine(){
   const sc = B().scenario();
   const name = sc.name || 'Unsaved working scenario';
-  return `Scenario: <strong>${esc(name)}</strong>${sc.dirty ? ' <span class="mr-soft">(unsaved edits included)</span>' : ''} ·
-          Membership year: <strong>${esc(B().yearLabel())}</strong>`;
+  return `<div class="mr-scenario-badge">
+    <span class="mr-sb-label">Scenario</span>
+    <span class="mr-sb-name">${esc(name)}</span>
+    ${sc.dirty ? '<span class="mr-sb-dirty">unsaved edits included</span>' : ''}
+    <span class="mr-sb-year">Membership year ${esc(B().yearLabel())}</span>
+  </div>`;
+}
+
+/* Same visual language as scenarioLine(), for sections that compare two named
+   scenarios rather than describing one. Both names get equal visual weight
+   deliberately -- neither reads as "the real one" and the other as an
+   afterthought, which a plain sentence naming one in bold and the other in
+   passing tends to imply even when that isn't the intent. */
+function scenarioCompareLine(nameA, labelA, nameB, labelB){
+  return `<div class="mr-scenario-badge mr-sb-compare">
+    <span class="mr-sb-col"><span class="mr-sb-label">${esc(labelA)}</span>
+      <span class="mr-sb-name">${esc(nameA)}</span></span>
+    <span class="mr-sb-vs">VS</span>
+    <span class="mr-sb-col mr-sb-right"><span class="mr-sb-label">${esc(labelB)}</span>
+      <span class="mr-sb-name">${esc(nameB)}</span></span>
+  </div>`;
 }
 
 /* ---------- distribution statistics ---------- */
@@ -877,10 +896,10 @@ const BOUNDARY_SECTIONS = {
       const key = Array.from({length:M.nG}, (_,gi)=>`<span class="mr-mapkey">
         <span class="mr-sw" style="background:${M.colorOf(gi)}"></span>${esc(M.nameOf(gi))}</span>`).join('');
       const assignedM = t.rows.reduce((a2,r)=>a2+r.m,0);
-      const scName = (api.scenario && api.scenario() && api.scenario().name) || 'Scenario';
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">${esc(scName)} &mdash; summary</h2>
+        <h2 class="mr-h2">Realignment — scenario summary</h2>
+        ${scenarioLine()}
         ${freezeBlock}
         <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
         <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
@@ -956,12 +975,67 @@ const BOUNDARY_SECTIONS = {
         : `The same map, run under each pathway. Only the rules differ between columns — the boundaries,
            the field each pathway starts from, and the measured behaviour are held still, so every difference
            below is caused by the rules and nothing else.`;
+
+      // The actual qualification RULES, per scenario -- not just the numbers
+      // those rules produce. Same QualRouting.describe() boundary_pathway
+      // itself uses, so the wording matches exactly if you look at either
+      // scenario on its own afterward.
+      const QRr = window.QualRouting;
+      const rulesBlocks = QRr ? C.map(c => {
+        if (c.error || !c.routing) return '';
+        const nmFor = i => (c.levels && c.levels[i] && c.levels[i].name) || ('Level '+(i+1));
+        const items = c.routing.map((lvl, L) =>
+          `<li><strong>${esc(nmFor(L))}</strong> — ${esc(QRr.describe(c.routing, L, nmFor))}</li>`).join('');
+        return `<div class="mr-rules-col"><div class="mr-rules-h">${esc(c.label)}</div>
+          <ul class="mr-bullets">${items}</ul></div>`;
+      }).join('') : '';
+
+      const usdSigned = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      const moneyDelta = (v,b) => {
+        const d = Math.round(v - b);
+        if (!d) return '';
+        return ` <span class="mr-soft">(${d>0?'+':'\u2212'}${usd(Math.abs(d))})</span>`;
+      };
+      const financeRow = (label, get) => `<tr><td>${esc(label)}</td>` +
+        C.map((c,i)=>{
+          if (c.error || !c.finance) return '<td class="mr-num">—</td>';
+          const v = get(c.finance);
+          return `<td class="mr-num mono">${usdSigned(v)}${i>0 && base.finance?moneyDelta(v,get(base.finance)):''}</td>`;
+        }).join('') + '</tr>';
+
+      const bannerNames = C.map(c => c.label);
+      const banner = bannerNames.length === 2
+        ? scenarioCompareLine(bannerNames[0], 'On screen', bannerNames[1], 'Compared against')
+        : `<div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
+             <span class="mr-sb-name">${bannerNames.map(esc).join(' &nbsp;vs&nbsp; ')}</span></div>`;
+
       return `<section class="mr-section">
         <h2 class="mr-h2">Pathways compared</h2>
+        ${banner}
         <p class="mr-p">${introText}</p>
+
+        <h3 class="mr-h3">Qualification rules, side by side</h3>
+        <div class="mr-rules-grid">${rulesBlocks}</div>
+
+        <h3 class="mr-h3">Entries and the field</h3>
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${row('Championship field', c=>c.finalField, 'who reaches the top meet')}
           ${levelRows}
+        </tbody></table>
+
+        <h3 class="mr-h3">Money — entry fees only</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
+          ${financeRow('Entry income (gross)', f=>f.gross)}
+          ${financeRow('DiveMeets pass-through', f=>-f.levy)}
+          ${financeRow('To hosts', f=>f.host)}
+          ${financeRow('USA Diving keeps', f=>f.usad)}
+        </tbody></table>
+        <p class="mr-note">Entry fees only, at the standing rates, less the DiveMeets pass-through — membership
+          dues, synchro and the senior circuit are not here. Priced the same way for every column, so a
+          difference is caused by the rules, not by a different fee card.</p>
+
+        <h3 class="mr-h3">Meets and schedule</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${row('Meets to run', c=>c.meets)}
           ${row('Competition days, all meets', c=>c.daysTotal)}
           ${row('Meets that do not fit', c=>c.over)}
@@ -1027,6 +1101,7 @@ const BOUNDARY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">Potential schedules</h2>
+        ${scenarioLine()}
         <p class="mr-p">Every area this map and pathway create becomes a real meet a host club has to run
           inside its own pool hours. The pages below lay out each stop day by day and session by session,
           in the same format Schedule Builder prints for a real meet — entries and estimated run time per
@@ -1141,7 +1216,7 @@ const BOUNDARY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">Qualification pathway</h2>
-        <p class="mr-p">${esc(scenarioLine().replace(/<[^>]+>/g,''))}</p>
+        ${scenarioLine()}
         ${probs ? `<p class="mr-p mr-warn"><b>This pathway has problems that affect the numbers below.</b></p>
           <ul class="mr-bullets">${probs}</ul>` : ''}
         <ul class="mr-bullets">${routes}</ul>
@@ -1233,7 +1308,7 @@ const BOUNDARY_SECTIONS = {
         <td class="mr-num">—</td><td class="mr-num">${pctS(un.m, total+un.m)}</td><td class="mr-num">—</td></tr>` : '';
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — scenario overview</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">Structure: ${tierChain}</p>
         <p class="mr-p">This table is at the <strong>${esc(api.tierName(api.tierView()))}</strong>
         level currently shown on the map. “Deviation” is how far an area sits from an equal share of
@@ -1295,7 +1370,7 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — balance &amp; equity</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <div class="mr-kpis">
           <div class="mr-kpi"><div class="mr-kpi-v">${verdict}</div>
             <div class="mr-kpi-l">Overall balance of members</div>
@@ -1376,7 +1451,7 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — tier rollups</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">Each level of the structure is rolled up from the painted county map. Balance
         usually improves as levels combine — a lopsided bottom tier can still produce even upper tiers,
         and that is worth checking before signing off on a structure.</p>
@@ -1442,7 +1517,7 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — area profiles</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">Age bands are athlete counts by competition-year age. County counts include
         every county painted into the area, whether or not it currently contains members.</p>
         ${blocks}
@@ -1451,13 +1526,15 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_compare: {
-    label: 'Realignment — compare to another scenario', group: 'Boundary Studio',
-    desc: 'County moves and member flows between the working scenario and the loaded comparison scenario.',
+    label: 'Realignment — which counties move (vs. another scenario)', group: 'Boundary Studio',
+    desc: 'Geographic differences only: which counties and members change area between the working scenario '
+        + 'and the loaded comparison scenario. Two proposals sharing the same map will correctly show zero '
+        + 'differences here \u2014 for field size, meets, or money differences, use "Pathways compared" instead.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — compare to another scenario');
+      if (!boundaryReady()) return notReady('Realignment — which counties move');
       const api = B(), cmp = api.compare();
       if (!cmp) return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — compare to another scenario</h2>
+        <h2 class="mr-h2">Realignment — which counties move</h2>
         <p class="mr-p mr-warn">No comparison scenario is loaded. In Boundary Studio, load a scenario
         into the compare slot first, then generate this report.</p></section>`;
       const geo = api.geo(), y = api.year(), assign = api.assign(), regions = api.regions();
@@ -1491,11 +1568,18 @@ const BOUNDARY_SECTIONS = {
         `<tr><td>${esc(m.name)}</td><td>${esc(m.st)}</td>
          <td>${esc(m.from || 'Unassigned')}</td><td>${esc(m.to || 'Unassigned')}</td>
          <td class="mr-num">${fmt(m.m)}</td></tr>`).join('');
+      const workingName = api.scenario().name || 'Unsaved working scenario';
+      const sameMap = moves.length === 0;
+      const sameMapNote = sameMap ? `<div class="mr-note" style="border-left-color:#171F69">
+        <strong>These two scenarios use the exact same map.</strong> Every county is assigned to the same
+        area in both, so zero geographic differences is the correct answer, not a sign nothing loaded.
+        If ${esc(workingName)} and ${esc(cmp.name || cmp.id || 'the compared scenario')} differ in their
+        rules instead \u2014 who qualifies, how big the field is, what it costs \u2014 that shows up in
+        <strong>"Realignment \u2014 pathways compared,"</strong> not here.</div>` : '';
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — compare to another scenario</h2>
-        <p class="mr-p">Working scenario: <strong>${esc(api.scenario().name || 'Unsaved working scenario')}</strong>
-           · Compared against: <strong>${esc(cmp.name || cmp.id || 'comparison scenario')}</strong>
-           · Membership year: <strong>${esc(api.yearLabel())}</strong></p>
+        <h2 class="mr-h2">Which counties move</h2>
+        ${scenarioCompareLine(workingName, 'Working scenario', cmp.name || cmp.id || 'Comparison scenario', 'Compared against')}
+        ${sameMapNote}
         <div class="mr-kpis">
           <div class="mr-kpi"><div class="mr-kpi-v">${fmt(moves.length)}</div>
             <div class="mr-kpi-l">Counties that change area</div>
@@ -1509,7 +1593,7 @@ const BOUNDARY_SECTIONS = {
         </div>
         <h3 class="mr-h3">Member flows between areas</h3>
         <table class="mr-table"><thead><tr><th scope="col">Move</th><th scope="col" class="mr-num">Counties</th>
-          <th scope="col" class="mr-num">Members affected</th></tr></thead><tbody>${flowRows || '<tr><td colspan="3">No differences.</td></tr>'}</tbody></table>
+          <th scope="col" class="mr-num">Members affected</th></tr></thead><tbody>${flowRows || '<tr><td colspan="3">No geographic differences \u2014 see the note above.</td></tr>'}</tbody></table>
         <h3 class="mr-h3">Counties that move (those containing members)</h3>
         <table class="mr-table mr-table-sm"><thead><tr><th scope="col">County</th><th scope="col">State</th><th scope="col">From</th>
           <th scope="col">To</th><th scope="col" class="mr-num">Members</th></tr></thead>
@@ -1605,6 +1689,8 @@ const BOUNDARY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+        <div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
+          <span class="mr-sb-name">${cols.map(c=>esc(c.label)).join(' &nbsp;vs&nbsp; ')}</span></div>
         <p class="mr-note"><b>How to read this.</b> "Today's real system" is the 2026 season as it actually ran:
           12 Regions → 6 Zones → East/Central/West → Junior Nationals, real entries, real results. Both proposals
           replace that with 9 Zones feeding East/Central/West directly — no Regional round. CCE's proposal sends
@@ -1669,7 +1755,7 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — zip code appendix</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">Only zip codes containing at least one member are listed. Zip codes are assigned
         by geocoding the member's zip to a point and testing which county polygon contains it, so a zip
         straddling a county line lands wholly in one county.</p>
@@ -1887,7 +1973,7 @@ const EQUITY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — competitive equity</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
         experiences is the score they must post to get out of their Regional, and the top ${rank}
         per springboard event advance. That bar is directly measurable.</p>
@@ -2038,7 +2124,7 @@ const EQUITY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — maps by stage</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <p class="mr-p">One map per stage of the structure, in the colours used on screen, each with
         the breakdown for that stage. Counties are shaded by the area they belong to at that level;
         pale grey means unassigned.</p>
@@ -2094,7 +2180,7 @@ const EQUITY_SECTIONS = {
          <td>${esc(r.from)}</td><td>${esc(r.to)}</td></tr>`).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">Realignment — which clubs move</h2>
-        <p class="mr-p">${scenarioLine()}</p>
+        ${scenarioLine()}
         <div class="mr-kpis">
           <div class="mr-kpi"><div class="mr-kpi-v">${fmt(movers.length)}</div>
             <div class="mr-kpi-l">Clubs changing area</div>
@@ -2631,6 +2717,26 @@ const STYLES = `
   margin:0;color:#171F69;text-transform:uppercase;letter-spacing:.01em}
 #mr-output .mr-doc-sub{font-size:11.5px;color:#5a6480;margin-top:8px;line-height:1.65}
 #mr-output .mr-section{margin:26px 0;page-break-inside:auto}
+#mr-output .mr-scenario-badge{background:#171F69;color:#fff;border-radius:8px;padding:10px 16px;
+  margin:0 0 14px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;page-break-inside:avoid}
+#mr-output .mr-scenario-badge .mr-sb-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8FC3EA;flex-shrink:0}
+#mr-output .mr-scenario-badge .mr-sb-name{font-weight:800;font-size:15px}
+#mr-output .mr-scenario-badge .mr-sb-year{font-size:11px;color:#c8d0f0;margin-left:auto;white-space:nowrap}
+#mr-output .mr-scenario-badge .mr-sb-dirty{font-size:10px;color:#fde68a;font-weight:600}
+#mr-output .mr-scenario-badge.mr-sb-compare{display:grid;grid-template-columns:1fr auto 1fr;
+  align-items:center;gap:4px 12px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-col{display:flex;flex-direction:column;gap:1px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-vs{font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;font-size:12px;color:#8FC3EA;text-align:center;padding:0 4px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-col.mr-sb-right{align-items:flex-end;text-align:right}
+#mr-output .mr-rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;
+  margin:8px 0 16px}
+#mr-output .mr-rules-col{background:#f7f8fc;border:1px solid #e2e5ef;border-radius:8px;padding:11px 14px}
+#mr-output .mr-rules-h{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;
+  border-bottom:2px solid #E31937;padding-bottom:4px}
+#mr-output .mr-rules-col .mr-bullets{margin:0;padding-left:16px;font-size:11px;line-height:1.6}
 #mr-output .mr-h2{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#171F69;
   border-bottom:2px solid #171F69;padding-bottom:4px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
 .mr-yearband{background:var(--navy);color:#fff;font-family:var(--display);font-size:17px;letter-spacing:.05em;
