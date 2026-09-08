@@ -33,6 +33,12 @@
  *   MCP_SHARED_SECRET  — a long random string. Callers must send
  *                        `Authorization: Bearer <MCP_SHARED_SECRET>`.
  *                        Generate with: openssl rand -hex 32
+ *
+ * A second, independent auth path is available for the Microsoft 365
+ * federated connector, which authenticates via a real Entra token rather
+ * than a shared secret -- see api/_entra-auth.js. It only activates once
+ * ENTRA_TENANT_ID and ENTRA_AUDIENCE are both set; until then this is a
+ * no-op and MCP_SHARED_SECRET is the only accepted credential.
  */
 
 import {
@@ -43,6 +49,7 @@ import {
   getSchedule,
   listBoundaryScenarios,
 } from './_mcp-tools.js';
+import { isEntraConfigured, verifyEntraToken } from './_entra-auth.js';
 
 const SERVER_INFO = { name: 'usa-diving-internal-apps', version: '0.1.0' };
 const PROTOCOL_VERSION = '2025-06-18';
@@ -222,10 +229,24 @@ export default async function handler(req, res) {
   }
   const authHeader = req.headers['authorization'] || '';
   const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
   const { timingSafeEqual } = await import('node:crypto');
   const a = Buffer.from(provided);
   const b = Buffer.from(secret);
-  const authorized = a.length === b.length && timingSafeEqual(a, b);
+  let authorized = a.length === b.length && timingSafeEqual(a, b);
+
+  // Second path: a real Microsoft Entra access token, for the federated
+  // connector. Only attempted if the shared secret didn't match and Entra
+  // validation is actually configured -- see api/_entra-auth.js.
+  if (!authorized && isEntraConfigured() && provided) {
+    try {
+      await verifyEntraToken(provided);
+      authorized = true;
+    } catch (e) {
+      console.error('Entra token rejected:', e.message);
+    }
+  }
+
   if (!authorized) {
     res.status(401).json({ error: 'Unauthorized — missing or invalid bearer token.' });
     return;
