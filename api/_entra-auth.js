@@ -67,8 +67,9 @@ export async function verifyEntraToken(token) {
   if (claims.exp && claims.exp < now) throw new Error('Token expired');
   if (claims.nbf && claims.nbf > now) throw new Error('Token not yet valid');
 
-  const expectedIssuer = `https://login.microsoftonline.com/${tenantId}/v2.0`;
-  if (claims.iss !== expectedIssuer) {
+  const expectedIssuerV2 = `https://login.microsoftonline.com/${tenantId}/v2.0`;
+  const expectedIssuerV1 = `https://sts.windows.net/${tenantId}/`;
+  if (claims.iss !== expectedIssuerV2 && claims.iss !== expectedIssuerV1) {
     throw new Error(`Unexpected issuer: ${claims.iss}`);
   }
   if (claims.aud !== audience) {
