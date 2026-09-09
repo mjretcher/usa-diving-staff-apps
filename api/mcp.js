@@ -51,6 +51,7 @@ import {
   getBoundaryScenarioFinances,
 } from './_mcp-tools.js';
 import { isEntraConfigured, verifyEntraToken } from './_entra-auth.js';
+import { randomUUID } from 'node:crypto';
 
 const SERVER_INFO = { name: 'usa-diving-internal-apps', version: '0.1.0' };
 const PROTOCOL_VERSION = '2025-06-18';
@@ -297,6 +298,19 @@ export default async function handler(req, res) {
       const result = await handleRpc(msg);
       if (result) responses.push(result);
     }
+
+    // Session handling: none of our tools need real cross-call state (every
+    // call independently queries Neon fresh), so this is a protocol-shape
+    // formality, not a real session store -- but several MCP clients,
+    // including Microsoft's, apparently expect an Mcp-Session-Id to come
+    // back from initialize and be echoed on later calls, and silently give
+    // up discovering tools if it never shows up. Generate one on initialize;
+    // echo back whatever the client sends otherwise (or a fresh one if it
+    // sends none, for clients like curl/Claude that never adopted this).
+    const isInit = messages.some((m) => m && m.method === 'initialize');
+    const incomingSessionId = req.headers['mcp-session-id'];
+    const sessionId = isInit ? randomUUID() : (incomingSessionId || randomUUID());
+    res.setHeader('Mcp-Session-Id', sessionId);
 
     if (responses.length === 0) {
       // All notifications -- no content to return.
