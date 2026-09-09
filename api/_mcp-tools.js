@@ -15,6 +15,7 @@
  */
 
 import { neonQuery } from './_neon.js';
+import { computeBoundaryMoneyReport } from './_boundary-money.js';
 
 function addEq(clauses, params, col, val) {
   if (val != null && val !== '') {
@@ -113,6 +114,13 @@ export async function getSchedule({ schedule_id } = {}) {
     [schedule_id]
   );
   return rows[0] || null;
+}
+
+export async function getBoundaryScenarioFinances({ scenario_id } = {}) {
+  if (!scenario_id) throw new Error('scenario_id is required -- use list_boundary_scenarios to find one.');
+  const report = await computeBoundaryMoneyReport(scenario_id);
+  if (!report) throw new Error(`No boundary scenario found with id ${scenario_id}.`);
+  return report;
 }
 
 export async function listBoundaryScenarios({ name_contains } = {}) {

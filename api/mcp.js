@@ -48,6 +48,7 @@ import {
   listSchedules,
   getSchedule,
   listBoundaryScenarios,
+  getBoundaryScenarioFinances,
 } from './_mcp-tools.js';
 import { isEntraConfigured, verifyEntraToken } from './_entra-auth.js';
 
@@ -142,15 +143,32 @@ const TOOLS = [
     name: 'list_boundary_scenarios',
     description:
       'Lists saved Boundary Studio regional-restructuring scenarios by id, name, and last-updated ' +
-      'time only. Does NOT return derived figures like projected Nationals field size or net revenue — ' +
-      'those are computed client-side by boundary.js from a large internal data structure this server ' +
-      'does not interpret. If asked for those numbers, say they are not available through this tool ' +
-      'yet and that Mike would need to pull them from the Boundary Studio UI directly.',
+      'time. Use get_boundary_scenario_finances on a specific id for the actual projected field size ' +
+      'and revenue numbers.',
     inputSchema: {
       type: 'object',
       properties: { name_contains: { type: 'string' } },
     },
     handler: listBoundaryScenarios,
+  },
+  {
+    name: 'get_boundary_scenario_finances',
+    description:
+      'Runs Boundary Studio\'s real "Money" tab calculation for one scenario -- the same numbers a ' +
+      'person would see on that screen: projected field size at the championship, gross entry income, ' +
+      'DiveMeets pass-through, host payouts, and net revenue USA Diving keeps, broken down per tier ' +
+      '(Zones/EWC/National etc.) and in total. This is ENTRY FEES ONLY -- it does not include ' +
+      'membership dues or senior circuit revenue, which are a separate Pricing Studio model not ' +
+      'covered by this tool. Figures reflect live current data (real entries, real membership), not a ' +
+      'frozen snapshot, so they will drift slightly from a screenshot taken on an earlier date as more ' +
+      'competition results come in -- that is expected, not an error. Use list_boundary_scenarios first ' +
+      'to find a scenario_id.',
+    inputSchema: {
+      type: 'object',
+      properties: { scenario_id: { type: 'string' } },
+      required: ['scenario_id'],
+    },
+    handler: getBoundaryScenarioFinances,
   },
 ];
 
