@@ -222,9 +222,17 @@ export default async function handler(req, res) {
     return;
   }
 
-  const secret = process.env.MCP_SHARED_SECRET;
-  if (!secret) {
-    res.status(500).json({ error: 'MCP server is not configured (missing MCP_SHARED_SECRET env var).' });
+  // TEMPORARY, 2026-09-08: unauthenticated access while the Entra SSO / OAuth
+  // registration gets sorted out. Every request is accepted with no credential
+  // check at all while this is 'true' -- remove MCP_AUTH_DISABLED from Vercel
+  // (or set it to anything other than 'true') to re-lock this, no code change
+  // needed. Do not leave this set longer than necessary.
+  if (process.env.MCP_AUTH_DISABLED === 'true') {
+    console.warn('MCP_AUTH_DISABLED is true -- serving request with NO authentication.');
+  } else {
+    const secret = process.env.MCP_SHARED_SECRET;
+    if (!secret) {
+      res.status(500).json({ error: 'MCP server is not configured (missing MCP_SHARED_SECRET env var).' });
     return;
   }
   const authHeader = req.headers['authorization'] || '';
@@ -250,6 +258,7 @@ export default async function handler(req, res) {
   if (!authorized) {
     res.status(401).json({ error: 'Unauthorized — missing or invalid bearer token.' });
     return;
+  }
   }
 
   try {
