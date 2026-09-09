@@ -47,12 +47,14 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { neonQuery } from './_neon.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MA_DIR = path.join(__dirname, '..', 'membership-analytics');
+// See api/_pricing-engine.js for why this is process.cwd() and not
+// import.meta.url/__dirname -- the short version: Vercel compiles this file
+// to CommonJS, and import.meta is a parse-time SyntaxError there, not a
+// runtime one.
+const MA_DIR = path.join(process.cwd(), 'membership-analytics');
 
 const ROUTING_SRC = fs.readFileSync(path.join(MA_DIR, 'routing.js'), 'utf8');
 const SCHEDULE_ENGINE_SRC = fs.readFileSync(path.join(MA_DIR, 'scenario-schedule-engine.js'), 'utf8');
