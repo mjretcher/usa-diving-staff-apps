@@ -739,10 +739,16 @@ async function applyBoundary(id){
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
     PS.regions = (d.regions && d.regions.length) ? d.regions : defaultRegions(12);
     PS.assign  = d.assign || {};
+    const prevNames = (PS.levels || []).map(l => l && l.name).join('|');
     PS.levels  = (d.levels && d.levels.length) ? d.levels : defaultLevels(PS.regions.length);
     PS.finalName = d.finalName || 'Junior Nationals';
     PS.boundaryRouting = (d.routing && d.routing.length) ? d.routing : null;
     PS.boundaryId = id; PS.boundaryName = row.name;
+    // Fee cards are preserved by index in resizeCards(). Across a structural
+    // change that index means nothing -- it carried a Regional-first ladder's
+    // $85 into a structure that starts at Zones. Only preserve when the
+    // structure is the same one the cards were built for.
+    if (PS.levels.map(l => l && l.name).join('|') !== prevNames) PS.fees = null;
     resizeCards();
     return true;
   } catch(e){ console.error(e); msg('Could not load structure: ' + (e.message||e)); return false; }
@@ -761,17 +767,36 @@ function feeRowName(i, NL, fallback){
   return LEVEL_ALIAS[ln] || ln;
 }
 
+/* Default fee for level i chosen by the STAGE that level actually is, not by
+   its position. defaultFees() lays out a Regional-first ladder ($85, $90,
+   $115, then $125 for the championship); indexing it by position charged a
+   structure that starts at Zones the Regional rate at Zones, the Zone rate at
+   E/W/C, and so on -- one tier too low across the board -- while the row
+   names were relabelled correctly and hid it. Boundary Studio's feeFor()
+   already resolves by stage; this makes Pricing Studio match it. */
+function defaultFeeForLevel(i, NL, df){
+  if (i >= NL) return df[df.length-1];                     // the championship row
+  const n = String(levelName(i) || '').toLowerCase();
+  const byStage = /region/.test(n) ? 0 : /zone/.test(n) ? 1
+                : /east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n) ? 2
+                : /national/.test(n) ? 3 : null;
+  return (byStage != null && df[byStage]) ? df[byStage] : (df[i] || {qual:100, non:0});
+}
+
 /* Keep the fee + flow cards the same length as the structure, preserving any
    edits the user has already made at each index. */
 function resizeCards(){
   const NL = levelCount();
   const df = defaultFees(NL), dfl = defaultFlow(NL);
   const oldF = PS.fees || [], oldFl = PS.flow || [];
-  PS.fees = df.map((f,i) => ({
-    name: feeRowName(i, NL, f.name),
-    qual: oldF[i] ? oldF[i].qual : f.qual,
-    non:  oldF[i] ? oldF[i].non  : f.non,
-  }));
+  PS.fees = df.map((f,i) => {
+    const d = defaultFeeForLevel(i, NL, df);
+    return {
+      name: feeRowName(i, NL, f.name),
+      qual: oldF[i] ? oldF[i].qual : d.qual,
+      non:  oldF[i] ? oldF[i].non  : d.non,
+    };
+  });
   PS.flow = dfl.map((f,i) => oldFl[i] ? Object.assign({}, f, oldFl[i]) : f);
   if (PS.flow.length) PS.flow[PS.flow.length-1].advance = 0;
   const ds = defaultSynchro(NL), oldS = PS.synchro || [];
@@ -2293,7 +2318,14 @@ async function ensureFlowData(){
     let base = null;
     try {
       await loadBoundaryList();
-      const seed = (PS.bList||[]).find(b => /2026 Alignment/i.test(b.name));
+      // Two saved scenarios match /2026 Alignment/ ("Official ..." and
+      // "Current ..."); choosing by regex picked whichever sorted first by
+      // updated_at, so the calibration baseline could silently switch if
+      // either was re-saved. Prefer the explicit ids, in the same order
+      // boundary.js's SEED_IDS uses; regex only as a last resort.
+      const list = PS.bList || [];
+      const seed = ['seed-2026-official','seed-2026-alignment'].map(id => list.find(b => b.id === id)).find(Boolean)
+                || list.find(b => /2026 Alignment/i.test(b.name));
       if (seed){
         const r = await NEON.query(`SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`, [seed.id]);
         if (r.rows.length){

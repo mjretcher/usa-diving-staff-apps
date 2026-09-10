@@ -1102,7 +1102,17 @@ function syncRouting(){
   tallyInvalidate();
   if (!QR()) return;
   const n = S.levels.length;
-  if (!S.routing || !S.routing.length) S.routing = QR().defaultRouting(n - 1, n - 1);
+  if (!S.routing || !S.routing.length){
+    // Where do the Zone top-3 go? Under the 2026 rule they skip E/W/C and go
+    // straight to Nationals. If Nationals is a painted level, F is that level.
+    // If it is NOT painted (Regions/Zones/E-W-C only), F must point PAST the
+    // top so the top-3 route is filtered out below and they leave the painted
+    // structure -- rather than collapsing onto E/W/C, which over-fed it by the
+    // whole top-3 cohort (verified against real 2026 E/W/C: 1,414 with them,
+    // 1,104 without, actual 1,046). Calibration already subtracts them.
+    const lastIsNationals = /national/i.test(String((S.levels[n-1] && S.levels[n-1].name) || ''));
+    S.routing = QR().defaultRouting(n - 1, lastIsNationals ? n - 1 : n);
+  }
   while (S.routing.length < n) S.routing.push({rounds:[{key:'final'}], routes:[]});
   S.routing.length = n;
   S.routing.forEach(l => {
@@ -1346,12 +1356,37 @@ function seedTotal(){
   return t;
 }
 
+/* The calibration hands back TWO constants per cell for a stage: conv (the
+   share of rule-qualified athletes who actually turn up) and directAt (a
+   cohort that arrives at this stage without coming through the level below
+   -- in 2026 that is Groups C and D, who did not compete at Regionals, and
+   platform, which is exhibition there). Previously only conv was read, and
+   it was averaged into one number applied to every cell -- including cells
+   the calibration had marked 0 because their whole field is direct entry.
+   The direct cohort was dropped entirely. Against real 2026 Zones that
+   under-counted by ~700 athletes. Both halves are now used, per cell. */
+function calibrationForLevel(L){
+  try {
+    const k = window.JuniorFlow && window.JuniorFlow.constants
+            ? window.JuniorFlow.constants(S.year) : null;
+    if (!k || !k.usable) return null;
+    const stage = stageNameForLevel(L);
+    const lv = stage && k.byStage ? k.byStage[stage] : null;
+    if (!lv || !lv.conv) return null;
+    return {conv: lv.conv, directAt: lv.directAt || {}};
+  } catch(e){ return null; }
+}
+
 function projectPathway(withTakeUp){
   S._cr = null;
   if (!QR() || !S.flow) return null;   // caller must have refreshed the flow
   syncRouting();
   const cells = CELLS;
   const conv = {};
+  // Work on a copy: calibration-derived 'entering' must never be written back
+  // into S.routing, or it would be saved with the scenario and then double
+  // count on the next load.
+  const routing = S.routing.map(l => Object.assign({}, l, {entering: l.entering ? Object.assign({}, l.entering) : undefined}));
   // The "qualified, before take-up" breakdown projects with withTakeUp=false
   // while the panel is being drawn; resetting S.takeUp here too made the
   // footer flip to "take-up could not be measured" every time that mode was
@@ -1359,20 +1394,37 @@ function projectPathway(withTakeUp){
   if (withTakeUp !== false){
     S.takeUp = null;
     let anyMeasured = false;
-    for (let L = 1; L < S.routing.length; L++){
-      const r = arrivalRate(L);
-      if (measuredArrival(L) != null) anyMeasured = true;
-      if (Math.abs(r - 1) > 0.001){
-        const m = {}; cells.forEach(c => { m[c] = r; });
+    for (let L = 1; L < routing.length; L++){
+      if (S.arrival && S.arrival[L] != null){
+        // A hand-set arrival rate overrides measurement for the whole level.
+        const m = {}; cells.forEach(c => { m[c] = S.arrival[L]; });
         conv[L] = m;
+        continue;
       }
+      const cal = calibrationForLevel(L);
+      if (!cal) continue;
+      anyMeasured = true;
+      const m = {};
+      cells.forEach(c => { m[c] = cal.conv[c] != null ? cal.conv[c] : 1; });
+      conv[L] = m;
+      // Direct-entry cohorts join this level. A cell the scenario already
+      // lists in its own 'entering' keeps the scenario's number -- the
+      // calibration never adds on top of a hand-specified cohort.
+      const explicit = routing[L].entering || {};
+      const merged = Object.assign({}, explicit);
+      let added = false;
+      cells.forEach(c => {
+        const d = cal.directAt[c];
+        if (d > 0 && explicit[c] == null){ merged[c] = d; added = true; }
+      });
+      if (added || routing[L].entering) routing[L].entering = merged;
     }
     let basis = null;
     try { const k = window.JuniorFlow.constants(S.year); basis = k && k.basis; } catch(e){}
     S.takeUp = {basis, usable: anyMeasured};
   }
   return QR().project({
-    routing: S.routing,
+    routing,
     entries0: seedRows(),
     groupCount: L => groupCountAt(L),
     groupOf: groupUp,
