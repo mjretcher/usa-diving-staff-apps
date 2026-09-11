@@ -1,0 +1,18 @@
+name: Build membership geography
+on: { workflow_dispatch: {} }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install psycopg2-binary
+      - run: python db/scripts/build_membership_geo.py
+        env: { DATABASE_URL: "${{ secrets.NEON_DATABASE_URL }}" }
+      - run: |
+          git add membership-analytics/membership-geo.json
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git config user.name "github-actions[bot]"; git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Build membership-geo.json (per-county membership by type)"; git pull --rebase; git push

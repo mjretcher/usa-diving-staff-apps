@@ -2295,9 +2295,99 @@ const EQUITY_SECTIONS = {
     }
   },
 
+  membership_geo: {
+    label: 'Membership by area', group: 'Boundary Studio',
+    desc: 'Where the membership is, on the current map: members by type, athletes, coaches, and clubs per area. No pathway or qualification content.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Membership by area');
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions();
+      const TG = api.tierGroupsAt(0), of = TG.of, nG = TG.groups.length;
+      const FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d', '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+      const colorOf = gi => { const g = TG.groups[gi]; return (g && g.colors && g.colors[0]) || FALLBACK[gi % FALLBACK.length]; };
+      const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+      const areaOfFips = f => { const ri = assign[f]; return (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null; };
+
+      // Optional per-type file (membership-geo.json). If absent, the report still
+      // renders members/athletes/coaches/clubs from the county stats.
+      let GEO = null;
+      try { GEO = await fetch('membership-geo.json?v=' + Date.now()).then(r => r.ok ? r.json() : null); } catch(e){}
+      const zips = GEO && GEO.years ? GEO.years[String(y)] : null;
+
+      // county map -> zip is via the same z-block used elsewhere: geo.stats[f].z lists zips per county.
+      const zipToArea = {};
+      if (zips){ for (const [f, st] of Object.entries(geo.stats)){ const gi = areaOfFips(f); if (gi==null) continue; for (const z of Object.keys(st.z||{})) if (zipToArea[z]==null) zipToArea[z]=gi; } }
+
+      // Solid where divers live, pale wash where the area has none.
+      const emptyD = [], solidByArea = Array.from({length:nG},()=>[]), unParts = [];
+      const stat = Array.from({length:nG},()=>({m:0,a:0,c:0,cl:new Set(),n:0}));
+      let unM = 0;
+      for (const c of geo.counties){
+        const gi = areaOfFips(c.f);
+        if (gi==null){ unParts.push(c.d); continue; }
+        stat[gi].n++;
+        const v = (geo.stats[c.f]||{})[y];
+        (v && v.m > 0 ? solidByArea[gi] : emptyD).push({d:c.d, gi});
+      }
+      for (const [f, st] of Object.entries(geo.stats)){
+        const v = st[y]; if (!v) continue; const gi = areaOfFips(f);
+        if (gi==null){ unM += v.m; continue; }
+        stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c; (v.cl||[]).forEach(i => stat[gi].cl.add(i));
+      }
+      const solidPaths = solidByArea.map((arr,gi)=> arr.length ? `<path d="${arr.map(x=>x.d).join('')}" fill="${colorOf(gi)}" stroke="#fff" stroke-width="0.3"/>` : '').join('');
+      const emptyPaths = emptyD.map(x=>`<path d="${x.d}" fill="${colorOf(x.gi)}" fill-opacity="0.26" stroke="#fff" stroke-width="0.3"/>`).join('');
+      const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
+        ${emptyPaths}${solidPaths}
+        ${unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#fff" stroke-width="0.3"/>` : ''}
+        <path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width="0.5" stroke-opacity="0.7"/>
+      </svg>`;
+
+      // per-type table if we have the file
+      let typeTable = '';
+      if (zips){
+        const types = {};
+        for (const [z, rec] of Object.entries(zips)){ const gi = zipToArea[z]; if (gi==null) continue;
+          for (const [t,n] of Object.entries(rec.types||{})){ (types[t] = types[t] || Array.from({length:nG},()=>0))[gi] += n; } }
+        const order = Object.keys(types).sort((a,b)=> types[b].reduce((s,x)=>s+x,0) - types[a].reduce((s,x)=>s+x,0));
+        const head = `<tr><th scope="col">Membership type</th>${TG.groups.map((_,gi)=>`<th scope="col" class="mr-num"><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</th>`).join('')}<th scope="col" class="mr-num">Total</th></tr>`;
+        const trows = order.map(t=>{ const row = types[t]; const tot = row.reduce((s,x)=>s+x,0);
+          return `<tr><td>${esc(t)}</td>${row.map(x=>`<td class="mr-num">${x?fmt(x):'—'}</td>`).join('')}<td class="mr-num"><b>${fmt(tot)}</b></td></tr>`; }).join('');
+        const colTot = Array.from({length:nG},(_,gi)=>order.reduce((s,t)=>s+types[t][gi],0));
+        const foot = `<tr><td><b>All types</b></td>${colTot.map(x=>`<td class="mr-num"><b>${fmt(x)}</b></td>`).join('')}<td class="mr-num"><b>${fmt(colTot.reduce((s,x)=>s+x,0))}</b></td></tr>`;
+        typeTable = `<h3 class="mr-h3">Members by type and ${esc(api.tierName(0).toLowerCase())}</h3>
+          <table class="mr-table mr-table-sm"><thead>${head}</thead><tbody>${trows}${foot}</tbody></table>`;
+      }
+
+      const total = stat.reduce((s,x)=>s+x.m,0);
+      const rows = stat.map((x,gi)=>`<tr>
+        <td><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</td>
+        <td class="mr-num">${fmt(x.m)}</td><td class="mr-num">${fmt(x.a)}</td><td class="mr-num">${fmt(x.c)}</td>
+        <td class="mr-num">${fmt(x.cl.size)}</td><td class="mr-num">${fmt(x.n)}</td><td class="mr-num">${pctS(x.m,total)}</td></tr>`).join('');
+      const grand = { m: total, a: stat.reduce((s,x)=>s+x.a,0), c: stat.reduce((s,x)=>s+x.c,0), cl: new Set() };
+      stat.forEach(x=>x.cl.forEach(i=>grand.cl.add(i)));
+      const foot = `<tr><td><b>Total</b></td><td class="mr-num"><b>${fmt(grand.m)}</b></td><td class="mr-num"><b>${fmt(grand.a)}</b></td>
+        <td class="mr-num"><b>${fmt(grand.c)}</b></td><td class="mr-num"><b>${fmt(grand.cl.size)}</b></td><td class="mr-num">&nbsp;</td><td class="mr-num">&nbsp;</td></tr>`;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Membership by ${esc(api.tierName(0).toLowerCase())}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">Where the membership sits on the current map, for the ${esc(api.yearLabel(y))} season. Counties are
+        shaded solid where members live and pale where an area has none. Figures are members placed by home ZIP.</p>
+        <div class="mr-map">${svg}</div>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(api.tierName(0))}</th>
+          <th scope="col" class="mr-num">Members</th><th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Coaches</th>
+          <th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th></tr></thead>
+          <tbody>${rows}${foot}</tbody></table>
+        ${typeTable}
+        ${unM > 0 ? `<p class="mr-note">${fmt(unM)} members sit in unassigned counties, shown pale grey and excluded from the figures above.</p>` : ''}
+        ${!zips ? `<p class="mr-note">Membership-by-type detail is unavailable; run the membership-geography build to populate it. Members, athletes, coaches and clubs above are from the current county data.</p>` : ''}
+      </section>`;
+    }
+  },
+
   boundary_club_moves: {
-    label: 'Realignment — which clubs move', group: 'Boundary Studio',
-    desc: 'Every club that changes area, with where it goes. The first thing a regional chair will ask for.',
+    label: 'Clubs by area', group: 'Boundary Studio',
+    desc: 'Clubs and members per area, and the largest clubs with where they land.',
     build: async function(o){
       if (!boundaryReady()) return notReady('Realignment — which clubs move');
       let Q, AD;
@@ -2399,7 +2489,7 @@ const TEMPLATES = [
 
   { id:'realignment_board', label:'Realignment — Board Packet',
     desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, what it takes to advance, and whether every meet this creates can actually be run. No appendices.',
-    sections:['boundary_map','boundary_balance','boundary_equity','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
+    sections:['boundary_map','membership_geo','boundary_balance','boundary_equity','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
 
   { id:'realignment_equity', label:'Realignment — Fairness Case',
     desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
