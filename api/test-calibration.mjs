@@ -56,5 +56,15 @@ console.log('=== boundary.js feeFor and meetMoney late fee ===');
   S.lateFeeShare = 0.1; const m1 = I.meetMoney({ level: 0, entries: 100 });
   ok(m1.lateFees === 1000 && m1.gross === 10000, 'lateFeeShare 0.1 adds 100 x 0.1 x $100 = $1,000'); }
 
+console.log('=== boundary.js feeFor resolves by stage name (Region-first 3-level structure) ===');
+{ const { I, S } = fresh(['Regions','Zones','E / W / C']); S.fees = null;
+  ok(I.meetMoney({level:0,entries:1}).fee === 85 && I.meetMoney({level:1,entries:1}).fee === 90 && I.meetMoney({level:2,entries:1}).fee === 115,
+     'Regions $85 / Zones $90 / E-W-C $115 (was $90/$115/$125 by position)'); }
+{ const { I, S } = fresh(['Regions','Zones','Nationals']); S.fees = null;
+  ok(I.meetMoney({level:0,entries:1}).fee === 85 && I.meetMoney({level:1,entries:1}).fee === 90 && I.meetMoney({level:2,entries:1}).fee === 125,
+     '2025-rules structure: Regions $85 / Zones $90 / Nationals $125'); }
+{ const { I, S } = fresh(['Level 1','Level 2','Level 3']); S.fees = null;
+  ok(I.meetMoney({level:0,entries:1}).fee === 90 && I.meetMoney({level:2,entries:1}).fee === 125, 'unnamed levels keep the positional fallback'); }
+
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

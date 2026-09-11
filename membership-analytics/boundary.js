@@ -1765,6 +1765,17 @@ const DEFAULT_FEES = [85, 90, 115, 125];
 function feeFor(L){
   if (S.fees && S.fees[L] != null) return S.fees[L];
   const n = S.levels.length;
+  // Resolve by the STAGE the level actually is, not by its position. Deciding
+  // the shift by level count (n <= 3 => "must start at Zones") charged a
+  // Region-first three-level structure the Zone rate at Regionals and the
+  // E/W/C rate at Zones -- one tier too high across the board. Same fix as
+  // Pricing Studio's defaultFeeForLevel; position is only the fallback for a
+  // level whose name matches no stage.
+  const nm = String((S.levels[L] && S.levels[L].name) || '').toLowerCase();
+  const byStage = /region/.test(nm) ? 0 : /zone/.test(nm) ? 1
+                : /east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(nm) ? 2
+                : /national|championship/.test(nm) ? 3 : null;
+  if (byStage != null) return DEFAULT_FEES[byStage];
   // Last level is the championship; otherwise walk the published ladder.
   if (L === n - 1) return DEFAULT_FEES[3];
   return DEFAULT_FEES[Math.min(L + (n <= 3 ? 1 : 0), 2)];
