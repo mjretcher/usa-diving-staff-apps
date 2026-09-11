@@ -116,11 +116,12 @@ export async function getSchedule({ schedule_id } = {}) {
   return rows[0] || null;
 }
 
-export async function getBoundaryScenarioFinances({ scenario_id, cd_first_stop, ceiling_year, late_fee_share } = {}) {
+export async function getBoundaryScenarioFinances({ scenario_id, cd_first_stop, ceiling_year, late_fee_share, use_recap_rates } = {}) {
   if (!scenario_id) throw new Error('scenario_id is required -- use list_boundary_scenarios to find one.');
   const opts = {};
   if (cd_first_stop != null) opts.cdFirstStop = !!cd_first_stop;
   if (ceiling_year != null) { const y = +ceiling_year; if (![2024, 2025, 2026].includes(y)) throw new Error('ceiling_year must be 2024, 2025 or 2026'); opts.ceilingYear = y; }
+  if (use_recap_rates != null) opts.useRecapRates = !!use_recap_rates;
   if (late_fee_share != null) { const r = +late_fee_share; if (!(r >= 0 && r <= 1)) throw new Error('late_fee_share must be between 0 and 1'); opts.lateFeeShare = r; }
   const report = await computeBoundaryMoneyReport(scenario_id, opts);
   if (!report) throw new Error(`No boundary scenario found with id ${scenario_id}.`);

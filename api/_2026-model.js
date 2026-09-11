@@ -53,6 +53,8 @@
  */
 
 import { buildWindow } from './_boundary-money.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import { neonQuery } from './_neon.js';
 import { cohortLoad, movementRates } from './_eligibility.js';
 
@@ -147,10 +149,29 @@ export async function compute2026BaselineWithNationals() {
       lateFeePublished: rm.lateFeePublished,
       grossEntryIncome: Math.round(money.gross), diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad) });
   }
+  // Reconciled actuals from the 2026 DiveMeets recaps (membership-analytics/recaps-2026.json):
+  // paid entries, gross, DiveMeets cut, net to USA Diving, and the calculated host split per meet.
+  let recaps = null;
+  try { recaps = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'membership-analytics', 'recaps-2026.json'), 'utf8')); } catch (e) { recaps = null; }
+  const keyOf = (n) => { const m = /Region (\d+)|Zone ([A-F])|(East|Central|West)|(Junior Nationals)/.exec(n || ''); return m ? m[0] : n; };
+  const recByKey = {}; if (recaps) for (const r of recaps.perMeet) recByKey[keyOf(r.name)] = r;
+  for (const m of perMeet) {
+    const r = recByKey[keyOf(m.stop)];
+    if (r) m.recap = { paidEntries: r.paid, competedEntries: r.competed, paidNotCompetedPct: r.no_show_pct, lateFeeCount: r.late_count, lateFeeTotal: r.late_total,
+      sheetChanges: r.sheet_changes, gross: r.gross, diveMeetsFees: r.divemeets, netToUsaDiving: r.net, hostSplit: r.host, hostConfirmedInBooks: false, settlementDate: r.settlement };
+  }
+  const reconciled = recaps ? (() => {
+    const rows = recaps.perMeet; const sum = (k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
+    return { source: recaps.source, paidEntries: sum('paid'), competedEntries: sum('competed'), gross: +sum('gross').toFixed(2), diveMeetsFees: +sum('divemeets').toFixed(2),
+      netToUsaDiving: +sum('net').toFixed(2), hostSplitBooked: +sum('host').toFixed(2), hostUnreconciled: ['Junior Nationals'],
+      usaDivingKeepsBeforeNationalsHost: +(sum('net') - sum('host')).toFixed(2), byStage: recaps.byStage,
+      note: 'Host figures are the calculated split, not confirmed QuickBooks postings; E/W/C host bills also net merch and ticket sales (East $10,851.24, Central $8,030.38, West $9,214.17 actual bills). Zone C/D host share ($60/$40 question) open with finance as of 2026-06-11.' };
+  })() : null;
   const mvRate = ((movementBand[2026] || {}).regionals || {}).rate || 0;
   const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
-    assumptions: { basis: 'real 2026 entries at every tier (competed athletes only -- paid-but-not-competed entries and late fees are not in results data)', ceilingYear: 2026 },
+    assumptions: { basis: 'model: real 2026 competed entries at every tier with the scenario host terms. reconciled: the DiveMeets recaps (paid entries, late fees, actual host split).', ceilingYear: 2026 },
+    reconciled,
     movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(usaDivingKeeps) },
     perMeet,
     movementBand,

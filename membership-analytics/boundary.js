@@ -1821,16 +1821,31 @@ function meetMoney(m){
   //   S.coachLateFeeShare share of entries carrying the $50 coach late fee
   //   S.sheetChangeShare  share of entries with a $15 sheet change
   const sh = (v) => Math.min(1, Math.max(0, +v || 0));
-  const athleteLate = m.entries * sh(S.lateFeeShare) * (S.lateFee != null ? +S.lateFee : 100);
-  const coachLate   = m.entries * sh(S.coachLateFeeShare) * (S.coachLateFee != null ? +S.coachLateFee : 50);
-  const sheetChange = m.entries * sh(S.sheetChangeShare) * (S.sheetChangeFee != null ? +S.sheetChangeFee : 15);
+  // Reconciled-basis rates by stage (S.recapRates, from the season's DiveMeets
+  // recaps -- see membership-analytics/recaps-2026.json). When present for this
+  // meet's stage they supply: the paid-but-not-competed uplift (results only
+  // hold athletes who dove; DiveMeets bills everyone who paid), the late-fee
+  // share and average, the sheet-change $/entry, and the host share of net.
+  // Absent, everything below falls back to the per-field inputs / defaults.
+  const stageNm = String((S.levels[m.level] && S.levels[m.level].name) || '').toLowerCase();
+  const stageKey = /region/.test(stageNm) ? 'Regionals' : /zone/.test(stageNm) ? 'Zones'
+                 : /east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(stageNm) ? 'E / W / C' : /national/.test(stageNm) ? 'Nationals' : null;
+  const rr = (S.recapRates && stageKey && S.recapRates[stageKey]) || null;
+  const paidUplift = rr && rr.paidNotCompetedPct > 0 ? 1 / (1 - rr.paidNotCompetedPct / 100) : 1;
+  const paidEntries = m.entries * paidUplift;
+  const billedIncome = entryIncome * paidUplift;
+  const athleteLate = rr ? paidEntries * (rr.lateFeeSharePct / 100) * rr.avgLateFee
+                         : m.entries * sh(S.lateFeeShare) * (S.lateFee != null ? +S.lateFee : 100);
+  const coachLate   = rr ? 0 : m.entries * sh(S.coachLateFeeShare) * (S.coachLateFee != null ? +S.coachLateFee : 50);
+  const sheetChange = rr ? paidEntries * rr.sheetChangePerEntry
+                         : m.entries * sh(S.sheetChangeShare) * (S.sheetChangeFee != null ? +S.sheetChangeFee : 15);
   const otherFees = athleteLate + coachLate + sheetChange;
   const lateFees = athleteLate + coachLate;
-  const gross = entryIncome + otherFees;
+  const gross = billedIncome + otherFees;
   // DiveMeets' cut: flat per entry ($4.95 in 2026, $4.90 before) + 10% of other fees.
-  const levy = m.entries * levyPerEntry() + otherFees * LEVY_OTHER_FEES_PCT;
+  const levy = paidEntries * levyPerEntry() + otherFees * LEVY_OTHER_FEES_PCT;
   const net = gross - levy;
-  const mode = S.hostMode || 'pct';
+  const mode = (rr && rr.hostPctOfNet != null) ? 'recap_pct' : (S.hostMode || 'pct');
   // A negotiated figure for one meet beats any formula. Hosts are dealt with
   // individually -- a facility with its own board, a city bidding to attract a
   // championship, a small stop that needs underwriting -- and a single rule
@@ -1839,6 +1854,7 @@ function meetMoney(m){
   const ov = S.hostPer_stop && S.hostPer_stop[meetKey(m)];
   const overridden = ov != null && ov !== '';
   let host = overridden ? (+ov || 0)
+           : mode === 'recap_pct' ? net * (rr.hostPctOfNet / 100)
            : mode === 'flat'      ? (+S.hostFlat || 0)
            : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
            :                        net * (S.hostShare || 0);
@@ -1850,7 +1866,8 @@ function meetMoney(m){
   const capped = host > net;
   if (capped) host = net;
   return {fee, gross, levy, net, host, usad: net - host, floored, capped, overridden,
-          lateFees, otherFees, entryIncome, pct: net > 0 ? host/net : 0};
+          lateFees, otherFees, entryIncome, paidEntries, basis: rr ? 'recap-2026' : 'model',
+          pct: net > 0 ? host/net : 0};
 }
 
 /* Largest against smallest within a tier: the number a host cut lives or dies

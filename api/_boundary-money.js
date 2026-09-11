@@ -192,7 +192,7 @@ export async function hydrateScenario(I, id) {
  *   lateFeeShare (default 0)     share of entries paying the $100 late fee.
  */
 export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {}) {
-  const opts = Object.assign({ cdFirstStop: true, ceilingYear: 2026, lateFeeShare: 0 }, options);
+  const opts = Object.assign({ cdFirstStop: true, ceilingYear: 2026, lateFeeShare: 0, useRecapRates: false }, options);
   const { w, warnings } = buildWindow();
   const Ipricing = w.__pricingInternal;
   const Iboundary = w.__boundaryInternal;
@@ -213,6 +213,10 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   const S = Iboundary.S;
   S.year = opts.ceilingYear === 2025 ? 'y25' : opts.ceilingYear === 2024 ? 'y24' : 'y26';
   S.lateFeeShare = opts.lateFeeShare || 0;
+  // Reconciled basis: rates from the 2026 DiveMeets recaps (host share of net by
+  // stage, paid-vs-competed uplift, late fees, sheet changes). Off by default so
+  // the stored scenario's own host terms apply unless asked for.
+  S.recapRates = opts.useRecapRates ? loadStaticJson('recaps-2026.json').byStage : null;
   if (opts.cdFirstStop && S.year === 'y26' && S.advData && S.advData.pools) {
     const adv = S.advData;
     const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
@@ -285,7 +289,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   // Per stop: the engine already computes every meet; surface it.
   const perMeet = Iboundary.meetManifest(res).map((m) => {
     const money = Iboundary.meetMoney(m);
-    return { tier: m.levelName, stop: m.name, entries: m.entries, spots: m.spots || null,
+    return { tier: m.levelName, stop: m.name, entries: m.entries, paidEntries: Math.round(money.paidEntries || m.entries), spots: m.spots || null, basis: money.basis,
       feePerEvent: money.fee, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0),
       diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad),
       hostOverride: money.overridden };
@@ -299,6 +303,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
     assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
+      revenueBasis: opts.useRecapRates ? 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, late fees and sheet changes from the DiveMeets recaps' : 'scenario\'s stored host terms; competed entries only; no late fees',
       seedPool: S.seedPool || 'inferred', note: opts.cdFirstStop ? 'Groups C and D modelled at the first stop (mandatory); 2026 non-mandatory first stop treated as the exception.' : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
     movementBandApplied: { ratePct: mvRate, firstTierEntries: band(firstEntries), usaDivingKeeps: band(keptTotal) },
     perMeet,

@@ -1,0 +1,713 @@
+{
+ "perMeet": [
+  {
+   "meet_id": "12851",
+   "name": "Region 1 Championships",
+   "stage": "Regional",
+   "paid": 273,
+   "tiers": [
+    [
+     45.0,
+     79
+    ],
+    [
+     85.0,
+     194
+    ]
+   ],
+   "tier_amount": 20045.0,
+   "competed": 259,
+   "competed_individual": 259,
+   "competed_synchro": 0,
+   "no_show_pct": 5.1,
+   "late_count": 27,
+   "late_total": 2350.0,
+   "sheet_changes": 195.0,
+   "gross": 22590.0,
+   "divemeets": 1605.85,
+   "divemeets_check": 1605.85,
+   "net": 20984.15,
+   "host": 10162.5,
+   "host_pct_of_net": 48.4,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12852",
+   "name": "Region 2 Championships",
+   "stage": "Regional",
+   "paid": 315,
+   "tiers": [
+    [
+     45.0,
+     130
+    ],
+    [
+     85.0,
+     185
+    ]
+   ],
+   "tier_amount": 21575.0,
+   "competed": 288,
+   "competed_individual": 288,
+   "competed_synchro": 0,
+   "no_show_pct": 8.6,
+   "late_count": 8,
+   "late_total": 650.0,
+   "sheet_changes": 285.0,
+   "gross": 22510.0,
+   "divemeets": 1652.75,
+   "divemeets_check": 1652.75,
+   "net": 20857.25,
+   "host": 11482.5,
+   "host_pct_of_net": 55.1,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12853",
+   "name": "Region 3 Championships",
+   "stage": "Regional",
+   "paid": 295,
+   "tiers": [
+    [
+     45.0,
+     121
+    ],
+    [
+     85.0,
+     174
+    ]
+   ],
+   "tier_amount": 20235.0,
+   "competed": 280,
+   "competed_individual": 278,
+   "competed_synchro": 2,
+   "no_show_pct": 5.1,
+   "late_count": 14,
+   "late_total": 1300.0,
+   "sheet_changes": 180.0,
+   "gross": 21715.0,
+   "divemeets": 1608.25,
+   "divemeets_check": 1608.25,
+   "net": 20106.75,
+   "host": 11425.0,
+   "host_pct_of_net": 56.8,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12854",
+   "name": "Region 4 Championships",
+   "stage": "Regional",
+   "paid": 178,
+   "tiers": [
+    [
+     45.0,
+     40
+    ],
+    [
+     85.0,
+     138
+    ]
+   ],
+   "tier_amount": 13530.0,
+   "competed": 171,
+   "competed_individual": 162,
+   "competed_synchro": 9,
+   "no_show_pct": 3.9,
+   "late_count": 4,
+   "late_total": 250.0,
+   "sheet_changes": 60.0,
+   "gross": 13840.0,
+   "divemeets": 912.1,
+   "divemeets_check": 912.1,
+   "net": 12927.9,
+   "host": 7712.5,
+   "host_pct_of_net": 59.7,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12856",
+   "name": "Region 5 Championships",
+   "stage": "Regional",
+   "paid": 172,
+   "tiers": [
+    [
+     45.0,
+     47
+    ],
+    [
+     85.0,
+     125
+    ]
+   ],
+   "tier_amount": 12740.0,
+   "competed": 165,
+   "competed_individual": 165,
+   "competed_synchro": 0,
+   "no_show_pct": 4.1,
+   "late_count": 13,
+   "late_total": 950.0,
+   "sheet_changes": 90.0,
+   "gross": 13780.0,
+   "divemeets": 955.4,
+   "divemeets_check": 955.4,
+   "net": 12824.6,
+   "host": 8307.5,
+   "host_pct_of_net": 64.8,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12857",
+   "name": "Region 6 Championships",
+   "stage": "Regional",
+   "paid": 274,
+   "tiers": [
+    [
+     45.0,
+     88
+    ],
+    [
+     85.0,
+     186
+    ]
+   ],
+   "tier_amount": 19770.0,
+   "competed": 256,
+   "competed_individual": 256,
+   "competed_synchro": 0,
+   "no_show_pct": 6.6,
+   "late_count": 13,
+   "late_total": 1150.0,
+   "sheet_changes": 150.0,
+   "gross": 21070.0,
+   "divemeets": 1486.3,
+   "divemeets_check": 1486.3,
+   "net": 19583.7,
+   "host": 10037.5,
+   "host_pct_of_net": 51.3,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12858",
+   "name": "Region 7 Championships",
+   "stage": "Regional",
+   "paid": 117,
+   "tiers": [
+    [
+     45.0,
+     21
+    ],
+    [
+     85.0,
+     96
+    ]
+   ],
+   "tier_amount": 9105.0,
+   "competed": 108,
+   "competed_individual": 108,
+   "competed_synchro": 0,
+   "no_show_pct": 7.7,
+   "late_count": 7,
+   "late_total": 600.0,
+   "sheet_changes": 90.0,
+   "gross": 9795.0,
+   "divemeets": 648.15,
+   "divemeets_check": 648.15,
+   "net": 9146.85,
+   "host": 7110.0,
+   "host_pct_of_net": 77.7,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12859",
+   "name": "Region 8 Championships",
+   "stage": "Regional",
+   "paid": 170,
+   "tiers": [
+    [
+     45.0,
+     35
+    ],
+    [
+     85.0,
+     135
+    ]
+   ],
+   "tier_amount": 13050.0,
+   "competed": 163,
+   "competed_individual": 155,
+   "competed_synchro": 8,
+   "no_show_pct": 4.1,
+   "late_count": 12,
+   "late_total": 1050.0,
+   "sheet_changes": 135.0,
+   "gross": 14235.0,
+   "divemeets": 960.0,
+   "divemeets_check": 960.0,
+   "net": 13275.0,
+   "host": 7872.5,
+   "host_pct_of_net": 59.3,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12860",
+   "name": "Region 9 Championships",
+   "stage": "Regional",
+   "paid": 158,
+   "tiers": [
+    [
+     45.0,
+     24
+    ],
+    [
+     85.0,
+     134
+    ]
+   ],
+   "tier_amount": 12470.0,
+   "competed": 153,
+   "competed_individual": 153,
+   "competed_synchro": 0,
+   "no_show_pct": 3.2,
+   "late_count": 9,
+   "late_total": 700.0,
+   "sheet_changes": 45.0,
+   "gross": 13215.0,
+   "divemeets": 856.6,
+   "divemeets_check": 856.6,
+   "net": 12358.4,
+   "host": 7275.0,
+   "host_pct_of_net": 58.9,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12861",
+   "name": "Region 10 Championships",
+   "stage": "Regional",
+   "paid": 174,
+   "tiers": [
+    [
+     45.0,
+     45
+    ],
+    [
+     85.0,
+     129
+    ]
+   ],
+   "tier_amount": 12990.0,
+   "competed": 168,
+   "competed_individual": 168,
+   "competed_synchro": 0,
+   "no_show_pct": 3.4,
+   "late_count": 10,
+   "late_total": 850.0,
+   "sheet_changes": 105.0,
+   "gross": 13945.0,
+   "divemeets": 956.8,
+   "divemeets_check": 956.8,
+   "net": 12988.2,
+   "host": 8182.5,
+   "host_pct_of_net": 63.0,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12862",
+   "name": "Region 11 Championships",
+   "stage": "Regional",
+   "paid": 196,
+   "tiers": [
+    [
+     45.0,
+     78
+    ],
+    [
+     85.0,
+     118
+    ]
+   ],
+   "tier_amount": 13540.0,
+   "competed": 178,
+   "competed_individual": 178,
+   "competed_synchro": 0,
+   "no_show_pct": 9.2,
+   "late_count": 6,
+   "late_total": 600.0,
+   "sheet_changes": 75.0,
+   "gross": 14215.0,
+   "divemeets": 1037.7,
+   "divemeets_check": 1037.7,
+   "net": 13177.3,
+   "host": 9390.0,
+   "host_pct_of_net": 71.3,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12863",
+   "name": "Region 12 Championships",
+   "stage": "Regional",
+   "paid": 221,
+   "tiers": [
+    [
+     85.0,
+     221
+    ]
+   ],
+   "tier_amount": 18785.0,
+   "competed": 216,
+   "competed_individual": 216,
+   "competed_synchro": 0,
+   "no_show_pct": 2.3,
+   "late_count": 11,
+   "late_total": 1000.0,
+   "sheet_changes": 120.0,
+   "gross": 19905.0,
+   "divemeets": 1205.95,
+   "divemeets_check": 1205.95,
+   "net": 18699.05,
+   "host": 6450.0,
+   "host_pct_of_net": 34.5,
+   "settlement": "2026-04-28"
+  },
+  {
+   "meet_id": "12878",
+   "name": "Zone A Championships",
+   "stage": "Zone",
+   "paid": 505,
+   "tiers": [
+    [
+     90.0,
+     505
+    ]
+   ],
+   "tier_amount": 45450.0,
+   "competed": 491,
+   "competed_individual": 491,
+   "competed_synchro": 0,
+   "no_show_pct": 2.8,
+   "late_count": 16,
+   "late_total": 1600.0,
+   "sheet_changes": 195.0,
+   "gross": 47245.0,
+   "divemeets": 2679.25,
+   "divemeets_check": 2679.25,
+   "net": 44565.75,
+   "host": 15870.0,
+   "host_pct_of_net": 35.6,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12879",
+   "name": "Zone B Championships",
+   "stage": "Zone",
+   "paid": 407,
+   "tiers": [
+    [
+     90.0,
+     407
+    ]
+   ],
+   "tier_amount": 36630.0,
+   "competed": 396,
+   "competed_individual": 396,
+   "competed_synchro": 0,
+   "no_show_pct": 2.7,
+   "late_count": 4,
+   "late_total": 350.0,
+   "sheet_changes": 195.0,
+   "gross": 37175.0,
+   "divemeets": 2069.15,
+   "divemeets_check": 2069.15,
+   "net": 35105.85,
+   "host": 12345.0,
+   "host_pct_of_net": 35.2,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12880",
+   "name": "Zone C Championships",
+   "stage": "Zone",
+   "paid": 453,
+   "tiers": [
+    [
+     65.0,
+     56
+    ],
+    [
+     90.0,
+     397
+    ]
+   ],
+   "tier_amount": 39370.0,
+   "competed": 385,
+   "competed_individual": 385,
+   "competed_synchro": 0,
+   "no_show_pct": 15.0,
+   "late_count": 15,
+   "late_total": 1500.0,
+   "sheet_changes": 150.0,
+   "gross": 41020.0,
+   "divemeets": 2407.35,
+   "divemeets_check": 2407.35,
+   "net": 38612.65,
+   "host": 15945.0,
+   "host_pct_of_net": 41.3,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12882",
+   "name": "Zone D Championships",
+   "stage": "Zone",
+   "paid": 309,
+   "tiers": [
+    [
+     45.0,
+     12
+    ],
+    [
+     90.0,
+     297
+    ]
+   ],
+   "tier_amount": 27270.0,
+   "competed": 295,
+   "competed_individual": 295,
+   "competed_synchro": 0,
+   "no_show_pct": 4.5,
+   "late_count": 10,
+   "late_total": 1000.0,
+   "sheet_changes": 135.0,
+   "gross": 28405.0,
+   "divemeets": 1643.05,
+   "divemeets_check": 1643.05,
+   "net": 26761.95,
+   "host": 9840.0,
+   "host_pct_of_net": 36.8,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12881",
+   "name": "Zone E Championships",
+   "stage": "Zone",
+   "paid": 333,
+   "tiers": [
+    [
+     90.0,
+     333
+    ]
+   ],
+   "tier_amount": 29970.0,
+   "competed": 321,
+   "competed_individual": 321,
+   "competed_synchro": 0,
+   "no_show_pct": 3.6,
+   "late_count": 4,
+   "late_total": 400.0,
+   "sheet_changes": 255.0,
+   "gross": 30625.0,
+   "divemeets": 1713.85,
+   "divemeets_check": 1713.85,
+   "net": 28911.15,
+   "host": 10170.0,
+   "host_pct_of_net": 35.2,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12883",
+   "name": "Zone F Championships",
+   "stage": "Zone",
+   "paid": 514,
+   "tiers": [
+    [
+     90.0,
+     514
+    ]
+   ],
+   "tier_amount": 46260.0,
+   "competed": 510,
+   "competed_individual": 510,
+   "competed_synchro": 0,
+   "no_show_pct": 0.8,
+   "late_count": 3,
+   "late_total": 250.0,
+   "sheet_changes": 255.0,
+   "gross": 46765.0,
+   "divemeets": 2594.8,
+   "divemeets_check": 2594.8,
+   "net": 44170.2,
+   "host": 15510.0,
+   "host_pct_of_net": 35.1,
+   "settlement": "2026-06-11"
+  },
+  {
+   "meet_id": "12894",
+   "name": "East Championships",
+   "stage": "E/W/C",
+   "paid": 413,
+   "tiers": [
+    [
+     115.0,
+     413
+    ]
+   ],
+   "tier_amount": 47495.0,
+   "competed": 397,
+   "competed_individual": 397,
+   "competed_synchro": 0,
+   "no_show_pct": 3.9,
+   "late_count": 13,
+   "late_total": 1250.0,
+   "sheet_changes": 240.0,
+   "gross": 48985.0,
+   "divemeets": 2193.35,
+   "divemeets_check": 2193.35,
+   "net": 46791.65,
+   "host": 12310.5,
+   "host_pct_of_net": 26.3,
+   "settlement": "2026-07-03"
+  },
+  {
+   "meet_id": "12897",
+   "name": "Central Championships",
+   "stage": "E/W/C",
+   "paid": 288,
+   "tiers": [
+    [
+     115.0,
+     288
+    ]
+   ],
+   "tier_amount": 33120.0,
+   "competed": 288,
+   "competed_individual": 288,
+   "competed_synchro": 0,
+   "no_show_pct": 0.0,
+   "late_count": 9,
+   "late_total": 850.0,
+   "sheet_changes": 105.0,
+   "gross": 34075.0,
+   "divemeets": 1521.1,
+   "divemeets_check": 1521.1,
+   "net": 32553.9,
+   "host": 8568.0,
+   "host_pct_of_net": 26.3,
+   "settlement": "2026-07-03"
+  },
+  {
+   "meet_id": "12898",
+   "name": "West Championships",
+   "stage": "E/W/C",
+   "paid": 371,
+   "tiers": [
+    [
+     115.0,
+     371
+    ]
+   ],
+   "tier_amount": 42665.0,
+   "competed": 361,
+   "competed_individual": 361,
+   "competed_synchro": 0,
+   "no_show_pct": 2.7,
+   "late_count": 9,
+   "late_total": 900.0,
+   "sheet_changes": 165.0,
+   "gross": 43730.0,
+   "divemeets": 1942.95,
+   "divemeets_check": 1942.95,
+   "net": 41787.05,
+   "host": 10978.5,
+   "host_pct_of_net": 26.3,
+   "settlement": "2026-07-03"
+  },
+  {
+   "meet_id": "12923",
+   "name": "Junior Nationals",
+   "stage": "National",
+   "paid": 751,
+   "tiers": [
+    [
+     125.0,
+     751
+    ]
+   ],
+   "tier_amount": 93875.0,
+   "competed": 757,
+   "competed_individual": 720,
+   "competed_synchro": 37,
+   "no_show_pct": -0.8,
+   "late_count": 21,
+   "late_total": 1800.0,
+   "sheet_changes": 510.0,
+   "gross": 96185.0,
+   "divemeets": 3948.45,
+   "divemeets_check": 3948.45,
+   "net": 92236.55,
+   "host": null,
+   "host_pct_of_net": null,
+   "settlement": "2026-08-17"
+  }
+ ],
+ "byStage": {
+  "Regionals": {
+   "paidEntries": 2543,
+   "competedEntries": 2405,
+   "paidNotCompetedPct": 5.4,
+   "lateFeeSharePct": 5.3,
+   "avgLateFee": 85.45,
+   "sheetChangePerEntry": 0.6,
+   "hostPctOfNet": 56.4,
+   "recapGross": 200815.0,
+   "modelGross": 204425,
+   "recapNet": 186929.15,
+   "modelNet": 192641,
+   "recapHost": 105407.5,
+   "modelHost": 60125
+  },
+  "Zones": {
+   "paidEntries": 2521,
+   "competedEntries": 2398,
+   "paidNotCompetedPct": 4.9,
+   "lateFeeSharePct": 2.1,
+   "avgLateFee": 98.08,
+   "sheetChangePerEntry": 0.47,
+   "hostPctOfNet": 36.5,
+   "recapGross": 231235.0,
+   "modelGross": 215820,
+   "recapNet": 218127.55,
+   "modelNet": 204069,
+   "recapHost": 79680.0,
+   "modelHost": 59950
+  },
+  "E / W / C": {
+   "paidEntries": 1072,
+   "competedEntries": 1046,
+   "paidNotCompetedPct": 2.4,
+   "lateFeeSharePct": 2.9,
+   "avgLateFee": 96.77,
+   "sheetChangePerEntry": 0.48,
+   "hostPctOfNet": 26.3,
+   "recapGross": 126790.0,
+   "modelGross": 120290,
+   "recapNet": 121132.6,
+   "modelNet": 115165,
+   "recapHost": 31857.0,
+   "modelHost": 26150
+  },
+  "Nationals": {
+   "paidEntries": 751,
+   "competedEntries": 757,
+   "paidNotCompetedPct": -0.8,
+   "lateFeeSharePct": 2.8,
+   "avgLateFee": 85.71,
+   "sheetChangePerEntry": 0.68,
+   "hostPctOfNet": null,
+   "recapGross": 96185.0,
+   "modelGross": 94625,
+   "recapNet": 92236.55,
+   "modelNet": 90916,
+   "recapHost": null,
+   "modelHost": null
+  }
+ },
+ "source": "2026 DiveMeets recaps as reconciled by USA Diving finance (aggregates only; host = calculated split, not confirmed QBO posting; Nationals host not reconciled)"
+}
