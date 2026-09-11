@@ -216,7 +216,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   // Reconciled basis: rates from the 2026 DiveMeets recaps (host share of net by
   // stage, paid-vs-competed uplift, late fees, sheet changes). Off by default so
   // the stored scenario's own host terms apply unless asked for.
-  S.recapRates = opts.useRecapRates ? loadStaticJson('recaps-2026.json').byStage : null;
+  S.recapRates = opts.useRecapRates ? (loadStaticJson(opts.ceilingYear === 2025 ? 'recaps-2025.json' : 'recaps-2026.json') || {}).byStage : null;
   if (opts.cdFirstStop && S.year === 'y26' && S.advData && S.advData.pools) {
     const adv = S.advData;
     const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
@@ -303,7 +303,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
     assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
-      revenueBasis: opts.useRecapRates ? 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, late fees and sheet changes from the DiveMeets recaps' : 'scenario\'s stored host terms; competed entries only; no late fees',
+      revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario\'s stored host terms; competed entries only; no late fees',
       seedPool: S.seedPool || 'inferred', note: opts.cdFirstStop ? 'Groups C and D modelled at the first stop (mandatory); 2026 non-mandatory first stop treated as the exception.' : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
     movementBandApplied: { ratePct: mvRate, firstTierEntries: band(firstEntries), usaDivingKeeps: band(keptTotal) },
     perMeet,

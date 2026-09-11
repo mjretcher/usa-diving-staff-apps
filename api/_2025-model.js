@@ -49,6 +49,8 @@
  * here and in the tool's own output, not left implicit.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { buildWindow } from './_boundary-money.js';
 import { cohortLoad, movementRates } from './_eligibility.js';
 
@@ -109,7 +111,8 @@ function buildRouting() {
   ];
 }
 
-export async function compute2025Model() {
+export async function compute2025Model(options = {}) {
+  const opts = Object.assign({ useRecapRates: false }, options);
   const { w } = buildWindow();
   const I = w.__boundaryInternal;
   const QR = w.QualRouting;
@@ -126,6 +129,9 @@ export async function compute2025Model() {
   S.hostFlat = 3000;
   S.hostPer = 25;
   S.hostMin = 0;
+  let recaps = null;
+  try { recaps = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'membership-analytics', 'recaps-2025.json'), 'utf8')); } catch (e) {}
+  S.recapRates = opts.useRecapRates && recaps ? recaps.byStage : null;
   S.scenarioId = 'model-2025-rules';
   S.scenarioName = '2025 Model — Region \u2192 Zone \u2192 Nationals (pre-E/W/C rules)';
 
@@ -154,7 +160,7 @@ export async function compute2025Model() {
   }
 
   const meets = I.meetManifest(res);
-  const perMeet = meets.map((m) => { const money = I.meetMoney(m); return { tier: m.levelName, stop: m.name, entries: m.entries, spots: m.spots || null,
+  const perMeet = meets.map((m) => { const money = I.meetMoney(m); return { tier: m.levelName, stop: m.name, entries: m.entries, spots: m.spots || null, basis: money.basis,
     feePerEvent: money.fee, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0), diveMeetsPassThrough: Math.round(money.levy),
     toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad) }; });
   const tiers = {};
@@ -192,11 +198,20 @@ export async function compute2025Model() {
     };
   });
 
+  // Attach 2025 actuals per meet (Entry Fees.xlsx 2025 tab; rate x count model that ties to the GL).
+  if (recaps) {
+    const byName = {}; for (const r of recaps.perMeet) byName[r.name] = r;
+    for (const m of perMeet) { const r = byName[m.stop] || byName[m.stop.replace(/^Region (\d+)$/, 'Region $1')] || (m.tier === 'Nationals' ? byName['Junior Nationals'] : null);
+      if (r) m.recap = { paidEntries: r.paid, competedEntries: r.competed, paidNotCompetedPct: r.no_show_pct, gross: r.gross, creditCardFees: r.credit_card, diveMeetsFees: r.divemeets, host: r.host, hostPerEntry: r.host_per_entry, usadShare: r.usad }; }
+  }
+  const reconciled = recaps ? (() => { const rows = recaps.perMeet; const sum = (k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
+    return { source: recaps.source, paidEntries: sum('paid'), competedEntries: sum('competed'), gross: sum('gross'), creditCardFees: +sum('credit_card').toFixed(2), diveMeetsFees: +sum('divemeets').toFixed(2), host: +sum('host').toFixed(2), usadShare: +sum('usad').toFixed(2), byStage: recaps.byStage }; })() : null;
   const movementBand = await movementRates();
   const mvRate = ((movementBand[2025] || {}).regionals || {}).rate || 0;
   const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
-    assumptions: { basis: 'real 2025 per-region entries; Groups C/D competed at the first stop in 2025 as a matter of course', ceilingYear: 2025 },
+    assumptions: { basis: opts.useRecapRates ? 'reconciled 2025 rates (Entry Fees.xlsx): $85/$115 flat, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'real 2025 per-region entries with default fees and $25/entry host', ceilingYear: 2025 },
+    reconciled,
     movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(Math.round(total.usad)) },
     perMeet,
     movementBand,

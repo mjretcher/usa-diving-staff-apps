@@ -1784,7 +1784,7 @@ const LEVY = 4.90;
 /* DiveMeets' cut, per Amy's 2026-05-07 note reconciled against all 22 of the 2026
    Junior Circuit recaps: $4.95 flat per entry in 2026 (was $4.90), plus 10% of all
    other fees (late fees, sheet changes). Earlier seasons keep $4.90. */
-function levyPerEntry(){ return S.year === 'y26' ? 4.95 : LEVY; }
+function levyPerEntry(){ return S.year === 'y26' ? 4.95 : S.year === 'y25' ? 3.80 : LEVY; }
 const LEVY_OTHER_FEES_PCT = 0.10;
 /* Regionals in 2026 priced by tier, not one fee: Group C and D events and
    tower (platform) sit in a $45 non-qualifying tier; Group A/B springboard is the
@@ -1833,19 +1833,26 @@ function meetMoney(m){
   const rr = (S.recapRates && stageKey && S.recapRates[stageKey]) || null;
   const paidUplift = rr && rr.paidNotCompetedPct > 0 ? 1 / (1 - rr.paidNotCompetedPct / 100) : 1;
   const paidEntries = m.entries * paidUplift;
-  const billedIncome = entryIncome * paidUplift;
-  const athleteLate = rr ? paidEntries * (rr.lateFeeSharePct / 100) * rr.avgLateFee
+  // A season whose recap basis carries one flat fee per stage (2025: $85 / $115,
+  // no tiers) prices every entry at that fee; otherwise the per-cell pricing above.
+  const billedIncome = (rr && rr.feePerEvent != null) ? paidEntries * rr.feePerEvent : entryIncome * paidUplift;
+  const athleteLate = rr ? paidEntries * ((rr.athleteLateSharePct != null ? rr.athleteLateSharePct : rr.lateFeeSharePct) / 100) * (rr.avgAthleteLateFee != null ? rr.avgAthleteLateFee : rr.avgLateFee)
                          : m.entries * sh(S.lateFeeShare) * (S.lateFee != null ? +S.lateFee : 100);
-  const coachLate   = rr ? 0 : m.entries * sh(S.coachLateFeeShare) * (S.coachLateFee != null ? +S.coachLateFee : 50);
-  const sheetChange = rr ? paidEntries * rr.sheetChangePerEntry
+  const coachLate   = rr ? paidEntries * ((rr.coachLateSharePct || 0) / 100) * (rr.avgCoachLateFee || 0)
+                         : m.entries * sh(S.coachLateFeeShare) * (S.coachLateFee != null ? +S.coachLateFee : 50);
+  const sheetChange = rr ? paidEntries * (rr.sheetChangePerEntry || 0)
                          : m.entries * sh(S.sheetChangeShare) * (S.sheetChangeFee != null ? +S.sheetChangeFee : 15);
   const otherFees = athleteLate + coachLate + sheetChange;
   const lateFees = athleteLate + coachLate;
   const gross = billedIncome + otherFees;
-  // DiveMeets' cut: flat per entry ($4.95 in 2026, $4.90 before) + 10% of other fees.
-  const levy = paidEntries * levyPerEntry() + otherFees * LEVY_OTHER_FEES_PCT;
+  // DiveMeets' cut: flat per entry ($4.95 in 2026, $3.80 in 2025, $4.90 default)
+  // + 10% of other fees. In 2025 USA Diving also absorbed a 4% card fee on gross.
+  const perEntryCut = rr && rr.diveMeetsPerEntry != null ? rr.diveMeetsPerEntry : levyPerEntry();
+  const cardFee = gross * ((rr && rr.creditCardPct) || 0) / 100;
+  const levy = paidEntries * perEntryCut + otherFees * LEVY_OTHER_FEES_PCT + cardFee;
   const net = gross - levy;
-  const mode = (rr && rr.hostPctOfNet != null) ? 'recap_pct' : (S.hostMode || 'pct');
+  const mode = (rr && rr.hostPerEntry != null) ? 'recap_per_entry'
+             : (rr && rr.hostPctOfNet != null) ? 'recap_pct' : (S.hostMode || 'pct');
   // A negotiated figure for one meet beats any formula. Hosts are dealt with
   // individually -- a facility with its own board, a city bidding to attract a
   // championship, a small stop that needs underwriting -- and a single rule
@@ -1854,6 +1861,7 @@ function meetMoney(m){
   const ov = S.hostPer_stop && S.hostPer_stop[meetKey(m)];
   const overridden = ov != null && ov !== '';
   let host = overridden ? (+ov || 0)
+           : mode === 'recap_per_entry' ? paidEntries * rr.hostPerEntry
            : mode === 'recap_pct' ? net * (rr.hostPctOfNet / 100)
            : mode === 'flat'      ? (+S.hostFlat || 0)
            : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
@@ -1866,7 +1874,7 @@ function meetMoney(m){
   const capped = host > net;
   if (capped) host = net;
   return {fee, gross, levy, net, host, usad: net - host, floored, capped, overridden,
-          lateFees, otherFees, entryIncome, paidEntries, basis: rr ? 'recap-2026' : 'model',
+          lateFees, otherFees, entryIncome, paidEntries, cardFee, basis: rr ? ('recap-' + (S.year === 'y25' ? '2025' : '2026')) : 'model',
           pct: net > 0 ? host/net : 0};
 }
 

@@ -71,7 +71,9 @@ console.log('=== 2026 recap rules: $4.95 per-entry cut, 10% on other fees, Regio
   S.year = 'y26'; let m = I.meetMoney({ level: 1, entries: 100 });
   ok(Math.abs(m.levy - 495) < 0.01, 'y26: DiveMeets cut $4.95 x 100 = $495');
   S.year = 'y25'; m = I.meetMoney({ level: 1, entries: 100 });
-  ok(Math.abs(m.levy - 490) < 0.01, 'y25: DiveMeets cut stays $4.90 x 100 = $490');
+  ok(Math.abs(m.levy - 380) < 0.01, 'y25: DiveMeets cut $3.80 x 100 = $380 (Entry Fees.xlsx 2025)');
+  S.year = 'y24'; m = I.meetMoney({ level: 1, entries: 100 });
+  ok(Math.abs(m.levy - 490) < 0.01, 'other seasons keep the $4.90 default');
   S.year = 'y26'; S.lateFeeShare = 0.1; S.coachLateFeeShare = 0.1; S.sheetChangeShare = 0.1;
   m = I.meetMoney({ level: 1, entries: 100 });
   ok(Math.abs(m.otherFees - (1000 + 500 + 150)) < 0.01 && Math.abs(m.levy - (495 + 165)) < 0.01, 'other fees: $1,000 athlete late + $500 coach late + $150 sheet changes; DiveMeets takes 10% of those ($165) on top of $495');
@@ -96,6 +98,14 @@ console.log('=== reconciled basis (S.recapRates): paid uplift, late fees, sheet 
   ok(Math.abs(m.host - (m.net * 0.365)) < 0.01 && m.basis === 'recap-2026', 'host = 36.5% of net (recap basis), overriding the $25/entry stored term');
   const m0 = I.meetMoney({ level: 0, entries: 1000 });
   ok(m0.basis === 'model' && Math.abs(m0.host - 25000) < 0.01, 'a stage without recap rates falls back to the stored host terms'); }
+
+console.log('=== 2025 reconciled basis: flat fee, $3.80 cut, 4% card fee, host per entry ===');
+{ const { I, S } = fresh(['Regions','Zones','Nationals']); S.fees = null; S.year = 'y25'; S.hostMode='per_entry'; S.hostPer=25; S.hostMin=0; S.hostPer_stop=null;
+  S.recapRates = { Regionals: { paidNotCompetedPct: 0, feePerEvent: 85, creditCardPct: 4, diveMeetsPerEntry: 3.80, hostPerEntry: 32.50, lateFeeSharePct: 0, avgLateFee: 0, sheetChangePerEntry: 0 } };
+  const m = I.meetMoney({ level: 0, entries: 100, events: [{ cell: 'CG1', n: 100 }] });
+  ok(Math.abs(m.gross - 8500) < 0.01, '2025 Regionals price every entry at the flat $85 (no $45 tier)');
+  ok(Math.abs(m.levy - (380 + 340)) < 0.01, 'DiveMeets $3.80 x 100 + 4% card fee on gross ($340)');
+  ok(Math.abs(m.host - 3250) < 0.01 && m.basis === 'recap-2025', 'host $32.50 per paid entry (2025 split)'); }
 
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

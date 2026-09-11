@@ -29,7 +29,11 @@
    "net": 20984.15,
    "host": 10162.5,
    "host_pct_of_net": 48.4,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 7,
+   "coach_late_total": 350.0,
+   "athlete_late_count": 20,
+   "athlete_late_total": 2000.0
   },
   {
    "meet_id": "12852",
@@ -60,7 +64,11 @@
    "net": 20857.25,
    "host": 11482.5,
    "host_pct_of_net": 55.1,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 3,
+   "coach_late_total": 150.0,
+   "athlete_late_count": 5,
+   "athlete_late_total": 500.0
   },
   {
    "meet_id": "12853",
@@ -91,7 +99,11 @@
    "net": 20106.75,
    "host": 11425.0,
    "host_pct_of_net": 56.8,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 2,
+   "coach_late_total": 100.0,
+   "athlete_late_count": 12,
+   "athlete_late_total": 1200.0
   },
   {
    "meet_id": "12854",
@@ -122,7 +134,11 @@
    "net": 12927.9,
    "host": 7712.5,
    "host_pct_of_net": 59.7,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 3,
+   "coach_late_total": 150.0,
+   "athlete_late_count": 1,
+   "athlete_late_total": 100.0
   },
   {
    "meet_id": "12856",
@@ -153,7 +169,11 @@
    "net": 12824.6,
    "host": 8307.5,
    "host_pct_of_net": 64.8,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 7,
+   "coach_late_total": 350.0,
+   "athlete_late_count": 6,
+   "athlete_late_total": 600.0
   },
   {
    "meet_id": "12857",
@@ -184,7 +204,11 @@
    "net": 19583.7,
    "host": 10037.5,
    "host_pct_of_net": 51.3,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 3,
+   "coach_late_total": 150.0,
+   "athlete_late_count": 10,
+   "athlete_late_total": 1000.0
   },
   {
    "meet_id": "12858",
@@ -215,7 +239,11 @@
    "net": 9146.85,
    "host": 7110.0,
    "host_pct_of_net": 77.7,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 2,
+   "coach_late_total": 100.0,
+   "athlete_late_count": 5,
+   "athlete_late_total": 500.0
   },
   {
    "meet_id": "12859",
@@ -246,7 +274,11 @@
    "net": 13275.0,
    "host": 7872.5,
    "host_pct_of_net": 59.3,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 3,
+   "coach_late_total": 150.0,
+   "athlete_late_count": 9,
+   "athlete_late_total": 900.0
   },
   {
    "meet_id": "12860",
@@ -277,7 +309,11 @@
    "net": 12358.4,
    "host": 7275.0,
    "host_pct_of_net": 58.9,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 4,
+   "coach_late_total": 200.0,
+   "athlete_late_count": 5,
+   "athlete_late_total": 500.0
   },
   {
    "meet_id": "12861",
@@ -308,7 +344,11 @@
    "net": 12988.2,
    "host": 8182.5,
    "host_pct_of_net": 63.0,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 3,
+   "coach_late_total": 150.0,
+   "athlete_late_count": 7,
+   "athlete_late_total": 700.0
   },
   {
    "meet_id": "12862",
@@ -339,7 +379,11 @@
    "net": 13177.3,
    "host": 9390.0,
    "host_pct_of_net": 71.3,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 6,
+   "athlete_late_total": 600.0
   },
   {
    "meet_id": "12863",
@@ -366,7 +410,11 @@
    "net": 18699.05,
    "host": 6450.0,
    "host_pct_of_net": 34.5,
-   "settlement": "2026-04-28"
+   "settlement": "2026-04-28",
+   "coach_late_count": 2,
+   "coach_late_total": 100.0,
+   "athlete_late_count": 9,
+   "athlete_late_total": 900.0
   },
   {
    "meet_id": "12878",
@@ -393,7 +441,11 @@
    "net": 44565.75,
    "host": 15870.0,
    "host_pct_of_net": 35.6,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 16,
+   "athlete_late_total": 1600.0
   },
   {
    "meet_id": "12879",
@@ -420,7 +472,11 @@
    "net": 35105.85,
    "host": 12345.0,
    "host_pct_of_net": 35.2,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 1,
+   "coach_late_total": 50.0,
+   "athlete_late_count": 3,
+   "athlete_late_total": 300.0
   },
   {
    "meet_id": "12880",
@@ -451,7 +507,11 @@
    "net": 38612.65,
    "host": 15945.0,
    "host_pct_of_net": 41.3,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 15,
+   "athlete_late_total": 1500.0
   },
   {
    "meet_id": "12882",
@@ -482,7 +542,11 @@
    "net": 26761.95,
    "host": 9840.0,
    "host_pct_of_net": 36.8,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 10,
+   "athlete_late_total": 1000.0
   },
   {
    "meet_id": "12881",
@@ -509,7 +573,11 @@
    "net": 28911.15,
    "host": 10170.0,
    "host_pct_of_net": 35.2,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 4,
+   "athlete_late_total": 400.0
   },
   {
    "meet_id": "12883",
@@ -536,7 +604,11 @@
    "net": 44170.2,
    "host": 15510.0,
    "host_pct_of_net": 35.1,
-   "settlement": "2026-06-11"
+   "settlement": "2026-06-11",
+   "coach_late_count": 1,
+   "coach_late_total": 50.0,
+   "athlete_late_count": 2,
+   "athlete_late_total": 200.0
   },
   {
    "meet_id": "12894",
@@ -563,7 +635,11 @@
    "net": 46791.65,
    "host": 12310.5,
    "host_pct_of_net": 26.3,
-   "settlement": "2026-07-03"
+   "settlement": "2026-07-03",
+   "coach_late_count": 1,
+   "coach_late_total": 50.0,
+   "athlete_late_count": 12,
+   "athlete_late_total": 1200.0
   },
   {
    "meet_id": "12897",
@@ -590,7 +666,11 @@
    "net": 32553.9,
    "host": 8568.0,
    "host_pct_of_net": 26.3,
-   "settlement": "2026-07-03"
+   "settlement": "2026-07-03",
+   "coach_late_count": 1,
+   "coach_late_total": 50.0,
+   "athlete_late_count": 8,
+   "athlete_late_total": 800.0
   },
   {
    "meet_id": "12898",
@@ -617,7 +697,11 @@
    "net": 41787.05,
    "host": 10978.5,
    "host_pct_of_net": 26.3,
-   "settlement": "2026-07-03"
+   "settlement": "2026-07-03",
+   "coach_late_count": 0,
+   "coach_late_total": 0.0,
+   "athlete_late_count": 9,
+   "athlete_late_total": 900.0
   },
   {
    "meet_id": "12923",
@@ -644,7 +728,11 @@
    "net": 92236.55,
    "host": null,
    "host_pct_of_net": null,
-   "settlement": "2026-08-17"
+   "settlement": "2026-08-17",
+   "coach_late_count": 6,
+   "coach_late_total": 300.0,
+   "athlete_late_count": 15,
+   "athlete_late_total": 1500.0
   }
  ],
  "byStage": {
@@ -661,7 +749,13 @@
    "recapNet": 186929.15,
    "modelNet": 192641,
    "recapHost": 105407.5,
-   "modelHost": 60125
+   "modelHost": 60125,
+   "coachLateSharePct": 1.53,
+   "avgCoachLateFee": 50.0,
+   "athleteLateSharePct": 3.74,
+   "avgAthleteLateFee": 100.0,
+   "diveMeetsPerEntry": 4.95,
+   "creditCardPct": 0
   },
   "Zones": {
    "paidEntries": 2521,
@@ -676,7 +770,13 @@
    "recapNet": 218127.55,
    "modelNet": 204069,
    "recapHost": 79680.0,
-   "modelHost": 59950
+   "modelHost": 59950,
+   "coachLateSharePct": 0.08,
+   "avgCoachLateFee": 50.0,
+   "athleteLateSharePct": 1.98,
+   "avgAthleteLateFee": 100.0,
+   "diveMeetsPerEntry": 4.95,
+   "creditCardPct": 0
   },
   "E / W / C": {
    "paidEntries": 1072,
@@ -691,7 +791,13 @@
    "recapNet": 121132.6,
    "modelNet": 115165,
    "recapHost": 31857.0,
-   "modelHost": 26150
+   "modelHost": 26150,
+   "coachLateSharePct": 0.19,
+   "avgCoachLateFee": 50.0,
+   "athleteLateSharePct": 2.71,
+   "avgAthleteLateFee": 100.0,
+   "diveMeetsPerEntry": 4.95,
+   "creditCardPct": 0
   },
   "Nationals": {
    "paidEntries": 751,
@@ -706,7 +812,13 @@
    "recapNet": 92236.55,
    "modelNet": 90916,
    "recapHost": null,
-   "modelHost": null
+   "modelHost": null,
+   "coachLateSharePct": 0.8,
+   "avgCoachLateFee": 50.0,
+   "athleteLateSharePct": 2.0,
+   "avgAthleteLateFee": 100.0,
+   "diveMeetsPerEntry": 4.95,
+   "creditCardPct": 0
   }
  },
  "source": "2026 DiveMeets recaps as reconciled by USA Diving finance (aggregates only; host = calculated split, not confirmed QBO posting; Nationals host not reconciled)"
