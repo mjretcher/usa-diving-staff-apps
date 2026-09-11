@@ -2335,28 +2335,28 @@ const EQUITY_SECTIONS = {
                    to: names[+a], moved: off ? (names[+a] !== ('Region '+off)) : true});
       }
       rows.sort((x,y2)=>y2.m-x.m);
-      const movers = rows.filter(r=>r.moved);
-      const stay = rows.length - movers.length;
-      const body = movers.slice(0, o.topN || 60).map(r =>
+      // Clubs and members per proposed area.
+      const perArea = names.map(()=>({clubs:0, m:0}));
+      for (const r of rows){ const i = names.indexOf(r.to); if (i>=0){ perArea[i].clubs++; perArea[i].m += r.m; } }
+      const largest = [...rows].sort((x,y2)=>y2.m-x.m).slice(0, o.topN || 25);
+      const body = largest.map(r =>
         `<tr><td>${esc(r.name)}</td><td class="mr-num">${fmt(r.m)}</td>
          <td>${esc(r.from)}</td><td>${esc(r.to)}</td></tr>`).join('');
+      const areaRows = names.map((nm,i)=>
+        `<tr><td>${esc(nm)}</td><td class="mr-num">${fmt(perArea[i].clubs)}</td><td class="mr-num">${fmt(perArea[i].m)}</td></tr>`).join('');
+      const tierNm = (api.tierName ? api.tierName(1) : 'Area');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — which clubs move</h2>
+        <h2 class="mr-h2">Clubs by ${esc(tierNm.toLowerCase())}</h2>
         ${scenarioLine()}
-        <div class="mr-kpis">
-          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(movers.length)}</div>
-            <div class="mr-kpi-l">Clubs changing area</div>
-            <div class="mr-kpi-s">out of ${fmt(rows.length)} with members on file</div></div>
-          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(stay)}</div>
-            <div class="mr-kpi-l">Clubs staying put</div>
-            <div class="mr-kpi-s">${pctS(stay, rows.length)} of all clubs</div></div>
-        </div>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(tierNm)}</th>
+          <th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Members</th></tr></thead>
+          <tbody>${areaRows}</tbody></table>
+        <h3 class="mr-h3">Largest clubs and their proposed ${esc(tierNm.toLowerCase())}</h3>
         <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Club</th>
-          <th scope="col" class="mr-num">Members nearby</th><th scope="col">Today</th><th scope="col">Proposed</th></tr></thead>
-          <tbody>${body || '<tr><td colspan="4">No club changes area under this map.</td></tr>'}</tbody></table>
-        <p class="mr-note">A club is placed where most of its members live. Clubs drawing members
-        across a county line may show a move that only affects part of their roster, so treat this as
-        the list to consult rather than the final word.</p>
+          <th scope="col" class="mr-num">Members nearby</th><th scope="col">Current region</th><th scope="col">Proposed ${esc(tierNm.toLowerCase())}</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="4">No clubs with members on file.</td></tr>'}</tbody></table>
+        <p class="mr-note">Each club is placed where most of its members live. Clubs that draw members
+        across a county line are counted once, in the area holding the largest share of their roster.</p>
       </section>`;
     }
   },

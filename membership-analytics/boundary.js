@@ -7060,10 +7060,13 @@ function atlasStaticSvg(assignOf, colorOf, opts){
     const ri = assignOf(c.f);
     const on = ri != null && ri >= 0;
     const fill = on ? colorOf(ri) : ATLAS_UNASSIGNED;
-    const empty = on && countyEmpty(c.f);
-    parts.push(`<path d="${c.d}" fill="${fill}"${empty?' fill-opacity=".6"':''} stroke="#fff" stroke-width=".4"${opts.dataF?` data-f="${c.f}"`:''}/>`);
+    // A county with divers is drawn solid in its area colour; a county with none
+    // is a pale wash of the same colour. This makes where the members actually
+    // live read at a glance, rather than dimming the empty ones after the fact.
+    const hasDivers = on && !countyEmpty(c.f);
+    parts.push(`<path d="${c.d}" fill="${fill}"${on && !hasDivers?' fill-opacity=".28"':''} stroke="#fff" stroke-width=".35"${opts.dataF?` data-f="${c.f}"`:''}/>`);
   }
-  parts.push(`<path d="${geo.stateMesh}" fill="none" stroke="#171f69" stroke-width=".7" stroke-opacity=".45" pointer-events="none"/>`);
+  parts.push(`<path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width=".45" stroke-opacity=".7" pointer-events="none"/>`);
   if (opts.changed){
     const d = geo.counties.filter(c => opts.changed(c.f)).map(c => c.d).join('');
     if (d) parts.push(`<path d="${d}" fill="none" stroke="#e31937" stroke-width="1.1" pointer-events="none"/>`);
