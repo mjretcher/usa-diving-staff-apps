@@ -1,0 +1,36 @@
+name: Apply staff gender confirmations
+
+# Takes a JSON object of member_id -> "Boys" | "Girls" and records it in
+# membership.member_gender with source = staff-confirmed. Existing rows are
+# left alone. Unknowns are simply not sent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmations:
+        description: 'JSON, e.g. {"123456":"Girls","234567":"Boys"}'
+        required: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Apply
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          CONFIRMATIONS: ${{ inputs.confirmations }}
+        run: |
+          python - <<'PY'
+          import os, json, psycopg2
+          data = json.loads(os.environ["CONFIRMATIONS"])
+          rows = [(k, v, "staff-confirmed") for k, v in data.items() if v in ("Boys", "Girls")]
+          conn = psycopg2.connect(os.environ["DATABASE_URL"]); cur = conn.cursor()
+          cur.executemany("insert into membership.member_gender (member_id, gender, source) values (%s,%s,%s) on conflict (member_id) do nothing", rows)
+          conn.commit(); print(f"applied {cur.rowcount if cur.rowcount>=0 else len(rows)} of {len(rows)}")
+          PY

@@ -1,0 +1,34 @@
+name: Export unresolved-gender checklist (private artifact)
+
+# Produces an Excel checklist of eligible competition members with no gender on
+# file, for staff to complete. Names are readable only on the runner; the file
+# is uploaded as a private artifact (repo users only, 14-day retention) and is
+# never committed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: Membership year
+        default: "2026"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary openpyxl
+      - name: Export
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          YEAR: ${{ inputs.year }}
+        run: python db/scripts/export_unresolved_gender.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unresolved-gender-${{ inputs.year }}
+          path: out/unresolved-gender-${{ inputs.year }}.xlsx
+          retention-days: 14
