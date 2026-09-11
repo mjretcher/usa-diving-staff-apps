@@ -69,6 +69,24 @@ async function realPerCell2026(stage) {
   const m = {}; for (const r of rows) if (r.cell && !/null/.test(r.cell)) m[r.cell] = r.entries; return m;
 }
 
+/* Real 2026 per-meet entries and the fee DiveMeets published for that meet.
+   Regionals (all 12) and Zones C and D publish "varies at checkout" -- host-set,
+   so no flat fee exists; those stops carry the model's default fee and are
+   flagged hostSetFee: true. */
+async function realPerMeet2026() {
+  const rows = await neonQuery(
+    `with e as (select meet_id_dm, stage, count(distinct diver_id_dm||'|'||event_key) filter (where not is_synchro)::int as individual,
+                       count(distinct diver_id_dm||'|'||event_key) filter (where is_synchro)::int as synchro
+                from core.event_results where is_junior_circuit and year=2026 and diver_id_dm is not null group by 1,2)
+     select e.stage, e.meet_id_dm, dm.meet_name, e.individual, e.synchro,
+            (dm.info::jsonb)->>'Fee per Event' as fee_text, (dm.info::jsonb)->>'Late Fee' as late_text
+     from e left join divemeets.meets dm on dm.meet_id::text = e.meet_id_dm::text
+     order by case e.stage when 'Regionals' then 1 when 'Zones' then 2 when 'EWC' then 3 else 4 end, e.meet_id_dm`);
+  return rows.map((r) => { const m = /\$?([0-9]+(?:\.[0-9]+)?)/.exec(r.fee_text || ''); return {
+    stage: r.stage, meetId: r.meet_id_dm, name: r.meet_name, individualEntries: r.individual, synchroEntries: r.synchro,
+    publishedFeePerEvent: m ? +m[1] : null, hostSetFee: !m, lateFeePublished: (/\$?([0-9]+)/.exec(r.late_text || '') || [])[1] ? +(/\$?([0-9]+)/.exec(r.late_text)[1]) : null }; });
+}
+
 async function computeTierFromRealEntries(level, entries, hostSettings) {
   const { w } = buildWindow();
   const I = w.__boundaryInternal;
@@ -104,7 +122,31 @@ export async function compute2026BaselineWithNationals() {
   const usaDivingKeeps = perTier.reduce((a, t) => a + t.usaDivingKeeps, 0);
 
   const movementBand = await movementRates();
+  // Per stop, from real entries and published fees. Host cost per meet uses the
+  // same real meetMoney() formula, with the published per-event fee where it is
+  // flat and the model default where the host sets pricing at checkout.
+  const stageLevel = { Regionals: 0, Zones: 1, EWC: 2, Nationals: 3 };
+  const realMeets = await realPerMeet2026();
+  const perMeet = [];
+  for (const rm of realMeets) {
+    const { w } = buildWindow(); const I = w.__boundaryInternal; const S = I.S;
+    S.levels = [{ name: 'Regions' }, { name: 'Zones' }, { name: 'E / W / C' }, { name: 'Nationals' }];
+    S.fees = rm.publishedFeePerEvent != null ? { [stageLevel[rm.stage]]: rm.publishedFeePerEvent } : null;
+    Object.assign(S, hostSettings);
+    const entries = rm.individualEntries + rm.synchroEntries;
+    const money = I.meetMoney({ level: stageLevel[rm.stage], entries });
+    perMeet.push({ tier: rm.stage === 'EWC' ? 'E / W / C' : rm.stage === 'Regionals' ? 'Regions' : rm.stage, stop: rm.name, entries,
+      individualEntries: rm.individualEntries, synchroEntries: rm.synchroEntries,
+      feePerEvent: money.fee, feeSource: rm.hostSetFee ? 'host-set at checkout (model default used)' : 'published on DiveMeets',
+      lateFeePublished: rm.lateFeePublished,
+      grossEntryIncome: Math.round(money.gross), diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad) });
+  }
+  const mvRate = ((movementBand[2026] || {}).regionals || {}).rate || 0;
+  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
+    assumptions: { basis: 'real 2026 entries at every tier (competed athletes only -- paid-but-not-competed entries and late fees are not in results data)', ceilingYear: 2026 },
+    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(usaDivingKeeps) },
+    perMeet,
     movementBand,
     scenarioId: 'seed-2026-official',
     scenarioName: 'Official 2026 Alignment (published map) -- rebuilt from real 2026 completed-meet entries',

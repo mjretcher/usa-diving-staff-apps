@@ -49,6 +49,8 @@ import {
   getSchedule,
   listBoundaryScenarios,
   getBoundaryScenarioFinances,
+  get2025RulesModel,
+  get2026CurrentModel,
 } from './_mcp-tools.js';
 import { isEntraConfigured, verifyEntraToken } from './_entra-auth.js';
 import { randomUUID } from 'node:crypto';
@@ -169,10 +171,29 @@ const TOOLS = [
       'membership. Use list_boundary_scenarios first to find a scenario_id.',
     inputSchema: {
       type: 'object',
-      properties: { scenario_id: { type: 'string' } },
+      properties: {
+        scenario_id: { type: 'string' },
+        cd_first_stop: { type: 'boolean', description: 'Default true: Groups C and D compete at the first stop (the 2026 non-mandatory first stop is treated as the exception). Set false to evaluate the scenario with its stored seed exactly as the live Money tab does.' },
+        ceiling_year: { type: 'integer', enum: [2024, 2025, 2026], description: 'Membership year for the eligibility ceiling and participation basis. Default 2026.' },
+        late_fee_share: { type: 'number', description: 'Share (0-1) of entries assumed to pay the $100 late fee every 2026 meet publishes. Default 0 (not in results data; set from reconciliations).' },
+      },
       required: ['scenario_id'],
     },
     handler: getBoundaryScenarioFinances,
+  },
+  {
+    name: 'get_2025_rules_model',
+    description:
+      'The rebuilt 2021-2025 qualification rules (Region -> Zone -> Nationals, no E/W/C tier), seeded from real 2025 per-region entries and validated against real 2025 results (Zones 2,382 vs actual 2,410; Nationals 1,224 vs actual 1,234). Same output shape as get_boundary_scenario_finances: per tier, per stop, cohort load (unique athletes as % of eligible members by age group and gender, toggleable across 2024/2025/2026 membership), ages-13-and-under line, movement band. Entry fees only.',
+    inputSchema: { type: 'object', properties: {} },
+    handler: get2025RulesModel,
+  },
+  {
+    name: 'get_2026_current_model',
+    description:
+      'The current 2026 rules (Region -> Zone -> E/W/C -> Nationals) built from real, already-completed 2026 meets: real entries at every tier and every stop, with the fee DiveMeets actually published for each meet where it is flat (Zones $90, E/W/C $115, Nationals $125) and a flag where the host sets pricing at checkout (all Regionals, Zones C and D). Counts competed athletes only -- paid-but-not-competed entries and late fees are not in results data. Same output shape as get_boundary_scenario_finances.',
+    inputSchema: { type: 'object', properties: {} },
+    handler: get2026CurrentModel,
   },
 ];
 

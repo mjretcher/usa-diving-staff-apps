@@ -3,7 +3,7 @@
   "private": true,
   "description": "Internal staff web applications for USA Diving. jsdom is a real runtime dependency of api/_pricing-engine.js and api/_boundary-money.js (they execute the actual browser app code headlessly) -- not just a test tool anymore, so it must stay in dependencies, not devDependencies, or Vercel's production install will skip it and the MCP server will crash at runtime.",
   "scripts": {
-    "test": "cd membership-analytics && node test-billing.js && node test-studio.js && node test-route-step.js"
+    "test": "cd membership-analytics && node test-billing.js && node test-studio.js && node test-route-step.js && cd .. && node api/test-calibration.mjs"
   },
   "dependencies": {
     "jsdom": "^24.1.0"

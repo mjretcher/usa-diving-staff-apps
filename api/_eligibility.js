@@ -150,10 +150,12 @@ export async function cohortLoad(perCellEntries, year, tierName) {
     eligibleYear: year,
     rows,
     genderUnresolvedMembers: unresolved,
-    cdDesignation: {
+    ages13AndUnder: {
+      label: 'Of which ages 13 & under (Groups C and D)',
       entries: cd.reduce((a, r) => a + r.entries, 0),
       uniqueAthletes: cd.reduce((a, r) => a + r.uniqueAthletes, 0),
-      note: 'Groups C and D shown separately: their first-stop participation was non-mandatory in 2026 only; projections assume they compete at the first stop.',
+      shareOfTierUnique: (() => { const all = rows.reduce((a, r) => a + r.uniqueAthletes, 0); const u = cd.reduce((a, r) => a + r.uniqueAthletes, 0); return all ? +(100 * u / all).toFixed(1) : null; })(),
+      note: 'How many of this tier\'s athletes are Group C (ages 12-13) or Group D (11 and under). Shown separately because their first-stop participation was non-mandatory in 2026 only; projections assume they compete at the first stop.',
     },
     anyCohortExceedsEligible: rows.some((r) => r.exceedsEligible),
     over100Note: 'A cohort above 100% of eligible members means real competitors outnumber registered competition members in that cohort. Documented causes: members whose gender is unresolved (carried as a band, see pctOfEligibleLow), and foreign athletes, who compete at Regionals as non-members and are outside the membership ceiling.',

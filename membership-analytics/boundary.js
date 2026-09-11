@@ -1781,7 +1781,13 @@ function meetKey(m){ return m.level + '|' + m.gi; }
 
 function meetMoney(m){
   const fee = feeFor(m.level);
-  const gross = m.entries * fee;
+  // Late fees: every 2026 Junior Circuit meet publishes a $100 late fee on
+  // DiveMeets. The share of entries that pay it is not in the results data,
+  // so it is an input (S.lateFeeShare, 0..1) that defaults to 0 -- the live
+  // Money tab is unchanged unless it is set. S.lateFee defaults to $100.
+  const lateShare = Math.min(1, Math.max(0, +S.lateFeeShare || 0));
+  const lateFees = m.entries * lateShare * (S.lateFee != null ? +S.lateFee : 100);
+  const gross = m.entries * fee + lateFees;
   const levy = m.entries * LEVY;
   const net = gross - levy;
   const mode = S.hostMode || 'pct';
@@ -1804,7 +1810,7 @@ function meetMoney(m){
   const capped = host > net;
   if (capped) host = net;
   return {fee, gross, levy, net, host, usad: net - host, floored, capped, overridden,
-          pct: net > 0 ? host/net : 0};
+          lateFees, pct: net > 0 ? host/net : 0};
 }
 
 /* Largest against smallest within a tier: the number a host cut lives or dies

@@ -154,6 +154,9 @@ export async function compute2025Model() {
   }
 
   const meets = I.meetManifest(res);
+  const perMeet = meets.map((m) => { const money = I.meetMoney(m); return { tier: m.levelName, stop: m.name, entries: m.entries, spots: m.spots || null,
+    feePerEvent: money.fee, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0), diveMeetsPassThrough: Math.round(money.levy),
+    toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad) }; });
   const tiers = {};
   meets.forEach((m) => {
     const fin = I.meetMoney(m);
@@ -190,7 +193,12 @@ export async function compute2025Model() {
   });
 
   const movementBand = await movementRates();
+  const mvRate = ((movementBand[2025] || {}).regionals || {}).rate || 0;
+  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
+    assumptions: { basis: 'real 2025 per-region entries; Groups C/D competed at the first stop in 2025 as a matter of course', ceilingYear: 2025 },
+    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(Math.round(total.usad)) },
+    perMeet,
     movementBand,
     scenarioId: 'model-2025-rules',
     scenarioName: S.scenarioName,

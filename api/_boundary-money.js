@@ -65,7 +65,7 @@ const BOUNDARY_SRC_RAW = fs.readFileSync(path.join(MA_DIR, 'boundary.js'), 'utf8
 const PRICING_ANCHOR = '};\n\n})();';
 const PRICING_SHIM = `};
 
-window.__pricingInternal = { PS, bootstrap, applyBoundary, computeRevenue, computeVolume, ensureFlowData };
+window.__pricingInternal = { PS, bootstrap, applyBoundary, computeRevenue, computeVolume, ensureFlowData, resizeCards, defaultFees };
 
 })();`;
 
@@ -181,7 +181,18 @@ export async function hydrateScenario(I, id) {
   return true;
 }
 
-export async function computeBoundaryMoneyReport(boundaryScenarioId) {
+/* options:
+ *   cdFirstStop  (default true)  Groups C and D compete at the first stop. 2026's
+ *                non-mandatory first stop is the exception, so the 2026 seed is
+ *                rebuilt from everyone who competed by any path (Regionals pool
+ *                for A/B/platform + Zones pool for C/D). Set false to use the
+ *                scenario's stored seed as-is (what the live Money tab shows).
+ *   ceilingYear  (default 2026)  membership year for the eligibility ceiling and
+ *                the participation basis (2025 or 2026).
+ *   lateFeeShare (default 0)     share of entries paying the $100 late fee.
+ */
+export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {}) {
+  const opts = Object.assign({ cdFirstStop: true, ceilingYear: 2026, lateFeeShare: 0 }, options);
   const { w, warnings } = buildWindow();
   const Ipricing = w.__pricingInternal;
   const Iboundary = w.__boundaryInternal;
@@ -200,6 +211,16 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId) {
   if (!applied) return null;
 
   const S = Iboundary.S;
+  S.year = opts.ceilingYear === 2025 ? 'y25' : opts.ceilingYear === 2024 ? 'y24' : 'y26';
+  S.lateFeeShare = opts.lateFeeShare || 0;
+  if (opts.cdFirstStop && S.year === 'y26' && S.advData && S.advData.pools) {
+    const adv = S.advData;
+    const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
+    for (const f in R) for (const c of Object.keys(R[f])) if (/^[CD]/.test(c)) delete R[f][c];
+    for (const f in Z) for (const c in Z[f]) if (/^[CD]/.test(c)) { R[f] = R[f] || {}; R[f][c] = (R[f][c] || 0) + Z[f][c]; }
+    S.advData = Object.assign({}, adv, { pools: Object.assign({}, adv.pools, { '2026|Regionals_CDfirst': R }) });
+    S.seedPool = 'Regionals_CDfirst';
+  }
   S.flow = w.JuniorFlow.compute({
     regions: S.regions, assign: S.assign, levels: S.levels,
     finalName: S.finalName, year: S.year,
@@ -261,7 +282,26 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId) {
   }
 
   const movementBand = await movementRates();
+  // Per stop: the engine already computes every meet; surface it.
+  const perMeet = Iboundary.meetManifest(res).map((m) => {
+    const money = Iboundary.meetMoney(m);
+    return { tier: m.levelName, stop: m.name, entries: m.entries, spots: m.spots || null,
+      feePerEvent: money.fee, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0),
+      diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad),
+      hostOverride: money.overridden };
+  });
+  // Movement band: the measured region-choice rate for the ceiling year, carried
+  // as +/- on first-tier entries and on the total USA Diving keeps. Measured,
+  // not predicted (see movementBand for the source rates).
+  const mvRate = ((movementBand[opts.ceilingYear] || {}).regionals || {}).rate || 0;
+  const firstEntries = perTier.length ? perTier[0].entries : 0;
+  const keptTotal = Math.round(a.total.usad);
+  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
+    assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
+      seedPool: S.seedPool || 'inferred', note: opts.cdFirstStop ? 'Groups C and D modelled at the first stop (mandatory); 2026 non-mandatory first stop treated as the exception.' : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
+    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(firstEntries), usaDivingKeeps: band(keptTotal) },
+    perMeet,
     movementBand,
     scenarioId: S.scenarioId,
     scenarioName: S.scenarioName,
