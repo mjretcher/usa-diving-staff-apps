@@ -54,7 +54,7 @@
 
 import { buildWindow } from './_boundary-money.js';
 import { neonQuery } from './_neon.js';
-import { cohortLoad } from './_eligibility.js';
+import { cohortLoad, movementRates } from './_eligibility.js';
 
 const REAL_2026_ENTRIES = { Regions: 2405, Zones: 2398, 'E / W / C': 1046, Nationals: 757 };
 
@@ -103,7 +103,9 @@ export async function compute2026BaselineWithNationals() {
   const toHosts = perTier.reduce((a, t) => a + t.toHosts, 0);
   const usaDivingKeeps = perTier.reduce((a, t) => a + t.usaDivingKeeps, 0);
 
+  const movementBand = await movementRates();
   return {
+    movementBand,
     scenarioId: 'seed-2026-official',
     scenarioName: 'Official 2026 Alignment (published map) -- rebuilt from real 2026 completed-meet entries',
     fieldAtFinal: perTier[perTier.length - 1].entries,

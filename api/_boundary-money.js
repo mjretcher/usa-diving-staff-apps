@@ -49,7 +49,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { neonQuery } from './_neon.js';
-import { cohortLoad, yearFromCode } from './_eligibility.js';
+import { cohortLoad, yearFromCode, movementRates } from './_eligibility.js';
 
 // See api/_pricing-engine.js for why this is process.cwd() and not
 // import.meta.url/__dirname -- the short version: Vercel compiles this file
@@ -260,7 +260,9 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId) {
     notes.push('One or more data sources logged a warning during computation -- see dataLoadWarnings.');
   }
 
+  const movementBand = await movementRates();
   return {
+    movementBand,
     scenarioId: S.scenarioId,
     scenarioName: S.scenarioName,
     fieldAtFinal: perTier.length ? perTier[perTier.length - 1].entries : null,

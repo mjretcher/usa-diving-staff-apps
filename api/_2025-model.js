@@ -50,7 +50,7 @@
  */
 
 import { buildWindow } from './_boundary-money.js';
-import { cohortLoad } from './_eligibility.js';
+import { cohortLoad, movementRates } from './_eligibility.js';
 
 const CELLS = ['AB1','AB3','ABP','AG1','AG3','AGP','BB1','BB3','BBP','BG1','BG3','BGP',
                'CB1','CB3','CBP','CG1','CG3','CGP','DB1','DB3','DBP','DG1','DG3','DGP'];
@@ -189,7 +189,9 @@ export async function compute2025Model() {
     };
   });
 
+  const movementBand = await movementRates();
   return {
+    movementBand,
     scenarioId: 'model-2025-rules',
     scenarioName: S.scenarioName,
     fieldAtFinal: perTier.length ? perTier[perTier.length - 1].entries : null,

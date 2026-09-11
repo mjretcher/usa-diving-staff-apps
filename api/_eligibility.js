@@ -94,7 +94,8 @@ export function stageForTierName(name) {
    age-group x gender cohort plus a designation summary. */
 export async function cohortLoad(perCellEntries, year, tierName) {
   const stage = stageForTierName(tierName);
-  const [eligible, epa] = await Promise.all([eligibleByCohort(year), eventsPerAthlete(year, stage)]);
+  const [eligible, epa, e24, e25, e26] = await Promise.all([eligibleByCohort(year), eventsPerAthlete(year, stage), eligibleByCohort(2024), eligibleByCohort(2025), eligibleByCohort(2026)]);
+  const eligibleAll = { 2024: e24, 2025: e25, 2026: e26 };
   // events-per-athlete year fallback: a stage that did not run in `year`
   // (e.g. EWC in 2024/2025) measures from the nearest year that has it.
   let epaUse = epa;
@@ -120,6 +121,16 @@ export async function cohortLoad(perCellEntries, year, tierName) {
     const resolvedTotal = (eligible[g + 'B'] || 0) + (eligible[g + 'G'] || 0);
     const share = resolvedTotal ? elig / resolvedTotal : 0.5;
     const eligHigh = elig + unres * share;
+    // The same projected unique athletes against EACH year's real membership,
+    // so a reader can toggle the ceiling (2024 / 2025 / 2026 actuals).
+    const pctByMembershipYear = {};
+    for (const y of [2024, 2025, 2026]) {
+      const ey = eligibleAll[y] || {};
+      const e0 = ey[k] || 0, u0 = ey[g + '?'] || 0;
+      const rt = (ey[g + 'B'] || 0) + (ey[g + 'G'] || 0);
+      const eHigh = e0 + u0 * (rt ? e0 / rt : 0.5);
+      pctByMembershipYear[y] = e0 ? { eligible: e0, pct: +(100 * unique / e0).toFixed(1), pctLow: eHigh ? +(100 * unique / eHigh).toFixed(1) : null } : null;
+    }
     return {
       cohort: k, ageGroup: GROUP_LABEL[k[0]], gender: GENDER_LABEL[k[1]],
       entries: Math.round(entries), uniqueAthletes: Math.round(unique),
@@ -129,6 +140,7 @@ export async function cohortLoad(perCellEntries, year, tierName) {
       pctOfEligibleLow: eligHigh ? +(100 * unique / eligHigh).toFixed(1) : null,
       exceedsEligible: elig ? unique > elig : null,
       exceedsEvenWithUnresolved: eligHigh ? unique > eligHigh : null,
+      pctByMembershipYear,
     };
   });
   const unresolved = ['A','B','C','D'].reduce((a, g) => a + (eligible[g + '?'] || 0), 0);
@@ -150,3 +162,50 @@ export async function cohortLoad(perCellEntries, year, tierName) {
 }
 
 export function yearFromCode(code) { return code === 'y24' ? 2024 : code === 'y25' ? 2025 : 2026; }
+
+/* Region-choice movement, measured from real entries in the audit data, per
+   year. Regional step: share of athletes competing outside their club's home
+   region (club home = the region its athletes compete in most, 2021-2026 --
+   a proxy for residence, which is PII this role cannot read; treat as an
+   upper bound). Zone step: share who entered at Zones with no Regionals row
+   that year ("entered first"), and share at a zone other than the one their
+   own Regionals region feeds ("moved at zone"). These are the bands carried
+   on projections; region choice is not predicted, only measured. */
+const moveCache = {};
+export async function movementRates() {
+  if (moveCache.rows) return moveCache.rows;
+  const rows = await neonQuery(`
+    with base as (select year, stage, diver_id_dm, team_id_dm, region, zone from core.event_results
+                  where is_junior_circuit and diver_id_dm is not null and year between 2021 and 2026),
+    reg as (select distinct year, diver_id_dm, team_id_dm, region from base where stage='Regionals' and region is not null),
+    zon as (select distinct year, diver_id_dm, team_id_dm, zone from base where stage='Zones' and zone is not null),
+    club_home as (select team_id_dm, region as home_region from (
+        select team_id_dm, region, count(*) n, row_number() over (partition by team_id_dm order by count(*) desc) rn from reg group by 1,2) t where rn=1),
+    r2z as (select year, region, zone from (
+        select r.year, r.region, z.zone, count(*) n, row_number() over (partition by r.year, r.region order by count(*) desc) rn
+        from reg r join zon z on z.year=r.year and z.diver_id_dm=r.diver_id_dm group by 1,2,3) t where rn=1),
+    rs as (select r.year, r.diver_id_dm, case when ch.home_region is null then 'unknown' when ch.home_region=r.region then 'home' else 'moved' end st
+           from reg r left join club_home ch on ch.team_id_dm=r.team_id_dm),
+    zs as (select z.year, z.diver_id_dm, case when r.region is null then 'entered_first' when y.zone=z.zone then 'home' else 'moved' end st
+           from zon z left join reg r on r.year=z.year and r.diver_id_dm=z.diver_id_dm left join r2z y on y.year=z.year and y.region=r.region)
+    select year,
+      (select count(distinct diver_id_dm) from rs x where x.year=t.year)::int as regionals_athletes,
+      (select count(distinct diver_id_dm) from rs x where x.year=t.year and st='moved')::int as regionals_moved,
+      (select count(distinct diver_id_dm) from rs x where x.year=t.year and st='unknown')::int as regionals_unknown_club,
+      (select count(distinct diver_id_dm) from zs x where x.year=t.year)::int as zones_athletes,
+      (select count(distinct diver_id_dm) from zs x where x.year=t.year and st='entered_first')::int as zones_entered_first,
+      (select count(distinct diver_id_dm) from zs x where x.year=t.year and st='moved')::int as zones_moved
+    from (select distinct year from base where year between 2024 and 2026) t order by year`);
+  const out = {};
+  for (const r of rows) {
+    out[r.year] = {
+      regionals: { athletes: r.regionals_athletes, competedOutsideClubHomeRegion: r.regionals_moved,
+                   rate: +(100 * r.regionals_moved / r.regionals_athletes).toFixed(1), unknownClubHome: r.regionals_unknown_club },
+      zones: { athletes: r.zones_athletes, enteredAtZonesFirst: r.zones_entered_first,
+               enteredFirstRate: +(100 * r.zones_entered_first / r.zones_athletes).toFixed(1),
+               movedAtZone: r.zones_moved, movedAtZoneRate: +(100 * r.zones_moved / r.zones_athletes).toFixed(1) },
+    };
+  }
+  moveCache.rows = out;
+  return out;
+}
