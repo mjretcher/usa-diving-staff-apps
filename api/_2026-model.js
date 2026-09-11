@@ -87,14 +87,18 @@ async function realPerMeet2026() {
     publishedFeePerEvent: m ? +m[1] : null, hostSetFee: !m, lateFeePublished: (/\$?([0-9]+)/.exec(r.late_text || '') || [])[1] ? +(/\$?([0-9]+)/.exec(r.late_text)[1]) : null }; });
 }
 
-async function computeTierFromRealEntries(level, entries, hostSettings) {
+async function computeTierFromRealEntries(level, entries, hostSettings, perCell) {
   const { w } = buildWindow();
   const I = w.__boundaryInternal;
   const S = I.S;
   S.levels = [{ name: 'Regions' }, { name: 'Zones' }, { name: 'E / W / C' }, { name: 'Nationals' }];
   S.fees = null; // DEFAULT_FEES -- same basis as CCE Submission and the rest of this report
+  S.year = 'y26';
   Object.assign(S, hostSettings);
-  const money = I.meetMoney({ level, entries });
+  // Carry the per-cell event list so Regionals price Group C/D and tower at the
+  // $45 non-qualifying tier (2026), exactly as the DiveMeets recaps do.
+  const events = perCell ? Object.entries(perCell).map(([cell, n]) => ({ cell, n })) : null;
+  const money = I.meetMoney({ level, entries, events });
   return {
     level: S.levels[level].name, meets: null, entries,
     spots: null, fillRate: null,
@@ -111,8 +115,9 @@ export async function compute2026BaselineWithNationals() {
   const stageOf = { Regions: 'Regionals', Zones: 'Zones', 'E / W / C': 'EWC', Nationals: 'Nationals' };
   const perTier = [];
   for (const [name, entries] of Object.entries(REAL_2026_ENTRIES)) {
-    const t = await computeTierFromRealEntries(levelIndex[name], entries, hostSettings);
-    t.cohortLoad = await cohortLoad(await realPerCell2026(stageOf[name]), 2026, name);
+    const perCell = await realPerCell2026(stageOf[name]);
+    const t = await computeTierFromRealEntries(levelIndex[name], entries, hostSettings, perCell);
+    t.cohortLoad = await cohortLoad(perCell, 2026, name);
     perTier.push(t);
   }
 
@@ -131,6 +136,7 @@ export async function compute2026BaselineWithNationals() {
   for (const rm of realMeets) {
     const { w } = buildWindow(); const I = w.__boundaryInternal; const S = I.S;
     S.levels = [{ name: 'Regions' }, { name: 'Zones' }, { name: 'E / W / C' }, { name: 'Nationals' }];
+    S.year = 'y26';
     S.fees = rm.publishedFeePerEvent != null ? { [stageLevel[rm.stage]]: rm.publishedFeePerEvent } : null;
     Object.assign(S, hostSettings);
     const entries = rm.individualEntries + rm.synchroEntries;

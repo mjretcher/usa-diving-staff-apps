@@ -1781,6 +1781,23 @@ function feeFor(L){
   return DEFAULT_FEES[Math.min(L + (n <= 3 ? 1 : 0), 2)];
 }
 const LEVY = 4.90;
+/* DiveMeets' cut, per Amy's 2026-05-07 note reconciled against all 22 of the 2026
+   Junior Circuit recaps: $4.95 flat per entry in 2026 (was $4.90), plus 10% of all
+   other fees (late fees, sheet changes). Earlier seasons keep $4.90. */
+function levyPerEntry(){ return S.year === 'y26' ? 4.95 : LEVY; }
+const LEVY_OTHER_FEES_PCT = 0.10;
+/* Regionals in 2026 priced by tier, not one fee: Group C and D events and
+   tower (platform) sit in a $45 non-qualifying tier; Group A/B springboard is the
+   qualifying tier at the published Regional fee. Applied per cell, only at a
+   level whose name is Regions/Regionals and only for y26. */
+const REGIONAL_NON_QUALIFYING_FEE = 45;
+function feeForCell(L, cell){
+  const nm = String((S.levels[L] && S.levels[L].name) || '').toLowerCase();
+  if (S.year === 'y26' && /region/.test(nm) && (S.fees == null || S.fees[L] == null)) {
+    if (/^[CD]/.test(cell) || cell[2] === 'P') return REGIONAL_NON_QUALIFYING_FEE;
+  }
+  return feeFor(L);
+}
 
 /* How a host is paid. A percentage is only one of the answers, and on an
    unbalanced tier it is the worst of them: at 44x apart it pays one host
@@ -1792,14 +1809,26 @@ function meetKey(m){ return m.level + '|' + m.gi; }
 
 function meetMoney(m){
   const fee = feeFor(m.level);
-  // Late fees: every 2026 Junior Circuit meet publishes a $100 late fee on
-  // DiveMeets. The share of entries that pay it is not in the results data,
-  // so it is an input (S.lateFeeShare, 0..1) that defaults to 0 -- the live
-  // Money tab is unchanged unless it is set. S.lateFee defaults to $100.
-  const lateShare = Math.min(1, Math.max(0, +S.lateFeeShare || 0));
-  const lateFees = m.entries * lateShare * (S.lateFee != null ? +S.lateFee : 100);
-  const gross = m.entries * fee + lateFees;
-  const levy = m.entries * LEVY;
+  // Entry income: per cell where the meet carries its event list (Regionals
+  // price Group C/D and tower at the $45 non-qualifying tier in 2026), else
+  // entries x the level fee.
+  const entryIncome = (m.events && m.events.length)
+    ? m.events.reduce((a, e) => a + e.n * feeForCell(m.level, e.cell), 0)
+    : m.entries * fee;
+  // Other fees -- none of these are in results data, so each is an input that
+  // defaults to 0 and leaves the live Money tab unchanged unless set:
+  //   S.lateFeeShare      share of entries paying the $100 athlete late fee
+  //   S.coachLateFeeShare share of entries carrying the $50 coach late fee
+  //   S.sheetChangeShare  share of entries with a $15 sheet change
+  const sh = (v) => Math.min(1, Math.max(0, +v || 0));
+  const athleteLate = m.entries * sh(S.lateFeeShare) * (S.lateFee != null ? +S.lateFee : 100);
+  const coachLate   = m.entries * sh(S.coachLateFeeShare) * (S.coachLateFee != null ? +S.coachLateFee : 50);
+  const sheetChange = m.entries * sh(S.sheetChangeShare) * (S.sheetChangeFee != null ? +S.sheetChangeFee : 15);
+  const otherFees = athleteLate + coachLate + sheetChange;
+  const lateFees = athleteLate + coachLate;
+  const gross = entryIncome + otherFees;
+  // DiveMeets' cut: flat per entry ($4.95 in 2026, $4.90 before) + 10% of other fees.
+  const levy = m.entries * levyPerEntry() + otherFees * LEVY_OTHER_FEES_PCT;
   const net = gross - levy;
   const mode = S.hostMode || 'pct';
   // A negotiated figure for one meet beats any formula. Hosts are dealt with
@@ -1821,7 +1850,7 @@ function meetMoney(m){
   const capped = host > net;
   if (capped) host = net;
   return {fee, gross, levy, net, host, usad: net - host, floored, capped, overridden,
-          lateFees, pct: net > 0 ? host/net : 0};
+          lateFees, otherFees, entryIncome, pct: net > 0 ? host/net : 0};
 }
 
 /* Largest against smallest within a tier: the number a host cut lives or dies

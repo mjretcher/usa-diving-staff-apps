@@ -66,5 +66,23 @@ console.log('=== boundary.js feeFor resolves by stage name (Region-first 3-level
 { const { I, S } = fresh(['Level 1','Level 2','Level 3']); S.fees = null;
   ok(I.meetMoney({level:0,entries:1}).fee === 90 && I.meetMoney({level:2,entries:1}).fee === 125, 'unnamed levels keep the positional fallback'); }
 
+console.log('=== 2026 recap rules: $4.95 per-entry cut, 10% on other fees, Regional $45 non-qualifying tier per cell ===');
+{ const { I, S } = fresh(['Regions','Zones','Nationals']); S.fees = null; S.hostMode='per_entry'; S.hostPer=0; S.hostMin=0; S.hostPer_stop=null;
+  S.year = 'y26'; let m = I.meetMoney({ level: 1, entries: 100 });
+  ok(Math.abs(m.levy - 495) < 0.01, 'y26: DiveMeets cut $4.95 x 100 = $495');
+  S.year = 'y25'; m = I.meetMoney({ level: 1, entries: 100 });
+  ok(Math.abs(m.levy - 490) < 0.01, 'y25: DiveMeets cut stays $4.90 x 100 = $490');
+  S.year = 'y26'; S.lateFeeShare = 0.1; S.coachLateFeeShare = 0.1; S.sheetChangeShare = 0.1;
+  m = I.meetMoney({ level: 1, entries: 100 });
+  ok(Math.abs(m.otherFees - (1000 + 500 + 150)) < 0.01 && Math.abs(m.levy - (495 + 165)) < 0.01, 'other fees: $1,000 athlete late + $500 coach late + $150 sheet changes; DiveMeets takes 10% of those ($165) on top of $495');
+  S.lateFeeShare = S.coachLateFeeShare = S.sheetChangeShare = 0;
+  const events = [{ cell: 'AG1', n: 10 }, { cell: 'CG1', n: 10 }, { cell: 'AGP', n: 10 }];
+  m = I.meetMoney({ level: 0, entries: 30, events });
+  ok(Math.abs(m.entryIncome - (10*85 + 10*45 + 10*45)) < 0.01, 'Regionals 2026 per cell: A Girls 1M $85, C Girls 1M $45, A Girls platform $45');
+  m = I.meetMoney({ level: 1, entries: 30, events });
+  ok(Math.abs(m.entryIncome - 30*90) < 0.01, 'the $45 tier applies only at Regionals -- Zones price every cell at $90');
+  S.year = 'y25'; m = I.meetMoney({ level: 0, entries: 30, events });
+  ok(Math.abs(m.entryIncome - 30*85) < 0.01, 'the $45 tier is 2026-only -- 2025 Regionals price every cell at $85'); }
+
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);
