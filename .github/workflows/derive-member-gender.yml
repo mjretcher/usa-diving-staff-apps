@@ -1,0 +1,47 @@
+name: Derive member gender (all results sources)
+
+# Widens the gender name-match beyond the Junior Circuit to every results source
+# that carries a name and a gender. Runs here because member names are readable
+# only under the owner connection. Writes member_id + gender only, and commits a
+# counts-only summary back for the apps and reports.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: derive-member-gender
+  cancel-in-progress: false
+
+jobs:
+  derive:
+    name: Match unresolved members
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install psycopg2-binary
+
+      - name: Derive
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/derive_member_gender_v2.py
+
+      - name: Commit summary if changed
+        run: |
+          git add membership-analytics/gender-derivation-summary.json
+          if git diff --cached --quiet; then echo "No change."; exit 0; fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Gender derivation v2 summary (all results sources)"
+          git pull --rebase
+          git push
