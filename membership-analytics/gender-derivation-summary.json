@@ -1,0 +1,39 @@
+{
+ "run": "2026-09-11T17:09:09.205399Z",
+ "source": "name-match:all-results-v2",
+ "candidates": 198,
+ "resolved": 147,
+ "conflictingVotes": 0,
+ "noResultsUnderThatName": 51,
+ "resolvedGenderSplit": {
+  "Boys": 46,
+  "Girls": 101
+ },
+ "sourcesThatContributed": {
+  "core.event_results": 20,
+  "core.dive_sheets": 89,
+  "core.result_phases": 116,
+  "scoresandmore": 97
+ },
+ "byYearAfter": [
+  {
+   "year": 2024,
+   "eligible": 2060,
+   "unresolved": 28,
+   "resolvedByThisPass": 95
+  },
+  {
+   "year": 2025,
+   "eligible": 1845,
+   "unresolved": 25,
+   "resolvedByThisPass": 81
+  },
+  {
+   "year": 2026,
+   "eligible": 1514,
+   "unresolved": 23,
+   "resolvedByThisPass": 47
+  }
+ ],
+ "note": "Only unambiguous matches are stored: every result source that has the name must agree on one gender. Names never leave the runner; only member_id, gender and this summary are written."
+}
