@@ -49,6 +49,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import { neonQuery } from './_neon.js';
+import { cohortLoad, yearFromCode } from './_eligibility.js';
 
 // See api/_pricing-engine.js for why this is process.cwd() and not
 // import.meta.url/__dirname -- the short version: Vercel compiles this file
@@ -85,7 +86,7 @@ if (!BOUNDARY_SRC_RAW.trimEnd().endsWith(BOUNDARY_ANCHOR)) {
   );
 }
 const BOUNDARY_SHIM = `
-window.__boundaryInternal = { S, financialsFor, syncRouting, syncLevels, migrateLevels, defaultRegions, defaultLevels, defaultAdv };
+window.__boundaryInternal = { S, financialsFor, projectPathway, syncRouting, syncLevels, migrateLevels, defaultRegions, defaultLevels, defaultAdv, meetManifest, meetMoney, tierName, groupCountAt, groupUp };
 
 })();`;
 const BOUNDARY_SRC =
@@ -98,7 +99,7 @@ function loadStaticJson(file) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 
-function buildWindow() {
+export function buildWindow() {
   const dom = new JSDOM('', { runScripts: 'outside-only' });
   const w = dom.window;
 
@@ -137,7 +138,7 @@ function buildWindow() {
  * 1:1 to a line in the real loadScenario -- nothing added, nothing
  * reinterpreted.
  */
-async function hydrateScenario(I, id) {
+export async function hydrateScenario(I, id) {
   const r = { rows: await neonQuery(
     `SELECT name, data FROM membership.boundary_scenarios WHERE id=$1`,
     [id]
@@ -212,9 +213,31 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId) {
     );
   }
 
+  // Per-cell entries per tier, for the cohort load (unique athletes as a share
+  // of eligible membership per age group x gender). Re-running the projection
+  // is deterministic; financialsFor does not expose the per-cell result.
+  const CELLS24 = ['AB1','AB3','ABP','AG1','AG3','AGP','BB1','BB3','BBP','BG1','BG3','BGP',
+                   'CB1','CB3','CBP','CG1','CG3','CGP','DB1','DB3','DBP','DG1','DG3','DGP'];
+  const res = Iboundary.projectPathway();
+  const QR = w.QualRouting;
+  const perCellByLevel = {};
+  if (res) {
+    S.levels.forEach((lv, L) => {
+      const m = {};
+      CELLS24.forEach((c) => { let e = 0; for (let g = 0; g < Iboundary.groupCountAt(L); g++) e += QR.entriesCellAt(res, L, g, c); m[c] = e; });
+      perCellByLevel[L] = m;
+    });
+  }
+  const eligYear = yearFromCode(S.year);
+  const loads = {};
+  for (const L of Object.keys(a.tiers)) {
+    if (perCellByLevel[L]) loads[L] = await cohortLoad(perCellByLevel[L], eligYear, a.tiers[L].name);
+  }
+
   const perTier = Object.keys(a.tiers).sort((x, y) => x - y).map((L) => {
     const t = a.tiers[L];
     return {
+      cohortLoad: loads[L] || null,
       level: t.name,
       meets: t.meets,
       entries: Math.round(t.entries),

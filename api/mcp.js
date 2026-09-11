@@ -162,8 +162,11 @@ const TOOLS = [
       'membership dues or senior circuit revenue, which are a separate Pricing Studio model not ' +
       'covered by this tool. Figures reflect live current data (real entries, real membership), not a ' +
       'frozen snapshot, so they will drift slightly from a screenshot taken on an earlier date as more ' +
-      'competition results come in -- that is expected, not an error. Use list_boundary_scenarios first ' +
-      'to find a scenario_id.',
+      'competition results come in -- that is expected, not an error. Each tier also carries a cohortLoad: ' +
+      'projected unique athletes (entries converted by real measured events-per-athlete) as a percentage of ' +
+      'eligible Competition Athlete members, per age group and gender, with a band for members whose gender ' +
+      'is unresolved, an explicit Groups C/D designation, and a flag if any cohort exceeds its eligible ' +
+      'membership. Use list_boundary_scenarios first to find a scenario_id.',
     inputSchema: {
       type: 'object',
       properties: { scenario_id: { type: 'string' } },
