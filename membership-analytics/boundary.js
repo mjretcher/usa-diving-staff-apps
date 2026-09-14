@@ -6902,6 +6902,25 @@ window.BoundaryAPI = {
      them rather than presenting a bare number with no stated completeness. */
   entryDataCompleteness: (yearNum, stage) =>
     (S.advData && S.advData.totals && S.advData.totals[yearNum + '|' + stage]) || null,
+  /* A real season's entry pool for one stage, summed into the four Junior
+     Circuit age groups. Pool cells are keyed age+gender+board ("AB1"), so
+     the age group is the first character. Returns null when that season
+     never ran that stage, which the caller must handle rather than
+     treating as zero -- a stage that did not exist is not a stage with an
+     empty field. */
+  poolByGroup: (yearNum, stage) => {
+    const P = S.advData && S.advData.pools && S.advData.pools[yearNum + '|' + stage];
+    if (!P) return null;
+    const out = {A:0, B:0, C:0, D:0};
+    Object.keys(P).forEach(fips => {
+      const cells = P[fips];
+      Object.keys(cells).forEach(c => {
+        const g = c.charAt(0);
+        if (out[g] != null) out[g] += cells[c];
+      });
+    });
+    return out;
+  },
   /* The qualification pathway and its projection. project() recomputes rather
      than returning a cache, so a report never depends on whether the Pathway
      panel happened to be open. */

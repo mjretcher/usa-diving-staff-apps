@@ -2469,7 +2469,440 @@ const EQUITY_SECTIONS = {
   },
 
 };
+/* =====================================================================
+   FOCUSED REPORTS (added 2026-09-14)
+
+   Three reports answering questions the existing set could not. Each is
+   named for the question it answers rather than the module that produced
+   it, and each states its own limits inline -- a number that cannot say
+   what it rests on does not belong in a decision.
+   ===================================================================== */
+
+const FOCUSED_SECTIONS = {
+
+  /* -------------------------------------------------------------------
+     1. Entries vs athletes, and the one-fee-per-stop mechanic.
+
+     This exists because "entries" and "athletes" get used
+     interchangeably in the room and they are not the same number, and
+     because the fee mechanic is genuinely easy to get wrong: an athlete
+     who swims a prelim and a final at the SAME stop pays once, not
+     twice. entriesCellAt() in routing.js already handles this correctly
+     by counting arrivals rather than summing rounds -- this report makes
+     that visible instead of asking anyone to trust it.
+     ------------------------------------------------------------------- */
+  boundary_entry_economics: {
+    label: 'What gets paid — entries, athletes, and fees',
+    title: 'What gets paid — entries, athletes, and fees',
+    group: 'Boundary Studio',
+    desc: 'The three numbers people mix up: event entries, unique athletes, and fee-paying '
+        + 'arrivals. Includes why a prelim and a final at the same stop are one fee, not two.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('What gets paid — entries, athletes, and fees');
+      const api = B(), QRr = window.QualRouting;
+      const routing = api.routing ? api.routing() : null;
+      const res = api.pathway ? api.pathway() : null;
+      if (!routing || !res || !QRr) return notReady('What gets paid — entries, athletes, and fees');
+
+      const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+      const mult = api.multiplicity ? api.multiplicity() : null;
+
+      // Per stage: fee-paying arrivals (what bills), total round-sizes
+      // (what the sessions have to seat), and unique athletes where the
+      // events-per-athlete measurement supports it.
+      const rows = routing.map((lvl, L) => {
+        const stops = Math.max(1, api.groupCountAt(L));
+        const rounds = QRr.roundsOf(lvl);
+
+        // Arrivals: everyone who JOINS this stage, at any round. This is
+        // the fee-paying count -- one per athlete per stop, however many
+        // rounds they then swim there.
+        let arrivals = 0;
+        for (let g = 0; g < stops; g++) arrivals += QRr.entriesAt(res, L, g, CELLS);
+
+        // Seat-count: summed across rounds. Deliberately different from
+        // arrivals, and larger wherever a stage runs more than one round.
+        let seats = 0;
+        rounds.forEach(r => { seats += QRr.sizeAt(res, L, r.key, CELLS); });
+
+        let athletes = '<span class="mr-soft">not measured</span>';
+        if (mult && QRr.diversAt){
+          const d = QRr.diversAt(res, L, rounds[0].key, CELLS, mult, api.multBasis(L));
+          if (d && d.ok){
+            athletes = fmt(Math.round(d.divers)) + (d.reliable ? '' : ' <span class="mr-soft">(est.)</span>');
+          }
+        }
+        const multi = rounds.length > 1;
+        return `<tr><td><b>${esc(api.tierName(L))}</b>${multi
+            ? `<div class="mr-soft">${rounds.length} rounds — seats exceed fees here</div>` : ''}</td>
+          <td class="mr-num">${fmt(Math.round(arrivals))}</td>
+          <td class="mr-num">${fmt(Math.round(seats))}</td>
+          <td class="mr-num">${athletes}</td>
+          <td class="mr-num">${fmt(stops)}</td></tr>`;
+      }).join('');
+
+      // The money, by stage, from the same manifest the Money tab bills on.
+      // usd() alone renders a negative as "$-1,441"; the sign belongs in
+      // front of the symbol, which is what the other money sections do.
+      const usdR = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      let moneyRows = '', moneyNote = '';
+      try {
+        const summ = api.summariseRouting ? api.summariseRouting(routing, 'this scenario') : null;
+        if (summ && summ.financeByLevel){
+          moneyRows = summ.financeByLevel.filter(Boolean).map(t =>
+            `<tr><td>${esc(t.name)}</td><td class="mr-num">${fmt(t.meets)}</td>
+             <td class="mr-num">${fmt(Math.round(t.entries))}</td>
+             <td class="mr-num">${usdR(t.gross)}</td>
+             <td class="mr-num">${usdR(-Math.abs(t.levy))}</td>
+             <td class="mr-num">${usdR(t.host)}</td>
+             <td class="mr-num"><b>${usdR(t.usad)}</b></td></tr>`).join('');
+          if (summ.finance){
+            const f = summ.finance;
+            moneyRows += `<tr class="mr-tot"><td><b>All stages</b></td><td class="mr-num"></td>
+              <td class="mr-num"></td><td class="mr-num"><b>${usdR(f.gross)}</b></td>
+              <td class="mr-num"><b>${usdR(-Math.abs(f.levy))}</b></td>
+              <td class="mr-num"><b>${usdR(f.host)}</b></td>
+              <td class="mr-num"><b>${usdR(f.usad)}</b></td></tr>`;
+          }
+        }
+      } catch(e){ moneyNote = '<p class="mr-note mr-warn">Fee figures could not be computed for this pathway.</p>'; }
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">What gets paid — entries, athletes, and fees</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">Three different numbers get called "entries" in conversation, and a proposal
+          can look cheaper or dearer than it is depending on which one someone has in mind. This page
+          separates them.</p>
+
+        <table class="mr-table"><tbody>
+          <tr><td><b>Fee-paying arrivals</b></td><td>Each athlete counted <b>once per stop</b>, in each
+            event they enter. This is what bills.</td></tr>
+          <tr><td><b>Seats to fill</b></td><td>Summed across every round. Larger than arrivals wherever
+            a stage runs a prelim and a final, because the same athlete occupies a seat in both. This is
+            what session length and judging panels have to cover.</td></tr>
+          <tr><td><b>Unique athletes</b></td><td>People, not entries. Lower than both, because athletes
+            commonly contest two or three events. This is what beds, awards and travel scale with.</td></tr>
+        </tbody></table>
+
+        <p class="mr-note"><b>Why a prelim and a final are one fee.</b> Entry fees are charged per athlete
+          per event per <em>stop</em> — advancing from a prelim into a final at the same meet is not a new
+          entry and is not charged again. The figures below follow that rule: the arrivals column counts
+          athletes joining a stop, never the sum of its rounds. An athlete seeded directly into a later
+          round from a different stage <em>is</em> a new arrival there, and is counted, because that is a
+          real new entry at a new stop.</p>
+
+        <h3 class="mr-h3">By stage</h3>
+        <table class="mr-table"><thead><tr>
+          <th scope="col">Stage</th>
+          <th scope="col" class="mr-num">Fee-paying arrivals</th>
+          <th scope="col" class="mr-num">Seats to fill</th>
+          <th scope="col" class="mr-num">Unique athletes</th>
+          <th scope="col" class="mr-num">Meets</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <p class="mr-note">Where arrivals and seats match, that stage runs a single round. Where seats are
+          higher, the difference is athletes swimming more than one round at the same stop — extra session
+          time, no extra fee.</p>
+
+        ${moneyRows ? `<h3 class="mr-h3">Fee income by stage</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Meets</th>
+          <th scope="col" class="mr-num">Entries billed</th><th scope="col" class="mr-num">Gross</th>
+          <th scope="col" class="mr-num">DiveMeets</th><th scope="col" class="mr-num">To hosts</th>
+          <th scope="col" class="mr-num">USA Diving keeps</th></tr></thead>
+          <tbody>${moneyRows}</tbody></table>` : ''}
+        ${moneyNote}
+
+        <p class="mr-note"><b>On unique athletes, honestly.</b> The athlete counts above are derived from a
+          measured events-per-athlete rate, not from identified individuals — the entry data does not carry a
+          reliable person identifier across meets. Anything marked <i>est.</i> means this pathway has shifted
+          the event mix away from what that rate was measured on. Treat athlete counts as good enough for
+          sizing beds and awards, and not as a roster. Where an exact headcount matters, the fee-paying
+          arrivals column is the one that is directly counted.</p>
+      </section>`;
+    }
+  },
+
+  /* -------------------------------------------------------------------
+     2. The field, projected forward on measured attrition.
+
+     Max-available is a ceiling and a single real season is a snapshot;
+     neither answers "what would this look like if we ran it now." This
+     applies each age group's own measured membership change to a real
+     season's field. The assumption being made is stated in the report,
+     not buried here: membership attrition is used as a proxy for
+     competition attrition, and those are not proven to move together.
+     ------------------------------------------------------------------- */
+  boundary_decline_projection: {
+    label: 'The field, projected forward',
+    title: 'The field, projected forward',
+    group: 'Boundary Studio',
+    desc: 'A real season\u2019s field re-based on each age group\u2019s own measured membership change, '
+        + 'so an older season can be read against today rather than taken at face value.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('The field, projected forward');
+      const api = B();
+
+      // AQUA age = membership year minus birth year, as of 31 December;
+      // birth month is deliberately ignored (project domain rule). The
+      // bucket boundaries match AGE_GROUPS in boundary.js exactly.
+      let rows = [];
+      try {
+        rows = await q(`
+          SELECT membership_year AS y,
+                 CASE
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 11 THEN 'D'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 13 THEN 'C'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 15 THEN 'B'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 18 THEN 'A'
+                   ELSE '19+'
+                 END AS grp,
+                 COUNT(DISTINCT member_id) AS n
+            FROM membership.members
+           WHERE membership_type LIKE '%Athlete%'
+             AND birth_date IS NOT NULL
+             AND membership_year IN (2024, 2025, 2026)
+           GROUP BY 1, 2`);
+      } catch(e){
+        return `<section class="mr-section"><h2 class="mr-h2">The field, projected forward</h2>
+          ${scenarioLine()}
+          <p class="mr-p mr-warn">The membership counts behind this projection could not be read
+            (${esc(e.message||String(e))}). Nothing below would be trustworthy without them, so the
+            report stops here rather than showing a figure it cannot stand behind.</p></section>`;
+      }
+
+      const G = ['A','B','C','D'];
+      const byYear = {2024:{}, 2025:{}, 2026:{}};
+      rows.forEach(r => {
+        const y = +r.y, g = String(r.grp);
+        if (byYear[y] && G.indexOf(g) >= 0) byYear[y][g] = +r.n;
+      });
+      const have = [2024,2025,2026].filter(y => G.some(g => byYear[y][g] > 0));
+      if (have.indexOf(2024) < 0){
+        return `<section class="mr-section"><h2 class="mr-h2">The field, projected forward</h2>
+          ${scenarioLine()}
+          <p class="mr-p mr-warn">No 2024 athlete membership with usable birth dates was found, so there is
+            no base season to project from.</p></section>`;
+      }
+
+      const ratio = (to, g) => (byYear[2024][g] > 0 && byYear[to][g] > 0)
+        ? byYear[to][g] / byYear[2024][g] : null;
+
+      const memRows = G.map(g => {
+        const r25 = ratio(2025, g), r26 = ratio(2026, g);
+        return `<tr><td><b>Group ${g}</b> <span class="mr-soft">${
+            g==='A'?'16–18':g==='B'?'14–15':g==='C'?'12–13':'11 &amp; under'}</span></td>
+          <td class="mr-num">${fmt(byYear[2024][g]||0)}</td>
+          <td class="mr-num">${fmt(byYear[2025][g]||0)}</td>
+          <td class="mr-num">${fmt(byYear[2026][g]||0)}</td>
+          <td class="mr-num">${r25==null?'—':(100*r25).toFixed(1)+'%'}</td>
+          <td class="mr-num">${r26==null?'—':(100*r26).toFixed(1)+'%'}</td></tr>`;
+      }).join('');
+
+      // Apply each group's own rate to the real 2024 field, stage by stage.
+      const STAGES = ['Regionals','Zones','EWC','Nationals'];
+      let fieldRows = '', anyField = false;
+      STAGES.forEach(st => {
+        const c = api.entryDataCompleteness ? api.entryDataCompleteness('2024', st) : null;
+        const pool = api.poolByGroup ? api.poolByGroup('2024', st) : null;
+        if (!pool) return;
+        const raw = G.reduce((s,g) => s + (pool[g]||0), 0);
+        if (!raw) return;
+        anyField = true;
+        const adj25 = G.reduce((s,g) => s + (pool[g]||0) * (ratio(2025,g) == null ? 1 : ratio(2025,g)), 0);
+        const adj26 = G.reduce((s,g) => s + (pool[g]||0) * (ratio(2026,g) == null ? 1 : ratio(2026,g)), 0);
+        fieldRows += `<tr><td><b>${esc(st)}</b></td>
+          <td class="mr-num">${fmt(Math.round(raw))}</td>
+          <td class="mr-num">${fmt(Math.round(adj25))} <span class="mr-soft">${(100*adj25/raw).toFixed(0)}%</span></td>
+          <td class="mr-num">${fmt(Math.round(adj26))} <span class="mr-soft">${(100*adj26/raw).toFixed(0)}%</span></td>
+          <td class="mr-num">${c && c.total ? Math.round(100*c.mapped/c.total)+'%' : '—'}</td></tr>`;
+      });
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">The field, projected forward</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">An older season's field taken at face value overstates what the same rules would
+          draw today, because the membership behind it has shrunk — and not evenly across age groups.
+          This re-bases 2024's real field on each group's own measured change, so it can be read against
+          the present instead of being quietly compared to a bigger population.</p>
+
+        <h3 class="mr-h3">Measured change, by age group</h3>
+        <p class="mr-note">Athlete memberships with a usable birth date, counted once per person per year.
+          AQUA age is the membership year minus the birth year as of 31 December; birth month is
+          deliberately ignored, per the competition rules.</p>
+        <table class="mr-table"><thead><tr><th scope="col">Age group</th>
+          <th scope="col" class="mr-num">2024</th><th scope="col" class="mr-num">2025</th>
+          <th scope="col" class="mr-num">2026</th>
+          <th scope="col" class="mr-num">2025 of 2024</th><th scope="col" class="mr-num">2026 of 2024</th>
+        </tr></thead><tbody>${memRows}</tbody></table>
+        <p class="mr-note">2026 is a year still in progress, so its share will rise as registrations come
+          in. For a settled comparison use the 2025 column; read 2026 as a floor, not a final figure.</p>
+
+        ${anyField ? `<h3 class="mr-h3">2024's real field, re-based</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th>
+          <th scope="col" class="mr-num">As it ran (2024)</th>
+          <th scope="col" class="mr-num">At 2025 participation</th>
+          <th scope="col" class="mr-num">At 2026 participation</th>
+          <th scope="col" class="mr-num">Data resolved</th></tr></thead>
+          <tbody>${fieldRows}</tbody></table>
+        <p class="mr-note">The final column is the share of that stage's real 2024 field that could be
+          matched to a membership record with a usable zip code. 2024 resolves less completely than later
+          seasons because the county lookup was built from 2025/2026 members, so athletes who left before
+          2025 are less likely to match. The unmatched remainder is excluded, never estimated.</p>`
+        : `<p class="mr-p mr-warn">The 2024 entry pools are not loaded, so only the membership change above
+            can be shown. Open Boundary Studio once and regenerate to include the re-based field.</p>`}
+
+        <h3 class="mr-h3">What this assumes, and where it could be wrong</h3>
+        <p class="mr-p">This applies <em>membership</em> change to a <em>competition</em> field. That is an
+          assumption, not a measurement: it treats a group's competitors as shrinking at the same rate as
+          its members overall. Competitive athletes may well hold on longer than casual members, which
+          would make these figures too low — or drop faster, which would make them too high. Nobody has
+          tested which, and this report does not settle it.</p>
+        <p class="mr-note">So: use these to argue that an older season's raw numbers overstate today, and to
+          bound roughly how much. Do not use them as a forecast of a specific field, and do not put a
+          single re-based figure in front of a committee without saying what it assumes. On the selection
+          integrity standard this is internal context, not a decision-grade number.</p>
+      </section>`;
+    }
+  },
+
+  /* -------------------------------------------------------------------
+     3. Provenance and defensibility.
+
+     Selection decisions are reviewable by a neutral arbitrator, and the
+     failure modes are documented: undefined criteria, non-reproducible
+     computations, and athletes judged on data of unequal completeness.
+     This report states, for the scenario actually on screen, what every
+     figure rests on -- so a paper built from it can be traced back
+     months later, and so anything that does NOT meet the standard is
+     labelled internal rather than quietly presented as decision-grade.
+     ------------------------------------------------------------------- */
+  boundary_defensibility: {
+    label: 'Provenance and defensibility',
+    title: 'Provenance and defensibility',
+    group: 'Boundary Studio',
+    desc: 'What every figure rests on, how complete the data behind it is, and which numbers meet the '
+        + 'standard for a selection decision versus which are internal context only.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady('Provenance and defensibility');
+      const api = B();
+      const stamps = api.stamps ? api.stamps() : null;
+      const frozen = api.frozen ? api.frozen() : null;
+      const drift = (frozen && api.frozenDrift) ? api.frozenDrift() : null;
+
+      // Completeness for every real season/stage the entry data carries.
+      const PAIRS = [['2024','Regionals'],['2024','Zones'],['2024','Nationals'],
+                     ['2025','Regionals'],['2025','Zones'],['2025','Nationals'],
+                     ['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']];
+      let compRows = '', worst = null;
+      PAIRS.forEach(([yr, st]) => {
+        const c = api.entryDataCompleteness ? api.entryDataCompleteness(yr, st) : null;
+        if (!c || !c.total) return;
+        const share = 100 * c.mapped / c.total;
+        if (worst == null || share < worst.share) worst = {yr, st, share};
+        const cls = share >= 97 ? '' : (share >= 92 ? ' class="mr-under"' : ' class="mr-warn"');
+        compRows += `<tr><td>${esc(yr)} ${esc(st)}</td>
+          <td class="mr-num">${fmt(c.total)}</td>
+          <td class="mr-num">${fmt(c.mapped)}</td>
+          <td class="mr-num">${fmt(c.unmapped)}</td>
+          <td class="mr-num"${cls}>${share.toFixed(1)}%</td></tr>`;
+      });
+
+      const freezeRow = !frozen
+        ? `<tr><td>Frozen record</td><td>Not frozen. These figures can move under you if the entry data is
+             rebuilt. Freeze the scenario before circulating it.</td></tr>`
+        : (drift
+          ? `<tr><td>Frozen record</td><td class="mr-warn"><b>Frozen ${esc(String(frozen.at||'').slice(0,10))}
+               and no longer computing what it said then.</b> ${drift.figures && drift.figures.length
+               ? esc(drift.figures.map(r=>`${r.label} was ${Math.round(r.then)}, now ${Math.round(r.now)}`).join('; '))
+               : 'Headline figures match; the inputs behind them have moved.'}</td></tr>`
+          : `<tr><td>Frozen record</td><td>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
+               frozen.note?` — ${esc(frozen.note)}`:''}, and still computing exactly what it said then.</td></tr>`);
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">Provenance and defensibility</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">Selection and funding decisions are reviewable by a neutral arbitrator, and the
+          documented ways an organisation loses are specific: criteria that were never clearly defined,
+          computations nobody outside can reproduce, and athletes assessed on data of unequal completeness.
+          This page states what the figures in this report set actually rest on, so a paper built from them
+          can be traced back months later — and so anything that does not meet that standard is labelled
+          rather than quietly presented as though it did.</p>
+
+        <h3 class="mr-h3">What these figures were computed from</h3>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Scenario</td><td>${esc((api.scenario && api.scenario().name) || 'unsaved')}${
+            (api.scenario && api.scenario().id) ? ` <span class="mr-soft">(${esc(api.scenario().id)})</span>` : ''}${
+            (api.scenario && api.scenario().dirty) ? ' <b class="mr-warn">— edited since it was last saved</b>' : ''}</td></tr>
+          <tr><td>Pathway</td><td>${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}</td></tr>
+          <tr><td>Season on screen</td><td>${esc(api.yearLabel ? api.yearLabel() : '—')}</td></tr>
+          ${stamps?`<tr><td>Entry data build</td><td>${esc(String(stamps.advance_data||'—').slice(0,10))}</td></tr>
+          <tr><td>Events per athlete</td><td>${esc(String(stamps.multiplicity||'—').slice(0,10))}</td></tr>
+          <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
+          <tr><td>First stop fed by</td><td>${esc(stamps.seed_pool||'—')}</td></tr>`:''}
+          ${freezeRow}
+          <tr><td>Report generated</td><td>${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC</td></tr>
+        </tbody></table>
+
+        ${compRows ? `<h3 class="mr-h3">How complete the entry data is</h3>
+        <p class="mr-note">Every real-season figure comes from matching a result to a membership record and
+          then to a county. That match does not succeed for every entry. Unmatched entries are excluded from
+          the pools, never estimated into them — so a lower share here means a stage's field is
+          <em>understated</em>, not wrong in an unknown direction.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Season and stage</th>
+          <th scope="col" class="mr-num">Real entries</th><th scope="col" class="mr-num">Resolved</th>
+          <th scope="col" class="mr-num">Excluded</th><th scope="col" class="mr-num">Share resolved</th>
+        </tr></thead><tbody>${compRows}</tbody></table>
+        ${worst ? `<p class="mr-note">Weakest ground in this set: <b>${esc(worst.yr)} ${esc(worst.st)}</b> at
+          ${worst.share.toFixed(1)}% resolved. If one figure is going to be challenged, expect it to be one
+          leaning on that stage. 2024 resolves less completely than 2025 or 2026 throughout, because the
+          county lookup was built from 2025/2026 members — athletes who left before 2025 are less likely to
+          match.</p>` : ''}` : ''}
+
+        <h3 class="mr-h3">Against the standard</h3>
+        <table class="mr-table"><tbody>
+          <tr><td><b>Published in advance</b></td><td>Area definitions and advancement rules in this
+            scenario are explicit and printable — see the area profiles and zip appendix. A rule that is
+            only in the tool and not in the published procedure cannot carry a selection decision.</td></tr>
+          <tr><td><b>Reproducible from source</b></td><td>The rows above name the scenario, pathway, season,
+            and each data build. An outside party given the same inputs reaches the same figures. If any
+            row above reads &ldquo;—&rdquo;, that part is not currently reproducible and should not be
+            relied on.</td></tr>
+          <tr><td><b>Applied uniformly</b></td><td>Every athlete in a given stage is run through the same
+            published bands. The tool does not apply per-athlete discretion, and no figure here is
+            hand-adjusted.</td></tr>
+          <tr><td><b>Comparable completeness</b></td><td class="mr-under">This is the weak point. Resolution
+            rates differ by season and stage, so athletes are not all computed from data of equal
+            completeness — a 2024-based figure rests on a thinner match than a 2026 one. Say so wherever
+            seasons are compared.</td></tr>
+        </tbody></table>
+
+        <h3 class="mr-h3">Decision-grade versus internal context</h3>
+        <p class="mr-p">Not everything in this report set clears the bar, and the difference matters:</p>
+        <table class="mr-table"><tbody>
+          <tr><td><b>Counted, from real results</b></td><td>Area sizes, membership and club counts, real
+            entry counts per stage, and fee income at published rates. These are counted from records, and
+            are the figures to put in front of a committee.</td></tr>
+          <tr><td><b>Projected by published rule</b></td><td>Field sizes carried up a pathway, calibrated to
+            a measured take-up rate. Reproducible and rule-driven, but a projection of qualified places —
+            not a roster, and not a forecast of who wins.</td></tr>
+          <tr><td><b>Modelled, internal only</b></td><td class="mr-under">Maximum-capacity
+            ceilings, decline re-based fields, unique-athlete estimates, and any stage marked
+            <i>modelled</i> or <i>est.</i> These rest on assumptions that have not been measured. Use them
+            to frame a discussion; do not let one become a criterion.</td></tr>
+        </tbody></table>
+        <p class="mr-note">If a figure cannot be traced to the rows at the top of this page, it does not
+          belong in a decision — and if it is in the modelled row above, it needs to be labelled as such
+          wherever it appears, including in anything quoted out of this report.</p>
+      </section>`;
+    }
+  },
+
+};
+
 Object.assign(BOUNDARY_SECTIONS, EQUITY_SECTIONS);
+Object.assign(BOUNDARY_SECTIONS, FOCUSED_SECTIONS);
 
 Object.assign(SECTIONS, BOUNDARY_SECTIONS);
 /* =====================================================================
