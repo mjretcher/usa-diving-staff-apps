@@ -855,6 +855,13 @@ const NAMES = {
   membership_geo:             'Where the members and clubs are',
   boundary_region_profiles:   'Area profiles',
   boundary_zips:              'Zip code appendix',
+  // The three focused reports. These were added with hardcoded names, which
+  // meant a cross-reference to NAMES.boundary_entry_economics rendered the
+  // literal word "undefined" in a report -- exactly the drift this map exists
+  // to prevent, so they belong here too.
+  boundary_entry_economics:   'What gets paid — entries, athletes, and fees',
+  boundary_decline_projection:'The field, projected forward',
+  boundary_defensibility:     'Provenance and defensibility',
   // Absorbed into a parent below; the builders stay, the picker entries go.
   boundary_overview:          'How the structure is built',
   boundary_tiers:             'Every level, rolled up',
@@ -1366,23 +1373,11 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
           3-meter board in the semi-final — the number a timetable and an awards order are actually built from.</p>
 
-        <h3 class="mr-h3">What actually gets billed</h3>
-        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Billable entries</th></tr></thead>
-          <tbody>${billed}</tbody></table>
-        <p class="mr-note">An athlete pays once per event at a meet however many rounds they dive, so moving
-          between rounds inside a stage bills nothing. Adding the round fields together would charge the same
-          diver two or three times over.</p>
-
-        <h3 class="mr-h3">Fee income at the published 2026 rates</h3>
-        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Entries</th>
-          <th scope="col" class="mr-num">Fee</th><th scope="col" class="mr-num">Gross</th><th scope="col" class="mr-num">DiveMeets</th>
-          <th scope="col" class="mr-num">Net</th></tr></thead><tbody>${money}
-          <tr class="mr-tot"><td>Total</td><td class="mr-num">${fmt(Math.round(rev.entries))}</td><td></td>
-            <td class="mr-num">${usd(rev.gross)}</td><td class="mr-num">&minus;${usd(rev.levy)}</td>
-            <td class="mr-num">${usd(rev.net)}</td></tr></tbody></table>
-        <p class="mr-note">Entry fees only, at the standing 2026 rates, with $4.90 per entry passed through to
-          DiveMeets. Membership dues, synchro and the senior circuit are not in this figure — Pricing Studio
-          carries those, and is where fees themselves can be changed. ${esc(feeSourceNote)}</p>
+        <p class="mr-note"><b>Money is not on this page.</b> This report answers who advances. What that
+          costs, who pays it, and why a prelim and a final at the same stop are one fee and not two are all
+          in <b>${NAMES.boundary_entry_economics}</b> &mdash; which also separates fee-paying arrivals from
+          seats to fill and from unique athletes, three numbers that get called "entries" interchangeably and
+          are not the same. Add that section alongside this one when the question is financial.</p>
       </section>`;
     }
   },
@@ -1480,6 +1475,15 @@ const BOUNDARY_SECTIONS = {
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_balance}</h2>
         ${scenarioLine()}
+        <p class="mr-p">This page measures one thing: whether the areas hold comparable numbers of people.
+          That is a question about <em>size</em>, and evenly sized areas are easier to schedule, staff and
+          fund.</p>
+        <p class="mr-note"><b>Even size is not the same as a fair contest, and this page cannot show
+          fairness.</b> Two areas holding identical member counts can still demand very different scores to
+          advance, because depth of talent is not distributed like headcount. The report that answers the
+          fairness question is <b>${NAMES.boundary_equity}</b>. These two used to share the word "equity" in
+          their names, which invited exactly the wrong conclusion &mdash; that an evenly sized map is
+          therefore an even contest. Read both before defending a map on fairness grounds.</p>
         <div class="mr-kpis">
           <div class="mr-kpi"><div class="mr-kpi-v">${verdict}</div>
             <div class="mr-kpi-l">Overall balance of members</div>
@@ -2523,17 +2527,17 @@ const FOCUSED_SECTIONS = {
      that visible instead of asking anyone to trust it.
      ------------------------------------------------------------------- */
   boundary_entry_economics: {
-    label: 'What gets paid — entries, athletes, and fees',
-    title: 'What gets paid — entries, athletes, and fees',
+    label: NAMES.boundary_entry_economics,
+    title: NAMES.boundary_entry_economics,
     group: 'Boundary Studio',
     desc: 'The three numbers people mix up: event entries, unique athletes, and fee-paying '
         + 'arrivals. Includes why a prelim and a final at the same stop are one fee, not two.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('What gets paid — entries, athletes, and fees');
+      if (!boundaryReady()) return notReady(NAMES.boundary_entry_economics);
       const api = B(), QRr = window.QualRouting;
       const routing = api.routing ? api.routing() : null;
       const res = api.pathway ? api.pathway() : null;
-      if (!routing || !res || !QRr) return notReady('What gets paid — entries, athletes, and fees');
+      if (!routing || !res || !QRr) return notReady(NAMES.boundary_entry_economics);
 
       const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
       const mult = api.multiplicity ? api.multiplicity() : null;
@@ -2599,7 +2603,7 @@ const FOCUSED_SECTIONS = {
       } catch(e){ moneyNote = '<p class="mr-note mr-warn">Fee figures could not be computed for this pathway.</p>'; }
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">What gets paid — entries, athletes, and fees</h2>
+        <h2 class="mr-h2">${NAMES.boundary_entry_economics}</h2>
         ${scenarioLine()}
 
         <p class="mr-p">Three different numbers get called "entries" in conversation, and a proposal
@@ -2664,13 +2668,13 @@ const FOCUSED_SECTIONS = {
      competition attrition, and those are not proven to move together.
      ------------------------------------------------------------------- */
   boundary_decline_projection: {
-    label: 'The field, projected forward',
-    title: 'The field, projected forward',
+    label: NAMES.boundary_decline_projection,
+    title: NAMES.boundary_decline_projection,
     group: 'Boundary Studio',
     desc: 'A real season\u2019s field re-based on each age group\u2019s own measured membership change, '
         + 'so an older season can be read against today rather than taken at face value.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('The field, projected forward');
+      if (!boundaryReady()) return notReady(NAMES.boundary_decline_projection);
       const api = B();
 
       // AQUA age = membership year minus birth year, as of 31 December;
@@ -2694,7 +2698,7 @@ const FOCUSED_SECTIONS = {
              AND membership_year IN (2024, 2025, 2026)
            GROUP BY 1, 2`);
       } catch(e){
-        return `<section class="mr-section"><h2 class="mr-h2">The field, projected forward</h2>
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
           ${scenarioLine()}
           <p class="mr-p mr-warn">The membership counts behind this projection could not be read
             (${esc(e.message||String(e))}). Nothing below would be trustworthy without them, so the
@@ -2709,7 +2713,7 @@ const FOCUSED_SECTIONS = {
       });
       const have = [2024,2025,2026].filter(y => G.some(g => byYear[y][g] > 0));
       if (have.indexOf(2024) < 0){
-        return `<section class="mr-section"><h2 class="mr-h2">The field, projected forward</h2>
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
           ${scenarioLine()}
           <p class="mr-p mr-warn">No 2024 athlete membership with usable birth dates was found, so there is
             no base season to project from.</p></section>`;
@@ -2749,7 +2753,7 @@ const FOCUSED_SECTIONS = {
       });
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">The field, projected forward</h2>
+        <h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
         ${scenarioLine()}
 
         <p class="mr-p">An older season's field taken at face value overstates what the same rules would
@@ -2809,13 +2813,13 @@ const FOCUSED_SECTIONS = {
      labelled internal rather than quietly presented as decision-grade.
      ------------------------------------------------------------------- */
   boundary_defensibility: {
-    label: 'Provenance and defensibility',
-    title: 'Provenance and defensibility',
+    label: NAMES.boundary_defensibility,
+    title: NAMES.boundary_defensibility,
     group: 'Boundary Studio',
     desc: 'What every figure rests on, how complete the data behind it is, and which numbers meet the '
         + 'standard for a selection decision versus which are internal context only.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Provenance and defensibility');
+      if (!boundaryReady()) return notReady(NAMES.boundary_defensibility);
       const api = B();
       const stamps = api.stamps ? api.stamps() : null;
       const frozen = api.frozen ? api.frozen() : null;
@@ -2851,7 +2855,7 @@ const FOCUSED_SECTIONS = {
                frozen.note?` — ${esc(frozen.note)}`:''}, and still computing exactly what it said then.</td></tr>`);
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Provenance and defensibility</h2>
+        <h2 class="mr-h2">${NAMES.boundary_defensibility}</h2>
         ${scenarioLine()}
 
         <p class="mr-p">Selection and funding decisions are reviewable by a neutral arbitrator, and the
