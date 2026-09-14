@@ -830,14 +830,45 @@ function boundaryMapSvg(L){
   };
 }
 
+/* One source of truth for every Boundary Studio report's name. The picker
+   label and the heading rendered inside the report used to be stored
+   separately and had already drifted apart (boundary_compare's label said
+   "which counties move (vs. another scenario)" while its heading said just
+   "Which counties move"). Both now read from here, so they cannot diverge
+   again.
+
+   Names state the question the report answers rather than the module that
+   produced it. In particular "balance" and "equity" are no longer both
+   called equity: area SIZE and the SCORE IT TAKES TO ADVANCE are different
+   tests, and blurring them hides the distinction that matters most when a
+   selection decision is reviewed. */
+const NAMES = {
+  boundary_summary:           'The proposal in brief',
+  boundary_map:               'The map, stage by stage',
+  boundary_balance:           'Are the areas evenly sized?',
+  boundary_equity:            'What it takes to advance',
+  boundary_pathway:           'Who advances at every stage',
+  boundary_circuit_delta:     'Today versus the proposals',
+  boundary_pathways_compared: 'Two pathways, side by side',
+  boundary_schedule:          'Can every meet actually be run?',
+  boundary_compare:           'What changes from today',
+  membership_geo:             'Where the members and clubs are',
+  boundary_region_profiles:   'Area profiles',
+  boundary_zips:              'Zip code appendix',
+  // Absorbed into a parent below; the builders stay, the picker entries go.
+  boundary_overview:          'How the structure is built',
+  boundary_tiers:             'Every level, rolled up',
+  boundary_club_moves:        'Clubs by area',
+};
+
 const BOUNDARY_SECTIONS = {
 
   boundary_summary: {
-    label: 'Realignment — scenario summary (start here)', group: 'Boundary Studio',
+    label: NAMES.boundary_summary, group: 'Boundary Studio',
     desc: 'One page: the map, the structure in a sentence, who reaches the championship, '
         + 'whether every meet runs, and exactly what it was computed from.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — scenario summary');
+      if (!boundaryReady()) return notReady(NAMES.boundary_summary);
       const api = B(), QRr = window.QualRouting;
       const nLev = api.levelCount ? api.levelCount() : 1;
       const routing = api.routing ? api.routing() : null;
@@ -898,7 +929,7 @@ const BOUNDARY_SECTIONS = {
       const assignedM = t.rows.reduce((a2,r)=>a2+r.m,0);
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — scenario summary</h2>
+        <h2 class="mr-h2">${NAMES.boundary_summary}</h2>
         ${scenarioLine()}
         ${freezeBlock}
         <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
@@ -936,10 +967,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_pathways_compared: {
-    label: 'Realignment — pathways compared', group: 'Boundary Studio',
+    label: NAMES.boundary_pathways_compared, group: 'Boundary Studio',
     desc: 'Saved pathways side by side on the same map: championship field, meet sizes, days, and what does not fit.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — pathways compared');
+      if (!boundaryReady()) return notReady(NAMES.boundary_pathways_compared);
       const api = B();
       let C = api.comparison ? api.comparison() : null;
       let fromCompareSlot = false;
@@ -947,7 +978,7 @@ const BOUNDARY_SECTIONS = {
         C = api.comparisonFromCompareSlot ? api.comparisonFromCompareSlot() : null;
         fromCompareSlot = !!(C && C.length);
       }
-      if (!C || !C.length) return `<section class="mr-section"><h2 class="mr-h2">Pathways compared</h2>
+      if (!C || !C.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathways_compared}</h2>
         <p class="mr-p mr-warn">No comparison is loaded. Either open <strong>Boundary Studio &rarr; Compare with</strong>
         and load a saved scenario there, or use <strong>Boundary Studio &rarr; Compare</strong> to tick saved
         pathways or maps against the one on screen, then generate this report again.</p>
@@ -1010,7 +1041,7 @@ const BOUNDARY_SECTIONS = {
              <span class="mr-sb-name">${bannerNames.map(esc).join(' &nbsp;vs&nbsp; ')}</span></div>`;
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Pathways compared</h2>
+        <h2 class="mr-h2">${NAMES.boundary_pathways_compared}</h2>
         ${banner}
         <p class="mr-p">${introText}</p>
 
@@ -1053,22 +1084,22 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_schedule: {
-    label: 'Realignment — potential schedules', group: 'Boundary Studio',
+    label: NAMES.boundary_schedule, group: 'Boundary Studio',
     desc: 'A proposed day-by-day, session-by-session schedule for every stop this pathway creates — boards, '
         + 'warm-ups, splits and practice time — so the committee sees how each meet would actually run, not '
         + 'just whether a summary number says it fits.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — potential schedules');
+      if (!boundaryReady()) return notReady(NAMES.boundary_schedule);
       const api = B(), QRr = window.QualRouting, E = window.ScenarioScheduleEngine;
       if (!QRr || !E || typeof E.simulateStop !== 'function')
-        return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
           <p class="mr-p mr-warn">The schedule engine is not loaded.</p></section>`;
       const res = api.pathway();
-      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
+      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
         <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway are
         worked out, then generate this report again.</p></section>`;
       const sched = api.scheduleAll ? api.scheduleAll() : null;
-      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">Potential schedules</h2>
+      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
         <p class="mr-p mr-warn">No stops to lay out. Draw a map and set a pathway first.</p></section>`;
 
       const R = sched.rules;
@@ -1100,7 +1131,7 @@ const BOUNDARY_SECTIONS = {
         : `<p class="mr-p">Every stop fits inside the assumed facility day on this layout.</p>`;
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Potential schedules</h2>
+        <h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
         ${scenarioLine()}
         <p class="mr-p">Every area this map and pathway create becomes a real meet a host club has to run
           inside its own pool hours. The pages below lay out each stop day by day and session by session,
@@ -1138,17 +1169,17 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_pathway: {
-    label: 'Realignment — qualification pathway', group: 'Boundary Studio',
+    label: NAMES.boundary_pathway, group: 'Boundary Studio',
     desc: 'Who advances at every stage and round, how many people that is, and what it bills.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — qualification pathway');
+      if (!boundaryReady()) return notReady(NAMES.boundary_pathway);
       const api = B(), QRr = window.QualRouting;
-      if (!QRr) return `<section class="mr-section"><h2 class="mr-h2">Qualification pathway</h2>
+      if (!QRr) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
         <p class="mr-p mr-warn">The pathway engine is not loaded.</p></section>`;
       await (api.ensureMult ? api.ensureMult() : Promise.resolve());
       const routing = api.routing();
       const res = api.pathway();
-      if (!res) return `<section class="mr-section"><h2 class="mr-h2">Qualification pathway</h2>
+      if (!res) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
         <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway
         are worked out, then generate this report again.</p></section>`;
 
@@ -1258,7 +1289,7 @@ const BOUNDARY_SECTIONS = {
         `<li class="mr-warn">${esc(p.level!=null ? nm(p.level)+': ' : '')}${esc(p.msg)}</li>`).join('');
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Qualification pathway</h2>
+        <h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
         ${scenarioLine()}
         ${probs ? `<p class="mr-p mr-warn"><b>This pathway has problems that affect the numbers below.</b></p>
           <ul class="mr-bullets">${probs}</ul>` : ''}
@@ -1357,10 +1388,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_overview: {
-    label: 'Realignment — scenario overview', group: 'Boundary Studio',
+    label: NAMES.boundary_overview, group: 'Boundary Studio',
     desc: 'What the scenario is, how the tiers are structured, and the headline size of every area.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — scenario overview');
+      if (!boundaryReady()) return notReady(NAMES.boundary_overview);
       const api = B(), {P, un} = groupProfiles();
       const total = P.reduce((s,g)=>s+g.m,0);
       const equal = P.length ? total / P.length : 0;
@@ -1385,7 +1416,7 @@ const BOUNDARY_SECTIONS = {
         <td class="mr-num">${fmt(un.c)}</td><td class="mr-num">${fmt(un.clubs.size)}</td>
         <td class="mr-num">—</td><td class="mr-num">${pctS(un.m, total+un.m)}</td><td class="mr-num">—</td></tr>` : '';
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — scenario overview</h2>
+        <h2 class="mr-h2">${NAMES.boundary_overview}</h2>
         ${scenarioLine()}
         <p class="mr-p">Structure: ${tierChain}</p>
         <p class="mr-p">This table is at the <strong>${esc(api.tierName(api.tierView()))}</strong>
@@ -1411,12 +1442,12 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_balance: {
-    label: 'Realignment — balance & equity', group: 'Boundary Studio',
+    label: NAMES.boundary_balance, group: 'Boundary Studio',
     desc: 'How evenly the scenario splits members, athletes and clubs — spread, largest-to-smallest ratio and concentration.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — balance & equity');
+      if (!boundaryReady()) return notReady(NAMES.boundary_balance);
       const {P} = groupProfiles();
-      if (P.length < 2) return `<section class="mr-section"><h2 class="mr-h2">Realignment — balance &amp; equity</h2>
+      if (P.length < 2) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_balance}</h2>
         <p class="mr-p mr-warn">Balance statistics need at least two areas. This scenario has ${P.length}.</p></section>`;
       const dims = [
         {k:'m', label:'Members'}, {k:'a', label:'Athletes'}, {k:'c', label:'Coaches'},
@@ -1447,7 +1478,7 @@ const BOUNDARY_SECTIONS = {
           <td class="mr-num ${devClass(g.m, equal)}">${signPct(p)}</td></tr>`;
       }).join('');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — balance &amp; equity</h2>
+        <h2 class="mr-h2">${NAMES.boundary_balance}</h2>
         ${scenarioLine()}
         <div class="mr-kpis">
           <div class="mr-kpi"><div class="mr-kpi-v">${verdict}</div>
@@ -1492,10 +1523,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_tiers: {
-    label: 'Realignment — tier rollups', group: 'Boundary Studio',
+    label: NAMES.boundary_tiers, group: 'Boundary Studio',
     desc: 'Every level of the structure rolled up in turn, with balance statistics at each level.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — tier rollups');
+      if (!boundaryReady()) return notReady(NAMES.boundary_tiers);
       const api = B(), geo = api.geo(), y = api.year();
       const assign = api.assign(), regions = api.regions(), levels = api.levels() || [];
       const blocks = levels.map((lv, li) => {
@@ -1528,7 +1559,7 @@ const BOUNDARY_SECTIONS = {
           ${unM>0 && li===0 ? `<p class="mr-note">${fmt(unM)} members are in unassigned counties and are excluded.</p>`:''}`;
       }).join('');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — tier rollups</h2>
+        <h2 class="mr-h2">${NAMES.boundary_tiers}</h2>
         ${scenarioLine()}
         <p class="mr-p">Each level of the structure is rolled up from the painted county map. Balance
         usually improves as levels combine — a lopsided bottom tier can still produce even upper tiers,
@@ -1546,10 +1577,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_region_profiles: {
-    label: 'Realignment — area profiles', group: 'Boundary Studio',
+    label: NAMES.boundary_region_profiles, group: 'Boundary Studio',
     desc: 'A one-block profile per area: size, age mix, states covered, and its largest clubs.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — area profiles');
+      if (!boundaryReady()) return notReady(NAMES.boundary_region_profiles);
       const api = B(), clubs = api.clubs(), AG = api.ageGroups();
       const {P} = groupProfiles();
       const total = P.reduce((s,g)=>s+g.m,0);
@@ -1594,7 +1625,7 @@ const BOUNDARY_SECTIONS = {
         </div>`;
       }).join('');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — area profiles</h2>
+        <h2 class="mr-h2">${NAMES.boundary_region_profiles}</h2>
         ${scenarioLine()}
         <p class="mr-p">Age bands are athlete counts by competition-year age. County counts include
         every county painted into the area, whether or not it currently contains members.</p>
@@ -1604,15 +1635,15 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_compare: {
-    label: 'Realignment — which counties move (vs. another scenario)', group: 'Boundary Studio',
+    label: NAMES.boundary_compare, group: 'Boundary Studio',
     desc: 'Geographic differences only: which counties and members change area between the working scenario '
         + 'and the loaded comparison scenario. Two proposals sharing the same map will correctly show zero '
         + 'differences here \u2014 for field size, meets, or money differences, use "Pathways compared" instead.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — which counties move');
+      if (!boundaryReady()) return notReady(NAMES.boundary_compare);
       const api = B(), cmp = api.compare();
       if (!cmp) return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — which counties move</h2>
+        <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
         <p class="mr-p mr-warn">No comparison scenario is loaded. In Boundary Studio, load a scenario
         into the compare slot first, then generate this report.</p></section>`;
       const geo = api.geo(), y = api.year(), assign = api.assign(), regions = api.regions();
@@ -1655,7 +1686,7 @@ const BOUNDARY_SECTIONS = {
         rules instead \u2014 who qualifies, how big the field is, what it costs \u2014 that shows up in
         <strong>"Realignment \u2014 pathways compared,"</strong> not here.</div>` : '';
       return `<section class="mr-section">
-        <h2 class="mr-h2">Which counties move</h2>
+        <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
         ${scenarioCompareLine(workingName, 'Working scenario', cmp.name || cmp.id || 'Comparison scenario', 'Compared against')}
         ${sameMapNote}
         <div class="mr-kpis">
@@ -1683,10 +1714,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_circuit_delta: {
-    label: 'New Junior Circuit — old vs. proposed', group: 'Boundary Studio',
+    label: NAMES.boundary_circuit_delta, group: 'Boundary Studio',
     desc: 'Today\u2019s real qualification field against both 9-zone proposals, on the same map, by age group and gender, with the E/W/C cap shown at 3/4/5.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('New Junior Circuit — old vs. proposed');
+      if (!boundaryReady()) return notReady(NAMES.boundary_circuit_delta);
       const api = B();
       const OLD_SEED_ID = 'seed-2026-official';
       const CCE_ID = 'bs-msg2vatz-5q86m';
@@ -1698,14 +1729,14 @@ const BOUNDARY_SECTIONS = {
           `SELECT id, name, data, updated_at FROM membership.boundary_scenarios WHERE id IN ($1,$2,$3)`,
           [OLD_SEED_ID, CCE_ID, COUNTER_ID]);
       } catch(e){
-        return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
           <p class="mr-p mr-warn">Could not load the comparison scenarios: ${esc(e.message||e)}</p></section>`;
       }
       const byId = {};
       (rows.rows||[]).forEach(r => byId[r.id] = {name:r.name, updatedAt:r.updated_at,
         data: typeof r.data==='string'?JSON.parse(r.data):r.data});
       const missing = [OLD_SEED_ID, CCE_ID, COUNTER_ID].filter(id => !byId[id]);
-      if (missing.length) return `<section class="mr-section"><h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+      if (missing.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
         <p class="mr-p mr-warn">Missing saved scenario(s): ${missing.map(esc).join(', ')}. This section names
         specific scenarios rather than whatever happens to be on screen, so it cannot substitute another one.</p></section>`;
 
@@ -1798,7 +1829,7 @@ const BOUNDARY_SECTIONS = {
       const ds = api.stamps ? api.stamps() : null;
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">New Junior Circuit — old vs. proposed</h2>
+        <h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
         <div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
           <span class="mr-sb-name">${cols.map(c=>esc(c.label)).join(' &nbsp;vs&nbsp; ')}</span></div>
         <p class="mr-note"><b>How to read this.</b> "Today's real system" is the 2026 season as it actually ran:
@@ -1881,10 +1912,10 @@ const BOUNDARY_SECTIONS = {
   },
 
   boundary_zips: {
-    label: 'Realignment — zip code appendix', group: 'Boundary Studio',
+    label: NAMES.boundary_zips, group: 'Boundary Studio',
     desc: 'Every zip code in every area with its member count — the appendix a rulebook edit needs.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — zip code appendix');
+      if (!boundaryReady()) return notReady(NAMES.boundary_zips);
       const {P} = groupProfiles();
       const blocks = P.map(g => {
         const rows = g.zips.map(z => `<tr><td class="mr-mono">${esc(z.zip)}</td>
@@ -1896,7 +1927,7 @@ const BOUNDARY_SECTIONS = {
             '<tr><td colspan="4">No zip codes with members.</td></tr>'}</tbody></table>`;
       }).join('');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — zip code appendix</h2>
+        <h2 class="mr-h2">${NAMES.boundary_zips}</h2>
         ${scenarioLine()}
         <p class="mr-p">Only zip codes containing at least one member are listed. Zip codes are assigned
         by geocoding the member's zip to a point and testing which county polygon contains it, so a zip
@@ -2025,13 +2056,13 @@ function realAdvanceRank(routing, level){
 const EQUITY_SECTIONS = {
 
   boundary_equity: {
-    label: 'Realignment — competitive equity', group: 'Boundary Studio',
+    label: NAMES.boundary_equity, group: 'Boundary Studio',
     desc: 'What score it actually takes to advance in each area, versus today. The fairness test that headcount cannot show.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — competitive equity');
+      if (!boundaryReady()) return notReady(NAMES.boundary_equity);
       let Q;
       try { Q = await loadQual(); }
-      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — competitive equity</h2>
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_equity}</h2>
         <p class="mr-p mr-warn">Could not load the historical results data: ${esc(String(e.message||e))}</p></section>`; }
       const api = B();
       const liveRank = realAdvanceRank(api.routing(), api.tierView());
@@ -2148,7 +2179,7 @@ const EQUITY_SECTIONS = {
           above can diverge from what a purely geographic model would predict.</p>` : '';
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — competitive equity</h2>
+        <h2 class="mr-h2">${NAMES.boundary_equity}</h2>
         ${scenarioLine()}
         <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
         experiences is the score they must post to get out of ${esc((api.levels()[api.tierView()] && api.levels()[api.tierView()].name) || 'this stage')}, and the top
@@ -2212,10 +2243,10 @@ const EQUITY_SECTIONS = {
   },
 
   boundary_map: {
-    label: 'Realignment — maps by stage', group: 'Boundary Studio',
+    label: NAMES.boundary_map, group: 'Boundary Studio',
     desc: 'A colour-coded map of every stage in the structure, each with its own breakdown.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — maps by stage');
+      if (!boundaryReady()) return notReady(NAMES.boundary_map);
       const api = B(), geo = api.geo(), y = api.year();
       const assign = api.assign(), regions = api.regions();
       const nLev = api.levelCount ? api.levelCount() : 1;
@@ -2302,7 +2333,7 @@ const EQUITY_SECTIONS = {
       }
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Realignment — maps by stage</h2>
+        <h2 class="mr-h2">${NAMES.boundary_map}</h2>
         ${scenarioLine()}
         <p class="mr-p">One map per stage of the structure, in the colours used on screen, each with
         the breakdown for that stage. Counties are shaded by the area they belong to at that level;
@@ -2313,10 +2344,10 @@ const EQUITY_SECTIONS = {
   },
 
   membership_geo: {
-    label: 'Membership by area', group: 'Boundary Studio',
+    label: NAMES.membership_geo, group: 'Boundary Studio',
     desc: 'Where the membership is, on the current map: members by type, athletes, coaches, and clubs per area. No pathway or qualification content.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Membership by area');
+      if (!boundaryReady()) return notReady(NAMES.membership_geo);
       const api = B(), geo = api.geo(), y = api.year();
       const assign = api.assign(), regions = api.regions();
       const TG = api.tierGroupsAt(0), of = TG.of, nG = TG.groups.length;
@@ -2386,7 +2417,7 @@ const EQUITY_SECTIONS = {
         <td class="mr-num"><b>${fmt(grand.c)}</b></td><td class="mr-num"><b>${fmt(grand.cl.size)}</b></td><td class="mr-num">&nbsp;</td><td class="mr-num">&nbsp;</td></tr>`;
 
       return `<section class="mr-section">
-        <h2 class="mr-h2">Membership by ${esc(api.tierName(0).toLowerCase())}</h2>
+        <h2 class="mr-h2">${NAMES.membership_geo}</h2>
         ${scenarioLine()}
         <p class="mr-p">Where the membership sits on the current map, for the ${esc(api.yearLabel(y))} season. Counties are
         shaded solid where members live and pale where an area has none. Figures are members placed by home ZIP.</p>
@@ -2403,13 +2434,13 @@ const EQUITY_SECTIONS = {
   },
 
   boundary_club_moves: {
-    label: 'Clubs by area', group: 'Boundary Studio',
+    label: NAMES.boundary_club_moves, group: 'Boundary Studio',
     desc: 'Clubs and members per area, and the largest clubs with where they land.',
     build: async function(o){
-      if (!boundaryReady()) return notReady('Realignment — which clubs move');
+      if (!boundaryReady()) return notReady(NAMES.boundary_club_moves);
       let Q, AD;
       try { [Q, AD] = await Promise.all([loadQual(), loadAutoFips()]); }
-      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">Realignment — which clubs move</h2>
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_club_moves}</h2>
         <p class="mr-p mr-warn">Could not load reference data: ${esc(String(e.message||e))}</p></section>`; }
       const api = B(), geo = api.geo(), y = api.year();
       const assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
@@ -2453,7 +2484,7 @@ const EQUITY_SECTIONS = {
         `<tr><td>${esc(nm)}</td><td class="mr-num">${fmt(perArea[i].clubs)}</td><td class="mr-num">${fmt(perArea[i].m)}</td></tr>`).join('');
       const tierNm = (api.tierName ? api.tierName(1) : 'Area');
       return `<section class="mr-section">
-        <h2 class="mr-h2">Clubs by ${esc(tierNm.toLowerCase())}</h2>
+        <h2 class="mr-h2">${NAMES.boundary_club_moves}</h2>
         ${scenarioLine()}
         <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(tierNm)}</th>
           <th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Members</th></tr></thead>
@@ -2906,6 +2937,71 @@ Object.assign(BOUNDARY_SECTIONS, FOCUSED_SECTIONS);
 
 Object.assign(SECTIONS, BOUNDARY_SECTIONS);
 /* =====================================================================
+   MERGES
+
+   Three pairs said nearly the same thing under nearly the same name:
+   "scenario summary (start here)" vs "scenario overview" gave no way to
+   tell which to pick; maps-by-stage and tier-rollups are the same walk
+   through the structure twice; membership-by-area and clubs-by-area are
+   both pure geography of the same map.
+
+   Rather than rewrite four working bodies, each parent now appends its
+   child's content. The child builders are untouched -- only their picker
+   entries are removed -- so nothing that currently renders correctly is
+   at risk, and un-merging is a one-line change.
+   ===================================================================== */
+
+/* Take a report's inner content, dropping the pieces the parent already
+   renders once: the <section> wrapper, the <h2>, and the scenario banner.
+   Returns '' for a not-ready notice, so a child that could not build adds
+   nothing rather than injecting a stray warning into a parent that did. */
+function innerOf(html, heading){
+  let s = String(html || '');
+  if (!s) return '';
+  if (s.indexOf('has not finished loading') >= 0) return '';
+  const open = s.indexOf('<section class="mr-section">');
+  if (open >= 0) s = s.slice(open + '<section class="mr-section">'.length);
+  s = s.replace(/<\/section>\s*$/, '');
+  // The child's own <h2> becomes an <h3>: dropping it outright would leave
+  // its tables sitting under the parent's heading with nothing to say where
+  // the parent's content ended and the absorbed content began. Any later
+  // <h2> in the same body (some sections emit one per code path) is removed,
+  // since only the first introduces the content.
+  let first = true;
+  s = s.replace(/<h2 class="mr-h2">([\s\S]*?)<\/h2>/g, (m, inner) => {
+    if (!first) return '';
+    first = false;
+    return '<h3 class="mr-h3">' + (heading != null ? heading : inner) + '</h3>';
+  });
+  s = s.replace(/<div class="mr-scenario-badge">[\s\S]*?<\/div>/g, '');
+  return s.trim();
+}
+
+const MERGED_INTO = {
+  boundary_overview:   'boundary_summary',
+  boundary_tiers:      'boundary_map',
+  boundary_club_moves: 'membership_geo',
+};
+
+Object.keys(MERGED_INTO).forEach(childId => {
+  const parentId = MERGED_INTO[childId];
+  const parent = BOUNDARY_SECTIONS[parentId];
+  const child  = BOUNDARY_SECTIONS[childId];
+  if (!parent || !child) return;
+  const parentBuild = parent.build, childBuild = child.build;
+  parent.build = async function(o){
+    const a = await parentBuild.call(parent, o);
+    let b = '';
+    try { b = innerOf(await childBuild.call(child, o), esc(NAMES[childId] || '')); } catch(e){ b = ''; }
+    if (!b) return a;
+    // Land the child's content inside the parent's own section wrapper.
+    return /<\/section>\s*$/.test(a) ? a.replace(/<\/section>\s*$/, b + '</section>') : (a + b);
+  };
+  delete SECTIONS[childId];
+  delete BOUNDARY_SECTIONS[childId];
+});
+
+/* =====================================================================
    TEMPLATES — curated section sequences for the deliverables staff
    actually get asked for.
    ===================================================================== */
@@ -2916,8 +3012,7 @@ const TEMPLATES = [
 
   { id:'year_review', label:'Membership Year in Review',
     desc:'The full annual picture: totals, mix, ages, geography, retention, clubs and the sales ledger.',
-    sections:['exec_summary','membership_mix','age_profile','geography_assoc','geography_state',
-              'retention','clubs','sales_ledger'], years:[2024,2025,2026] },
+    sections:['exec_summary','membership_mix','age_profile','geography_assoc','geography_state','retention','clubs','sales_ledger'], years:[2024,2025,2026] },
 
   { id:'retention_deep', label:'Retention Deep Dive',
     desc:'Where members are being lost — by age group, association and club — and the win-back picture.',
@@ -2933,8 +3028,7 @@ const TEMPLATES = [
 
   { id:'realignment_proposal', label:'Realignment Proposal',
     desc:'The full case: the map, size balance, what it takes to advance in each area, whether every meet fits, tier rollups and a profile of every area.',
-    sections:['boundary_summary','boundary_map','boundary_overview','boundary_balance','boundary_equity',
-              'boundary_pathway','boundary_schedule','boundary_circuit_delta','boundary_tiers','boundary_region_profiles'],
+    sections:['boundary_summary','boundary_map','boundary_balance','boundary_equity','boundary_pathway','boundary_schedule','boundary_circuit_delta','boundary_region_profiles'],
     years:[2025,2026], boundary:true },
 
   { id:'realignment_board', label:'Realignment — Board Packet',
@@ -2947,14 +3041,11 @@ const TEMPLATES = [
 
   { id:'realignment_compare', label:'Realignment — Before & After (full)',
     desc:'The complete case for the loaded scenario -- map, structure, balance, competitive equity, tier rollups, the full qualification pathway and its billing, and the full schedule -- plus every delta against the currently loaded comparison scenario: counties moved, members affected, and pathways and field sizes set side by side.',
-    sections:['boundary_summary','boundary_map','boundary_overview','boundary_compare','boundary_club_moves',
-              'boundary_balance','boundary_equity','boundary_tiers','boundary_pathway',
-              'boundary_pathways_compared','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
+    sections:['boundary_summary','boundary_map','boundary_compare','membership_geo','boundary_balance','boundary_equity','boundary_pathway','boundary_pathways_compared','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
 
   { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',
     desc:'The document a rulebook edit needs: area definitions, profiles, and the full zip code appendix.',
-    sections:['boundary_summary','boundary_map','boundary_overview','boundary_region_profiles',
-              'boundary_club_moves','boundary_zips'], years:[2025,2026], boundary:true },
+    sections:['boundary_summary','boundary_map','boundary_region_profiles','membership_geo','boundary_zips'], years:[2025,2026], boundary:true },
 ];
 
 /* =====================================================================
