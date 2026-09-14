@@ -6895,6 +6895,13 @@ window.BoundaryAPI = {
   compare:    () => S.compare,
   comparisonFromCompareSlot,
   totals:     () => S.totals,
+  /* advance-data.json's own record of how much of each real season's field
+     could be resolved to a county (mapped) versus not (unmapped) -- distinct
+     from totals() above, which is unrelated member-tally state. A report
+     showing entry counts from a "year|stage" pool should cite this alongside
+     them rather than presenting a bare number with no stated completeness. */
+  entryDataCompleteness: (yearNum, stage) =>
+    (S.advData && S.advData.totals && S.advData.totals[yearNum + '|' + stage]) || null,
   /* The qualification pathway and its projection. project() recomputes rather
      than returning a cache, so a report never depends on whether the Pathway
      panel happened to be open. */

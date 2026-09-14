@@ -1290,6 +1290,23 @@ const BOUNDARY_SECTIONS = {
           <th scope="col" class="mr-num">Max available</th><th scope="col" class="mr-num">2024</th>
           <th scope="col" class="mr-num">2025</th><th scope="col" class="mr-num">2026</th></tr></thead>
           <tbody>${sourceRows}</tbody></table>
+        ${(function(){
+          // Every real-season figure above comes from a name -> zip -> county
+          // match that does not resolve for every entry; advance-data.json
+          // tracks exactly how much of each season's field that reaches, so
+          // cite it rather than let a bare number stand with no stated limit.
+          const lines = [];
+          [['2024','Regionals'],['2024','Zones'],['2024','Nationals'],
+           ['2025','Regionals'],['2025','Zones'],['2025','Nationals'],
+           ['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']]
+            .forEach(([yr, st]) => {
+              const c = api.entryDataCompleteness(yr, st);
+              if (c && c.total) lines.push(`${yr} ${st} ${Math.round(100*c.mapped/c.total)}%`);
+            });
+          return lines.length ? `<p class="mr-note mr-soft">Share of each real season's field that resolved to a
+            county (the rest could not be matched to a membership record with a usable zip code, and is not
+            counted above): ${lines.join(' &middot; ')}.</p>` : '';
+        })()}
 
         <h3 class="mr-h3">Every event, every round</h3>
         ${(function(){
