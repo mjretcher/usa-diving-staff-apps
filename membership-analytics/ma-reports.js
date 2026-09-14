@@ -938,6 +938,14 @@ const BOUNDARY_SECTIONS = {
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_summary}</h2>
         ${scenarioLine()}
+        <p class="mr-note"><b>Where to go for each question.</b> This page is the one-pager. For anything
+          deeper: <b>${NAMES.boundary_balance}</b> for whether the areas are the same size, and
+          <b>${NAMES.boundary_equity}</b> for whether that makes them a fair contest &mdash; those are
+          different questions and the answers can disagree. <b>${NAMES.boundary_pathway}</b> for who
+          advances, <b>${NAMES.boundary_entry_economics}</b> for what it costs and who pays,
+          <b>${NAMES.boundary_schedule}</b> for whether the meets can physically be run,
+          <b>${NAMES.boundary_circuit_delta}</b> to set it against today, and
+          <b>${NAMES.boundary_defensibility}</b> before any of it goes in front of a committee.</p>
         ${freezeBlock}
         <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
         <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
@@ -1139,6 +1147,40 @@ const BOUNDARY_SECTIONS = {
 
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
+        ${(function(){
+          // A fit / does-not-fit verdict is useless without the parameters it
+          // was measured against. These are read from the schedule engine's
+          // own defaults rather than restated by hand, so they cannot drift
+          // out of step with what actually produced the verdict.
+          // Prefer the rules this schedule was actually laid out with -- each
+          // stop carries its own, so an overridden window is reported as the
+          // window that produced the verdict, not as the engine default.
+          let R = null;
+          try {
+            R = (sched && sched.stops && sched.stops[0] && sched.stops[0].rules) ||
+                (window.ScenarioScheduleEngine && window.ScenarioScheduleEngine.DEFAULT_RULES) || null;
+          } catch(e){ R = null; }
+          const hhmm = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+          if (!R || R.facilityOpenMin == null) return `<p class="mr-note"><b>What "does not fit" means.</b>
+            A meet does not fit when its longest day needs more time than a standard facility day allows,
+            once each session's warm-up is added to its competition time. The exact parameters could not be
+            read from the schedule engine here, so check them in Schedule Builder before quoting a
+            verdict.</p>`;
+          const win = R.facilityCloseMin - R.facilityOpenMin;
+          const tiers = (R.warmupJuniorGroupsByEntries || []).map(t =>
+            (t.maxEntries === Infinity || t.maxEntries == null ? 'more' : '\u2264' + t.maxEntries)
+            + ' entries \u2192 ' + t.minutes + ' min').join(' \u00b7 ');
+          return `<p class="mr-note"><b>What "does not fit" means, and against what.</b> A meet does not fit
+            when its longest day needs more time than the facility day allows. The figures below assume a
+            day running <b>${hhmm(R.facilityOpenMin)} to ${hhmm(R.facilityCloseMin)}</b>
+            (${(win/60).toFixed(1)} hours), with one warm-up per session &mdash; every event in a session
+            starts together, so the session carries the longest warm-up any of its events needs.
+            Groups A and B take a fixed <b>${R.warmupSeniorGroupsMin} minutes</b>; Groups C and D scale with
+            entry count (${tiers}). A verdict here is only as good as those numbers: if your venue closes
+            earlier, or warm-up practice differs, change them in Schedule Builder and regenerate rather than
+            reading these as fixed. Platform never splits, so a large platform field cannot be relieved by
+            splitting it.</p>`;
+        })()}
         ${scenarioLine()}
         <p class="mr-p">Every area this map and pathway create becomes a real meet a host club has to run
           inside its own pool hours. The pages below lay out each stop day by day and session by session,
@@ -1630,6 +1672,9 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_region_profiles}</h2>
+        <p class="mr-note">One block per area, for the reader who needs to know what a single area is made
+          of rather than how the areas compare. For comparison across areas use
+          <b>${NAMES.boundary_balance}</b>. Club lists are the largest by membership, not every club.</p>
         ${scenarioLine()}
         <p class="mr-p">Age bands are athlete counts by competition-year age. County counts include
         every county painted into the area, whether or not it currently contains members.</p>
@@ -1691,6 +1736,11 @@ const BOUNDARY_SECTIONS = {
         <strong>"Realignment \u2014 pathways compared,"</strong> not here.</div>` : '';
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
+        <p class="mr-note"><b>Geography only.</b> This page answers which counties and members sit in a
+          different area than they do now. It says nothing about whether the <em>rules</em> changed &mdash;
+          two scenarios can move nobody at all and still send wildly different numbers of athletes forward.
+          For rule differences use <b>${NAMES.boundary_pathways_compared}</b>, and for the effect on the
+          championship field use <b>${NAMES.boundary_circuit_delta}</b>.</p>
         ${scenarioCompareLine(workingName, 'Working scenario', cmp.name || cmp.id || 'Comparison scenario', 'Compared against')}
         ${sameMapNote}
         <div class="mr-kpis">
@@ -1949,6 +1999,12 @@ const BOUNDARY_SECTIONS = {
       }).join('');
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_zips}</h2>
+        <p class="mr-note"><b>This is the definitive list.</b> Everything else in this report set is a
+          count, a projection or a judgement; this is the actual assignment, zip by zip, and it is what a
+          rulebook edit or a published alignment has to reproduce exactly. If a figure elsewhere disagrees
+          with a total here, this page is right and the other is stale. Member counts shown are for the
+          season named above &mdash; a zip with none listed is still assigned to its area, it simply has
+          nobody in it this year.</p>
         ${scenarioLine()}
         <p class="mr-p">Only zip codes containing at least one member are listed. Zip codes are assigned
         by geocoding the member's zip to a point and testing which county polygon contains it, so a zip
