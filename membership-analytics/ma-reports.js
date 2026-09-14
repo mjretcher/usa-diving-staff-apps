@@ -1861,6 +1861,23 @@ const BOUNDARY_SECTIONS = {
           this figure should reproduce exactly if you regenerate this section later; a different number then
           would mean the underlying data was deliberately rebuilt (check the repo's commit history), not that
           results quietly accumulated in the background.</p>
+        ${(function(){
+          // Every real-season figure on this page comes from a name -> zip ->
+          // county match that does not resolve for every entry. This report
+          // goes to committees, so the share it rests on belongs on the page
+          // rather than only in the provenance report.
+          const lines = [];
+          [['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']].forEach(([yr, st]) => {
+            const c = api.entryDataCompleteness ? api.entryDataCompleteness(yr, st) : null;
+            if (c && c.total) lines.push(`${yr} ${st} ${Math.round(100*c.mapped/c.total)}%`);
+          });
+          return lines.length ? `<p class="mr-note mr-soft"><b>How complete the field behind this is.</b>
+            Share of each real stage that resolved to a county, the rest being entries that could not be
+            matched to a membership record with a usable zip code: ${lines.join(' &middot; ')}. Unmatched
+            entries are excluded, never estimated in — so a figure here is understated by roughly that
+            margin rather than wrong in an unknown direction. Full record in
+            <b>${NAMES.boundary_defensibility}</b>.</p>` : '';
+        })()}
 
         <h3 class="mr-h3">Junior Nationals prelim field</h3>
         <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
@@ -2210,6 +2227,18 @@ const EQUITY_SECTIONS = {
           Every figure here is computed from those fields and nothing else. Gates beyond Regionals
           &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
           section says nothing about them.</div>
+
+        <p class="mr-note"><b>Where these numbers sit if a selection decision is ever reviewed.</b> This is
+          the most sensitive page in the set, because a score-to-advance is the kind of figure that ends up
+          quoted in a selection or funding conversation. The two tables below are not the same kind of
+          number and should never be presented as though they were. <b>Today's bar</b> is measured: it is
+          the real ${rank}th-place average from results that actually happened, and it is reproducible from
+          the fields listed above. <b>The estimated bar under this map</b> is modelled &mdash; it redraws
+          historical scores onto areas that did not exist when they were posted, and it rests on the
+          interpretive step named above. Treat the first as evidence and the second as internal context for
+          designing a map, not as a standard any athlete was measured against. See
+          <b>${NAMES.boundary_defensibility}</b> for the full provenance record and for the one standard this
+          data does not currently meet.</p>
 
         <h3 class="mr-h3">Today's inequity — the bar to advance, by region</h3>
         <p class="mr-p">Average ${rank}th-place score in each region's own Regionals field,
