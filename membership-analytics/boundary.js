@@ -3658,14 +3658,23 @@ function summariseRouting(routing, label, notes){
       t.meets++; t.entries += m.entries; t.gross += $.gross; t.levy += $.levy; t.host += $.host; t.usad += $.usad;
       return acc;
     }, {gross:0, levy:0, host:0, usad:0});
-    // Places the rules entitle, before take-up -- the "qualifiers" a band sends.
-    let resQ = null;
-    try { resQ = projectPathway(false); } catch(e){ resQ = null; }
+    /* Places sent INTO each level by the level(s) before it, from the same
+       projection the entries and the "qualify" rows come from. This used to be
+       read from a second, no-take-up-anywhere projection, so a level's
+       "qualified places" did not equal what the level above it said it sends
+       (National showed 633 places while E/W/C sent 422 + 145 = 567). Now:
+         entries = placesIn x take-up (per event) + direct entrants
+       and placesIn is exactly the sum of the upstream "qualify" rows. */
+    const placesIn = routing.map(() => 0), arrivedIn = routing.map(() => 0);
+    (res.flows || []).forEach(fl => {
+      if (fl.fromLevel === fl.toLevel || !placesIn.hasOwnProperty(fl.toLevel)) return;
+      placesIn[fl.toLevel] += fl.n;
+      arrivedIn[fl.toLevel] += (fl.arrived != null ? fl.arrived : fl.n);
+    });
     const levels = routing.map((lvl, L) => {
       const stops = Math.max(1, groupCountAt(L));
       const rounds = QR().roundsOf(lvl);
-      let qualified = null;
-      if (L > 0 && resQ){ qualified = 0; for (let g = 0; g < stops; g++) qualified += QR().entriesAt(resQ, L, g, cells); }
+      const qualified = L > 0 ? placesIn[L] : null;
       const detail = rounds.map(r => {
         const size = QR().sizeAt(res, L, r.key, cells);
         const f = res.field[L] && res.field[L][r.key];
@@ -3687,7 +3696,11 @@ function summariseRouting(routing, label, notes){
       const refStage = L === 0 ? seedStage() : stageNameForLevel(L);
       const ceiling = historicalCeiling(refStage);
       const flagged = ceiling != null && entry > ceiling * SANITY_HEADROOM;
-      const stage = L === routing.length - 1 ? 'Nationals' : stageNameForLevel(L);
+      // A level's own name wins: a structure that ENDS at "E / W / C" must be
+      // compared with the real E/W/C field, not with Junior Nationals just
+      // because it is the last level (it was showing Nationals' 710 beside
+      // an E/W/C of 1,033 real entries).
+      const stage = stageNameForLevel(L) || (L === routing.length - 1 ? 'Nationals' : null);
       return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
               rounds: rounds.length, refStage, historicalMax: ceiling, flagged,
               // take-up applied at this level, whether it was measured, and the
@@ -3695,7 +3708,11 @@ function summariseRouting(routing, label, notes){
               // projection is never shown without the actual beside it
               arrive: L === 0 ? null : arrivalRate(L), measured: L === 0 ? null : measuredArrival(L),
               stage, actual: realStageField(stage, S.year),
-              qualified, detail, offered};
+              qualified, arrivedFromPlaces: L > 0 ? arrivedIn[L] : null,
+              direct: L > 0 ? Math.max(0, entry - arrivedIn[L]) : null,
+              takeUpEff: (L > 0 && placesIn[L] > 0) ? arrivedIn[L] / placesIn[L] : null,
+              fromName: L > 0 ? tierName(L - 1) : null,
+              detail, offered};
     });
     const sanityFlags = levels.filter(l => l.flagged);
     const last = routing.length - 1;
@@ -8678,12 +8695,12 @@ function atlasReportHtml(res){
         <div style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;color:#171f69"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(col.name)}</span></div>
         ${c.error ? `<div style="color:#b3122b">${esc(c.error)}</div>` : (c.levels||[]).map((l,L) => `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eceff4">
           <div style="font-weight:600;color:#0f1633">${esc(l.name)} <span style="color:#6b7385;font-weight:400">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}</span></div>
-          <div><span class="mono">${fmt(Math.round(l.entries))}</span> entries${L > 0 && l.qualified != null ? ` from <span class="mono">${fmt(Math.round(l.qualified))}</span> qualified places at take-up ${Math.round((l.arrive||1)*100)}% ${l.measured != null ? '(measured)' : '(assumed)'}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span>` : ''}</div>
+          <div><span class="mono">${fmt(Math.round(l.entries))}</span> entries${L > 0 && l.qualified != null ? `: <span class="mono">${fmt(Math.round(l.qualified))}</span> places sent by ${esc(l.fromName || 'the level above')}, <span class="mono">${fmt(Math.round(l.arrivedFromPlaces))}</span> take them up (${Math.round((l.takeUpEff != null ? l.takeUpEff : 1)*100)}%, ${l.measured != null ? 'measured event by event' : 'assumed'})${Math.round(l.direct) >= 1 ? ` + <span class="mono">${fmt(Math.round(l.direct))}</span> entering directly` : ''}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span>` : ''}</div>
           ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify <span style="color:#9aa5b8">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round((rt.byBoard||{})[b.k] || 0))).join(' · ')})</span></div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
         </div>`).join('')}</div>`; }).join('')}</div>`;
     pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C')}
       ${rt('exC1', 'Exhibit C. Scenarios side by side — structure and pathway', 'div', 'atl-ex')}
-      ${rt('exC1s', 'Each column is a scenario\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Entries are who is expected to arrive after take-up; the actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
+      ${rt('exC1s', 'Each column is a scenario\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Each level reads: places sent by the level above (the sum of that level\u2019s \u201cqualify\u201d lines), how many take them up, plus anyone entering directly = entries. Take-up is measured separately for every event, so the percentage shown is the overall result, not one flat rate. The actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
       ${structCols}
       ${pageFoot(4)}</article>
     <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}

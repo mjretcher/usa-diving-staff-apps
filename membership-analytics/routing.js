@@ -261,16 +261,17 @@ function project(opts){
   });
 
   const flows = [], dropped = [];
+  // Returns how many actually arrive (after take-up), 0 if the place goes nowhere.
   const add = (toL, toR, toG, cell, n, fromL) => {
-    if (n <= 0) return;
-    if (!offered(toL, cell)) return;
+    if (n <= 0) return 0;
+    if (!offered(toL, cell)) return 0;
     const lvl = field[toL];
     if (!lvl || !lvl[toR] || !lvl[toR][toG]){
       // Record it. Athletes vanishing without trace is how a projection ends up
       // confidently wrong.
       dropped.push({toLevel:toL, toRound:toR, toGroup:toG, cell, n,
                     why: !lvl ? 'no such level' : !lvl[toR] ? 'no such round' : 'no such group'});
-      return;
+      return 0;
     }
     // conv is take-up behaviour on JOINING a level from elsewhere -- the same
     // distinction arrive() draws below. Re-applying it on an internal round
@@ -281,6 +282,7 @@ function project(opts){
     // Arriving from a DIFFERENT level is joining a new meet, so it is an entry.
     // Moving between rounds of the same level is qualifying, and is not.
     if (fromL !== toL) arrive(toL, toR, toG, cell, n * k);
+    return n * k;
   };
 
   // Levels in order; rounds within a level in competition order. A route may
@@ -303,10 +305,11 @@ function project(opts){
             const toL = rt.to.level;
             const toG = (toL === L) ? g : groupOf(L, g, toL);
             if (toG == null) return;
-            add(toL, rt.to.round, toG, cell, n, L);
+            const arrived = add(toL, rt.to.round, toG, cell, n, L);
+            // n = places the band creates; arrived = how many of them take it up.
             flows.push({fromLevel:L, fromRound:r.key, fromGroup:g,
                         toLevel:toL, toRound:rt.to.round, toGroup:toG,
-                        cell, n});
+                        cell, n, arrived});
           });
         });
       }
