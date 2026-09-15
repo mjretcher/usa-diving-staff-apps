@@ -49,6 +49,28 @@ function routeSplitByBoard(rt){
 }
 const cellLabel = c => `${AGES.find(a=>a.k===c[0]).label} ${GENS.find(g=>g.k===c[1]).label} ${DISCS.find(d=>d.k===c[2]).label}`;
 
+/* USA Diving membership types, as Webpoint names them, for the Map rail's
+   "what the rows count" picker. Counts come from membership-geo.json (per zip,
+   per exact membership_type), placed in counties through the same zip list
+   boundary-data.json uses, so a type row and the "All members" row exclude the
+   same unmappable addresses. "All athletes" in boundary-data.json is exactly the
+   six ATHLETE types below (Lifetime is not in it) and "All coaches" is the three
+   COACH types -- verified county by county against membership-geo.json for
+   2025 and 2026, zero mismatches. */
+const MTYPE_METRICS = {
+  t_comp:   {label:'Competition Athlete',  word:'Competition Athlete members',  types:['Competition Athlete (17U)','Competition Athlete (AQUA Age 18+)']},
+  t_ath:    {label:'Athlete',              word:'Athlete members',              types:['Athlete (17U)','Athlete (AQUA Age 18+)']},
+  t_intro:  {label:'Introductory Athlete', word:'Introductory Athlete members', types:['Introductory Athlete 17U','Introductory Athlete AQUA Age 18+']},
+  t_ccoach: {label:'Competition Coach',    word:'Competition Coach members',    types:['Competition Coach']},
+  t_coach:  {label:'Coach',                word:'Coach members',                types:['Coach']},
+  t_off:    {label:'Judge & Volunteer/Official', word:'Judge and Volunteer/Official members', types:['Judge','Volunteer/Official']},
+};
+const ATYPE_SPLIT = [
+  {k:'t_comp',  short:'Comp',  color:'#171F69'},
+  {k:'t_ath',   short:'Ath',   color:'#009AC7'},
+  {k:'t_intro', short:'Intro', color:'#8FC3EA'},
+];
+
 const POOLS = [
   {k:'2026|Zones',     label:'2026 Zone entrants'},
   {k:'2026|Regionals', label:'2026 Regional entrants'},
@@ -500,6 +522,44 @@ function poolMembers(level){
     for (const a in idx) tgt[a] = (tgt[a]||0) + (ag[idx[a]]||0);
   }
   return {rows:out, un};
+}
+/* membership-geo.json -> {fips: {y25: {type: n}, ...}} using boundary-data.json's
+   zip -> county list. A zip that list does not cover is left out, exactly as
+   it is for the member totals. */
+function buildMemberTypes(G){
+  const z2c = {};
+  for (const [fips, st] of Object.entries(S.geo.stats)) for (const z in (st.z||{})) z2c[z] = fips;
+  const out = {}, years = new Set();
+  for (const [yr, zips] of Object.entries((G && G.years) || {})){
+    const y = 'y' + String(yr).slice(2);
+    years.add(y);
+    for (const [z, v] of Object.entries(zips)){
+      const f = z2c[z]; if (!f) continue;
+      const rec = (out[f] = out[f] || {}); const t = (rec[y] = rec[y] || {});
+      for (const k in v.types) t[k] = (t[k]||0) + v.types[k];
+    }
+  }
+  return {byCounty: out, years};
+}
+/* 2026 only. Webpoint rewrites a renewed member's earlier-year row with their
+   current membership type (see the Types tab note: 35% of 2024 rows and 53% of
+   2025 rows), so a 2024/2025 split by exact type is not recoverable. The
+   combined athlete / coach totals are unaffected; the per-type rows are not. */
+const MTYPE_YEARS = ['y26'];
+const mtypeYearOk = () => !!(S.mtypes && S.mtypes.years.has(S.year) && MTYPE_YEARS.includes(S.year));
+/* Per-group counts for each MTYPE_METRICS key at the current level and year. */
+function memberTypeTallies(TG){
+  const keys = Object.keys(MTYPE_METRICS);
+  const rows = TG.groups.map(() => Object.fromEntries(keys.map(k => [k, 0])));
+  if (!mtypeYearOk()) return null;
+  for (const [fips, rec] of Object.entries(S.mtypes.byCounty)){
+    const t = rec[S.year]; if (!t) continue;
+    const ri = S.assign[fips];
+    if (ri == null || ri < 0 || ri >= S.regions.length) continue;
+    const row = rows[TG.of[ri]];
+    for (const k of keys) for (const ty of MTYPE_METRICS[k].types) row[k] += (t[ty]||0);
+  }
+  return rows;
 }
 const poolIsMembers = () => S.adv.pool === 'members';
 // Total pool for a group, honoring the current focus filter.
@@ -7351,8 +7411,36 @@ function atlasMapHtml(){
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
   const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}" title="${esc(tierName(i))}">${esc(tierName(i))}</button>`).join('');
   const metric = S.atlMetric || 'members';
-  const metricOpts = [['members','Members'],['athletes','Athletes'],['entries','Competing entries'],['coaches','Coaches'],['clubs','Clubs'],['zips','Zip codes'],['counties','Counties'],['age','Athletes by age group'],['comp','Competitors by event']]
-    .map(([k,l]) => `<option value="${k}" ${metric===k?'selected':''}>${l}</option>`).join('');
+  const yn = yearNumBoundary(S.year);
+  const noTypes = mtypeYearOk() ? '' : ' (2026 only)';
+  const compPool = (POOLS.find(p=>p.k===(S.adv && S.adv.pool))||{}).label || '';
+  const compLbl = /entrants$/.test(compPool) ? compPool.replace(/ entrants$/, ' event entries by board') : 'Event entries by board';
+  const metricGroups = [
+    [`Members by USA Diving membership type · ${yn}`, [
+      ['members',  'All members (every membership type)'],
+      ['athletes', 'All athletes (Athlete + Competition + Introductory)'],
+      ['t_comp',   'Competition Athlete members' + noTypes],
+      ['t_ath',    'Athlete members' + noTypes],
+      ['t_intro',  'Introductory Athlete members' + noTypes],
+      ['atype',    'Athletes split by membership type' + noTypes],
+      ['age',      'Athletes split by age group (D / C / B / A / 19+)'],
+      ['coaches',  'All coaches (Coach + Competition + Lifetime Coach)'],
+      ['t_ccoach', 'Competition Coach members' + noTypes],
+      ['t_coach',  'Coach members' + noTypes],
+      ['t_off',    'Judges & Volunteer/Officials' + noTypes],
+    ]],
+    [`Junior Circuit competition`, [
+      ['entries',  `Event entries — ${seedStage()} ${yn} field (1 per diver per event)`],
+      ['comp',     `${compLbl} (1M / 3M / Platform)`],
+    ]],
+    ['Map coverage', [
+      ['clubs',    'Clubs with members in the area'],
+      ['zips',     'Zip codes with members'],
+      ['counties', 'Counties painted into the area'],
+    ]],
+  ];
+  const metricOpts = metricGroups.map(([g, opts]) => `<optgroup label="${esc(g)}">`
+    + opts.map(([k,l]) => `<option value="${k}" ${metric===k?'selected':''}>${esc(l)}</option>`).join('') + '</optgroup>').join('');
   const yearOpts = [['y24','2024'],['y25','2025'],['y26','2026 YTD']].map(([k,l]) => `<option value="${k}" ${S.year===k?'selected':''}>${l}</option>`).join('');
   const addBtn = tv === 0 ? `<button class="atl-link" id="bsAddRegion">+ Add ${esc(tierLabel)}</button>`
                           : `<button class="atl-link bs-addgrp" data-lvl="${tv}">+ Add ${esc(tierLabel)}</button>`;
@@ -7403,6 +7491,12 @@ function atlasMapHtml(){
 function atlasRailBreakdown(t, metric){
   const box = $id('atlRows');
   const pooled = metric === 'comp' ? poolCells(S.tierView) : null;
+  const typed = metric === 'atype' ? memberTypeTallies(t.TG) : null;
+  if (metric === 'atype' && !typed){
+    box.innerHTML = `<div class="atl-rail-note">The split by membership type can only be counted for 2026. Webpoint rewrites a renewing member's earlier-year record with their current type, so a ${esc(yearNumBoundary(S.year))} split isn't reliable. Switch the season to 2026 YTD, or use <b>All athletes</b>.</div>`;
+    const n0 = $id('atlRailNote'); if (n0) n0.innerHTML = '';
+    return;
+  }
   const DC = ['#009AC7','#171F69','#E31937'];
   box.innerHTML = t.rows.map((r,gi) => {
     const col = groupColor(gi);
@@ -7412,6 +7506,11 @@ function atlasRailBreakdown(t, metric){
       const ag = r.ag; total = ag.reduce((s,x)=>s+x,0);
       segs = ag.map((v,j) => v>0 ? `<i style="flex:${v};background:${AGE_GROUPS[j].color}" title="${AGE_GROUPS[j].k} (${AGE_GROUPS[j].label}): ${fmt(v)}"></i>` : '').join('');
       nums = AGE_GROUPS.map((g,j) => `<span><b style="color:${g.color==='#8FC3EA'?'#0b6ea0':g.color}">${g.k}</b>${fmt(ag[j])}</span>`).join('');
+    } else if (metric === 'atype'){
+      const per = ATYPE_SPLIT.map(x => typed[gi][x.k]);
+      total = per.reduce((s,x)=>s+x,0);
+      segs = per.map((v,j) => v>0 ? `<i style="flex:${v};background:${ATYPE_SPLIT[j].color}" title="${esc(MTYPE_METRICS[ATYPE_SPLIT[j].k].word)}: ${fmt(v)}"></i>` : '').join('');
+      nums = per.map((v,j) => `<span><b style="color:${ATYPE_SPLIT[j].color==='#8FC3EA'?'#0b6ea0':ATYPE_SPLIT[j].color}">${ATYPE_SPLIT[j].short}</b>${fmt(v)}</span>`).join('');
     } else {
       const c = pooled.rows[gi] || {};
       const per = DISCS.map(d => CELLS.filter(k=>k[2]===d.k).reduce((s,k)=>s+(c[k]||0),0));
@@ -7431,14 +7530,16 @@ function atlasRailBreakdown(t, metric){
   }).join('');
   const note = $id('atlRailNote');
   if (note) note.innerHTML = metric === 'age'
-    ? `Athletes by AQUA age group (as of Dec 31): ${AGE_GROUPS.map(g=>`<b>${g.k}</b> ${g.label}`).join(' · ')}. ${esc(yearLabelBoundary(S.year))}.`
-    : `${esc((POOLS.find(p=>p.k===S.adv.pool)||{}).label || 'Competitors')} by board: <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls.`;
+    ? `All athletes by AQUA age group (age on Dec 31): ${AGE_GROUPS.map(g=>`<b>${g.k}</b> ${g.label}`).join(' · ')}. ${esc(yearLabelBoundary(S.year))}.`
+    : metric === 'atype'
+    ? `Athletes by membership type, 17U and AQUA Age 18+ combined: <b>Comp</b> Competition Athlete · <b>Ath</b> Athlete · <b>Intro</b> Introductory Athlete. ${esc(yearLabelBoundary(S.year))}.`
+    : `${esc(((POOLS.find(p=>p.k===S.adv.pool)||{}).label || 'Competitors').replace(/ entrants$/, ' event entries'))} by board. One entry per diver per event, so a diver in 1M, 3M and platform counts three times. <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls. This view always shows that real field, whatever season is picked above.`;
 }
 
 function atlasRailRows(t){
   const box = $id('atlRows'); if (!box || !t) return;
   const metric = S.atlMetric || 'members';
-  if (metric === 'age' || metric === 'comp'){
+  if (metric === 'age' || metric === 'comp' || metric === 'atype'){
     atlasRailBreakdown(t, metric);
     const un = $id('atlUnassigned');
     const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
@@ -7449,9 +7550,18 @@ function atlasRailRows(t){
     });
     return;
   }
+  const mdef = MTYPE_METRICS[metric] || null;
+  const typed = mdef ? memberTypeTallies(t.TG) : null;
+  if (mdef && !typed){
+    box.innerHTML = `<div class="atl-rail-note">${esc(mdef.word)} can only be counted for 2026. Webpoint rewrites a renewing member's earlier-year record with their current membership type, so a ${esc(yearNumBoundary(S.year))} count by exact type isn't reliable. Switch the season to 2026 YTD, or use <b>All athletes</b> / <b>All coaches</b>.</div>`;
+    const n0 = $id('atlRailNote'); if (n0) n0.innerHTML = '';
+    const un0 = $id('atlUnassigned'); if (un0) un0.textContent = '';
+    return;
+  }
   const bal = metric === 'entries' ? balanceAt(S.tierView) : null;
   const vals = t.rows.map((r,gi) =>
-    metric === 'entries'  ? (bal ? bal.totals[gi] : null)
+    mdef                  ? typed[gi][metric]
+  : metric === 'entries'  ? (bal ? bal.totals[gi] : null)
   : metric === 'athletes' ? r.a
   : metric === 'coaches'  ? r.c
   : metric === 'clubs'    ? r.cl.size
@@ -7481,9 +7591,17 @@ function atlasRailRows(t){
   if (un) un.textContent = unC > 0 ? `${fmt(unC)} counties · ${fmt(t.un.m)} members unassigned` : 'every county assigned';
   const note = $id('atlRailNote');
   if (note){
-    const word = {members:'members', athletes:'athletes', entries:'competing entries', coaches:'coaches', clubs:'clubs', zips:'zip codes', counties:'counties'}[metric] || metric;
+    const word = mdef ? mdef.word : {members:'all members', athletes:'all athletes', entries:'event entries', coaches:'all coaches', clubs:'clubs', zips:'zip codes', counties:'counties'}[metric] || metric;
+    const what = mdef ? `Counts ${esc(mdef.types.join(' + '))}.`
+      : metric === 'members'  ? 'Every USA Diving membership type: athletes, coaches, judges, volunteer/officials, medical/consultant, staff, lifetime and alumni / fan.'
+      : metric === 'athletes' ? 'Athlete, Competition Athlete and Introductory Athlete memberships (17U and AQUA Age 18+). Lifetime members are not included.'
+      : metric === 'coaches'  ? 'Coach, Competition Coach and Lifetime Coach memberships.'
+      : metric === 'entries'  ? `One entry per diver per event, so a diver in 1M, 3M and platform counts three times. ${S.tierView === 0 ? `The real ${esc(seedStage())} ${esc(yearNumBoundary(S.year))} field, redistributed by county.` : `Projected entries at this level, advanced from the real ${esc(seedStage())} ${esc(yearNumBoundary(S.year))} field.`}`
+      : metric === 'clubs'    ? 'Distinct clubs with at least one member living in the area.'
+      : metric === 'zips'     ? 'Zip codes with at least one member.'
+      : metric === 'counties' ? 'Counties painted into the area.' : '';
     const unmappable = S.totals[S.year] - (t.rows.reduce((a,r)=>a+r.m,0) + t.un.m);
-    note.innerHTML = `Bar = share of ${esc(word)}; the tick is an even split. Deviation in percentage points. Tallies: ${esc(yearLabelBoundary(S.year))}.`
+    note.innerHTML = `${what} Bar = share of ${esc(word)}; the tick is an even split. Deviation in percentage points. Tallies: ${esc(yearLabelBoundary(S.year))}.`
       + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
   }
   box.querySelectorAll('.atl-row').forEach(b => {
@@ -8839,6 +8957,8 @@ window.renderBoundary = async function(){
   catch(e){ S.age = {}; }
   try { S.advData = await (await fetch('advance-data.json?v=202607231600')).json(); }
   catch(e){ S.advData = {pools:{}, totals:{}}; }
+  try { S.mtypes = buildMemberTypes(await (await fetch('membership-geo.json?v=202609151600')).json()); }
+  catch(e){ S.mtypes = null; }
   S.regions = defaultRegions(12);
   S.levels = defaultLevels(12);
   S.adv = defaultAdv();
