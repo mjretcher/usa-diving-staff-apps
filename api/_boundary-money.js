@@ -181,6 +181,22 @@ export async function hydrateScenario(I, id) {
   return true;
 }
 
+/* The 2026 first-stop seed for a structure whose first stop is where every
+   event first counts toward qualifying (both nine-zone proposals). Each cell
+   comes from the real 2026 stage where that event was first a QUALIFYING event:
+   Group A/B springboard from Regionals; platform (every group) and all Group C/D
+   events from Zones. Platform was optional ($45, non-qualifying) at 2026
+   Regionals -- 58 Group A/B platform event entries there against 345 at Zones --
+   so seeding it from Regionals undercounted it by ~290 (corrected 2026-09-16).
+   Exported so api/check-invariants.mjs tests the exact seed the report uses. */
+export const seedFromZones = (c) => /^[CD]/.test(c) || c[2] === 'P';
+export function withFirstStopSeed(adv) {
+  const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
+  for (const f in R) for (const c of Object.keys(R[f])) if (seedFromZones(c)) delete R[f][c];
+  for (const f in Z) for (const c in Z[f]) if (seedFromZones(c)) { R[f] = R[f] || {}; R[f][c] = (R[f][c] || 0) + Z[f][c]; }
+  return Object.assign({}, adv, { pools: Object.assign({}, adv.pools, { '2026|Regionals_CDfirst': R }) });
+}
+
 /* options:
  *   cdFirstStop  (default true)  Groups C and D compete at the first stop. 2026's
  *                non-mandatory first stop is the exception, so the 2026 seed is
@@ -218,19 +234,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   // the stored scenario's own host terms apply unless asked for.
   S.recapRates = opts.useRecapRates ? (loadStaticJson(opts.ceilingYear === 2025 ? 'recaps-2025.json' : 'recaps-2026.json') || {}).byStage : null;
   if (opts.cdFirstStop && S.year === 'y26' && S.advData && S.advData.pools) {
-    const adv = S.advData;
-    const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
-    // Take from the 2026 Zones pool every cell whose real first qualifying
-    // appearance was at Zones: all Group C/D events, and platform for every
-    // group. Platform was optional (non-qualifying, $45) at 2026 Regionals, so
-    // the Regionals pool holds only 58 Group A/B platform event entries against
-    // 345 at Zones -- seeding platform from Regionals undercounted it by ~290
-    // event entries at the first stop and everywhere downstream (corrected
-    // 2026-09-16).
-    const fromZones = (c) => /^[CD]/.test(c) || c[2] === 'P';
-    for (const f in R) for (const c of Object.keys(R[f])) if (fromZones(c)) delete R[f][c];
-    for (const f in Z) for (const c in Z[f]) if (fromZones(c)) { R[f] = R[f] || {}; R[f][c] = (R[f][c] || 0) + Z[f][c]; }
-    S.advData = Object.assign({}, adv, { pools: Object.assign({}, adv.pools, { '2026|Regionals_CDfirst': R }) });
+    S.advData = withFirstStopSeed(S.advData);
     S.seedPool = 'Regionals_CDfirst';
   }
   S.flow = w.JuniorFlow.compute({

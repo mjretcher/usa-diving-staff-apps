@@ -1082,7 +1082,7 @@ function renderSenior(base, sim){
       standard in. The Qualifier on ${esc((PS.senior.find(r=>r.entry==='open')||{}).dates||'5-6 Aug')} exists so they can add events.
       Rows marked <b>derived</b> are computed from final standings in our own results; the rest are roster decisions recorded
       nowhere in this database and need a number from you.</p>
-    <table class="ps-tbl"><thead><tr><th>Qualification pathway</th><th class="num">Entries</th></tr></thead>
+    <table class="ps-tbl"><thead><tr><th>Qualification pathway</th><th class="num">Event entries</th></tr></thead>
       <tbody>${pr}
         <tr class="ps-tot"><td>Accounted for</td><td class="num mono">${fmt(Math.round(accounted))}</td></tr>
         <tr><td class="ps-sub">Live entry count for meet ${esc(nats.meet)}</td>
@@ -1113,7 +1113,7 @@ function renderSenior(base, sim){
       : (missing ? '<div class="ps-warn">One or more meets have no synced entry count. Tick <b>use</b> and type a figure, or re-run the DiveMeets entries sync for that meet number.</div>' : '')}
     <table class="ps-tbl"><thead><tr>
       <th>Meet</th><th class="num">Live individual</th><th class="num">Synchro</th><th class="num">Override</th>
-      <th class="num">Entries used</th><th class="num">Fee / event</th>
+      <th class="num">Event entries used</th><th class="num">Fee / event</th>
       <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
       <tr class="ps-tot"><td>Total</td><td colspan="3"></td>
@@ -1157,7 +1157,7 @@ function renderStructure(sim){
       <div class="note">Stops, fields and qualifier counts come from the loaded boundary scenario. Change how many advance out of each level and every downstream field &mdash; and the revenue &mdash; recomputes.</div>
     </div><div class="card-b">
     <table class="ps-tbl"><thead><tr>
-      <th>Level</th><th class="num">Stops</th><th class="num">Entries</th>
+      <th>Level</th><th class="num">Stops</th><th class="num">Event entries (projected)</th>
       <th class="num">Qualifying</th><th class="num">Non-qual.</th>
       <th class="num">Advance / event</th><th class="num">Direct to final / event</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table>
@@ -1196,7 +1196,7 @@ function renderEventFees(base, sim){
       <div class="note">Baseline is the 2026 card from the Athlete Progression Guide. Response = % of entries lost per 10% fee increase.</div>
     </div><div class="card-b">
     <table class="ps-tbl"><thead><tr>
-      <th>Level</th><th class="num">Entries</th><th class="num">Qualifying fee</th>
+      <th>Level</th><th class="num">Event entries (projected)</th><th class="num">Qualifying fee</th>
       <th class="num">Non-qual. fee</th><th class="num">Response</th><th class="num">Synchro teams</th>
       <th class="num">Gross</th><th class="num">DiveMeets</th><th class="num">Net</th><th class="num">vs baseline</th>
     </tr></thead><tbody>${rows}
@@ -1301,7 +1301,7 @@ function renderQualification(sim){
       <div>
         <h4 class="ps-h4">Field size per stop</h4>
         <table class="ps-tbl"><thead><tr>
-          <th>Level</th><th class="num">Stops</th><th class="num">Entries</th>
+          <th>Level</th><th class="num">Stops</th><th class="num">Event entries (projected)</th>
           <th class="num">Per stop</th><th class="num">Per event</th>
         </tr></thead><tbody>${fieldRows}</tbody></table>
         <p class="note ps-foot">Per event assumes all 24 individual events run at every stop. This is the number that decides session length &mdash; a scenario that looks affordable can still be unrunnable if it pushes a stop past what the pool can get through in a day.</p>
@@ -1715,9 +1715,9 @@ function renderCompare(){
       ${row('Entry fees, gross', c=>c.feeRev, usd1, 'up')}
       ${row('DiveMeets pass-through', c=>-c.levy, usd1, 'up')}
       <tr class="ps-grp"><td colspan="${cols.length+1}">Athlete opportunity</td></tr>
-      ${row('Field reaching the final', c=>c.national, v=>fmt(Math.round(v)), 'up')}
-      ${row('Total chargeable entries', c=>c.chargeable, v=>fmt(Math.round(v)), null)}
-      <tr class="ps-grp"><td colspan="${cols.length+1}">Entries by level</td></tr>
+      ${row('Field reaching the final, event entries (projected)', c=>c.national, v=>fmt(Math.round(v)), 'up')}
+      ${row('Total chargeable event entries (projected)', c=>c.chargeable, v=>fmt(Math.round(v)), null)}
+      <tr class="ps-grp"><td colspan="${cols.length+1}">Event entries by level (projected)</td></tr>
       ${lvlRows}
       <tr class="ps-grp"><td colspan="${cols.length+1}">Structure</td></tr>
       ${row('Regions painted', c=>c.regions, v=>fmt(Math.round(v)), null)}
@@ -1921,7 +1921,7 @@ function buildReport(){
 $${PS.levy.toFixed(2)} of every event entry goes to DiveMeets as the scoring platform, charged once per synchro team rather than once per diver. It is a flat amount, so it takes ${(PS.levy/45*100).toFixed(1)}% of a $45 non-qualifying entry against ${(PS.levy/125*100).toFixed(1)}% of a $125 national entry.</p>
 
 <h2>By level</h2>
-<table><thead><tr><th>Level</th><th class="n">Stops</th><th class="n">Entries</th><th class="n">Qual. fee</th>
+<table><thead><tr><th>Level</th><th class="n">Stops</th><th class="n">Event entries (projected)</th><th class="n">Qual. fee</th>
   <th class="n">Gross</th><th class="n">DiveMeets</th><th class="n">Net</th></tr></thead><tbody>${lvlRows}</tbody></table>
 
 <h2>Athlete opportunity</h2>

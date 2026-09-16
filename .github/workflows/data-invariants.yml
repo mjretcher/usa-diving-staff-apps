@@ -1,0 +1,40 @@
+name: Junior Circuit data checks
+
+# Read-only checks that the Junior Circuit models and reports still agree with
+# real results, published fees and their own totals (api/check-invariants.mjs).
+# Runs on any change to the engine or its data, and weekly because the data
+# underneath (results, qualifier list) keeps moving. A failure here means a
+# number on a report is wrong -- fix before circulating.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'membership-analytics/boundary.js'
+      - 'membership-analytics/pricing.js'
+      - 'membership-analytics/routing.js'
+      - 'membership-analytics/advance-data.json'
+      - 'membership-analytics/recaps-*.json'
+
+concurrency:
+  group: data-invariants
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci
+      - run: npm test
+      - run: node api/check-invariants.mjs
+        env:
+          NEON_SQL_ENDPOINT: https://ep-holy-bird-aj5deo63.c-3.us-east-2.aws.neon.tech/sql
+          NEON_READONLY_URL: ${{ secrets.NEON_DATABASE_URL }}

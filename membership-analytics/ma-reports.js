@@ -958,7 +958,7 @@ const BOUNDARY_SECTIONS = {
         </tbody></table>
         ${levelRows?`<h3 class="mr-h3">Every stage</h3>
         <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Meets</th>
-          <th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Per meet</th></tr></thead>
+          <th scope="col" class="mr-num">Event entries</th><th scope="col" class="mr-num">Per meet</th></tr></thead>
           <tbody>${levelRows}</tbody></table>`:''}
         ${schedLine}${probLine}
         <h3 class="mr-h3">What this was computed from</h3>
@@ -1198,7 +1198,7 @@ const BOUNDARY_SECTIONS = {
         <h3 class="mr-h3">Summary — does each meet fit</h3>
         ${verdict}
         <table class="mr-table"><thead><tr>
-          <th scope="col">Stop</th><th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Events</th>
+          <th scope="col">Stop</th><th scope="col" class="mr-num">Event entries</th><th scope="col" class="mr-num">Events</th>
           <th scope="col" class="mr-num">Days</th><th scope="col" class="mr-num">Longest day</th><th scope="col">&nbsp;</th>
           <th scope="col" class="mr-num">Split</th><th scope="col" class="mr-num">Look at</th><th scope="col">Verdict</th>
         </tr></thead><tbody>${rows}</tbody></table>
@@ -1348,7 +1348,7 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-note">Calibrated to ${esc(api.yearLabel())}'s measured take-up where a real one exists;
           bands with no real measurement assume every qualifier turns up.</p>
         <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th><th scope="col" class="mr-num">Stops</th>
-          <th scope="col" class="mr-num">Entries</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Divers</th></tr></thead>
+          <th scope="col" class="mr-num">Event entries (projected)</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Unique athletes (projected)</th></tr></thead>
           <tbody>${rows}</tbody></table>
         <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
           three events, so the two answer different questions — entries decide session length and fee income,
