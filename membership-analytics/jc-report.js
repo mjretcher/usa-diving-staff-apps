@@ -254,7 +254,7 @@ async function generate(id) {
   out.innerHTML = `
     <div class="mr-toolbar">
       <button class="mr-print" onclick="window.print()">Print / save as PDF</button>
-      <button onclick="window._jcOpen()">Comparison reports</button>
+      <button onclick="document.getElementById('mr-output').remove(); window._jcOpen()">Back to comparison reports</button>
       <button onclick="document.getElementById('mr-output').remove()">✕ Close</button>
       <span class="mr-soft" style="margin-left:auto">Sized for US Letter.</span>
     </div>
