@@ -824,7 +824,7 @@ async function loadSeniorEntries(){
          COALESCE(sum(entries) FILTER (WHERE COALESCE(discipline,'') ILIKE '%synchro%'
                                           OR COALESCE(event_name,'') ILIKE '%synchro%'),0)::int syn,
          count(*)::int ev
-       FROM junior_results.meet_entries WHERE meet_id_dm = ANY($1) GROUP BY 1`, [ids]);
+       FROM junior_results.meet_entries WHERE meet_id_dm::text = ANY(string_to_array($1, ',')) GROUP BY 1`, [ids.join(',')]);
     const out = {};
     r.rows.forEach(x => { out[String(x.m)] = {n:+x.ind, syn:+x.syn, ev:+x.ev}; });
     PS.seniorEntries = out;
@@ -833,9 +833,9 @@ async function loadSeniorEntries(){
     const d = await NEON.query(
       `SELECT meet_id_dm m, event_id_dm e, entries n
        FROM junior_results.meet_entries
-       WHERE meet_id_dm = ANY($1)
+       WHERE meet_id_dm::text = ANY(string_to_array($1, ','))
          AND NOT (COALESCE(discipline,'') ILIKE '%synchro%'
-               OR COALESCE(event_name,'') ILIKE '%synchro%')`, [ids]);
+               OR COALESCE(event_name,'') ILIKE '%synchro%')`, [ids.join(',')]);
     const per = {};
     d.rows.forEach(x => { (per[String(x.m)] = per[String(x.m)] || []).push(+x.n); });
     PS.seniorEventFields = per;

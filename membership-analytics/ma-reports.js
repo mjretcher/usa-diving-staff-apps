@@ -3503,6 +3503,8 @@ function mount(){
   bar.innerHTML = `
     <span class="mr-bar-lbl">Reports</span>
     <button class="mr-bar-btn mr-bar-prim" onclick="window._mrOpenBuilder()">Build a report</button>
+    <button class="mr-bar-btn" onclick="window._jcOpen ? window._jcOpen() : null"
+            title="Junior Circuit Comparison Report and your saved copies — generate, duplicate, edit">Comparison reports</button>
     <button class="mr-bar-btn" onclick="window._mrOpenBuilder('__boundary__')"
             title="Open the builder with the map templates first — nothing is chosen for you">Report on this map</button>
     <button class="mr-bar-btn" onclick="window._mrShare()"

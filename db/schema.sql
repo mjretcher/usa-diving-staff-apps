@@ -1022,6 +1022,20 @@ CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Saved report definitions (Membership Analytics -> Reports -> Comparison
+-- reports). `config` holds what to compare (saved Boundary Studio scenarios
+-- and/or the 2025 / 2026 structures), the column labels, the title and the
+-- sections. Only the recipe is stored; every figure is recomputed from live
+-- data each time the report is generated.
+CREATE TABLE IF NOT EXISTS membership.report_definitions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    config JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Pricing Studio scenarios (Membership Analytics): membership + event fee cards,
 -- elasticity assumptions and flow overrides, bound to a boundary scenario id.
 CREATE TABLE IF NOT EXISTS membership.pricing_scenarios (
@@ -1224,7 +1238,8 @@ BEGIN
       membership.pricing_scenarios,
       membership.scenario_schedules,
       membership.schedule_templates,
-      membership.pathways
+      membership.pathways,
+      membership.report_definitions
       TO usad_app;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
     -- The default privilege is what stops this recurring: a table added later

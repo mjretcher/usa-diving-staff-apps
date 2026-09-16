@@ -20,6 +20,7 @@ import { neonQuery } from './_neon.js';
 import { withFirstStopSeed, seedFromZones, computeBoundaryMoneyReport, buildWindow } from './_boundary-money.js';
 import { compute2025Model } from './_2025-model.js';
 import { compute2026BaselineWithNationals } from './_2026-model.js';
+import { buildJuniorCircuitReport, JC_BUILTIN } from '../shared/jc/report.js';
 
 let pass = 0, fail = 0;
 const ok = (c, msg) => { if (c) { pass++; console.log('  PASS:', msg); } else { fail++; console.log('  FAIL:', msg); } };
@@ -136,6 +137,19 @@ for (const f of ['boundary.js', 'pricing.js']) {
   const src = fs.readFileSync(path.join(MA, f), 'utf8');
   const bare = (src.match(/>(Entries|Divers|Competitors)</g) || []);
   ok(bare.length === 0, `${f}: no bare "Entries"/"Divers"/"Competitors" headings (${bare.length} found)`);
+}
+
+console.log('=== report: the in-app Junior Circuit Comparison Report matches the models ===');
+{
+  const rep = await buildJuniorCircuitReport(JC_BUILTIN);
+  ok(rep.columns.every((c) => !c.error), `report: all ${rep.columns.length} columns built`);
+  ok(rep.checks.every((c) => c.pass), `report: its own ${rep.checks.length} checks pass`);
+  const [cce, nos, s25, s26] = rep.columns;
+  const cceM = await computeBoundaryMoneyReport('bs-msg2vatz-5q86m', {});
+  ok(cce.money.keeps === cceM.usaDivingKeeps && cce.nationals.eventEntries === cceM.fieldAtFinal, `report CCE keeps $${cce.money.keeps} / Junior Nationals ${cce.nationals.eventEntries} = model`);
+  ok(s25.money.keeps === m25.usaDivingKeeps && s26.money.keeps === m26.usaDivingKeeps, `report 2025 / 2026 keeps = models ($${s25.money.keeps} / $${s26.money.keeps})`);
+  ok(s26.nationals.eventEntries + s26.nationals.synchroEntries === m26.perTier.find((t) => t.level === 'Nationals').entries, `report 2026 Junior Nationals ${s26.nationals.eventEntries} individual + ${s26.nationals.synchroEntries} synchro = model`);
+  ok(nos.nationals.eventEntriesLow < nos.nationals.eventEntries && nos.nationals.rangeReason, 'report: projected Junior Nationals range has a low end and a stated reason');
 }
 
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
