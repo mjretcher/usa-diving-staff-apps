@@ -220,8 +220,16 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   if (opts.cdFirstStop && S.year === 'y26' && S.advData && S.advData.pools) {
     const adv = S.advData;
     const R = JSON.parse(JSON.stringify(adv.pools['2026|Regionals'] || {})), Z = adv.pools['2026|Zones'] || {};
-    for (const f in R) for (const c of Object.keys(R[f])) if (/^[CD]/.test(c)) delete R[f][c];
-    for (const f in Z) for (const c in Z[f]) if (/^[CD]/.test(c)) { R[f] = R[f] || {}; R[f][c] = (R[f][c] || 0) + Z[f][c]; }
+    // Take from the 2026 Zones pool every cell whose real first qualifying
+    // appearance was at Zones: all Group C/D events, and platform for every
+    // group. Platform was optional (non-qualifying, $45) at 2026 Regionals, so
+    // the Regionals pool holds only 58 Group A/B platform event entries against
+    // 345 at Zones -- seeding platform from Regionals undercounted it by ~290
+    // event entries at the first stop and everywhere downstream (corrected
+    // 2026-09-16).
+    const fromZones = (c) => /^[CD]/.test(c) || c[2] === 'P';
+    for (const f in R) for (const c of Object.keys(R[f])) if (fromZones(c)) delete R[f][c];
+    for (const f in Z) for (const c in Z[f]) if (fromZones(c)) { R[f] = R[f] || {}; R[f][c] = (R[f][c] || 0) + Z[f][c]; }
     S.advData = Object.assign({}, adv, { pools: Object.assign({}, adv.pools, { '2026|Regionals_CDfirst': R }) });
     S.seedPool = 'Regionals_CDfirst';
   }
