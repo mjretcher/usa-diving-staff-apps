@@ -58,18 +58,35 @@ import path from 'node:path';
 import { neonQuery } from './_neon.js';
 import { cohortLoad, movementRates } from './_eligibility.js';
 
-const REAL_2026_ENTRIES = { Regions: 2405, Zones: 2398, 'E / W / C': 1046, Nationals: 757 };
-
-/* Real 2026 per-cell entries for a stage (diver+event, deduplicated across rounds). */
-async function realPerCell2026(stage) {
+/* Real 2026 per-cell entries for a stage, optionally one meet (diver+event,
+   deduplicated across rounds). Synchro entries are one cell, 'SYN', so the
+   per-cell list always covers every entry that DiveMeets bills and the host is
+   paid on -- income, DiveMeets and host are computed on the same entries.
+   (Before 2026-09-16 synchro was left out of the list while still counted in
+   the entry total: Nationals income was priced on 720 entries and costs on 757.) */
+async function realPerCell2026(stage, meetId = null) {
   const rows = await neonQuery(
-    `select right(age_group,1)||left(gender,1)||(case discipline when '1M' then '1' when '3M' then '3' when 'Platform' then 'P' end) as cell,
+    `select case when coalesce(is_synchro,false) then 'SYN'
+                 else right(age_group,1)||left(gender,1)||(case discipline when '1M' then '1' when '3M' then '3' when 'Platform' then 'P' end) end as cell,
             count(distinct diver_id_dm||'|'||event_key)::int as entries
      from core.event_results
      where is_junior_circuit and year = 2026 and stage = $1 and diver_id_dm is not null
-     group by 1`, [stage]);
-  const m = {}; for (const r of rows) if (r.cell && !/null/.test(r.cell)) m[r.cell] = r.entries; return m;
+       and ($2::text is null or meet_id_dm::text = $2::text)
+     group by 1`, [stage, meetId == null ? null : String(meetId)]);
+  const m = {};
+  for (const r of rows) {
+    if (!r.cell || /null/.test(r.cell)) {
+      // Regionals also run non-circuit events (the "FC Level" developmental
+      // events): no Junior age group, never qualifying. They are billed entries,
+      // so they stay in, priced as non-qualifying ('NQ' = $45).
+      if (stage === 'Regionals') { m.NQ = (m.NQ || 0) + r.entries; continue; }
+      throw new Error(`2026 ${stage}: ${r.entries} entries have no age group / gender / board -- refusing to price them as something else`);
+    }
+    m[r.cell] = r.entries;
+  }
+  return m;
 }
+const sumCells = (m) => Object.values(m).reduce((a, n) => a + n, 0);
 
 /* Real 2026 per-meet entries and the fee DiveMeets published for that meet.
    Regionals (all 12) and Zones C and D publish "varies at checkout" -- host-set,
@@ -97,8 +114,9 @@ async function computeTierFromRealEntries(level, entries, hostSettings, perCell)
   S.fees = null; // DEFAULT_FEES -- same basis as CCE Submission and the rest of this report
   S.year = 'y26';
   Object.assign(S, hostSettings);
-  // Carry the per-cell event list so Regionals price Group C/D and tower at the
-  // $45 non-qualifying tier (2026), exactly as the DiveMeets recaps do.
+  // Carry the per-cell event list so Regionals price each entry by event type:
+  // qualifying (Group A/B 1-meter, 3-meter) $85, non-qualifying (platform,
+  // Groups C/D, synchro) $45 -- 2026 Athlete Progression Guide.
   const events = perCell ? Object.entries(perCell).map(([cell, n]) => ({ cell, n })) : null;
   const money = I.meetMoney({ level, entries, events });
   return {
@@ -116,10 +134,15 @@ export async function compute2026BaselineWithNationals() {
 
   const stageOf = { Regions: 'Regionals', Zones: 'Zones', 'E / W / C': 'EWC', Nationals: 'Nationals' };
   const perTier = [];
-  for (const [name, entries] of Object.entries(REAL_2026_ENTRIES)) {
+  for (const name of Object.keys(stageOf)) {
     const perCell = await realPerCell2026(stageOf[name]);
+    const entries = sumCells(perCell);
     const t = await computeTierFromRealEntries(levelIndex[name], entries, hostSettings, perCell);
-    t.cohortLoad = await cohortLoad(perCell, 2026, name);
+    t.synchroEntries = perCell.SYN || 0;
+    t.otherNonCircuitEntries = perCell.NQ || 0;
+    t.individualEntries = entries - t.synchroEntries - t.otherNonCircuitEntries;
+    const indiv = Object.assign({}, perCell); delete indiv.SYN; delete indiv.NQ;
+    t.cohortLoad = await cohortLoad(indiv, 2026, name);
     perTier.push(t);
   }
 
@@ -139,13 +162,22 @@ export async function compute2026BaselineWithNationals() {
     const { w } = buildWindow(); const I = w.__boundaryInternal; const S = I.S;
     S.levels = [{ name: 'Regions' }, { name: 'Zones' }, { name: 'E / W / C' }, { name: 'Nationals' }];
     S.year = 'y26';
-    S.fees = rm.publishedFeePerEvent != null ? { [stageLevel[rm.stage]]: rm.publishedFeePerEvent } : null;
+    // Regionals: always the Guide's two-rate schedule, whatever DiveMeets shows
+    // (it lists "varies at checkout"). Other stops: the published flat fee, or the
+    // stage default where the host sets pricing.
+    const isRegional = rm.stage === 'Regionals';
+    S.fees = (!isRegional && rm.publishedFeePerEvent != null) ? { [stageLevel[rm.stage]]: rm.publishedFeePerEvent } : null;
     Object.assign(S, hostSettings);
-    const entries = rm.individualEntries + rm.synchroEntries;
-    const money = I.meetMoney({ level: stageLevel[rm.stage], entries });
+    const cells = await realPerCell2026(rm.stage, rm.meetId);
+    const entries = sumCells(cells);
+    const events = isRegional ? Object.entries(cells).map(([cell, n]) => ({ cell, n })) : null;
+    const money = I.meetMoney({ level: stageLevel[rm.stage], entries, events });
+    const qualifying = isRegional ? Object.entries(cells).filter(([c]) => /^[AB][BG][13]$/.test(c)).reduce((a, [, n]) => a + n, 0) : null;
     perMeet.push({ tier: rm.stage === 'EWC' ? 'E / W / C' : rm.stage === 'Regionals' ? 'Regions' : rm.stage, stop: rm.name, entries,
       individualEntries: rm.individualEntries, synchroEntries: rm.synchroEntries,
-      feePerEvent: money.fee, feeSource: rm.hostSetFee ? 'host-set at checkout (model default used)' : 'published on DiveMeets',
+      qualifyingEntries: qualifying, nonQualifyingEntries: isRegional ? entries - qualifying : null,
+      feePerEvent: isRegional ? '$85 qualifying / $45 non-qualifying' : money.fee,
+      feeSource: isRegional ? '2026 Athlete Progression Guide' : rm.hostSetFee ? 'host-set at checkout (stage default used)' : 'published on DiveMeets',
       lateFeePublished: rm.lateFeePublished,
       grossEntryIncome: Math.round(money.gross), diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad) });
   }
@@ -167,17 +199,23 @@ export async function compute2026BaselineWithNationals() {
       usaDivingKeepsBeforeNationalsHost: +(sum('net') - sum('host')).toFixed(2), byStage: recaps.byStage,
       note: 'Host figures are the calculated split, not confirmed QuickBooks postings; E/W/C host bills also net merch and ticket sales (East $10,851.24, Central $8,030.38, West $9,214.17 actual bills). Zone C/D host share ($60/$40 question) open with finance as of 2026-06-11.' };
   })() : null;
-  const mvRate = ((movementBand[2026] || {}).regionals || {}).rate || 0;
-  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
+  // Stop totals must equal the season totals -- they are the same entries at the
+  // same fees. A mismatch here is what put $404K and $437K in the same report.
+  const stopKeeps = perMeet.reduce((a, m) => a + m.usaDivingKeeps, 0);
+  const stopGross = perMeet.reduce((a, m) => a + m.grossEntryIncome, 0);
+  if (Math.abs(stopGross - grossEntryIncome) > perMeet.length || Math.abs(stopKeeps - usaDivingKeeps) > perMeet.length * 2) {
+    throw new Error(`2026 model: stops sum to gross $${stopGross} / keeps $${stopKeeps} but season is $${grossEntryIncome} / $${usaDivingKeeps}`);
+  }
   return {
     assumptions: { basis: 'model: real 2026 competed entries at every tier with the scenario host terms. reconciled: the DiveMeets recaps (paid entries, late fees, actual host split).', ceilingYear: 2026 },
     reconciled,
-    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(usaDivingKeeps) },
     perMeet,
     movementBand,
     scenarioId: 'seed-2026-official',
     scenarioName: 'Official 2026 Alignment (published map) -- rebuilt from real 2026 completed-meet entries',
     fieldAtFinal: perTier[perTier.length - 1].entries,
+    fieldAtFinalIndividual: perTier[perTier.length - 1].individualEntries,
+    fieldAtFinalSynchro: perTier[perTier.length - 1].synchroEntries,
     grossEntryIncome, diveMeetsPassThrough, toHosts, usaDivingKeeps,
     perTier,
     notes: [
@@ -187,8 +225,13 @@ export async function compute2026BaselineWithNationals() {
       'counts (diver+event, deduplicated across prelim/semi/final rounds) from core.event_results, the ' +
       'same standard already used for the 2025 Model.',
       'Entry fees only -- membership dues and senior circuit revenue are a separate model, not included here.',
-      'Fee schedule: DEFAULT_FEES (same basis as CCE Submission). Host-cost settings match both live ' +
-      'proposals exactly.',
+      'Fees (2026 Athlete Progression Guide): Regionals $85 qualifying event (Group A/B 1-meter, 3-meter), ' +
+      '$45 non-qualifying (platform, Groups C/D, synchro, and the non-circuit FC Level events); Zones $90; E/W/C $115; Junior Nationals $125. ' +
+      'Host-cost settings match both live proposals exactly ($25 per entry).',
+      'Junior Nationals entries include synchro (fieldAtFinalSynchro). Compare with the proposals, which project ' +
+      'individual events only, using fieldAtFinalIndividual.',
+      'Region-choice movement (movementBand) is reported as a measured rate only. It is not applied to entry ' +
+      'or revenue totals: an athlete who competes outside their home region still enters a meet.',
     ],
   };
 }

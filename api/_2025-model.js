@@ -34,19 +34,18 @@
  *     15th place) and platform's direct Zone entries (525 real athletes --
  *     platform is exhibition at Regionals in every year 2021-2026, so it
  *     enters at Zones directly) are both real 2025 counts, not estimates.
- *   - Result: projected Zone total 2,382 vs. real 2,410 (1.2% off); projected
- *     Nationals total 1,224 vs. real 1,234 (0.8% off), both from this file's
- *     own meetManifest/meetMoney-based output. The remaining gap is most
- *     likely the domain rules' "skip-stage qualifiers" (Alaska/Hawaii, YMCA
- *     champions, military-dependent athletes) which this does not yet model
- *     as a separate cohort.
+ *   - Result: projected Zone total 2,382 vs. real 2,443 (2.5% under);
+ *     projected Nationals total 1,224 vs. real 1,256 individual entries
+ *     (2.5% under; 1,324 including 68 synchro, which this model does not
+ *     project). Real counts: core.event_results, distinct diver+event, 2025.
+ *     (Corrected 2026-09-16: the earlier "2,410" and "1,234" were not the real
+ *     totals -- 2,410 counted only county-matched entries, 1,234 was a typo.)
  *
- * Fee/host-cost basis: DEFAULT_FEES (same as the CCE Submission scenario,
- * which stores no fee override) and the same host-cost settings both real
- * proposals use (per_entry, 25% share, $3,000 flat, $25/entry, $0 minimum) --
- * so the comparison isolates the effect of the qualification structure
- * itself, not a difference in pricing assumptions. Documented explicitly
- * here and in the tool's own output, not left implicit.
+ * Fee basis: the fees DiveMeets published for the 2025 season -- Regionals $85,
+ * Zones $85, Junior Nationals $115 (meets 11572-11578, 11609). Corrected
+ * 2026-09-16: this previously used the 2026 schedule ($90 Zones, $125
+ * Nationals), overstating 2025 gross by $24,150. Host cost: the same settings
+ * both proposals use ($25/entry).
  */
 
 import fs from 'node:fs';
@@ -80,6 +79,10 @@ const REGION_ENTRIES_FULL = [
 const THRESHOLD_ADDS_2025 = {AB1:12,AB3:8,AG1:16,AG3:19,BB1:2,BG1:22,BG3:17,CB1:1,CG1:14,CG3:7,DG1:3};
 const PLATFORM_ZONE_ENTRIES_2025 = {ABP:74,AGP:134,BBP:51,BGP:104,CBP:39,CGP:64,DBP:27,DGP:32};
 const TAKE_UP_RATE_2025 = 0.8374;
+// 2025 published entry fees, by level: Regions, Zones, Junior Nationals.
+const FEES_2025 = { 0: 85, 1: 85, 2: 115 };
+// Real 2025 totals (core.event_results, distinct diver+event, individual events).
+const REAL_2025 = { zones: 2443, nationalsIndividual: 1256, nationalsSynchro: 68 };
 
 function buildLevels() {
   const zones = ['A','B','C','D','E','F'].map((L) => ({ name: 'Zone ' + L }));
@@ -123,7 +126,7 @@ export async function compute2025Model(options = {}) {
   S.routing = buildRouting();
   S.finalName = 'Junior Nationals';
   S.year = 'y25';
-  S.fees = null; // DEFAULT_FEES -- same basis as the CCE Submission scenario
+  S.fees = FEES_2025; // what DiveMeets published for 2025
   S.hostMode = 'per_entry';
   S.hostShare = 0.25;
   S.hostFlat = 3000;
@@ -207,12 +210,9 @@ export async function compute2025Model(options = {}) {
   const reconciled = recaps ? (() => { const rows = recaps.perMeet; const sum = (k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
     return { source: recaps.source, paidEntries: sum('paid'), competedEntries: sum('competed'), gross: sum('gross'), creditCardFees: +sum('credit_card').toFixed(2), diveMeetsFees: +sum('divemeets').toFixed(2), host: +sum('host').toFixed(2), usadShare: +sum('usad').toFixed(2), byStage: recaps.byStage }; })() : null;
   const movementBand = await movementRates();
-  const mvRate = ((movementBand[2025] || {}).regionals || {}).rate || 0;
-  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
   return {
-    assumptions: { basis: opts.useRecapRates ? 'reconciled 2025 rates (Entry Fees.xlsx): $85/$115 flat, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'real 2025 per-region entries with default fees and $25/entry host', ceilingYear: 2025 },
+    assumptions: { basis: opts.useRecapRates ? 'reconciled 2025 rates (Entry Fees.xlsx): $85/$115 flat, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'modeled 2025 entries at 2025 published fees ($85 Regionals, $85 Zones, $115 Junior Nationals), $3.80 DiveMeets, $25/entry host', ceilingYear: 2025 },
     reconciled,
-    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(perTier[0].entries), usaDivingKeeps: band(Math.round(total.usad)) },
     perMeet,
     movementBand,
     scenarioId: 'model-2025-rules',
@@ -229,18 +229,20 @@ export async function compute2025Model(options = {}) {
         'from this file\'s own output (via the real meetManifest/meetMoney billing logic), ' +
         'not a separate rough estimate.',
       projectedVsReal: {
-        zoneTotal: { projected: perTier.find((t) => t.level === 'Zones').entries, real: 2410 },
-        nationalsTotal: { projected: perTier.find((t) => t.level === 'Nationals').entries, real: 1234 },
+        zoneTotal: { projected: perTier.find((t) => t.level === 'Zones').entries, real: REAL_2025.zones },
+        nationalsIndividual: { projected: perTier.find((t) => t.level === 'Nationals').entries, real: REAL_2025.nationalsIndividual,
+          realIncludingSynchro: REAL_2025.nationalsIndividual + REAL_2025.nationalsSynchro },
       },
-      knownGap: 'Remaining ~1-2% gap likely reflects skip-stage qualifiers (Alaska/Hawaii, YMCA ' +
-        'champions, military-dependent athletes) not yet modeled as a separate entry cohort.',
+      knownGap: 'Model runs about 2.5% under real 2025 at Zones and at Nationals. Likely causes: skip-stage ' +
+        'qualifiers (Alaska/Hawaii, YMCA champions, military dependents) not modeled as their own cohort.',
     },
     notes: [
       'Entry fees only, same basis as the two live proposals -- membership dues and senior ' +
       'circuit revenue are a separate model, not included here.',
-      'Fee schedule: DEFAULT_FEES (same basis as CCE Submission, which stores no override). ' +
-      'Host-cost settings (per_entry, 25% share, $3,000 flat, $25/entry, $0 min) match both ' +
-      'live proposals exactly, so this comparison isolates the qualification structure itself.',
+      'Fees: 2025 published fees ($85 Regionals, $85 Zones, $115 Junior Nationals); DiveMeets $3.80 per entry. ' +
+      'Host cost $25 per entry, matching both proposals.',
+      'Junior Nationals entries are individual events only (fieldAtFinal); real 2025 also had 68 synchro entries.',
+      'Region-choice movement (movementBand) is a measured rate only; it is not applied to totals.',
       'This is NOT run through the standard scenario pipeline (see file header) -- it uses a ' +
       'take-up rate measured specifically for this ruleset, not the app\'s automatic per-year ' +
       'calibration, which is built for the current system\'s structure and would not apply ' +

@@ -1846,15 +1846,17 @@ const LEVY = 4.90;
    other fees (late fees, sheet changes). Earlier seasons keep $4.90. */
 function levyPerEntry(){ return S.year === 'y26' ? 4.95 : S.year === 'y25' ? 3.80 : LEVY; }
 const LEVY_OTHER_FEES_PCT = 0.10;
-/* Regionals in 2026 priced by tier, not one fee: Group C and D events and
-   tower (platform) sit in a $45 non-qualifying tier; Group A/B springboard is the
-   qualifying tier at the published Regional fee. Applied per cell, only at a
-   level whose name is Regions/Regionals and only for y26. */
+/* Regionals in 2026 are priced by event type (2026 Athlete Progression Guide,
+   Entry Fees): a QUALIFYING event -- Group A/B 1-meter and 3-meter -- is $85;
+   every NON-QUALIFYING event -- platform, any Group C/D event, and synchro
+   (cell code 'SYN') -- is $45. Applied per cell, only at a level whose name is
+   Regions/Regionals and only for y26 (2025 Regionals were a flat $85). */
 const REGIONAL_NON_QUALIFYING_FEE = 45;
+function regionalQualifyingCell(cell){ return /^[AB][BG][13]$/.test(String(cell || '')); }
 function feeForCell(L, cell){
   const nm = String((S.levels[L] && S.levels[L].name) || '').toLowerCase();
   if (S.year === 'y26' && /region/.test(nm) && (S.fees == null || S.fees[L] == null)) {
-    if (/^[CD]/.test(cell) || cell[2] === 'P') return REGIONAL_NON_QUALIFYING_FEE;
+    if (!regionalQualifyingCell(cell)) return REGIONAL_NON_QUALIFYING_FEE;
   }
   return feeFor(L);
 }

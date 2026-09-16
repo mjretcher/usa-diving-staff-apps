@@ -86,6 +86,16 @@ console.log('=== 2026 recap rules: $4.95 per-entry cut, 10% on other fees, Regio
   S.year = 'y25'; m = I.meetMoney({ level: 0, entries: 30, events });
   ok(Math.abs(m.entryIncome - 30*85) < 0.01, 'the $45 tier is 2026-only -- 2025 Regionals price every cell at $85'); }
 
+console.log('=== 2026 Regionals: $85 qualifying event (A/B 1-meter, 3-meter), $45 every non-qualifying event ===');
+{ const { I, S } = fresh(['Regions','Zones','E / W / C','Nationals']); S.fees = null; S.year = 'y26'; S.hostMode='per_entry'; S.hostPer=0; S.hostMin=0; S.hostPer_stop=null;
+  const price = (cell) => I.meetMoney({ level: 0, entries: 1, events: [{ cell, n: 1 }] }).entryIncome;
+  ok(['AB1','AB3','AG1','AG3','BB1','BB3','BG1','BG3'].every(c => price(c) === 85), 'every Group A/B 1-meter and 3-meter event is $85');
+  ok(['ABP','AGP','BBP','BGP'].every(c => price(c) === 45), 'Group A/B platform is non-qualifying at Regionals: $45');
+  ok(['CB1','CG3','CBP','DB1','DG3','DGP'].every(c => price(c) === 45), 'every Group C/D event is non-qualifying at Regionals: $45');
+  ok(price('SYN') === 45 && price('NQ') === 45, 'synchro and non-circuit (FC Level) events at Regionals: $45');
+  const z = I.meetMoney({ level: 3, entries: 2, events: [{ cell: 'AB1', n: 1 }, { cell: 'SYN', n: 1 }] });
+  ok(z.entryIncome === 250, 'Junior Nationals: synchro billed at the $125 event fee like any other entry'); }
+
 console.log('=== reconciled basis (S.recapRates): paid uplift, late fees, sheet changes, host share of net by stage ===');
 { const { I, S } = fresh(['Regions','Zones','Nationals']); S.fees = null; S.year = 'y26'; S.hostMode='per_entry'; S.hostPer=25; S.hostMin=0; S.hostPer_stop=null;
   S.recapRates = { Zones: { paidNotCompetedPct: 4.9, lateFeeSharePct: 2.1, avgLateFee: 98, sheetChangePerEntry: 0.47, hostPctOfNet: 36.5 } };

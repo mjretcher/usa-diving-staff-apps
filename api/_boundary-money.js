@@ -294,18 +294,26 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
       diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad),
       hostOverride: money.overridden };
   });
-  // Movement band: the measured region-choice rate for the ceiling year, carried
-  // as +/- on first-tier entries and on the total USA Diving keeps. Measured,
-  // not predicted (see movementBand for the source rates).
-  const mvRate = ((movementBand[opts.ceilingYear] || {}).regionals || {}).rate || 0;
-  const firstEntries = perTier.length ? perTier[0].entries : 0;
-  const keptTotal = Math.round(a.total.usad);
-  const band = (v) => ({ low: Math.round(v * (1 - mvRate / 100)), point: Math.round(v), high: Math.round(v * (1 + mvRate / 100)) });
+  // Region-choice movement is reported as a measured rate only (movementBand).
+  // It is not applied to totals: an athlete who competes outside their home
+  // region still enters a meet, so season entries and revenue don't move with it.
+  //
+  // Standard-fee comparison: a scenario that stores its own fees (the National
+  // Office Proposal prices Junior Nationals at $135) is also priced at the
+  // published 2026 schedule, so two proposals can be compared on structure alone.
+  let atStandardFees = null;
+  if (S.fees && Object.values(S.fees).some((v) => v != null)) {
+    const saved = S.fees; S.fees = null;
+    try { const b = Iboundary.financialsFor(null); if (b) atStandardFees = { grossEntryIncome: Math.round(b.total.gross), usaDivingKeeps: Math.round(b.total.usad),
+      note: 'Same entries priced at the published 2026 schedule ($85/$45 Regionals, $90 Zones, $115 E/W/C, $125 Junior Nationals) instead of this scenario\'s own fees.' }; }
+    finally { S.fees = saved; }
+  }
   return {
     assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
       revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario\'s stored host terms; competed entries only; no late fees',
       seedPool: S.seedPool || 'inferred', note: opts.cdFirstStop ? 'Groups C and D modelled at the first stop (mandatory); 2026 non-mandatory first stop treated as the exception.' : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
-    movementBandApplied: { ratePct: mvRate, firstTierEntries: band(firstEntries), usaDivingKeeps: band(keptTotal) },
+    scenarioFees: S.fees || null,
+    atStandardFees,
     perMeet,
     movementBand,
     scenarioId: S.scenarioId,

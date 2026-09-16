@@ -168,7 +168,7 @@ const TOOLS = [
       'projected unique athletes (entries converted by real measured events-per-athlete) as a percentage of ' +
       'eligible Competition Athlete members, per age group and gender, with a band for members whose gender ' +
       'is unresolved, an explicit Groups C/D designation, and a flag if any cohort exceeds its eligible ' +
-      'membership. Use list_boundary_scenarios first to find a scenario_id.',
+      'membership. When the scenario stores its own fees (e.g. $135 Junior Nationals), atStandardFees gives the same entries priced at the published 2026 schedule so proposals can be compared on structure alone. Region-choice movement is reported as a measured rate only and is not applied to totals. Use list_boundary_scenarios first to find a scenario_id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -185,14 +185,14 @@ const TOOLS = [
   {
     name: 'get_2025_rules_model',
     description:
-      'The rebuilt 2021-2025 qualification rules (Region -> Zone -> Nationals, no E/W/C tier), seeded from real 2025 per-region entries and validated against real 2025 results (Zones 2,382 vs actual 2,410; Nationals 1,224 vs actual 1,234). Same output shape as get_boundary_scenario_finances: per tier, per stop, cohort load (unique athletes as % of eligible members by age group and gender, toggleable across 2024/2025/2026 membership), ages-13-and-under line, movement band. Entry fees only.',
+      'The rebuilt 2021-2025 qualification rules (Region -> Zone -> Nationals, no E/W/C tier), seeded from real 2025 per-region entries and validated against real 2025 results (Zones 2,382 vs actual 2,443; Junior Nationals 1,224 vs actual 1,256 individual entries, 1,324 with synchro -- both about 2.5% under). Priced at the fees DiveMeets published for 2025: $85 Regionals, $85 Zones, $115 Junior Nationals. Same output shape as get_boundary_scenario_finances: per tier, per stop, cohort load (unique athletes as % of eligible members by age group and gender, toggleable across 2024/2025/2026 membership), ages-13-and-under line, measured region-choice rates (not applied to totals). Entry fees only.',
     inputSchema: { type: 'object', properties: {} },
     handler: get2025RulesModel,
   },
   {
     name: 'get_2026_current_model',
     description:
-      'The current 2026 rules (Region -> Zone -> E/W/C -> Nationals) built from real, already-completed 2026 meets: real entries at every tier and every stop, with the fee DiveMeets actually published for each meet where it is flat (Zones $90, E/W/C $115, Nationals $125) and a flag where the host sets pricing at checkout (all Regionals, Zones C and D). Counts competed athletes only -- paid-but-not-competed entries and late fees are not in results data. Same output shape as get_boundary_scenario_finances.',
+      'The current 2026 rules (Region -> Zone -> E/W/C -> Nationals) built from real, already-completed 2026 meets: real entries at every tier and every stop, priced per the 2026 Athlete Progression Guide: Regionals $85 per qualifying event (Group A/B 1-meter, 3-meter) and $45 per non-qualifying event (platform, Groups C/D, synchro); Zones $90; E/W/C $115; Junior Nationals $125. Stop-by-stop and season totals are the same entries at the same fees and are checked to agree. Junior Nationals entries include synchro -- use fieldAtFinalIndividual to compare with the proposals, which project individual events only. Counts competed athletes only -- paid-but-not-competed entries and late fees are not in results data (see reconciled for the DiveMeets recaps). Same output shape as get_boundary_scenario_finances.',
     inputSchema: { type: 'object', properties: {} },
     handler: get2026CurrentModel,
   },
