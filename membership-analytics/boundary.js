@@ -2019,8 +2019,13 @@ function meetManifest(res){
           const ff = res.field[L] && res.field[L][r.key];
           byRound[r.key] = ff && ff[gi] ? Math.round(ff[gi][cell] || 0) : 0;
         });
-        events.push({cell, n: Math.round(n), byRound});
-        entries += n;
+        // Each event is a whole number of entries, and the meet's entries are
+        // the sum of those whole numbers -- the same figure the fee is charged
+        // on. (Rounding the unrounded total instead let a stop show 536 event
+        // entries while billing 539.)
+        const nEvent = Math.round(n);
+        events.push({cell, n: nEvent, byRound});
+        entries += nEvent;
         const cap = QR().capacityAt(S.routing, L, rounds[0].key, l => groupCountAt(l), cell);
         if (isFinite(cap)) spots += cap / Math.max(1, TG.groups.length);
         const blk = cell.slice(0,2);
@@ -2030,7 +2035,7 @@ function meetManifest(res){
       out.push({level:L, levelName: tierName(L), gi,
                 name: g.name || ('Area ' + (gi+1)),
                 rounds: rounds.map(r => r.key),
-                events, entries: Math.round(entries), spots: Math.round(spots),
+                events, entries, spots: Math.round(spots),
                 biggest: events.length ? Math.max(...events.map(e => e.n)) : 0,
                 minDays, blocks});
     });

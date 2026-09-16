@@ -16,7 +16,7 @@ const BOUNDARY_ANCHOR = '})();';
 export function patchBoundary(src) {
   if (!src.trimEnd().endsWith(BOUNDARY_ANCHOR)) throw new Error('boundary.js does not end with "})();" -- refusing to guess where to add the export.');
   return src.trimEnd().slice(0, -BOUNDARY_ANCHOR.length) + `
-window.__boundaryInternal = { S, financialsFor, projectPathway, syncRouting, syncLevels, migrateLevels, defaultRegions, defaultLevels, defaultAdv, meetManifest, meetMoney, tierName, groupCountAt, groupUp };
+window.__boundaryInternal = { S, financialsFor, projectPathway, syncRouting, syncLevels, migrateLevels, defaultRegions, defaultLevels, defaultAdv, meetManifest, meetMoney, feeForCell, levyPerEntry, tierName, groupCountAt, groupUp };
 
 })();`;
 }

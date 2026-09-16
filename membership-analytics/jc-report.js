@@ -153,6 +153,7 @@ function renderEditor() {
         </div></div>
         <div class="mr-step"><div class="mr-step-n">2</div><div class="mr-step-c">
           <div class="mr-step-h">Columns to compare</div>
+          <p class="mr-soft" style="margin:-4px 0 8px">Only saved Boundary Studio scenarios are listed. A new scenario must have counties assigned and be saved before it can be a column${(() => { try { const B = window.__BOUNDARY && window.__BOUNDARY.S; return B && B.dirty ? ` — “${esc(B.scenarioName || 'the scenario open in Boundary Studio')}” has unsaved changes, so the report will use its last saved version` : ''; } catch (_) { return ''; } })()}.</p>
           <div style="display:flex;flex-direction:column;gap:6px">${c.columns.map(colRow).join('')}</div>
           <button class="mr-link" onclick="window._jcColAdd()">+ Add a column</button>
         </div></div>
@@ -297,33 +298,66 @@ const cellOf = (html) => `<td class="mr-num">${html}</td>`;
 
 function rangeText(lo, hi) { return lo != null && lo !== hi ? `${n(lo)}–${n(hi)}` : n(hi); }
 
+const natOf = (c) => c.nationals;
+const noNat = (c) => `<span class="mr-soft">not in this scenario (ends at ${esc(stage(c.endsAt || ''))})</span>`;
+
 function secSummary(r) {
   const cols = r.columns;
   const rows = [];
-  const add = (label, f) => rows.push(`<tr><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? f(c) : '—')).join('')}</tr>`);
-  add('First stop — event entries', (c) => `${n(c.tiers[0].eventEntries)} <span class="mr-soft">${statusWord(c)}</span><br><span class="mr-soft">${esc(stage(c.tiers[0].name))}</span>`);
-  add('First stop — unique athletes', (c) => `${n(c.tiers[0].uniqueAthletes)} <span class="mr-soft">${c.kind === 'structure2026' ? 'actual' : statusWord(c)}</span>`);
-  add('Junior Nationals — individual event entries', (c) => {
-    const N = c.nationals;
-    if (c.kind === 'scenario') return `${rangeText(N.eventEntriesLow, N.eventEntries)} <span class="mr-soft">projected range†</span>`;
-    if (c.kind === 'structure2025') return `${n(N.eventEntries)} <span class="mr-soft">modeled</span><br><span class="mr-soft">actual ${n(N.actualEventEntries)}</span>`;
+  const add = (label, f, cls) => rows.push(`<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? f(c) : '—')).join('')}</tr>`);
+  add('First stop — event entries', (c) => {
+    const t = c.tiers[0];
+    if (c.kind === 'structure2026') return `${n(t.individualAged)} <span class="mr-soft">actual, individual</span><br><span class="mr-soft">${esc(stage(t.name))} · ${n(t.eventEntries)} billed</span>`;
+    return `${n(t.eventEntries)} <span class="mr-soft">${statusWord(c)}</span><br><span class="mr-soft">${esc(stage(t.name))}</span>`;
+  });
+  add('First stop — unique athletes', (c) => `${n(c.tiers[0].uniqueAthletes)} <span class="mr-soft">${statusWord(c)}</span>`);
+  add('Junior Nationals — qualifying-ladder event entries', (c) => {
+    const N = natOf(c);
+    if (!N) return noNat(c);
+    if (c.kind === 'scenario') return `${rangeText(N.eventEntriesLow, N.eventEntries)} <span class="mr-soft">projected†</span>`;
+    if (c.kind === 'structure2026') return `${n(N.ladderEntries)} <span class="mr-soft">actual</span>`;
+    return '<span class="mr-soft">not separated</span>';
+  });
+  add('Junior Nationals — qualifying-ladder unique athletes', (c) => {
+    const N = natOf(c);
+    if (!N) return noNat(c);
+    if (c.kind === 'scenario') return `${rangeText(N.uniqueAthletesLow, N.uniqueAthletes)} <span class="mr-soft">projected†</span>`;
+    if (c.kind === 'structure2026') return `${n(N.ladderAthletes)} <span class="mr-soft">actual</span>`;
+    return '<span class="mr-soft">not separated</span>';
+  });
+  add('Junior Nationals — all individual event entries', (c) => {
+    const N = natOf(c);
+    if (!N) return noNat(c);
+    if (c.kind === 'scenario') return '<span class="mr-soft">ladder only — plus High Performance Squad and other entries (2026: ' + n(r.accuracy.nationals2026 && r.accuracy.nationals2026.other.entries) + ')</span>';
+    if (c.kind === 'structure2025') return `${n(N.eventEntries)} <span class="mr-soft">modeled</span><br><span class="mr-soft">${n(N.actualEventEntries)} actual</span>`;
     return `${n(N.eventEntries)} <span class="mr-soft">actual</span><br><span class="mr-soft">plus ${n(N.synchroEntries)} synchro</span>`;
   });
-  add('Junior Nationals — unique athletes', (c) => {
-    const N = c.nationals;
-    if (c.kind === 'scenario') return `${rangeText(N.uniqueAthletesLow, N.uniqueAthletes)} <span class="mr-soft">projected range†</span>`;
-    if (c.kind === 'structure2025') return `${n(N.uniqueAthletes)} <span class="mr-soft">modeled</span><br><span class="mr-soft">actual ${n(N.actualUniqueAthletes)}</span>`;
+  add('Junior Nationals — all unique athletes', (c) => {
+    const N = natOf(c);
+    if (!N) return noNat(c);
+    if (c.kind === 'scenario') return '<span class="mr-soft">ladder only</span>';
+    if (c.kind === 'structure2025') return `${n(N.uniqueAthletes)} <span class="mr-soft">modeled</span><br><span class="mr-soft">${n(N.actualUniqueAthletes)} actual</span>`;
     return `${n(N.uniqueAthletes)} <span class="mr-soft">actual</span>`;
   });
-  add('Junior Nationals — places the rules create', (c) => (c.nationals.places != null ? n(c.nationals.places) : '<span class="mr-soft">see rules</span>'));
-  add('Season — event entries, all stops', (c) => `${n(c.tiers.reduce((a, t) => a + t.eventEntries, 0))} <span class="mr-soft">${c.kind === 'structure2026' ? 'actual billed' : statusWord(c)}</span>`);
+  add('Junior Nationals — places the rules create', (c) => {
+    const N = natOf(c);
+    if (!N) return noNat(c);
+    return N.places != null ? `${n(N.places)}${N.placesNote ? `<br><span class="mr-soft">${esc(N.placesNote)}</span>` : ''}` : '—';
+  });
+  add('Season — event entries, all stops', (c) => (c.kind === 'structure2026'
+    ? `${n(c.money.individualOnly.eventEntries)} <span class="mr-soft">actual, individual</span><br><span class="mr-soft">${n(c.tiers.reduce((a, t) => a + t.eventEntries, 0))} billed</span>`
+    : `${n(c.tiers.reduce((a, t) => a + t.eventEntries, 0))} <span class="mr-soft">${statusWord(c)}</span>`));
   add('Gross entry income', (c) => usd(c.money.gross));
   add('<strong>USA Diving keeps (entry fees)</strong>', (c) => `<strong>${usd(c.money.keeps)}</strong>`
     + (c.money.atStandardFees ? `<br><span class="mr-soft">${usd(c.money.atStandardFees.usaDivingKeeps)} at 2026 published fees</span>` : '')
-    + (c.money.reconciledKeeps != null ? `<br><span class="mr-soft">${usd(c.money.reconciledKeeps)} reconciled‡</span>` : ''));
-  const scen = cols.find((c) => ok(c) && c.kind === 'scenario');
+    + (c.money.individualOnly ? `<br><span class="mr-soft">${usd(c.money.individualOnly.keeps)} individual events only§</span>` : '')
+    + (c.money.reconciledKeeps != null ? `<br><span class="mr-soft">${usd(c.money.reconciledKeeps)} reconciled‡</span>` : ''), 'mr-total');
+  const scen = cols.find((c) => ok(c) && c.kind === 'scenario' && c.nationals);
   const notes = [];
-  if (scen && scen.nationals.rangeReason) notes.push(`† ${esc(scen.nationals.rangeReason)} ${esc(scen.nationals.excludes)}`);
+  if (scen) notes.push(`† ${esc(scen.nationals.rangeReason)} ${esc(scen.nationals.excludes)}`);
+  const c26 = cols.find((c) => ok(c) && c.kind === 'structure2026');
+  if (c26) notes.push(`2026 individual = junior circuit individual events with an age group. Billed also includes synchro and FC Level entries. 2026 athletes who competed at Regionals, Zones or both: ${n(c26.firstStops.eventEntries)} event entries, ${n(c26.firstStops.uniqueAthletes)} unique athletes — the comparison for a proposal whose one first stop replaces both.`);
+  if (c26) notes.push('§ Same basis as the proposals: individual circuit events only (synchro and FC Level entries removed at the fee each paid).');
   const rec = cols.filter((c) => ok(c) && c.money.reconciledKeeps != null);
   if (rec.length) notes.push('‡ ' + rec.map((c) => `${esc(c.label)}: ${esc(c.money.reconciledNote)}`).join(' '));
   notes.push('Event entry = one athlete in one event. Unique athlete = each person counted once, however many events they enter.');
@@ -333,10 +367,12 @@ function secSummary(r) {
 function secPathways(r) {
   const blocks = r.columns.filter(ok).map((c) => {
     const stops = (c.structure.levels || []).map((l) => `${l.meets} ${esc(stage(l.name))} meet${l.meets === 1 ? '' : 's'}`);
-    if (c.structure.finalName && !(c.structure.levels || []).some((l) => stage(l.name) === 'Junior Nationals')) stops.push(esc(c.structure.finalName));
+    const hasJN = (c.structure.levels || []).some((l) => /national/i.test(l.name));
+    if (c.kind === 'scenario' && !hasJN) stops.push(`${esc(c.structure.finalName || 'Junior Nationals')} <span class="mr-soft">(not modeled in this scenario)</span>`);
     return `<div class="mr-rules-col"><div class="mr-rules-h">${esc(c.label)}</div>
       <p class="mr-p" style="font-size:11px"><strong>Stops:</strong> ${stops.join(' → ')}</p>
       <ul class="mr-bullets">${(c.rules || []).map((x) => `<li>${esc(x.text)}${x.places != null ? ` <strong>${n(x.places)} places</strong> <span class="mr-soft">(${esc(x.placesText)})</span>` : ''}${x.internal ? ' <span class="mr-soft">— inside the same meet</span>' : ''}</li>`).join('')}</ul>
+      ${c.assumption ? `<p class="mr-p" style="font-size:11px"><strong>Assumption:</strong> ${esc(c.assumption)}</p>` : ''}
       <p class="mr-soft">${esc(c.source)}</p></div>`;
   });
   return section('How each structure works', `<div class="mr-rules-grid">${blocks.join('')}</div>
@@ -347,14 +383,19 @@ function secTiers(r) {
   const parts = r.columns.filter(ok).map((c) => {
     const st = statusWord(c);
     const act25 = c.kind === 'structure2025';
-    const head = `<tr><th>Stop</th><th class="mr-num">Meets</th><th class="mr-num">Event entries (${st})</th><th class="mr-num">Unique athletes (${c.kind === 'structure2026' ? 'actual' : st})</th>`
+    const is26 = c.kind === 'structure2026';
+    const head = `<tr><th>Stop</th><th class="mr-num">Meets</th>`
+      + (is26 ? '<th class="mr-num">Individual event entries (actual)</th><th class="mr-num">Event entries billed (actual)</th>' : `<th class="mr-num">Event entries (${st})</th>`)
+      + `<th class="mr-num">Unique athletes (${st})</th>`
       + (act25 ? '<th class="mr-num">Event entries (actual)</th><th class="mr-num">Unique athletes (actual)</th>' : '')
       + (c.kind === 'scenario' ? '<th class="mr-num">Places the rules create</th>' : '') + '</tr>';
-    const body = c.tiers.map((t) => `<tr><td>${esc(stage(t.name))}</td><td class="mr-num">${n(t.meets)}</td><td class="mr-num">${n(t.eventEntries)}</td><td class="mr-num">${n(t.uniqueAthletes)}</td>`
+    const body = c.tiers.map((t) => `<tr><td>${esc(stage(t.name))}</td><td class="mr-num">${n(t.meets)}</td>`
+      + (is26 ? `<td class="mr-num">${n(t.individualAged)}</td>` : '')
+      + `<td class="mr-num">${n(t.eventEntries)}</td><td class="mr-num">${n(t.uniqueAthletes)}</td>`
       + (act25 ? `<td class="mr-num">${n(t.actualEventEntries)}</td><td class="mr-num">${n(t.actualUniqueAthletes)}</td>` : '')
       + (c.kind === 'scenario' ? `<td class="mr-num">${t.places == null ? '<span class="mr-soft">open entry</span>' : n(t.places)}</td>` : '') + '</tr>').join('');
-    const note = c.kind === 'structure2026'
-      ? 'Event entries are the entries billed at each stop (individual and synchro, including non-circuit events on the same entry list). Unique athletes are individual-event competitors from the results.'
+    const note = is26
+      ? 'Individual = junior circuit individual events with an age group. Billed = every entry charged at that stop, which adds synchro and FC Level entries with no age group (' + c.tiers.filter((t) => t.eventEntries !== t.individualAged).map((t) => `${stage(t.name)} +${n(t.eventEntries - t.individualAged)}`).join(', ') + '). Unique athletes = individual-event competitors.'
       : act25 ? 'Modeled: the 2021–2025 rules run on real 2025 Regionals entries. Actual event entries are individual events only; 2025 Junior Nationals also had synchro entries, shown in the Junior Nationals section.'
         : 'Projected unique athletes = projected event entries ÷ the measured events per athlete for that age group, gender and stop.';
     return `<h3 class="mr-h3">${esc(c.label)} — ${esc(colSub(c).toLowerCase())}</h3><table class="mr-table mr-table-sm">${head}${body}</table><p class="mr-note">${esc(note)}</p>`;
@@ -365,36 +406,46 @@ function secTiers(r) {
 function secNationals(r) {
   const cols = r.columns;
   const rows = [];
-  const add = (label, f) => rows.push(`<tr><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? f(c) : '—')).join('')}</tr>`);
-  add('Individual event entries — high end', (c) => (c.kind === 'scenario' ? `${n(c.nationals.eventEntries)} <span class="mr-soft">projected</span>` : '—'));
-  add('Individual event entries — low end', (c) => (c.kind === 'scenario' ? `${n(c.nationals.eventEntriesLow)} <span class="mr-soft">projected</span>` : '—'));
-  add('Individual event entries', (c) => (c.kind === 'structure2025' ? `${n(c.nationals.eventEntries)} modeled<br><span class="mr-soft">${n(c.nationals.actualEventEntries)} actual</span>`
-    : c.kind === 'structure2026' ? `${n(c.nationals.eventEntries)} <span class="mr-soft">actual</span>` : '—'));
-  add('Synchro event entries', (c) => (c.kind === 'scenario' ? '<span class="mr-soft">not modeled</span>' : `${n(c.kind === 'structure2025' ? c.nationals.actualSynchro : c.nationals.synchroEntries)} <span class="mr-soft">actual</span>`));
-  add('Unique athletes (individual events)', (c) => (c.kind === 'scenario' ? `${rangeText(c.nationals.uniqueAthletesLow, c.nationals.uniqueAthletes)} <span class="mr-soft">projected</span>`
-    : c.kind === 'structure2025' ? `${n(c.nationals.uniqueAthletes)} modeled<br><span class="mr-soft">${n(c.nationals.actualUniqueAthletes)} actual</span>` : `${n(c.nationals.uniqueAthletes)} <span class="mr-soft">actual</span>`));
-  add('Places the rules create', (c) => (c.nationals.places != null ? n(c.nationals.places) : '<span class="mr-soft">see rules</span>'));
+  const add = (label, f) => rows.push(`<tr><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? (c.nationals ? f(c, c.nationals) : noNat(c)) : '—')).join('')}</tr>`);
+  add('Qualifying-ladder event entries — high end', (c, N) => (c.kind === 'scenario' ? `${n(N.eventEntries)} <span class="mr-soft">projected</span>` : '—'));
+  add('Qualifying-ladder event entries — low end', (c, N) => (c.kind === 'scenario' ? `${n(N.eventEntriesLow)} <span class="mr-soft">projected</span>` : '—'));
+  add('Qualifying-ladder event entries', (c, N) => (c.kind === 'structure2026' ? `${n(N.ladderEntries)} <span class="mr-soft">actual</span>` : '—'));
+  add('Qualifying-ladder unique athletes', (c, N) => (c.kind === 'scenario' ? `${rangeText(N.uniqueAthletesLow, N.uniqueAthletes)} <span class="mr-soft">projected</span>`
+    : c.kind === 'structure2026' ? `${n(N.ladderAthletes)} <span class="mr-soft">actual</span>` : '—'));
+  add('High Performance Squad, backfilled and other event entries', (c, N) => (c.kind === 'scenario' ? '<span class="mr-soft">not modeled</span>'
+    : c.kind === 'structure2026' ? `${n(N.otherEntries)} <span class="mr-soft">actual</span>` : '—'));
+  add('All individual event entries', (c, N) => (c.kind === 'scenario' ? '<span class="mr-soft">ladder only</span>'
+    : c.kind === 'structure2025' ? `${n(N.eventEntries)} modeled<br><span class="mr-soft">${n(N.actualEventEntries)} actual</span>` : `${n(N.eventEntries)} <span class="mr-soft">actual</span>`));
+  add('All unique athletes (individual events)', (c, N) => (c.kind === 'scenario' ? '<span class="mr-soft">ladder only</span>'
+    : c.kind === 'structure2025' ? `${n(N.uniqueAthletes)} modeled<br><span class="mr-soft">${n(N.actualUniqueAthletes)} actual</span>` : `${n(N.uniqueAthletes)} <span class="mr-soft">actual</span>`));
+  add('Synchro event entries', (c, N) => (c.kind === 'scenario' ? '<span class="mr-soft">not modeled</span>' : `${n(c.kind === 'structure2025' ? N.actualSynchro : N.synchroEntries)} <span class="mr-soft">actual</span>`));
+  add('Places the rules create', (c, N) => (N.places != null ? `${n(N.places)}${N.placesNote ? `<br><span class="mr-soft">${esc(N.placesNote)}</span>` : ''}` : '—'));
   let html = `<table class="mr-table">${headRow(cols, 'Junior Nationals')}${rows.join('')}</table>`;
-  const scen = cols.find((c) => ok(c) && c.kind === 'scenario');
+  const scen = cols.find((c) => ok(c) && c.kind === 'scenario' && c.nationals);
   if (scen) html += `<p class="mr-note"><strong>Why a range:</strong> ${esc(scen.nationals.rangeReason)}<br><strong>Not included in projected figures:</strong> ${esc(scen.nationals.excludes)}</p>`;
   const b = r.accuracy.nationals2026;
   if (b) {
-    html += `<h3 class="mr-h3">2026 Junior Nationals — who actually competed, by how they qualified</h3>
-    <table class="mr-table mr-table-sm"><tr><th>Route</th><th class="mr-num">Individual event entries (actual)</th><th class="mr-num">Unique athletes (actual)</th></tr>
-      <tr><td>Zone top places (Zone Direct)</td><td class="mr-num">${n(b.zoneDirect.entries)}</td><td class="mr-num">${n(b.zoneDirect.athletes)}</td></tr>
-      <tr><td>East, West, Central</td><td class="mr-num">${n(b.ewc.entries)}</td><td class="mr-num">${n(b.ewc.athletes)}</td></tr>
-      <tr class="mr-total"><td>Qualifying ladder, subtotal</td><td class="mr-num">${n(b.ladder.entries)}</td><td class="mr-num">${n(b.ladder.athletes)}</td></tr>
-      <tr><td>High Performance Squad</td><td class="mr-num">${n(b.hps.entries)}</td><td class="mr-num">${n(b.hps.athletes)}</td></tr>
-      <tr><td>Not matched to the published qualifier list</td><td class="mr-num">${n(b.other.entries)}</td><td class="mr-num">${n(b.other.athletes)}</td></tr>
-      <tr class="mr-total"><td>Total competed</td><td class="mr-num">${n(b.zoneDirect.entries + b.ewc.entries + b.hps.entries + b.other.entries)}</td><td class="mr-num"><span class="mr-soft">see note</span></td></tr>
+    const row = (label, x, cls) => `<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td><td class="mr-num">${n(x.entries)}</td><td class="mr-num">${n(x.athletes)}</td></tr>`;
+    html += `<h3 class="mr-h3">2026 Junior Nationals — who actually competed, by how they earned the place</h3>
+    <table class="mr-table mr-table-sm"><tr><th>Route (read from 2026 results)</th><th class="mr-num">Individual event entries (actual)</th><th class="mr-num">Unique athletes (actual)</th></tr>
+      ${row('Zones — top 3', b.zoneTop3)}
+      ${row('East, West, Central — top 3', b.ewcTop3)}
+      ${row('East, West, Central — 4th–6th, met the average score', b.ewcAverage)}
+      ${row('Qualifying ladder, subtotal', b.ladder, 'mr-total')}
+      ${row('High Performance Squad', b.hps)}
+      ${row('Competed in that event at Zones or E/W/C without a qualifying finish (backfilled places, other approvals)', b.otherCompeted)}
+      ${row('No Zones or E/W/C result in that event', b.otherNoResult)}
+      ${row('Total competed', b.total, 'mr-total')}
     </table>
-    <p class="mr-note">Unique athletes do not add across rows: one athlete can qualify by different routes in different events. Qualifier list (Zone Direct + E/W/C): ${n(b.qualified.entries)} event entries, ${n(b.qualified.athletes)} unique athletes. ${n(b.ladder.entries)} of those event entries competed = ${pct(100 * b.attendance)} — the attendance rate used for the low end of every projected range.</p>`;
+    <p class="mr-note">Each event entry is counted once, in the first route that applies, top to bottom. Unique athletes do not add across rows: one athlete can earn places by different routes in different events.
+    ${n(b.earnedTop3.entries)} event entries (${n(b.earnedTop3.athletes)} unique athletes) earned a place by finishing top 3 at Zones or E/W/C; ${n(b.competedTop3.entries)} (${n(b.competedTop3.athletes)} unique athletes) competed in that event = ${pct(100 * b.attendance)}, the low end of every projected range.
+    For reference, the qualifier list published in July shows ${n(b.publishedList.entries)} event entries (${n(b.publishedList.athletes)} unique athletes) for Zone Direct and E/W/C.</p>`;
   }
   return section('Junior Nationals field', html);
 }
 
 function fmtFees(c) {
-  if (c.kind !== 'scenario') return '';
+  if (c.kind !== 'scenario') return esc(c.money.feesUsed || '');
   const f = c.money.fees;
   if (!f || !Object.values(f).some((v) => v != null)) return 'Published 2026 fees';
   return Object.entries(f).filter(([, v]) => v != null).map(([L, v]) => `${esc(stage((c.structure.levels[+L] || {}).name || ('level ' + L)))} $${v}`).join(', ') + '; other stops at 2026 published fees';
@@ -404,65 +455,57 @@ function secMoney(r) {
   const cols = r.columns;
   const rows = [];
   const add = (label, f, cls) => rows.push(`<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? f(c) : '—')).join('')}</tr>`);
-  add('Fees used', (c) => `<span class="mr-soft">${c.kind === 'scenario' ? fmtFees(c) : c.kind === 'structure2025' ? '2025 published fees' : '2026 published fees'}</span>`);
+  add('Fees used', (c) => `<span class="mr-soft">${fmtFees(c)}</span>`);
+  add('Event entries charged', (c) => `${n(c.stops.reduce((a, x) => a + x.eventEntries, 0))} <span class="mr-soft">${c.kind === 'structure2026' ? 'actual billed' : statusWord(c)}</span>`);
   add('Gross entry income', (c) => usd(c.money.gross));
   add('DiveMeets fees', (c) => usd(-c.money.diveMeets));
   add('Paid to hosts', (c) => usd(-c.money.hosts));
   add('USA Diving keeps', (c) => usd(c.money.keeps), 'mr-total');
-  if (cols.some((c) => ok(c) && c.money.atStandardFees)) add('USA Diving keeps at 2026 published fees', (c) => (c.money.atStandardFees ? usd(c.money.atStandardFees.usaDivingKeeps) : '<span class="mr-soft">same as above</span>'));
+  if (cols.some((c) => ok(c) && c.money.individualOnly)) add('USA Diving keeps, individual circuit events only', (c) => (c.money.individualOnly
+    ? `${usd(c.money.individualOnly.keeps)}<br><span class="mr-soft">${n(c.money.individualOnly.eventEntries)} event entries</span>`
+    : c.kind === 'scenario' ? '<span class="mr-soft">same as above (individual only)</span>' : '<span class="mr-soft">not separated</span>'));
+  if (cols.some((c) => ok(c) && c.money.atStandardFees)) add('USA Diving keeps at 2026 published fees', (c) => (c.money.atStandardFees ? usd(c.money.atStandardFees.usaDivingKeeps)
+    : c.kind === 'structure2025' ? '<span class="mr-soft">not calculated (2025 fees)</span>' : '<span class="mr-soft">same as above</span>'));
   if (cols.some((c) => ok(c) && c.money.reconciledKeeps != null)) add('USA Diving share, reconciled to actual payments', (c) => (c.money.reconciledKeeps != null ? usd(c.money.reconciledKeeps) : '<span class="mr-soft">n/a — not held yet</span>'));
   const notes = cols.filter(ok).map((c) => `<strong>${esc(c.label)}:</strong> ${esc(c.money.basis)}${c.money.reconciledNote && c.money.reconciledKeeps != null ? ' Reconciled: ' + esc(c.money.reconciledNote) : ''}${c.money.atStandardFees ? ' ' + esc(c.money.atStandardFees.note) : ''}`);
   return section('Entry income', `<table class="mr-table">${headRow(cols, 'Entry fees only')}${rows.join('')}</table>
     ${notes.map((t) => `<p class="mr-note">${t}</p>`).join('')}
-    <p class="mr-note">Entry fees only. Membership dues, late fees and senior-circuit income are not included.</p>`);
+    <p class="mr-note">Entry fees only. Membership dues, late fees and senior-circuit income are not included. Host payments follow each column's stated terms (the two proposals and the 2025/2026 models use $25 per event entry); actual host payments differ, which is why the reconciled figures are lower.</p>`);
 }
 
-function secStops(r) {
-  const parts = r.columns.filter(ok).map((c) => {
-    const st = c.kind === 'structure2026' ? 'actual billed' : statusWord(c);
-    const q26 = c.kind === 'structure2026';
-    const tot = (k) => c.stops.reduce((a, x) => a + (x[k] || 0), 0);
-    const body = c.stops.map((x) => `<tr><td>${esc(x.stop)}</td><td>${esc(stage(x.tier))}</td><td class="mr-num">${n(x.eventEntries)}${q26 && x.qualifyingEntries != null ? `<br><span class="mr-soft">${n(x.qualifyingEntries)} qualifying / ${n(x.nonQualifyingEntries)} non-qualifying</span>` : ''}</td>
-      <td class="mr-num">${fee(x.fee)}</td><td class="mr-num">${usd(x.gross)}</td><td class="mr-num">${usd(x.keeps)}</td></tr>`).join('');
-    return `<h3 class="mr-h3">${esc(c.label)}</h3><table class="mr-table mr-table-sm">
-      <tr><th>Stop</th><th>Stop type</th><th class="mr-num">Event entries (${st})</th><th class="mr-num">Fee per event entry</th><th class="mr-num">Gross</th><th class="mr-num">USA Diving keeps</th></tr>
-      ${body}<tr class="mr-total"><td colspan="2">Season</td><td class="mr-num">${n(tot('eventEntries'))}</td><td></td><td class="mr-num">${usd(c.money.gross)}</td><td class="mr-num">${usd(c.money.keeps)}</td></tr></table>
-      ${Math.abs(tot('keeps') - c.money.keeps) + Math.abs(tot('gross') - c.money.gross) > 0 ? `<p class="mr-note">Each stop is rounded to the dollar; the season line is the unrounded season total, so the stops add to within $${Math.max(Math.abs(tot('keeps') - c.money.keeps), Math.abs(tot('gross') - c.money.gross))} of it.</p>` : ''}`;
-  });
-  return section('Entry income by stop', parts.join(''));
-}
-
+const COHORT_SHORT = { AB: 'A boys', AG: 'A girls', BB: 'B boys', BG: 'B girls', CB: 'C boys', CG: 'C girls', DB: 'D boys', DG: 'D girls' };
 function secCapacity(r) {
   const parts = r.columns.filter(ok).map((c) => {
     const tiers = c.tiers.filter((t) => t.cohorts && t.cohorts.length);
     if (!tiers.length) return '';
     const keys = [...new Set(tiers.flatMap((t) => t.cohorts.map((x) => x.cohort)))].sort((a, b) => COHORTS.indexOf(a) - COHORTS.indexOf(b));
-    const st = c.kind === 'structure2026' ? 'actual' : statusWord(c);
-    const head = `<tr><th>Cohort</th><th class="mr-num">Eligible members</th>${tiers.map((t) => `<th class="mr-num">${esc(stage(t.name))}<br><span class="mr-soft">unique athletes (${st}) · % of eligible</span></th>`).join('')}</tr>`;
-    const body = keys.map((k) => {
-      const first = tiers.map((t) => t.cohorts.find((x) => x.cohort === k)).find(Boolean) || {};
-      return `<tr><td>${esc(cohortName(k))}</td><td class="mr-num">${n(first.eligible)}</td>${tiers.map((t) => {
-        const x = t.cohorts.find((y) => y.cohort === k);
-        return `<td class="mr-num">${x ? `${n(x.uniqueAthletes)} · ${pct(x.pct)}` : '—'}</td>`;
-      }).join('')}</tr>`;
-    }).join('');
-    return `<h3 class="mr-h3">${esc(c.label)}</h3><table class="mr-table mr-table-sm">${head}${body}</table>`;
+    const st = statusWord(c);
+    const elig = (k) => (tiers.map((t) => t.cohorts.find((x) => x.cohort === k)).find(Boolean) || {}).eligible;
+    const head = `<tr><th>Unique athletes (${st})</th>${keys.map((k) => `<th class="mr-num">${esc(COHORT_SHORT[k] || k)}</th>`).join('')}</tr>`;
+    const eligRow = `<tr class="mr-muted"><td>Eligible members</td>${keys.map((k) => `<td class="mr-num">${n(elig(k))}</td>`).join('')}</tr>`;
+    const body = tiers.map((t) => `<tr><td>${esc(stage(t.name))}</td>${keys.map((k) => {
+      const x = t.cohorts.find((y) => y.cohort === k);
+      return `<td class="mr-num">${x ? `${n(x.uniqueAthletes)}<br><span class="mr-soft">${pct(x.pct, 0)}</span>` : '—'}</td>`;
+    }).join('')}</tr>`).join('');
+    return `<h3 class="mr-h3">${esc(c.label)}</h3><table class="mr-table mr-table-sm">${head}${eligRow}${body}</table>`;
   });
   return section('Capacity against membership', parts.join('')
+    + `<p class="mr-note">Groups: A 16–18, B 14–15, C 12–13, D 11 and under. Each cell: unique athletes, then that number as a share of eligible members in the same cohort.</p>`
     + (r.columns.some((c) => c.kind === 'structure2026') ? `<p class="mr-note">2026 structure: unique athletes per cohort are counted from results. They can add to slightly less than the stop total: an athlete with no age group on their entry is in the stop total but in no cohort row.</p>` : '')
     + `<p class="mr-note">Eligible members = unique Competition Athlete members, AQUA age 18 and under, in the membership year the column is measured against. Above 100% means more athletes competed than hold that membership (foreign athletes and members with no gender on file are the documented causes).</p>`);
 }
 
 function secMembership(r) {
   const m = r.membership;
-  const keys = [...new Set(MEMBER_YEARS.flatMap((y) => Object.keys(m[y] || {})))].sort((a, b) => (COHORTS.indexOf(a) + 99 * (COHORTS.indexOf(a) < 0)) - (COHORTS.indexOf(b) + 99 * (COHORTS.indexOf(b) < 0)));
+  const rank = (k) => (COHORTS.indexOf(k) < 0 ? 99 + 'ABCD'.indexOf(k[0]) : COHORTS.indexOf(k));
+  const keys = [...new Set(MEMBER_YEARS.flatMap((y) => Object.keys(m[y] || {})))].sort((a, b) => rank(a) - rank(b));
   const total = (y) => Object.values(m[y] || {}).reduce((a, b) => a + b, 0);
   const body = keys.map((k) => `<tr><td>${esc(cohortName(k))}</td>${MEMBER_YEARS.map((y) => `<td class="mr-num">${n((m[y] || {})[k] || 0)}</td>`).join('')}</tr>`).join('');
   return section('Eligible membership, 2024–2026', `<table class="mr-table mr-table-sm">
     <tr><th>Cohort (unique members, actual)</th>${MEMBER_YEARS.map((y) => `<th class="mr-num">${y}</th>`).join('')}</tr>${body}
     <tr class="mr-total"><td>Eligible Competition Athlete members</td>${MEMBER_YEARS.map((y) => `<td class="mr-num">${n(total(y))}</td>`).join('')}</tr>
     <tr><td>Change from the year before</td><td class="mr-num">—</td>${MEMBER_YEARS.slice(1).map((y) => `<td class="mr-num">${signPct(total(y), total(y - 1))}</td>`).join('')}</tr></table>
-    <p class="mr-note">Competition Athlete (17U) and Competition Athlete (AQUA Age 18+) members with a birth date on file, AQUA age 18 and under. The ${new Date().getFullYear()} count is as of today and can still grow.</p>`);
+    <p class="mr-note">Competition Athlete (17U) and Competition Athlete (AQUA Age 18+) members with a birth date on file, AQUA age 18 and under. 2024 and 2025 are full membership years. 2026 is as of the last membership import (${esc(m.asOf2026 || 'date unknown')}); members who joined after that date are not counted, so the 2026 change is not a same-date comparison.</p>`);
 }
 
 function secAccuracy(r) {
@@ -476,9 +519,28 @@ function secAccuracy(r) {
     </table><p class="mr-note">2025 Junior Nationals also had ${n(v.nationalsIndividual.realIncludingSynchro - v.nationalsIndividual.real)} synchro event entries (${n(v.nationalsIndividual.realIncludingSynchro)} in total); the model covers individual events only.</p>`;
   } else html += '<p class="mr-p mr-soft">Add the 2025 structure as a column to include the 2025 validation.</p>';
   const b = r.accuracy.nationals2026;
-  if (b) html += `<h3 class="mr-h3">2026: projected ranges against the real qualifier list</h3>
-    <p class="mr-p">${n(b.qualified.entries)} individual event entries (${n(b.qualified.athletes)} unique athletes) qualified through Zones and East, West, Central in 2026; ${n(b.ladder.entries)} (${n(b.ladder.athletes)} unique athletes) competed — ${pct(100 * b.attendance)}. A projection that fills every place is the high end; the same projection at ${pct(100 * b.attendance)} attendance is the low end.</p>`;
+  if (b) html += `<h3 class="mr-h3">2026: how the projected Junior Nationals range is set</h3>
+    <p class="mr-p">In 2026, ${n(b.earnedTop3.entries)} individual event entries (${n(b.earnedTop3.athletes)} unique athletes) earned a Junior Nationals place by finishing top 3 at Zones or East, West, Central. ${n(b.competedTop3.entries)} (${n(b.competedTop3.athletes)} unique athletes) competed in that event — ${pct(100 * b.attendance)}. Another ${n(b.otherCompeted.entries)} event entries came from athletes who competed in that event at Zones or E/W/C without a qualifying finish (places declined by others and filled from further down, or other approvals). A projection that fills every earned place is the high end; the same projection at ${pct(100 * b.attendance)} is the low end.</p>`;
+  const c26 = r.columns.find((c) => ok(c) && c.kind === 'structure2026');
+  const sc = r.columns.filter((c) => ok(c) && c.kind === 'scenario' && c.assumption);
+  if (c26 && sc.length) html += `<h3 class="mr-h3">What the proposals' first stop assumes</h3>
+    <p class="mr-p">Projected first stop (${sc.map((c) => `${esc(c.label)} ${n(c.tiers[0].eventEntries)} event entries, ${n(c.tiers[0].uniqueAthletes)} unique athletes`).join('; ')}) is built from 2026 Regionals springboard for Groups A and B, plus 2026 Zones for platform and Groups C and D. In 2026, ${n(c26.firstStops.eventEntries)} event entries (${n(c26.firstStops.uniqueAthletes)} unique athletes) were competed at Regionals, Zones or both. The gap is mostly Group C and D athletes who dove at Regionals but did not go on to Zones; the projection does not assume they would travel to a Zones-sized first stop.</p>`;
   return section('How accurate the model is', html);
+}
+
+function secStops(r) {
+  const parts = r.columns.filter(ok).map((c) => {
+    const st = c.kind === 'structure2026' ? 'actual billed' : statusWord(c);
+    const q26 = c.kind === 'structure2026';
+    const tot = (k) => c.stops.reduce((a, x) => a + (x[k] || 0), 0);
+    const body = c.stops.map((x) => `<tr><td>${esc(x.stop)}</td><td>${esc(stage(x.tier))}</td><td class="mr-num">${n(x.eventEntries)}${q26 && x.qualifyingEntries != null ? `<br><span class="mr-soft">${n(x.qualifyingEntries)} qualifying / ${n(x.nonQualifyingEntries)} non-qualifying</span>` : ''}${x.feeSplit ? `<br><span class="mr-soft">${x.feeSplit.map((f) => `${n(f.entries)} at $${f.fee}`).join(' / ')}</span>` : ''}</td>
+      <td class="mr-num">${fee(x.fee)}</td><td class="mr-num">${usd(x.gross)}</td><td class="mr-num">${usd(x.keeps)}</td></tr>`).join('');
+    return `<h3 class="mr-h3">${esc(c.label)}</h3><table class="mr-table mr-table-sm">
+      <tr><th>Stop</th><th>Stop type</th><th class="mr-num">Event entries (${st})</th><th class="mr-num">Fee per event entry</th><th class="mr-num">Gross</th><th class="mr-num">USA Diving keeps</th></tr>
+      ${body}<tr class="mr-total"><td colspan="2">Season</td><td class="mr-num">${n(tot('eventEntries'))}</td><td></td><td class="mr-num">${usd(c.money.gross)}</td><td class="mr-num">${usd(c.money.keeps)}</td></tr></table>
+      ${Math.abs(tot('keeps') - c.money.keeps) + Math.abs(tot('gross') - c.money.gross) > 0 ? `<p class="mr-note">Each stop is rounded to the dollar; the season line is the unrounded season total, so the stops add to within $${Math.max(Math.abs(tot('keeps') - c.money.keeps), Math.abs(tot('gross') - c.money.gross))} of it.</p>` : ''}`;
+  });
+  return section('Entry income by stop', parts.join(''));
 }
 
 function secChecks(r) {

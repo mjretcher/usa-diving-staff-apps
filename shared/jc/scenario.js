@@ -175,8 +175,15 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   // Per stop: the engine already computes every meet; surface it.
   const perMeet = Iboundary.meetManifest(res).map((m) => {
     const money = Iboundary.meetMoney(m);
+    // Fee per event entry: one number, or the split when the stop prices events
+    // differently (2026-style Regionals: $85 qualifying / $45 non-qualifying).
+    const byFee = {};
+    for (const e of m.events || []) { const f = Iboundary.feeForCell(m.level, e.cell); byFee[f] = (byFee[f] || 0) + e.n; }
+    const fees = Object.keys(byFee).map(Number).sort((a, b) => b - a);
+    const split = fees.length > 1;
     return { tier: m.levelName, stop: m.name, entries: m.entries, paidEntries: Math.round(money.paidEntries || m.entries), spots: m.spots || null, basis: money.basis,
-      feePerEvent: money.fee, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0),
+      feePerEvent: split ? fees.map((f) => `$${f}`).join(' / ') : (fees.length ? fees[0] : money.fee),
+      feeSplit: split ? fees.map((f) => ({ fee: f, entries: byFee[f] })) : null, grossEntryIncome: Math.round(money.gross), lateFees: Math.round(money.lateFees || 0),
       diveMeetsPassThrough: Math.round(money.levy), toHosts: Math.round(money.host), usaDivingKeeps: Math.round(money.usad),
       hostOverride: money.overridden };
   });
@@ -199,6 +206,8 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
       revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario\'s stored host terms; competed entries only; no late fees',
       seedPool: S.seedPool || 'inferred', note: opts.cdFirstStop ? 'Groups C and D modelled at the first stop (mandatory); 2026 non-mandatory first stop treated as the exception.' : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
     scenarioFees: S.fees || null,
+    hostTerms: { mode: S.hostMode || 'pct', share: S.hostShare, perEntry: S.hostPer, flat: S.hostFlat, min: S.hostMin || 0 },
+    diveMeetsPerEntry: Iboundary.levyPerEntry(),
     // The structure as run, so a report can state its rules and place counts
     // from the scenario itself rather than from hand-typed text.
     structure: {
