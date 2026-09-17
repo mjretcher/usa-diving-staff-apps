@@ -4359,7 +4359,23 @@ function summariseRouting(routing, label, notes){
       // because it is the last level (it was showing Nationals' 710 beside
       // an E/W/C of 1,033 real entries).
       const stage = stageNameForLevel(L) || (L === routing.length - 1 ? 'Nationals' : null);
+      /* Unique athletes alongside the entries. Two different units get called
+         "entries" in the room, and the gap is about a factor of two: an
+         athlete contesting 1m, 3m and platform is three event entries and
+         one person. Derived from the measured events-per-athlete behaviour
+         for this stage, so it carries a reliability flag rather than being
+         presented as counted -- the entry data has no person identifier
+         across meets, so this is an estimate by construction and labelled
+         that way wherever it is shown. */
+      const divers = (() => {
+        try {
+          if (!S.mult) return null;
+          const d = QR().diversAt(res, L, rounds[0] && rounds[0].key, cells, S.mult, multBasisFor(L));
+          return (d && d.ok) ? {n: d.divers, reliable: !!d.reliable} : null;
+        } catch(e){ return null; }
+      })();
       return {name: tierName(L), stops, entries: entry, perStop: entry / stops,
+              divers: divers ? divers.n : null, diversReliable: divers ? divers.reliable : null,
               rounds: rounds.length, refStage, historicalMax: ceiling, flagged,
               // take-up applied at this level, whether it was measured, and the
               // real field of the stage this level stands in for -- so a
@@ -4388,10 +4404,22 @@ function summariseRouting(routing, label, notes){
       for (let g = 0; g < Math.max(1, groupCountAt(last)); g++) n += QR().entriesAt(res, last, g, subset);
       return {age: a.k, gender: gd.k, label: `${a.label} ${gd.label}`, field: Math.round(n*100)/100};
     })).flat();
+    // The headline in the same two units. "614 reach Junior Nationals" reads
+    // as 614 people; it is event entries, and the headcount is closer to 290.
+    // Both go on the card so that cannot be misread.
+    const finalDivers = (() => {
+      try {
+        if (!S.mult) return null;
+        const d = QR().diversAt(res, last, lastRounds[0] && lastRounds[0].key, cells, S.mult, multBasisFor(last));
+        return (d && d.ok) ? {n: d.divers, reliable: !!d.reliable} : null;
+      } catch(e){ return null; }
+    })();
     const st = sched.stops || [];
     return {
       label, notes, routing,
       levels, finalField, byGroup, sanityFlags, finance, financeByLevel,
+      finalDivers: finalDivers ? finalDivers.n : null,
+      finalDiversReliable: finalDivers ? finalDivers.reliable : null,
       meets:     st.length,
       daysTotal: st.reduce((a,x)=>a+(x.days||0), 0),
       over:      st.filter(x=>x.daysOver).length,
@@ -9297,6 +9325,17 @@ function atlasCompareHtml(){
 }
 
 /* "places 1–12 → East, West, Central preliminaries" */
+/* "614 event entries · ~291 athletes (est.)" -- the second unit, rendered the
+   same way everywhere so it cannot be mistaken for a counted headcount. The
+   entry data carries no person identifier across meets, so every athlete
+   figure here is derived from measured events-per-athlete behaviour and says
+   so. Returns '' when there is no measurement to stand on, rather than
+   guessing a divisor. */
+function athletesLine(n, reliable){
+  if (n == null || !isFinite(n) || n <= 0) return '';
+  return `<span class="c-faint"> · ~${fmt(Math.round(n))} athletes${reliable ? '' : ' (est.)'}</span>`;
+}
+
 function bandText(lo, hi){ return hi == null ? `places ${lo} and below` : lo === hi ? `place ${lo}` : `places ${lo}–${hi}`; }
 function routeText(rt){
   const band = rt.split && rt.bands
@@ -9309,7 +9348,7 @@ function routeText(rt){
 /* "1,338 qualify (1m 520 · 3m 520 · platform 298)" */
 function sendsText(rt){
   const bb = rt.byBoard || {};
-  return `<b>${fmt(Math.round(rt.sends))}</b> qualify <span class="c-faint">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round(bb[b.k] || 0))).join(' · ')})</span>`;
+  return `<b>${fmt(Math.round(rt.sends))}</b> event entries qualify <span class="c-faint">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round(bb[b.k] || 0))).join(' · ')})</span>`;
 }
 
 /* One column of figures per scenario, laid out like the Overview's KPI tiles:
@@ -9334,8 +9373,8 @@ function atlasScorecardHtml(C, cols, axis){
   const k = (() => { try { return window.JuniorFlow.constants(S.year); } catch(e){ return null; } })();
   const measuredFor = stage => { const lv = k && k.byStage && k.byStage[stage]; if (!lv || !lv.conv) return null; const v = Object.values(lv.conv).filter(x => x > 0); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; };
   const actualTiles = stages.map(([st, label]) => { const real = realStageField(st, S.year); if (real == null) return ''; const m = st === 'Regionals' ? null : measuredFor(st);
-    return tile({c:'#0f1633', sm:true, label: esc(label), big: fmt(real), chip: 'actual', chipCls:'ink', sub: m != null ? `take-up ${pct(m)} measured (real field ÷ what the bands sent)` : (st === 'Regionals' ? 'open entry' : 'take-up not measured')}); }).filter(Boolean).join('');
-  const actualCol = actualTiles ? `<div class="atl-kpi-col"><div class="atl-kpi-head"><span class="atl-let" style="background:#0f1633">${yr.slice(2)}</span><b>Actual ${yr}</b><small>${S.year==='y26' ? 'season to date' : 'complete season'} · the structure that ran</small></div>${actualTiles}${tile({c:'#0f1633', sm:true, label:'Real entries', big: fmt(stages.reduce((a,[st])=>a+(realStageField(st,S.year)||0),0)), sub:'every stage, every meet'})}</div>` : '';
+    return tile({c:'#0f1633', sm:true, label: esc(label), big: fmt(real), chip: 'actual event entries', chipCls:'ink', sub: m != null ? `take-up ${pct(m)} measured (real field ÷ what the bands sent)` : (st === 'Regionals' ? 'open entry' : 'take-up not measured')}); }).filter(Boolean).join('');
+  const actualCol = actualTiles ? `<div class="atl-kpi-col"><div class="atl-kpi-head"><span class="atl-let" style="background:#0f1633">${yr.slice(2)}</span><b>Actual ${yr}</b><small>${S.year==='y26' ? 'season to date' : 'complete season'} · the structure that ran</small></div>${actualTiles}${tile({c:'#0f1633', sm:true, label:'Real entries', big: fmt(stages.reduce((a,[st])=>a+(realStageField(st,S.year)||0),0)), sub:'event entries · every stage, every meet'})}</div>` : '';
 
   const scen = cols.map((col, i) => {
     const c = C[i]; const tag = CMP_TAG[i];
@@ -9346,14 +9385,15 @@ function atlasScorecardHtml(C, cols, axis){
       const a = A.levels && A.levels[L];
       const take = L === 0 ? 'open entry' : (l.measured != null ? `take-up ${pct(l.arrive)} measured` : `take-up ${pct(l.arrive)} assumed`);
       const actual = l.actual != null ? ` · actual ${yr}: <b>${fmt(l.actual)}</b>` : '';
-      const qual = (L > 0 && l.qualified != null) ? `qualified places <b>${fi(l.qualified)}</b>${i ? dl(l.qualified, a && a.qualified, fi) : ''} · ` : '';
-      const rounds = (l.detail || []).map(r => `<div class="rnd"><span>${esc(r.name)} · <b>${fi(r.perStop)}</b> per stop</span>${r.routes.length ? r.routes.map(rt => `<div class="rt">${esc(routeText(rt))} ${sendsText(rt)}</div>`).join('') : `<div class="rt c-faint">nobody advances${L === lv.length-1 ? ' — the championship final' : ''}</div>`}</div>`).join('');
+      const qual = (L > 0 && l.qualified != null) ? `<b>${fi(l.qualified)}</b> qualified places${i ? dl(l.qualified, a && a.qualified, fi) : ''} · ` : '';
+      const rounds = (l.detail || []).map(r => `<div class="rnd"><span>${esc(r.name)} · <b>${fi(r.perStop)}</b> event entries per stop</span>${r.routes.length ? r.routes.map(rt => `<div class="rt">${esc(routeText(rt))} ${sendsText(rt)}</div>`).join('') : `<div class="rt c-faint">nobody advances${L === lv.length-1 ? ' — the championship final' : ''}</div>`}</div>`).join('');
       return tile({c: tag, sm:true, label: esc(l.name) + ` <span class="c-faint">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'} · ${l.offered != null ? l.offered + ' events' : ''}</span>`,
-        big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : ''), sub: qual + take + actual, extra: rounds});
+        big: fi(l.entries) + (i ? dl(l.entries, a && a.entries, fi) : '') + athletesLine(l.divers, l.diversReliable),
+        sub: 'event entries · ' + qual + take + actual, extra: rounds});
     }).join('');
     return `<div class="atl-kpi-col">
       <div class="atl-kpi-head"><span class="atl-let" style="background:${tag}">${CMP_LET[i]}</span><b title="${esc(col.name)}">${esc(col.name)}</b><small>${i === 0 ? 'baseline for every delta' : 'Δ against ' + esc(cols[0].name.length > 28 ? cols[0].name.slice(0,26) + '…' : cols[0].name)}</small></div>
-      ${tile({c: tag, big: fi(c.finalField||0) + (i ? dl(c.finalField, A.finalField, fi) : ''), chip: 'reach ' + esc(S.finalName||'the final'), sub: `calibrated · ceiling ${c.maxFinal != null ? fmt(Math.round(c.maxFinal)) : '—'}${realChampionshipField(S.year) != null ? ` · actual ${yr}: <b>${fmt(realChampionshipField(S.year))}</b>` : ''}`})}
+      ${tile({c: tag, big: fi(c.finalField||0) + (i ? dl(c.finalField, A.finalField, fi) : ''), chip: 'event entries reaching ' + esc(S.finalName||'the final'), sub: `${athletesLine(c.finalDivers, c.finalDiversReliable).replace(/^<span class="c-faint"> · /, '').replace(/<\/span>$/, '') || 'athlete count not measured'} · calibrated · ceiling ${c.maxFinal != null ? fmt(Math.round(c.maxFinal)) : '—'} entries${realChampionshipField(S.year) != null ? ` · actual ${yr}: <b>${fmt(realChampionshipField(S.year))}</b> entries` : ''}`})}
       <div class="atl-kpi-row">
         ${tile({c: tag, sm:true, label:'Widest gap', big: c.gap != null ? fpp(c.gap) + (i ? dl(c.gap, A.gap, fpp, true) : '') : '—', sub:'event entries, largest vs smallest'})}
         ${tile({c: tag, sm:true, label:'Do not fit', big: fi(c.over||0) + (i ? dl(c.over, A.over, fi, true) : ''), sub:`of ${fmt(meets)} meets · ${fmt(c.daysTotal||0)} competition days`})}
@@ -9364,7 +9404,7 @@ function atlasScorecardHtml(C, cols, axis){
   }).join('');
   const note = axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each proposal as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps';
   return `<div class="atl-kpis" style="grid-template-columns:repeat(${cols.length + (actualCol ? 1 : 0)},minmax(0,1fr))">${actualCol}${scen}</div>
-    <p class="atl-note" style="padding:0 28px 18px;margin:0">${note}. <b>Actual</b> is the season that ran, straight from results; a projection's <b>take-up</b> is measured where that season ran the stage and assumed at 100% where it did not. Ceiling is maximum capacity with no take-up.</p>`;
+    <p class="atl-note" style="padding:0 28px 18px;margin:0">${note}. <b>Every figure here is an event entry</b> &mdash; one athlete in one event, so a diver contesting 1m, 3m and platform counts three times. Athlete counts, where shown, are marked <i>~</i> and derived from measured events-per-athlete behaviour, not from identified people: the entry data carries no person identifier across meets, so treat them as sizing for beds and awards, never as a roster. <b>Actual</b> is the season that ran, straight from results; a projection's <b>take-up</b> is measured where that season ran the stage and assumed at 100% where it did not. Ceiling is maximum capacity, in entries, with no take-up.</p>`;
 }
 
 async function atlasRebuildCompare(){
