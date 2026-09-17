@@ -7517,6 +7517,12 @@ function atlasMapHtml(){
         <div class="atl-rail-id"><span>${S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet'}</span>${S.scenarioId && isSeed(S.scenarioId) ? '<span>·</span><span>reference map</span>' : ''}</div>
         <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
         <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
+        <div class="atl-rail-start${Object.keys(S.assign || {}).length ? '' : ' empty'}">
+          <span>Start a new map</span>
+          <button class="atl-start-auto" id="atlRailAuto" title="Divide the country into the number of connected, evenly sized areas you choose">⚡ Auto-draw</button>
+          <button class="atl-start-alt" id="atlRailOfficial" title="Start from the published 2026 alignment">Official 2026</button>
+          <button class="atl-start-alt" id="atlRailBlank" title="Clear the map and paint counties yourself">Blank</button>
+        </div>
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
       <div class="atl-rail-sub">
@@ -7705,6 +7711,10 @@ function wireAtlasMap(){
   if (yr) yr.addEventListener('change', () => { S.year = yr.value; repaintAll(); renderPanel(); });
   const lr = $id('bsLoadRail');
   if (lr) lr.addEventListener('change', () => { if (lr.value) loadScenario(lr.value); });
+  // "Start a new map" buttons reuse the same actions as the scenario menu.
+  const ra = $id('atlRailAuto'); if (ra) ra.addEventListener('click', () => openAutoDialog());
+  const ro = $id('atlRailOfficial'); if (ro) ro.addEventListener('click', () => loadScenario('seed-2026-official'));
+  const rb = $id('atlRailBlank'); if (rb) rb.addEventListener('click', () => { const b = $id('bsNew'); if (b) b.click(); });
   loadScenarioList();
   const mt = $id('atlMetric');
   if (mt) mt.addEventListener('change', () => { S.atlMetric = mt.value; atlasRailRows(computeTallies()); });

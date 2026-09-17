@@ -943,6 +943,14 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-rail{background:#fff;border-right:1px solid #dfe3ea;display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0}
 .atl-rail *{min-width:0}
 .atl-rail-open{display:block;width:100%;margin-top:10px;color:#009ac7;font-weight:500}
+.atl-rail-start{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding:8px 10px;border:1px solid #dbe2ee;border-radius:8px;background:#fff}
+.atl-rail-start>span{flex:1 0 100%;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#5a6480}
+.atl-rail-start button{border-radius:6px;padding:6px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+.atl-start-auto{background:#009AC7;color:#fff;border:1px solid #009AC7}
+.atl-start-auto:hover{background:#00789b}
+.atl-start-alt{background:#fff;color:#171F69;border:1px solid #cdd6e4}
+.atl-start-alt:hover{border-color:#009AC7}
+.atl-rail-start.empty{border-color:#009AC7;box-shadow:0 0 0 3px rgba(0,154,199,.12)}
 .atl-rail-top{padding:22px 22px 14px;border-bottom:1px solid #eceff4}
 .atl-rail-id{font-size:12px;color:#6b7385;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden}
 .atl-rail-id .mono{color:#171f69;overflow:hidden;text-overflow:ellipsis}
@@ -1435,7 +1443,7 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="ma-app.js?v=202609030441"></script>
 <script src="routing.js?v=202609151824"></script>
 <script src="scenario-schedule-engine.js?v=202608281800"></script>
-<script src="boundary.js?v=202609171330"></script>
+<script src="boundary.js?v=202609171600"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202609162200"></script>
 <script type="module" src="jc-report.js?v=202609171515"></script>
