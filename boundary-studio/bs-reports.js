@@ -2838,7 +2838,7 @@ function renderBuilder(){
   <div class="mr-overlay" onclick="if(event.target===this)window._mrClose()">
     <div class="mr-dialog">
       <div class="mr-head">
-        <div><div class="mr-eyebrow">USA Diving · Membership Analytics</div>
+        <div><div class="mr-eyebrow">USA Diving · Boundary Studio</div>
              <h2 class="mr-title">Build a Report</h2></div>
         <button class="mr-x" onclick="window._mrClose()" title="Close">✕</button>
       </div>

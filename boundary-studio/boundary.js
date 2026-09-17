@@ -3617,14 +3617,19 @@ function computeSchedule(res){
       // The projection carries compact cell keys (AG1). The engine reads
       // group|gender|discipline and decides warm-up from the group name; the
       // round rides in a 4th part the engine ignores but diveSpec reads.
-      const rounds = []; let entries = 0, unknown = 0;
-      QR().roundsOf(S.routing[L]).forEach(r => {
+      const rounds = []; let entries = 0, unknown = 0, firstRoundEntries = 0;
+      QR().roundsOf(S.routing[L]).forEach((r, ri) => {
         const src = (lvl[r.key] && lvl[r.key][g]) || {};
         const cells = {}; let any = false;
         for (const c in src){
           const n = src[c]; if (!n || n < 0.5) continue;
           const key = `${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_LBL[c[2]]}|${r.key}`;
           cells[key] = n; entries += n; any = true;
+          // `entries` sums every round -- the competitor-slots the timetable
+          // has to seat. The event entries a committee reads elsewhere are the
+          // arrivals at the first round only; a diver in prelims and finals is
+          // one entry, not two. Kept separately so the heading can say both.
+          if (ri === 0) firstRoundEntries += n;
           if (!DIVE_TABLE[`${AGE_LBL[c[0]]}|${GEN_LBL[c[1]]}|${DIS_APPARATUS[DIS_LBL[c[2]]] || DIS_LBL[c[2]]}`]) unknown++;
         }
         if (any) rounds.push({key: r.key, cells});
@@ -3638,7 +3643,7 @@ function computeSchedule(res){
       catch(e){ err = e.message || String(e); }
       const d = (sim && sim.days) || [];
       stops.push({
-        name, level: tierName(L), levelIndex: L, groupIndex: g, entries, unknown, err, sim,
+        name, level: tierName(L), levelIndex: L, groupIndex: g, entries, firstRoundEntries, rounds: rounds.length, unknown, err, sim,
         events:      sim ? sim.totalEvents : 0,
         days:        sim ? sim.totalDays : 0,
         autoSplit:   d.reduce((a,x)=>a+((x.splitEvents||[]).length), 0),
@@ -4497,7 +4502,7 @@ async function buildComparison(ids, axis){
 
 function currentPathwayLabel(){
   if (S.pathSaved) return S.pathSaved.name + (S.pathDirty ? ' (edited)' : '');
-  if (S.routing && S.routing.length) return (S.scenarioName || 'This map') + '\u2019s own';
+  if (S.routing && S.routing.length) return (S.scenarioName || 'This map') + '\u2019s own pathway';
   return 'Published rules';
 }
 
@@ -7935,6 +7940,14 @@ function reachFinal(res){
 /* The four consequence numbers, computed once for the classic strip, the Map
    readout bar and the context strip. */
 function consequenceCells(){
+  // Nothing assigned means nothing to project. The engine would still produce
+  // numbers here (the direct-entry seed spread evenly across empty areas),
+  // and those read as a real forecast for a map nobody has drawn yet.
+  const anyAssigned = Object.keys(S.assign || {}).some(f => S.assign[f] != null && S.assign[f] >= 0);
+  if (!anyAssigned){
+    return [{k:'areas', label:'no map yet', value:'—', cls:'',
+             hint:'Paint counties or pick a saved map. Nothing is projected until at least one county is assigned.'}];
+  }
   const nAreas = groupCountAt(S.tierView);
   // "Regions" is already plural: the old label read "Regionss".
   const tn = tierName(S.tierView);
@@ -7957,7 +7970,8 @@ function consequenceCells(){
     }
     try {
       const n = reachFinal(res);
-      if (n != null) out.push({k:'reach', label:'reach ' + (S.finalName||'the final'), value: fmt(Math.round(n)), cls:''});
+      if (n != null) out.push({k:'reach', label:'entries reach ' + (S.finalName||'the final'), value: fmt(Math.round(n)), cls:'',
+                                hint:'Event entries (one athlete in one event) projected to arrive at the championship. Athletes are fewer: see Projection.'});
     } catch(e){}
   } else {
     out.push({k:'fit', label:'meets', value:'&hellip;', cls:''});
@@ -8089,7 +8103,7 @@ function atlasHeader(){
   const menuOpen = !!S.atlMenu;
   h.innerHTML = `
     <div class="atl-brand"><img src="../shared/images/diver-mark.svg" alt="">
-      <div><b>Boundary Studio</b><span>USA Diving · Membership Analytics</span></div></div>
+      <div><b>Boundary Studio</b><span>USA Diving · Staff Platform</span></div></div>
     <nav class="atl-nav">${INSPECTORS.map(t => `<button data-atlnav="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}${t.k==='schedule'?'<span id="atlSchedBadge"></span>':''}</button>`).join('')}</nav>
     <div class="atl-head-r">
       <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Proposal menu: open, new, copy, compare, season, export">
@@ -8621,7 +8635,7 @@ function atlasStructureHtml(res){
         <option value="" ${!overridden?'selected':''}>Auto (currently: ${esc(inferred)})</option>
         ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
       </select></label>
-    <div class="atl-note">Seeding from real <b>${esc(effective)} ${yearNumBoundary(S.year)}</b> entries — ${fmt(seedTotal())} before this level's own advancement rule is applied.${overridden ? '' : ' If Level 1 has taken over a stage this map used to have below it, auto-detect will seed it from the wrong, already-filtered field — pick the right one explicitly.'}</div></div>`;
+    <div class="atl-note">Seeding from the real <b>${esc(seedFieldLabel())}</b> — ${fmt(seedTotal())} actual event entries, before this level's own advancement rule is applied.${overridden ? '' : ' If Level 1 has taken over a stage this map used to have below it, auto-detect will seed it from the wrong, already-filtered field — pick the right one explicitly.'}</div></div>`;
 
   const left = `<aside class="atl-sidebar">
     <div class="atl-hh">Levels &amp; names</div>
@@ -8777,6 +8791,11 @@ function meetDivers(m){
 const stopFor = (sched, m) => (sched.stops||[]).find(s => s.levelIndex === m.level && s.groupIndex === m.gi);
 
 function atlasProjectionHtml(res){
+  const anyAssigned = Object.keys(S.assign || {}).some(f => S.assign[f] != null && S.assign[f] >= 0);
+  if (!anyAssigned){
+    return `<div class="atl-warn" style="margin:28px"><b>No map to project.</b> No county is assigned to an area yet, so there is no field to route.
+      Paint counties on the Map tab or open a saved proposal; the projection, schedule and money views fill in from there.</div>`;
+  }
   const fin = financialsFor(null);
   const sched = computeSchedule(res);
   const meets = meetManifest(res);
@@ -8907,7 +8926,7 @@ function atlasMoneyHtml(res){
     }
   }
 
-  const caveat = `<p class="atl-note" style="margin-top:12px">Entry fees ${S.fees ? '<b>as typed at right</b>' : 'at the published rate for each tier'}, less the DiveMeets pass-through ($${LEVY.toFixed(2)} per entry).
+  const caveat = `<p class="atl-note" style="margin-top:12px">Entry fees ${S.fees ? '<b>as typed at right</b>' : 'at the published rate for each tier'}, less the DiveMeets pass-through ($${levyPerEntry().toFixed(2)} per entry in ${yearNumBoundary(S.year)}).
       <b>Filled</b> is entries against the places the rules make available at that tier — capacity, not a forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
       <b>Biggest ÷ smallest</b> is the number a single host cut lives or dies on: a tier far from 1× cannot be paid by one rule, whatever the rule is.
       Membership dues and the senior circuit are in Pricing Studio, not here.</p>`;
@@ -9097,7 +9116,7 @@ function atlasScheduleHtml(res){
       const saved = (ss.sequentialMinutes||0) - (ss.compMinutes||0);
       return `<div class="bs-sc-sess">
         <div class="atl-sh">Session ${ss.index}<span>${hhmm(ss.warmupStartMinutes)} – ${hhmm(ss.sessionEndMinutes)}</span></div>
-        <div class="atl-wu"><span>Warm-up ${ss.warmupMinutes} min${lanes ? ' · ' + esc(lanes) : ''}</span>${saved > 0 ? `<span class="mono" title="Boards run together">−${saved} min</span>` : ''}</div>
+        <div class="atl-wu"><span>Warm-up ${ss.warmupMinutes} min${lanes ? ' · ' + esc(lanes) : ''}</span>${saved > 0 ? `<span class="mono" title="Boards run together: one board at a time would take ${saved} min longer">saves ${saved} min running together</span>` : ''}</div>
         ${evs}</div>`;
     }).join('');
     const occupied = (dd.sessions||[]).reduce((a,ss)=>a+(ss.sessionEndMinutes-ss.warmupStartMinutes),0);
@@ -9118,7 +9137,7 @@ function atlasScheduleHtml(res){
     <div class="atl-pills">${pills}</div>
     <div class="atl-sched-h">
       <span class="atl-mn">${esc(st.name)}</span>
-      <span class="atl-ms">${esc(st.level)} · <span class="mono">${fmt(Math.round(st.entries))}</span> event entries (projected)${d ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' (estimate)'}` : ''} · <span class="mono">${fmt(st.events)}</span> events</span>
+      <span class="atl-ms">${esc(st.level)} · <span class="mono">${fmt(Math.round(st.firstRoundEntries != null ? st.firstRoundEntries : st.entries))}</span> event entries (projected)${d ? ` · <span class="mono">${fmt(Math.round(d.divers))}</span> divers${d.reliable?'':' (estimate)'}` : ''}${(st.rounds||1) > 1 ? ` · <span class="mono">${fmt(Math.round(st.entries))}</span> competitor slots across ${st.rounds} rounds` : ''} · <span class="mono">${fmt(st.events)}</span> ${(st.rounds||1) > 1 ? 'sessions' : 'events'}</span>
       <span class="atl-mv ${bad?'c-bad':(st.unknown?'c-warn':'c-ok')}">${verdict}</span>
       <div class="atl-right">Pool opens <input class="atl-in mono bs-rt-in" type="time" id="bsSchedOpen" value="${tm(R.facilityOpenMin)}"> closes <input class="atl-in mono bs-rt-in" type="time" id="bsSchedClose" value="${tm(R.facilityCloseMin)}">
         <label title="Events per session">per session <input class="atl-in mono bs-rt-in" type="number" min="1" max="12" id="bsSchedEPS" value="${R.eventsPerSession}"></label>
@@ -9226,7 +9245,7 @@ function atlasCompareHtml(){
       maps = `<div class="atl-xfade"><div><svg viewBox="0 0 975 610" class="atl-static" id="atlXfade">${svgFor(xi)}</svg></div>
         <div class="atl-xlist"><span>Showing on the map</span>
           ${cols.map((c,i) => { const r = C[i]; return `<button class="atl-xrow ${i===xi?'on':''}" data-atlx="${i}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
-            <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} ${esc(tierName(0).toLowerCase())} · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
+            <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} ${esc(tierName(0).toLowerCase())} · ${fmt(Math.round(r.finalField||0))} event entries reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
           <span class="faint">Hover a proposal to crossfade the fills. Counties that sit in a different area than in ${esc(aShort)} are outlined in red.</span></div></div>`;
     }
   }
