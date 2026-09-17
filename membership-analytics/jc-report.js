@@ -60,7 +60,12 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const allDefs = () => [JC_BUILTIN, ...JC.defs];
 const findDef = (id) => allDefs().find((d) => d.id === id);
 
-/* ------------------------------------------------------------ picker / editor */
+/* ------------------------------------------------------------ picker / editor
+   Plain-language flow:
+     list    -> each report as a card: what it compares, one Generate button,
+                Copy / Change / Delete as quiet links
+     editor  -> 1 name, 2 tick what to compare (label each), 3 tick what to
+                include; title, subtitle and membership year under "More options" */
 
 function modal() {
   let m = document.getElementById('mr-modal');
@@ -69,107 +74,168 @@ function modal() {
 }
 function close() { const m = document.getElementById('mr-modal'); if (m) m.remove(); JC.editing = null; }
 
-function colSummary(c) {
-  if (c.type === 'scenario') {
-    const s = JC.scenarios.find((x) => x.id === c.scenarioId);
-    return `${esc(c.label)} <span class="mr-soft">— saved scenario ${esc(s ? s.name : c.scenarioId)} · projected</span>`;
-  }
-  return `${esc(c.label)} <span class="mr-soft">— ${+c.year === 2026 ? 'actual 2026 results' : 'modeled on real 2025 entries'}</span>`;
+const shortName = (s) => String(s || '').split(' — ')[0].trim();
+const colKey = (c) => (c.type === 'scenario' ? 's:' + c.scenarioId : 'y:' + c.year);
+const KIND = {
+  scenario: { tag: 'Proposal', desc: 'Projected from a saved Boundary Studio scenario' },
+  2026: { tag: 'Real 2026 season', desc: 'What actually happened: 2026 results and fees' },
+  2025: { tag: 'Real 2025 season', desc: '2021–2025 rules modeled on real 2025 entries' },
+};
+const kindOf = (c) => (c.type === 'scenario' ? KIND.scenario : KIND[+c.year] || KIND[2026]);
+function choices() {
+  return [
+    { type: 'structure', year: 2026, name: '2026 season (actual)', label: '2026 Structure' },
+    { type: 'structure', year: 2025, name: '2025 season (modeled)', label: '2025 Structure' },
+    ...JC.scenarios.map((s) => ({ type: 'scenario', scenarioId: s.id, name: s.name, label: shortName(s.name) })),
+  ];
+}
+const sameConfig = (a, b) => JSON.stringify({ c: a.columns, s: a.sections, t: a.title, u: a.subtitle, y: +a.membershipYear })
+  === JSON.stringify({ c: b.columns, s: b.sections, t: b.title, u: b.subtitle, y: +b.membershipYear });
+const when = (d) => { try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch (_) { return ''; } };
+
+const UI_CSS = `
+#mr-modal .jc-card{border:1px solid #dbe2ee;border-radius:10px;padding:14px 16px;background:#fff;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+#mr-modal .jc-card.is-std{border-color:#171F69;box-shadow:inset 3px 0 0 #171F69}
+#mr-modal .jc-card-main{flex:1;min-width:260px}
+#mr-modal .jc-name{font-weight:800;font-size:15px;color:#171F69}
+#mr-modal .jc-sub{font-size:12px;color:#5a6480;margin:2px 0 8px}
+#mr-modal .jc-chips{display:flex;flex-wrap:wrap;gap:6px}
+#mr-modal .jc-chip{font-size:12px;border-radius:999px;padding:3px 10px;background:#eef2fb;color:#171F69;font-weight:600;white-space:nowrap}
+#mr-modal .jc-chip i{font-style:normal;font-weight:500;color:#5a6480;margin-left:4px}
+#mr-modal .jc-acts{display:flex;align-items:center;gap:12px}
+#mr-modal .jc-link{background:none;border:none;color:#00789b;font-weight:700;font-size:13px;cursor:pointer;padding:4px 0;font-family:inherit}
+#mr-modal .jc-link.danger{color:#b3122b}
+#mr-modal .jc-top{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+#mr-modal .jc-msg{font-size:12.5px;font-weight:700;color:#15803d}
+#mr-modal .jc-warn{font-size:12.5px;color:#b45309}
+#mr-modal .jc-pick{display:flex;align-items:center;gap:10px;border:1px solid #e2e8f2;border-radius:9px;padding:9px 12px;background:#fff;flex-wrap:wrap}
+#mr-modal .jc-pick.is-on{border-color:#171F69;background:#f5f8fd}
+#mr-modal .jc-pick input[type=checkbox]{width:17px;height:17px;accent-color:#171F69}
+#mr-modal .jc-pick-name{font-weight:700;font-size:13.5px;color:#171F69}
+#mr-modal .jc-pick-desc{font-size:11.5px;color:#5a6480}
+#mr-modal .jc-pick-lbl{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#5a6480}
+#mr-modal .jc-in{padding:7px 9px;border:1px solid #cdd6e4;border-radius:6px;font:inherit;font-size:13px}
+#mr-modal .jc-order{font-weight:800;color:#fff;background:#171F69;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+#mr-modal .jc-arrow{border:1px solid #cdd6e4;background:#fff;border-radius:5px;width:26px;height:26px;cursor:pointer;color:#171F69}
+#mr-modal .jc-arrow:disabled{opacity:.35;cursor:default}
+#mr-modal details.jc-more summary{cursor:pointer;font-weight:700;color:#00789b;font-size:13px;margin:4px 0 10px}
+`;
+function ensureCss() {
+  if (document.getElementById('jc-ui-css')) return;
+  const st = document.createElement('style'); st.id = 'jc-ui-css'; st.textContent = UI_CSS; document.head.appendChild(st);
+}
+
+function chipsFor(cfg) {
+  return cfg.columns.map((c) => `<span class="jc-chip">${esc(c.label)}<i>${esc(kindOf(c).tag)}</i></span>`).join('');
 }
 
 function renderList() {
+  ensureCss();
   const m = modal();
-  const row = (d) => `
-    <div class="mr-secopt" style="cursor:default;align-items:center">
-      <div style="flex:1;min-width:0">
-        <div class="mr-secopt-n">${esc(d.name)} ${d.builtin ? '<span class="mr-tag">Built in · read-only</span>' : ''}</div>
-        <div class="mr-secopt-d">${esc(d.config.title)}${d.config.subtitle ? ' — ' + esc(d.config.subtitle) : ''}</div>
-        <div class="mr-secopt-d">${d.config.columns.map(colSummary).join('<br>')}</div>
+  const card = (d) => {
+    const std = !!d.builtin;
+    const same = !std && sameConfig(d.config, JC_BUILTIN.config);
+    const sub = std ? 'The standard report. Always available; it cannot be changed.'
+      : `Your version · saved ${esc(when(d.updatedAt))}${same ? ' · <span class="jc-warn">no changes from the standard report yet</span>' : ''}`;
+    return `<div class="jc-card${std ? ' is-std' : ''}">
+      <div class="jc-card-main">
+        <div class="jc-name">${esc(d.name)}</div>
+        <div class="jc-sub">${sub}</div>
+        <div class="jc-chips">${chipsFor(d.config)}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-        <button class="mr-btn mr-btn-p" onclick="window._jcGenerate('${esc(d.id)}')">Generate</button>
-        <button class="mr-btn" onclick="window._jcDuplicate('${esc(d.id)}')">Duplicate</button>
-        ${d.builtin ? '' : `<button class="mr-btn" onclick="window._jcEdit('${esc(d.id)}')">Edit</button>
-        <button class="mr-btn" onclick="window._jcDelete('${esc(d.id)}')">Delete</button>`}
+      <div class="jc-acts">
+        ${std ? `<button class="jc-link" onclick="window._jcDuplicate('${esc(d.id)}')">Make my own version</button>`
+          : `<button class="jc-link" onclick="window._jcEdit('${esc(d.id)}')">Change</button>
+             <button class="jc-link danger" onclick="window._jcDelete('${esc(d.id)}')">Delete</button>`}
+        <button class="mr-btn mr-btn-p" onclick="window._jcGenerate('${esc(d.id)}')">Generate report</button>
       </div>
     </div>`;
+  };
+  const tableMissing = JC.loadErr && /report_definitions/.test(JC.loadErr) && /does not exist/.test(JC.loadErr);
   m.innerHTML = `
   <div class="mr-overlay" onclick="if(event.target===this)window._jcClose()">
     <div class="mr-dialog" role="dialog" aria-label="Comparison reports">
       <div class="mr-head">
         <div><div class="mr-eyebrow">Reports</div><h2 class="mr-title">Comparison reports</h2>
-          <div class="mr-soft">Every figure is recomputed from live data when you press Generate. A copy keeps its own columns, labels and sections.</div></div>
+          <div class="mr-soft">Side-by-side comparison of proposals and real seasons: entries, athletes, Junior Nationals field and entry income. Numbers are recalculated from live data every time you generate.</div></div>
         <button class="mr-x" onclick="window._jcClose()" aria-label="Close">✕</button>
       </div>
       <div class="mr-body">
-        ${JC.msg ? `<p class="mr-soft" style="color:#15803d;font-weight:700">${esc(JC.msg)}</p>` : ''}
-        ${JC.loadErr ? `<p class="mr-soft" style="color:#b45309">${/report_definitions/.test(JC.loadErr) && /does not exist/.test(JC.loadErr)
-          ? 'Saved copies are not available yet — the database table for them is still being created. The built-in report works now.'
-          : 'Saved copies could not be loaded: ' + esc(JC.loadErr)}</p>` : ''}
-        <div style="display:flex;flex-direction:column;gap:8px">${allDefs().map(row).join('')}</div>
+        <div class="jc-top">
+          <button class="mr-btn" onclick="window._jcNew()">+ New comparison</button>
+          ${JC.msg ? `<span class="jc-msg">${esc(JC.msg)}</span>` : ''}
+          ${JC.loadErr ? `<span class="jc-warn">${tableMissing ? 'Saved versions are not available yet. The standard report works now.' : 'Saved versions could not be loaded: ' + esc(JC.loadErr)}</span>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">${allDefs().map(card).join('')}</div>
       </div>
     </div>
   </div>`;
 }
 
 function renderEditor() {
+  ensureCss();
   const d = JC.editing; const c = d.config;
-  const scenOpts = (sel) => JC.scenarios.map((s) => `<option value="${esc(s.id)}" ${s.id === sel ? 'selected' : ''}>${esc(s.name)}</option>`).join('')
-    + (sel && !JC.scenarios.some((s) => s.id === sel) ? `<option value="${esc(sel)}" selected>${esc(sel)} (not found)</option>` : '');
-  const kindOf = (col) => (col.type === 'scenario' ? 'scenario' : 'y' + col.year);
-  const colRow = (col, i) => `
-    <div class="mr-secopt" style="cursor:default;align-items:center;flex-wrap:wrap">
-      <span class="mr-step-n" style="width:22px;height:22px;flex:0 0 22px;font-size:11px">${i + 1}</span>
-      <select onchange="window._jcColKind(${i}, this.value)" style="padding:6px">
-        <option value="scenario" ${kindOf(col) === 'scenario' ? 'selected' : ''}>Saved Boundary Studio scenario (projected)</option>
-        <option value="y2025" ${kindOf(col) === 'y2025' ? 'selected' : ''}>2025 structure (modeled on real 2025 entries)</option>
-        <option value="y2026" ${kindOf(col) === 'y2026' ? 'selected' : ''}>2026 structure (actual results)</option>
-      </select>
-      ${col.type === 'scenario' ? `<select onchange="window._jcColScenario(${i}, this.value)" style="padding:6px;max-width:260px">${scenOpts(col.scenarioId)}</select>` : ''}
-      <label class="mr-soft">Column label <input value="${esc(col.label)}" oninput="window._jcColLabel(${i}, this.value)" style="padding:6px;width:200px"></label>
-      <span style="margin-left:auto;display:flex;gap:4px">
-        <button class="mr-btn" ${i === 0 ? 'disabled' : ''} onclick="window._jcColMove(${i}, -1)" title="Move up">↑</button>
-        <button class="mr-btn" ${i === c.columns.length - 1 ? 'disabled' : ''} onclick="window._jcColMove(${i}, 1)" title="Move down">↓</button>
-        <button class="mr-btn" ${c.columns.length === 1 ? 'disabled' : ''} onclick="window._jcColRemove(${i})">Remove</button>
-      </span>
+  const picked = new Map(c.columns.map((col, i) => [colKey(col), i]));
+  const row = (ch) => {
+    const i = picked.has(colKey(ch)) ? picked.get(colKey(ch)) : -1;
+    const on = i >= 0;
+    const k = kindOf(ch);
+    return `<div class="jc-pick${on ? ' is-on' : ''}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="window._jcToggle('${esc(colKey(ch))}', this.checked)" aria-label="${esc(ch.name)}">
+      ${on ? `<span class="jc-order" title="Column ${i + 1}">${i + 1}</span>` : ''}
+      <div style="min-width:0;flex:1 1 260px"><div class="jc-pick-name">${esc(ch.name)}</div><div class="jc-pick-desc">${esc(k.tag)} — ${esc(k.desc)}</div></div>
+      ${on ? `<label class="jc-pick-lbl">Column heading <input class="jc-in" style="width:190px" value="${esc(c.columns[i].label)}" oninput="window._jcColLabel(${i}, this.value)"></label>
+        <button class="jc-arrow" ${i === 0 ? 'disabled' : ''} onclick="window._jcColMove(${i}, -1)" title="Move this column left">←</button>
+        <button class="jc-arrow" ${i === c.columns.length - 1 ? 'disabled' : ''} onclick="window._jcColMove(${i}, 1)" title="Move this column right">→</button>` : ''}
     </div>`;
+  };
+  const missing = c.columns.filter((col) => col.type === 'scenario' && !JC.scenarios.some((s) => s.id === col.scenarioId));
+  const dirtyNote = (() => { try { const B = window.__BOUNDARY && window.__BOUNDARY.S; return B && B.dirty ? ` “${esc(B.scenarioName || 'The scenario open in Boundary Studio')}” has unsaved changes; the report uses its last saved version.` : ''; } catch (_) { return ''; } })();
+  const allOn = c.sections.length === JC_SECTIONS.length;
   const m = modal();
   m.innerHTML = `
   <div class="mr-overlay">
-    <div class="mr-dialog" role="dialog" aria-label="Edit comparison report">
+    <div class="mr-dialog" role="dialog" aria-label="Set up comparison">
       <div class="mr-head">
-        <div><div class="mr-eyebrow">Comparison reports · ${d.isNew ? 'new copy (not saved yet)' : 'saved copy'}</div>
-          <h2 class="mr-title">${esc(d.name || 'Untitled')}</h2></div>
+        <div><div class="mr-eyebrow">Comparison reports · ${d.isNew ? 'new' : 'change'}</div>
+          <h2 class="mr-title">${d.isNew ? 'Set up a comparison' : 'Change this comparison'}</h2></div>
         <button class="mr-x" onclick="window._jcBack()" aria-label="Back">✕</button>
       </div>
       <div class="mr-body">
         <div class="mr-step"><div class="mr-step-n">1</div><div class="mr-step-c">
-          <div class="mr-step-h">Name and heading</div>
-          <div class="mr-fgrp"><div class="mr-flbl">Name in this list</div><input value="${esc(d.name)}" oninput="window._jcSet('name', this.value)" style="padding:7px;width:100%"></div>
-          <div class="mr-fgrp"><div class="mr-flbl">Report title</div><input value="${esc(c.title)}" oninput="window._jcSetCfg('title', this.value)" style="padding:7px;width:100%"></div>
-          <div class="mr-fgrp"><div class="mr-flbl">Subtitle</div><input value="${esc(c.subtitle || '')}" oninput="window._jcSetCfg('subtitle', this.value)" style="padding:7px;width:100%"></div>
-          <div class="mr-fgrp"><div class="mr-flbl">Membership year used for eligible members (capacity section and scenario ceilings)</div>
-            <div class="mr-chips">${MEMBER_YEARS.map((y) => `<button class="mr-chip sm ${+c.membershipYear === y ? 'is-on' : ''}" onclick="window._jcSetCfg('membershipYear', ${y}, true)">${y}</button>`).join('')}</div></div>
+          <div class="mr-step-h">Name it</div>
+          <input class="jc-in" style="width:100%;max-width:520px" value="${esc(d.name)}" placeholder="e.g. Board packet — October" oninput="window._jcSet('name', this.value)">
         </div></div>
         <div class="mr-step"><div class="mr-step-n">2</div><div class="mr-step-c">
-          <div class="mr-step-h">Columns to compare</div>
-          <p class="mr-soft" style="margin:-4px 0 8px">Only saved Boundary Studio scenarios are listed. A new scenario must have counties assigned and be saved before it can be a column${(() => { try { const B = window.__BOUNDARY && window.__BOUNDARY.S; return B && B.dirty ? ` — “${esc(B.scenarioName || 'the scenario open in Boundary Studio')}” has unsaved changes, so the report will use its last saved version` : ''; } catch (_) { return ''; } })()}.</p>
-          <div style="display:flex;flex-direction:column;gap:6px">${c.columns.map(colRow).join('')}</div>
-          <button class="mr-link" onclick="window._jcColAdd()">+ Add a column</button>
+          <div class="mr-step-h">Tick what to compare</div>
+          <p class="mr-soft" style="margin:-4px 0 8px">Each ticked item becomes a column, in the order shown by the number. Proposals come from scenarios saved in Boundary Studio (counties assigned, then Save).${dirtyNote}</p>
+          ${missing.length ? `<p class="jc-warn">${missing.length === 1 ? 'One column uses a scenario that no longer exists' : missing.length + ' columns use scenarios that no longer exist'}; untick ${missing.length === 1 ? 'it' : 'them'} below.</p>` : ''}
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${choices().map(row).join('')}
+            ${missing.map((col) => row({ type: 'scenario', scenarioId: col.scenarioId, name: `${col.label} (scenario deleted)`, label: col.label })).join('')}
+          </div>
         </div></div>
         <div class="mr-step"><div class="mr-step-n">3</div><div class="mr-step-c">
-          <div class="mr-step-h">Sections</div>
+          <div class="mr-step-h">Tick what to include</div>
+          <p class="mr-soft" style="margin:-4px 0 8px"><button class="jc-link" onclick="window._jcAllSections(${allOn ? 'false' : 'true'})">${allOn ? 'Clear all' : 'Include everything'}</button></p>
           <div class="mr-sections">${JC_SECTIONS.map((s) => {
             const on = c.sections.includes(s.id);
             return `<label class="mr-secopt ${on ? 'is-on' : ''}"><input type="checkbox" ${on ? 'checked' : ''} onchange="window._jcSection('${s.id}', this.checked)">
               <span><div class="mr-secopt-n">${esc(s.label)}</div><div class="mr-secopt-d">${esc(s.desc)}</div></span></label>`;
           }).join('')}</div>
         </div></div>
+        <details class="jc-more"><summary>More options — title, subtitle, membership year</summary>
+          <div class="mr-fgrp"><div class="mr-flbl">Title printed on the report</div><input class="jc-in" style="width:100%" value="${esc(c.title)}" oninput="window._jcSetCfg('title', this.value)"></div>
+          <div class="mr-fgrp"><div class="mr-flbl">Subtitle</div><input class="jc-in" style="width:100%" value="${esc(c.subtitle || '')}" oninput="window._jcSetCfg('subtitle', this.value)"></div>
+          <div class="mr-fgrp"><div class="mr-flbl">Membership year for eligible members</div>
+            <div class="mr-chips">${MEMBER_YEARS.map((y) => `<button class="mr-chip sm ${+c.membershipYear === y ? 'is-on' : ''}" onclick="window._jcSetCfg('membershipYear', ${y}, true)">${y}</button>`).join('')}</div></div>
+        </details>
       </div>
       <div class="mr-foot">
         <button class="mr-btn" onclick="window._jcBack()">Cancel</button>
-        <span class="mr-soft">${esc(JC.msg || '')}</span>
-        <button class="mr-btn" style="margin-left:auto" onclick="window._jcSave(false)">Save</button>
+        <span class="jc-warn">${esc(JC.msg || '')}</span>
+        <span class="mr-soft" style="margin-left:auto">${c.columns.length} column${c.columns.length === 1 ? '' : 's'} · ${c.sections.length} of ${JC_SECTIONS.length} sections</span>
+        <button class="mr-btn" onclick="window._jcSave(false)">Save</button>
         <button class="mr-btn mr-btn-p" onclick="window._jcSave(true)">Save and generate</button>
       </div>
     </div>
@@ -186,16 +252,20 @@ async function open() {
 window._jcOpen = open;
 window._jcClose = close;
 window._jcBack = () => { JC.editing = null; JC.msg = ''; renderList(); };
+window._jcNew = () => {
+  JC.editing = { id: newId(), name: '', isNew: true, config: Object.assign(clone(JC_BUILTIN.config), { columns: [], title: 'Junior Circuit Comparison', subtitle: '' }) };
+  JC.msg = ''; renderEditor();
+};
 window._jcDuplicate = (id) => {
   const src = findDef(id); if (!src) return;
-  JC.editing = { id: newId(), name: 'Copy of ' + src.name, config: clone(src.config), isNew: true };
+  JC.editing = { id: newId(), name: '', config: clone(src.config), isNew: true };
   JC.msg = ''; renderEditor();
 };
 window._jcEdit = (id) => { const src = findDef(id); if (!src || src.builtin) return; JC.editing = clone(src); JC.msg = ''; renderEditor(); };
 window._jcDelete = async (id) => {
   const d = findDef(id); if (!d || d.builtin) return;
-  if (!window.confirm(`Delete the saved report "${d.name}"? The built-in report is not affected.`)) return;
-  try { await deleteDef(id); await loadLists(); JC.msg = `Deleted "${d.name}".`; } catch (e) { JC.msg = 'Delete failed: ' + (e.message || e); }
+  if (!window.confirm(`Delete “${d.name}”? The standard report is not affected.`)) return;
+  try { await deleteDef(id); await loadLists(); JC.msg = `Deleted “${d.name}”.`; } catch (e) { JC.msg = 'Delete failed: ' + (e.message || e); }
   renderList();
 };
 window._jcSet = (k, v) => { JC.editing[k] = v; };
@@ -205,31 +275,32 @@ window._jcSection = (id, on) => {
   JC.editing.config.sections = JC_SECTIONS.map((x) => x.id).filter((x) => s.has(x));
   renderEditor();
 };
-window._jcColKind = (i, v) => {
-  const col = JC.editing.config.columns[i];
-  if (v === 'scenario') JC.editing.config.columns[i] = { type: 'scenario', scenarioId: (JC.scenarios[0] || {}).id || '', label: col.label };
-  else JC.editing.config.columns[i] = { type: 'structure', year: v === 'y2025' ? 2025 : 2026, label: col.label };
+window._jcAllSections = (on) => { JC.editing.config.sections = on ? JC_SECTIONS.map((x) => x.id) : []; renderEditor(); };
+window._jcToggle = (key, on) => {
+  const cols = JC.editing.config.columns;
+  const i = cols.findIndex((c) => colKey(c) === key);
+  if (!on) { if (i >= 0) cols.splice(i, 1); }
+  else if (i < 0) {
+    const ch = choices().find((x) => colKey(x) === key);
+    if (ch) cols.push(ch.type === 'scenario' ? { type: 'scenario', scenarioId: ch.scenarioId, label: ch.label } : { type: 'structure', year: ch.year, label: ch.label });
+  }
   renderEditor();
 };
-window._jcColScenario = (i, v) => { JC.editing.config.columns[i].scenarioId = v; };
 window._jcColLabel = (i, v) => { JC.editing.config.columns[i].label = v; };
 window._jcColMove = (i, dir) => {
   const a = JC.editing.config.columns; const j = i + dir; if (j < 0 || j >= a.length) return;
   [a[i], a[j]] = [a[j], a[i]]; renderEditor();
 };
-window._jcColRemove = (i) => { JC.editing.config.columns.splice(i, 1); renderEditor(); };
-window._jcColAdd = () => {
-  JC.editing.config.columns.push({ type: 'scenario', scenarioId: (JC.scenarios[0] || {}).id || '', label: 'New column' });
-  renderEditor();
-};
 window._jcSave = async (andGenerate) => {
   const d = JC.editing;
   const problems = [];
   if (!d.name || !d.name.trim()) problems.push('give it a name');
-  if (!d.config.columns.length) problems.push('add at least one column');
-  if (d.config.columns.some((c) => !String(c.label || '').trim())) problems.push('label every column');
-  if (d.config.columns.some((c) => c.type === 'scenario' && !c.scenarioId)) problems.push('pick a scenario for every scenario column');
-  if (!d.config.sections.length) problems.push('pick at least one section');
+  if (!d.config.columns.length) problems.push('tick at least one thing to compare');
+  if (d.config.columns.some((c) => !String(c.label || '').trim())) problems.push('give every column a heading');
+  if (d.config.columns.some((c) => c.type === 'scenario' && !JC.scenarios.some((s) => s.id === c.scenarioId))) problems.push('untick the deleted scenario');
+  if (!d.config.sections.length) problems.push('tick at least one section');
+  const dup = JC.defs.find((x) => x.id !== d.id && x.name.trim().toLowerCase() === String(d.name || '').trim().toLowerCase());
+  if (dup) problems.push('pick a name that isn’t already used');
   if (problems.length) { JC.msg = 'Before saving: ' + problems.join(', ') + '.'; renderEditor(); return; }
   try {
     await saveDef({ id: d.id, name: d.name, config: d.config });
@@ -237,7 +308,7 @@ window._jcSave = async (andGenerate) => {
   const id = d.id;
   await loadLists();
   JC.editing = null;
-  JC.msg = `Saved "${d.name.trim()}".`;
+  JC.msg = `Saved “${d.name.trim()}”.`;
   if (andGenerate) generate(id); else renderList();
 };
 window._jcGenerate = (id) => generate(id);
@@ -255,7 +326,7 @@ async function generate(id) {
   out.innerHTML = `
     <div class="mr-toolbar">
       <button class="mr-print" onclick="window.print()">Print / save as PDF</button>
-      <button onclick="document.getElementById('mr-output').remove(); window._jcOpen()">Back to comparison reports</button>
+      <button onclick="document.getElementById('mr-output').remove(); window._jcOpen()">← All comparison reports</button>
       <button onclick="document.getElementById('mr-output').remove()">✕ Close</button>
       <span class="mr-soft" style="margin-left:auto">Sized for US Letter.</span>
     </div>
