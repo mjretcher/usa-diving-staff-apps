@@ -47,6 +47,14 @@ function routeSplitByBoard(rt){
   const bands = BOARDS.map(b => boardBand(rt, b.k));
   return bands.some(x => x.lo !== bands[0].lo || x.hi !== bands[0].hi);
 }
+/* In the rules springboard is one thing: 1 meter and 3 meter always share a
+   band, and platform is the board that differs (top 10 springboard / top 7
+   platform at Zones through 2025, for instance). So the editor's default split
+   is two-way -- springboard vs platform -- with 1m and 3m written together.
+   Splitting 1m from 3m stays possible as an explicit extra step. */
+const springboardCells = () => CELLS.filter(c => c[2] !== 'P');
+function sameBand(a, b){ return a.lo === b.lo && a.hi === b.hi; }
+function routeThreeWay(rt){ return !!rt.byCell && (rt._threeWay === true || !sameBand(boardBand(rt,'1'), boardBand(rt,'3'))); }
 const cellLabel = c => `${AGES.find(a=>a.k===c[0]).label} ${GENS.find(g=>g.k===c[1]).label} ${DISCS.find(d=>d.k===c[2]).label}`;
 
 /* USA Diving membership types, as Webpoint names them, for the Map rail's
@@ -8733,8 +8741,9 @@ function atlasPathwayHtml(res){
           <span class="c-faint">·</span>
           <select class="bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
           <button class="bs-x" data-rtdel="${ri}" data-l="${L}" title="Remove this route">×</button>
-          <button class="atl-link ${rt.byCell ? '' : 'quiet'}" data-rtboard="${L}|${ri}" title="${rt.byCell ? 'Back to one band for every board' : 'Give 1 meter, 3 meter and platform their own bands'}">${rt.byCell ? 'one band for all boards' : 'by board…'}</button>
-        </div>${rt.byCell ? BOARDS.map(b => { const bd = boardBand(rt, b.k); return `<div class="atl-route atl-route-board">
+          ${(L === 0 && S.firstStopPlatform === 'skip') ? `<span class="c-faint" title="Platform is not contested at ${esc(tierName(0))} in this proposal (Structure → Platform at ${esc(tierName(0))})">platform not held here</span>`
+            : `<button class="atl-link ${rt.byCell ? '' : 'quiet'}" data-rtboard="${L}|${ri}" title="${rt.byCell ? 'Back to one band for springboard and platform alike' : 'Qualify platform on its own band, separate from springboard'}">${rt.byCell ? 'same band for all boards' : 'platform qualifies separately…'}</button>`}
+        </div>${rt.byCell ? (routeThreeWay(rt) ? BOARDS : [{k:'S', label:'Springboard (1m · 3m)'}, {k:'P', label:'Platform'}]).map(b => { const bd = boardBand(rt, b.k === 'S' ? '1' : b.k); return `<div class="atl-route atl-route-board">
           <span class="atl-board">${b.label}</span><span>places</span>
           <input class="atl-in mono" type="number" min="1" max="200" data-rtb="lo" data-l="${L}" data-i="${ri}" data-board="${b.k}" value="${bd.lo}">
           <span>to</span>
@@ -8742,7 +8751,7 @@ function atlasPathwayHtml(res){
             <button data-rtbstep="-1" data-l="${L}" data-i="${ri}" data-board="${b.k}" title="One fewer" ${bd.hi==null||bd.hi<=1?'disabled':''}>−</button>
             <input class="atl-in mono bs-rt-hi-b" type="number" min="1" max="200" data-rtb="hi" data-l="${L}" data-i="${ri}" data-board="${b.k}" value="${bd.hi==null?'':bd.hi}" placeholder="∞">
             <button data-rtbstep="1" data-l="${L}" data-i="${ri}" data-board="${b.k}" title="One more">+</button>
-          </span></div>`; }).join('') : ''}`).join('');
+          </span></div>`; }).join('') + (routeThreeWay(rt) ? '' : `<div class="atl-route atl-route-board"><span class="atl-board"></span><button class="atl-link quiet" data-rt13="${L}|${ri}" title="Give 1 meter and 3 meter their own bands">1 meter and 3 meter separately…</button></div>`) : ''}`).join('');
       const none = !outs.length ? `<div class="atl-none">${L === S.routing.length-1 && r === rounds[rounds.length-1]
         ? 'Nobody advances from here — this is the championship final.' : 'Nobody advances from here.'}</div>` : '';
       return `<div class="atl-round">
@@ -9387,9 +9396,13 @@ function athletesLine(n, reliable){
 
 function bandText(lo, hi){ return hi == null ? `places ${lo} and below` : lo === hi ? `place ${lo}` : `places ${lo}–${hi}`; }
 function routeText(rt){
-  const band = rt.split && rt.bands
-    ? rt.bands.map(b => `${bandText(b.lo, b.hi)} ${BOARDS.find(x => x.k === b.board).short}`).join(' / ')
-    : bandText(rt.lo, rt.hi);
+  let band;
+  if (rt.split && rt.bands){
+    const by = {}; rt.bands.forEach(b => { by[b.board] = b; });
+    band = (by['1'] && by['3'] && sameBand(by['1'], by['3']))
+      ? `springboard ${bandText(by['1'].lo, by['1'].hi)} / platform ${bandText(by['P'].lo, by['P'].hi)}`
+      : rt.bands.map(b => `${bandText(b.lo, b.hi)} ${BOARDS.find(x => x.k === b.board).short}`).join(' / ');
+  } else band = bandText(rt.lo, rt.hi);
   if (!rt.toLevel) return band + ' out';
   return `${band} → ${rt.toLevel} ${String(rt.toRound||'').toLowerCase()}`;
 }
@@ -9795,7 +9808,7 @@ function wireAtlasMain(main){
       const [L, i] = e.currentTarget.dataset.rtboard.split('|').map(Number);
       const rt = S.routing[L] && S.routing[L].routes[i]; if (!rt) return;
       pushUndo();
-      if (rt.byCell) delete rt.byCell;
+      if (rt.byCell){ delete rt.byCell; delete rt._threeWay; }
       else { rt.byCell = {}; CELLS.forEach(c => { rt.byCell[c] = {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi}; }); }
       touch();
     });
@@ -9805,7 +9818,16 @@ function wireAtlasMain(main){
       pushUndo();
       rt.byCell = rt.byCell || {};
       const v = el.value === '' ? null : Math.max(1, Math.round(+el.value || 1));
-      boardCells(b).forEach(c => { const cur = rt.byCell[c] || {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi}; cur[k] = v; if (k === 'lo' && v == null) cur.lo = 1; rt.byCell[c] = cur; });
+      (b === 'S' ? springboardCells() : boardCells(b)).forEach(c => { const cur = rt.byCell[c] || {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi}; cur[k] = v; if (k === 'lo' && v == null) cur.lo = 1; rt.byCell[c] = cur; });
+      touch();
+    });
+    // Split 1m from 3m: nudge 3m by nothing -- the rows appear because the
+    // bands are now allowed to differ; nothing moves until edited.
+    on('[data-rt13]', 'click', e => {
+      const [L, i] = e.currentTarget.dataset.rt13.split('|').map(Number);
+      const rt = S.routing[L] && S.routing[L].routes[i]; if (!rt || !rt.byCell) return;
+      pushUndo();
+      rt._threeWay = true;
       touch();
     });
     on('[data-rtbstep]', 'click', e => {
