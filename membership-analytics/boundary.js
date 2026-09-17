@@ -1488,6 +1488,17 @@ function projectPathway(withTakeUp){
   // into S.routing, or it would be saved with the scenario and then double
   // count on the next load.
   const routing = S.routing.map(l => Object.assign({}, l, {entering: l.entering ? Object.assign({}, l.entering) : undefined}));
+  // Platform (tower) not held at the first stop: the first stop does not
+  // contest it, and everyone who would have dived it there enters the next
+  // stop directly (how 2026 Zones platform worked).
+  if (S.firstStopPlatform === 'skip' && routing.length > 1){
+    const P = cells.filter(c => c[2] === 'P');
+    routing[0].notOffered = Array.from(new Set((routing[0].notOffered || []).concat(P)));
+    const tot = {}; seedRows().forEach(row => P.forEach(c => { tot[c] = (tot[c] || 0) + (+row[c] || 0); }));
+    const ent = Object.assign({}, routing[1].entering || {});
+    P.forEach(c => { if (ent[c] == null && tot[c] > 0) ent[c] = tot[c]; });
+    routing[1].entering = ent;
+  }
   // The "qualified, before take-up" breakdown projects with withTakeUp=false
   // while the panel is being drawn; resetting S.takeUp here too made the
   // footer flip to "take-up could not be measured" every time that mode was
@@ -2745,6 +2756,355 @@ async function loadMapList(){
     S.mapList = r.rows || [];
   } catch(e){ console.warn('mapList', e); S.mapList = []; }
   return S.mapList;
+}
+
+/* ============================================================================
+   MAPS, SEPARATE FROM SCENARIOS
+   A map is the county assignment plus the level grouping and names (regions,
+   assign, levels). A scenario is a map + pathway + fees + schedule. Maps have
+   their own name (S.mapName) and can be saved on their own to
+   membership.boundary_maps, loaded onto any scenario, or picked when a
+   scenario is copied. The map inside every saved scenario is also offered.
+   ========================================================================= */
+async function listMaps(){
+  let lib = [], scen = [];
+  try {
+    const r = await NEON.query(`SELECT id, name, to_char(updated_at,'Mon DD') u,
+        jsonb_array_length(coalesce((data::jsonb)->'regions','[]'::jsonb)) n
+      FROM membership.boundary_maps ORDER BY updated_at DESC LIMIT 100`);
+    lib = (r.rows || []).map(x => ({id: 'mp:' + x.id, libId: x.id, name: x.name, n: +x.n, u: x.u, src: 'library'}));
+  } catch(e){ console.warn('maps', e); }
+  try {
+    const r = await NEON.query(`SELECT id, name, (data::jsonb)->>'mapName' mapname, to_char(updated_at,'Mon DD') u,
+        jsonb_array_length(coalesce((data::jsonb)->'regions','[]'::jsonb)) n,
+        (SELECT count(*) FROM jsonb_object_keys(coalesce((data::jsonb)->'assign','{}'::jsonb)))::int painted
+      FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 100`);
+    scen = (r.rows || []).filter(x => +x.painted > 0)
+      .map(x => ({id: 'sc:' + x.id, scId: x.id, name: x.mapname || x.name, scenario: x.name, n: +x.n, u: x.u, src: 'scenario'}));
+  } catch(e){ console.warn('scenario maps', e); }
+  S.mapLib = lib.concat(scen);
+  return S.mapLib;
+}
+
+async function fetchMap(id){
+  if (String(id).startsWith('mp:')){
+    const r = await NEON.query('SELECT id, name, data FROM membership.boundary_maps WHERE id=$1', [id.slice(3)]);
+    if (!r.rows || !r.rows.length) return null;
+    const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    return {name: r.rows[0].name, libId: r.rows[0].id, regions: d.regions || [], assign: d.assign || {},
+            levels: d.levels || null, finalName: d.finalName || null};
+  }
+  const sid = String(id).startsWith('sc:') ? id.slice(3) : id;
+  const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [sid]);
+  if (!r.rows || !r.rows.length) return null;
+  const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+  return {name: d.mapName || r.rows[0].name, libId: d.mapId || null, regions: d.regions || [], assign: d.assign || {},
+          levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName || null};
+}
+
+/* Put a map under the scenario on screen. The pathway stays; if the new map
+   has a different number of levels it is fitted, and the notes say how. */
+function applyMap(m, opts){
+  opts = opts || {};
+  if (!opts.noUndo) pushUndo();
+  const before = S.routing ? {routing: JSON.parse(JSON.stringify(S.routing))} : null;
+  S.regions = JSON.parse(JSON.stringify(m.regions && m.regions.length ? m.regions : defaultRegions(12)));
+  S.assign = JSON.parse(JSON.stringify(m.assign || {}));
+  if (m.levels && m.levels.length) S.levels = JSON.parse(JSON.stringify(m.levels));
+  if (m.finalName) S.finalName = m.finalName;
+  let notes = [];
+  if (before && before.routing.length && before.routing.length !== S.levels.length){
+    const fit = adaptPathway(before);
+    S.routing = fit.routing; notes = fit.notes;
+    S.pathNotes = fit.notes;
+  }
+  syncLevels(); syncRouting();
+  S.mapName = m.name || '';
+  S.mapId = m.libId || null;
+  S.active = 0; S.detailRegion = null; S.tierView = 0; S.dirty = true;
+  S.compare = S.compare && S.compare.id === S.scenarioId ? null : S.compare;
+  repaintAll(); renderPanel();
+  return notes;
+}
+
+async function saveMap(){
+  if (!Object.keys(S.assign || {}).length){ msg('Paint or auto-draw the map before saving it.'); return; }
+  const existing = S.mapId ? (S.mapLib || []).find(x => x.libId === S.mapId) : null;
+  const v = await bsDialog({
+    title: 'Save this map',
+    okLabel: 'Save map',
+    body: `<p class="bs-dlg-p">Saves only the map — counties, areas and level names. The pathway, fees and
+      schedule stay with the scenario. A saved map can be put under any scenario.</p>
+      <div class="bs-dlg-facts"><span>${fmt(S.regions.length)} ${esc(tierName(0).toLowerCase())}</span>
+      <span>${fmt(S.levels.length)} level${S.levels.length===1?'':'s'}</span></div>
+      <label class="bs-dlg-lbl">Map name <input class="bs-dlg-in" id="bsMapNm" maxlength="120" value="${esc(S.mapName || '')}" placeholder="e.g. Nine zones, west-coast split"></label>
+      ${S.mapId ? `<label class="bs-dlg-lbl" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="bsMapOver" checked> Update the saved map “${esc((existing && existing.name) || S.mapName)}” (untick to save a new one)</label>` : ''}`,
+    collect: w => ({name: (w.querySelector('#bsMapNm').value || '').trim(), over: !!(w.querySelector('#bsMapOver') || {}).checked}),
+  });
+  if (!v) return;
+  if (!v.name){ msg('Give the map a name.'); return; }
+  const id = (v.over && S.mapId) ? S.mapId : 'mp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6);
+  const data = JSON.stringify({regions: S.regions, assign: S.assign, levels: S.levels, finalName: S.finalName, v: 1});
+  try {
+    await NEON.query(`INSERT INTO membership.boundary_maps (id, name, data) VALUES ($1,$2,$3::jsonb)
+      ON CONFLICT (id) DO UPDATE SET name=$2, data=$3::jsonb, updated_at=now()`, [id, v.name, data]);
+    S.mapId = id; S.mapName = v.name; S.dirty = true;
+    await listMaps();
+    renderPanel();
+    msg(`Saved the map "${v.name}". Save the scenario too if this scenario should keep using it.`);
+  } catch(e){ msg('Could not save the map: ' + neonMsg(e)); }
+}
+
+async function deleteMap(libId){
+  const m = (S.mapLib || []).find(x => x.libId === libId); if (!m) return;
+  if (!await bsConfirm({title:'Delete this saved map?', danger:true, okLabel:'Delete',
+    body:`<p class="bs-dlg-p">Removes <b>${esc(m.name)}</b> from the map library. Scenarios that use it keep their own copy.</p>`})) return;
+  try {
+    await NEON.query('DELETE FROM membership.boundary_maps WHERE id=$1', [libId]);
+    if (S.mapId === libId) S.mapId = null;
+    await listMaps(); renderPanel(); msg('Deleted the map.');
+  } catch(e){ msg('Could not delete the map: ' + neonMsg(e)); }
+}
+
+function mapOptions(sel, extra){
+  const L = S.mapLib || [];
+  const opt = m => `<option value="${esc(m.id)}" ${sel===m.id?'selected':''}>${esc(m.name)}${m.src==='scenario' && m.scenario !== m.name ? ' — in “' + esc(m.scenario) + '”' : ''} · ${m.n} areas</option>`;
+  const lib = L.filter(m => m.src === 'library'), sc = L.filter(m => m.src === 'scenario');
+  return (extra || '')
+    + (lib.length ? `<optgroup label="Saved maps">${lib.map(opt).join('')}</optgroup>` : '')
+    + (sc.length ? `<optgroup label="Map from a saved scenario">${sc.map(opt).join('')}</optgroup>` : '');
+}
+
+async function loadMapInto(id){
+  if (!id) return;
+  try {
+    const m = await fetchMap(id);
+    if (!m){ msg('That map is gone.'); return; }
+    const notes = applyMap(m);
+    msg(`Loaded the map "${m.name}" under this scenario` + (notes.length ? ` — pathway fitted: ${notes.join(' ')}` : '') + '. Save the scenario to keep it.');
+  } catch(e){ msg('Could not load the map: ' + neonMsg(e)); }
+}
+
+/* Copy a saved scenario and choose the map the copy uses. */
+async function copyScenarioDialog(srcId){
+  await Promise.all([listMaps(), loadScenarioList()]);
+  const rows = (scenarioListCache && scenarioListCache.rows) || [];
+  if (!rows.length){ msg('There are no saved scenarios to copy yet.'); return; }
+  const src0 = srcId && rows.some(r => r.id === srcId) ? srcId : rows[0].id;
+  const nameOf = id => (rows.find(r => r.id === id) || {}).name || '';
+  const v = await bsDialog({
+    title: 'Copy a scenario',
+    okLabel: 'Make the copy',
+    body: `<p class="bs-dlg-p">The copy keeps the scenario's pathway, fees and host terms. Choose the map it should use.</p>
+      <label class="bs-dlg-lbl">Copy this scenario
+        <select class="bs-dlg-in" id="bsCpSrc">${rows.map(r => `<option value="${esc(r.id)}" ${r.id===src0?'selected':''}>${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="bs-dlg-lbl">Name of the copy <input class="bs-dlg-in" id="bsCpName" maxlength="120" value="${esc(nameOf(src0).replace(/ \(copy( \d+)?\)$/, '') + ' (copy)')}"></label>
+      <label class="bs-dlg-lbl">Map for the copy
+        <select class="bs-dlg-in" id="bsCpMap">${mapOptions('keep', `
+          <option value="keep" selected>Keep the map it has now</option>
+          <option value="auto">Auto-draw a new map</option>
+          <option value="blank">Blank map — I'll paint it</option>`)}</select></label>`,
+    wire: w => {
+      const s = w.querySelector('#bsCpSrc'), n = w.querySelector('#bsCpName');
+      s.addEventListener('change', () => { n.value = nameOf(s.value).replace(/ \(copy( \d+)?\)$/, '') + ' (copy)'; });
+    },
+    collect: w => ({src: w.querySelector('#bsCpSrc').value, name: (w.querySelector('#bsCpName').value || '').trim(), map: w.querySelector('#bsCpMap').value}),
+  });
+  if (!v) return;
+  if (!v.name){ msg('Give the copy a name.'); return; }
+  if (rows.some(r => r.name.trim().toLowerCase() === v.name.toLowerCase())){ msg(`A scenario called "${v.name}" already exists — pick another name.`); return; }
+  await loadScenario(v.src);
+  if (S.scenarioId !== v.src) return;             // not loaded (or the user kept unsaved work)
+  // Fork: a new id and name; a frozen record's lock does not travel with a copy.
+  S.scenarioId = newScenarioId(); S.scenarioName = v.name; S.frozen = null; S.savedAt = null; S.schedPlans = {};
+  if (v.map === 'auto'){
+    applyMap({regions: S.regions, assign: S.assign, levels: S.levels, name: ''}, {noUndo: true});
+    renderPanel(); openAutoDialog();
+    msg(`"${v.name}" is ready — draw its map, then Save scenario.`);
+    return;
+  }
+  if (v.map === 'blank'){
+    applyMap({regions: S.regions, assign: {}, levels: S.levels, name: ''}, {noUndo: true});
+    msg(`"${v.name}" has a blank map — paint or auto-draw it, then Save scenario.`);
+    return;
+  }
+  if (v.map !== 'keep'){
+    const m = await fetchMap(v.map);
+    if (!m){ msg('That map is gone.'); return; }
+    applyMap(m, {noUndo: true});
+  }
+  await saveScenario(false);
+}
+
+/* Auto-draw numbering that flows: area 1 starts in the northeast and every
+   next number touches the one before; with a tier ladder, each upper area's
+   members are numbered together and the run carries from one upper area into
+   the next. Works on an area graph (centroids + adjacency). */
+function orderAreasPath(nodes, adj, cx, cy, prev, nextSet, deadline){
+  if (nodes.length <= 1) return nodes.slice();
+  const inSet = new Set(nodes);
+  const nb = n => Array.from(adj[n] || []).filter(m => inSet.has(m));
+  const ne = n => cx[n] - cy[n];
+  let starts = prev != null ? nodes.filter(n => (adj[prev] || new Set()).has(n)) : [];
+  if (!starts.length) starts = nodes.slice().sort((a, b) => ne(b) - ne(a)).slice(0, 3);
+  let best = null, bestScore = -1;
+  const score = path => path.length * 2 + (nextSet && nextSet.size && Array.from(adj[path[path.length-1]] || []).some(m => nextSet.has(m)) ? 1 : 0);
+  const dfs = (path, seen) => {
+    if (Date.now() > deadline) return true;
+    const sc = score(path);
+    if (sc > bestScore){ bestScore = sc; best = path.slice(); }
+    if (path.length === nodes.length && bestScore === nodes.length * 2 + (nextSet && nextSet.size ? 1 : 0)) return true;
+    const cur = path[path.length - 1];
+    const cand = nb(cur).filter(m => !seen.has(m))
+      .sort((a, b) => nb(a).filter(x => !seen.has(x)).length - nb(b).filter(x => !seen.has(x)).length
+        || Math.hypot(cx[a]-cx[cur], cy[a]-cy[cur]) - Math.hypot(cx[b]-cx[cur], cy[b]-cy[cur]));
+    for (const m of cand){
+      seen.add(m); path.push(m);
+      if (dfs(path, seen)) return true;
+      path.pop(); seen.delete(m);
+    }
+    return false;
+  };
+  for (const s of starts){ if (dfs([s], new Set([s]))) break; if (Date.now() > deadline) break; }
+  // Anything the search could not reach in one run is appended next to the
+  // most recent area it touches (or nearest), so numbers still stay close.
+  const out = best ? best.slice() : [starts[0]];
+  const used = new Set(out);
+  while (out.length < nodes.length){
+    const rest = nodes.filter(n => !used.has(n));
+    let pick = null;
+    for (let i = out.length - 1; i >= 0 && pick == null; i--){
+      const t = rest.find(n => (adj[out[i]] || new Set()).has(n));
+      if (t != null) pick = t;
+    }
+    if (pick == null){
+      const last = out[out.length - 1];
+      pick = rest.sort((a, b) => Math.hypot(cx[a]-cx[last], cy[a]-cy[last]) - Math.hypot(cx[b]-cx[last], cy[b]-cy[last]))[0];
+    }
+    out.push(pick); used.add(pick);
+  }
+  return out;
+}
+
+function flowNumbering(A, assign, N, chain){
+  // Tier 0 graph from counties.
+  const tiers = [];
+  const build = (of, n, below) => {
+    const cx = new Array(n).fill(0), cy = new Array(n).fill(0), c = new Array(n).fill(0);
+    const adj = Array.from({length: n}, () => new Set());
+    if (!below){
+      for (let i = 0; i < A.fips.length; i++){
+        const a = of[i]; if (a == null || a < 0) continue;
+        cx[a] += A.cx[i]; cy[a] += A.cy[i]; c[a]++;
+        for (const j of A.adj[i]){ const b = of[j]; if (b != null && b >= 0 && b !== a){ adj[a].add(b); adj[b].add(a); } }
+      }
+    } else {
+      for (let k = 0; k < below.n; k++){
+        const a = of[k]; if (a == null || a < 0) continue;
+        cx[a] += below.cx[k] * below.c[k]; cy[a] += below.cy[k] * below.c[k]; c[a] += below.c[k];
+        for (const m of below.adj[k]){ const b = of[m]; if (b != null && b >= 0 && b !== a){ adj[a].add(b); adj[b].add(a); } }
+      }
+    }
+    for (let a = 0; a < n; a++){ if (c[a]){ cx[a] /= c[a]; cy[a] /= c[a]; } }
+    return {n, cx, cy, c, adj};
+  };
+  tiers.push(build(assign, N, null));
+  (chain || []).forEach((of, t) => {
+    const n = of.reduce((m, v) => Math.max(m, (v == null ? -1 : v) + 1), 0);
+    tiers.push(build(of, n, tiers[t]));
+  });
+  const T = tiers.length - 1;
+  const orders = new Array(tiers.length);
+  // First try one unbroken run through every first-stop area in which each
+  // upper-level group is numbered as a block (so every consecutive pair
+  // touches, including across group boundaries).
+  const G0 = tiers[0];
+  const grp = [Array.from({length: G0.n}, (_, i) => i)];      // grp[t][base] = group at tier t
+  for (let t = 0; t < (chain || []).length; t++) grp.push(grp[t].map(g => chain[t][g]));
+  const run = (() => {
+    const n = G0.n; if (n <= 1) return Array.from({length: n}, (_, i) => i);
+    const left = grp.map((gt, t) => { const m = {}; gt.forEach(g => { m[g] = (m[g] || 0) + 1; }); return m; });
+    const seen = new Array(n).fill(false);
+    const path = [];
+    const stop = Date.now() + 900;
+    const ok = (u, v) => {
+      for (let t = 1; t < grp.length; t++) if (left[t][grp[t][u]] > 0 && grp[t][v] !== grp[t][u]) return false;
+      return true;
+    };
+    const take = (v, d) => { seen[v] = !!d; for (let t = 1; t < grp.length; t++) left[t][grp[t][v]] -= d ? 1 : -1; };
+    const free = v => Array.from(G0.adj[v]).filter(m => !seen[m]).length;
+    const dist = (a, b) => Math.hypot(G0.cx[a] - G0.cx[b], G0.cy[a] - G0.cy[b]);
+    // Cheapest numbering: every non-touching step costs a lot plus how far it
+    // jumps, so a break (when the map makes one unavoidable) is as short as
+    // possible. Branch and bound, time-capped.
+    const BREAK = 100000;
+    let best = null, bestCost = Infinity;
+    const dfs = (cost) => {
+      if (cost >= bestCost || Date.now() > stop) return;
+      if (path.length === n){ bestCost = cost; best = path.slice(); return; }
+      const u = path[path.length - 1];
+      const valid = []; for (let v = 0; v < n; v++) if (!seen[v] && ok(u, v)) valid.push(v);
+      const near = valid.filter(v => G0.adj[u].has(v)).sort((a, b) => free(a) - free(b));
+      const far = valid.filter(v => !G0.adj[u].has(v)).sort((a, b) => dist(u, a) - dist(u, b)).slice(0, 3);
+      for (const v of near){ take(v, 1); path.push(v); dfs(cost); path.pop(); take(v, 0); }
+      for (const v of far){ take(v, 1); path.push(v); dfs(cost + BREAK + dist(u, v)); path.pop(); take(v, 0); }
+    };
+    const starts = Array.from({length: n}, (_, i) => i).sort((a, b) => (G0.cx[b] - G0.cy[b]) - (G0.cx[a] - G0.cy[a]));
+    for (const s0 of starts.slice(0, 4)){
+      take(s0, 1); path.push(s0);
+      dfs(0);
+      path.pop(); take(s0, 0);
+      if (bestCost < BREAK || Date.now() > stop) break;   // an unbroken run from the northeast wins
+    }
+    return best;
+  })();
+  if (run){
+    orders[0] = run;
+    for (let t = 1; t < tiers.length; t++){
+      const o = []; run.forEach(b => { const g = grp[t][b]; if (!o.includes(g)) o.push(g); });
+      for (let g = 0; g < tiers[t].n; g++) if (!o.includes(g)) o.push(g);
+      orders[t] = o;
+    }
+  }
+  const deadline = Date.now() + 400;
+  if (!run){
+  orders[T] = orderAreasPath(Array.from({length: tiers[T].n}, (_, i) => i), tiers[T].adj, tiers[T].cx, tiers[T].cy, null, null, deadline);
+  for (let t = T - 1; t >= 0; t--){
+    const of = chain[t], G = tiers[t];
+    const out = [];
+    const parents = orders[t + 1];
+    parents.forEach((p, pi) => {
+      const kids = []; for (let k = 0; k < G.n; k++) if (of[k] === p) kids.push(k);
+      const next = pi + 1 < parents.length ? new Set(Array.from({length: G.n}, (_, k) => k).filter(k => of[k] === parents[pi + 1])) : null;
+      out.push(...orderAreasPath(kids, G.adj, G.cx, G.cy, out.length ? out[out.length - 1] : null, next, deadline + 200));
+    });
+    orders[t] = out;
+  }
+  }
+  // old index -> new index, per tier
+  const newIdx = orders.map(o => { const m = []; o.forEach((old, i) => { m[old] = i; }); return m; });
+  const newAssign = assign.map(a => (a == null || a < 0) ? a : newIdx[0][a]);
+  const newChain = (chain || []).map((of, t) => {
+    const nof = new Array(of.length);
+    of.forEach((p, old) => { nof[newIdx[t][old]] = newIdx[t + 1][p]; });
+    return nof;
+  });
+  const centroids = tiers.map((G, t) => orders[t].map(old => ({x: G.cx[old], y: G.cy[old]})));
+  return {assign: newAssign, chain: newChain, centroids};
+}
+
+/* Level names for an auto-drawn ladder, e.g. 9,3,1 -> Zones / East, West, Central / National. */
+function autoLevelNames(counts){
+  const names = [];
+  counts.forEach((k, t) => {
+    let nm;
+    if (k === 1) nm = 'National';
+    else if (k === 3 && t > 0) nm = 'East, West, Central';
+    else if (t === 0) nm = k >= 10 ? 'Regions' : 'Zones';
+    else nm = names.includes('Zones') ? 'Level ' + (t + 1) : 'Zones';
+    names.push(nm);
+  });
+  return names;
 }
 
 /* The library is the saved pathways (membership.pathways) PLUS the pathway
@@ -4397,6 +4757,7 @@ function bsDialog(opts){
       resolve(v);
     };
     const val = () => {
+      if (opts.collect) return opts.collect(wrap);
       const el = wrap.querySelector('#bsDlgIn');
       return opts.input ? (el ? el.value.trim() : '') : true;
     };
@@ -4413,6 +4774,7 @@ function bsDialog(opts){
       if (b.dataset.dlg === 'cancel') return done(null);
       const v = val(); done(opts.input && !v ? null : v);
     });
+    if (opts.wire) opts.wire(wrap);
     document.addEventListener('keydown', key, true);
     document.body.appendChild(wrap);
     const focusEl = wrap.querySelector('#bsDlgIn') || wrap.querySelector('[data-dlg="ok"]');
@@ -5410,9 +5772,13 @@ function wireStructureControls(P){
   P.querySelectorAll('.bs-lvlname').forEach(inp => inp.addEventListener('change', ()=>{
     const lvl = +inp.dataset.lvl;
     const r = renumberAreas(lvl, false);
-    if (!r.renamed) return;
+    // Every heading, tab, legend, report page and toast reads tierName(), so a
+    // full redraw puts the new wording everywhere at once.
     S.dirty = true;
-    syncLevels(); repaintAll(); renderPanel();
+    // Redraw after the change/blur finishes, so the input being left is not
+    // pulled out from under its own event.
+    setTimeout(() => { syncLevels(); repaintAll(); renderPanel(); }, 0);
+    if (!r.renamed){ msg(`Level ${lvl + 1} is now called "${tierName(lvl)}" throughout Boundary Studio.`); return; }
     const n = areasAtLevel(lvl).length;
     msg(`Renamed ${r.renamed} area${r.renamed===1?'':'s'} to ` +
         (n === 1 ? r.base : `${r.base} 1–${n}`) +
@@ -5439,6 +5805,13 @@ function wireStructureControls(P){
     S.dirty = true;
     syncLevels(); repaintAll(); renderPanel();
     msg(`Renamed ${r.renamed} area${r.renamed===1?'':'s'} to ${base} 1–${areas.length}`);
+  }));
+  P.querySelectorAll('[data-tower]').forEach(b => b.addEventListener('click', () => {
+    if ((S.firstStopPlatform || 'held') === b.dataset.tower) return;
+    pushUndo();
+    S.firstStopPlatform = b.dataset.tower; S.dirty = true;
+    repaintAll(); renderPanel(); refreshFlow();
+    msg(S.firstStopPlatform === 'skip' ? `Platform is off at ${tierName(0)}; platform divers now enter ${tierName(1)} directly.` : `Platform is back on at ${tierName(0)}.`);
   }));
   const fin = P.querySelector('#bsFinalName');
   if (fin) fin.addEventListener('input', ()=>{
@@ -5511,7 +5884,7 @@ function wireScenarioControls(P){
   const nameI = P.querySelector('#bsName');
   if (nameI) nameI.addEventListener('input', ()=>{ S.scenarioName = nameI.value; S.dirty=true; });
   bind('bsSave', ()=>saveScenario(false));
-  bind('bsSaveNew', ()=>saveScenario(true));
+  bind('bsSaveNew', ()=>copyScenarioDialog(S.scenarioId));
   bind('bsDelete', deleteScenario);
   const cmp = P.querySelector('#bsCompare');
   if (cmp) cmp.addEventListener('change', ()=>{ if (cmp.value) loadCompare(cmp.value); });
@@ -5525,6 +5898,7 @@ function wireScenarioControls(P){
     S.finalName='Junior Nationals'; S.compare=null;
     S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
     S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null;
+    S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
   });
@@ -5590,7 +5964,9 @@ async function saveScenario(asNew){
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
     arrival:S.arrival, seedPool:S.seedPool, reportText:S.reportText,
-    levels:S.levels, finalName:S.finalName, adv:S.adv, v:4});
+    levels:S.levels, finalName:S.finalName, adv:S.adv,
+    mapName:S.mapName || null, mapId:S.mapId || null,
+    firstStopPlatform:S.firstStopPlatform || 'held', v:4});
   try {
     await NEON.query(
       `INSERT INTO membership.boundary_scenarios (id, name, data) VALUES ($1,$2,$3::jsonb)
@@ -5598,7 +5974,7 @@ async function saveScenario(asNew){
       [S.scenarioId, S.scenarioName.trim(), data]);
     S.dirty = false;
     S.savedAt = nowStamp();
-    scenarioListCache = null;
+    scenarioListCache = null; S.mapLib = null; S.mapList = null; S.pathList = null;
     msg((forking ? 'Saved a new scenario "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
   } catch(e){ console.error(e); msg('Save failed: ' + neonMsg(e)); }
@@ -5728,6 +6104,9 @@ async function loadScenario(id){
     if (!S.adv.focus) S.adv.focus = 'all';
     if (!S.adv.pool) S.adv.pool = '2026|Zones';
     syncLevels();
+    S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
+    S.mapName = d.mapName || (isSeed(id) ? row.name : '');
+    S.mapId = d.mapId || null;
     S.scenarioId = id; S.scenarioName = row.name; S.active = 0; S.detailRegion = null; S.dirty = false;
     S.undo.length = 0; S.redo.length = 0; S.palOpen = null;
     if (S.compare && S.compare.id === id) S.compare = null;
@@ -6989,33 +7368,45 @@ window._bsAutoApply = function(){
   // re-draw doesn't wipe naming work.
   if (S.regions.length !== N) S.regions = defaultRegions(N);
   const A = _autoData, next = {};
-  for (let i=0;i<A.fips.length;i++){
+  let baseAssign = A.fips.map((f,i) => {
     const g = r.assign[i];
-    if (g != null && g >= 0 && g < N) next[A.fips[i]] = g;
-  }
-  S.assign = next;
+    return (g != null && g >= 0 && g < N) ? g : -1;
+  });
   // Build the requested tier ladder from the map just drawn.
-  const ladder = parseLadder().slice(1).filter(k => k >= 1);
+  const full = parseLadder();
+  const ladder = full.slice(1).filter(k => k >= 1);
+  let chain = [];
   if (ladder.length && !r.byState){
-    try {
-      const baseAssign = A.fips.map((f,i) => {
-        const g = r.assign[i];
-        return (g != null && g >= 0 && g < N) ? g : -1;
-      });
-      const w = autoWeights(A, AUTO.basis);
-      const chain = groupAreasIntoTiers(A, baseAssign, w, ladder);
-      const names = ladder.length === 2 && ladder[0] === 3
-        ? [['East','Central','West'], ['National']]
-        : null;
-      S.levels = [{name:'Regions'}].concat(chain.map((of, t) => ({
-        name: ladder[t] === 1 ? 'National' : (t === 0 ? 'Zones' : 'Level ' + (t+2)),
-        groups: Array.from({length: ladder[t]}, (_,gi) =>
-          ({name: (names && names[t] && names[t][gi]) ? names[t][gi]
-                  : (ladder[t] === 1 ? 'National' : 'Group ' + (gi+1))})),
-        of: of.slice(),
-      })));
-    } catch(e){ console.warn('tier rollup failed, leaving levels as they were:', e && e.message); }
+    try { chain = groupAreasIntoTiers(A, baseAssign, autoWeights(A, AUTO.basis), ladder); }
+    catch(e){ console.warn('tier rollup failed, leaving levels as they were:', e && e.message); chain = []; }
   }
+  // Number the areas so they flow: 1 in the northeast, each next number
+  // touching the one before, upper-level groups numbered as runs.
+  let cents = null;
+  try {
+    const f = flowNumbering(A, baseAssign, N, chain);
+    baseAssign = f.assign; chain = f.chain; cents = f.centroids;
+  } catch(e){ console.warn('flow numbering failed, keeping the solver order:', e && e.message); }
+  for (let i=0;i<A.fips.length;i++){ const g = baseAssign[i]; if (g >= 0) next[A.fips[i]] = g; }
+  S.assign = next;
+  if (chain.length){
+    const names = autoLevelNames([N].concat(ladder));
+    S.levels = [{name: names[0]}].concat(chain.map((of, t) => {
+      const k = ladder[t];
+      let gnames = Array.from({length: k}, (_, gi) => k === 1 ? 'National' : singulariseLevel(names[t+1]) ? `${singulariseLevel(names[t+1])} ${gi+1}` : 'Group ' + (gi+1));
+      if (k === 3 && names[t+1] === 'East, West, Central' && cents && cents[t+1]){
+        // Name by position: most westerly West, most easterly East.
+        const byX = [0,1,2].sort((a, b) => cents[t+1][a].x - cents[t+1][b].x);
+        gnames = []; gnames[byX[0]] = 'West'; gnames[byX[1]] = 'Central'; gnames[byX[2]] = 'East';
+      }
+      return {name: names[t+1], groups: gnames.map(nm => ({name: nm})), of: of.slice()};
+    }));
+  } else if (!r.byState){
+    S.levels[0].name = autoLevelNames([N])[0];
+  }
+  // Generated area names follow the level name and the new order.
+  try { for (let L = 0; L < S.levels.length; L++) renumberAreas(L, false); } catch(e){}
+  S.mapName = ''; S.mapId = null;
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
   S.detailRegion = null; S.dirty = true;
   syncLevels();
@@ -7564,11 +7955,20 @@ function atlasMapHtml(){
         <div class="atl-rail-id"><span>${S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet'}</span>${S.scenarioId && isSeed(S.scenarioId) ? '<span>·</span><span>reference map</span>' : ''}</div>
         <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
         <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
+        <div class="atl-rail-map">
+          <label>Map <input class="atl-in" id="atlMapName" value="${esc(S.mapName || '')}" placeholder="Name this map" title="The map's own name — separate from the scenario name"></label>
+          <div class="atl-rail-map-row">
+            <select class="atl-sel" id="atlMapLoad" title="Put a saved map under this scenario (keeps the pathway and fees)"><option value="">Use a different map…</option>${mapOptions('')}</select>
+            <button class="atl-start-alt" id="atlMapSave" title="Save only the map (counties, areas, level names)">Save map</button>
+          </div>
+          ${S.mapId ? `<button class="atl-link quiet" id="atlMapDel" data-id="${esc(S.mapId)}">Delete this saved map</button>` : ''}
+        </div>
         <div class="atl-rail-start${Object.keys(S.assign || {}).length ? '' : ' empty'}">
-          <span>Start a new map</span>
-          <button class="atl-start-auto" id="atlRailAuto" title="Divide the country into the number of connected, evenly sized areas you choose">⚡ Auto-draw</button>
+          <span>Start something new</span>
+          <button class="atl-start-auto" id="atlRailAuto" title="Divide the country into the number of connected, evenly sized areas you choose">⚡ Auto-draw map</button>
           <button class="atl-start-alt" id="atlRailOfficial" title="Start from the published 2026 alignment">Official 2026</button>
           <button class="atl-start-alt" id="atlRailBlank" title="Clear the map and paint counties yourself">Blank</button>
+          <button class="atl-start-alt" id="atlRailCopy" title="Copy a saved scenario and choose which map the copy uses">Copy a scenario…</button>
         </div>
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
@@ -7762,6 +8162,12 @@ function wireAtlasMap(){
   const ra = $id('atlRailAuto'); if (ra) ra.addEventListener('click', () => openAutoDialog());
   const ro = $id('atlRailOfficial'); if (ro) ro.addEventListener('click', () => loadScenario('seed-2026-official'));
   const rb = $id('atlRailBlank'); if (rb) rb.addEventListener('click', () => { const b = $id('bsNew'); if (b) b.click(); });
+  const rc = $id('atlRailCopy'); if (rc) rc.addEventListener('click', () => copyScenarioDialog(S.scenarioId));
+  const mn = $id('atlMapName'); if (mn) mn.addEventListener('input', () => { S.mapName = mn.value; S.dirty = true; atlasStatus(); });
+  const ml = $id('atlMapLoad'); if (ml) ml.addEventListener('change', () => { if (ml.value) loadMapInto(ml.value); });
+  const ms = $id('atlMapSave'); if (ms) ms.addEventListener('click', saveMap);
+  const md = $id('atlMapDel'); if (md) md.addEventListener('click', () => deleteMap(md.dataset.id));
+  if (!S.mapLib && !S._mapLibBusy){ S._mapLibBusy = true; listMaps().then(() => { S._mapLibBusy = false; const sel = $id('atlMapLoad'); if (sel) sel.innerHTML = '<option value="">Use a different map…</option>' + mapOptions(''); }); }
   loadScenarioList();
   const mt = $id('atlMetric');
   if (mt) mt.addEventListener('change', () => { S.atlMetric = mt.value; atlasRailRows(computeTallies()); });
@@ -7847,6 +8253,14 @@ function atlasStructureHtml(res){
     <div class="atl-links"><button class="atl-link" id="bsAddLevel" ${N>=MAX_LEVELS?'disabled':''}>+ Add a level on top</button><button class="atl-link quiet" id="bsRemLevel" ${N<=1?'disabled':''}>Remove top level</button></div>
     ${rollBlocks.join('')}
     <div class="atl-topmeet"><span>Top meet</span><input class="atl-in" id="bsFinalName" value="${esc(S.finalName)}" placeholder="Junior Nationals"></div>
+    ${S.levels.length > 1 ? `<div class="atl-tower">
+      <div class="atl-tower-h">Platform (tower) at ${esc(tierName(0))}</div>
+      <div class="atl-seg sm">
+        <button data-tower="held" class="${S.firstStopPlatform !== 'skip' ? 'on' : ''}">Held</button>
+        <button data-tower="skip" class="${S.firstStopPlatform === 'skip' ? 'on' : ''}">Not held</button></div>
+      <div class="atl-note">${S.firstStopPlatform === 'skip'
+        ? `No platform events at ${esc(tierName(0))}; platform divers enter ${esc(tierName(1))} directly.`
+        : `Platform is contested at ${esc(tierName(0))} and qualifies like 1m and 3m.`}</div></div>` : ''}
     ${seed}
   </aside>`;
 

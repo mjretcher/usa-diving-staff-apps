@@ -42,6 +42,7 @@ export async function hydrateScenario(I, id) {
   S.hostPer_stop = d.hostPer_stop || null;
   S.arrival = d.arrival || null;
   S.seedPool = d.seedPool || null;
+  S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
   I.syncRouting();
   S.levels = I.migrateLevels(d, S.regions.length);
   S.finalName = d.finalName || 'Junior Nationals';
@@ -213,7 +214,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   return {
     assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
       revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario\'s stored host terms; competed entries only; no late fees',
-      seedPool: S.seedPool || 'inferred', seedBasis: opts.cdFirstStop ? firstStopSeedBasis(advRaw) : 'stored',
+      seedPool: S.seedPool || 'inferred', seedBasis: opts.cdFirstStop ? firstStopSeedBasis(advRaw) : 'stored', firstStopPlatform: S.firstStopPlatform || 'held',
       note: opts.cdFirstStop ? (firstStopSeedBasis(advRaw) === 'combined'
         ? 'The first stop is mandatory for every age group: it is seeded with every athlete who competed in each event at 2026 Regionals or Zones, counted once.'
         : 'Groups C and D modelled at the first stop (mandatory): seeded from 2026 Regionals for Group A/B springboard and from 2026 Zones for platform and Groups C/D.') : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },

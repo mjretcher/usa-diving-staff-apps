@@ -1022,6 +1022,16 @@ CREATE TABLE IF NOT EXISTS membership.boundary_scenarios (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Saved maps (Boundary Studio): a county assignment with its level grouping
+-- and names, saved and named on its own so it can be put under any scenario.
+CREATE TABLE IF NOT EXISTS membership.boundary_maps (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Saved report definitions (Membership Analytics -> Reports -> Comparison
 -- reports). `config` holds what to compare (saved Boundary Studio scenarios
 -- and/or the 2025 / 2026 structures), the column labels, the title and the
@@ -1239,7 +1249,8 @@ BEGIN
       membership.scenario_schedules,
       membership.schedule_templates,
       membership.pathways,
-      membership.report_definitions
+      membership.report_definitions,
+      membership.boundary_maps
       TO usad_app;
     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA membership TO usad_app;
     -- The default privilege is what stops this recurring: a table added later

@@ -204,7 +204,8 @@ async function buildColumn(col, ctx) {
     const att = ctx.jn26 ? ctx.jn26.attendance : null;
     return {
       label: col.label || r.scenarioName, kind: 'scenario', source: `Saved scenario “${r.scenarioName}” (${col.scenarioId})`,
-      assumption: r.assumptions && r.assumptions.note,
+      assumption: [r.assumptions && r.assumptions.note,
+        r.assumptions && r.assumptions.firstStopPlatform === 'skip' ? `Platform is not held at ${r.structure.levels[0].name}; platform divers enter ${(r.structure.levels[1] || {}).name || 'the next stop'} directly.` : null].filter(Boolean).join(' '),
       seedBasis: r.assumptions && r.assumptions.seedBasis,
       endsAt: tiers[tiers.length - 1].name,
       status: 'projected', tiers,
