@@ -7187,7 +7187,12 @@ function autoStagesFromMap(){
   const lv = S.levels || [];
   const blank = !Object.keys(S.assign || {}).length;
   if (blank || !lv.length) return {stages: [{name: 'Zones', n: 9}, {name: 'East, West, Central', n: 3}], nat: true};
-  const stages = lv.map((l, L) => ({name: l.name || ('Stop ' + (L + 1)), n: L === 0 ? S.regions.length : (l.groups || []).length}));
+  const stages = lv.map((l, L) => {
+    const areas = L === 0 ? S.regions : (l.groups || []);
+    // Carry over names a person chose (North, South…) so a re-draw keeps them.
+    const chosen = areas.length > 1 && areas.every(a => a && a.name && !looksGenerated(a.name));
+    return {name: l.name || ('Stop ' + (L + 1)), n: areas.length, areaNames: chosen ? areas.map(a => a.name).join(', ') : ''};
+  });
   let nat = false;
   const last = stages[stages.length - 1];
   if (stages.length > 1 && last.n === 1){ stages.pop(); nat = true; }
@@ -7216,13 +7221,16 @@ function autoStageProblems(){
     if (i > 0 && s.n >= st[i-1].n) out.push(`${s.name || 'Stop ' + (i+1)} needs fewer areas than ${st[i-1].name || 'the stop before it'} (${st[i-1].n}).`);
     if (i > 0 && s.n < 2) out.push(`${s.name || 'Stop ' + (i+1)} needs at least 2 areas — use “Junior Nationals as the last stop” for a single national meet.`);
     if (!String(s.name || '').trim()) out.push(`Stop ${i+1} needs a name.`);
+    const typed = splitNameList(s.areaNames);
+    if (typed.length && typed.length !== s.n) out.push(`${s.name || 'Stop ' + (i+1)}: you listed ${typed.length} area name${typed.length === 1 ? '' : 's'} but the stop has ${s.n} areas.`);
   });
   return out;
 }
 const autoChanged = () => { AUTO.result = null; AUTO.prep = null; AUTO.n = AUTO.stages[0].n; renderAutoDialog(); };
 window._bsAutoStageN = function(i, d){ const s = AUTO.stages[i]; s.n = Math.min(24, Math.max(i ? 2 : 2, s.n + d)); autoChanged(); };
 window._bsAutoStageSet = function(i, v){ const n = parseInt(v, 10); if (!isNaN(n)) AUTO.stages[i].n = Math.min(24, Math.max(2, n)); autoChanged(); };
-window._bsAutoStageName = function(i, v){ AUTO.stages[i].name = v; AUTO.prep = null; };
+window._bsAutoStageName = function(i, v, redraw){ AUTO.stages[i].name = v; AUTO.prep = null; if (redraw) renderAutoDialog(); };
+window._bsAutoStageAreas = function(i, v){ AUTO.stages[i].areaNames = v; renderAutoDialog(); };
 window._bsAutoStageAdd = function(){
   const last = AUTO.stages[AUTO.stages.length - 1];
   const n = Math.max(2, Math.floor(last.n / 2));
@@ -7257,7 +7265,62 @@ function prepareAuto(r){
   AUTO.prep = {r, baseAssign, chain, cents, byF, size, cnt};
   return AUTO.prep;
 }
-function autoGroupNames(t, k, name, cents){
+/* Area names for a stop. Explicit names ("Area names" box) win; otherwise a
+   stop name that is itself a list of compass words ("North South East West")
+   names the areas. Compass names are placed by where each area sits on the
+   map, so "North" is the northern area; any other list follows the numbering. */
+const COMPASS_DIR = {north:[0,-1], south:[0,1], east:[1,0], west:[-1,0], central:[0,0], centre:[0,0], center:[0,0], middle:[0,0], mid:[0,0],
+  northeast:[.71,-.71], northwest:[-.71,-.71], southeast:[.71,.71], southwest:[-.71,.71],
+  midwest:[-.2,-.6], pacific:[-1,0], atlantic:[1,0], mountain:[-.6,-.2], gulf:[.1,1], northern:[0,-1], southern:[0,1], eastern:[1,0], western:[-1,0]};
+const compassKey = w => String(w || '').toLowerCase().replace(/[^a-z]/g, '');
+function titleWord(w){ w = String(w).trim(); return w === w.toLowerCase() ? w.replace(/(^|[\s-])([a-z])/g, (m, a, b) => a + b.toUpperCase()) : w; }
+function splitNameList(text){
+  const t = String(text || '').trim();
+  if (!t) return [];
+  let parts = t.split(/\s*(?:,|\/|;|\||&|\+|\band\b)\s*/i).filter(Boolean);
+  if (parts.length < 2){
+    // "north south east west": only split on spaces when every word is a compass word,
+    // so a plain name like "Junior Circuit Finals" is never broken up.
+    const words = t.split(/\s+/);
+    if (words.length >= 2 && words.every(w => COMPASS_DIR[compassKey(w)])) parts = words;
+  }
+  return parts.map(titleWord);
+}
+function listIsCompass(list){ return list.length >= 2 && list.every(n => COMPASS_DIR[compassKey(n)]); }
+function placeCompassNames(list, cents){
+  const k = list.length;
+  if (!cents || cents.length !== k) return list.slice();
+  const mx = cents.reduce((a, c) => a + c.x, 0) / k, my = cents.reduce((a, c) => a + c.y, 0) / k;
+  const sx = Math.sqrt(cents.reduce((a, c) => a + (c.x - mx) ** 2, 0) / k) || 1;
+  const sy = Math.sqrt(cents.reduce((a, c) => a + (c.y - my) ** 2, 0) / k) || 1;
+  const off = cents.map(c => [(c.x - mx) / sx, (c.y - my) / sy]);
+  const score = (a, nm) => { const d = COMPASS_DIR[compassKey(nm)];
+    return (d[0] === 0 && d[1] === 0) ? -Math.hypot(off[a][0], off[a][1]) : off[a][0] * d[0] + off[a][1] * d[1]; };
+  const best = {v: -Infinity, perm: null}, perm = [], used = new Array(k).fill(false);
+  const go = (a, v) => {
+    if (a === k){ if (v > best.v){ best.v = v; best.perm = perm.slice(); } return; }
+    for (let j = 0; j < k; j++) if (!used[j]){ used[j] = true; perm[a] = j; go(a + 1, v + score(a, list[j])); used[j] = false; }
+  };
+  if (k <= 8) go(0, 0);
+  else { // greedy for long lists
+    best.perm = []; const taken = new Set();
+    for (let a = 0; a < k; a++){ let bj = -1, bv = -Infinity;
+      for (let j = 0; j < k; j++) if (!taken.has(j) && score(a, list[j]) > bv){ bv = score(a, list[j]); bj = j; }
+      taken.add(bj); best.perm[a] = bj; }
+  }
+  return best.perm.map(j => list[j]);
+}
+/* The names a stop's areas will get, or null to fall back to numbering. */
+function stageAreaList(stage, k){
+  if (!stage) return null;
+  const typed = splitNameList(stage.areaNames);
+  if (typed.length) return typed.length === k ? typed : null;
+  const fromName = splitNameList(stage.name);
+  return (fromName.length === k && listIsCompass(fromName)) ? fromName : null;
+}
+function autoGroupNames(t, k, name, cents, stage){
+  const list = stageAreaList(stage, k);
+  if (list) return listIsCompass(list) ? placeCompassNames(list, cents) : list;
   if (k === 1) return [AUTO.withNationals && t === parseLadder().length - 1 ? 'National' : singulariseLevel(name) || name];
   if (k === 3 && /east/i.test(name) && cents){
     const byX = [0,1,2].sort((a, b) => cents[a].x - cents[b].x);
@@ -7280,13 +7343,18 @@ function renderAutoDialog(){
     <div class="aa-stage">
       <div class="aa-stage-n">${i + 1}</div>
       <div class="aa-stage-main">
-        <input class="aa-in" value="${esc(s.name)}" placeholder="Name, e.g. Zones" oninput="window._bsAutoStageName(${i}, this.value)" aria-label="Name of stop ${i + 1}">
+        <input class="aa-in" value="${esc(s.name)}" placeholder="Name, e.g. Zones" oninput="window._bsAutoStageName(${i}, this.value)" onchange="window._bsAutoStageName(${i}, this.value, true)" aria-label="Name of stop ${i + 1}">
         <div class="aa-step">
           <button onclick="window._bsAutoStageN(${i}, -1)" aria-label="Fewer areas">&minus;</button>
           <input type="number" min="2" max="24" value="${s.n}" onchange="window._bsAutoStageSet(${i}, this.value)" aria-label="Areas at stop ${i + 1}">
           <button onclick="window._bsAutoStageN(${i}, 1)" aria-label="More areas">+</button>
           <span>${i === 0 ? 'areas — every county is in one' : `areas, each made of whole ${esc((st[i-1].name || 'areas').toLowerCase())}`}</span>
         </div>
+        ${(() => { const list = stageAreaList(s, s.n); const named = list ? (prep && prep.cents && prep.cents[i] && listIsCompass(list) ? placeCompassNames(list, prep.cents[i]) : list) : null;
+          return `<label class="aa-areanames"><span>Area names <i>(optional)</i></span>
+          <input class="aa-in" value="${esc(s.areaNames || '')}" placeholder="e.g. North, South, East, West" onchange="window._bsAutoStageAreas(${i}, this.value)" aria-label="Area names for stop ${i + 1}"></label>
+          <div class="aa-areahint">${named ? `Areas will be named <b>${named.map(esc).join(', ')}</b>${listIsCompass(named) ? ' — placed by where each sits on the map' : ' — in number order'}.`
+            : `Separate names with commas. Blank = numbered (${esc(singulariseLevel(s.name) || 'Group')} 1, 2…).`}</div>`; })()}
       </div>
       ${i > 0 ? `<button class="aa-del" onclick="window._bsAutoStageDel(${i})" title="Remove this stop">&#10005;</button>` : ''}
     </div>`).join('');
@@ -7295,7 +7363,8 @@ function renderAutoDialog(){
   const pal = (S.regions.length === AUTO.n ? S.regions : defaultRegions(AUTO.n)).map(x => x.color);
   const colOf = i => pal[i] || PALETTE[i % PALETTE.length];
   const svg = prep && S.geo ? atlasStaticSvg(f => prep.byF[f], colOf) : '';
-  const groupOf = (i) => { if (!prep || !prep.chain.length) return ''; const g = prep.chain[0][i]; const nm = autoGroupNames(1, ladder[1], st[1] ? st[1].name : '', prep.cents && prep.cents[1]); return nm[g] || ''; };
+  const groupOf = (i) => { if (!prep || !prep.chain.length) return ''; const g = prep.chain[0][i]; const nm = autoGroupNames(1, ladder[1], st[1] ? st[1].name : '', prep.cents && prep.cents[1], st[1]); return nm[g] || ''; };
+  const areaOf = (i) => { const l = prep ? stageAreaList(st[0], AUTO.n) : null; if (!l) return null; return autoGroupNames(0, AUTO.n, st[0].name, prep.cents && prep.cents[0], st[0])[i]; };
   d.innerHTML = `
   <div class="bs-auto-ov aa" onclick="if(event.target===this)window._bsAutoClose()">
     <div class="bs-auto-dlg aa-dlg">
@@ -7353,7 +7422,7 @@ function renderAutoDialog(){
               ${(r.stats.continuity != null && r.stats.continuity > 0) ? `<div><b>${Math.round(100 * (1 - r.stats.continuity))}%</b><span>of members stay where they are</span></div>` : ''}
             </div>
             <table class="bs-auto-tbl"><thead><tr><th>${esc(singulariseLevel(st[0].name) || 'Area')}</th>${prep.chain.length ? `<th>${esc(st[1] ? st[1].name : '')}</th>` : ''}<th class="num">${AUTO.basis === 'athletes' ? 'Athletes' : 'Members'}</th><th class="num">Counties</th></tr></thead>
-              <tbody>${prep.size.map((w, i) => `<tr><td><span class="sw" style="background:${colOf(i)}"></span>${esc((singulariseLevel(st[0].name) || 'Area') + ' ' + (i + 1))}</td>${prep.chain.length ? `<td>${esc(groupOf(i))}</td>` : ''}<td class="num">${fmt(Math.round(w))}</td><td class="num">${fmt(prep.cnt[i])}</td></tr>`).join('')}</tbody></table>
+              <tbody>${prep.size.map((w, i) => `<tr><td><span class="sw" style="background:${colOf(i)}"></span>${esc(areaOf(i) || ((singulariseLevel(st[0].name) || 'Area') + ' ' + (i + 1)))}</td>${prep.chain.length ? `<td>${esc(groupOf(i))}</td>` : ''}<td class="num">${fmt(Math.round(w))}</td><td class="num">${fmt(prep.cnt[i])}</td></tr>`).join('')}</tbody></table>
             <div class="bs-auto-legend">Numbers run from the northeast, and each area touches the next where the map allows. Areas are always connected.</div>`}
         </div>
       </div>
@@ -7488,13 +7557,19 @@ window._bsAutoApply = function(){
   if (chain.length){
     S.levels = [{name: names[0]}].concat(chain.map((of, t) => ({
       name: names[t+1] || ('Stop ' + (t+2)),
-      groups: autoGroupNames(t+1, ladder[t+1], names[t+1] || '', cents && cents[t+1]).map(nm => ({name: nm})),
+      groups: autoGroupNames(t+1, ladder[t+1], names[t+1] || '', cents && cents[t+1], st[t+1]).map(nm => ({name: nm})),
       of: of.slice(),
     })));
   } else {
     S.levels = [{name: names[0]}];
   }
   if (AUTO.withNationals && chain.length) S.finalName = S.finalName || 'Junior Nationals';
+  // Named first-stop areas (typed, or a compass list) replace the numbered names.
+  const firstNames = stageAreaList(st[0], N);
+  if (firstNames){
+    const nm0 = autoGroupNames(0, N, names[0], cents && cents[0], st[0]);
+    S.regions.forEach((rg, i) => { if (nm0[i]) rg.name = nm0[i]; });
+  }
   // Generated area names follow the level name and the new order.
   try { for (let L = 0; L < S.levels.length; L++) renumberAreas(L, false); } catch(e){}
   S.mapName = ''; S.mapId = null;
@@ -9616,7 +9691,7 @@ window.renderBoundary = async function(){
    reachable by clicking through the UI. */
 window.__BOUNDARY = {
   S, syncRouting, projectPathway, pushUndo, groupCountAt, groupUp, seedRows,
-  meetManifest, meetMoney, tierGroupsAt, tierName,
+  meetManifest, meetMoney, tierGroupsAt, tierName, openAutoDialog,
 };
 
 })();
