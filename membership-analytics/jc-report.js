@@ -44,7 +44,11 @@ async function loadLists() {
     JC.defs = rows.map((r) => ({ id: r.id, name: r.name, config: typeof r.config === 'string' ? JSON.parse(r.config) : r.config, updatedAt: r.updated_at }));
   } catch (e) { JC.defs = []; JC.loadErr = String(e && e.message || e); }
   try {
-    JC.scenarios = await sql(`SELECT id, name FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 200`);
+    // Same display names as Boundary Studio; the superseded 2026 draft is not offered.
+    const SEED_NAMES = { 'seed-2026-official': 'Official 2026 Regions (published map)' };
+    JC.scenarios = (await sql(`SELECT id, name FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 200`))
+      .filter((r) => r.id !== 'seed-2026-alignment')
+      .map((r) => ({ ...r, name: SEED_NAMES[r.id] || r.name }));
   } catch (e) { JC.scenarios = []; }
 }
 

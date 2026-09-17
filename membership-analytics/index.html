@@ -1000,7 +1000,20 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-mapslot #bsSvg{width:100%;height:calc(100vh - 56px - 52px);display:block;touch-action:none;user-select:none;cursor:crosshair}
 .atl-mapslot.tool-pan #bsSvg{cursor:grab}
 .atl-mapslot.erase #bsSvg{cursor:cell}
-.atl-tools{position:absolute;left:20px;bottom:64px;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #dfe3ea;border-radius:4px;padding:4px;box-shadow:0 8px 24px rgba(23,31,105,.12);z-index:5}
+.atl-tools{position:absolute;left:0;right:0;margin-inline:auto;width:max-content;top:12px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;max-width:calc(100% - 32px);background:#fff;border:1px solid #dfe3ea;border-radius:10px;padding:5px 8px;box-shadow:0 8px 24px rgba(23,31,105,.12);z-index:5;font-size:13px}
+.atl-tools .atl-zoom{display:inline-flex;border:1px solid #dfe3ea;border-radius:6px;overflow:hidden}
+.atl-tools .atl-zoom button{width:30px;height:30px;font-size:17px;font-weight:700;color:#171f69;background:#fff}
+.atl-tools .atl-zoom button+button{border-left:1px solid #dfe3ea}
+.atl-tools .atl-zoom button:hover{background:#f4f5f8}
+.atl-painting{display:inline-flex;align-items:center;gap:6px;padding:0 4px 0 2px;white-space:nowrap;color:#171f69}
+.atl-painting .atl-pc-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7390}
+.atl-painting .atl-pc-sw{width:14px;height:14px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.atl-painting .atl-pc-sw.erase{background:repeating-linear-gradient(45deg,#fff 0 3px,#E31937 3px 5px)}
+.atl-painting .atl-pc-note{font-size:12px;color:#6b7390}
+.atl-mapslot #bsSvg.panning{cursor:grabbing!important}
+#bsLift path{transition:none}
+.atl-bg-sep{font-style:normal;color:#9aa3b5;margin:0 1px}
+.atl-bg-u{font-style:normal;color:#8a93a6}
 .atl-tools .atl-seg{background:none;padding:0}
 .atl-tools .atl-seg button{padding:7px 12px}
 .atl-tools .atl-seg button.on{background:#171f69;color:#fff}
@@ -1535,10 +1548,10 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="ma-app.js?v=202609030441"></script>
 <script src="routing.js?v=202609171730"></script>
 <script src="scenario-schedule-engine.js?v=202608281800"></script>
-<script src="boundary.js?v=20260917b"></script>
+<script src="boundary.js?v=20260917d"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202609162200"></script>
-<script type="module" src="jc-report.js?v=202609171700"></script>
+<script type="module" src="jc-report.js?v=202609171900"></script>
 <script src="pricing.js?v=202609162200"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

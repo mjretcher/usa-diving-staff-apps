@@ -276,6 +276,19 @@ function heatTint(m, maxM){
 /* ---------- undo / redo ---------- */
 const SEED_IDS = ['seed-2026-official','seed-2026-alignment'];
 const isSeed = id => SEED_IDS.includes(id);
+/* The two reference rows have near-identical stored names ("Current 2026
+   Alignment" / "Official 2026 Alignment") but are different maps: 684 of 3,142
+   counties sit in a different region. The official one is the published map;
+   the other is an older draft built from which Regional each club attended.
+   Show them under names that say so, and keep the draft out of the pickers
+   so there is one obvious 2026 reference. The stored rows are unchanged. */
+const SEED_NAMES = {
+  'seed-2026-official':  'Official 2026 Regions (published map)',
+  'seed-2026-alignment': 'Older 2026 draft (from meets clubs attended)',
+};
+const HIDDEN_SEEDS = ['seed-2026-alignment'];
+const seedName = (id, name) => SEED_NAMES[id] || name;
+const listedScenario = r => !HIDDEN_SEEDS.includes(r.id) || r.id === S.scenarioId;
 
 /* The pathway editor calls pushUndo() before every route edit and the
    "Back to published rules" dialog promises "Undo will bring this one back",
@@ -495,11 +508,11 @@ function tallyMove(fips, fromRi, toRi){
 
 /* ---------- competitor pools ---------- */
 // Entrants per group at a level, broken out by cell key (age+gender+discipline).
-function poolCells(level){
+function poolCells(level, key){
   const TG = tierGroupsAt(level);
   const out = TG.groups.map(()=>({}));
   const un = {};
-  const P = S.advData && S.advData.pools ? S.advData.pools[S.adv.pool] : null;
+  const P = S.advData && S.advData.pools ? S.advData.pools[key || S.adv.pool] : null;
   if (!P) return {rows:out, un};
   for (const [fips, cells] of Object.entries(P)){
     const ri = S.assign[fips];
@@ -561,6 +574,23 @@ function memberTypeTallies(TG){
   }
   return rows;
 }
+/* Competition Athlete members per group: 15 numbers each (age groups D, C, B,
+   A, 19+; each boys, girls, gender not known). 2026 only, like every count by
+   exact membership type. Null when it can't be counted. */
+function compAthTallies(TG){
+  if (!S.compAth || !mtypeYearOk()) return null;
+  const rows = TG.groups.map(() => new Array(15).fill(0));
+  for (const [fips, rec] of Object.entries(S.compAth)){
+    const v = rec[S.year]; if (!v) continue;
+    const ri = S.assign[fips];
+    if (ri == null || ri < 0 || ri >= S.regions.length) continue;
+    const row = rows[TG.of[ri]];
+    for (let j = 0; j < 15; j++) row[j] += v[j] || 0;
+  }
+  return rows;
+}
+const BREAKDOWN_METRICS = ['age', 'comp', 'atype', 'cage', 'cgen', 'cagegen', 'eagegen'];
+const GENDER_COL = {boys:'#2456B8', girls:'#E31937', unknown:'#b8c0cc'};
 const poolIsMembers = () => S.adv.pool === 'members';
 // Total pool for a group, honoring the current focus filter.
 function poolTotal(cells){
@@ -739,6 +769,7 @@ function renderMapOnce(){
     `<path class="bs-mesh bs-mesh-st" d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="1.4" pointer-events="none"/>` +
     `<path class="bs-mesh bs-mesh-nat" d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="1" pointer-events="none"/>`;
   S._els = null;                 // element cache is stale after a full re-render
+  applySelectedLift();
   document.querySelectorAll('path.bcty').forEach(el=>{
     el._ac = countyClass(el.dataset.f);
     if (el._ac === 'a-u') el.style.fill = fillFor(el.dataset.f, S._maxM);
@@ -759,11 +790,73 @@ function repaintAll(){
     }
     el.style.fill = (want === 'a-u') ? fillFor(el.dataset.f, S._maxM) : '';
   });
+  applySelectedLift();
 }
 
+/* The selected area sits slightly "raised": a copy of its counties drawn on
+   top with a soft shadow below and a crisp navy edge around the outside only
+   (the filter works on the group's combined shape, so inner county lines get
+   no shadow). The copy ignores the pointer, so painting still hits the map. */
+function ensureLiftDefs(){
+  const svg = document.getElementById('bsSvg');
+  if (!svg || svg.querySelector('#bsLiftF')) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(NS, 'defs');
+  defs.innerHTML = `<filter id="bsLiftF" x="-10%" y="-10%" width="120%" height="125%" color-interpolation-filters="sRGB">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="0.9" result="thick"/>
+    <feFlood flood-color="#171F69" flood-opacity="0.95"/><feComposite in2="thick" operator="in" result="edge"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+    <feOffset in="blur" dx="0" dy="3" result="off"/>
+    <feFlood flood-color="#0b1240" flood-opacity="0.38"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+  svg.insertBefore(defs, svg.firstChild);
+}
+let _liftRaf = 0;
+function applySelectedLift(){
+  if (_liftRaf) return;
+  _liftRaf = requestAnimationFrame(() => { _liftRaf = 0; drawSelectedLift(); });
+}
+function drawSelectedLift(){
+  const g = document.getElementById('bsSvgG');
+  if (!g || !S.geo) return;
+  let lift = document.getElementById('bsLift');
+  const on = atlasOn() && S.panelMode === 'map' && S.tierView === 0 && S.active >= 0 && S.active < S.regions.length;
+  if (!on){ if (lift) lift.remove(); return; }
+  ensureLiftDefs();
+  if (!lift){
+    lift = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    lift.id = 'bsLift'; lift.setAttribute('pointer-events', 'none'); lift.setAttribute('filter', 'url(#bsLiftF)');
+    g.appendChild(lift);
+  } else if (lift !== g.lastElementChild) g.appendChild(lift);
+  const k = S.zoom.k || 1, f = document.getElementById('bsLiftF');
+  if (f){   // keep the effect the same on-screen size at any zoom
+    f.querySelector('feMorphology').setAttribute('radius', (0.9 / Math.sqrt(k)).toFixed(3));
+    f.querySelector('feGaussianBlur').setAttribute('stdDeviation', (3 / k).toFixed(3));
+    f.querySelector('feOffset').setAttribute('dy', (3 / k).toFixed(3));
+  }
+  lift.setAttribute('transform', `translate(0 ${(-1.6 / k).toFixed(3)})`);
+  const parts = [];
+  for (const c of S.geo.counties){
+    if (S.assign[c.f] !== S.active) continue;
+    const el = countyEl(c.f);
+    const cs = el ? getComputedStyle(el) : null;
+    parts.push(`<path d="${c.d}" fill="${cs ? cs.fill : groupColor(S.active)}" fill-opacity="${cs ? cs.fillOpacity : 1}" stroke="#fff" stroke-width="${(0.35 / Math.sqrt(k)).toFixed(3)}"/>`);
+  }
+  lift.innerHTML = parts.join('');
+}
+function zoomBy(f){
+  const k2 = Math.min(14, Math.max(1, S.zoom.k * f)), real = k2 / S.zoom.k;
+  const cx = 975/2, cy = 610/2;
+  S.zoom.x = cx - (cx - S.zoom.x) * real; S.zoom.y = cy - (cy - S.zoom.y) * real; S.zoom.k = k2;
+  if (S.zoom.k === 1){ S.zoom.x = 0; S.zoom.y = 0; }
+  applyZoom();
+}
+function panBy(dx, dy){ if (S.zoom.k <= 1) return; S.zoom.x += dx; S.zoom.y += dy; applyZoom(); }
 function applyZoom(){
   const g = document.getElementById('bsSvgG');
   if (g) g.setAttribute('transform', `translate(${S.zoom.x},${S.zoom.y}) scale(${S.zoom.k})`);
+  if (S._liftK !== S.zoom.k){ S._liftK = S.zoom.k; applySelectedLift(); }
 }
 
 /* ---------- panel ---------- */
@@ -1400,7 +1493,7 @@ function renderSeedPoolPicker(){
         ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
       </select>
     </label>
-    <div style="margin-top:4px">Currently seeding from actual <b>${/FirstQualifying$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals for Group A/B springboard, and ${yearNumBoundary(S.year)} Zones for platform${S.year==='y26'?' and Groups C/D':''} (where those events first counted)` : `${effective} ${yearNumBoundary(S.year)}`}</b> — ${total.toLocaleString()} actual event entries, before this level's own advancement rule is applied.
+    <div style="margin-top:4px">Currently seeding from actual <b>${/FirstStop$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals and Zones combined (every diver who entered an event at either, counted once per event)` : /FirstQualifying$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals for Group A/B springboard, and ${yearNumBoundary(S.year)} Zones for platform${S.year==='y26'?' and Groups C/D':''} (where those events first counted)` : `${effective} ${yearNumBoundary(S.year)}`}</b> — ${total.toLocaleString()} actual event entries, before this level's own advancement rule is applied.
     ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
   </div>`;
 }
@@ -1436,6 +1529,14 @@ function seedPoolKey(){
     const k = firstQualifyingPool(year); if (k) return k;
   }
   return year + '|' + stage;
+}
+/* Plain-English name of the real field that seeds the first stop. */
+function seedFieldLabel(){
+  const k = seedPoolKey(), yn = yearNumBoundary(S.year);
+  if (/FirstStop$/.test(k)) return `${yn} first-stop field (Regionals + Zones combined)`;
+  if (/FirstQualifying$/.test(k)) return `${yn} first-stop field (Regionals springboard + Zones platform)`;
+  const st = seedStage();
+  return `${yn} ${st === 'EWC' ? 'East/West/Central' : st === 'Nationals' ? 'Junior Nationals' : st} field`;
 }
 function seedRows(){
   const n = Math.max(1, groupCountAt(0));
@@ -2779,8 +2880,8 @@ async function listMaps(){
         jsonb_array_length(coalesce((data::jsonb)->'regions','[]'::jsonb)) n,
         (SELECT count(*) FROM jsonb_object_keys(coalesce((data::jsonb)->'assign','{}'::jsonb)))::int painted
       FROM membership.boundary_scenarios ORDER BY updated_at DESC LIMIT 100`);
-    scen = (r.rows || []).filter(x => +x.painted > 0)
-      .map(x => ({id: 'sc:' + x.id, scId: x.id, name: x.mapname || x.name, scenario: x.name, n: +x.n, u: x.u, src: 'scenario'}));
+    scen = (r.rows || []).filter(x => +x.painted > 0 && !HIDDEN_SEEDS.includes(x.id))
+      .map(x => ({id: 'sc:' + x.id, scId: x.id, name: x.mapname || seedName(x.id, x.name), scenario: seedName(x.id, x.name), n: +x.n, u: x.u, src: 'scenario'}));
   } catch(e){ console.warn('scenario maps', e); }
   S.mapLib = lib.concat(scen);
   return S.mapLib;
@@ -2943,10 +3044,10 @@ function bsPick(opts){
 async function openProposalPicker(){
   scenarioListCache = null;
   await loadScenarioList();
-  const rows = (scenarioListCache && scenarioListCache.rows) || [];
+  const rows = ((scenarioListCache && scenarioListCache.rows) || []).filter(listedScenario);
   const items = rows.map(r => ({
     id: r.id, label: r.name, current: r.id === S.scenarioId,
-    group: isSeed(r.id) ? 'Reference maps' : 'Saved proposals',
+    group: isSeed(r.id) ? 'Reference map' : 'Saved proposals',
     tag: r.id === S.scenarioId ? 'open now' : isSeed(r.id) ? 'reference' : '',
     sub: `saved ${r.u}${r.has_fees ? ' · fees set' : ''}${r.has_schedule ? ' · schedule' : ''}`,
   })).sort((a, b) => (a.group === b.group ? 0 : a.group === 'Saved proposals' ? -1 : 1));
@@ -4521,7 +4622,7 @@ function setBrush(r){
   S.brush = Math.max(0, Math.min(6, r));
   if (S.brush > 0) ensureBrushGraph();
   const el = document.getElementById('bsBrushLbl');
-  if (el) el.textContent = S.brush === 0 ? 'single county' : `${S.brush} deep`;
+  if (el) el.textContent = S.brush === 0 ? (atlasOn() ? '1 county' : 'single county') : (atlasOn() ? `${S.brush} rings` : `${S.brush} deep`);
   msg(S.brush === 0 ? 'Brush: single county' : `Brush: everything within ${S.brush} border${S.brush>1?'s':''}`);
 }
 
@@ -4616,8 +4717,8 @@ function paletteItems(){
   add('Separate touching colours', 'No two neighbours look alike', separateAdjacentColors, 'Map');
   add('Recolour areas with the Atlas ramp', 'Give a proposal saved under the old palette the design colours (Undo puts them back)', recolourWithRamp, 'Map');
   add('Auto-draw the map…', 'Divide the country into N connected, even areas', openAutoDialog, 'Map');
-  add('Load official 2026 alignment', 'The published Regional Championship map', ()=>loadScenario('seed-2026-official'), 'Maps');
-  add('Load attendance-based map', 'The older draft, from which Regional each club attended', ()=>loadScenario('seed-2026-alignment'), 'Maps');
+  add('Open the official 2026 Regions', 'The published Regional Championship map', ()=>loadScenario('seed-2026-official'), 'Maps');
+  add('Open the older 2026 draft', 'Superseded draft built from which Regional each club attended — not the published map', ()=>loadScenario('seed-2026-alignment'), 'Maps');
   add('Reset the map view', 'Zoom back out', ()=>{ S.zoom={k:1,x:0,y:0}; applyZoom(); }, 'Map');
   [['y24','2024'],['y25','2025'],['y26','2026 YTD']].forEach(([k,l]) => add('Season: ' + l, 'Count members from this season',
     ()=>{ S.year = k; repaintAll(); renderPanel(); }, 'Season'));
@@ -5631,6 +5732,7 @@ function assignState(abbr){
 let tallyRaf = 0, heavyTimer = null;
 function tallySoon(){
   if (!tallyRaf) tallyRaf = requestAnimationFrame(()=>{ tallyRaf = 0; renderNumbersLight(); });
+  applySelectedLift();
   clearTimeout(heavyTimer);
   heavyTimer = setTimeout(()=>{ heavyTimer = null; renderNumbers(); }, 220);
 }
@@ -5661,9 +5763,15 @@ function wireMap(){
   const tip = document.getElementById('bsTip');
   let panStart = null;
 
+  /* Moving the map works in every tool: the Move tool, holding Space, the
+     middle or right mouse button, or dragging from empty space (ocean,
+     outside the country). A plain drag on a county still paints. */
+  const beginPan = e => { panStart = {x:e.clientX, y:e.clientY, zx:S.zoom.x, zy:S.zoom.y}; svg.setPointerCapture(e.pointerId); svg.classList.add('panning'); tip.style.display='none'; };
+  svg.addEventListener('contextmenu', e => { if (S.zoom.k > 1 || panStart) e.preventDefault(); });
   svg.addEventListener('pointerdown', e=>{
-    if (S.tool==='pan'){ panStart = {x:e.clientX, y:e.clientY, zx:S.zoom.x, zy:S.zoom.y}; svg.setPointerCapture(e.pointerId); return; }
-    const t = e.target.closest('path.bcty'); if (!t) return;
+    const onCounty = e.target.closest('path.bcty');
+    if (S.tool==='pan' || S._spacePan || e.button === 1 || e.button === 2 || (!onCounty && e.button === 0)){ e.preventDefault(); beginPan(e); return; }
+    const t = onCounty; if (!t) return;
     S._pre = snapshot();           // one undo step per stroke, not per county
     S.painting = true;
     if (S.tool==='state') assignState(t.dataset.f && S.geo.counties.find(c=>c.f===t.dataset.f).st);
@@ -5733,15 +5841,20 @@ function wireMap(){
       }
       S._pre = null;
     }
-    S.painting=false; panStart=null;
+    S.painting=false; panStart=null; svg.classList.remove('panning');
   };
   svg.addEventListener('pointerup', stop);
-  svg.addEventListener('pointerleave', e=>{ stop(); tip.style.display='none'; });
+  svg.addEventListener('pointerleave', e=>{ if (!panStart) stop(); tip.style.display='none'; });
+  svg.addEventListener('lostpointercapture', () => { if (panStart) stop(); });
   svg.addEventListener('wheel', e=>{
     e.preventDefault();
     const rect = svg.getBoundingClientRect();
     const mx = (e.clientX-rect.left) * (975/rect.width), my = (e.clientY-rect.top) * (975/rect.width);
-    const f = e.deltaY < 0 ? 1.18 : 1/1.18;
+    if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY)){        // two-finger sideways swipe: move
+      if (S.zoom.k > 1){ S.zoom.x -= e.deltaX * (975/rect.width); applyZoom(); }
+      return;
+    }
+    const f = e.ctrlKey ? Math.exp(-e.deltaY * 0.01) : (e.deltaY < 0 ? 1.18 : 1/1.18);
     const k2 = Math.min(14, Math.max(1, S.zoom.k * f));
     const real = k2 / S.zoom.k;
     S.zoom.x = mx - (mx - S.zoom.x) * real;
@@ -6044,7 +6157,7 @@ async function saveScenario(asNew){
     S.scenarioId = newScenarioId();
     if (isSeed(S.scenarioId)) S.scenarioId = newScenarioId();
     const base = S.scenarioName.trim();
-    if (asNew || frozenChanged || /^(Official 2026 Alignment|Current 2026 Alignment)/.test(base)){
+    if (asNew || frozenChanged || /^(Official 2026 Alignment|Current 2026 Alignment|Official 2026 Regions|Older 2026 draft)/.test(base)){
       S.scenarioName = base.replace(/ \(copy( \d+)?\)$/, '') + ' (copy)';
     }
     // The copy is a working model again; the freeze belongs to the original.
@@ -6115,7 +6228,7 @@ async function loadScenarioList(){
                EXISTS(SELECT 1 FROM membership.scenario_schedules ss WHERE ss.boundary_scenario_id = bs.id) AS has_schedule
         FROM membership.boundary_scenarios bs
         ORDER BY bs.updated_at DESC LIMIT 50`);
-      scenarioListCache = {t: Date.now(), rows: res.rows};
+      scenarioListCache = {t: Date.now(), rows: (res.rows || []).map(r => Object.assign({}, r, {name: seedName(r.id, r.name)}))};
     }
     const completeness = r => {
       const parts = [];
@@ -6128,13 +6241,13 @@ async function loadScenarioList(){
       if (!sel) return;
       const cur = sel.value;
       sel.innerHTML = `<option value="">${id === 'bsLoadRail' ? 'Open a saved proposal&hellip;' : 'Load proposal&hellip;'}</option>` +
-        scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})${completeness(r)}</option>`).join('');
+        scenarioListCache.rows.filter(listedScenario).map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})${completeness(r)}</option>`).join('');
       if (cur && !S.scenarioId) sel.value = cur;
     });
     const csel = document.getElementById('bsCompare');
     if (csel){
       csel.innerHTML = '<option value="">nothing&hellip;</option>' +
-        scenarioListCache.rows.filter(r=>r.id!==S.scenarioId)
+        scenarioListCache.rows.filter(r=>r.id!==S.scenarioId && listedScenario(r))
           .map(r=>`<option value="${esc(r.id)}" ${S.compare&&S.compare.id===r.id?'selected':''}>${esc(r.name)}</option>`).join('');
     }
   } catch(e){ /* silent */ }
@@ -6199,9 +6312,9 @@ async function loadScenario(id){
     if (!S.adv.pool) S.adv.pool = '2026|Zones';
     syncLevels();
     S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
-    S.mapName = d.mapName || (isSeed(id) ? row.name : '');
+    S.mapName = d.mapName || (isSeed(id) ? seedName(id, row.name) : '');
     S.mapId = d.mapId || null;
-    S.scenarioId = id; S.scenarioName = row.name; S.active = 0; S.detailRegion = null; S.dirty = false;
+    S.scenarioId = id; S.scenarioName = seedName(id, row.name); S.active = 0; S.detailRegion = null; S.dirty = false;
     S.undo.length = 0; S.redo.length = 0; S.palOpen = null;
     if (S.compare && S.compare.id === id) S.compare = null;
     repaintAll(); renderPanel();
@@ -7753,6 +7866,21 @@ function balanceFrom(flow, level){
   const TG = tierGroupsAt(i);
   const rows = (flow.levels[i] && flow.levels[i].rows) || [];
   const totals = TG.groups.map((_,gi)=>CELLS.reduce((a,c)=>a+((rows[gi]||{})[c]||0),0));
+  return balanceStats(i, TG, totals);
+}
+/* The same measure on the pathway projection -- the numbers the Projection
+   tab, the meet manifests and the comparison report use (event entries per
+   stop, each event rounded as it is billed). Preferred whenever it exists, so
+   the rail, the readout bar and the report never disagree about a stop. */
+function balanceFromRes(res, level){
+  if (!res || !res.field || !S.routing || !S.routing.length || !QR()) return null;
+  const i = Math.min(level, S.routing.length - 1);
+  if (!res.field[i]) return null;
+  const TG = tierGroupsAt(i);
+  const totals = TG.groups.map((_,gi)=>CELLS.reduce((a,c)=>a+Math.round(QR().entriesCellAt(res, i, gi, c) || 0),0));
+  return balanceStats(i, TG, totals);
+}
+function balanceStats(i, TG, totals){
   const grand = totals.reduce((a,b)=>a+b,0);
   const n = TG.groups.length, equal = n ? 100/n : 0;
   const spread = (grand > 0 && n > 1) ? (100*Math.max(...totals)/grand - 100*Math.min(...totals)/grand) : 0;
@@ -7765,7 +7893,7 @@ function balanceFrom(flow, level){
   });
   return {level:i, TG, totals, grand, n, equal, spread, cls, word, per};
 }
-const balanceAt = level => balanceFrom(S.flow, level);
+const balanceAt = level => balanceFromRes(S.routeRes, level) || balanceFrom(S.flow, level);
 
 /* Everyone reaching the top meet: the championship's entry field. */
 function reachFinal(res){
@@ -7788,7 +7916,7 @@ function consequenceCells(){
   if (bal){
     if (bal.grand > 0 && bal.n > 1)
       out.push({k:'gap', label:'widest gap', value: bal.spread.toFixed(1) + ' pp', cls: bal.cls,
-                hint:'How far the biggest area is from the smallest, as a share of everyone competing.'});
+                hint:'How far the biggest area is from the smallest, as a share of all event entries at this stop (same numbers as the Projection tab).'});
   } else out.push({k:'gap', label:'widest gap', value:'&hellip;', cls:''});
   const res = S.routeRes;
   if (res && res.field){
@@ -7886,7 +8014,11 @@ function mapExtras(map){
     try {
       const flow = window.JuniorFlow.compute({regions:S.regions, assign:S.assign, levels:S.levels,
                                               finalName:S.finalName, year:S.year});
-      bal = balanceFrom(flow, 0);
+      const keepFlow = S.flow, keepCr = S._cr;
+      try { S.flow = flow; bal = balanceFromRes(projectPathway(), 0); }
+      catch(e){ bal = null; }
+      finally { S.flow = keepFlow; S._cr = keepCr; }
+      if (!bal) bal = balanceFrom(flow, 0);
       gap = bal ? bal.spread : null;
     } catch(e){}
     const t = tallyBatchAt(0);
@@ -8085,30 +8217,34 @@ function atlasMapHtml(){
   const metric = S.atlMetric || 'members';
   const yn = yearNumBoundary(S.year);
   const noTypes = mtypeYearOk() ? '' : ' (2026 only)';
-  const compPool = (POOLS.find(p=>p.k===(S.adv && S.adv.pool))||{}).label || '';
-  const compLbl = /entrants$/.test(compPool) ? compPool.replace(/ entrants$/, ' event entries by board') : 'Event entries by board';
   const metricGroups = [
-    [`Members by USA Diving membership type · ${yn}`, [
+    [`Members · ${yn}`, [
       ['members',  'All members (every membership type)'],
-      ['athletes', 'All athletes (Athlete + Competition + Introductory)'],
+      ['athletes', 'All athletes (Athlete, Competition Athlete, Introductory)'],
+      ['age',      'All athletes by age group (D / C / B / A / 19+)'],
+      ['atype',    'All athletes by membership type' + noTypes],
       ['t_comp',   'Competition Athlete members' + noTypes],
       ['t_ath',    'Athlete members' + noTypes],
       ['t_intro',  'Introductory Athlete members' + noTypes],
-      ['atype',    'Athletes split by membership type' + noTypes],
-      ['age',      'Athletes split by age group (D / C / B / A / 19+)'],
-      ['coaches',  'All coaches (Coach + Competition + Lifetime Coach)'],
+      ['coaches',  'All coaches (Coach, Competition Coach, Lifetime Coach)'],
       ['t_ccoach', 'Competition Coach members' + noTypes],
       ['t_coach',  'Coach members' + noTypes],
-      ['t_off',    'Judges & Volunteer/Officials' + noTypes],
+      ['t_off',    'Judge and Volunteer/Official members' + noTypes],
     ]],
-    [`Junior Circuit competition`, [
-      ['entries',  `Event entries — ${seedStage()} ${yn} field (1 per diver per event)`],
-      ['comp',     `${compLbl} (1M / 3M / Platform)`],
+    [`Competition Athlete members · ${yn}`, [
+      ['cage',     'Competition Athletes by age group (D / C / B / A / 19+)' + noTypes],
+      ['cgen',     'Competition Athletes by gender (boys / girls)' + noTypes],
+      ['cagegen',  'Competition Athletes by age group and gender' + noTypes],
+    ]],
+    ['Junior Circuit meets (event entries: one per diver per event)', [
+      ['entries',  `Event entries at each stop — seeded from the ${seedFieldLabel()}`],
+      ['comp',     'First-stop event entries by board (1M / 3M / Platform)'],
+      ['eagegen',  'First-stop event entries by age group and gender'],
     ]],
     ['Map coverage', [
-      ['clubs',    'Clubs with members in the area'],
+      ['clubs',    'Clubs with members living in the area'],
       ['zips',     'Zip codes with members'],
-      ['counties', 'Counties painted into the area'],
+      ['counties', 'Counties in the area'],
     ]],
   ];
   const metricOpts = metricGroups.map(([g, opts]) => `<optgroup label="${esc(g)}">`
@@ -8150,22 +8286,25 @@ function atlasMapHtml(){
     </aside>
     <section class="atl-mapsec">
       <div class="atl-mapslot ${S.tool==='pan'?'tool-pan':''} ${S.active===-1?'erase':''}" id="atlMapSlot"></div>
-      <div class="atl-tools">
+      <div class="atl-tools" role="toolbar" aria-label="Map tools">
+        <span class="atl-painting" id="atlPainting">${atlasPaintingChip()}</span>
+        <span class="atl-vr"></span>
         <div class="atl-seg">
-          <button data-atltool="county" class="${S.tool==='county'?'on':''}">County</button>
-          <button data-atltool="state" class="${S.tool==='state'?'on':''}">Whole state</button>
-          <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to pan; scroll to zoom">Pan</button>
+          <button data-atltool="county" class="${S.tool==='county'?'on':''}" title="Click or drag across counties to add them to the selected ${esc(tierLabel)}">🖌 Paint counties</button>
+          <button data-atltool="state" class="${S.tool==='state'?'on':''}" title="Click a state to add every county in it">Whole state</button>
+          <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to move the map. You can also hold Space and drag, or drag from empty space, in any tool.">✋ Move map</button>
         </div>
         <span class="atl-vr"></span>
-        <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Ctrl/⌘ Z">↶ Undo</button>
-        <button id="bsRedo" ${S.redo.length?'':'disabled'} title="Ctrl/⌘ ⇧ Z">Redo ↷</button>
+        <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Undo (Ctrl/⌘ Z)">↶ Undo</button>
+        <button id="bsRedo" ${S.redo.length?'':'disabled'} title="Redo (Ctrl/⌘ ⇧ Z)">Redo ↷</button>
         <span class="atl-vr"></span>
-        <span class="atl-brush" title="How wide the brush is. [ and ] change it."><button id="bsBrushDown" aria-label="Narrower brush">−</button>Brush <b id="bsBrushLbl">${S.brush===0?'single county':S.brush+' deep'}</b><button id="bsBrushUp" aria-label="Wider brush">+</button></span>
+        <span class="atl-brush" title="How many counties one click paints. [ and ] also change it."><button id="bsBrushDown" aria-label="Smaller brush">−</button>Brush <b id="bsBrushLbl">${S.brush===0?'1 county':S.brush+' rings'}</b><button id="bsBrushUp" aria-label="Bigger brush">+</button></span>
         <span class="atl-vr"></span>
-        <button id="atlZoomReset" title="Reset the view">Reset view</button>
+        <span class="atl-zoom"><button id="atlZoomOut" aria-label="Zoom out" title="Zoom out (−)">−</button><button id="atlZoomIn" aria-label="Zoom in" title="Zoom in (+)">+</button></span>
+        <button id="atlZoomReset" title="Show the whole country">Fit map</button>
       </div>
       <div class="atl-readout"><div id="bsStrip" class="atl-strip"></div>
-        <span class="atl-hint">Click or drag to paint · 1–9 pick a ${esc(tierLabel)} · E unassign · ⌘Z undo · ⌘S save · double-click a row for its zip codes</span></div>
+        <span class="atl-hint">Drag to paint · Space + drag (or drag empty space) to move · scroll to zoom · 1–9 pick a ${esc(tierLabel)} · E remove counties · ⌘Z undo · ⌘S save</span></div>
     </section>`;
 }
 
@@ -8174,8 +8313,15 @@ function atlasMapHtml(){
    legend cards read (tally .ag and poolCells), same colours. */
 function atlasRailBreakdown(t, metric){
   const box = $id('atlRows');
-  const pooled = metric === 'comp' ? poolCells(S.tierView) : null;
+  const pooled = (metric === 'comp' || metric === 'eagegen') ? poolCells(S.tierView, seedPoolKey()) : null;
   const typed = metric === 'atype' ? memberTypeTallies(t.TG) : null;
+  const cath = /^c(age|gen|agegen)$/.test(metric) ? compAthTallies(t.TG) : null;
+  if (/^c(age|gen|agegen)$/.test(metric) && !cath){
+    box.innerHTML = `<div class="atl-rail-note">${S.compAth ? `Competition Athletes by age group and gender can only be counted for 2026. Webpoint rewrites a renewing member's earlier-year record with their current membership type, so a ${esc(yearNumBoundary(S.year))} count isn't reliable. Switch the season to 2026 YTD.` : 'The Competition Athlete breakdown file did not load. Refresh the page to try again.'}</div>`;
+    const n0 = $id('atlRailNote'); if (n0) n0.innerHTML = '';
+    return;
+  }
+  const bgNums = (b, g, u) => `${fmt(b)}<i class="atl-bg-sep">/</i>${fmt(g)}${u ? `<i class="atl-bg-u"> (+${fmt(u)})</i>` : ''}`;
   if (metric === 'atype' && !typed){
     box.innerHTML = `<div class="atl-rail-note">The split by membership type can only be counted for 2026. Webpoint rewrites a renewing member's earlier-year record with their current type, so a ${esc(yearNumBoundary(S.year))} split isn't reliable. Switch the season to 2026 YTD, or use <b>All athletes</b>.</div>`;
     const n0 = $id('atlRailNote'); if (n0) n0.innerHTML = '';
@@ -8190,6 +8336,25 @@ function atlasRailBreakdown(t, metric){
       const ag = r.ag; total = ag.reduce((s,x)=>s+x,0);
       segs = ag.map((v,j) => v>0 ? `<i style="flex:${v};background:${AGE_GROUPS[j].color}" title="${AGE_GROUPS[j].k} (${AGE_GROUPS[j].label}): ${fmt(v)}"></i>` : '').join('');
       nums = AGE_GROUPS.map((g,j) => `<span><b style="color:${g.color==='#8FC3EA'?'#0b6ea0':g.color}">${g.k}</b>${fmt(ag[j])}</span>`).join('');
+    } else if (metric === 'cage' || metric === 'cagegen'){
+      const v = cath[gi];
+      const ag = [0,1,2,3,4].map(j => v[j*3] + v[j*3+1] + v[j*3+2]);
+      total = ag.reduce((s,x)=>s+x,0);
+      segs = ag.map((n,j) => n>0 ? `<i style="flex:${n};background:${AGE_GROUPS[j].color}" title="${AGE_GROUPS[j].k} (${AGE_GROUPS[j].label}): ${fmt(v[j*3])} boys, ${fmt(v[j*3+1])} girls${v[j*3+2] ? ', ' + fmt(v[j*3+2]) + ' gender not known' : ''}"></i>` : '').join('');
+      nums = AGE_GROUPS.map((g,j) => `<span title="${g.k} (${g.label})${metric === 'cagegen' ? ': boys / girls' + (v[j*3+2] ? ' + gender not known' : '') : ''}"><b style="color:${g.color==='#8FC3EA'?'#0b6ea0':g.color}">${g.k}</b>${metric === 'cagegen' ? bgNums(v[j*3], v[j*3+1], v[j*3+2]) : fmt(ag[j])}</span>`).join('');
+    } else if (metric === 'cgen'){
+      const v = cath[gi];
+      const b = [0,1,2,3,4].reduce((s,j)=>s+v[j*3],0), g = [0,1,2,3,4].reduce((s,j)=>s+v[j*3+1],0), u = [0,1,2,3,4].reduce((s,j)=>s+v[j*3+2],0);
+      total = b + g + u;
+      segs = [[b,'boys','Boys'],[g,'girls','Girls'],[u,'unknown','Gender not known']].map(([n,k,l]) => n>0 ? `<i style="flex:${n};background:${GENDER_COL[k]}" title="${l}: ${fmt(n)}"></i>` : '').join('');
+      nums = `<span><b style="color:${GENDER_COL.boys}">Boys</b>${fmt(b)}</span><span><b style="color:${GENDER_COL.girls}">Girls</b>${fmt(g)}</span>` + (u ? `<span><b style="color:#64748b">Not known</b>${fmt(u)}</span>` : '');
+    } else if (metric === 'eagegen'){
+      const c = pooled.rows[gi] || {};
+      const ORDER = ['D','C','B','A'], COL = {D:'#8FC3EA', C:'#009AC7', B:'#2456B8', A:'#171F69'};
+      const per = ORDER.map(a => ['B','G'].map(x => CELLS.filter(k => k[0]===a && k[1]===x).reduce((s,k)=>s+(c[k]||0),0)));
+      total = per.reduce((s,[b,g])=>s+b+g,0);
+      segs = per.map(([b,g],j) => (b+g)>0 ? `<i style="flex:${b+g};background:${COL[ORDER[j]]}" title="Group ${ORDER[j]}: ${fmt(b)} boys' entries, ${fmt(g)} girls' entries"></i>` : '').join('');
+      nums = per.map(([b,g],j) => `<span title="Group ${ORDER[j]}: boys / girls"><b style="color:${ORDER[j]==='D'?'#0b6ea0':COL[ORDER[j]]}">${ORDER[j]}</b>${bgNums(b, g, 0)}</span>`).join('');
     } else if (metric === 'atype'){
       const per = ATYPE_SPLIT.map(x => typed[gi][x.k]);
       total = per.reduce((s,x)=>s+x,0);
@@ -8213,17 +8378,28 @@ function atlasRailBreakdown(t, metric){
     </button>`;
   }).join('');
   const note = $id('atlRailNote');
-  if (note) note.innerHTML = metric === 'age'
+  const poolName = `Actual event entries in the ${esc(seedFieldLabel())}`;
+  const ageKey = AGE_GROUPS.map(g=>`<b>${g.k}</b> ${g.label}`).join(' · ');
+  const unknownTot = cath ? cath.reduce((s,v)=>s+v[2]+v[5]+v[8]+v[11]+v[14],0) : 0;
+  if (note) note.innerHTML = metric === 'cage'
+    ? `Competition Athlete members (17U + AQUA Age 18+), one count per person, by AQUA age group (age on Dec 31): ${ageKey}. ${esc(yearLabelBoundary(S.year))}.`
+    : metric === 'cgen'
+    ? `Competition Athlete members (17U + AQUA Age 18+), one count per person, by gender. Webpoint doesn't record gender, so it comes from matching members to competition results.${unknownTot ? ` <b>${fmt(unknownTot)}</b> couldn't be matched and are shown as “not known” rather than guessed.` : ''} ${esc(yearLabelBoundary(S.year))}.`
+    : metric === 'cagegen'
+    ? `Competition Athlete members by AQUA age group, shown as <b>boys / girls</b>: ${ageKey}. Gender comes from matching members to competition results${unknownTot ? `; <span class="atl-bg-u">(+n)</span> = gender not known (${fmt(unknownTot)} in total, mostly 19+)` : ''}. ${esc(yearLabelBoundary(S.year))}.`
+    : metric === 'eagegen'
+    ? `${poolName}, by junior age group, shown as <b>boys / girls</b>. One entry per diver per event, so a diver in 1M, 3M and platform counts three times. Groups: <b>D</b> 11 & under · <b>C</b> 12–13 · <b>B</b> 14–15 · <b>A</b> 16–18. This is the real field placed by where each diver lives, so at the first stop it adds up to the event-entry total.`
+    : metric === 'age'
     ? `All athletes by AQUA age group (age on Dec 31): ${AGE_GROUPS.map(g=>`<b>${g.k}</b> ${g.label}`).join(' · ')}. ${esc(yearLabelBoundary(S.year))}.`
     : metric === 'atype'
     ? `Athletes by membership type, 17U and AQUA Age 18+ combined: <b>Comp</b> Competition Athlete · <b>Ath</b> Athlete · <b>Intro</b> Introductory Athlete. ${esc(yearLabelBoundary(S.year))}.`
-    : `${esc(((POOLS.find(p=>p.k===S.adv.pool)||{}).label || 'Competitors').replace(/ entrants$/, ' event entries'))} by board. One entry per diver per event, so a diver in 1M, 3M and platform counts three times. <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls. This view always shows that real field, whatever season is picked above.`;
+    : `${poolName}, by board. One entry per diver per event, so a diver in 1M, 3M and platform counts three times. <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls. This is the real field placed by where each diver lives, so at the first stop it adds up to the event-entry total.`;
 }
 
 function atlasRailRows(t){
   const box = $id('atlRows'); if (!box || !t) return;
   const metric = S.atlMetric || 'members';
-  if (metric === 'age' || metric === 'comp' || metric === 'atype'){
+  if (BREAKDOWN_METRICS.includes(metric)){
     atlasRailBreakdown(t, metric);
     const un = $id('atlUnassigned');
     const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
@@ -8280,10 +8456,10 @@ function atlasRailRows(t){
       : metric === 'members'  ? 'Every USA Diving membership type: athletes, coaches, judges, volunteer/officials, medical/consultant, staff, lifetime and alumni / fan.'
       : metric === 'athletes' ? 'Athlete, Competition Athlete and Introductory Athlete memberships (17U and AQUA Age 18+). Lifetime members are not included.'
       : metric === 'coaches'  ? 'Coach, Competition Coach and Lifetime Coach memberships.'
-      : metric === 'entries'  ? `One entry per diver per event, so a diver in 1M, 3M and platform counts three times. ${S.tierView === 0 ? `The real ${esc(seedStage())} ${esc(yearNumBoundary(S.year))} field, redistributed by county.` : `Projected entries at this level, advanced from the real ${esc(seedStage())} ${esc(yearNumBoundary(S.year))} field.`}`
+      : metric === 'entries'  ? `One entry per diver per event, so a diver in 1M, 3M and platform counts three times. ${S.tierView === 0 ? `The actual ${esc(seedFieldLabel())}, placed by where each diver lives${S.firstStopPlatform === 'skip' ? ', without platform (not held at this stop)' : ''}.` : `Projected entries at this stop, advanced from the actual ${esc(seedFieldLabel())}.`} Same numbers as the Projection tab and the comparison report.`
       : metric === 'clubs'    ? 'Distinct clubs with at least one member living in the area.'
       : metric === 'zips'     ? 'Zip codes with at least one member.'
-      : metric === 'counties' ? 'Counties painted into the area.' : '';
+      : metric === 'counties' ? 'Counties in the area (counties with no members count too).' : '';
     const unmappable = S.totals[S.year] - (t.rows.reduce((a,r)=>a+r.m,0) + t.un.m);
     note.innerHTML = `${what} Bar = share of ${esc(word)}; the tick is an even split. Deviation in percentage points. Tallies: ${esc(yearLabelBoundary(S.year))}.`
       + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
@@ -8294,8 +8470,18 @@ function atlasRailRows(t){
   });
 }
 
+/* "Painting: ■ Region 5" -- what a click on the map will do right now. */
+function atlasPaintingChip(){
+  if (S.tierView !== 0) return `<span class="atl-pc-note">Pick the ${esc(tierName(0).replace(/s$/i,''))} tab to paint</span>`;
+  if (S.active === -1) return `<span class="atl-pc-lbl">Removing counties</span><span class="atl-pc-sw erase"></span>`;
+  const rg = S.regions[S.active];
+  if (!rg) return `<span class="atl-pc-note">Pick an area on the left to paint</span>`;
+  return `<span class="atl-pc-lbl">Painting</span><span class="atl-pc-sw" style="background:${rg.color}"></span><b>${esc(rg.name)}</b>`;
+}
 function atlasSetActive(ri){
   S.active = ri;
+  const pc = $id('atlPainting'); if (pc) pc.innerHTML = atlasPaintingChip();
+  applySelectedLift();
   document.querySelectorAll('.atl-row[data-ri]').forEach(x => x.classList.toggle('on', x.dataset.ri !== '' && +x.dataset.ri === S.active));
   const slot = $id('atlMapSlot'); if (slot) slot.classList.toggle('erase', S.active === -1);
 }
@@ -8345,6 +8531,8 @@ function wireAtlasMap(){
   bind('bsBrushUp',   () => setBrush(S.brush + 1));
   bind('bsBrushDown', () => setBrush(S.brush - 1));
   bind('atlZoomReset', () => { S.zoom = {k:1, x:0, y:0}; applyZoom(); });
+  bind('atlZoomIn', () => zoomBy(1.4));
+  bind('atlZoomOut', () => zoomBy(1/1.4));
   wireStructureControls(main);     // + Add region / + Add group live in the rail
 }
 
@@ -9457,6 +9645,7 @@ function exportChangesCsv(){
    wireStructureControls() exactly as before.
    ========================================================================= */
 function atlasMain(){
+  applySelectedLift();   // deferred a frame, so it sees the redrawn map
   const main = $id('atlMain'); if (!main) return;
   const M = S.panelMode;
   const place = keepPlace('atlMain');
@@ -9587,6 +9776,15 @@ function atlasKeys(e){
   if (typing || mod || e.altKey) return false;
   if (e.key === 'Escape' && S.atlMenu){ S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; return true; }
   if (S.panelMode !== 'map') return false;
+  if (e.key === ' ' || e.code === 'Space'){
+    e.preventDefault();
+    if (!S._spacePan){ S._spacePan = true; const sl = $id('atlMapSlot'); if (sl) sl.classList.add('tool-pan'); }
+    return true;
+  }
+  const AR = {ArrowLeft:[60,0], ArrowRight:[-60,0], ArrowUp:[0,60], ArrowDown:[0,-60]}[e.key];
+  if (AR){ e.preventDefault(); panBy(AR[0], AR[1]); return true; }
+  if (e.key === '+' || e.key === '='){ zoomBy(1.3); return true; }
+  if (e.key === '-' || e.key === '_'){ zoomBy(1/1.3); return true; }
   if ((e.key||'').toLowerCase() === 'e'){ atlasSetActive(-1); return true; }
   if (/^[1-9]$/.test(e.key) && S.tierView === 0 && +e.key - 1 < S.regions.length){ atlasSetActive(+e.key - 1); return true; }
   return false;
@@ -9620,7 +9818,7 @@ function classicBootView(el){
 function classicShellHtml(){
   return `
     <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape.
-    <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Load Official 2026 Alignment</button>
+    <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Open official 2026 Regions</button>
       <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>
       <span class="note">Choose how many areas you want and it divides the country into that many connected, evenly-sized areas. A starting point &mdash; edit anything afterwards, or Undo.</span></div>
@@ -9653,6 +9851,8 @@ window.renderBoundary = async function(){
     el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Boundary data failed to load.</b> ${esc(e.message||e)}</div></div></div>`;
     return;
   }
+  try { S.compAth = (await (await fetch('comp-athletes-data.json?v=20260917')).json()).counties; }
+  catch(e){ S.compAth = null; }
   try { S.age = await (await fetch('age-data.json?v=202609041900')).json(); }
   catch(e){ S.age = {}; }
   try { S.advData = await (await fetch('advance-data.json?v=202607231600')).json(); }
@@ -9664,6 +9864,9 @@ window.renderBoundary = async function(){
   S.adv = defaultAdv();
   syncLevels();
   if (atlasOn()) atlasBootView(el); else classicBootView(el);
+  const endSpacePan = () => { if (!S._spacePan) return; S._spacePan = false; const sl = $id('atlMapSlot'); if (sl) sl.classList.toggle('tool-pan', S.tool === 'pan'); };
+  document.addEventListener('keyup', e => { if (e.key === ' ' || e.code === 'Space') endSpacePan(); });
+  window.addEventListener('blur', endSpacePan);
   document.addEventListener('keydown', e=>{
     const view = document.getElementById('viewBoundary');
     const live = view && view.offsetParent !== null;
