@@ -1427,3 +1427,83 @@ BEGIN
       GRANT SELECT ON TABLES TO usad_app;
   END IF;
 END $$;
+
+-- ============================================================================
+-- BOUNDARY STUDIO EXTERNAL SHARE (added 2026-09-17)
+-- ----------------------------------------------------------------------------
+-- A passcode-gated copy of Boundary Studio runs on the Vercel deployment for a
+-- small outside group. They must be able to open every current proposal, save
+-- and copy their own, and use the full tool -- while Mike's proposals stay
+-- untouchable and nothing outside Boundary Studio is reachable.
+--
+-- Enforcement is in the database, not the proxy: row-level security keyed on a
+-- per-request setting (app.owner) that the serverless proxy sets inside the
+-- same transaction from the validated share token. A row with owner IS NULL
+-- is staff work and can only be changed by usad_app. Share users can read
+-- everything, insert rows (the trigger stamps their owner and name), and edit
+-- or delete only rows carrying their own owner.
+--
+-- usad_readonly_share is reused as the share role because its password already
+-- lives only in Vercel. Widening it here is safe: the proxy still refuses any
+-- write for a junior-scoped token, and RLS bounds what a boundary-scoped one
+-- can touch. A dedicated role is the upgrade path once a repo secret exists to
+-- hold its password.
+-- ============================================================================
+
+ALTER TABLE share_access.tokens ADD COLUMN IF NOT EXISTS scope text NOT NULL DEFAULT 'junior';
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['boundary_scenarios','boundary_maps','pathways','scenario_schedules','report_definitions'] LOOP
+    EXECUTE format('ALTER TABLE membership.%I ADD COLUMN IF NOT EXISTS owner text', t);
+    EXECUTE format('ALTER TABLE membership.%I ADD COLUMN IF NOT EXISTS saved_by text', t);
+  END LOOP;
+END $$;
+
+-- Stamp ownership from the request setting. Staff writes (no setting) leave
+-- owner NULL. On an upsert's UPDATE branch the row keeps its owner.
+CREATE OR REPLACE FUNCTION membership.stamp_share_owner() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE o text := NULLIF(current_setting('app.owner', true), '');
+BEGIN
+  IF TG_OP = 'INSERT' AND o IS NOT NULL THEN
+    NEW.owner := o;
+    NEW.saved_by := NULLIF(current_setting('app.saved_by', true), '');
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.owner := OLD.owner;
+    IF o IS NOT NULL THEN NEW.saved_by := COALESCE(NULLIF(current_setting('app.saved_by', true), ''), OLD.saved_by); END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['boundary_scenarios','boundary_maps','pathways','scenario_schedules','report_definitions'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS stamp_share_owner ON membership.%I', t);
+    EXECUTE format('CREATE TRIGGER stamp_share_owner BEFORE INSERT OR UPDATE ON membership.%I FOR EACH ROW EXECUTE FUNCTION membership.stamp_share_owner()', t);
+
+    EXECUTE format('ALTER TABLE membership.%I ENABLE ROW LEVEL SECURITY', t);
+    -- Staff app: unchanged, full access.
+    EXECUTE format('DROP POLICY IF EXISTS staff_all ON membership.%I', t);
+    EXECUTE format('CREATE POLICY staff_all ON membership.%I FOR ALL TO usad_app USING (true) WITH CHECK (true)', t);
+    -- Share role: read everything; write only its own rows; never a NULL-owner row.
+    EXECUTE format('DROP POLICY IF EXISTS share_read ON membership.%I', t);
+    EXECUTE format('CREATE POLICY share_read ON membership.%I FOR SELECT TO usad_readonly_share USING (true)', t);
+    EXECUTE format('DROP POLICY IF EXISTS share_insert ON membership.%I', t);
+    EXECUTE format('CREATE POLICY share_insert ON membership.%I FOR INSERT TO usad_readonly_share WITH CHECK (NULLIF(current_setting(''app.owner'', true), '''') IS NOT NULL)', t);
+    EXECUTE format('DROP POLICY IF EXISTS share_update ON membership.%I', t);
+    EXECUTE format('CREATE POLICY share_update ON membership.%I FOR UPDATE TO usad_readonly_share USING (owner IS NOT NULL AND owner = current_setting(''app.owner'', true)) WITH CHECK (owner IS NOT NULL AND owner = current_setting(''app.owner'', true))', t);
+    EXECUTE format('DROP POLICY IF EXISTS share_delete ON membership.%I', t);
+    EXECUTE format('CREATE POLICY share_delete ON membership.%I FOR DELETE TO usad_readonly_share USING (owner IS NOT NULL AND owner = current_setting(''app.owner'', true))', t);
+  END LOOP;
+END $$;
+
+-- Grants the share role needs for Boundary Studio to run. Pricing Studio is
+-- hidden on the share, so membership.members and pricing_scenarios stay denied.
+GRANT USAGE ON SCHEMA membership, share_access TO usad_readonly_share;
+GRANT SELECT, INSERT, UPDATE, DELETE ON membership.boundary_scenarios, membership.boundary_maps,
+  membership.pathways, membership.scenario_schedules, membership.report_definitions TO usad_readonly_share;
+GRANT SELECT ON membership.schedule_templates TO usad_readonly_share;
+GRANT SELECT, UPDATE ON share_access.tokens TO usad_readonly_share;
