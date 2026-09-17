@@ -33,11 +33,6 @@
       "permanent": false
     },
     {
-      "source": "/boundary-studio/:path*",
-      "destination": "/junior-results/",
-      "permanent": false
-    },
-    {
       "source": "/schedule-builder/:path*",
       "destination": "/junior-results/",
       "permanent": false

@@ -1472,6 +1472,18 @@ function seedStage(){
   return seedStageInferred();
 }
 
+/* ---- the passcode-gated share ----
+   On the Vercel share, the person is identified by the passcode's label (their
+   group) and the name they typed at the door. Both travel on every database
+   call; the database stamps and scopes rows by them (db/schema.sql). The app
+   only needs to know two things: whether it is on the share, and whether the
+   proposal on screen belongs to this group -- because saving over someone
+   else's proposal is refused by the database, so it forks to a copy instead
+   of failing. */
+function shareMode(){ return !!(window.USAD_CONFIG && window.USAD_CONFIG.boundaryShare); }
+function shareLabel(){ try { return sessionStorage.getItem('usad_share_label') || ''; } catch(e){ return ''; } }
+function ownsScenario(){ return !shareMode() || (S.scenarioOwner != null && S.scenarioOwner === shareLabel()); }
+
 /* Which real field seeds Level 1 used to be guessed silently from Level 1's
    name -- right for a scenario that keeps Regionals as-is and only redraws
    Zones-and-up, wrong for a scenario that DELETES a stage and has Level 1
@@ -3045,12 +3057,18 @@ async function openProposalPicker(){
   scenarioListCache = null;
   await loadScenarioList();
   const rows = ((scenarioListCache && scenarioListCache.rows) || []).filter(listedScenario);
+  const me = shareLabel();
+  const groupOf = r => isSeed(r.id) ? 'Reference map'
+    : r.owner == null ? (shareMode() ? 'USA Diving proposals' : 'Saved proposals')
+    : (shareMode() && r.owner === me) ? 'Your group\u2019s proposals'
+    : `Saved by ${r.owner}`;
+  const order = g => g === 'Your group\u2019s proposals' ? 0 : g === 'Saved proposals' || g === 'USA Diving proposals' ? 1 : g === 'Reference map' ? 3 : 2;
   const items = rows.map(r => ({
     id: r.id, label: r.name, current: r.id === S.scenarioId,
-    group: isSeed(r.id) ? 'Reference map' : 'Saved proposals',
-    tag: r.id === S.scenarioId ? 'open now' : isSeed(r.id) ? 'reference' : '',
-    sub: `saved ${r.u}${r.has_fees ? ' · fees set' : ''}${r.has_schedule ? ' · schedule' : ''}`,
-  })).sort((a, b) => (a.group === b.group ? 0 : a.group === 'Saved proposals' ? -1 : 1));
+    group: groupOf(r),
+    tag: r.id === S.scenarioId ? 'open now' : isSeed(r.id) ? 'reference' : (r.owner != null && !(shareMode() && r.owner === me)) ? 'read-only' : '',
+    sub: `saved ${r.u}${r.saved_by ? ' by ' + r.saved_by : ''}${r.has_fees ? ' · fees set' : ''}${r.has_schedule ? ' · schedule' : ''}`,
+  })).sort((a, b) => order(a.group) - order(b.group));
   const id = await bsPick({title: 'Open a proposal', intro: 'A proposal is a map plus its pathway, fees and schedule.', items});
   if (id) loadScenario(id);
 }
@@ -6178,7 +6196,9 @@ async function saveScenario(asNew){
   // the version a committee saw has to stay recoverable, so the edit forks and
   // the frozen original is left where it is.
   const frozenChanged = !!(S.frozen && freezeDrift());
-  const forking = asNew || !S.scenarioId || isSeed(S.scenarioId) || frozenChanged;
+  const notMine = shareMode() && !!S.scenarioId && !isSeed(S.scenarioId) && !ownsScenario();
+  const forking = asNew || !S.scenarioId || isSeed(S.scenarioId) || frozenChanged || notMine;
+  if (notMine && !asNew) msg('That proposal belongs to USA Diving staff or another group, so this saves as your own copy.');
   if (frozenChanged && !asNew){
     if (!await bsConfirm({title:'This frozen proposal has changed', okLabel:'Save a copy',
       body:`<p class="bs-dlg-p"><b>${esc(S.scenarioName)}</b> was frozen on
@@ -6222,6 +6242,7 @@ async function saveScenario(asNew){
 
 async function deleteScenario(){
   if (!S.scenarioId || isSeed(S.scenarioId)){ msg('Reference maps cannot be deleted.'); return; }
+  if (!ownsScenario()){ msg('Only the group that saved a proposal can delete it.'); return; }
   if (!await bsConfirm({title:'Delete this proposal?', danger:true, okLabel:'Delete permanently',
     body:`<p class="bs-dlg-p">Deletes <b>${esc(S.scenarioName)}</b> and everything saved with it &mdash; the map,
       its pathway, and any frozen record of what it said. This cannot be undone.</p>`})) return;
@@ -6256,7 +6277,7 @@ async function loadScenarioList(){
   try {
     if (!scenarioListCache || scenarioListCache.t < Date.now()-15000){
       const res = await NEON.query(`
-        SELECT bs.id, bs.name, to_char(bs.updated_at,'Mon DD HH24:MI') u,
+        SELECT bs.id, bs.name, bs.owner, bs.saved_by, to_char(bs.updated_at,'Mon DD HH24:MI') u,
                (bs.data ? 'fees' AND bs.data->'fees' IS NOT NULL AND bs.data->'fees' != 'null'::jsonb) AS has_fees,
                EXISTS(SELECT 1 FROM membership.scenario_schedules ss WHERE ss.boundary_scenario_id = bs.id) AS has_schedule
         FROM membership.boundary_scenarios bs
@@ -6308,7 +6329,7 @@ async function loadScenario(id){
     body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'the current proposal')}</b>.
       Loading another discards them.</p>`})) return;
   try {
-    const res = await NEON.query(`SELECT name, data, to_char(updated_at,'Mon DD · HH24:MI') u FROM membership.boundary_scenarios WHERE id=$1`, [id]);
+    const res = await NEON.query(`SELECT name, data, owner, to_char(updated_at,'Mon DD · HH24:MI') u FROM membership.boundary_scenarios WHERE id=$1`, [id]);
     if (!res.rows.length){ msg('Scenario not found.'); return; }
     const row = res.rows[0];
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
@@ -6347,7 +6368,7 @@ async function loadScenario(id){
     S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
     S.mapName = d.mapName || (isSeed(id) ? seedName(id, row.name) : '');
     S.mapId = d.mapId || null;
-    S.scenarioId = id; S.scenarioName = seedName(id, row.name); S.active = 0; S.detailRegion = null; S.dirty = false;
+    S.scenarioId = id; S.scenarioOwner = row.owner == null ? null : String(row.owner); S.scenarioName = seedName(id, row.name); S.active = 0; S.detailRegion = null; S.dirty = false;
     S.undo.length = 0; S.redo.length = 0; S.palOpen = null;
     if (S.compare && S.compare.id === id) S.compare = null;
     repaintAll(); renderPanel();

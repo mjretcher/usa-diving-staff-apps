@@ -1494,6 +1494,19 @@ tr[data-hl]:hover{background:#eef7fb}
 .bs-pick-row.big{padding:12px 14px}
 .bs-pick-row.big b{font-size:15px}
 .bs-pick-none{color:#6b7385;font-size:13px;padding:10px}
+
+/* ---- passcode gate (share deployment only) ---- */
+.bs-gate{position:fixed;inset:0;z-index:9999;background:#171F69;display:flex;align-items:center;justify-content:center;padding:24px}
+.bs-gate-card{background:#fff;border-radius:14px;padding:32px 34px;width:min(420px,100%);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.bs-gate-card h1{font-family:'Barlow Condensed',sans-serif;font-size:30px;margin:0 0 2px;color:#171F69;letter-spacing:.01em}
+.bs-gate-card .sub{color:#6b7385;font-size:14px;margin:0 0 20px}
+.bs-gate-card label{display:block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#171F69;margin:14px 0 6px}
+.bs-gate-card input{width:100%;box-sizing:border-box;font:16px Inter,sans-serif;padding:11px 12px;border:1.5px solid #cfd5e1;border-radius:9px}
+.bs-gate-card input:focus{outline:none;border-color:#009AC7;box-shadow:0 0 0 3px rgba(0,154,199,.18)}
+.bs-gate-card button{margin-top:20px;width:100%;font:700 15px Inter,sans-serif;padding:12px;border:0;border-radius:9px;background:#171F69;color:#fff;cursor:pointer}
+.bs-gate-card button:disabled{opacity:.6;cursor:wait}
+.bs-gate-err{color:#E31937;font-size:13px;margin-top:10px;min-height:18px}
+.bs-gate-note{color:#9aa5b8;font-size:12px;margin-top:16px;line-height:1.45}
 </style>
 </head>
 <body>
@@ -1526,15 +1539,20 @@ tr[data-hl]:hover{background:#eef7fb}
 
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
-<script src="../shared/neon-client.js?v=202607202300"></script>
+<script src="../shared/neon-client.js?v=202609172030"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
-<script src="bs-shell.js?v=202609171200"></script>
-<script src="routing.js?v=202609171730"></script>
-<script src="scenario-schedule-engine.js?v=202608281800"></script>
-<script src="boundary.js?v=202609171930"></script>
-<script src="bs-reports.js?v=202609171930"></script>
-<script type="module" src="jc-report.js?v=202609171200"></script>
-<script src="pricing.js?v=202609171200"></script>
+<!-- The app's own scripts are loaded by bs-shell.js, in this order, so that
+     on the passcode-gated share nothing about the app loads until the
+     passcode has been accepted. On the staff site they load immediately. -->
+<script id="bsAppScripts" type="application/json">[
+  {"src":"routing.js?v=202609171730"},
+  {"src":"scenario-schedule-engine.js?v=202608281800"},
+  {"src":"boundary.js?v=202609172030"},
+  {"src":"bs-reports.js?v=202609171930"},
+  {"src":"jc-report.js?v=202609171200","module":true},
+  {"src":"pricing.js?v=202609171200"}
+]</script>
+<script src="bs-shell.js?v=202609172030"></script>
 </body>
 </html>

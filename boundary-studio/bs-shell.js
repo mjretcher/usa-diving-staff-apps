@@ -67,18 +67,105 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function boot() {
+  /* ---- loading the app ----
+     The app's scripts are listed in #bsAppScripts (index.html) and loaded here
+     in that order. Dynamically inserted scripts with async=false run in
+     insertion order, so the dependency chain routing -> engine -> boundary ->
+     reports -> pricing holds exactly as it did with static tags. boundary.js
+     boots on DOMContentLoaded, which has already fired by the time it loads,
+     so we call its renderer once the chain has finished. */
+  function loadAppScripts() {
+    return new Promise((resolve, reject) => {
+      let list = [];
+      try { list = JSON.parse(byId('bsAppScripts').textContent); } catch (e) { reject(e); return; }
+      let i = 0;
+      const next = () => {
+        if (i >= list.length) { resolve(); return; }
+        const spec = list[i++];
+        const el = document.createElement('script');
+        el.src = spec.src; el.async = false;
+        if (spec.module) el.type = 'module';
+        el.onload = next;
+        el.onerror = () => reject(new Error('Failed to load ' + spec.src));
+        document.body.appendChild(el);
+      };
+      next();
+    });
+  }
+
+  function share() { return !!(window.USAD_CONFIG && window.USAD_CONFIG.boundaryShare); }
+
+  /* ---- the passcode gate (share deployment only) ----
+     The passcode is checked by the proxy against share_access.tokens; this
+     page only asks and remembers. Nothing about the app loads until the proxy
+     has accepted it, and every later database call carries it. */
+  function gate() {
+    return new Promise((resolve) => {
+      const params = new URLSearchParams(location.search);
+      const preset = params.get('key') || '';
+      let tok = '', who = '';
+      try { tok = sessionStorage.getItem('usad_share_token') || ''; who = sessionStorage.getItem('usad_share_name') || ''; } catch (e) {}
+
+      const check = async (token, name) => {
+        const r = await fetch('/api/neon', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Share-Token': token, 'X-Share-Name': name },
+          body: JSON.stringify({ ping: true }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok || j.scope !== 'boundary') throw new Error(j.error || 'That passcode is not valid for Boundary Studio.');
+        try {
+          sessionStorage.setItem('usad_share_token', token);
+          sessionStorage.setItem('usad_share_name', name);
+          sessionStorage.setItem('usad_share_label', j.label || '');
+        } catch (e) {}
+      };
+
+      const show = (err) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'bs-gate';
+        wrap.innerHTML = '<form class="bs-gate-card">' +
+          '<h1>Boundary Studio</h1><p class="sub">USA Diving &middot; shared workspace</p>' +
+          '<label for="bsGateKey">Passcode</label><input id="bsGateKey" type="password" autocomplete="off" required value="' + esc(preset) + '">' +
+          '<label for="bsGateName">Your name</label><input id="bsGateName" type="text" autocomplete="name" maxlength="80" required placeholder="So USA Diving can see who saved what" value="' + esc(who) + '">' +
+          '<button type="submit">Open Boundary Studio</button>' +
+          '<div class="bs-gate-err">' + esc(err || '') + '</div>' +
+          '<p class="bs-gate-note">Proposals you save are visible to USA Diving staff and to others using this passcode. USA Diving\u2019s own proposals open read-only; saving one makes your own copy.</p>' +
+          '</form>';
+        document.body.appendChild(wrap);
+        const form = wrap.querySelector('form'), btn = wrap.querySelector('button'), errEl = wrap.querySelector('.bs-gate-err');
+        (preset ? byId('bsGateName') : byId('bsGateKey')).focus();
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault(); btn.disabled = true; errEl.textContent = '';
+          try {
+            await check(byId('bsGateKey').value.trim(), byId('bsGateName').value.trim());
+            wrap.remove(); resolve();
+          } catch (ex) { errEl.textContent = ex.message; btn.disabled = false; }
+        });
+      };
+
+      if (tok && who) check(tok, who).then(resolve, () => show('Your session expired. Enter the passcode again.'));
+      else show('');
+    });
+  }
+
+  /* On the share, the parts that reach beyond Boundary Studio are removed
+     rather than left to fail: Pricing Studio reads membership counts the share
+     is not allowed, and the schedule generator writes a Schedule Builder file. */
+  function fenceShare() {
+    const pricingTab = document.querySelector('#tabs .tab[data-view="pricing"]');
+    if (pricingTab) pricingTab.remove();
+    const st = document.createElement('style');
+    st.textContent = '#bsGenSchedule{display:none !important}';
+    document.head.appendChild(st);
+    const hub = document.querySelector('a[href="../index.html"], a[href="../"]');
+    if (hub) hub.remove();
+  }
+
+  async function boot() {
+    if (share()) { fenceShare(); await gate(); }
+    try { await loadAppScripts(); }
+    catch (e) { const el = byId('topMeta'); if (el) el.textContent = e.message; return; }
     wireTabs();
-    // Boundary Studio is the landing view, so draw it immediately rather than
-    // waiting for a tab click that will not come.
-    if (window.renderBoundary) {
-      window.renderBoundary();
-    } else {
-      // boundary.js may not have parsed yet depending on script order.
-      window.addEventListener('load', () => {
-        if (window.renderBoundary) window.renderBoundary();
-      });
-    }
+    if (window.renderBoundary) window.renderBoundary();
     meta();
   }
 

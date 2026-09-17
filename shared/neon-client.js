@@ -31,14 +31,25 @@
     params = (params || []).map(function(p){ return p == null ? null : String(p); });
 
     if (USE_PROXY) {
+      // A passcode-gated share carries its token and the person's name on every
+      // call. The proxy validates the token server-side and, for writes, names
+      // the owner inside the transaction so the database can scope the write.
+      const hdrs = { 'Content-Type': 'application/json' };
+      try {
+        const tok = sessionStorage.getItem('usad_share_token');
+        const who = sessionStorage.getItem('usad_share_name');
+        if (tok) hdrs['X-Share-Token'] = tok;
+        if (who) hdrs['X-Share-Name'] = who;
+      } catch(e){}
       const res = await fetch(PROXY_ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: hdrs,
         body: JSON.stringify({ query: sql, params: params }),
       });
       if (!res.ok) {
         const text = await res.text();
-        throw new Error('[neon-proxy ' + res.status + '] ' + text.slice(0, 400));
+        let m = text; try { m = JSON.parse(text).error || text; } catch(e){}
+        throw new Error(m.slice(0, 400));
       }
       return shape(await res.json());
     }
