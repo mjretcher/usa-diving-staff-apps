@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>USA Diving Membership Analytics</title>
+<title>Boundary Studio · USA Diving</title>
 <link rel="icon" type="image/svg+xml" href="../shared/images/diver-mark.svg">
 <link rel="apple-touch-icon" href="../shared/images/diver-mark.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1504,8 +1504,8 @@ tr[data-hl]:hover{background:#eef7fb}
       <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false">
     </a>
     <div class="brand-title">
-      <h1>Membership Analytics</h1>
-      <p>Growth, retention, geography &amp; the competitive landscape — 2024 to today</p>
+      <h1>Boundary Studio</h1>
+      <p>Region design, qualification pathways, entry economics &amp; committee papers</p>
     </div>
   </div>
   <div class="top-right">
@@ -1515,31 +1515,13 @@ tr[data-hl]:hover{background:#eef7fb}
 </div>
 
 <div class="wrap" id="mainWrap">
-  <div class="callout" style="margin:0 0 14px">
-    <b>Boundary Studio and Pricing Studio have moved.</b> Region design, qualification pathways,
-    entry economics and the realignment reports are now their own app:
-    <a href="../boundary-studio/index.html"><b>open Boundary Studio &rarr;</b></a>
-    Saved scenarios are unchanged &mdash; they live in the database, not in either app.
-  </div>
   <div class="view-tabs" id="tabs">
-    <button class="tab active" data-view="overview">Overview</button>
-    <button class="tab" data-view="map">Membership Map</button>
-    <button class="tab" data-view="trends">Trends</button>
-    <button class="tab" data-view="types">Membership Types</button>
-    <button class="tab" data-view="clubs">Club Health</button>
-    <button class="tab" data-view="geography">Geography</button>
-    <button class="tab" data-view="retention">Retention &amp; Churn</button>
-    <button class="tab" data-view="aau">AAU Landscape</button>
+    <button class="tab active" data-view="boundary">Boundary Studio</button>
+    <button class="tab" data-view="pricing">Pricing Studio</button>
   </div>
 
-  <div id="viewOverview" class="view active"><div class="loading">Loading membership data&hellip;</div></div>
-  <div id="viewMap" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewTrends" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewTypes" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewClubs" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewGeography" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewRetention" class="view"><div class="loading">Loading&hellip;</div></div>
-  <div id="viewAau" class="view"><div class="loading">Loading&hellip;</div></div>
+  <div id="viewBoundary" class="view active"><div class="loading">Loading boundary data&hellip;</div></div>
+  <div id="viewPricing" class="view"><div class="loading">Loading&hellip;</div></div>
 </div>
 
 <script src="../data/config.js?v=202607262115"></script>
@@ -1547,9 +1529,12 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="../shared/neon-client.js?v=202607202300"></script>
 <script src="../shared/usad-toast.js?v=202607202300"></script>
 <script src="../shared/usad-keepplace.js?v=202608055500"></script>
-<script src="ma-app.js?v=202609030441"></script>
-<script src="ma-clubs.js?v=202607281105"></script>
-<script src="ma-reports.js?v=202609162200"></script>
-<script src="ma-import.js?v=202608050400"></script>
+<script src="bs-shell.js?v=202609171200"></script>
+<script src="routing.js?v=202609171730"></script>
+<script src="scenario-schedule-engine.js?v=202608281800"></script>
+<script src="boundary.js?v=202609171200"></script>
+<script src="bs-reports.js?v=202609171200"></script>
+<script type="module" src="jc-report.js?v=202609171200"></script>
+<script src="pricing.js?v=202609171200"></script>
 </body>
 </html>

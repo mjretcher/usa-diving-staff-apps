@@ -1,0 +1,3416 @@
+/* USA Diving Membership Analytics — ma-reports.js
+   ---------------------------------------------------------------------------
+   Reporting layer for the Membership Analytics app, built to the same standard
+   as the Junior Results Audit "Analytics & Reports" stage:
+
+     • a scoped Report Builder — pick a template or hand-assemble sections,
+       choose year(s), narrow the scope, generate a branded print/PDF document
+     • deep Boundary Studio reporting — balance & equity metrics, per-region
+       profiles, tier rollups, scenario-vs-scenario diffs, zip appendix
+     • a shareable view URL so a colleague opens exactly what you were looking at
+
+   Membership sections read live from Neon (membership.members,
+   membership.sales_ledger, divemeets.meets). Boundary sections read the live
+   Boundary Studio scenario through window.BoundaryAPI — never a stale copy —
+   so a report always describes the map currently on screen.
+
+   Categorization matches ma-app.js exactly (Athlete / Coach / Official / Other,
+   competition-year age groups). Any change there must be mirrored here.
+*/
+(function(){
+'use strict';
+
+const NAVY='#171F69', RED='#E31937', POOL='#009AC7', SKY='#8FC3EA';
+const ALL_YEARS = [2024, 2025, 2026];
+const CUR_YEAR  = 2026;
+const CATS = ['Athlete','Coach','Official','Other'];
+const GROUP_ORDER = ['D','C','B','A','19+'];
+const GROUP_LABEL = {D:'11 & under', C:'12–13', B:'14–15', A:'16–18', '19+':'19 & over'};
+
+const fmt  = n => Number(n||0).toLocaleString('en-US');
+/* Money, for the pathway's fee tables. */
+const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
+
+const fmt1 = n => (Number(n)||0).toFixed(1);
+/* If shared/usad-keepplace.js is not loaded, every redraw silently goes back to
+   throwing away your scroll position and open sections -- the exact bug it was
+   written to stop, reintroduced by a missing script tag and invisible. Say so
+   once. */
+let _keepWarned = false;
+function keepPlace(target){
+  if (window.KeepPlace) return KeepPlace.capture(target);
+  if (!_keepWarned){ _keepWarned = true;
+    console.warn('shared/usad-keepplace.js is not loaded — this panel will lose your scroll position and open sections on every redraw.'); }
+  return null;
+}
+function keepRestore(st, target){ if (window.KeepPlace) KeepPlace.restore(st, target); }
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sq(s){ return "'" + String(s==null?'':s).replace(/'/g,"''") + "'"; }
+function pctS(a,b){ return b>0 ? (100*a/b).toFixed(1)+'%' : '—'; }
+
+/* Signed delta cell — arrows only, never colour alone (accessibility). */
+function delta(cur, prev){
+  if (prev == null || prev === 0) return '<span class="mr-soft">—</span>';
+  const d = cur - prev, p = (100*d/prev).toFixed(1);
+  if (d > 0) return `<span class="mr-up">▲ +${fmt(d)} (+${p}%)</span>`;
+  if (d < 0) return `<span class="mr-down">▼ ${fmt(d)} (${p}%)</span>`;
+  return '<span class="mr-soft">▪ 0</span>';
+}
+
+/* ---------- shared SQL fragments (must match ma-app.js) ---------- */
+const CAT_SQL = `CASE
+  WHEN membership_type ILIKE '%Athlete%' THEN 'Athlete'
+  WHEN membership_type ILIKE '%Coach%' THEN 'Coach'
+  WHEN membership_type IN ('Volunteer/Official','Judge') THEN 'Official'
+  ELSE 'Other' END`;
+const GRP_SQL = `CASE
+  WHEN membership_year - EXTRACT(YEAR FROM birth_date) <= 11 THEN 'D'
+  WHEN membership_year - EXTRACT(YEAR FROM birth_date) <= 13 THEN 'C'
+  WHEN membership_year - EXTRACT(YEAR FROM birth_date) <= 15 THEN 'B'
+  WHEN membership_year - EXTRACT(YEAR FROM birth_date) <= 18 THEN 'A'
+  ELSE '19+' END`;
+
+function catPred(c, a){
+  a = a || '';
+  if (c === 'Athlete')  return `${a}membership_type ILIKE '%Athlete%'`;
+  if (c === 'Coach')    return `${a}membership_type ILIKE '%Coach%'`;
+  if (c === 'Official') return `${a}membership_type IN ('Volunteer/Official','Judge')`;
+  return `NOT (${a}membership_type ILIKE '%Athlete%' OR ${a}membership_type ILIKE '%Coach%'
+               OR ${a}membership_type IN ('Volunteer/Official','Judge'))`;
+}
+
+/* Scope predicates shared by every membership section. Years are handled
+   separately by sections that pivot across years. */
+function scopePreds(o, alias){
+  const a = alias ? alias + '.' : '';
+  const w = [];
+  if (o.cats   && o.cats.length   && o.cats.length   < CATS.length)
+    w.push('(' + o.cats.map(c => catPred(c, a)).join(' OR ') + ')');
+  if (o.assocs && o.assocs.length)
+    w.push(`COALESCE(${a}association,'(none)') IN (${o.assocs.map(sq).join(',')})`);
+  if (o.states && o.states.length)
+    w.push(`COALESCE(${a}state,'??') IN (${o.states.map(sq).join(',')})`);
+  return w;
+}
+function scopeWhere(o, extra, alias){
+  const w = scopePreds(o, alias).concat(extra || []);
+  return w.length ? 'WHERE ' + w.join(' AND ') : '';
+}
+function scopeAnd(o, extra, alias){
+  const w = scopePreds(o, alias).concat(extra || []);
+  return w.length ? ' AND ' + w.join(' AND ') : '';
+}
+function scopeSummary(o){
+  const p = [];
+  if (o.cats && o.cats.length && o.cats.length < CATS.length) p.push(o.cats.join(' / '));
+  if (o.assocs && o.assocs.length) p.push(o.assocs.length > 3 ? o.assocs.length+' associations' : o.assocs.join(', '));
+  if (o.states && o.states.length) p.push(o.states.length > 6 ? o.states.length+' states' : o.states.join(', '));
+  return p.length ? p.join(' · ') : 'All members, all associations';
+}
+
+async function q(sql){
+  const r = await NEON.query(sql);
+  return r.rows || [];
+}
+
+/* Build a {key: {year: value}} pivot. */
+function pivot(rows, keyF, yearF, valF){
+  const m = {};
+  rows.forEach(r => { const k = keyF(r); (m[k] = m[k] || {})[yearF(r)] = Number(valF(r)) || 0; });
+  return m;
+}
+
+/* Standard year-columns table used by most membership sections. */
+function yearTable(opts){
+  const {rowsMap, order, years, label, totalRow} = opts;
+  const keys = order || Object.keys(rowsMap).sort();
+  const last = years[years.length-1], prev = years[years.length-2];
+  const totals = {}; years.forEach(y => totals[y] = 0);
+  keys.forEach(k => years.forEach(y => totals[y] += (rowsMap[k]||{})[y] || 0));
+  const body = keys.map(k => {
+    const r = rowsMap[k] || {};
+    return `<tr><td>${esc(opts.labelFn ? opts.labelFn(k) : k)}</td>` +
+      years.map(y => `<td class="mr-num">${fmt(r[y]||0)}</td>`).join('') +
+      (prev ? `<td>${delta(r[last]||0, r[prev]||0)}</td>` : '') +
+      `<td class="mr-num">${pctS(r[last]||0, totals[last])}</td></tr>`;
+  }).join('');
+  const foot = totalRow === false ? '' :
+    `<tr class="mr-total"><td>Total</td>` +
+    years.map(y => `<td class="mr-num">${fmt(totals[y])}</td>`).join('') +
+    (prev ? `<td>${delta(totals[last], totals[prev])}</td>` : '') +
+    `<td class="mr-num">100%</td></tr>`;
+  return `<table class="mr-table"><thead><tr><th scope="col">${esc(label)}</th>` +
+    years.map(y => `<th scope="col" class="mr-num">${y}${y===CUR_YEAR?' YTD':''}</th>`).join('') +
+    (prev ? `<th scope="col">Change ${prev}→${last}</th>` : '') +
+    `<th scope="col" class="mr-num">Share ${last}</th></tr></thead><tbody>${body}${foot}</tbody></table>`;
+}
+
+/* Inline horizontal bar — used inside report tables so printed output still
+   carries visual weight without depending on a chart library. */
+function bar(v, max, color){
+  const w = max > 0 ? Math.max(1, Math.round(100 * v / max)) : 0;
+  return `<span class="mr-bar"><span class="mr-bar-f" style="width:${w}%;background:${color||POOL}"></span></span>`;
+}
+
+/* =====================================================================
+   POTENTIAL-SCHEDULE RENDERING — shared by the "does each meet fit" report
+   section. Turns one stop's ScenarioScheduleEngine.simulateStop() output
+   (days -> sessions -> events) into a printable, session-by-session
+   schedule, in the same board/warm-up/practice-time terms Boundary Studio's
+   live Schedule tab uses, so the paper says what the screen says.
+   ===================================================================== */
+const SCHED_BOARD_DISPLAY = {'1m':'1-Meter', '3m':'3-Meter', 'Platform':'Platform',
+                              'platform':'Platform', 'other':'Other'};
+
+/* Minutes-since-midnight -> "8:05am". Mirrors hhmm() in boundary.js's live
+   Schedule tab so a clock time in the report matches the clock time on
+   screen. */
+function hhmmSched(m){
+  const h = Math.floor(m/60), mm = Math.round(m%60);
+  const ap = h >= 12 ? 'pm' : 'am', h12 = ((h + 11) % 12) + 1;
+  return h12 + ':' + String(mm).padStart(2,'0') + ap;
+}
+
+/* One line per event, inside a session's table -- entries and estimated run
+   time, no clock times: this is a projection with no real date set, so a
+   start/end time would be fabricated precision. Matches the fields the
+   handout format actually needs to answer "how long does this take and for
+   how many people," which is the whole point of laying it out. */
+function schedEventRow(e){
+  const QRr = window.QualRouting;
+  const board = SCHED_BOARD_DISPLAY[e.discipline] || e.discipline;
+  const round = QRr && QRr.ROUND_NAME && QRr.ROUND_NAME[e.round];
+  const label = `${esc(e.group)} ${esc(e.gender)} ${esc(board)}` + (round ? ` &middot; ${esc(round)}` : '');
+  const flags = [];
+  if (!e.dives) flags.push('no dive count on record &mdash; not timed, will run longer than shown');
+  if (e.split) flags.push(`split across two boards${e.splitManual ? ' (set by staff)' : ''}`);
+  if (e.reviewSplit) flags.push('flagged for review &mdash; long, but the host decides whether to split it');
+  return `<div class="mr-hd-ev">
+    <span class="mr-hd-ev-name">${label}${flags.length ? `<span class="mr-hd-ev-flag">${flags.join('; ')}</span>` : ''}</span>
+    <span class="mr-hd-ev-nums">${fmt(Math.round(e.divers))}<span class="n"> entries</span>
+      &nbsp;&middot;&nbsp; ${e.dives ? fmt(e.estimatedMinutes) : '&mdash;'}<span class="n"> min</span></span>
+  </div>`;
+}
+
+/* One session: which boards run it, the standard warm-up, and every event
+   in it with its entries and run time. No clock times -- see the note on
+   schedEventRow. Warm-up is shown at the standard 55 minutes used to plan a
+   session regardless of which groups are in it; the day's actual pool-time
+   math (whether everything fits, below) still uses the engine's real
+   per-group warm-up, so the "Fits" verdict elsewhere in this report keeps
+   agreeing with Boundary Studio's own Schedule tab. */
+const STANDARD_WARMUP_MIN = 55;
+function schedSessionCard(ss){
+  const boardBits = Object.keys(ss.lanes||{})
+    .map(L => `${esc(SCHED_BOARD_DISPLAY[L]||L)} ${Math.round(ss.lanes[L])} min`).join(' &middot; ');
+  const saved = (ss.sequentialMinutes||0) - (ss.compMinutes||0);
+  const evRows = (ss.events||[]).map(schedEventRow).join('');
+  const compMin = (ss.events||[]).reduce((a,e) => a + (e.dives ? e.estimatedMinutes : 0), 0);
+  return `<div class="mr-hd-sess">
+    <div class="mr-hd-sess-h">
+      <span class="mr-hd-sess-name">Session ${ss.index}</span>
+      <span class="mr-hd-wu">Warm-up ${STANDARD_WARMUP_MIN} min</span>
+      <span class="mr-soft">&middot; ${fmt(compMin)} min competition &middot; ${fmt(STANDARD_WARMUP_MIN + compMin)} min total</span>
+    </div>
+    ${boardBits ? `<p class="mr-hd-boards">${boardBits}${saved > 0
+      ? ` &mdash; these boards run at the same time, ${saved} min shorter than running one after another`
+      : ''}</p>` : ''}
+    ${evRows}
+  </div>`;
+}
+
+/* The open-practice-time sentence for one day, naming which gap (before the
+   first session, between two named sessions, or after the last) each usable
+   block sits in. windows[] is [before, between(1,2), between(2,3), ...,
+   after] exactly as ScenarioScheduleEngine.layoutDay() returns it. */
+function schedPracticeLine(windows, sessCount){
+  const list = windows || [];
+  const usable = list.filter(w => w.usable);
+  if (!usable.length) return 'No usable open-practice window on this day &mdash; every gap between sessions is under the 60-minute floor that counts as real practice time.';
+  const parts = list.map((w, i) => {
+    if (!w.usable) return null;
+    if (w.position === 'before') return `${w.minutes} min before session 1`;
+    if (w.position === 'after') return `${w.minutes} min after session ${sessCount}`;
+    return `${w.minutes} min between sessions ${i} and ${i+1}`;
+  }).filter(Boolean);
+  return 'Open practice time: ' + parts.join('; ') + '.';
+}
+
+/* One day, in the same visual family as Schedule Builder's own printed
+   handout: a navy header bar, the red/white/blue accent stripe, and every
+   session that day with its warm-up and events. No clock times -- see the
+   note on schedEventRow for why. */
+function schedDayCard(d, windowMin){
+  const occupied = (d.sessions||[]).reduce((a,ss) => a + (ss.sessionEndMinutes - ss.warmupStartMinutes), 0);
+  const sessCount = (d.sessions||[]).length;
+  const sessCards = (d.sessions||[]).map(schedSessionCard).join('');
+  return `<div class="mr-hd-day ${d.overCapacity ? 'over' : ''}">
+    <div class="mr-hd-day-h">
+      <span class="mr-hd-daynum">Day ${d.dayNumber}</span>
+      <span class="mr-hd-pool">${(occupied/60).toFixed(1)}h of ${(windowMin/60).toFixed(1)}h pool time used</span>
+    </div>
+    <div class="mr-hd-accent"></div>
+    <div class="mr-hd-body">
+      ${d.overCapacity ? `<p class="mr-hd-day-warn">Runs ${d.overCapacityByMinutes} min past the assumed closing
+          time on this layout &mdash; this day needs fewer entries, an earlier open, a later close, or a
+          second day.</p>` : ''}
+      ${(d.conflicts||[]).length ? `<p class="mr-hd-day-warn">Two events for the same age group and gender are
+          placed on this day (${esc(d.conflicts.join(', '))}) &mdash; a person moved one here deliberately,
+          and that placement is kept.</p>` : ''}
+      ${sessCards || '<p class="mr-note">Nothing is scheduled on this day.</p>'}
+      <p class="mr-sched-practice">${schedPracticeLine(d.practiceWindows, sessCount)}</p>
+    </div>
+  </div>`;
+}
+
+/* One stop, start to finish: header, headline status, and every day it
+   would take to run under this pathway. */
+function schedStopCard(x, windowMin){
+  if (x.err) return `<div class="mr-sched-stop">
+      <div class="mr-sched-stop-h"><span class="mr-sched-stop-name">${esc(x.name)}</span>
+        <span class="mr-soft">${esc(x.level)}</span></div>
+      <p class="mr-p mr-warn">This stop could not be laid out: ${esc(x.err)}</p>
+    </div>`;
+  const days = (x.sim && x.sim.days) || [];
+  if (!days.length) return `<div class="mr-sched-stop">
+      <div class="mr-sched-stop-h"><span class="mr-sched-stop-name">${esc(x.name)}</span>
+        <span class="mr-soft">${esc(x.level)}</span></div>
+      <p class="mr-p mr-warn">No events project onto this stop under the current pathway, so there is nothing
+        to schedule.</p>
+    </div>`;
+  const status = x.daysOver
+    ? `<span class="mr-over">${x.daysOver} of ${days.length} day${days.length===1?'':'s'} run past the
+        assumed closing time</span>`
+    : `<span class="mr-under">Every day fits inside the assumed pool hours</span>`;
+  return `<div class="mr-sched-stop">
+    <div class="mr-sched-stop-h">
+      <span class="mr-sched-stop-name">${esc(x.name)}</span>
+      <span class="mr-soft">${esc(x.level)}</span>
+    </div>
+    <div class="mr-sched-stop-kpis">
+      <span>${fmt(Math.round(x.entries))} entries</span>
+      <span>${fmt(x.events)} event${x.events===1?'':'s'}</span>
+      <span>${days.length} day${days.length===1?'':'s'}</span>
+      ${status}
+    </div>
+    ${x.unknown ? `<p class="mr-note mr-warn">${fmt(x.unknown)} event${x.unknown===1?' has':'s have'} no dive
+      count on record and ${x.unknown===1?'is':'are'} timed here as zero minutes. This meet will run longer
+      than the schedule below shows, until those events have a dive count.</p>` : ''}
+    ${days.map(d => schedDayCard(d, windowMin)).join('')}
+  </div>`;
+}
+/* =====================================================================
+   SECTION REGISTRY — membership sections (live Neon)
+   Each section: {label, desc, group, build(opts) -> HTML string}
+   `opts` = {years, cats, assocs, states, topN}
+   ===================================================================== */
+/* Membership report sections live in Membership Analytics'
+   ma-reports.js. This app carries the Boundary Studio families only,
+   so SECTIONS starts empty and the Object.assign calls below fill it. */
+const SECTIONS = {};
+
+function B(){ return window.BoundaryAPI; }
+/* Map the report's membership years onto the years the boundary data holds.
+   Previously every boundary section rendered whichever single year Boundary
+   Studio happened to be sitting on, ignoring the report's selection entirely --
+   so asking for 2025 and 2026 produced one year twice over. */
+function boundaryYears(o){
+  const avail = (B().availableYears && B().availableYears()) || ['y25','y26'];
+  const want = (o && o.years && o.years.length ? o.years : [2026])
+    .map(y => 'y' + String(y).slice(-2))
+    .filter(y => avail.indexOf(y) >= 0);
+  const missing = (o && o.years ? o.years : [])
+    .filter(y => avail.indexOf('y' + String(y).slice(-2)) < 0);
+  return {years: want.length ? want : [B().year()], missing};
+}
+function boundaryReady(){ return !!(B() && B().ready()); }
+function notReady(title){
+  return `<section class="mr-section"><h2 class="mr-h2">${esc(title)}</h2>
+    <p class="mr-p mr-warn">Boundary Studio has not finished loading. Open the
+    <strong>Boundary Studio</strong> tab once, let the map draw, then generate this report again.</p>
+    </section>`;
+}
+function scenarioLine(){
+  const sc = B().scenario();
+  const name = sc.name || 'Unsaved working scenario';
+  return `<div class="mr-scenario-badge">
+    <span class="mr-sb-label">Scenario</span>
+    <span class="mr-sb-name">${esc(name)}</span>
+    ${sc.dirty ? '<span class="mr-sb-dirty">unsaved edits included</span>' : ''}
+    <span class="mr-sb-year">Membership year ${esc(B().yearLabel())}</span>
+  </div>`;
+}
+
+/* Same visual language as scenarioLine(), for sections that compare two named
+   scenarios rather than describing one. Both names get equal visual weight
+   deliberately -- neither reads as "the real one" and the other as an
+   afterthought, which a plain sentence naming one in bold and the other in
+   passing tends to imply even when that isn't the intent. */
+function scenarioCompareLine(nameA, labelA, nameB, labelB){
+  return `<div class="mr-scenario-badge mr-sb-compare">
+    <span class="mr-sb-col"><span class="mr-sb-label">${esc(labelA)}</span>
+      <span class="mr-sb-name">${esc(nameA)}</span></span>
+    <span class="mr-sb-vs">VS</span>
+    <span class="mr-sb-col mr-sb-right"><span class="mr-sb-label">${esc(labelB)}</span>
+      <span class="mr-sb-name">${esc(nameB)}</span></span>
+  </div>`;
+}
+
+/* ---------- distribution statistics ---------- */
+function gini(xs){
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mean = xs.reduce((a,b)=>a+b,0) / n;
+  if (mean <= 0) return 0;
+  let sum = 0;
+  for (let i=0;i<n;i++) for (let j=0;j<n;j++) sum += Math.abs(xs[i]-xs[j]);
+  return sum / (2 * n * n * mean);
+}
+function stats(xs){
+  const n = xs.length;
+  if (!n) return {n:0, total:0, mean:0, sd:0, cv:0, min:0, max:0, ratio:0, gini:0, spread:0};
+  const total = xs.reduce((a,b)=>a+b,0);
+  const mean = total / n;
+  const sd = Math.sqrt(xs.reduce((s,x)=>s+(x-mean)*(x-mean),0) / n);
+  const min = Math.min(...xs), max = Math.max(...xs);
+  return {n, total, mean, sd, cv: mean>0 ? sd/mean : 0, min, max,
+          ratio: min>0 ? max/min : Infinity, gini: gini(xs),
+          spread: mean>0 ? (max-min)/mean : 0};
+}
+/* Plain-English verdict so the report is readable by non-analysts. */
+function balanceVerdict(cv){
+  if (cv <= 0.10) return ['Well balanced', 'Every area is within roughly a tenth of the average size.'];
+  if (cv <= 0.20) return ['Reasonably balanced', 'Some variation between areas, but nothing extreme.'];
+  if (cv <= 0.35) return ['Uneven', 'Areas differ enough that the largest carry a noticeably heavier load.'];
+  return ['Highly uneven', 'The largest and smallest areas are very far apart.'];
+}
+
+/* Full per-group profile at the current tier view. */
+function groupProfiles(){
+  const api = B(), geo = api.geo(), y = api.year(), age = api.age() || {};
+  const TG = api.tierGroups(), assign = api.assign(), regions = api.regions();
+  const counties = geo.counties, clubs = geo.clubs || [];
+  const byFips = {}; counties.forEach(c => byFips[c.f] = c);
+  const P = TG.groups.map((g,i) => ({
+    idx:i, name:g.name || ('Area '+(i+1)), color: api.groupColor(i),
+    m:0, a:0, c:0, clubs:new Map(), counties:0, countiesWithMembers:0,
+    states:new Map(), zips:[], ages:[0,0,0,0,0],
+  }));
+  const un = {idx:-1, name:'Unassigned', color:'#94a3b8', m:0,a:0,c:0,
+              clubs:new Map(), counties:0, countiesWithMembers:0, states:new Map(), zips:[], ages:[0,0,0,0,0]};
+  const groupOf = fips => {
+    const ri = assign[fips];
+    if (ri == null || ri < 0 || ri >= regions.length) return null;
+    return P[TG.of[ri]] || null;
+  };
+  // Counties assigned (whether or not they contain members)
+  Object.keys(assign).forEach(f => { const t = groupOf(f); if (t) t.counties++; });
+  // Member statistics, which only exist for counties that geocoded members
+  for (const [fips, st] of Object.entries(geo.stats)){
+    const v = st[y]; if (!v) continue;
+    const t = groupOf(fips) || un;
+    t.m += v.m; t.a += v.a; t.c += v.c;
+    if (v.m > 0) t.countiesWithMembers++;
+    (v.cl || []).forEach(ci => t.clubs.set(ci, (t.clubs.get(ci)||0) + 1));
+    const co = byFips[fips];
+    if (co && v.m > 0) t.states.set(co.st, (t.states.get(co.st)||0) + v.m);
+    const ag = age[fips] && age[fips][y];
+    if (ag) for (let j=0;j<5;j++) t.ages[j] += (ag[j]||0);
+    for (const [zip, mm] of Object.entries(st.z || {})){
+      const n = mm[y === 'y25' ? 0 : 1];
+      if (n > 0) t.zips.push({zip, n, county: co ? co.n : '', st: co ? co.st : ''});
+    }
+  }
+  P.concat([un]).forEach(t => t.zips.sort((a,b)=>b.n-a.n));
+  return {P, un, TG};
+}
+
+/* One map renderer for every boundary section. Two copies would eventually
+   disagree about a colour or an unassigned county, and the report is the
+   artefact that leaves the building. */
+const BMAP_FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d',
+                       '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+function boundaryMapSvg(L){
+  const api = B(), geo = api.geo();
+  const assign = api.assign(), regions = api.regions();
+  const TG = api.tierGroupsAt(L), of = TG.of, nG = TG.groups.length;
+  const colorOf = gi => {
+    const g = TG.groups[gi];
+    if (g && g.colors && g.colors.length && g.colors[0]) return g.colors[0];
+    return BMAP_FALLBACK[gi % BMAP_FALLBACK.length];
+  };
+  const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+  const dParts = Array.from({length:nG}, ()=>[]), unParts = [];
+  for (const c of geo.counties){
+    const ri = assign[c.f];
+    const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+    if (gi == null || gi < 0 || gi >= nG) unParts.push(c.d); else dParts[gi].push(c.d);
+  }
+  const paths = dParts.map((parts, gi) => parts.length
+      ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '').join('')
+    + (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+  return {
+    svg: `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">${paths}
+      <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
+      <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/></svg>`,
+    colorOf, nameOf, nG,
+  };
+}
+
+/* One source of truth for every Boundary Studio report's name. The picker
+   label and the heading rendered inside the report used to be stored
+   separately and had already drifted apart (boundary_compare's label said
+   "which counties move (vs. another scenario)" while its heading said just
+   "Which counties move"). Both now read from here, so they cannot diverge
+   again.
+
+   Names state the question the report answers rather than the module that
+   produced it. In particular "balance" and "equity" are no longer both
+   called equity: area SIZE and the SCORE IT TAKES TO ADVANCE are different
+   tests, and blurring them hides the distinction that matters most when a
+   selection decision is reviewed. */
+const NAMES = {
+  boundary_summary:           'The proposal in brief',
+  boundary_map:               'The map, stage by stage',
+  boundary_balance:           'Are the areas evenly sized?',
+  boundary_equity:            'What it takes to advance',
+  boundary_pathway:           'Who advances at every stage',
+  boundary_circuit_delta:     'Today versus the proposals',
+  boundary_pathways_compared: 'Two pathways, side by side',
+  boundary_schedule:          'Can every meet actually be run?',
+  boundary_compare:           'What changes from today',
+  membership_geo:             'Where the members and clubs are',
+  boundary_region_profiles:   'Area profiles',
+  boundary_zips:              'Zip code appendix',
+  // The three focused reports. These were added with hardcoded names, which
+  // meant a cross-reference to NAMES.boundary_entry_economics rendered the
+  // literal word "undefined" in a report -- exactly the drift this map exists
+  // to prevent, so they belong here too.
+  boundary_entry_economics:   'What gets paid — entries, athletes, and fees',
+  boundary_decline_projection:'The field, projected forward',
+  boundary_defensibility:     'Provenance and defensibility',
+  // Absorbed into a parent below; the builders stay, the picker entries go.
+  boundary_overview:          'How the structure is built',
+  boundary_tiers:             'Every level, rolled up',
+  boundary_club_moves:        'Clubs by area',
+};
+
+const BOUNDARY_SECTIONS = {
+
+  boundary_summary: {
+    label: NAMES.boundary_summary, group: 'Boundary Studio',
+    desc: 'One page: the map, the structure in a sentence, who reaches the championship, '
+        + 'whether every meet runs, and exactly what it was computed from.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_summary);
+      const api = B(), QRr = window.QualRouting;
+      const nLev = api.levelCount ? api.levelCount() : 1;
+      const routing = api.routing ? api.routing() : null;
+      const res = api.pathway ? api.pathway() : null;
+      const M = boundaryMapSvg(0);
+      const t = api.tallies();
+      const stamps = api.stamps ? api.stamps() : null;
+      const finalNm = api.finalName ? api.finalName() : 'the championship';
+      const frozen = api.frozen ? api.frozen() : null;
+      const drift = (frozen && api.frozenDrift) ? api.frozenDrift() : null;
+      const freezeBlock = !frozen ? '' : (drift
+        ? `<p class="mr-p mr-warn"><strong>This scenario was frozen on
+             ${esc(String(frozen.at||'').slice(0,10))}${frozen.note?` (${esc(frozen.note)})`:''} and no longer
+             computes what it said then.</strong> ${drift.figures.length
+             ? drift.figures.map(r=>`${esc(r.label)} was ${fmt(Math.round(r.then))}, now ${fmt(Math.round(r.now))}`).join('; ')+'.'
+             : 'The headline figures still match; the inputs behind them have moved.'}
+             Do not circulate these numbers under the earlier date without saying so.</p>`
+        : `<p class="mr-p"><strong>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
+             frozen.note?` — ${esc(frozen.note)}`:''}.</strong> Everything below still computes exactly what it
+             said when it was presented.</p>`);
+
+      // The structure as one readable sentence, which is how it gets described
+      // out loud in the room anyway.
+      const chain = [];
+      for (let L = 0; L < nLev; L++) chain.push(`${fmt(api.groupCountAt(L))} ${esc(api.tierName(L))}`);
+      const sentence = chain.join(' &rarr; ') + ' &rarr; ' + esc(finalNm);
+
+      let field = null, levelRows = '', schedLine = '', probLine = '';
+      if (routing && res && QRr){
+        const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+        levelRows = routing.map((lvl, L) => {
+          const stops = api.groupCountAt(L);
+          // Everyone who joins this stage at any round. Reading the first round
+          // alone misses athletes seeded past it, which the 2026 rules do.
+          let n = 0;
+          for (let g = 0; g < stops; g++) n += QRr.entriesAt(res, L, g, CELLS);
+          return `<tr><td>${esc(api.tierName(L))}</td><td class="mr-num">${fmt(stops)}</td>
+            <td class="mr-num">${fmt(Math.round(n))}</td>
+            <td class="mr-num">${fmt(Math.round(n/Math.max(1,stops)))}</td></tr>`;
+        }).join('');
+        const last = routing.length - 1;
+        field = 0;
+        for (let g = 0; g < Math.max(1, api.groupCountAt(last)); g++) field += QRr.entriesAt(res, last, g, CELLS);
+        const nProb = (res.problems||[]).length;
+        probLine = nProb ? `<p class="mr-p mr-warn"><strong>${nProb} problem${nProb===1?'':'s'} in this
+          pathway.</strong> Open Boundary Studio &rarr; Structure and clear them before this goes further.</p>` : '';
+      }
+      const sched = api.scheduleAll ? api.scheduleAll() : null;
+      if (sched && sched.stops && sched.stops.length){
+        const bad = sched.stops.filter(x=>x.daysOver);
+        schedLine = bad.length
+          ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} meets do not fit a standard
+             facility day.</strong> ${esc(bad.map(x=>x.name).join(', '))}.</p>`
+          : `<p class="mr-p">All ${sched.stops.length} meets fit inside a standard facility day.</p>`;
+      }
+      const key = Array.from({length:M.nG}, (_,gi)=>`<span class="mr-mapkey">
+        <span class="mr-sw" style="background:${M.colorOf(gi)}"></span>${esc(M.nameOf(gi))}</span>`).join('');
+      const assignedM = t.rows.reduce((a2,r)=>a2+r.m,0);
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_summary}</h2>
+        ${scenarioLine()}
+        <p class="mr-note"><b>Where to go for each question.</b> This page is the one-pager. For anything
+          deeper: <b>${NAMES.boundary_balance}</b> for whether the areas are the same size, and
+          <b>${NAMES.boundary_equity}</b> for whether that makes them a fair contest &mdash; those are
+          different questions and the answers can disagree. <b>${NAMES.boundary_pathway}</b> for who
+          advances, <b>${NAMES.boundary_entry_economics}</b> for what it costs and who pays,
+          <b>${NAMES.boundary_schedule}</b> for whether the meets can physically be run,
+          <b>${NAMES.boundary_circuit_delta}</b> to set it against today, and
+          <b>${NAMES.boundary_defensibility}</b> before any of it goes in front of a committee.</p>
+        ${freezeBlock}
+        <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
+        <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
+        <div class="mr-map">${M.svg}</div>
+        <div class="mr-mapkeys">${key}</div>
+        <table class="mr-table"><tbody>
+          <tr><td>Members in the mapped area</td><td class="mr-num">${fmt(assignedM)}</td></tr>
+          ${field!=null?`<tr><td><strong>Reaching ${esc(finalNm)}</strong></td>
+            <td class="mr-num"><strong>${fmt(Math.round(field))}</strong></td></tr>`:''}
+        </tbody></table>
+        ${levelRows?`<h3 class="mr-h3">Every stage</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Meets</th>
+          <th scope="col" class="mr-num">Event entries</th><th scope="col" class="mr-num">Per meet</th></tr></thead>
+          <tbody>${levelRows}</tbody></table>`:''}
+        ${schedLine}${probLine}
+        <h3 class="mr-h3">What this was computed from</h3>
+        <p class="mr-p">Every figure above should be reproducible from this alone. If one is not, it does not
+          belong in a decision.</p>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Season</td><td>${esc(api.yearLabel())}</td></tr>
+          ${frozen?`<tr><td>Frozen</td><td>${esc(String(frozen.at||'').slice(0,10))}${
+            frozen.note?' — '+esc(frozen.note):''}${drift?' <strong>(figures have moved since)</strong>':''}</td></tr>`:''}
+          ${stamps?`<tr><td>Entry data build</td><td>${esc(String(stamps.advance_data||'—').slice(0,10))}</td></tr>
+          <tr><td>Events per athlete</td><td>${esc(String(stamps.multiplicity||'—').slice(0,10))}</td></tr>
+          <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
+          <tr><td>First stop fed by</td><td>${esc(stamps.seed_pool||'—')}</td></tr>`:''}
+        </tbody></table>
+        <p class="mr-note">Entries are not people: athletes commonly contest two or three events, so an entry count
+          tells you what a session costs and how long it runs, not how many bodies need a bed. Projected figures are
+          qualified places carried up by the published rules and the take-up measured on the alignment that season
+          was actually run under &mdash; they are not a forecast of who wins.</p>
+      </section>`;
+    }
+  },
+
+  boundary_pathways_compared: {
+    label: NAMES.boundary_pathways_compared, group: 'Boundary Studio',
+    desc: 'Saved pathways side by side on the same map: championship field, meet sizes, days, and what does not fit.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_pathways_compared);
+      const api = B();
+      let C = api.comparison ? api.comparison() : null;
+      let fromCompareSlot = false;
+      if (!C || !C.length){
+        C = api.comparisonFromCompareSlot ? api.comparisonFromCompareSlot() : null;
+        fromCompareSlot = !!(C && C.length);
+      }
+      if (!C || !C.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathways_compared}</h2>
+        <p class="mr-p mr-warn">No comparison is loaded. Either open <strong>Boundary Studio &rarr; Compare with</strong>
+        and load a saved scenario there, or use <strong>Boundary Studio &rarr; Compare</strong> to tick saved
+        pathways or maps against the one on screen, then generate this report again.</p>
+        </section>`;
+      const base = C[0];
+      const head = C.map((c,i)=>`<th scope="col" class="mr-num">${esc(c.label)}${i===0?'<div class="mr-soft">on screen</div>':''}</th>`).join('');
+      const delta = (v,b) => (b==null||v==null||Math.round(v)===Math.round(b)) ? ''
+        : ` <span class="mr-soft">(${v-b>0?'+':''}${fmt(Math.round(v-b))})</span>`;
+      const row = (label, get, hint) => `<tr><td>${esc(label)}${hint?`<div class="mr-soft">${esc(hint)}</div>`:''}</td>` +
+        C.map((c,i)=>{
+          if (c.error) return `<td class="mr-num mr-warn">${esc(c.error)}</td>`;
+          const v=get(c); if (v==null) return '<td class="mr-num">—</td>';
+          return `<td class="mr-num">${fmt(Math.round(v))}${i>0?delta(v,get(base)):''}</td>`;
+        }).join('') + '</tr>';
+      const nLev = Math.max(0, ...C.filter(c=>c.levels).map(c=>c.levels.length));
+      const levelRows = Array.from({length:nLev}, (_,L) =>
+        row(((base.levels&&base.levels[L])?base.levels[L].name:'Level '+(L+1)) + ' — entries',
+            c => (c.levels&&c.levels[L]) ? c.levels[L].entries : null,
+            (base.levels&&base.levels[L]) ? `${base.levels[L].stops} stop${base.levels[L].stops===1?'':'s'}` : '')).join('');
+      const noted = C.filter(c=>c.notes && c.notes.length);
+      const introText = fromCompareSlot
+        ? `Two full scenarios, each run exactly as saved &mdash; its own map and its own pathway together.
+           Nothing is held fixed between columns; every difference below reflects everything that differs
+           between the two proposals, not one isolated rule change.`
+        : `The same map, run under each pathway. Only the rules differ between columns — the boundaries,
+           the field each pathway starts from, and the measured behaviour are held still, so every difference
+           below is caused by the rules and nothing else.`;
+
+      // The actual qualification RULES, per scenario -- not just the numbers
+      // those rules produce. Same QualRouting.describe() boundary_pathway
+      // itself uses, so the wording matches exactly if you look at either
+      // scenario on its own afterward.
+      const QRr = window.QualRouting;
+      const rulesBlocks = QRr ? C.map(c => {
+        if (c.error || !c.routing) return '';
+        const nmFor = i => (c.levels && c.levels[i] && c.levels[i].name) || ('Level '+(i+1));
+        const items = c.routing.map((lvl, L) =>
+          `<li><strong>${esc(nmFor(L))}</strong> — ${esc(QRr.describe(c.routing, L, nmFor))}</li>`).join('');
+        return `<div class="mr-rules-col"><div class="mr-rules-h">${esc(c.label)}</div>
+          <ul class="mr-bullets">${items}</ul></div>`;
+      }).join('') : '';
+
+      const usdSigned = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      const moneyDelta = (v,b) => {
+        const d = Math.round(v - b);
+        if (!d) return '';
+        return ` <span class="mr-soft">(${d>0?'+':'\u2212'}${usd(Math.abs(d))})</span>`;
+      };
+      const financeRow = (label, get) => `<tr><td>${esc(label)}</td>` +
+        C.map((c,i)=>{
+          if (c.error || !c.finance) return '<td class="mr-num">—</td>';
+          const v = get(c.finance);
+          return `<td class="mr-num mono">${usdSigned(v)}${i>0 && base.finance?moneyDelta(v,get(base.finance)):''}</td>`;
+        }).join('') + '</tr>';
+
+      const bannerNames = C.map(c => c.label);
+      const banner = bannerNames.length === 2
+        ? scenarioCompareLine(bannerNames[0], 'On screen', bannerNames[1], 'Compared against')
+        : `<div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
+             <span class="mr-sb-name">${bannerNames.map(esc).join(' &nbsp;vs&nbsp; ')}</span></div>`;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_pathways_compared}</h2>
+        ${banner}
+        <p class="mr-p">${introText}</p>
+
+        <h3 class="mr-h3">Qualification rules, side by side</h3>
+        <div class="mr-rules-grid">${rulesBlocks}</div>
+
+        <h3 class="mr-h3">Entries and the field</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
+          ${row('Championship field', c=>c.finalField, 'who reaches the top meet')}
+          ${levelRows}
+        </tbody></table>
+
+        <h3 class="mr-h3">Money — entry fees only</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
+          ${financeRow('Entry income (gross)', f=>f.gross)}
+          ${financeRow('DiveMeets pass-through', f=>-f.levy)}
+          ${financeRow('To hosts', f=>f.host)}
+          ${financeRow('USA Diving keeps', f=>f.usad)}
+        </tbody></table>
+        <p class="mr-note">Entry fees only, at the standing rates, less the DiveMeets pass-through — membership
+          dues, synchro and the senior circuit are not here. Priced the same way for every column, so a
+          difference is caused by the rules, not by a different fee card.</p>
+
+        <h3 class="mr-h3">Meets and schedule</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
+          ${row('Meets to run', c=>c.meets)}
+          ${row('Competition days, all meets', c=>c.daysTotal)}
+          ${row('Meets that do not fit', c=>c.over)}
+          ${row('Events split', c=>c.autoSplit)}
+          ${row('Events to look at', c=>c.review)}
+        </tbody></table>
+        ${noted.length ? `<p class="mr-note mr-warn">${noted.map(c=>
+          `<strong>${esc(c.label)}</strong> was saved for a different structure and was fitted onto this one. ${
+          c.notes.map(n=>esc(n)).join(' ')}`).join('<br>')}</p>` : ''}
+        <p class="mr-note">Each route band sets the size of the meet it feeds. Widening how many leave the first
+          stop changes how big the next meet is; it does not change the championship field, which is capped by the
+          last route into it. A top line that has not moved means the change was upstream of what sets it.</p>
+      </section>`;
+    }
+  },
+
+  boundary_schedule: {
+    label: NAMES.boundary_schedule, group: 'Boundary Studio',
+    desc: 'A proposed day-by-day, session-by-session schedule for every stop this pathway creates — boards, '
+        + 'warm-ups, splits and practice time — so the committee sees how each meet would actually run, not '
+        + 'just whether a summary number says it fits.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_schedule);
+      const api = B(), QRr = window.QualRouting, E = window.ScenarioScheduleEngine;
+      if (!QRr || !E || typeof E.simulateStop !== 'function')
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
+          <p class="mr-p mr-warn">The schedule engine is not loaded.</p></section>`;
+      const res = api.pathway();
+      if (!res || !res.field) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
+        <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway are
+        worked out, then generate this report again.</p></section>`;
+      const sched = api.scheduleAll ? api.scheduleAll() : null;
+      if (!sched || !sched.stops.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
+        <p class="mr-p mr-warn">No stops to lay out. Draw a map and set a pathway first.</p></section>`;
+
+      const R = sched.rules;
+      const windowMin = R.facilityCloseMin - R.facilityOpenMin;
+      const maxDay = Math.max(1, ...sched.stops.map(x => x.longestDayMin || 0));
+
+      const rows = sched.stops.map(x => {
+        const overCls = x.daysOver ? 'mr-warn' : '';
+        return `<tr>
+          <td>${esc(x.name)}<div class="mr-soft">${esc(x.level)}</div></td>
+          <td class="mr-num">${fmt(Math.round(x.entries))}</td>
+          <td class="mr-num">${fmt(x.events)}</td>
+          <td class="mr-num">${fmt(x.days)}</td>
+          <td class="mr-num">${x.longestDayMin ? (x.longestDayMin/60).toFixed(1)+' h' : '—'}</td>
+          <td style="width:16%">${bar(x.longestDayMin||0, maxDay, x.daysOver ? RED : POOL)}</td>
+          <td class="mr-num">${x.autoSplit || '—'}</td>
+          <td class="mr-num">${x.review || '—'}</td>
+          <td class="${overCls}">${x.daysOver ? x.daysOver+' day'+(x.daysOver>1?'s':'')+' over' : 'Fits'}</td>
+        </tr>`;
+      }).join('');
+
+      const bad = sched.stops.filter(x => x.daysOver);
+      const untimed = sched.stops.reduce((a,x)=>a+(x.unknown||0), 0);
+      const verdict = bad.length
+        ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} stops run past the assumed
+             facility day on this layout.</strong> ${esc(bad.map(x=>x.name).join(', '))}. Either those areas
+             carry too many entries for one venue, or those hosts need an extra day — the full proposed
+             schedule for each stop, below, shows exactly which day and which session.</p>`
+        : `<p class="mr-p">Every stop fits inside the assumed facility day on this layout.</p>`;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
+        ${(function(){
+          // A fit / does-not-fit verdict is useless without the parameters it
+          // was measured against. These are read from the schedule engine's
+          // own defaults rather than restated by hand, so they cannot drift
+          // out of step with what actually produced the verdict.
+          // Prefer the rules this schedule was actually laid out with -- each
+          // stop carries its own, so an overridden window is reported as the
+          // window that produced the verdict, not as the engine default.
+          let R = null;
+          try {
+            R = (sched && sched.stops && sched.stops[0] && sched.stops[0].rules) ||
+                (window.ScenarioScheduleEngine && window.ScenarioScheduleEngine.DEFAULT_RULES) || null;
+          } catch(e){ R = null; }
+          const hhmm = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+          if (!R || R.facilityOpenMin == null) return `<p class="mr-note"><b>What "does not fit" means.</b>
+            A meet does not fit when its longest day needs more time than a standard facility day allows,
+            once each session's warm-up is added to its competition time. The exact parameters could not be
+            read from the schedule engine here, so check them in Schedule Builder before quoting a
+            verdict.</p>`;
+          const win = R.facilityCloseMin - R.facilityOpenMin;
+          const tiers = (R.warmupJuniorGroupsByEntries || []).map(t =>
+            (t.maxEntries === Infinity || t.maxEntries == null ? 'more' : '\u2264' + t.maxEntries)
+            + ' entries \u2192 ' + t.minutes + ' min').join(' \u00b7 ');
+          return `<p class="mr-note"><b>What "does not fit" means, and against what.</b> A meet does not fit
+            when its longest day needs more time than the facility day allows. The figures below assume a
+            day running <b>${hhmm(R.facilityOpenMin)} to ${hhmm(R.facilityCloseMin)}</b>
+            (${(win/60).toFixed(1)} hours), with one warm-up per session &mdash; every event in a session
+            starts together, so the session carries the longest warm-up any of its events needs.
+            Groups A and B take a fixed <b>${R.warmupSeniorGroupsMin} minutes</b>; Groups C and D scale with
+            entry count (${tiers}). A verdict here is only as good as those numbers: if your venue closes
+            earlier, or warm-up practice differs, change them in Schedule Builder and regenerate rather than
+            reading these as fixed. Platform never splits, so a large platform field cannot be relieved by
+            splitting it.</p>`;
+        })()}
+        ${scenarioLine()}
+        <p class="mr-p">Every area this map and pathway create becomes a real meet a host club has to run
+          inside its own pool hours. The pages below lay out each stop day by day and session by session,
+          in the same format Schedule Builder prints for a real meet — entries and estimated run time per
+          event, standard 55-minute warm-up, one discipline per age group and gender per day. There is no
+          real date yet, so there are no clock times; once a stop is actually scheduled, Schedule Builder
+          fills those in.</p>
+        <p class="mr-note">Warm-up shows as the standard 55 minutes throughout. The <strong>Fits / doesn't
+          fit</strong> verdict below still uses each session's real computed warm-up (Groups A/B run longer
+          than C/D), so that verdict keeps agreeing with Boundary Studio's own Schedule tab — the 55-minute
+          figure is a planning standard for reading the pages, not a change to that math. Dive counts are
+          taken from the 2026 Zone and Junior National schedules as actually run. This is a proposal, not a
+          real schedule — a host's own equipment, pool hours and judgement outrank every figure here.</p>
+
+        <h3 class="mr-h3">Summary — does each meet fit</h3>
+        ${verdict}
+        <table class="mr-table"><thead><tr>
+          <th scope="col">Stop</th><th scope="col" class="mr-num">Event entries</th><th scope="col" class="mr-num">Events</th>
+          <th scope="col" class="mr-num">Days</th><th scope="col" class="mr-num">Longest day</th><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Split</th><th scope="col" class="mr-num">Look at</th><th scope="col">Verdict</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        ${untimed ? `<p class="mr-note mr-warn">${fmt(untimed)} event${untimed>1?'s have':' has'} no dive count on
+          record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown, both above
+          and in the proposed schedules below.</p>` : ''}
+        <p class="mr-note">Pool assumed open ${Math.floor(R.facilityOpenMin/60)}:00 to
+          ${Math.floor(R.facilityCloseMin/60)}:00 — a ${(windowMin/60).toFixed(1)}-hour day, the same for every
+          host, purely so stops can be compared on one ruler. Hosts open at different times in practice and may
+          run one age group earlier or later than another.</p>
+
+        <h3 class="mr-h3">Proposed schedule, stop by stop</h3>
+        <p class="mr-p">Every day, every session, every event — for every stop this pathway creates.</p>
+        ${sched.stops.map(x => schedStopCard(x, windowMin)).join('')}
+      </section>`;
+    }
+  },
+
+  boundary_pathway: {
+    label: NAMES.boundary_pathway, group: 'Boundary Studio',
+    desc: 'Who advances at every stage and round, how many people that is, and what it bills.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_pathway);
+      const api = B(), QRr = window.QualRouting;
+      if (!QRr) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
+        <p class="mr-p mr-warn">The pathway engine is not loaded.</p></section>`;
+      await (api.ensureMult ? api.ensureMult() : Promise.resolve());
+      const routing = api.routing();
+      const res = api.pathway();
+      if (!res) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
+        <p class="mr-p mr-warn">Open the <strong>Boundary Studio</strong> tab once so the map and pathway
+        are worked out, then generate this report again.</p></section>`;
+
+      const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+      const mult = api.multiplicity();
+      const nm = i => api.tierName(i);
+      const seed = (function(){
+        // The entry level's own field, which is what it bills on.
+        const g = api.groupCountAt(0);
+        const rows = [];
+        for (let i=0;i<g;i++) rows.push(res.field[0][QRr.roundsOf(routing[0])[0].key][i] || {});
+        return rows;
+      })();
+
+      const rows = routing.map((lvl, L) => {
+        const stops = api.groupCountAt(L);
+        const rounds = QRr.roundsOf(lvl).map(r => {
+          const size = QRr.sizeAt(res, L, r.key, CELLS);
+          let people = '';
+          if (mult){
+            const d = QRr.diversAt(res, L, r.key, CELLS, mult, api.multBasis(L));
+            if (d && d.ok) people = fmt(Math.round(d.divers)) + (d.reliable ? '' : ' <span class="mr-soft">(est.)</span>');
+          }
+          return `<tr><td>${esc(nm(L))}</td><td>${esc(QRr.ROUND_NAME[r.key] || r.key)}</td>
+            <td class="mr-num">${fmt(stops)}</td>
+            <td class="mr-num">${fmt(Math.round(size))}</td>
+            <td class="mr-num">${fmt(Math.round(size / Math.max(1, stops)))}</td>
+            <td class="mr-num">${people || '—'}</td></tr>`;
+        }).join('');
+        return rounds;
+      }).join('');
+
+      // Three genuinely different kinds of number, easy to conflate unless
+      // each row says which one it is: what the rules would admit if every
+      // qualifier turned up (a ceiling, not a forecast), and what the field
+      // actually was in each of the last two real seasons (calibrated to
+      // that season's own measured take-up, where a real one exists at all).
+      // entriesForSource() and withYear() already existed for exactly this
+      // -- built for the schedule generator, never wired into a report until
+      // now. Sequential, not Promise.all: withYear mutates S.year for its
+      // duration, and its own comment warns against overlapping calls.
+      let sourceRows = '';
+      try {
+        const maxRes = await api.entriesForSource('max');
+        const y24Res = await api.entriesForSource('y24');
+        const y25Res = await api.entriesForSource('y25');
+        const y26Res = await api.entriesForSource('y26');
+        const stageOf = (L, rk) => {
+          const total = (R) => {
+            const f = R && R.field && R.field[L] && R.field[L][rk];
+            return f ? f.reduce((s,g) => s + CELLS.reduce((s2,c) => s2+(g[c]||0), 0), 0) : null;
+          };
+          return {max: total(maxRes), y24: total(y24Res), y25: total(y25Res), y26: total(y26Res)};
+        };
+        const srows = [];
+        routing.forEach((lvl2, L) => QRr.roundsOf(lvl2).forEach(r => {
+          const s = stageOf(L, r.key);
+          // Level 0 is the entry pool itself, not a stage anything advances
+          // INTO -- there is no rule capping it, so "max available" has no
+          // real meaning there. maxCapacityEntries() seeds it with an
+          // arbitrary huge placeholder to make the projection math work,
+          // which is not a number to show anyone; say plainly why instead.
+          const maxCell = L === 0
+            ? '<span class="mr-soft">n/a — entry pool, not capped by a rule</span>'
+            : (s.max!=null?fmt(Math.round(s.max)):'—');
+          srows.push(`<tr><td>${esc(nm(L))}</td><td>${esc(QRr.ROUND_NAME[r.key] || r.key)}</td>
+            <td class="mr-num">${maxCell}</td>
+            <td class="mr-num">${s.y24!=null?fmt(Math.round(s.y24)):'<span class="mr-soft">no 2024 data</span>'}</td>
+            <td class="mr-num">${s.y25!=null?fmt(Math.round(s.y25)):'<span class="mr-soft">no 2025 data</span>'}</td>
+            <td class="mr-num">${s.y26!=null?fmt(Math.round(s.y26)):'<span class="mr-soft">no 2026 data</span>'}</td></tr>`);
+        }));
+        sourceRows = srows.join('');
+      } catch(e){ sourceRows = `<tr><td colspan="5" class="mr-warn">Could not compute the max/2025/2026
+        comparison: ${esc(e.message||String(e))}</td></tr>`; }
+
+      const billed = routing.map((lvl, L) => {
+        const b = QRr.billableEntries(res, L, CELLS, seed);
+        const n = CELLS.reduce((s,c) => s + (b[c]||0), 0);
+        return `<tr><td>${esc(nm(L))}</td><td class="mr-num">${fmt(Math.round(n))}</td></tr>`;
+      }).join('');
+
+      // Published 2026 card. Pricing Studio owns fees and is the single source
+      // of truth for them; read its live PS.fees rather than keep a second
+      // copy here that would silently go stale the moment a fee actually
+      // changes -- the same class of gap the pricing.js/routing.js merge
+      // closed earlier, just in a different spot. Fall back only if Pricing
+      // Studio genuinely hasn't loaded, and say so plainly either way.
+      const livePSFees = (window.__PRICING && window.__PRICING.PS && window.__PRICING.PS.fees && window.__PRICING.PS.fees.length)
+        ? window.__PRICING.PS.fees : null;
+      const CARD = livePSFees || [{qual:85,non:45},{qual:90,non:45},{qual:115,non:0},{qual:125,non:0}];
+      const feeSourceNote = livePSFees
+        ? 'Fees read live from Pricing Studio.'
+        : 'Pricing Studio has not loaded in this session, so this used a fallback 2026 fee card -- confirm it still matches Pricing Studio before relying on this figure.';
+      const fees = routing.map((_,L) => CARD[Math.min(L, CARD.length-1)]);
+      const isQual = (L, c) => L > 0 || (c[2] !== 'P');
+      const rev = QRr.revenue(res, CELLS, seed, {fees, levy:4.90, isQual});
+      const money = rev.perLevel.map(p => `<tr><td>${esc(nm(p.level))}</td>
+        <td class="mr-num">${fmt(Math.round(p.entries))}</td>
+        <td class="mr-num">${usd(fees[p.level].qual)}</td>
+        <td class="mr-num">${usd(p.gross)}</td>
+        <td class="mr-num">&minus;${usd(p.levy)}</td>
+        <td class="mr-num">${usd(p.net)}</td></tr>`).join('');
+
+      const routes = routing.map((lvl,L) =>
+        `<li><strong>${esc(nm(L))}</strong> — ${esc(QRr.describe(routing, L, nm))}</li>`).join('');
+      const probs = (res.problems||[]).map(p =>
+        `<li class="mr-warn">${esc(p.level!=null ? nm(p.level)+': ' : '')}${esc(p.msg)}</li>`).join('');
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_pathway}</h2>
+        ${scenarioLine()}
+        ${probs ? `<p class="mr-p mr-warn"><b>This pathway has problems that affect the numbers below.</b></p>
+          <ul class="mr-bullets">${probs}</ul>` : ''}
+        <ul class="mr-bullets">${routes}</ul>
+
+        <h3 class="mr-h3">Field at every stage and round</h3>
+        <p class="mr-note">Calibrated to ${esc(api.yearLabel())}'s measured take-up where a real one exists;
+          bands with no real measurement assume every qualifier turns up.</p>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th><th scope="col" class="mr-num">Stops</th>
+          <th scope="col" class="mr-num">Event entries (projected)</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Unique athletes (projected)</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
+          three events, so the two answer different questions — entries decide session length and fee income,
+          divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
+          of events away from what was measured, so read it as indicative.</p>
+
+        <h3 class="mr-h3">The same field, four ways</h3>
+        <p class="mr-p">These are four different kinds of number, not four estimates of the same one.
+          <b>Max available</b> is a structural ceiling — every band saturated as if the real field were
+          infinite, useful for sizing a venue's worst case, not for predicting turnout. It only means
+          something for a stage a <em>rule</em> caps; the entry level itself has no such rule, so it shows
+          as not applicable rather than a number. <b>2024</b>, <b>2025</b>, and <b>2026</b> are what actually
+          happened those seasons, each calibrated to that season's own measured take-up where a real
+          measurement exists for that stage. 2024 is the last season the real system ran a genuine 3-stage
+          path — Region → Zone → Nationals, no E/W/C tier — which is structurally closer to what a 9-zone
+          proposal replaces it with than the real 2026 season is, even though the specific stages differ.
+          A stage marked "no data" did not exist, or was not separately measured, in that season.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th>
+          <th scope="col" class="mr-num">Max available</th><th scope="col" class="mr-num">2024</th>
+          <th scope="col" class="mr-num">2025</th><th scope="col" class="mr-num">2026</th></tr></thead>
+          <tbody>${sourceRows}</tbody></table>
+        ${(function(){
+          // Every real-season figure above comes from a name -> zip -> county
+          // match that does not resolve for every entry; advance-data.json
+          // tracks exactly how much of each season's field that reaches, so
+          // cite it rather than let a bare number stand with no stated limit.
+          const lines = [];
+          [['2024','Regionals'],['2024','Zones'],['2024','Nationals'],
+           ['2025','Regionals'],['2025','Zones'],['2025','Nationals'],
+           ['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']]
+            .forEach(([yr, st]) => {
+              const c = api.entryDataCompleteness(yr, st);
+              if (c && c.total) lines.push(`${yr} ${st} ${Math.round(100*c.mapped/c.total)}%`);
+            });
+          return lines.length ? `<p class="mr-note mr-soft">Share of each real season's field that resolved to a
+            county (the rest could not be matched to a membership record with a usable zip code, and is not
+            counted above): ${lines.join(' &middot; ')}.</p>` : '';
+        })()}
+
+        <h3 class="mr-h3">Every event, every round</h3>
+        ${(function(){
+          const AGE={A:'Group A',B:'Group B',C:'Group C',D:'Group D'};
+          const GEN={B:'Boys',G:'Girls'}, DIS={'1':'1m','3':'3m',P:'Platform'};
+          const cols=[];
+          routing.forEach((lvl,L)=>QRr.roundsOf(lvl).forEach(r=>
+            cols.push({L,key:r.key,name:nm(L),round:QRr.ROUND_NAME[r.key]||r.key})));
+          const val=(L,rk,cell)=>{const f=res.field[L]&&res.field[L][rk];
+            return f? f.reduce((s,g)=>s+(g[cell]||0),0) : 0;};
+          const head=cols.map(c=>`<th scope="col" class="mr-num">${esc(c.name)}<br><span class="mr-soft">${esc(c.round)}</span></th>`).join('');
+          const body=['A','B','C','D'].map(ag=>{
+            const sub=cols.map(c=>{let n=0;['B','G'].forEach(g=>['1','3','P'].forEach(d=>{n+=val(c.L,c.key,ag+g+d);}));
+              return `<td class="mr-num">${n>0.5?fmt(Math.round(n)):'—'}</td>`;}).join('');
+            const rows=['B','G'].flatMap(g=>['1','3','P'].map(d=>{
+              const cell=ag+g+d;
+              const tds=cols.map(c=>{const n=val(c.L,c.key,cell);
+                return `<td class="mr-num">${n>0.5?fmt(Math.round(n)):'—'}</td>`;}).join('');
+              return `<tr><td style="padding-left:18px">${esc(GEN[g])} ${esc(DIS[d])}</td>${tds}</tr>`;})).join('');
+            return `<tr class="mr-sub"><td><b>${esc(AGE[ag])}</b></td>${sub}</tr>${rows}`;}).join('');
+          const tot=cols.map(c=>{const n=CELLS.reduce((s,cell)=>s+val(c.L,c.key,cell),0);
+            return `<td class="mr-num"><b>${fmt(Math.round(n))}</b></td>`;}).join('');
+          return `<table class="mr-table"><thead><tr><th scope="col">Age group / event</th>${head}</tr></thead>
+            <tbody>${body}<tr class="mr-tot"><td><b>All events</b></td>${tot}</tr></tbody></table>`;
+        })()}
+        <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
+          3-meter board in the semi-final — the number a timetable and an awards order are actually built from.</p>
+
+        <p class="mr-note"><b>Money is not on this page.</b> This report answers who advances. What that
+          costs, who pays it, and why a prelim and a final at the same stop are one fee and not two are all
+          in <b>${NAMES.boundary_entry_economics}</b> &mdash; which also separates fee-paying arrivals from
+          seats to fill and from unique athletes, three numbers that get called "entries" interchangeably and
+          are not the same. Add that section alongside this one when the question is financial.</p>
+      </section>`;
+    }
+  },
+
+  boundary_overview: {
+    label: NAMES.boundary_overview, group: 'Boundary Studio',
+    desc: 'What the scenario is, how the tiers are structured, and the headline size of every area.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_overview);
+      const api = B(), {P, un} = groupProfiles();
+      const total = P.reduce((s,g)=>s+g.m,0);
+      const equal = P.length ? total / P.length : 0;
+      const maxM = Math.max(1, ...P.map(g=>g.m));
+      const levels = api.levels() || [];
+      const tierChain = levels.map((l,i) => {
+        const n = api.tierGroupsAt(i).groups.length;
+        return `${esc(api.tierName(i))} <span class="mr-soft">(${n})</span>`;
+      }).join(' &rarr; ') + (api.finalName() ? ` &rarr; ${esc(api.finalName())}` : '');
+      const body = P.map(g => `<tr>
+        <td><span class="mr-sw" style="background:${g.color}"></span>${esc(g.name)}</td>
+        <td class="mr-num">${fmt(g.m)}</td>
+        <td style="width:20%">${bar(g.m, maxM, g.color)}</td>
+        <td class="mr-num">${fmt(g.a)}</td><td class="mr-num">${fmt(g.c)}</td>
+        <td class="mr-num">${fmt(g.clubs.size)}</td>
+        <td class="mr-num">${fmt(g.counties)}</td>
+        <td class="mr-num">${pctS(g.m, total)}</td>
+        <td class="mr-num ${devClass(g.m, equal)}">${equal>0 ? signPct((g.m-equal)/equal) : '—'}</td>
+      </tr>`).join('');
+      const unRow = un.m > 0 ? `<tr class="mr-muted"><td>Not assigned to any area</td>
+        <td class="mr-num">${fmt(un.m)}</td><td></td><td class="mr-num">${fmt(un.a)}</td>
+        <td class="mr-num">${fmt(un.c)}</td><td class="mr-num">${fmt(un.clubs.size)}</td>
+        <td class="mr-num">—</td><td class="mr-num">${pctS(un.m, total+un.m)}</td><td class="mr-num">—</td></tr>` : '';
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_overview}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">Structure: ${tierChain}</p>
+        <p class="mr-p">This table is at the <strong>${esc(api.tierName(api.tierView()))}</strong>
+        level currently shown on the map. “Deviation” is how far an area sits from an equal share of
+        members — an equal split would put ${fmt(Math.round(equal))} members in each of the
+        ${P.length} areas.</p>
+        <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
+          <th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th>
+          <th scope="col" class="mr-num">Deviation</th></tr></thead>
+          <tbody>${body}${unRow}
+          <tr class="mr-total"><td>Total assigned</td><td class="mr-num">${fmt(total)}</td><td></td>
+            <td class="mr-num">${fmt(P.reduce((s,g)=>s+g.a,0))}</td>
+            <td class="mr-num">${fmt(P.reduce((s,g)=>s+g.c,0))}</td>
+            <td class="mr-num">${fmt(new Set(P.flatMap(g=>[...g.clubs.keys()])).size)}</td>
+            <td class="mr-num">${fmt(P.reduce((s,g)=>s+g.counties,0))}</td>
+            <td class="mr-num">100%</td><td class="mr-num">—</td></tr></tbody></table>
+        ${un.m > 0 ? `<p class="mr-note"><b>Unassigned members:</b> ${fmt(un.m)} members sit in counties
+          that have not been painted into any area. They are excluded from every share and balance
+          figure in this report. Assign them before treating the scenario as complete.</p>` : ''}
+      </section>`;
+    }
+  },
+
+  boundary_balance: {
+    label: NAMES.boundary_balance, group: 'Boundary Studio',
+    desc: 'How evenly the scenario splits members, athletes and clubs — spread, largest-to-smallest ratio and concentration.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_balance);
+      const {P} = groupProfiles();
+      if (P.length < 2) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_balance}</h2>
+        <p class="mr-p mr-warn">Balance statistics need at least two areas. This scenario has ${P.length}.</p></section>`;
+      const dims = [
+        {k:'m', label:'Members'}, {k:'a', label:'Athletes'}, {k:'c', label:'Coaches'},
+      ];
+      const rows = dims.map(d => {
+        const s = stats(P.map(g=>g[d.k]));
+        const [v] = balanceVerdict(s.cv);
+        return `<tr><td>${esc(d.label)}</td><td class="mr-num">${fmt(s.total)}</td>
+          <td class="mr-num">${fmt(Math.round(s.mean))}</td>
+          <td class="mr-num">${fmt(s.min)}</td><td class="mr-num">${fmt(s.max)}</td>
+          <td class="mr-num">${isFinite(s.ratio) ? s.ratio.toFixed(2)+'×' : '—'}</td>
+          <td class="mr-num">${(100*s.cv).toFixed(1)}%</td>
+          <td class="mr-num">${s.gini.toFixed(3)}</td>
+          <td>${esc(v)}</td></tr>`;
+      }).join('');
+      const clubStats = stats(P.map(g=>g.clubs.size));
+      const mS = stats(P.map(g=>g.m));
+      const [verdict, verdictWhy] = balanceVerdict(mS.cv);
+      const equal = mS.mean;
+      const sorted = P.slice().sort((a,b)=>b.m-a.m);
+      const maxAbs = Math.max(...P.map(g=>Math.abs(g.m-equal)), 1);
+      const devRows = sorted.map(g => {
+        const d = g.m - equal, p = equal>0 ? d/equal : 0;
+        return `<tr><td><span class="mr-sw" style="background:${g.color}"></span>${esc(g.name)}</td>
+          <td class="mr-num">${fmt(g.m)}</td>
+          <td class="mr-dev">${devBar(d, maxAbs)}</td>
+          <td class="mr-num ${devClass(g.m, equal)}">${signNum(d)}</td>
+          <td class="mr-num ${devClass(g.m, equal)}">${signPct(p)}</td></tr>`;
+      }).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_balance}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">This page measures one thing: whether the areas hold comparable numbers of people.
+          That is a question about <em>size</em>, and evenly sized areas are easier to schedule, staff and
+          fund.</p>
+        <p class="mr-note"><b>Even size is not the same as a fair contest, and this page cannot show
+          fairness.</b> Two areas holding identical member counts can still demand very different scores to
+          advance, because depth of talent is not distributed like headcount. The report that answers the
+          fairness question is <b>${NAMES.boundary_equity}</b>. These two used to share the word "equity" in
+          their names, which invited exactly the wrong conclusion &mdash; that an evenly sized map is
+          therefore an even contest. Read both before defending a map on fairness grounds.</p>
+        <div class="mr-kpis">
+          <div class="mr-kpi"><div class="mr-kpi-v">${verdict}</div>
+            <div class="mr-kpi-l">Overall balance of members</div>
+            <div class="mr-kpi-s">${esc(verdictWhy)}</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${isFinite(mS.ratio)?mS.ratio.toFixed(2)+'×':'—'}</div>
+            <div class="mr-kpi-l">Largest ÷ smallest area</div>
+            <div class="mr-kpi-s">${fmt(mS.max)} vs ${fmt(mS.min)} members</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${(100*mS.cv).toFixed(1)}%</div>
+            <div class="mr-kpi-l">Spread around the average</div>
+            <div class="mr-kpi-s">Lower is more even. Under 10% is tight.</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(Math.round(equal))}</div>
+            <div class="mr-kpi-l">Members in an equal split</div>
+            <div class="mr-kpi-s">${fmt(mS.total)} members ÷ ${P.length} areas</div></div>
+        </div>
+        <h3 class="mr-h3">Distribution by measure</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Measure</th><th scope="col" class="mr-num">Total</th>
+          <th scope="col" class="mr-num">Average</th><th scope="col" class="mr-num">Smallest</th><th scope="col" class="mr-num">Largest</th>
+          <th scope="col" class="mr-num">Max ÷ min</th><th scope="col" class="mr-num">Spread</th><th scope="col" class="mr-num">Gini</th>
+          <th scope="col">Read</th></tr></thead><tbody>${rows}
+          <tr><td>Distinct clubs</td><td class="mr-num">${fmt(clubStats.total)}</td>
+            <td class="mr-num">${fmt(Math.round(clubStats.mean))}</td>
+            <td class="mr-num">${fmt(clubStats.min)}</td><td class="mr-num">${fmt(clubStats.max)}</td>
+            <td class="mr-num">${isFinite(clubStats.ratio)?clubStats.ratio.toFixed(2)+'×':'—'}</td>
+            <td class="mr-num">${(100*clubStats.cv).toFixed(1)}%</td>
+            <td class="mr-num">${clubStats.gini.toFixed(3)}</td>
+            <td>${esc(balanceVerdict(clubStats.cv)[0])}</td></tr>
+        </tbody></table>
+        <p class="mr-note"><b>How to read these:</b> <em>Spread</em> is the coefficient of variation —
+        the typical distance from the average, as a percentage of the average. <em>Gini</em> runs from
+        0 (perfectly equal) to 1 (all members in one area); anything under about 0.10 is a very even
+        split. Both ignore geography, so pair them with the deviation chart below and with travel
+        considerations before drawing conclusions.</p>
+        <h3 class="mr-h3">Deviation from an equal share</h3>
+        <p class="mr-p">Bars to the right of the centre line are larger than an equal share; bars to the
+        left are smaller.</p>
+        <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th>
+          <th scope="col" style="width:34%">Versus equal share</th><th scope="col" class="mr-num">Difference</th>
+          <th scope="col" class="mr-num">%</th></tr></thead><tbody>${devRows}</tbody></table>
+      </section>`;
+    }
+  },
+
+  boundary_tiers: {
+    label: NAMES.boundary_tiers, group: 'Boundary Studio',
+    desc: 'Every level of the structure rolled up in turn, with balance statistics at each level.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_tiers);
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions(), levels = api.levels() || [];
+      const blocks = levels.map((lv, li) => {
+        const TG = api.tierGroupsAt(li);
+        const agg = TG.groups.map(g => ({name: g.name || 'Area', m:0, a:0, c:0, cl:new Set()}));
+        let unM = 0;
+        for (const [fips, st] of Object.entries(geo.stats)){
+          const v = st[y]; if (!v) continue;
+          const ri = assign[fips];
+          if (ri == null || ri < 0 || ri >= regions.length){ unM += v.m; continue; }
+          const t = agg[TG.of[ri]]; if (!t) continue;
+          t.m += v.m; t.a += v.a; t.c += v.c;
+          (v.cl||[]).forEach(ci=>t.cl.add(ci));
+        }
+        const s = stats(agg.map(x=>x.m));
+        const maxM = Math.max(1, ...agg.map(x=>x.m));
+        const rows = agg.map((x,i) => `<tr>
+          <td><span class="mr-sw" style="background:${api.groupColor(i)}"></span>${esc(x.name)}</td>
+          <td class="mr-num">${fmt(x.m)}</td><td style="width:26%">${bar(x.m, maxM, api.groupColor(i))}</td>
+          <td class="mr-num">${fmt(x.a)}</td><td class="mr-num">${fmt(x.cl.size)}</td>
+          <td class="mr-num">${pctS(x.m, s.total)}</td>
+          <td class="mr-num ${devClass(x.m, s.mean)}">${s.mean>0?signPct((x.m-s.mean)/s.mean):'—'}</td></tr>`).join('');
+        return `<h3 class="mr-h3">${esc(api.tierName(li))} — ${agg.length} area${agg.length===1?'':'s'}</h3>
+          <p class="mr-p">Average ${fmt(Math.round(s.mean))} members per area ·
+             largest ÷ smallest ${isFinite(s.ratio)?s.ratio.toFixed(2)+'×':'—'} ·
+             spread ${(100*s.cv).toFixed(1)}% · <strong>${esc(balanceVerdict(s.cv)[0])}</strong></p>
+          <table class="mr-table"><thead><tr><th scope="col">Area</th><th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th>
+            <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Share</th>
+            <th scope="col" class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
+          ${unM>0 && li===0 ? `<p class="mr-note">${fmt(unM)} members are in unassigned counties and are excluded.</p>`:''}`;
+      }).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_tiers}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">Each level of the structure is rolled up from the painted county map. Balance
+        usually improves as levels combine — a lopsided bottom tier can still produce even upper tiers,
+        and that is worth checking before signing off on a structure.</p>
+        <p class="mr-note"><b>How to read this.</b> <em>Share</em> is this area's percentage of the
+        level's total membership — areas at a level should sum to 100%. <em>Deviation</em> compares an
+        area to what an exactly even split would look like at that level (total members ÷ number of
+        areas): a deviation of +20% means this area has a fifth more members than an equal share would
+        give it, not a fifth more than any other specific area. Compare the same level's deviation
+        column across areas to see which ones are furthest from even; compare deviation at one area
+        across levels to see whether combining areas is smoothing out or compounding an imbalance.</p>
+        ${blocks}
+      </section>`;
+    }
+  },
+
+  boundary_region_profiles: {
+    label: NAMES.boundary_region_profiles, group: 'Boundary Studio',
+    desc: 'A one-block profile per area: size, age mix, states covered, and its largest clubs.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_region_profiles);
+      const api = B(), clubs = api.clubs(), AG = api.ageGroups();
+      const {P} = groupProfiles();
+      const total = P.reduce((s,g)=>s+g.m,0);
+      const blocks = P.map(g => {
+        const topClubs = [...g.clubs.keys()].map(ci => clubs[ci] || ('club #'+ci)).sort();
+        const states = [...g.states.entries()].sort((a,b)=>b[1]-a[1]);
+        const ageTot = g.ages.reduce((a,b)=>a+b,0);
+        const ageBar = AG.map((ag,i) => {
+          const w = ageTot>0 ? (100*g.ages[i]/ageTot) : 0;
+          return w > 0 ? `<span class="mr-seg" style="width:${w}%;background:${ag.color}"
+            title="${esc(ag.label)}: ${fmt(g.ages[i])}"></span>` : '';
+        }).join('');
+        const ageCells = AG.map((ag,i) =>
+          `<td class="mr-num">${fmt(g.ages[i])}<div class="mr-soft">${pctS(g.ages[i], ageTot)}</div></td>`).join('');
+        const stateList = states.slice(0,12).map(([st,n]) => `${esc(st)} <span class="mr-soft">${fmt(n)}</span>`).join(' · ')
+          + (states.length > 12 ? ` <span class="mr-soft">+${states.length-12} more</span>` : '');
+        const zipTop = g.zips.slice(0,8).map(z =>
+          `${esc(z.zip)} <span class="mr-soft">${fmt(z.n)}</span>`).join(' · ');
+        return `<div class="mr-profile">
+          <div class="mr-profile-h" style="border-left:6px solid ${g.color}">
+            <div class="mr-profile-name">${esc(g.name)}</div>
+            <div class="mr-profile-kpi">
+              <span><b>${fmt(g.m)}</b> members</span>
+              <span><b>${fmt(g.a)}</b> athletes</span>
+              <span><b>${fmt(g.c)}</b> coaches</span>
+              <span><b>${fmt(g.clubs.size)}</b> clubs</span>
+              <span><b>${fmt(g.counties)}</b> counties</span>
+              <span><b>${pctS(g.m, total)}</b> of national</span>
+            </div>
+          </div>
+          <table class="mr-table mr-table-sm"><thead><tr>
+            ${AG.map(a=>`<th scope="col" class="mr-num">${esc(a.label)}</th>`).join('')}
+            <th scope="col" class="mr-num">Total</th></tr></thead>
+            <tbody><tr>${ageCells}<td class="mr-num"><b>${fmt(ageTot)}</b></td></tr></tbody></table>
+          <div class="mr-stack">${ageBar}</div>
+          <div class="mr-kv"><span class="mr-kv-k">States</span>
+            <span class="mr-kv-v">${stateList || '<span class="mr-soft">none</span>'}</span></div>
+          <div class="mr-kv"><span class="mr-kv-k">Densest zips</span>
+            <span class="mr-kv-v">${zipTop || '<span class="mr-soft">none</span>'}</span></div>
+          <div class="mr-kv"><span class="mr-kv-k">Clubs (${g.clubs.size})</span>
+            <span class="mr-kv-v">${topClubs.length ? esc(topClubs.join(' · ')) : '<span class="mr-soft">none</span>'}</span></div>
+        </div>`;
+      }).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_region_profiles}</h2>
+        <p class="mr-note">One block per area, for the reader who needs to know what a single area is made
+          of rather than how the areas compare. For comparison across areas use
+          <b>${NAMES.boundary_balance}</b>. Club lists are the largest by membership, not every club.</p>
+        ${scenarioLine()}
+        <p class="mr-p">Age bands are athlete counts by competition-year age. County counts include
+        every county painted into the area, whether or not it currently contains members.</p>
+        ${blocks}
+      </section>`;
+    }
+  },
+
+  boundary_compare: {
+    label: NAMES.boundary_compare, group: 'Boundary Studio',
+    desc: 'Geographic differences only: which counties and members change area between the working scenario '
+        + 'and the loaded comparison scenario. Two proposals sharing the same map will correctly show zero '
+        + 'differences here \u2014 for field size, meets, or money differences, use "Pathways compared" instead.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_compare);
+      const api = B(), cmp = api.compare();
+      if (!cmp) return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
+        <p class="mr-p mr-warn">No comparison scenario is loaded. In Boundary Studio, load a scenario
+        into the compare slot first, then generate this report.</p></section>`;
+      const geo = api.geo(), y = api.year(), assign = api.assign(), regions = api.regions();
+      const byFips = {}; geo.counties.forEach(c => byFips[c.f] = c);
+      const curName = i => (regions[i] && regions[i].name) || ('Area '+(i+1));
+      const oldName = i => (cmp.regions && cmp.regions[i] && cmp.regions[i].name) || ('Area '+(i+1));
+      const moves = [];
+      let movedMembers = 0, sameCount = 0;
+      const flow = new Map();
+      const allFips = new Set([...Object.keys(assign), ...Object.keys(cmp.assign || {})]);
+      allFips.forEach(f => {
+        const a = cmp.assign ? cmp.assign[f] : undefined;
+        const b = assign[f];
+        const an = (a == null || a < 0) ? null : oldName(a);
+        const bn = (b == null || b < 0) ? null : curName(b);
+        if (an === bn){ sameCount++; return; }
+        const st = geo.stats[f];
+        const m = st && st[y] ? st[y].m : 0;
+        movedMembers += m;
+        const co = byFips[f];
+        moves.push({f, name: co?co.n:'', st: co?co.st:'', from: an, to: bn, m});
+        const key = (an||'Unassigned') + ' → ' + (bn||'Unassigned');
+        const cur = flow.get(key) || {counties:0, m:0};
+        cur.counties++; cur.m += m; flow.set(key, cur);
+      });
+      moves.sort((a,b)=>b.m-a.m || String(a.st).localeCompare(String(b.st)));
+      const flowRows = [...flow.entries()].sort((a,b)=>b[1].m-a[1].m).map(([k,v]) =>
+        `<tr><td>${esc(k)}</td><td class="mr-num">${fmt(v.counties)}</td>
+         <td class="mr-num">${fmt(v.m)}</td></tr>`).join('');
+      const moveRows = moves.filter(m=>m.m>0).slice(0, o.topN || 60).map(m =>
+        `<tr><td>${esc(m.name)}</td><td>${esc(m.st)}</td>
+         <td>${esc(m.from || 'Unassigned')}</td><td>${esc(m.to || 'Unassigned')}</td>
+         <td class="mr-num">${fmt(m.m)}</td></tr>`).join('');
+      const workingName = api.scenario().name || 'Unsaved working scenario';
+      const sameMap = moves.length === 0;
+      const sameMapNote = sameMap ? `<div class="mr-note" style="border-left-color:#171F69">
+        <strong>These two scenarios use the exact same map.</strong> Every county is assigned to the same
+        area in both, so zero geographic differences is the correct answer, not a sign nothing loaded.
+        If ${esc(workingName)} and ${esc(cmp.name || cmp.id || 'the compared scenario')} differ in their
+        rules instead \u2014 who qualifies, how big the field is, what it costs \u2014 that shows up in
+        <strong>"Realignment \u2014 pathways compared,"</strong> not here.</div>` : '';
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
+        <p class="mr-note"><b>Geography only.</b> This page answers which counties and members sit in a
+          different area than they do now. It says nothing about whether the <em>rules</em> changed &mdash;
+          two scenarios can move nobody at all and still send wildly different numbers of athletes forward.
+          For rule differences use <b>${NAMES.boundary_pathways_compared}</b>, and for the effect on the
+          championship field use <b>${NAMES.boundary_circuit_delta}</b>.</p>
+        ${scenarioCompareLine(workingName, 'Working scenario', cmp.name || cmp.id || 'Comparison scenario', 'Compared against')}
+        ${sameMapNote}
+        <div class="mr-kpis">
+          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(moves.length)}</div>
+            <div class="mr-kpi-l">Counties that change area</div>
+            <div class="mr-kpi-s">${fmt(sameCount)} stay where they are</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${fmt(movedMembers)}</div>
+            <div class="mr-kpi-l">Members who change area</div>
+            <div class="mr-kpi-s">Everyone in a moved county</div></div>
+          <div class="mr-kpi"><div class="mr-kpi-v">${flow.size}</div>
+            <div class="mr-kpi-l">Distinct area-to-area moves</div>
+            <div class="mr-kpi-s">Each origin/destination pairing</div></div>
+        </div>
+        <h3 class="mr-h3">Member flows between areas</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Move</th><th scope="col" class="mr-num">Counties</th>
+          <th scope="col" class="mr-num">Members affected</th></tr></thead><tbody>${flowRows || '<tr><td colspan="3">No geographic differences \u2014 see the note above.</td></tr>'}</tbody></table>
+        <h3 class="mr-h3">Counties that move (those containing members)</h3>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">County</th><th scope="col">State</th><th scope="col">From</th>
+          <th scope="col">To</th><th scope="col" class="mr-num">Members</th></tr></thead>
+          <tbody>${moveRows || '<tr><td colspan="5">No member-carrying county changes area.</td></tr>'}</tbody></table>
+        <p class="mr-note">Counties with no recorded members can still change area; they are counted in
+        the headline figure above but omitted from the detail table to keep it readable.</p>
+      </section>`;
+    }
+  },
+
+  boundary_circuit_delta: {
+    label: NAMES.boundary_circuit_delta, group: 'Boundary Studio',
+    desc: 'Today\u2019s real qualification field against both 9-zone proposals, on the same map, by age group and gender, with the E/W/C cap shown at 3/4/5.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_circuit_delta);
+      const api = B();
+      const OLD_SEED_ID = 'seed-2026-official';
+      const CCE_ID = 'bs-msg2vatz-5q86m';
+      const COUNTER_ID = 'bs-msix7ibe-nij21';
+
+      let rows;
+      try {
+        rows = await NEON.query(
+          `SELECT id, name, data, updated_at FROM membership.boundary_scenarios WHERE id IN ($1,$2,$3)`,
+          [OLD_SEED_ID, CCE_ID, COUNTER_ID]);
+      } catch(e){
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
+          <p class="mr-p mr-warn">Could not load the comparison scenarios: ${esc(e.message||e)}</p></section>`;
+      }
+      const byId = {};
+      (rows.rows||[]).forEach(r => byId[r.id] = {name:r.name, updatedAt:r.updated_at,
+        data: typeof r.data==='string'?JSON.parse(r.data):r.data});
+      const missing = [OLD_SEED_ID, CCE_ID, COUNTER_ID].filter(id => !byId[id]);
+      if (missing.length) return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
+        <p class="mr-p mr-warn">Missing saved scenario(s): ${missing.map(esc).join(', ')}. This section names
+        specific scenarios rather than whatever happens to be on screen, so it cannot substitute another one.</p></section>`;
+
+      const oldData = byId[OLD_SEED_ID].data, cceData = byId[CCE_ID].data, cntData = byId[COUNTER_ID].data;
+
+      // OLD: the real 2026 structure on the real, currently-published 12-region
+      // map -- what actually happened, not a hypothetical.
+      const oldLevels = [{name:'Regions'},
+        {name:'Zones', groups:Array.from({length:6},(_,i)=>({name:'Zone '+String.fromCharCode(65+i)})),
+         of:[0,0,1,1,2,2,3,3,4,4,5,5]},
+        {name:'E / W / C', groups:[{name:'East'},{name:'Central'},{name:'West'}], of:[0,0,1,1,2,2]},
+        {name:'Junior Nationals', groups:[{name:'Junior Nationals'}], of:[0,0,0]}];
+      const oldSummary = api.withMap(
+        {regions: Array.from({length:12},(_,i)=>({name:'Region '+(i+1)})), assign: oldData.assign, levels: oldLevels},
+        () => api.summariseRouting(window.QualRouting.defaultRouting(3,3), 'Today\u2019s real system', null));
+
+      // CCE and the counter-proposal share one map (the counter-proposal's,
+      // the more developed of the two) -- only the rules differ between them,
+      // so every difference below is caused by the rules and nothing else.
+      const sharedMap = {regions: cntData.regions, assign: cntData.assign, levels: cntData.levels};
+      const cceSummary = api.withMap(sharedMap, () => api.summariseRouting(cceData.routing, 'CCE proposal', null));
+
+      const CAPS = [3,4,5];
+      const capSummaries = {};
+      CAPS.forEach(cap => {
+        const routing = JSON.parse(JSON.stringify(cntData.routing));
+        const rt = routing[1].routes.find(r => r.from === 'final');
+        if (rt) rt.hi = cap;
+        capSummaries[cap] = api.withMap(sharedMap,
+          () => api.summariseRouting(routing, `Counter-proposal (E/W/C final top ${cap})`, null));
+      });
+      const DEFAULT_CAP = 4;
+      const cntSummary = capSummaries[DEFAULT_CAP];
+
+      const cols = [oldSummary, cceSummary, cntSummary];
+      const maxField = Math.max(...cols.map(c=>c.finalField));
+      const pctVs = (v, base) => base > 0 ? (100*(v-base)/base) : null;
+      const pctStr = p => p == null ? '—' : `${p>0?'+':''}${p.toFixed(0)}%`;
+
+      const headlineRows = cols.map((c,i) => `<tr>
+        <td><b>${esc(c.label)}</b>${i===2?` <span class="mr-soft">(E/W/C final cap = ${DEFAULT_CAP})</span>`:''}</td>
+        <td style="width:32%">${bar(c.finalField, maxField, i===0?SKY:(i===1?POOL:NAVY))}</td>
+        <td class="mr-num">${fmt(c.finalField)}</td>
+        <td class="mr-num">${i===0?'—':pctStr(pctVs(c.finalField, cols[0].finalField))}</td>
+      </tr>`).join('');
+
+      const groupRows = oldSummary.byGroup.map((g,i) => {
+        const oldV = g.field, cceV = cceSummary.byGroup[i].field, cntV = cntSummary.byGroup[i].field;
+        return `<tr><td>${esc(g.label)}</td>
+          <td class="mr-num">${fmt(oldV)}</td>
+          <td class="mr-num">${fmt(cceV)} <span class="mr-soft">${pctStr(pctVs(cceV, oldV))}</span></td>
+          <td class="mr-num">${fmt(cntV)} <span class="mr-soft">${pctStr(pctVs(cntV, oldV))}</span></td>
+        </tr>`;
+      }).join('');
+
+      const capRows = CAPS.map(cap => `<tr>${cap===DEFAULT_CAP?'<td><b>':'<td>'}Top ${cap}${cap===DEFAULT_CAP?' (current default)</b>':''}</td>
+        <td class="mr-num">${fmt(capSummaries[cap].finalField)}</td>
+        <td class="mr-num">${pctStr(pctVs(capSummaries[cap].finalField, cols[0].finalField))}</td></tr>`).join('');
+
+      // Financials, in the same two-part shape as the athlete-count sections
+      // above: a headline bar-chart on the one number that matters most
+      // (what USA Diving actually keeps), then every line of the breakdown.
+      // finance was already computed by summariseRouting() for all three
+      // systems -- same "already there, just never rendered" situation as
+      // byGroup was.
+      const usdSigned = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      const maxUsad = Math.max(...cols.map(c => c.finance ? c.finance.usad : 0));
+      const finHeadlineRows = cols.map((c,i) => {
+        const v = c.finance ? c.finance.usad : null;
+        return `<tr>
+          <td><b>${esc(c.label)}</b>${i===2?` <span class="mr-soft">(E/W/C final cap = ${DEFAULT_CAP})</span>`:''}</td>
+          <td style="width:32%">${v!=null ? bar(v, maxUsad, i===0?SKY:(i===1?POOL:NAVY)) : ''}</td>
+          <td class="mr-num mono">${v!=null ? usdSigned(v) : '—'}</td>
+          <td class="mr-num">${i===0 || v==null ? '—' : pctStr(pctVs(v, cols[0].finance ? cols[0].finance.usad : null))}</td>
+        </tr>`;
+      }).join('');
+
+      const pctVsSigned = (v, base) => (base == null || Math.abs(base) < 0.5) ? null
+        : (100*(Math.abs(v)-Math.abs(base))/Math.abs(base));
+      const finRow = (label, get) => {
+        const oldV = cols[0].finance ? get(cols[0].finance) : null;
+        return `<tr><td>${esc(label)}</td>` + cols.map((c,i) => {
+          const v = c.finance ? get(c.finance) : null;
+          if (v == null) return '<td class="mr-num">—</td>';
+          const pct = i===0 ? '' : ` <span class="mr-soft">${pctStr(pctVsSigned(v, oldV))}</span>`;
+          return `<td class="mr-num mono">${usdSigned(v)}${pct}</td>`;
+        }).join('') + '</tr>';
+      };
+
+      const ds = api.stamps ? api.stamps() : null;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_circuit_delta}</h2>
+        <div class="mr-scenario-badge"><span class="mr-sb-label">Comparing</span>
+          <span class="mr-sb-name">${cols.map(c=>esc(c.label)).join(' &nbsp;vs&nbsp; ')}</span></div>
+        <p class="mr-note"><b>How to read this.</b> "Today's real system" is the 2026 season as it actually ran:
+          12 Regions → 6 Zones → East/Central/West → Junior Nationals, real entries, real results. Both proposals
+          replace that with 9 Zones feeding East/Central/West directly — no Regional round. CCE's proposal sends
+          the top 12 from each Zone to E/W/C and the top 9 from each E/W/C meet straight to Nationals. The
+          counter-proposal sends the top 15/16 from each Zone to an E/W/C <em>prelim</em>: the top 8 of that
+          qualify straight to Nationals, places 9\u201324 continue to an E/W/C <em>final</em>, and the top of that
+          final also qualifies — currently set to the top ${DEFAULT_CAP}. The two proposals sit on the identical
+          9-zone map, so every difference between them below is the rule, not the geography. Volume for both
+          is the real 2026 Zone-level field, redrawn onto that map, <b>then calibrated to that season's own
+          measured take-up</b> — the share of qualifiers at each stage who actually showed up, not a structural
+          ceiling assuming every one of them does. A stage with no real measurement to calibrate against would
+          say so; none does here.</p>
+        <p class="mr-note mr-soft"><b>Computed from:</b>
+          "${esc(byId[OLD_SEED_ID].name)}" (${esc(OLD_SEED_ID)}, saved ${esc(String(byId[OLD_SEED_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          "${esc(byId[CCE_ID].name)}" (${esc(CCE_ID)}, saved ${esc(String(byId[CCE_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          "${esc(byId[COUNTER_ID].name)}" (${esc(COUNTER_ID)}, saved ${esc(String(byId[COUNTER_ID].updatedAt||'').slice(0,16).replace('T',' '))} UTC) ·
+          real entry data built ${esc(ds && ds.advance_data ? String(ds.advance_data).slice(0,10) : 'unknown')}.
+          Report generated ${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC. If any of these three
+          scenarios has been edited since the timestamp shown for it, the numbers above no longer reflect what's
+          currently saved — regenerate this section rather than trust a printed copy. The real entry data only
+          changes when someone explicitly rebuilds it — the crawlers and the build step are on-demand, not a
+          running schedule. With the 2026 season's meets complete and none scheduled for the next two months,
+          this figure should reproduce exactly if you regenerate this section later; a different number then
+          would mean the underlying data was deliberately rebuilt (check the repo's commit history), not that
+          results quietly accumulated in the background.</p>
+        ${(function(){
+          // Every real-season figure on this page comes from a name -> zip ->
+          // county match that does not resolve for every entry. This report
+          // goes to committees, so the share it rests on belongs on the page
+          // rather than only in the provenance report.
+          const lines = [];
+          [['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']].forEach(([yr, st]) => {
+            const c = api.entryDataCompleteness ? api.entryDataCompleteness(yr, st) : null;
+            if (c && c.total) lines.push(`${yr} ${st} ${Math.round(100*c.mapped/c.total)}%`);
+          });
+          return lines.length ? `<p class="mr-note mr-soft"><b>How complete the field behind this is.</b>
+            Share of each real stage that resolved to a county, the rest being entries that could not be
+            matched to a membership record with a usable zip code: ${lines.join(' &middot; ')}. Unmatched
+            entries are excluded, never estimated in — so a figure here is understated by roughly that
+            margin rather than wrong in an unknown direction. Full record in
+            <b>${NAMES.boundary_defensibility}</b>.</p>` : '';
+        })()}
+
+        <h3 class="mr-h3">Junior Nationals prelim field</h3>
+        <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
+          <th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
+          <tbody>${headlineRows}</tbody></table>
+
+        <h3 class="mr-h3">By age group and gender</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Group</th>
+          <th scope="col" class="mr-num">Today</th><th scope="col" class="mr-num">CCE proposal</th>
+          <th scope="col" class="mr-num">Counter-proposal</th></tr></thead>
+          <tbody>${groupRows}</tbody></table>
+        <p class="mr-note">Percentages are each proposal against today's real field for that group, not against
+          the other proposal.</p>
+
+        <h3 class="mr-h3">Counter-proposal — sensitivity to the E/W/C final cap</h3>
+        <p class="mr-p">The cap on how many qualify out of the E/W/C final is not yet decided. This is the whole
+          field's sensitivity to that one number, everything else held the same.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">E/W/C final qualifiers</th>
+          <th scope="col" class="mr-num">Nationals field</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
+          <tbody>${capRows}</tbody></table>
+
+        <h3 class="mr-h3">USA Diving keeps (entry fees only)</h3>
+        <table class="mr-table"><thead><tr><th scope="col">System</th><th scope="col"></th>
+          <th scope="col" class="mr-num">Net to USA Diving</th><th scope="col" class="mr-num">vs. today</th></tr></thead>
+          <tbody>${finHeadlineRows}</tbody></table>
+        <p class="mr-note">Priced at today's standing fee card for all three systems — the same card CCE and the
+          counter-proposal are already compared under — so a financial difference below is caused by how many
+          athletes and meets the rules produce, not by a different fee schedule. This is not what 2026 actually
+          collected under the old rules; it is what today's fee card would collect on that old structure's field,
+          held constant on purpose so the comparison isolates the rule change.</p>
+
+        <h3 class="mr-h3">Financial breakdown</h3>
+        <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>
+          <th scope="col" class="mr-num">Today</th><th scope="col" class="mr-num">CCE proposal</th>
+          <th scope="col" class="mr-num">Counter-proposal</th></tr></thead><tbody>
+          ${finRow('Entry income (gross)', f=>f.gross)}
+          ${finRow('DiveMeets pass-through', f=>-f.levy)}
+          ${finRow('To hosts', f=>f.host)}
+          ${finRow('USA Diving keeps', f=>f.usad)}
+        </tbody></table>
+        <p class="mr-note">Membership dues, synchro and the senior circuit are not here — entry fees only, same
+          as every other financial comparison in this report family.</p>
+
+        <p class="mr-note mr-warn"><b>What this is and is not.</b> This projects real 2026 entry volume through
+          each rule set on the same map — it is not a prediction of who will actually enter under a new circuit,
+          and it does not yet account for behaviour change (a bigger or smaller field can itself change how many
+          athletes choose to compete). Today's system starts its count at Regionals because Regions exist there;
+          both proposals start at Zones because Regions do not exist in either. That is a real structural
+          difference between old and new, not a gap in the comparison. The financial figures carry the same
+          caveat: they are entry-fee volume under today's rate card, not a revenue forecast.</p>
+      </section>`;
+    }
+  },
+
+  boundary_zips: {
+    label: NAMES.boundary_zips, group: 'Boundary Studio',
+    desc: 'Every zip code in every area with its member count — the appendix a rulebook edit needs.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_zips);
+      const {P} = groupProfiles();
+      const blocks = P.map(g => {
+        const rows = g.zips.map(z => `<tr><td class="mr-mono">${esc(z.zip)}</td>
+          <td>${esc(z.county)}</td><td>${esc(z.st)}</td><td class="mr-num">${fmt(z.n)}</td></tr>`).join('');
+        return `<h3 class="mr-h3"><span class="mr-sw" style="background:${g.color}"></span>${esc(g.name)}
+          <span class="mr-soft">— ${fmt(g.zips.length)} zip codes, ${fmt(g.m)} members</span></h3>
+          <table class="mr-table mr-table-sm mr-zip"><thead><tr><th scope="col">Zip</th><th scope="col">County</th><th scope="col">State</th>
+            <th scope="col" class="mr-num">Members</th></tr></thead><tbody>${rows ||
+            '<tr><td colspan="4">No zip codes with members.</td></tr>'}</tbody></table>`;
+      }).join('');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_zips}</h2>
+        <p class="mr-note"><b>This is the definitive list.</b> Everything else in this report set is a
+          count, a projection or a judgement; this is the actual assignment, zip by zip, and it is what a
+          rulebook edit or a published alignment has to reproduce exactly. If a figure elsewhere disagrees
+          with a total here, this page is right and the other is stale. Member counts shown are for the
+          season named above &mdash; a zip with none listed is still assigned to its area, it simply has
+          nobody in it this year.</p>
+        ${scenarioLine()}
+        <p class="mr-p">Only zip codes containing at least one member are listed. Zip codes are assigned
+        by geocoding the member's zip to a point and testing which county polygon contains it, so a zip
+        straddling a county line lands wholly in one county.</p>
+        ${blocks}
+      </section>`;
+    }
+  },
+
+};
+
+/* deviation helpers */
+function devClass(v, equal){ if (!equal) return ''; const d=(v-equal)/equal; return d>0.05?'mr-over':(d<-0.05?'mr-under':''); }
+function signPct(p){ const v=100*p; return (v>0?'+':'') + v.toFixed(1) + '%'; }
+function signNum(d){ return (d>0?'+':'') + fmt(Math.round(d)); }
+function devBar(d, maxAbs){
+  const w = maxAbs>0 ? Math.min(50, Math.abs(d)/maxAbs*50) : 0;
+  const side = d >= 0
+    ? `left:50%;width:${w}%;background:${POOL}`
+    : `right:50%;width:${w}%;background:${NAVY}`;
+  return `<span class="mr-devbar"><span class="mr-devbar-mid"></span>
+          <span class="mr-devbar-f" style="${side}"></span></span>`;
+}
+
+/* ===================================================================
+   COMPETITIVE EQUITY
+   The question a realignment is actually judged on is not "are the areas
+   the same size" but "does an athlete in one area need a better score to
+   advance than an athlete in another". Regionals advance the top 15 per
+   springboard event, so the 15th-place score IS the bar, and it is
+   directly measurable from historical results.
+
+   For a PROPOSED map, qual-data.json's cellsByCounty carries each athlete's
+   real historical score under their home county, so every county the
+   current map assigns to an area contributes its own field directly --
+   no estimation, since a county belongs to exactly one area (this used to
+   pool fractional shares of whole regions before qual-data.json learned to
+   carry county; see git history on pooledCut if that estimation logic is
+   ever needed again). Merging counties into one area correctly raises the
+   bar: the same athletes now compete for one set of 15 places instead of
+   several.
+   =================================================================== */
+let _qual = null, _qualLoading = null;
+function loadQual(){
+  if (_qual) return Promise.resolve(_qual);
+  if (_qualLoading) return _qualLoading;
+  _qualLoading = fetch('qual-data.json?v=202607242330')
+    .then(r => { if (!r.ok) throw new Error('qual-data.json ' + r.status); return r.json(); })
+    .then(j => { _qual = j; return j; });
+  return _qualLoading;
+}
+let _autoFips = null;
+function loadAutoFips(){
+  if (_autoFips) return Promise.resolve(_autoFips);
+  return fetch('auto-data.json?v=202607242100').then(r=>r.json())
+    .then(j => { _autoFips = j; return j; });
+}
+
+/* Sum every county's real per-year score lists directly into whichever area
+   the CURRENT map assigns it to. No share/overlap estimation needed now that
+   qual-data.json is itself keyed by county: a county belongs to exactly one
+   area, unlike a region, which used to have to be split fractionally by
+   population share. Simpler and exact where the old method was an estimate. */
+function pooledCutByCounty(Q, cellKey, areaIndex, rank){
+  const api = B(), assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
+  const cell = Q.cellsByCounty && Q.cellsByCounty[cellKey];
+  if (!cell) return null;
+  const pool = [];
+  let contributingCounties = 0;
+  for (const [fips, byYear] of Object.entries(cell)){
+    const ri = assign[fips];
+    if (ri == null || ri < 0 || ri >= regions.length) continue;
+    const a = TG.of[ri];
+    if (a !== areaIndex) continue;
+    const years = Object.keys(byYear);
+    if (!years.length) continue;
+    contributingCounties++;
+    // Average the per-year field so one unusually deep season cannot dominate.
+    const perYear = years.map(yr => byYear[yr]);
+    const longest = perYear.reduce((x,y)=>x.length>=y.length?x:y);
+    const avg = longest.map((_,i) => {
+      const vals = perYear.map(l=>l[i]).filter(v=>v!=null);
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    }).filter(v=>v!=null);
+    pool.push(...avg);
+  }
+  if (pool.length < rank) return {cut:null, field:pool.length, counties:contributingCounties};
+  pool.sort((a,b)=>b-a);
+  return {cut: pool[rank-1], field: pool.length, counties: contributingCounties};
+}
+
+/* Today's actual bar per region, averaged across the stored years. Reads the
+   region-keyed half of qual-data.json -- the same data that was there before
+   this file also learned to carry county. */
+function todaysCuts(Q, cellKey, rank){
+  const cell = (Q.cellsByRegion || Q.cells || {})[cellKey]; if (!cell) return [];
+  const out = [];
+  for (const [rg, yrs] of Object.entries(cell)){
+    const vals = Object.values(yrs).filter(l=>l.length>=rank).map(l=>l[rank-1]);
+    if (vals.length) out.push({region:+rg, cut: vals.reduce((a,b)=>a+b,0)/vals.length});
+  }
+  return out.sort((a,b)=>a.cut-b.cut);
+}
+
+/* The real "how many advance out of this level" cutoff, read from whatever
+   scenario is actually on screen -- not a number baked into qual-data.json
+   at build time, which reflected the old top-15-from-Regions rule and has
+   no way to know a proposal now advances a different number. A level can
+   have more than one route leaving it (a prelim/final split sends some
+   people straight through and others via a second round with a different
+   cutoff); in that case there is no single clean "the bar," so this takes
+   the widest cutoff among routes that actually leave the level -- the last
+   rank with any path forward at all -- and flags that it's a simplification
+   rather than silently presenting it as one clean rule. */
+function realAdvanceRank(routing, level){
+  const lvl = routing && routing[level];
+  if (!lvl || !lvl.routes) return null;
+  const outRoutes = lvl.routes.filter(r => r.to && r.to.level > level && r.hi != null);
+  if (!outRoutes.length) return null;
+  const QRr = window.QualRouting;
+  const rounds = QRr ? QRr.roundsOf(lvl) : (lvl.rounds || []);
+  const simple = rounds.length <= 1 && outRoutes.length === 1;
+  return {rank: Math.max(...outRoutes.map(r => r.hi)), simple, routeCount: outRoutes.length};
+}
+
+const EQUITY_SECTIONS = {
+
+  boundary_equity: {
+    label: NAMES.boundary_equity, group: 'Boundary Studio',
+    desc: 'What score it actually takes to advance in each area, versus today. The fairness test that headcount cannot show.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_equity);
+      let Q;
+      try { Q = await loadQual(); }
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_equity}</h2>
+        <p class="mr-p mr-warn">Could not load the historical results data: ${esc(String(e.message||e))}</p></section>`; }
+      const api = B();
+      const liveRank = realAdvanceRank(api.routing(), api.tierView());
+      const rank = liveRank ? liveRank.rank : (Q.advanceRank || 15);
+      const rankNote = !liveRank
+        ? `<p class="mr-note mr-warn">This level has no route advancing to a later one under the pathway on
+             screen, so there is no real "how many advance" figure to read here &mdash; showing the ${rank}th
+             place bar from the underlying data file instead. Switch to a level that actually advances
+             somewhere before trusting the numbers below.</p>`
+        : !liveRank.simple
+        ? `<p class="mr-note">This level sends people forward through ${liveRank.routeCount} different routes
+             (for example, a prelim/final split), so there is no single cutoff rank in the strict sense. The
+             ${rank}th place score below is the widest cutoff among those routes &mdash; the last rank with any
+             path forward at all, not a claim that everyone in ${esc(fmt(rank))}th place actually advances.</p>`
+        : '';
+      const TG = api.tierGroups();
+      const nA = TG.groups.length;
+      const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
+
+      const events = Object.keys(Q.cellsByRegion || Q.cells || {})
+        .filter(k => !/Platform$/.test(k))
+        .sort();
+
+      // Today's inequity, worst events first.
+      const todayRows = events.map(k => {
+        const cuts = todaysCuts(Q, k, rank);
+        if (cuts.length < 2) return null;
+        const lo = cuts[0], hi = cuts[cuts.length-1];
+        return {k, lo, hi, gap: hi.cut - lo.cut, n: cuts.length};
+      }).filter(Boolean).sort((a,b)=>b.gap-a.gap);
+
+      const todayTable = todayRows.slice(0, 12).map(r => {
+        const [ag, gd, dc] = r.k.split('|');
+        return `<tr><td>${esc(ag)} ${esc(gd)} ${esc(dc)}</td>
+          <td class="mr-num">${r.lo.cut.toFixed(1)}</td><td>R${r.lo.region}</td>
+          <td class="mr-num">${r.hi.cut.toFixed(1)}</td><td>R${r.hi.region}</td>
+          <td class="mr-num mr-over">+${r.gap.toFixed(1)}</td>
+          <td class="mr-num">${(100*r.gap/r.lo.cut).toFixed(0)}%</td></tr>`;
+      }).join('');
+
+      // Proposed map: bar per area for the worst few events, pooled directly
+      // from every county the current map assigns to that area.
+      const focus = todayRows.slice(0, 6).map(r => r.k);
+      const propBlocks = focus.map(k => {
+        const [ag, gd, dc] = k.split('|');
+        const rows = [];
+        for (let a=0;a<nA;a++){
+          const res = pooledCutByCounty(Q, k, a, rank);
+          rows.push({a, res});
+        }
+        const valid = rows.filter(r=>r.res && r.res.cut != null);
+        if (valid.length < 2) return '';
+        const cuts = valid.map(r=>r.res.cut);
+        const lo = Math.min(...cuts), hi = Math.max(...cuts);
+        const today = todayRows.find(r=>r.k===k);
+        const body = rows.map(r => {
+          if (!r.res || r.res.cut == null)
+            return `<tr><td>${esc(names[r.a])}</td><td class="mr-num">&mdash;</td>
+              <td class="mr-num">${r.res?fmt(r.res.field):'0'}</td>
+              <td colspan="2" class="mr-soft">field too small to fill ${rank} places</td></tr>`;
+          const rel = (r.res.cut - lo);
+          return `<tr><td>${esc(names[r.a])}</td>
+            <td class="mr-num">${r.res.cut.toFixed(1)}</td>
+            <td class="mr-num">${fmt(r.res.field)}</td>
+            <td style="width:28%">${bar(r.res.cut-lo, Math.max(1,hi-lo), r.res.cut>=hi-1e-9?RED:POOL)}</td>
+            <td class="mr-num ${rel>0?'mr-over':''}">${rel>0?'+'+rel.toFixed(1):'lowest bar'}</td></tr>`;
+        }).join('');
+        return `<h3 class="mr-h3">${esc(ag)} ${esc(gd)} ${esc(dc)}</h3>
+          <p class="mr-p">Estimated score needed for ${rank}th place under this map:
+            <b>${lo.toFixed(1)}</b> in the easiest area to <b>${hi.toFixed(1)}</b> in the hardest
+            &mdash; a spread of <b>${(hi-lo).toFixed(1)}</b> points.
+            ${today ? `Today that spread is <b>${today.gap.toFixed(1)}</b> points.
+              ${(hi-lo) < today.gap
+                 ? `<span class="mr-up">This map narrows it by ${(today.gap-(hi-lo)).toFixed(1)}.</span>`
+                 : `<span class="mr-down">This map widens it by ${((hi-lo)-today.gap).toFixed(1)}.</span>`}` : ''}</p>
+          <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Area</th>
+            <th scope="col" class="mr-num">Bar to advance</th><th scope="col" class="mr-num">Field size</th>
+            <th scope="col">&nbsp;</th><th scope="col" class="mr-num">vs easiest</th></tr></thead>
+            <tbody>${body}</tbody></table>`;
+      }).join('');
+
+      const rc = (function(){
+        const byYear = Q.regionChoice && Q.regionChoice.regionals;
+        if (!byYear) return null;
+        const yrs = (Q.years||[]).map(String).filter(y => byYear[y]);
+        if (!yrs.length) return null;
+        const athletes = yrs.reduce((s,y)=>s+(byYear[y].athletes||0), 0);
+        const away = yrs.reduce((s,y)=>s+(byYear[y].competing_away||0), 0);
+        const clubs = Math.max(...yrs.map(y=>byYear[y].clubs||0));
+        const clubsSplit = Math.max(...yrs.map(y=>byYear[y].clubs_split||0));
+        if (!athletes) return null;
+        return {
+          athletes, competing_away: away, leakage_pct: Math.round(away/athletes*1000)/10,
+          clubs, clubs_split: clubsSplit,
+          clubs_split_pct: clubs ? Math.round(clubsSplit/clubs*1000)/10 : 0,
+          years: yrs,
+        };
+      })();
+      const regionChoiceBlock = rc ? `
+        <h3 class="mr-h3">Region choice — how much the map itself explains</h3>
+        <p class="mr-p">An athlete may begin the pathway in any region and must then stay in that
+          region's route. Every number above assumes people compete where the map sends them; this
+          is how often that assumption doesn't hold, measured against each club's own usual region
+          rather than any drawn boundary, so it can't be circular.</p>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Athletes competing outside their club's usual region</td>
+            <td class="mr-num">${rc.leakage_pct}%</td><td class="mr-soft">${fmt(rc.competing_away)} of ${fmt(rc.athletes)}</td></tr>
+          <tr><td>Clubs whose athletes don't all go to one region</td>
+            <td class="mr-num">${rc.clubs_split_pct}%</td><td class="mr-soft">${fmt(rc.clubs_split)} of ${fmt(rc.clubs)} clubs</td></tr>
+        </tbody></table>
+        <p class="mr-note">A modest overall rate can still move a specific bar substantially where a
+          handful of strong athletes cluster near the cutoff — this is a real, rule-permitted pattern,
+          not noise to average away, and it's the honest reason today's-bar and under-this-map numbers
+          above can diverge from what a purely geographic model would predict.</p>` : '';
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_equity}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
+        experiences is the score they must post to get out of ${esc((api.levels()[api.tierView()] && api.levels()[api.tierView()].name) || 'this stage')}, and the top
+        ${rank} advance. That bar is directly measurable.</p>
+        ${rankNote}
+        <div class="mr-note"><b>Scope of this section — read before using any number below.</b>
+          <ul style="margin:6px 0 0 16px;padding:0">
+            <li><b>Gate modelled:</b> ${esc(Q.scope || '')}</li>
+            <li><b>Years used:</b> ${esc(Q.basis || '')}</li>
+            <li><b>Excluded:</b> ${esc(Q.exclusions || '')}</li>
+            ${Q.matchRate!=null ? `<li><b>Matched to a home county:</b> ${Q.matchRate}% of qualifying
+              results &mdash; the rest could not be attributed to a membership record with a zip code
+              and are excluded from the "under this map" estimate below, though not from the "today"
+              table, which uses the region already on record.</li>` : ''}
+            <li><b>If this structure has no Regions:</b> these figures are still built from Regionals-level
+              historical scores, because that is the historical data that exists. Neither new-circuit
+              proposal has a Regionals stage &mdash; the actual first gate becomes Zone &rarr; E/W/C. Using
+              Regionals scores as the stand-in is reasonable because dive lists are unchanged, but it is a
+              real interpretive step: this section estimates what the bar would have looked like at the old
+              first gate if it were redrawn, not a direct measurement of the new first gate. The cutoff rank
+              used throughout (top ${rank}) is read from the pathway on screen's own advancement rule for
+              this stage, not a fixed historical constant, so it matches whatever the scenario actually says.</li>
+          </ul>
+          Every figure here is computed from those fields and nothing else. Gates beyond Regionals
+          &mdash; Zones to Nationals, and the E/W/C stage &mdash; are <b>not</b> modelled, so this
+          section says nothing about them.</div>
+
+        <p class="mr-note"><b>Where these numbers sit if a selection decision is ever reviewed.</b> This is
+          the most sensitive page in the set, because a score-to-advance is the kind of figure that ends up
+          quoted in a selection or funding conversation. The two tables below are not the same kind of
+          number and should never be presented as though they were. <b>Today's bar</b> is measured: it is
+          the real ${rank}th-place average from results that actually happened, and it is reproducible from
+          the fields listed above. <b>The estimated bar under this map</b> is modelled &mdash; it redraws
+          historical scores onto areas that did not exist when they were posted, and it rests on the
+          interpretive step named above. Treat the first as evidence and the second as internal context for
+          designing a map, not as a standard any athlete was measured against. See
+          <b>${NAMES.boundary_defensibility}</b> for the full provenance record and for the one standard this
+          data does not currently meet.</p>
+
+        <h3 class="mr-h3">Today's inequity — the bar to advance, by region</h3>
+        <p class="mr-p">Average ${rank}th-place score in each region's own Regionals field,
+        ${esc((Q.years||[]).join(' and '))}. Only fields meeting the exclusions above are counted.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Event</th>
+          <th scope="col" class="mr-num">Easiest bar</th><th scope="col">Where</th>
+          <th scope="col" class="mr-num">Hardest bar</th><th scope="col">Where</th>
+          <th scope="col" class="mr-num">Gap</th><th scope="col" class="mr-num">Harder by</th></tr></thead>
+          <tbody>${todayTable}</tbody></table>
+        ${todayRows[0] ? `<p class="mr-note"><b>Largest measured gap:</b>
+          ${esc(todayRows[0].k.split('|').join(' '))} &mdash; ${todayRows[0].lo.cut.toFixed(1)} in
+          Region ${todayRows[0].lo.region} against ${todayRows[0].hi.cut.toFixed(1)} in Region
+          ${todayRows[0].hi.region}, a difference of ${todayRows[0].gap.toFixed(1)} points
+          (${(100*todayRows[0].gap/todayRows[0].lo.cut).toFixed(0)}%). This compares the
+          ${rank}th-place score in each region's own field across ${esc((Q.years||[]).join(' and '))};
+          it is not a statement about any individual athlete.</p>` : ''}
+        ${regionChoiceBlock}
+
+        <h3 class="mr-h3">Under this map — estimated bar to advance</h3>
+        <p class="mr-p">Every county the current map assigns to an area contributes its own real
+        historical field directly &mdash; no fractional overlap or sampling, since a county belongs to
+        exactly one area. This works for any structure, including one with no Regions at all.
+        Combining counties into fewer, larger areas correctly raises the bar, because the same
+        athletes then compete for one set of ${rank} places instead of several.</p>
+        ${propBlocks || '<p class="mr-p mr-warn">Not enough counties with usable history fall inside this map to estimate.</p>'}
+        <p class="mr-note"><b>What this is and is not:</b> an estimate built from
+        ${esc((Q.years||[]).join(' and '))} Regionals results, keyed to each athlete's home county and
+        assuming the same athletes competing under different boundaries. It cannot predict who will
+        actually enter, it says nothing about athletes who change clubs, and it models only the
+        Regionals gate. The region-choice figures above are the honest measure of how far that
+        assumption can be wrong. Treat it as the relative ordering of areas, not a forecast of any
+        score.</p>
+      </section>`;
+    }
+  },
+
+  boundary_map: {
+    label: NAMES.boundary_map, group: 'Boundary Studio',
+    desc: 'A colour-coded map of every stage in the structure, each with its own breakdown.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_map);
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions();
+      const nLev = api.levelCount ? api.levelCount() : 1;
+      const counties = geo.counties;
+      const FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d',
+                        '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+
+      const blocks = [];
+      for (let L = 0; L < nLev; L++){
+        const TG = api.tierGroupsAt(L);
+        const of = TG.of, nG = TG.groups.length;
+        const colorOf = gi => {
+          const g = TG.groups[gi];
+          if (g && g.colors && g.colors.length && g.colors[0]) return g.colors[0];
+          return FALLBACK[gi % FALLBACK.length];
+        };
+        const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+
+        // Every county in a group shares one fill, so their outlines are merged
+        // into a single path per group. That keeps a three-stage report to a few
+        // dozen path elements instead of three copies of 3,142.
+        const dParts = Array.from({length:nG}, ()=>[]);
+        const unParts = [];
+        const stat = Array.from({length:nG}, ()=>({m:0,a:0,c:0,cl:new Set(),n:0}));
+        let unM = 0, unN = 0;
+        for (const c of counties){
+          const ri = assign[c.f];
+          const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+          if (gi == null || gi < 0 || gi >= nG){ unParts.push(c.d); unN++; }
+          else { dParts[gi].push(c.d); stat[gi].n++; }
+        }
+        for (const [fips, st] of Object.entries(geo.stats)){
+          const v = st[y]; if (!v) continue;
+          const ri = assign[fips];
+          const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+          if (gi == null || gi < 0 || gi >= nG){ unM += v.m; continue; }
+          stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c;
+          (v.cl||[]).forEach(i => stat[gi].cl.add(i));
+        }
+
+        const paths = dParts.map((parts, gi) => parts.length
+          ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '')
+          .join('') +
+          (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+        const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
+            ${paths}
+            <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
+            <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/>
+          </svg>`;
+
+        const total = stat.reduce((s2,x)=>s2+x.m, 0);
+        const mean = nG ? total/nG : 0;
+        const maxM = Math.max(1, ...stat.map(x=>x.m));
+        const rows = stat.map((x,gi) => `<tr>
+            <td><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</td>
+            <td class="mr-num">${fmt(x.m)}</td>
+            <td style="width:18%">${bar(x.m, maxM, colorOf(gi))}</td>
+            <td class="mr-num">${fmt(x.a)}</td><td class="mr-num">${fmt(x.c)}</td>
+            <td class="mr-num">${fmt(x.cl.size)}</td><td class="mr-num">${fmt(x.n)}</td>
+            <td class="mr-num">${pctS(x.m, total)}</td>
+            <td class="mr-num ${devClass(x.m, mean)}">${mean>0 ? signPct((x.m-mean)/mean) : '—'}</td>
+          </tr>`).join('');
+        const sd = nG ? Math.sqrt(stat.reduce((s2,x)=>s2+(x.m-mean)*(x.m-mean),0)/nG) : 0;
+        const mins = Math.min(...stat.map(x=>x.m)), maxs = Math.max(...stat.map(x=>x.m));
+        const key = stat.map((x,gi) => `<span class="mr-mapkey"><span class="mr-sw" style="background:${colorOf(gi)}"></span>
+          ${esc(nameOf(gi))} <span class="mr-soft">${fmt(x.m)}</span></span>`).join('');
+
+        blocks.push(`<div class="mr-stage">
+          <h3 class="mr-h3">${esc(api.tierName(L))} &mdash; ${nG} area${nG===1?'':'s'}</h3>
+          <p class="mr-p">Average ${fmt(Math.round(mean))} members ·
+            smallest ${fmt(mins)} to largest ${fmt(maxs)} ·
+            largest &divide; smallest ${mins>0 ? (maxs/mins).toFixed(2)+'\u00d7' : '—'} ·
+            spread ${mean>0 ? (100*sd/mean).toFixed(1) : '0.0'}%</p>
+          <div class="mr-map">${svg}</div>
+          <div class="mr-mapkeys">${key}</div>
+          <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Area</th>
+            <th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th><th scope="col" class="mr-num">Athletes</th>
+            <th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
+            <th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th>
+            <th scope="col" class="mr-num">Deviation</th></tr></thead><tbody>${rows}</tbody></table>
+          ${unM > 0 && L === 0 ? `<p class="mr-note">${fmt(unM)} members sit in ${fmt(unN)}
+            unassigned counties, shown pale grey and excluded from every figure above.</p>` : ''}
+        </div>`);
+      }
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_map}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">One map per stage of the structure, in the colours used on screen, each with
+        the breakdown for that stage. Counties are shaded by the area they belong to at that level;
+        pale grey means unassigned.</p>
+        ${blocks.join('')}
+      </section>`;
+    }
+  },
+
+  membership_geo: {
+    label: NAMES.membership_geo, group: 'Boundary Studio',
+    desc: 'Where the membership is, on the current map: members by type, athletes, coaches, and clubs per area. No pathway or qualification content.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.membership_geo);
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions();
+      const TG = api.tierGroupsAt(0), of = TG.of, nG = TG.groups.length;
+      const FALLBACK = [NAVY, RED, POOL, SKY, '#6d28d9', '#047857', '#b45309', '#9d174d', '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
+      const colorOf = gi => { const g = TG.groups[gi]; return (g && g.colors && g.colors[0]) || FALLBACK[gi % FALLBACK.length]; };
+      const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
+      const areaOfFips = f => { const ri = assign[f]; return (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null; };
+
+      // Optional per-type file (membership-geo.json). If absent, the report still
+      // renders members/athletes/coaches/clubs from the county stats.
+      let GEO = null;
+      try { GEO = await fetch('membership-geo.json?v=' + Date.now()).then(r => r.ok ? r.json() : null); } catch(e){}
+      const zips = GEO && GEO.years ? GEO.years[String(y)] : null;
+
+      // county map -> zip is via the same z-block used elsewhere: geo.stats[f].z lists zips per county.
+      const zipToArea = {};
+      if (zips){ for (const [f, st] of Object.entries(geo.stats)){ const gi = areaOfFips(f); if (gi==null) continue; for (const z of Object.keys(st.z||{})) if (zipToArea[z]==null) zipToArea[z]=gi; } }
+
+      // Solid where divers live, pale wash where the area has none.
+      const emptyD = [], solidByArea = Array.from({length:nG},()=>[]), unParts = [];
+      const stat = Array.from({length:nG},()=>({m:0,a:0,c:0,cl:new Set(),n:0}));
+      let unM = 0;
+      for (const c of geo.counties){
+        const gi = areaOfFips(c.f);
+        if (gi==null){ unParts.push(c.d); continue; }
+        stat[gi].n++;
+        const v = (geo.stats[c.f]||{})[y];
+        (v && v.m > 0 ? solidByArea[gi] : emptyD).push({d:c.d, gi});
+      }
+      for (const [f, st] of Object.entries(geo.stats)){
+        const v = st[y]; if (!v) continue; const gi = areaOfFips(f);
+        if (gi==null){ unM += v.m; continue; }
+        stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c; (v.cl||[]).forEach(i => stat[gi].cl.add(i));
+      }
+      const solidPaths = solidByArea.map((arr,gi)=> arr.length ? `<path d="${arr.map(x=>x.d).join('')}" fill="${colorOf(gi)}" stroke="#fff" stroke-width="0.3"/>` : '').join('');
+      const emptyPaths = emptyD.map(x=>`<path d="${x.d}" fill="${colorOf(x.gi)}" fill-opacity="0.26" stroke="#fff" stroke-width="0.3"/>`).join('');
+      const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
+        ${emptyPaths}${solidPaths}
+        ${unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#fff" stroke-width="0.3"/>` : ''}
+        <path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width="0.5" stroke-opacity="0.7"/>
+      </svg>`;
+
+      // per-type table if we have the file
+      let typeTable = '';
+      if (zips){
+        const types = {};
+        for (const [z, rec] of Object.entries(zips)){ const gi = zipToArea[z]; if (gi==null) continue;
+          for (const [t,n] of Object.entries(rec.types||{})){ (types[t] = types[t] || Array.from({length:nG},()=>0))[gi] += n; } }
+        const order = Object.keys(types).sort((a,b)=> types[b].reduce((s,x)=>s+x,0) - types[a].reduce((s,x)=>s+x,0));
+        const head = `<tr><th scope="col">Membership type</th>${TG.groups.map((_,gi)=>`<th scope="col" class="mr-num"><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</th>`).join('')}<th scope="col" class="mr-num">Total</th></tr>`;
+        const trows = order.map(t=>{ const row = types[t]; const tot = row.reduce((s,x)=>s+x,0);
+          return `<tr><td>${esc(t)}</td>${row.map(x=>`<td class="mr-num">${x?fmt(x):'—'}</td>`).join('')}<td class="mr-num"><b>${fmt(tot)}</b></td></tr>`; }).join('');
+        const colTot = Array.from({length:nG},(_,gi)=>order.reduce((s,t)=>s+types[t][gi],0));
+        const foot = `<tr><td><b>All types</b></td>${colTot.map(x=>`<td class="mr-num"><b>${fmt(x)}</b></td>`).join('')}<td class="mr-num"><b>${fmt(colTot.reduce((s,x)=>s+x,0))}</b></td></tr>`;
+        typeTable = `<h3 class="mr-h3">Members by type and ${esc(api.tierName(0).toLowerCase())}</h3>
+          <table class="mr-table mr-table-sm"><thead>${head}</thead><tbody>${trows}${foot}</tbody></table>`;
+      }
+
+      const total = stat.reduce((s,x)=>s+x.m,0);
+      const rows = stat.map((x,gi)=>`<tr>
+        <td><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(nameOf(gi))}</td>
+        <td class="mr-num">${fmt(x.m)}</td><td class="mr-num">${fmt(x.a)}</td><td class="mr-num">${fmt(x.c)}</td>
+        <td class="mr-num">${fmt(x.cl.size)}</td><td class="mr-num">${fmt(x.n)}</td><td class="mr-num">${pctS(x.m,total)}</td></tr>`).join('');
+      const grand = { m: total, a: stat.reduce((s,x)=>s+x.a,0), c: stat.reduce((s,x)=>s+x.c,0), cl: new Set() };
+      stat.forEach(x=>x.cl.forEach(i=>grand.cl.add(i)));
+      const foot = `<tr><td><b>Total</b></td><td class="mr-num"><b>${fmt(grand.m)}</b></td><td class="mr-num"><b>${fmt(grand.a)}</b></td>
+        <td class="mr-num"><b>${fmt(grand.c)}</b></td><td class="mr-num"><b>${fmt(grand.cl.size)}</b></td><td class="mr-num">&nbsp;</td><td class="mr-num">&nbsp;</td></tr>`;
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.membership_geo}</h2>
+        ${scenarioLine()}
+        <p class="mr-p">Where the membership sits on the current map, for the ${esc(api.yearLabel(y))} season. Counties are
+        shaded solid where members live and pale where an area has none. Figures are members placed by home ZIP.</p>
+        <div class="mr-map">${svg}</div>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(api.tierName(0))}</th>
+          <th scope="col" class="mr-num">Members</th><th scope="col" class="mr-num">Athletes</th><th scope="col" class="mr-num">Coaches</th>
+          <th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Counties</th><th scope="col" class="mr-num">Share</th></tr></thead>
+          <tbody>${rows}${foot}</tbody></table>
+        ${typeTable}
+        ${unM > 0 ? `<p class="mr-note">${fmt(unM)} members sit in unassigned counties, shown pale grey and excluded from the figures above.</p>` : ''}
+        ${!zips ? `<p class="mr-note">Membership-by-type detail is unavailable; run the membership-geography build to populate it. Members, athletes, coaches and clubs above are from the current county data.</p>` : ''}
+      </section>`;
+    }
+  },
+
+  boundary_club_moves: {
+    label: NAMES.boundary_club_moves, group: 'Boundary Studio',
+    desc: 'Clubs and members per area, and the largest clubs with where they land.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_club_moves);
+      let Q, AD;
+      try { [Q, AD] = await Promise.all([loadQual(), loadAutoFips()]); }
+      catch(e){ return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_club_moves}</h2>
+        <p class="mr-p mr-warn">Could not load reference data: ${esc(String(e.message||e))}</p></section>`; }
+      const api = B(), geo = api.geo(), y = api.year();
+      const assign = api.assign(), regions = api.regions(), TG = api.tierGroups();
+      const clubs = api.clubs();
+      const names = TG.groups.map((g,i)=>g.name || ('Area '+(i+1)));
+      const offByFips = {}; AD.fips.forEach((f,i)=>offByFips[f]=Q.officialRegion[i]);
+
+      // A club can appear in several counties; attribute it to where most of
+      // its members are, weighting each county by its membership.
+      const acc = {};
+      for (const [fips, st] of Object.entries(geo.stats)){
+        const v = st[y]; if (!v || !v.cl) continue;
+        const ri = assign[fips];
+        const a = (ri != null && ri >= 0 && ri < regions.length) ? TG.of[ri] : null;
+        const off = offByFips[fips] || 0;
+        for (const ci of v.cl){
+          const e = acc[ci] = acc[ci] || {m:0, area:{}, off:{}};
+          e.m += v.m;
+          if (a != null) e.area[a] = (e.area[a]||0) + v.m;
+          if (off) e.off[off] = (e.off[off]||0) + v.m;
+        }
+      }
+      const top = obj => { let bk=null,bv=-1; for(const [k,v] of Object.entries(obj||{})) if(v>bv){bv=v;bk=k;} return bk; };
+      const rows = [];
+      for (const [ci, e] of Object.entries(acc)){
+        const a = top(e.area), off = top(e.off);
+        if (a == null) continue;
+        rows.push({name: clubs[ci] || ('club #'+ci), m: e.m,
+                   from: off ? ('Region '+off) : 'not in published map',
+                   to: names[+a], moved: off ? (names[+a] !== ('Region '+off)) : true});
+      }
+      rows.sort((x,y2)=>y2.m-x.m);
+      // Clubs and members per proposed area.
+      const perArea = names.map(()=>({clubs:0, m:0}));
+      for (const r of rows){ const i = names.indexOf(r.to); if (i>=0){ perArea[i].clubs++; perArea[i].m += r.m; } }
+      const largest = [...rows].sort((x,y2)=>y2.m-x.m).slice(0, o.topN || 25);
+      const body = largest.map(r =>
+        `<tr><td>${esc(r.name)}</td><td class="mr-num">${fmt(r.m)}</td>
+         <td>${esc(r.from)}</td><td>${esc(r.to)}</td></tr>`).join('');
+      const areaRows = names.map((nm,i)=>
+        `<tr><td>${esc(nm)}</td><td class="mr-num">${fmt(perArea[i].clubs)}</td><td class="mr-num">${fmt(perArea[i].m)}</td></tr>`).join('');
+      const tierNm = (api.tierName ? api.tierName(1) : 'Area');
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_club_moves}</h2>
+        ${scenarioLine()}
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(tierNm)}</th>
+          <th scope="col" class="mr-num">Clubs</th><th scope="col" class="mr-num">Members</th></tr></thead>
+          <tbody>${areaRows}</tbody></table>
+        <h3 class="mr-h3">Largest clubs and their proposed ${esc(tierNm.toLowerCase())}</h3>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Club</th>
+          <th scope="col" class="mr-num">Members nearby</th><th scope="col">Current region</th><th scope="col">Proposed ${esc(tierNm.toLowerCase())}</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="4">No clubs with members on file.</td></tr>'}</tbody></table>
+        <p class="mr-note">Each club is placed where most of its members live. Clubs that draw members
+        across a county line are counted once, in the area holding the largest share of their roster.</p>
+      </section>`;
+    }
+  },
+
+};
+/* =====================================================================
+   FOCUSED REPORTS (added 2026-09-14)
+
+   Three reports answering questions the existing set could not. Each is
+   named for the question it answers rather than the module that produced
+   it, and each states its own limits inline -- a number that cannot say
+   what it rests on does not belong in a decision.
+   ===================================================================== */
+
+const FOCUSED_SECTIONS = {
+
+  /* -------------------------------------------------------------------
+     1. Entries vs athletes, and the one-fee-per-stop mechanic.
+
+     This exists because "entries" and "athletes" get used
+     interchangeably in the room and they are not the same number, and
+     because the fee mechanic is genuinely easy to get wrong: an athlete
+     who swims a prelim and a final at the SAME stop pays once, not
+     twice. entriesCellAt() in routing.js already handles this correctly
+     by counting arrivals rather than summing rounds -- this report makes
+     that visible instead of asking anyone to trust it.
+     ------------------------------------------------------------------- */
+  boundary_entry_economics: {
+    label: NAMES.boundary_entry_economics,
+    title: NAMES.boundary_entry_economics,
+    group: 'Boundary Studio',
+    desc: 'The three numbers people mix up: event entries, unique athletes, and fee-paying '
+        + 'arrivals. Includes why a prelim and a final at the same stop are one fee, not two.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_entry_economics);
+      const api = B(), QRr = window.QualRouting;
+      const routing = api.routing ? api.routing() : null;
+      const res = api.pathway ? api.pathway() : null;
+      if (!routing || !res || !QRr) return notReady(NAMES.boundary_entry_economics);
+
+      const CELLS = (window.JuniorFlow && window.JuniorFlow.CODES) || [];
+      const mult = api.multiplicity ? api.multiplicity() : null;
+
+      // Per stage: fee-paying arrivals (what bills), total round-sizes
+      // (what the sessions have to seat), and unique athletes where the
+      // events-per-athlete measurement supports it.
+      const rows = routing.map((lvl, L) => {
+        const stops = Math.max(1, api.groupCountAt(L));
+        const rounds = QRr.roundsOf(lvl);
+
+        // Arrivals: everyone who JOINS this stage, at any round. This is
+        // the fee-paying count -- one per athlete per stop, however many
+        // rounds they then swim there.
+        let arrivals = 0;
+        for (let g = 0; g < stops; g++) arrivals += QRr.entriesAt(res, L, g, CELLS);
+
+        // Seat-count: summed across rounds. Deliberately different from
+        // arrivals, and larger wherever a stage runs more than one round.
+        let seats = 0;
+        rounds.forEach(r => { seats += QRr.sizeAt(res, L, r.key, CELLS); });
+
+        let athletes = '<span class="mr-soft">not measured</span>';
+        if (mult && QRr.diversAt){
+          const d = QRr.diversAt(res, L, rounds[0].key, CELLS, mult, api.multBasis(L));
+          if (d && d.ok){
+            athletes = fmt(Math.round(d.divers)) + (d.reliable ? '' : ' <span class="mr-soft">(est.)</span>');
+          }
+        }
+        const multi = rounds.length > 1;
+        return `<tr><td><b>${esc(api.tierName(L))}</b>${multi
+            ? `<div class="mr-soft">${rounds.length} rounds — seats exceed fees here</div>` : ''}</td>
+          <td class="mr-num">${fmt(Math.round(arrivals))}</td>
+          <td class="mr-num">${fmt(Math.round(seats))}</td>
+          <td class="mr-num">${athletes}</td>
+          <td class="mr-num">${fmt(stops)}</td></tr>`;
+      }).join('');
+
+      // The money, by stage, from the same manifest the Money tab bills on.
+      // usd() alone renders a negative as "$-1,441"; the sign belongs in
+      // front of the symbol, which is what the other money sections do.
+      const usdR = v => (v < 0 ? '\u2212' + usd(Math.abs(v)) : usd(v));
+      let moneyRows = '', moneyNote = '';
+      try {
+        const summ = api.summariseRouting ? api.summariseRouting(routing, 'this scenario') : null;
+        if (summ && summ.financeByLevel){
+          moneyRows = summ.financeByLevel.filter(Boolean).map(t =>
+            `<tr><td>${esc(t.name)}</td><td class="mr-num">${fmt(t.meets)}</td>
+             <td class="mr-num">${fmt(Math.round(t.entries))}</td>
+             <td class="mr-num">${usdR(t.gross)}</td>
+             <td class="mr-num">${usdR(-Math.abs(t.levy))}</td>
+             <td class="mr-num">${usdR(t.host)}</td>
+             <td class="mr-num"><b>${usdR(t.usad)}</b></td></tr>`).join('');
+          if (summ.finance){
+            const f = summ.finance;
+            moneyRows += `<tr class="mr-tot"><td><b>All stages</b></td><td class="mr-num"></td>
+              <td class="mr-num"></td><td class="mr-num"><b>${usdR(f.gross)}</b></td>
+              <td class="mr-num"><b>${usdR(-Math.abs(f.levy))}</b></td>
+              <td class="mr-num"><b>${usdR(f.host)}</b></td>
+              <td class="mr-num"><b>${usdR(f.usad)}</b></td></tr>`;
+          }
+        }
+      } catch(e){ moneyNote = '<p class="mr-note mr-warn">Fee figures could not be computed for this pathway.</p>'; }
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_entry_economics}</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">Three different numbers get called "entries" in conversation, and a proposal
+          can look cheaper or dearer than it is depending on which one someone has in mind. This page
+          separates them.</p>
+
+        <table class="mr-table"><tbody>
+          <tr><td><b>Fee-paying arrivals</b></td><td>Each athlete counted <b>once per stop</b>, in each
+            event they enter. This is what bills.</td></tr>
+          <tr><td><b>Seats to fill</b></td><td>Summed across every round. Larger than arrivals wherever
+            a stage runs a prelim and a final, because the same athlete occupies a seat in both. This is
+            what session length and judging panels have to cover.</td></tr>
+          <tr><td><b>Unique athletes</b></td><td>People, not entries. Lower than both, because athletes
+            commonly contest two or three events. This is what beds, awards and travel scale with.</td></tr>
+        </tbody></table>
+
+        <p class="mr-note"><b>Why a prelim and a final are one fee.</b> Entry fees are charged per athlete
+          per event per <em>stop</em> — advancing from a prelim into a final at the same meet is not a new
+          entry and is not charged again. The figures below follow that rule: the arrivals column counts
+          athletes joining a stop, never the sum of its rounds. An athlete seeded directly into a later
+          round from a different stage <em>is</em> a new arrival there, and is counted, because that is a
+          real new entry at a new stop.</p>
+
+        <h3 class="mr-h3">By stage</h3>
+        <table class="mr-table"><thead><tr>
+          <th scope="col">Stage</th>
+          <th scope="col" class="mr-num">Fee-paying arrivals</th>
+          <th scope="col" class="mr-num">Seats to fill</th>
+          <th scope="col" class="mr-num">Unique athletes</th>
+          <th scope="col" class="mr-num">Meets</th></tr></thead>
+          <tbody>${rows}</tbody></table>
+        <p class="mr-note">Where arrivals and seats match, that stage runs a single round. Where seats are
+          higher, the difference is athletes swimming more than one round at the same stop — extra session
+          time, no extra fee.</p>
+
+        ${moneyRows ? `<h3 class="mr-h3">Fee income by stage</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col" class="mr-num">Meets</th>
+          <th scope="col" class="mr-num">Entries billed</th><th scope="col" class="mr-num">Gross</th>
+          <th scope="col" class="mr-num">DiveMeets</th><th scope="col" class="mr-num">To hosts</th>
+          <th scope="col" class="mr-num">USA Diving keeps</th></tr></thead>
+          <tbody>${moneyRows}</tbody></table>` : ''}
+        ${moneyNote}
+
+        <p class="mr-note"><b>On unique athletes, honestly.</b> The athlete counts above are derived from a
+          measured events-per-athlete rate, not from identified individuals — the entry data does not carry a
+          reliable person identifier across meets. Anything marked <i>est.</i> means this pathway has shifted
+          the event mix away from what that rate was measured on. Treat athlete counts as good enough for
+          sizing beds and awards, and not as a roster. Where an exact headcount matters, the fee-paying
+          arrivals column is the one that is directly counted.</p>
+      </section>`;
+    }
+  },
+
+  /* -------------------------------------------------------------------
+     2. The field, projected forward on measured attrition.
+
+     Max-available is a ceiling and a single real season is a snapshot;
+     neither answers "what would this look like if we ran it now." This
+     applies each age group's own measured membership change to a real
+     season's field. The assumption being made is stated in the report,
+     not buried here: membership attrition is used as a proxy for
+     competition attrition, and those are not proven to move together.
+     ------------------------------------------------------------------- */
+  boundary_decline_projection: {
+    label: NAMES.boundary_decline_projection,
+    title: NAMES.boundary_decline_projection,
+    group: 'Boundary Studio',
+    desc: 'A real season\u2019s field re-based on each age group\u2019s own measured membership change, '
+        + 'so an older season can be read against today rather than taken at face value.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_decline_projection);
+      const api = B();
+
+      // AQUA age = membership year minus birth year, as of 31 December;
+      // birth month is deliberately ignored (project domain rule). The
+      // bucket boundaries match AGE_GROUPS in boundary.js exactly.
+      let rows = [];
+      try {
+        rows = await q(`
+          SELECT membership_year AS y,
+                 CASE
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 11 THEN 'D'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 13 THEN 'C'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 15 THEN 'B'
+                   WHEN membership_year - EXTRACT(YEAR FROM birth_date)::int <= 18 THEN 'A'
+                   ELSE '19+'
+                 END AS grp,
+                 COUNT(DISTINCT member_id) AS n
+            FROM membership.members
+           WHERE membership_type LIKE '%Athlete%'
+             AND birth_date IS NOT NULL
+             AND membership_year IN (2024, 2025, 2026)
+           GROUP BY 1, 2`);
+      } catch(e){
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
+          ${scenarioLine()}
+          <p class="mr-p mr-warn">The membership counts behind this projection could not be read
+            (${esc(e.message||String(e))}). Nothing below would be trustworthy without them, so the
+            report stops here rather than showing a figure it cannot stand behind.</p></section>`;
+      }
+
+      const G = ['A','B','C','D'];
+      const byYear = {2024:{}, 2025:{}, 2026:{}};
+      rows.forEach(r => {
+        const y = +r.y, g = String(r.grp);
+        if (byYear[y] && G.indexOf(g) >= 0) byYear[y][g] = +r.n;
+      });
+      const have = [2024,2025,2026].filter(y => G.some(g => byYear[y][g] > 0));
+      if (have.indexOf(2024) < 0){
+        return `<section class="mr-section"><h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
+          ${scenarioLine()}
+          <p class="mr-p mr-warn">No 2024 athlete membership with usable birth dates was found, so there is
+            no base season to project from.</p></section>`;
+      }
+
+      const ratio = (to, g) => (byYear[2024][g] > 0 && byYear[to][g] > 0)
+        ? byYear[to][g] / byYear[2024][g] : null;
+
+      const memRows = G.map(g => {
+        const r25 = ratio(2025, g), r26 = ratio(2026, g);
+        return `<tr><td><b>Group ${g}</b> <span class="mr-soft">${
+            g==='A'?'16–18':g==='B'?'14–15':g==='C'?'12–13':'11 &amp; under'}</span></td>
+          <td class="mr-num">${fmt(byYear[2024][g]||0)}</td>
+          <td class="mr-num">${fmt(byYear[2025][g]||0)}</td>
+          <td class="mr-num">${fmt(byYear[2026][g]||0)}</td>
+          <td class="mr-num">${r25==null?'—':(100*r25).toFixed(1)+'%'}</td>
+          <td class="mr-num">${r26==null?'—':(100*r26).toFixed(1)+'%'}</td></tr>`;
+      }).join('');
+
+      // Apply each group's own rate to the real 2024 field, stage by stage.
+      const STAGES = ['Regionals','Zones','EWC','Nationals'];
+      let fieldRows = '', anyField = false;
+      STAGES.forEach(st => {
+        const c = api.entryDataCompleteness ? api.entryDataCompleteness('2024', st) : null;
+        const pool = api.poolByGroup ? api.poolByGroup('2024', st) : null;
+        if (!pool) return;
+        const raw = G.reduce((s,g) => s + (pool[g]||0), 0);
+        if (!raw) return;
+        anyField = true;
+        const adj25 = G.reduce((s,g) => s + (pool[g]||0) * (ratio(2025,g) == null ? 1 : ratio(2025,g)), 0);
+        const adj26 = G.reduce((s,g) => s + (pool[g]||0) * (ratio(2026,g) == null ? 1 : ratio(2026,g)), 0);
+        fieldRows += `<tr><td><b>${esc(st)}</b></td>
+          <td class="mr-num">${fmt(Math.round(raw))}</td>
+          <td class="mr-num">${fmt(Math.round(adj25))} <span class="mr-soft">${(100*adj25/raw).toFixed(0)}%</span></td>
+          <td class="mr-num">${fmt(Math.round(adj26))} <span class="mr-soft">${(100*adj26/raw).toFixed(0)}%</span></td>
+          <td class="mr-num">${c && c.total ? Math.round(100*c.mapped/c.total)+'%' : '—'}</td></tr>`;
+      });
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_decline_projection}</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">An older season's field taken at face value overstates what the same rules would
+          draw today, because the membership behind it has shrunk — and not evenly across age groups.
+          This re-bases 2024's real field on each group's own measured change, so it can be read against
+          the present instead of being quietly compared to a bigger population.</p>
+
+        <h3 class="mr-h3">Measured change, by age group</h3>
+        <p class="mr-note">Athlete memberships with a usable birth date, counted once per person per year.
+          AQUA age is the membership year minus the birth year as of 31 December; birth month is
+          deliberately ignored, per the competition rules.</p>
+        <table class="mr-table"><thead><tr><th scope="col">Age group</th>
+          <th scope="col" class="mr-num">2024</th><th scope="col" class="mr-num">2025</th>
+          <th scope="col" class="mr-num">2026</th>
+          <th scope="col" class="mr-num">2025 of 2024</th><th scope="col" class="mr-num">2026 of 2024</th>
+        </tr></thead><tbody>${memRows}</tbody></table>
+        <p class="mr-note">2026 is a year still in progress, so its share will rise as registrations come
+          in. For a settled comparison use the 2025 column; read 2026 as a floor, not a final figure.</p>
+
+        ${anyField ? `<h3 class="mr-h3">2024's real field, re-based</h3>
+        <table class="mr-table"><thead><tr><th scope="col">Stage</th>
+          <th scope="col" class="mr-num">As it ran (2024)</th>
+          <th scope="col" class="mr-num">At 2025 participation</th>
+          <th scope="col" class="mr-num">At 2026 participation</th>
+          <th scope="col" class="mr-num">Data resolved</th></tr></thead>
+          <tbody>${fieldRows}</tbody></table>
+        <p class="mr-note">The final column is the share of that stage's real 2024 field that could be
+          matched to a membership record with a usable zip code. 2024 resolves less completely than later
+          seasons because the county lookup was built from 2025/2026 members, so athletes who left before
+          2025 are less likely to match. The unmatched remainder is excluded, never estimated.</p>`
+        : `<p class="mr-p mr-warn">The 2024 entry pools are not loaded, so only the membership change above
+            can be shown. Open Boundary Studio once and regenerate to include the re-based field.</p>`}
+
+        <h3 class="mr-h3">What this assumes, and where it could be wrong</h3>
+        <p class="mr-p">This applies <em>membership</em> change to a <em>competition</em> field. That is an
+          assumption, not a measurement: it treats a group's competitors as shrinking at the same rate as
+          its members overall. Competitive athletes may well hold on longer than casual members, which
+          would make these figures too low — or drop faster, which would make them too high. Nobody has
+          tested which, and this report does not settle it.</p>
+        <p class="mr-note">So: use these to argue that an older season's raw numbers overstate today, and to
+          bound roughly how much. Do not use them as a forecast of a specific field, and do not put a
+          single re-based figure in front of a committee without saying what it assumes. On the selection
+          integrity standard this is internal context, not a decision-grade number.</p>
+      </section>`;
+    }
+  },
+
+  /* -------------------------------------------------------------------
+     3. Provenance and defensibility.
+
+     Selection decisions are reviewable by a neutral arbitrator, and the
+     failure modes are documented: undefined criteria, non-reproducible
+     computations, and athletes judged on data of unequal completeness.
+     This report states, for the scenario actually on screen, what every
+     figure rests on -- so a paper built from it can be traced back
+     months later, and so anything that does NOT meet the standard is
+     labelled internal rather than quietly presented as decision-grade.
+     ------------------------------------------------------------------- */
+  boundary_defensibility: {
+    label: NAMES.boundary_defensibility,
+    title: NAMES.boundary_defensibility,
+    group: 'Boundary Studio',
+    desc: 'What every figure rests on, how complete the data behind it is, and which numbers meet the '
+        + 'standard for a selection decision versus which are internal context only.',
+    build: async function(o){
+      if (!boundaryReady()) return notReady(NAMES.boundary_defensibility);
+      const api = B();
+      const stamps = api.stamps ? api.stamps() : null;
+      const frozen = api.frozen ? api.frozen() : null;
+      const drift = (frozen && api.frozenDrift) ? api.frozenDrift() : null;
+
+      // Completeness for every real season/stage the entry data carries.
+      const PAIRS = [['2024','Regionals'],['2024','Zones'],['2024','Nationals'],
+                     ['2025','Regionals'],['2025','Zones'],['2025','Nationals'],
+                     ['2026','Regionals'],['2026','Zones'],['2026','EWC'],['2026','Nationals']];
+      let compRows = '', worst = null;
+      PAIRS.forEach(([yr, st]) => {
+        const c = api.entryDataCompleteness ? api.entryDataCompleteness(yr, st) : null;
+        if (!c || !c.total) return;
+        const share = 100 * c.mapped / c.total;
+        if (worst == null || share < worst.share) worst = {yr, st, share};
+        const cls = share >= 97 ? '' : (share >= 92 ? ' class="mr-under"' : ' class="mr-warn"');
+        compRows += `<tr><td>${esc(yr)} ${esc(st)}</td>
+          <td class="mr-num">${fmt(c.total)}</td>
+          <td class="mr-num">${fmt(c.mapped)}</td>
+          <td class="mr-num">${fmt(c.unmapped)}</td>
+          <td class="mr-num"${cls}>${share.toFixed(1)}%</td></tr>`;
+      });
+
+      const freezeRow = !frozen
+        ? `<tr><td>Frozen record</td><td>Not frozen. These figures can move under you if the entry data is
+             rebuilt. Freeze the scenario before circulating it.</td></tr>`
+        : (drift
+          ? `<tr><td>Frozen record</td><td class="mr-warn"><b>Frozen ${esc(String(frozen.at||'').slice(0,10))}
+               and no longer computing what it said then.</b> ${drift.figures && drift.figures.length
+               ? esc(drift.figures.map(r=>`${r.label} was ${Math.round(r.then)}, now ${Math.round(r.now)}`).join('; '))
+               : 'Headline figures match; the inputs behind them have moved.'}</td></tr>`
+          : `<tr><td>Frozen record</td><td>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
+               frozen.note?` — ${esc(frozen.note)}`:''}, and still computing exactly what it said then.</td></tr>`);
+
+      return `<section class="mr-section">
+        <h2 class="mr-h2">${NAMES.boundary_defensibility}</h2>
+        ${scenarioLine()}
+
+        <p class="mr-p">Selection and funding decisions are reviewable by a neutral arbitrator, and the
+          documented ways an organisation loses are specific: criteria that were never clearly defined,
+          computations nobody outside can reproduce, and athletes assessed on data of unequal completeness.
+          This page states what the figures in this report set actually rest on, so a paper built from them
+          can be traced back months later — and so anything that does not meet that standard is labelled
+          rather than quietly presented as though it did.</p>
+
+        <h3 class="mr-h3">What these figures were computed from</h3>
+        <table class="mr-table mr-table-sm"><tbody>
+          <tr><td>Scenario</td><td>${esc((api.scenario && api.scenario().name) || 'unsaved')}${
+            (api.scenario && api.scenario().id) ? ` <span class="mr-soft">(${esc(api.scenario().id)})</span>` : ''}${
+            (api.scenario && api.scenario().dirty) ? ' <b class="mr-warn">— edited since it was last saved</b>' : ''}</td></tr>
+          <tr><td>Pathway</td><td>${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}</td></tr>
+          <tr><td>Season on screen</td><td>${esc(api.yearLabel ? api.yearLabel() : '—')}</td></tr>
+          ${stamps?`<tr><td>Entry data build</td><td>${esc(String(stamps.advance_data||'—').slice(0,10))}</td></tr>
+          <tr><td>Events per athlete</td><td>${esc(String(stamps.multiplicity||'—').slice(0,10))}</td></tr>
+          <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
+          <tr><td>First stop fed by</td><td>${esc(stamps.seed_pool||'—')}</td></tr>`:''}
+          ${freezeRow}
+          <tr><td>Report generated</td><td>${esc(new Date().toISOString().slice(0,16).replace('T',' '))} UTC</td></tr>
+        </tbody></table>
+
+        ${compRows ? `<h3 class="mr-h3">How complete the entry data is</h3>
+        <p class="mr-note">Every real-season figure comes from matching a result to a membership record and
+          then to a county. That match does not succeed for every entry. Unmatched entries are excluded from
+          the pools, never estimated into them — so a lower share here means a stage's field is
+          <em>understated</em>, not wrong in an unknown direction.</p>
+        <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Season and stage</th>
+          <th scope="col" class="mr-num">Real entries</th><th scope="col" class="mr-num">Resolved</th>
+          <th scope="col" class="mr-num">Excluded</th><th scope="col" class="mr-num">Share resolved</th>
+        </tr></thead><tbody>${compRows}</tbody></table>
+        ${worst ? `<p class="mr-note">Weakest ground in this set: <b>${esc(worst.yr)} ${esc(worst.st)}</b> at
+          ${worst.share.toFixed(1)}% resolved. If one figure is going to be challenged, expect it to be one
+          leaning on that stage. 2024 resolves less completely than 2025 or 2026 throughout, because the
+          county lookup was built from 2025/2026 members — athletes who left before 2025 are less likely to
+          match.</p>` : ''}` : ''}
+
+        <h3 class="mr-h3">Against the standard</h3>
+        <table class="mr-table"><tbody>
+          <tr><td><b>Published in advance</b></td><td>Area definitions and advancement rules in this
+            scenario are explicit and printable — see the area profiles and zip appendix. A rule that is
+            only in the tool and not in the published procedure cannot carry a selection decision.</td></tr>
+          <tr><td><b>Reproducible from source</b></td><td>The rows above name the scenario, pathway, season,
+            and each data build. An outside party given the same inputs reaches the same figures. If any
+            row above reads &ldquo;—&rdquo;, that part is not currently reproducible and should not be
+            relied on.</td></tr>
+          <tr><td><b>Applied uniformly</b></td><td>Every athlete in a given stage is run through the same
+            published bands. The tool does not apply per-athlete discretion, and no figure here is
+            hand-adjusted.</td></tr>
+          <tr><td><b>Comparable completeness</b></td><td class="mr-under">This is the weak point. Resolution
+            rates differ by season and stage, so athletes are not all computed from data of equal
+            completeness — a 2024-based figure rests on a thinner match than a 2026 one. Say so wherever
+            seasons are compared.</td></tr>
+        </tbody></table>
+
+        <h3 class="mr-h3">Decision-grade versus internal context</h3>
+        <p class="mr-p">Not everything in this report set clears the bar, and the difference matters:</p>
+        <table class="mr-table"><tbody>
+          <tr><td><b>Counted, from real results</b></td><td>Area sizes, membership and club counts, real
+            entry counts per stage, and fee income at published rates. These are counted from records, and
+            are the figures to put in front of a committee.</td></tr>
+          <tr><td><b>Projected by published rule</b></td><td>Field sizes carried up a pathway, calibrated to
+            a measured take-up rate. Reproducible and rule-driven, but a projection of qualified places —
+            not a roster, and not a forecast of who wins.</td></tr>
+          <tr><td><b>Modelled, internal only</b></td><td class="mr-under">Maximum-capacity
+            ceilings, decline re-based fields, unique-athlete estimates, and any stage marked
+            <i>modelled</i> or <i>est.</i> These rest on assumptions that have not been measured. Use them
+            to frame a discussion; do not let one become a criterion.</td></tr>
+        </tbody></table>
+        <p class="mr-note">If a figure cannot be traced to the rows at the top of this page, it does not
+          belong in a decision — and if it is in the modelled row above, it needs to be labelled as such
+          wherever it appears, including in anything quoted out of this report.</p>
+      </section>`;
+    }
+  },
+
+};
+
+Object.assign(BOUNDARY_SECTIONS, EQUITY_SECTIONS);
+Object.assign(BOUNDARY_SECTIONS, FOCUSED_SECTIONS);
+
+Object.assign(SECTIONS, BOUNDARY_SECTIONS);
+/* =====================================================================
+   MERGES
+
+   Three pairs said nearly the same thing under nearly the same name:
+   "scenario summary (start here)" vs "scenario overview" gave no way to
+   tell which to pick; maps-by-stage and tier-rollups are the same walk
+   through the structure twice; membership-by-area and clubs-by-area are
+   both pure geography of the same map.
+
+   Rather than rewrite four working bodies, each parent now appends its
+   child's content. The child builders are untouched -- only their picker
+   entries are removed -- so nothing that currently renders correctly is
+   at risk, and un-merging is a one-line change.
+   ===================================================================== */
+
+/* Take a report's inner content, dropping the pieces the parent already
+   renders once: the <section> wrapper, the <h2>, and the scenario banner.
+   Returns '' for a not-ready notice, so a child that could not build adds
+   nothing rather than injecting a stray warning into a parent that did. */
+function innerOf(html, heading){
+  let s = String(html || '');
+  if (!s) return '';
+  if (s.indexOf('has not finished loading') >= 0) return '';
+  const open = s.indexOf('<section class="mr-section">');
+  if (open >= 0) s = s.slice(open + '<section class="mr-section">'.length);
+  s = s.replace(/<\/section>\s*$/, '');
+  // The child's own <h2> becomes an <h3>: dropping it outright would leave
+  // its tables sitting under the parent's heading with nothing to say where
+  // the parent's content ended and the absorbed content began. Any later
+  // <h2> in the same body (some sections emit one per code path) is removed,
+  // since only the first introduces the content.
+  let first = true;
+  s = s.replace(/<h2 class="mr-h2">([\s\S]*?)<\/h2>/g, (m, inner) => {
+    if (!first) return '';
+    first = false;
+    return '<h3 class="mr-h3">' + (heading != null ? heading : inner) + '</h3>';
+  });
+  s = s.replace(/<div class="mr-scenario-badge">[\s\S]*?<\/div>/g, '');
+  return s.trim();
+}
+
+const MERGED_INTO = {
+  boundary_overview:   'boundary_summary',
+  boundary_tiers:      'boundary_map',
+  boundary_club_moves: 'membership_geo',
+};
+
+Object.keys(MERGED_INTO).forEach(childId => {
+  const parentId = MERGED_INTO[childId];
+  const parent = BOUNDARY_SECTIONS[parentId];
+  const child  = BOUNDARY_SECTIONS[childId];
+  if (!parent || !child) return;
+  const parentBuild = parent.build, childBuild = child.build;
+  parent.build = async function(o){
+    const a = await parentBuild.call(parent, o);
+    let b = '';
+    try { b = innerOf(await childBuild.call(child, o), esc(NAMES[childId] || '')); } catch(e){ b = ''; }
+    if (!b) return a;
+    // Land the child's content inside the parent's own section wrapper.
+    return /<\/section>\s*$/.test(a) ? a.replace(/<\/section>\s*$/, b + '</section>') : (a + b);
+  };
+  delete SECTIONS[childId];
+  delete BOUNDARY_SECTIONS[childId];
+});
+
+/* =====================================================================
+   TEMPLATES — curated section sequences for the deliverables staff
+   actually get asked for.
+   ===================================================================== */
+const TEMPLATES = [
+  { id:'realignment_proposal', label:'Realignment Proposal',
+    desc:'The full case: the map, size balance, what it takes to advance in each area, whether every meet fits, tier rollups and a profile of every area.',
+    sections:['boundary_summary','boundary_map','boundary_balance','boundary_equity','boundary_pathway','boundary_schedule','boundary_circuit_delta','boundary_region_profiles'],
+    years:[2025,2026], boundary:true },
+  { id:'realignment_board', label:'Realignment — Board Packet',
+    desc:'The lean decision document: a map and breakdown for every stage, how even the sizes are, what it takes to advance, and whether every meet this creates can actually be run. No appendices.',
+    sections:['boundary_map','membership_geo','boundary_balance','boundary_equity','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
+  { id:'realignment_equity', label:'Realignment — Fairness Case',
+    desc:'The argument on competitive equity alone: what score it takes to advance today versus under this map.',
+    sections:['boundary_map','boundary_equity','boundary_balance'], years:[2025,2026], boundary:true },
+  { id:'realignment_compare', label:'Realignment — Before & After (full)',
+    desc:'The complete case for the loaded scenario -- map, structure, balance, competitive equity, tier rollups, the full qualification pathway and its billing, and the full schedule -- plus every delta against the currently loaded comparison scenario: counties moved, members affected, and pathways and field sizes set side by side.',
+    sections:['boundary_summary','boundary_map','boundary_compare','membership_geo','boundary_balance','boundary_equity','boundary_pathway','boundary_pathways_compared','boundary_schedule','boundary_circuit_delta'], years:[2025,2026], boundary:true },
+  { id:'realignment_rulebook', label:'Realignment — Rulebook Appendix',
+    desc:'The document a rulebook edit needs: area definitions, profiles, and the full zip code appendix.',
+    sections:['boundary_summary','boundary_map','boundary_region_profiles','membership_geo','boundary_zips'], years:[2025,2026], boundary:true },
+];
+
+/* =====================================================================
+   BUILDER STATE + UI
+   ===================================================================== */
+const RB = {
+  template: null,
+  sections: new Set(),
+  years: null,
+  cats: [],
+  assocs: [],
+  states: [],
+  topN: 25,
+  optionsLoaded: false,
+  assocOpts: [],
+  stateOpts: [],
+  scopeOpen: false,
+};
+
+function rbYears(){
+  if (RB.years && RB.years.length) return RB.years.slice().sort();
+  const t = TEMPLATES.find(t=>t.id===RB.template);
+  return (t && t.years) ? t.years.slice() : [CUR_YEAR];
+}
+function rbOpts(){
+  return { years: rbYears(), cats: RB.cats.slice(), assocs: RB.assocs.slice(),
+           states: RB.states.slice(), topN: RB.topN };
+}
+
+async function loadFilterOptions(){
+  if (RB.optionsLoaded) return;
+  try {
+    const [a, s] = await Promise.all([
+      q(`SELECT COALESCE(association,'(none)') k, count(DISTINCT member_id) n
+           FROM membership.members GROUP BY 1 ORDER BY 2 DESC`),
+      q(`SELECT COALESCE(state,'??') k, count(DISTINCT member_id) n
+           FROM membership.members GROUP BY 1 ORDER BY 1`),
+    ]);
+    RB.assocOpts = a.map(r=>r.k);
+    RB.stateOpts = s.map(r=>r.k);
+  } catch(e){ /* filters simply stay empty; sections still run unscoped */ }
+  RB.optionsLoaded = true;
+  if (document.getElementById('mr-modal')) renderBuilder();
+}
+
+function openBuilder(preset){
+  RB.template = null; RB.sections = new Set(); RB.years = null;
+  RB.cats = []; RB.assocs = []; RB.states = []; RB.scopeOpen = false;
+  // '__boundary__' means "show me the map templates", not "pick one for me".
+  // Landing already committed to the six-section Realignment Proposal is a
+  // choice made on the reader's behalf, and it was not asked for.
+  RB.mapFirst = (preset === '__boundary__');
+  if (preset && preset !== '__boundary__') pickTemplate(preset, true);
+  let m = document.getElementById('mr-modal');
+  if (!m){ m = document.createElement('div'); m.id = 'mr-modal'; document.body.appendChild(m); }
+  renderBuilder();
+  loadFilterOptions();
+}
+
+function pickTemplate(id, silent){
+  const t = TEMPLATES.find(x=>x.id===id);
+  if (!t) return;
+  RB.template = id;
+  RB.sections = new Set(t.sections);
+  RB.years = t.years.slice();
+  if (!silent) renderBuilder();
+}
+
+/* Keeping your place across a redraw lives in shared/usad-keepplace.js. */
+
+function renderBuilder(){
+  const m = document.getElementById('mr-modal');
+  if (!m) return;
+  const place = keepPlace('mr-modal');
+  const sel = rbYears();
+  const canGo = RB.sections.size > 0;
+  const groups = {};
+  Object.entries(SECTIONS).forEach(([id,s]) => { (groups[s.group] = groups[s.group] || []).push([id,s]); });
+  const bReady = boundaryReady();
+
+  const sectionGroups = Object.entries(groups).map(([g, list]) => `
+    <div class="mr-secgrp">
+      <div class="mr-secgrp-h">${esc(g)}${g==='Boundary Studio' && !bReady
+        ? ' <span class="mr-tag mr-tag-warn">open Boundary Studio first</span>' : ''}</div>
+      <div class="mr-sections">
+        ${list.map(([id,s]) => `
+          <label class="mr-secopt ${RB.sections.has(id)?'is-on':''}">
+            <input type="checkbox" ${RB.sections.has(id)?'checked':''}
+                   onchange="window._mrToggleSection('${id}')">
+            <div><div class="mr-secopt-n">${esc(s.label)}</div>
+                 <div class="mr-secopt-d">${esc(s.desc)}</div></div>
+          </label>`).join('')}
+      </div>
+    </div>`).join('');
+
+  m.innerHTML = `
+  <div class="mr-overlay" onclick="if(event.target===this)window._mrClose()">
+    <div class="mr-dialog">
+      <div class="mr-head">
+        <div><div class="mr-eyebrow">USA Diving · Membership Analytics</div>
+             <h2 class="mr-title">Build a Report</h2></div>
+        <button class="mr-x" onclick="window._mrClose()" title="Close">✕</button>
+      </div>
+      <div class="mr-body">
+
+        <div class="mr-step"><div class="mr-step-n">1</div><div class="mr-step-c">
+          <div class="mr-step-h">Start from a template</div>
+          <div class="mr-tmpls">
+            ${TEMPLATES.map(t => `
+              <button class="mr-tmpl ${RB.template===t.id?'is-on':''} ${t.boundary && !bReady ? 'is-dim':''} ${RB.mapFirst && t.boundary ? 'is-hint':''}"
+                      data-tpl="${t.id}"
+                      onclick="window._mrPickTemplate('${t.id}')">
+                <div class="mr-tmpl-n">${esc(t.label)}</div>
+                <div class="mr-tmpl-d">${esc(t.desc)}</div>
+                <div class="mr-tmpl-s">${t.sections.length} sections${t.boundary?' · uses the live map':''}</div>
+              </button>`).join('')}
+          </div>
+        </div></div>
+
+        <div class="mr-step"><div class="mr-step-n">2</div><div class="mr-step-c">
+          <div class="mr-step-h">Choose sections
+            <span class="mr-soft">(${RB.sections.size} selected)</span></div>
+          ${sectionGroups}
+        </div></div>
+
+        <div class="mr-step"><div class="mr-step-n">3</div><div class="mr-step-c">
+          <div class="mr-step-h">Pick membership year(s)</div>
+          <div class="mr-chips">
+            ${ALL_YEARS.map(y => `<button class="mr-chip ${sel.includes(y)?'is-on':''}"
+                onclick="window._mrToggleYear(${y})">${y}${y===CUR_YEAR?' (YTD)':''}</button>`).join('')}
+            <button class="mr-chip" onclick="window._mrAllYears()">All years</button>
+            <button class="mr-chip" onclick="window._mrCurrentYear()">Current only</button>
+          </div>
+          <div class="mr-soft" style="margin-top:6px">Boundary Studio sections always use the year
+            selected on the map itself, not this setting.</div>
+        </div></div>
+
+        <div class="mr-step"><div class="mr-step-n">4</div><div class="mr-step-c">
+          <div class="mr-step-h">Narrow the scope
+            <span class="mr-soft">(optional — applies to every membership section)</span></div>
+          <div class="mr-fgrp">
+            <div class="mr-flbl">Membership category</div>
+            <div class="mr-chips">
+              ${CATS.map(c => `<button class="mr-chip sm ${RB.cats.includes(c)?'is-on':''}"
+                onclick="window._mrToggleFilter('cats','${c}')">${c}</button>`).join('')}
+            </div>
+          </div>
+          ${RB.scopeOpen ? `
+            <div class="mr-fgrp">
+              <div class="mr-flbl">Association <span class="mr-soft">(${RB.assocs.length||'all'})</span></div>
+              <div class="mr-chips mr-scroll">
+                ${RB.assocOpts.map(a => `<button class="mr-chip sm ${RB.assocs.includes(a)?'is-on':''}"
+                  onclick="window._mrToggleFilter('assocs',${JSON.stringify(a).replace(/"/g,'&quot;')})">${esc(a)}</button>`).join('')
+                  || '<span class="mr-soft">loading…</span>'}
+              </div>
+            </div>
+            <div class="mr-fgrp">
+              <div class="mr-flbl">State <span class="mr-soft">(${RB.states.length||'all'})</span></div>
+              <div class="mr-chips mr-scroll">
+                ${RB.stateOpts.map(a => `<button class="mr-chip sm ${RB.states.includes(a)?'is-on':''}"
+                  onclick="window._mrToggleFilter('states',${JSON.stringify(a).replace(/"/g,'&quot;')})">${esc(a)}</button>`).join('')
+                  || '<span class="mr-soft">loading…</span>'}
+              </div>
+            </div>
+            <button class="mr-link" onclick="window._mrClearScope()">Clear all scope filters</button>`
+          : `<button class="mr-link" onclick="window._mrOpenScope()">＋ Also narrow by association or state</button>`}
+          <div class="mr-fgrp">
+            <div class="mr-flbl">List length <span class="mr-soft">(clubs, associations, county moves)</span></div>
+            <div class="mr-chips">
+              ${[10,25,40,100].map(n => `<button class="mr-chip sm ${RB.topN===n?'is-on':''}"
+                onclick="window._mrSetTopN(${n})">Top ${n}</button>`).join('')}
+            </div>
+          </div>
+        </div></div>
+
+      </div>
+      <div class="mr-foot">
+        <div class="mr-soft">Scope: <strong>${esc(scopeSummary(rbOpts()))}</strong> ·
+          Years: ${esc(sel.join(', '))}</div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="mr-btn" onclick="window._mrClose()">Cancel</button>
+          <button class="mr-btn mr-btn-p ${canGo?'':'is-dim'}" ${canGo?'':'disabled'}
+                  onclick="window._mrGenerate()">Generate report</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  keepRestore(place, 'mr-modal');
+}
+
+window._mrClose = function(){ const m=document.getElementById('mr-modal'); if (m) m.remove(); };
+window._mrPickTemplate = function(id){ pickTemplate(id); };
+window._mrToggleSection = function(id){
+  if (RB.sections.has(id)) RB.sections.delete(id); else RB.sections.add(id);
+  RB.template = null; renderBuilder();
+};
+window._mrToggleYear = function(y){
+  const cur = rbYears().slice();
+  const i = cur.indexOf(y);
+  if (i >= 0) cur.splice(i,1); else cur.push(y);
+  RB.years = cur.length ? cur : [CUR_YEAR];
+  renderBuilder();
+};
+window._mrAllYears = function(){ RB.years = ALL_YEARS.slice(); renderBuilder(); };
+window._mrCurrentYear = function(){ RB.years = [CUR_YEAR]; renderBuilder(); };
+window._mrToggleFilter = function(key, val){
+  const arr = RB[key];
+  const i = arr.indexOf(val);
+  if (i >= 0) arr.splice(i,1); else arr.push(val);
+  renderBuilder();
+};
+window._mrOpenScope = function(){ RB.scopeOpen = true; renderBuilder(); loadFilterOptions(); };
+window._mrClearScope = function(){ RB.cats=[]; RB.assocs=[]; RB.states=[]; renderBuilder(); };
+window._mrSetTopN = function(n){ RB.topN = n; renderBuilder(); };
+
+/* =====================================================================
+   GENERATE — branded, print-ready document
+   ===================================================================== */
+window._mrGenerate = async function(){
+  const ids = Array.from(RB.sections);
+  if (!ids.length) return;
+  const opts = rbOpts();
+  const tmpl = TEMPLATES.find(t=>t.id===RB.template);
+  const title = tmpl ? tmpl.label : 'Custom Membership Report';
+  window._mrClose();
+
+  const out = document.createElement('div');
+  out.id = 'mr-output';
+  out.innerHTML = `
+    <div class="mr-toolbar">
+      <button class="mr-print" onclick="window.print()">Print / save as PDF</button>
+      <button onclick="document.getElementById('mr-output').remove()">✕ Close</button>
+      <span class="mr-soft" style="margin-left:auto">Print to PDF for the cleanest result.
+        Sized for US Letter.</span>
+    </div>
+    <div class="mr-doc">
+      <div class="mr-doc-head">
+        <h1>${esc(title)}</h1>
+        <div class="mr-doc-sub">
+          Generated: ${new Date().toLocaleString()}<br>
+          Membership year(s): ${esc(opts.years.join(', '))}<br>
+          Scope: <strong>${esc(scopeSummary(opts))}</strong><br>
+          Sections: ${esc(ids.map(i => SECTIONS[i].label).join(' · '))}<br>
+          Data source: live Neon — membership.members, membership.sales_ledger, divemeets.meets
+        </div>
+      </div>
+      <div id="mr-doc-body">
+        <div class="mr-soft">Building sections… <span id="mr-prog">0 / ${ids.length}</span></div>
+      </div>
+    </div>`;
+  document.body.appendChild(out);
+
+  let done = 0;
+  const total = ids.length;
+  const tick = () => { done++; const el = document.getElementById('mr-prog');
+                       if (el) el.textContent = done + ' / ' + total; };
+  const fail = (id, e) => `<section class="mr-section"><h2 class="mr-h2">${esc(SECTIONS[id].label)}</h2>
+        <p class="mr-p mr-warn">This section could not be built: ${esc(String(e && e.message || e))}</p>
+        </section>`;
+
+  const isBoundary = id => !!BOUNDARY_SECTIONS[id];
+  const plainIds = ids.filter(id => !isBoundary(id));
+  const boundIds = ids.filter(isBoundary);
+
+  // Non-boundary sections are independent and can run together.
+  const plain = await Promise.all(plainIds.map(id =>
+    Promise.resolve().then(() => SECTIONS[id].build(opts))
+      .catch(e => fail(id, e)).then(h => { tick(); return h; })));
+
+  // Boundary sections read the live map through global state, so they run one
+  // at a time -- and once per requested year, which is what was missing.
+  const bound = [];
+  if (boundIds.length){
+    const by = boundaryReady() ? boundaryYears(opts) : {years:[], missing:[]};
+    for (const id of boundIds){
+      let html = '';
+      try {
+        if (!boundaryReady()){
+          html = await SECTIONS[id].build(opts);      // renders its own "open the tab" notice
+        } else if (by.years.length <= 1){
+          html = await SECTIONS[id].build(opts);
+        } else {
+          const parts = [];
+          for (const y of by.years){
+            const one = await B().withYear(y, () => SECTIONS[id].build(opts));
+            parts.push(`<div class="mr-yearband">Membership year — ${esc(B().yearLabel(y))}</div>` + one);
+          }
+          if (by.missing.length){
+            parts.push(`<p class="mr-note">No boundary data exists for ${esc(by.missing.join(', '))}: the
+              geocoded county statistics only cover 2025 and 2026, so those years are omitted here rather
+              than estimated.</p>`);
+          }
+          html = parts.join('');
+        }
+      } catch(e){ html = fail(id, e); }
+      tick();
+      bound.push(html);
+    }
+  }
+
+  const order = {};
+  plainIds.forEach((id,i) => order[id] = plain[i]);
+  boundIds.forEach((id,i) => order[id] = bound[i]);
+  const results = ids.map(id => order[id]);
+
+  const body = document.getElementById('mr-doc-body');
+  if (body){
+    const d = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
+    body.innerHTML = results.join('') +
+      `<div class="mr-foot-note">Generated ${d} · USA Diving Membership Analytics ·
+       Reflects the filters, scenario and data active at time of generation.</div>`;
+  }
+};
+
+/* =====================================================================
+   SHARE VIEW
+   ===================================================================== */
+window._mrShare = function(){
+  const tab = document.querySelector('#tabs .tab.active');
+  const view = tab ? tab.getAttribute('data-view') : 'overview';
+  const parts = ['view=' + encodeURIComponent(view)];
+  if (boundaryReady()){
+    const sc = B().scenario();
+    parts.push('byear=' + encodeURIComponent(B().year()));
+    if (sc.id) parts.push('scenario=' + encodeURIComponent(sc.id));
+  }
+  const url = window.location.origin + window.location.pathname + '#ma-share/' + parts.join('&');
+  const done = () => toast('Share link copied to clipboard');
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done, () => window.prompt('Copy this link:', url));
+  } else window.prompt('Copy this link:', url);
+};
+function toast(msg){
+  if (window.USADToast && window.USADToast.show) { window.USADToast.show(msg); return; }
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:'+NAVY+';color:#fff;'+
+    'padding:10px 16px;border-radius:6px;font-size:13px;z-index:100000;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2500);
+}
+function applyShareHash(){
+  const h = window.location.hash || '';
+  if (!h.startsWith('#ma-share/')) return;
+  const map = {};
+  h.slice('#ma-share/'.length).split('&').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > 0) map[p.slice(0,i)] = decodeURIComponent(p.slice(i+1));
+  });
+  if (map.view){
+    const btn = document.querySelector(`#tabs .tab[data-view="${CSS.escape(map.view)}"]`);
+    if (btn) btn.click();
+  }
+}
+
+/* =====================================================================
+   MOUNT — action bar + styles
+   ===================================================================== */
+function mount(){
+  if (document.getElementById('mr-bar')) return;
+  const tabs = document.getElementById('tabs');
+  if (!tabs) return;
+  const bar = document.createElement('div');
+  bar.id = 'mr-bar';
+  bar.className = 'mr-bar';
+  bar.innerHTML = `
+    <span class="mr-bar-lbl">Reports</span>
+    <button class="mr-bar-btn mr-bar-prim" onclick="window._mrOpenBuilder()">Build a report</button>
+    <button class="mr-bar-btn" onclick="window._jcOpen ? window._jcOpen() : null"
+            title="Junior Circuit Comparison Report and your saved copies — generate, duplicate, edit">Comparison reports</button>
+    <button class="mr-bar-btn" onclick="window._mrOpenBuilder('__boundary__')"
+            title="Open the builder with the map templates first — nothing is chosen for you">Report on this map</button>
+    <button class="mr-bar-btn" onclick="window._mrShare()"
+            title="Copy a link that opens this same view">Share this view</button>
+    <span class="mr-bar-note">Every report prints straight to PDF.</span>`;
+  tabs.parentNode.insertBefore(bar, tabs.nextSibling);
+  window._mrOpenBuilder = function(preset){ openBuilder(preset); };
+  applyShareHash();
+}
+
+const STYLES = `
+.mr-bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 16px;padding:10px 14px;
+  background:#fff;border:1px solid #e2e8f2;border-radius:12px;box-shadow:0 4px 12px rgba(16,24,40,.04)}
+.mr-bar-lbl{font-family:'Barlow Condensed',sans-serif;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;font-size:13px;color:#171F69;padding-right:4px}
+.mr-bar-btn{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:999px;
+  padding:8px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+.mr-bar-btn:hover{border-color:#009AC7;color:#00789b}
+.mr-bar-prim{background:#171F69;color:#fff;border-color:#171F69}
+.mr-bar-prim:hover{background:#0f1650;color:#fff}
+.mr-bar-note{margin-left:auto;font-size:12px;color:#6b7390}
+
+/* ---- builder modal ---- */
+#mr-modal .mr-overlay{position:fixed;inset:0;background:rgba(15,20,45,.55);z-index:99998;
+  display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:26px 16px}
+#mr-modal .mr-dialog{background:#fff;border-radius:14px;max-width:1020px;width:100%;
+  box-shadow:0 18px 50px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:92vh}
+#mr-modal .mr-head{display:flex;align-items:flex-start;padding:20px 24px 14px;border-bottom:3px solid #E31937}
+#mr-modal .mr-eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#009AC7}
+#mr-modal .mr-title{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;
+  margin:2px 0 0;color:#171F69;text-transform:uppercase}
+#mr-modal .mr-x{margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer;color:#6b7390}
+#mr-modal .mr-body{padding:16px 24px;overflow:auto}
+#mr-modal .mr-step{display:flex;gap:14px;margin-bottom:22px}
+#mr-modal .mr-step-n{width:28px;height:28px;border-radius:50%;background:#171F69;color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:0 0 28px}
+#mr-modal .mr-step-c{flex:1;min-width:0}
+#mr-modal .mr-step-h{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin-bottom:9px}
+#mr-modal .mr-tmpls{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:9px}
+#mr-modal .mr-tmpl{text-align:left;border:1px solid #dbe2ee;border-radius:9px;padding:11px 13px;
+  background:#fff;cursor:pointer;font-family:inherit}
+#mr-modal .mr-tmpl:hover{border-color:#009AC7;background:#f6fbfd}
+#mr-modal .mr-tmpl.is-on{border-color:#171F69;background:#eef2fb;box-shadow:inset 0 0 0 1px #171F69}
+#mr-modal .mr-tmpl.is-dim{opacity:.62}
+#mr-modal .mr-tmpl-n{font-weight:800;font-size:13.5px;color:#171F69}
+#mr-modal .mr-tmpl-d{font-size:11.5px;color:#5a6480;margin:4px 0 6px;line-height:1.42}
+#mr-modal .mr-tmpl-s{font-size:10.5px;color:#009AC7;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+#mr-modal .mr-secgrp{margin-bottom:14px}
+#mr-modal .mr-secgrp-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+  color:#009AC7;margin-bottom:6px}
+#mr-modal .mr-sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(292px,1fr));gap:7px}
+#mr-modal .mr-secopt{display:flex;gap:9px;align-items:flex-start;border:1px solid #e2e8f2;
+  border-radius:8px;padding:9px 11px;cursor:pointer;background:#fff}
+#mr-modal .mr-secopt:hover{border-color:#009AC7}
+#mr-modal .mr-secopt.is-on{border-color:#171F69;background:#f5f8fd}
+#mr-modal .mr-secopt input{margin-top:2px;accent-color:#171F69}
+#mr-modal .mr-secopt-n{font-weight:700;font-size:12.5px;color:#171F69}
+#mr-modal .mr-secopt-d{font-size:11px;color:#5a6480;margin-top:2px;line-height:1.4}
+#mr-modal .mr-chips{display:flex;gap:6px;flex-wrap:wrap}
+#mr-modal .mr-scroll{max-height:132px;overflow:auto;padding:3px;border:1px solid #eef1f7;border-radius:7px}
+#mr-modal .mr-chip{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:999px;
+  padding:6px 13px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit}
+#mr-modal .mr-chip.sm{padding:4px 10px;font-size:11.5px}
+#mr-modal .mr-chip.is-on{background:#171F69;color:#fff;border-color:#171F69}
+#mr-modal .mr-fgrp{margin-bottom:11px}
+#mr-modal .mr-flbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:#5a6480;margin-bottom:5px}
+#mr-modal .mr-link{background:none;border:none;color:#009AC7;font-weight:700;font-size:12.5px;
+  cursor:pointer;padding:2px 0;font-family:inherit;text-decoration:underline}
+#mr-modal .mr-tag{font-size:9.5px;background:#eef2fb;color:#171F69;border-radius:4px;padding:1px 5px;
+  text-transform:uppercase;letter-spacing:.04em}
+#mr-modal .mr-tag-warn{background:#fef3e2;color:#b45309}
+#mr-modal .mr-foot{display:flex;align-items:center;gap:10px;padding:13px 24px;border-top:1px solid #e5e9f2;
+  background:#fafbfd;border-radius:0 0 14px 14px;flex-wrap:wrap}
+#mr-modal .mr-btn{border:1px solid #cdd6e4;background:#fff;color:#171F69;border-radius:7px;
+  padding:9px 17px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+#mr-modal .mr-btn-p{background:#171F69;color:#fff;border-color:#171F69}
+#mr-modal .mr-btn.is-dim{opacity:.45;cursor:not-allowed}
+#mr-modal .mr-soft{color:#6b7390;font-size:12px;font-weight:500}
+
+/* ---- generated document ---- */
+#mr-output{position:fixed;inset:0;background:#fafbfd;z-index:99999;overflow:auto;
+  font-family:'Inter',system-ui,sans-serif;color:#171F69}
+#mr-output .mr-toolbar{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e9f2;
+  padding:10px 18px;display:flex;align-items:center;gap:8px;z-index:1}
+#mr-output .mr-toolbar button{padding:7px 13px;border-radius:5px;border:1px solid #cdd6e4;background:#fff;
+  cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;color:#171F69}
+#mr-output .mr-print{background:#171F69;color:#fff;border-color:#171F69}
+#mr-output .mr-doc{max-width:920px;margin:24px auto;padding:34px 46px;background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#mr-output .mr-doc-head{border-bottom:4px solid #E31937;padding-bottom:14px;margin-bottom:22px}
+#mr-output .mr-doc-head h1{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:29px;
+  margin:0;color:#171F69;text-transform:uppercase;letter-spacing:.01em}
+#mr-output .mr-doc-sub{font-size:11.5px;color:#5a6480;margin-top:8px;line-height:1.65}
+#mr-output .mr-section{margin:26px 0;page-break-inside:auto}
+#mr-output .mr-scenario-badge{background:#171F69;color:#fff;border-radius:8px;padding:10px 16px;
+  margin:0 0 14px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;page-break-inside:avoid}
+#mr-output .mr-scenario-badge .mr-sb-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8FC3EA;flex-shrink:0}
+#mr-output .mr-scenario-badge .mr-sb-name{font-weight:800;font-size:15px}
+#mr-output .mr-scenario-badge .mr-sb-year{font-size:11px;color:#c8d0f0;margin-left:auto;white-space:nowrap}
+#mr-output .mr-scenario-badge .mr-sb-dirty{font-size:10px;color:#fde68a;font-weight:600}
+#mr-output .mr-scenario-badge.mr-sb-compare{display:grid;grid-template-columns:1fr auto 1fr;
+  align-items:center;gap:4px 12px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-col{display:flex;flex-direction:column;gap:1px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-vs{font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;font-size:12px;color:#8FC3EA;text-align:center;padding:0 4px}
+#mr-output .mr-scenario-badge.mr-sb-compare .mr-sb-col.mr-sb-right{align-items:flex-end;text-align:right}
+#mr-output .mr-rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;
+  margin:8px 0 16px}
+#mr-output .mr-rules-col{background:#f7f8fc;border:1px solid #e2e5ef;border-radius:8px;padding:11px 14px}
+#mr-output .mr-rules-h{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.02em;margin-bottom:6px;
+  border-bottom:2px solid #E31937;padding-bottom:4px}
+#mr-output .mr-rules-col .mr-bullets{margin:0;padding-left:16px;font-size:11px;line-height:1.6}
+#mr-output .mr-h2{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;color:#171F69;
+  border-bottom:2px solid #171F69;padding-bottom:4px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
+.mr-yearband{background:var(--navy);color:#fff;font-family:var(--display);font-size:17px;letter-spacing:.05em;
+  text-transform:uppercase;padding:7px 14px;border-radius:9px;margin:22px 0 10px;page-break-after:avoid}
+
+#mr-output .mr-h3{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14.5px;color:#171F69;
+  margin:18px 0 6px;text-transform:uppercase;letter-spacing:.03em}
+#mr-output .mr-p{font-size:12px;color:#2d3450;margin:0 0 9px;line-height:1.55}
+#mr-output .mr-note{font-size:11px;color:#5a6480;margin:9px 0 0;line-height:1.55;
+  background:#f6f8fc;border-left:3px solid #009AC7;padding:8px 11px;border-radius:0 5px 5px 0}
+.mr-sub td{background:#f4f8fd}
+
+.mr-bullets{margin:8px 0 12px;padding-left:20px;font-size:11px;line-height:1.6;color:#13213a}
+.mr-bullets li{margin-bottom:4px}
+
+#mr-output .mr-warn{background:#fef3e2;border-left:3px solid #b45309;padding:9px 12px;border-radius:0 5px 5px 0;color:#7c4a06}
+#mr-output .mr-soft{color:#6b7390;font-size:10.5px}
+#mr-output .mr-mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+#mr-output .mr-table{width:100%;border-collapse:collapse;font-size:11.5px;margin:7px 0 4px}
+#mr-output .mr-table th{background:#eef1f7;color:#171F69;text-align:left;padding:5px 8px;font-weight:700;
+  text-transform:uppercase;font-size:9.5px;letter-spacing:.04em;border-bottom:1px solid #c5cce0}
+#mr-output .mr-table td{padding:5px 8px;border-bottom:1px solid #e9edf5;vertical-align:middle}
+#mr-output .mr-table .mr-num{text-align:right;font-variant-numeric:tabular-nums;
+  font-family:'JetBrains Mono',monospace;font-size:11px}
+#mr-output .mr-table th.mr-num{text-align:right}
+#mr-output .mr-table-sm{font-size:10.5px}
+#mr-output .mr-table-sm td,#mr-output .mr-table-sm th{padding:3.5px 7px}
+#mr-output .mr-table-plain td{border-bottom:none;padding:3px 8px}
+#mr-output .mr-table tr.mr-total td{font-weight:800;background:#eef3fa;border-top:2px solid #c8d4e6}
+#mr-output .mr-table tr.mr-muted td{color:#6b7390;font-style:italic}
+#mr-output .mr-zip{page-break-inside:auto}
+#mr-output .mr-up{color:#15803d;font-weight:700;font-size:11px}
+#mr-output .mr-down{color:#b3122b;font-weight:700;font-size:11px}
+#mr-output .mr-over{color:#b45309;font-weight:700}
+#mr-output .mr-under{color:#1d4ed8;font-weight:700}
+#mr-output .mr-bar{display:block;height:10px;line-height:0;background:#eef1f7;border-radius:3px;overflow:hidden;min-width:40px}
+#mr-output .mr-bar-f{display:block;height:10px;min-height:10px;border-radius:3px}
+#mr-output .mr-devbar{position:relative;display:block;height:11px;background:#f2f5fa;border-radius:3px}
+#mr-output .mr-devbar-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#94a3b8}
+#mr-output .mr-devbar-f{position:absolute;top:1px;bottom:1px;border-radius:2px}
+#mr-output .mr-sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+#mr-output .mr-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:9px;margin:10px 0 14px}
+#mr-output .mr-kpi{background:#f6f8fc;border-radius:7px;padding:11px 13px;border-top:3px solid #009AC7}
+#mr-output .mr-kpi-v{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;color:#171F69;line-height:1.05}
+#mr-output .mr-kpi-l{font-size:10.5px;font-weight:700;color:#171F69;text-transform:uppercase;
+  letter-spacing:.03em;margin-top:3px}
+#mr-output .mr-kpi-s{font-size:10px;color:#5a6480;margin-top:4px;line-height:1.45}
+#mr-output .mr-profile{border:1px solid #e2e8f2;border-radius:8px;padding:12px 14px;margin:11px 0;
+  page-break-inside:avoid}
+#mr-output .mr-profile-h{padding-left:11px;margin-bottom:9px}
+#mr-output .mr-profile-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.02em}
+#mr-output .mr-profile-kpi{display:flex;flex-wrap:wrap;gap:13px;font-size:11px;color:#5a6480;margin-top:3px}
+#mr-output .mr-profile-kpi b{color:#171F69;font-size:12.5px}
+#mr-output .mr-stack{display:flex;height:11px;border-radius:3px;overflow:hidden;margin:5px 0 9px;background:#eef1f7}
+#mr-output .mr-seg{display:block;height:11px;min-height:11px}
+#mr-output .mr-kv{display:flex;gap:9px;font-size:11px;margin:5px 0;line-height:1.5}
+#mr-output .mr-kv-k{flex:0 0 96px;font-weight:700;color:#171F69;text-transform:uppercase;
+  font-size:9.5px;letter-spacing:.04em;padding-top:1px}
+#mr-output .mr-kv-v{flex:1;color:#2d3450}
+#mr-output .mr-map{border:1px solid #e2e8f2;border-radius:8px;padding:8px;margin:9px 0;background:#fff}
+#mr-output .mr-map svg{width:100%;height:auto;display:block}\n#mr-output .mr-stage{margin:14px 0 20px;page-break-inside:avoid}\n#mr-output .mr-stagemap{width:100%;height:auto;display:block}
+#mr-output .mr-mapkeys{display:flex;flex-wrap:wrap;gap:5px 14px;margin:6px 0 2px}
+#mr-output .mr-mapkey{font-size:10.5px;color:#2d3450;white-space:nowrap}
+#mr-output .mr-foot-note{margin-top:20px;padding-top:10px;border-top:1px solid #e5e9f2;
+  font-size:9.5px;color:#6b7390}
+
+/* ---- potential-schedule cards (boundary_schedule report section) ----
+   Matches Schedule Builder's own printed handout (HANDOUT_CSS / buildHandoutDayHTML
+   in sb-app.js) as closely as a report section can -- same navy header bar, same
+   red/white/blue accent stripe, same Barlow Condensed treatment for the big
+   numbers -- so a page from this report and a page Schedule Builder prints for a
+   real meet read as the same family of document. No clock times: this is a
+   projection with no real date set yet, so entries and estimated run time replace
+   start/end times as the thing each row actually reports. */
+#mr-output .mr-sched-stop{border:1px solid #e2e8f2;border-radius:9px;padding:13px 15px;margin:14px 0;
+  page-break-inside:avoid}
+#mr-output .mr-sched-stop-h{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+#mr-output .mr-sched-stop-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;
+  color:#171F69;text-transform:uppercase;letter-spacing:.02em}
+#mr-output .mr-sched-stop-kpis{display:flex;flex-wrap:wrap;gap:5px 16px;font-size:11px;color:#5a6480;
+  margin:2px 0 9px}
+#mr-output .mr-sched-stop-kpis .mr-over{color:#b45309;font-weight:700}
+#mr-output .mr-sched-stop-kpis .mr-under{color:#15803d;font-weight:700}
+#mr-output .mr-hd-day{background:#fff;border:1px solid #e2e8f2;border-radius:10px;margin:10px 0;
+  overflow:hidden;page-break-inside:avoid}
+#mr-output .mr-hd-day.over{border-color:#f0c48a}
+#mr-output .mr-hd-day-h{background:#171F69;color:#fff;padding:9px 14px;display:flex;
+  justify-content:space-between;align-items:center}
+#mr-output .mr-hd-day-h .mr-hd-daynum{font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:16px;text-transform:uppercase;letter-spacing:.03em}
+#mr-output .mr-hd-day-h .mr-hd-pool{font-size:10.5px;opacity:.8}
+#mr-output .mr-hd-accent{height:3px;background:linear-gradient(90deg,#E31937 0 33%,#fff 33% 66%,#009AC7 66% 100%)}
+#mr-output .mr-hd-body{padding:9px 14px 11px}
+#mr-output .mr-hd-day-warn{font-size:10.5px;color:#b45309;font-weight:600;margin:6px 0 0}
+#mr-output .mr-hd-sess{border-bottom:1.5px solid #E5E9F2;padding:8px 0}
+#mr-output .mr-hd-sess:last-child{border-bottom:none}
+#mr-output .mr-hd-sess-h{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+#mr-output .mr-hd-sess-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;
+  color:#171F69}
+#mr-output .mr-hd-wu{font-size:10.5px;color:#009AC7;font-weight:600}
+#mr-output .mr-hd-boards{font-size:10px;color:#5a6480;margin-bottom:3px}
+#mr-output .mr-hd-ev{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11.5px;padding:1.5px 0}
+#mr-output .mr-hd-ev-name{flex:1}
+#mr-output .mr-hd-ev-nums{color:#374151;font-variant-numeric:tabular-nums;font-weight:600;
+  white-space:nowrap;margin-left:10px}
+#mr-output .mr-hd-ev-nums .n{color:#94A3B8;font-weight:500}
+#mr-output .mr-hd-ev-flag{display:block;font-size:10px;color:#b45309;font-style:italic}
+#mr-output .mr-sched-practice{font-size:10.5px;color:#5a6480;margin-top:8px}
+@media print{
+  body *{visibility:hidden !important}
+  #mr-output,#mr-output *{visibility:visible !important}
+  #mr-output{position:absolute;left:0;top:0;width:100%;background:#fff;overflow:visible}
+  #mr-output .mr-toolbar{display:none !important}
+  #mr-output .mr-doc{box-shadow:none;margin:0;max-width:none;padding:0}
+  #mr-output,#mr-output *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;
+    color-adjust:exact !important}
+  #mr-output .mr-h2{page-break-after:avoid}
+  #mr-output .mr-h3{page-break-after:avoid}
+  #mr-output table{page-break-after:auto}
+  #mr-output .mr-table thead{display:table-header-group}
+  #mr-output tr{page-break-inside:avoid}
+  #mr-output .mr-table{table-layout:auto;max-width:100%;font-size:10px}
+  #mr-output .mr-fg-tbl,#mr-output .bs-fg-tbl{font-size:8.5px}
+  #mr-output .mr-rules-grid{display:block}
+  #mr-output .mr-rules-col{margin-bottom:8px;page-break-inside:avoid}
+  @page{margin:.55in}
+}
+
+/* No mobile breakpoint existed anywhere in this file before. Two fixes, both
+   standard and low-risk: the document's fixed 34px/46px padding leaves very
+   little usable width once the viewport itself is only a few hundred px, and
+   report tables run 5-9 columns wide, which will not reflow sanely at any
+   width -- letting them scroll horizontally is the safe, well-established
+   fix, not attempting to reflow columns nobody has seen rendered.
+   Explicitly screen-only: overflow-x:auto does nothing useful on a printed
+   page (there is no scrolling), and leaving this unscoped risked being part
+   of why report tables were bleeding past the printed page edge instead of
+   shrinking or wrapping. */
+@media screen and (max-width: 600px){
+  #mr-output .mr-doc{padding:18px 14px}
+  #mr-output .mr-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    white-space:nowrap;max-width:100%}
+  #mr-output .mr-map svg,#mr-output .mr-stagemap{max-width:100%}
+}
+`;
+
+
+/* A duplicate key in a section object is silent in JavaScript -- the later one
+   wins and the earlier section vanishes with no error. That happened once
+   (boundary_compare was added on top of an existing section of the same name,
+   which killed the county-churn report until it was caught). Counting the keys
+   in the source is not possible at runtime, so instead every section registry
+   is checked for collisions as the registries are merged. */
+function assertNoDuplicateSections(){
+  const seen = {}, dupes = [];
+  [['SECTIONS', SECTIONS], ['BOUNDARY_SECTIONS', BOUNDARY_SECTIONS],
+   ['EQUITY_SECTIONS', EQUITY_SECTIONS]].forEach(([nm, reg]) => {
+    Object.keys(reg || {}).forEach(k => {
+      if (seen[k]) dupes.push(`${k} (in ${seen[k]} and ${nm})`);
+      else seen[k] = nm;
+    });
+  });
+  if (dupes.length) console.error('Report sections collide, so one of each pair is unreachable:', dupes);
+  return dupes;
+}
+
+function injectCSS(){
+  if (document.getElementById('mr-css')) return;
+  const s = document.createElement('style');
+  s.id = 'mr-css';
+  s.textContent = STYLES;
+  document.head.appendChild(s);
+}
+
+injectCSS();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
+else mount();
+/* Exposed so a single section can be built without driving the whole modal --
+   used by the tests, and by anything that wants one section's html. */
+window.MAReports = {
+  sections: () => SECTIONS,
+  build: (id, opts) => SECTIONS[id] ? SECTIONS[id].build(opts) : Promise.resolve(''),
+};
+
+window.addEventListener('load', mount);
+
+})();

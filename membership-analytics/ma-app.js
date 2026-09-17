@@ -625,10 +625,10 @@ function wireTabs(){
     const v = t.dataset.view;
     document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
     document.getElementById('view'+v[0].toUpperCase()+v.slice(1)).classList.add('active');
-    if (v==='boundary' && window.renderBoundary) window.renderBoundary();
+    // Boundary Studio and Pricing Studio moved to boundary-studio/ — their
+    // handoffs are gone with them. Everything else is unchanged.
     if (v==='types') renderTypes();
     if (v==='clubs' && window.renderClubs) window.renderClubs();
-    if (v==='pricing' && window.renderPricing) window.renderPricing();
     if (v==='overview' && window.renderMemberImport){
       const host = document.getElementById('viewOverview');
       if (host && !document.getElementById('miCard')){
