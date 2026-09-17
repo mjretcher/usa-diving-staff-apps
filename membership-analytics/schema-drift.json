@@ -1,6 +1,6 @@
 {
-  "generated": "2026-09-17T16:01:01Z",
-  "declared_tables": 52,
+  "generated": "2026-09-17T19:15:17Z",
+  "declared_tables": 53,
   "live_tables": 82,
   "type_mismatches": [],
   "columns_missing_in_db": [],
@@ -9,6 +9,86 @@
     {
       "table": "divemeets.meets",
       "column": "sheets_attempts",
+      "actual": "integer"
+    },
+    {
+      "table": "membership.boundary_maps",
+      "column": "owner",
+      "actual": "text"
+    },
+    {
+      "table": "membership.boundary_maps",
+      "column": "saved_by",
+      "actual": "text"
+    },
+    {
+      "table": "membership.boundary_scenarios",
+      "column": "owner",
+      "actual": "text"
+    },
+    {
+      "table": "membership.boundary_scenarios",
+      "column": "saved_by",
+      "actual": "text"
+    },
+    {
+      "table": "membership.pathways",
+      "column": "owner",
+      "actual": "text"
+    },
+    {
+      "table": "membership.pathways",
+      "column": "saved_by",
+      "actual": "text"
+    },
+    {
+      "table": "membership.report_definitions",
+      "column": "owner",
+      "actual": "text"
+    },
+    {
+      "table": "membership.report_definitions",
+      "column": "saved_by",
+      "actual": "text"
+    },
+    {
+      "table": "membership.scenario_schedules",
+      "column": "owner",
+      "actual": "text"
+    },
+    {
+      "table": "membership.scenario_schedules",
+      "column": "saved_by",
+      "actual": "text"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "created_at",
+      "actual": "timestamp with time zone"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "label",
+      "actual": "text"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "last_used_at",
+      "actual": "timestamp with time zone"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "revoked_at",
+      "actual": "timestamp with time zone"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "token",
+      "actual": "text"
+    },
+    {
+      "table": "share_access.tokens",
+      "column": "use_count",
       "actual": "integer"
     }
   ]
