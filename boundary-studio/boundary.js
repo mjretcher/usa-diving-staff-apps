@@ -804,10 +804,12 @@ function ensureLiftDefs(){
   const defs = document.createElementNS(NS, 'defs');
   defs.innerHTML = `<filter id="bsLiftF" x="-10%" y="-10%" width="120%" height="125%" color-interpolation-filters="sRGB">
     <feMorphology in="SourceAlpha" operator="dilate" radius="0.9" result="thick"/>
-    <feFlood flood-color="#171F69" flood-opacity="0.95"/><feComposite in2="thick" operator="in" result="edge"/>
+    <feComposite in="thick" in2="SourceAlpha" operator="out" result="ring"/>
+    <feFlood flood-color="#171F69" flood-opacity="0.95"/><feComposite in2="ring" operator="in" result="edge"/>
     <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
     <feOffset in="blur" dx="0" dy="3" result="off"/>
-    <feFlood flood-color="#0b1240" flood-opacity="0.38"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feComposite in="off" in2="SourceAlpha" operator="out" result="offOut"/>
+    <feFlood flood-color="#0b1240" flood-opacity="0.38"/><feComposite in2="offOut" operator="in" result="shadow"/>
     <feMerge><feMergeNode in="shadow"/><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>`;
   svg.insertBefore(defs, svg.firstChild);
@@ -836,12 +838,19 @@ function drawSelectedLift(){
     f.querySelector('feOffset').setAttribute('dy', (3 / k).toFixed(3));
   }
   lift.setAttribute('transform', `translate(0 ${(-1.6 / k).toFixed(3)})`);
+  /* Every county in the copy is drawn fully opaque. The live layer shows an
+     empty county as the area colour at 60% opacity, and copying that opacity
+     here put a translucent county on top of the filter's own navy edge and
+     shadow layers -- which made empty counties DARKER than full ones, so the
+     whole area read as one bold block and the with-members signal vanished.
+     The solved opaque tint (emptyTint) is the same lightness the eye expects,
+     and with an opaque source the ring-only filter above has nothing to bleed
+     through. */
+  const col = groupColor(S.active), pale = emptyTint(col);
   const parts = [];
   for (const c of S.geo.counties){
     if (S.assign[c.f] !== S.active) continue;
-    const el = countyEl(c.f);
-    const cs = el ? getComputedStyle(el) : null;
-    parts.push(`<path d="${c.d}" fill="${cs ? cs.fill : groupColor(S.active)}" fill-opacity="${cs ? cs.fillOpacity : 1}" stroke="#fff" stroke-width="${(0.35 / Math.sqrt(k)).toFixed(3)}"/>`);
+    parts.push(`<path d="${c.d}" fill="${countyEmpty(c.f) ? pale : col}" stroke="#fff" stroke-width="${(0.35 / Math.sqrt(k)).toFixed(3)}"/>`);
   }
   lift.innerHTML = parts.join('');
 }
