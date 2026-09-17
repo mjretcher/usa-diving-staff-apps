@@ -52,7 +52,7 @@ jobs:
         if: always()
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "gha@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add db/audits/analytics_refresh.log || true
           git commit -m "analytics refresh log" || echo none
           git pull --rebase --autostash -q || true

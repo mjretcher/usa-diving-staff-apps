@@ -15,7 +15,7 @@ jobs:
           python db/scripts/ae_world_provenance.py 2>&1 | tee db/audits/ae_world_prov.txt
       - run: |
           git config user.name "github-actions[bot]"
-          git config user.email "gha@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add db/audits/ae_world_prov.txt
           git commit -m "AE world provenance" || echo none
           git pull --rebase --autostash -q || true

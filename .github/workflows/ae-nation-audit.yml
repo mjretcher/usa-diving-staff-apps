@@ -15,7 +15,7 @@ jobs:
           python db/scripts/ae_nation_audit.py 2>&1 | tee db/audits/ae_nation_audit.txt
       - run: |
           git config user.name "github-actions[bot]"
-          git config user.email "gha@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add db/audits/ae_nation_audit.txt
           git commit -m "AE nation audit" || echo none
           git pull --rebase --autostash -q || true
