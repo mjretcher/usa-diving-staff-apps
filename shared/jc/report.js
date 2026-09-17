@@ -205,6 +205,7 @@ async function buildColumn(col, ctx) {
     return {
       label: col.label || r.scenarioName, kind: 'scenario', source: `Saved scenario “${r.scenarioName}” (${col.scenarioId})`,
       assumption: r.assumptions && r.assumptions.note,
+      seedBasis: r.assumptions && r.assumptions.seedBasis,
       endsAt: tiers[tiers.length - 1].name,
       status: 'projected', tiers,
       nationals: !nat ? null : {

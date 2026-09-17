@@ -40,14 +40,20 @@ console.log('=== seed: every first-stop cell comes from the stage where that eve
 {
   const adv = JSON.parse(fs.readFileSync(path.join(MA, 'advance-data.json'), 'utf8'));
   const seed = withFirstStopSeed(adv).pools['2026|Regionals_CDfirst'];
+  const combined = !!adv.pools['2026|FirstStop'];
+  console.log(`  seed basis: ${combined ? 'combined Regionals + Zones pool' : 'split (Regionals A/B springboard, Zones platform and C/D)'}`);
+  const either = {};
+  for (const r of await neonQuery(`select ${cellSql} as cell, count(distinct coalesce(diver_id_dm::text, diver_first||diver_last)||'|'||age_group||gender||discipline)::int as n
+      from core.event_results where is_junior_circuit and year=2026 and stage in ('Regionals','Zones') and not coalesce(is_synchro,false)
+        and age_group is not null group by 1`)) either[r.cell] = r.n;
   const seeded = {}; for (const f in seed) for (const c in seed[f]) seeded[c] = (seeded[c] || 0) + seed[f][c];
   const reg = await realByCell(2026, 'Regionals'), zon = await realByCell(2026, 'Zones');
   // advance-data.json drops entries it can't place in a county (documented 1-9% gap), so allow 15% under.
   for (const grp of ['A', 'B', 'C', 'D']) for (const g of ['B', 'G']) for (const kind of ['springboard', 'platform']) {
     const cells = CELLS.filter((c) => c[0] === grp && c[1] === g && (kind === 'platform') === (c[2] === 'P'));
-    const ref = cells.reduce((a, c) => a + ((seedFromZones(c) ? zon : reg)[c] || 0), 0);
+    const ref = cells.reduce((a, c) => a + ((combined ? either : seedFromZones(c) ? zon : reg)[c] || 0), 0);
     const got = cells.reduce((a, c) => a + (seeded[c] || 0), 0);
-    ok(ref === 0 || (got >= ref * 0.85 && got <= ref * 1.05), `Group ${grp} ${g === 'B' ? 'boys' : 'girls'} ${kind}: seed ${got} event entries vs real ${ref} at ${seedFromZones(cells[0]) ? 'Zones' : 'Regionals'}`);
+    ok(ref === 0 || (got >= ref * 0.85 && got <= ref * 1.05), `Group ${grp} ${g === 'B' ? 'boys' : 'girls'} ${kind}: seed ${got} event entries vs real ${ref} at ${combined ? 'Regionals or Zones' : seedFromZones(cells[0]) ? 'Zones' : 'Regionals'}`);
   }
 }
 

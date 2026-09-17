@@ -10,6 +10,13 @@ name: Rebuild advance-data
 
 on:
   workflow_dispatch:
+  # Also when the builder itself changes, so a new pool lands without a
+  # separate manual run. The regression gate below still refuses a rebuild
+  # that moves any existing pool by more than 2%.
+  push:
+    branches: [main]
+    paths:
+      - "db/scripts/build_advance_data.py"
 
 permissions:
   contents: write
@@ -55,5 +62,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add membership-analytics/advance-data.json
-          git commit -m "Rebuild advance-data.json from core.event_results (adds E/W/C pool)"
+          git commit -m "Rebuild advance-data.json from core.event_results"
           git push

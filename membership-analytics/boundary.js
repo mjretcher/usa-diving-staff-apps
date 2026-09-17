@@ -1415,6 +1415,10 @@ function renderSeedPoolPicker(){
 function firstStopFromZones(year, cell){ return cell[2] === 'P' || (year === '2026' && /^[CD]/.test(cell)); }
 function firstQualifyingPool(year){
   const pools = S.advData && S.advData.pools; if (!pools) return null;
+  // A single first stop is mandatory for every age group, so when the combined
+  // pool exists (every athlete who competed in an event at Regionals OR Zones,
+  // once) it is the seed. The split below is the fallback.
+  if (pools[year + '|FirstStop']) return year + '|FirstStop';
   const key = year + '|FirstQualifying';
   if (pools[key]) return key;
   const R = pools[year + '|Regionals'], Z = pools[year + '|Zones'];

@@ -13,6 +13,8 @@ WHAT IT PRODUCES
     pools["{year}|{stage}"][county_fips][event_code] = number of entries
     event_code is [A-D][B|G][1|3|P] -- age group, gender, board.
     Stages: Regionals, Zones, EWC, Nationals. Years: 2024, 2025, 2026.
+    Plus "{year}|FirstStop": Regionals and Zones combined, each diver once per
+    event -- the seed for a single mandatory first stop.
 
     2024 genuinely has no EWC pool -- not a gap in this script, a fact about
     that season. 2024 ran the old 3-stage Region -> Zone -> Nationals
@@ -65,6 +67,7 @@ TARGET = os.path.join(ROOT, "membership-analytics", "advance-data.json")
 
 YEARS = (2024, 2025, 2026)
 STAGE_ALIASES = {
+    "FirstStop": "FirstStop",
     "Regionals": "Regionals",
     "Regional": "Regionals",
     "Zones": "Zones",
@@ -128,6 +131,46 @@ LEFT JOIN mem m ON m.f = e.f AND m.l = e.l
 GROUP BY 1, 2, 3, 4, 5, 6
 """
 
+# One first stop replacing Regionals and Zones: every diver who competed in an
+# event at EITHER stage that season, counted once per event (a diver who dove
+# 3m at both stages is one entry, not two). Divers are matched across the two
+# stages by DiveMeets id where present, otherwise by name. Used to seed a
+# proposal whose single first stop (e.g. nine Zones) is mandatory for every
+# age group -- including Groups C and D, who in 2026 could skip Regionals.
+FIRST_STOP_SQL = """
+WITH ent AS (
+    SELECT DISTINCT
+        COALESCE(r.diver_id_dm::text, lower(btrim(r.diver_first)) || '|' || lower(btrim(r.diver_last))) AS who,
+        lower(btrim(r.diver_first)) AS f,
+        lower(btrim(r.diver_last))  AS l,
+        r.year, r.age_group, r.gender, r.discipline
+    FROM core.event_results r
+    WHERE r.is_junior_circuit = TRUE
+      AND COALESCE(r.is_synchro, FALSE) = FALSE
+      AND r.year = ANY(%s)
+      AND r.stage IN ('Regionals', 'Zones')
+      AND r.age_group IS NOT NULL
+      AND r.gender IS NOT NULL
+      AND r.discipline IS NOT NULL
+),
+one AS (
+    SELECT who, year, age_group, gender, discipline, min(f) AS f, min(l) AS l
+    FROM ent GROUP BY 1, 2, 3, 4, 5
+),
+mem AS (
+    SELECT lower(btrim(first_name)) AS f,
+           lower(btrim(last_name))  AS l,
+           (array_agg(zip5 ORDER BY membership_year DESC))[1] AS zip5
+    FROM membership.members
+    WHERE zip5 IS NOT NULL AND btrim(zip5) <> ''
+    GROUP BY 1, 2
+)
+SELECT o.year, 'FirstStop', m.zip5, o.age_group, o.gender, o.discipline, count(*) AS n
+FROM one o
+LEFT JOIN mem m ON m.f = o.f AND m.l = o.l
+GROUP BY 1, 2, 3, 4, 5, 6
+"""
+
 STAGE_PROBE = """
 SELECT stage, year, count(*) FROM core.event_results
 WHERE is_junior_circuit = TRUE AND year = ANY(%s)
@@ -152,9 +195,11 @@ def main():
     for s, y, n in stages_seen:
         print(f"   {y} {s!r:24} {n:6} rows")
 
-    wanted = sorted({k for k in STAGE_ALIASES})
+    wanted = sorted({k for k in STAGE_ALIASES if k != "FirstStop"})
     cur.execute(SQL, (list(YEARS), wanted))
     rows = cur.fetchall()
+    cur.execute(FIRST_STOP_SQL, (list(YEARS),))
+    rows += cur.fetchall()
     cur.close()
     conn.close()
     print(f"aggregated rows: {len(rows)}")

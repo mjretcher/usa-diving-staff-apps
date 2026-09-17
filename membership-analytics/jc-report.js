@@ -523,8 +523,14 @@ function secAccuracy(r) {
     <p class="mr-p">In 2026, ${n(b.earnedTop3.entries)} individual event entries (${n(b.earnedTop3.athletes)} unique athletes) earned a Junior Nationals place by finishing top 3 at Zones or East, West, Central. ${n(b.competedTop3.entries)} (${n(b.competedTop3.athletes)} unique athletes) competed in that event — ${pct(100 * b.attendance)}. Another ${n(b.otherCompeted.entries)} event entries came from athletes who competed in that event at Zones or E/W/C without a qualifying finish (places declined by others and filled from further down, or other approvals). A projection that fills every earned place is the high end; the same projection at ${pct(100 * b.attendance)} is the low end.</p>`;
   const c26 = r.columns.find((c) => ok(c) && c.kind === 'structure2026');
   const sc = r.columns.filter((c) => ok(c) && c.kind === 'scenario' && c.assumption);
-  if (c26 && sc.length) html += `<h3 class="mr-h3">What the proposals' first stop assumes</h3>
-    <p class="mr-p">Projected first stop (${sc.map((c) => `${esc(c.label)} ${n(c.tiers[0].eventEntries)} event entries, ${n(c.tiers[0].uniqueAthletes)} unique athletes`).join('; ')}) is built from 2026 Regionals springboard for Groups A and B, plus 2026 Zones for platform and Groups C and D. In 2026, ${n(c26.firstStops.eventEntries)} event entries (${n(c26.firstStops.uniqueAthletes)} unique athletes) were competed at Regionals, Zones or both. The gap is mostly Group C and D athletes who dove at Regionals but did not go on to Zones; the projection does not assume they would travel to a Zones-sized first stop.</p>`;
+  if (c26 && sc.length) {
+    const basis = sc[0].seedBasis;
+    html += `<h3 class="mr-h3">What the proposals' first stop assumes</h3>
+    <p class="mr-p">A single first stop is mandatory for every age group, Groups C and D included. ${basis === 'combined'
+      ? `It is seeded with every athlete who competed in each event at 2026 Regionals or Zones, counted once per event: ${n(c26.firstStops.eventEntries)} event entries (${n(c26.firstStops.uniqueAthletes)} unique athletes) in 2026 results.`
+      : `It is seeded from 2026 Regionals for Group A/B springboard and from 2026 Zones for platform and Groups C/D. In 2026, ${n(c26.firstStops.eventEntries)} event entries (${n(c26.firstStops.uniqueAthletes)} unique athletes) were competed at Regionals, Zones or both.`}
+    Projected first stop: ${sc.map((c) => `${esc(c.label)} ${n(c.tiers[0].eventEntries)} event entries, ${n(c.tiers[0].uniqueAthletes)} unique athletes`).join('; ')}. The projection counts only athletes whose home county is on file (about 98% of 2026 entries).</p>`;
+  }
   return section('How accurate the model is', html);
 }
 
