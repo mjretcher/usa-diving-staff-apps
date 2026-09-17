@@ -127,7 +127,7 @@ const S = {
   hostPer_stop: null,   // {levelIdx|groupIdx: dollars} — a negotiated figure for one meet
   tiersOpen: false,     // whether Names & structure is open, because YOU opened it
   frozen: null,         // {at, note, stamps, figures} once presented — see freezeScenario()
-  loadedStamps: null,   // the data build a loaded scenario was saved against
+  loadedStamps: null,   // the data build a loaded proposal was saved against
   tripCost: null,       // per-stop travel and lodging
   costEvents: 2,        // events an athlete contests
   costElastic: null,    // how hard cost bites on take-up
@@ -141,7 +141,7 @@ const S = {
   age: null,            // fips -> {y25:[D,C,B,A,19+], y26:[...]}
   scenarioId: null,
   scenarioName: '',
-  undo: [], redo: [],   // full scenario snapshots
+  undo: [], redo: [],   // full proposal snapshots
   compare: null,        // {id, name, assign, regions} loaded for side-by-side churn
   palOpen: null,        // area index whose colour picker is open
   mergeFrom: 0, mergeTo: 1,
@@ -154,7 +154,7 @@ const S = {
   // Presentation. 'atlas' is the redesigned seven-workspace view; 'classic'
   // is the two-card panel it replaces, kept reachable until parity is signed off.
   ui: 'atlas',
-  savedAt: null,        // when this scenario was last written, for the status chip
+  savedAt: null,        // when this proposal was last written, for the status chip
   atlMetric: 'members', // what the Map rail's rows count
   atlBdL: 0, atlBdR: null,   // Projection: which level / round the breakdown shows
   cmpView: 'card', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
@@ -958,7 +958,7 @@ function renderPanel(){
       <input class="search" id="bsName" placeholder="Scenario name&hellip;" value="${esc(S.scenarioName)}" style="min-width:180px">
       <button class="tab" id="bsSave">${S.dirty?'Save*':'Save'}</button>
       <button class="tab" id="bsSaveNew">Save as a new one</button>
-      <select class="sel" id="bsLoad"><option value="">Load scenario&hellip;</option></select>
+      <select class="sel" id="bsLoad"><option value="">Load proposal&hellip;</option></select>
       <button class="tab" id="bsNew">New / Clear</button>
       <button class="tab" id="bsDelete" ${(!S.scenarioId||isSeed(S.scenarioId))?'disabled':''}>Delete this one</button>
     </div>
@@ -1066,7 +1066,7 @@ function renderCompare(){
     <table class="bs-table"><thead><tr>
       <th>Area now</th><th class="num">Members it keeps</th><th>Members it takes from</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <div class="note" style="margin-top:6px">Matched by area name. Rename areas to match the other scenario if you want a like-for-like read.</div>
+    <div class="note" style="margin-top:6px">Matched by area name. Rename areas to match the other proposal if you want a like-for-like read.</div>
   </div>`;
 }
 
@@ -2311,7 +2311,7 @@ function renderProvenance(){
     <span>take-up <code>${esc(now.calibration_basis||'—')}</code></span>
     <span>season <code>${esc(now.year)}</code></span>
     ${st ? (drifted
-      ? `<span class="bs-prov-warn">This scenario was saved against a different data build
+      ? `<span class="bs-prov-warn">This proposal was saved against a different data build
           (${d(st.advance_data)}). The figures on screen are not the figures it was saved with.</span>`
       : `<span class="bs-prov-ok">Same data build as when it was saved.</span>`) : ''}
   </div>`;
@@ -2372,7 +2372,7 @@ function renderFinancials(){
     const tot = a.total;
     return `<div class="bs-bd">
       <div class="bs-bd-h"><b>The money</b>
-        <span class="note">Load a comparison scenario on the map to price two side by side.</span>
+        <span class="note">Load a comparison proposal on the map to price two side by side.</span>
         ${feeBar}</div>
       <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl">
         <thead><tr><th>Tier</th><th class="num">Event entries (projected)</th><th class="num">Filled</th><th class="num">Entry income</th>
@@ -2447,7 +2447,7 @@ function renderFinancials(){
     <div class="bs-bd-scroll"><table class="bs-drill bs-bd-tbl bs-fin-tbl bs-fg-tbl">
       <thead>
         <tr><th></th>
-          <th colspan="6" class="bs-fg-grp bs-fg-a">${esc(S.scenarioName || 'This scenario')} <span class="bs-soft">on screen</span></th>
+          <th colspan="6" class="bs-fg-grp bs-fg-a">${esc(S.scenarioName || 'This proposal')} <span class="bs-soft">on screen</span></th>
           <th class="bs-fg-sep"></th>
           <th colspan="6" class="bs-fg-grp bs-fg-b">${esc(S.compare.name)}</th>
           <th class="bs-fg-sep"></th>
@@ -2834,7 +2834,7 @@ async function saveMap(){
     title: 'Save this map',
     okLabel: 'Save map',
     body: `<p class="bs-dlg-p">Saves only the map — counties, areas and level names. The pathway, fees and
-      schedule stay with the scenario. A saved map can be put under any scenario.</p>
+      schedule stay with the proposal. A saved map can be put under any proposal.</p>
       <div class="bs-dlg-facts"><span>${fmt(S.regions.length)} ${esc(tierName(0).toLowerCase())}</span>
       <span>${fmt(S.levels.length)} level${S.levels.length===1?'':'s'}</span></div>
       <label class="bs-dlg-lbl">Map name <input class="bs-dlg-in" id="bsMapNm" maxlength="120" value="${esc(S.mapName || '')}" placeholder="e.g. Nine zones, west-coast split"></label>
@@ -2851,14 +2851,14 @@ async function saveMap(){
     S.mapId = id; S.mapName = v.name; S.dirty = true;
     await listMaps();
     renderPanel();
-    msg(`Saved the map "${v.name}". Save the scenario too if this scenario should keep using it.`);
+    msg(`Saved the map "${v.name}". Save the proposal too if this proposal should keep using it.`);
   } catch(e){ msg('Could not save the map: ' + neonMsg(e)); }
 }
 
 async function deleteMap(libId){
   const m = (S.mapLib || []).find(x => x.libId === libId); if (!m) return;
   if (!await bsConfirm({title:'Delete this saved map?', danger:true, okLabel:'Delete',
-    body:`<p class="bs-dlg-p">Removes <b>${esc(m.name)}</b> from the map library. Scenarios that use it keep their own copy.</p>`})) return;
+    body:`<p class="bs-dlg-p">Removes <b>${esc(m.name)}</b> from the map library. Proposals that use it keep their own copy.</p>`})) return;
   try {
     await NEON.query('DELETE FROM membership.boundary_maps WHERE id=$1', [libId]);
     if (S.mapId === libId) S.mapId = null;
@@ -2872,7 +2872,7 @@ function mapOptions(sel, extra){
   const lib = L.filter(m => m.src === 'library'), sc = L.filter(m => m.src === 'scenario');
   return (extra || '')
     + (lib.length ? `<optgroup label="Saved maps">${lib.map(opt).join('')}</optgroup>` : '')
-    + (sc.length ? `<optgroup label="Map from a saved scenario">${sc.map(opt).join('')}</optgroup>` : '');
+    + (sc.length ? `<optgroup label="Map from a saved proposal">${sc.map(opt).join('')}</optgroup>` : '');
 }
 
 async function loadMapInto(id){
@@ -2881,22 +2881,128 @@ async function loadMapInto(id){
     const m = await fetchMap(id);
     if (!m){ msg('That map is gone.'); return; }
     const notes = applyMap(m);
-    msg(`Loaded the map "${m.name}" under this scenario` + (notes.length ? ` — pathway fitted: ${notes.join(' ')}` : '') + '. Save the scenario to keep it.');
+    msg(`Loaded the map "${m.name}" under this proposal` + (notes.length ? ` — pathway fitted: ${notes.join(' ')}` : '') + '. Save the proposal to keep it.');
   } catch(e){ msg('Could not load the map: ' + neonMsg(e)); }
+}
+
+async function newBlankProposal(){
+    if (S.dirty && !await bsConfirm({title:'Start a new proposal?', danger:true, okLabel:'Discard and start new',
+      body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'this proposal')}</b>.
+        Starting a new one discards them.</p>`})) return false;
+    pushUndo();
+    S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
+    S.finalName='Junior Nationals'; S.compare=null;
+    S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
+    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null;
+    S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
+    syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
+    repaintAll(); renderPanel();
+  return true;
+}
+
+/* ---------- one simple chooser for proposals and maps ----------
+   A list you click. Groups, a search box, one line of detail per item. */
+function bsPick(opts){
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'bs-dlg-back';
+    const items = opts.items || [];
+    const groups = [...new Set(items.map(i => i.group || ''))];
+    const list = q => groups.map(g => {
+      const rows = items.filter(i => (i.group || '') === g && (!q || (i.label + ' ' + (i.sub || '')).toLowerCase().includes(q)));
+      if (!rows.length) return '';
+      return (g ? `<div class="bs-pick-g">${esc(g)}</div>` : '') + rows.map(i =>
+        `<button class="bs-pick-row${i.big ? ' big' : ''}${i.current ? ' cur' : ''}" data-pick="${esc(i.id)}">
+          <b>${esc(i.label)}</b>${i.tag ? `<span class="bs-pick-tag">${esc(i.tag)}</span>` : ''}${i.sub ? `<span>${esc(i.sub)}</span>` : ''}</button>`).join('');
+    }).join('') || '<div class="bs-pick-none">Nothing matches.</div>';
+    wrap.innerHTML = `
+      <div class="bs-dlg bs-pick" role="dialog" aria-modal="true" aria-label="${esc(opts.title || '')}">
+        <div class="bs-dlg-h">${esc(opts.title || '')}</div>
+        <div class="bs-dlg-b">
+          ${opts.intro ? `<p class="bs-dlg-p">${opts.intro}</p>` : ''}
+          ${items.length > 8 ? `<input class="bs-dlg-in bs-pick-q" placeholder="Search…">` : ''}
+          <div class="bs-pick-list">${list('')}</div>
+        </div>
+        <div class="bs-dlg-f"><button class="tab" data-dlg="cancel">Cancel</button></div>
+      </div>`;
+    const done = v => { document.removeEventListener('keydown', key, true); wrap.remove(); resolve(v); };
+    const key = e => { if (e.key === 'Escape'){ e.preventDefault(); done(null); } };
+    wrap.addEventListener('click', e => {
+      if (e.target === wrap) return done(null);
+      const r = e.target.closest('[data-pick]'); if (r) return done(r.dataset.pick);
+      if (e.target.closest('[data-dlg="cancel"]')) return done(null);
+    });
+    const qEl = wrap.querySelector('.bs-pick-q');
+    if (qEl) qEl.addEventListener('input', () => { wrap.querySelector('.bs-pick-list').innerHTML = list(qEl.value.trim().toLowerCase()); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(wrap);
+    if (qEl) qEl.focus();
+  });
+}
+
+async function openProposalPicker(){
+  scenarioListCache = null;
+  await loadScenarioList();
+  const rows = (scenarioListCache && scenarioListCache.rows) || [];
+  const items = rows.map(r => ({
+    id: r.id, label: r.name, current: r.id === S.scenarioId,
+    group: isSeed(r.id) ? 'Reference maps' : 'Saved proposals',
+    tag: r.id === S.scenarioId ? 'open now' : isSeed(r.id) ? 'reference' : '',
+    sub: `saved ${r.u}${r.has_fees ? ' · fees set' : ''}${r.has_schedule ? ' · schedule' : ''}`,
+  })).sort((a, b) => (a.group === b.group ? 0 : a.group === 'Saved proposals' ? -1 : 1));
+  const id = await bsPick({title: 'Open a proposal', intro: 'A proposal is a map plus its pathway, fees and schedule.', items});
+  if (id) loadScenario(id);
+}
+
+async function newProposalPicker(){
+  const id = await bsPick({
+    title: 'New proposal',
+    intro: 'How should the new proposal start? You can change the map later.',
+    items: [
+      {id: 'auto', big: true, label: '⚡ Auto-draw a map', sub: 'Pick the stops and how many areas each has; the country is divided for you.'},
+      {id: 'official', big: true, label: 'Official 2026 alignment', sub: 'The published 12 regions / 6 zones / E, W, C map, with the 2026 rules.'},
+      {id: 'copy', big: true, label: 'Copy an existing proposal', sub: 'Keep its pathway and fees; choose the map for the copy.'},
+      {id: 'blank', big: true, label: 'Blank map', sub: 'Paint counties yourself.'},
+    ],
+  });
+  if (!id) return;
+  if (id === 'copy') return copyScenarioDialog(S.scenarioId);
+  if (id === 'official') return loadScenario('seed-2026-official');
+  if (!await newBlankProposal()) return;                 // asks first if there are unsaved changes
+  if (id === 'auto') openAutoDialog();
+}
+
+async function changeMapPicker(){
+  await listMaps();
+  const L = S.mapLib || [];
+  const items = [
+    {id: 'auto', group: 'Make a new map', label: '⚡ Auto-draw a map', sub: 'Divide the country into the stops and areas you choose.'},
+    {id: 'blank', group: 'Make a new map', label: 'Blank map', sub: 'Clear every county and paint it yourself.'},
+    ...L.filter(m => m.src === 'library').map(m => ({id: m.id, group: 'Saved maps', label: m.name, current: m.libId && m.libId === S.mapId, sub: `${m.n} areas · saved ${m.u}`})),
+    ...L.filter(m => m.src === 'scenario' && m.scId !== S.scenarioId).map(m => ({id: m.id, group: 'Map from another proposal', label: m.name, sub: `${m.n} areas${m.scenario !== m.name ? ' · in “' + m.scenario + '”' : ''}`})),
+  ];
+  const id = await bsPick({title: 'Change the map', intro: 'The proposal keeps its pathway, fees and schedule; only the map changes. Undo puts the old map back.', items});
+  if (!id) return;
+  if (id === 'auto') return openAutoDialog();
+  if (id === 'blank'){
+    pushUndo(); S.assign = {}; S.mapName = ''; S.mapId = null; S.dirty = true;
+    repaintAll(); renderPanel(); msg('Map cleared — paint counties or auto-draw.'); return;
+  }
+  loadMapInto(id);
 }
 
 /* Copy a saved scenario and choose the map the copy uses. */
 async function copyScenarioDialog(srcId){
   await Promise.all([listMaps(), loadScenarioList()]);
   const rows = (scenarioListCache && scenarioListCache.rows) || [];
-  if (!rows.length){ msg('There are no saved scenarios to copy yet.'); return; }
+  if (!rows.length){ msg('There are no saved proposals to copy yet.'); return; }
   const src0 = srcId && rows.some(r => r.id === srcId) ? srcId : rows[0].id;
   const nameOf = id => (rows.find(r => r.id === id) || {}).name || '';
   const v = await bsDialog({
-    title: 'Copy a scenario',
+    title: 'Copy a proposal',
     okLabel: 'Make the copy',
-    body: `<p class="bs-dlg-p">The copy keeps the scenario's pathway, fees and host terms. Choose the map it should use.</p>
-      <label class="bs-dlg-lbl">Copy this scenario
+    body: `<p class="bs-dlg-p">The copy keeps the proposal's pathway, fees and host terms. Choose the map it should use.</p>
+      <label class="bs-dlg-lbl">Copy this proposal
         <select class="bs-dlg-in" id="bsCpSrc">${rows.map(r => `<option value="${esc(r.id)}" ${r.id===src0?'selected':''}>${esc(r.name)}</option>`).join('')}</select></label>
       <label class="bs-dlg-lbl">Name of the copy <input class="bs-dlg-in" id="bsCpName" maxlength="120" value="${esc(nameOf(src0).replace(/ \(copy( \d+)?\)$/, '') + ' (copy)')}"></label>
       <label class="bs-dlg-lbl">Map for the copy
@@ -2912,7 +3018,7 @@ async function copyScenarioDialog(srcId){
   });
   if (!v) return;
   if (!v.name){ msg('Give the copy a name.'); return; }
-  if (rows.some(r => r.name.trim().toLowerCase() === v.name.toLowerCase())){ msg(`A scenario called "${v.name}" already exists — pick another name.`); return; }
+  if (rows.some(r => r.name.trim().toLowerCase() === v.name.toLowerCase())){ msg(`A proposal called "${v.name}" already exists — pick another name.`); return; }
   await loadScenario(v.src);
   if (S.scenarioId !== v.src) return;             // not loaded (or the user kept unsaved work)
   // Fork: a new id and name; a frozen record's lock does not travel with a copy.
@@ -2920,12 +3026,12 @@ async function copyScenarioDialog(srcId){
   if (v.map === 'auto'){
     applyMap({regions: S.regions, assign: S.assign, levels: S.levels, name: ''}, {noUndo: true});
     renderPanel(); openAutoDialog();
-    msg(`"${v.name}" is ready — draw its map, then Save scenario.`);
+    msg(`"${v.name}" is ready — draw its map, then Save proposal.`);
     return;
   }
   if (v.map === 'blank'){
     applyMap({regions: S.regions, assign: {}, levels: S.levels, name: ''}, {noUndo: true});
-    msg(`"${v.name}" has a blank map — paint or auto-draw it, then Save scenario.`);
+    msg(`"${v.name}" has a blank map — paint or auto-draw it, then Save proposal.`);
     return;
   }
   if (v.map !== 'keep'){
@@ -3150,9 +3256,9 @@ function pathwayOptions(){
   const opt = p => `<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} · ${p.levels} level${p.levels===1?'':'s'}${p.u ? ' · ' + esc(p.u) : ''}</option>`;
   const lib = L.filter(p => p.src !== 'scenario'), sc = L.filter(p => p.src === 'scenario');
   if (!S.pathList) return '<option value="" disabled>Loading…</option>';
-  if (!L.length) return '<option value="" disabled>No saved pathways or scenarios yet</option>';
+  if (!L.length) return '<option value="" disabled>No saved pathways or proposals yet</option>';
   return (lib.length ? `<optgroup label="Pathway library">${lib.map(opt).join('')}</optgroup>` : '')
-    + (sc.length ? `<optgroup label="From a saved scenario">${sc.map(opt).join('')}</optgroup>` : '');
+    + (sc.length ? `<optgroup label="From a saved proposal">${sc.map(opt).join('')}</optgroup>` : '');
 }
 
 async function savePathway(){
@@ -3202,7 +3308,7 @@ async function loadPathway(id){
 async function deletePathway(){
   const id = (document.getElementById('bsPathLoad') || {}).value;
   if (!id) { msg('Choose a saved pathway first.'); return; }
-  if (String(id).startsWith('sc:')) { msg('That pathway belongs to a saved scenario — delete or change the scenario itself.'); return; }
+  if (String(id).startsWith('sc:')) { msg('That pathway belongs to a saved proposal — delete or change the proposal itself.'); return; }
   const nm = (S.pathList || []).find(p => p.id === id);
   if (!await bsConfirm({title:'Delete this saved pathway?', danger:true, okLabel:'Delete',
     body:`<p class="bs-dlg-p">Removes <b>${esc(nm ? nm.name : id)}</b> from the library. Maps that used it keep
@@ -4009,11 +4115,11 @@ async function generateScheduleFromTemplate(templateId, source, startDate){
   const res = await entriesForSource(source);
   const sourceLabel = {max:'maximum capacity (no calibration)', y24:'actual 2024 event entries', y25:'actual 2025 event entries', y26:'actual 2026 event entries',
     projected:'today\u2019s calibrated projection'}[source] || source;
-  const name = `${S.scenarioName || 'Untitled scenario'} \u2014 ${t.name} \u2014 ${sourceLabel}`;
+  const name = `${S.scenarioName || 'Untitled proposal'} \u2014 ${t.name} \u2014 ${sourceLabel}`;
   const schedule = buildScheduleFromTemplate(t.data, res, {
     id: 'sched-' + Math.random().toString(36).slice(2,10),
     name, venue: 'Peak Health Aquatic Center at Mylan Park, Morgantown, WV',
-    description: `Generated from Boundary Studio scenario "${S.scenarioName||''}" (${S.scenarioId||'unsaved'}) `
+    description: `Generated from Boundary Studio proposal "${S.scenarioName||''}" (${S.scenarioId||'unsaved'}) `
       + `via template "${t.name}" (${t.id}), entries: ${sourceLabel}. Generated ${new Date().toISOString()}. `
       + `Projected entries, not synced from DiveMeets -- verify before publishing.`,
     year: +yearNumBoundary(S.year),
@@ -4231,7 +4337,7 @@ async function buildComparison(ids, axis){
         const routing = own ? JSON.parse(JSON.stringify(d.routing)) : null;
         row = withScenarioSettings(d, () => withMap(map, notes => {
           const rt = routing || S.routing;
-          const nn = (notes || []).concat(own ? [] : ['no pathway was saved with this scenario, so it runs under the pathway on screen']);
+          const nn = (notes || []).concat(own ? [] : ['no pathway was saved with this proposal, so it runs under the pathway on screen']);
           return summariseRouting(rt, r.rows[0].name, nn.length ? nn : null);
         }));
         if (row && !row.error){
@@ -4283,10 +4389,10 @@ function comparisonFromCompareSlot(){
     row = withMap(map, () => {
       const routing = cmp.routing && cmp.routing.length ? cmp.routing : S.routing;
       const notes = (cmp.routing && cmp.routing.length) ? null
-        : ['this scenario had no pathway of its own saved with it -- run here with the routing on screen'];
-      return summariseRouting(routing, cmp.name || cmp.id || 'Compared scenario', notes);
+        : ['this proposal had no pathway of its own saved with it -- run here with the routing on screen'];
+      return summariseRouting(routing, cmp.name || cmp.id || 'Compared proposal', notes);
     });
-  } catch(e){ row = {label: cmp.name || 'Compared scenario', error: e.message || String(e)}; }
+  } catch(e){ row = {label: cmp.name || 'Compared proposal', error: e.message || String(e)}; }
   cols.push(row);
   return cols;
 }
@@ -4311,7 +4417,7 @@ function renderCompareInspector(){
       ? 'Nothing saved to compare against yet.' : 'No other saved maps to compare against yet.'}</b>
       ${onPath
         ? 'Save the pathway you have now under <b>Structure</b>, change it, save that too &mdash; then this puts them side by side on the same map.'
-        : 'Save another map under the scenario controls below the inspector, then this runs your pathway across both.'}</div>
+        : 'Save another map under the proposal controls below the inspector, then this runs your pathway across both.'}</div>
     <p class="note">Only the ${onPath?'pathway':'map'} changes between columns. ${esc(held)}</p>`;
 
   const picks = S.cmpIds || [];
@@ -4508,23 +4614,23 @@ function paletteItems(){
   TG.groups.forEach((g, gi) => add('Highlight ' + g.name, tierName(S.tierView),
     ()=>{ highlightArea(gi); setTimeout(()=>highlightArea(null), 2600); }, 'Areas'));
   add('Separate touching colours', 'No two neighbours look alike', separateAdjacentColors, 'Map');
-  add('Recolour areas with the Atlas ramp', 'Give a scenario saved under the old palette the design colours (Undo puts them back)', recolourWithRamp, 'Map');
+  add('Recolour areas with the Atlas ramp', 'Give a proposal saved under the old palette the design colours (Undo puts them back)', recolourWithRamp, 'Map');
   add('Auto-draw the map…', 'Divide the country into N connected, even areas', openAutoDialog, 'Map');
   add('Load official 2026 alignment', 'The published Regional Championship map', ()=>loadScenario('seed-2026-official'), 'Maps');
   add('Load attendance-based map', 'The older draft, from which Regional each club attended', ()=>loadScenario('seed-2026-alignment'), 'Maps');
   add('Reset the map view', 'Zoom back out', ()=>{ S.zoom={k:1,x:0,y:0}; applyZoom(); }, 'Map');
   [['y24','2024'],['y25','2025'],['y26','2026 YTD']].forEach(([k,l]) => add('Season: ' + l, 'Count members from this season',
     ()=>{ S.year = k; repaintAll(); renderPanel(); }, 'Season'));
-  add('Save as a copy', 'A new scenario with the same map', ()=>saveScenario(true), 'Record');
-  add('New scenario', 'Start from a blank map', ()=>{ const b = document.getElementById('bsNew'); if (b) b.click(); }, 'Record');
+  add('Save as a copy', 'A new proposal with the same map', ()=>saveScenario(true), 'Record');
+  add('New proposal', 'Start from a blank map', ()=>{ const b = document.getElementById('bsNew'); if (b) b.click(); }, 'Record');
   add('Export zips CSV', '', exportCsv, 'Export');
   add('Export advancement CSV', '', exportAdvCsv, 'Export');
   add('Export meet list CSV', '', exportManifestCsv, 'Export');
   add('Export county changes CSV', 'Every county, with the baseline it moved from', exportChangesCsv, 'Export');
-  add(atlasOn() ? 'Switch to the classic view' : 'Switch to the Atlas view', 'The other presentation of the same scenario',
+  add(atlasOn() ? 'Switch to the classic view' : 'Switch to the Atlas view', 'The other presentation of the same proposal',
     ()=>setUiMode(atlasOn() ? 'classic' : 'atlas'), 'View');
-  add('Freeze this scenario', 'Record what it says right now', freezeScenario, 'Record');
-  add('Save the scenario', '', ()=>saveScenario(false), 'Record');
+  add('Freeze this proposal', 'Record what it says right now', freezeScenario, 'Record');
+  add('Save the proposal', '', ()=>saveScenario(false), 'Record');
   add('Undo', 'Ctrl+Z', ()=>doUndo(), 'Edit');
   [0,1,2,3,4].forEach(r => add('Brush: ' + (r===0?'single county':r+' deep'),
     r===0?'One county per click':'Everything within '+r+' border'+(r>1?'s':''), ()=>setBrush(r), 'Brush'));
@@ -4830,14 +4936,14 @@ function freezeFigures(){
 }
 
 async function freezeScenario(){
-  if (!S.scenarioId){ msg('Save the scenario first — a freeze has to attach to something.'); return; }
+  if (!S.scenarioId){ msg('Save the proposal first — a freeze has to attach to something.'); return; }
   const figures = freezeFigures();
   if (!figures){ msg('Could not read the figures to freeze. Open Projection once, then try again.'); return; }
   const st = dataStamps();
   const note = await bsPrompt({
-    title: 'Freeze this scenario as presented',
+    title: 'Freeze this proposal as presented',
     okLabel: 'Freeze',
-    body: `<p class="bs-dlg-p">This records what the scenario says right now, so if the entry data is rebuilt
+    body: `<p class="bs-dlg-p">This records what the proposal says right now, so if the entry data is rebuilt
         underneath it the difference shows instead of hiding. Check the figures before committing them &mdash;
         these are what the record will say you presented.</p>
       <table class="bs-dlg-t"><tbody>
@@ -4868,14 +4974,14 @@ async function freezeScenario(){
       ['boundary_studio', 'scenario_freeze', S.scenarioId, S.scenarioName.trim(),
        JSON.stringify({note, stamps: st}), JSON.stringify(figures)]);
   } catch(e){ console.error('decision_ledger write failed (freeze itself still succeeded):', e); }
-  msg('Frozen. Save the scenario to write the record.');
+  msg('Frozen. Save the proposal to write the record.');
   renderPanel();
 }
 
 async function unfreezeScenario(){
   if (!S.frozen) return;
   if (!await bsConfirm({title:'Remove the freeze?', danger:true, okLabel:'Remove the freeze',
-    body:`<p class="bs-dlg-p">The record of what this said when it was presented is deleted, and the scenario
+    body:`<p class="bs-dlg-p">The record of what this said when it was presented is deleted, and the proposal
       becomes a working model again. If it has already been in front of a committee, keep the freeze and save a
       copy to work in instead.</p>`})) return;
   S.frozen = null; S.dirty = true;
@@ -4918,13 +5024,13 @@ function freezeDrift(){
 function renderFreezePanel(){
   const F = S.frozen;
   if (!F) return `<div class="bs-freeze">
-    <div class="bs-pwbar-h">Freeze this scenario</div>
+    <div class="bs-pwbar-h">Freeze this proposal</div>
     <p class="note">Once these numbers have been in front of a committee, freeze them. That records both what
       they were computed from and what they actually said, so if the entry data is rebuilt underneath you, the
       difference shows rather than hides. It does not lock the map &mdash; it stops the record being overwritten
       without you noticing.</p>
     <button class="tab" id="bsFreeze" ${S.scenarioId?'':'disabled'}>Freeze as presented&hellip;</button>
-    ${S.scenarioId?'':'<span class="bs-arr-m warn">Save the scenario first.</span>'}</div>`;
+    ${S.scenarioId?'':'<span class="bs-arr-m warn">Save the proposal first.</span>'}</div>`;
 
   const d = freezeDrift();
   const when = String(F.at||'').slice(0,10);
@@ -4972,7 +5078,7 @@ async function showLedgerHistory(){
        WHERE app='boundary_studio' AND kind='scenario_freeze' AND ref_id=$1
        ORDER BY recorded_at DESC LIMIT 20`, [S.scenarioId]);
     const rows = res.rows || [];
-    box.innerHTML = `<div class="note" style="margin-top:8px"><b>Every freeze ever recorded for this scenario
+    box.innerHTML = `<div class="note" style="margin-top:8px"><b>Every freeze ever recorded for this proposal
       &mdash; independent of "Remove the freeze" above, this list cannot be edited or deleted from the app.</b></div>
       ${rows.length ? `<table class="bs-drill" style="margin-top:6px"><thead><tr>
         <th>When</th><th>Note</th><th class="num">Championship field</th></tr></thead><tbody>
@@ -4980,7 +5086,7 @@ async function showLedgerHistory(){
           const o = typeof r.outputs==='string' ? JSON.parse(r.outputs) : (r.outputs||{});
           return `<tr><td>${esc(String(r.recorded_at).slice(0,16).replace('T',' '))}</td>
             <td>${esc(r.label||'')}</td><td class="num">${o.finalField!=null?fmt(Math.round(o.finalField)):'—'}</td></tr>`;
-        }).join('')}</tbody></table>` : '<p class="note">Nothing recorded yet for this scenario.</p>'}`;
+        }).join('')}</tbody></table>` : '<p class="note">Nothing recorded yet for this proposal.</p>'}`;
   } catch(e){ box.innerHTML = `<p class="note bs-warn">Could not load: ${esc(e.message||e)}</p>`; }
 }
 
@@ -4993,7 +5099,7 @@ function renderReportInspector(){
   return `<div class="bs-tier-h">Where these numbers come from</div>
     ${renderProvenance()}
     <div class="bs-prov">
-      <b>This scenario</b>
+      <b>This proposal</b>
       <span>map <code>${esc(S.scenarioName || 'unsaved')}</code></span>
       <span>pathway <code>${esc(p)}</code></span>
       <span>first stop fed by <code>${esc(seedStage())} ${yearNumBoundary(S.year)}</code></span>
@@ -5007,7 +5113,7 @@ function renderReportInspector(){
       <button class="tab" id="bsGoReport">Open the report builder</button>
       <button class="tab" id="bsCsvManifest">Export the meet list (CSV)</button>
     </div>
-    <p class="note">The report builder has the Boundary Studio sections &mdash; scenario overview and
+    <p class="note">The report builder has the Boundary Studio sections &mdash; proposal overview and
       qualification pathway &mdash; and prints to PDF.</p>`;
 }
 
@@ -5889,19 +5995,7 @@ function wireScenarioControls(P){
   const cmp = P.querySelector('#bsCompare');
   if (cmp) cmp.addEventListener('change', ()=>{ if (cmp.value) loadCompare(cmp.value); });
   bind('bsCompareOff', ()=>{ S.compare=null; renderPanel(); });
-  bind('bsNew', async ()=>{
-    if (S.dirty && !await bsConfirm({title:'Start a new scenario?', danger:true, okLabel:'Discard and start new',
-      body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'this scenario')}</b>.
-        Starting a new one discards them.</p>`})) return;
-    pushUndo();
-    S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
-    S.finalName='Junior Nationals'; S.compare=null;
-    S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
-    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null;
-    S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
-    syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
-    repaintAll(); renderPanel();
-  });
+  bind('bsNew', () => newBlankProposal());
   bind('bsCsv', exportCsv);
   bind('bsCsvAdv', exportAdvCsv);
   const loadSel = P.querySelector('#bsLoad');
@@ -5932,7 +6026,7 @@ function newScenarioId(){
 }
 
 async function saveScenario(asNew){
-  if (!S.scenarioName.trim()){ msg('Give the scenario a name first.'); return; }
+  if (!S.scenarioName.trim()){ msg('Give the proposal a name first.'); return; }
   // Reference maps are never overwritten — saving one forks it instead. A frozen
   // record gets the same protection the moment it stops matching what it said:
   // the version a committee saw has to stay recoverable, so the edit forks and
@@ -5940,7 +6034,7 @@ async function saveScenario(asNew){
   const frozenChanged = !!(S.frozen && freezeDrift());
   const forking = asNew || !S.scenarioId || isSeed(S.scenarioId) || frozenChanged;
   if (frozenChanged && !asNew){
-    if (!await bsConfirm({title:'This frozen scenario has changed', okLabel:'Save a copy',
+    if (!await bsConfirm({title:'This frozen proposal has changed', okLabel:'Save a copy',
       body:`<p class="bs-dlg-p"><b>${esc(S.scenarioName)}</b> was frozen on
         ${esc(String(S.frozen.at||'').slice(0,10))} and no longer computes what it said then.</p>
         <p class="bs-dlg-p">Saving creates a copy so the frozen version stays exactly as the committee saw it.
@@ -5975,14 +6069,14 @@ async function saveScenario(asNew){
     S.dirty = false;
     S.savedAt = nowStamp();
     scenarioListCache = null; S.mapLib = null; S.mapList = null; S.pathList = null;
-    msg((forking ? 'Saved a new scenario "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
+    msg((forking ? 'Saved a new proposal "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
   } catch(e){ console.error(e); msg('Save failed: ' + neonMsg(e)); }
 }
 
 async function deleteScenario(){
   if (!S.scenarioId || isSeed(S.scenarioId)){ msg('Reference maps cannot be deleted.'); return; }
-  if (!await bsConfirm({title:'Delete this scenario?', danger:true, okLabel:'Delete permanently',
+  if (!await bsConfirm({title:'Delete this proposal?', danger:true, okLabel:'Delete permanently',
     body:`<p class="bs-dlg-p">Deletes <b>${esc(S.scenarioName)}</b> and everything saved with it &mdash; the map,
       its pathway, and any frozen record of what it said. This cannot be undone.</p>`})) return;
   try {
@@ -6033,7 +6127,7 @@ async function loadScenarioList(){
       const sel = document.getElementById(id);
       if (!sel) return;
       const cur = sel.value;
-      sel.innerHTML = `<option value="">${id === 'bsLoadRail' ? 'Open a saved scenario&hellip;' : 'Load scenario&hellip;'}</option>` +
+      sel.innerHTML = `<option value="">${id === 'bsLoadRail' ? 'Open a saved proposal&hellip;' : 'Load proposal&hellip;'}</option>` +
         scenarioListCache.rows.map(r=>`<option value="${esc(r.id)}" ${r.id===S.scenarioId?'selected':''}>${esc(r.name)} (${esc(r.u)})${completeness(r)}</option>`).join('');
       if (cur && !S.scenarioId) sel.value = cur;
     });
@@ -6065,7 +6159,7 @@ function migrateLevels(d, nRegions){
 
 async function loadScenario(id){
   if (S.dirty && !await bsConfirm({title:'Load over unsaved changes?', danger:true, okLabel:'Discard and load',
-    body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'the current scenario')}</b>.
+    body:`<p class="bs-dlg-p">There are unsaved changes to <b>${esc(S.scenarioName||'the current proposal')}</b>.
       Loading another discards them.</p>`})) return;
   try {
     const res = await NEON.query(`SELECT name, data, to_char(updated_at,'Mon DD · HH24:MI') u FROM membership.boundary_scenarios WHERE id=$1`, [id]);
@@ -7564,7 +7658,7 @@ function atlasLevelColor(level, gi){
 
 /* What a person calls this scenario. The record id (bs-…) is a database key
    and stays out of the interface except where a record has to be cited. */
-const scenarioLabel = () => (S.scenarioName || '').trim() || 'Unsaved scenario';
+const scenarioLabel = () => (S.scenarioName || '').trim() || 'Unsaved proposal';
 /* How the paper names the pathway in a sentence. */
 const pathwayPhrase = () => S.pathSaved ? `the saved pathway "${S.pathSaved.name}"${S.pathDirty ? ' (edited)' : ''}` : ((S.routing && S.routing.length) ? 'its own qualification pathway' : 'the published rules');
 
@@ -7763,27 +7857,26 @@ function atlasHeader(){
       <div><b>Boundary Studio</b><span>USA Diving · Membership Analytics</span></div></div>
     <nav class="atl-nav">${INSPECTORS.map(t => `<button data-atlnav="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}${t.k==='schedule'?'<span id="atlSchedBadge"></span>':''}</button>`).join('')}</nav>
     <div class="atl-head-r">
-      <button class="atl-btn" id="atlOpenBtn" title="Open a saved scenario, start a new one, export, season">Open ▾</button>
-      <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Scenario menu: open, copy, delete, export, season">
+      <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Proposal menu: open, new, copy, compare, season, export">
         <span class="atl-dot"></span><span class="atl-chip-name" title="${esc(scenarioLabel())}">${esc(scenarioLabel())}</span>
         <span id="atlStatusText">${S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet')}</span>
         <span class="atl-caret">▾</span></button>
-      <button class="atl-save ${S.dirty?'dirty':''}" id="bsSave" title="Ctrl/⌘ S">${S.dirty ? 'Save scenario' : 'Saved'}</button>
+      <button class="atl-save ${S.dirty?'dirty':''}" id="bsSave" title="Ctrl/⌘ S">${S.dirty ? 'Save proposal' : 'Saved'}</button>
       <div class="atl-menu" id="atlMenu" ${menuOpen?'':'hidden'}>
-        <label>Open <select class="atl-sel" id="bsLoad"><option value="">Load scenario…</option></select></label>
+        <div class="atl-menu-row"><span>Proposal</span>
+          <button class="atl-link" id="atlMenuOpen">Open…</button>
+          <button class="atl-link" id="atlMenuNew">New…</button>
+          <button class="atl-link" id="bsSaveNew">Save as a copy…</button>
+          <button class="atl-link quiet" id="bsDelete" ${(!S.scenarioId||isSeed(S.scenarioId))?'disabled':''}>Delete</button></div>
+        <div class="atl-menu-row"><span>Map</span>
+          <button class="atl-link" id="atlMenuMap">Change map…</button>
+          <button class="atl-link" id="atlMenuMapSave">Save map</button></div>
         <label>Baseline <select class="atl-sel" id="bsCompare" title="Loaded beside this scenario: Money prices both, Report shows the changes against it"><option value="">nothing…</option></select></label>
         ${S.compare ? `<div class="atl-menu-row"><span></span><span class="atl-note">Against <b>${esc(S.compare.name)}</b></span><button class="atl-link quiet" id="bsCompareOff">Stop comparing</button></div>` : ''}
         <hr>
-        <div class="atl-menu-row"><span>Scenario</span>
-          <button class="atl-link" id="bsNew">New</button>
-          <button class="atl-link" id="bsSaveNew">Save as a copy</button>
-          <button class="atl-link quiet" id="bsDelete" ${(!S.scenarioId||isSeed(S.scenarioId))?'disabled':''}>Delete</button></div>
-        <div class="atl-menu-row"><span>Start from</span>
-          <button class="atl-link" id="atlLoadOfficial">Official 2026 alignment</button>
-          <button class="atl-link" id="atlAutoOpen">Auto-draw…</button>
-          <button class="atl-link quiet" id="atlLoadSeed">Attendance-based map</button></div>
+        <button id="bsNew" hidden></button>
         <div class="atl-menu-row"><span>Colours</span>
-          <button class="atl-link" id="atlRecolour" title="Give a scenario saved under the old palette the design colours">Recolour with the Atlas ramp</button>
+          <button class="atl-link" id="atlRecolour" title="Give a proposal saved under the old palette the design colours">Recolour with the Atlas ramp</button>
           <button class="atl-link quiet" id="bsSepColors">Separate touching colours</button></div>
         <div class="atl-menu-row"><span>Season</span>
           <div class="atl-seg sm"><button data-atlyear="y24" class="${S.year==='y24'?'on':''}">2024</button><button data-atlyear="y25" class="${S.year==='y25'?'on':''}">2025</button><button data-atlyear="y26" class="${S.year==='y26'?'on':''}">2026 YTD</button></div></div>
@@ -7804,10 +7897,9 @@ function atlasHeader(){
   h.querySelectorAll('[data-atlnav]').forEach(b => b.addEventListener('click', () => {
     S.panelMode = b.dataset.atlnav; S.atlMenu = false; renderPanel(); refreshFlow();
   }));
-  const toggle = e => { e.stopPropagation(); S.atlMenu = !S.atlMenu; $id('atlMenu').hidden = !S.atlMenu; if (S.atlMenu){ const l = $id('bsLoad'); if (l) l.focus(); } };
-  const chip = $id('atlChip'), ob = $id('atlOpenBtn');
+  const toggle = e => { e.stopPropagation(); S.atlMenu = !S.atlMenu; $id('atlMenu').hidden = !S.atlMenu;  };
+  const chip = $id('atlChip');
   if (chip) chip.addEventListener('click', toggle);
-  if (ob) ob.addEventListener('click', toggle);
   const menu = $id('atlMenu');
   if (menu) menu.addEventListener('click', e => e.stopPropagation());
   if (!S._atlDocClick){
@@ -7816,9 +7908,11 @@ function atlasHeader(){
   }
   wireScenarioControls(h);
   const bind = (id, f) => { const b = h.querySelector('#'+id); if (b) b.addEventListener('click', f); };
-  bind('atlLoadOfficial', () => loadScenario('seed-2026-official'));
-  bind('atlLoadSeed', () => loadScenario('seed-2026-alignment'));
-  bind('atlAutoOpen', () => { S.atlMenu = false; openAutoDialog(); });
+  const closeMenu = () => { S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; };
+  bind('atlMenuOpen', () => { closeMenu(); openProposalPicker(); });
+  bind('atlMenuNew', () => { closeMenu(); newProposalPicker(); });
+  bind('atlMenuMap', () => { closeMenu(); changeMapPicker(); });
+  bind('atlMenuMapSave', () => { closeMenu(); saveMap(); });
   bind('bsPalOpen', () => { S.atlMenu = false; $id('atlMenu').hidden = true; openPalette(); });
   bind('bsCsvManifest', exportManifestCsv);
   bind('atlCsvChanges', exportChangesCsv);
@@ -7842,7 +7936,7 @@ function atlasSchedBadge(){
 function atlasStatus(){
   const chip = $id('atlChip'), save = $id('bsSave'), txt = $id('atlStatusText');
   if (chip) chip.classList.toggle('dirty', !!S.dirty);
-  if (save){ save.classList.toggle('dirty', !!S.dirty); save.textContent = S.dirty ? 'Save scenario' : 'Saved'; }
+  if (save){ save.classList.toggle('dirty', !!S.dirty); save.textContent = S.dirty ? 'Save proposal' : 'Saved'; }
   if (txt) txt.textContent = S.dirty ? 'Unsaved changes' : (S.savedAt ? 'Saved ' + S.savedAt : 'Not saved yet');
 }
 
@@ -7874,7 +7968,7 @@ function atlasContext(){
   if (!show){ c.innerHTML = ''; return; }
   c.innerHTML = `<div class="atl-ctx">
     <div class="atl-ctx-name">
-      <input id="atlName2" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
+      <input id="atlName2" value="${esc(S.scenarioName)}" placeholder="Name this proposal" title="Scenario name">
       <span>Pathway: ${esc(currentPathwayLabel())} · field from ${esc(seedStage())} ${yearNumBoundary(S.year)}</span>
     </div>
     <div class="atl-ctx-ro" id="atlReadout"></div>
@@ -7950,23 +8044,20 @@ function atlasMapHtml(){
   return `
     <aside class="atl-rail">
       <div class="atl-rail-top">
-        <div class="atl-rail-id"><span>${S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet'}</span>${S.scenarioId && isSeed(S.scenarioId) ? '<span>·</span><span>reference map</span>' : ''}</div>
-        <textarea class="atl-rail-name" id="bsName" rows="1" placeholder="Name this scenario" title="Scenario name" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(S.scenarioName)}</textarea>
-        <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
-        <div class="atl-rail-map">
-          <label>Map <input class="atl-in" id="atlMapName" value="${esc(S.mapName || '')}" placeholder="Name this map" title="The map's own name — separate from the scenario name"></label>
-          <div class="atl-rail-map-row">
-            <select class="atl-sel" id="atlMapLoad" title="Put a saved map under this scenario (keeps the pathway and fees)"><option value="">Use a different map…</option>${mapOptions('')}</select>
-            <button class="atl-start-alt" id="atlMapSave" title="Save only the map (counties, areas, level names)">Save map</button>
-          </div>
-          ${S.mapId ? `<button class="atl-link quiet" id="atlMapDel" data-id="${esc(S.mapId)}">Delete this saved map</button>` : ''}
+        <div class="atl-card-lbl">Proposal <span>${S.dirty ? 'unsaved changes' : S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}${S.scenarioId && isSeed(S.scenarioId) ? ' · reference map' : ''}</span></div>
+        <textarea class="atl-rail-name" id="bsName" rows="1" placeholder="Name this proposal" title="Proposal name" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(S.scenarioName)}</textarea>
+        <div class="atl-btnrow">
+          <button class="atl-pbtn" id="atlPropOpen" title="Open a saved proposal">Open…</button>
+          <button class="atl-pbtn" id="atlPropNew" title="Start a new proposal">New…</button>
+          <button class="atl-pbtn" id="atlPropCopy" title="Copy a saved proposal and choose its map">Copy…</button>
         </div>
-        <div class="atl-rail-start${Object.keys(S.assign || {}).length ? '' : ' empty'}">
-          <span>Start something new</span>
-          <button class="atl-start-auto" id="atlRailAuto" title="Divide the country into the number of connected, evenly sized areas you choose">⚡ Auto-draw map</button>
-          <button class="atl-start-alt" id="atlRailOfficial" title="Start from the published 2026 alignment">Official 2026</button>
-          <button class="atl-start-alt" id="atlRailBlank" title="Clear the map and paint counties yourself">Blank</button>
-          <button class="atl-start-alt" id="atlRailCopy" title="Copy a saved scenario and choose which map the copy uses">Copy a scenario…</button>
+        <div class="atl-mapcard${Object.keys(S.assign || {}).length ? '' : ' empty'}">
+          <div class="atl-card-lbl">Map <span>${Object.keys(S.assign || {}).length ? (S.mapId ? 'saved map' : 'part of this proposal') : 'empty — draw or pick one'}</span></div>
+          <input class="atl-in atl-mapname" id="atlMapName" value="${esc(S.mapName || '')}" placeholder="Name this map" title="The map's own name — separate from the proposal name">
+          <div class="atl-btnrow">
+            <button class="atl-pbtn prim" id="atlMapChange" title="Auto-draw, pick a saved map, or start blank — the pathway and fees stay">${Object.keys(S.assign || {}).length ? 'Change map…' : 'Choose a map…'}</button>
+            <button class="atl-pbtn" id="atlMapSave" title="Save only the map (counties, areas, level names)">Save map</button>
+          </div>
         </div>
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
@@ -8156,16 +8247,13 @@ function wireAtlasMap(){
   if (yr) yr.addEventListener('change', () => { S.year = yr.value; repaintAll(); renderPanel(); });
   const lr = $id('bsLoadRail');
   if (lr) lr.addEventListener('change', () => { if (lr.value) loadScenario(lr.value); });
-  // "Start a new map" buttons reuse the same actions as the scenario menu.
-  const ra = $id('atlRailAuto'); if (ra) ra.addEventListener('click', () => openAutoDialog());
-  const ro = $id('atlRailOfficial'); if (ro) ro.addEventListener('click', () => loadScenario('seed-2026-official'));
-  const rb = $id('atlRailBlank'); if (rb) rb.addEventListener('click', () => { const b = $id('bsNew'); if (b) b.click(); });
-  const rc = $id('atlRailCopy'); if (rc) rc.addEventListener('click', () => copyScenarioDialog(S.scenarioId));
+  const on = (id, f) => { const e = $id(id); if (e) e.addEventListener('click', f); };
+  on('atlPropOpen', openProposalPicker);
+  on('atlPropNew', newProposalPicker);
+  on('atlPropCopy', () => copyScenarioDialog(S.scenarioId));
+  on('atlMapChange', changeMapPicker);
+  on('atlMapSave', saveMap);
   const mn = $id('atlMapName'); if (mn) mn.addEventListener('input', () => { S.mapName = mn.value; S.dirty = true; atlasStatus(); });
-  const ml = $id('atlMapLoad'); if (ml) ml.addEventListener('change', () => { if (ml.value) loadMapInto(ml.value); });
-  const ms = $id('atlMapSave'); if (ms) ms.addEventListener('click', saveMap);
-  const md = $id('atlMapDel'); if (md) md.addEventListener('click', () => deleteMap(md.dataset.id));
-  if (!S.mapLib && !S._mapLibBusy){ S._mapLibBusy = true; listMaps().then(() => { S._mapLibBusy = false; const sel = $id('atlMapLoad'); if (sel) sel.innerHTML = '<option value="">Use a different map…</option>' + mapOptions(''); }); }
   loadScenarioList();
   const mt = $id('atlMetric');
   if (mt) mt.addEventListener('change', () => { S.atlMetric = mt.value; atlasRailRows(computeTallies()); });
@@ -8524,7 +8612,7 @@ function atlasMoneyHtml(res){
       const dv = (x,y) => { const v = x - y; if (Math.abs(v) < 1) return '<span class="c-faint">same</span>'; return `<span class="${v>0?'c-ok':'c-bad'}">${v>0?'+':'−'}${usd(Math.abs(v))}</span>`; };
       cmp = `<div class="atl-h" style="margin-top:28px"><b>Against ${esc(S.compare.name)}</b><span>priced the same way: same pathway engine, same fees, same host model, only the map and its tiers changed</span></div>
         ${table(b)}
-        <p class="atl-note" style="margin-top:8px">USA Diving keeps, this scenario against ${esc(S.compare.name)}: <span class="mono">${dv(a.total.usad, b.total.usad)}</span> · entry income ${dv(a.total.gross, b.total.gross)} · to hosts ${dv(a.total.host, b.total.host)}.</p>`;
+        <p class="atl-note" style="margin-top:8px">USA Diving keeps, this proposal against ${esc(S.compare.name)}: <span class="mono">${dv(a.total.usad, b.total.usad)}</span> · entry income ${dv(a.total.gross, b.total.gross)} · to hosts ${dv(a.total.host, b.total.host)}.</p>`;
     }
   }
 
@@ -8609,10 +8697,10 @@ function atlasMoneyHtml(res){
         : `<div class="num">${g(c,L,'entries')==null?'—':fmt(Math.round(g(c,L,'entries')))}${i?cellN(g(c,L,'entries'), g(CR[0],L,'entries')):''}</div><div class="num">${g(c,L,'gross')==null?'—':usd(g(c,L,'gross'))}${i?cellD(g(c,L,'gross'), g(CR[0],L,'gross')):''}</div><div class="num dim">${g(c,L,'host')==null?'—':usd(g(c,L,'host'))}${i?cellD(g(c,L,'host'), g(CR[0],L,'host'), true):''}</div><div class="num c-navy ${i===CR.length-1?'last':''}" style="font-weight:600">${g(c,L,'usad')==null?'—':usd(g(c,L,'usad'))}${i?cellD(g(c,L,'usad'), g(CR[0],L,'usad')):''}</div>`).join('');
     }).join('');
     const tot = `<div class="tot first">All tiers</div>` + CR.map((c,i) => c.error ? '<div class="tot" style="grid-column:span 4"></div>' : `<div class="num tot">${fmt(Math.round((c.levels||[]).reduce((s,l)=>s+(l.entries||0),0)))}</div><div class="num tot">${usd(c.finance.gross)}${i?cellD(c.finance.gross, CR[0].finance.gross):''}</div><div class="num tot dim">${usd(c.finance.host)}${i?cellD(c.finance.host, CR[0].finance.host, true):''}</div><div class="num tot c-navy ${i===CR.length-1?'last':''}">${usd(c.finance.usad)}${i?cellD(c.finance.usad, CR[0].finance.usad):''}</div>`).join('');
-    side = `<div class="atl-h" style="margin-top:28px"><b>Side by side</b><span>${axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each scenario as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps'} · Δ against ${esc(names[0])} · pinned under Compare</span></div>
+    side = `<div class="atl-h" style="margin-top:28px"><b>Side by side</b><span>${axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each proposal as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps'} · Δ against ${esc(names[0])} · pinned under Compare</span></div>
       <div class="atl-scroll"><div class="atl-tbl" style="grid-template-columns:1.2fr repeat(${CR.length*4},minmax(88px,1fr));min-width:${300 + CR.length*360}px">${head}${rowsS}${tot}</div></div>`;
   } else {
-    side = `<p class="atl-note" style="margin-top:22px"><b>Side by side.</b> Pin one or two saved scenarios under <button class="atl-link" data-atlnav-go="compare">Compare</button> and their entries, income, host payouts and what USA Diving keeps appear here tier by tier, with the difference against this scenario.</p>`;
+    side = `<p class="atl-note" style="margin-top:22px"><b>Side by side.</b> Pin one or two saved proposals under <button class="atl-link" data-atlnav-go="compare">Compare</button> and their entries, income, host payouts and what USA Diving keeps appear here tier by tier, with the difference against this proposal.</p>`;
   }
   return `<div class="atl-page"><div class="atl-money-grid">
     <div>
@@ -8788,11 +8876,11 @@ function atlasCompareHtml(){
   const pinnable = lib.filter(x => ids.indexOf(x.id) < 0);
   const canPin = cols.length < 4 && pinnable.length > 0;
   const pinSel = canPin ? `<select class="atl-pinsel" id="atlPin"><option value="">+ Pin a saved ${onPath?'pathway':'scenario'} (up to 3)</option>${pinnable.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}${onPath?` · ${x.levels} levels`:''}</option>`).join('')}</select>`
-    : (cols.length >= 4 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another scenario from the header menu'}.</span>`);
+    : (cols.length >= 4 ? '' : `<span class="atl-note">Nothing saved to pin yet${onPath ? ' — save a pathway under Structure' : ' — save another proposal from the header menu'}.</span>`);
   const view = S.cmpView || 'card';
   const bar = `<div class="atl-cmp-bar">${pins}${pinSel}
-      <div class="atl-seg sm" style="margin-left:auto" title="What is allowed to differ between columns"><button data-cmpaxis="scenario" class="${asSaved?'on':''}" title="Each scenario exactly as saved: its own map, pathway, fees and host model">Scenarios as saved</button><button data-cmpaxis="map" class="${axis==='map'?'on':''}" title="Only the map differs; the pathway on screen runs over every map">Maps only</button><button data-cmpaxis="pathway" class="${onPath?'on':''}" title="Only the pathway differs; every column runs on this map">Pathways only</button></div>
-      <div class="atl-seg sm"><button data-atlcmpview="card" class="${view==='card'?'on':''}" title="One column of figures per scenario">Scorecard</button>${!onPath ? `<button data-atlcmpview="side" class="${view==='side'?'on':''}">Maps</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Crossfade</button>` : ''}</div>
+      <div class="atl-seg sm" style="margin-left:auto" title="What is allowed to differ between columns"><button data-cmpaxis="scenario" class="${asSaved?'on':''}" title="Each proposal exactly as saved: its own map, pathway, fees and host model">Proposals as saved</button><button data-cmpaxis="map" class="${axis==='map'?'on':''}" title="Only the map differs; the pathway on screen runs over every map">Maps only</button><button data-cmpaxis="pathway" class="${onPath?'on':''}" title="Only the pathway differs; every column runs on this map">Pathways only</button></div>
+      <div class="atl-seg sm"><button data-atlcmpview="card" class="${view==='card'?'on':''}" title="One column of figures per proposal">Scorecard</button>${!onPath ? `<button data-atlcmpview="side" class="${view==='side'?'on':''}">Maps</button><button data-atlcmpview="single" class="${view==='single'?'on':''}">Crossfade</button>` : ''}</div>
       ${!onPath ? `<label title="Outline the counties that sit in a different area than in ${esc(aName)}"><input type="checkbox" id="atlCmpOutline" ${S.cmpOutline!==false?'checked':''}> Outline moves vs ${esc(aShort)}</label>` : ''}
       <button class="atl-btn" id="atlGoReport">Build report →</button>
       ${S._cmpBusy ? '<span class="atl-note">Comparing…</span>' : ''}</div>`;
@@ -8800,8 +8888,8 @@ function atlasCompareHtml(){
   if (cols.length < 2)
     return bar + `<div class="atl-cmp-empty">${onPath
       ? 'Pin one or two saved pathways to put beside the one on screen. Only the pathway changes between columns: the boundaries, the field each pathway starts from and the measured behaviour are held still.'
-      : asSaved ? 'Pin one or two saved scenarios. Each column is that scenario exactly as it was saved — its own map, pathway, fees and host model — so the comparison reads the way the proposals were written. Use Maps only or Pathways only to change one thing at a time.'
-      : 'Pin one or two saved scenarios to put beside this map. Only the map changes between columns: the pathway, the season and the measured behaviour are held still.'}</div>`;
+      : asSaved ? 'Pin one or two saved proposals. Each column is that proposal exactly as it was saved — its own map, pathway, fees and host model — so the comparison reads the way the proposals were written. Use Maps only or Pathways only to change one thing at a time.'
+      : 'Pin one or two saved proposals to put beside this map. Only the map changes between columns: the pathway, the season and the measured behaviour are held still.'}</div>`;
   if (!C.length || C.length < cols.length) return bar + '<div class="atl-cmp-empty">Comparing…</div>';
 
   // Live column extras, measured the same way mapExtras() measures the others.
@@ -8848,7 +8936,7 @@ function atlasCompareHtml(){
         <div class="atl-xlist"><span>Showing on the map</span>
           ${cols.map((c,i) => { const r = C[i]; return `<button class="atl-xrow ${i===xi?'on':''}" data-atlx="${i}"><span class="atl-let" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span>
             <div><b>${esc(c.name)}</b><span>${r.error ? esc(r.error) : `${fmt(r.regionCount || (r.levels&&r.levels[0]?r.levels[0].stops:0))} ${esc(tierName(0).toLowerCase())} · ${fmt(Math.round(r.finalField||0))} reach ${esc(S.finalName||'the final')}`}</span></div></button>`; }).join('')}
-          <span class="faint">Hover a scenario to crossfade the fills. Counties that sit in a different area than in ${esc(aShort)} are outlined in red.</span></div></div>`;
+          <span class="faint">Hover a proposal to crossfade the fills. Counties that sit in a different area than in ${esc(aShort)} are outlined in red.</span></div></div>`;
     }
   }
 
@@ -8933,15 +9021,15 @@ function atlasCompareHtml(){
   const flags = C.filter(c => (c.sanityFlags||[]).length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b>: ${c.sanityFlags.map(f=>`${esc(f.name)} projects ${fmt(Math.round(f.entries))}, the highest real ${esc(f.refStage)} field ever run is ${fmt(f.historicalMax)}`).join('; ')}. Check the seed pool and route bands before using this number.</div>`).join('');
   const noted = C.filter(c => c.notes && c.notes.length).map(c => `<div class="atl-warn amber"><b>${esc(c.label)}</b> does not have the same number of levels as the structure on screen, so the pathway was fitted onto it. ${c.notes.map(n=>esc(n)).join(' ')}</div>`).join('');
   const table = `<div class="atl-cmp-body">
-    <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : asSaved ? 'each scenario as saved — its own map, pathway, fees and host model; only the season and the measured behaviour are shared' : 'same pathway, same fees, same season — only the map differs'} · Δ against ${esc(aShort)}</span></div>
+    <div class="atl-h"><b>What changes</b><span>${onPath ? 'same map, same season, same measured behaviour — only the pathway differs' : asSaved ? 'each proposal as saved — its own map, pathway, fees and host model; only the season and the measured behaviour are shared' : 'same pathway, same fees, same season — only the map differs'} · Δ against ${esc(aShort)}</span></div>
     <div class="atl-scroll"><div class="atl-tbl atl-cmp-tbl" style="grid-template-columns:minmax(300px,1.8fr) repeat(${C.length},minmax(0,1fr));min-width:${300 + C.length*170}px">
       <div class="th first"></div>${cols.map((c,i) => `<div class="th ${i===C.length-1?'last':''}" title="${esc(c.name)}"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span class="atl-th-name">${esc(c.name)}</span></div>`).join('')}
       ${rows}${structHead}${structRows}${moneyHead}${moneyRows}</div></div>
     ${flags ? `<div class="atl-probs">${flags}</div>` : ''}${noted ? `<div class="atl-probs">${noted}</div>` : ''}
     <p class="atl-note" style="margin-top:12px">${onPath
       ? 'Each route band sets the size of the meet it feeds, so widening how many leave the first stop changes how big the next meet is — it does <i>not</i> change the championship field, which is capped by the last route into it. If the top line has not moved, the change you made was upstream of what sets it.'
-      : asSaved ? `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} can come from the map, the pathway or the fees — open Maps only or Pathways only to isolate one.`
-    : `Region rows are matched by name; a scenario with a different structure shows — where no match exists. A change against ${esc(aName)} is caused by the map and nothing else.`}</p></div>`;
+      : asSaved ? `Region rows are matched by name; a proposal with a different structure shows — where no match exists. A change against ${esc(aName)} can come from the map, the pathway or the fees — open Maps only or Pathways only to isolate one.`
+    : `Region rows are matched by name; a proposal with a different structure shows — where no match exists. A change against ${esc(aName)} is caused by the map and nothing else.`}</p></div>`;
   return bar + maps + table;
 }
 
@@ -9011,7 +9099,7 @@ function atlasScorecardHtml(C, cols, axis){
       ${levelTiles}
     </div>`;
   }).join('');
-  const note = axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each scenario as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps';
+  const note = axis === 'pathway' ? 'same map, different pathways' : axis === 'scenario' ? 'each proposal as saved — its own map, pathway, fees and host model' : 'same pathway and fees, different maps';
   return `<div class="atl-kpis" style="grid-template-columns:repeat(${cols.length + (actualCol ? 1 : 0)},minmax(0,1fr))">${actualCol}${scen}</div>
     <p class="atl-note" style="padding:0 28px 18px;margin:0">${note}. <b>Actual</b> is the season that ran, straight from results; a projection's <b>take-up</b> is measured where that season ran the stage and assumed at 100% where it did not. Ceiling is maximum capacity with no take-up.</p>`;
 }
@@ -9102,14 +9190,14 @@ function atlasReportHtml(res){
       <div class="num last ${dCls}">${dTxt}</div>`;
   }).join('');
   const totDelta = bx ? (mappedM === bx.regionRows.reduce((a,r)=>a+r.m,0) ? '—' : ((mappedM > bx.regionRows.reduce((a,r)=>a+r.m,0) ? '+' : '−') + fmt(Math.abs(mappedM - bx.regionRows.reduce((a,r)=>a+r.m,0))))) : '—';
-  const recDefault = `That the Committee approve the scenario "${esc(name)}", a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under ${esc(pathwayPhrase())}.`
+  const recDefault = `That the Committee approve the proposal "${esc(name)}", a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under ${esc(pathwayPhrase())}.`
     + (churn ? ` Relative to ${esc(baseName)} it moves ${mono(fmt(churn.moved))} counties and ${mono(fmt(churn.movedM))} members` + (bx.gap != null && bal ? `, and ${bal.spread <= bx.gap ? 'narrows' : 'widens'} the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} from ${mono(bx.gap.toFixed(1))} to ${mono(bal.spread.toFixed(1))} percentage points` : '') + '.' : '')
     + (champ != null ? ` The championship field is ${mono(fmt(Math.round(champ)))} entries.` : '')
     + (overStops.length ? ` ${mono(fmt(overStops.length))} ${overStops.length===1?'meet does':'meets do'} not fit a standard pool day.` : ' Every meet fits a standard pool day.');
   const p1 = `<article class="atl-pg" data-screen-label="Report p1">
     <div class="atl-mast"><div class="atl-ml"><img src="../shared/images/diver-mark.svg" alt=""><div><div class="atl-mb">USA Diving</div><div class="atl-ms">High Performance Operations</div></div></div>
       <div class="atl-mr"><div>Competition Committee · Board paper</div><div><span class="mono">${esc(paperId)}</span> · ${esc(name)}</div></div></div>
-    ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled scenario')}`, 'h1')}
+    ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled proposal')}`, 'h1')}
     ${rt('meta', `Recommendation for approval · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
     <div class="atl-rec">${rt('h1', '1. Recommendation', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
     ${rt('h2', `2. ${esc(tierName(0))} under the recommended alignment`, 'div', 'atl-sec')}
@@ -9118,7 +9206,7 @@ function atlasReportHtml(res){
       ${regRows}
       <div class="tot first"></div><div class="tot">Total mapped</div><div class="tot num">${fmt(mappedM)}</div><div class="tot num">${fmt(mappedA)}</div><div class="tot num">${bal ? fmt(Math.round(bal.grand)) : '—'}</div><div class="tot num">${bal ? bal.spread.toFixed(1) + ' pp gap' : '—'}</div><div class="tot num last">${totDelta}</div>
     </div>
-    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline scenario is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
+    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline proposal is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
     ${pageFoot(1)}</article>`;
 
   // Page 2 -- Exhibit A
@@ -9163,7 +9251,7 @@ function atlasReportHtml(res){
     return `<div class="first">${esc(t.name)}</div><div class="num">${fmt(Math.round(t.entries))}</div><div class="num">${fmt(t.meets)}</div><div class="num ${ov?'c-bad':''}">${fmt(ov)}</div><div class="num">${usd(t.gross)}</div><div class="num last">${usd(t.usad)}</div>`; }).join('');
   const p3 = `<article class="atl-pg" data-screen-label="Report p3">${head2('Exhibit B · Section 3')}
     ${rt('exB', 'Exhibit B. Pathway, projected fields and meets', 'div', 'atl-ex')}
-    ${rt('exBs', `${esc(pathwayPhrase().replace(/^its/, 'The scenario\u2019s').replace(/^the /, 'The '))} applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
+    ${rt('exBs', `${esc(pathwayPhrase().replace(/^its/, 'The proposal\u2019s').replace(/^the /, 'The '))} applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
     <div class="atl-exb" style="grid-template-columns:repeat(${S.routing.length},1fr)">${exb}</div>
     <div class="atl-rt" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 1fr;margin-top:14px">
       <div class="th first">Event entries by level</div><div class="th num">Projected</div><div class="th num">Maximum (places)</div><div class="th num">Actual 2024</div><div class="th num">Actual 2025</div><div class="th num last">Actual 2026</div>
@@ -9219,13 +9307,13 @@ function atlasReportHtml(res){
           ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify <span style="color:#9aa5b8">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round((rt.byBoard||{})[b.k] || 0))).join(' · ')})</span></div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
         </div>`).join('')}</div>`; }).join('')}</div>`;
     pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C')}
-      ${rt('exC1', 'Exhibit C. Scenarios side by side — structure and pathway', 'div', 'atl-ex')}
-      ${rt('exC1s', 'Each column is a scenario\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Each level reads: places sent by the level above (the sum of that level\u2019s \u201cqualify\u201d lines), how many take them up, plus anyone entering directly = entries. Take-up is measured separately for every event, so the percentage shown is the overall result, not one flat rate. The actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
+      ${rt('exC1', 'Exhibit C. Proposals side by side — structure and pathway', 'div', 'atl-ex')}
+      ${rt('exC1s', 'Each column is a proposal\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Each level reads: places sent by the level above (the sum of that level\u2019s \u201cqualify\u201d lines), how many take them up, plus anyone entering directly = entries. Take-up is measured separately for every event, so the percentage shown is the overall result, not one flat rate. The actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
       ${structCols}
       ${pageFoot(4)}</article>
     <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}
       ${rt('exC', 'Exhibit C, continued. Maps and figures', 'div', 'atl-ex')}
-      ${rt('exCs', `${cmpAsSaved ? 'Each scenario exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} ${cols.some((c, i) => i > 0 && c.c && c.c.churn && c.c.churn.moved) ? `Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.` : `Every scenario shown uses the same county map as ${esc(name)}, so no county is outlined; the differences are in structure, pathway and fees.`}`, 'div', 'atl-exs')}
+      ${rt('exCs', `${cmpAsSaved ? 'Each proposal exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} ${cols.some((c, i) => i > 0 && c.c && c.c.churn && c.c.churn.moved) ? `Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.` : `Every proposal shown uses the same county map as ${esc(name)}, so no county is outlined; the differences are in structure, pathway and fees.`}`, 'div', 'atl-exs')}
       <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? (c.c.churn.moved ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : `same county map as ${esc(aShort)}`) : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
       <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
         <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Inter',sans-serif">${esc(c.name)}</span></div>`).join('')}
@@ -9239,7 +9327,7 @@ function atlasReportHtml(res){
   const changes = churn ? churn.changes : [];
   const shown = changes.slice(0, 16);
   const chgRows = shown.map(c => `<div class="first">${esc(c.county)} <span class="atl-fips">${esc(c.f)}</span></div><div>${esc(c.st)}</div><div class="c-muted">${esc(c.from)}</div><div>${esc(c.to)}</div><div class="num last">${fmt(c.m)}</div>`).join('');
-  const chgSummary = !churn ? 'No baseline scenario is loaded, so there is nothing to compare against. Choose one in the toolbar above.'
+  const chgSummary = !churn ? 'No baseline proposal is loaded, so there is nothing to compare against. Choose one in the toolbar above.'
     : changes.length > 16 ? `${fmt(changes.length)} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} in total; the 16 with the most members are listed. The complete list is the CSV appendix.`
     : changes.length ? `${fmt(changes.length)} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}; every one is listed above.`
     : 'No county changes ' + esc((singulariseLevel(tierName(0))||'region').toLowerCase()) + ' against the baseline.';
@@ -9251,17 +9339,17 @@ function atlasReportHtml(res){
     ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
     ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
     ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
-    ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio scenario "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
-                       : `Figures are live from the Boundary Studio scenario "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the scenario before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
+    ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
+                       : `Figures are live from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the proposal before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
     ${pageFoot(nPages)}</article>`;
 
   // Toolbar
   const drift = S.frozen ? freezeDrift() : null;
-  const fz = !S.frozen ? `<div class="atl-fz none"><span class="atl-dot"></span><span>Not frozen · figures are live; freeze before presenting. Click any heading or paragraph to edit its wording.</span><button id="bsFreeze" ${S.scenarioId?'':'disabled'} title="${S.scenarioId?'':'Save the scenario first'}">Freeze as presented…</button></div>`
+  const fz = !S.frozen ? `<div class="atl-fz none"><span class="atl-dot"></span><span>Not frozen · figures are live; freeze before presenting. Click any heading or paragraph to edit its wording.</span><button id="bsFreeze" ${S.scenarioId?'':'disabled'} title="${S.scenarioId?'':'Save the proposal first'}">Freeze as presented…</button></div>`
     : `<div class="atl-fz ${drift?'drift':''}"><span class="atl-dot"></span><span>Frozen ${esc(String(S.frozen.at||'').slice(0,10))}${S.frozen.note?` — ${esc(S.frozen.note)}`:''} · ${drift ? 'figures have moved since; re-freeze or explain the change' : 'figures match the record; click any heading or paragraph to edit its wording before export'}</span>
        <button id="bsFreeze">Re-freeze</button><button class="quiet" id="bsLedgerHist">Permanent record</button><button class="quiet" id="bsUnfreeze">Remove freeze</button></div>`;
-  const cmpNote = C ? `<span class="atl-note">Exhibit C compares ${C.length} pinned scenarios</span>` : `<button class="atl-link" id="atlReportPins" title="Pin scenarios under Compare and they appear as Exhibit C">Add a side-by-side exhibit…</button>`;
-  const baseSel = cmpNote + `<select class="atl-sel" id="atlReportBase" title="The scenario this paper compares against"><option value="">Compare against…</option>${(S.mapList||[]).filter(x=>x.id!==S.scenarioId).map(x=>`<option value="${esc(x.id)}" ${base&&base.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+  const cmpNote = C ? `<span class="atl-note">Exhibit C compares ${C.length} pinned proposals</span>` : `<button class="atl-link" id="atlReportPins" title="Pin proposals under Compare and they appear as Exhibit C">Add a side-by-side exhibit…</button>`;
+  const baseSel = cmpNote + `<select class="atl-sel" id="atlReportBase" title="The proposal this paper compares against"><option value="">Compare against…</option>${(S.mapList||[]).filter(x=>x.id!==S.scenarioId).map(x=>`<option value="${esc(x.id)}" ${base&&base.id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
   const tool = `<div class="atl-rtool">${fz}<div class="atl-rbtns">${baseSel}<button class="atl-btn" id="atlCsvAppendix">CSV appendix</button><button class="atl-btn" id="bsGoReport" title="The wider report builder, with the Boundary Studio sections">Report builder</button><button class="atl-btn prim" id="atlPrint">Export PDF</button></div></div>
     ${drift ? `<div class="atl-rbox"><b style="color:#b3122b">This no longer computes what it said when it was frozen.</b>
       ${drift.inputs.length ? `<div>Inputs that changed: ${drift.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} → ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>` : ''}
@@ -9464,7 +9552,7 @@ function classicShellHtml(){
     <div class="bs-seedrow"><button class="tab" id="bsLoadSeed">Load attendance-based map</button>
       <span class="note">The older draft, built from which Regional meet each club actually attended. Useful for comparison, but it is not the published alignment.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsAtlasOpen">Switch to the Atlas view</button>
-      <span class="note">The redesigned presentation: seven workspaces, one header, and a board paper you can print. Same scenario, same numbers.</span></div></div>
+      <span class="note">The redesigned presentation: seven workspaces, one header, and a board paper you can print. Same proposal, same numbers.</span></div></div>
     <div class="bs-layout">
       <div class="card" style="margin-bottom:0"><div class="card-b" style="padding:10px">
         <svg id="bsSvg" viewBox="0 0 975 610" style="width:100%;height:auto;display:block;touch-action:none;cursor:crosshair"><g id="bsSvgG"></g></svg>

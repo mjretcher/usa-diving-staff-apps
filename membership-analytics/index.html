@@ -1445,6 +1445,31 @@ tr[data-hl]:hover{background:#eef7fb}
 #bsAutoModal .aa-map svg{width:100%;height:auto;display:block}
 #bsAutoModal .bs-auto-tbl .num{text-align:right}
 @media(max-width:900px){#bsAutoModal .aa-body{grid-template-columns:1fr}#bsAutoModal .bs-auto-dlg.aa-dlg{height:auto}#bsAutoModal .aa-left{border-right:0}}
+
+/* ---- proposal / map cards in the rail ---- */
+.atl-card-lbl{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#171f69}
+.atl-card-lbl span{font-weight:500;text-transform:none;letter-spacing:0;color:#6b7385;font-size:11.5px;text-align:right}
+.atl-btnrow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.atl-pbtn{flex:1;min-width:0;border:1px solid #cdd6e4;background:#fff;color:#171f69;border-radius:7px;padding:8px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.atl-pbtn:hover{border-color:#009AC7;color:#00789b}
+.atl-pbtn.prim{background:#009AC7;border-color:#009AC7;color:#fff}
+.atl-pbtn.prim:hover{background:#00789b;color:#fff}
+.atl-mapcard{margin-top:14px;padding:10px 12px;border:1px solid #dbe2ee;border-radius:9px;background:#f8fafd}
+.atl-mapcard.empty{border-color:#009AC7;box-shadow:0 0 0 3px rgba(0,154,199,.12)}
+.atl-mapname{width:100%;margin-top:6px}
+/* ---- chooser ---- */
+.bs-pick{max-width:640px}
+.bs-pick-list{display:flex;flex-direction:column;gap:6px;max-height:56vh;overflow:auto;margin-top:8px}
+.bs-pick-g{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#009AC7;margin:8px 0 2px}
+.bs-pick-row{display:block;text-align:left;border:1px solid #dbe2ee;background:#fff;border-radius:8px;padding:9px 12px;cursor:pointer;font:inherit}
+.bs-pick-row:hover{border-color:#171f69;background:#f5f8fd}
+.bs-pick-row.cur{border-color:#171f69;box-shadow:inset 3px 0 0 #171f69}
+.bs-pick-row b{font-size:14px;color:#171f69}
+.bs-pick-row span{display:block;font-size:12px;color:#5a6480;margin-top:2px}
+.bs-pick-row .bs-pick-tag{display:inline-block;margin:0 0 0 8px;font-size:10px;font-weight:700;text-transform:uppercase;background:#eef2fb;color:#171f69;border-radius:4px;padding:1px 6px}
+.bs-pick-row.big{padding:12px 14px}
+.bs-pick-row.big b{font-size:15px}
+.bs-pick-none{color:#6b7385;font-size:13px;padding:10px}
 </style>
 </head>
 <body>
@@ -1499,10 +1524,10 @@ tr[data-hl]:hover{background:#eef7fb}
 <script src="ma-app.js?v=202609030441"></script>
 <script src="routing.js?v=202609171730"></script>
 <script src="scenario-schedule-engine.js?v=202608281800"></script>
-<script src="boundary.js?v=202609172300"></script>
+<script src="boundary.js?v=202609171700"></script>
 <script src="ma-clubs.js?v=202607281105"></script>
 <script src="ma-reports.js?v=202609162200"></script>
-<script type="module" src="jc-report.js?v=202609171515"></script>
+<script type="module" src="jc-report.js?v=202609171700"></script>
 <script src="pricing.js?v=202609162200"></script>
 <script src="ma-import.js?v=202608050400"></script>
 </body>

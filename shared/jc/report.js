@@ -194,16 +194,16 @@ function tierRows(perTier, status) {
 async function buildColumn(col, ctx) {
   if (col.type === 'scenario') {
     const r = await computeBoundaryMoneyReport(col.scenarioId, { ceilingYear: ctx.membershipYear });
-    if (!r) throw new Error(`Saved scenario ${col.scenarioId} was not found.`);
+    if (!r) throw new Error(`Saved proposal ${col.scenarioId} was not found.`);
     const tiers = tierRows(r.perTier, 'projected');
     if (!tiers.length || !(tiers[0].eventEntries > 0)) {
-      throw new Error(`Saved scenario “${r.scenarioName}” projects no event entries — its map has no counties assigned to areas (a new scenario starts blank). Open it in Boundary Studio, assign counties, save, then generate again.`);
+      throw new Error(`Saved proposal “${r.scenarioName}” projects no event entries — its map has no counties assigned (a new proposal starts blank). Open it in Boundary Studio, draw or choose a map, save, then generate again.`);
     }
     // Junior Nationals is only in the report when the scenario models it as a stop.
     const nat = tiers.find((t) => /national/i.test(t.name)) || null;
     const att = ctx.jn26 ? ctx.jn26.attendance : null;
     return {
-      label: col.label || r.scenarioName, kind: 'scenario', source: `Saved scenario “${r.scenarioName}” (${col.scenarioId})`,
+      label: col.label || r.scenarioName, kind: 'scenario', source: `Saved proposal “${r.scenarioName}” (${col.scenarioId})`,
       assumption: [r.assumptions && r.assumptions.note,
         r.assumptions && r.assumptions.firstStopPlatform === 'skip' ? `Platform is not held at ${r.structure.levels[0].name}; platform divers enter ${(r.structure.levels[1] || {}).name || 'the next stop'} directly.` : null].filter(Boolean).join(' '),
       seedBasis: r.assumptions && r.assumptions.seedBasis,
@@ -307,7 +307,7 @@ function individualOnly2026(m, tiers) {
 }
 
 function hostText(h) {
-  if (!h) return 'per the scenario';
+  if (!h) return 'per the proposal';
   const min = +h.min ? ` (minimum $${(+h.min).toLocaleString('en-US')})` : '';
   if (h.mode === 'per_entry') return `$${+h.perEntry} per event entry${min}`;
   if (h.mode === 'flat') return `$${(+h.flat || 0).toLocaleString('en-US')} per meet${min}`;

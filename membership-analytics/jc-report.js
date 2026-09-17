@@ -77,7 +77,7 @@ function close() { const m = document.getElementById('mr-modal'); if (m) m.remov
 const shortName = (s) => String(s || '').split(' — ')[0].trim();
 const colKey = (c) => (c.type === 'scenario' ? 's:' + c.scenarioId : 'y:' + c.year);
 const KIND = {
-  scenario: { tag: 'Proposal', desc: 'Projected from a saved Boundary Studio scenario' },
+  scenario: { tag: 'Proposal', desc: 'Projected from a saved Boundary Studio proposal' },
   2026: { tag: 'Real 2026 season', desc: 'What actually happened: 2026 results and fees' },
   2025: { tag: 'Real 2025 season', desc: '2021–2025 rules modeled on real 2025 entries' },
 };
@@ -190,7 +190,7 @@ function renderEditor() {
     </div>`;
   };
   const missing = c.columns.filter((col) => col.type === 'scenario' && !JC.scenarios.some((s) => s.id === col.scenarioId));
-  const dirtyNote = (() => { try { const B = window.__BOUNDARY && window.__BOUNDARY.S; return B && B.dirty ? ` “${esc(B.scenarioName || 'The scenario open in Boundary Studio')}” has unsaved changes; the report uses its last saved version.` : ''; } catch (_) { return ''; } })();
+  const dirtyNote = (() => { try { const B = window.__BOUNDARY && window.__BOUNDARY.S; return B && B.dirty ? ` “${esc(B.scenarioName || 'The proposal open in Boundary Studio')}” has unsaved changes; the report uses its last saved version.` : ''; } catch (_) { return ''; } })();
   const allOn = c.sections.length === JC_SECTIONS.length;
   const m = modal();
   m.innerHTML = `
@@ -208,8 +208,8 @@ function renderEditor() {
         </div></div>
         <div class="mr-step"><div class="mr-step-n">2</div><div class="mr-step-c">
           <div class="mr-step-h">Tick what to compare</div>
-          <p class="mr-soft" style="margin:-4px 0 8px">Each ticked item becomes a column, in the order shown by the number. Proposals come from scenarios saved in Boundary Studio (counties assigned, then Save).${dirtyNote}</p>
-          ${missing.length ? `<p class="jc-warn">${missing.length === 1 ? 'One column uses a scenario that no longer exists' : missing.length + ' columns use scenarios that no longer exist'}; untick ${missing.length === 1 ? 'it' : 'them'} below.</p>` : ''}
+          <p class="mr-soft" style="margin:-4px 0 8px">Each ticked item becomes a column, in the order shown by the number. Proposals come from Boundary Studio (counties assigned, then Save).${dirtyNote}</p>
+          ${missing.length ? `<p class="jc-warn">${missing.length === 1 ? 'One column uses a proposal that no longer exists' : missing.length + ' columns use proposals that no longer exist'}; untick ${missing.length === 1 ? 'it' : 'them'} below.</p>` : ''}
           <div style="display:flex;flex-direction:column;gap:6px">
             ${choices().map(row).join('')}
             ${missing.map((col) => row({ type: 'scenario', scenarioId: col.scenarioId, name: `${col.label} (scenario deleted)`, label: col.label })).join('')}
@@ -347,7 +347,7 @@ async function generate(id) {
     return;
   }
   const sub = document.getElementById('jc-sub');
-  if (sub) sub.innerHTML += `<br>Generated ${esc(new Date(r.generatedAt).toLocaleString())} from live data (DiveMeets results, USA Diving membership, saved Boundary Studio scenarios)`
+  if (sub) sub.innerHTML += `<br>Generated ${esc(new Date(r.generatedAt).toLocaleString())} from live data (DiveMeets results, USA Diving membership, saved Boundary Studio proposals)`
     + `<br>Columns: ${r.columns.map((c) => esc(c.label)).join(' · ')}`
     + `<br>Data checks: <strong>${r.checks.filter((c) => c.pass).length} passed, ${r.checks.filter((c) => !c.pass).length} failed</strong>`;
   document.getElementById('mr-doc-body').innerHTML = renderReport(r);
@@ -370,7 +370,7 @@ const cellOf = (html) => `<td class="mr-num">${html}</td>`;
 function rangeText(lo, hi) { return lo != null && lo !== hi ? `${n(lo)}–${n(hi)}` : n(hi); }
 
 const natOf = (c) => c.nationals;
-const noNat = (c) => `<span class="mr-soft">not in this scenario (ends at ${esc(stage(c.endsAt || ''))})</span>`;
+const noNat = (c) => `<span class="mr-soft">not in this proposal (ends at ${esc(stage(c.endsAt || ''))})</span>`;
 
 function secSummary(r) {
   const cols = r.columns;
