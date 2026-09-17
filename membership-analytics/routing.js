@@ -61,8 +61,14 @@ function roundsOf(level){
    configuration among many and can be diffed against a proposal. */
 function defaultRouting(levelCount, finalLevel){
   const F = finalLevel == null ? levelCount : finalLevel;
+  // Championship not on the map (F past the last painted level, e.g. Regions /
+  // Zones / E-W-C with Junior Nationals as the top meet): every painted level
+  // is an ordinary stage, so E/W/C keeps its prelim -> final route; routes to F
+  // are dropped by the caller because F is off the map.
+  const offMap = F > levelCount;
+  const stages = offMap ? levelCount + 1 : levelCount;
   const out = [];
-  for (let L = 0; L < levelCount; L++){
+  for (let L = 0; L < stages; L++){
     if (L === 0){
       // Regionals and Zones run a single round, so their only round is the
       // final one and that is also where arrivals land.
@@ -78,7 +84,7 @@ function defaultRouting(levelCount, finalLevel){
                         {from:'final',  lo:1, hi:3,  to:{level:F, round:'prelim'}}]});
     }
   }
-  out.push({rounds:[{key:'prelim'},{key:'final'}],
+  if (!offMap) out.push({rounds:[{key:'prelim'},{key:'final'}],
             routes:[{from:'prelim', lo:1, hi:12, to:{level:F, round:'final'}}]});
   return out;
 }

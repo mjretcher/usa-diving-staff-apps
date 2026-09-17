@@ -2747,13 +2747,52 @@ async function loadMapList(){
   return S.mapList;
 }
 
+/* The library is the saved pathways (membership.pathways) PLUS the pathway
+   inside every saved scenario, so a proposal's rules can be loaded onto any
+   map without first being saved to the library. Scenario entries carry the id
+   'sc:<scenario id>' and are read-only here. */
 async function listPathways(){
+  let lib = [], scen = [];
   try {
     const r = await NEON.query(
       `SELECT id, name, levels, notes, to_char(updated_at,'Mon DD') u
        FROM membership.pathways ORDER BY updated_at DESC LIMIT 60`);
-    return r.rows || [];
-  } catch(e){ console.warn('pathways', e); return []; }
+    lib = (r.rows || []).map(x => Object.assign({src:'library'}, x));
+  } catch(e){ console.warn('pathways', e); }
+  try {
+    const r = await NEON.query(
+      `SELECT id, name, jsonb_array_length(coalesce((data::jsonb)->'routing','[]'::jsonb)) AS levels, to_char(updated_at,'Mon DD') u
+       FROM membership.boundary_scenarios
+       WHERE jsonb_array_length(coalesce((data::jsonb)->'routing','[]'::jsonb)) > 0
+       ORDER BY updated_at DESC LIMIT 60`);
+    scen = (r.rows || []).filter(x => x.id !== S.scenarioId)
+      .map(x => ({id: 'sc:' + x.id, name: x.name, levels: +x.levels, u: x.u, src: 'scenario'}));
+  } catch(e){ console.warn('scenario pathways', e); }
+  return lib.concat(scen);
+}
+
+/* One saved pathway, from the library or from a saved scenario. */
+async function fetchPathway(id){
+  if (String(id).startsWith('sc:')){
+    const r = await NEON.query('SELECT name, data FROM membership.boundary_scenarios WHERE id=$1', [id.slice(3)]);
+    if (!r.rows || !r.rows.length) return null;
+    const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    const lv = migrateLevels(d, (d.regions||[]).length) || [];
+    return {name: r.rows[0].name, data: {v: 1, levels: (d.routing||[]).length, routing: d.routing || [],
+      arrival: d.arrival || null, seedPool: d.seedPool || null, levelNames: lv.map(l => l.name)}};
+  }
+  const r = await NEON.query(`SELECT name, data FROM membership.pathways WHERE id=$1`, [id]);
+  if (!r.rows || !r.rows.length) return null;
+  return {name: r.rows[0].name, data: typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data};
+}
+function pathwayOptions(){
+  const L = S.pathList || [];
+  const opt = p => `<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} · ${p.levels} level${p.levels===1?'':'s'}${p.u ? ' · ' + esc(p.u) : ''}</option>`;
+  const lib = L.filter(p => p.src !== 'scenario'), sc = L.filter(p => p.src === 'scenario');
+  if (!S.pathList) return '<option value="" disabled>Loading…</option>';
+  if (!L.length) return '<option value="" disabled>No saved pathways or scenarios yet</option>';
+  return (lib.length ? `<optgroup label="Pathway library">${lib.map(opt).join('')}</optgroup>` : '')
+    + (sc.length ? `<optgroup label="From a saved scenario">${sc.map(opt).join('')}</optgroup>` : '');
 }
 
 async function savePathway(){
@@ -2781,9 +2820,10 @@ async function savePathway(){
 async function loadPathway(id){
   if (!id) return;
   try {
-    const r = await NEON.query(`SELECT name, data FROM membership.pathways WHERE id=$1`, [id]);
-    if (!r.rows || !r.rows.length){ msg('That pathway is gone.'); return; }
-    const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+    const got = await fetchPathway(id);
+    if (!got){ msg('That pathway is gone.'); return; }
+    const p = got.data;
+    const r = {rows: [{name: got.name}]};
     pushUndo();
     const fit = adaptPathway(p);
     S.routing = fit.routing;
@@ -2802,6 +2842,7 @@ async function loadPathway(id){
 async function deletePathway(){
   const id = (document.getElementById('bsPathLoad') || {}).value;
   if (!id) { msg('Choose a saved pathway first.'); return; }
+  if (String(id).startsWith('sc:')) { msg('That pathway belongs to a saved scenario — delete or change the scenario itself.'); return; }
   const nm = (S.pathList || []).find(p => p.id === id);
   if (!await bsConfirm({title:'Delete this saved pathway?', danger:true, okLabel:'Delete',
     body:`<p class="bs-dlg-p">Removes <b>${esc(nm ? nm.name : id)}</b> from the library. Maps that used it keep
@@ -2911,7 +2952,7 @@ function renderPathwayLibrary(){
     <div class="bs-pwbar-r">
       <select class="sel" id="bsPathLoad">
         <option value="">Load a saved pathway&hellip;</option>
-        ${(S.pathList||[]).map(p=>`<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} &middot; ${p.levels} levels &middot; ${esc(p.u||'')}</option>`).join('')}
+        ${pathwayOptions()}
       </select>
       <button class="tab bs-mini" id="bsPathSave">${inLib && !S.pathDirty ? 'Save a copy' : 'Save this pathway'}</button>
       <button class="tab bs-mini" id="bsPathDel" title="Delete the selected saved pathway">Delete saved</button>
@@ -3809,9 +3850,10 @@ async function buildComparison(ids, axis){
     let row = null;
     try {
       if (onPathways){
-        const r = await NEON.query('SELECT name, data FROM membership.pathways WHERE id=$1', [id]);
-        if (!r.rows || !r.rows.length){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
-        const p = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
+        const got = await fetchPathway(id);
+        if (!got){ cols.push({label:'(deleted)', error:'no longer saved'}); continue; }
+        const p = got.data;
+        const r = {rows: [{name: got.name}]};
         // Fit onto the structure now on screen; carry the notes into the column
         // so a fitted pathway never reads as a clean like-for-like.
         const fit = adaptPathway(p);
@@ -4958,7 +5000,12 @@ function wirePathway(){
       body:'<p class="bs-dlg-p">Replaces every round and route with the current published rules. '
          + 'Undo will bring this one back.</p>'})) return;
     pushUndo();
-    S.routing = QR().defaultRouting(S.levels.length - 1, S.levels.length - 1);
+    // Same rule as syncRouting: the championship is a painted level only if the
+    // top level is Nationals; otherwise it sits past the map.
+    const n = S.levels.length;
+    const lastIsNationals = /national/i.test(String((S.levels[n-1] && S.levels[n-1].name) || ''));
+    S.routing = QR().defaultRouting(n - 1, lastIsNationals ? n - 1 : n);
+    syncRouting();
     touch();
   });
 }
@@ -7809,8 +7856,7 @@ function atlasStructureHtml(res){
 function atlasPathwayHtml(res){
   const RN = QR().ROUND_NAME;
   const inLib = !!(S.pathSaved && S.pathSaved.id);
-  const lib = `<select class="atl-sel" id="bsPathLoad"><option value="">Load a saved pathway…</option>
-      ${(S.pathList||[]).map(p=>`<option value="${esc(p.id)}" ${S.pathSaved&&S.pathSaved.id===p.id?'selected':''}>${esc(p.name)} · ${p.levels} levels · ${esc(p.u||'')}</option>`).join('')}</select>`;
+  const lib = `<select class="atl-sel" id="bsPathLoad"><option value="">Load a saved pathway…</option>${pathwayOptions()}</select>`;
   const probsAll = (res.problems||[]).map(p => ({kind:p.kind, msg:(p.level!=null?tierName(p.level)+': ':'') + p.msg}));
   const probs = probsAll.slice(0,4).map(p => `<div class="atl-warn ${p.kind==='gap'?'amber':''}">${esc(p.msg)}</div>`).join('')
     + (probsAll.length > 4 ? `<div class="atl-note">and ${probsAll.length-4} more — see Schedule</div>` : '');
