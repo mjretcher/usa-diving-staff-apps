@@ -7073,8 +7073,8 @@ function picksNeedBase(){
   return (AUTO.picks||[]).some(k => (AUTO_PRESETS.find(x=>x.k===k)||{}).needsBase);
 }
 
-const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: null,
-               busy: false, locks: [], ladder: '12, 6, 3', picks: ['blend'], tz: false,
+const AUTO = { n: 9, basis: 'members', whole: false, preset: 'blend', result: null,
+               busy: false, locks: [], stages: null, withNationals: true, prep: null, picks: ['blend'], tz: false,
                // Host sites are no longer a user choice, but the two things
                // that control did are separable and only one of them should go.
                // Measuring travel to a county that actually carries membership
@@ -7085,9 +7085,25 @@ const AUTO = { n: 12, basis: 'members', whole: false, preset: 'blend', result: n
                // the optimiser to quietly rule a map out.
                hostMin: 25, weights: null };
 
+/* ---------- auto-draw: stops set one by one ----------
+   Each qualifying stop has its own name and its own number of areas; nothing
+   is inferred from anything else. Junior Nationals can be added as a final
+   one-meet stop. Settings on the left, the preview map on the right. */
+function autoStagesFromMap(){
+  const lv = S.levels || [];
+  const blank = !Object.keys(S.assign || {}).length;
+  if (blank || !lv.length) return {stages: [{name: 'Zones', n: 9}, {name: 'East, West, Central', n: 3}], nat: true};
+  const stages = lv.map((l, L) => ({name: l.name || ('Stop ' + (L + 1)), n: L === 0 ? S.regions.length : (l.groups || []).length}));
+  let nat = false;
+  const last = stages[stages.length - 1];
+  if (stages.length > 1 && last.n === 1){ stages.pop(); nat = true; }
+  return {stages: stages.filter(s => s.n >= 1), nat};
+}
 function openAutoDialog(){
-  AUTO.n = Math.max(2, S.regions.length || 12);
-  AUTO.result = null;
+  const init = autoStagesFromMap();
+  AUTO.stages = init.stages; AUTO.withNationals = init.nat;
+  AUTO.n = AUTO.stages[0].n;
+  AUTO.result = null; AUTO.prep = null;
   let d = document.getElementById('bsAutoModal');
   if (!d){ d = document.createElement('div'); d.id = 'bsAutoModal'; document.body.appendChild(d); }
   renderAutoDialog();
@@ -7095,147 +7111,163 @@ function openAutoDialog(){
     AUTO.error = String(e.message || e); renderAutoDialog();
   });
 }
+function parseLadder(){
+  const st = (AUTO.stages && AUTO.stages.length) ? AUTO.stages : [{n: AUTO.n}];
+  return st.map(s => s.n).concat(AUTO.withNationals ? [1] : []);
+}
+function autoStageProblems(){
+  const st = AUTO.stages || [], out = [];
+  st.forEach((s, i) => {
+    if (i === 0 && (s.n < 2 || s.n > 24)) out.push('The first stop needs 2 to 24 areas.');
+    if (i > 0 && s.n >= st[i-1].n) out.push(`${s.name || 'Stop ' + (i+1)} needs fewer areas than ${st[i-1].name || 'the stop before it'} (${st[i-1].n}).`);
+    if (i > 0 && s.n < 2) out.push(`${s.name || 'Stop ' + (i+1)} needs at least 2 areas — use “Junior Nationals as the last stop” for a single national meet.`);
+    if (!String(s.name || '').trim()) out.push(`Stop ${i+1} needs a name.`);
+  });
+  return out;
+}
+const autoChanged = () => { AUTO.result = null; AUTO.prep = null; AUTO.n = AUTO.stages[0].n; renderAutoDialog(); };
+window._bsAutoStageN = function(i, d){ const s = AUTO.stages[i]; s.n = Math.min(24, Math.max(i ? 2 : 2, s.n + d)); autoChanged(); };
+window._bsAutoStageSet = function(i, v){ const n = parseInt(v, 10); if (!isNaN(n)) AUTO.stages[i].n = Math.min(24, Math.max(2, n)); autoChanged(); };
+window._bsAutoStageName = function(i, v){ AUTO.stages[i].name = v; AUTO.prep = null; };
+window._bsAutoStageAdd = function(){
+  const last = AUTO.stages[AUTO.stages.length - 1];
+  const n = Math.max(2, Math.floor(last.n / 2));
+  AUTO.stages.push({name: n === 3 ? 'East, West, Central' : 'Stop ' + (AUTO.stages.length + 1), n});
+  autoChanged();
+};
+window._bsAutoStageDel = function(i){ if (AUTO.stages.length > 1){ AUTO.stages.splice(i, 1); autoChanged(); } };
+window._bsAutoNat = function(on){ AUTO.withNationals = !!on; autoChanged(); };
+// kept for callers/tests that still use the old controls
+window._bsAutoN = function(delta){ window._bsAutoStageN(0, delta); };
+window._bsAutoSetN = function(v){ window._bsAutoStageSet(0, v); };
+
+/* Order and group a drawn result once, so the preview and "Use this map"
+   show exactly the same numbering. */
+function prepareAuto(r){
+  if (AUTO.prep && AUTO.prep.r === r) return AUTO.prep;
+  const A = _autoData, N = AUTO.n;
+  let baseAssign = A.fips.map((f, i) => { const g = r.assign[i]; return (g != null && g >= 0 && g < N) ? g : -1; });
+  const ladder = parseLadder().slice(1);
+  let chain = [];
+  if (ladder.length && !r.byState){
+    try { chain = groupAreasIntoTiers(A, baseAssign, autoWeights(A, AUTO.basis), ladder); }
+    catch(e){ console.warn('tier rollup failed:', e && e.message); chain = []; }
+  }
+  let cents = null;
+  try { const f = flowNumbering(A, baseAssign, N, chain); baseAssign = f.assign; chain = f.chain; cents = f.centroids; }
+  catch(e){ console.warn('flow numbering failed, keeping the solver order:', e && e.message); }
+  const byF = {}; A.fips.forEach((f, i) => { if (baseAssign[i] >= 0) byF[f] = baseAssign[i]; });
+  const w = autoWeights(A, AUTO.basis);
+  const size = new Array(N).fill(0), cnt = new Array(N).fill(0);
+  baseAssign.forEach((g, i) => { if (g >= 0){ size[g] += w[i]; cnt[g]++; } });
+  AUTO.prep = {r, baseAssign, chain, cents, byF, size, cnt};
+  return AUTO.prep;
+}
+function autoGroupNames(t, k, name, cents){
+  if (k === 1) return [AUTO.withNationals && t === parseLadder().length - 1 ? 'National' : singulariseLevel(name) || name];
+  if (k === 3 && /east/i.test(name) && cents){
+    const byX = [0,1,2].sort((a, b) => cents[a].x - cents[b].x);
+    const g = []; g[byX[0]] = 'West'; g[byX[1]] = 'Central'; g[byX[2]] = 'East'; return g;
+  }
+  const base = singulariseLevel(name);
+  return Array.from({length: k}, (_, i) => (base ? base : 'Group') + ' ' + (i + 1));
+}
 
 function renderAutoDialog(){
   const d = document.getElementById('bsAutoModal');
   if (!d) return;
   const ready = !!_autoData;
   const r = AUTO.result;
+  const probs = autoStageProblems();
+  const st = AUTO.stages || [];
+  const prep = r && ready ? prepareAuto(r) : null;
+  const ladder = parseLadder();
+  const stageRows = st.map((s, i) => `
+    <div class="aa-stage">
+      <div class="aa-stage-n">${i + 1}</div>
+      <div class="aa-stage-main">
+        <input class="aa-in" value="${esc(s.name)}" placeholder="Name, e.g. Zones" oninput="window._bsAutoStageName(${i}, this.value)" aria-label="Name of stop ${i + 1}">
+        <div class="aa-step">
+          <button onclick="window._bsAutoStageN(${i}, -1)" aria-label="Fewer areas">&minus;</button>
+          <input type="number" min="2" max="24" value="${s.n}" onchange="window._bsAutoStageSet(${i}, this.value)" aria-label="Areas at stop ${i + 1}">
+          <button onclick="window._bsAutoStageN(${i}, 1)" aria-label="More areas">+</button>
+          <span>${i === 0 ? 'areas — every county is in one' : `areas, each made of whole ${esc((st[i-1].name || 'areas').toLowerCase())}`}</span>
+        </div>
+      </div>
+      ${i > 0 ? `<button class="aa-del" onclick="window._bsAutoStageDel(${i})" title="Remove this stop">&#10005;</button>` : ''}
+    </div>`).join('');
+  const flow = st.map(s => `${s.n} ${esc(s.name || '')}`).concat(AUTO.withNationals ? ['Junior Nationals'] : []).join(' → ');
+  // Same colours the map will use once applied.
+  const pal = (S.regions.length === AUTO.n ? S.regions : defaultRegions(AUTO.n)).map(x => x.color);
+  const colOf = i => pal[i] || PALETTE[i % PALETTE.length];
+  const svg = prep && S.geo ? atlasStaticSvg(f => prep.byF[f], colOf) : '';
+  const groupOf = (i) => { if (!prep || !prep.chain.length) return ''; const g = prep.chain[0][i]; const nm = autoGroupNames(1, ladder[1], st[1] ? st[1].name : '', prep.cents && prep.cents[1]); return nm[g] || ''; };
   d.innerHTML = `
-  <div class="bs-auto-ov" onclick="if(event.target===this)window._bsAutoClose()">
-    <div class="bs-auto-dlg">
+  <div class="bs-auto-ov aa" onclick="if(event.target===this)window._bsAutoClose()">
+    <div class="bs-auto-dlg aa-dlg">
       <div class="bs-auto-head">
-        <div><div class="bs-auto-eyebrow">Boundary Studio</div>
-             <h2>Auto-draw the map</h2></div>
+        <div><div class="bs-auto-eyebrow">Boundary Studio</div><h2>Auto-draw the map</h2>
+          <div class="bs-auto-hint">Draws connected, evenly sized areas for each stop. Everything stays editable afterwards, and Undo puts back what you had.</div></div>
         <button class="bs-auto-x" onclick="window._bsAutoClose()" aria-label="Close">&#10005;</button>
       </div>
-      <div class="bs-auto-body">
-        <p class="bs-auto-p">Pick how many areas you want and this will divide the whole
-        country into that many <b>connected</b> areas with roughly the same number of members
-        in each. It is a starting point, not a decision &mdash; every county stays fully
-        editable afterwards, and Undo puts back what you had.</p>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">How many areas?</label>
-          <div class="bs-auto-nrow">
-            <button onclick="window._bsAutoN(-1)" aria-label="One fewer area">&minus;</button>
-            <input id="bsAutoN" type="number" min="2" max="24" value="${AUTO.n}"
-                   onchange="window._bsAutoSetN(this.value)">
-            <button onclick="window._bsAutoN(1)" aria-label="One more area">+</button>
-            <span class="bs-auto-hint">2 to 24</span>
+      <div class="aa-body">
+        <div class="aa-left">
+          <div class="aa-sec">
+            <div class="aa-h"><span>1</span>Qualifying stops</div>
+            <div class="bs-auto-hint">Stop 1 is the first meet athletes enter. Set how many areas each stop has.</div>
+            ${stageRows}
+            <div class="aa-row"><button class="aa-link" onclick="window._bsAutoStageAdd()" ${st.length >= 4 ? 'disabled' : ''}>+ Add a qualifying stop</button></div>
+            <label class="aa-check"><input type="checkbox" ${AUTO.withNationals ? 'checked' : ''} onchange="window._bsAutoNat(this.checked)"> Junior Nationals as the last stop (one national meet)</label>
+            <div class="aa-flow">${flow}</div>
+            ${probs.length ? `<div class="bs-auto-err">${probs.map(esc).join('<br>')}</div>` : ''}
           </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Stages</label>
-          <div style="flex:1">
-            <input id="bsAutoLadder" type="text" value="${esc(AUTO.ladder)}"
-                   onchange="window._bsAutoLadder(this.value)"
-                   style="width:180px;height:32px;border:1px solid #cdd6e4;border-radius:7px;
-                          padding:0 9px;font-family:'JetBrains Mono',monospace;font-size:14px;
-                          font-weight:700;color:#171F69">
-            <div class="bs-auto-hint" style="margin-top:4px">How many at each stage, biggest first
-              &mdash; e.g. <b>9, 3, 1</b> for nine areas feeding three, feeding one. Each stage is
-              balanced and connected in its own right. Two stages is fine; so is one.</div>
+          <div class="aa-sec">
+            <div class="aa-h"><span>2</span>What matters most</div>
+            <div class="bs-auto-hint">Pick one, or several in order of importance.</div>
+            <div class="bs-auto-presets aa-presets">
+              ${AUTO_PRESETS.map(p => { const rank = (AUTO.picks || []).indexOf(p.k);
+                return `<button class="${rank >= 0 ? 'on' : ''}" onclick="window._bsAutoPreset('${p.k}')"><b>${esc(p.label)}</b><span>${esc(p.hint)}</span>
+                  ${rank >= 0 && AUTO.picks.length > 1 ? `<span class="bs-auto-rank">${rank + 1}</span>` : ''}</button>`; }).join('')}
+            </div>
           </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">What matters most</label>
-          <div class="bs-auto-presets">
-            ${AUTO_PRESETS.map(p=>{
-              const rank = (AUTO.picks||[]).indexOf(p.k);
-              return `<button class="${rank>=0?'on':''}" onclick="window._bsAutoPreset('${p.k}')">
-                <b>${esc(p.label)}</b><span>${esc(p.hint)}</span>
-                ${rank>=0?`<span class="bs-auto-rank" title="Ranked ${rank+1} of ${AUTO.picks.length}">${rank+1}</span>`:''}
-                </button>`;}).join('')}
-          </div>
-        </div>
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl"></label>
-          <div class="bs-auto-hint" style="flex:1">
-            ${(AUTO.picks||[]).length > 1
-              ? `Blending <b>${(AUTO.picks||[]).map((k,i)=>{
-                   const p=AUTO_PRESETS.find(x=>x.k===k);
-                   return esc(p?p.label:k)+' ('+Math.round(rankWeight(i,AUTO.picks.length)*100)+'%)';}).join(' · ')}</b>.
-                 Click again to drop one, or click in a different order to change the ranking &mdash;
-                 the first counts most.`
-              : (AUTO.picks||[]).length === 1
-                ? 'Pick a second and a third if you want them blended. The order you click is the ranking.'
-                : 'Pick one, or several &mdash; the order you click them is the order they count.'}
-          </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Count</label>
-          <div class="bs-auto-chips">
-            <button class="${AUTO.basis==='members'?'on':''}" onclick="window._bsAutoBasis('members')">All members</button>
-            <button class="${AUTO.basis==='athletes'?'on':''}" onclick="window._bsAutoBasis('athletes')">Athletes only</button>
-          </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Keep in place</label>
-          <div style="flex:1">
+          <div class="aa-sec">
+            <div class="aa-h"><span>3</span>Balance by</div>
             <div class="bs-auto-chips">
-              ${S.regions.map((r,i)=>`<button class="sm ${AUTO.locks.indexOf(i)>=0?'on':''}"
-                onclick="window._bsAutoLock(${i})" style="border-left:5px solid ${r.color}">
-                ${esc(r.name||('Area '+(i+1)))}</button>`).join('')}
-              ${AUTO.locks.length?`<button class="sm" onclick="window._bsAutoLock(-1)">Clear</button>`:''}
+              <button class="${AUTO.basis === 'members' ? 'on' : ''}" onclick="window._bsAutoBasis('members')">All members</button>
+              <button class="${AUTO.basis === 'athletes' ? 'on' : ''}" onclick="window._bsAutoBasis('athletes')">Athletes only</button>
             </div>
-            <div class="bs-auto-hint" style="margin-top:4px">Pick any areas whose counties must not
-              move. Everything else gets redrawn around them.</div>
+            <div class="bs-auto-hint" style="margin-top:6px">Using ${yearLabelBoundary(S.year)} membership. Change the season on the map first for a different year.</div>
           </div>
-        </div>
-
-        <div class="bs-auto-row">
-          <label class="bs-auto-lbl">Whole states</label>
-          <label class="bs-auto-check">
-            <input type="checkbox" ${AUTO.whole?'checked':''} onchange="window._bsAutoWhole(this.checked)">
-            <span>Never split a state across two areas
-              <span class="bs-auto-hint">(tidier lines, but less even &mdash; a big state can't be shared)</span></span>
-          </label>
-        </div>
-
-        <div class="bs-auto-note">Using <b>${yearLabelBoundary(S.year)}</b>
-          membership &mdash; switch the year on the map before drawing if you want a different one.</div>
-
-        ${AUTO.error ? `<div class="bs-auto-err">Could not load the map data: ${esc(AUTO.error)}</div>` : ''}
-
-        ${r ? `
-          <div class="bs-auto-result">
-            <div class="bs-auto-rh">Result</div>
-            <div class="bs-auto-kpis">
-              <div><b>${(100*r.stats.spread).toFixed(1)}%</b><span>size spread &mdash; lower is more even</span></div>
-              <div><b>${isFinite(r.stats.ratio)?r.stats.ratio.toFixed(2)+'\u00d7':'&mdash;'}</b><span>largest &divide; smallest area</span></div>
-              ${r.stats.travelMi!=null?`<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>`:''}
-              ${weakestGroup(r)!=null?`<div><b>${Math.round(100*weakestGroup(r))}%</b><span>thinnest ${esc(weakestGroup(r,true)||'age group')} field vs average <b>(estimated)</b></span></div>`:''}
-              ${(r.stats.continuity!=null&&r.stats.continuity>0)?`<div><b>${Math.round(100*(1-r.stats.continuity))}%</b><span>of members stay where they are</span></div>`:''}
+          <details class="aa-sec aa-more" ${AUTO.locks.length || AUTO.whole ? 'open' : ''}>
+            <summary>More options</summary>
+            <div class="aa-sub">Keep these areas exactly as they are</div>
+            <div class="bs-auto-chips">
+              ${S.regions.map((rg, i) => `<button class="sm ${AUTO.locks.indexOf(i) >= 0 ? 'on' : ''}" onclick="window._bsAutoLock(${i})" style="border-left:5px solid ${rg.color}">${esc(rg.name || ('Area ' + (i + 1)))}</button>`).join('')}
+              ${AUTO.locks.length ? `<button class="sm" onclick="window._bsAutoLock(-1)">Clear</button>` : ''}
             </div>
-            ${(r.stats.hostless>0)?`<div class="bs-auto-note"><b>${r.stats.hostless} area${r.stats.hostless===1?' has':'s have'} no county carrying 25+ members.</b>
-               This does not count against the map &mdash; whether somewhere can host is a facilities question.
-              Worth knowing when you come to bid them out.</div>`:''}
-            ${(r.stats.chosenHost&&r.stats.chosenHost.some(x=>x>=0))?`
-              <div class="bs-auto-legend"><b>Likely host counties:</b>
-              ${r.stats.chosenHost.map((ci,i)=>ci>=0?hostLabel(ci):null).filter(Boolean).join(' · ')}</div>`:''}
-            <div class="bs-auto-legend"><b>Age/gender fields are estimates.</b> Gender is known for
-              about 45% of athletes (name-matched to competition results); the rest are split using
-              the observed local ratio. Use these to compare areas, not as counts.</div>
-            <div class="bs-auto-legend">Areas are always connected &mdash; no area is ever left in
-              two separate pieces. Alaska and Hawaii are left out of the travel figure, since those
-              athletes fly whatever the map says.</div>
-            <table class="bs-auto-tbl"><thead><tr><th>Area</th><th>Members</th><th>Counties</th></tr></thead>
-              <tbody>${r.stats.weights.map((w,i)=>`<tr>
-                <td><span class="sw" style="background:${PALETTE[i%PALETTE.length]}"></span>Area ${i+1}</td>
-                <td>${fmt(Math.round(w))}</td><td>${fmt(r.stats.counties[i])}</td></tr>`).join('')}</tbody></table>
-          </div>` : ''}
+            <label class="aa-check"><input type="checkbox" ${AUTO.whole ? 'checked' : ''} onchange="window._bsAutoWhole(this.checked)"> Never split a state (tidier lines, less even)</label>
+          </details>
+          ${AUTO.error ? `<div class="bs-auto-err">Could not load the map data: ${esc(AUTO.error)}</div>` : ''}
+        </div>
+        <div class="aa-right">
+          ${!r ? `<div class="aa-empty">${ready ? `<b>Set the stops, then press Preview.</b><br>${flow}` : 'Loading map data…'}</div>` : `
+            <div class="aa-map"><svg viewBox="0 0 975 610">${svg}</svg></div>
+            <div class="bs-auto-kpis">
+              <div><b>${(100 * r.stats.spread).toFixed(1)}%</b><span>size spread (lower is more even)</span></div>
+              <div><b>${isFinite(r.stats.ratio) ? r.stats.ratio.toFixed(2) + '×' : '—'}</b><span>largest ÷ smallest area</span></div>
+              ${r.stats.travelMi != null ? `<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>` : ''}
+              ${(r.stats.continuity != null && r.stats.continuity > 0) ? `<div><b>${Math.round(100 * (1 - r.stats.continuity))}%</b><span>of members stay where they are</span></div>` : ''}
+            </div>
+            <table class="bs-auto-tbl"><thead><tr><th>${esc(singulariseLevel(st[0].name) || 'Area')}</th>${prep.chain.length ? `<th>${esc(st[1] ? st[1].name : '')}</th>` : ''}<th class="num">${AUTO.basis === 'athletes' ? 'Athletes' : 'Members'}</th><th class="num">Counties</th></tr></thead>
+              <tbody>${prep.size.map((w, i) => `<tr><td><span class="sw" style="background:${colOf(i)}"></span>${esc((singulariseLevel(st[0].name) || 'Area') + ' ' + (i + 1))}</td>${prep.chain.length ? `<td>${esc(groupOf(i))}</td>` : ''}<td class="num">${fmt(Math.round(w))}</td><td class="num">${fmt(prep.cnt[i])}</td></tr>`).join('')}</tbody></table>
+            <div class="bs-auto-legend">Numbers run from the northeast, and each area touches the next where the map allows. Areas are always connected.</div>`}
+        </div>
       </div>
       <div class="bs-auto-foot">
-        <span class="bs-auto-hint">${ready ? '' : 'Loading map data&hellip;'}</span>
+        <span class="bs-auto-hint">${esc(flow.replace(/&amp;/g, '&'))}</span>
         <div class="bs-auto-btns">
           <button onclick="window._bsAutoClose()">Cancel</button>
-          <button class="prim" ${ready&&!AUTO.busy?'':'disabled'} onclick="window._bsAutoRun()">
-            ${AUTO.busy ? 'Working&hellip;' : (r ? 'Draw it again' : 'Preview the map')}</button>
+          <button class="prim" ${ready && !AUTO.busy && !probs.length ? '' : 'disabled'} onclick="window._bsAutoRun()">${AUTO.busy ? 'Working…' : (r ? 'Draw again' : 'Preview')}</button>
           ${r ? `<button class="prim go" onclick="window._bsAutoApply()">Use this map</button>` : ''}
         </div>
       </div>
@@ -7244,22 +7276,6 @@ function renderAutoDialog(){
 }
 
 window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
-function syncLadderFirst(){
-  const L = parseLadder(); L[0] = AUTO.n; AUTO.ladder = L.join(', ');
-}
-window._bsAutoN = function(delta){ AUTO.n = Math.min(24, Math.max(2, AUTO.n + delta)); syncLadderFirst(); AUTO.result=null; renderAutoDialog(); };
-function parseLadder(){
-  const nums = String(AUTO.ladder||'').split(/[^0-9]+/).filter(Boolean).map(Number)
-    .filter(n => n >= 1 && n <= 24);
-  return nums.length ? nums : [AUTO.n];
-}
-window._bsAutoLadder = function(v){
-  AUTO.ladder = v;
-  const L = parseLadder();
-  if (L.length) AUTO.n = L[0];
-  AUTO.result = null; renderAutoDialog();
-};
-window._bsAutoSetN = function(v){ const n=parseInt(v,10); if(!isNaN(n)) AUTO.n=Math.min(24,Math.max(2,n)); syncLadderFirst(); AUTO.result=null; renderAutoDialog(); };
 function weakestGroup(r, wantLabel){
   if (!r || !r.stats || !r.stats.ages || !r.stats.groupNeed) return null;
   const N = r.stats.ages.length, NG = r.stats.groupNeed.length;
@@ -7368,45 +7384,27 @@ window._bsAutoApply = function(){
   // re-draw doesn't wipe naming work.
   if (S.regions.length !== N) S.regions = defaultRegions(N);
   const A = _autoData, next = {};
-  let baseAssign = A.fips.map((f,i) => {
-    const g = r.assign[i];
-    return (g != null && g >= 0 && g < N) ? g : -1;
-  });
-  // Build the requested tier ladder from the map just drawn.
-  const full = parseLadder();
-  const ladder = full.slice(1).filter(k => k >= 1);
-  let chain = [];
-  if (ladder.length && !r.byState){
-    try { chain = groupAreasIntoTiers(A, baseAssign, autoWeights(A, AUTO.basis), ladder); }
-    catch(e){ console.warn('tier rollup failed, leaving levels as they were:', e && e.message); chain = []; }
-  }
-  // Number the areas so they flow: 1 in the northeast, each next number
-  // touching the one before, upper-level groups numbered as runs.
-  let cents = null;
-  try {
-    const f = flowNumbering(A, baseAssign, N, chain);
-    baseAssign = f.assign; chain = f.chain; cents = f.centroids;
-  } catch(e){ console.warn('flow numbering failed, keeping the solver order:', e && e.message); }
-  for (let i=0;i<A.fips.length;i++){ const g = baseAssign[i]; if (g >= 0) next[A.fips[i]] = g; }
+  const prep = prepareAuto(r);
+  const ladder = parseLadder();
+  const chain = prep.chain, cents = prep.cents;
+  for (let i=0;i<A.fips.length;i++){ const g = prep.baseAssign[i]; if (g >= 0) next[A.fips[i]] = g; }
   S.assign = next;
+  const st = AUTO.stages || [{name: autoLevelNames([N])[0], n: N}];
+  const names = st.map(x => String(x.name || '').trim()).concat(AUTO.withNationals ? ['National'] : []);
   if (chain.length){
-    const names = autoLevelNames([N].concat(ladder));
-    S.levels = [{name: names[0]}].concat(chain.map((of, t) => {
-      const k = ladder[t];
-      let gnames = Array.from({length: k}, (_, gi) => k === 1 ? 'National' : singulariseLevel(names[t+1]) ? `${singulariseLevel(names[t+1])} ${gi+1}` : 'Group ' + (gi+1));
-      if (k === 3 && names[t+1] === 'East, West, Central' && cents && cents[t+1]){
-        // Name by position: most westerly West, most easterly East.
-        const byX = [0,1,2].sort((a, b) => cents[t+1][a].x - cents[t+1][b].x);
-        gnames = []; gnames[byX[0]] = 'West'; gnames[byX[1]] = 'Central'; gnames[byX[2]] = 'East';
-      }
-      return {name: names[t+1], groups: gnames.map(nm => ({name: nm})), of: of.slice()};
-    }));
-  } else if (!r.byState){
-    S.levels[0].name = autoLevelNames([N])[0];
+    S.levels = [{name: names[0]}].concat(chain.map((of, t) => ({
+      name: names[t+1] || ('Stop ' + (t+2)),
+      groups: autoGroupNames(t+1, ladder[t+1], names[t+1] || '', cents && cents[t+1]).map(nm => ({name: nm})),
+      of: of.slice(),
+    })));
+  } else {
+    S.levels = [{name: names[0]}];
   }
+  if (AUTO.withNationals && chain.length) S.finalName = S.finalName || 'Junior Nationals';
   // Generated area names follow the level name and the new order.
   try { for (let L = 0; L < S.levels.length; L++) renumberAreas(L, false); } catch(e){}
   S.mapName = ''; S.mapId = null;
+  syncRouting();
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
   S.detailRegion = null; S.dirty = true;
   syncLevels();
@@ -7953,7 +7951,7 @@ function atlasMapHtml(){
     <aside class="atl-rail">
       <div class="atl-rail-top">
         <div class="atl-rail-id"><span>${S.savedAt ? 'Saved ' + esc(S.savedAt) : 'Not saved yet'}</span>${S.scenarioId && isSeed(S.scenarioId) ? '<span>·</span><span>reference map</span>' : ''}</div>
-        <input class="atl-rail-name" id="bsName" value="${esc(S.scenarioName)}" placeholder="Name this scenario" title="Scenario name">
+        <textarea class="atl-rail-name" id="bsName" rows="1" placeholder="Name this scenario" title="Scenario name" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(S.scenarioName)}</textarea>
         <select class="atl-sel atl-rail-open" id="bsLoadRail" title="Open a saved scenario"><option value="">Open a saved scenario…</option></select>
         <div class="atl-rail-map">
           <label>Map <input class="atl-in" id="atlMapName" value="${esc(S.mapName || '')}" placeholder="Name this map" title="The map's own name — separate from the scenario name"></label>
