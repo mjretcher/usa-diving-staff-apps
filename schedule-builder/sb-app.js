@@ -3494,6 +3494,65 @@ ${pages}
 
 // ── CLUB ITINERARIES END ─────────────────────────────────────────────
 
+// ── EVENTS-ONLY REPORT (events + day + order — no times, no counts) ──
+// Mike's spec (2026-09-18): a report with just the events and which day
+// they're on, in schedule order, no start/end times, no athlete counts,
+// stacked one day per section, whole meet on one page.
+function eoRoundClass(round){
+  const k=(round||'').toLowerCase();
+  if(k==='prelim')return'eo-round-prelim';
+  if(k==='semifinal')return'eo-round-semifinal';
+  if(k==='final')return'eo-round-final';
+  return'eo-round-other';
+}
+function buildEventsOnlyDaySection(day,timed){
+  const sessions=filterByEvent(timed.filter(s=>s.dayId===day.id&&!s.isPractice));
+  const events=[];
+  sessions.forEach(sess=>{(sess.timing.events||[]).forEach(ev=>events.push(ev));});
+  if(!events.length)return'';
+  const rows=events.map((ev,i)=>{
+    const r=evRound(ev);
+    return`<tr><td class="eo-num">${i+1}</td><td class="eo-name">${esc(evName(ev))}</td><td class="eo-round ${eoRoundClass(r)}">${esc(r)}</td></tr>`;
+  }).join('');
+  return`<div class="eo-day">${esc(fullDate(day.date))}</div><table class="eo-table">${rows}</table>`;
+}
+function openEventsOnlyReport(){
+  const timed=allTimed();
+  const sections=S.meet.days.map(d=>buildEventsOnlyDaySection(d,timed)).filter(Boolean).join('');
+  if(!sections){toast('No competition events scheduled yet');return;}
+  const page=`<div class="hd-page">
+<div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date" style="font-size:18px">Event schedule</div></div>
+<div class="hd-accent"></div>
+${sections}
+<div class="hd-foot"><span>Order reflects the current run-of-show sequence for each day</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
+</div>`;
+  const extraCss=`
+  .eo-day{background:#171F69;color:#fff;font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:14px;letter-spacing:.02em;padding:5px 10px;border-radius:4px;margin:12px 0 4px;text-transform:uppercase}
+  .eo-day:first-of-type{margin-top:2px}
+  .eo-table{width:100%;border-collapse:collapse;margin-bottom:2px}
+  .eo-table tr{page-break-inside:avoid}
+  .eo-table td{padding:2px 6px;border-bottom:none}
+  .eo-table tr:nth-child(even){background:#F8FAFC}
+  .eo-num{width:22px;color:#94A3B8;font-variant-numeric:tabular-nums;font-size:11px}
+  .eo-name{font-size:12.5px}
+  .eo-round{text-align:right;font-size:11px;font-weight:700;white-space:nowrap;width:90px}
+  .eo-round-prelim{color:#085041}
+  .eo-round-semifinal{color:#712B13}
+  .eo-round-final{color:#0C447C}
+  .eo-round-other{color:#64748B}`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(S.meet.name||'Schedule')} — Events by day</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>${HANDOUT_CSS}${extraCss}</style></head><body>
+<button class="hd-print" onclick="window.print()">Print</button>
+${page}
+<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Pop-up blocked — allow pop-ups for this site to print the report');return;}
+  w.document.write(html);w.document.close();
+}
+// ── EVENTS-ONLY REPORT END ────────────────────────────────────────────
+
 // ── EXCEL WORKBOOK EXPORT (one sheet per day + summary) ──────────────
 let _sheetJsLoading=null;
 function loadSheetJS(){
@@ -3566,6 +3625,7 @@ function renderExportModal(){
         <button class="move-btn" onclick="closeModal();exportMeetExcel()"><span><strong>Excel workbook (.xlsx)</strong><br><span style="font-size:11px;color:var(--tx3)">One sheet per day plus a meet summary — for ops staff who live in spreadsheets</span></span></button>
         <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
         <button class="move-btn" onclick="closeModal();openClubItineraries()"><span><strong>Club itineraries (print)</strong><br><span style="font-size:11px;color:var(--tx3)">One page per club — every diver's personal report times and events, whole meet</span></span></button>
+        <button class="move-btn" onclick="closeModal();openEventsOnlyReport()"><span><strong>Events by day (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Just the events and which day they're on, in order — no times, no counts, whole meet on one page</span></span></button>
         <button class="move-btn" onclick="closeModal();openPresentation()"><span><strong>Presentation mode</strong><br><span style="font-size:11px;color:var(--tx3)">Full-screen scoreboard walkthrough — one day per screen, arrow keys to move</span></span></button>
         ${anyEventTags()?`<button class="move-btn" onclick="closeModal();splitByEvent()"><span><strong>Split into per-event schedules</strong><br><span style="font-size:11px;color:var(--tx3)">Creates a separate saved schedule for each tagged event (Junior / Senior / Qualifier) — this master stays untouched</span></span></button>`:''}
       </div>
