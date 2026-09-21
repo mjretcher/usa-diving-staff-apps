@@ -27,9 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install deps
-        run: |
-          pip install requests playwright
-          playwright install --with-deps chromium
+        run: pip install requests
 
       - name: Explore
         run: python db/scripts/explore_qualifying_sheets.py
@@ -38,7 +36,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add db/scratch/qualifying_sheets_explore.json
-          git add db/scratch/qualifying_sheets_screenshot.png 2>/dev/null || true
+          git add db/scratch/aau_qualifier_counts.json
           git commit -m "Explore q_qualifying_sheets Zoho view [skip ci]" || echo "Nothing to commit"
           git push

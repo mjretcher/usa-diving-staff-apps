@@ -1,161 +1,81 @@
 #!/usr/bin/env python3
 """
-ONE-OFF DIAGNOSTIC -- not part of the regular pipeline, not scheduled.
+ONE-OFF DIAGNOSTIC, round 5 -- pulls the actual "AAU Qualifier Counts" pivot
+(view 2617098000011468016, key 795c275b109657a3d7be9f20338a01d3) for 2024,
+2025, 2026, via a direct request (no browser needed -- round 3/4's Playwright
+capture found the real endpoint: POST ZDBTableDataAction.ma, ZDBACTION=
+DATAVIEW, VIEWTYPE=Pivot, with a year filter baked into the POST body's XML
+as <zavmfv cr='YYYY,' dcr='YYYY' .../>).
 
-Explores a Zoho Analytics open view discovered 2026-09-21 on
-scoresandmore.live/aau-national-qualifiers/, embedded as:
-  https://analytics.zoho.com/open-view/2617098000005092932
-    ?ZOHO_CRITERIA="q_qualifying_sheets"."governing_body"='AAU'
-
-This is a DIFFERENT table (q_qualifying_sheets) than anything sm_zoho.py's
-VIEWS dict already knows about (q_meets, q_meet_event_results, q_event_result).
-A per-SHEET governing_body field, if it holds up, would be a real sanctioning
-signal -- not the name-text guessing meet_classification.py currently does --
-and might be the authoritative source for "did this diver have an official
-qualifying score on file," which is exactly the question the qualifying-score
-check tried to reconstruct from raw results.
-
-This script only reads and reports; it writes nothing to Neon. Output goes to
-db/scratch/qualifying_sheets_explore.json so it can be inspected from outside
-CI (the sandbox that wrote this script has no network path to analytics.zoho.com
-or scoresandmore.live -- confirmed via direct test, 403 at the egress proxy --
-so this diagnostic has to run here and report back via a committed file).
+Writes a clean {year: {age_group: {female, male, total}}} table to
+db/scratch/aau_qualifier_counts.json. Read-only, writes nothing to Neon.
 """
 import json
 import os
+import re
 import sys
-import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sm_zoho import ZohoOpenView, BASE, UA
+from sm_zoho import BASE, UA
 
-
-def broad_capture(view_id, key, criteria="", wait_seconds=25):
-    """Round 3: don't assume the response is SHOWREPORT/ZAChartView -- log
-    EVERY response Zoho makes while the page loads, so a pivot/summary view
-    (or whatever this actually is) can't hide from us just because it uses
-    an endpoint name sm_zoho.py's existing client doesn't know about yet."""
-    from playwright.sync_api import sync_playwright
-    import urllib.parse
-
-    path = f"/open-view/{view_id}"
-    if key:
-        path += f"/{key}"
-    url = f"{BASE}{path}"
-    if criteria:
-        url += f"?ZOHO_CRITERIA={urllib.parse.quote(criteria, safe='')}"
-
-    seen = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        ctx = browser.new_context(user_agent=UA)
-        page = ctx.new_page()
-
-        def on_response(resp):
-            try:
-                req = resp.request
-                entry = {
-                    "url": resp.url,
-                    "method": req.method,
-                    "status": resp.status,
-                    "resource_type": req.resource_type,
-                    "content_type": resp.headers.get("content-type", ""),
-                }
-                # Only Zoho's own calls are interesting; skip fonts/images/analytics beacons.
-                if "zoho.com" in resp.url and req.resource_type in ("xhr", "fetch", "document"):
-                    entry["post_data"] = (req.post_data or "")[:1500]
-                    try:
-                        body = resp.text()
-                        # Round 4: the pivot data payload (ZDBTableDataAction.ma,
-                        # DATAVIEW) is the one response that actually matters --
-                        # keep it in full. Everything else (static URLs, menu
-                        # HTML, filter lists) stays truncated; they're just noise
-                        # confirming the page loaded normally.
-                        keep_full = "ZDBTableDataAction.ma" in resp.url and "DATAVIEW" in resp.url
-                        entry["body_preview"] = body if keep_full else body[:1000]
-                        entry["body_length"] = len(body)
-                        entry["body_full"] = keep_full
-                    except Exception as e:
-                        entry["body_error"] = str(e)
-                    seen.append(entry)
-            except Exception as e:
-                seen.append({"listener_error": str(e)})
-
-        page.on("response", on_response)
-        nav_error = None
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            page.wait_for_timeout(wait_seconds * 1000)
-        except Exception as e:
-            nav_error = str(e)
-
-        screenshot_path = "db/scratch/qualifying_sheets_screenshot.png"
-        try:
-            page.screenshot(path=screenshot_path, full_page=True)
-        except Exception:
-            screenshot_path = None
-
-        page.close(); browser.close()
-
-    return {"url": url, "nav_error": nav_error, "responses": seen,
-            "screenshot": screenshot_path}
-
-# Round 2 (2026-09-21): the AAU qualifiers page actually embeds TWO Zoho
-# links, and round 1 only tried the bare one (view 2617098000005092932, no
-# key) -- which is very likely just a raw table-criteria reference, not a
-# published dashboard, hence no SHOWREPORT/ZAChartView ever fired for it.
-# The FIRST link on that page has an actual privatelink key -- the same
-# shape every other already-working view in sm_zoho.py's VIEWS dict has.
-# Confirmed by checking the parallel NCAA Qualifiers page, which embeds the
-# identical two-link pattern (2617098000009032337/89a70815... + a bare
-# governing_body-filtered one) -- so this is the site's general convention,
-# not something AAU-specific.
 VIEW_ID = "2617098000011468016"
 KEY = "795c275b109657a3d7be9f20338a01d3"
+PARENT_VIEW = "2617098000005092608"
+YEAR_COLID = "2617098000007130362"
 
-report = {"view_id": VIEW_ID, "key": KEY, "attempts": [], "broad_capture": None}
+
+def fetch_year(session, year):
+    body = (
+        "<DBSVRequest>\n<zadata >\n"
+        f"<dbobj dispname='AAU Qualifier Counts' desc='Number of divers who have earned a qualifying score' type='Pivot' >"
+        f"<zaav gt='BEST' sgt='DEF' title='' merge='false' lp='AUTO' lt='' ltm='false' lf='true' cinfo='false' jt='1' >"
+        f"<zavmfv cr='{year},' dcr='{year}' lbl='year' cno='{YEAR_COLID}' ex='false' isDashCr='false' ft='100' "
+        f"po='{PARENT_VIEW}' op='CONTINUOUS' asscolid='-1' />\n"
+        "<zavrfv currentSelValue='{}' currentChildSelValue='{}' />\n\n</zaav>\n<zataginfo >\n</zataginfo>\n\n</dbobj>\n\n</zadata>\n"
+        "<DBSVParams PARENT_VIEW_TYPE='Pivot' ZAGRIDTYPE='PivotSheet' /></DBSVRequest>"
+    )
+    url = (f"{BASE}/ZDBTableDataAction.ma?ZDBACTION=DATAVIEW&CONFIGASXML=true&OBJTYPE=AnalysisGrid"
+           f"&OBJID={VIEW_ID}&privatelink={KEY}&CHANGESLIDERBOUNDS=true&RESETSORT=true"
+           f"&FIELDSCHANGED=false&EDITMODE=false&VIEWTYPE=Pivot&SUBREQUEST=XMLHTTP&_ZVER_=101")
+    r = session.post(url, data=body.encode(),
+                      headers={"Content-Type": "text/plain; charset=UTF-8",
+                               "X-Requested-With": "XMLHttpRequest",
+                               "Referer": f"{BASE}/open-view/{VIEW_ID}/{KEY}"},
+                      timeout=90)
+    r.raise_for_status()
+    return r.json()
 
 
-def attempt(label, criteria):
-    entry = {"label": label, "criteria": criteria}
+def parse_grid(data):
+    dt = data.get("dataTextNew", {})
+    out = {}
+    for k, row in dt.items():
+        if k in ("n", "v"):
+            continue
+        group = row["n"]["fv"]
+        vals = row["v"]
+        out[group] = {"female": int(vals[0]["fv"]), "male": int(vals[1]["fv"]), "total": int(vals[2]["fv"])}
+    if "v" in dt:
+        out["_grand_total"] = {"female": int(dt["v"][0]["fv"]), "male": int(dt["v"][1]["fv"]), "total": int(dt["v"][2]["fv"])}
+    return out
+
+
+import requests
+session = requests.Session()
+session.headers.update({"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"})
+session.get(f"{BASE}/open-view/{VIEW_ID}/{KEY}", timeout=60).raise_for_status()
+
+results = {}
+errors = {}
+for year in (2024, 2025, 2026):
     try:
-        v = ZohoOpenView(VIEW_ID, KEY)
-        cols = v.columns(criteria)
-        entry["columns"] = list(cols.values())
-        try:
-            rows, header = v.rows(criteria)
-            entry["row_count"] = len(rows)
-            entry["header"] = header
-            entry["sample_rows"] = rows[:5]
-            if rows:
-                # Surface distinct values of anything that looks like a
-                # governing-body / sanctioning column, if present -- the
-                # whole point of this exploration.
-                for col in header:
-                    if any(k in col.lower() for k in ("govern", "sanction", "body", "org")):
-                        vals = sorted(set(r.get(col) for r in rows if r.get(col) is not None))
-                        entry.setdefault("distinct_values_of_interest", {})[col] = vals[:30]
-        except RuntimeError as e:
-            # Grid cap / pagination errors are themselves informative --
-            # they mean the view is real and has more data than one page.
-            entry["rows_error"] = str(e)
-        v.close()
+        data = fetch_year(session, year)
+        results[year] = parse_grid(data)
     except Exception as e:
-        entry["error"] = f"{type(e).__name__}: {e}"
-        entry["traceback"] = traceback.format_exc()
-    report["attempts"].append(entry)
+        errors[year] = str(e)
 
-
-# Round 3: skip the narrow columns()/rows() attempt (round 2 already showed
-# it fetches column metadata fine -- gender, dive_user_id, age_group -- but
-# never sees a recognized report response). Go straight to logging every
-# single network response Zoho makes, so whatever endpoint this pivot/
-# summary view actually calls can't hide from a name filter that doesn't
-# know about it yet.
 os.makedirs("db/scratch", exist_ok=True)
-report["broad_capture"] = broad_capture(VIEW_ID, KEY, criteria="", wait_seconds=25)
-with open("db/scratch/qualifying_sheets_explore.json", "w") as f:
-    json.dump(report, f, indent=2, default=str)
+with open("db/scratch/aau_qualifier_counts.json", "w") as f:
+    json.dump({"results": results, "errors": errors}, f, indent=2)
 
-print(json.dumps(report, indent=2, default=str)[:8000])
-print("\nWrote db/scratch/qualifying_sheets_explore.json")
+print(json.dumps({"results": results, "errors": errors}, indent=2))
