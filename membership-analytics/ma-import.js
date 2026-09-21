@@ -161,7 +161,22 @@ function summarise(rows){
   return {types, status, members: ids.size};
 }
 
-/* ---------- writing ---------- */
+/* ---------- writing ----------
+   Two statements per batch, not one, because of a real permission wall
+   (found 2026-09-21): usad_app's SELECT grant on this table deliberately
+   excludes first_name, last_name, zip (PII column scoping below in
+   db/schema.sql). INSERT ... ON CONFLICT DO UPDATE SET requires SELECT on
+   every column named in the SET list -- confirmed live, it fails with
+   42501 the instant first_name/last_name/zip appear there, even though a
+   plain UPDATE touching those same columns succeeds without it. So: the
+   upsert's DO UPDATE SET only carries the columns usad_app can already
+   read, and a second, plain UPDATE...FROM VALUES pass sets first_name/
+   last_name/zip for the same batch afterward -- harmless on rows that were
+   fresh inserts (same value written twice), necessary for rows that
+   already existed. */
+const DO_UPDATE_COLS = ['city','state','zip5','country','birth_date','start_date','exp_date',
+                         'association','club','member_status','loaded_at'];
+
 async function load(){
   if (M.busy || !M.rows.length || !M.year) return;
   M.busy = true; M.err = null; M.result = null; render();
@@ -172,6 +187,10 @@ async function load(){
     let written = 0;
     for (let i=0; i<M.rows.length; i+=B){
       const chunk = M.rows.slice(i, i+B);
+
+      // Step 1: upsert everything except the DO UPDATE path for the three
+      // SELECT-restricted columns (their INSERT-time value is still written
+      // correctly here for brand-new rows -- INSERT needs no SELECT at all).
       const vals = [], params = [];
       chunk.forEach(r => {
         const base = params.length;
@@ -180,15 +199,26 @@ async function load(){
                     r.city, r.state, r.zip, r.zip5, r.country, r.birth_date,
                     r.start_date, r.exp_date, r.association, r.club, r.member_status, stamp);
       });
+      const setClause = DO_UPDATE_COLS.map(c => `${c}=EXCLUDED.${c}`).join(', ');
       await NEON.query(
         `INSERT INTO membership.members (${COLS.join(',')}) VALUES ${vals.join(',')}
-         ON CONFLICT (member_id, membership_year, membership_type) DO UPDATE SET
-           first_name=EXCLUDED.first_name, last_name=EXCLUDED.last_name,
-           city=EXCLUDED.city, state=EXCLUDED.state, zip=EXCLUDED.zip, zip5=EXCLUDED.zip5,
-           country=EXCLUDED.country, birth_date=EXCLUDED.birth_date,
-           start_date=EXCLUDED.start_date, exp_date=EXCLUDED.exp_date,
-           association=EXCLUDED.association, club=EXCLUDED.club,
-           member_status=EXCLUDED.member_status, loaded_at=EXCLUDED.loaded_at`, params);
+         ON CONFLICT (member_id, membership_year, membership_type) DO UPDATE SET ${setClause}`, params);
+
+      // Step 2: plain UPDATE for first_name/last_name/zip, batched via VALUES.
+      const vals2 = [], params2 = [];
+      chunk.forEach(r => {
+        const base = params2.length;
+        vals2.push('(' + [1,2,3,4,5,6].map((_,j)=>`$${base+j+1}::text`).join(',') + ')');
+        params2.push(r.member_id, String(M.year), r.membership_type, r.first_name, r.last_name, r.zip);
+      });
+      await NEON.query(
+        `UPDATE membership.members m SET
+           first_name = v.first_name, last_name = v.last_name, zip = v.zip
+         FROM (VALUES ${vals2.join(',')})
+           AS v(member_id, membership_year, membership_type, first_name, last_name, zip)
+         WHERE m.member_id = v.member_id AND m.membership_year = v.membership_year::int
+           AND m.membership_type = v.membership_type`, params2);
+
       written += chunk.length;
       M.progress = written; render();
     }
