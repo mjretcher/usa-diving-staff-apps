@@ -27,7 +27,71 @@ import sys
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sm_zoho import ZohoOpenView
+from sm_zoho import ZohoOpenView, BASE, UA
+
+
+def broad_capture(view_id, key, criteria="", wait_seconds=25):
+    """Round 3: don't assume the response is SHOWREPORT/ZAChartView -- log
+    EVERY response Zoho makes while the page loads, so a pivot/summary view
+    (or whatever this actually is) can't hide from us just because it uses
+    an endpoint name sm_zoho.py's existing client doesn't know about yet."""
+    from playwright.sync_api import sync_playwright
+    import urllib.parse
+
+    path = f"/open-view/{view_id}"
+    if key:
+        path += f"/{key}"
+    url = f"{BASE}{path}"
+    if criteria:
+        url += f"?ZOHO_CRITERIA={urllib.parse.quote(criteria, safe='')}"
+
+    seen = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        ctx = browser.new_context(user_agent=UA)
+        page = ctx.new_page()
+
+        def on_response(resp):
+            try:
+                req = resp.request
+                entry = {
+                    "url": resp.url,
+                    "method": req.method,
+                    "status": resp.status,
+                    "resource_type": req.resource_type,
+                    "content_type": resp.headers.get("content-type", ""),
+                }
+                # Only Zoho's own calls are interesting; skip fonts/images/analytics beacons.
+                if "zoho.com" in resp.url and req.resource_type in ("xhr", "fetch", "document"):
+                    entry["post_data"] = (req.post_data or "")[:1500]
+                    try:
+                        body = resp.text()
+                        entry["body_preview"] = body[:3000]
+                        entry["body_length"] = len(body)
+                    except Exception as e:
+                        entry["body_error"] = str(e)
+                    seen.append(entry)
+            except Exception as e:
+                seen.append({"listener_error": str(e)})
+
+        page.on("response", on_response)
+        nav_error = None
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(wait_seconds * 1000)
+        except Exception as e:
+            nav_error = str(e)
+
+        screenshot_path = "db/scratch/qualifying_sheets_screenshot.png"
+        try:
+            page.screenshot(path=screenshot_path, full_page=True)
+        except Exception:
+            screenshot_path = None
+
+        page.close(); browser.close()
+
+    return {"url": url, "nav_error": nav_error, "responses": seen,
+            "screenshot": screenshot_path}
 
 # Round 2 (2026-09-21): the AAU qualifiers page actually embeds TWO Zoho
 # links, and round 1 only tried the bare one (view 2617098000005092932, no
@@ -42,7 +106,7 @@ from sm_zoho import ZohoOpenView
 VIEW_ID = "2617098000011468016"
 KEY = "795c275b109657a3d7be9f20338a01d3"
 
-report = {"view_id": VIEW_ID, "key": KEY, "attempts": []}
+report = {"view_id": VIEW_ID, "key": KEY, "attempts": [], "broad_capture": None}
 
 
 def attempt(label, criteria):
@@ -75,15 +139,14 @@ def attempt(label, criteria):
     report["attempts"].append(entry)
 
 
-# This is a dedicated, pre-built AAU qualifiers dashboard (its own view
-# with its own key) -- likely self-scoped already, unlike the generic
-# q_meets view which needs a date filter to stay under the 200-row cap.
-# Don't guess at field names for a narrowing filter without seeing the
-# real column list first -- this attempt's own columns() result tells us
-# what's actually queryable if a second round turns out to be needed.
-attempt("no_filter", "")
-
+# Round 3: skip the narrow columns()/rows() attempt (round 2 already showed
+# it fetches column metadata fine -- gender, dive_user_id, age_group -- but
+# never sees a recognized report response). Go straight to logging every
+# single network response Zoho makes, so whatever endpoint this pivot/
+# summary view actually calls can't hide from a name filter that doesn't
+# know about it yet.
 os.makedirs("db/scratch", exist_ok=True)
+report["broad_capture"] = broad_capture(VIEW_ID, KEY, criteria="", wait_seconds=25)
 with open("db/scratch/qualifying_sheets_explore.json", "w") as f:
     json.dump(report, f, indent=2, default=str)
 
