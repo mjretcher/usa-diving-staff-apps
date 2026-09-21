@@ -1101,6 +1101,7 @@ window._mrGenerate = async function(){
   out.innerHTML = `
     <div class="mr-toolbar">
       <button class="mr-print" onclick="window.print()">Print / save as PDF</button>
+      <button onclick="window.MAExport && MAExport.csv('mr-doc-body','comparison-report')">Download CSV</button>
       <button onclick="document.getElementById('mr-output').remove()">✕ Close</button>
       <span class="mr-soft" style="margin-left:auto">Print to PDF for the cleanest result.
         Sized for US Letter.</span>

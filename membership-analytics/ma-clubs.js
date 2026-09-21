@@ -343,7 +343,11 @@ async function renderClubs() {
     members who transfer each year have their earlier years counted at their new club. It moves individual club
     histories slightly; it does not change the totals.</div>`;
 
-  el.innerHTML = kpis + caveat + flowCard + watchCard + newCard + swingCard
+  const clubsSub = `Age groups: ${CL.ageOn ? 'on (' + CL.ageYear + ')' : 'off'}`
+    + (CL.q ? ` · Search: "${esc(CL.q)}"` : '')
+    + `<br>Generated: ${new Date().toLocaleString()}`;
+  const exportBar = window.MAExport ? MAExport.bar('viewClubs','club-health','Club Health', clubsSub) : '';
+  el.innerHTML = exportBar + kpis + caveat + flowCard + watchCard + newCard + swingCard
     + sizeCard + duesCard + assocCard + rosterCard;
 
   document.getElementById('clQ').addEventListener('input', e => { CL.q = e.target.value; renderClubRoster(); });

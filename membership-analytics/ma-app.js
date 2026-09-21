@@ -105,6 +105,142 @@ function legendHtml(items){
   return '<div class="legend">' + items.map(i=>`<span><span class="sw" style="background:${i.color}"></span>${esc(i.label)}</span>`).join('') + '</div>';
 }
 
+/* ---------- CSV / PDF export, shared by every screen ----------
+   Generic and DOM-driven on purpose: it reads whatever is actually on screen
+   right now (current filter/sort/search state), rather than re-querying or
+   re-deriving data, so the export can never drift from what the user is
+   looking at. Works off two structural conventions already used by every
+   screen in this app: a KPI headline (.kpi-band > .kpi > .big/.chip/.sub)
+   and detail tables (.card > .card-h h2 + .card-b table). A screen with
+   neither (the Membership Map) opts in with data-csv-table / data-csv-row /
+   data-col-* attributes instead — see renderMap().
+   PDF reuses the same branded doc header as the Comparison Reports bar
+   (ma-reports.js's #mr-output / .mr-doc / .mr-css, injected by that file)
+   and simply clones the live view into it, so a screen's charts, cards and
+   tables print exactly as shown, with interactive controls stripped out. */
+function csvCell(el){
+  if (!el) return '';
+  return el.textContent.replace(/\s+/g,' ').trim();
+}
+function csvEscape(v){
+  const s = v==null ? '' : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function tableToCSVRows(table){
+  const rows = [];
+  table.querySelectorAll('tr').forEach(tr=>{
+    const cells = Array.from(tr.children)
+      .filter(c=>c.tagName==='TD'||c.tagName==='TH')
+      .map(csvCell);
+    if (cells.some(c=>c!=='')) rows.push(cells);
+  });
+  return rows;
+}
+function downloadCSVText(filenameBase, text){
+  const blob = new Blob(['\uFEFF' + text], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `${filenameBase}-${stamp}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function notifyExport(msg){ if (window.USAD && USAD.toast) USAD.toast(msg, {kind:'warn'}); else console.warn(msg); }
+
+function exportViewCSV(viewElId, filenameBase){
+  const src = document.getElementById(viewElId);
+  if (!src){ notifyExport('Nothing to export yet'); return; }
+  const blocks = [];
+
+  src.querySelectorAll('.kpi-band').forEach(band=>{
+    const rows = [['Metric','Value','Detail']];
+    band.querySelectorAll(':scope > .kpi').forEach(k=>{
+      rows.push([csvCell(k.querySelector('.chip')), csvCell(k.querySelector('.big')), csvCell(k.querySelector('.sub'))]);
+    });
+    if (rows.length > 1) blocks.push({title:'Summary', rows});
+  });
+
+  // Opt-in generic data grid, for screens with no native <table> (e.g. the Map).
+  src.querySelectorAll('[data-csv-table]').forEach(grid=>{
+    const items = Array.from(grid.querySelectorAll('[data-csv-row]'));
+    if (!items.length) return;
+    const cols = Array.from(items[0].attributes)
+      .filter(a=>a.name.startsWith('data-col-'))
+      .map(a=>a.name.slice('data-col-'.length));
+    if (!cols.length) return;
+    const rows = [cols.map(c=>c.replace(/-/g,' '))];
+    items.forEach(it=>rows.push(cols.map(c=>it.getAttribute('data-col-'+c) || '')));
+    blocks.push({title: grid.getAttribute('data-csv-title') || '', rows});
+  });
+
+  src.querySelectorAll('.card').forEach(card=>{
+    const h2 = card.querySelector('.card-h h2');
+    const title = h2 ? csvCell(h2) : '';
+    card.querySelectorAll('table').forEach(table=>{
+      const rows = tableToCSVRows(table);
+      if (rows.length) blocks.push({title, rows});
+    });
+  });
+  // Defensive: a table not inside a .card (none exist today, but don't silently drop one).
+  Array.from(src.querySelectorAll('table')).forEach(table=>{
+    if (table.closest('.card')) return;
+    const rows = tableToCSVRows(table);
+    if (rows.length) blocks.push({title:'', rows});
+  });
+
+  if (!blocks.length){ notifyExport('Nothing exportable on this screen yet'); return; }
+  const lines = [];
+  blocks.forEach((b,i)=>{
+    if (i > 0) lines.push('');
+    if (b.title) lines.push(csvEscape(b.title));
+    b.rows.forEach(r=>lines.push(r.map(csvEscape).join(',')));
+  });
+  downloadCSVText(filenameBase, lines.join('\r\n'));
+}
+
+function exportViewPDF(viewElId, title, subtitleHtml){
+  const src = document.getElementById(viewElId);
+  if (!src){ notifyExport('Nothing to export yet'); return; }
+  if (!document.getElementById('mr-css')){
+    notifyExport('Report styling has not loaded yet — try again in a moment');
+    return;
+  }
+  const old = document.getElementById('mr-output'); if (old) old.remove();
+  const out = document.createElement('div');
+  out.id = 'mr-output';
+  out.innerHTML = `
+    <div class="mr-toolbar">
+      <button class="mr-print" onclick="window.print()">Print / save as PDF</button>
+      <button onclick="document.getElementById('mr-output').remove()">✕ Close</button>
+      <span class="mr-soft" style="margin-left:auto">Print to PDF for the cleanest result. Sized for US Letter.</span>
+    </div>
+    <div class="mr-doc">
+      <div class="mr-doc-head">
+        <h1>${esc(title)}</h1>
+        <div class="mr-doc-sub">${subtitleHtml}</div>
+      </div>
+      <div class="mr-doc-body"></div>
+    </div>`;
+  const clone = src.cloneNode(true);
+  clone.removeAttribute('id');
+  // Strip anything interactive — a printed doc has no use for a search box,
+  // a sort button, or our own export bar, and they read as broken when static.
+  clone.querySelectorAll('input,select,button,.ma-export-bar').forEach(n=>n.remove());
+  out.querySelector('.mr-doc-body').appendChild(clone);
+  document.body.appendChild(out);
+  try { window.scrollTo(0,0); } catch(e){}
+}
+
+function exportBarHtml(viewElId, filenameBase, title, subtitleHtml){
+  return `<div class="ma-export-bar">
+    <button class="mr-bar-btn" onclick="MAExport.csv('${viewElId}','${filenameBase}')">Export CSV</button>
+    <button class="mr-bar-btn mr-bar-prim" onclick="MAExport.pdf('${viewElId}',${JSON.stringify(title)},${JSON.stringify(subtitleHtml)})">Export PDF</button>
+  </div>`;
+}
+// Exposed so ma-clubs.js and ma-reports.js (each its own IIFE) can use the
+// same exporter and the same export-bar markup — one implementation, every screen.
+window.MAExport = { csv: exportViewCSV, pdf: exportViewPDF, bar: exportBarHtml };
+
 /* ---------- data loading ---------- */
 async function loadAll(){
   const mmdd = String(new Date().getMonth()+1).padStart(2,'0') + '-' + String(new Date().getDate()).padStart(2,'0');
@@ -213,7 +349,10 @@ function renderOverview(){
     height: 250,
   });
 
-  document.getElementById('viewOverview').innerHTML = kpis + `
+  document.getElementById('viewOverview').innerHTML =
+    exportBarHtml('viewOverview','membership-overview','Membership Overview',
+      `Membership years: 2024–2026 (2026 is year-to-date)<br>Generated: ${new Date().toLocaleString()}`)
+    + kpis + `
   <div class="coverage-note"><b>Coverage:</b> member totals and renewal above &mdash; and the <b>Retention</b>, Trends &ldquo;By Role,&rdquo; Geography, and Clubs views &mdash; count <b>every membership type</b>: athletes (including adult / AQUA&nbsp;18+), coaches, officials, and other. Only panels labeled &ldquo;by age group&rdquo; are athletes&#8209;only, since age groups apply only to athletes.</div>
   <div class="callout warn"><b>Reading these numbers:</b> 2026 is a season in progress (data through the latest export), so raw 2026 totals will keep growing. For a fair year-over-year read, use the <b>&ldquo;Registered by ${D.paceDate.replace('-','/')}&rdquo;</b> pace figure, which counts only members who had joined by this same date in each year.</div>
   <div class="grid-2">
@@ -258,7 +397,10 @@ function renderTrends(){
     return `<tr><td><b>${esc(GROUP_LABEL[g])}</b></td><td class="num">${fmt(a)}</td><td class="num">${fmt(b)}</td><td>${deltaHtml(b,a)}</td><td class="num">${fmt(c)}</td><td>${deltaHtml(c,b)}</td></tr>`;
   }).join('');
 
-  document.getElementById('viewTrends').innerHTML = `
+  document.getElementById('viewTrends').innerHTML =
+    exportBarHtml('viewTrends','membership-trends','Membership Trends',
+      `Membership years: 2024–2026 (2026 is year-to-date)<br>Generated: ${new Date().toLocaleString()}`)
+    + `
   <div class="card"><div class="card-h"><h2>Total Membership Trend</h2><span class="sub">Solid = year total &middot; dashed = same-date pace (apples-to-apples)</span></div>
     <div class="card-b">${totalLine}${legendHtml([{label:'Year total',color:NAVY},{label:`Registered by ${D.paceDate.replace('-','/')}`,color:RED}])}</div></div>
   <div class="grid-2">
@@ -293,7 +435,14 @@ function renderGeography(){
     <td class="num">${fmt(e.y2026)}</td>
     <td>${deltaHtml(e.y2026, e.y2025)}</td></tr>`).join('');
 
-  el.innerHTML = `
+  const geoSub = `Grouped by: ${geoState.mode==='assoc'?'Association (LDA)':'State'}`
+    + (geoState.mode==='assoc' ? ` · Scope: ${geoState.metric==='ath'?'Athletes only':'All members'}` : '')
+    + ` · Sorted by: ${geoState.sortK} (${geoState.sortDir<0?'desc':'asc'})`
+    + (geoState.q ? ` · Filter: "${esc(geoState.q)}"` : '')
+    + `<br>Generated: ${new Date().toLocaleString()}`;
+  el.innerHTML =
+    exportBarHtml('viewGeography','membership-geography','Geography', geoSub)
+    + `
   <div class="card"><div class="card-h"><h2>Where the Membership Lives</h2>
     <span class="sub">2026 is YTD. Boundary Studio (region/zone redraw on a live map) builds on this data next.</span></div>
     <div class="card-b">
@@ -372,7 +521,12 @@ function renderRetention(){
       credential is served publicly. The retention and churn figures above are unaffected and complete.
       Restoring the list means routing this one query through the server-side proxy.</td></tr>`;
 
-  el.innerHTML = kpis + `
+  const retSub = `Win-back list filter: ${lostState.assoc ? 'association "'+esc(lostState.assoc)+'"' : 'all associations'}`
+    + (lostState.q ? ` · search "${esc(lostState.q)}"` : '')
+    + `<br>Generated: ${new Date().toLocaleString()}`;
+  el.innerHTML =
+    exportBarHtml('viewRetention','membership-retention','Retention & Churn', retSub)
+    + kpis + `
   <div class="coverage-note"><b>Coverage:</b> every figure on this tab &mdash; retained, not-yet-renewed, the renewal rate, and the win-back list &mdash; counts <b>all membership types</b> (athletes, coaches, officials, and other). The one exception is the <b>&ldquo;by age group&rdquo;</b> table below, which is athletes-only by definition.</div>
   <div class="callout"><b>How to read churn mid-season:</b> &ldquo;Not yet renewed&rdquo; 2025 members may still register for 2026 &mdash; especially athletes whose competition season starts later. The 2024&rarr;2025 numbers compare two complete years and are the true churn benchmark.</div>
   <div class="grid-2">
@@ -412,7 +566,10 @@ function renderAau(){
   });
   const rows = D.aau.slice().reverse().map(r=>`<tr><td><b>${r.y}</b></td><td class="num">${fmt(+r.usad)}</td><td class="num">${fmt(+r.aau)}</td>
     <td class="num">${(+r.usad>0? (+r.aau / +r.usad).toFixed(2) : '—')}</td></tr>`).join('');
-  el.innerHTML = `
+  el.innerHTML =
+    exportBarHtml('viewAau','membership-aau-landscape','AAU Landscape',
+      `Sanctioned meets cataloged on DiveMeets, ${xs[0]||''}–${xs[xs.length-1]||''} (latest year is YTD)<br>Generated: ${new Date().toLocaleString()}`)
+    + `
   <div class="card"><div class="card-h"><h2>Meet Activity: USA Diving vs AAU</h2><span class="sub">Sanctioned meets cataloged on DiveMeets (2026 is YTD)</span></div>
     <div class="card-b">${chart}${legendHtml([{label:'USA Diving',color:NAVY},{label:'AAU',color:RED}])}</div></div>
   <div class="grid-2">
@@ -470,7 +627,9 @@ async function renderMap(){
   const paths = geo.states.map(s=>{
     const v = stM[s.abbr]||{};
     const tip = `${s.name} — 2024: ${fmt(v[2024]||0)} · 2025: ${fmt(v[2025]||0)} · 2026 YTD: ${fmt(v[2026]||0)}`;
-    return `<path class="st" d="${s.d}" fill="${fills[s.abbr]}"><title>${esc(tip)}</title></path>`;
+    return `<path class="st" d="${s.d}" fill="${fills[s.abbr]}" data-csv-row
+      data-col-state="${esc(s.name)}" data-col-2024="${v[2024]||0}" data-col-2025="${v[2025]||0}"
+      data-col-2026-ytd="${v[2026]||0}"><title>${esc(tip)}</title></path>`;
   }).join('');
 
   const pins = mapState.pins ? geo.clubs.map(c=>`
@@ -497,9 +656,15 @@ async function renderMap(){
        <span><span class="sw" style="background:${heatColor(5,10)}"></span>&rarr;</span>
        <span><span class="sw" style="background:${NAVY}"></span>More 2026 members</span>`;
 
-  const clubList = geo.clubs.map(c=>`<div><b>${fmt(c.members)}</b> &nbsp;${esc(c.name)} <span style="color:#94a3b8">(${esc(c.state)})</span></div>`).join('');
+  const clubList = geo.clubs.map(c=>`<div data-csv-row data-col-club="${esc(c.name)}" data-col-city="${esc(c.city||'')}"
+    data-col-state="${esc(c.state)}" data-col-members="${c.members||0}" data-col-athletes="${c.athletes||0}">
+    <b>${fmt(c.members)}</b> &nbsp;${esc(c.name)} <span style="color:#94a3b8">(${esc(c.state)})</span></div>`).join('');
 
-  el.innerHTML = `
+  const mapSub = `Mode: ${mapState.mode==='trend'?'Growth / Decline (2024→2025)':'2026 Members Heat'} · Pins: ${mapState.pins?'on':'off'}`
+    + `<br>Generated: ${new Date().toLocaleString()}`;
+  el.innerHTML =
+    exportBarHtml('viewMap','membership-map', 'Membership Map', mapSub)
+    + `
   <div class="controls-row" style="margin-bottom:10px">
     <div class="seg">
       <button id="mapTrend" class="${mapState.mode==='trend'?'on':''}">Growth / Decline</button>
@@ -515,13 +680,13 @@ async function renderMap(){
       <div style="width:110px"></div>
     </div>
     <div class="map-body">
-      <div class="map-svg-wrap"><svg viewBox="${geo.viewBox}" xmlns="http://www.w3.org/2000/svg">${paths}${pins}</svg></div>
+      <div class="map-svg-wrap"><svg viewBox="${geo.viewBox}" xmlns="http://www.w3.org/2000/svg" data-csv-table data-csv-title="Membership by state">${paths}${pins}</svg></div>
       <div class="big-stats">${stats}</div>
     </div>
     <div class="map-legend">${legend}</div>
     <div class="map-foot">
       <div class="stamp">${monthStamp} &middot; Top 30 Clubs by 2026 Membership</div>
-      <div class="club-cols">${clubList}</div>
+      <div class="club-cols" data-csv-table data-csv-title="Top clubs by 2026 membership">${clubList}</div>
     </div>
   </div>
   <div class="callout" style="margin-top:14px"><b>Coming next — Boundary Studio:</b> this same map gains Region / Zone / East-West-Central overlays and a redraw mode: move geography between regions (down to the county level for the I&#8209;35, Southern&nbsp;Pacific, and Clark&nbsp;County splits), test any structure &mdash; 12&nbsp;regions or 9, four tiers or three &mdash; and instantly see the membership and meet-field numbers for every proposed alignment, with saved scenarios to compare side by side.</div>`;
@@ -617,7 +782,10 @@ async function renderTypes(){
     since renewed. Year totals, 2026 figures, and the accountant&rsquo;s sales ledger are unaffected.
   </div></div></div>`;
 
-  el.innerHTML = typesTable;
+  el.innerHTML =
+    exportBarHtml('viewTypes','membership-types','Membership Types',
+      `Distinct members · 2026 is year-to-date<br>Generated: ${new Date().toLocaleString()}`)
+    + typesTable;
 }
 function wireTabs(){
   document.querySelectorAll('#tabs .tab').forEach(t=>t.addEventListener('click',()=>{
