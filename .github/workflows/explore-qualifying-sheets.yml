@@ -1,0 +1,43 @@
+name: Explore qualifying_sheets Zoho view (one-off diagnostic)
+
+# Manual only. Not part of the regular pipeline. Investigates a Zoho
+# Analytics view (q_qualifying_sheets, governing_body column) found
+# 2026-09-21 on scoresandmore.live/aau-national-qualifiers/ -- see
+# db/scripts/explore_qualifying_sheets.py for why this needs to run here
+# rather than anywhere else that has this repo checked out.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  explore:
+    name: Explore q_qualifying_sheets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install requests playwright
+          playwright install --with-deps chromium
+
+      - name: Explore
+        run: python db/scripts/explore_qualifying_sheets.py
+
+      - name: Commit findings
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/scratch/qualifying_sheets_explore.json
+          git commit -m "Explore q_qualifying_sheets Zoho view [skip ci]" || echo "Nothing to commit"
+          git push
