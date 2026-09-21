@@ -1,0 +1,86 @@
+{
+  "results": {
+    "2024": {
+      "A": {
+        "female": 200,
+        "male": 72,
+        "total": 272
+      },
+      "B": {
+        "female": 102,
+        "male": 70,
+        "total": 172
+      },
+      "C": {
+        "female": 70,
+        "male": 64,
+        "total": 134
+      },
+      "D": {
+        "female": 74,
+        "male": 40,
+        "total": 114
+      },
+      "_grand_total": {
+        "female": 415,
+        "male": 234,
+        "total": 649
+      }
+    },
+    "2025": {
+      "A": {
+        "female": 91,
+        "male": 106,
+        "total": 197
+      },
+      "B": {
+        "female": 58,
+        "male": 83,
+        "total": 141
+      },
+      "C": {
+        "female": 53,
+        "male": 80,
+        "total": 133
+      },
+      "D": {
+        "female": 34,
+        "male": 35,
+        "total": 69
+      },
+      "_grand_total": {
+        "female": 226,
+        "male": 295,
+        "total": 521
+      }
+    },
+    "2026": {
+      "A": {
+        "female": 246,
+        "male": 102,
+        "total": 348
+      },
+      "B": {
+        "female": 168,
+        "male": 108,
+        "total": 276
+      },
+      "C": {
+        "female": 140,
+        "male": 83,
+        "total": 223
+      },
+      "D": {
+        "female": 111,
+        "male": 66,
+        "total": 177
+      },
+      "_grand_total": {
+        "female": 628,
+        "male": 332,
+        "total": 960
+      }
+    }
+  },
+  "errors": {}
+}

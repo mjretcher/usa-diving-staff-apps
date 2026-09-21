@@ -1,0 +1,111 @@
+{
+  "view_id": "2617098000011468016",
+  "key": "795c275b109657a3d7be9f20338a01d3",
+  "attempts": [],
+  "broad_capture": {
+    "url": "https://analytics.zoho.com/open-view/2617098000011468016/795c275b109657a3d7be9f20338a01d3",
+    "nav_error": null,
+    "responses": [
+      {
+        "url": "https://analytics.zoho.com/open-view/2617098000011468016/795c275b109657a3d7be9f20338a01d3",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "document",
+        "content_type": "text/html;charset=utf-8",
+        "post_data": "",
+        "body_preview": "<!DOCTYPE html>\n<html lang=en ><head><meta name=\"referrer\" content=\"no-referrer\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,minimum-scale=1.0\" /><link rel=\"stylesheet\" type=\"text/css\" href=\"https://static.zohocdn.com/analytics/v3_zr/themes/common/styles/f3/ZALoader.28e3ea310c88dd1c33dd7ea15026e84e.css\"/><title>Zoho Analytics : Dive Live - AAU Qualifier Counts</title><meta name=\"description\" content=\"This is the Dive Live data analytics platform and reporting tool.\"><meta prefix=\"og: http://ogp.me/ns#\" property=\"og:type\"          content=\"website\" /><meta prefix=\"og: http://ogp.me/ns#\" property=\"og:title\"         content=\"Zoho Analytics\" /><meta prefix=\"og: http://ogp.me/ns#\" property=\"og:description\"   content=\"Analyze your data, create stunning data visualizations, and discover hidden insights in minutes.\" /><meta prefix=\"og: http://ogp.me/ns#\" property=\"og:image\"         content=\"https://static.zohocdn.com/analytics/v3_zr/themes/common/images/link-preview.a7a6e",
+        "body_length": 20766,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/clientapi/staticurls",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "",
+        "body_preview": "{\"status\":\"success\",\"summary\":\"Static Urls Info\",\"data\":{\"JSLAZYLOADJSON\":{\"connector/awsca/js/AWSCAInteg.js\":\"https://static.zohocdn.com/analytics/v3_zr/connector/awsca/js/AWSCAInteg.362f2896b2e2b567e8464594ed72f9c4.js\",\"zdbjs/components/ZRCheckbox.js\":\"https://static.zohocdn.com/analytics/v3_zr/zdbjs/components/ZRCheckbox.ed9b15f11c0602e5909e8b6f7798c5a6.js\",\"ZDBDashSetting\":\"https://static.zohocdn.com/analytics/v3_zr/compressed/DashSettings.b813808b8378c15f3a1d8452c282c59a.js\",\"ZRSDatasheet_TEMPLATE\":\"https://static.zohocdn.com/analytics/v3_zr/compressed/ZRSDatasheet_TEMPLATE.4a06516bfd767d5fb9a55ce8f59386a8.js\",\"JSPATH\":\"https://static.zohocdn.com/analytics/v3_zr/\",\"ZCOMPONENTS_JSLIST\":\"https://static.zohocdn.com/analytics/v3_zr/compressed/ZComponents.14401d2b3e437f338946aeb3e083848a.js\",\"connector/fbcomp/js/FBCompInteg.js\":\"https://static.zohocdn.com/analytics/v3_zr/connector/fbcomp/js/FBCompInteg.11f4f3f2e0623aebbf0ade52110b2800.js\",\"zdbjs/ios/touchbutton.js\":\"https://static.zoho",
+        "body_length": 46023,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/reportsapi/STANDALONEREQUESTS?DBID=2617098000000138087",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "",
+        "body_preview": "{\"status\":\"success\",\"data\":{\"connAllowedDomains\":[\"https://reports.zoho.com\",\"https://analytics.zoho.com\",\"https://prereports.zoho.com\",\"https://preanalytics.zoho.com\"],\"USERFULLNAME\":\"Public Visitor\",\"EMAILID\":\"publiczohodb@adventnet.com\",\"ISUSERPHOTOPRESENT\":false,\"isSSOP\":false,\"CONTEXTPATH\":\"\",\"TIMELINE_MINRANGE\":\"01 Jan 1000\",\"TIMELINE_MAXRANGE\":\"30 Dec 2999\",\"fyFormatDetails\":{\"useUTC\":true,\"weekMode\":1,\"startWeekDay\":0},\"CURRENTZSOID\":789108416,\"localDBFetchSize\":{},\"I18NKEYS\":\"https://static.zohocdn.com/analytics/v3_zr/zdbjs/i18nJsKeys/messages_en.39fc10c78ae147648592eda1ca137a46.js\",\"READONLYMODE\":false,\"CURRENTTHEME\":\"dark\",\"CURRENTHEADERTHEME\":\"theme_3\",\"showExistingOPUsers\":false,\"showInvokeOptionDlg\":true,\"IS_POSTGRES_BUILD\":false,\"ISOPOEMBUILD\":false,\"ISJIRASWOPPLUGIN\":false,\"IS_VECTORWISE_USER\":false,\"IS_CSTORE_USER\":true,\"IS_VELOCIRAPTOR_USER\":false,\"IS_FORMULACOL_LOOKUP_ENABLED_FORDB\":true,\"ISSASBUILD\":true,\"enableZIA\":true,\"enableRecommendations\":false,\"recommendation",
+        "body_length": 9330,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/reportsapi/DATASHEETINFO?DBID=2617098000000138087&STANDALONE=true",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "",
+        "body_preview": "{\"status\":\"success\",\"data\":{\"dbId\":2617098000000138087,\"isPublicUser\":true,\"LAYOUT_MODE\":1,\"isCustomDomain\":false,\"isOnPremise\":false,\"isOPCustomPortal\":false,\"isMEAplus\":false,\"shopifyShow\":false,\"footerLogoUrl\":\"https://diveliveapp.com\",\"poweredByText\":true,\"customOnPremise\":false,\"poweredSrcStore\":\"/rebrand/UserLogo.img?ZDBFILEID=4000636480389&ZRZUID=789108068\",\"poweredTitleStore\":\"https://diveliveapp.com\",\"ISRTLMODE\":false,\"IS_6_0_ENABLED\":true}}",
+        "body_length": 454,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/reportsapi/AnalysisViewJSON?SUBREQUEST=XMLHTTP&_ZVER_=101",
+        "method": "POST",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "OBJID=2617098000011468016&INCLUDEGRAPHAREA=true&privatelink=795c275b109657a3d7be9f20338a01d3",
+        "body_preview": "{\"status\":\"success\",\"data\":{\"id\":\"ZDBAnalysisConfig_2617098000011468016\",\"haveAllInvolvedTablesReadPermission\":\"true\",\"viewConfigJSON\":{\"ZAViewColInst\":[{\"VCID\":\"2617098000023478033\",\"ORIGDATATYPE\":\"PLAIN\",\"DATA_TYPE\":1,\"COLUMN_ID\":\"2617098000005092615\",\"PARENT_OBJ_ID\":\"2617098000005092608\",\"FIELD_COL_TYPE\":\"100\",\"DISPLAY_NAME\":\"gender\",\"PARENT_DISPNAME\":\"q_qualifying_sheets\",\"OPERATION\":\"GROUPBY\",\"SHOWVALUEAS\":\"0\",\"DTYPE\":\"DIMENSIONAL\",\"ADDONTYPE\":\"CATEGORICAL\",\"VIEWTYPE\":\"XAXIS\",\"SHOWSUMMARY\":\"true\",\"SHOWROWSUMMARY\":\"true\",\"window\":\"[]\"},{\"VCID\":\"2617098000023478035\",\"COLUMNNAME\":\"q_qualifying_sheets.dive_user_id\",\"DISPLAY_NAME\":\"dive_user_id\",\"COLUMN_ID\":\"2617098000005092612\",\"PARENT_OBJ_ID\":\"2617098000005092608\",\"ORIGDATATYPE\":\"NUMBER\",\"isSystemVariableInvolved\":false,\"FIELD_COL_TYPE\":\"100\",\"OPERATION\":\"DC\",\"SHOWVALUEAS\":\"0\",\"DTYPE\":\"MEASURE\",\"ADDONTYPE\":\"NUMBER\",\"VIEWTYPE\":\"TEXTAXIS\",\"SHOWSUMMARY\":\"true\",\"SHOWROWSUMMARY\":\"true\",\"window\":\"[]\"},{\"VCID\":\"2617098000023478037\",\"ORIGDAT",
+        "body_length": 6739,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/AnalysisFunMenu.cc?SUBREQUEST=XMLHTTP&_ZVER_=101",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "text/html;charset=utf-8",
+        "post_data": "",
+        "body_preview": "<div style=\"display: none\"><div id=\"ZDBFuncMenuBox\" class=\"ZRSMenu shadowAdded \" isMenu=\"true\"><ul elname=\"menuTable\" style=\"max-width:450px;\"><li  tip = 'All values in the column are listed.(Each value is considered to be a individual category).'  tipHeaderDesc ='Actual Values'  custom-tip-func-params='null,true, true' ><span elname=\"ZRSTicker\"></span> <a  noencode=\"true\" funcMenuEl=\"true\" isDate=\"false\" isSubMenu=\"0\" ADDONTYPE=\"CATEGORICAL\" OPERATION=\"GROUPBY\" DTYPE=\"DIMENSIONAL\" DEFOPERATIONTYPE=\"1\" ABBREV=Actual>Actual Values</a></li><li  tip = 'Number of values in the column.'  tipHeaderDesc ='Count'  custom-tip-func-params='null,true, true' ><span elname=\"ZRSTicker\"></span> <a funcMenuEl=\"true\" isDate=\"false\" isSubMenu=\"0\" ADDONTYPE=\"CATEGORICAL\" OPERATION=\"COUNT\"  noencode=\"true\"  SUBMENUID=\"numSubFunc\" ABBREV=Count  TEXTAXIS=\"true\" \">\n<div class=\"fLeft\" >Count</div><div elname=\"funcDiv\" style=\"float:right;margin-top:5px;\"></div></a></li><li  tip = 'Number of distinct values in ",
+        "body_length": 79297,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/staticcontent/v3_zr/__en__US____/ViewModeContentNew.txt",
+        "method": "GET",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "text/plain;charset=utf-8",
+        "post_data": "",
+        "body_preview": "<!--Chart_Drill_Menu_Start-->\n<div class=\"toolTipShadow\" id=\"ZADrillOptMenu\" style=\"position: absolute; visibility: visible; z-index: 20000; display: none;\"><div style=\"float:left;\" elname=\"content\"><div id=\"DRILLMENU\" class=\"TooltipBottomArrow\" style=\"white-space: normal; visibility: visible;padding: 0px;\"><table class=\"drilldown-menu-theme\" cellspacing=\"0\" cellpadding=\"0\" elname=\"menuTable\"><tbody>\n<tr><td nowrap=\"nowrap\" func=\"chartClick\" elName = \"vudElem\" style=\"padding:0 13px;border-radius: 6px 6px 0px 0px ;\" class=\"funcMenuItem\" colspan=\"2\">View Underlying Data</td></tr><tr><td nowrap=\"nowrap\" func=\"chartClick\" elName = \"exploreDataElem\" style=\"padding:0 13px;border-radius: 0px 0px 0px 0px ;\" class=\"funcMenuItem\" colspan=\"2\" ></td></tr><tr><td nowrap=\"nowrap\" func=\"drillDown\" xAxisDrill=true elName = \"defdrillElem_xAxis\" tip=\"\" style=\"padding:0 13px;max-width: 195px;overflow: hidden;text-overflow: ellipsis;border-radius:0px 0px 0px 0px;display:none\" class=\"funcMenuItem\"> {{{enab",
+        "body_length": 80721,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/VMFilterDataFetch.ve?VMFILTERLBLNAME=year&OBJID=2617098000011468016&privatelink=795c275b109657a3d7be9f20338a01d3&VMFILTERACTION=FILTERLISTFETCH&COLID=2617098000007130362&INCLUDECR=false&ISDASHBOARDUF=false&PARENTVIEWID=2617098000005092608&ISPRELOAD=true&SUBREQUEST=XMLHTTP&_ZVER_=101",
+        "method": "POST",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "<zadata >\n<dbobj   dispname='AAU Qualifier Counts'  desc='Number of divers who have earned a qualifying score'  type='Pivot' ><zaav  gt='BEST'  sgt='DEF'  title=''  merge='false'  lp='AUTO'  lt=''  ltm='false'  lf='true'  cinfo='false'  jt='1' >\n</zaav>\n <zataginfo >\n</zataginfo>\n \n</dbobj>\n \n</zadata>\n ",
+        "body_preview": "{\"BASE_LIST\":[[\"2024\",\"2024\"],[\"2025\",\"2025\"],[\"2026\",\"2026\"]],\"EXTRA_INFO\":{\"containsOthers\":false,\"NEXT\":-1},\"VAR_LIST\":[]}",
+        "body_length": 125,
+        "body_full": false
+      },
+      {
+        "url": "https://analytics.zoho.com/ZDBTableDataAction.ma?ZDBACTION=DATAVIEW&CONFIGASXML=true&OBJTYPE=AnalysisGrid&OBJID=2617098000011468016&privatelink=795c275b109657a3d7be9f20338a01d3&CHANGESLIDERBOUNDS=true&RESETSORT=true&FIELDSCHANGED=false&EDITMODE=false&VIEWTYPE=Pivot&SUBREQUEST=XMLHTTP&_ZVER_=101",
+        "method": "POST",
+        "status": 200,
+        "resource_type": "xhr",
+        "content_type": "application/json;charset=UTF-8",
+        "post_data": "<DBSVRequest>\n<zadata >\n<dbobj   dispname='AAU Qualifier Counts'  desc='Number of divers who have earned a qualifying score'  type='Pivot' ><zaav  gt='BEST'  sgt='DEF'  title=''  merge='false'  lp='AUTO'  lt=''  ltm='false'  lf='true'  cinfo='false'  jt='1' ><zavmfv  cr='2026,'  dcr='2026'  lbl='year'  cno='2617098000007130362'  ex='false'  isDashCr='false'  ft='100'  po='2617098000005092608'  op='CONTINUOUS'  asscolid='-1' />\n<zavrfv  currentSelValue='{}'  currentChildSelValue='{}' />\n\n</zaav>\n <zataginfo >\n</zataginfo>\n \n</dbobj>\n \n</zadata>\n <DBSVParams  PARENT_VIEW_TYPE='Pivot' ZAGRIDTYPE='PivotSheet'   /></DBSVRequest>",
+        "body_preview": "{\"grid_param\":{\"type\":\"PivotSheet\",\"dataColOrder\":[\"0\",\"1\",\"2\",\"3\"],\"gridHeaderRows\":[],\"importInProgress\":false,\"disablePhysicalLookup\":true,\"newComments\":false},\"zaProp\":{\"chartSelectedEl\":{\"selectedGraph\":\"CONTINGENCY\",\"allowedGraphs\":\"CONTINGENCY,TABLE_CHART,SCATTER\",\"isMultiY\":false,\"userGrpSel\":\"TABLE_CHART\",\"userSubGrpSel\":\"DEF\",\"subGraphType\":\"DEF\"},\"propSet\":{}},\"subTotalConfig\":{\"rs\":0,\"rg\":3,\"cs\":1,\"cg\":1},\"theme_prop\":{\"zr_theme_color\":\"#e2e2e2\"},\"disp_settings\":{},\"new_grid\":[\"2617098000011468016\",\"2617098000000138087\",\"AAU Qualifier Counts\",\"Number of divers who have earned a qualifying score\",\"PivotSheet\",\"Pivot\",0,\"2617098000005092608\",\"true\",\"-1\"],\"perm\":[null,false,false,false,false,false,false,false],\"navigInfo\":[1,5,4,1,1,5],\"clearCache\":false,\"visibleColsAlone\":false,\"showFirstPage\":true,\"maxValueArray\":[null,null,null,null],\"dataTextNew\":{\"n\":{\"ov\":\"-NA-\",\"fv\":\"Total\"},\"0\":{\"n\":{\"ov\":\"A\",\"fv\":\"A\"},\"v\":[{\"ov\":\"246\",\"fv\":\"246\"},{\"ov\":\"102\",\"fv\":\"102\"},{\"ov\":\"348\",\"fv\":\"348\"}]},\"1\":{\"n\":{\"ov\":\"B\",\"fv\":\"B\"},\"v\":[{\"ov\":\"168\",\"fv\":\"168\"},{\"ov\":\"108\",\"fv\":\"108\"},{\"ov\":\"276\",\"fv\":\"276\"}]},\"2\":{\"n\":{\"ov\":\"C\",\"fv\":\"C\"},\"v\":[{\"ov\":\"140\",\"fv\":\"140\"},{\"ov\":\"83\",\"fv\":\"83\"},{\"ov\":\"223\",\"fv\":\"223\"}]},\"3\":{\"n\":{\"ov\":\"D\",\"fv\":\"D\"},\"v\":[{\"ov\":\"111\",\"fv\":\"111\"},{\"ov\":\"66\",\"fv\":\"66\"},{\"ov\":\"177\",\"fv\":\"177\"}]},\"v\":[{\"ov\":\"628\",\"fv\":\"628\"},{\"ov\":\"332\",\"fv\":\"332\"},{\"ov\":\"960\",\"fv\":\"960\"}]},\"structDet\":{\"yAxisConfig\":[{\"summary\":true}],\"xAxisConfig\":[{\"vciKey\":\"1\",\"id\":\"1\",\"colName\":\"gender\",\"xIDX\":0,\"subType\":\"PLAIN\"}],\"textAxisConfig\":[{\"rowSummary\":true,\"id\":\"2\",\"alignment\":\"Right\",\"dispName\":\"Total\"}],\"repeatLabel\":false,\"showExpCollButton\":0,\"subTotalText\":\"${Sub-group Label}\",\"altTextForColList\":[null],\"AllColumnsList\":[[{\"origVal\":\"female\",\"dispVal\":\"female\"}],[{\"origVal\":\"male\",\"dispVal\":\"male\"}]]},\"valueInfos\":{\"2\":{\"key\":\"2\",\"displayName\":\"Total\",\"type\":\"NUMBER\",\"alignment\":\"Right\",\"valPos\":0,\"currency\":\"en;US;\",\"showSymbol\":true}},\"keyVsColValIndexPosMap\":[\"female-T-1\",\"male-T-1\",\"Summary-T-2\"],\"colInfos\":{\"female-T-1\":{\"width\":75},\"male-T-1\":{\"width\":62},\"Summary-T-2\":{\"width\":66}},\"keyInOrder\":[\"female-T-\",\"male-T-\",\"Summary-T-\"],\"sortInfoClient\":{\"female-T-\":{\"width\":75},\"male-T-\":{\"width\":62},\"Summary-T-\":{\"width\":66}},\"predict\":{\"disabled\":{\"forecast\":{\"primary\":{\"errorMsg\":\"Forecast will be plotted only if Date / Actual[M] column is present in X-Axis.\",\"errorCode\":1001,\"enabled\":false}}}},\"PVCritProp\":[[\"2-P--V-2\",66,null],[\"1-P-male\",62,null],[\"1-P-female\",75,null]],\"ZAVCIProp\":[[\"\",\"\"]],\"SortDetails\":[{\"instKey\":\"3\",\"sortType\":0,\"criteria\":\"\"}],\"resetSort\":true,\"PVTColHead\":[[\"0\",null,\"3\",\"age_group sorted in Descending order.\",null,null],[\"1\",null,\"female\",null,null,0],[\"2\",null,\"male\",null,null,0],[\"3\",\"dive_user_id Distinct Count\",\"-V-2\",null,1,null]],\"tableIdDispNameMapping\":{},\"otherRelatedTables\":[],\"colHead\":[[\"0\",\"3\",\"age_group\",false,false,true,\"PLAIN\",null,null,null,87,3,true,null,0,0,false,1,null,null,null,false,null,null,\"en;US;\",\"colHeadL\",null,\"Left\",\"0\",-1,true,null,true,true,-1,\"0\",false,null,null,null,null,null,null,null,null,[],null,null,null,null,false,0,{\"height\":16,\"width\":16,\"userDefImgSize\":false},0,1,true,false,{},null,null,null,null],[\"1\",\"1\",\"female\",false,false,1,\"NUMBER\",null,null,null,75,22,true,null,null,null,false,2,null,null,null,null,null,null,\"en;US;\",\"colHeadR\",\"2617098000005092608\",\"Right\",\"0\",-1,true,\"dd MMM, yyyy HH:mm:ss\",true,true,0,\"0\",false,null,null,null,null,null,null,null,null,[],null,[false,null],null,null,null,null,{},0,1,true,false,{},null,null,null,null],[\"2\",\"1\",\"male\",false,false,1,\"NUMBER\",null,null,null,62,22,true,null,null,null,false,2,null,null,null,null,null,null,\"en;US;\",\"colHeadR\",\"2617098000005092608\",\"Right\",\"0\",-1,true,\"dd MMM, yyyy HH:mm:ss\",true,true,0,\"0\",false,null,null,null,null,null,null,null,null,[],null,[false,null],null,null,null,null,{},0,1,true,false,{},null,null,null,null],[\"3\",\"2\",\"Total\",false,false,1,\"NUMBER\",null,null,null,66,22,true,null,null,null,false,2,null,null,null,null,null,null,\"en;US;\",\"colHeadR\",\"2617098000005092608\",\"Right\",\"0\",-1,true,\"dd MMM, yyyy HH:mm:ss\",true,true,0,\"0\",false,null,null,null,null,null,null,null,null,[],null,[false,null],null,null,null,null,{},0,1,true,false,{},null,null,null,null]],\"colMaxLength\":[5,3,3,3],\"zaf\":{\"zacf\":{\"1\":{\"DEFAULT\":{\"displayName\":\"gender\",\"type\":\"PLAIN\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Center\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"gender\"},\"FORMAT_IN_TABLE\":{\"displayName\":\"gender\",\"type\":\"PLAIN\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Left\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"gender\"},\"positions\":[\"DEFAULT\"],\"APPLYTOALL\":true,\"AXISTYPE\":\"XAXIS\"},\"2\":{\"DEFAULT\":{\"displayName\":\"dive_user_id Distinct Count\",\"type\":\"NUMBER\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Right\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"dateFormat\":\"dd MMM, yyyy HH:mm:ss\",\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"dive_user_id Distinct Count\"},\"NotModified\":true,\"FORMAT_IN_TABLE\":{\"displayName\":\"dive_user_id Distinct Count\",\"type\":\"NUMBER\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Right\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"dateFormat\":\"dd MMM, yyyy HH:mm:ss\",\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"dive_user_id Distinct Count\"},\"positions\":[\"DEFAULT\"],\"APPLYTOALL\":true,\"AXISTYPE\":\"TEXTAXIS\"},\"3\":{\"DEFAULT\":{\"displayName\":\"age_group\",\"type\":\"PLAIN\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Left\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"age_group\"},\"NotModified\":true,\"FORMAT_IN_TABLE\":{\"displayName\":\"age_group\",\"type\":\"PLAIN\",\"currencyFormat\":\"en;US;\",\"alignment\":\"Left\",\"thousandSeparator\":0,\"decimalPlaces\":-1,\"showSymbol\":true,\"showNegativeSign\":true,\"decimalSeparator\":0,\"userLocale\":false,\"numberingType\":1,\"unitsList\":\"None\",\"displayLabel\":\"age_group\"},\"positions\":[\"DEFAULT\"],\"APPLYTOALL\":true,\"AXISTYPE\":\"YAXIS\"}},\"zacfKeys\":{\"1\":true},\"INST_KEYS\":{\"1\":\"1\",\"2\":\"2\",\"3\":\"3\",\"static\":\"static\"}},\"condFormat\":{\"condRules\":{},\"formatRows\":[]},\"isShowMissingValueAllowed\":true,\"allowedMissValColInXAxis\":[\"1\"],\"allowedMissValColInYAxis\":[\"3\"],\"duplicateAllowedColMapInXAxis\":{},\"duplicateAllowedColMapInYAxis\":{},\"sliderComp\":{},\"SYSTEM_TAG_INFO\":[]}",
+        "body_length": 6772,
+        "body_full": true
+      }
+    ],
+    "screenshot": "db/scratch/qualifying_sheets_screenshot.png"
+  }
+}
