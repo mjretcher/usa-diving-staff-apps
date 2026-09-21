@@ -554,31 +554,177 @@ function renderRetention(){
   document.getElementById('lostNext').addEventListener('click',()=>{lostState.page++;renderRetention();});
 }
 
-function renderAau(){
+/* ---------- AAU Landscape ----------
+   Backed by the AAU/Dive-Live pipeline (db/scripts/build_aau_overlap.py,
+   aau_qualifying_check.py -- both run daily via
+   .github/workflows/build-aau-overlap.yml). Every number here carries its
+   own coverage caveat inline rather than in one disclaimer at the bottom,
+   matching the rest of this app -- see each card. */
+let AAU = { loaded:false, overlap:null, overlapDetail:null, rwb:null, qual:null, qualDetail:null, qualYear:2026 };
+const AAU_GROUP_ORDER = ['D','C','B','A','19PLUS'];
+const AAU_GROUP_LABEL = {D:'Group D (11 & under)', C:'Group C (12–13)', B:'Group B (14–15)', A:'Group A (16–18)', '19PLUS':'19 & over'};
+
+async function renderAau(){
   const el = document.getElementById('viewAau');
-  const xs = D.aau.map(r=>String(r.y));
-  const chart = lineChart({
-    xs,
-    series: [
-      {label:'USA Diving sanctioned meets', color:NAVY, values:D.aau.map(r=>+r.usad)},
-      {label:'AAU sanctioned meets', color:RED, values:D.aau.map(r=>+r.aau)},
-    ], height: 260,
+  if (!AAU.loaded){
+    el.innerHTML = '<div class="loading">Loading AAU comparison data&hellip;</div>';
+    try {
+      const [overlap, detail, rwb, qual, qualDetail] = await Promise.all([
+        NEON.query(`SELECT cohort_year, aau_divers, matched_usad, match_pct, membership_data_available
+                    FROM scoresandmore.aau_usad_overlap WHERE match_tier='nickname' ORDER BY cohort_year`),
+        NEON.query(`SELECT cohort_year, gender, usad_group, apparatus, aau_divers, matched_usad, membership_data_available
+                    FROM scoresandmore.aau_usad_overlap_detail
+                    WHERE match_tier='nickname' AND usad_group IN ('D','C','B','A','19PLUS')`),
+        NEON.query(`SELECT EXTRACT(YEAR FROM start_date)::int yr, rwb_color, rwb_region
+                    FROM scoresandmore.meet_classification
+                    WHERE series='aau_rwb_qualifier' AND rwb_region IS NOT NULL`),
+        NEON.query(`SELECT cohort_year, entrants, verified_dive_live_only, verified_usad_only,
+                    verified_both, verified_total, unverified, verified_pct
+                    FROM scoresandmore.aau_qualifying_check ORDER BY cohort_year`),
+        NEON.query(`SELECT cohort_year, usad_group, gender, apparatus, entrants, verified_total,
+                    unverified, verified_pct
+                    FROM scoresandmore.aau_qualifying_check_detail ORDER BY cohort_year, usad_group, gender, apparatus`),
+      ]);
+      AAU.overlap = overlap.rows; AAU.overlapDetail = detail.rows; AAU.rwb = rwb.rows;
+      AAU.qual = qual.rows; AAU.qualDetail = qualDetail.rows;
+      AAU.loaded = true;
+    } catch(e){
+      el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Load failed.</b> ${esc(e.message||e)}</div></div></div>`;
+      return;
+    }
+  }
+  renderAauBody();
+}
+
+function aauKpis(){
+  const latestOverlap = AAU.overlap[AAU.overlap.length-1] || {};
+  const latestQual = AAU.qual[AAU.qual.length-1] || {};
+  const rwbByYear = {};
+  AAU.rwb.forEach(r=>{ (rwbByYear[r.yr] = rwbByYear[r.yr] || new Set()).add(r.rwb_color+'|'+r.rwb_region); });
+  const rwbYears = Object.keys(rwbByYear).map(Number).sort((a,b)=>a-b);
+  const latestRwbYear = rwbYears[rwbYears.length-1];
+  const priorRwbYear = rwbYears.find(y=>rwbByYear[y].size !== (rwbByYear[latestRwbYear]||new Set()).size);
+  return `
+  <div class="kpi-band">
+    <div class="kpi navy"><div class="big">${fmt(+latestOverlap.aau_divers||0)}</div>
+      <span class="chip navy">${latestOverlap.cohort_year||''} AAU Cohort</span>
+      <div class="sub">Distinct divers seen in AAU-classified Dive Live results<br><span class="scope-tag all">Named-evidence floor, not a census</span></div></div>
+    <div class="kpi pool"><div class="big">${latestOverlap.membership_data_available ? (+latestOverlap.match_pct||0)+'%' : '—'}</div>
+      <span class="chip pool">Matched to USA Diving</span>
+      <div class="sub">${latestOverlap.membership_data_available ? 'Name match, nickname tier' : 'No membership snapshot for this year to check against'}</div></div>
+    <div class="kpi red"><div class="big">${latestQual.verified_pct!=null ? (100-(+latestQual.verified_pct)).toFixed(1)+'%' : '—'}</div>
+      <span class="chip">${latestQual.cohort_year||''} Nationals: no qualifying score found</span>
+      <div class="sub">${fmt(latestQual.unverified||0)} of ${fmt(latestQual.entrants||0)} entrants &mdash; floor only, see card below</div></div>
+    <div class="kpi sky"><div class="big">${(rwbByYear[latestRwbYear]?.size||0)}</div>
+      <span class="chip navy">${latestRwbYear||''} RWB Qualifying Sites</span>
+      <div class="sub">${priorRwbYear ? `Was ${rwbByYear[priorRwbYear].size} in ${priorRwbYear}` : '3 colors &times; regions'}</div></div>
+  </div>`;
+}
+
+function aauOverlapCard(){
+  const rows = AAU.overlap.slice().reverse().map(r=>`
+    <tr><td><b>${r.cohort_year}</b></td>
+      <td class="num">${fmt(+r.aau_divers)}</td>
+      <td class="num">${r.membership_data_available ? fmt(+r.matched_usad) : '<span style="color:#94a3b8" title="membership.members has no snapshot for this year">n/a<sup style="color:#E31937">*</sup></span>'}</td>
+      <td class="num">${r.membership_data_available ? (+r.match_pct)+'%' : '—'}</td></tr>`).join('');
+  return `
+  <div class="card"><div class="card-h"><h2>AAU / USA Diving Overlap by Year</h2>
+    <span class="sub">Distinct AAU-cohort divers also seen as a USA Diving athlete member, by name (nickname tier)</span></div>
+    <div class="card-b">
+      <table><thead><tr><th>Year</th><th class="num">AAU cohort</th><th class="num">Also USA Diving</th><th class="num">Match rate</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="coverage-note"><b><span style="color:#E31937">*</span> Not zero &mdash; not checkable.</b>
+        USA Diving membership records only go back to 2024, so 2022&ndash;2023 AAU cohorts have nothing to match against yet.
+        Once earlier membership years are loaded, these rows recompute automatically.</div>
+    </div></div>`;
+}
+
+function aauGroupGenderCard(){
+  const latestYear = AAU.overlap.length ? AAU.overlap[AAU.overlap.length-1].cohort_year : null;
+  const rows = AAU.overlapDetail.filter(r=>r.cohort_year===latestYear);
+  const agg = {};   // group|gender -> {n, matched, avail}
+  rows.forEach(r=>{
+    const key = r.usad_group+'|'+r.gender;
+    const a = agg[key] = agg[key] || {n:0, matched:0, avail:r.membership_data_available};
+    a.n += +r.aau_divers; a.matched += r.membership_data_available ? (+r.matched_usad||0) : 0;
   });
-  const rows = D.aau.slice().reverse().map(r=>`<tr><td><b>${r.y}</b></td><td class="num">${fmt(+r.usad)}</td><td class="num">${fmt(+r.aau)}</td>
-    <td class="num">${(+r.usad>0? (+r.aau / +r.usad).toFixed(2) : '—')}</td></tr>`).join('');
+  const genders = ['Male','Female'];
+  const body = AAU_GROUP_ORDER.map(g=>{
+    return `<tr><td><b>${esc(AAU_GROUP_LABEL[g])}</b></td>` + genders.map(gen=>{
+      const a = agg[g+'|'+gen];
+      if (!a || !a.n) return `<td class="num">&mdash;</td>`;
+      if (!a.avail) return `<td class="num" style="color:#94a3b8">n/a</td>`;
+      return `<td class="num">${(100*a.matched/a.n).toFixed(1)}% <span style="color:#94a3b8;font-size:10.5px">(${fmt(a.n)})</span></td>`;
+    }).join('') + `</tr>`;
+  }).join('');
+  return `
+  <div class="card"><div class="card-h"><h2>Overlap by Age Group &amp; Gender</h2>
+    <span class="sub">${latestYear||''} &middot; match rate, cohort size in parens</span></div>
+    <div class="card-b"><table><thead><tr><th>Age group</th><th class="num">Boys</th><th class="num">Girls</th></tr></thead>
+    <tbody>${body}</tbody></table></div></div>`;
+}
+
+function aauRwbCard(){
+  const byYear = {};
+  AAU.rwb.forEach(r=>{
+    const y = byYear[r.yr] = byYear[r.yr] || {};
+    const k = r.rwb_color+'|'+r.rwb_region;
+    y[k] = (y[k]||0) + 1;
+  });
+  const years = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
+  const rows = years.map(y=>{
+    const regions = new Set(Object.keys(byYear[y]).map(k=>k.split('|')[1]));
+    return `<tr><td><b>${y}</b></td><td>${[...regions].sort().map(r=>`<span class="pill navy" style="margin-right:4px;text-transform:capitalize">${esc(r)}</span>`).join('')}</td>
+      <td class="num">${regions.size * 3}</td></tr>`;
+  }).join('');
+  return `
+  <div class="card"><div class="card-h"><h2>Red / White / Blue Qualifier Structure</h2>
+    <span class="sub">Derived from meet names classified as RWB qualifiers &mdash; not an authoritative rules feed</span></div>
+    <div class="card-b"><table><thead><tr><th>Year</th><th>Regions seen</th><th class="num">Sites (regions &times; 3 colors)</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="note" style="margin-top:8px">AAU's own announcement confirms the North/South &rarr; North/Central/South expansion starting the 2025 season (6 &rarr; 9 qualifying sites) &mdash; matches what the meet-name classification shows independently.</div></div></div>`;
+}
+
+function aauQualifyingCard(){
+  const yr = AAU.qualYear;
+  const coarse = AAU.qual.find(r=>r.cohort_year===yr) || {};
+  const detail = AAU.qualDetail.filter(r=>r.cohort_year===yr);
+  const rows = detail.map(r=>`<tr><td><b>${esc(AAU_GROUP_LABEL[r.usad_group]||r.usad_group)}</b></td><td>${esc(r.gender)}</td><td>${esc(r.apparatus)}</td>
+    <td class="num">${fmt(r.entrants)}</td>
+    <td class="num">${r.verified_pct!=null ? r.verified_pct+'%' : '—'}</td>
+    <td class="num">${fmt(r.unverified)}</td></tr>`).join('');
+  const yearBtns = AAU.qual.map(r=>`<button class="tab ${r.cohort_year===yr?'active':''}" data-qual-yr="${r.cohort_year}">${r.cohort_year}</button>`).join('');
+  return `
+  <div class="card"><div class="card-h"><h2>AAU Nationals &mdash; Verified Qualifying Score</h2>
+    <span class="sub">Age-group (D/C/B/A) entrants only &middot; Elite Open, College Open and Group E excluded (no point-score standard)</span></div>
+    <div class="card-b">
+      <div class="controls-row"><div class="seg" id="aauQualYearSeg">${yearBtns}</div>
+        <span class="note">${fmt(coarse.entrants||0)} entrants &middot; ${fmt(coarse.unverified||0)} (${coarse.entrants?(100-coarse.verified_pct).toFixed(1):'—'}%) with no qualifying result found</span></div>
+      <table><thead><tr><th>Group</th><th>Gender</th><th>Event</th><th class="num">Entrants</th><th class="num">Verified</th><th class="num">No record</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="coverage-note"><b>What "no record found" does and doesn't mean.</b> Checked against every scraped
+        Dive Live result (not just meets named "AAU") <i>and</i> USA Diving's own results (exact name match) for the
+        Sept&ndash;July qualifying window. <b>Not checked:</b> state high-school meets outside our Dive Live scrape,
+        and AQUA/FINA or Diving Plongeon Canada results (not in our data at all). A diver here may have legitimately
+        qualified somewhere we can't see &mdash; this is a floor on verified qualification, not a finding that anyone
+        lacked a score.</div>
+    </div></div>`;
+}
+
+function renderAauBody(){
+  const el = document.getElementById('viewAau');
+  const latestYear = AAU.overlap.length ? AAU.overlap[AAU.overlap.length-1].cohort_year : '';
   el.innerHTML =
     exportBarHtml('viewAau','membership-aau-landscape','AAU Landscape',
-      `Sanctioned meets cataloged on DiveMeets, ${xs[0]||''}–${xs[xs.length-1]||''} (latest year is YTD)<br>Generated: ${new Date().toLocaleString()}`)
-    + `
-  <div class="card"><div class="card-h"><h2>Meet Activity: USA Diving vs AAU</h2><span class="sub">Sanctioned meets cataloged on DiveMeets (2026 is YTD)</span></div>
-    <div class="card-b">${chart}${legendHtml([{label:'USA Diving',color:NAVY},{label:'AAU',color:RED}])}</div></div>
-  <div class="grid-2">
-    <div class="card"><div class="card-h"><h2>By the Numbers</h2></div>
-      <div class="card-b"><table><thead><tr><th>Year</th><th class="num">USA Diving meets</th><th class="num">AAU meets</th><th class="num">AAU : USAD ratio</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-    <div class="card"><div class="card-h"><h2>What's Next for AAU Comparison</h2></div>
-      <div class="card-b"><div class="callout"><b>678 AAU meets</b> are already cataloged in our DiveMeets crawl (names, dates, venues) &mdash; but their <b>results have not been crawled yet</b>, so athlete-level comparison (who dives AAU-only, who does both, head-to-head participation by geography and age) is pending a results crawl. That crawl runs on our existing GitHub Actions pipeline and is the next build step for this tab.</div>
-      <div class="note">Once results land, this tab gains: AAU athlete counts by year &amp; state, overlap analysis (USA Diving members also seen in AAU results), and market-share maps.</div></div></div>
-  </div>`;
+      `AAU/Dive-Live cohort through ${latestYear} (latest year is YTD)<br>Generated: ${new Date().toLocaleString()}`)
+    + aauKpis()
+    + `<div class="grid-2">${aauOverlapCard()}${aauGroupGenderCard()}</div>`
+    + `<div class="grid-2">${aauRwbCard()}${aauQualifyingCard()}</div>`;
+
+  const seg = document.getElementById('aauQualYearSeg');
+  if (seg) seg.querySelectorAll('button[data-qual-yr]').forEach(b=>b.addEventListener('click', ()=>{
+    AAU.qualYear = +b.dataset.qualYr; renderAauBody();
+  }));
 }
 
 
