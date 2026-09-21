@@ -36,12 +36,19 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sm_classify import classify, RULE_VERSION
+from aau_age_group import classify_event_title, RULE_VERSION as AGE_GROUP_RULE_VERSION
 
 DB_URL = os.environ.get("DATABASE_URL")
 if not DB_URL:
     sys.exit("DATABASE_URL not set")
 
-METHOD_VERSION = "overlap-2026-08-08.1"
+METHOD_VERSION = "overlap-2026-09-21.1"
+# USAD buckets the detail breakdown reports cleanly. Everything else (MIXED:*
+# combinations that genuinely straddle more than one bucket, and unrecognized
+# ranges) rolls into one explicit catch-all rather than being force-fit or
+# silently dropped -- see aau_age_group.py's module docstring.
+CLEAN_USAD_GROUPS = {"D", "C", "B", "A", "19PLUS"}
+OTHER_GROUP_LABEL = "OTHER_MIXED_UNGROUPED"
 
 # Common given-name variants. Folding is deliberately conservative: only
 # well-established pairs, because a wrong fold inflates the match rate.
@@ -165,38 +172,93 @@ def main():
         exact_ix.setdefault(yr, set()).add(f"{g} {s}")
         nick_ix.setdefault(yr, set()).add(f"{fold(g)} {s}")
         init_ix.setdefault(yr, set()).add(f"{g[0]} {s}")
-    print(f"membership years indexed: {sorted(exact_ix)}")
+    membership_years = set(exact_ix)
+    print(f"membership years indexed: {sorted(membership_years)}")
 
-    # ---------------------------------------------------- match
-    out = {}
+    def match_tiers_for(g, s, yr):
+        """Return (exact, nickname, initial) booleans, or None if no
+        membership data exists for this year OR the prior year (season
+        straddles years) -- distinct from 'checked and found no match'."""
+        yrs = [y for y in (yr, yr - 1) if y in membership_years]
+        if not yrs:
+            return None
+        exact = any(f"{g} {s}" in exact_ix[y] for y in yrs)
+        nickname = exact or any(f"{fold(g)} {s}" in nick_ix[y] for y in yrs)
+        initial = nickname or any(f"{g[0]} {s}" in init_ix[y] for y in yrs)
+        return (exact, nickname, initial)
+
+    # ---------------------------------------------------- per-diver match (name only)
+    diver_match = {}   # (diver_id, yr) -> (exact, nickname, initial) | None
+    out = {}            # yr -> {cohort, exact, nickname, initial}, membership_data_available
     for (did, yr), dname in cohort.items():
         g, s = split_name(dname)
         if not g or not s:
             continue
-        b = out.setdefault(yr, dict(cohort=0, exact=0, nickname=0, initial=0))
+        b = out.setdefault(yr, dict(cohort=0, exact=0, nickname=0, initial=0,
+                                     membership_data_available=(yr in membership_years or yr - 1 in membership_years)))
         b["cohort"] += 1
-        # Same-year membership; fall back to prior year (season straddles years)
-        yrs = [y for y in (yr, yr - 1) if y in exact_ix]
-        if any(f"{g} {s}" in exact_ix[y] for y in yrs):
-            b["exact"] += 1
-            b["nickname"] += 1
-            b["initial"] += 1
-        elif any(f"{fold(g)} {s}" in nick_ix[y] for y in yrs):
-            b["nickname"] += 1
-            b["initial"] += 1
-        elif any(f"{g[0]} {s}" in init_ix[y] for y in yrs):
-            b["initial"] += 1
+        tiers = match_tiers_for(g, s, yr)
+        diver_match[(did, yr)] = tiers
+        if tiers:
+            if tiers[0]: b["exact"] += 1
+            if tiers[1]: b["nickname"] += 1
+            if tiers[2]: b["initial"] += 1
 
     cur.execute("TRUNCATE scoresandmore.aau_usad_overlap")
     recs = []
     for yr, b in sorted(out.items()):
+        avail = b["membership_data_available"]
         for tier in ("exact", "nickname", "initial"):
-            recs.append((yr, tier, b["cohort"], b[tier],
-                         round(100.0 * b[tier] / b["cohort"], 2) if b["cohort"] else None,
-                         METHOD_VERSION, RULE_VERSION))
+            matched = b[tier] if avail else None
+            pct = (round(100.0 * b[tier] / b["cohort"], 2) if avail and b["cohort"] else None)
+            recs.append((yr, tier, b["cohort"], matched, pct, avail, METHOD_VERSION, RULE_VERSION))
     execute_values(cur, """INSERT INTO scoresandmore.aau_usad_overlap
         (cohort_year, match_tier, aau_divers, matched_usad, match_pct,
-         method_version, rule_version) VALUES %s""", recs)
+         membership_data_available, method_version, rule_version) VALUES %s""", recs)
+
+    # ---------------------------------------------------- gender x age-group x apparatus detail
+    # Every result row for a domestic-AAU-meet diver, joined to its event's
+    # gender and title (for age-group + apparatus). One diver can land in
+    # several (gender, group, apparatus) buckets in a year (multiple events);
+    # each bucket counts them once, matching "each event, each gender" the
+    # way an athlete actually shows up on that axis.
+    cur.execute("""
+        SELECT r.diver_id, EXTRACT(YEAR FROM m.start_date)::int yr,
+               me.gender, me.event_title
+        FROM scoresandmore.event_results r
+        JOIN scoresandmore.meet_classification m ON m.meet_id = r.meet_id
+        JOIN scoresandmore.meet_events me ON me.meet_id = r.meet_id AND me.event_id = r.event_id
+        WHERE m.is_domestic_aau AND r.diver_id IS NOT NULL""")
+    buckets = {}   # (yr, gender, usad_group, apparatus) -> set of diver_id
+    for did, yr, gender, title in cur.fetchall():
+        if (did, yr) not in diver_match:
+            continue   # diver's name didn't parse into (given, surname) -- excluded upstream too
+        c = classify_event_title(title, gender)
+        grp = c["usad_group"]
+        if grp is None:
+            continue   # no USAD-comparable age concept at all (logistics, Future Champions, etc.)
+        if grp not in CLEAN_USAD_GROUPS:
+            grp = OTHER_GROUP_LABEL
+        apparatus = c["apparatus"] or "OTHER"
+        gen = gender or "Unknown"
+        buckets.setdefault((yr, gen, grp, apparatus), set()).add(did)
+
+    cur.execute("TRUNCATE scoresandmore.aau_usad_overlap_detail")
+    detail_recs = []
+    for (yr, gen, grp, apparatus), divers in buckets.items():
+        avail = out.get(yr, {}).get("membership_data_available", False)
+        for tier_i, tier in enumerate(("exact", "nickname", "initial")):
+            if avail:
+                matched = sum(1 for did in divers if diver_match[(did, yr)] and diver_match[(did, yr)][tier_i])
+                pct = round(100.0 * matched / len(divers), 2) if divers else None
+            else:
+                matched, pct = None, None
+            detail_recs.append((yr, gen, grp, apparatus, tier, len(divers), matched, pct,
+                                 avail, METHOD_VERSION, RULE_VERSION, AGE_GROUP_RULE_VERSION))
+    execute_values(cur, """INSERT INTO scoresandmore.aau_usad_overlap_detail
+        (cohort_year, gender, usad_group, apparatus, match_tier, aau_divers, matched_usad,
+         match_pct, membership_data_available, method_version, rule_version, age_group_rule_version)
+        VALUES %s""", detail_recs)
 
     cur.execute("""INSERT INTO app_meta.config (key, value, description)
         VALUES (%s,%s,'AAU/USAD overlap build report')
@@ -204,13 +266,16 @@ def main():
         ("aau_overlap_last_run", json.dumps({
             "at": datetime.now(timezone.utc).isoformat(),
             "rule_version": RULE_VERSION, "method_version": METHOD_VERSION,
+            "age_group_rule_version": AGE_GROUP_RULE_VERSION,
             "domestic_aau_meets": n_aau, "cohort_rows": len(cohort),
-            "by_year": {str(k): v for k, v in sorted(out.items())}})))
+            "detail_buckets": len(buckets),
+            "by_year": {str(k): {kk: vv for kk, vv in v.items()} for k, v in sorted(out.items())}})))
 
     conn.commit()
-    print("\ncohort_year  tier      aau_divers  matched   pct")
-    for yr, tier, c, mt, pct, *_ in recs:
-        print(f"  {yr}      {tier:9} {c:>9} {mt:>8}   {pct}%")
+    print("\ncohort_year  tier      aau_divers  matched   pct   membership_data")
+    for yr, tier, c, mt, pct, avail, *_ in recs:
+        print(f"  {yr}      {tier:9} {c:>9} {str(mt):>8}   {pct}%   {'yes' if avail else 'NOT AVAILABLE'}")
+    print(f"\ndetail rows written: {len(detail_recs)} across {len(buckets)} (year, gender, group, apparatus) buckets")
     cur.close(); conn.close()
 
 

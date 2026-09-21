@@ -840,16 +840,43 @@ CREATE TABLE IF NOT EXISTS scoresandmore.aau_usad_overlap (
   cohort_year    integer NOT NULL,
   match_tier     text    NOT NULL,   -- exact | nickname | initial
   aau_divers     integer NOT NULL,
-  matched_usad   integer NOT NULL,
-  match_pct      numeric,
+  matched_usad   integer,            -- NULL when membership_data_available is false, never 0
+  match_pct      numeric,            -- NULL under the same condition
   method_version text,
   rule_version   text,
   computed_at    timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (cohort_year, match_tier)
 );
+-- membership.members only carries 2024-2026 (2026-09-21). A cohort year with
+-- no membership snapshot to check against is NOT the same as "checked, zero
+-- overlap" -- matched_usad/match_pct must read NULL for it, not 0.
+ALTER TABLE scoresandmore.aau_usad_overlap
+  ADD COLUMN IF NOT EXISTS membership_data_available boolean NOT NULL DEFAULT true;
 
-GRANT SELECT ON scoresandmore.meet_classification TO usad_app;
-GRANT SELECT ON scoresandmore.aau_usad_overlap    TO usad_app;
+-- Same aggregates-only rule as above, broken out by gender, USAD-comparable
+-- age group (D/C/B/A/19PLUS, or OTHER_MIXED_UNGROUPED for AAU brackets that
+-- straddle more than one USAD bucket -- see db/scripts/aau_age_group.py) and
+-- apparatus (1M/3M/Platform/OTHER). Populated by build_aau_overlap.py.
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_usad_overlap_detail (
+  cohort_year              integer NOT NULL,
+  gender                   text    NOT NULL,   -- Male | Female | Any | Unknown
+  usad_group               text    NOT NULL,   -- D | C | B | A | 19PLUS | OTHER_MIXED_UNGROUPED
+  apparatus                text    NOT NULL,   -- 1M | 3M | Platform | OTHER
+  match_tier               text    NOT NULL,   -- exact | nickname | initial
+  aau_divers               integer NOT NULL,
+  matched_usad             integer,            -- NULL when membership_data_available is false
+  match_pct                numeric,
+  membership_data_available boolean NOT NULL DEFAULT true,
+  method_version           text,
+  rule_version             text,
+  age_group_rule_version   text,
+  computed_at              timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (cohort_year, gender, usad_group, apparatus, match_tier)
+);
+
+GRANT SELECT ON scoresandmore.meet_classification     TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap        TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap_detail TO usad_app;
 
 CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
   meet_id  integer NOT NULL,
