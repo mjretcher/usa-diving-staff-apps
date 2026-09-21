@@ -66,8 +66,15 @@ def broad_capture(view_id, key, criteria="", wait_seconds=25):
                     entry["post_data"] = (req.post_data or "")[:1500]
                     try:
                         body = resp.text()
-                        entry["body_preview"] = body[:3000]
+                        # Round 4: the pivot data payload (ZDBTableDataAction.ma,
+                        # DATAVIEW) is the one response that actually matters --
+                        # keep it in full. Everything else (static URLs, menu
+                        # HTML, filter lists) stays truncated; they're just noise
+                        # confirming the page loaded normally.
+                        keep_full = "ZDBTableDataAction.ma" in resp.url and "DATAVIEW" in resp.url
+                        entry["body_preview"] = body if keep_full else body[:1000]
                         entry["body_length"] = len(body)
+                        entry["body_full"] = keep_full
                     except Exception as e:
                         entry["body_error"] = str(e)
                     seen.append(entry)
