@@ -1,0 +1,20 @@
+# Files Vercel must not upload. Nothing here is served by the Vercel deployment
+# (vercel.json redirects every app except junior-results) or read by any api/
+# function (verified with @vercel/nft traces and `vercel build`, 2026-09-21).
+# Everything stays in git for the GitHub Pages copy and the seed pipeline.
+
+# Static datasets superseded by Neon
+data/data_20*.js
+data/criteria-data.js
+criteria-simulator/data.js
+junior-results/junior-data.js
+
+# Database seeds, scripts and audits (GitHub Actions / psql only)
+db/
+
+# CI, Python tooling, notes
+.github/
+*.py
+requirements.txt
+claude/
+README.md
