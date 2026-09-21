@@ -560,7 +560,16 @@ function renderRetention(){
    .github/workflows/build-aau-overlap.yml). Every number here carries its
    own coverage caveat inline rather than in one disclaimer at the bottom,
    matching the rest of this app -- see each card. */
-let AAU = { loaded:false, overlap:null, overlapDetail:null, rwb:null, qual:null, qualDetail:null, qualYear:2026 };
+let AAU = { loaded:false, overlap:null, overlapDetail:null, rwb:null, qual:null, qualDetail:null, qualYear:2026,
+  membership:null, membershipDetail:null };
+// USA Diving's own fees, mirroring ma-clubs.js's CLUB_FEES (kept separately since
+// each module here is its own IIFE with nothing shared but NEON) -- and AAU's,
+// from AAU's own published membership-fees page (aausports.org/membership-fees/,
+// checked 2026-09-21). Entry fees are the AAU Diving Nationals 2026 packet Mike
+// provided ($80/event) vs a representative USA Diving Junior Circuit entry fee.
+const AAU_FEE_YOUTH_ATHLETE = 22;      // AAU Youth Athlete, regular (their cheapest athlete tier)
+const USAD_FEE_INTRO = 22;             // USA Diving Introductory Athlete, new for 2026
+const USAD_FEE_COMPETITION = 233;      // USA Diving Competition Athlete + $33 background
 const AAU_GROUP_ORDER = ['D','C','B','A','19PLUS'];
 const AAU_GROUP_LABEL = {D:'Group D (11 & under)', C:'Group C (12–13)', B:'Group B (14–15)', A:'Group A (16–18)', '19PLUS':'19 & over'};
 
@@ -569,7 +578,7 @@ async function renderAau(){
   if (!AAU.loaded){
     el.innerHTML = '<div class="loading">Loading AAU comparison data&hellip;</div>';
     try {
-      const [overlap, detail, rwb, qual, qualDetail] = await Promise.all([
+      const [overlap, detail, rwb, qual, qualDetail, membership, membershipDetail] = await Promise.all([
         NEON.query(`SELECT cohort_year, aau_divers, matched_usad, match_pct, membership_data_available
                     FROM scoresandmore.aau_usad_overlap WHERE match_tier='nickname' ORDER BY cohort_year`),
         NEON.query(`SELECT cohort_year, gender, usad_group, apparatus, aau_divers, matched_usad, membership_data_available
@@ -584,9 +593,14 @@ async function renderAau(){
         NEON.query(`SELECT cohort_year, usad_group, gender, apparatus, entrants, verified_total,
                     unverified, verified_pct
                     FROM scoresandmore.aau_qualifying_check_detail ORDER BY cohort_year, usad_group, gender, apparatus`),
+        NEON.query(`SELECT cohort_year, unique_names, unique_diver_ids
+                    FROM scoresandmore.aau_membership_estimate ORDER BY cohort_year`),
+        NEON.query(`SELECT cohort_year, gender, usad_group, unique_names, unique_diver_ids
+                    FROM scoresandmore.aau_membership_estimate_detail ORDER BY cohort_year, usad_group, gender`),
       ]);
       AAU.overlap = overlap.rows; AAU.overlapDetail = detail.rows; AAU.rwb = rwb.rows;
       AAU.qual = qual.rows; AAU.qualDetail = qualDetail.rows;
+      AAU.membership = membership.rows; AAU.membershipDetail = membershipDetail.rows;
       AAU.loaded = true;
     } catch(e){
       el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Load failed.</b> ${esc(e.message||e)}</div></div></div>`;
@@ -598,27 +612,93 @@ async function renderAau(){
 
 function aauKpis(){
   const latestOverlap = AAU.overlap[AAU.overlap.length-1] || {};
-  const latestQual = AAU.qual[AAU.qual.length-1] || {};
+  const latestMembership = AAU.membership[AAU.membership.length-1] || {};
   const rwbByYear = {};
   AAU.rwb.forEach(r=>{ (rwbByYear[r.yr] = rwbByYear[r.yr] || new Set()).add(r.rwb_color+'|'+r.rwb_region); });
   const rwbYears = Object.keys(rwbByYear).map(Number).sort((a,b)=>a-b);
   const latestRwbYear = rwbYears[rwbYears.length-1];
   const priorRwbYear = rwbYears.find(y=>rwbByYear[y].size !== (rwbByYear[latestRwbYear]||new Set()).size);
+  const feeMultiple = (USAD_FEE_COMPETITION / AAU_FEE_YOUTH_ATHLETE).toFixed(1);
   return `
   <div class="kpi-band">
-    <div class="kpi navy"><div class="big">${fmt(+latestOverlap.aau_divers||0)}</div>
-      <span class="chip navy">${latestOverlap.cohort_year||''} AAU Cohort</span>
-      <div class="sub">Distinct divers seen in AAU-classified Dive Live results<br><span class="scope-tag all">Named-evidence floor, not a census</span></div></div>
+    <div class="kpi navy"><div class="big">${fmt(+latestMembership.unique_names||0)}</div>
+      <span class="chip navy">${latestMembership.cohort_year||''} Est. AAU Membership</span>
+      <div class="sub">Unique names across AAU-classified events<br><span class="scope-tag all">Floor, not a census &mdash; see card below</span></div></div>
     <div class="kpi pool"><div class="big">${latestOverlap.membership_data_available ? (+latestOverlap.match_pct||0)+'%' : '—'}</div>
       <span class="chip pool">Matched to USA Diving</span>
       <div class="sub">${latestOverlap.membership_data_available ? 'Name match, nickname tier' : 'No membership snapshot for this year to check against'}</div></div>
-    <div class="kpi red"><div class="big">${latestQual.verified_pct!=null ? (100-(+latestQual.verified_pct)).toFixed(1)+'%' : '—'}</div>
-      <span class="chip">${latestQual.cohort_year||''} Nationals: no qualifying score found</span>
-      <div class="sub">${fmt(latestQual.unverified||0)} of ${fmt(latestQual.entrants||0)} entrants &mdash; floor only, see card below</div></div>
+    <div class="kpi red"><div class="big">${feeMultiple}&times;</div>
+      <span class="chip">Cost Gap: Competition Athlete vs AAU</span>
+      <div class="sub">$${USAD_FEE_COMPETITION} (+background) vs $${AAU_FEE_YOUTH_ATHLETE}/yr &mdash; see cost card</div></div>
     <div class="kpi sky"><div class="big">${(rwbByYear[latestRwbYear]?.size||0)}</div>
       <span class="chip navy">${latestRwbYear||''} RWB Qualifying Sites</span>
       <div class="sub">${priorRwbYear ? `Was ${rwbByYear[priorRwbYear].size} in ${priorRwbYear}` : '3 colors &times; regions'}</div></div>
   </div>`;
+}
+
+function aauMembershipCard(){
+  const rows = AAU.membership.slice().reverse().map(r=>{
+    const gap = (+r.unique_diver_ids) - (+r.unique_names);
+    return `<tr><td><b>${r.cohort_year}</b></td><td class="num">${fmt(+r.unique_names)}</td>
+      <td class="num">${fmt(+r.unique_diver_ids)}</td>
+      <td class="num" style="color:#5a6480">${gap>0?'+':''}${fmt(gap)}</td></tr>`;
+  }).join('');
+  const latestYear = AAU.membership.length ? AAU.membership[AAU.membership.length-1].cohort_year : null;
+  const detail = AAU.membershipDetail.filter(r=>r.cohort_year===latestYear);
+  const genders = ['Boys','Girls'];
+  const groupOrder = ['D','C','B','A','19PLUS','OTHER'];
+  const groupLabel = Object.assign({}, AAU_GROUP_LABEL, {OTHER:'Other / unclassified'});
+  const detailRows = groupOrder.map(g=>{
+    return `<tr><td>${esc(groupLabel[g]||g)}</td>` + genders.map(gen=>{
+      const r = detail.find(d=>d.usad_group===g && d.gender===gen);
+      return `<td class="num">${r?fmt(+r.unique_names):'&mdash;'}</td>`;
+    }).join('') + `</tr>`;
+  }).join('');
+  return `
+  <div class="card"><div class="card-h"><h2>Estimated AAU Membership</h2>
+    <span class="sub">Unique event-entry names, all domestic-AAU-classified meets &middot; AAU publishes no membership figures of its own</span></div>
+    <div class="card-b">
+      <table><thead><tr><th>Year</th><th class="num">Unique names</th><th class="num">Unique diver IDs</th><th class="num">Gap</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <details style="margin-top:10px">
+        <summary style="cursor:pointer;font-weight:700;color:#171F69;font-size:12.5px">By age group &amp; gender (${latestYear||''}) &mdash; click to expand</summary>
+        <table style="margin-top:8px"><thead><tr><th>Group</th><th class="num">Boys</th><th class="num">Girls</th></tr></thead>
+        <tbody>${detailRows}</tbody></table>
+      </details>
+      <div class="coverage-note" style="margin-top:10px"><b>Two identity keys, on purpose.</b> "Unique names" dedupes by normalized
+        first+last name; "unique diver IDs" is Dive Live's own athlete key. They should track closely &mdash; where they don't (2024&ndash;2026
+        run slightly higher on names than IDs; 2022&ndash;2023 run the other way) is itself a data-quality signal, not noise to average away.
+        Either way, this only counts people with evidence in a meet whose <i>name</i> reads as AAU &mdash; most Dive Live volume (52,621 of
+        82,471 results) sits in meets that never say "AAU," so this is a floor, likely a substantial one.</div>
+    </div></div>`;
+}
+
+function aauCostCard(){
+  return `
+  <div class="card"><div class="card-h"><h2>Membership Cost Comparison</h2>
+    <span class="sub">AAU's own published fees vs ours &middot; checked 2026-09-21</span></div>
+    <div class="card-b">
+      <table><thead><tr><th>Membership</th><th class="num">Annual fee</th></tr></thead><tbody>
+        <tr><td><b>AAU Youth Athlete</b> (regular)</td><td class="num">$${AAU_FEE_YOUTH_ATHLETE}</td></tr>
+        <tr><td>USA Diving Introductory Athlete <span class="note" style="font-size:10.5px">(new for 2026)</span></td><td class="num">$${USAD_FEE_INTRO}</td></tr>
+        <tr><td>USA Diving Athlete (17U)</td><td class="num">$40</td></tr>
+        <tr class="grand"><td><b>USA Diving Competition Athlete</b> (+ $33 background)</td><td class="num">$${USAD_FEE_COMPETITION}</td></tr>
+      </tbody></table>
+      <div class="note" style="margin-top:8px">Per-event entry: AAU Nationals runs $80/event flat. USA Diving Junior Circuit entries vary by
+        meet tier (see the Reports bar's fee tables) but Regional/Zone entries commonly run higher per event once host and sanction fees are added.</div>
+      <div class="coverage-note" style="margin-top:10px">Our new Introductory Athlete tier ($22) now matches AAU's own youth fee almost exactly &mdash;
+        but the <b>Competition Athlete</b> tier most serious divers actually need to enter meets like Zones/Nationals is roughly
+        <b>${(USAD_FEE_COMPETITION/AAU_FEE_YOUTH_ATHLETE).toFixed(1)}&times;</b> AAU's price. Source: AAU's published membership-fees page
+        (aausports.org/membership-fees) and our own CLUB_FEES table (Club Health tab).</div>
+    </div></div>`;
+}
+
+function aauHunchNarrative(){
+  return `<div class="callout" style="margin-bottom:14px"><b>Working hypothesis (Mike, 2026-09-21):</b> we're likely losing some
+    members to AAU not because it offers a worse experience, but because it's dramatically cheaper and is widely seen as
+    offering &ldquo;equal&rdquo; opportunity and prestige &mdash; especially at AAU Summer Nationals. This tab exists to put real
+    numbers next to that hunch, not to confirm it: the membership estimate and cost gap above are the strongest evidence for it
+    so far; the qualifying-score enforcement question below is a related but separate thread.</div>`;
 }
 
 function aauOverlapCard(){
@@ -717,9 +797,15 @@ function renderAauBody(){
   el.innerHTML =
     exportBarHtml('viewAau','membership-aau-landscape','AAU Landscape',
       `AAU/Dive-Live cohort through ${latestYear} (latest year is YTD)<br>Generated: ${new Date().toLocaleString()}`)
+    + aauHunchNarrative()
     + aauKpis()
+    + `<div class="grid-2">${aauMembershipCard()}${aauCostCard()}</div>`
     + `<div class="grid-2">${aauOverlapCard()}${aauGroupGenderCard()}</div>`
-    + `<div class="grid-2">${aauRwbCard()}${aauQualifyingCard()}</div>`;
+    + aauRwbCard()
+    + `<details style="margin-top:6px"><summary style="cursor:pointer;font-weight:700;color:#171F69;
+         font-family:var(--display);font-size:15px;letter-spacing:.03em;text-transform:uppercase;padding:6px 2px">
+         My Hunch: Is the Qualifying Score Actually Enforced? &mdash; click to expand</summary>
+       <div style="margin-top:8px">${aauQualifyingCard()}</div></details>`;
 
   const seg = document.getElementById('aauQualYearSeg');
   if (seg) seg.querySelectorAll('button[data-qual-yr]').forEach(b=>b.addEventListener('click', ()=>{
