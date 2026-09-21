@@ -879,9 +879,48 @@ CREATE TABLE IF NOT EXISTS scoresandmore.aau_usad_overlap_detail (
   PRIMARY KEY (cohort_year, gender, usad_group, apparatus, match_tier)
 );
 
-GRANT SELECT ON scoresandmore.meet_classification     TO usad_app;
-GRANT SELECT ON scoresandmore.aau_usad_overlap        TO usad_app;
-GRANT SELECT ON scoresandmore.aau_usad_overlap_detail TO usad_app;
+-- Verified-qualifying-score check for AAU (Summer) Nationals entrants, from
+-- db/scripts/aau_qualifying_check.py. Aggregates only (see that script for
+-- what "verified" does and does not mean).
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_qualifying_check (
+  cohort_year              integer NOT NULL PRIMARY KEY,
+  entrants                 integer NOT NULL,
+  verified_dive_live_only  integer NOT NULL,
+  verified_usad_only       integer NOT NULL,
+  verified_both            integer NOT NULL,
+  verified_total           integer NOT NULL,
+  unverified               integer NOT NULL,
+  verified_pct             numeric,
+  method_version           text,
+  scores_rule_version      text,
+  age_group_rule_version   text,
+  computed_at              timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_qualifying_check_detail (
+  cohort_year              integer NOT NULL,
+  usad_group               text    NOT NULL,   -- D | C | B | A (age-group only)
+  gender                   text    NOT NULL,   -- Boys | Girls
+  apparatus                text    NOT NULL,   -- 1M | 3M | Platform
+  entrants                 integer NOT NULL,
+  verified_dive_live_only  integer NOT NULL,
+  verified_usad_only       integer NOT NULL,
+  verified_both            integer NOT NULL,
+  verified_total           integer NOT NULL,
+  unverified               integer NOT NULL,
+  verified_pct             numeric,
+  method_version           text,
+  scores_rule_version      text,
+  age_group_rule_version   text,
+  computed_at              timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (cohort_year, usad_group, gender, apparatus)
+);
+
+GRANT SELECT ON scoresandmore.meet_classification        TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap           TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap_detail    TO usad_app;
+GRANT SELECT ON scoresandmore.aau_qualifying_check       TO usad_app;
+GRANT SELECT ON scoresandmore.aau_qualifying_check_detail TO usad_app;
 
 CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
   meet_id  integer NOT NULL,

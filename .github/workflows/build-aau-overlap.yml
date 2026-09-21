@@ -32,7 +32,12 @@ jobs:
       - name: Install deps
         run: pip install psycopg2-binary
 
-      - name: Build
+      - name: Build overlap
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: python db/scripts/build_aau_overlap.py
+
+      - name: Build qualifying-score check
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/aau_qualifying_check.py
