@@ -850,8 +850,13 @@ CREATE TABLE IF NOT EXISTS scoresandmore.aau_usad_overlap (
 -- membership.members only carries 2024-2026 (2026-09-21). A cohort year with
 -- no membership snapshot to check against is NOT the same as "checked, zero
 -- overlap" -- matched_usad/match_pct must read NULL for it, not 0.
+-- The CREATE TABLE above only takes effect on a brand-new database; the live
+-- table already existed with matched_usad NOT NULL, so that constraint has
+-- to be dropped explicitly or every NULL write for an unavailable year fails.
 ALTER TABLE scoresandmore.aau_usad_overlap
   ADD COLUMN IF NOT EXISTS membership_data_available boolean NOT NULL DEFAULT true;
+ALTER TABLE scoresandmore.aau_usad_overlap
+  ALTER COLUMN matched_usad DROP NOT NULL;
 
 -- Same aggregates-only rule as above, broken out by gender, USAD-comparable
 -- age group (D/C/B/A/19PLUS, or OTHER_MIXED_UNGROUPED for AAU brackets that
