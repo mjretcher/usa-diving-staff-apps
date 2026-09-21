@@ -1,96 +1,16 @@
 {
-  "view_id": "2617098000005092932",
+  "view_id": "2617098000011468016",
+  "key": "795c275b109657a3d7be9f20338a01d3",
   "attempts": [
-    {
-      "label": "aau_filter",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='AAU'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
     {
       "label": "no_filter",
       "criteria": "",
       "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
+        "gender",
+        "dive_user_id",
         "age_group"
       ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
-    {
-      "label": "filter_USAD",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='USAD'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
-    {
-      "label": "filter_USA Diving",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='USA Diving'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
-    {
-      "label": "filter_NCAA",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='NCAA'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
-    {
-      "label": "filter_NFHS",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='NFHS'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
-    },
-    {
-      "label": "filter_AQUA",
-      "criteria": "\"q_qualifying_sheets\".\"governing_body\"='AQUA'",
-      "columns": [
-        "total_award",
-        "event_height",
-        "team_name",
-        "coach_name",
-        "diver_name",
-        "age_group"
-      ],
-      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000005092932"
+      "rows_error": "Playwright capture got no SHOWREPORT/ZAChartView for view 2617098000011468016"
     }
   ]
 }
