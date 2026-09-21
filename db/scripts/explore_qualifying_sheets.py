@@ -29,10 +29,20 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sm_zoho import ZohoOpenView
 
-VIEW_ID = "2617098000005092932"
-KEY = None   # the discovered URL has no privatelink path segment
+# Round 2 (2026-09-21): the AAU qualifiers page actually embeds TWO Zoho
+# links, and round 1 only tried the bare one (view 2617098000005092932, no
+# key) -- which is very likely just a raw table-criteria reference, not a
+# published dashboard, hence no SHOWREPORT/ZAChartView ever fired for it.
+# The FIRST link on that page has an actual privatelink key -- the same
+# shape every other already-working view in sm_zoho.py's VIEWS dict has.
+# Confirmed by checking the parallel NCAA Qualifiers page, which embeds the
+# identical two-link pattern (2617098000009032337/89a70815... + a bare
+# governing_body-filtered one) -- so this is the site's general convention,
+# not something AAU-specific.
+VIEW_ID = "2617098000011468016"
+KEY = "795c275b109657a3d7be9f20338a01d3"
 
-report = {"view_id": VIEW_ID, "attempts": []}
+report = {"view_id": VIEW_ID, "key": KEY, "attempts": []}
 
 
 def attempt(label, criteria):
@@ -65,17 +75,13 @@ def attempt(label, criteria):
     report["attempts"].append(entry)
 
 
-# 1) Exactly the criteria found embedded on the live page.
-attempt("aau_filter", "\"q_qualifying_sheets\".\"governing_body\"='AAU'")
-
-# 2) No filter at all -- just to see the full column set and (likely) hit
-#    the safety cap, which still tells us the table is real and populated.
+# This is a dedicated, pre-built AAU qualifiers dashboard (its own view
+# with its own key) -- likely self-scoped already, unlike the generic
+# q_meets view which needs a date filter to stay under the 200-row cap.
+# Don't guess at field names for a narrowing filter without seeing the
+# real column list first -- this attempt's own columns() result tells us
+# what's actually queryable if a second round turns out to be needed.
 attempt("no_filter", "")
-
-# 3) A couple of plausible other governing_body values, in case the column
-#    is confirmed to exist and this cheaply maps out what it distinguishes.
-for gb in ("USAD", "USA Diving", "NCAA", "NFHS", "AQUA"):
-    attempt(f"filter_{gb}", f"\"q_qualifying_sheets\".\"governing_body\"='{gb}'")
 
 os.makedirs("db/scratch", exist_ok=True)
 with open("db/scratch/qualifying_sheets_explore.json", "w") as f:
