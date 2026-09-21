@@ -916,11 +916,38 @@ CREATE TABLE IF NOT EXISTS scoresandmore.aau_qualifying_check_detail (
   PRIMARY KEY (cohort_year, usad_group, gender, apparatus)
 );
 
-GRANT SELECT ON scoresandmore.meet_classification        TO usad_app;
-GRANT SELECT ON scoresandmore.aau_usad_overlap           TO usad_app;
-GRANT SELECT ON scoresandmore.aau_usad_overlap_detail    TO usad_app;
-GRANT SELECT ON scoresandmore.aau_qualifying_check       TO usad_app;
+-- Estimated AAU membership size (unique event-entry names, since AAU
+-- publishes no membership numbers of its own) from db/scripts/
+-- aau_membership_estimate.py. Both identity keys kept side by side -- see
+-- that script's docstring for why neither is treated as definitive.
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_membership_estimate (
+  cohort_year             integer NOT NULL PRIMARY KEY,
+  unique_names            integer NOT NULL,
+  unique_diver_ids        integer NOT NULL,
+  method_version          text,
+  age_group_rule_version  text,
+  computed_at             timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS scoresandmore.aau_membership_estimate_detail (
+  cohort_year             integer NOT NULL,
+  gender                  text    NOT NULL,   -- Boys | Girls
+  usad_group              text    NOT NULL,   -- D | C | B | A | 19PLUS | OTHER
+  unique_names            integer NOT NULL,
+  unique_diver_ids        integer NOT NULL,
+  method_version          text,
+  age_group_rule_version  text,
+  computed_at             timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (cohort_year, gender, usad_group)
+);
+
+GRANT SELECT ON scoresandmore.meet_classification         TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap            TO usad_app;
+GRANT SELECT ON scoresandmore.aau_usad_overlap_detail     TO usad_app;
+GRANT SELECT ON scoresandmore.aau_qualifying_check        TO usad_app;
 GRANT SELECT ON scoresandmore.aau_qualifying_check_detail TO usad_app;
+GRANT SELECT ON scoresandmore.aau_membership_estimate        TO usad_app;
+GRANT SELECT ON scoresandmore.aau_membership_estimate_detail TO usad_app;
 
 CREATE TABLE IF NOT EXISTS scoresandmore.scrape_gaps (
   meet_id  integer NOT NULL,

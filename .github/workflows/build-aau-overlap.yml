@@ -41,3 +41,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: python db/scripts/aau_qualifying_check.py
+
+      - name: Build membership estimate
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: python db/scripts/aau_membership_estimate.py
