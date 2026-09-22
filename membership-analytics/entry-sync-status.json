@@ -1,10 +1,10 @@
 {
-  "generated": "2026-09-21T16:27:18Z",
+  "generated": "2026-09-22T14:45:09Z",
   "meets": {
     "12923": {
       "entries": 719,
       "events": 24,
-      "fetched": "2026-09-21 16:25",
+      "fetched": "2026-09-22 14:42",
       "individual": 719,
       "max_round": "Prelim",
       "min_round": "Prelim",
@@ -13,7 +13,7 @@
     "12924": {
       "entries": 97,
       "events": 6,
-      "fetched": "2026-09-21 16:26",
+      "fetched": "2026-09-22 14:44",
       "individual": 97,
       "max_round": "Prelim",
       "min_round": "Prelim",
@@ -22,7 +22,7 @@
     "12925": {
       "entries": 135,
       "events": 6,
-      "fetched": "2026-09-21 16:26",
+      "fetched": "2026-09-22 14:44",
       "individual": 135,
       "max_round": "Prelim",
       "min_round": "Prelim",
