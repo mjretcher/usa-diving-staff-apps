@@ -3508,7 +3508,16 @@ function eoRoundClass(round){
 function buildEventsOnlyDaySection(day,timed){
   const sessions=filterByEvent(timed.filter(s=>s.dayId===day.id&&!s.isPractice));
   const events=[];
-  sessions.forEach(sess=>{(sess.timing.events||[]).forEach(ev=>events.push(ev));});
+  // Filter by the EVENT's own style, not just the session's isPractice flag.
+  // Open Training / Restricted Training / Technical Meeting / any other
+  // placeholder block is style 'Custom Block' (or 'Restricted Training'),
+  // and its free-text label commonly carries a literal time range typed in
+  // by hand (e.g. "Open Training 6:30-7:15am") -- exactly the kind of time
+  // text this report exists to leave out. A practice-flagged session is
+  // still the common case, but this catches one that isn't, too.
+  sessions.forEach(sess=>{(sess.timing.events||[]).forEach(ev=>{
+    if(ev.style==='Individual'||ev.style==='Synchronized') events.push(ev);
+  });});
   if(!events.length)return'';
   const rows=events.map((ev,i)=>{
     const r=evRound(ev);
