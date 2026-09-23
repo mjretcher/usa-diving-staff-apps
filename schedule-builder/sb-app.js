@@ -6517,11 +6517,12 @@ function renderPP(timed,cfg,titleOverride){
     const t=sess.timing;const ft=t.flightTimes||[];
     const closeNote=sess.fitToClose?'  •  until facility close':'';
     return`<div class="pp-prac">
-      <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}${sess.hideFromPublic?` <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;vertical-align:middle">Internal — not on public schedule</span>`:''}</span><span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span></div>
+      <div class="pp-prac-t"><span class="pp-prac-name">${esc(sess.title||'Open Training')}${sess.hideFromPublic?` <span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border-radius:4px;padding:1px 6px;vertical-align:middle">Internal — not on public schedule</span>`:''}</span>${cfg.showTimes?`<span class="pp-prac-time">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${closeNote}</span>`:''}</div>
       ${(()=>{const nt=sessNoteFor(sess,cfg);return nt?`<div class="pp-note">${esc(nt)}</div>`:''})()}
       ${ft.length?`<div class="pp-prac-flights">${ft.map(f=>{
         const cr=(cfg.showFlightCounts&&UI.projRows)?athleteCountForFlight(f):null;
-        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cr!=null?` · ${cr.total} athlete${cr.total===1?'':'s'}${cr.registered!=null?` (${cr.registered} registered)`:''}`:''}</span></div>`;
+        const cnt=cr!=null?`${cr.total} athlete${cr.total===1?'':'s'}${cr.registered!=null?` (${cr.registered} registered)`:''}`:'';
+        return`<div class="pp-prac-f"><span>${esc(f.name)}</span><span>${cfg.showTimes?`${f12(f.startMinutes)} – ${f12(f.endMinutes)}${cnt?' · '+cnt:''}`:cnt}</span></div>`;
       }).join('')}</div>`:''}
     </div>`;
   }
@@ -6540,7 +6541,7 @@ function renderPP(timed,cfg,titleOverride){
       <div class="pp-sess-hd">
         <span class="pp-sess-badge ${hasFinals?'finals':''}">${kind}</span>${(sess.timing&&sess.timing.bcastRows)?`<span class="pp-sess-badge" style="background:#009AC7">On air</span>`:''}
         <span class="pp-sess-n">Session ${n}</span>
-        <span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>
+        ${cfg.showTimes?`<span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>`:''}
         ${cfg.showWU?`<span class="pp-sess-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</span>`:''}
       </div>
       ${(()=>{const nt=sessNoteFor(sess,cfg);return nt?`<div class="pp-note">${esc(nt)}</div>`:''})()}
