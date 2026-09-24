@@ -4364,10 +4364,17 @@ function summariseRouting(routing, label, notes){
          entries = placesIn x take-up (per event) + direct entrants
        and placesIn is exactly the sum of the upstream "qualify" rows. */
     const placesIn = routing.map(() => 0), arrivedIn = routing.map(() => 0);
+    // The same flows, kept per (from level -> to level) pair, for the pathway
+    // flow diagram in the committee paper. Summed from the identical records
+    // as placesIn/arrivedIn, so the diagram cannot disagree with the text.
+    const flowPairs = {};
     (res.flows || []).forEach(fl => {
       if (fl.fromLevel === fl.toLevel || !placesIn.hasOwnProperty(fl.toLevel)) return;
       placesIn[fl.toLevel] += fl.n;
       arrivedIn[fl.toLevel] += (fl.arrived != null ? fl.arrived : fl.n);
+      const k = fl.fromLevel + '>' + fl.toLevel;
+      const p = flowPairs[k] || (flowPairs[k] = {from: fl.fromLevel, to: fl.toLevel, places: 0, arrived: 0});
+      p.places += fl.n; p.arrived += (fl.arrived != null ? fl.arrived : fl.n);
     });
     const levels = routing.map((lvl, L) => {
       const stops = Math.max(1, groupCountAt(L));
@@ -4458,6 +4465,7 @@ function summariseRouting(routing, label, notes){
     return {
       label, notes, routing,
       levels, finalField, byGroup, sanityFlags, finance, financeByLevel,
+      flowPairs: Object.values(flowPairs), dropped: (res.dropped || []).reduce((a,d) => a + d.n, 0),
       finalDivers: finalDivers ? finalDivers.n : null,
       finalDiversReliable: finalDivers ? finalDivers.reliable : null,
       meets:     st.length,
@@ -9511,6 +9519,184 @@ function rt(key, dflt, tag, cls){
 const mono = v => `<span class="mono">${v}</span>`;
 const longDate = d => (d ? new Date(d) : new Date()).toLocaleDateString('en-US', {day:'numeric', month:'long', year:'numeric'});
 
+/* =========================================================================
+   Pathway flow diagram for the committee paper.
+   One proposal's pathway as a flow: every level is a bar as tall as its
+   projected event entries; bands show who moves on, who stops (split into
+   "had a place, did not take it up" and "did not place high enough") and who
+   joins a level directly. Every number comes from summariseRouting() -- the
+   same levels/flowPairs the Exhibit C text is written from -- and the
+   accounting is checked before anything is drawn:
+     entries(L) = arrivals from earlier levels + direct entrants
+     entries(L) = places taken up onward + places not taken up + no place
+   If a level does not balance, or the projection dropped places, the diagram
+   is withheld with the reason rather than drawn wrong.
+   ========================================================================= */
+function pathwayFlowSvg(col, o){
+  o = o || {};
+  const W = 672, lv = (col && col.levels) || [], n = lv.length;
+  const idp = String(o.id || 'pf').replace(/[^a-z0-9_-]/gi, '');
+  const r0 = v => Math.round(v || 0), f0 = v => fmt(r0(v));
+  const pct = (a, b) => b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
+  const withheld = why => `<div style="border:1px solid #c9d0dc;border-left:3px solid #b3122b;padding:10px 12px;font-size:9.5pt;color:#4b5568">Flow diagram withheld: ${esc(why)}</div>`;
+  if (!col || col.error) return withheld(col && col.error ? col.error : 'this proposal could not be projected');
+  if (!n) return withheld('the proposal has no levels');
+  if ((col.dropped || 0) > 0.5) return withheld(`${f0(col.dropped)} places are routed to a level or round that does not exist; fix the routes first`);
+  const pairs = (col.flowPairs || []).filter(p => p.to > p.from && p.to < n);
+  const acc = lv.map((l, L) => {
+    const outs = pairs.filter(p => p.from === L), ins = pairs.filter(p => p.to === L);
+    const placesOut = outs.reduce((a, p) => a + p.places, 0), arrivedOut = outs.reduce((a, p) => a + p.arrived, 0);
+    const arrivedIn = ins.reduce((a, p) => a + p.arrived, 0);
+    return {l, L, outs, ins, placesOut, arrivedOut, arrivedIn,
+            direct: L === 0 ? 0 : l.entries - arrivedIn,
+            declined: placesOut - arrivedOut, noPlace: l.entries - placesOut};
+  });
+  const off = acc.find(a => a.direct < -0.5 || a.declined < -0.5 || a.noPlace < -0.5);
+  if (off) return withheld(`${off.l.name} does not balance (${f0(off.l.entries)} event entries against ${f0(off.arrivedIn)} arriving and ${f0(off.placesOut)} places sent on), so the flow cannot be drawn without inventing a number`);
+  acc.forEach(a => { a.direct = Math.max(0, a.direct); a.declined = Math.max(0, a.declined); a.noPlace = Math.max(0, a.noPlace); });
+
+  const k = o.scale || (150 / Math.max(1, ...lv.map(l => l.entries || 0)));
+  const th = v => v > 0.5 ? Math.max(1.5, v * k) : 0;
+  const NW = 12, M = 64;
+  const cx = L => n === 1 ? W / 2 : M + (W - 2 * M) * L / (n - 1);
+  const gap = n > 1 ? (W - 2 * M) / (n - 1) : W - 2 * M;
+  const measured = T => lv[T] && lv[T].measured != null;
+  const tier = L => esc(lv[L].name);
+  const out = [];
+  const T = (x, y, s, a) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}"${a || ''}>${s}</text>`;
+  const estW = (s, px, cond) => String(s).replace(/<[^>]+>/g, '').length * px * (cond ? 0.46 : 0.56);
+  const wrap = (s, maxW, px) => { const words = String(s).split(' '), lines = []; let cur = '';
+    words.forEach(w => { const t = cur ? cur + ' ' + w : w; if (cur && estW(t, px) > maxW){ lines.push(cur); cur = w; } else cur = t; });
+    if (cur) lines.push(cur); return lines; };
+
+  // Header per level
+  const HEAD = 80;
+  lv.forEach((l, L) => {
+    const x = cx(L), a = acc[L];
+    const lines = [
+      {s: esc(String(l.name).toUpperCase()), px: 11.5, cls: 'font-family:\'Barlow Condensed\',sans-serif;font-weight:700;fill:#171f69;letter-spacing:.02em', y: 13, cond: true},
+      {s: f0(l.entries), px: 24, cls: 'font-family:\'Barlow Condensed\',sans-serif;font-weight:700;fill:#171f69', y: 38, cond: true},
+      {s: `event entries, projected · ${fmt(l.stops)} ${l.stops === 1 ? 'meet' : 'meets'}`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#4b5568', y: 51},
+      l.divers != null ? {s: `about ${f0(l.divers)} athletes (${l.diversReliable ? 'estimated' : 'rough estimate'})`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#6b7385', y: 63} : null,
+      l.actual != null ? {s: `actual ${esc(yearNumBoundary(o.year || S.year))}${l.stage ? ' ' + esc(l.stage) : ''}: ${fmt(l.actual)}`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#6b7385', y: l.divers != null ? 75 : 63} : null,
+    ].filter(Boolean);
+    const wMax = Math.max(...lines.map(z => estW(z.s, z.px, z.cond)));
+    const anc = x - wMax / 2 < 2 ? ['start', 2] : x + wMax / 2 > W - 2 ? ['end', W - 2] : ['middle', x];
+    lines.forEach(z => out.push(T(anc[1], z.y, z.s, ` text-anchor="${anc[0]}" style="${z.cls};font-size:${z.px}px"`)));
+  });
+
+  // Lanes above the bars for any flow that skips a level
+  const skips = pairs.filter(p => p.to > p.from + 1 && p.arrived > 0.5).sort((a, b) => (b.to - b.from) - (a.to - a.from));
+  let laneY = HEAD + 10;
+  skips.forEach(p => { const h = th(p.arrived); p.lane = laneY + h / 2; laneY += h + 16; });
+  // A band too thin to hold its own label carries it just above, so leave a line
+  const thinLead = pairs.some(p => p.to === p.from + 1 && p.arrived > 0.5 && th(p.arrived) < 12) ? 12 : 0;
+  const topY = (skips.length ? laneY + 4 : HEAD + 10) + thinLead;
+  const maxBar = Math.max(...lv.map(l => th(l.entries)));
+
+  // Stack the right (out) and left (in) edges of every bar
+  const segOut = {}, segIn = {};
+  acc.forEach(a => {
+    let y = topY;
+    const outs = a.outs.slice().sort((p, q) => q.to - p.to);          // farthest first, on top
+    outs.forEach(p => { const h = th(p.arrived); segOut[p.from + '>' + p.to] = [y, h]; y += h; });
+    a.declY = [y, th(a.declined)]; y += th(a.declined);
+    a.noY = [y, th(a.noPlace)];
+    let yi = topY;
+    const ins = a.ins.slice().sort((p, q) => p.from - q.from);          // farthest first, on top
+    ins.forEach(p => { const h = th(p.arrived); segIn[p.from + '>' + p.to] = [yi, h]; yi += h; });
+    a.dirY = [yi, th(a.direct)];
+  });
+
+  /* Gradients are in user space, one per band: a band that runs dead level
+     has a zero-height bounding box, and an objectBoundingBox gradient on it
+     renders nothing at all. */
+  const PAL = {a: ['#4f9fcf', '#8fc3ea'], j: ['#c7e1f5', '#8fc3ea'], r: ['#e31937', '#ef8a97'], d: ['#d9822b', '#f2c38f']};
+  const bands = [], grads = [];
+  const labels = [];
+  const band = (d, h, kind, xa, xb) => { if (!(h > 0)) return; const gid = `${idp}-g${grads.length}`, c = PAL[kind];
+    grads.push(`<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${xa.toFixed(1)}" y1="0" x2="${xb.toFixed(1)}" y2="0"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient>`);
+    bands.push(`<path d="${d}" fill="none" stroke="url(#${gid})" stroke-width="${h.toFixed(2)}"/>`); };
+  const curve = (x0, y0, x1, y1) => { const xm = (x0 + x1) / 2; return `M${x0.toFixed(1)},${y0.toFixed(1)} C${xm.toFixed(1)},${y0.toFixed(1)} ${xm.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`; };
+
+  // Advancing bands
+  pairs.forEach(p => {
+    if (p.arrived <= 0.5) return;
+    const so = segOut[p.from + '>' + p.to], si = segIn[p.from + '>' + p.to];
+    const x0 = cx(p.from) + NW / 2, x1 = cx(p.to) - NW / 2, y0 = so[0] + so[1] / 2, y1 = si[0] + si[1] / 2, h = so[1];
+    const tk = `${f0(p.arrived)} advance to ${tier(p.to)}`;
+    const sub = `${f0(p.places)} places · ${Math.round(p.arrived / p.places * 100)}% taken up (${measured(p.to) ? 'measured' : 'assumed, not measured'})`;
+    if (p.lane != null){
+      const ly = p.lane;
+      band(`M${x0},${y0.toFixed(1)} C${x0 + 34},${y0.toFixed(1)} ${x0 + 34},${ly.toFixed(1)} ${x0 + 68},${ly.toFixed(1)} L${x1 - 68},${ly.toFixed(1)} C${x1 - 34},${ly.toFixed(1)} ${x1 - 34},${y1.toFixed(1)} ${x1},${y1.toFixed(1)}`, h, 'a', x0, x1);
+      const mx = (cx(p.from) + cx(p.to)) / 2;
+      labels.push(T(mx, ly - h / 2 - 3, `${tk} · ${sub}`, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:8.5px;fill:#171f69"`));
+      return;
+    }
+    band(curve(x0, y0, x1, y1), h, 'a', x0, x1);
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, room = x1 - x0 - 16;
+    if (h >= 26){
+      labels.push(T(mx, my - 2, tk, ` text-anchor="middle" style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;fill:#171f69"`));
+      wrap(sub, room, 7.8).slice(0, 2).forEach((s, i) => labels.push(T(mx, my + 9 + i * 9.5, s, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:7.8px;fill:#171f69"`)));
+    } else {
+      const short = `${Math.round(p.arrived / p.places * 100)}% of ${f0(p.places)} places ${measured(p.to) ? '(measured)' : '(assumed)'}`;
+      let line = `${tk} · ${short}`;
+      if (estW(line, 8) > room) line = `${f0(p.arrived)} advance · ${short}`;
+      labels.push(T(mx, h >= 12 ? my + 3 : Math.min(y0, y1) - h / 2 - 4, line, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:8px;font-weight:600;fill:#171f69"`));
+    }
+  });
+
+  // Direct entrants: a short band from the left, just below where they land
+  let barsBottom = topY + maxBar;
+  acc.forEach(a => {
+    if (a.L === 0 || a.direct <= 0.5) return;
+    const [yT, h] = a.dirY, x1 = cx(a.L) - NW / 2, sx = cx(a.L) - gap * 0.30, sy = yT + 18;
+    band(curve(sx + 8, sy + h / 2, x1, yT + h / 2), h, 'j', sx + 8, x1);
+    bands.push(`<rect x="${sx.toFixed(1)}" y="${sy.toFixed(1)}" width="8" height="${h.toFixed(1)}" rx="1.5" fill="#4f9fcf"/>`);
+    const lx = sx - 6, ly = sy + Math.max(10, h / 2 - 8);
+    labels.push(T(lx, ly, `\u2191 ${f0(a.direct)} join here`, ` text-anchor="end" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5px;fill:#005f86"`));
+    wrap(`entered ${tier(a.L)} directly, with no place from ${tier(a.L - 1)}`, gap * 0.40, 8).slice(0, 3)
+      .forEach((s, i) => labels.push(T(lx, ly + 11 + i * 10, s, ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#4b5568"`)));
+    barsBottom = Math.max(barsBottom, sy + h, ly + 11 + 30);
+  });
+
+  // Who stops after each level
+  const stopTop = barsBottom + 18;
+  let bottom = stopTop;
+  acc.forEach(a => {
+    const last = a.L === n - 1;
+    if (last){
+      const y = topY + th(a.l.entries) + 12;
+      labels.push(T(cx(a.L) + NW / 2, y, 'final level', ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#6b7385"`));
+      labels.push(T(cx(a.L) + NW / 2, y + 10, 'nobody advances', ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#6b7385"`));
+      bottom = Math.max(bottom, y + 12);
+      return;
+    }
+    const stop = a.declined + a.noPlace;
+    if (stop <= 0.5) return;
+    const x0 = cx(a.L) + NW / 2, sx = cx(a.L) + gap * 0.32, hd = a.declY[1], hn = a.noY[1];
+    band(curve(x0, a.declY[0] + hd / 2, sx, stopTop + hd / 2), hd, 'd', x0, sx);
+    band(curve(x0, a.noY[0] + hn / 2, sx, stopTop + hd + hn / 2), hn, 'r', x0, sx);
+    if (hd) bands.push(`<rect x="${sx.toFixed(1)}" y="${stopTop.toFixed(1)}" width="8" height="${hd.toFixed(1)}" fill="#d9822b"/>`);
+    if (hn) bands.push(`<rect x="${sx.toFixed(1)}" y="${(stopTop + hd).toFixed(1)}" width="8" height="${hn.toFixed(1)}" fill="#e31937"/>`);
+    const lx = sx + 14, maxW = gap * 0.68 - 26;
+    let y = stopTop + 10;
+    labels.push(T(lx, y, `\u2193 ${f0(stop)} stop after ${tier(a.L)}`, ` style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5px;fill:#b3122b"`));
+    const sub = [
+      [`${pct(stop, a.l.entries)} of ${tier(a.L)} event entries`, '#4b5568'],
+      a.declined > 0.5 ? [`${f0(a.declined)} had a place, did not take it up`, '#9a4a06'] : null,
+      a.noPlace > 0.5 ? [`${f0(a.noPlace)} did not place high enough`, '#4b5568'] : null,
+    ].filter(Boolean);
+    sub.forEach(([s, c]) => wrap(s, maxW, 8).forEach(line => { y += 10.5; labels.push(T(lx, y, line, ` style="font-family:Inter,sans-serif;font-size:8px;fill:${c}"`)); }));
+    bottom = Math.max(bottom, stopTop + hd + hn, y + 4);
+  });
+
+  // Bars on top of the band ends
+  const bars = lv.map((l, L) => `<rect x="${(cx(L) - NW / 2).toFixed(1)}" y="${topY.toFixed(1)}" width="${NW}" height="${Math.max(2, th(l.entries)).toFixed(1)}" rx="2" fill="#171f69"/>`).join('');
+  const H = Math.ceil(bottom + 6);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible" role="img" aria-label="Pathway flow, projected event entries"><defs>${grads.join('')}</defs><g>${bands.join('')}</g>${bars}<g>${out.join('')}${labels.join('')}</g></svg>`;
+}
+
 function atlasReportHtml(res){
   const base = S.compare || null;
   const bx = base ? mapExtras(base) : null;
@@ -9525,7 +9711,22 @@ function atlasReportHtml(res){
   const paperId = 'CC-' + new Date().toISOString().slice(0,7);
   const C = (S.cmpRes && S.cmpRes.length >= 2 && (S.cmpAxis||'scenario') !== 'pathway') ? S.cmpRes : null;
   const cmpAsSaved = (S.cmpAxis||'scenario') === 'scenario';
-  const nPages = C ? 6 : 4;
+  // Pathway-at-a-glance flow pages: every compared proposal (two per page),
+  // or this proposal alone when nothing is pinned.
+  const flowCols = C ? C.map((c, i) => ({c, name: i === 0 ? name : c.label, i}))
+                     : [{c: (() => { try { return summariseRouting(S.routing, name, null); } catch(e){ return {error: 'could not project'}; } })(), name, i: 0}];
+  // One bar scale across every proposal, so heights compare directly. Then
+  // pack the diagrams onto pages by their drawn height: two to a page when
+  // they fit, otherwise one -- never clipped by the fixed page.
+  const flowScale = 105 / Math.max(1, ...flowCols.map(fc => Math.max(0, ...((fc.c && fc.c.levels) || []).map(l => l.entries || 0))));
+  flowCols.forEach(fc => { fc.svg = pathwayFlowSvg(fc.c, {id: 'pf' + fc.i, scale: flowScale});
+    const m = /viewBox="0 0 672 (\d+)"/.exec(fc.svg); fc.h = (m ? +m[1] : 90) + 40; });
+  const flowPageList = [];
+  flowCols.forEach(fc => { const pg = flowPageList[flowPageList.length - 1];
+    const room = flowPageList.length === 1 ? 630 : 800;   // measured: 703 / 879 px free, less the closing note
+    if (pg && pg.length < 2 && pg.reduce((a, x) => a + x.h, 0) + fc.h <= room) pg.push(fc); else flowPageList.push([fc]); });
+  const flowPages = flowPageList.length;
+  const nPages = 4 + flowPages + (C ? 2 : 0);
   const mx = maxCapacitySummary();
   const yf = yearFillRows();
   const n = S.regions.length;
@@ -9671,11 +9872,11 @@ function atlasReportHtml(res){
           <div><span class="mono">${fmt(Math.round(l.entries))}</span> event entries (projected)${L > 0 && l.qualified != null ? `: <span class="mono">${fmt(Math.round(l.qualified))}</span> places sent by ${esc(l.fromName || 'the level above')}, <span class="mono">${fmt(Math.round(l.arrivedFromPlaces))}</span> take them up (${Math.round((l.takeUpEff != null ? l.takeUpEff : 1)*100)}%, ${l.measured != null ? 'measured event by event' : 'assumed'})${Math.round(l.direct) >= 1 ? ` + <span class="mono">${fmt(Math.round(l.direct))}</span> entering directly` : ''}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span> event entries` : ''}</div>
           ${(l.detail||[]).map(r => r.routes.length ? r.routes.map(rt => `<div style="color:#4b5568">${esc(r.name)}: ${esc(routeText(rt))} · <span class="mono">${fmt(Math.round(rt.sends))}</span> qualify <span style="color:#9aa5b8">(${BOARDS.map(b => b.short + ' ' + fmt(Math.round((rt.byBoard||{})[b.k] || 0))).join(' · ')})</span></div>`).join('') : `<div style="color:#9aa5b8">${esc(r.name)}: nobody advances</div>`).join('')}
         </div>`).join('')}</div>`; }).join('')}</div>`;
-    pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C')}
-      ${rt('exC1', 'Exhibit C. Proposals side by side — structure and pathway', 'div', 'atl-ex')}
+    pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C, continued')}
+      ${rt('exC1', 'Exhibit C, continued. Proposals side by side — structure and pathway in detail', 'div', 'atl-ex')}
       ${rt('exC1s', 'Each column is a proposal\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Each level reads: places sent by the level above (the sum of that level\u2019s \u201cqualify\u201d lines), how many take them up, plus anyone entering directly = entries. Take-up is measured separately for every event, so the percentage shown is the overall result, not one flat rate. The actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
       ${structCols}
-      ${pageFoot(4)}</article>
+      ${pageFoot(4 + flowPages)}</article>
     <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}
       ${rt('exC', 'Exhibit C, continued. Maps and figures', 'div', 'atl-ex')}
       ${rt('exCs', `${cmpAsSaved ? 'Each proposal exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} ${cols.some((c, i) => i > 0 && c.c && c.c.churn && c.c.churn.moved) ? `Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.` : `Every proposal shown uses the same county map as ${esc(name)}, so no county is outlined; the differences are in structure, pathway and fees.`}`, 'div', 'atl-exs')}
@@ -9685,7 +9886,23 @@ function atlasReportHtml(res){
         ${rows}
       </div>
       ${rt('exCf', `Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against ${esc(aShort)} is better or worse for that line.`, 'p', 'atl-fn')}
-      ${pageFoot(5)}</article>`;
+      ${pageFoot(5 + flowPages)}</article>`;
+  }
+
+  // Pathway at a glance -- flow diagrams (drawn and paged above)
+  let pF = '';
+  for (let pg = 0; pg < flowPages; pg++){
+    const two = flowPageList[pg];
+    const first = pg === 0;
+    const exName = C ? 'Exhibit C' : 'Exhibit B, continued';
+    pF += `<article class="atl-pg" data-screen-label="Report pathway flow ${pg + 1}">${head2(first ? exName : exName + (C ? ', continued' : ''))}
+      ${first ? rt('exF', C ? 'Exhibit C. Pathway at a glance' : 'Exhibit B, continued. Pathway at a glance', 'div', 'atl-ex') : ''}
+      ${first ? rt('exFs', `Who moves on from each level. Bars are levels, as tall as their projected event entries (one athlete in one event). Blue: places taken up at the next level. Orange: had a qualifying place and did not take it up. Red: did not place high enough. Light blue from the left: athletes who start at that level with no place from the one before. Where take-up is marked \u201cassumed\u201d, everyone is taken to attend, so that figure is a ceiling.${C ? ' All proposals are drawn to one scale.' : ''}`, 'div', 'atl-exs') : ''}
+      ${two.map(fc => `<div style="margin-top:${first ? 14 : 4}px;break-inside:avoid">
+        <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;color:#171f69;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #eceff4">${C ? `<span class="atl-let sm" style="background:${CMP_TAG[fc.i]}">${CMP_LET[fc.i]}</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fc.name)}</span></div>
+        ${fc.svg}</div>`).join('')}
+      <div style="flex:1"></div>${pg === flowPages - 1 ? rt('exFf', `All counts are projected event entries unless marked otherwise; each is rounded on its own, so parts can differ from a total by one. Athlete counts are estimates from the measured number of events each athlete enters, and are labelled as such. \u201cActual\u201d is the real field of the stage that level stands in for in the ${esc(yearNumBoundary(S.year))} season, given for reference, not as a like-for-like projection. The same figures in words are in ${C ? 'Exhibit C, continued' : 'Exhibit B'}.`, 'p', 'atl-fn') : ''}
+      ${pageFoot(4 + pg)}</article>`;
   }
 
   // Page 4/5 -- changes + methodology
@@ -9721,7 +9938,7 @@ function atlasReportHtml(res){
       ${drift.figures.length ? `<table><thead><tr><th>Figure</th><th style="text-align:right">As presented</th><th style="text-align:right">Now</th><th style="text-align:right">Change</th></tr></thead><tbody>${drift.figures.map(r=>`<tr><td>${esc(r.label)}</td><td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td><td class="num ${r.now>r.then?'c-warn':'c-bad'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td></tr>`).join('')}</tbody></table>
       <div style="margin-top:6px">The frozen column is what the committee saw. Do not quietly republish the new figures under the old date — either explain the change or freeze again.</div>` : '<div>The headline figures still match; only the inputs moved.</div>'}</div>` : ''}
     <div class="atl-rbox" id="bsLedgerHistBox" hidden></div>`;
-  return tool + p1 + p2 + p3 + pC + p4;
+  return tool + p1 + p2 + p3 + pF + pC + p4;
 }
 
 function exportChangesCsv(){
