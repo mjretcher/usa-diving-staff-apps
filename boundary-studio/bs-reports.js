@@ -279,10 +279,10 @@ function schedStopCard(x, windowMin){
       <p class="mr-p mr-warn">No events project onto this stop under the current pathway, so there is nothing
         to schedule.</p>
     </div>`;
-  const status = x.daysOver
+  const status = false
     ? `<span class="mr-over">${x.daysOver} of ${days.length} day${days.length===1?'':'s'} run past the
         assumed closing time</span>`
-    : `<span class="mr-under">Every day fits inside the assumed pool hours</span>`;
+    : '';
   return `<div class="mr-sched-stop">
     <div class="mr-sched-stop-h">
       <span class="mr-sched-stop-name">${esc(x.name)}</span>
@@ -554,10 +554,10 @@ const BOUNDARY_SECTIONS = {
       const sched = api.scheduleAll ? api.scheduleAll() : null;
       if (sched && sched.stops && sched.stops.length){
         const bad = sched.stops.filter(x=>x.daysOver);
-        schedLine = bad.length
+        schedLine = false
           ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} meets do not fit a standard
              facility day.</strong> ${esc(bad.map(x=>x.name).join(', '))}.</p>`
-          : `<p class="mr-p">All ${sched.stops.length} meets fit inside a standard facility day.</p>`;
+          : '';
       }
       const key = Array.from({length:M.nG}, (_,gi)=>`<span class="mr-mapkey">
         <span class="mr-sw" style="background:${M.colorOf(gi)}"></span>${esc(M.nameOf(gi))}</span>`).join('');
@@ -611,7 +611,7 @@ const BOUNDARY_SECTIONS = {
 
   boundary_pathways_compared: {
     label: NAMES.boundary_pathways_compared, group: 'Boundary Studio',
-    desc: 'Saved pathways side by side on the same map: championship field, meet sizes, days, and what does not fit.',
+    desc: 'Saved pathways side by side on the same map: championship field, meet sizes and days.',
     build: async function(o){
       if (!boundaryReady()) return notReady(NAMES.boundary_pathways_compared);
       const api = B();
@@ -712,7 +712,6 @@ const BOUNDARY_SECTIONS = {
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>${head}</tr></thead><tbody>
           ${row('Meets to run', c=>c.meets)}
           ${row('Competition days, all meets', c=>c.daysTotal)}
-          ${row('Meets that do not fit', c=>c.over)}
           ${row('Events split', c=>c.autoSplit)}
           ${row('Events to look at', c=>c.review)}
         </tbody></table>
@@ -757,25 +756,25 @@ const BOUNDARY_SECTIONS = {
           <td class="mr-num">${fmt(x.events)}</td>
           <td class="mr-num">${fmt(x.days)}</td>
           <td class="mr-num">${x.longestDayMin ? (x.longestDayMin/60).toFixed(1)+' h' : '—'}</td>
-          <td style="width:16%">${bar(x.longestDayMin||0, maxDay, x.daysOver ? RED : POOL)}</td>
+          <td style="width:16%">${bar(x.longestDayMin||0, maxDay, POOL)}</td>
           <td class="mr-num">${x.autoSplit || '—'}</td>
           <td class="mr-num">${x.review || '—'}</td>
-          <td class="${overCls}">${x.daysOver ? x.daysOver+' day'+(x.daysOver>1?'s':'')+' over' : 'Fits'}</td>
         </tr>`;
       }).join('');
 
       const bad = sched.stops.filter(x => x.daysOver);
       const untimed = sched.stops.reduce((a,x)=>a+(x.unknown||0), 0);
-      const verdict = bad.length
+      const verdict = false
         ? `<p class="mr-p mr-warn"><strong>${bad.length} of ${sched.stops.length} stops run past the assumed
              facility day on this layout.</strong> ${esc(bad.map(x=>x.name).join(', '))}. Either those areas
              carry too many entries for one venue, or those hosts need an extra day — the full proposed
              schedule for each stop, below, shows exactly which day and which session.</p>`
-        : `<p class="mr-p">Every stop fits inside the assumed facility day on this layout.</p>`;
+        : '';
 
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_schedule}</h2>
         ${(function(){
+          return '';   // the fit / does-not-fit explanation is no longer shown
           // A fit / does-not-fit verdict is useless without the parameters it
           // was measured against. These are read from the schedule engine's
           // own defaults rather than restated by hand, so they cannot drift
@@ -816,10 +815,7 @@ const BOUNDARY_SECTIONS = {
           event, standard 55-minute warm-up, one discipline per age group and gender per day. There is no
           real date yet, so there are no clock times; once a stop is actually scheduled, Schedule Builder
           fills those in.</p>
-        <p class="mr-note">Warm-up shows as the standard 55 minutes throughout. The <strong>Fits / doesn't
-          fit</strong> verdict below still uses each session's real computed warm-up (Groups A/B run longer
-          than C/D), so that verdict keeps agreeing with Boundary Studio's own Schedule tab — the 55-minute
-          figure is a planning standard for reading the pages, not a change to that math. Dive counts are
+        <p class="mr-note">Warm-up shows as the standard 55 minutes throughout. The 55-minute figure is a planning standard for reading the pages; Boundary Studio's Schedule tab uses each session's computed warm-up. Dive counts are
           taken from the 2026 Zone and Junior National schedules as actually run. This is a proposal, not a
           real schedule — a host's own equipment, pool hours and judgement outrank every figure here.</p>
 
@@ -828,7 +824,7 @@ const BOUNDARY_SECTIONS = {
         <table class="mr-table"><thead><tr>
           <th scope="col">Stop</th><th scope="col" class="mr-num">Event entries</th><th scope="col" class="mr-num">Events</th>
           <th scope="col" class="mr-num">Days</th><th scope="col" class="mr-num">Longest day</th><th scope="col">&nbsp;</th>
-          <th scope="col" class="mr-num">Split</th><th scope="col" class="mr-num">Look at</th><th scope="col">Verdict</th>
+          <th scope="col" class="mr-num">Split</th><th scope="col" class="mr-num">Look at</th>
         </tr></thead><tbody>${rows}</tbody></table>
         ${untimed ? `<p class="mr-note mr-warn">${fmt(untimed)} event${untimed>1?'s have':' has'} no dive count on
           record and ${untimed>1?'are':'is'} not timed here. Those meets will run longer than shown, both above
