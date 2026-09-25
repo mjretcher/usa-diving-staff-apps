@@ -4202,9 +4202,15 @@ function maxCapacityEntries(){
   const rows = Array.from({length: n}, () => {
     const r = {}; CELLS.forEach(c => r[c] = HUGE); return r;
   });
+  // platformReal scenarios: platform joins level 2 by open entry, so at maximum
+  // it is uncapped there, as in the projection (other scenarios: unchanged).
+  const routing = S.routing.map(l => Object.assign({}, l, {entering: l.entering ? Object.assign({}, l.entering) : undefined}));
+  const po = platformOpenEntry(routing);
+  if (po){ const ent = Object.assign({}, routing[1].entering || {}); Object.keys(po.entering).forEach(c => { ent[c] = HUGE; }); routing[1].entering = ent; }
   return QR().project({
-    routing: S.routing, entries0: rows,
+    routing: po ? routing : S.routing, entries0: rows,
     groupCount: groupCountAt, groupOf: groupUp, conv: {}, cells: CELLS,
+    share: po ? (L => L === 1 ? po.share : null) : undefined,
   });
 }
 
@@ -8256,11 +8262,44 @@ function atlasStaticSvg(assignOf, colorOf, opts){
     parts.push(`<path d="${c.d}" fill="${fill}"${on && !hasDivers?' fill-opacity=".28"':''} stroke="#fff" stroke-width=".35"${opts.dataF?` data-f="${c.f}"`:''}/>`);
   }
   parts.push(`<path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width=".45" stroke-opacity=".7" pointer-events="none"/>`);
+  if (opts.zones) parts.push(zoneOutlineSvg(assignOf, opts.zones));
   if (opts.changed){
     const d = geo.counties.filter(c => opts.changed(c.f)).map(c => c.d).join('');
     if (d) parts.push(`<path d="${d}" fill="none" stroke="#e31937" stroke-width="1.1" pointer-events="none"/>`);
   }
   return parts.join('');
+}
+
+/* Zone (second-level) boundaries over a static map, for the committee paper.
+   Each Zone's counties are drawn as one silhouette through a filter that keeps
+   only a thin ring around the outside: close the hairline gaps between
+   counties, grow the shape by a pixel, subtract the shape. Adjacent Zones' rings
+   meet in a single navy line; nothing inside a Zone is outlined. Labels sit at
+   the mean position of each Zone's lower-48 counties. The paper map used to
+   carry red outlines on changed counties instead; changes are listed in
+   Section 4. */
+function paperZones(){
+  if (!S.levels || S.levels.length < 3) return null;      // a Zone level exists only between Regions and the final stop
+  const lv = S.levels[1]; if (!lv || !Array.isArray(lv.of) || !lv.groups || lv.groups.length < 2) return null;
+  return {of: lv.of, names: lv.groups.map(g => g.name)};
+}
+function zoneOutlineSvg(assignOf, Z){
+  const geo = S.geo, groups = Z.names.map(() => []), pts = Z.names.map(() => [0, 0, 0]);
+  for (const c of geo.counties){
+    const ri = assignOf(c.f); if (ri == null || ri < 0) continue;
+    const zi = Z.of[ri]; if (zi == null || !groups[zi]) continue;
+    groups[zi].push(c.d);
+    if (c.st !== 'AK' && c.st !== 'HI'){ const m = /M(-?[\d.]+),(-?[\d.]+)/.exec(c.d); if (m){ pts[zi][0] += +m[1]; pts[zi][1] += +m[2]; pts[zi][2]++; } }
+  }
+  const fid = 'zr' + Math.random().toString(36).slice(2, 8);
+  const defs = `<defs><filter id="${fid}" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="0.8" result="c1"/><feMorphology in="c1" operator="erode" radius="0.8" result="closed"/>
+    <feMorphology in="closed" operator="dilate" radius="1.1" result="grown"/><feComposite in="grown" in2="closed" operator="out" result="ring"/>
+    <feFlood flood-color="#171F69" flood-opacity=".9"/><feComposite in2="ring" operator="in"/></filter></defs>`;
+  const rings = groups.map(ds => ds.length ? `<g filter="url(#${fid})" pointer-events="none"><path d="${ds.join('')}" fill="#000"/></g>` : '').join('');
+  const labels = Z.names.map((nm, zi) => { const p = pts[zi]; if (!p[2]) return ''; const x = p[0]/p[2], y = p[1]/p[2], w = nm.length * 6.6 + 18;
+    return `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})" pointer-events="none"><rect x="${(-w/2).toFixed(1)}" y="-10" width="${w.toFixed(1)}" height="19" rx="9.5" fill="#171F69"/><text text-anchor="middle" y="3.6" font-size="10.5" font-weight="700" fill="#fff" font-family="Inter,sans-serif">${esc(nm)}</text></g>`; }).join('');
+  return defs + rings + labels;
 }
 
 /* ---------- churn between any two maps ----------
@@ -10030,7 +10069,8 @@ function rmSpecProjected(col){
         sent += rt.sends; declined += rt.sends - take;
         const toKey = (lv[rt.toIdx].detail || []).find(d => d.name === rt.toRound);
         routes.push({from: sid(L, r.key), to: sid(rt.toIdx, toKey ? toKey.key : ''), kind,
-          band: (rt.hi == null ? `${rmOrd(rt.lo)} and lower` : `Places ${rt.lo}–${rt.hi}`) + (kind === 'nat' && rt.toIdx - L > 1 ? ` go straight to ${lv[rt.toIdx].name}` : ''),
+          band: (rt.share != null ? `${Math.round(rt.share * 100)}% of the field` + (rt.hi != null ? `, places ${rt.lo}–${rt.hi}` : rt.lo > 1 ? `, from ${rmOrd(rt.lo)}` : '')
+                 : rt.hi == null ? `${rmOrd(rt.lo)} and lower` : `Places ${rt.lo}–${rt.hi}`) + (kind === 'nat' && rt.toIdx - L > 1 ? ` go straight to ${lv[rt.toIdx].name}` : ''),
           places: rt.sends, take: kind === 'round' ? null : take,
           pct: kind === 'round' ? null : `${Math.round(ratio * 100)}% take up, ${lv[rt.toIdx].measured != null ? 'measured' : 'assumed'}`, assumed: kind !== 'round' && lv[rt.toIdx].measured == null,
           split: BOARDS.map(b => (rt.byBoard || {})[b.k] || 0)});
@@ -10172,7 +10212,13 @@ function atlasReportHtml(res){
   const yf = yearFillRows();
   const n = S.regions.length;
   const churn = bx ? bx.churn : null;
-  const champ = reachFinal(res);
+  // Event entries in this paper are BILLED entries: each event at each meet a
+  // whole number, summed -- meetManifest(), the same count the Money tab and
+  // the server report charge fees on. Summing the engine's fractional entries
+  // instead put the paper 8 Zone entries (and 2 at the final) off the report.
+  const MAN = meetManifest(res);
+  const billedAt = L => MAN.filter(m => m.level === L).reduce((a, m) => a + m.entries, 0);
+  const champ = res && S.routing ? billedAt(S.routing.length - 1) : null;
   const unmappable = S.totals[S.year] - (t0.rows.reduce((a,r)=>a+r.m,0) + t0.un.m);
   const mappedM = t0.rows.reduce((a,r)=>a+r.m,0), mappedA = t0.rows.reduce((a,r)=>a+r.a,0);
   const overStops = (sched.stops||[]).filter(x => x.daysOver);
@@ -10197,17 +10243,19 @@ function atlasReportHtml(res){
       <div class="num last ${dCls}">${dTxt}</div>`;
   }).join('');
   const totDelta = bx ? (mappedM === bx.regionRows.reduce((a,r)=>a+r.m,0) ? '—' : ((mappedM > bx.regionRows.reduce((a,r)=>a+r.m,0) ? '+' : '−') + fmt(Math.abs(mappedM - bx.regionRows.reduce((a,r)=>a+r.m,0))))) : '—';
-  const recDefault = `That the Committee approve the proposal "${esc(name)}", a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under ${esc(pathwayPhrase())}.`
-    + (churn ? ` Relative to ${esc(baseName)} it moves ${mono(fmt(churn.moved))} counties and ${mono(fmt(churn.movedM))} members` + (bx.gap != null && bal ? `, and ${bal.spread <= bx.gap ? 'narrows' : 'widens'} the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} from ${mono(bx.gap.toFixed(1))} to ${mono(bal.spread.toFixed(1))} percentage points` : '') + '.' : '')
+  const recDefault = `This paper presents the proposal "${esc(name)}" for discussion: a ${mono(fmt(n))}-${esc(singulariseLevel(tierName(0))||'region').toLowerCase()} alignment under ${esc(pathwayPhrase())}.`
+    + (churn ? (churn.moved
+        ? ` Relative to ${esc(baseName)} it moves ${mono(fmt(churn.moved))} counties and ${mono(fmt(churn.movedM))} members` + (bx.gap != null && bal ? (bx.gap.toFixed(1) === bal.spread.toFixed(1) ? `, and leaves the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} unchanged at ${mono(bal.spread.toFixed(1))} percentage points` : `, and ${bal.spread < bx.gap ? 'narrows' : 'widens'} the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} from ${mono(bx.gap.toFixed(1))} to ${mono(bal.spread.toFixed(1))} percentage points`) : '') + '.'
+        : ` It uses the same county map as ${esc(baseName)}` + (bal ? `; the widest gap in competing entries between ${esc(tierName(0).toLowerCase())} is ${mono(bal.spread.toFixed(1))} percentage points` : '') + '.') : '')
     + (champ != null ? ` The championship field is ${mono(fmt(Math.round(champ)))} entries.` : '')
     + (overStops.length ? ` ${mono(fmt(overStops.length))} ${overStops.length===1?'meet does':'meets do'} not fit a standard pool day.` : ' Every meet fits a standard pool day.');
   const p1 = `<article class="atl-pg" data-screen-label="Report p1">
     <div class="atl-mast"><div class="atl-ml"><img src="../shared/images/diver-mark.svg" alt=""><div><div class="atl-mb">USA Diving</div><div class="atl-ms">High Performance Operations</div></div></div>
       <div class="atl-mr"><div>Competition Committee · Board paper</div><div><span class="mono">${esc(paperId)}</span> · ${esc(name)}</div></div></div>
     ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled proposal')}`, 'h1')}
-    ${rt('meta', `Recommendation for approval · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
-    <div class="atl-rec">${rt('h1', '1. Recommendation', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
-    ${rt('h2', `2. ${esc(tierName(0))} under the recommended alignment`, 'div', 'atl-sec')}
+    ${rt('meta', `For discussion · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
+    <div class="atl-rec">${rt('h1', '1. Summary', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
+    ${rt('h2', `2. ${esc(tierName(0))} under this proposal`, 'div', 'atl-sec')}
     <div class="atl-rt" style="grid-template-columns:18px 1.5fr 1fr 1fr 1fr 1fr 1fr">
       <div class="th first"></div><div class="th">${esc(singulariseLevel(tierName(0))||'Region')}</div><div class="th num">Members</div><div class="th num">Athletes (unique)</div><div class="th num">Event entries</div><div class="th num">vs even split</div><div class="th num last">Δ members ${baseName ? 'vs baseline' : '(no baseline)'}</div>
       ${regRows}
@@ -10222,11 +10270,11 @@ function atlasReportHtml(res){
     const bn = (b==null||b<0||!base.regions[b]) ? null : base.regions[b].name;
     return an !== bn; }) : null;
   const p2 = `<article class="atl-pg" data-screen-label="Report p2">${head2('Exhibit A')}
-    ${rt('exA', `Exhibit A. Recommended ${esc(tierName(0).toLowerCase())} boundaries by county`, 'div', 'atl-ex')}
+    ${rt('exA', `Exhibit A. Proposed ${esc(tierName(0).toLowerCase())} boundaries by county`, 'div', 'atl-ex')}
     ${rt(churn && !churn.moved ? 'exAs0' : 'exAs', `Every U.S. county is assigned to exactly one ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}. Solid counties have ${yearNumBoundary(S.year)} competitors; pale counties have none.${churn ? (churn.moved
-      ? ` Counties outlined in red change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} relative to ${esc(baseName)}.`
+      ? ` ${mono(fmt(churn.moved))} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} relative to ${esc(baseName)}; Section 4 lists them.`
       : ` The county assignment is identical to ${esc(baseName)}: no county changes ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}.`) : ''}`, 'div', 'atl-exs')}
-    <svg viewBox="0 0 975 610" class="atl-static">${atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed: changedVs})}</svg>
+    <svg viewBox="0 0 975 610" class="atl-static">${atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {zones: paperZones()})}</svg>
     <div class="atl-sum"><span>${mono(fmt(n))} ${esc(tierName(0).toLowerCase())}</span>
       ${churn ? (churn.moved ? `<span>${mono(fmt(churn.moved))} counties change ${vs}</span><span>${mono(fmt(churn.movedM))} members affected</span>` : `<span>same county map as ${esc(baseName)}</span>`) : ''}
       ${bal ? `<span>widest gap ${mono((bx && bx.gap != null && bx.gap.toFixed(1) !== bal.spread.toFixed(1) ? bx.gap.toFixed(1) + ' → ' : '') + bal.spread.toFixed(1) + ' pp')}</span>` : ''}
@@ -10240,10 +10288,18 @@ function atlasReportHtml(res){
     const t = fin && fin.tiers[L];
     const rounds = QR().roundsOf(lvl);
     let entries = 0;
-    for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) entries += QR().entriesAt(res, L, g, CELLS);
+    entries = billedAt(L);
     const d = (S.mult && entries > 0.5) ? QR().diversAt(res, L, rounds[0].key, CELLS, S.mult, multBasisFor(L)) : null;
     const routes = (lvl.routes||[]).filter(r => r.to);
-    const band = routes.length ? routes.map(r => `Places ${r.lo||1}–${r.hi==null?'∞':r.hi} of ${(RN[r.from]||r.from).toLowerCase()} advance to ${esc(tierName(r.to.level))} ${(RN[r.to.round]||r.to.round).toLowerCase()}`).join('; ')
+    const dest = r => `${esc(tierName(r.to.level))} ${(RN[r.to.round]||r.to.round).toLowerCase()}`;
+    const bandWords = r => r.fillTo != null
+        ? `Top finishers in the ${(RN[r.from]||r.from).toLowerCase()} fill the ${dest(r)} to ${r.fillTo}` + (r.byCell && Object.values(r.byCell).some(o => o && o.fillTo != null && o.fillTo !== r.fillTo) ? ` (${Object.values(r.byCell).find(o => o && o.fillTo != null && o.fillTo !== r.fillTo).fillTo} on platform)` : '')
+        : r.share != null
+        ? (r.hi != null ? `Places ${r.lo||1}–${r.hi} within ${Math.round(r.share*100)}% of each event’s field advance to ${dest(r)}`
+           : (r.lo||1) > 1 ? `The rest of that ${Math.round(r.share*100)}% share, from place ${r.lo}, advances to ${dest(r)}`
+           : `${Math.round(r.share*100)}% of each event’s field advances to ${dest(r)}`)
+        : (r.hi == null ? `Places ${r.lo||1} and below` : `Places ${r.lo||1}–${r.hi}`) + ` of ${(RN[r.from]||r.from).toLowerCase()} advance to ${dest(r)}`;
+    const band = routes.length ? routes.map(bandWords).join('; ')
                                : (L === S.routing.length-1 ? 'Championship final — nobody advances' : 'No route out of this level');
     const arrive = L === 0 ? `Open entry: real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field`
       : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))}${stageMatchNote(L)})`
@@ -10262,7 +10318,7 @@ function atlasReportHtml(res){
     <div class="atl-exb" style="grid-template-columns:repeat(${S.routing.length},1fr)">${exb}</div>
     <div class="atl-rt" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 1fr;margin-top:14px">
       <div class="th first">Event entries by level</div><div class="th num">Projected</div><div class="th num">Maximum (places)</div><div class="th num">Actual 2024</div><div class="th num">Actual 2025</div><div class="th num last">Actual 2026</div>
-      ${S.routing.map((lvl, L) => { let e = 0; for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) e += QR().entriesAt(res, L, g, CELLS); const y = yf && yf[L]; const cell = (i) => { const c = y && y.cells[i]; return c && c.entries != null ? fmt(Math.round(c.entries)) + (c.real ? '' : '<span style="color:#b45309"> mod.</span>') : '—'; }; return `<div class="first">${esc(tierName(L))}</div><div class="num">${fmt(Math.round(e))}</div><div class="num">${mx.maxLevels && mx.maxLevels[L] != null ? fmt(Math.round(mx.maxLevels[L])) : '<span style="color:#6b7385">no cap</span>'}</div><div class="num">${cell(0)}</div><div class="num">${cell(1)}</div><div class="num last">${cell(2)}</div>`; }).join('')}
+      ${S.routing.map((lvl, L) => { const e = billedAt(L); const y = yf && yf[L]; const cell = (i) => { const c = y && y.cells[i]; return c && c.entries != null ? fmt(Math.round(c.entries)) + (c.real ? '' : '<span style="color:#b45309"> mod.</span>') : '—'; }; return `<div class="first">${esc(tierName(L))}</div><div class="num">${fmt(Math.round(e))}</div><div class="num">${mx.maxLevels && mx.maxLevels[L] != null ? fmt(Math.round(mx.maxLevels[L])) : '<span style="color:#6b7385">no cap</span>'}</div><div class="num">${cell(0)}</div><div class="num">${cell(1)}</div><div class="num last">${cell(2)}</div>`; }).join('')}
       <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div>${['y24','y25','y26'].map((y,i) => { const r = realChampionshipField(y); return `<div class="num ${i===2?'last':''}">${r != null ? fmt(r) : '—'}</div>`; }).join('')}
     </div>
     <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout. The championship's real columns are the actual ${esc(S.finalName||'championship')} entries, one meet, no reallocation — the projection has no measured take-up into the championship, so judge it against those.</p>
