@@ -107,7 +107,7 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
     <button data-model="bs-pathway27-10-5-1" aria-pressed="false">10 Regions · 5 Zones</button>
   </div>
 </header>
-<script src="pq-visuals.js?v=20260925b"></script>
+<script src="pq-visuals.js?v=20260925c"></script>
 <main id="app"><div class="card">Loading…</div></main>
 <footer id="foot"></footer>
 <script>
@@ -331,13 +331,13 @@ function render(){
   </section>
 
   <section class="card"><span class="num">03</span><h2>What it would have done in real seasons</h2>
-    <p class="lede">Every real event, as it happened. Each dot is one event at one meet: across is how many divers were in it, up is the share who went on. The navy line is what the proportional rule would have sent.</p>
-    <h3 style="font-size:19px;margin:14px 0 2px">Regionals to Zones, 2026</h3>
-    <div class="scroll">${PQVisuals.oddsScatter(VIS.scatter2026)}</div>
-    <p class="note">${fmtN(VIS.scatter2026.events)} springboard events at 12 Regionals, ${fmtN(VIS.scatter2026.field)} divers-in-events. Top 15 sent ${fmtN(VIS.scatter2026.actual)} to Zones; 65% of every field would have sent ${fmtN(VIS.scatter2026.rule)} — about the same number, spread evenly instead of by field size.</p>
-    <h3 style="font-size:19px;margin:22px 0 2px">Zones to Junior Nationals, 2025</h3>
-    <div class="scroll">${PQVisuals.oddsScatter(VIS.scatter2025)}</div>
-    <p class="note">${fmtN(VIS.scatter2025.events)} events at 6 Zones, ${fmtN(VIS.scatter2025.field)} divers-in-events. ${fmtN(VIS.scatter2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.scatter2025.rule)} before round limits and take-up. Small fields sent nearly everyone; the largest sent about 30%.</p>
+    <p class="lede">Real results, event by event. Each row is an event; each dot is one meet, placed at the share of that event's field who actually advanced. The navy line is the proportional share, the same for every event. Hover a dot for the meet, the field size and who went.</p>
+    <h3 style="font-size:19px;margin:14px 0 2px">${esc(VIS.strip2026.title)}</h3>
+    <div class="scroll">${PQVisuals.eventStrip(VIS.strip2026)}</div>
+    <p class="note">${fmtN(VIS.strip2026.events)} junior springboard events at 12 Regionals, ${fmtN(VIS.strip2026.field)} divers-in-events. Top 15 sent ${fmtN(VIS.strip2026.actual)} to Zones; 65% of every field would have sent ${fmtN(VIS.strip2026.rule)} before the score threshold, spread evenly instead of by field size.</p>
+    <h3 style="font-size:19px;margin:22px 0 2px">${esc(VIS.strip2025.title)}</h3>
+    <div class="scroll">${PQVisuals.eventStrip(VIS.strip2025)}</div>
+    <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
   </section>
 
   <section class="card"><span class="num">04</span><h2>Following one Zone through a season</h2>

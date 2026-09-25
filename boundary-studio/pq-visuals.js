@@ -96,8 +96,12 @@ function zoneWalkthrough(ex){
   s += T(zx, zy-12, `${ex.zone}: ${zoneField} divers`, {weight:600, fill:INK});
   s += dots(zoneField, toNats, zx+4, zy+4, 10, [{upTo: direct, color: NAVY}, {upTo: toNats, color: '#4a6cc9'}]);
   const zyEnd = zy + 4 + Math.ceil(zoneField/10)*11;
-  s += T(zx, zyEnd + 12, `${fmt(arriving)} qualify and attend${ex.zoneCap && arriving > ex.zoneCap ? `; capped at ${ex.zoneCap}` : ''}`, {size:11.5});
-  s += T(zx, zyEnd + 30, `${toNats} advance (${Math.round(ex.stage2Share*100)}%)`, {fill:NAVY, weight:700});
+  const q = adv.reduce((a, b) => a + b, 0), capped = ex.zoneCap && arriving > ex.zoneCap;
+  s += T(zx, zyEnd + 12, `${adv.join(' + ')} = ${q} qualify; about ${arriving} would attend`, {size:11.5});
+  if (capped){ const sh = adv.map(a => Math.round(ex.zoneCap * a / q));
+    s += T(zx, zyEnd + 27, `Zone limit is ${ex.zoneCap} divers, so the spots are shared:`, {size:11.5});
+    s += T(zx, zyEnd + 42, reg.map((r, i) => `${r.name} ${sh[i]}`).join(', '), {size:11.5}); }
+  s += T(zx, zyEnd + (capped ? 62 : 30), `${toNats} advance (${Math.round(ex.stage2Share*100)}%)`, {fill:NAVY, weight:700});
   s += `<path d="M420,92 L500,92" stroke="${NAVY}" stroke-width="2"/><polygon points="500,86 510,92 500,98" fill="${NAVY}"/>`;
   const nx = 530;
   s += T(nx, 70, 'Junior Nationals', {weight:600, fill:INK});
@@ -111,6 +115,37 @@ function zoneWalkthrough(ex){
   s += T(10, H-10, `Take-up ${Math.round(ex.takeUp*100)}% at Zones (measured). Dots are divers; filled dots advance. Real fields from DiveMeets results; the proportional rule is applied to them.`, {size:11});
   return s + '</svg>';
 }
-root.PQVisuals = {oddsScatter, pathwayBars, zoneWalkthrough, quota};
+
+/* Every real event, by age group, gender and board: one row per event, one dot
+   per meet (Zone or Region) at the share of that event's field who actually
+   advanced; the navy line is the proportional share. Hover a dot for the meet,
+   field size, who went, and what the proportional rule would have sent. */
+const AGE_COL = {A:'#009AC7', B:'#7c5cc4', C:'#e3872f', D:'#2e9e6b'};
+function eventStrip(o){
+  const rows = o.rows || [], W = 760, L = 178, Rt = 88, rowH = o.rowH || 17, top = 40;
+  const x = v => L + (W - L - Rt) * v / 100, H = top + rows.length * rowH + 58;
+  const lab = e => e.replace(/^Group /, 'Group ').replace(/ 1M$/, ' 1m').replace(/ 3M$/, ' 3m').replace(/ Platform$/, ' platform');
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(o.title || 'Share advancing by event')}">`;
+  for (let v = 0; v <= 100; v += 25){ s += `<line x1="${x(v)}" x2="${x(v)}" y1="${top-6}" y2="${top + rows.length*rowH}" stroke="${LINE}"/>` + T(x(v), top + rows.length*rowH + 16, v + '%', {anchor:'middle'}); }
+  s += T(W - Rt + 18, top - 12, 'field size', {size:11});
+  let prev = null;
+  rows.forEach((r, i) => {
+    const y = top + i*rowH + rowH/2, col = AGE_COL[r.group] || NAVY;
+    if (prev && prev !== r.group) s += `<line x1="8" x2="${W-8}" y1="${y - rowH/2}" y2="${y - rowH/2}" stroke="#b9c0d6"/>`;
+    prev = r.group;
+    if (i % 2 === 0) s += `<rect x="8" y="${y - rowH/2}" width="${W-16}" height="${rowH}" fill="#f7f8fb"/>`;
+    s += `<rect x="12" y="${y-4}" width="8" height="8" rx="2" fill="${col}"/>` + T(26, y+4, lab(r.event), {fill:INK, size:11.5});
+    const ns = r.pts.map(p => p.n); s += T(W - Rt + 18, y+4, `${Math.min(...ns)}–${Math.max(...ns)}`, {size:11});
+    r.pts.forEach(p => { s += `<circle cx="${x(p.pct).toFixed(1)}" cy="${y}" r="4.3" fill="${col}" fill-opacity=".8" stroke="#fff" stroke-width=".8"><title>${esc(`${o.meetLabel || 'Meet'} ${p.m} · ${p.n} divers · ${p.went} went (${Math.round(p.pct)}%) · proportional rule: ${p.rule}`)}</title></circle>`; });
+  });
+  const xs = x(o.share * 100);
+  s += `<line x1="${xs}" x2="${xs}" y1="${top-10}" y2="${top + rows.length*rowH}" stroke="${NAVY}" stroke-width="2.4"/>`;
+  s += T(xs, top - 16, `${Math.round(o.share*100)}% · proportional`, {anchor:'middle', fill:NAVY, weight:700});
+  const ml = (o.meetLabel || 'meet').toLowerCase();
+  s += T(12, H - 24, `Each dot is one ${ml}: the share of that event's field who actually advanced. Navy line: the proportional share, the same for every event.`, {size:11});
+  s += T(12, H - 8, `Field size = divers in the event at each ${ml} (smallest–largest).`, {size:11});
+  return s + '</svg>';
+}
+root.PQVisuals = {oddsScatter, pathwayBars, zoneWalkthrough, eventStrip, quota};
 if (typeof module !== 'undefined') module.exports = root.PQVisuals;
 })(typeof window !== 'undefined' ? window : globalThis);

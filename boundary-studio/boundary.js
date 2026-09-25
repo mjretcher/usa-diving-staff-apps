@@ -10459,13 +10459,15 @@ function atlasReportHtml(res){
       ${rt('exF', `${exName}. How an athlete reaches ${esc(S.finalName || 'the final')}`, 'div', 'atl-ex')}
       ${rt('exFs', 'Event entries at each stop on one scale, this proposal highlighted, with the other options and the 2026 season for reference.', 'div', 'atl-exs')}
       <div style="margin-top:8px">${VZ.pathwayBars(rows)}</div>
-      ${usesShare ? sub('What proportional qualification would have done: Regionals to Zones, 2026') + VZ.oddsScatter(VD.scatter2026)
-        + `<p class="atl-fn">${fmt(VD.scatter2026.events)} springboard events, ${fmt(VD.scatter2026.field)} divers-in-events. Top 15 sent ${fmt(VD.scatter2026.actual)} to Zones; 65% of every field would have sent ${fmt(VD.scatter2026.rule)}, spread evenly instead of by field size.</p>` : ''}
+      ${usesShare ? sub('One Zone, followed through a season') + VZ.zoneWalkthrough(VD.walkthrough) : ''}
       ${pageFoot(5)}</article>`
       + (usesShare ? `<article class="atl-pg" data-screen-label="Report pathway 2">${head2(exName + ', continued')}
-      ${sub('Zones to Junior Nationals, 2025')}${VZ.oddsScatter(VD.scatter2025)}
-      <p class="atl-fn">${fmt(VD.scatter2025.events)} Zone events, ${fmt(VD.scatter2025.field)} divers-in-events. ${fmt(VD.scatter2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmt(VD.scatter2025.rule)} before round limits and take-up.</p>
-      ${sub('One Zone, followed through a season')}${VZ.zoneWalkthrough(VD.walkthrough)}
+      ${sub('What proportional qualification would have done, event by event')}
+      <p class="atl-fn" style="margin:2px 0 6px">Real results. Under a fixed number of places, the share who advanced depended on the event and the size of the field; under proportional qualification every event sits on the navy line.</p>
+      ${sub(esc(VD.strip2026.title))}${VZ.eventStrip(Object.assign({}, VD.strip2026, {rowH: 15}))}
+      <p class="atl-fn">${fmt(VD.strip2026.events)} junior springboard events at 12 Regionals, ${fmt(VD.strip2026.field)} divers-in-events. Top 15 sent ${fmt(VD.strip2026.actual)} to Zones; 65% of every field would have sent ${fmt(VD.strip2026.rule)} before the score threshold, spread evenly instead of by field size.</p>
+      ${sub(esc(VD.strip2025.title))}${VZ.eventStrip(Object.assign({}, VD.strip2025, {rowH: 15}))}
+      <p class="atl-fn">${fmt(VD.strip2025.events)} Zone events, ${fmt(VD.strip2025.field)} divers-in-events. ${fmt(VD.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmt(VD.strip2025.rule)} before round limits and take-up.</p>
       ${pageFoot(6)}</article>` : '');
   }
   return tool + p1 + p2 + p3 + pF + pC + p4;
