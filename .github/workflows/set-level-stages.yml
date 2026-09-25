@@ -1,0 +1,32 @@
+name: Set proposal level stages
+
+# Sets levels[i].stage ("Counts as" on the Structure tab) on a saved Boundary
+# Studio proposal, so its take-up, fees and comparisons follow an explicit stage
+# instead of one inferred from the level's name or meet count. Nothing else in
+# the record changes. Refuses frozen proposals and mismatched level counts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario_id:
+        description: "Proposal id (e.g. bs-msg2vatz-5q86m)"
+        required: true
+      stages:
+        description: "One per level, comma-separated: Regionals, Zones, EWC, Nationals (blank = automatic)"
+        required: true
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Set stages
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SCENARIO_ID: ${{ github.event.inputs.scenario_id }}
+          STAGES: ${{ github.event.inputs.stages }}
+        run: python db/scripts/set_level_stages.py

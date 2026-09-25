@@ -9684,14 +9684,14 @@ async function loadActual2026Routes(){
         and diver_id_dm is not null and age_group is not null),
     k as (select did, disc, min(grp) grp, min(g) g from r0 group by 1,2),
     reg as (select did, disc, min(place) place, max(score) sc, bool_or(grp in ('A','B') and disc in ('1M','3M')) q from r0 where stage='Regionals' group by 1,2),
-    zon as (select did, disc, min(place) place, min(zone) zn from r0 where stage='Zones' group by 1,2),
+    zon as (select did, disc, min(place) place, min(zone) zn, max(score) zsc from r0 where stage='Zones' group by 1,2),
     ewp as (select did, disc from r0 where stage='EWC' and round='Prelim' group by 1,2),
     ewf as (select did, disc, min(place) place, max(score) score from r0 where stage='EWC' and round='Final' group by 1,2),
     jnp as (select did, disc, max(nm) nm from r0 where stage='Nationals' and round='Prelim' group by 1,2),
     jnf as (select did, disc from r0 where stage='Nationals' and round='Final' group by 1,2)
     select k.did, k.disc, k.grp, k.g, reg.did is not null in_r, coalesce(reg.q,false) r_q, reg.place r_pl,
       zon.did is not null in_z, zon.place z_pl, ewp.did is not null in_e, ewf.did is not null in_ef, ewf.place ef_pl, ewf.score ef_sc,
-      jnp.did is not null in_n, jnf.did is not null in_nf, jnp.nm, reg.sc r_sc, zon.zn z_zn
+      jnp.did is not null in_n, jnf.did is not null in_nf, jnp.nm, reg.sc r_sc, zon.zn z_zn, zon.zsc z_sc
     from k left join reg using (did,disc) left join zon using (did,disc) left join ewp using (did,disc)
       left join ewf using (did,disc) left join jnp using (did,disc) left join jnf using (did,disc)`)).rows || [];
   const val = (r, k, i) => Array.isArray(r) ? r[i] : r[k];
@@ -9700,9 +9700,9 @@ async function loadActual2026Routes(){
   // Published 2026 Regionals -> Zones average bars, one per zone and event
   // (DiveMeets zone qualifier lists; junior_results.zone_thresholds).
   const zb = (await NEON.query(`select zone, event_key, threshold_score from junior_results.zone_thresholds where year=2026`)).rows || [];
-  const ZBAR = {}, EBAR = {};
+  const ZBAR = {}, EBAR = {}, Z18 = {};
   zb.forEach(r => { const z = val(r, 'zone', 0), k = val(r, 'event_key', 1), v = +val(r, 'threshold_score', 2);
-    if (z === 'EWC') EBAR[k] = v; else if (/^[A-F]$/.test(z)) ZBAR[z + '|' + k] = v; });
+    if (z === 'EWC') EBAR[k] = v; else if (z === 'Z18') Z18[k] = v; else if (/^[A-F]$/.test(z)) ZBAR[z + '|' + k] = v; });
   if (Object.keys(EBAR).length !== 24) throw new Error(`E/W/C average bars: ${Object.keys(EBAR).length} of 24 on file`);
   const hk = new Set(hps.map(h => val(h, 'kk', 0))), hn = new Set(hps.map(h => val(h, 'nm', 1)));
   const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
@@ -9710,7 +9710,7 @@ async function loadActual2026Routes(){
   const bool = v => v === true || v === 't' || v === 'true';
   const num = v => v == null || v === '' ? null : +v;
   rows.forEach(r => {
-    const g = n => val(r, n, ['did','disc','grp','g','in_r','r_q','r_pl','in_z','z_pl','in_e','in_ef','ef_pl','ef_sc','in_n','in_nf','nm','r_sc','z_zn'].indexOf(n));
+    const g = n => val(r, n, ['did','disc','grp','g','in_r','r_q','r_pl','in_z','z_pl','in_e','in_ef','ef_pl','ef_sc','in_n','in_nf','nm','r_sc','z_zn','z_sc'].indexOf(n));
     const d = g('disc'); if (!(d in B)) return;
     const inR = bool(g('in_r')), inZ = bool(g('in_z')), inE = bool(g('in_e')), inEF = bool(g('in_ef')), inN = bool(g('in_n'));
     const rp = num(g('r_pl')), zp = num(g('z_pl')), ef = num(g('ef_pl'));
@@ -9726,7 +9726,9 @@ async function loadActual2026Routes(){
       const band = zp != null && zp <= 3 ? 'top3' : zp != null && zp <= 18 ? 'mid' : 'low';
       inc('Z.' + band, d);
       if (band === 'mid' && inE) inc('Z.mid.went', d);
-      if (band === 'low' && inE) inc('Z.low.toE', d);
+      if (band === 'low' && inE){ inc('Z.low.toE', d);
+        const b18 = Z18[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`];
+        inc(zp != null && b18 != null && num(g('z_sc')) >= b18 ? 'Z.low.bar' : 'Z.low.other', d); }
       if (band === 'top3' && inE) inc('Z.top3.alsoE', d);
       if (!inE && !inN) inc('Z.stop.' + band, d); }
     if (inE){ inc('E', d);
@@ -9755,7 +9757,8 @@ async function loadActual2026Routes(){
   const zv = Object.values(ZBAR);
   return {C, n, at: new Date().toISOString(), year: 2026,
     bars: {zones: zv.length ? {count: zv.length, lo: Math.min(...zv), hi: Math.max(...zv)} : null,
-           ewc: {count: Object.keys(EBAR).length, lo: Math.min(...Object.values(EBAR)), hi: Math.max(...Object.values(EBAR))}}};
+           ewc: {count: Object.keys(EBAR).length, lo: Math.min(...Object.values(EBAR)), hi: Math.max(...Object.values(EBAR))},
+           z18: Object.keys(Z18).length}};
 }
 
 /* A 2021-2025-rules season (2024 and 2025 are loaded) as it ran: Regions ->
@@ -9899,7 +9902,7 @@ function rmSpecActual2026(A){
       {from: 'R', to: 'Z', kind: 'next', band: 'Places 1–15', places: n('R.won'), take: n('R.won.went'), pct: `${Math.round(n('R.won.went') / n('R.won') * 100)}% went`, split: s('R.won')},
       {from: 'R', to: 'Z', kind: 'avg', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went'), sub: `${f0(n('R.low.bar'))} over the zone bar`},
       {from: 'Z', to: 'EP', kind: 'next', band: 'Places 4–18', places: n('Z.mid'), take: n('Z.mid.went'), pct: `${Math.round(n('Z.mid.went') / n('Z.mid') * 100)}% went`, split: s('Z.mid')},
-      {from: 'Z', to: 'EP', kind: 'alt', band: '19th or lower', places: n('Z.low.toE'), split: s('Z.low.toE')},
+      {from: 'Z', to: 'EP', kind: A.bars && A.bars.z18 ? 'avg' : 'alt', band: '19th or lower', places: n('Z.low.toE'), split: s('Z.low.toE'), sub: A.bars && A.bars.z18 ? `${f0(n('Z.low.bar'))} over the 18th-place bar` : null},
       {from: 'Z', to: 'NP', kind: 'nat', band: 'Zones places 1–3 go straight to Junior Nationals', places: n('Z.top3'), take: n('N.zoneTop3'), split: s('Z.top3')},
       {from: 'EP', to: 'EF', kind: 'round', band: 'Top 12', places: n('E.final'), split: s('E.final')},
       {from: 'EF', to: 'NP', kind: 'nat', band: 'Places 1–3', places: n('E.top3'), take: n('N.ewcTop3'), split: s('E.top3')},
@@ -9907,7 +9910,7 @@ function rmSpecActual2026(A){
       {from: 'NP', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.final'), split: s('N.final')}],
     strip: ['WAYS INTO JUNIOR NATIONALS — 2026 ACTUAL',
       `Zones top 3: ${f0(n('N.zoneTop3'))} · E/W/C top 3: ${f0(n('N.ewcTop3'))} · average bar: ${f0(n('N.ewcBar'))} · HP Squad: ${f0(n('N.hps'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: A.bars ? `Bars used: ${A.bars.zones ? A.bars.zones.count + ' published zone bars' : 'no zone bars'} (Regionals → Zones), ${A.bars.ewc.count} event bars (E/W/C → Junior Nationals); the Zones → E/W/C 18th-place bar is not on file.` : '',
+    bars: A.bars ? `Bars used: ${A.bars.zones ? A.bars.zones.count + ' published zone bars' : 'no zone bars'} (Regionals → Zones), ${A.bars.z18 ? A.bars.z18 + ' 18th-place bars (Zones → E/W/C)' : 'Zones → E/W/C 18th-place bar not on file'}, ${A.bars.ewc.count} event bars (E/W/C → Junior Nationals).` : '',
     foot: `It is every real 2026 entry by diver and board; \u201cother\u201d at Junior Nationals is ${f0(n('N.otherCompeted'))} without a qualifying finish, ${f0(n('N.ewcBelow'))} E/W/C 4th\u20136th below the bar, ${f0(n('N.otherNoResult'))} with no Zones or E/W/C result.`};
 }
 
