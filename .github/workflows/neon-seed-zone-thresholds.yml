@@ -1,5 +1,11 @@
 name: Neon seed — junior_results.zone_thresholds
 
+# Average-score bars. zone says where a bar applies:
+#   A-F  2026 Regionals -> Zones, one per zone and event (DiveMeets zone qualifier lists)
+#   ALL  a season's national Regionals -> Zones bar per event (2024: USA Diving workbook)
+#   EWC  2026 E/W/C -> Junior Nationals 3rd-place average per event (Art. 303(b)(3)(ii))
+# This table is the single source for all three; the apps and reports read it.
+
 on:
   push:
     branches: [main]
@@ -40,17 +46,19 @@ jobs:
             CREATE INDEX IF NOT EXISTS idx_jzt_year_event ON junior_results.zone_thresholds(year, zone, event_key);
           SQL
 
-      - name: Truncate table (idempotent reload)
+      - name: Replace rows in one transaction
+        # Truncate and load together: if the load fails (a bad line in the CSV),
+        # the transaction rolls back and the old rows stay. On 2026-09-25 the two
+        # ran as separate steps and a failed load left the table empty.
         env:
           DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
         run: |
-          psql "$DATABASE_URL" -c "TRUNCATE junior_results.zone_thresholds RESTART IDENTITY;"
-
-      - name: Bulk load via \copy
-        env:
-          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
-        run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\copy junior_results.zone_thresholds(year,zone,meet_id,event_id,event_name,event_key,threshold_score,event_sort,source_url) FROM 'db/seeds/zone_thresholds.csv' WITH (FORMAT csv, HEADER true, NULL '')"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          TRUNCATE junior_results.zone_thresholds RESTART IDENTITY;
+          \copy junior_results.zone_thresholds(year,zone,meet_id,event_id,event_name,event_key,threshold_score,event_sort,source_url) FROM 'db/seeds/zone_thresholds.csv' WITH (FORMAT csv, HEADER true, NULL '')
+          COMMIT;
+          SQL
 
       - name: Report load stats
         env:
