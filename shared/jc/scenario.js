@@ -43,6 +43,7 @@ export async function hydrateScenario(I, id) {
   S.arrival = d.arrival || null;
   S.seedPool = d.seedPool || null;
   S.firstStopAll = !!d.firstStopAll;
+  S.platformReal = !!d.platformReal;
   S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
   I.syncRouting();
   S.levels = I.migrateLevels(d, S.regions.length);

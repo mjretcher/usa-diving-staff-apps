@@ -315,7 +315,7 @@ function snapshot(){
           finalName:S.finalName,
           routing: S.routing ? JSON.parse(JSON.stringify(S.routing)) : null,
           arrival: S.arrival ? JSON.parse(JSON.stringify(S.arrival)) : null,
-          seedPool: S.seedPool || null, firstStopAll: !!S.firstStopAll};
+          seedPool: S.seedPool || null, firstStopAll: !!S.firstStopAll, platformReal: !!S.platformReal};
 }
 function sameAssign(a, b){
   const ka = Object.keys(a);
@@ -336,7 +336,7 @@ function applySnap(sn){
   S.assign = sn.assign; S.regions = sn.regions; S.levels = sn.levels; S.finalName = sn.finalName;
   if ('routing' in sn){
     if (sn.routing && S.routing && JSON.stringify(sn.routing) !== JSON.stringify(S.routing)) markPathwayEdited();
-    S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool; S.firstStopAll = !!sn.firstStopAll;
+    S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool; S.firstStopAll = !!sn.firstStopAll; S.platformReal = !!sn.platformReal;
   }
   syncLevels();
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
@@ -1565,6 +1565,8 @@ function renderSeedPoolPicker(){
     </label>
     <label class="bs-tier-row" style="margin-top:6px;gap:8px;align-items:center"><input type="checkbox" id="bsFirstAll" ${S.firstStopAll?'checked':''}>
       <span>Every age group competes at the first stop (Groups C/D required) — seed from Regionals + Zones combined</span></label>
+    <label class="bs-tier-row" style="margin-top:4px;gap:8px;align-items:center;${S.firstStopAll?'':'opacity:.5'}"><input type="checkbox" id="bsPlatReal" ${S.platformReal?'checked':''} ${S.firstStopAll?'':'disabled'}>
+      <span>Platform non-qualifying at the first stop: count only real Regionals platform entries there; real Zones platform entries enter the second stop by open entry, placed by club county</span></label>
     <div style="margin-top:4px">Currently seeding from actual <b>${/FirstStop$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals and Zones combined (every diver who entered an event at either, counted once per event)` : /FirstQualifying$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals for Group A/B springboard, and ${yearNumBoundary(S.year)} Zones for platform${S.year==='y26'?' and Groups C/D':''} (where those events first counted)` : `${effective} ${yearNumBoundary(S.year)}`}</b> — ${total.toLocaleString()} actual event entries, before this level's own advancement rule is applied.
     ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
   </div>`;
@@ -1599,15 +1601,56 @@ function seedPoolKey(){
   // Every age group competes at the first stop (Groups C/D included): seed it
   // from the combined pool -- every diver who entered an event at the real
   // Regionals OR Zones, once per event -- whatever Level 1 is called.
-  if (S.firstStopAll){ const k = firstQualifyingPool(year); if (k) return k; }
+  if (S.firstStopAll){
+    const k = firstQualifyingPool(year);
+    if (k && S.platformReal){ const d = platformRealPool(year, k); if (d) return d; }
+    if (k) return k;
+  }
   const stage = seedStage();
   if (stage === 'Regionals' && !/region/i.test(String(tierName(0) || ''))) {
     const k = firstQualifyingPool(year); if (k) return k;
   }
   return year + '|' + stage;
 }
+/* Every age group at the first stop, with platform counted as it was really
+   entered at the first stop (Regionals). The combined pool counts everyone who
+   dove platform at Zones as a first-stop platform entry too, which fits a first
+   stop where platform qualifies; where platform is non-qualifying at the first
+   stop, only the divers who really entered it there should count. Springboard
+   comes from the combined pool; platform from the real Regionals pool. Built
+   once per year and cached on the pools. */
+function platformRealPool(year, combinedKey){
+  const pools = S.advData && S.advData.pools; if (!pools) return null;
+  const key = year + '|FirstStop_platformAtRegionals';
+  if (pools[key]) return key;
+  const F = pools[combinedKey], R = pools[year + '|Regionals'];
+  if (!F || !R) return null;
+  const out = {};
+  for (const f in F){ for (const c in F[f]) if (c[2] !== 'P'){ (out[f] = out[f] || {})[c] = F[f][c]; } }
+  for (const f in R){ for (const c in R[f]) if (c[2] === 'P' && R[f][c]){ (out[f] = out[f] || {})[c] = R[f][c]; } }
+  pools[key] = out;
+  return key;
+}
+/* Platform open entry at level 2 for platformReal scenarios: the real 2026
+   Zones platform entries, each placed in the level-2 meet that covers the
+   diver's club county (not split evenly across meets). Returns
+   {entering, share} or null. */
+function platformOpenEntry(routing){
+  if (!(S.firstStopAll && S.platformReal) || routing.length < 2) return null;
+  const year = (S.year==='y24'?'2024':S.year==='y25'?'2025':'2026');
+  const Z = S.advData && S.advData.pools && S.advData.pools[year + '|Zones']; if (!Z) return null;
+  const P = CELLS.filter(c => c[2] === 'P'), n0 = Math.max(1, groupCountAt(0)), n1 = Math.max(1, groupCountAt(1));
+  const w = Array.from({length:n1}, () => ({})), tot = {};
+  for (const f in Z){
+    const ri = S.assign[f]; if (ri == null || ri < 0 || ri >= n0) continue;
+    const g1 = groupUp(0, ri, 1); if (g1 == null || g1 < 0 || g1 >= n1) continue;
+    P.forEach(c => { const v = +Z[f][c] || 0; if (v){ w[g1][c] = (w[g1][c] || 0) + v; tot[c] = (tot[c] || 0) + v; } });
+  }
+  P.forEach(c => { for (let g = 0; g < n1; g++) w[g][c] = tot[c] ? (w[g][c] || 0) / tot[c] : 1 / n1; });
+  return {entering: tot, share: w};
+}
 /* Stage name for plain-English text about the seed ("the real X 2026 field"). */
-function seedStageLabel(){ return /FirstStop$/.test(seedPoolKey()) ? 'Regionals + Zones (every age group at the first stop)' : seedStage(); }
+function seedStageLabel(){ const k = seedPoolKey(); return /FirstStop_platformAtRegionals$/.test(k) ? 'Regionals + Zones (every age group at the first stop; platform as entered at Regionals)' : /FirstStop$/.test(k) ? 'Regionals + Zones (every age group at the first stop)' : seedStage(); }
 /* Plain-English name of the real field that seeds the first stop. */
 function seedFieldLabel(){
   const k = seedPoolKey(), yn = yearNumBoundary(S.year);
@@ -1678,6 +1721,10 @@ function projectPathway(withTakeUp){
     P.forEach(c => { if (ent[c] == null && tot[c] > 0) ent[c] = tot[c]; });
     routing[1].entering = ent;
   }
+  // platformReal: real Zones platform entries enter level 2 by open entry, placed
+  // by club county (a copy only -- never written back into S.routing).
+  const platOpen = platformOpenEntry(routing);
+  if (platOpen){ routing[1].entering = Object.assign({}, routing[1].entering || {}, platOpen.entering); }
   // The "qualified, before take-up" breakdown projects with withTakeUp=false
   // while the panel is being drawn; resetting S.takeUp here too made the
   // footer flip to "take-up could not be measured" every time that mode was
@@ -1720,6 +1767,7 @@ function projectPathway(withTakeUp){
     groupCount: L => groupCountAt(L),
     groupOf: groupUp,
     conv, cells,
+    share: platOpen ? (L => L === 1 ? platOpen.share : null) : undefined,
   });
 }
 
@@ -3070,7 +3118,7 @@ async function newBlankProposal(){
     pushUndo();
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
-    S.routing=null; S.arrival=null; S.seedPool=null; S.firstStopAll=false; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
+    S.routing=null; S.arrival=null; S.seedPool=null; S.firstStopAll=false; S.platformReal=false; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
     S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null; S._off25=null; S._ownRouting=false;
     S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
@@ -6272,6 +6320,12 @@ function wireStructureControls(P){
     msg(firstAll.checked ? 'Level 1 now seeds from every diver who entered 2026 Regionals or Zones (all age groups at the first stop).'
                          : 'Level 1 seed back to the selected pool.');
   });
+  const platReal = P.querySelector('#bsPlatReal');
+  if (platReal) platReal.addEventListener('change', ()=>{
+    pushUndo(); S.platformReal = platReal.checked; S.dirty = true;
+    refreshFlow(); repaintAll(); renderPanel();
+    msg(platReal.checked ? 'First-stop platform now counts real Regionals platform entries; real Zones platform entries enter the second stop directly.' : 'First-stop platform back to the combined pool.');
+  });
   const seedSel = P.querySelector('#bsSeedPool');
   if (seedSel) seedSel.addEventListener('change', ()=>{
     pushUndo();
@@ -6405,7 +6459,7 @@ async function saveScenario(asNew){
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
-    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, reportText:S.reportText,
+    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText,
     levels:saveLevels, finalName:S.finalName, adv:S.adv,
     mapName:S.mapName || null, mapId:S.mapId || null,
     firstStopPlatform:S.firstStopPlatform || 'held', v:4});
@@ -6542,6 +6596,7 @@ async function loadScenario(id){
     S.arrival  = d.arrival  || null;
     S.seedPool = d.seedPool || null;
     S.firstStopAll = !!d.firstStopAll;
+    S.platformReal = !!d.platformReal;
     syncRouting();
     S.levels = migrateLevels(d, S.regions.length);
     S.finalName = d.finalName || 'Junior Nationals';

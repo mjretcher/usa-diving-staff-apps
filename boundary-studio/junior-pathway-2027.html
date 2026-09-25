@@ -110,13 +110,21 @@ function render(){
     <h2>Four scenarios under review</h2>
     <p class="lede">The CCE Submission, the USA Diving National Office Submission, and two proportional-qualification scenarios built new in Boundary Studio. Every figure is a projection from real 2026 entries, run through Boundary Studio's own engine on the same basis: entry fees only, $25 per entry to hosts, DiveMeets fees passed through. None of this changes any stored scenario or any real competition data.</p>
     <div class="scroll">${glance()}</div>
+    <div style="margin-top:14px;border:1px solid var(--line);border-left:4px solid var(--pool);border-radius:10px;padding:12px 16px;background:var(--surface-2)">
+      <b style="color:var(--navy)">Assumptions behind every figure</b>
+      <ul style="margin:6px 0 0 18px;padding:0">${DATA.assumptions.map(a=>`<li style="margin:3px 0">${esc(a)}</li>`).join('')}</ul></div>
     <p class="note">${DATA.scenarios.find(x=>x.id==='bs-msix7ibe-nij21').atStandardFees?`The National Office Submission is stored with its own fees ($90 first stop, $135 Junior Nationals). At the published 2026 fee card it projects ${usd(DATA.scenarios.find(x=>x.id==='bs-msix7ibe-nij21').atStandardFees.grossEntryIncome)} gross and ${usd(DATA.scenarios.find(x=>x.id==='bs-msix7ibe-nij21').atStandardFees.usaDivingKeeps)} to USA Diving.`:''}</p>
   </section>
   <section class="card"><h2>Entry revenue by stop</h2>
     <p class="lede">Where each scenario's entry income goes: DiveMeets fees, host share, and USA Diving's share. No expenses are modeled, matching every other Boundary Studio scenario.</p>
     ${revenueBars()}
     <div class="legend"><span><i style="background:#9aa3c7"></i>DiveMeets fees</span><span><i style="background:#009ac7"></i>To hosts</span><span><i style="background:#171f69"></i>USA Diving keeps</span></div>
-    <p class="note" style="margin-top:10px"><b>Reading the first stop:</b> all four scenarios have the same ${fmt(s.tiers[0].entries)} first-stop entries. The 9-Zone submissions price that stop as Zones ($90 every event); the proportional scenarios price it as Regionals ($85 for A/B springboard, $45 for Groups C/D and platform, including the proposed reduced C/D fee). At a flat $90 the proportional first stop would gross ${usd(s.firstStopAt90)}, identical to the submissions. The difference is the fee card, not the structure.</p>
+    ${firstStopNote(s)}
+  </section>
+  <section class="card"><h2>Membership sensitivity</h2>
+    <p class="lede">Competition membership has been declining. Every scenario re-projected through Boundary Studio's engine with 5% and 10% fewer participants at every stop.</p>
+    <div class="scroll">${sensTable()}</div>
+    <p class="note">Proportional qualification shrinks with participation at every stop, so the qualifying bar stays steady and the Junior Nationals field adjusts. Fixed "top N" places send nearly the same number to the final stop from a smaller field, which keeps its size but lowers the bar. The first stop falls slightly less than the nominal cut in all four scenarios because entries are counted in whole divers per event per meet.</p>
   </section>
   <section class="card"><h2>Who reaches Junior Nationals</h2>
     <p class="lede">Unique athletes at Junior Nationals as a share of eligible 2026 competition members in each age group and gender.</p>
@@ -155,6 +163,16 @@ function render(){
   document.querySelectorAll('[data-stage]').forEach(b=>b.onclick=()=>{STAGE=b.dataset.stage;document.querySelectorAll('[data-stage]').forEach(x=>x.setAttribute('aria-pressed',x===b));drawGrid();});
   drawGrid();
 }
+function firstStopNote(s){
+  const sub=DATA.scenarios.find(x=>x.kind==='sub'), g90=s.firstStopAt90, gSub=sub.tiers[0].gross, gPQ=s.tiers[0].gross, eDiff=sub.tiers[0].entries-s.tiers[0].entries;
+  return `<p class="note" style="margin-top:10px"><b>Reading the first stop:</b> the 9-Zone submissions count ${fmt(sub.tiers[0].entries)} first-stop entries, platform included (platform qualifies there), priced as Zones at $90 each: ${usd(gSub)}. The proportional scenarios count ${fmt(s.tiers[0].entries)}: platform is non-qualifying at Regionals, so only real 2026 Regionals platform entries are counted. They price the stop as Regionals ($85 for A/B springboard; $45 for Groups C/D and platform, including the proposed reduced C/D fee): ${usd(gPQ)}. Of the ${usd(gSub-gPQ)} difference, ${usd(gSub-g90)} is the ${fmt(eDiff)} fewer platform entries and ${usd(g90-gPQ)} is the fee card.</p>`;}
+function sensTable(){
+  const sc=DATA.scenarios,SE=DATA.sensitivity;
+  const cell=(s,k)=>{if(k==='1.00'){const t=s.tiers;return {n:t[t.length-1].entries,g:s.gross,u:s.usad,f:t[0].entries};}const x=SE[k][s.id];return {n:x.entries[x.entries.length-1],g:x.gross,u:x.usad,f:x.entries[0]};};
+  return `<table class="tbl-scen"><thead><tr><th>Scenario</th><th>Participation</th><th>First stop</th><th>Junior Nationals</th><th>Gross</th><th>USA Diving keeps</th></tr></thead><tbody>
+  ${sc.map((s,i)=>['1.00','0.95','0.90'].map((k,j)=>{const c=cell(s,k),b=cell(s,'1.00');
+    return `<tr${j===0?' style="border-top:2px solid var(--line)"':''}><td>${j===0?`<b style="color:${SC_COL[i]}">${esc(s.label)}</b>`:''}</td><td style="text-align:left">${k==='1.00'?'2026 level':k==='0.95'?'−5%':'−10%'}</td>
+      <td>${fmt(c.f)}</td><td>${fmt(c.n)}${j?` <span class="note">(${(100*(c.n/b.n-1)).toFixed(1)}%)</span>`:''}</td><td>${usd(c.g)}</td><td>${usd(c.u)}${j?` <span class="note">(${usd(c.u-b.u)})</span>`:''}</td></tr>`;}).join('')).join('')}</tbody></table>`;}
 function glance(){
   const sc=DATA.scenarios,R=DATA.references;
   const row=(lab,fn,cls='')=>`<tr${cls}><td>${lab}</td>${sc.map(fn).join('')}${R.map(r=>`<td class="note">${r._cell?r._cell(lab):''}</td>`).join('')}</tr>`;
@@ -295,7 +313,7 @@ function faq(){const Q=[
 return Q.map(q=>`<details><summary>${esc(q[0])}${q[2]?'<span class="tag">POLICY TO WRITE</span>':''}</summary><p>${esc(q[1])}</p>${q[2]?`<p class="note">Open item: ${esc(q[2])}.</p>`:''}</details>`).join('');}
 function method(){const c=DATA.checks,e=DATA.engineChecks||[];return `
 <p><b>Engine.</b> Every scenario figure on this page comes from Boundary Studio's own projection and Money calculation (the same code the app and the MCP finance tool use), run on real 2026 entries. The two proportional scenarios use Boundary Studio's native proportional qualification (route share %, round limits with roll-down, fill-to) added for this review; the change was verified to leave every existing scenario's projection exactly as before.</p>
-<p><b>Basis.</b> Entry fees only; $25 per entry to hosts for all four scenarios; DiveMeets fees passed through; no expenses (as in every Boundary Studio scenario). First stop seeded from every diver who entered 2026 Regionals or Zones, placed at the club's home Region by county. Take-up: 96.4% measured at Zones; 83.7% at Junior Nationals (2021–2025 measured); capped rounds fill by roll-down. Prequalified/HPS athletes are not added at Junior Nationals, consistent with the other stored scenarios.</p>
+<p><b>Basis.</b> See “Assumptions behind every figure” at the top. For the proportional scenarios, Boundary Studio seeds springboard at the first stop from every event entered at 2026 Regionals or Zones (every age group competes at the first stop), and platform from real 2026 Regionals platform entries; real 2026 Zones platform entries join the second stop by open entry, placed by club county. Entries are counted in whole divers per event per meet. Participation is held at 2026 levels, with a membership sensitivity at −5% and −10%.</p>
 <p><b>Maps.</b> 12-6-1 uses the published 12-Region map and current Zone pairings. 10-5-1 is a working map merging Regions 4+9 and 7+8 (Zones 1+2, 3+6, 5+7/8, 4/9+11, 10+12); final lines to be drawn in Boundary Studio.</p>
 <p><b>Schedules.</b> Solved as a scheduling problem at 2025 planning pace (30 s/dive springboard, 36 s platform) with 1m, 3m and platform running concurrently and Open events on the auxiliary 1m boards (Mission Viejo: 4×1m, 2×3m, 5/7.5/10m). With Open events counted toward the 3m/platform rest rule, 8 Nationals days works when Opens may run through Day 5 and one A/B semifinal falls two days after its prelims; a 9-day version keeps every semifinal the next day.</p>
 <p><b>CCE Submission note.</b> Its levels carry explicit “counts as” stages (Zones, E/W/C, Nationals), set by the repository’s level-stage workflow on Sep 24. That is what its projection uses.</p>
