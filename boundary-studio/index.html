@@ -974,6 +974,11 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-rail-sub>.atl-sel:not(.quiet){flex:1 1 100%;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-weight:600;color:#171F69}
 .atl-rail-sub .atl-sel{padding:4px 8px;font-size:12.5px}
 .atl-rail-list{flex:1;overflow:auto;padding:0 12px 12px;min-height:0}
+/* Map screen: the page is fitted to the window, so the rail scrolls as one column.
+   Before 2026-09-25 only the region list scrolled, and on a laptop screen the
+   rail's top section left it 56-197px tall -- the regions looked unreachable. */
+.atl-main.atl-map .atl-rail{overflow-y:auto;overscroll-behavior:contain}
+.atl-main.atl-map .atl-rail-list{flex:0 0 auto;overflow:visible;min-height:auto}
 .atl-row{display:grid;grid-template-columns:28px 1fr auto;column-gap:12px;align-items:center;width:100%;text-align:left;border-left:3px solid transparent;border-radius:4px;padding:9px 10px 9px 9px;margin-top:2px}
 .atl-row:hover{background:#f8f9fb}
 .atl-row.on{background:#f4f5f8;border-left-color:#e31937}
