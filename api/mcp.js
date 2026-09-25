@@ -88,9 +88,9 @@ const TOOLS = [
   {
     name: 'get_zone_thresholds',
     description:
-      'The official average-score bar that admits additional finishers to the next stage — for 2026, ' +
-      'the Art.303(b)(3)(ii) threshold that lets 4th–6th place E/W/C finishers advance to Junior ' +
-      'Nationals; for 2021–2025, the Region→Zone 15th-place ±1SD threshold. year is required.',
+      'The official Regionals -> Zones average-score bar that admits finishers below the place cut to Zones. ' +
+      '2026: one bar per zone and event, from the DiveMeets zone qualifier lists. 2024: one national bar per event (zone = ALL), ' +
+      'from the USA Diving 2024 Zone Qualifiers workbook. Not held here: 2025 (not on file) and the E/W/C bars. year is required.',
     inputSchema: {
       type: 'object',
       properties: {

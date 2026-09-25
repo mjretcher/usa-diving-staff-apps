@@ -9701,21 +9701,27 @@ async function loadActual2026Routes(){
    exactly that -- a count, not a claimed rule. */
 async function loadActualRoutesPre26(year){
   const rows = (await NEON.query(`with r0 as (
-      select stage, round, diver_id_dm::text did, discipline disc, left(gender,1) g, nullif(place,127) place
+      select stage, round, diver_id_dm::text did, discipline disc, right(age_group,1) grp, left(gender,1) g, nullif(place,127) place, score
       from core.event_results where year=$1 and is_junior_circuit and not coalesce(is_synchro,false)
         and diver_id_dm is not null and age_group is not null),
-    k as (select did, disc from r0 group by 1,2),
-    reg as (select did, disc, min(place) place from r0 where stage='Regionals' group by 1,2),
+    k as (select did, disc, min(grp) grp, min(g) g from r0 group by 1,2),
+    reg as (select did, disc, min(place) place, max(score) sc from r0 where stage='Regionals' group by 1,2),
     zon as (select did, disc, min(place) place from r0 where stage='Zones' group by 1,2),
     np as (select did, disc from r0 where stage='Nationals' and round='Prelim' group by 1,2),
     ns as (select did, disc from r0 where stage='Nationals' and round='Semifinal' group by 1,2),
     nf as (select did, disc from r0 where stage='Nationals' and round='Final' group by 1,2)
     select k.did, k.disc, reg.did is not null in_r, reg.place r_pl, zon.did is not null in_z, zon.place z_pl,
-      np.did is not null in_np, ns.did is not null in_ns, nf.did is not null in_nf
+      np.did is not null in_np, ns.did is not null in_ns, nf.did is not null in_nf, k.grp, k.g, reg.sc r_sc
     from k left join reg using (did,disc) left join zon using (did,disc) left join np using (did,disc)
       left join ns using (did,disc) left join nf using (did,disc)`, [year])).rows || [];
   const val = (r, k, i) => Array.isArray(r) ? r[i] : r[k];
-  const cols = ['did','disc','in_r','r_pl','in_z','z_pl','in_np','in_ns','in_nf'];
+  const cols = ['did','disc','in_r','r_pl','in_z','z_pl','in_np','in_ns','in_nf','grp','g','r_sc'];
+  // The published national 15th-place average bar per event, where it is on file
+  // (junior_results.zone_thresholds, zone = 'ALL'; 2024 from the USA Diving
+  // 2024 Zone Qualifiers workbook). No rows for a season = bar not on file.
+  const bt = (await NEON.query(`select event_key, threshold_score from junior_results.zone_thresholds where year=$1 and zone='ALL'`, [year])).rows || [];
+  const BAR = {}; bt.forEach(r => { BAR[val(r, 'event_key', 0)] = +val(r, 'threshold_score', 1); });
+  const haveBars = Object.keys(BAR).length > 0;
   const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
   const inc = (k, d) => { const c = C[k] || (C[k] = [0, 0, 0]); c[B[d]]++; };
   const bool = v => v === true || v === 't' || v === 'true';
@@ -9731,7 +9737,9 @@ async function loadActualRoutesPre26(year){
       else { const won = rp != null && rp <= 15;
         if (won) inc('R.won', d);
         if (won && inZ) inc('R.won.went', d);
-        if (!won && inZ) inc('R.low.went', d);
+        if (!won && inZ){ inc('R.low.went', d);
+          if (haveBars){ const bar = BAR[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`];
+            inc(bar != null && num(g('r_sc')) >= bar ? 'R.low.bar' : 'R.low.other', d); } }
         if (!inZ) inc(won ? 'R.stop.won' : 'R.stop.low', d); } }
     if (inZ){ inc('Z', d);
       if (!inR || plat) inc(plat ? 'Z.dir.p' : 'Z.dir.o', d);
@@ -9757,7 +9765,8 @@ async function loadActualRoutesPre26(year){
     ['Junior Nationals routes', ['zoneTop3','zoneMid','zoneAlt','otherCompeted','otherNoResult'].reduce((a, k) => a + n('N.' + k), 0), n('N')],
   ].filter(c => c[1] !== c[2]);
   if (!rows.length || checks.length) throw new Error(!rows.length ? `no ${year} results returned` : `real ${year} routes do not add up: ` + checks.map(c => `${c[0]} ${c[1]} vs ${c[2]}`).join('; '));
-  return {C, n, year, at: new Date().toISOString()};
+  const bv = Object.values(BAR);
+  return {C, n, year, at: new Date().toISOString(), bars: haveBars ? {count: bv.length, lo: Math.min(...bv), hi: Math.max(...bv)} : null};
 }
 
 function rmSpecActualPre26(A){
@@ -9779,7 +9788,7 @@ function rmSpecActualPre26(A){
       {id: 'NF', level: 2, round: 'Final', n: n('N.f'), goal: true}],
     routes: [
       {from: 'R', to: 'Z', kind: 'next', band: 'Places 1–15', places: n('R.won'), take: n('R.won.went'), pct: `${Math.round(n('R.won.went') / Math.max(1, n('R.won')) * 100)}% went`, split: s('R.won')},
-      {from: 'R', to: 'Z', kind: 'alt', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went')},
+      {from: 'R', to: 'Z', kind: A.bars ? 'avg' : 'alt', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went'), sub: A.bars ? `${f0(n('R.low.bar'))} over the average bar` : null},
       {from: 'Z', to: 'NS', kind: 'nat', band: 'Zones places 1–3 go straight to the semifinal', places: n('Z.top3'), take: n('N.zoneTop3'), split: s('Z.top3')},
       {from: 'Z', to: 'NP', kind: 'nat', band: 'Places 4–10 (4–7 platform)', places: n('Z.mid'), take: n('N.zoneMid'), pct: `${Math.round(n('N.zoneMid') / Math.max(1, n('Z.mid')) * 100)}% went`, split: s('Z.mid')},
       {from: 'Z', to: 'NP', kind: 'alt', band: 'Alternates 11–16', places: n('N.zoneAlt'), split: s('N.zoneAlt')},
@@ -9787,7 +9796,8 @@ function rmSpecActualPre26(A){
       {from: 'NS', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.f'), split: s('N.f')}],
     strip: [`WAYS INTO JUNIOR NATIONALS — ${Y} ACTUAL`,
       `Zones top 3: ${f0(n('N.zoneTop3'))} · Zones 4–10 / 4–7: ${f0(n('N.zoneMid'))} · alternates: ${f0(n('N.zoneAlt'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: `Average bar: the ${Y} Regionals \\u2192 Zones 15th-place average bar is not on file, so the ${f0(n('R.low.went'))} who reached Zones from 16th or lower are shown as a count, not attributed to it.`,
+    bars: A.bars ? `Average bars (published, ${Y}): Regionals → Zones, ${A.bars.count} national event bars from ${A.bars.lo.toFixed(3)} to ${A.bars.hi.toFixed(3)} (USA Diving ${Y} Zone Qualifiers workbook); ${f0(n('R.low.bar'))} of the ${f0(n('R.low.went'))} who reached Zones from 16th or lower cleared the bar, ${f0(n('R.low.other'))} came in another way.`
+      : `Average bar: the ${Y} Regionals → Zones 15th-place average bar is not on file, so the ${f0(n('R.low.went'))} who reached Zones from 16th or lower are shown as a count, not attributed to it.`,
     foot: `It is every real ${Y} Junior Circuit entry, followed from results by diver and board, under the ${Y} rules (no E/W/C). ${f0(rDirPlat)} platform entries also dove Regionals as exhibition.`};
 }
 
