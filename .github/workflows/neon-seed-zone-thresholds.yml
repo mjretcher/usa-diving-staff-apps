@@ -2,7 +2,8 @@ name: Neon seed — junior_results.zone_thresholds
 
 # Average-score bars. zone says where a bar applies:
 #   A-F  2026 Regionals -> Zones, one per zone and event (DiveMeets zone qualifier lists)
-#   ALL  a season's national Regionals -> Zones bar per event (2024: USA Diving workbook)
+#   ALL  a season's national Regionals -> Zones bar per event (2024: USA Diving workbook;
+#        2025: 5 published on DiveMeets, 11 recomputed by DiveMeets' published method)
 #   EWC  2026 E/W/C -> Junior Nationals 3rd-place average per event (Art. 303(b)(3)(ii))
 #   Z18  2026 Zones -> E/W/C 18th-place average per event (Art. 304(a)(3))
 # This table is the single source for all three; the apps and reports read it.

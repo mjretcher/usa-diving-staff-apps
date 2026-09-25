@@ -90,8 +90,8 @@ const TOOLS = [
     description:
       'The official Regionals -> Zones average-score bar that admits finishers below the place cut to Zones. ' +
       '2026: one bar per zone and event, from the DiveMeets zone qualifier lists. 2024: one national bar per event (zone = ALL), ' +
-      'from the USA Diving 2024 Zone Qualifiers workbook. zone = EWC: the 2026 E/W/C -> Junior Nationals 3rd-place average per event ' +
-      '(Art. 303(b)(3)(ii)). Not held: 2025 Regionals bars and the 2026 Zones -> E/W/C 18th-place bar (not on file). year is required.',
+      'from the USA Diving 2024 Zone Qualifiers workbook; 2025 likewise (zone = ALL; 5 published on DiveMeets, 11 recomputed by its published method). zone = Z18: 2026 Zones -> E/W/C 18th-place average. zone = EWC: the 2026 E/W/C -> Junior Nationals 3rd-place average per event ' +
+      '(Art. 303(b)(3)(ii)). year is required.',
     inputSchema: {
       type: 'object',
       properties: {

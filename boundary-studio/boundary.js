@@ -9871,7 +9871,7 @@ function rmSpecActualPre26(A){
       {from: 'NS', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.f'), split: s('N.f')}],
     strip: [`WAYS INTO JUNIOR NATIONALS — ${Y} ACTUAL`,
       `Zones top 3: ${f0(n('N.zoneTop3'))} · Zones 4–10 / 4–7: ${f0(n('N.zoneMid'))} · alternates: ${f0(n('N.zoneAlt'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: A.bars ? `Average bars (published, ${Y}): Regionals → Zones, ${A.bars.count} national event bars from ${A.bars.lo.toFixed(3)} to ${A.bars.hi.toFixed(3)} (USA Diving ${Y} Zone Qualifiers workbook); ${f0(n('R.low.bar'))} of the ${f0(n('R.low.went'))} who reached Zones from 16th or lower cleared the bar, ${f0(n('R.low.other'))} came in another way.`
+    bars: A.bars ? `Average bars (published, ${Y}): Regionals → Zones, ${A.bars.count} national event bars from ${A.bars.lo.toFixed(3)} to ${A.bars.hi.toFixed(3)} (${Y === 2024 ? 'USA Diving 2024 Zone Qualifiers workbook' : 'DiveMeets zone qualifier pages; events not shown there recomputed by DiveMeets\u2019 published method'}); ${f0(n('R.low.bar'))} of the ${f0(n('R.low.went'))} who reached Zones from 16th or lower cleared the bar, ${f0(n('R.low.other'))} came in another way.`
       : `Average bar: the ${Y} Regionals → Zones 15th-place average bar is not on file, so the ${f0(n('R.low.went'))} who reached Zones from 16th or lower are shown as a count, not attributed to it.`,
     foot: `It is every real ${Y} Junior Circuit entry, followed from results by diver and board, under the ${Y} rules (no E/W/C). ${f0(rDirPlat)} platform entries also dove Regionals as exhibition.`};
 }
