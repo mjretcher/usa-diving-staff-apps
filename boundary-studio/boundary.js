@@ -1430,6 +1430,11 @@ function levelStage(L){
 }
 /* Regionals / Zones / EWC for calibration; the championship matches nothing on
    purpose (see stageForName). */
+const STAGE_LABEL = {Regionals: 'Regionals', Zones: 'Zones', EWC: 'East / West / Central', Nationals: 'Junior Nationals'};
+/* Levels whose stage was worked out from their meet count rather than set or named. */
+function inferredStageLevels(){
+  return (S.levels || []).map((_, L) => ({L, r: levelStage(L)})).filter(x => x.r.how === 'structure');
+}
 function stageNameForLevel(L){
   const st = levelStage(L).stage;
   return st === 'Nationals' ? null : st;
@@ -6142,6 +6147,14 @@ function wireStructureControls(P){
     // the same group can appear in two columns; keep them in step
     P.querySelectorAll(`.bs-gname[data-lvl="${lvl}"][data-gi="${gi}"]`).forEach(o=>{ if(o!==inp) o.value = v; });
   });
+  P.querySelectorAll('.bs-lvlstage').forEach(sel => sel.addEventListener('change', () => {
+    const lvl = +sel.dataset.lvl;
+    pushUndo();
+    if (sel.value) S.levels[lvl].stage = sel.value; else delete S.levels[lvl].stage;
+    S.dirty = true;
+    msg(`${tierName(lvl)} now counts as ${STAGE_LABEL[levelStage(lvl).stage]}${sel.value ? '' : ' (automatic)'} — its take-up, fees and comparisons follow that stage.`);
+    setTimeout(() => { repaintAll(); renderPanel(); }, 0);
+  }));
   nameBind('.bs-lvlname', inp=>{
     const lvl = +inp.dataset.lvl;
     S.levels[lvl].name = inp.value;
@@ -8722,9 +8735,14 @@ function atlasStructureHtml(res){
   const lvlRows = Array.from({length:N}, (_,i) => {
     const n = groupCountAt(i);
     const what = n === 1 && i === N-1 ? 'meet' : (n === 1 ? 'stop' : (singulariseLevel(tierName(i)) ? tierName(i).toLowerCase() : 'stops'));
+    const st = levelStage(i), set = S.levels[i] && S.levels[i].stage;
+    const auto = `Auto: ${STAGE_LABEL[st.stage]}${st.how === 'structure' ? ` (from ${st.meets} ${st.meets === 1 ? 'meet' : 'meets'})` : ' (from name)'}`;
+    const opts = [['', auto]].concat(Object.entries(STAGE_LABEL)).map(([v, l]) => `<option value="${v}" ${(set || '') === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
     return `<div class="atl-lvl"><span class="mono">${i+1}</span>
       <input class="atl-in bs-lvlname" data-lvl="${i}" value="${esc(tierName(i))}">
-      <span class="mono">${fmt(n)} ${esc(what)}</span></div>`;
+      <span class="mono">${fmt(n)} ${esc(what)}</span>
+      <label class="atl-lvlstage${st.how === 'structure' ? ' inferred' : ''}" title="Which real stage this level stands in for: its measured take-up, fees, real-field comparison and athlete counts come from that stage">Counts as
+        <select class="atl-sel bs-lvlstage" data-lvl="${i}">${opts}</select></label></div>`;
   }).join('');
 
   const rollBlocks = [];
@@ -9629,10 +9647,8 @@ const rmOrd = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s
    Squad, competed without a qualifying finish, no Zones/E/W/C result. The
    E/W/C 4th-6th group is split by whether the final score cleared the
    published 2026 average bar (Art. 303(b)(3)(ii)). */
-const RM_EWC_BAR = {'A|B|1M':403.85,'A|B|3M':425.85,'A|B|Platform':356.517,'A|G|1M':340.65,'A|G|3M':376.9,'A|G|Platform':318.1,
-  'B|B|1M':303.85,'B|B|3M':333.467,'B|B|Platform':273,'B|G|1M':278.383,'B|G|3M':294.083,'B|G|Platform':245.883,
-  'C|B|1M':236.883,'C|B|3M':236,'C|B|Platform':169.217,'C|G|1M':234,'C|G|3M':243.317,'C|G|Platform':185.667,
-  'D|B|1M':146.95,'D|B|3M':147.95,'D|B|Platform':155.85,'D|G|1M':164.233,'D|G|3M':170.533,'D|G|Platform':143.983};
+/* E/W/C -> Junior Nationals average bars come from junior_results.zone_thresholds
+   (zone = 'EWC'), the one place they are stored; loaded with the results below. */
 async function loadActual2026Routes(){
   const rows = (await NEON.query(`with r0 as (
       select stage, round, diver_id_dm::text did, discipline disc, right(age_group,1) grp, left(gender,1) g,
@@ -9657,7 +9673,10 @@ async function loadActual2026Routes(){
   // Published 2026 Regionals -> Zones average bars, one per zone and event
   // (DiveMeets zone qualifier lists; junior_results.zone_thresholds).
   const zb = (await NEON.query(`select zone, event_key, threshold_score from junior_results.zone_thresholds where year=2026`)).rows || [];
-  const ZBAR = {}; zb.forEach(r => { ZBAR[val(r, 'zone', 0) + '|' + val(r, 'event_key', 1)] = +val(r, 'threshold_score', 2); });
+  const ZBAR = {}, EBAR = {};
+  zb.forEach(r => { const z = val(r, 'zone', 0), k = val(r, 'event_key', 1), v = +val(r, 'threshold_score', 2);
+    if (z === 'EWC') EBAR[k] = v; else if (/^[A-F]$/.test(z)) ZBAR[z + '|' + k] = v; });
+  if (Object.keys(EBAR).length !== 24) throw new Error(`E/W/C average bars: ${Object.keys(EBAR).length} of 24 on file`);
   const hk = new Set(hps.map(h => val(h, 'kk', 0))), hn = new Set(hps.map(h => val(h, 'nm', 1)));
   const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
   const inc = (k, d) => { const c = C[k] || (C[k] = [0, 0, 0]); c[B[d]]++; };
@@ -9692,7 +9711,7 @@ async function loadActual2026Routes(){
       let cat;
       if (inZ && zp != null && zp <= 3) cat = 'zoneTop3';
       else if (inEF && ef != null && ef <= 3) cat = 'ewcTop3';
-      else if (inEF && ef != null && ef <= 6){ const bar = RM_EWC_BAR[g('grp') + '|' + g('g') + '|' + d]; cat = bar != null && num(g('ef_sc')) >= bar ? 'ewcBar' : 'ewcBelow'; }
+      else if (inEF && ef != null && ef <= 6){ const bar = EBAR[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`]; cat = bar != null && num(g('ef_sc')) >= bar ? 'ewcBar' : 'ewcBelow'; }
       else if (hk.has('dm:' + g('did')) || hn.has(g('nm'))) cat = 'hps';
       else if (inZ || inE) cat = 'otherCompeted';
       else cat = 'otherNoResult';
@@ -9709,7 +9728,7 @@ async function loadActual2026Routes(){
   const zv = Object.values(ZBAR);
   return {C, n, at: new Date().toISOString(), year: 2026,
     bars: {zones: zv.length ? {count: zv.length, lo: Math.min(...zv), hi: Math.max(...zv)} : null,
-           ewc: {count: Object.keys(RM_EWC_BAR).length, lo: Math.min(...Object.values(RM_EWC_BAR)), hi: Math.max(...Object.values(RM_EWC_BAR))}}};
+           ewc: {count: Object.keys(EBAR).length, lo: Math.min(...Object.values(EBAR)), hi: Math.max(...Object.values(EBAR))}}};
 }
 
 /* A 2021-2025-rules season (2024 and 2025 are loaded) as it ran: Regions ->
@@ -10232,6 +10251,7 @@ function atlasReportHtml(res){
     ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
     ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
     ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
+    ${inferredStageLevels().length ? `<p class="atl-m" style="color:#9a4a06">Stages worked out from meet counts, not set: ${inferredStageLevels().map(x => `${esc(tierName(x.L))} counts as ${esc(STAGE_LABEL[x.r.stage])} (${x.r.meets} ${x.r.meets === 1 ? 'meet' : 'meets'})`).join('; ')}. Set each on the Structure tab ("Counts as") to fix it.</p>` : ''}
     ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
                        : `Figures are live from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the proposal before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
     ${pageFoot(nPages)}</article>`;

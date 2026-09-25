@@ -23,40 +23,13 @@
   var SEASON   = 2026;
   var injected = false;
 
-  /* Official 3rd-place-average thresholds (2026 Art.303(b)(3)(ii)), supplied
-     by Mike. This is the cross-meet score bar that admits 4th-6th place E/W/C
-     finishers to Junior Nationals alongside the top-3 direct qualifiers.
-     Keyed "Group X|Boys/Girls|1M/3M/Platform" to match the age_group/gender/
-     discipline columns coming back from core.event_results. */
-  var EWC_AVG_THRESHOLD = {
-    'Group A|Boys|1M':       403.85,
-    'Group A|Boys|3M':       425.85,
-    'Group A|Boys|Platform': 356.517,
-    'Group A|Girls|1M':      340.65,
-    'Group A|Girls|3M':      376.9,
-    'Group A|Girls|Platform':318.1,
-
-    'Group B|Boys|1M':       303.85,
-    'Group B|Boys|3M':       333.467,
-    'Group B|Boys|Platform': 273,
-    'Group B|Girls|1M':      278.383,
-    'Group B|Girls|3M':      294.083,
-    'Group B|Girls|Platform':245.883,
-
-    'Group C|Boys|1M':       236.883,
-    'Group C|Boys|3M':       236,
-    'Group C|Boys|Platform': 169.217,
-    'Group C|Girls|1M':      234,
-    'Group C|Girls|3M':      243.317,
-    'Group C|Girls|Platform':185.667,
-
-    'Group D|Boys|1M':       146.95,
-    'Group D|Boys|3M':       147.95,
-    'Group D|Boys|Platform': 155.85,
-    'Group D|Girls|1M':      164.233,
-    'Group D|Girls|3M':      170.533,
-    'Group D|Girls|Platform':143.983
-  };
+  /* Official 3rd-place-average thresholds (2026 Art.303(b)(3)(ii)) -- the bar
+     that admits 4th-6th place E/W/C finishers to Junior Nationals. Read from
+     junior_results.zone_thresholds (zone = 'EWC'), the single stored copy that
+     Boundary Studio and the committee reports also use; keyed here
+     "Group X|Boys/Girls|1M/3M/Platform" to match core.event_results columns. */
+  var EWC_AVG_THRESHOLD = {};
+  var barsLoaded = false;
   function ewcAvgThreshold(ageGroup, gender, discipline) {
     var key = String(ageGroup || '') + '|' + String(gender || '') + '|' + String(discipline || '');
     return Object.prototype.hasOwnProperty.call(EWC_AVG_THRESHOLD, key) ? EWC_AVG_THRESHOLD[key] : null;
@@ -99,7 +72,16 @@
       " diver_id_dm, diver_first, diver_last, team_name, team_code, zone, place, score, event_name" +
       " FROM core.event_results" +
       " WHERE year = $1 AND stage = 'EWC' AND is_junior_circuit AND place IS NOT NULL";
-    window.NEON.query(sql, [SEASON]).then(function (res) {
+    window.NEON.query("SELECT event_key, threshold_score FROM junior_results.zone_thresholds WHERE year = $1 AND zone = 'EWC'", [SEASON]).then(function (b) {
+      ((b && b.rows) || []).forEach(function (r) {
+        var k = Array.isArray(r) ? r[0] : r.event_key, v = Array.isArray(r) ? r[1] : r.threshold_score;
+        var p = String(k || '').split(' ');           // "Group A Girls 1M" -> Group A | Girls | 1M
+        if (p.length === 4) EWC_AVG_THRESHOLD[p[0] + ' ' + p[1] + '|' + p[2] + '|' + p[3]] = Number(v);
+      });
+      barsLoaded = Object.keys(EWC_AVG_THRESHOLD).length === 24;
+      if (!barsLoaded) console.error('[ewc-neon-loader] E/W/C average bars: ' + Object.keys(EWC_AVG_THRESHOLD).length + ' of 24 loaded -- 4th-6th qualifiers cannot be evaluated');
+      return window.NEON.query(sql, [SEASON]);
+    }).then(function (res) {
       var raw = (res && res.rows) || [];
       if (raw.length) injectRows(raw);
     }).catch(function (e) {
@@ -231,7 +213,13 @@
     });
 
     /* 5) Inject once, then recompute + re-render so the engine and views pick it up. */
-    DATA.results = DATA.results.filter(function (r) { return !r._ewcNeonInjected; });
+    /* Replace every E/W/C row, not just our own. data/ewc-results-2026.js (a
+       partial 6/27 export: 607 rows, 12 of 24 events) also merges E/W/C rows into
+       DATA.results, with its own average bar (the mean of all top-3 scores, not
+       the published 3rd-place average). Both sets were loaded together until
+       2026-09-25, so those 12 events carried every diver twice. The complete
+       results from Neon win; the static file remains only the offline fallback. */
+    DATA.results = DATA.results.filter(function (r) { return r.stage !== 'EWC'; });
     Array.prototype.push.apply(DATA.results, rows);
     injected = true;
 

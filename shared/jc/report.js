@@ -80,16 +80,10 @@ async function actualCohorts(year) {
      -> High Performance Squad (published list) -> competed at Zones/E/W/C in
      that event without a qualifying finish (backfilled places and other
      approvals) -> no Zones/E/W/C result in that event. */
-/* Official 2026 E/W/C -> Junior Nationals average bars (Art. 303(b)(3)(ii)), the
-   same table the Junior Results app and Boundary Studio use. Until 2026-09-25 every
-   E/W/C 4th-6th finisher who dove Junior Nationals was reported as meeting the
-   average score (44); 10 of them finished below their bar. */
-const EWC_BAR = {'A|B|1M':403.85,'A|B|3M':425.85,'A|B|Platform':356.517,'A|G|1M':340.65,'A|G|3M':376.9,'A|G|Platform':318.1,
-  'B|B|1M':303.85,'B|B|3M':333.467,'B|B|Platform':273,'B|G|1M':278.383,'B|G|3M':294.083,'B|G|Platform':245.883,
-  'C|B|1M':236.883,'C|B|3M':236,'C|B|Platform':169.217,'C|G|1M':234,'C|G|3M':243.317,'C|G|Platform':185.667,
-  'D|B|1M':146.95,'D|B|3M':147.95,'D|B|Platform':155.85,'D|G|1M':164.233,'D|G|3M':170.533,'D|G|Platform':143.983};
-const EWC_BAR_SQL = Object.entries(EWC_BAR).map(([k, v]) => { const [a, g, d] = k.split('|'); return `('${a}','${g}','${d}',${v}::numeric)`; }).join(',');
-
+/* E/W/C -> Junior Nationals average bars (Art. 303(b)(3)(ii)) are read from
+   junior_results.zone_thresholds (zone = 'EWC'), the one place they are stored.
+   Until 2026-09-25 every E/W/C 4th-6th finisher who dove Junior Nationals was
+   reported as meeting the average score (44); 10 of them finished below their bar. */
 async function nationals2026Breakdown() {
   const base = `with jn as (select distinct diver_id_dm::text did, discipline disc,
         lower(regexp_replace(diver_first||' '||diver_last,'\\s+',' ','g')) nm
@@ -98,7 +92,8 @@ async function nationals2026Breakdown() {
       where year=2026 and is_junior_circuit and not coalesce(is_synchro,false) and diver_id_dm is not null
         and stage in ('Zones','EWC') and round='Final'),
     top3 as (select distinct did, disc, stage from fin where place between 1 and 3),
-    bar as (select * from (values ${EWC_BAR_SQL}) v(grp, g, disc, bar)),
+    bar as (select right(split_part(event_key,' ',2),1) grp, left(split_part(event_key,' ',3),1) g, split_part(event_key,' ',4) disc, threshold_score bar
+      from junior_results.zone_thresholds where year=2026 and zone='EWC'),
     hps as (select distinct diver_key k, lower(regexp_replace(athlete_name,'\\s+',' ','g')) nm
       from junior_results.projected_nationals_field where season=2026 and qualification_path like 'HPS%'),
     anyres as (select distinct diver_id_dm::text did, discipline disc from core.event_results

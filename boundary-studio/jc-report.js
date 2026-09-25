@@ -13,7 +13,7 @@
  * projected, modeled). Ranges state their reason.
  */
 import './jc-browser.js?v=202609250140';
-import { buildJuniorCircuitReport, JC_BUILTIN, JC_SECTIONS, JC_REPORT_KIND } from '../shared/jc/report.js?v=202609250140';
+import { buildJuniorCircuitReport, JC_BUILTIN, JC_SECTIONS, JC_REPORT_KIND } from '../shared/jc/report.js?v=202609250150';
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v) => (v == null || !Number.isFinite(+v) ? '—' : Math.round(+v).toLocaleString('en-US'));
