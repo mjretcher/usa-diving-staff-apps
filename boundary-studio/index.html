@@ -939,7 +939,8 @@ tr[data-hl]:hover{background:#eef7fb}
 
 /* --- Map workspace --- */
 .atl-main{flex:1;min-height:0}
-.atl-main.atl-map{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:calc(100vh - 56px);position:relative}
+.atl-main.atl-map{display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:minmax(0,1fr);flex:0 0 auto;height:calc(var(--atl-map-h, calc(100vh - 108px)) + 52px);position:relative}
+.atl:has(> .atl-main.atl-map){min-height:0}
 .atl-rail{background:#fff;border-right:1px solid #dfe3ea;display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0}
 .atl-rail *{min-width:0}
 .atl-rail-open{display:block;width:100%;margin-top:10px;color:#009ac7;font-weight:500}
@@ -997,7 +998,8 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-rail-links{display:flex;flex-wrap:wrap;gap:4px 12px;padding:6px 10px 0;font-size:12.5px}
 .atl-rail-note{padding:8px 10px 0;font-size:12px;color:#9aa5b8;line-height:1.5}
 .atl-mapsec{position:relative;overflow:hidden;background:radial-gradient(900px 500px at 50% 45%,#ffffff 0%,#f4f5f8 70%);min-width:0}
-.atl-mapslot #bsSvg{width:100%;height:calc(100vh - 56px - 52px);display:block;touch-action:none;user-select:none;cursor:crosshair}
+.atl-main.atl-map .atl-mapslot{padding-top:50px}
+.atl-mapslot #bsSvg{width:100%;height:calc(var(--atl-map-h, calc(100vh - 108px)) - 50px);display:block;touch-action:none;user-select:none;cursor:crosshair}
 .atl-mapslot.tool-pan #bsSvg{cursor:grab}
 .atl-mapslot.erase #bsSvg{cursor:cell}
 .atl-tools{position:absolute;left:0;right:0;margin-inline:auto;width:max-content;top:12px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;max-width:calc(100% - 32px);background:#fff;border:1px solid #dfe3ea;border-radius:10px;padding:5px 8px;box-shadow:0 8px 24px rgba(23,31,105,.12);z-index:5;font-size:13px}
@@ -1549,7 +1551,7 @@ tr[data-hl]:hover{background:#eef7fb}
 <script id="bsAppScripts" type="application/json">[
   {"src":"routing.js?v=202609171730"},
   {"src":"scenario-schedule-engine.js?v=202608281800"},
-  {"src":"boundary.js?v=202609250018"},
+  {"src":"boundary.js?v=202609250031"},
   {"src":"bs-reports.js?v=202609171930"},
   {"src":"jc-report.js?v=202609171200","module":true},
   {"src":"pricing.js?v=202609171200"}

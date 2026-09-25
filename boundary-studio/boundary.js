@@ -870,6 +870,11 @@ function zoomBy(f){
   applyZoom();
 }
 function panBy(dx, dy){ if (S.zoom.k <= 1) return; S.zoom.x += dx; S.zoom.y += dy; applyZoom(); }
+function svgUnitsPerPx(svg){
+  const m = svg && svg.getScreenCTM && svg.getScreenCTM();
+  return m && m.a ? 1 / m.a : 975 / Math.max(1, svg.clientWidth);
+}
+
 function applyZoom(){
   const g = document.getElementById('bsSvgG');
   if (g) g.setAttribute('transform', `translate(${S.zoom.x},${S.zoom.y}) scale(${S.zoom.k})`);
@@ -5883,8 +5888,11 @@ function wireMap(){
   });
   svg.addEventListener('pointermove', e=>{
     if (panStart){
-      S.zoom.x = panStart.zx + (e.clientX - panStart.x) * (975 / svg.clientWidth);
-      S.zoom.y = panStart.zy + (e.clientY - panStart.y) * (975 / svg.clientWidth);
+      // Map units per screen pixel from the SVG's own transform: correct whichever
+      // way the map is letterboxed (the workspace is sized to the screen now).
+      const u = svgUnitsPerPx(svg);
+      S.zoom.x = panStart.zx + (e.clientX - panStart.x) * u;
+      S.zoom.y = panStart.zy + (e.clientY - panStart.y) * u;
       applyZoom(); return;
     }
     const t = e.target.closest('path.bcty');
@@ -5951,10 +5959,12 @@ function wireMap(){
   svg.addEventListener('lostpointercapture', () => { if (panStart) stop(); });
   svg.addEventListener('wheel', e=>{
     e.preventDefault();
-    const rect = svg.getBoundingClientRect();
-    const mx = (e.clientX-rect.left) * (975/rect.width), my = (e.clientY-rect.top) * (975/rect.width);
+    const m = svg.getScreenCTM();
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const at = m ? pt.matrixTransform(m.inverse()) : {x: 0, y: 0};
+    const mx = at.x, my = at.y;
     if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY)){        // two-finger sideways swipe: move
-      if (S.zoom.k > 1){ S.zoom.x -= e.deltaX * (975/rect.width); applyZoom(); }
+      if (S.zoom.k > 1){ S.zoom.x -= e.deltaX * svgUnitsPerPx(svg); applyZoom(); }
       return;
     }
     const f = e.ctrlKey ? Math.exp(-e.deltaY * 0.01) : (e.deltaY < 0 ? 1.18 : 1/1.18);
@@ -10072,6 +10082,29 @@ function exportChangesCsv(){
    with a classic hook is wired by wirePathway(), wireSchedule() and
    wireStructureControls() exactly as before.
    ========================================================================= */
+/* Size the map workspace to the screen that is actually left under the page
+   chrome (site header, studio tabs, report bar, Boundary Studio nav), so the
+   whole map, its toolbar (undo, paint / whole state, zoom) and the numbers
+   strip are on screen together with no page scrolling. The map keeps its
+   shape and simply draws smaller; the left rail scrolls inside itself.
+   Never below 380px, so a short laptop screen still gets a usable map; the
+   top 50px is kept clear so the toolbar never sits on the map. */
+function fitAtlasMap(){
+  const sec = document.querySelector('.atl-main.atl-map .atl-mapsec');
+  if (!sec) return;
+  const top = sec.getBoundingClientRect().top + window.scrollY;
+  let h = Math.max(380, Math.floor(window.innerHeight - top - 52 - 4));
+  document.documentElement.style.setProperty('--atl-map-h', h + 'px');
+  // Whatever padding sits below the workspace still makes the page scroll; take it off too.
+  const extra = document.documentElement.scrollHeight - window.innerHeight;
+  if (extra > 0 && h > 380){ h = Math.max(380, h - extra); document.documentElement.style.setProperty('--atl-map-h', h + 'px'); }
+  if (!fitAtlasMap._wired){
+    fitAtlasMap._wired = true;
+    let raf = 0;
+    window.addEventListener('resize', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(fitAtlasMap); });
+  }
+}
+
 function atlasMain(){
   applySelectedLift();   // deferred a frame, so it sees the redrawn map
   const main = $id('atlMain'); if (!main) return;
@@ -10085,6 +10118,7 @@ function atlasMain(){
     wireAtlasMap();
     atlasRailRows(computeTallies());
     renderConsequenceStrip();
+    fitAtlasMap();
     keepRestore(place, 'atlMain');
     return;
   }
