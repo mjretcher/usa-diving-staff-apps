@@ -14,7 +14,7 @@
 /* One athlete, one event, one meet = one fee. However many rounds they swim. */
 const fs=require('fs'); const {JSDOM}=require('jsdom');
 const w=new JSDOM('',{runScripts:'outside-only'}).window;
-w.eval(fs.readFileSync('routing.js','utf8'));
+w.eval(fs.readFileSync('../boundary-studio/routing.js','utf8'));
 const R=w.QualRouting;
 const C=['AG1'];   // a single event, so every number is a headcount
 

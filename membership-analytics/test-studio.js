@@ -30,8 +30,8 @@
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 const w = new JSDOM('', { runScripts: 'outside-only' }).window;
-w.eval(fs.readFileSync('routing.js', 'utf8'));
-w.eval(fs.readFileSync('scenario-schedule-engine.js', 'utf8'));
+w.eval(fs.readFileSync('../boundary-studio/routing.js', 'utf8'));
+w.eval(fs.readFileSync('../boundary-studio/scenario-schedule-engine.js', 'utf8'));
 const QR = w.QualRouting;
 const E = w.ScenarioScheduleEngine || (typeof module !== 'undefined' && module.exports);
 

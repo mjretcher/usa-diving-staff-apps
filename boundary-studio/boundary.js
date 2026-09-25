@@ -170,6 +170,11 @@ const S = {
   atlMenu: false,
 };
 
+/* Every data file is read from membership-analytics/, the one directory the
+   build workflows write to. Boundary Studio used to fetch its own copies, which
+   no workflow refreshed -- advance-data, comp-athletes-data, membership-geo and
+   qual-data had already drifted from the rebuilt ones by 2026-09-25. */
+const DATA_DIR = '../membership-analytics/';
 const fmt = n => Number(n||0).toLocaleString('en-US');
 const usd = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
 
@@ -1285,7 +1290,7 @@ function syncRouting(){
     // structure -- rather than collapsing onto E/W/C, which over-fed it by the
     // whole top-3 cohort (verified against real 2026 E/W/C: 1,414 with them,
     // 1,104 without, actual 1,046). Calibration already subtracts them.
-    const lastIsNationals = /national/i.test(String((S.levels[n-1] && S.levels[n-1].name) || ''));
+    const lastIsNationals = levelStage(n - 1).stage === 'Nationals';
     S.routing = QR().defaultRouting(n - 1, lastIsNationals ? n - 1 : n);
   }
   while (S.routing.length < n) S.routing.push({rounds:[{key:'final'}], routes:[]});
@@ -1327,12 +1332,12 @@ function multBasisFor(L){
 async function ensureMult(){
   if (S.mult) return S.mult;
   try {
-    const r = await fetch('athlete-multiplicity.json?v=' + Date.now().toString(36).slice(0,5));
+    const r = await fetch(DATA_DIR + 'athlete-multiplicity.json?v=' + Date.now().toString(36).slice(0,5));
     S.mult = r.ok ? await r.json() : null;
   } catch(e){ console.warn('multiplicity', e); S.mult = null; }
   if (!S.gender){
     try {
-      const g = await fetch('gender-data.json?v=' + Date.now().toString(36).slice(0,5));
+      const g = await fetch(DATA_DIR + 'gender-data.json?v=' + Date.now().toString(36).slice(0,5));
       S.gender = g.ok ? await g.json() : null;
     } catch(e){ S.gender = null; }
   }
@@ -1400,12 +1405,38 @@ function realStageField(stage, year){
   let t = 0; for (const f in P) for (const c in P[f]) t += P[f][c];
   return t;
 }
-function stageNameForLevel(L){
+/* The real stage a level stands in for -- Regionals, Zones, EWC or Nationals.
+   An explicit levels[L].stage wins; then the level's name; then its structure.
+   Matching on the name alone broke when the CCE Submission renamed its levels
+   "1st round / 2nd round / The Finals" (2026-09-18): its E/W/C-equivalent level
+   silently lost its measured take-up (projected at 100%), its championship lost
+   its Junior Nationals fee-row match and athlete counts, and its figures moved
+   with no change to the pathway. Structure cannot be renamed: a one-meet last
+   level is the championship; a later level of up to four meets is E/W/C-like;
+   up to nine meets is Zone-like; more is Regional-like. */
+function levelStage(L){
+  const lv = S.levels && S.levels[L];
+  if (lv && lv.stage) return {stage: lv.stage, how: 'set'};
   const n = String(tierName(L) || '').toLowerCase();
-  if (/region/.test(n)) return 'Regionals';
-  if (/zone/.test(n)) return 'Zones';
-  if (/east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n)) return 'EWC';
-  return null;
+  if (/region/.test(n)) return {stage: 'Regionals', how: 'name'};
+  if (/zone/.test(n)) return {stage: 'Zones', how: 'name'};
+  if (/east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(n)) return {stage: 'EWC', how: 'name'};
+  if (/national|championship/.test(n)) return {stage: 'Nationals', how: 'name'};
+  const N = (S.levels || []).length, g = Math.max(1, groupCountAt(L));
+  if (N > 1 && L === N - 1 && g === 1) return {stage: 'Nationals', how: 'structure', meets: g};
+  if (L > 0 && g <= 4) return {stage: 'EWC', how: 'structure', meets: g};
+  if (g <= 9) return {stage: 'Zones', how: 'structure', meets: g};
+  return {stage: 'Regionals', how: 'structure', meets: g};
+}
+/* Regionals / Zones / EWC for calibration; the championship matches nothing on
+   purpose (see stageForName). */
+function stageNameForLevel(L){
+  const st = levelStage(L).stage;
+  return st === 'Nationals' ? null : st;
+}
+function stageMatchNote(L){
+  const r = levelStage(L);
+  return r.how === 'structure' ? ` · matched by its ${r.meets} ${r.meets === 1 ? 'meet' : 'meets'}` : '';
 }
 
 function measuredArrival(L){
@@ -2018,10 +2049,7 @@ function feeFor(L){
   // E/W/C rate at Zones -- one tier too high across the board. Same fix as
   // Pricing Studio's defaultFeeForLevel; position is only the fallback for a
   // level whose name matches no stage.
-  const nm = String((S.levels[L] && S.levels[L].name) || '').toLowerCase();
-  const byStage = /region/.test(nm) ? 0 : /zone/.test(nm) ? 1
-                : /east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(nm) ? 2
-                : /national|championship/.test(nm) ? 3 : null;
+  const byStage = {Regionals: 0, Zones: 1, EWC: 2, Nationals: 3}[levelStage(L).stage];
   if (byStage != null) return DEFAULT_FEES[byStage];
   // Last level is the championship; otherwise walk the published ladder.
   if (L === n - 1) return DEFAULT_FEES[3];
@@ -2076,9 +2104,7 @@ function meetMoney(m){
   // hold athletes who dove; DiveMeets bills everyone who paid), the late-fee
   // share and average, the sheet-change $/entry, and the host share of net.
   // Absent, everything below falls back to the per-field inputs / defaults.
-  const stageNm = String((S.levels[m.level] && S.levels[m.level].name) || '').toLowerCase();
-  const stageKey = /region/.test(stageNm) ? 'Regionals' : /zone/.test(stageNm) ? 'Zones'
-                 : /east|west|central|e\s*\/\s*w\s*\/\s*c|\bewc\b/.test(stageNm) ? 'E / W / C' : /national/.test(stageNm) ? 'Nationals' : null;
+  const stageKey = {Regionals: 'Regionals', Zones: 'Zones', EWC: 'E / W / C', Nationals: 'Nationals'}[levelStage(m.level).stage] || null;
   const rr = (S.recapRates && stageKey && S.recapRates[stageKey]) || null;
   const paidUplift = rr && rr.paidNotCompetedPct > 0 ? 1 / (1 - rr.paidNotCompetedPct / 100) : 1;
   const paidEntries = m.entries * paidUplift;
@@ -5428,7 +5454,7 @@ function renderPathway(){
         ${L>0 ? `<label class="bs-arr">arrive
           <input class="bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}"
             value="${Math.round(arrivalRate(L)*100)}">%
-          ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))})</span>`
+          ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))}${stageMatchNote(L)})</span>`
             : `<span class="bs-arr-m warn">not measured${stageNameForLevel(L)?'':` — name "${esc(tierName(L))}" does not match a real stage`}</span>`}</label>` : ''}
         ${spare.length ? `<select class="sel bs-mini bs-rndadd" data-l="${L}">
           <option value="">+ add round…</option>${spare.map(k=>`<option value="${k}">${esc(RN[k])}</option>`).join('')}</select>` : ''}
@@ -5703,7 +5729,7 @@ function wirePathway(){
     // Same rule as syncRouting: the championship is a painted level only if the
     // top level is Nationals; otherwise it sits past the map.
     const n = S.levels.length;
-    const lastIsNationals = /national/i.test(String((S.levels[n-1] && S.levels[n-1].name) || ''));
+    const lastIsNationals = levelStage(n - 1).stage === 'Nationals';
     S.routing = QR().defaultRouting(n - 1, lastIsNationals ? n - 1 : n);
     syncRouting();
     touch();
@@ -7347,7 +7373,7 @@ function groupAreasIntoTiers(A, baseAssign, W, counts){
 let _genderData = null;
 function loadGenderData(){
   if (_genderData) return Promise.resolve(_genderData);
-  return fetch('gender-data.json?v=202607250130')
+  return fetch(DATA_DIR + 'gender-data.json?v=202607250130')
     .then(r => { if (!r.ok) throw new Error('gender-data.json ' + r.status); return r.json(); })
     .then(j => { _genderData = j; return j; })
     .catch(() => { _genderData = {counties:{}}; return _genderData; });
@@ -7361,7 +7387,7 @@ function autoData(){ return _autoData; }
 function loadAutoData(){
   if (_autoData) return Promise.resolve(_autoData);
   if (_autoLoading) return _autoLoading;
-  _autoLoading = fetch('auto-data.json?v=202607242100')
+  _autoLoading = fetch(DATA_DIR + 'auto-data.json?v=202607242100')
     .then(r => { if (!r.ok) throw new Error('auto-data.json ' + r.status); return r.json(); })
     .then(j => { _autoData = j; return j; });
   return _autoLoading;
@@ -8790,7 +8816,7 @@ function atlasPathwayHtml(res){
           : 'The boards disagree about how many people this is, which means the mix of events has moved away from what was measured.')}">estimate</span>`);
     }
     const arrive = L > 0 ? `<div class="atl-arrive">Arrive <input class="atl-in mono bs-rt-in" type="number" min="0" max="300" step="1" data-arr="${L}" value="${Math.round(arrivalRate(L)*100)}">%
-        ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))})</span>`
+        ${measuredArrival(L)!=null ? `<span class="bs-arr-m">measured ${Math.round(measuredArrival(L)*100)}% (real ${esc(stageNameForLevel(L))}${stageMatchNote(L)})</span>`
           : `<span class="bs-arr-m warn">not measured — assumes full turnout${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? ` · real ${yearNumBoundary(S.year)} field was ${fmt(realChampionshipField(S.year))} entries` : (stageNameForLevel(L)?'':` · "${esc(tierName(L))}" does not match a real stage`)}</span>`}</div>` : '';
     const roundRows = rounds.map(r => {
       const outs = (lvl.routes||[]).map((rt,ri)=>({rt,ri})).filter(x => x.rt.from === r.key);
@@ -10076,7 +10102,7 @@ function atlasReportHtml(res){
     const band = routes.length ? routes.map(r => `Places ${r.lo||1}–${r.hi==null?'∞':r.hi} of ${(RN[r.from]||r.from).toLowerCase()} advance to ${esc(tierName(r.to.level))} ${(RN[r.to.round]||r.to.round).toLowerCase()}`).join('; ')
                                : (L === S.routing.length-1 ? 'Championship final — nobody advances' : 'No route out of this level');
     const arrive = L === 0 ? `Open entry: real ${esc(seedStage())} ${yearNumBoundary(S.year)} field`
-      : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))})`
+      : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))}${stageMatchNote(L)})`
       : `Take-up ${Math.round(arrivalRate(L)*100)}%, not measured (ceiling)${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? `; real ${yearNumBoundary(S.year)} field ${fmt(realChampionshipField(S.year))}` : ''}`;
     const nMeets = t ? t.meets : groupCountAt(L);
     return `<div><div class="atl-en">${esc(tierName(L))} <span>· ${fmt(nMeets)} ${nMeets===1?'meet':'meets'}</span></div>
@@ -10489,18 +10515,18 @@ window.renderBoundary = async function(){
   try { S.ui = localStorage.getItem('bsUi') === 'classic' ? 'classic' : 'atlas'; } catch(e){ S.ui = 'atlas'; }
   el.innerHTML = '<div class="loading">Loading county map&hellip;</div>';
   try {
-    S.geo = await (await fetch('boundary-data.json?v=202609041900')).json();
+    S.geo = await (await fetch(DATA_DIR + 'boundary-data.json?v=202609041900')).json();
   } catch(e){
     el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Boundary data failed to load.</b> ${esc(e.message||e)}</div></div></div>`;
     return;
   }
-  try { S.compAth = (await (await fetch('comp-athletes-data.json?v=20260917')).json()).counties; }
+  try { S.compAth = (await (await fetch(DATA_DIR + 'comp-athletes-data.json?v=20260917')).json()).counties; }
   catch(e){ S.compAth = null; }
-  try { S.age = await (await fetch('age-data.json?v=202609041900')).json(); }
+  try { S.age = await (await fetch(DATA_DIR + 'age-data.json?v=202609041900')).json(); }
   catch(e){ S.age = {}; }
-  try { S.advData = await (await fetch('advance-data.json?v=202607231600')).json(); }
+  try { S.advData = await (await fetch(DATA_DIR + 'advance-data.json?v=202607231600')).json(); }
   catch(e){ S.advData = {pools:{}, totals:{}}; }
-  try { S.mtypes = buildMemberTypes(await (await fetch('membership-geo.json?v=202609151600')).json()); }
+  try { S.mtypes = buildMemberTypes(await (await fetch(DATA_DIR + 'membership-geo.json?v=202609151600')).json()); }
   catch(e){ S.mtypes = null; }
   S.regions = defaultRegions(12);
   S.levels = defaultLevels(12);

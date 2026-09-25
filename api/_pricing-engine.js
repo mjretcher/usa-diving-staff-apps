@@ -67,8 +67,10 @@ import { neonQuery } from './_neon.js';
 // both places without needing to know which module system is in play.
 const MA_DIR = path.join(process.cwd(), 'membership-analytics');
 
-const ROUTING_SRC = fs.readFileSync(path.join(MA_DIR, 'routing.js'), 'utf8');
-const PRICING_SRC_RAW = fs.readFileSync(path.join(MA_DIR, 'pricing.js'), 'utf8');
+// Engine code is the live Boundary Studio's; data files stay in membership-analytics/.
+const BS_DIR = path.join(process.cwd(), 'boundary-studio');
+const ROUTING_SRC = fs.readFileSync(path.join(BS_DIR, 'routing.js'), 'utf8');
+const PRICING_SRC_RAW = fs.readFileSync(path.join(BS_DIR, 'pricing.js'), 'utf8');
 
 // The exact literal end of pricing.js as of the date in the comment above.
 // Insertion is purely additive -- one new `window.__pricingInternal = {...}`

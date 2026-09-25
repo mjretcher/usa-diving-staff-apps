@@ -142,7 +142,7 @@ console.log('=== validate: 2025 model vs real 2025 ===');
 
 console.log('=== labels: counts say event entries or unique athletes ===');
 for (const f of ['boundary.js', 'pricing.js']) {
-  const src = fs.readFileSync(path.join(MA, f), 'utf8');
+  const src = fs.readFileSync(path.join(process.cwd(), 'boundary-studio', f), 'utf8');
   const bare = (src.match(/>(Entries|Divers|Competitors)</g) || []);
   ok(bare.length === 0, `${f}: no bare "Entries"/"Divers"/"Competitors" headings (${bare.length} found)`);
 }

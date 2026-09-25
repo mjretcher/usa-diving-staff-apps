@@ -55,7 +55,9 @@ import { ENGINE_FILES, patchFor } from '../shared/jc/engine-source.js';
 // See api/_pricing-engine.js for why this is process.cwd() and not
 // import.meta.url/__dirname -- Vercel compiles this file to CommonJS.
 const MA_DIR = path.join(process.cwd(), 'membership-analytics');
-const SOURCES = ENGINE_FILES.map((f) => patchFor(f, fs.readFileSync(path.join(MA_DIR, f), 'utf8')));
+// The engine is the live Boundary Studio code; data files stay in membership-analytics/.
+const BS_DIR = path.join(process.cwd(), 'boundary-studio');
+const SOURCES = ENGINE_FILES.map((f) => patchFor(f, fs.readFileSync(path.join(BS_DIR, f), 'utf8')));
 
 function loadStaticJson(file) {
   const clean = String(file).split('?')[0];

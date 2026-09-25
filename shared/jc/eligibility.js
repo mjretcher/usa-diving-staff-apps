@@ -92,8 +92,9 @@ export function stageForTierName(name) {
 
 /* perCellEntries: { 'AG1': n, ... } (24 cells). Returns one row per
    age-group x gender cohort plus a designation summary. */
-export async function cohortLoad(perCellEntries, year, tierName) {
-  const stage = stageForTierName(tierName);
+export async function cohortLoad(perCellEntries, year, tierName, stageHint) {
+  // The level's real stage when the engine knows it (a renamed level still is what it is); its name otherwise.
+  const stage = stageHint || stageForTierName(tierName);
   const [eligible, epa, e24, e25, e26] = await Promise.all([eligibleByCohort(year), eventsPerAthlete(year, stage), eligibleByCohort(2024), eligibleByCohort(2025), eligibleByCohort(2026)]);
   const eligibleAll = { 2024: e24, 2025: e25, 2026: e26 };
   // events-per-athlete year fallback: a stage that did not run in `year`

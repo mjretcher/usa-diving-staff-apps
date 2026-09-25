@@ -1679,7 +1679,7 @@ let _qual = null, _qualLoading = null;
 function loadQual(){
   if (_qual) return Promise.resolve(_qual);
   if (_qualLoading) return _qualLoading;
-  _qualLoading = fetch('qual-data.json?v=202607242330')
+  _qualLoading = fetch('../membership-analytics/qual-data.json?v=' + Date.now().toString(36).slice(0,5))
     .then(r => { if (!r.ok) throw new Error('qual-data.json ' + r.status); return r.json(); })
     .then(j => { _qual = j; return j; });
   return _qualLoading;
@@ -1687,7 +1687,7 @@ function loadQual(){
 let _autoFips = null;
 function loadAutoFips(){
   if (_autoFips) return Promise.resolve(_autoFips);
-  return fetch('auto-data.json?v=202607242100').then(r=>r.json())
+  return fetch('../membership-analytics/auto-data.json?v=202607242100').then(r=>r.json())
     .then(j => { _autoFips = j; return j; });
 }
 
@@ -2076,7 +2076,7 @@ const EQUITY_SECTIONS = {
       // Optional per-type file (membership-geo.json). If absent, the report still
       // renders members/athletes/coaches/clubs from the county stats.
       let GEO = null;
-      try { GEO = await fetch('membership-geo.json?v=' + Date.now()).then(r => r.ok ? r.json() : null); } catch(e){}
+      try { GEO = await fetch('../membership-analytics/membership-geo.json?v=' + Date.now()).then(r => r.ok ? r.json() : null); } catch(e){}
       const zips = GEO && GEO.years ? GEO.years[String(y)] : null;
 
       // county map -> zip is via the same z-block used elsewhere: geo.stats[f].z lists zips per county.

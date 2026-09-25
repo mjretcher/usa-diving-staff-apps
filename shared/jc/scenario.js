@@ -152,7 +152,7 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   const eligYear = yearFromCode(S.year);
   const loads = {};
   for (const L of Object.keys(a.tiers)) {
-    if (perCellByLevel[L]) loads[L] = await cohortLoad(perCellByLevel[L], eligYear, a.tiers[L].name);
+    if (perCellByLevel[L]) loads[L] = await cohortLoad(perCellByLevel[L], eligYear, a.tiers[L].name, Iboundary.levelStage ? Iboundary.levelStage(+L).stage : null);
   }
 
   const perTier = Object.keys(a.tiers).sort((x, y) => x - y).map((L) => {

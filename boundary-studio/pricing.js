@@ -698,8 +698,10 @@ function computeRevenue(useNewPrices){
 /* ==========================================================================
    DATA LOADING
    ========================================================================== */
+/* Data files live in membership-analytics/, where the build workflows write them. */
+const DATA_DIR = '../membership-analytics/';
 function loadJson(file){
-  return fetch(file + '?v=' + Date.now().toString(36).slice(0,5))
+  return fetch(DATA_DIR + file + '?v=' + Date.now().toString(36).slice(0,5))
     .then(r => { if (!r.ok) throw new Error(file + ' HTTP ' + r.status); return r.json(); });
 }
 

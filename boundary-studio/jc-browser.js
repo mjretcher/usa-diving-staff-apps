@@ -11,7 +11,12 @@
 import { configure } from '../shared/jc/runtime.js';
 import { ENGINE_FILES, patchFor } from '../shared/jc/engine-source.js';
 
-const BASE = new URL('./', import.meta.url);
+// One engine and one data set for every report, whichever app opens it: the
+// code is the live Boundary Studio (boundary-studio/), the data is what the build
+// workflows write (membership-analytics/). Each app used to load its own copies,
+// and membership-analytics/boundary.js had been frozen since the 9/17 split.
+const BASE = new URL('../membership-analytics/', import.meta.url);
+const ENGINE_BASE = new URL('../boundary-studio/', import.meta.url);
 const textCache = new Map();
 
 async function fetchText(name) {
@@ -34,7 +39,7 @@ let sourcesP = null;
 function engineSources() {
   if (!sourcesP) {
     sourcesP = Promise.all(ENGINE_FILES.map(async (f) => {
-      const t = await fetchText(f);
+      const t = await fetchText(new URL(f, ENGINE_BASE).href);
       if (t == null) throw new Error(`Could not load ${f} for the report engine.`);
       return patchFor(f, t);
     }));
