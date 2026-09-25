@@ -1,0 +1,34 @@
+name: Fetch DiveMeets zone qualifying scores
+
+# Reads the published Regionals -> Zones "Qualifying Score" per event from the
+# DiveMeets zone qualifier pages and commits db/seeds/divemeets_zone_bars_<year>.json.
+# Read-only against DiveMeets; nothing is written to the database here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Space-separated seasons, e.g. 2024 2025"
+        required: true
+        default: "2024 2025"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch
+        run: for y in ${{ github.event.inputs.years }}; do python db/scripts/fetch_divemeets_zone_bars.py "$y"; done
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add db/seeds/divemeets_zone_bars_*.json
+          git diff --staged --quiet || git commit -m "Fetch DiveMeets zone qualifying scores [skip ci]"
+          git push
