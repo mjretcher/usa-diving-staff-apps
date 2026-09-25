@@ -214,11 +214,10 @@
 
     /* 5) Inject once, then recompute + re-render so the engine and views pick it up. */
     /* Replace every E/W/C row, not just our own. data/ewc-results-2026.js (a
-       partial 6/27 export: 607 rows, 12 of 24 events) also merges E/W/C rows into
-       DATA.results, with its own average bar (the mean of all top-3 scores, not
-       the published 3rd-place average). Both sets were loaded together until
-       2026-09-25, so those 12 events carried every diver twice. The complete
-       results from Neon win; the static file remains only the offline fallback. */
+       partial 6/27 export: 607 rows, 12 of 24 events, with its own average bar)
+       used to merge E/W/C rows too, so those events carried every diver twice.
+       It was retired 2026-09-25; the complete results come only from Neon, and if
+       Neon is unreachable the E/W/C views fall back to the Zones projection. */
     DATA.results = DATA.results.filter(function (r) { return r.stage !== 'EWC'; });
     Array.prototype.push.apply(DATA.results, rows);
     injected = true;

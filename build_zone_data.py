@@ -23,7 +23,7 @@ Usage:
 Options:
   --db PATH            Local path to usa_2026.db (auto-downloaded if omitted)
   --js PATH            Path to junior-data.js
-                       (default: junior-results/junior-data.js)
+                       (default: data/junior-data.js -- the copy the app loads)
   --main-js PATH       Path to main.js
                        (default: junior-results/main.js)
   --prequalified FILE  JSON array of [{diveMeetsId, eventKey}] athletes already

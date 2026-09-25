@@ -1144,6 +1144,9 @@
      BEFORE E/W/C was scored, it cannot contain the E/W/C top-3 qualifiers.
      Detected from the data itself (list date vs E/W/C results date) so it
      disappears automatically once a refreshed post-E/W/C list is loaded. */
+  /* Read the retired static E/W/C file's date; with that file gone
+     (2026-09-25, E/W/C now loads from Neon) this returns '' -- the season's
+     official list post-dates E/W/C, so there is nothing to warn about. */
   function natStalenessBanner() {
     const ewcRes  = (window.EWC_2026_RESULTS && window.EWC_2026_RESULTS.results) || [];
     const ewcMeta = (window.EWC_2026_RESULTS && window.EWC_2026_RESULTS.meta)    || null;
