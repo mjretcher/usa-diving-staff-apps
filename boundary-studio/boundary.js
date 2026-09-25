@@ -2971,6 +2971,10 @@ async function fetchMap(id){
 /* Put a map under the scenario on screen. The pathway stays; if the new map
    has a different number of levels it is fitted, and the notes say how. */
 function applyMap(m, opts){
+  // A new map replaces whatever the Official-map season view was showing; restoring
+  // the stashed 2026 levels later would undo the change.
+  if (S._off25){ S.levels = S._off25.levels; S.routing = S._off25.routing; S._off25 = null; }
+  S._ownRouting = true;
   opts = opts || {};
   if (!opts.noUndo) pushUndo();
   const before = S.routing ? {routing: JSON.parse(JSON.stringify(S.routing))} : null;
@@ -3059,7 +3063,7 @@ async function newBlankProposal(){
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
     S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
-    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null;
+    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null; S._off25=null; S._ownRouting=false;
     S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
@@ -4547,6 +4551,26 @@ function official2026Pathway(id, d, map){
    final. No E/W/C. The 15th-place average bar and alternates are not place
    bands and are not projected. */
 const RM_PLAT = ['ABP','AGP','BBP','BGP','CBP','CGP','DBP','DGP'];
+
+/* On screen, the Official map follows its season too. Opened with 2024 or 2025
+   selected, its Structure and Projection tabs show the rules that season ran
+   under (Regions -> Zones -> Junior Nationals) instead of the 2026 three-level
+   E/W/C structure it is painted in; switching back to 2026 restores it. The
+   swap is held in S._off25 and is never saved: saving (which forks a copy of a
+   reference map) writes the map's own levels and pathway. Only the untouched
+   record -- no pathway of its own -- is swapped. */
+function applyOfficialSeason(){
+  const pre26 = S.year === 'y24' || S.year === 'y25';
+  if (S.scenarioId === 'seed-2026-official' && !S._ownRouting && pre26){
+    if (S._off25) return;
+    const off = official2025Pathway({levels: S.levels});
+    if (!off) return;
+    S._off25 = {levels: S.levels, routing: S.routing};
+    S.levels = off.levels; S.routing = JSON.parse(JSON.stringify(off.routing));
+  } else if (S._off25){
+    S.levels = S._off25.levels; S.routing = S._off25.routing; S._off25 = null;
+  }
+}
 function official2025Pathway(map){
   const lv = (map.levels || []).slice(0, 2);
   if (lv.length !== 2) return null;
@@ -4883,7 +4907,7 @@ function paletteItems(){
   add('Open the older 2026 draft', 'Superseded draft built from which Regional each club attended — not the published map', ()=>loadScenario('seed-2026-alignment'), 'Maps');
   add('Reset the map view', 'Zoom back out', ()=>{ S.zoom={k:1,x:0,y:0}; applyZoom(); }, 'Map');
   [['y24','2024'],['y25','2025'],['y26','2026 YTD']].forEach(([k,l]) => add('Season: ' + l, 'Count members from this season',
-    ()=>{ S.year = k; repaintAll(); renderPanel(); }, 'Season'));
+    ()=>{ S.year = k; applyOfficialSeason(); repaintAll(); renderPanel(); }, 'Season'));
   add('Save as a copy', 'A new proposal with the same map', ()=>saveScenario(true), 'Record');
   add('New proposal', 'Start from a blank map', ()=>{ const b = document.getElementById('bsNew'); if (b) b.click(); }, 'Record');
   add('Export zips CSV', '', exportCsv, 'Export');
@@ -6341,14 +6365,15 @@ async function saveScenario(asNew){
     if (frozenChanged) S.frozen = null;
   }
   syncLevels();
-  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:S.routing,
+  const saveLevels = S._off25 ? S._off25.levels : S.levels, saveRouting = S._off25 ? S._off25.routing : S.routing;
+  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:saveRouting,
     fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
     hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
     arrival:S.arrival, seedPool:S.seedPool, reportText:S.reportText,
-    levels:S.levels, finalName:S.finalName, adv:S.adv,
+    levels:saveLevels, finalName:S.finalName, adv:S.adv,
     mapName:S.mapName || null, mapId:S.mapId || null,
     firstStopPlatform:S.firstStopPlatform || 'held', v:4});
   try {
@@ -6464,6 +6489,7 @@ async function loadScenario(id){
     S.assign = d.assign || {};
     S.year = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
+    S._ownRouting = !!(d.routing && d.routing.length); S._off25 = null;
     S.pathSaved = null; S.pathDirty = false;   // this is the map's own copy, not a library pathway
     S.frozen = d.frozen || null;
     S.schedPlans = d.schedPlans || {};
@@ -6495,6 +6521,7 @@ async function loadScenario(id){
     S.scenarioId = id; S.scenarioOwner = row.owner == null ? null : String(row.owner); S.scenarioName = seedName(id, row.name); S.active = 0; S.detailRegion = null; S.dirty = false;
     S.undo.length = 0; S.redo.length = 0; S.palOpen = null;
     if (S.compare && S.compare.id === id) S.compare = null;
+    applyOfficialSeason();
     repaintAll(); renderPanel();
     msg('Loaded "' + row.name + '".');
   } catch(e){ console.error(e); msg('Load failed: ' + (e.message||e)); }
@@ -8314,7 +8341,7 @@ function atlasHeader(){
   bind('atlRecolour', () => { S.atlMenu = false; recolourWithRamp(); });
   bind('bsSepColors', () => { S.atlMenu = false; separateAdjacentColors(); });
   h.querySelectorAll('[data-atlyear]').forEach(b => b.addEventListener('click', () => {
-    S.year = b.dataset.atlyear; S.atlMenu = false; repaintAll(); renderPanel();
+    S.year = b.dataset.atlyear; S.atlMenu = false; applyOfficialSeason(); repaintAll(); renderPanel();
   }));
   atlasSchedBadge();
 }
@@ -8692,7 +8719,7 @@ function wireAtlasMap(){
     S.tierView = +b.dataset.tierv; S.detailRegion = null; repaintAll(); renderPanel();
   }));
   const yr = $id('atlYear');
-  if (yr) yr.addEventListener('change', () => { S.year = yr.value; repaintAll(); renderPanel(); });
+  if (yr) yr.addEventListener('change', () => { S.year = yr.value; applyOfficialSeason(); repaintAll(); renderPanel(); });
   const lr = $id('bsLoadRail');
   if (lr) lr.addEventListener('change', () => { if (lr.value) loadScenario(lr.value); });
   const on = (id, f) => { const e = $id(id); if (e) e.addEventListener('click', f); };
@@ -10353,8 +10380,9 @@ function atlasMain(){
     if (!res) inner = '<div class="atl-page"><div class="atl-note">Could not project the pathway.</div></div>';
     else {
       try {
-        inner = M === 'structure'  ? atlasStructureHtml(res)
-              : M === 'projection' ? atlasProjectionHtml(res)
+        const off25 = S._off25 ? `<div class="atl-note" style="margin:0 0 10px;padding:8px 12px;border:1px solid #bfdcf2;border-radius:8px;background:#eef6fc;color:#0c3d66">Showing the ${esc(yearNumBoundary(S.year))} rules for the Official map: Regions → Zones → Junior Nationals, no East / West / Central. Switch the season to 2026 for the structure it runs today.</div>` : '';
+        inner = M === 'structure'  ? off25 + atlasStructureHtml(res)
+              : M === 'projection' ? off25 + atlasProjectionHtml(res)
               : M === 'money'      ? atlasMoneyHtml(res)
               : M === 'schedule'   ? atlasScheduleHtml(res)
               : M === 'compare'    ? atlasCompareHtml()
