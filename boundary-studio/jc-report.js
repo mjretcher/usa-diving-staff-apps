@@ -13,7 +13,7 @@
  * projected, modeled). Ranges state their reason.
  */
 import './jc-browser.js';
-import { buildJuniorCircuitReport, JC_BUILTIN, JC_SECTIONS, JC_REPORT_KIND } from '../shared/jc/report.js';
+import { buildJuniorCircuitReport, JC_BUILTIN, JC_SECTIONS, JC_REPORT_KIND } from '../shared/jc/report.js?v=202609250120';
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const n = (v) => (v == null || !Number.isFinite(+v) ? '—' : Math.round(+v).toLocaleString('en-US'));
@@ -506,6 +506,7 @@ function secNationals(r) {
       ${row('Zones — top 3', b.zoneTop3)}
       ${row('East, West, Central — top 3', b.ewcTop3)}
       ${row('East, West, Central — 4th–6th, met the average score', b.ewcAverage)}
+      ${b.ewcBelowBar ? row('East, West, Central — 4th–6th, below the average score (entered another way)', b.ewcBelowBar) : ''}
       ${row('Qualifying ladder, subtotal', b.ladder, 'mr-total')}
       ${row('High Performance Squad', b.hps)}
       ${row('Competed in that event at Zones or E/W/C without a qualifying finish (backfilled places, other approvals)', b.otherCompeted)}

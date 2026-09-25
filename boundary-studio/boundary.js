@@ -9835,8 +9835,8 @@ function rmSpecActual2026(A){
       {from: 'NP', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.final'), split: s('N.final')}],
     strip: ['WAYS INTO JUNIOR NATIONALS — 2026 ACTUAL',
       `Zones top 3: ${f0(n('N.zoneTop3'))} · E/W/C top 3: ${f0(n('N.ewcTop3'))} · average bar: ${f0(n('N.ewcBar'))} · HP Squad: ${f0(n('N.hps'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: A.bars ? `Average bars (published, 2026): Regionals \u2192 Zones, ${A.bars.zones ? fmt(A.bars.zones.count) + ' zone-and-event bars from ' + A.bars.zones.lo.toFixed(3) + ' to ' + A.bars.zones.hi.toFixed(3) : 'not on file'}; ${f0(n('R.low.bar'))} of the ${f0(n('R.low.went'))} who reached Zones from 16th or lower cleared their zone's bar, ${f0(n('R.low.other'))} came in another way; E/W/C \u2192 Junior Nationals, ${A.bars.ewc.count} event bars from ${A.bars.ewc.lo.toFixed(3)} to ${A.bars.ewc.hi.toFixed(3)}; Zones \u2192 E/W/C 18th-place bar not on file, so those ${f0(n('Z.low.toE'))} are shown as 19th or lower.` : '',
-    foot: `It is every real 2026 Junior Circuit entry, followed from results by diver and board; \u201cother\u201d at Junior Nationals is ${f0(n('N.otherCompeted'))} without a qualifying finish, ${f0(n('N.ewcBelow'))} E/W/C 4th\u20136th below the bar, ${f0(n('N.otherNoResult'))} with no Zones or E/W/C result.`};
+    bars: A.bars ? `Bars used: ${A.bars.zones ? A.bars.zones.count + ' published zone bars' : 'no zone bars'} (Regionals → Zones), ${A.bars.ewc.count} event bars (E/W/C → Junior Nationals); the Zones → E/W/C 18th-place bar is not on file.` : '',
+    foot: `It is every real 2026 entry by diver and board; \u201cother\u201d at Junior Nationals is ${f0(n('N.otherCompeted'))} without a qualifying finish, ${f0(n('N.ewcBelow'))} E/W/C 4th\u20136th below the bar, ${f0(n('N.otherNoResult'))} with no Zones or E/W/C result.`};
 }
 
 /* A submission's projection as a route-map spec. */
@@ -9994,7 +9994,10 @@ function atlasReportHtml(res){
     const room = flowPageList.length === 1 ? 700 : 820;   // measured 2026-09-25 with the closing note and key   // measured 2026-09-25: diagrams may run from ~232px (first page) / ~100px to ~940px
     if (pg && pg.length < 2 && pg.reduce((a, x) => a + x.h, 0) + fc.h <= room) pg.push(fc); else flowPageList.push([fc]); });
   const flowPages = flowPageList.length;
-  const nPages = 4 + flowPages + (C ? 2 : 0);
+  // Fixed pages never clip: Section 3 has its own page, Exhibit C detail takes two
+  // proposals per page, and its maps and its figures table are separate pages.
+  const c1n = C ? (C.length > 2 ? 2 : 1) : 0;
+  const nPages = 5 + flowPages + (C ? c1n + 2 : 0);
   const mx = maxCapacitySummary();
   const yf = yearFillRows();
   const n = S.regions.length;
@@ -10093,6 +10096,8 @@ function atlasReportHtml(res){
       <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div>${['y24','y25','y26'].map((y,i) => { const r = realChampionshipField(y); return `<div class="num ${i===2?'last':''}">${r != null ? fmt(r) : '—'}</div>`; }).join('')}
     </div>
     <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout. The championship's real columns are the actual ${esc(S.finalName||'championship')} entries, one meet, no reallocation — the projection has no measured take-up into the championship, so judge it against those.</p>
+    ${pageFoot(3)}</article>
+  <article class="atl-pg" data-screen-label="Report p3b">${head2('Section 3')}
     ${rt('h3', '3. Meets, days and entry income', 'div', 'atl-sec m26')}
     <div class="atl-rt" style="grid-template-columns:1.6fr .9fr .8fr .8fr 1fr 1fr">
       <div class="th first">Tier</div><div class="th num">Event entries (projected)</div><div class="th num">Meets</div><div class="th num">Do not fit</div><div class="th num">Entry income</div><div class="th num last">USA Diving keeps</div>
@@ -10101,7 +10106,7 @@ function atlasReportHtml(res){
     </div>
     ${rt('foot3', `A meet "does not fit" when the schedule engine cannot lay its events out inside the pool day (${hhmm(sched.rules.facilityOpenMin)}–${hhmm(sched.rules.facilityCloseMin)}) with a prelim and its final on the same day. Entry income is the published fee × entries less the DiveMeets pass-through; host payouts follow the host-cut model in force when this paper was built. Membership dues are not included.`, 'p', 'atl-fn')}
     ${overStops.length ? `<div class="atl-over"><b>Meets that do not fit:</b> ${overStops.map(x => `${esc(x.name)} (${esc(x.level)}, ${x.days} days, ${x.daysOver} over)`).join('; ')}.</div>` : ''}
-    ${pageFoot(3)}</article>`;
+    ${pageFoot(4)}</article>`;
 
   // Exhibit C -- the scenarios pinned under Compare, side by side
   let pC = '';
@@ -10133,7 +10138,7 @@ function atlasReportHtml(res){
       }),
     ].join('');
     const nLevC = Math.max(0, ...C.map(c => (c.levels||[]).length));
-    const structCols = `<div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:0;border:1px solid #c9d0dc;margin-top:12px;font-size:9pt;line-height:1.35">${cols.map((col,i) => { const c = col.c; return `<div style="padding:8px 10px;border-right:1px solid #c9d0dc;min-width:0">
+    const structColsFor = sub => `<div style="display:grid;grid-template-columns:repeat(${sub.length},1fr);gap:0;border:1px solid #c9d0dc;margin-top:12px;font-size:9pt;line-height:1.35">${sub.map(i => { const col = cols[i]; const c = col.c; return `<div style="padding:8px 10px;border-right:1px solid #c9d0dc;min-width:0">
         <div style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;color:#171f69"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(col.name)}</span></div>
         ${c.error ? `<div style="color:#b3122b">${esc(c.error)}</div>` : (c.levels||[]).map((l,L) => `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eceff4">
           <div style="font-weight:600;color:#0f1633">${esc(l.name)} <span style="color:#6b7385;font-weight:400">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}</span></div>
@@ -10143,18 +10148,24 @@ function atlasReportHtml(res){
     pC = `<article class="atl-pg" data-screen-label="Report exhibit C1">${head2('Exhibit C, continued')}
       ${rt('exC1', 'Exhibit C, continued. Proposals side by side — structure and pathway in detail', 'div', 'atl-ex')}
       ${rt('exC1s', 'Each column is a proposal\u2019s structure as saved: its levels, how many stops each runs, the route bands out of every round and how many places each band qualifies. Each level reads: places sent by the level above (the sum of that level\u2019s \u201cqualify\u201d lines), how many take them up, plus anyone entering directly = entries. Take-up is measured separately for every event, so the percentage shown is the overall result, not one flat rate. The actual field of the season is given where that stage ran.', 'div', 'atl-exs')}
-      ${structCols}
-      ${pageFoot(4 + flowPages)}</article>
+      ${structColsFor(C.map((_, i) => i).slice(0, 2))}
+      ${pageFoot(5 + flowPages)}</article>${c1n > 1 ? `
+    <article class="atl-pg" data-screen-label="Report exhibit C1b">${head2('Exhibit C, continued')}
+      ${structColsFor(C.map((_, i) => i).slice(2))}
+      ${pageFoot(6 + flowPages)}</article>` : ''}
     <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}
       ${rt('exC', 'Exhibit C, continued. Maps and figures', 'div', 'atl-ex')}
       ${rt('exCs', `${cmpAsSaved ? 'Each proposal exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} ${cols.some((c, i) => i > 0 && c.c && c.c.churn && c.c.churn.moved) ? `Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.` : `Every proposal shown uses the same county map as ${esc(name)}, so no county is outlined; the differences are in structure, pathway and fees.`}`, 'div', 'atl-exs')}
       <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? (c.c.churn.moved ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : `same county map as ${esc(aShort)}`) : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
+      ${pageFoot(5 + flowPages + c1n)}</article>
+    <article class="atl-pg" data-screen-label="Report exhibit C2b">${head2('Exhibit C, continued')}
+      ${rt('exCt', 'Exhibit C, continued. Figures side by side', 'div', 'atl-ex')}
       <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
         <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Inter',sans-serif">${esc(c.name)}</span></div>`).join('')}
         ${rows}
       </div>
       ${rt('exCf', `Calibrated fields apply the measured take-up at each level; maximum capacity saturates every band with no take-up and is a ceiling, not a forecast. Green and red mark whether a change against ${esc(aShort)} is better or worse for that line.`, 'p', 'atl-fn')}
-      ${pageFoot(5 + flowPages)}</article>`;
+      ${pageFoot(6 + flowPages + c1n)}</article>`;
   }
 
   // Pathway at a glance -- flow diagrams (drawn and paged above)
@@ -10174,9 +10185,9 @@ function atlasReportHtml(res){
         <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#171f69" stroke-width="5"/></svg> championship</span>
         <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#8fc3ea" stroke-width="5" stroke-dasharray="7 4"/></svg> next round</span>
         <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#8fc3ea" stroke-width="8" opacity=".7"/></svg> not taken up</span>
-        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#b45309" stroke-width="3"/></svg> another way in (4th–6th over the average bar, approvals)</span></div>` : ''}
-      <div style="flex:1"></div>${pg === flowPages - 1 ? rt('exFf2', `All counts are event entries (one athlete in one event). Submissions are projected from the real ${esc(yearNumBoundary(S.year))} field, each figure rounded on its own; take-up marked \u201cassumed\u201d is a ceiling. ${flowCols.some(fc => fc.actual) ? `The Official map is not projected. ` + esc((flowCols.find(fc => fc.actual) || {}).foot || '') + ' ' + esc((flowCols.find(fc => fc.actual) || {}).bars || '') : ''}`, 'p', 'atl-fn atl-fn-sm') : ''}
-      ${pageFoot(4 + pg)}</article>`;
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#b45309" stroke-width="3"/></svg> another way in (average bar, approval)</span></div>` : ''}
+      <div style="flex:1"></div>${pg === flowPages - 1 ? rt('exFf2', `All counts are event entries (one athlete in one event). Submissions are projected from the real ${esc(yearNumBoundary(S.year))} field, each figure rounded on its own; take-up marked \u201cassumed\u201d is a ceiling. ${flowCols.some(fc => fc.actual) ? `The Official map is real results, not a projection. ` + esc((flowCols.find(fc => fc.actual) || {}).foot || '') + ' ' + esc((flowCols.find(fc => fc.actual) || {}).bars || '') : ''}`, 'p', 'atl-fn atl-fn-sm') : ''}
+      ${pageFoot(5 + pg)}</article>`;
   }
 
   // Page 4/5 -- changes + methodology

@@ -80,14 +80,25 @@ async function actualCohorts(year) {
      -> High Performance Squad (published list) -> competed at Zones/E/W/C in
      that event without a qualifying finish (backfilled places and other
      approvals) -> no Zones/E/W/C result in that event. */
+/* Official 2026 E/W/C -> Junior Nationals average bars (Art. 303(b)(3)(ii)), the
+   same table the Junior Results app and Boundary Studio use. Until 2026-09-25 every
+   E/W/C 4th-6th finisher who dove Junior Nationals was reported as meeting the
+   average score (44); 10 of them finished below their bar. */
+const EWC_BAR = {'A|B|1M':403.85,'A|B|3M':425.85,'A|B|Platform':356.517,'A|G|1M':340.65,'A|G|3M':376.9,'A|G|Platform':318.1,
+  'B|B|1M':303.85,'B|B|3M':333.467,'B|B|Platform':273,'B|G|1M':278.383,'B|G|3M':294.083,'B|G|Platform':245.883,
+  'C|B|1M':236.883,'C|B|3M':236,'C|B|Platform':169.217,'C|G|1M':234,'C|G|3M':243.317,'C|G|Platform':185.667,
+  'D|B|1M':146.95,'D|B|3M':147.95,'D|B|Platform':155.85,'D|G|1M':164.233,'D|G|3M':170.533,'D|G|Platform':143.983};
+const EWC_BAR_SQL = Object.entries(EWC_BAR).map(([k, v]) => { const [a, g, d] = k.split('|'); return `('${a}','${g}','${d}',${v}::numeric)`; }).join(',');
+
 async function nationals2026Breakdown() {
   const base = `with jn as (select distinct diver_id_dm::text did, discipline disc,
         lower(regexp_replace(diver_first||' '||diver_last,'\\s+',' ','g')) nm
       from core.event_results where year=2026 and is_junior_circuit and stage='Nationals' and not coalesce(is_synchro,false) and diver_id_dm is not null),
-    fin as (select distinct diver_id_dm::text did, discipline disc, stage, place from core.event_results
+    fin as (select distinct diver_id_dm::text did, discipline disc, stage, place, score, right(age_group,1) grp, left(gender,1) g from core.event_results
       where year=2026 and is_junior_circuit and not coalesce(is_synchro,false) and diver_id_dm is not null
         and stage in ('Zones','EWC') and round='Final'),
     top3 as (select distinct did, disc, stage from fin where place between 1 and 3),
+    bar as (select * from (values ${EWC_BAR_SQL}) v(grp, g, disc, bar)),
     hps as (select distinct diver_key k, lower(regexp_replace(athlete_name,'\\s+',' ','g')) nm
       from junior_results.projected_nationals_field where season=2026 and qualification_path like 'HPS%'),
     anyres as (select distinct diver_id_dm::text did, discipline disc from core.event_results
@@ -95,7 +106,9 @@ async function nationals2026Breakdown() {
     c as (select jn.did, jn.disc, case
       when exists (select 1 from top3 t where t.did=jn.did and t.disc=jn.disc and t.stage='Zones') then 'zoneTop3'
       when exists (select 1 from top3 t where t.did=jn.did and t.disc=jn.disc and t.stage='EWC') then 'ewcTop3'
-      when exists (select 1 from fin f where f.did=jn.did and f.disc=jn.disc and f.stage='EWC' and f.place between 4 and 6) then 'ewcAverage'
+      when exists (select 1 from fin f join bar b on b.grp=f.grp and b.g=f.g and b.disc=f.disc
+                   where f.did=jn.did and f.disc=jn.disc and f.stage='EWC' and f.place between 4 and 6 and f.score >= b.bar) then 'ewcAverage'
+      when exists (select 1 from fin f where f.did=jn.did and f.disc=jn.disc and f.stage='EWC' and f.place between 4 and 6) then 'ewcBelowBar'
       when exists (select 1 from hps h where h.k='dm:'||jn.did or h.nm=jn.nm) then 'hps'
       when exists (select 1 from anyres a where a.did=jn.did and a.disc=jn.disc) then 'otherCompeted'
       else 'otherNoResult' end cat from jn)`;
@@ -103,10 +116,10 @@ async function nationals2026Breakdown() {
   const groups = await q(base + ` select
       count(*) filter (where cat in ('zoneTop3','ewcTop3'))::int place_e,
       count(distinct did) filter (where cat in ('zoneTop3','ewcTop3'))::int place_a,
-      count(*) filter (where cat in ('zoneTop3','ewcTop3','ewcAverage'))::int ladder_e,
-      count(distinct did) filter (where cat in ('zoneTop3','ewcTop3','ewcAverage'))::int ladder_a,
-      count(*) filter (where cat not in ('zoneTop3','ewcTop3','ewcAverage'))::int other_e,
-      count(distinct did) filter (where cat not in ('zoneTop3','ewcTop3','ewcAverage'))::int other_a,
+      count(*) filter (where cat in ('zoneTop3','ewcTop3','ewcAverage','ewcBelowBar'))::int ladder_e,
+      count(distinct did) filter (where cat in ('zoneTop3','ewcTop3','ewcAverage','ewcBelowBar'))::int ladder_a,
+      count(*) filter (where cat not in ('zoneTop3','ewcTop3','ewcAverage','ewcBelowBar'))::int other_e,
+      count(distinct did) filter (where cat not in ('zoneTop3','ewcTop3','ewcAverage','ewcBelowBar'))::int other_a,
       count(*)::int total_e, count(distinct did)::int total_a from c`);
   // Everyone who earned a place by finishing top 3 (Zones, then E/W/C), and how many of them competed in that event.
   const earned = await q(`with t as (select distinct diver_id_dm::text did, discipline disc from core.event_results
@@ -121,7 +134,7 @@ async function nationals2026Breakdown() {
   const get = (k) => { const r = byCat.find((x) => x.cat === k); return r ? { entries: r.entries, athletes: r.athletes } : { entries: 0, athletes: 0 }; };
   const g = groups[0], e = earned[0];
   return {
-    zoneTop3: get('zoneTop3'), ewcTop3: get('ewcTop3'), ewcAverage: get('ewcAverage'), hps: get('hps'),
+    zoneTop3: get('zoneTop3'), ewcTop3: get('ewcTop3'), ewcAverage: get('ewcAverage'), ewcBelowBar: get('ewcBelowBar'), hps: get('hps'),
     otherCompeted: get('otherCompeted'), otherNoResult: get('otherNoResult'),
     byPlace: { entries: g.place_e, athletes: g.place_a },
     ladder: { entries: g.ladder_e, athletes: g.ladder_a },
@@ -191,6 +204,16 @@ function tierRows(perTier, status) {
   }));
 }
 
+/* The championship stop: a tier named for Nationals, or the last tier when it is a
+   single meet (every structure's championship is one meet; an E/W/C-style last
+   stop has three and is correctly not treated as Junior Nationals). */
+function championshipTier(tiers) {
+  const named = tiers.find((t) => /national/i.test(t.name));
+  if (named) return named;
+  const last = tiers[tiers.length - 1];
+  return last && tiers.length > 1 && last.meets === 1 ? last : null;
+}
+
 async function buildColumn(col, ctx) {
   if (col.type === 'scenario') {
     const r = await computeBoundaryMoneyReport(col.scenarioId, { ceilingYear: ctx.membershipYear });
@@ -200,7 +223,10 @@ async function buildColumn(col, ctx) {
       throw new Error(`Saved proposal “${r.scenarioName}” projects no event entries — its map has no counties assigned (a new proposal starts blank). Open it in Boundary Studio, draw or choose a map, save, then generate again.`);
     }
     // Junior Nationals is only in the report when the scenario models it as a stop.
-    const nat = tiers.find((t) => /national/i.test(t.name)) || null;
+    // Found by what it is, not only by name: a submission may call its championship
+    // "The Finals" (the CCE Submission does since 2026-09-18), and matching on the
+    // word "National" alone dropped its Junior Nationals column from the report.
+    const nat = championshipTier(tiers);
     const att = ctx.jn26 ? ctx.jn26.attendance : null;
     return {
       label: col.label || r.scenarioName, kind: 'scenario', source: `Saved proposal “${r.scenarioName}” (${col.scenarioId})`,

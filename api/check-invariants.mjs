@@ -100,7 +100,9 @@ console.log('=== places: rule capacity = meets x band x events ===');
   const cce = await computeBoundaryMoneyReport('bs-msg2vatz-5q86m', {});
   const nos = await computeBoundaryMoneyReport('bs-msix7ibe-nij21', {});
   const spots = (r, lvl) => (r.perTier.find((t) => t.level === lvl) || {}).spots;
-  ok(spots(cce, 'National') === 3 * 9 * 24, `CCE Junior Nationals places ${spots(cce, 'National')} = 3 x 9 x 24`);
+  // The championship is the last stop; its name is the submission's own (CCE calls it "The Finals").
+  const lastSpots = (r) => r.perTier[r.perTier.length - 1].spots;
+  ok(lastSpots(cce) === 3 * 9 * 24, `CCE Junior Nationals places ${lastSpots(cce)} = 3 x 9 x 24`);
   ok(spots(nos, 'National') === 3 * (8 + 4) * 24, `National Office Junior Nationals places ${spots(nos, 'National')} = 3 x (8 + 4) x 24`);
   ok(spots(nos, 'East, West, Central') === 9 * 16 * 24, `National Office E/W/C places ${spots(nos, 'East, West, Central')} = 9 x 16 x 24`);
   const nosLive = await computeBoundaryMoneyReport('bs-msix7ibe-nij21', { cdFirstStop: false });
@@ -157,7 +159,7 @@ console.log('=== report: the in-app Junior Circuit Comparison Report matches the
   ok(s26.nationals.eventEntries + s26.nationals.synchroEntries === m26.perTier.find((t) => t.level === 'Nationals').entries, `report 2026 Junior Nationals ${s26.nationals.eventEntries} individual + ${s26.nationals.synchroEntries} synchro = model`);
   ok(nos.nationals.eventEntriesLow < nos.nationals.eventEntries && nos.nationals.rangeReason, 'report: projected Junior Nationals range has a low end and a stated reason');
   const b = rep.accuracy.nationals2026;
-  const parts = ['zoneTop3', 'ewcTop3', 'ewcAverage', 'hps', 'otherCompeted', 'otherNoResult'].reduce((a, k) => a + b[k].entries, 0);
+  const parts = ['zoneTop3', 'ewcTop3', 'ewcAverage', 'ewcBelowBar', 'hps', 'otherCompeted', 'otherNoResult'].reduce((a, k) => a + b[k].entries, 0);
   ok(parts === b.total.entries && b.total.entries === s26.nationals.eventEntries, `report: 2026 Junior Nationals routes add to ${parts} = ${s26.nationals.eventEntries} individual event entries`);
   ok(b.ladder.entries + b.other.entries === b.total.entries, `report: ladder ${b.ladder.entries} + other ${b.other.entries} = ${b.total.entries}`);
   ok(s26.money.individualOnly.eventEntries === s26.tiers.reduce((a, t) => a + t.individualAged, 0), `report: 2026 individual-only basis = ${s26.money.individualOnly.eventEntries} event entries`);
