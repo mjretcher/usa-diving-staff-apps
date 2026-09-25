@@ -16,9 +16,10 @@ on:
       - 'api/**'
       - 'shared/jc/**'
       - 'membership-analytics/jc-*.js'
-      - 'membership-analytics/boundary.js'
-      - 'membership-analytics/pricing.js'
-      - 'membership-analytics/routing.js'
+      - 'boundary-studio/jc-*.js'
+      - 'boundary-studio/boundary.js'
+      - 'boundary-studio/pricing.js'
+      - 'boundary-studio/routing.js'
       - 'membership-analytics/advance-data.json'
       - 'membership-analytics/recaps-*.json'
 

@@ -11,18 +11,18 @@ on:
   push:
     branches: [main]
     paths:
-      - 'membership-analytics/routing.js'
-      - 'membership-analytics/pricing.js'
-      - 'membership-analytics/boundary.js'
-      - 'membership-analytics/scenario-schedule-engine.js'
+      - 'boundary-studio/routing.js'
+      - 'boundary-studio/pricing.js'
+      - 'boundary-studio/boundary.js'
+      - 'boundary-studio/scenario-schedule-engine.js'
       - 'membership-analytics/ma-reports.js'
       - 'membership-analytics/test-*.js'
   pull_request:
     paths:
-      - 'membership-analytics/routing.js'
-      - 'membership-analytics/pricing.js'
-      - 'membership-analytics/boundary.js'
-      - 'membership-analytics/scenario-schedule-engine.js'
+      - 'boundary-studio/routing.js'
+      - 'boundary-studio/pricing.js'
+      - 'boundary-studio/boundary.js'
+      - 'boundary-studio/scenario-schedule-engine.js'
       - 'membership-analytics/ma-reports.js'
       - 'membership-analytics/test-*.js'
   workflow_dispatch:
