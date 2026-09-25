@@ -3332,8 +3332,13 @@ const STYLES = `
 #mr-output .mr-hd-ev-flag{display:block;font-size:10px;color:#b45309;font-style:italic}
 #mr-output .mr-sched-practice{font-size:10.5px;color:#5a6480;margin-top:8px}
 @media print{
-  body *{visibility:hidden !important}
-  #mr-output,#mr-output *{visibility:visible !important}
+  /* Hide the rest of the page only while a comparison report is open (#mr-output
+     exists only then). Unscoped, this rule blanked every other print from
+     Boundary Studio, including the committee paper's Export PDF. */
+  body:has(#mr-output) > *:not(#mr-output){display:none !important}
+  body:has(#mr-output) *{visibility:hidden !important}
+  body:has(#mr-output) #mr-output,body:has(#mr-output) #mr-output *{visibility:visible !important}
+  #mr-bar{display:none !important}      /* the Reports menu bar is navigation, never printed */
   #mr-output{position:absolute;left:0;top:0;width:100%;background:#fff;overflow:visible}
   #mr-output .mr-toolbar{display:none !important}
   #mr-output .mr-doc{box-shadow:none;margin:0;max-width:none;padding:0}
@@ -3348,7 +3353,10 @@ const STYLES = `
   #mr-output .mr-fg-tbl,#mr-output .bs-fg-tbl{font-size:8.5px}
   #mr-output .mr-rules-grid{display:block}
   #mr-output .mr-rules-col{margin-bottom:8px;page-break-inside:avoid}
-  @page{margin:.55in}
+  /* margins for the comparison report only (a named page), so the committee
+     paper keeps its own full-bleed @page from index.html */
+  @page mrpage{margin:.55in}
+  #mr-output{page:mrpage}
 }
 
 /* No mobile breakpoint existed anywhere in this file before. Two fixes, both
