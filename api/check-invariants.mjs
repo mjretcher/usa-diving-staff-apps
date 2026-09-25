@@ -21,6 +21,7 @@ import { withFirstStopSeed, seedFromZones, computeBoundaryMoneyReport, buildWind
 import { compute2025Model } from './_2025-model.js';
 import { compute2026BaselineWithNationals } from './_2026-model.js';
 import { buildJuniorCircuitReport, JC_BUILTIN } from '../shared/jc/report.js';
+import { checkBars, KNOWN_DIFFERENCES } from '../shared/jc/bars.js';
 
 let pass = 0, fail = 0;
 const ok = (c, msg) => { if (c) { pass++; console.log('  PASS:', msg); } else { fail++; console.log('  FAIL:', msg); } };
@@ -166,6 +167,17 @@ console.log('=== report: the in-app Junior Circuit Comparison Report matches the
   // A scenario that ends at E/W/C must not report its E/W/C field as Junior Nationals.
   const seedRep = await buildJuniorCircuitReport({ config: { columns: [{ type: 'scenario', scenarioId: 'seed-2026-official', label: 'Official 2026 map' }], sections: ['summary'] } });
   ok(!seedRep.columns[0].error && seedRep.columns[0].nationals === null, 'report: a scenario that stops at E/W/C shows no Junior Nationals figures');
+}
+
+console.log('=== bars: our own results reproduce every published average bar (check, not replacement) ===');
+{
+  const toObjs = async (sql, params) => { const r = await neonQuery(sql, params); return r; };
+  const { rows, missing } = await checkBars(toObjs);
+  const unexplained = rows.filter((r) => !r.match && !r.known);
+  const nowMatching = rows.filter((r) => r.match && r.known);
+  ok(unexplained.length === 0, `every published bar reproduced or on the known list (${rows.filter((r) => r.match).length} of ${rows.length} reproduced; new differences: ${unexplained.map((r) => `${r.key} published ${r.published} vs ours ${r.computed}`).join('; ') || 'none'})`);
+  ok(nowMatching.length === 0, `known-difference list is current (${nowMatching.map((r) => r.key).join(', ') || 'nothing on it now reproduces'})`);
+  ok(missing.length === 0, `every published bar has results to check against (${missing.join(', ') || 'all'})`);
 }
 
 console.log(`\n=== RESULT: ${pass} passed, ${fail} failed ===`);
