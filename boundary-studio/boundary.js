@@ -4480,6 +4480,28 @@ function summariseRouting(routing, label, notes){
   });
 }
 
+/* The Official 2026 record holds the published map only -- no pathway -- and it
+   is also the calibration baseline Pricing Studio measures take-up on, so its
+   stored levels are deliberately left alone. Wherever it is run as its own
+   column, it runs under the published 2026 rules (routing.js defaultRouting:
+   Regionals top 15 -> Zones; Zones 1-3 -> Junior Nationals, 4-18 -> E/W/C;
+   E/W/C prelims top 12 -> final, final top 3 -> Junior Nationals; Junior
+   Nationals prelims top 12 -> final) with Junior Nationals added as its fourth
+   level -- never under whatever pathway happens to be on screen, which is how
+   it used to show another submission's "places 1-16" bands. The E/W/C 4th-6th
+   and 18th-place average rules are not place bands, so they are not in this
+   projection; the committee paper draws the Official 2026 map from real
+   results instead (rmSpecActual2026). */
+function official2026Pathway(id, d, map){
+  if (id !== 'seed-2026-official' || !QR()) return null;
+  const lv = (map.levels || []).slice(0, 3);
+  if (lv.length !== 3) return null;
+  const top = lv[2];
+  const levels = lv.concat([{name: 'Junior Nationals', groups: [{name: 'Junior Nationals'}], of: (top.groups || [{}]).map(() => 0)}]);
+  return {levels, routing: QR().defaultRouting(3, 3),
+    note: 'runs under the published 2026 rules; the E/W/C 4th–6th and 18th-place average rules are not projected'};
+}
+
 /* Build every column. The first is always what is on screen, so a comparison
    is always anchored to something you can see. */
 async function buildComparison(ids, axis){
@@ -4511,14 +4533,17 @@ async function buildComparison(ids, axis){
         const map = {regions: d.regions, assign: d.assign,
                      levels: migrateLevels(d, (d.regions||[]).length), finalName: d.finalName};
         const own = !!(d.routing && d.routing.length);
-        const routing = own ? JSON.parse(JSON.stringify(d.routing)) : null;
+        const off = official2026Pathway(id, d, map);
+        const routing = own ? JSON.parse(JSON.stringify(d.routing)) : off ? off.routing : null;
+        if (off) map.levels = off.levels;
         row = withScenarioSettings(d, () => withMap(map, notes => {
           const rt = routing || S.routing;
-          const nn = (notes || []).concat(own ? [] : ['no pathway was saved with this proposal, so it runs under the pathway on screen']);
+          // withMap's notes describe fitting the ON-SCREEN pathway; they do not apply when the column runs its own.
+          const nn = ((own || off) ? [] : (notes || [])).concat(own ? [] : off ? [off.note] : ['no pathway was saved with this proposal, so it runs under the pathway on screen']);
           return summariseRouting(rt, r.rows[0].name, nn.length ? nn : null);
         }));
         if (row && !row.error){
-          row.map = map; row.asSaved = true;
+          row.map = map; row.asSaved = true; row.scenarioId = id;
           try { Object.assign(row, withScenarioSettings(d, () => withRouting(routing || S.routing, () => mapExtras(map)))); }
           catch(e){ console.warn('mapExtras', e); }
         }
@@ -4561,11 +4586,13 @@ function comparisonFromCompareSlot(){
   const cols = [summariseRouting(S.routing, baseLabel, null)];
   const cmp = S.compare;
   const map = {regions: cmp.regions, assign: cmp.assign, levels: cmp.levels, finalName: cmp.finalName};
+  const off = !(cmp.routing && cmp.routing.length) ? official2026Pathway(cmp.id, cmp, map) : null;
+  if (off) map.levels = off.levels;
   let row;
   try {
     row = withMap(map, () => {
-      const routing = cmp.routing && cmp.routing.length ? cmp.routing : S.routing;
-      const notes = (cmp.routing && cmp.routing.length) ? null
+      const routing = cmp.routing && cmp.routing.length ? cmp.routing : off ? off.routing : S.routing;
+      const notes = (cmp.routing && cmp.routing.length) ? null : off ? [off.note]
         : ['this proposal had no pathway of its own saved with it -- run here with the routing on screen'];
       return summariseRouting(routing, cmp.name || cmp.id || 'Compared proposal', notes);
     });
@@ -9520,181 +9547,252 @@ const mono = v => `<span class="mono">${v}</span>`;
 const longDate = d => (d ? new Date(d) : new Date()).toLocaleDateString('en-US', {day:'numeric', month:'long', year:'numeric'});
 
 /* =========================================================================
-   Pathway flow diagram for the committee paper.
-   One proposal's pathway as a flow: every level is a bar as tall as its
-   projected event entries; bands show who moves on, who stops (split into
-   "had a place, did not take it up" and "did not place high enough") and who
-   joins a level directly. Every number comes from summariseRouting() -- the
-   same levels/flowPairs the Exhibit C text is written from -- and the
-   accounting is checked before anything is drawn:
-     entries(L) = arrivals from earlier levels + direct entrants
-     entries(L) = places taken up onward + places not taken up + no place
-   If a level does not balance, or the projection dropped places, the diagram
-   is withheld with the reason rather than drawn wrong.
+   Pathway route map for the committee paper (Exhibit C / Exhibit B, cont.).
+   Every round is a stop; every route out of it is a line as thick as the
+   event entries it carries. Two sources feed the same drawing:
+     - a submission's projection: summariseRouting() levels, rounds, route
+       bands and flowPairs -- the same numbers the Exhibit C text uses;
+     - the 2026 season as run: every real 2026 Junior Circuit event entry,
+       read from results (core.event_results), never projected.
+   The small numbers under a route are its places won, split 1-meter ·
+   3-meter · platform. Anything that does not add up is withheld with the
+   reason rather than drawn.
    ========================================================================= */
-function pathwayFlowSvg(col, o){
+const RM_OFFICIAL_2026 = 'seed-2026-official';
+const rmOrd = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+
+/* The 2026 season, route by route, from results. Each individual event entry
+   (DiveMeets diver id x board) is followed across Regionals, Zones, E/W/C and
+   Junior Nationals. Junior Nationals entries are attributed in the same order
+   of precedence as the Junior Circuit report (shared/jc/report.js), so the
+   totals agree: Zones top 3, E/W/C top 3, E/W/C 4th-6th, High Performance
+   Squad, competed without a qualifying finish, no Zones/E/W/C result. The
+   E/W/C 4th-6th group is split by whether the final score cleared the
+   published 2026 average bar (Art. 303(b)(3)(ii)). */
+const RM_EWC_BAR = {'A|B|1M':403.85,'A|B|3M':425.85,'A|B|Platform':356.517,'A|G|1M':340.65,'A|G|3M':376.9,'A|G|Platform':318.1,
+  'B|B|1M':303.85,'B|B|3M':333.467,'B|B|Platform':273,'B|G|1M':278.383,'B|G|3M':294.083,'B|G|Platform':245.883,
+  'C|B|1M':236.883,'C|B|3M':236,'C|B|Platform':169.217,'C|G|1M':234,'C|G|3M':243.317,'C|G|Platform':185.667,
+  'D|B|1M':146.95,'D|B|3M':147.95,'D|B|Platform':155.85,'D|G|1M':164.233,'D|G|3M':170.533,'D|G|Platform':143.983};
+async function loadActual2026Routes(){
+  const rows = (await NEON.query(`with r0 as (
+      select stage, round, diver_id_dm::text did, discipline disc, right(age_group,1) grp, left(gender,1) g,
+             nullif(place,127) place, score, lower(regexp_replace(diver_first||' '||diver_last,'\\s+',' ','g')) nm
+      from core.event_results where year=2026 and is_junior_circuit and not coalesce(is_synchro,false)
+        and diver_id_dm is not null and age_group is not null),
+    k as (select did, disc, min(grp) grp, min(g) g from r0 group by 1,2),
+    reg as (select did, disc, min(place) place, bool_or(grp in ('A','B') and disc in ('1M','3M')) q from r0 where stage='Regionals' group by 1,2),
+    zon as (select did, disc, min(place) place from r0 where stage='Zones' group by 1,2),
+    ewp as (select did, disc from r0 where stage='EWC' and round='Prelim' group by 1,2),
+    ewf as (select did, disc, min(place) place, max(score) score from r0 where stage='EWC' and round='Final' group by 1,2),
+    jnp as (select did, disc, max(nm) nm from r0 where stage='Nationals' and round='Prelim' group by 1,2),
+    jnf as (select did, disc from r0 where stage='Nationals' and round='Final' group by 1,2)
+    select k.did, k.disc, k.grp, k.g, reg.did is not null in_r, coalesce(reg.q,false) r_q, reg.place r_pl,
+      zon.did is not null in_z, zon.place z_pl, ewp.did is not null in_e, ewf.did is not null in_ef, ewf.place ef_pl, ewf.score ef_sc,
+      jnp.did is not null in_n, jnf.did is not null in_nf, jnp.nm
+    from k left join reg using (did,disc) left join zon using (did,disc) left join ewp using (did,disc)
+      left join ewf using (did,disc) left join jnp using (did,disc) left join jnf using (did,disc)`)).rows || [];
+  const hps = (await NEON.query(`select distinct diver_key kk, lower(regexp_replace(athlete_name,'\\s+',' ','g')) nm
+      from junior_results.projected_nationals_field where season=2026 and qualification_path like 'HPS%'`)).rows || [];
+  const val = (r, k, i) => Array.isArray(r) ? r[i] : r[k];
+  const hk = new Set(hps.map(h => val(h, 'kk', 0))), hn = new Set(hps.map(h => val(h, 'nm', 1)));
+  const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
+  const inc = (k, d) => { const c = C[k] || (C[k] = [0, 0, 0]); c[B[d]]++; };
+  const bool = v => v === true || v === 't' || v === 'true';
+  const num = v => v == null || v === '' ? null : +v;
+  rows.forEach(r => {
+    const g = n => val(r, n, ['did','disc','grp','g','in_r','r_q','r_pl','in_z','z_pl','in_e','in_ef','ef_pl','ef_sc','in_n','in_nf','nm'].indexOf(n));
+    const d = g('disc'); if (!(d in B)) return;
+    const inR = bool(g('in_r')), inZ = bool(g('in_z')), inE = bool(g('in_e')), inEF = bool(g('in_ef')), inN = bool(g('in_n'));
+    const rp = num(g('r_pl')), zp = num(g('z_pl')), ef = num(g('ef_pl'));
+    if (inR){ inc('R', d);
+      const won = bool(g('r_q')) && rp != null && rp <= 15;
+      if (bool(g('r_q'))){ if (won) inc('R.won', d); if (won && inZ) inc('R.won.went', d); if (!won && inZ) inc('R.low.went', d); }
+      if (!inZ) inc(!bool(g('r_q')) ? 'R.stop.nq' : won ? 'R.stop.won' : 'R.stop.low', d); }
+    if (inZ){ inc('Z', d);
+      if (!(inR && bool(g('r_q')))) inc(g('grp') === 'C' || g('grp') === 'D' ? 'Z.dir.cd' : d === 'Platform' ? 'Z.dir.p' : 'Z.dir.o', d);
+      const band = zp != null && zp <= 3 ? 'top3' : zp != null && zp <= 18 ? 'mid' : 'low';
+      inc('Z.' + band, d);
+      if (band === 'mid' && inE) inc('Z.mid.went', d);
+      if (band === 'low' && inE) inc('Z.low.toE', d);
+      if (band === 'top3' && inE) inc('Z.top3.alsoE', d);
+      if (!inE && !inN) inc('Z.stop.' + band, d); }
+    if (inE){ inc('E', d);
+      if (!inZ) inc('E.dir', d);
+      if (inEF) inc('E.final', d);
+      if (inEF && ef != null && ef <= 3) inc('E.top3', d);
+      if (!inN) inc(!inEF ? 'E.stop.prelim' : (ef != null && ef <= 3) ? 'E.stop.top3' : 'E.stop.final', d); }
+    if (inN){ inc('N', d); if (bool(g('in_nf'))) inc('N.final', d);
+      let cat;
+      if (inZ && zp != null && zp <= 3) cat = 'zoneTop3';
+      else if (inEF && ef != null && ef <= 3) cat = 'ewcTop3';
+      else if (inEF && ef != null && ef <= 6){ const bar = RM_EWC_BAR[g('grp') + '|' + g('g') + '|' + d]; cat = bar != null && num(g('ef_sc')) >= bar ? 'ewcBar' : 'ewcBelow'; }
+      else if (hk.has('dm:' + g('did')) || hn.has(g('nm'))) cat = 'hps';
+      else if (inZ || inE) cat = 'otherCompeted';
+      else cat = 'otherNoResult';
+      inc('N.' + cat, d); }
+  });
+  const n = k => (C[k] || [0, 0, 0]).reduce((a, b) => a + b, 0);
+  // Self-checks: every level's parts must add back to its real field.
+  const checks = [
+    ['Zones sources', n('R.won.went') + n('R.low.went') + n('Z.dir.cd') + n('Z.dir.p') + n('Z.dir.o'), n('Z')],
+    ['E/W/C sources', n('Z.mid.went') + n('Z.low.toE') + n('Z.top3.alsoE') + n('E.dir'), n('E')],
+    ['Junior Nationals routes', ['zoneTop3','ewcTop3','ewcBar','ewcBelow','hps','otherCompeted','otherNoResult'].reduce((a, k) => a + n('N.' + k), 0), n('N')],
+  ].filter(c => c[1] !== c[2]);
+  if (!rows.length || checks.length) throw new Error(!rows.length ? 'no 2026 results returned' : 'real 2026 routes do not add up: ' + checks.map(c => `${c[0]} ${c[1]} vs ${c[2]}`).join('; '));
+  return {C, n, at: new Date().toISOString()};
+}
+
+/* The 2026 season as a route-map spec -- real event entries throughout. */
+function rmSpecActual2026(A){
+  const n = A.n, s = k => (A.C[k] || [0, 0, 0]).slice(), f0 = v => fmt(v);
+  const rDir = n('R') - n('R.stop.nq') - n('R.stop.won') - n('R.stop.low') - n('R.won.went') - n('R.low.went');   // non-qualifying Regionals entries that went on to Zones
+  const zDir = n('Z.dir.cd') + n('Z.dir.p') + n('Z.dir.o');
+  const nOther = n('N.ewcBelow') + n('N.otherCompeted') + n('N.otherNoResult');
+  return {actual: true,
+    levels: [
+      {name: 'Regions', entries: n('R'), meets: 12, rounds: 1, note: 'real 2026 field'},
+      {name: 'Zones', entries: n('Z'), meets: 6, rounds: 1, note: 'real 2026 field'},
+      {name: 'East / West / Central', entries: n('E'), meets: 3, rounds: 2, note: 'real 2026 field'},
+      {name: 'Junior Nationals', entries: n('N'), meets: 1, rounds: 2, note: 'real 2026 field', goal: true}],
+    stations: [
+      {id: 'R', level: 0, round: 'Regions', n: n('R'), stop: [`${f0(n('R.stop.low') + n('R.stop.won') + n('R.stop.nq'))} stop`, `${f0(n('R.stop.low'))} placed 16th+`, `${f0(n('R.stop.won'))} did not go`, `${f0(n('R.stop.nq'))} non-qualifying event`]},
+      {id: 'Z', level: 1, round: 'Zones', n: n('Z'), direct: {n: zDir, lines: [`${f0(n('Z.dir.cd'))} Groups C and D`, `${f0(n('Z.dir.p'))} platform` + (n('Z.dir.o') ? ` · ${f0(n('Z.dir.o'))} other` : '')]},
+        stop: [`${f0(n('Z.stop.top3') + n('Z.stop.mid') + n('Z.stop.low'))} stop`, `${f0(n('Z.stop.low'))} placed 19th+`, `${f0(n('Z.stop.mid') + n('Z.stop.top3'))} did not go`]},
+      {id: 'EP', level: 2, round: 'Prelims', n: n('E'), direct: n('E.dir') ? {n: n('E.dir'), lines: ['no Zones result'], small: true} : null,
+        stop: [`${f0(n('E.stop.prelim'))} stop`, 'placed 13th+']},
+      {id: 'EF', level: 2, round: 'Final', n: n('E.final'), stop: [`${f0(n('E.stop.final') + n('E.stop.top3'))} stop`, `${f0(n('E.stop.final'))} placed 4th+`, `${f0(n('E.stop.top3'))} did not go`]},
+      {id: 'NP', level: 3, round: 'Prelims', n: n('N'), goal: true, direct: {n: n('N.hps') + nOther, lines: [`${f0(n('N.hps'))} HP Squad`, `${f0(nOther)} other`], small: true},
+        stop: [`${f0(n('N') - n('N.final'))} finish here`]},
+      {id: 'NF', level: 3, round: 'Final', n: n('N.final'), goal: true}],
+    routes: [
+      {from: 'R', to: 'Z', kind: 'next', band: 'Places 1–15', places: n('R.won'), take: n('R.won.went'), pct: `${Math.round(n('R.won.went') / n('R.won') * 100)}% went`, split: s('R.won')},
+      {from: 'R', to: 'Z', kind: 'alt', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went')},
+      {from: 'Z', to: 'EP', kind: 'next', band: 'Places 4–18', places: n('Z.mid'), take: n('Z.mid.went'), pct: `${Math.round(n('Z.mid.went') / n('Z.mid') * 100)}% went`, split: s('Z.mid')},
+      {from: 'Z', to: 'EP', kind: 'alt', band: '19th or lower', places: n('Z.low.toE'), split: s('Z.low.toE')},
+      {from: 'Z', to: 'NP', kind: 'nat', band: 'Zones places 1–3 go straight to Junior Nationals', places: n('Z.top3'), take: n('N.zoneTop3'), split: s('Z.top3')},
+      {from: 'EP', to: 'EF', kind: 'round', band: 'Top 12', places: n('E.final'), split: s('E.final')},
+      {from: 'EF', to: 'NP', kind: 'nat', band: 'Places 1–3', places: n('E.top3'), take: n('N.ewcTop3'), split: s('E.top3')},
+      {from: 'EF', to: 'NP', kind: 'avg', band: 'Average bar', places: n('N.ewcBar'), split: s('N.ewcBar')},
+      {from: 'NP', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.final'), split: s('N.final')}],
+    strip: ['WAYS INTO JUNIOR NATIONALS — 2026 ACTUAL',
+      `Zones top 3: ${f0(n('N.zoneTop3'))} · E/W/C top 3: ${f0(n('N.ewcTop3'))} · average bar: ${f0(n('N.ewcBar'))} · HP Squad: ${f0(n('N.hps'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
+    foot: `It is every real 2026 Junior Circuit entry, followed from results by diver and board; \u201cother\u201d at Junior Nationals is ${f0(n('N.otherCompeted'))} without a qualifying finish, ${f0(n('N.ewcBelow'))} E/W/C 4th\u20136th below the bar, ${f0(n('N.otherNoResult'))} with no Zones or E/W/C result.`};
+}
+
+/* A submission's projection as a route-map spec. */
+function rmSpecProjected(col){
+  if (!col || col.error) return {withheld: col && col.error ? col.error : 'this submission could not be projected'};
+  if ((col.dropped || 0) > 0.5) return {withheld: `${fmt(Math.round(col.dropped))} places are routed to a level or round that does not exist; fix the routes first`};
+  const lv = col.levels || [], last = lv.length - 1, f0 = v => fmt(Math.round(v));
+  const pair = {}; (col.flowPairs || []).forEach(p => { pair[p.from + '>' + p.to] = p.places > 0 ? p.arrived / p.places : 1; });
+  const sid = (L, k) => L + ':' + k;
+  const stations = [], routes = [];
+  for (let L = 0; L <= last; L++){
+    const l = lv[L];
+    (l.detail || []).forEach((r, ri) => {
+      const outs = r.routes.filter(rt => rt.toIdx != null);
+      let sent = 0, declined = 0, hi = 0, contiguous = true;
+      outs.slice().sort((a, b) => a.lo - b.lo).forEach(rt => { if (rt.lo !== hi + 1) contiguous = false; hi = rt.hi == null ? Infinity : Math.max(hi, rt.hi); });
+      outs.forEach(rt => {
+        const kind = rt.toIdx === L ? 'round' : rt.toIdx === last ? 'nat' : 'next';
+        const ratio = rt.toIdx === L ? 1 : (pair[L + '>' + rt.toIdx] != null ? pair[L + '>' + rt.toIdx] : 1);
+        const take = rt.sends * ratio;
+        sent += rt.sends; declined += rt.sends - take;
+        const toKey = (lv[rt.toIdx].detail || []).find(d => d.name === rt.toRound);
+        routes.push({from: sid(L, r.key), to: sid(rt.toIdx, toKey ? toKey.key : ''), kind,
+          band: (rt.hi == null ? `${rmOrd(rt.lo)} and lower` : `Places ${rt.lo}–${rt.hi}`) + (kind === 'nat' && rt.toIdx - L > 1 ? ` go straight to ${lv[rt.toIdx].name}` : ''),
+          places: rt.sends, take: kind === 'round' ? null : take,
+          pct: kind === 'round' ? null : `${Math.round(ratio * 100)}% take up, ${lv[rt.toIdx].measured != null ? 'measured' : 'assumed'}`, assumed: kind !== 'round' && lv[rt.toIdx].measured == null,
+          split: BOARDS.map(b => (rt.byBoard || {})[b.k] || 0)});
+      });
+      const noPlace = r.size - sent;
+      if (noPlace < -0.5) { stations.bad = `${l.name} ${r.name.toLowerCase()} sends on more places (${f0(sent)}) than it has event entries (${f0(r.size)})`; }
+      const stop = noPlace + declined, isLast = L === last && ri === (l.detail.length - 1);
+      stations.push({id: sid(L, r.key), level: L, round: (l.detail.length === 1 ? l.name : r.name.replace(/^Preliminaries$/, 'Prelims').replace(/^Finals$/, 'Final')), n: r.size, goal: L === last,
+        direct: ri === 0 && L > 0 && l.direct >= 0.5 ? {n: l.direct, lines: [`no place from ${lv[L - 1].name}`]} : null,
+        stop: isLast || stop < 0.5 ? null : (L === last ? [`${f0(stop)} finish here`] : [`${f0(stop)} stop`,
+          noPlace >= 0.5 ? `${f0(noPlace)} ${contiguous && isFinite(hi) ? 'placed ' + rmOrd(hi + 1) + '+' : 'no qualifying place'}` : null,
+          declined >= 0.5 ? `${f0(declined)} did not go` : null].filter(Boolean))});
+    });
+  }
+  if (stations.bad) return {withheld: stations.bad};
+  const into = routes.filter(r => r.kind === 'nat');
+  const tot = into.reduce((a, r) => a + r.take, 0), anyAssumed = into.some(r => r.assumed);
+  return {levels: lv.map((l, L) => ({name: l.name, entries: l.entries, meets: l.stops, rounds: (l.detail || []).length, actual: l.actual, stage: l.stage, goal: L === last})),
+    stations, routes,
+    strip: [`WAYS INTO ${String(lv[last].name).toUpperCase()} — PROJECTED`,
+      into.map(r => { const st = stations.find(z => z.id === r.from); const L = +r.from.split(':')[0]; return `${lv[L].name}${(lv[L].detail || []).length > 1 ? ' ' + st.round.toLowerCase() : ''} ${r.band.replace(/ go straight.*/, '').replace(/^Places /, 'places ')} (${f0(r.take)})`; }).join(' + ') + ` = ${f0(tot)}` + (anyAssumed ? ' · take-up assumed 100%, not measured' : ' · take-up measured')]};
+}
+
+function pathwayRouteMap(spec, o){
   o = o || {};
-  const W = 672, lv = (col && col.levels) || [], n = lv.length;
-  const idp = String(o.id || 'pf').replace(/[^a-z0-9_-]/gi, '');
-  const r0 = v => Math.round(v || 0), f0 = v => fmt(r0(v));
-  const pct = (a, b) => b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
-  const withheld = why => `<div style="border:1px solid #c9d0dc;border-left:3px solid #b3122b;padding:10px 12px;font-size:9.5pt;color:#4b5568">Flow diagram withheld: ${esc(why)}</div>`;
-  if (!col || col.error) return withheld(col && col.error ? col.error : 'this proposal could not be projected');
-  if (!n) return withheld('the proposal has no levels');
-  if ((col.dropped || 0) > 0.5) return withheld(`${f0(col.dropped)} places are routed to a level or round that does not exist; fix the routes first`);
-  const pairs = (col.flowPairs || []).filter(p => p.to > p.from && p.to < n);
-  const acc = lv.map((l, L) => {
-    const outs = pairs.filter(p => p.from === L), ins = pairs.filter(p => p.to === L);
-    const placesOut = outs.reduce((a, p) => a + p.places, 0), arrivedOut = outs.reduce((a, p) => a + p.arrived, 0);
-    const arrivedIn = ins.reduce((a, p) => a + p.arrived, 0);
-    return {l, L, outs, ins, placesOut, arrivedOut, arrivedIn,
-            direct: L === 0 ? 0 : l.entries - arrivedIn,
-            declined: placesOut - arrivedOut, noPlace: l.entries - placesOut};
+  const W = 672;
+  if (!spec) return '';
+  if (spec.withheld) return `<div style="border:1px solid #c9d0dc;border-left:3px solid #b3122b;padding:10px 12px;font-size:9.5pt;color:#4b5568">Route map withheld: ${esc(spec.withheld)}</div>`;
+  const NV = '#171f69', PL = '#009ac7', SKY = '#8fc3ea', RD = '#b3122b', AM = '#b45309';
+  const f0 = v => fmt(Math.round(v));
+  const bc = "font-family:'Barlow Condensed',sans-serif;font-weight:700;", it = s => `font-family:Inter,sans-serif;font-size:${s}px;`, mo = s => `font-family:'JetBrains Mono',monospace;font-weight:600;font-size:${s}px;`;
+  let out = '';
+  const T = (x, y, s, st, a) => { out += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${a || 'middle'}" style="${st}">${s}</text>`; };
+  const k = o.scale || 0.0105, rw = v => Math.max(2.5, v * k), rr = v => 7 + Math.sqrt(Math.max(0, v)) * 0.33;
+  // Panels: width shared by rounds, never narrower than 122px.
+  const lv = spec.levels, nR = spec.stations.length, gap = 8;
+  const unit = (W - gap * (lv.length - 1)) / nR;
+  let x = 0; const panels = lv.map((l, L) => { const cnt = spec.stations.filter(s => s.level === L).length; const w = Math.max(122, unit * cnt); const p = {x0: x, x1: x + w}; x += w + gap; return p; });
+  const over = x - gap - W; if (over > 0){ const shrink = over / lv.length; let xx = 0; panels.forEach(p => { const w = p.x1 - p.x0 - shrink; p.x0 = xx; p.x1 = xx + w; xx += w + gap; }); }
+  const S0 = {}; spec.stations.forEach(s => { const p = panels[s.level], list = spec.stations.filter(z => z.level === s.level), i = list.indexOf(s);
+    s.x = p.x0 + (p.x1 - p.x0) * (i + 0.5) / list.length; if (s.level === 0 && list.length === 1) s.x = p.x0 + 52; if (s.goal && i === list.length - 1 && list.length > 1) s.x = Math.min(s.x, W - 22); S0[s.id] = s; });
+  const hasArc = spec.routes.some(r => { const a = S0[r.from], b = S0[r.to]; return a && b && spec.stations.some(s => s.x > a.x + 1 && s.x < b.x - 1); });
+  const Y = hasArc ? 150 : 116;
+  // Station label blocks decide the height.
+  const lines = s => 1 + (s.direct && s.direct.n >= 0.5 ? 1 + (s.direct.lines || []).length : 0) + (s.stop ? s.stop.length : 0);
+  const LH = 9, H = Math.ceil(Y + 68 + (Math.max(...spec.stations.map(lines)) - 1) * LH + 12 + 40);
+  lv.forEach((l, L) => { const p = panels[L], w = p.x1 - p.x0;
+    out += `<rect x="${p.x0.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 39}" rx="8" fill="${l.goal ? '#eaf2fb' : '#f4f6fa'}"/>`;
+    T(p.x0 + 10, 20, esc(String(l.name).toUpperCase()), bc + 'font-size:12px;fill:#171f69;letter-spacing:.03em', 'start');
+    T(p.x0 + 10, 46, f0(l.entries), bc + 'font-size:26px;fill:#171f69', 'start');
+    const m1 = `${fmt(l.meets)} ${l.meets === 1 ? 'meet' : 'meets'} · ${l.rounds} ${l.rounds === 1 ? 'round' : 'rounds'}`;
+    const m2 = l.note ? esc(l.note) : l.actual != null ? `actual ${esc(yearNumBoundary(S.year))}${l.stage ? ' ' + esc(l.stage) : ''}: ${fmt(l.actual)}` : '';
+    if (w < 170 && m2){ T(p.x0 + 10, 60, m1, it(8.5) + 'fill:#4b5568', 'start'); T(p.x0 + 10, 71, m2, it(8.5) + 'fill:#6b7385', 'start'); }
+    else T(p.x0 + 10, 60, m1 + (m2 ? ` · <tspan style="fill:#6b7385">${m2}</tspan>` : ''), it(8.5) + 'fill:#4b5568', 'start'); });
+  // Routes. A second route between the same two stops bows above the first.
+  const seen = {};
+  spec.routes.forEach(rt => {
+    const a = S0[rt.from], b = S0[rt.to]; if (!a || !b) return;
+    const arc = spec.stations.some(s => s.x > a.x + 1 && s.x < b.x - 1);
+    const key = rt.from + '>' + rt.to, nth = seen[key] = (seen[key] || 0) + 1;
+    const col = rt.kind === 'nat' ? NV : rt.kind === 'next' ? PL : rt.kind === 'round' ? SKY : AM;
+    const thick = rw(rt.take != null ? rt.take : rt.places);
+    let d, mx = (a.x + b.x) / 2;
+    if (arc){ const ly = Y - 52; d = `M${a.x.toFixed(1)} ${Y} C ${a.x.toFixed(1)} ${ly + 20}, ${(a.x + 14).toFixed(1)} ${ly}, ${(a.x + 40).toFixed(1)} ${ly} L ${(b.x - 40).toFixed(1)} ${ly} C ${(b.x - 14).toFixed(1)} ${ly}, ${b.x.toFixed(1)} ${ly + 20}, ${b.x.toFixed(1)} ${Y}`; }
+    else if (nth > 1){ const h = 30; d = `M${a.x.toFixed(1)} ${Y} C ${a.x.toFixed(1)} ${Y - h}, ${b.x.toFixed(1)} ${Y - h}, ${b.x.toFixed(1)} ${Y}`; }
+    else d = `M${a.x.toFixed(1)} ${Y} L${b.x.toFixed(1)} ${Y}`;
+    if (rt.take != null && rt.take < rt.places - 0.5) out += `<path d="${d}" fill="none" stroke="${SKY}" stroke-width="${rw(rt.places).toFixed(2)}" opacity=".7"/>`;
+    out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${(nth > 1 && !arc ? Math.max(2, thick) : thick).toFixed(2)}"${rt.kind === 'round' ? ' stroke-dasharray="7 4"' : ''}/>`;
+    const split = rt.split ? rt.split.map(f0).join(' · ') : '';
+    const counts = rt.take != null && rt.take < rt.places - 0.5 ? `${f0(rt.places)} → ${f0(rt.take)}` : f0(rt.take != null ? rt.take : rt.places);
+    if (arc){ const ly = Y - 52; T(mx, ly - 20, esc(rt.band), bc + 'font-size:11.5px;fill:#171f69'); T(mx, ly - 8, `${counts}<tspan dx="10" style="fill:#8a93a6">${split}</tspan>`, mo(8.5) + 'fill:#171f69'); }
+    else if (nth > 1){ T(a.x + rr(a.n) + 4, Y - 27, `${esc(rt.band)} · ${f0(rt.places)}`, bc + 'font-size:10.5px;fill:' + (rt.kind === 'avg' || rt.kind === 'alt' ? '#9a4a06' : '#171f69'), 'start'); }
+    else { T(mx, Y + 24, esc(rt.band), bc + 'font-size:11.5px;fill:#171f69'); T(mx, Y + 36, counts, mo(9) + 'fill:#0c3d66');
+      let yy = Y + 36; if (rt.pct){ yy += 11; T(mx, yy, esc(rt.pct), it(8) + (rt.assumed ? 'fill:#9a4a06' : 'fill:#4b5568')); }
+      yy += 11; T(mx, yy, split, mo(7.8) + 'fill:#8a93a6'); }
   });
-  const off = acc.find(a => a.direct < -0.5 || a.declined < -0.5 || a.noPlace < -0.5);
-  if (off) return withheld(`${off.l.name} does not balance (${f0(off.l.entries)} event entries against ${f0(off.arrivedIn)} arriving and ${f0(off.placesOut)} places sent on), so the flow cannot be drawn without inventing a number`);
-  acc.forEach(a => { a.direct = Math.max(0, a.direct); a.declined = Math.max(0, a.declined); a.noPlace = Math.max(0, a.noPlace); });
-
-  const k = o.scale || (150 / Math.max(1, ...lv.map(l => l.entries || 0)));
-  const th = v => v > 0.5 ? Math.max(1.5, v * k) : 0;
-  const NW = 12, M = 64;
-  const cx = L => n === 1 ? W / 2 : M + (W - 2 * M) * L / (n - 1);
-  const gap = n > 1 ? (W - 2 * M) / (n - 1) : W - 2 * M;
-  const measured = T => lv[T] && lv[T].measured != null;
-  const tier = L => esc(lv[L].name);
-  const out = [];
-  const T = (x, y, s, a) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}"${a || ''}>${s}</text>`;
-  const estW = (s, px, cond) => String(s).replace(/<[^>]+>/g, '').length * px * (cond ? 0.46 : 0.56);
-  const wrap = (s, maxW, px) => { const words = String(s).split(' '), lines = []; let cur = '';
-    words.forEach(w => { const t = cur ? cur + ' ' + w : w; if (cur && estW(t, px) > maxW){ lines.push(cur); cur = w; } else cur = t; });
-    if (cur) lines.push(cur); return lines; };
-
-  // Header per level
-  const HEAD = 80;
-  lv.forEach((l, L) => {
-    const x = cx(L), a = acc[L];
-    const lines = [
-      {s: esc(String(l.name).toUpperCase()), px: 11.5, cls: 'font-family:\'Barlow Condensed\',sans-serif;font-weight:700;fill:#171f69;letter-spacing:.02em', y: 13, cond: true},
-      {s: f0(l.entries), px: 24, cls: 'font-family:\'Barlow Condensed\',sans-serif;font-weight:700;fill:#171f69', y: 38, cond: true},
-      {s: `event entries, projected · ${fmt(l.stops)} ${l.stops === 1 ? 'meet' : 'meets'}`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#4b5568', y: 51},
-      l.divers != null ? {s: `about ${f0(l.divers)} athletes (${l.diversReliable ? 'estimated' : 'rough estimate'})`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#6b7385', y: 63} : null,
-      l.actual != null ? {s: `actual ${esc(yearNumBoundary(o.year || S.year))}${l.stage ? ' ' + esc(l.stage) : ''}: ${fmt(l.actual)}`, px: 8.5, cls: 'font-family:Inter,sans-serif;fill:#6b7385', y: l.divers != null ? 75 : 63} : null,
-    ].filter(Boolean);
-    const wMax = Math.max(...lines.map(z => estW(z.s, z.px, z.cond)));
-    const anc = x - wMax / 2 < 2 ? ['start', 2] : x + wMax / 2 > W - 2 ? ['end', W - 2] : ['middle', x];
-    lines.forEach(z => out.push(T(anc[1], z.y, z.s, ` text-anchor="${anc[0]}" style="${z.cls};font-size:${z.px}px"`)));
+  // Direct entrants: a feeder from below into the stop they join.
+  spec.stations.forEach(s => { if (s.direct && s.direct.n >= 0.5) out += `<line x1="${s.x.toFixed(1)}" y1="${Y}" x2="${s.x.toFixed(1)}" y2="${Y + 58}" stroke="${SKY}" stroke-width="${rw(s.direct.n).toFixed(2)}"/>`; });
+  spec.stations.forEach(s => {
+    const R0 = rr(s.n);
+    out += `<circle cx="${s.x.toFixed(1)}" cy="${Y}" r="${R0.toFixed(1)}" fill="${s.goal ? NV : '#fff'}" stroke="${NV}" stroke-width="3"/>`;
+    if (s.goal) T(s.x, Y + 4, f0(s.n), bc + `font-size:${R0 > 18 ? 14 : 11}px;fill:#fff`);
+    let ly = Y + 68;
+    T(s.x, ly, s.goal ? esc(s.round) : `${esc(s.round)} · <tspan style="${mo(8.5)}fill:#4b5568">${f0(s.n)}</tspan>`, bc + 'font-size:11.5px;fill:#171f69');
+    if (s.direct && s.direct.n >= 0.5){ ly += 12; T(s.x, ly, `+${f0(s.direct.n)} start here`, bc + 'font-size:11px;fill:#005f86');
+      (s.direct.lines || []).forEach(z => { ly += LH; T(s.x, ly, esc(z), it(8) + 'fill:#005f86'); }); }
+    if (s.stop){ ly += 13; T(s.x, ly, '↓ ' + esc(s.stop[0]), bc + 'font-size:11.5px;fill:' + RD); s.stop.slice(1).forEach(z => { ly += LH; T(s.x, ly, esc(z), it(8) + 'fill:#4b5568'); }); }
   });
-
-  // Lanes above the bars for any flow that skips a level
-  const skips = pairs.filter(p => p.to > p.from + 1 && p.arrived > 0.5).sort((a, b) => (b.to - b.from) - (a.to - a.from));
-  let laneY = HEAD + 10;
-  skips.forEach(p => { const h = th(p.arrived); p.lane = laneY + h / 2; laneY += h + 16; });
-  // A band too thin to hold its own label carries it just above, so leave a line
-  const thinLead = pairs.some(p => p.to === p.from + 1 && p.arrived > 0.5 && th(p.arrived) < 12) ? 12 : 0;
-  const topY = (skips.length ? laneY + 4 : HEAD + 10) + thinLead;
-  const maxBar = Math.max(...lv.map(l => th(l.entries)));
-
-  // Stack the right (out) and left (in) edges of every bar
-  const segOut = {}, segIn = {};
-  acc.forEach(a => {
-    let y = topY;
-    const outs = a.outs.slice().sort((p, q) => q.to - p.to);          // farthest first, on top
-    outs.forEach(p => { const h = th(p.arrived); segOut[p.from + '>' + p.to] = [y, h]; y += h; });
-    a.declY = [y, th(a.declined)]; y += th(a.declined);
-    a.noY = [y, th(a.noPlace)];
-    let yi = topY;
-    const ins = a.ins.slice().sort((p, q) => p.from - q.from);          // farthest first, on top
-    ins.forEach(p => { const h = th(p.arrived); segIn[p.from + '>' + p.to] = [yi, h]; yi += h; });
-    a.dirY = [yi, th(a.direct)];
-  });
-
-  /* Gradients are in user space, one per band: a band that runs dead level
-     has a zero-height bounding box, and an objectBoundingBox gradient on it
-     renders nothing at all. */
-  const PAL = {a: ['#4f9fcf', '#8fc3ea'], j: ['#c7e1f5', '#8fc3ea'], r: ['#e31937', '#ef8a97'], d: ['#d9822b', '#f2c38f']};
-  const bands = [], grads = [];
-  const labels = [];
-  const band = (d, h, kind, xa, xb) => { if (!(h > 0)) return; const gid = `${idp}-g${grads.length}`, c = PAL[kind];
-    grads.push(`<linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${xa.toFixed(1)}" y1="0" x2="${xb.toFixed(1)}" y2="0"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient>`);
-    bands.push(`<path d="${d}" fill="none" stroke="url(#${gid})" stroke-width="${h.toFixed(2)}"/>`); };
-  const curve = (x0, y0, x1, y1) => { const xm = (x0 + x1) / 2; return `M${x0.toFixed(1)},${y0.toFixed(1)} C${xm.toFixed(1)},${y0.toFixed(1)} ${xm.toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`; };
-
-  // Advancing bands
-  pairs.forEach(p => {
-    if (p.arrived <= 0.5) return;
-    const so = segOut[p.from + '>' + p.to], si = segIn[p.from + '>' + p.to];
-    const x0 = cx(p.from) + NW / 2, x1 = cx(p.to) - NW / 2, y0 = so[0] + so[1] / 2, y1 = si[0] + si[1] / 2, h = so[1];
-    const tk = `${f0(p.arrived)} advance to ${tier(p.to)}`;
-    const sub = `${f0(p.places)} places · ${Math.round(p.arrived / p.places * 100)}% taken up (${measured(p.to) ? 'measured' : 'assumed, not measured'})`;
-    if (p.lane != null){
-      const ly = p.lane;
-      band(`M${x0},${y0.toFixed(1)} C${x0 + 34},${y0.toFixed(1)} ${x0 + 34},${ly.toFixed(1)} ${x0 + 68},${ly.toFixed(1)} L${x1 - 68},${ly.toFixed(1)} C${x1 - 34},${ly.toFixed(1)} ${x1 - 34},${y1.toFixed(1)} ${x1},${y1.toFixed(1)}`, h, 'a', x0, x1);
-      const mx = (cx(p.from) + cx(p.to)) / 2;
-      labels.push(T(mx, ly - h / 2 - 3, `${tk} · ${sub}`, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:8.5px;fill:#171f69"`));
-      return;
-    }
-    band(curve(x0, y0, x1, y1), h, 'a', x0, x1);
-    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, room = x1 - x0 - 16;
-    if (h >= 26){
-      labels.push(T(mx, my - 2, tk, ` text-anchor="middle" style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;fill:#171f69"`));
-      wrap(sub, room, 7.8).slice(0, 2).forEach((s, i) => labels.push(T(mx, my + 9 + i * 9.5, s, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:7.8px;fill:#171f69"`)));
-    } else {
-      const short = `${Math.round(p.arrived / p.places * 100)}% of ${f0(p.places)} places ${measured(p.to) ? '(measured)' : '(assumed)'}`;
-      let line = `${tk} · ${short}`;
-      if (estW(line, 8) > room) line = `${f0(p.arrived)} advance · ${short}`;
-      labels.push(T(mx, h >= 12 ? my + 3 : Math.min(y0, y1) - h / 2 - 4, line, ` text-anchor="middle" style="font-family:Inter,sans-serif;font-size:8px;font-weight:600;fill:#171f69"`));
-    }
-  });
-
-  // Direct entrants: a short band from the left, just below where they land
-  let barsBottom = topY + maxBar;
-  acc.forEach(a => {
-    if (a.L === 0 || a.direct <= 0.5) return;
-    const [yT, h] = a.dirY, x1 = cx(a.L) - NW / 2, sx = cx(a.L) - gap * 0.30, sy = yT + 18;
-    band(curve(sx + 8, sy + h / 2, x1, yT + h / 2), h, 'j', sx + 8, x1);
-    bands.push(`<rect x="${sx.toFixed(1)}" y="${sy.toFixed(1)}" width="8" height="${h.toFixed(1)}" rx="1.5" fill="#4f9fcf"/>`);
-    const lx = sx - 6, ly = sy + Math.max(10, h / 2 - 8);
-    labels.push(T(lx, ly, `\u2191 ${f0(a.direct)} join here`, ` text-anchor="end" style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5px;fill:#005f86"`));
-    wrap(`entered ${tier(a.L)} directly, with no place from ${tier(a.L - 1)}`, gap * 0.40, 8).slice(0, 3)
-      .forEach((s, i) => labels.push(T(lx, ly + 11 + i * 10, s, ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#4b5568"`)));
-    barsBottom = Math.max(barsBottom, sy + h, ly + 11 + 30);
-  });
-
-  // Who stops after each level
-  const stopTop = barsBottom + 18;
-  let bottom = stopTop;
-  acc.forEach(a => {
-    const last = a.L === n - 1;
-    if (last){
-      const y = topY + th(a.l.entries) + 12;
-      labels.push(T(cx(a.L) + NW / 2, y, 'final level', ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#6b7385"`));
-      labels.push(T(cx(a.L) + NW / 2, y + 10, 'nobody advances', ` text-anchor="end" style="font-family:Inter,sans-serif;font-size:8px;fill:#6b7385"`));
-      bottom = Math.max(bottom, y + 12);
-      return;
-    }
-    const stop = a.declined + a.noPlace;
-    if (stop <= 0.5) return;
-    const x0 = cx(a.L) + NW / 2, sx = cx(a.L) + gap * 0.32, hd = a.declY[1], hn = a.noY[1];
-    band(curve(x0, a.declY[0] + hd / 2, sx, stopTop + hd / 2), hd, 'd', x0, sx);
-    band(curve(x0, a.noY[0] + hn / 2, sx, stopTop + hd + hn / 2), hn, 'r', x0, sx);
-    if (hd) bands.push(`<rect x="${sx.toFixed(1)}" y="${stopTop.toFixed(1)}" width="8" height="${hd.toFixed(1)}" fill="#d9822b"/>`);
-    if (hn) bands.push(`<rect x="${sx.toFixed(1)}" y="${(stopTop + hd).toFixed(1)}" width="8" height="${hn.toFixed(1)}" fill="#e31937"/>`);
-    const lx = sx + 14, maxW = gap * 0.68 - 26;
-    let y = stopTop + 10;
-    labels.push(T(lx, y, `\u2193 ${f0(stop)} stop after ${tier(a.L)}`, ` style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5px;fill:#b3122b"`));
-    const sub = [
-      [`${pct(stop, a.l.entries)} of ${tier(a.L)} event entries`, '#4b5568'],
-      a.declined > 0.5 ? [`${f0(a.declined)} had a place, did not take it up`, '#9a4a06'] : null,
-      a.noPlace > 0.5 ? [`${f0(a.noPlace)} did not place high enough`, '#4b5568'] : null,
-    ].filter(Boolean);
-    sub.forEach(([s, c]) => wrap(s, maxW, 8).forEach(line => { y += 10.5; labels.push(T(lx, y, line, ` style="font-family:Inter,sans-serif;font-size:8px;fill:${c}"`)); }));
-    bottom = Math.max(bottom, stopTop + hd + hn, y + 4);
-  });
-
-  // Bars on top of the band ends
-  const bars = lv.map((l, L) => `<rect x="${(cx(L) - NW / 2).toFixed(1)}" y="${topY.toFixed(1)}" width="${NW}" height="${Math.max(2, th(l.entries)).toFixed(1)}" rx="2" fill="#171f69"/>`).join('');
-  const H = Math.ceil(bottom + 6);
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible" role="img" aria-label="Pathway flow, projected event entries"><defs>${grads.join('')}</defs><g>${bands.join('')}</g>${bars}<g>${out.join('')}${labels.join('')}</g></svg>`;
+  out += `<rect x="0" y="${H - 34}" width="${W}" height="33" rx="7" fill="${NV}"/>`;
+  T(12, H - 21, esc(spec.strip[0]), bc + 'font-size:10.5px;fill:#8fc3ea;letter-spacing:.04em', 'start');
+  T(12, H - 8, esc(spec.strip[1]), it(9.5) + 'fill:#fff;font-weight:500', 'start');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="Qualification route map">${out}</svg>`;
 }
 
 function atlasReportHtml(res){
@@ -9713,17 +9811,22 @@ function atlasReportHtml(res){
   const cmpAsSaved = (S.cmpAxis||'scenario') === 'scenario';
   // Pathway-at-a-glance flow pages: every compared proposal (two per page),
   // or this proposal alone when nothing is pinned.
-  const flowCols = C ? C.map((c, i) => ({c, name: i === 0 ? name : c.label, i}))
-                     : [{c: (() => { try { return summariseRouting(S.routing, name, null); } catch(e){ return {error: 'could not project'}; } })(), name, i: 0}];
-  // One bar scale across every proposal, so heights compare directly. Then
-  // pack the diagrams onto pages by their drawn height: two to a page when
-  // they fit, otherwise one -- never clipped by the fixed page.
-  const flowScale = 105 / Math.max(1, ...flowCols.map(fc => Math.max(0, ...((fc.c && fc.c.levels) || []).map(l => l.entries || 0))));
-  flowCols.forEach(fc => { fc.svg = pathwayFlowSvg(fc.c, {id: 'pf' + fc.i, scale: flowScale});
-    const m = /viewBox="0 0 672 (\d+)"/.exec(fc.svg); fc.h = (m ? +m[1] : 90) + 40; });
+  const flowCols = C ? C.map((c, i) => ({c, name: i === 0 ? name : c.label, i, id: i === 0 ? S.scenarioId : c.scenarioId}))
+                     : [{c: (() => { try { return summariseRouting(S.routing, name, null); } catch(e){ return {error: 'could not project'}; } })(), name, i: 0, id: S.scenarioId}];
+  // The Official 2026 record is the season as it ran: drawn from every real
+  // 2026 entry, never projected. Any other column is its own projection.
+  // Pack onto pages by drawn height: two to a page when they fit, else one.
+  flowCols.forEach(fc => {
+    let spec;
+    if (fc.id === RM_OFFICIAL_2026 && S.year === 'y26'){
+      spec = S.act26 ? rmSpecActual2026(S.act26) : {withheld: S.act26Err ? 'the real 2026 results could not be read (' + S.act26Err + ')' : 'reading the real 2026 results…'};
+      fc.actual = true;
+    } else spec = rmSpecProjected(fc.c);
+    fc.svg = pathwayRouteMap(spec); fc.foot = spec.foot || '';
+    const m = /viewBox="0 0 672 (\d+)"/.exec(fc.svg); fc.h = (m ? +m[1] : 60) + 30; });
   const flowPageList = [];
   flowCols.forEach(fc => { const pg = flowPageList[flowPageList.length - 1];
-    const room = flowPageList.length === 1 ? 630 : 800;   // measured: 703 / 879 px free, less the closing note
+    const room = flowPageList.length === 1 ? 700 : 820;   // measured 2026-09-25 with the closing note and key   // measured 2026-09-25: diagrams may run from ~232px (first page) / ~100px to ~940px
     if (pg && pg.length < 2 && pg.reduce((a, x) => a + x.h, 0) + fc.h <= room) pg.push(fc); else flowPageList.push([fc]); });
   const flowPages = flowPageList.length;
   const nPages = 4 + flowPages + (C ? 2 : 0);
@@ -9896,12 +9999,18 @@ function atlasReportHtml(res){
     const first = pg === 0;
     const exName = C ? 'Exhibit C' : 'Exhibit B, continued';
     pF += `<article class="atl-pg" data-screen-label="Report pathway flow ${pg + 1}">${head2(first ? exName : exName + (C ? ', continued' : ''))}
-      ${first ? rt('exF', C ? 'Exhibit C. Pathway at a glance' : 'Exhibit B, continued. Pathway at a glance', 'div', 'atl-ex') : ''}
-      ${first ? rt('exFs', `Who moves on from each level. Bars are levels, as tall as their projected event entries (one athlete in one event). Blue: places taken up at the next level. Orange: had a qualifying place and did not take it up. Red: did not place high enough. Light blue from the left: athletes who start at that level with no place from the one before. Where take-up is marked \u201cassumed\u201d, everyone is taken to attend, so that figure is a ceiling.${C ? ' All proposals are drawn to one scale.' : ''}`, 'div', 'atl-exs') : ''}
-      ${two.map(fc => `<div style="margin-top:${first ? 14 : 4}px;break-inside:avoid">
-        <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12.5pt;color:#171f69;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #eceff4">${C ? `<span class="atl-let sm" style="background:${CMP_TAG[fc.i]}">${CMP_LET[fc.i]}</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fc.name)}</span></div>
+      ${first ? rt('exF', C ? 'Exhibit C. How an athlete reaches Junior Nationals' : 'Exhibit B, continued. How an athlete reaches Junior Nationals', 'div', 'atl-ex') : ''}
+      ${first ? rt('exFs', `Each round is a stop; each line a route out of it, as thick as the event entries it carries. Under each route: the place needed, places won → places taken up, and places won by board (1-meter · 3-meter · platform).`, 'div', 'atl-exs') : ''}
+      ${two.map(fc => `<div style="margin-top:${first ? 4 : 4}px;break-inside:avoid">
+        <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;color:#171f69;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #eceff4">${C ? `<span class="atl-let sm" style="background:${CMP_TAG[fc.i]}">${CMP_LET[fc.i]}</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fc.name)}</span></div>
         ${fc.svg}</div>`).join('')}
-      <div style="flex:1"></div>${pg === flowPages - 1 ? rt('exFf', `All counts are projected event entries unless marked otherwise; each is rounded on its own, so parts can differ from a total by one. Athlete counts are estimates from the measured number of events each athlete enters, and are labelled as such. \u201cActual\u201d is the real field of the stage that level stands in for in the ${esc(yearNumBoundary(S.year))} season, given for reference, not as a like-for-like projection. The same figures in words are in ${C ? 'Exhibit C, continued' : 'Exhibit B'}.`, 'p', 'atl-fn') : ''}
+      ${pg === flowPages - 1 ? `<div style="display:flex;flex-wrap:wrap;gap:3px 14px;white-space:nowrap;font-size:7.5pt;color:#4b5568;margin-top:8px">
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#009ac7" stroke-width="5"/></svg> next level</span>
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#171f69" stroke-width="5"/></svg> championship</span>
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#8fc3ea" stroke-width="5" stroke-dasharray="7 4"/></svg> next round</span>
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#8fc3ea" stroke-width="8" opacity=".7"/></svg> not taken up</span>
+        <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#b45309" stroke-width="3"/></svg> another way in (4th–6th over the average bar, approvals)</span></div>` : ''}
+      <div style="flex:1"></div>${pg === flowPages - 1 ? rt('exFf2', `All counts are event entries (one athlete in one event). Submissions are projected from the real ${esc(yearNumBoundary(S.year))} field, each figure rounded on its own; take-up marked \u201cassumed\u201d is a ceiling. ${flowCols.some(fc => fc.actual) ? 'The Official 2026 map is not projected. ' + esc((flowCols.find(fc => fc.actual) || {}).foot || '') : ''}`, 'p', 'atl-fn atl-fn-sm') : ''}
       ${pageFoot(4 + pg)}</article>`;
   }
 
@@ -9983,6 +10092,9 @@ function atlasMain(){
   // (Structure, Compare) and saved maps (Compare, Report). Re-render once they land.
   if (!S.pathList && !S._pathListBusy){ S._pathListBusy = true; listPathways().then(l => { S.pathList = l; S._pathListBusy = false; if (atlasOn() && S.panelMode !== 'map') atlasMain(); }); }
   if (!S.mapList && !S._mapListBusy && (M === 'compare' || M === 'report')){ S._mapListBusy = true; loadMapList().then(() => { S._mapListBusy = false; if (atlasOn() && S.panelMode !== 'map') atlasMain(); }); }
+  if (M === 'report' && S.year === 'y26' && !S.act26 && !S._act26Busy && !S.act26Err){ S._act26Busy = true;
+    loadActual2026Routes().then(a => { S.act26 = a; }).catch(e => { S.act26Err = e.message || String(e); console.error('real 2026 routes', e); })
+      .then(() => { S._act26Busy = false; if (atlasOn() && S.panelMode !== 'map') atlasMain(); }); }
   let inner, res = null;
   if (!QR()) inner = '<div class="atl-page"><div class="atl-note">Pathway engine not loaded.</div></div>';
   else if (!S.flow) inner = `<div class="atl-page"><div class="atl-note">${S.flowErr ? esc(S.flowErr) : 'Working out the pathway…'}</div></div>`;
