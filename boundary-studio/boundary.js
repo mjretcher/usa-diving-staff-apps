@@ -315,7 +315,7 @@ function snapshot(){
           finalName:S.finalName,
           routing: S.routing ? JSON.parse(JSON.stringify(S.routing)) : null,
           arrival: S.arrival ? JSON.parse(JSON.stringify(S.arrival)) : null,
-          seedPool: S.seedPool || null};
+          seedPool: S.seedPool || null, firstStopAll: !!S.firstStopAll};
 }
 function sameAssign(a, b){
   const ka = Object.keys(a);
@@ -336,7 +336,7 @@ function applySnap(sn){
   S.assign = sn.assign; S.regions = sn.regions; S.levels = sn.levels; S.finalName = sn.finalName;
   if ('routing' in sn){
     if (sn.routing && S.routing && JSON.stringify(sn.routing) !== JSON.stringify(S.routing)) markPathwayEdited();
-    S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool;
+    S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool; S.firstStopAll = !!sn.firstStopAll;
   }
   syncLevels();
   if (S.active >= S.regions.length) S.active = S.regions.length - 1;
@@ -1563,6 +1563,8 @@ function renderSeedPoolPicker(){
         ${SEED_STAGES.map(s=>`<option value="${s}" ${overridden && S.seedPool===s?'selected':''}>${s} (real, always)</option>`).join('')}
       </select>
     </label>
+    <label class="bs-tier-row" style="margin-top:6px;gap:8px;align-items:center"><input type="checkbox" id="bsFirstAll" ${S.firstStopAll?'checked':''}>
+      <span>Every age group competes at the first stop (Groups C/D required) — seed from Regionals + Zones combined</span></label>
     <div style="margin-top:4px">Currently seeding from actual <b>${/FirstStop$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals and Zones combined (every diver who entered an event at either, counted once per event)` : /FirstQualifying$/.test(seedPoolKey()) ? `${yearNumBoundary(S.year)} Regionals for Group A/B springboard, and ${yearNumBoundary(S.year)} Zones for platform${S.year==='y26'?' and Groups C/D':''} (where those events first counted)` : `${effective} ${yearNumBoundary(S.year)}`}</b> — ${total.toLocaleString()} actual event entries, before this level's own advancement rule is applied.
     ${overridden ? '' : `If Level 1 has taken over a stage this map used to have below it (e.g. it now absorbs what Regionals used to do), auto-detect will seed it from the wrong, already-filtered field — pick the correct one explicitly above.`}</div>
   </div>`;
@@ -1594,12 +1596,18 @@ function firstQualifyingPool(year){
 }
 function seedPoolKey(){
   const year = (S.year==='y24'?'2024':S.year==='y25'?'2025':'2026');
+  // Every age group competes at the first stop (Groups C/D included): seed it
+  // from the combined pool -- every diver who entered an event at the real
+  // Regionals OR Zones, once per event -- whatever Level 1 is called.
+  if (S.firstStopAll){ const k = firstQualifyingPool(year); if (k) return k; }
   const stage = seedStage();
   if (stage === 'Regionals' && !/region/i.test(String(tierName(0) || ''))) {
     const k = firstQualifyingPool(year); if (k) return k;
   }
   return year + '|' + stage;
 }
+/* Stage name for plain-English text about the seed ("the real X 2026 field"). */
+function seedStageLabel(){ return /FirstStop$/.test(seedPoolKey()) ? 'Regionals + Zones (every age group at the first stop)' : seedStage(); }
 /* Plain-English name of the real field that seeds the first stop. */
 function seedFieldLabel(){
   const k = seedPoolKey(), yn = yearNumBoundary(S.year);
@@ -3062,7 +3070,7 @@ async function newBlankProposal(){
     pushUndo();
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
-    S.routing=null; S.arrival=null; S.seedPool=null; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
+    S.routing=null; S.arrival=null; S.seedPool=null; S.firstStopAll=false; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
     S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null; S._off25=null; S._ownRouting=false;
     S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
@@ -4425,8 +4433,8 @@ function summariseRouting(routing, label, notes){
         const f = res.field[L] && res.field[L][r.key];
         const routes = (lvl.routes || []).filter(rt => rt.from === r.key).map(rt => {
           let sends = 0; const byBoard = {'1':0, '3':0, 'P':0};
-          if (f) f.forEach(g => cells.forEach(c => { const ov = rt.byCell && rt.byCell[c]; const n = QR().bandCount(g[c] || 0, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi); sends += n; byBoard[c[2]] += n; }));
-          return {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi,
+          if (f) f.forEach(g => cells.forEach(c => { const ov = rt.byCell && rt.byCell[c]; const n = QR().routeCount ? QR().routeCount(g[c] || 0, rt, c) : QR().bandCount(g[c] || 0, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi); sends += n; byBoard[c[2]] += n; }));
+          return {lo: rt.lo || 1, hi: rt.hi == null ? null : rt.hi, share: rt.share != null ? rt.share : null, fillTo: rt.fillTo != null ? rt.fillTo : null,
                   bands: BOARDS.map(b => Object.assign({board: b.k}, boardBand(rt, b.k))), split: routeSplitByBoard(rt),
                   toLevel: rt.to ? tierName(rt.to.level) : null, toIdx: rt.to ? rt.to.level : null,
                   toRound: rt.to ? (QR().ROUND_NAME[rt.to.round] || rt.to.round) : null, sends, byBoard};
@@ -5389,7 +5397,7 @@ function renderReportInspector(){
       <b>This proposal</b>
       <span>map <code>${esc(S.scenarioName || 'unsaved')}</code></span>
       <span>pathway <code>${esc(p)}</code></span>
-      <span>first stop fed by <code>${esc(seedStage())} ${yearNumBoundary(S.year)}</code></span>
+      <span>first stop fed by <code>${esc(seedStageLabel())} ${yearNumBoundary(S.year)}</code></span>
       <span>${fmt(seedTotal())} entries in that pool</span>
     </div>
     <p class="note">Anything you put in front of a committee should be reproducible from this line alone:
@@ -5461,6 +5469,10 @@ function renderPathway(){
             <button class="bs-rt-stepbtn" data-step="1" data-l="${L}" data-i="${ri}" title="One more"
               style="width:22px;height:22px;border:1px solid #cdd6e4;border-radius:5px;background:#fff;color:#171F69;font-weight:700;cursor:pointer;line-height:1;padding:0">&plus;</button>
           </span>
+          <span class="bs-rt-lbl" title="Proportional qualification: this % of each event's field at each meet (blank = the fixed places above)">share</span>
+          <input class="bs-rt-in" type="number" min="1" max="100" step="1" data-rt="share" data-l="${L}" data-i="${ri}" value="${rt.share!=null?Math.round(rt.share*100):''}" placeholder="—" style="width:52px">%
+          <span class="bs-rt-lbl" title="Fill the destination round up to this many (direct seats included). Blank = no fill limit.">fill to</span>
+          <input class="bs-rt-in" type="number" min="1" max="200" step="1" data-rt="fillTo" data-l="${L}" data-i="${ri}" value="${rt.fillTo!=null?rt.fillTo:''}" placeholder="—" style="width:52px">
           <span class="bs-rt-arrow">&rarr;</span>
           <select class="sel bs-rt-sel" data-rt="lvl" data-l="${L}" data-i="${ri}">${lvlOpts(rt.to?rt.to.level:L)}</select>
           <select class="sel bs-rt-sel" data-rt="rnd" data-l="${L}" data-i="${ri}">${rndOpts(rt.to?rt.to.round:'prelim')}</select>
@@ -5469,6 +5481,7 @@ function renderPathway(){
       return `<div class="bs-round">
         <div class="bs-round-h"><b>${esc(RN[r.key]||r.key)}</b>
           <span class="bs-round-n"><b>${Math.round(size/Math.max(1,stops))}</b> per stop &middot; ${fmt(Math.round(size))} across ${stops} ${stops===1?'stop':'stops'}${people}</span>
+<label class="bs-rcap" title="Round size limit per event (per meet). Capped rounds fill by roll-down.">limit <input class="bs-rt-in" type="number" min="1" max="300" data-rcap="cap" data-l="${L}" data-r="${esc(r.key)}" value="${r.cap!=null?r.cap:''}" placeholder="—" style="width:52px"> · platform <input class="bs-rt-in" type="number" min="1" max="300" data-rcap="capPlatform" data-l="${L}" data-r="${esc(r.key)}" value="${r.capPlatform!=null?r.capPlatform:''}" placeholder="—" style="width:52px"></label>
           <button class="tab bs-mini" data-rndel="${esc(r.key)}" data-l="${L}" ${rounds.length<=1?'disabled':''}>remove round</button></div>
         ${routes || '<div class="note bs-rt-none">Nobody advances from here.</div>'}
         <button class="tab bs-mini bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ add a route</button>
@@ -5595,8 +5608,14 @@ function wirePathway(){
   P.querySelectorAll('.bs-rt-in[data-rt]').forEach(el => el.addEventListener('change', e => {
     pushUndo();
     const L = +e.target.dataset.l, i = +e.target.dataset.i, k = e.target.dataset.rt;
+    const rt = S.routing[L].routes[i];
+    if (k === 'share' || k === 'fillTo'){
+      if (e.target.value === '') delete rt[k];
+      else rt[k] = k === 'share' ? Math.min(100, Math.max(1, +e.target.value)) / 100 : Math.max(1, Math.round(+e.target.value));
+      touch(); return;
+    }
     const v = e.target.value === '' ? null : Math.max(1, Math.round(+e.target.value||1));
-    S.routing[L].routes[i][k] = v;
+    rt[k] = v;
     touch();
   }));
   // Quick +/-1 on a route's hi value -- for comparing nearby thresholds (is
@@ -5647,6 +5666,13 @@ function wirePathway(){
     S.routing[L].rounds = S.routing[L].rounds.filter(r => r.key !== k);
     // Routes out of a round that no longer runs would be orphaned.
     S.routing[L].routes = S.routing[L].routes.filter(r => r.from !== k);
+    touch();
+  }));
+  P.querySelectorAll('input[data-rcap]').forEach(el => el.addEventListener('change', e => {
+    pushUndo();
+    const L = +e.target.dataset.l, k = e.target.dataset.rcap;
+    const rd = (S.routing[L].rounds || []).find(x => x.key === e.target.dataset.r); if (!rd) return;
+    if (e.target.value === '') delete rd[k]; else rd[k] = Math.max(1, Math.round(+e.target.value));
     touch();
   }));
   P.querySelectorAll('input[data-arr]').forEach(el => el.addEventListener('change', e => {
@@ -6239,6 +6265,13 @@ function wireStructureControls(P){
     clearTimeout(S._nameT); S._nameT = setTimeout(renderNumbers, 200);
   });
 
+  const firstAll = P.querySelector('#bsFirstAll');
+  if (firstAll) firstAll.addEventListener('change', ()=>{
+    pushUndo(); S.firstStopAll = firstAll.checked; S.dirty = true;
+    refreshFlow(); repaintAll(); renderPanel();
+    msg(firstAll.checked ? 'Level 1 now seeds from every diver who entered 2026 Regionals or Zones (all age groups at the first stop).'
+                         : 'Level 1 seed back to the selected pool.');
+  });
   const seedSel = P.querySelector('#bsSeedPool');
   if (seedSel) seedSel.addEventListener('change', ()=>{
     pushUndo();
@@ -6372,7 +6405,7 @@ async function saveScenario(asNew){
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
-    arrival:S.arrival, seedPool:S.seedPool, reportText:S.reportText,
+    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, reportText:S.reportText,
     levels:saveLevels, finalName:S.finalName, adv:S.adv,
     mapName:S.mapName || null, mapId:S.mapId || null,
     firstStopPlatform:S.firstStopPlatform || 'held', v:4});
@@ -6508,6 +6541,7 @@ async function loadScenario(id){
     if (d.costElastic != null) S.costElastic = d.costElastic;
     S.arrival  = d.arrival  || null;
     S.seedPool = d.seedPool || null;
+    S.firstStopAll = !!d.firstStopAll;
     syncRouting();
     S.levels = migrateLevels(d, S.regions.length);
     S.finalName = d.finalName || 'Junior Nationals';
@@ -8390,7 +8424,7 @@ function atlasContext(){
   c.innerHTML = `<div class="atl-ctx">
     <div class="atl-ctx-name">
       <input id="atlName2" value="${esc(S.scenarioName)}" placeholder="Name this proposal" title="Scenario name">
-      <span>Pathway: ${esc(currentPathwayLabel())} · field from ${esc(seedStage())} ${yearNumBoundary(S.year)}</span>
+      <span>Pathway: ${esc(currentPathwayLabel())} · field from ${esc(seedStageLabel())} ${yearNumBoundary(S.year)}</span>
     </div>
     <div class="atl-ctx-ro" id="atlReadout"></div>
     <div class="atl-mini" id="atlMini"></div>
@@ -8875,6 +8909,10 @@ function atlasPathwayHtml(res){
             <input class="bs-rt-in bs-rt-hi" type="number" min="1" max="200" data-rt="hi" data-l="${L}" data-i="${ri}" value="${rt.hi==null?'':rt.hi}" placeholder="∞">
             <button class="bs-rt-stepbtn" data-step="1" data-l="${L}" data-i="${ri}" title="One more">+</button>
           </span>
+          <span title="Proportional qualification: this % of each event's field at each meet (blank = the fixed places)">share</span>
+          <input class="bs-rt-in atl-in mono" type="number" min="1" max="100" step="1" data-rt="share" data-l="${L}" data-i="${ri}" value="${rt.share!=null?Math.round(rt.share*100):''}" placeholder="—" style="width:52px"><span>%</span>
+          <span title="Fill the destination round up to this many (direct seats included)">fill to</span>
+          <input class="bs-rt-in atl-in mono" type="number" min="1" max="200" step="1" data-rt="fillTo" data-l="${L}" data-i="${ri}" value="${rt.fillTo!=null?rt.fillTo:''}" placeholder="—" style="width:52px">
           <span class="atl-arrow">→</span>
           <select class="bs-rt-sel" data-rt="lvl" data-l="${L}" data-i="${ri}">${lvlOpts(rt.to?rt.to.level:L)}</select>
           <span class="c-faint">·</span>
@@ -8896,7 +8934,7 @@ function atlasPathwayHtml(res){
       return `<div class="atl-round">
         <div class="atl-round-h"><b>${esc(RN[r.key]||r.key)}</b>
           <span><span class="mono">${fmt(Math.round(size/Math.max(1,stops)))}</span> per stop · ${fmt(Math.round(size))} across ${stops} ${stops===1?'stop':'stops'}
-            ${rounds.length>1 ? `<button class="atl-link quiet" data-rndel="${esc(r.key)}" data-l="${L}" style="margin-left:8px">remove round</button>` : ''}</span></div>
+            ${rounds.length>1 ? `<button class="atl-link quiet" data-rndel="${esc(r.key)}" data-l="${L}" style="margin-left:8px">remove round</button>` : ''}</span><label class="atl-rcap" title="Round size limit per event (per meet). Capped rounds fill by roll-down.">limit <input class="bs-rt-in" type="number" min="1" max="300" data-rcap="cap" data-l="${L}" data-r="${esc(r.key)}" value="${r.cap!=null?r.cap:''}" placeholder="—" style="width:52px"> · platform <input class="bs-rt-in" type="number" min="1" max="300" data-rcap="capPlatform" data-l="${L}" data-r="${esc(r.key)}" value="${r.capPlatform!=null?r.capPlatform:''}" placeholder="—" style="width:52px"></label></div>
         ${routes}${none}
         <div class="atl-route" style="margin-top:8px"><button class="atl-link bs-rtadd" data-l="${L}" data-r="${esc(r.key)}">+ Add a route</button></div>
       </div>`;
@@ -9542,6 +9580,8 @@ function routeText(rt){
       ? `springboard ${bandText(by['1'].lo, by['1'].hi)} / platform ${bandText(by['P'].lo, by['P'].hi)}`
       : rt.bands.map(b => `${bandText(b.lo, b.hi)} ${BOARDS.find(x => x.k === b.board).short}`).join(' / ');
   } else band = bandText(rt.lo, rt.hi);
+  if (rt.share != null) band = `${Math.round(rt.share*100)}% of each event's field` + ((rt.lo > 1 || rt.hi != null) ? ` (${band})` : '');
+  if (rt.fillTo != null) band += `, filling to ${rt.fillTo}`;
   if (!rt.toLevel) return band + ' out';
   return `${band} → ${rt.toLevel} ${String(rt.toRound||'').toLowerCase()}`;
 }
@@ -10118,7 +10158,7 @@ function atlasReportHtml(res){
       ${regRows}
       <div class="tot first"></div><div class="tot">Total mapped</div><div class="tot num">${fmt(mappedM)}</div><div class="tot num">${fmt(mappedA)}</div><div class="tot num">${bal ? fmt(Math.round(bal.grand)) : '—'}</div><div class="tot num">${bal ? bal.spread.toFixed(1) + ' pp gap' : '—'}</div><div class="tot num last">${totDelta}</div>
     </div>
-    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline proposal is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
+    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline proposal is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
     ${pageFoot(1)}</article>`;
 
   // Page 2 -- Exhibit A
@@ -10150,7 +10190,7 @@ function atlasReportHtml(res){
     const routes = (lvl.routes||[]).filter(r => r.to);
     const band = routes.length ? routes.map(r => `Places ${r.lo||1}–${r.hi==null?'∞':r.hi} of ${(RN[r.from]||r.from).toLowerCase()} advance to ${esc(tierName(r.to.level))} ${(RN[r.to.round]||r.to.round).toLowerCase()}`).join('; ')
                                : (L === S.routing.length-1 ? 'Championship final — nobody advances' : 'No route out of this level');
-    const arrive = L === 0 ? `Open entry: real ${esc(seedStage())} ${yearNumBoundary(S.year)} field`
+    const arrive = L === 0 ? `Open entry: real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field`
       : measuredArrival(L) != null ? `Take-up ${Math.round(arrivalRate(L)*100)}%, measured (real ${esc(stageNameForLevel(L))}${stageMatchNote(L)})`
       : `Take-up ${Math.round(arrivalRate(L)*100)}%, not measured (ceiling)${isChampionshipLevel(L) && realChampionshipField(S.year) != null ? `; real ${yearNumBoundary(S.year)} field ${fmt(realChampionshipField(S.year))}` : ''}`;
     const nMeets = t ? t.meets : groupCountAt(L);
@@ -10170,7 +10210,7 @@ function atlasReportHtml(res){
       ${S.routing.map((lvl, L) => { let e = 0; for (let g = 0; g < Math.max(1, groupCountAt(L)); g++) e += QR().entriesAt(res, L, g, CELLS); const y = yf && yf[L]; const cell = (i) => { const c = y && y.cells[i]; return c && c.entries != null ? fmt(Math.round(c.entries)) + (c.real ? '' : '<span style="color:#b45309"> mod.</span>') : '—'; }; return `<div class="first">${esc(tierName(L))}</div><div class="num">${fmt(Math.round(e))}</div><div class="num">${mx.maxLevels && mx.maxLevels[L] != null ? fmt(Math.round(mx.maxLevels[L])) : '<span style="color:#6b7385">no cap</span>'}</div><div class="num">${cell(0)}</div><div class="num">${cell(1)}</div><div class="num last">${cell(2)}</div>`; }).join('')}
       <div class="first" style="font-weight:600">Reach ${esc(S.finalName||'the final')}</div><div class="num" style="font-weight:600">${champ != null ? fmt(Math.round(champ)) : '—'}</div><div class="num">${mx.maxFinal != null ? fmt(Math.round(mx.maxFinal)) : '—'}</div>${['y24','y25','y26'].map((y,i) => { const r = realChampionshipField(y); return `<div class="num ${i===2?'last':''}">${r != null ? fmt(r) : '—'}</div>`; }).join('')}
     </div>
-    <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStage())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout. The championship's real columns are the actual ${esc(S.finalName||'championship')} entries, one meet, no reallocation — the projection has no measured take-up into the championship, so judge it against those.</p>
+    <p class="atl-fn" style="margin-top:6px"><b>Projected</b> applies the measured take-up to the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field. <b>Maximum</b> saturates every band with no take-up — the structural ceiling, not a forecast. <b>Real</b> reallocates each season's actual entries into this map; <i>mod.</i> marks a tier that season never ran, so it assumes full turnout. The championship's real columns are the actual ${esc(S.finalName||'championship')} entries, one meet, no reallocation — the projection has no measured take-up into the championship, so judge it against those.</p>
     ${pageFoot(3)}</article>
   <article class="atl-pg" data-screen-label="Report p3b">${head2('Section 3')}
     ${rt('h3', '3. Meets, days and entry income', 'div', 'atl-sec m26')}
@@ -10280,7 +10320,7 @@ function atlasReportHtml(res){
     ${rt('foot4', chgSummary, 'p', 'atl-fn')}
     ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
     ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
-    ${rt('m2', `Competing entries are the real ${esc(seedStage())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
+    ${rt('m2', `Competing entries are the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
     ${inferredStageLevels().length ? `<p class="atl-m" style="color:#9a4a06">Stages worked out from meet counts, not set: ${inferredStageLevels().map(x => `${esc(tierName(x.L))} counts as ${esc(STAGE_LABEL[x.r.stage])} (${x.r.meets} ${x.r.meets === 1 ? 'meet' : 'meets'})`).join('; ')}. Set each on the Structure tab ("Counts as") to fix it.</p>` : ''}
     ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
                        : `Figures are live from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the proposal before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}

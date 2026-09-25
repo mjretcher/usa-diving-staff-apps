@@ -50,6 +50,42 @@ function bandCount(fieldSize, lo, hi){
   return Math.max(0, Math.min(b, fieldSize) - a + 1);
 }
 
+/* ---------- proportional qualification ----------
+   A route may carry a SHARE: instead of a fixed band of places, a set fraction
+   of the field in that event at that meet qualifies (the count fixed from the
+   entries, half rounds up). Fields of `smallAll` or fewer (default 3) all
+   qualify. `extra` adds the measured uplift from a cross-meet score threshold.
+   The route's lo/hi band then applies WITHIN that quota, so "places 1-2 to the
+   semifinal, the rest of the share to prelims" is two ordinary routes:
+     {from:'final', lo:1, hi:2, share:0.55, to:{level:2, round:'semi'}}
+     {from:'final', lo:3,       share:0.55, to:{level:2, round:'prelim'}}
+   A route may also FILL a round to a size -- `fillTo:36` sends the top
+   finishers until the destination round holds 36 (direct seats included).
+   Any of share / extra / smallAll / fillTo may be overridden per event through
+   byCell, like lo and hi. Routes without these fields behave exactly as before. */
+function pick(rt, ov, k){ return (ov && ov[k] != null) ? ov[k] : rt[k]; }
+function quotaOf(size, rt, ov){
+  const share = pick(rt, ov, 'share');
+  if (share == null || !(size > 0)) return size;
+  const small = pick(rt, ov, 'smallAll'); const lim = small == null ? 3 : small;
+  if (size <= lim) return size;
+  const extra = +pick(rt, ov, 'extra') || 0;
+  return Math.min(size, Math.floor(share * size + 0.5) * (1 + extra));
+}
+/* Places a route creates from a field of `size`, before any fill limit. */
+function routeCount(size, rt, cell){
+  const ov = cell && rt.byCell && rt.byCell[cell];
+  return bandCount(quotaOf(size, rt, ov), ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi);   // same lo/hi rule as before
+}
+/* A round's size limit for one event: capByCell[cell], else capPlatform for
+   platform cells, else cap. null = unlimited. */
+function capOf(round, cell){
+  if (!round) return null;
+  if (round.capByCell && round.capByCell[cell] != null) return round.capByCell[cell];
+  if (cell && cell[2] === 'P' && round.capPlatform != null) return round.capPlatform;
+  return round.cap != null ? round.cap : null;
+}
+
 /* The rounds a level runs, in competition order. */
 function roundsOf(level){
   const r = (level && level.rounds && level.rounds.length) ? level.rounds : [{key:'final'}];
@@ -123,7 +159,15 @@ function validate(routing){
                 roundsOf(dest).map(r=>`"${r.key}"`).join(', ')});
         }
       });
-      const bands = byRound[rk].slice().sort((a,b) => (a.lo||1) - (b.lo||1));
+      // Routes with per-event overrides (byCell) are checked event by event, on
+      // the band each event actually uses; an empty band (hi below lo) sends
+      // nobody and cannot overlap. Without overrides, the level bands as before.
+      const cellKeys = Array.from(new Set([].concat(...byRound[rk].map(rt => Object.keys(rt.byCell || {})))));
+      const variants = cellKeys.length ? cellKeys.map(c => byRound[rk].map(rt => {
+          const ov = rt.byCell && rt.byCell[c]; return ov ? Object.assign({}, rt, {lo: ov.lo, hi: ov.hi}) : rt; })
+        .filter(rt => !(rt.hi != null && rt.hi < (rt.lo || 1)))) : [byRound[rk]];
+      variants.forEach(vr => {
+      const bands = vr.slice().sort((a,b) => (a.lo||1) - (b.lo||1));
       for (let i = 1; i < bands.length; i++){
         const prev = bands[i-1], cur = bands[i];
         const prevHi = prev.hi == null ? Infinity : prev.hi;
@@ -137,8 +181,15 @@ function validate(routing){
                 `intended, or a gap?`});
         }
       }
+      });
     });
 
+    (lvl.routes || []).forEach(rt => {
+      if (rt.share != null && !(rt.share > 0 && rt.share <= 1))
+        problems.push({level:L, kind:'bad-share', msg:`a route out of ${rt.from} has a share of ${rt.share} — use a fraction between 0 and 1`});
+      if (rt.fillTo != null && !(rt.fillTo >= 1))
+        problems.push({level:L, kind:'bad-fill', msg:`a route out of ${rt.from} fills to ${rt.fillTo} — use a round size of 1 or more`});
+    });
     rounds.forEach(rk => {
       const leaves = (byRound[rk] || []).length;
       const fed = L === 0 && rk === rounds[0];
@@ -165,7 +216,8 @@ function validate(routing){
       }
     });
   });
-  return problems;
+  const uniq = new Map(); problems.forEach(p => uniq.set(p.level + '|' + p.msg, p));
+  return Array.from(uniq.values());
 }
 
 /* ---------- projection ----------
@@ -266,6 +318,12 @@ function project(opts){
     });
   });
 
+  // placed[L][round][group][cell]: places OFFERED into a round before take-up.
+  // A capped round fills by roll-down: if at least `cap` places were offered,
+  // declines pass down the results and the round still fills to its cap.
+  const placed = routing.map((lvl, L2) => { const f = {}; roundsOf(lvl).forEach(r => {
+    f[r.key] = Array.from({length: Math.max(1, groupCount(L2))}, () => ({})); }); return f; });
+  const capped = [];
   const flows = [], dropped = [];
   // Returns how many actually arrive (after take-up), 0 if the place goes nowhere.
   const add = (toL, toR, toG, cell, n, fromL) => {
@@ -285,6 +343,8 @@ function project(opts){
     // arrived athletes twice for no reason: they already took up their place.
     const k = (fromL !== toL && conv[toL] && conv[toL][cell] != null) ? conv[toL][cell] : 1;
     lvl[toR][toG][cell] = (lvl[toR][toG][cell] || 0) + n * k;
+    const pl = placed[toL] && placed[toL][toR] && placed[toL][toR][toG];
+    if (pl) pl[cell] = (pl[cell] || 0) + n;
     // Arriving from a DIFFERENT level is joining a new meet, so it is an entry.
     // Moving between rounds of the same level is qualifying, and is not.
     if (fromL !== toL) arrive(toL, toR, toG, cell, n * k);
@@ -293,8 +353,26 @@ function project(opts){
 
   // Levels in order; rounds within a level in competition order. A route may
   // only ever point forward, which is what makes one pass sufficient.
+  // Apply a round's size limit once everything arriving from other levels (and
+  // from the earlier rounds of this level) is in, and before anyone leaves it.
+  const applyCap = (L, r) => {
+    for (let g = 0; g < groupCount(L); g++){
+      const here = field[L][r.key] && field[L][r.key][g]; if (!here) continue;
+      cells.forEach(cell => {
+        const cap = capOf(r, cell); if (cap == null) return;
+        const cur = here[cell] || 0; if (cur <= 0) return;
+        const offeredPlaces = (placed[L][r.key][g] || {})[cell] || 0;
+        const next = (r.rollDown !== false && offeredPlaces >= cap) ? cap : Math.min(cur, cap);
+        if (Math.abs(next - cur) < 1e-9) return;
+        const ratio = next / cur; here[cell] = next;
+        const a = arrivals[L][r.key][g]; if (a && a[cell]) a[cell] *= ratio;
+        capped.push({level:L, round:r.key, group:g, cell, from:cur, to:next});
+      });
+    }
+  };
   routing.forEach((lvl, L) => {
     roundsOf(lvl).forEach(r => {
+      applyCap(L, r);
       const outs = (lvl.routes || []).filter(rt => rt.from === r.key);
       for (let g = 0; g < groupCount(L); g++){
         const here = field[L][r.key][g] || {};
@@ -306,11 +384,17 @@ function project(opts){
             // cell override lo/hi without a second model — Group A 1-meter can
             // send 12 while the route's level default sends 15 to everyone else.
             const ov = rt.byCell && rt.byCell[cell];
-            const n = bandCount(size, ov ? ov.lo : rt.lo, ov ? ov.hi : rt.hi);
+            let n = routeCount(size, rt, cell);
             if (!n || !rt.to) return;
             const toL = rt.to.level;
             const toG = (toL === L) ? g : groupOf(L, g, toL);
             if (toG == null) return;
+            const fill = pick(rt, ov, 'fillTo');
+            if (fill != null){
+              const dest = field[toL] && field[toL][rt.to.round] && field[toL][rt.to.round][toG];
+              n = Math.min(n, Math.max(0, fill - ((dest && dest[cell]) || 0)));
+              if (!n) return;
+            }
             const arrived = add(toL, rt.to.round, toG, cell, n, L);
             // n = places the band creates; arrived = how many of them take it up.
             flows.push({fromLevel:L, fromRound:r.key, fromGroup:g,
@@ -329,7 +413,7 @@ function project(opts){
       msg:`${Math.round(n)} athlete place(s) were routed somewhere that does not exist and ` +
           `have been lost from the projection — fix the routes before reading these numbers`});
   }
-  return {field, arrivals, flows, dropped, problems};
+  return {field, arrivals, flows, dropped, problems, capped};
 }
 
 /* Total athletes entering a level's given round, across groups and cells. */
@@ -376,10 +460,12 @@ function describe(routing, L, levelName){
       const band = rt.hi == null ? `places ${rt.lo} and below`
                  : rt.lo === rt.hi ? `place ${rt.lo}`
                  : `places ${rt.lo}–${rt.hi}`;
-      if (!rt.to) return `${band} out`;
+      const pre = (rt.share != null ? `${Math.round(rt.share*100)}% of each event's field` + (rt.lo > 1 || rt.hi != null ? `, ${band}` : '') : band)
+                + (rt.fillTo != null ? ` (filling to ${rt.fillTo})` : '');
+      if (!rt.to) return `${pre} out`;
       const dest = levelName(rt.to.level);
       const rn = (ROUND_NAME[rt.to.round] || rt.to.round).toLowerCase();
-      return `${band} → ${dest} ${rn}`;
+      return `${pre} → ${dest} ${rn}`;
     }).join('; ');
   }).join(' · ');
 }
@@ -589,7 +675,9 @@ function capacityAt(routing, L, round, groupCount, cell){
       if (cell && no && no.indexOf(cell) >= 0) return;
       const ov = cell && rt.byCell && rt.byCell[cell];
       const lo = ov ? ov.lo : rt.lo, hi = ov ? ov.hi : rt.hi;
-      const width = (hi == null) ? Infinity : Math.max(0, hi - (lo || 1) + 1);
+      let width = (hi == null) ? Infinity : Math.max(0, hi - (lo || 1) + 1);
+      const fill = pick(rt, ov, 'fillTo'); if (fill != null) width = Math.min(width, fill);
+      if (pick(rt, ov, 'share') != null && !isFinite(width)){ unbounded = true; return; }
       if (!isFinite(width)) { unbounded = true; return; }
       cap += width * Math.max(1, groupCount(from));
     });
@@ -603,7 +691,7 @@ function capacityTotal(routing, L, round, groupCount, cells){
 }
 
 window.QualRouting = {
-  ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound,
+  ROUND_ORDER, ROUND_NAME, roundsOf, bandCount, entryRound, routeCount, quotaOf, capOf,
   defaultRouting, validate, project, sizeAt, entriesAt, entriesCellAt, describe,
   estimateDivers, diversAt, boardShare, meanEvents,
   billableEntries, billableByGroup, revenue,
