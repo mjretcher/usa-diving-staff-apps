@@ -93,6 +93,44 @@ details.faq .a p{margin:0}
 .open li{margin:6px 0}
 details.app{border-top:1px solid var(--line);padding:10px 0}
 details.app summary{cursor:pointer;font:700 17px "Barlow Condensed",Inter;color:var(--navy)}
+.sx-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:4px 0 16px}
+.sx-seg{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:3px}
+.sx-seg button{background:none;border:0;color:var(--muted);font:700 13px Inter;padding:6px 13px;border-radius:7px;cursor:pointer}
+.sx-seg button[aria-pressed="true"]{background:var(--navy);color:#fff}
+.sx-stops{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:6px 0 8px}
+@media (max-width:860px){.sx-stops{grid-template-columns:1fr}}
+.sx-stop{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--soft)}
+.sx-stop .k{font:700 11px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--pool)}
+.sx-stop h3{font-size:22px;margin:2px 0 8px}
+.sx-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sx-two div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.sx-two b{display:block;font:700 26px "Barlow Condensed",Inter;color:var(--navy);line-height:1.1}
+.sx-two .real b{color:#5a6480}
+.sx-two small{display:block;font-size:11.5px;color:var(--muted)}
+.sx-two em{font-style:normal;font:600 11.5px "JetBrains Mono",monospace;color:var(--pool)}
+.sx-two .real em{color:#8a93b0}
+h3.sx-h{font-size:21px;margin:26px 0 4px}
+td.sub{color:var(--muted);font-size:12.5px}
+.mb{display:grid;grid-template-columns:1fr 38px;gap:6px;align-items:center;min-width:120px}
+.mb .t{height:7px;background:#eef1f7;border-radius:4px;overflow:hidden}
+.mb .f{height:100%;border-radius:4px}
+.mb .v{font:500 11.5px "JetBrains Mono",monospace;color:var(--muted);text-align:right}
+.dpos{color:#1d7a45}.dneg{color:#b4232f}
+.sx-pick{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin:6px 0 14px;font-size:13px;color:var(--muted)}
+.sx-pick select{font:600 13.5px Inter;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#fff}
+.sx-flow{display:grid;grid-template-columns:minmax(0,1.25fr) 26px minmax(0,1fr) 26px minmax(0,1fr);gap:8px;align-items:stretch}
+@media (max-width:860px){.sx-flow{grid-template-columns:1fr}.sx-flow .ar{transform:rotate(90deg);justify-self:center}}
+.sx-col{display:flex;flex-direction:column;gap:8px}
+.sx-col .h{font:700 11px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--pool)}
+.sx-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff}
+.sx-box .t{font:700 16px "Barlow Condensed",Inter;color:var(--navy);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sx-box .t span{font:500 11.5px "JetBrains Mono",monospace;color:var(--muted)}
+.sx-box .l{font-size:13px;margin:3px 0 0;display:flex;justify-content:space-between;gap:10px}
+.sx-box .l b{font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--navy)}
+.sx-box .l.r b{color:#5a6480}.sx-box .l.r{color:var(--muted)}
+.sx-box.hl{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy) inset}
+.sx-flow .ar{align-self:center;justify-self:center;font:700 20px Inter;color:var(--navy)}
+.sx-say{background:#eef7fc;border-left:4px solid var(--pool);border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0 0;font-size:14px;color:#2c3656}
 footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);font-size:12px}
 @media print{.top{position:static}.seg,.seg-l{display:none}body{background:#fff}.card{break-inside:avoid;border-color:#ccd3e2}details.faq{break-inside:avoid}}
 </style>
@@ -124,14 +162,15 @@ function tint(hex,t){const n=parseInt(hex.slice(1),16),r=n>>16&255,g=n>>8&255,b=
 Promise.all([
   fetch('junior-pathway-2027-data.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('report data HTTP '+r.status);return r.json();}),
   fetch('junior-pathway-2027-maps.json?v=202609251230').then(r=>{if(!r.ok)throw new Error('map data HTTP '+r.status);return r.json();}),
-  fetch('junior-pathway-2027-visuals.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('visuals data HTTP '+r.status);return r.json();})
-]).then(([d,m,v])=>{DATA=d;MAPS=m;VIS=v;render();})
+  fetch('junior-pathway-2027-visuals.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('visuals data HTTP '+r.status);return r.json();}),
+  fetch('junior-pathway-2027-seasons.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('seasons data HTTP '+r.status);return r.json();})
+]).then(([d,m,v,se])=>{DATA=d;MAPS=m;VIS=v;SEAS=se;render();})
  .catch(e=>{$('#app').innerHTML='<div class="card">Could not load the report data: '+esc(e.message)+'</div>';});
 window.addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>d.open=true));
 document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{SID=b.dataset.model;
   document.querySelectorAll('[data-model]').forEach(x=>x.setAttribute('aria-pressed',x===b));render();});
 
-let VIS=null;
+let VIS=null,SEAS=null,SX={yr:'2025',cell:null,zone:null};
 const scen=id=>DATA.scenarios.find(s=>s.id===id);
 const fmtN=n=>Math.round(n).toLocaleString('en-US');
 const lastTier=s=>s.tiers[s.tiers.length-1];
@@ -284,6 +323,110 @@ function roundSizes(s){
 }
 
 /* ---------- self-checks: figures that don't add up are withheld, not drawn ---------- */
+/* ---------- against real seasons (junior-pathway-2027-seasons.json) ---------- */
+const AGE_L={A:'Group A',B:'Group B',C:'Group C',D:'Group D'},GEN_L={G:'Girls',B:'Boys'},BRD_L={'1':'1 m','3':'3 m','P':'Platform'};
+const cellName=c=>`${AGE_L[c[0]]} ${GEN_L[c[1]]} ${BRD_L[c[2]]}`;
+const isSB=c=>c[2]!=='P';
+const sumC=(o,f=()=>true)=>o?Object.entries(o).reduce((a,[c,v])=>a+(f(c)?v:0),0):null;
+const pct=(a,b)=>b?Math.round(a/b*100):null;
+const pctTxt=v=>v==null?'—':v+'%';
+function mbar(v,col){return `<div class="mb"><div class="t"><div class="f" style="width:${Math.min(100,v||0)}%;background:${col}"></div></div><div class="v">${pctTxt(v)}</div></div>`;}
+function dTxt(a,b){if(b==null)return '—';const d=a-b;return d===0?'<span class="note">same</span>':`<span class="${d>0?'dpos':'dneg'}">${d>0?'+':'−'}${fmt(Math.abs(d))}</span>`;}
+function seasonsHTML(){
+  const sc=SEAS.scenarios[SID];if(!sc)return '<p class="note">No seasons data for this layout.</p>';
+  const Y=sc.years[SX.yr],R=Y.regions,Z=Y.zones,col=SC_COL[SID]||'#171F69',REAL='#b9c0d3';
+  const act=Y.totals.actual,is25=SX.yr==='2025';
+  const realFirst=act.Regionals,realZ=act.Zones,realJ=act.Nationals;
+  const stops=`<div class="sx-stops">
+   <div class="sx-stop"><div class="k">Stop 1</div><h3>Regionals</h3><div class="sx-two">
+     <div><small>Proportional</small><b>${fmt(Y.totals.first)}</b><small>every age group</small></div>
+     <div class="real"><small>${SX.yr} as run</small><b>${fmt(realFirst)}</b><small>Regionals</small></div></div></div>
+   <div class="sx-stop"><div class="k">Stop 2</div><h3>Zones</h3><div class="sx-two">
+     <div><small>Proportional</small><b>${fmt(Y.totals.zones)}</b><em>${pctTxt(pct(Y.totals.zones,Y.totals.first))} of stop 1</em></div>
+     <div class="real"><small>${SX.yr} as run</small><b>${fmt(realZ)}</b><em>${is25?pctTxt(pct(realZ,realFirst))+' of Regionals':'C/D and platform began here'}</em></div></div></div>
+   <div class="sx-stop"><div class="k">Stop 3</div><h3>Junior Nationals</h3><div class="sx-two">
+     <div><small>Proportional</small><b>${fmt(Y.totals.jn)}</b><em>${pctTxt(pct(Y.totals.jn,Y.totals.zones))} of Zones</em></div>
+     <div class="real"><small>${SX.yr} as run</small><b>${fmt(realJ)}</b><em>${is25?pctTxt(pct(realJ,realZ))+' of Zones':`after E/W/C (${fmt(act.EWC)})`}</em></div></div></div>
+  </div>`;
+  // by age group
+  const ag=['A','B','C','D'].map(a=>{const f=c=>c[0]===a;
+    const p1=R.reduce((t,r)=>t+sumC(r.first,f),0),pz=Z.reduce((t,z)=>t+sumC(z.field,f),0),pj=Z.reduce((t,z)=>t+sumC(z.toJN,f),0);
+    const r1=R.reduce((t,r)=>t+sumC(r.actual.Regionals,f),0),rz=R.reduce((t,r)=>t+sumC(r.actual.Zones,f),0),rj=R.reduce((t,r)=>t+sumC(r.actual.Nationals,f),0);
+    return `<tr><td>${AGE_L[a]}</td><td class="n">${fmt(p1)}</td><td class="n sub">${fmt(r1)}</td><td class="n">${fmt(pz)}</td><td class="n sub">${fmt(rz)}</td><td class="n">${fmt(pj)}</td><td class="n sub">${fmt(rj)}</td><td class="n">${dTxt(pj,rj)}</td></tr>`;}).join('');
+  const agT=`<table><tr><th>Age group</th><th class="n">Stop 1<br>proportional</th><th class="n">Regionals<br>${SX.yr} real</th><th class="n">Zones<br>proportional</th><th class="n">Zones<br>${SX.yr} real</th><th class="n">Nationals<br>proportional</th><th class="n">Nationals<br>${SX.yr} real</th><th class="n">Nationals<br>difference</th></tr>${ag}
+    <tr class="em"><td>All</td><td class="n">${fmt(Y.totals.first)}</td><td class="n">${fmt(realFirst)}</td><td class="n">${fmt(Y.totals.zones)}</td><td class="n">${fmt(realZ)}</td><td class="n">${fmt(Y.totals.jn)}</td><td class="n">${fmt(realJ)}</td><td class="n">${dTxt(Y.totals.jn,realJ)}</td></tr></table>`;
+  // regions: springboard, where the stop-1 rule applies. In 2026 Groups C/D
+  // first qualified at Zones, so the as-run share is only meaningful for A/B.
+  const rf=is25?isSB:(c=>isSB(c)&&/^[AB]/.test(c));
+  const rRows=R.map(r=>{const f1=sumC(r.first,rf),to=sumC(r.toZone,rf),a1=sumC(r.actual.Regionals,rf),az=sumC(r.actual.Zones,rf);
+    return `<tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${r.color};margin-right:7px;vertical-align:-1px"></span>${esc(r.name)}</td><td class="sub">${esc(r.zone)}</td>
+      <td class="n">${fmt(f1)}</td><td class="n">${fmt(to)}</td><td>${mbar(pct(to,f1),col)}</td>
+      <td class="n sub">${fmt(a1)}</td><td class="n sub">${fmt(az)}</td><td>${mbar(pct(az,a1),REAL)}</td></tr>`;}).join('');
+  const rT=`<table><tr><th>Region</th><th>Feeds</th><th class="n">${is25?'Springboard':'A/B springboard'}<br>entries</th><th class="n">To Zones<br>proportional</th><th>Share moving on</th><th class="n">${SX.yr} real<br>Regionals</th><th class="n">${SX.yr} real<br>at Zones</th><th>Share, as run</th></tr>${rRows}</table>`;
+  // zones
+  const zRows=Z.map(z=>{const fz=sumC(z.field),op=sumC(z.open),tj=sumC(z.toJN),az=sumC(z.actual.Zones),aj=sumC(z.actual.Nationals);
+    return `<tr><td>${esc(z.name)}<div class="note">${esc(z.regions.join(' · '))}</div></td>
+      <td class="n">${fmt(fz)}<div class="note">${fmt(op)} platform</div></td><td class="n sub">${fmt(az)}</td>
+      <td class="n">${fmt(tj)}</td><td>${mbar(pct(tj,fz),col)}</td><td class="n sub">${fmt(aj)}</td><td class="n">${dTxt(tj,aj)}</td></tr>`;}).join('');
+  const zT=`<table><tr><th>Zone</th><th class="n">Zone field<br>proportional</th><th class="n">${SX.yr} real<br>at Zones</th><th class="n">To Nationals<br>proportional</th><th>Share of Zone field</th><th class="n">${SX.yr} real at<br>Nationals</th><th class="n">Nationals<br>difference</th></tr>${zRows}
+    <tr class="em"><td>Junior Nationals</td><td class="n">${fmt(Y.totals.zones)}</td><td class="n">${fmt(realZ)}</td><td class="n">${fmt(Y.totals.jn)}</td><td>${mbar(pct(Y.totals.jn,Y.totals.zones),col)}</td><td class="n">${fmt(realJ)}</td><td class="n">${dTxt(Y.totals.jn,realJ)}</td></tr></table>`;
+  return `<div class="sx-bar"><span class="note">Season</span><div class="sx-seg">${Object.keys(sc.years).map(y=>`<button data-sxyr="${y}" aria-pressed="${y===SX.yr}">${y}</button>`).join('')}</div>
+      <span class="note">${esc(sc.name)} · switch the map layout at the top of the page</span></div>
+    ${stops}
+    <p class="note">Event entries: one diver in one event. “As run” is what really happened that season, counted for divers from the counties this map covers.${is25?'':' 2026 ran four stops (Regionals, Zones, East/West/Central, Nationals), so its Nationals figure comes after an extra stop.'}</p>
+    <h3 class="sx-h">By age group</h3>
+    <div class="scroll">${agT}</div>
+    <h3 class="sx-h">Each Region</h3>
+    <p class="note" style="margin:0 0 6px">${is25?'Springboard only':'Group A/B springboard only'}, where the Regionals rule applies (platform does not qualify at Regionals${is25?'':'; in 2026 Groups C/D first qualified at Zones, so they cannot be compared here'}). Grey columns: the same counties’ divers, as the ${SX.yr} season really ran.</p>
+    <div class="scroll">${rT}</div>
+    <h3 class="sx-h">Each Zone, and who reaches Junior Nationals</h3>
+    <p class="note" style="margin:0 0 6px">Zone fields include platform by open entry. “Real at Nationals” counts divers from that Zone’s counties at ${SX.yr} Junior Nationals.</p>
+    <div class="scroll">${zT}</div>
+    <h3 class="sx-h">Follow one event through one Zone</h3>
+    <div class="sx-pick" id="sxPick"></div>
+    <div id="sxFlow"></div>`;
+}
+function sxPickHTML(Y){
+  const cells=Y.cells.filter(c=>Y.zones.some(z=>(z.field[c]||0)>0));
+  return `<label>Event <select id="sxCell">${cells.map(c=>`<option value="${c}" ${c===SX.cell?'selected':''}>${esc(cellName(c))}</option>`).join('')}</select></label>
+    <label>Zone <select id="sxZone">${Y.zones.map((z,i)=>`<option value="${i}" ${i===SX.zone?'selected':''}>${esc(z.name)}</option>`).join('')}</select></label>`;
+}
+function sxFlowHTML(Y){
+  const c=SX.cell,z=Y.zones[SX.zone],regs=Y.regions.filter(r=>r.zone===z.name),plat=c[2]==='P',cd=/^[CD]/.test(c);
+  const v=(o)=>o?(o[c]||0):0;
+  const zField=v(z.field),zOpen=v(z.open),toJN=v(z.toJN),semi=Math.round(v(z.semi)),realZ=v(z.actual.Zones),realJ=v(z.actual.Nationals);
+  const rBoxes=regs.map(r=>{const f=v(r.first),sp=r.spots?(r.spots[c]||0):0,to=v(r.toZone);
+    return `<div class="sx-box"><div class="t">${esc(r.name)}<span>${fmt(f)} divers</span></div>
+      ${plat?`<div class="l"><span>Platform here is non-qualifying</span><b>—</b></div>`
+        :`<div class="l"><span>${f<=3?'Field of 3 or fewer: all advance':'65% of the field, plus score threshold'}</span><b>${fmt(Math.round(sp))} places</b></div>
+          <div class="l"><span>Expected at the Zone (take-up)</span><b>${fmt(to)}</b></div>`}
+      <div class="l r"><span>${SX.yr} real: at Regionals → at Zones</span><b>${fmt(v(r.actual.Regionals))} → ${fmt(v(r.actual.Zones))}</b></div></div>`;}).join('');
+  const zBox=`<div class="sx-box hl"><div class="t">${esc(z.name)}<span>${fmt(zField)} divers</span></div>
+      ${plat?`<div class="l"><span>Platform by open entry</span><b>${fmt(zOpen)}</b></div>`:`<div class="l"><span>From its Regionals</span><b>${fmt(zField-zOpen)}</b></div>`}
+      <div class="l"><span>${cd?'55% of the field':'Top 2, then rest of 55%'}</span><b>${fmt(toJN)} go on</b></div>
+      <div class="l r"><span>${SX.yr} real at Zones</span><b>${fmt(realZ)}</b></div></div>`;
+  const jBox=`<div class="sx-box"><div class="t">Junior Nationals<span>from ${esc(z.name)}</span></div>
+      ${cd?`<div class="l"><span>Prelims and final, same day</span><b>${fmt(toJN)}</b></div>`
+        :`<div class="l"><span>Straight to the semifinal</span><b>${fmt(Math.min(semi,toJN))}</b></div><div class="l"><span>Into prelims</span><b>${fmt(Math.max(0,toJN-Math.min(semi,toJN)))}</b></div>`}
+      <div class="l r"><span>${SX.yr} real at Nationals</span><b>${fmt(realJ)}</b></div></div>`;
+  const nR=regs.reduce((a,r)=>a+v(r.first),0),nRealR=regs.reduce((a,r)=>a+v(r.actual.Regionals),0);
+  const say=plat
+    ? `In ${SX.yr}, ${fmt(realZ)} ${esc(cellName(c))} divers from these counties dove at Zones and ${fmt(realJ)} reached Nationals. Under the proportional rule platform skips Regionals: all ${fmt(zOpen)} enter ${esc(z.name)} directly, and ${fmt(toJN)} go on to Junior Nationals.`
+    : `In ${SX.yr}, ${fmt(nRealR)} divers from these counties entered ${esc(cellName(c))} at Regionals, ${fmt(realZ)} dove it at Zones and ${fmt(realJ)} at Junior Nationals. With the same divers, the proportional rule would give ${fmt(nR)} at Regionals, ${fmt(zField)} at ${esc(z.name)} and ${fmt(toJN)} at Junior Nationals${toJN===realJ?', the same as really happened':toJN>realJ?`, ${fmt(toJN-realJ)} more than really went`:`, ${fmt(realJ-toJN)} fewer than really went`}.`;
+  return `<div class="sx-flow"><div class="sx-col"><div class="h">Regionals</div>${rBoxes}</div><div class="ar">→</div>
+    <div class="sx-col"><div class="h">Zone</div>${zBox}</div><div class="ar">→</div><div class="sx-col"><div class="h">Junior Nationals</div>${jBox}</div></div>
+    <div class="sx-say">${say}</div>`;
+}
+function sxWire(){
+  const sc=SEAS.scenarios[SID];if(!sc)return;const Y=sc.years[SX.yr];
+  if(SX.zone==null||SX.zone>=Y.zones.length){let b=0;Y.zones.forEach((z,i)=>{if(sumC(z.field)>sumC(Y.zones[b].field))b=i;});SX.zone=b;}
+  if(!SX.cell||!Y.zones.some(z=>(z.field[SX.cell]||0)>0))SX.cell='AG1';
+  $('#sxPick').innerHTML=sxPickHTML(Y);$('#sxFlow').innerHTML=sxFlowHTML(Y);
+  $('#sxCell').onchange=e=>{SX.cell=e.target.value;$('#sxFlow').innerHTML=sxFlowHTML(Y);};
+  $('#sxZone').onchange=e=>{SX.zone=+e.target.value;$('#sxFlow').innerHTML=sxFlowHTML(Y);};
+  document.querySelectorAll('[data-sxyr]').forEach(b=>b.onclick=()=>{SX.yr=b.dataset.sxyr;$('#seasons').innerHTML=seasonsHTML();sxWire();});
+}
+
 function checks(){
   const bad=[];
   DATA.scenarios.forEach(s=>{
@@ -295,6 +438,10 @@ function checks(){
     if(s.flow&&Math.abs(s.flow.natsEntries-lastTier(s).entries)>0.5) bad.push(`${s.label}: pathway Nationals ${s.flow.natsEntries} vs ${lastTier(s).entries}`);
     if(s.flow&&Math.abs(s.flow.stop1-s.tiers[0].entries)>0.5) bad.push(`${s.label}: pathway first stop ${s.flow.stop1} vs ${s.tiers[0].entries}`);
   });
+  Object.entries(SEAS.scenarios).forEach(([id,x])=>{const s=scen(id),y=x.years['2026'];if(!s||!y)return;
+    [['first stop',y.totals.first,s.tiers[0].entries],['Zones',y.totals.zones,s.tiers[1].entries],['Junior Nationals',y.totals.jn,lastTier(s).entries]].forEach(([l,a,b])=>{if(Math.abs(a-b)>0.5)bad.push(`${s.label}: seasons ${l} ${a} vs report ${b}`);});
+    Object.values(x.years).forEach(Y=>{const r=Y.regions.reduce((a,q)=>a+sumC(q.first),0),z=Y.zones.reduce((a,q)=>a+sumC(q.field),0),j=Y.zones.reduce((a,q)=>a+sumC(q.toJN),0);
+      if(r!==Y.totals.first||z!==Y.totals.zones||j!==Y.totals.jn)bad.push(`${x.name}: seasons tables do not add up`);});});
   Object.entries(MAPS.scenarios).forEach(([id,S])=>{const s=scen(id);if(!s){bad.push(`map for ${id} has no projection`);return;}
     if(S.regions.length!==s.tiers[0].meets) bad.push(`${s.label}: map has ${S.regions.length} Regions, projection ${s.tiers[0].meets}`);
     if(S.zones.length!==s.tiers[1].meets) bad.push(`${s.label}: map has ${S.zones.length} Zones, projection ${s.tiers[1].meets}`);
@@ -340,22 +487,28 @@ function render(){
     <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
   </section>
 
-  <section class="card"><span class="num">04</span><h2>Following one Zone through a season</h2>
+  <section class="card"><span class="num">04</span><h2>Run against real seasons, stop by stop</h2>
+    <p class="lede">The same divers who really competed, run through this proposal on this map. For each stop, each Region and each Zone, the proportional result sits next to what really happened to divers from the same counties.</p>
+    <div id="seasons">${seasonsHTML()}</div>
+    <p class="note" style="margin-top:12px">Projected with Boundary Studio’s engine from the real ${esc(Object.keys(SEAS.scenarios[SID]?SEAS.scenarios[SID].years:{}).join(' and '))} fields, each diver placed in the Region that covers their home county. Take-up (who accepts a place) is 2026’s measured rate in both seasons. The 2026 figures here are the same as the rest of this paper. Divers whose home county could not be found (1–2%) are left out of both sides. The Junior Nationals Open event is not counted. Data prepared ${esc(String(SEAS.generated).slice(0,10))}.</p>
+  </section>
+
+  <section class="card"><span class="num">05</span><h2>Following one Zone through a season</h2>
     <p class="lede">One event, one Zone, real divers: how the proportional rule would have moved them, next to what actually happened.</p>
     <div class="scroll">${PQVisuals.zoneWalkthrough(VIS.walkthrough)}</div>
   </section>
 
-  <section class="card"><span class="num">05</span><h2>The map: ${S.regions.length} Regions in ${S.zones.length} Zones</h2>
+  <section class="card"><span class="num">06</span><h2>The map: ${S.regions.length} Regions in ${S.zones.length} Zones</h2>
     <p class="lede">Each colour is a Region; navy lines and labels mark the Zone each Region feeds. Solid counties have USA Diving athletes; pale counties have none. Numbers are projected event entries at each meet. Switch layouts at the top of the page.</p>
     <div class="mapwrap"><div>${mapSVG()}</div><div class="zlist">${zoneList(s)}</div></div>
   </section>
 
-  <section class="card"><span class="num">06</span><h2>How an athlete moves through the season</h2>
+  <section class="card"><span class="num">07</span><h2>How an athlete moves through the season</h2>
     <p class="lede">${esc(s.label)}. Counts are projected event entries: one diver in one event.</p>
     ${pathHTML(s)}
   </section>
 
-  <section class="card"><span class="num">07</span><h2>What it does to the numbers</h2>
+  <section class="card"><span class="num">08</span><h2>What it does to the numbers</h2>
     <p class="lede">All four options on one basis, with the 2026 season for reference. Event entries throughout.</p>
     <div class="scroll">${PQVisuals.pathwayBars(VIS.pathway)}</div>
     <div class="scroll" style="margin-top:14px">${compareTable()}</div>
@@ -364,18 +517,18 @@ function render(){
     ${reachBars()}
   </section>
 
-  <section class="card"><span class="num">08</span><h2>Entry income</h2>
+  <section class="card"><span class="num">09</span><h2>Entry income</h2>
     <p class="lede">Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses, as in every Boundary Studio scenario.</p>
     <div class="scroll">${moneyTable()}</div>
     <p class="note" style="margin-top:10px">${feeNote()}</p>
   </section>
 
-  <section class="card"><span class="num">09</span><h2>Frequently asked questions</h2>
+  <section class="card"><span class="num">10</span><h2>Frequently asked questions</h2>
     <p class="lede">Anything marked <span class="tag">proposed</span> is an idea for discussion, not a current rule.</p>
     ${faqHTML()}
   </section>
 
-  <section class="card"><span class="num">10</span><h2>Not decided yet</h2>
+  <section class="card"><span class="num">11</span><h2>Not decided yet</h2>
     <ul class="open">
       <li>Whether the concept goes forward at all, and on which map.</li>
       <li>The exact shares (65% and 55%) and the cross-meet score threshold.</li>
@@ -386,13 +539,14 @@ function render(){
     </ul>
   </section>
 
-  <section class="card"><span class="num">11</span><h2>How the figures were made</h2>
+  <section class="card"><span class="num">12</span><h2>How the figures were made</h2>
     <ul class="note" style="font-size:13.5px">${(DATA.assumptions||[]).map(a=>`<li>${esc(a.replace('The membership sensitivity below shows','The income table also shows'))}</li>`).join('')}</ul>
     <p class="note">Reference columns: ${DATA.references.map(r=>`${esc(r.label)} (${esc(r.basis)})`).join('; ')}. Maps are the stored Boundary Studio scenarios; outlines are drawn from their county assignments.</p>
     <details class="app"><summary>Appendix A · Junior Nationals round sizes (${esc(s.label)})</summary><div class="scroll">${roundSizes(s)}</div></details>
     <details class="app"><summary>Appendix B · Entry income by meet (${esc(s.label)})</summary><div class="scroll">${revenueByMeet(s)}</div></details>
     <details class="app"><summary>Appendix C · Checks</summary><p class="note">Figure checks against the engine: ${(DATA.checks||[]).filter(c=>c.pass).length} of ${(DATA.checks||[]).length} pass; engine checks ${(DATA.engineChecks||[]).filter(c=>c.pass).length} of ${(DATA.engineChecks||[]).length} pass. This page also re-adds every stop, meet and income line, and matches each map to its projection, before it draws anything.</p></details>
   </section>`;
+  sxWire();
   $('#foot').textContent=`2027 Junior Circuit · Proportional qualification · Discussion draft, not a proposal or a rule · Boundary Studio, USA Diving`;
 }
 </script>
