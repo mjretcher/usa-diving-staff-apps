@@ -45,7 +45,7 @@ function pathwayBars(rows){
   const cols = [{k:'first', label:'First stop'}, {k:'second', label:'Second stop'}, {k:'ewc', label:'East / West / Central'}, {k:'nats', label:'Junior Nationals'}];
   const W = 900, x0 = 190, colW = (W - x0 - 10) / cols.length, barMax = colW - 18, rowH = 80;
   const max = Math.max(...rows.map(r => Math.max(...Object.values(r.stops).map(s => s.entries || 0))));
-  const H = 44 + rows.length * rowH + 30;
+  const H = 44 + rows.length * rowH + 48;
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Event entries at each stop, one row per scenario, on a common scale">`;
   cols.forEach((c, i) => { s += T(x0 + i*colW, 22, c.label, {weight:600, fill:INK}); });
   s += `<line x1="10" x2="${W-10}" y1="32" y2="32" stroke="${INK}" stroke-width="1.2"/>`;
@@ -64,7 +64,9 @@ function pathwayBars(rows){
     });
     s += `<line x1="10" x2="${W-10}" y1="${y+rowH-8}" y2="${y+rowH-8}" stroke="${LINE}"/>`;
   });
-  s += T(16, H-8, 'Bar length = event entries (one athlete in one event), same scale in every row. → shows how athletes advance from that stop.', {size:11});
+  s += T(16, H-26, 'Bar length = event entries (one athlete in one event), same scale in every row. → shows how athletes advance from that stop.', {size:11});
+  // First-stop entries differ only in platform (Groups C/D are in every scenario).
+  s += T(16, H-8, 'Platform at the first stop: non-qualifying in the proportional proposals (real 2026 Regionals entries); qualifying in the fixed-place ones (2026 Zones entries).', {size:11});
   return s + '</svg>';
 }
 
