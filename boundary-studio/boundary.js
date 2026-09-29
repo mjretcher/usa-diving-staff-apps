@@ -10262,6 +10262,20 @@ function atlasReportHtml(res){
     const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name;
     const bn = (b==null||b<0||!base.regions[b]) ? null : base.regions[b].name;
     return an !== bn; }) : null;
+  // Zones on the same page: each Zone's members, summed from the regions it is
+  // built from (the same member counts as the region legend above).
+  const PZ = paperZones();
+  const zoneLeg = PZ ? (() => {
+    const tot = PZ.names.map(() => 0), parts = PZ.names.map(() => []);
+    S.regions.forEach((r, ri) => { const zi = PZ.of[ri]; if (zi == null || tot[zi] == null) return; tot[zi] += t0.rows[ri] ? t0.rows[ri].m : 0; parts[zi].push(r.name); });
+    const lvName = (S.levels[1] && S.levels[1].name) || 'Zones';
+    // "Regions 1 & 2" when every name is "Region N"; otherwise the names as given.
+    const partsLabel = ns => ns.every(x => /^Region\s+\S+$/i.test(x)) && ns.length > 1
+      ? 'Regions ' + ns.map(x => x.replace(/^Region\s+/i, '')).join(ns.length === 2 ? ' & ' : ', ')
+      : ns.join(', ');
+    return `<div class="atl-zleg-h">${esc(lvName)} <span>members, built from the ${esc(tierName(0).toLowerCase())} above</span></div>
+    <div class="atl-zleg" style="grid-template-columns:repeat(${PZ.names.length <= 6 ? PZ.names.length : 3},1fr)">${PZ.names.map((nm, zi) => `<div><span class="atl-zp">${esc(nm)}</span><span class="mono">${fmt(tot[zi])}</span><em>${esc(partsLabel(parts[zi]))}</em></div>`).join('')}</div>`;
+  })() : '';
   const p2 = `<article class="atl-pg" data-screen-label="Report p2">${head2('Exhibit A')}
     ${rt('exA', `Exhibit A. Proposed ${esc(tierName(0).toLowerCase())} boundaries by county`, 'div', 'atl-ex')}
     ${rt(churn && !churn.moved ? 'exAs0' : 'exAs', `Every U.S. county is assigned to exactly one ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}. Solid counties have ${yearNumBoundary(S.year)} competitors; pale counties have none.${churn ? (churn.moved
@@ -10273,6 +10287,7 @@ function atlasReportHtml(res){
       ${bal ? `<span>widest gap ${mono((bx && bx.gap != null && bx.gap.toFixed(1) !== bal.spread.toFixed(1) ? bx.gap.toFixed(1) + ' → ' : '') + bal.spread.toFixed(1) + ' pp')}</span>` : ''}
       ${t0.un.m > 0 ? `<span>${mono(fmt(t0.un.m))} members unassigned</span>` : ''}</div>
     <div class="atl-leg">${S.regions.map((r,i) => `<div><span><i style="background:${r.color}"></i>${esc(r.name)}</span><span class="mono">${fmt(t0.rows[i]?t0.rows[i].m:0)}</span></div>`).join('')}</div>
+    ${zoneLeg}
     ${pageFoot(2)}</article>`;
 
   // Page 3 -- Exhibit B + section 3
