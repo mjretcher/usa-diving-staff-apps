@@ -131,6 +131,19 @@ td.sub{color:var(--muted);font-size:12.5px}
 .sx-box.hl{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy) inset}
 .sx-flow .ar{align-self:center;justify-self:center;font:700 20px Inter;color:var(--navy)}
 .sx-say{background:#eef7fc;border-left:4px solid var(--pool);border-radius:0 10px 10px 0;padding:10px 14px;margin:14px 0 0;font-size:14px;color:#2c3656}
+.mx{font-size:12.5px}
+.mx th,.mx td{padding:5px 7px;white-space:nowrap}
+.mx td:first-child{min-width:150px;position:sticky;left:0;background:#fff;z-index:1}
+.mx th:first-child{position:sticky;left:0;z-index:2}
+.mx td.n{font-family:"JetBrains Mono",monospace;font-size:12px}
+.mx td.n i{font-style:normal;color:#9aa2bb;font-size:11px;margin-left:4px}
+.mx td.z{color:#c3c8d6}
+.mx tr.gh td{background:var(--soft);font:700 11px Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+.mx tr.st td{font-weight:700;color:var(--navy);border-bottom:2px solid var(--line)}
+.mx tr.tot td{font-weight:800;color:var(--navy);background:#eef2fa;border-top:2px solid var(--navy)}
+.mx th.tt,.mx td.tt{background:#f1f4fb;border-left:2px solid var(--line)}
+.mx .up{color:#1d7a45}.mx .dn{color:#b4232f}
+.sx-dl{font:700 12.5px Inter;color:var(--navy);background:#e7ecf8;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
 footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);font-size:12px}
 @media print{.top{position:static}.seg,.seg-l{display:none}body{background:#fff}.card{break-inside:avoid;border-color:#ccd3e2}details.faq{break-inside:avoid}}
 </style>
@@ -170,7 +183,7 @@ window.addEventListener('beforeprint',()=>document.querySelectorAll('details').f
 document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{SID=b.dataset.model;
   document.querySelectorAll('[data-model]').forEach(x=>x.setAttribute('aria-pressed',x===b));render();});
 
-let VIS=null,SEAS=null,SX={yr:'2025',cell:null,zone:null};
+let VIS=null,SEAS=null,SX={yr:'2025',cell:null,zone:null,stop:0,view:'both'};
 const scen=id=>DATA.scenarios.find(s=>s.id===id);
 const fmtN=n=>Math.round(n).toLocaleString('en-US');
 const lastTier=s=>s.tiers[s.tiers.length-1];
@@ -382,9 +395,78 @@ function seasonsHTML(){
     <h3 class="sx-h">Each Zone, and who reaches Junior Nationals</h3>
     <p class="note" style="margin:0 0 6px">Zone fields include platform by open entry. “Real at Nationals” counts divers from that Zone’s counties at ${SX.yr} Junior Nationals.</p>
     <div class="scroll">${zT}</div>
+    <h3 class="sx-h">Every meet, every event</h3>
+    <div id="mxCtl"></div><div id="mxNote"></div>
+    <div class="scroll" id="mxTbl"></div>
     <h3 class="sx-h">Follow one event through one Zone</h3>
     <div class="sx-pick" id="sxPick"></div>
     <div id="sxFlow"></div>`;
+}
+/* Every meet, every event: one column per meet at the chosen stop, one row per
+   age group x gender x board. Proportional figures are the engine's billed
+   whole numbers; "as run" is the same counties' divers at that real stop. */
+const EVT_ORDER=(()=>{const o=[];['A','B','C','D'].forEach(a=>['G','B'].forEach(g=>['1','3','P'].forEach(b=>o.push(a+g+b))));return o;})();
+function mxData(Y){
+  const stop=SX.stop,is25=SX.yr==='2025';
+  if(stop===0) return {meets:Y.regions.map(r=>({name:r.name,sub:r.zone,p:r.first,a:r.actual.Regionals})),realLabel:`${SX.yr} Regionals`};
+  if(stop===1) return {meets:Y.zones.map(z=>({name:z.name,sub:z.regions.join(' · '),p:z.field,a:z.actual.Zones})),realLabel:`${SX.yr} Zones`};
+  return {meets:Y.zones.map(z=>({name:'From '+z.name,sub:'to Junior Nationals',p:z.toJN,a:z.actual.Nationals})),realLabel:`${SX.yr} Nationals`,jn:true};
+}
+function mxCell(p,a){
+  const v=SX.view;
+  if(v==='prop') return p?fmt(p):'';
+  if(v==='real') return a?fmt(a):'';
+  if(v==='diff'){const d=(p||0)-(a||0);return d===0?(p||a?'0':''):`<span class="${d>0?'up':'dn'}">${d>0?'+':'−'}${fmt(Math.abs(d))}</span>`;}
+  return (p||a)?`${fmt(p||0)}<i>/ ${fmt(a||0)}</i>`:'';
+}
+function matrixHTML(Y){
+  const D=mxData(Y),M=D.meets,cells=EVT_ORDER.filter(c=>M.some(m=>(m.p&&m.p[c])||(m.a&&m.a[c])));
+  const tot=(o,f)=>o?Object.entries(o).reduce((t,[c,v])=>t+(f(c)?v:0),0):0;
+  const row=(lab,f,cls)=>{const ps=M.map(m=>tot(m.p,f)),as=M.map(m=>tot(m.a,f));const P=ps.reduce((x,y)=>x+y,0),A=as.reduce((x,y)=>x+y,0);
+    const cell=(p,a,x='')=>{const h=mxCell(p,a);return `<td class="n ${x}${h===''?' z':''}">${h===''?'·':h}</td>`;};
+    return `<tr class="${cls||''}"><td>${lab}</td>${M.map((m,i)=>cell(ps[i],as[i])).join('')}${cell(P,A,'tt')}</tr>`;};
+  let body='';
+  ['A','B','C','D'].forEach(a=>{
+    const cs=cells.filter(c=>c[0]===a);if(!cs.length)return;
+    body+=`<tr class="gh"><td colspan="${M.length+2}">${AGE_L[a]}</td></tr>`;
+    cs.forEach(c=>{body+=row(`${GEN_L[c[1]]} ${BRD_L[c[2]]}`,x=>x===c);});
+    body+=row(`${AGE_L[a]} total`,x=>x[0]===a,'st');
+  });
+  body+=row('All events',()=>true,'tot');
+  const head=`<tr><th>Event</th>${M.map(m=>`<th class="n" title="${esc(m.sub)}">${esc(m.name)}</th>`).join('')}<th class="n tt">${D.jn?'Junior Nationals':'All meets'}</th></tr>`;
+  return `<table class="mx">${head}${body}</table>`;
+}
+function matrixCSV(){
+  const sc=SEAS.scenarios[SID],out=[['scenario','season','stop','meet','age group','gender','board','proportional entries',`as run (same counties)`]];
+  Object.entries(sc.years).forEach(([yr,Y])=>{
+    const add=(stop,meet,p,a)=>EVT_ORDER.forEach(c=>{const pv=(p&&p[c])||0,av=(a&&a[c])||0;if(pv||av)out.push([sc.name,yr,stop,meet,AGE_L[c[0]],GEN_L[c[1]],BRD_L[c[2]],pv,av]);});
+    Y.regions.forEach(r=>add('Regionals',r.name,r.first,r.actual.Regionals));
+    Y.zones.forEach(z=>add('Zones',z.name,z.field,z.actual.Zones));
+    Y.zones.forEach(z=>add('Junior Nationals','from '+z.name,z.toJN,z.actual.Nationals));
+  });
+  const csv=out.map(r=>r.map(v=>/[",]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n');
+  const b=new Blob([csv],{type:'text/csv'}),u=URL.createObjectURL(b),l=document.createElement('a');
+  l.href=u;l.download=`${SID}-every-meet-every-event.csv`;document.body.appendChild(l);l.click();l.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+function mxControls(){
+  const st=[['0','Regionals'],['1','Zones'],['2','Junior Nationals']],vw=[['both','Both'],['prop','Proportional'],['real','As run'],['diff','Difference']];
+  return `<div class="sx-bar"><div class="sx-seg">${st.map(([k,l])=>`<button data-mxs="${k}" aria-pressed="${+k===SX.stop}">${l}</button>`).join('')}</div>
+    <div class="sx-seg">${vw.map(([k,l])=>`<button data-mxv="${k}" aria-pressed="${k===SX.view}">${l}</button>`).join('')}</div>
+    <button class="sx-dl" id="mxCsv">Download every meet (CSV)</button></div>`;
+}
+function mxNote(){
+  const v=SX.view,real=SX.stop===0?'Regionals':SX.stop===1?'Zones':'Junior Nationals';
+  const key=v==='both'?`Each cell: proportional <span style="color:#9aa2bb">/ ${SX.yr} as run</span>.`:v==='diff'?`Proportional minus ${SX.yr} as run.`:'';
+  const stopTxt=SX.stop===2?`Junior Nationals is one meet; each column is what each Zone sends to it, and the last column is the whole meet.`:`One column per meet.`;
+  return `<p class="note" style="margin:0 0 6px">${stopTxt} ${key} “As run” counts divers from the same counties at ${SX.yr} ${real}${SX.stop===0?' (the real 2025 Regional lines were different; these divers are regrouped by the proposed map)':''}. A dot means no entries.</p>`;
+}
+function mxWire(){
+  const Y=SEAS.scenarios[SID].years[SX.yr];
+  const draw=()=>{$('#mxCtl').innerHTML=mxControls();$('#mxNote').innerHTML=mxNote();$('#mxTbl').innerHTML=matrixHTML(Y);
+    document.querySelectorAll('[data-mxs]').forEach(b=>b.onclick=()=>{SX.stop=+b.dataset.mxs;draw();});
+    document.querySelectorAll('[data-mxv]').forEach(b=>b.onclick=()=>{SX.view=b.dataset.mxv;draw();});
+    $('#mxCsv').onclick=matrixCSV;};
+  draw();
 }
 function sxPickHTML(Y){
   const cells=Y.cells.filter(c=>Y.zones.some(z=>(z.field[c]||0)>0));
@@ -421,6 +503,7 @@ function sxWire(){
   const sc=SEAS.scenarios[SID];if(!sc)return;const Y=sc.years[SX.yr];
   if(SX.zone==null||SX.zone>=Y.zones.length){let b=0;Y.zones.forEach((z,i)=>{if(sumC(z.field)>sumC(Y.zones[b].field))b=i;});SX.zone=b;}
   if(!SX.cell||!Y.zones.some(z=>(z.field[SX.cell]||0)>0))SX.cell='AG1';
+  mxWire();
   $('#sxPick').innerHTML=sxPickHTML(Y);$('#sxFlow').innerHTML=sxFlowHTML(Y);
   $('#sxCell').onchange=e=>{SX.cell=e.target.value;$('#sxFlow').innerHTML=sxFlowHTML(Y);};
   $('#sxZone').onchange=e=>{SX.zone=+e.target.value;$('#sxFlow').innerHTML=sxFlowHTML(Y);};
