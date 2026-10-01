@@ -71,7 +71,24 @@ for s in d['scenarios']:
     base = proposed['usad']
     swing = {lab: {str(dd): round(base + dd * k) for dd in SWINGS} for lab, k in
              (('stop1', e1), ('stop2', e2), ('nats', e3), ('all', n))}
-    out['scenarios'][s['id']] = {'swing': swing, 'perDollar': {'stop1': e1, 'stop2': e2, 'nats': e3, 'all': n},'label': s['label'], 'kind': s['kind'], 'entries': [e1, e2, e3],
+    # Per-meet income at the proposed fees (Appendix B). Proportional first-stop
+    # meets are priced from their own event mix; the CCE Submission keeps its
+    # stored per-meet figures (its fees are unchanged).
+    if s['kind'] == 'pq':
+        Y = se['scenarios'][s['id']]['years']['2026']; rmix = {r['name']: r['first'] for r in Y['regions']}
+        meets = []
+        for m in s['meets']:
+            if m['tier'] == t[0]['level']:
+                g = sum(v * FEE1['P' if c[2] == 'P' else c[0]] for c, v in rmix[m['stop']].items()); fee = '$90 / $65 / $55 / $45'
+            elif m['tier'] == t[-1]['level']:
+                g = m['entries'] * FEE3; fee = FEE3
+            else:
+                g = m['entries'] * FEE2; fee = FEE2
+            meets.append({'tier': m['tier'], 'stop': m['stop'], 'entries': m['entries'], 'fee': fee, **price(g, m['entries'])})
+        assert sum(x['entries'] for x in meets) == n and abs(sum(x['gross'] for x in meets) - proposed['gross']) <= 1, s['id']
+    else:
+        meets = [{k: m[k] for k in ('tier', 'stop', 'entries', 'fee', 'gross', 'dm', 'hosts', 'usad')} for m in s['meets']]
+    out['scenarios'][s['id']] = {'meets': meets, 'swing': swing, 'perDollar': {'stop1': e1, 'stop2': e2, 'nats': e3, 'all': n},'label': s['label'], 'kind': s['kind'], 'entries': [e1, e2, e3],
                                  'stop1Split': {k: round(v) for k, v in sp.items()},
                                  'storedEngine': {'gross': s['gross'], 'usad': s['usad']},
                                  'proposed': proposed, 'proposedSensitivity': sens,

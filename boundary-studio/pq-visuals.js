@@ -79,11 +79,15 @@ function dots(n, filled, x0, y0, cols, colors){
 }
 function zoneWalkthrough(ex){
   // ex: {event, zone, regions:[{name, field, actualSent}], stage1Share, takeUp, zoneCap, stage2Share, direct, actualZoneField, actualToNats}
-  const W = 900, H = 330, reg = ex.regions;
+  const W = 900, H = 350, reg = ex.regions;
   const adv = reg.map(r => quota(r.field, ex.stage1Share));
   const arriving = Math.round(adv.reduce((a, b) => a + b, 0) * ex.takeUp);
   const zoneField = Math.min(arriving, ex.zoneCap || Infinity);
-  const toNats = quota(zoneField, ex.stage2Share), direct = Math.min(ex.direct || 0, toNats);
+  const places = quota(zoneField, ex.stage2Share);
+  // Optional engine figure: Nationals event limits are shared by every Zone, and
+  // not every qualifier attends, so fewer go than the 55% places alone suggest.
+  const limited = ex.natsFromZone != null && ex.natsFromZone < places;
+  const toNats = limited ? ex.natsFromZone : places, direct = Math.min(ex.direct || 0, toNats);
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(ex.event)} followed through ${esc(ex.zone)}">`;
   s += T(10, 20, `${ex.event} · ${ex.zone} · real ${ex.year} fields, proportional rule applied`, {weight:700, fill:INK, size:13});
   reg.forEach((r, i) => {
@@ -103,17 +107,23 @@ function zoneWalkthrough(ex){
   if (capped){ const sh = adv.map(a => Math.round(ex.zoneCap * a / q));
     s += T(zx, zyEnd + 27, `Zone limit is ${ex.zoneCap} divers, so the spots are shared:`, {size:11.5});
     s += T(zx, zyEnd + 42, reg.map((r, i) => `${r.name} ${sh[i]}`).join(', '), {size:11.5}); }
-  s += T(zx, zyEnd + (capped ? 62 : 30), `${toNats} advance (${Math.round(ex.stage2Share*100)}%)`, {fill:NAVY, weight:700});
+  const ay = zyEnd + (capped ? 62 : 30);
+  if (limited){
+    s += T(zx, ay, `${places} earn places (${Math.round(ex.stage2Share*100)}%)`, {fill:NAVY, weight:700});
+    s += T(zx, ay + 15, `Nationals takes ${ex.natsLimit || 'a set number'} from all Zones;`, {size:11.5});
+    s += T(zx, ay + 30, `after take-up, about ${toNats} go`, {size:11.5, fill:NAVY, weight:700});
+  } else s += T(zx, ay, `${toNats} advance (${Math.round(ex.stage2Share*100)}%)`, {fill:NAVY, weight:700});
   s += `<path d="M420,92 L500,92" stroke="${NAVY}" stroke-width="2"/><polygon points="500,86 510,92 500,98" fill="${NAVY}"/>`;
   const nx = 530;
   s += T(nx, 70, 'Junior Nationals', {weight:600, fill:INK});
   s += `<rect x="${nx}" y="86" width="16" height="12" rx="2" fill="${NAVY}"/>` + T(nx+24, 96, `${direct} straight to the semifinal (places 1–2)`, {fill:INK});
   s += `<rect x="${nx}" y="108" width="16" height="12" rx="2" fill="#4a6cc9"/>` + T(nx+24, 118, `${toNats - direct} into prelims`, {fill:INK});
-  s += `<rect x="${nx-10}" y="150" width="${W-nx}" height="140" rx="10" fill="#f6f7fb" stroke="${LINE}"/>`;
-  s += T(nx, 176, `What actually happened in ${ex.year}`, {weight:700, fill:INK});
-  reg.forEach((r, i) => { s += T(nx, 200 + i*20, `${r.name}: ${r.actualSent} of ${r.field} went to Zones (${Math.round(100*r.actualSent/r.field)}%)`, {fill:INK}); });
-  s += T(nx, 200 + reg.length*20, `${ex.zone}: ${ex.actualZoneField} divers`, {fill:INK});
-  s += T(nx, 220 + reg.length*20, `${ex.actualToNats} reached Junior Nationals${ex.actualNote ? ' ' + ex.actualNote : ''}`, {fill:INK});
+  const by = limited ? 170 : 150;
+  s += `<rect x="${nx-10}" y="${by}" width="${W-nx}" height="140" rx="10" fill="#f6f7fb" stroke="${LINE}"/>`;
+  s += T(nx, by + 26, `What actually happened in ${ex.year}`, {weight:700, fill:INK});
+  reg.forEach((r, i) => { s += T(nx, by + 50 + i*20, `${r.name}: ${r.actualSent} of ${r.field} went to Zones (${Math.round(100*r.actualSent/r.field)}%)`, {fill:INK}); });
+  s += T(nx, by + 50 + reg.length*20, `${ex.zone}: ${ex.actualZoneField} divers`, {fill:INK});
+  s += T(nx, by + 70 + reg.length*20, `${ex.actualToNats} reached Junior Nationals${ex.actualNote ? ' ' + ex.actualNote : ''}`, {fill:INK});
   s += T(10, H-10, `Take-up ${Math.round(ex.takeUp*100)}% at Zones (measured). Dots are divers; filled dots advance. Real fields from DiveMeets results; the proportional rule is applied to them.`, {size:11});
   return s + '</svg>';
 }

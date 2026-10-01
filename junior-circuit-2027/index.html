@@ -47,6 +47,7 @@ table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{font:700 11px Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft)}
 td.n,th.n{text-align:right;white-space:nowrap}
+table.cmp th.n{white-space:normal;min-width:118px;vertical-align:bottom}
 tr.em td{font-weight:700;color:var(--navy)}
 td:first-child{min-width:170px}
 .pill{display:inline-block;font:700 10px Inter;letter-spacing:.04em;border-radius:999px;padding:2px 8px;margin-top:3px;background:#e7ecf8;color:var(--navy);text-transform:uppercase}
@@ -160,7 +161,7 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
     <button data-model="bs-pathway27-10-5-1" aria-pressed="false">10 Regions · 5 Zones</button>
   </div>
 </header>
-<script src="../boundary-studio/pq-visuals.js?v=20260929a"></script>
+<script src="../boundary-studio/pq-visuals.js?v=20261001a"></script>
 <main id="app"><div class="card">Loading…</div></main>
 <footer id="foot"></footer>
 <script>
@@ -280,8 +281,8 @@ function compareTable(){
   const reachR=s=>{const v=GROUPS.map(g=>s.reach&&s.reach[g]).filter(x=>x!=null);return v.length?Math.round(Math.min(...v))+'–'+Math.round(Math.max(...v))+'%':'—';};
   const head=`<tr><th></th>${sc.map(s=>`<th class="n"><span style="color:${SC_COL[s.id]}">${esc(s.label)}</span><br><span class="pill ${s.kind==='sub'?'sub':''}">${s.kind==='sub'?'submission':'concept'}</span></th>`).join('')}${R.map(r=>`<th class="n">${esc(r.label)}<br><span class="pill ref">actual / model</span></th>`).join('')}</tr>`;
   const row=(lab,fn,cls='')=>`<tr class="${cls}"><td>${lab}</td>${all.map(x=>`<td class="n">${fn(x)}</td>`).join('')}</tr>`;
-  return `<table>${head}
-   ${row('Stops',x=>x.tiers.map(t=>esc(t.level)).join(' → '))}
+  return `<table class="cmp">${head}
+   ${row('Meets per stop',x=>x.tiers.every(t=>t.meets!=null)?x.tiers.map(t=>t.meets).join(' → '):(x.tiers.length===4?'12 → 6 → 3 → 1':'—'))}
    ${row('First stop',x=>fmt(x.tiers[0].entries))}
    ${row('Second stop',x=>fmt(x.tiers[1]&&x.tiers[1].entries))}
    ${row('Third stop',x=>x.tiers.length>3?fmt(x.tiers[2].entries):'—')}
@@ -363,7 +364,7 @@ function openHTML(){
    <p class="note" style="margin:0 0 6px">Each cell: proportional rule <span class="note">/ 2025 as run</span>.</p>
    <div class="scroll"><table class="mx"><tr><th>Event</th>${ev.map(b=>`<th class="n">${bl[b]}</th>`).join('')}<th class="n tt">All boards</th></tr>${rows}
      <tr class="tot"><td>All</td>${ev.map(b=>`<td class="n">${fmt(groups.reduce((t,g)=>t+(P.events[`${g} ${b}`]||0),0))}<span class="note"> / ${fmt(groups.reduce((t,g)=>t+(A.events[`${g} ${b}`]||0),0))}</span></td>`).join('')}<td class="n tt">${fmt(P.likely)}<span class="note"> / ${fmt(A.likely)}</span></td></tr></table></div>
-   <div class="sx-say">Under the proportional rule about ${fmt(P.likely)} Open entries would be likely (${fmt(P.likelyAB)} Group A/B, ${fmt(P.likelyCD)} Group C/D), on top of the Junior Nationals field. The draft schedule plans 12 Group A/B Open events of up to 17 divers (204 places), which covers the likely Group A/B demand. Up to 24 more divers (2 per Group A/B Open event) would then join prelims, or 48 if Groups C/D also have an Open.</div>
+   <div class="sx-say">Under the proportional rule about ${fmt(P.likely)} Open entries would be likely (${fmt(P.likelyAB)} Group A/B, ${fmt(P.likelyCD)} Group C/D), on top of the Junior Nationals field. The draft schedule plans 12 Group A/B Open events of up to 17 divers (204 places). That covers Group A/B demand overall, but the Group A Girls springboard Opens would draw about 23 each, while Group B Boys Opens would have only 3–9. Up to 24 more divers (2 per Group A/B Open event) would then join prelims, or 48 if Groups C/D also have an Open.</div>
    <p class="note" style="margin-top:10px">The proportional row applies the 55% Zone rule to the real 2025 Zone results, with the Nationals event limits and 2026’s measured take-up (${Math.round(OPEN.takeUp*1000)/10}%); it lands near the engine’s Junior Nationals figure but is not identical to it. Entry fee: $45, as a non-qualifying event; at the likely ${fmt(OPEN.proportional.likely)} entries that is about ${usd(OPEN.proportional.likely*45)} in fees, of which about ${usd(OPEN.proportional.likely*(45-25-4.95))} stays with USA Diving after the $25 host share and DiveMeets fee. Not yet decided: whether Groups C/D have an Open.</p>`;
 }
 /* ---------- FAQ (policy items are marked proposed) ---------- */
@@ -398,7 +399,18 @@ function faqHTML(){
 }
 
 /* ---------- appendix ---------- */
-function revenueByMeet(s){
+/* Section 06 example with the engine's own Nationals figure for that Zone, so it
+   agrees with section 05 (Nationals event limits and take-up included). */
+function walkEx(){
+  const ex=Object.assign({},VIS.walkthrough),Y=SEAS.scenarios[SID]&&SEAS.scenarios[SID].years[String(ex.year)];
+  if(!Y)return ex;
+  const names=ex.regions.map(r=>r.name),z=Y.zones.find(q=>names.every(n=>q.regions.includes(n)));
+  if(!z)return ex;
+  ex.natsFromZone=z.toJN.AG1||0;ex.natsLimit=Y.jn.AG1;ex.zone=z.name;
+  return ex;
+}
+function revenueByMeet(s0){
+  const F=FEES.scenarios[s0.id],s=F?{meets:F.meets,gross:F.proposed.gross,dm:F.proposed.dm,hosts:F.proposed.hosts,usad:F.proposed.usad}:s0;
   return `<table><tr><th>Stop</th><th>Meet</th><th class="n">Entries</th><th class="n">Fee</th><th class="n">Collected</th><th class="n">DiveMeets</th><th class="n">Host</th><th class="n">USA Diving</th></tr>
    ${s.meets.map(m=>`<tr><td>${esc(m.tier)}</td><td>${esc(m.stop)}</td><td class="n">${fmt(m.entries)}</td><td class="n">${esc(m.fee||'')}</td><td class="n">${usd(m.gross)}</td><td class="n">${usd(m.dm)}</td><td class="n">${usd(m.hosts)}</td><td class="n">${usd(m.usad)}</td></tr>`).join('')}
    <tr class="em"><td colspan="2">Total</td><td class="n">${fmt(s.meets.reduce((a,m)=>a+m.entries,0))}</td><td></td><td class="n">${usd(s.gross)}</td><td class="n">${usd(s.dm)}</td><td class="n">${usd(s.hosts)}</td><td class="n">${usd(s.usad)}</td></tr></table>`;
@@ -612,11 +624,11 @@ function render(){
   const s=scen(SID),S=MAPS.scenarios[SID];
   $('#app').innerHTML=`
   <section class="hero">
-    <span class="eyebrow">Discussion draft · not a proposal</span>
+    <span class="eyebrow">Discussion draft · for CCE and CAC</span>
     <h1>What if the same share of every meet moved on?</h1>
     <p>This paper presents a concept for the 2027 Junior Circuit, <b>proportional qualification</b>, and shows what it would do on two possible maps. It sets the concept beside the CCE Submission, with the 2025 and 2026 seasons for reference, using the same data and the same calculations for all three options.</p>
     <p>It is here to inform the conversation. It does not recommend any option, and nothing in it is a rule.</p>
-    <p class="fine">Every figure is projected from real 2026 entries through Boundary Studio’s own engine. Data prepared ${esc(String(DATA.generated).slice(0,10))}.</p>
+    <p class="fine">Every figure is projected from real 2025 and 2026 entries through Boundary Studio’s own engine. Updated ${esc([DATA.generated,SEAS.generated,OPEN.generated].map(x=>String(x||'').slice(0,10)).sort().pop())}.</p>
   </section>
 
   <section class="card"><span class="num">01</span><h2>Questions this paper is meant to help answer</h2>
@@ -638,17 +650,17 @@ function render(){
     ${openHTML()}
   </section>
 
-  <section class="card"><span class="num">04</span><h2>What it would have done in real seasons</h2>
+  <section class="card"><span class="num">04</span><h2>How evenly meets advance divers today</h2>
     <p class="lede">Real results, event by event. Each row is an event; each dot is one meet, placed at the share of that event's field who actually advanced. The navy line is the proportional share, the same for every event. Hover a dot for the meet, the field size and who went.</p>
     <h3 style="font-size:19px;margin:14px 0 2px">${esc(VIS.strip2026.title)}</h3>
     <div class="scroll">${PQVisuals.eventStrip(VIS.strip2026)}</div>
     <p class="note">${fmtN(VIS.strip2026.events)} junior springboard events at 12 Regionals, ${fmtN(VIS.strip2026.field)} divers-in-events. Top 15 sent ${fmtN(VIS.strip2026.actual)} to Zones; 65% of every field would have sent ${fmtN(VIS.strip2026.rule)} before the score threshold, spread evenly instead of by field size.</p>
     <h3 style="font-size:19px;margin:22px 0 2px">${esc(VIS.strip2025.title)}</h3>
     <div class="scroll">${PQVisuals.eventStrip(VIS.strip2025)}</div>
-    <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
+    <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} of them reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
   </section>
 
-  <section class="card"><span class="num">05</span><h2>Run against real seasons, stop by stop</h2>
+  <section class="card"><span class="num">05</span><h2>The 2025 and 2026 seasons, run through the proposal</h2>
     <p class="lede">The same divers who really competed, run through this proposal on this map. For each stop, each Region and each Zone, the proportional result sits next to what really happened to divers from the same counties.</p>
     <div id="seasons">${seasonsHTML()}</div>
     <p class="note" style="margin-top:12px">Projected with Boundary Studio’s engine from the real ${esc(Object.keys(SEAS.scenarios[SID]?SEAS.scenarios[SID].years:{}).join(' and '))} fields, each diver placed in the Region that covers their home county. Take-up (who accepts a place) is 2026’s measured rate in both seasons. The 2026 figures here are the same as the rest of this paper. Divers whose home county could not be found (1–2%) are left out of both sides. The Junior Nationals Open event is not counted. Data prepared ${esc(String(SEAS.generated).slice(0,10))}.</p>
@@ -656,7 +668,7 @@ function render(){
 
   <section class="card"><span class="num">06</span><h2>Following one Zone through a season</h2>
     <p class="lede">One event, one Zone, real divers: how the proportional rule would have moved them, next to what actually happened.</p>
-    <div class="scroll">${PQVisuals.zoneWalkthrough(VIS.walkthrough)}</div>
+    <div class="scroll">${PQVisuals.zoneWalkthrough(walkEx())}</div>
   </section>
 
   <section class="card"><span class="num">07</span><h2>The map: ${S.regions.length} Regions in ${S.zones.length} Zones</h2>
@@ -712,7 +724,7 @@ function render(){
     <details class="app"><summary>Appendix C · Checks</summary><p class="note">Figure checks against the engine: ${(DATA.checks||[]).filter(c=>c.pass).length} of ${(DATA.checks||[]).length} pass; engine checks ${(DATA.engineChecks||[]).filter(c=>c.pass).length} of ${(DATA.engineChecks||[]).length} pass. This page also re-adds every stop, meet and income line, and matches each map to its projection, before it draws anything.</p></details>
   </section>`;
   sxWire();
-  $('#foot').textContent=`2027 Junior Circuit · Proportional qualification · Discussion draft, not a proposal or a rule · Boundary Studio, USA Diving`;
+  $('#foot').textContent=`2027 Junior Circuit · Proportional qualification · Discussion draft for CCE and CAC, not a rule · USA Diving`;
 }
 </script>
 </body>
