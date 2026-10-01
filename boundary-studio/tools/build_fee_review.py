@@ -2,18 +2,19 @@
 """
 build_fee_review.py -- every option priced on the same fee card.
 
-Why: the stored CCE Submission names its levels "1st round / 2nd round / The
-Finals" and carries no fees, so Boundary Studio prices it by structure: 9 meets
--> Zones fee $90 for every entry (Group C/D and platform included), 3 meets ->
-E/W/C fee $115, 1 meet -> $125. The proportional options are priced at the 2026
-Regionals card at their first stop ($85 Group A/B springboard, $45 Group C/D
-and platform) and $90 at Zones. Those are fee assumptions, not structure.
+Why: each option is priced at the 2026 fee card for the kind of meet each stop is.
+The CCE Submission's stops are Zones ($90 every entry), East/West/Central ($115)
+and Nationals ($125) -- set explicitly on its stored scenario on 2026-10-01. The
+proportional options' stops are Regionals ($85 Group A/B springboard, $45 Group
+C/D and platform), Zones ($90) and Nationals ($125). The difference in income is
+partly where each structure's stops sit on that card.
 
 This prices every option on two common cards, with the same per-entry costs
 ($25 to hosts, $4.95 DiveMeets):
   same card -- stop 1: $85 A/B springboard, $45 C/D and platform; stop 2: $90;
                Junior Nationals: $125 (the proportional options' own card).
-  CCE card  -- stop 1: $90 every entry; stop 2: $115; Junior Nationals: $125.
+  CCE card  -- stop 1: $90 every entry; stop 2: $115; Junior Nationals: $125
+               (the CCE Submission's own 2026 fees, applied stop for stop).
 Entries are the stored projections (junior-pathway-2027-data.json); the CCE
 first-stop split is the real 2026 first-stop pool it is seeded from.
 Writes boundary-studio/junior-pathway-2027-fees.json.

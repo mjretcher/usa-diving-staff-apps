@@ -305,24 +305,25 @@ function moneyTable(){
   const hd=t=>`<tr class="gh"><td colspan="${sc.length+1}">${t}</td></tr>`;
   return `<table class="money"><tr><th></th>${sc.map(s=>`<th class="n" style="color:${SC_COL[s.id]}">${esc(s.label)}</th>`).join('')}</tr>
    <tr><td>Event entries, all stops</td>${sc.map(s=>`<td class="n">${fmt(s.tiers.reduce((a,t)=>a+t.entries,0))}</td>`).join('')}</tr>
-   ${hd('On the same fee card (fair comparison)')}
-   <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','gross')}</td>`).join('')}</tr>
-   <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','usad')}</td>`).join('')}</tr>
-   ${hd('As each option was priced (fees differ by option)')}
+   ${hd('At 2026 actual fees for each kind of meet')}
    <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${usd(s.gross)}</td>`).join('')}</tr>
    <tr><td>DiveMeets fees</td>${sc.map(s=>`<td class="n">${usd(s.dm)}</td>`).join('')}</tr>
    <tr><td>To hosts ($25 per entry)</td>${sc.map(s=>`<td class="n">${usd(s.hosts)}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${usd(s.usad)}</td>`).join('')}</tr>
    ${['0.95','0.90'].filter(k=>sens[k]).map(k=>`<tr><td class="note">Keeps with ${Math.round((1-+k)*100)}% fewer divers</td>${sc.map(s=>`<td class="n note">${usd(sens[k][s.id]&&sens[k][s.id].usad)}</td>`).join('')}</tr>`).join('')}
-   ${hd('On the CCE Submission’s assumed fee card')}
+   ${hd('Same fee at each stop: stop 1 $85 / $45, stop 2 $90, Nationals $125')}
+   <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','gross')}</td>`).join('')}</tr>
+   <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','usad')}</td>`).join('')}</tr>
+   ${hd('Same fee at each stop: stop 1 $90, stop 2 $115, Nationals $125')}
    <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','gross')}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','usad')}</td>`).join('')}</tr>
   </table>`;
 }
 function feeNote(){
-  const c=FEES.cards,sub=DATA.scenarios.find(x=>x.kind==='sub'),F=sub&&FEES.scenarios[sub.id];
+  const sub=DATA.scenarios.find(x=>x.kind==='sub'),F=sub&&FEES.scenarios[sub.id],P=DATA.scenarios[0],FP=FEES.scenarios[P.id];
   if(!F) return '';
-  return `<b>Why the CCE Submission looked higher.</b> Its stored scenario carries no fees, so it was priced by structure: $${c.cce.stop1} for every first-stop entry (Group C/D and platform included), $${c.cce.stop2} at its 3-meet second round (the East/West/Central rate) and $${c.cce.nats} at the Finals. The proportional options were priced at $${c.same.stop1AB} for Group A/B springboard and $${c.same.stop1Other} for Group C/D and platform at Regionals, and $${c.same.stop2} at Zones. On the same card the CCE Submission collects ${usd(F.sameCard.gross)} and keeps ${usd(F.sameCard.usad)}: the proportional options keep more because they have more entries (${fmt(DATA.scenarios[0].tiers.reduce((a,t)=>a+t.entries,0))} against ${fmt(F.entries.reduce((a,b)=>a+b,0))}). Its first stop also counts platform as qualifying (${fmt(F.entries[0])} entries against ${fmt(DATA.scenarios[0].tiers[0].entries)}). The CCE Submission’s own intended fees should be confirmed with the committee.`;
+  const nP=P.tiers.reduce((a,t)=>a+t.entries,0),nC=F.entries.reduce((a,b)=>a+b,0);
+  return `<b>Why the CCE Submission keeps more at 2026 fees.</b> Every option is priced at the 2026 fee card for the kind of meet each stop is. The CCE Submission’s first stop is a Zones meet, so every entry pays $90, Group C/D and platform included, and its 3-meet second round is an East/West/Central at $115. The proportional options’ first stop is a Regionals meet ($85 Group A/B springboard, $45 Group C/D and platform) and their second stop a Zones meet ($90). So the CCE Submission collects more per entry, from fewer entries (${fmt(nC)} against ${fmt(nP)}). Charged the same fee at each stop, either card, the proportional options keep more. Its first stop also counts platform as qualifying (${fmt(F.entries[0])} entries against ${fmt(P.tiers[0].entries)}).`;
 }
 
 /* ---------- Junior Nationals Open (junior-pathway-2027-open.json) ---------- */
@@ -669,7 +670,7 @@ function render(){
   </section>
 
   <section class="card"><span class="num">10</span><h2>Entry income</h2>
-    <p class="lede">On the same fee card, the proportional options keep the most, because they have the most entries. The CCE Submission only looked higher because higher fees were assumed for it. Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses.</p>
+    <p class="lede">At 2026 actual fees the CCE Submission keeps the most, because its stops are priced as Zones and East/West/Central meets. Charged the same fee at each stop, the proportional options keep more, because they have more entries. Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses.</p>
     <div class="scroll">${moneyTable()}</div>
     <p class="note" style="margin-top:10px;font-size:13.5px">${feeNote()}</p>
   </section>
@@ -687,7 +688,6 @@ function render(){
       <li>Whether foreign athletes could medal at Junior Nationals.</li>
       <li>Fees for Groups C/D at Regionals, and the Junior Nationals Open entry fee.</li>
       <li>Whether Groups C/D also have a Junior Nationals Open.</li>
-      <li>The CCE Submission’s intended fees (it was stored without any).</li>
       <li>How many divers who only just qualify would actually attend. Take-up here is 2026’s measured rate, untested at these margins.</li>
     </ul>
   </section>
