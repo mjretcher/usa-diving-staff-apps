@@ -527,6 +527,11 @@ function seasonsHTML(){
   // regions: springboard, where the stop-1 rule applies. In 2026 Groups C/D
   // first qualified at Zones, so the as-run share is only meaningful for A/B.
   const rf=is25?isSB:(c=>isSB(c)&&/^[AB]/.test(c));
+  const rng=a=>{const v=a.filter(x=>x!=null&&isFinite(x));return v.length?[Math.min(...v),Math.max(...v)]:[null,null];};
+  const [pLo,pHi]=rng(R.map(r=>pct(sumC(r.toZone,rf),sumC(r.first,rf)))),[aLo,aHi]=rng(R.map(r=>pct(sumC(r.actual.Zones,rf),sumC(r.actual.Regionals,rf))));
+  const [zpLo,zpHi]=rng(Z.map(z=>pct(sumC(z.toJN),sumC(z.field)))),[zaLo,zaHi]=rng(Z.map(z=>pct(sumC(z.actual.Nationals),sumC(z.actual.Zones))));
+  const regSay=`<div class="sx-say" style="margin:0 0 10px">Under ${esc(sc.name.replace(/ \(.*\)$/,''))}, every Region would send <b>${pLo}–${pHi}%</b> of its ${is25?'':'Group A/B '}springboard field to Zones. As ${SX.yr} actually ran, the same counties ranged from <b>${aLo}% to ${aHi}%</b>.</div>`;
+  const zoneSay=`<div class="sx-say" style="margin:0 0 10px">Under the proportional rule, every Zone would send <b>${zpLo}–${zpHi}%</b> of its field to Junior Nationals (55% earn places; Nationals event limits and take-up bring the number who go lower)${is25?`; in 2025 the same counties ranged from <b>${zaLo}% to ${zaHi}%</b>`:''}.</div>`;
   const rRows=R.map(r=>{const f1=sumC(r.first,rf),to=sumC(r.toZone,rf),a1=sumC(r.actual.Regionals,rf),az=sumC(r.actual.Zones,rf);
     return `<tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:${r.color};margin-right:7px;vertical-align:-1px"></span>${esc(r.name)}</td><td class="sub">${esc(r.zone)}</td>
       <td class="n">${fmt(f1)}</td><td class="n">${fmt(to)}</td><td>${mbar(pct(to,f1),col)}</td>
@@ -546,9 +551,11 @@ function seasonsHTML(){
     <h3 class="sx-h">By age group</h3>
     <div class="scroll">${agT}</div>
     <h3 class="sx-h">Each Region</h3>
+    ${regSay}
     <p class="note" style="margin:0 0 6px">${is25?'Springboard only':'Group A/B springboard only'}, where the Regionals rule applies (platform does not qualify at Regionals${is25?'':'; in 2026 Groups C/D first qualified at Zones, so they cannot be compared here'}). Grey columns: the same counties’ divers, as the ${SX.yr} season really ran.</p>
     <div class="scroll">${rT}</div>
     <h3 class="sx-h">Each Zone, and who reaches Junior Nationals</h3>
+    ${zoneSay}
     <p class="note" style="margin:0 0 6px">Zone fields include platform by open entry. “Real at Nationals” counts divers from that Zone’s counties at ${SX.yr} Junior Nationals.</p>
     <div class="scroll">${zT}</div>
     <h3 class="sx-h">Every meet, every event</h3>
