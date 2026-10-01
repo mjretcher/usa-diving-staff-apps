@@ -166,6 +166,18 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
 /* Shared committee link: this page lives at /junior-circuit-2027/ and reads the
    same data files Boundary Studio builds, so it is always current. */
 const D='../boundary-studio/';
+/* Options no longer under consideration: kept in the stored data (and in
+   Boundary Studio) but left out of this committee report. */
+const RETIRED=new Set(['bs-msix7ibe-nij21']); // USA Diving National Office Submission (earlier, fixed places)
+function withoutRetired(d){
+  d.scenarios=(d.scenarios||[]).filter(s=>!RETIRED.has(s.id));
+  Object.values(d.sensitivity||{}).forEach(f=>RETIRED.forEach(id=>delete f[id]));
+  const n=d.scenarios.length;
+  d.assumptions=(d.assumptions||[]).map(a=>a.replace('First stop, 9-Zone submissions:','First stop, CCE Submission (9 Zones):').replace('These scenarios are shown','It is shown').replace('all four scenarios','all '+(n===3?'three':n)+' scenarios'));
+  d.engineChecks=(d.engineChecks||[]).map(c=>Object.assign({},c,{detail:String(c.detail||'').replace(/;\s*National Office \$[\d,]+ \/ \$[\d,]+/,'').replace('All four scenarios','All scenarios')}));
+  d.checks=(d.checks||[]).filter(c=>!/nij21|National Office/.test(JSON.stringify(c)));
+  return d;
+}
 if(new URLSearchParams(location.search).get('from')==='studio'){const b=document.getElementById('backStudio');if(b)b.hidden=false;}
 
 'use strict';
@@ -183,7 +195,8 @@ Promise.all([
   fetch(D+'junior-pathway-2027-maps.json?v=202609251230').then(r=>{if(!r.ok)throw new Error('map data HTTP '+r.status);return r.json();}),
   fetch(D+'junior-pathway-2027-visuals.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('visuals data HTTP '+r.status);return r.json();}),
   fetch(D+'junior-pathway-2027-seasons.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('seasons data HTTP '+r.status);return r.json();})
-]).then(([d,m,v,se])=>{DATA=d;MAPS=m;VIS=v;SEAS=se;render();})
+]).then(([d,m,v,se])=>{DATA=withoutRetired(d);MAPS=m;VIS=v;SEAS=se;
+  if(VIS&&VIS.pathway)VIS.pathway=VIS.pathway.filter(r=>!RETIRED.has(r.id));render();})
  .catch(e=>{$('#app').innerHTML='<div class="card">Could not load the report data: '+esc(e.message)+'</div>';});
 window.addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>d.open=true));
 document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{SID=b.dataset.model;
@@ -295,7 +308,7 @@ function moneyTable(){
 }
 function feeNote(){
   const p=scen(SID),first=p.tiers[0],sub=DATA.scenarios.find(x=>x.kind==='sub');
-  return `The two concepts charge the Regionals fee card at their first stop ($85 for Group A/B springboard, $45 for Groups C/D and platform); the two submissions charge the Zones fee ($90) at theirs. At a flat $90 the ${esc(p.label)} first stop would collect ${usd(p.firstStopAt90)} instead of ${usd(first.gross)}. The rest of the difference is entries: ${fmt(first.entries)} at the concept’s first stop against ${fmt(sub.tiers[0].entries)} in the submissions, which count platform as qualifying there.`;
+  return `The two concepts charge the Regionals fee card at their first stop ($85 for Group A/B springboard, $45 for Groups C/D and platform); the CCE Submission charges the Zones fee ($90) at its first stop. At a flat $90 the ${esc(p.label)} first stop would collect ${usd(p.firstStopAt90)} instead of ${usd(first.gross)}. The rest of the difference is entries: ${fmt(first.entries)} at the concept’s first stop against ${fmt(sub.tiers[0].entries)} in the submissions, which count platform as qualifying there.`;
 }
 
 /* ---------- FAQ (policy items are marked proposed) ---------- */
@@ -547,7 +560,7 @@ function render(){
   <section class="hero">
     <span class="eyebrow">Discussion draft · not a proposal</span>
     <h1>What if the same share of every meet moved on?</h1>
-    <p>This paper presents a concept for the 2027 Junior Circuit, <b>proportional qualification</b>, and shows what it would do on two possible maps. It sets the concept beside the CCE Submission and the USA Diving National Office Submission, using the same data and the same calculations for all four.</p>
+    <p>This paper presents a concept for the 2027 Junior Circuit, <b>proportional qualification</b>, and shows what it would do on two possible maps. It sets the concept beside the CCE Submission, with the 2025 and 2026 seasons for reference, using the same data and the same calculations for all three options.</p>
     <p>It is here to inform the conversation. It does not recommend any option, and nothing in it is a rule.</p>
     <p class="fine">Every figure is projected from real 2026 entries through Boundary Studio’s own engine. Data prepared ${esc(String(DATA.generated).slice(0,10))}.</p>
   </section>
@@ -556,7 +569,7 @@ function render(){
     <div class="ask">
       <div><b>Is it fair across Regions?</b>Today a diver’s odds depend on how crowded their Regional is. Would a fixed share make every meet equally hard to qualify from?</div>
       <div><b>Does Nationals stay workable?</b>How big would Junior Nationals be, and how many divers from each age group would reach it?</div>
-      <div><b>What does it cost?</b>How do entries and entry income compare with the two submissions?</div>
+      <div><b>What does it cost?</b>How do entries and entry income compare with the CCE Submission?</div>
     </div>
   </section>
 
@@ -598,7 +611,7 @@ function render(){
   </section>
 
   <section class="card"><span class="num">08</span><h2>What it does to the numbers</h2>
-    <p class="lede">All four options on one basis, with the 2026 season for reference. Event entries throughout.</p>
+    <p class="lede">All three options on one basis, with the 2026 season for reference. Event entries throughout.</p>
     <div class="scroll">${PQVisuals.pathwayBars(VIS.pathway)}</div>
     <div class="scroll" style="margin-top:14px">${compareTable()}</div>
     <h3 style="font-size:21px;margin:24px 0 4px">Who reaches Junior Nationals</h3>
