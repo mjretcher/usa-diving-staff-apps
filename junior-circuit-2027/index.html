@@ -147,6 +147,17 @@ td.sub{color:var(--muted);font-size:12.5px}
 .mx .up{color:#1d7a45}.mx .dn{color:#b4232f}
 .sx-dl{font:700 12.5px Inter;color:var(--navy);background:#e7ecf8;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
 table.money tr.gh td{background:var(--soft);font:700 11px Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
+.fd{transition:transform .8s cubic-bezier(.3,.7,.2,1)}
+.fcurve{transition:opacity .5s}
+.fair-leg{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:4px 0 0}
+.fair-leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.fair-tip{background:#eef7fc;border-left:4px solid var(--pool);border-radius:0 10px 10px 0;padding:9px 13px;margin:10px 0 0;font-size:14px;color:#2c3656;min-height:22px}
+.fair-ex{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;margin:8px 0 0;font-size:13px}
+.fair-ex div{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:#fff}
+table.heat{border-collapse:separate;border-spacing:2px;font-size:12px}
+table.heat th{padding:4px 5px}
+table.heat td{text-align:center;border-radius:3px;padding:4px 6px;font-family:"JetBrains Mono",monospace;font-size:11.5px;min-width:30px}
+table.heat td:first-child{text-align:left;font-family:Inter,sans-serif;white-space:nowrap;padding-right:10px;color:var(--ink)}
 footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);font-size:12px}
 @media print{.top{position:static}.seg,.seg-l{display:none}body{background:#fff}.card{break-inside:avoid;border-color:#ccd3e2}details.faq{break-inside:avoid}}
 </style>
@@ -409,6 +420,66 @@ function walkEx(){
   ex.natsFromZone=z.toJN.AG1||0;ex.natsLimit=Y.jn.AG1;ex.zone=z.name;
   return ex;
 }
+/* ---------- Section 04: field size against share advanced (+ heatmap) ---------- */
+const FCOL={A:'#009AC7',B:'#7c5cc4',C:'#e3872f',D:'#2e9e6b'};
+const FAIR={};
+function fairPts(st){const out=[];st.rows.forEach((r,ri)=>r.pts.forEach(p=>out.push({ev:r.event.replace(/ 1M$/,' 1 m').replace(/ 3M$/,' 3 m').replace(/ Platform$/,' platform'),g:r.group,m:p.m,n:p.n,went:p.went,rule:Math.min(p.n,p.rule),ri})));return out;}
+function fairHTML(id,st,o){
+  const P=fairPts(st),share=Math.round(st.share*100),W=760,H=330,L=48,Rt=18,Tp=18,B=40,maxN=Math.max(...P.map(p=>p.n));
+  const nx=Math.ceil((maxN+2)/10)*10,x=n=>L+(W-L-Rt)*n/nx,y=v=>Tp+(H-Tp-B)*(1-v/100),meet=st.meetLabel;
+  FAIR[id]={P,st,o,mode:'today',heat:'pct',y};
+  // two real examples from the biggest event: its largest field and its luckiest small field
+  const big=P.reduce((a,b)=>b.n>a.n?b:a),same=P.filter(p=>p.ri===big.ri&&p.n>=4),r=p=>p.went/p.n;
+  const ex=[same.reduce((a,b)=>r(b)<r(a)?b:a),same.reduce((a,b)=>r(b)>r(a)?b:a)];
+  let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(st.title)}: share of each field that advanced, by field size">`;
+  [0,25,50,75,100].forEach(v=>{s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(v)}" y2="${y(v)}" stroke="#e6e9f0"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#6b7385">${v}%</text>`;});
+  for(let n=0;n<=nx;n+=10)s+=`<text x="${x(n)}" y="${H-B+18}" text-anchor="middle" font-size="11" fill="#6b7385">${n}</text>`;
+  s+=`<text x="${(L+W)/2}" y="${H-6}" text-anchor="middle" font-size="11.5" fill="#6b7385">divers in the event at that ${meet.toLowerCase()} (field size)</text>`;
+  if(o.curve){let d='';for(let n=1;n<=nx;n++){const v=100*Math.min(o.curve,n)/n;d+=(n===1?'M':'L')+x(n).toFixed(1)+','+y(v).toFixed(1);}
+    s+=`<path class="fcurve" d="${d}" fill="none" stroke="#9aa2bb" stroke-width="2"/><text class="fcurve" x="${x(nx*0.9)}" y="${y(100*o.curve/(nx*0.9))+18}" text-anchor="middle" font-size="11.5" fill="#6b7385">${esc(o.rule)} rule</text>`;}
+  s+=`<line x1="${L}" x2="${W-Rt}" y1="${y(share)}" y2="${y(share)}" stroke="#171F69" stroke-width="2.2" stroke-dasharray="7 5"/><text x="${W-Rt}" y="${y(share)-7}" text-anchor="end" font-size="12" font-weight="700" fill="#171F69">${share}% proportional</text>`;
+  P.forEach((p,i)=>{const t=100*p.went/p.n,pr=100*p.rule/p.n,isEx=ex.includes(p);
+    s+=`<circle class="fd" data-i="${i}" cx="${x(p.n).toFixed(1)}" cy="${y(t).toFixed(1)}" data-dy="${(y(pr)-y(t)).toFixed(1)}" r="${isEx?6.5:4.6}" fill="${FCOL[p.g]}" fill-opacity="${isEx?1:.78}" stroke="${isEx?'#171F69':'#fff'}" stroke-width="${isEx?2:1}" style="cursor:pointer"/>`;});
+  s+='</svg>';
+  const fieldsTen=P.filter(p=>p.n>=10),lo=Math.round(Math.min(...fieldsTen.map(p=>100*p.went/p.n))),hi=Math.round(Math.max(...fieldsTen.map(p=>100*p.went/p.n)));
+  const plo=Math.round(Math.min(...fieldsTen.map(p=>100*p.rule/p.n))),phi=Math.round(Math.max(...fieldsTen.map(p=>100*p.rule/p.n)));
+  const exTxt=p=>`<b>${esc(meet)} ${esc(p.m)}, ${esc(p.ev)}:</b> ${p.n} divers, ${p.went} went (${Math.round(100*p.went/p.n)}%). At ${share}%, ${p.rule} would go.`;
+  const legend=['A','B','C','D'].map(g=>`<span><i style="background:${FCOL[g]}"></i>Group ${g}</span>`).join('');
+  return `<h3 class="sx-h">${esc(o.from)} to ${esc(o.to)}, ${o.year}</h3>
+   <div class="sx-bar"><div class="sx-seg"><button data-fair="${id}" data-fm="today" aria-pressed="true">${o.year} as run</button><button data-fair="${id}" data-fm="prop" aria-pressed="false">Proportional ${share}%</button></div>
+     <span class="note">Tap or click any dot for its details.</span></div>
+   <div class="scroll" id="${id}c">${s}</div>
+   <div class="fair-leg">${legend}<span><i style="background:#fff;border:2px solid #171F69"></i>examples below</span></div>
+   <div class="fair-tip" id="${id}t">${o.curve?`Small fields sit high on the curve, big fields low: the ${o.rule.toLowerCase()} rule decides the odds by field size.`:`Each Zone event sent a different share; the proportional rule sends ${share}% of every one.`}</div>
+   <div class="fair-ex">${ex.map(exTxt).map(t=>`<div>${t}</div>`).join('')}</div>
+   <p class="note" style="margin:8px 0 0">In events of 10 or more divers, the share that went ranged from <b>${lo}%</b> to <b>${hi}%</b>${o.curve?'':''}. At ${share}% every one lands between ${plo}% and ${phi}% (rounding)${o.to==='Zones'?', before the score threshold, which lets extra divers from strong meets through':', before Nationals event limits and take-up'}.</p>
+   <details class="app" style="margin-top:10px"><summary>See every event at every ${esc(meet)}</summary>
+     <div class="sx-bar" style="margin:10px 0 6px"><div class="sx-seg"><button data-fairh="${id}" data-hm="pct" aria-pressed="true">Share that went</button><button data-fairh="${id}" data-hm="delta" aria-pressed="false">Places at ${share}% vs ${o.year}</button></div></div>
+     <div class="scroll" id="${id}h">${fairHeat(id)}</div></details>`;
+}
+function fairHeat(id){
+  const F=FAIR[id],st=F.st,meets=[...new Set(F.P.map(p=>p.m))].sort((a,b)=>isNaN(a)||isNaN(b)?String(a).localeCompare(b):a-b),share=Math.round(st.share*100);
+  const shade=v=>v>=90?['#0c447c','#fff']:v>=share?['#2a78d6','#fff']:v>=40?['#9cc3ee','#0b2a4a']:['#e3edf9','#0b2a4a'];
+  const dshade=d=>d>=3?['#1d7a45','#fff']:d>0?['#cfe9d9','#0f4a2a']:d===0?['#f1f2f6','#5a6480']:d>-3?['#f6d5d7','#7a1d24']:['#b4232f','#fff'];
+  let h=`<table class="heat"><tr><th>Event</th>${meets.map(m=>`<th class="n">${esc(st.meetLabel[0])}${esc(m)}</th>`).join('')}</tr>`;
+  st.rows.forEach((r,ri)=>{const by={};F.P.filter(p=>p.ri===ri).forEach(p=>by[p.m]=p);
+    h+=`<tr><td>${esc(r.event.replace(/ 1M$/,' 1 m').replace(/ 3M$/,' 3 m').replace(/ Platform$/,' platform'))}</td>`+meets.map(m=>{const p=by[m];if(!p)return '<td></td>';
+      if(F.heat==='pct'){const v=Math.round(100*p.went/p.n),[bg,fg]=shade(v);return `<td style="background:${bg};color:${fg}" title="${p.n} divers, ${p.went} went">${v}</td>`;}
+      const d=p.rule-p.went,[bg,fg]=dshade(d);return `<td style="background:${bg};color:${fg}" title="${p.n} divers: ${p.went} went, ${p.rule} at ${share}%">${d>0?'+':d<0?'−':''}${Math.abs(d)||'0'}</td>`;}).join('')+'</tr>';});
+  const key=F.heat==='pct'?`Each cell: share of the field that went (%).`:`Each cell: places at ${share}% minus divers who really went. Green: more would go; red: fewer${st.meetLabel==='Region'?' (before the score threshold)':''}.`;
+  return h+`</table><p class="note" style="margin-top:6px">${key}</p>`;
+}
+function fairWire(){
+  document.querySelectorAll('[data-fair]').forEach(b=>b.onclick=()=>{const id=b.dataset.fair,F=FAIR[id];F.mode=b.dataset.fm;
+    document.querySelectorAll(`[data-fair="${id}"]`).forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    document.querySelectorAll(`#${id}c .fd`).forEach(c=>{c.style.transform=F.mode==='prop'?`translateY(${c.dataset.dy}px)`:'';});
+    document.querySelectorAll(`#${id}c .fcurve`).forEach(c=>c.style.opacity=F.mode==='prop'?.25:1);
+    $(`#${id}t`).textContent=F.mode==='prop'?`At ${Math.round(F.st.share*100)}%, every event lands on the same line: a diver’s odds no longer depend on the size of their meet.`:(F.o.curve?`Small fields sit high on the curve, big fields low: the ${F.o.rule.toLowerCase()} rule decides the odds by field size.`:`Each Zone event sent a different share; the proportional rule sends ${Math.round(F.st.share*100)}% of every one.`);});
+  document.querySelectorAll('.fd').forEach(c=>c.onclick=()=>{const id=c.closest('[id$="c"]').id.slice(0,-1),F=FAIR[id],p=F.P[+c.dataset.i],sh=Math.round(F.st.share*100);
+    $(`#${id}t`).innerHTML=`<b>${esc(F.st.meetLabel)} ${esc(p.m)} · ${esc(p.ev)}:</b> ${p.n} divers, ${p.went} went (${Math.round(100*p.went/p.n)}%). At ${sh}%: ${p.rule} would go.`;});
+  document.querySelectorAll('[data-fairh]').forEach(b=>b.onclick=()=>{const id=b.dataset.fairh;FAIR[id].heat=b.dataset.hm;
+    document.querySelectorAll(`[data-fairh="${id}"]`).forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$(`#${id}h`).innerHTML=fairHeat(id);});
+}
 function revenueByMeet(s0){
   const F=FEES.scenarios[s0.id],s=F?{meets:F.meets,gross:F.proposed.gross,dm:F.proposed.dm,hosts:F.proposed.hosts,usad:F.proposed.usad}:s0;
   return `<table><tr><th>Stop</th><th>Meet</th><th class="n">Entries</th><th class="n">Fee</th><th class="n">Collected</th><th class="n">DiveMeets</th><th class="n">Host</th><th class="n">USA Diving</th></tr>
@@ -650,14 +721,10 @@ function render(){
     ${openHTML()}
   </section>
 
-  <section class="card"><span class="num">04</span><h2>How evenly meets advance divers today</h2>
-    <p class="lede">Real results, event by event. Each row is an event; each dot is one meet, placed at the share of that event's field who actually advanced. The navy line is the proportional share, the same for every event. Hover a dot for the meet, the field size and who went.</p>
-    <h3 style="font-size:19px;margin:14px 0 2px">${esc(VIS.strip2026.title)}</h3>
-    <div class="scroll">${PQVisuals.eventStrip(VIS.strip2026)}</div>
-    <p class="note">${fmtN(VIS.strip2026.events)} junior springboard events at 12 Regionals, ${fmtN(VIS.strip2026.field)} divers-in-events. Top 15 sent ${fmtN(VIS.strip2026.actual)} to Zones; 65% of every field would have sent ${fmtN(VIS.strip2026.rule)} before the score threshold, spread evenly instead of by field size.</p>
-    <h3 style="font-size:19px;margin:22px 0 2px">${esc(VIS.strip2025.title)}</h3>
-    <div class="scroll">${PQVisuals.eventStrip(VIS.strip2025)}</div>
-    <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} of them reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
+  <section class="card"><span class="num">04</span><h2>Today, a diver’s odds depend on how big their meet is</h2>
+    <p class="lede">With a fixed number of places, a small Regional sends almost everyone and a big one sends about a third, so the same diver has very different odds depending on where they live. Each dot below is one real event at one meet. Switch to <b>Proportional</b> and every dot moves to the same share.</p>
+    ${fairHTML('f26',VIS.strip2026,{year:2026,from:'Regionals',to:'Zones',curve:15,rule:'Top 15'})}
+    ${fairHTML('f25',VIS.strip2025,{year:2025,from:'Zones',to:'Junior Nationals',curve:null,rule:'2025 rules'})}
   </section>
 
   <section class="card"><span class="num">05</span><h2>The 2025 and 2026 seasons, run through the proposal</h2>
@@ -724,6 +791,7 @@ function render(){
     <details class="app"><summary>Appendix C · Checks</summary><p class="note">Figure checks against the engine: ${(DATA.checks||[]).filter(c=>c.pass).length} of ${(DATA.checks||[]).length} pass; engine checks ${(DATA.engineChecks||[]).filter(c=>c.pass).length} of ${(DATA.engineChecks||[]).length} pass. This page also re-adds every stop, meet and income line, and matches each map to its projection, before it draws anything.</p></details>
   </section>`;
   sxWire();
+  fairWire();
   $('#foot').textContent=`2027 Junior Circuit · Proportional qualification · Discussion draft for CCE and CAC, not a rule · USA Diving`;
 }
 </script>
