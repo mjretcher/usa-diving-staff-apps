@@ -179,6 +179,16 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
 /* Shared committee link: this page lives at /junior-circuit-2027/ and reads the
    same data files Boundary Studio builds, so it is always current. */
 const D='../boundary-studio/';
+/* Last change to this page, set on every commit (UTC). The stamp shown is the
+   later of this and the data files' own build times. */
+const PAGE_UPDATED='2026-10-01T17:35:45Z';
+function updatedStamp(){
+  const iso=x=>{if(!x)return null;const t=String(x).trim().replace(' UTC','Z').replace(' ','T');const d=new Date(/Z$|[+-]\d\d:?\d\d$/.test(t)?t:t+'Z');return isNaN(d)?null:d;};
+  const all=[PAGE_UPDATED,DATA&&DATA.generated,SEAS&&SEAS.generated,OPEN&&OPEN.generated,FEES&&FEES.generated].map(iso).filter(Boolean);
+  const d=new Date(Math.max(...all));
+  const f=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}).format(d);
+  return 'Updated '+f+' ET';
+}
 /* Options no longer under consideration: kept in the stored data (and in
    Boundary Studio) but left out of this committee report. */
 const RETIRED=new Set(['bs-msix7ibe-nij21']); // USA Diving National Office Submission (earlier, fixed places)
@@ -706,7 +716,7 @@ function render(){
     <h1>What if the same share of every meet moved on?</h1>
     <p>This paper presents a concept for the 2027 Junior Circuit, <b>proportional qualification</b>, and shows what it would do on two possible maps. It sets the concept beside the CCE Submission, with the 2025 and 2026 seasons for reference, using the same data and the same calculations for all three options.</p>
     <p>It is here to inform the conversation. It does not recommend any option, and nothing in it is a rule.</p>
-    <p class="fine">Every figure is projected from real 2025 and 2026 entries through Boundary Studio’s own engine. Updated ${esc([DATA.generated,SEAS.generated,OPEN.generated].map(x=>String(x||'').slice(0,10)).sort().pop())}.</p>
+    <p class="fine">Every figure is projected from real 2025 and 2026 entries through Boundary Studio’s own engine. <span id="updStamp">${esc(updatedStamp())}</span>.</p>
   </section>
 
   <section class="card"><span class="num">01</span><h2>Questions this paper is meant to help answer</h2>

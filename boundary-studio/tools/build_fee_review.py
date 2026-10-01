@@ -40,7 +40,8 @@ def split_from_cells(cells_iter):
     return t
 
 cce_split = split_from_cells((c, v) for cs in adv['pools']['2026|FirstStop'].values() for c, v in cs.items())
-out = {'proposed': {'stop1': FEE1, 'stop2': FEE2, 'nats': FEE3, 'nonQualifying': OPEN_FEE},
+from datetime import datetime, timezone
+out = {'generated': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'proposed': {'stop1': FEE1, 'stop2': FEE2, 'nats': FEE3, 'nonQualifying': OPEN_FEE},
        'cards': {'proposed': {'stop1': FEE1, 'stop2': FEE2, 'nats': FEE3}, 'cce': {'stop1': 90, 'stop2': 115, 'nats': 125}},
        'swings': SWINGS,
        'costPerEntry': {'hosts': HOST, 'diveMeets': DM}, 'scenarios': {}}
