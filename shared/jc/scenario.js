@@ -34,6 +34,7 @@ export async function hydrateScenario(I, id) {
   S.year = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
   S.routing = (d.routing && d.routing.length) ? d.routing : null;
   S.fees = d.fees || null;
+  S.feesByCell = d.feesByCell || null;
   if (d.hostMode) S.hostMode = d.hostMode;
   if (d.hostShare != null) S.hostShare = d.hostShare;
   if (d.hostFlat != null) S.hostFlat = d.hostFlat;

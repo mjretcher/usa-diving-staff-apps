@@ -127,6 +127,7 @@ const S = {
   arrival: null,        // per-level arrival rate override
   seedPool: null,       // which observed field feeds the first stop
   fees: null,           // entry fee per level; null means the published ladder
+  feesByCell: null,     // per-level fee by age group / platform / non-qualifying, e.g. {0:{A:90,B:90,C:65,D:55,platform:45,nonQualifying:45}}
   hostShare: 0.25,      // share of net entry income going to the host
   hostMode: 'pct',      // pct | flat | per_entry
   hostFlat: 3000,       // flat fee per meet
@@ -2116,6 +2117,18 @@ function feeFor(L){
   if (L === n - 1) return DEFAULT_FEES[3];
   return DEFAULT_FEES[Math.min(L + (n <= 3 ? 1 : 0), 2)];
 }
+/* Plain-English note of any per-cell fees, for the Money panels. */
+function feesByCellNote(){
+  if (!S.feesByCell) return '';
+  const parts = Object.keys(S.feesByCell).sort().map(L => {
+    const m = S.feesByCell[L], nm = (S.levels[+L] && S.levels[+L].name) || ('Level ' + (+L + 1));
+    const bits = ['A','B','C','D'].filter(g => m[g] != null).map(g => `Group ${g} $${m[g]}`);
+    if (m.platform != null) bits.push(`platform $${m.platform}`);
+    if (m.nonQualifying != null) bits.push(`non-qualifying $${m.nonQualifying}`);
+    return `<b>${esc(nm)}:</b> ${bits.join(', ')}`;
+  });
+  return `<div class="atl-note" style="margin-top:10px">Fees by event at ${parts.join('; ')}. The box above shows the Group A/B fee.</div>`;
+}
 const LEVY = 4.90;
 /* DiveMeets' cut, per Amy's 2026-05-07 note reconciled against all 22 of the 2026
    Junior Circuit recaps: $4.95 flat per entry in 2026 (was $4.90), plus 10% of all
@@ -2129,7 +2142,22 @@ const LEVY_OTHER_FEES_PCT = 0.10;
    Regions/Regionals and only for y26 (2025 Regionals were a flat $85). */
 const REGIONAL_NON_QUALIFYING_FEE = 45;
 function regionalQualifyingCell(cell){ return /^[AB][BG][13]$/.test(String(cell || '')); }
+/* Per-cell fees set on a scenario (S.feesByCell[L]) win over everything else:
+   synchro / mixed team -> nonQualifying; platform -> platform (else
+   nonQualifying); springboard -> the age group's fee (A/B/C/D). Anything not
+   listed falls through to the rules below. Used for the 2027 proportional
+   proposals: Regionals $90 A/B, $65 C, $55 D, $45 platform (2026-10-01). */
+function cellFeeOverride(L, cell){
+  const m = S.feesByCell && S.feesByCell[L];
+  if (!m) return null;
+  const c = String(cell || '');
+  if (/SYN|MIX/i.test(c)) return m.nonQualifying != null ? m.nonQualifying : null;
+  if (c[2] === 'P') return m.platform != null ? m.platform : (m.nonQualifying != null ? m.nonQualifying : null);
+  return m[c[0]] != null ? m[c[0]] : null;
+}
 function feeForCell(L, cell){
+  const ov = cellFeeOverride(L, cell);
+  if (ov != null) return ov;
   const nm = String((S.levels[L] && S.levels[L].name) || '').toLowerCase();
   if (S.year === 'y26' && /region/.test(nm) && (S.fees == null || S.fees[L] == null)) {
     if (!regionalQualifyingCell(cell)) return REGIONAL_NON_QUALIFYING_FEE;
@@ -2563,7 +2591,7 @@ function renderFinancials(){
              value="${feeFor(+L)}"></label>`).join('')}
         ${S.fees ? '<button class="tab bs-mini" id="bsFeeReset">back to published</button>' : ''}
       </div>`;
-  const caveat = `<p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
+  const caveat = `${feesByCellNote()}<p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
       less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
       <b>Filled</b> is entries against the places the rules make available at that tier &mdash; capacity, not a
@@ -5813,10 +5841,12 @@ function wirePathway(){
   P.querySelectorAll('input[data-fee]').forEach(el => el.addEventListener('change', e => {
     S.fees = S.fees || {};
     S.fees[+e.target.dataset.fee] = Math.max(0, +e.target.value || 0);
+    // The box is the Group A/B fee where a level has per-event fees, so keep them in step.
+    { const L = +e.target.dataset.fee, m = S.feesByCell && S.feesByCell[L]; if (m){ m.A = S.fees[L]; m.B = S.fees[L]; } }
     S.dirty = true; renderPathway();
   }));
   const fr = document.getElementById('bsFeeReset');
-  if (fr) fr.addEventListener('click', () => { S.fees = null; S.dirty = true; renderPathway(); });
+  if (fr) fr.addEventListener('click', () => { S.fees = null; S.feesByCell = null; S.dirty = true; renderPathway(); });
   const pl = document.getElementById('bsPathLoad');
   if (pl) pl.addEventListener('change', () => { if (pl.value) loadPathway(pl.value); });
   const pv = document.getElementById('bsPathSave');
@@ -6456,7 +6486,7 @@ async function saveScenario(asNew){
   syncLevels();
   const saveLevels = S._off25 ? S._off25.levels : S.levels, saveRouting = S._off25 ? S._off25.routing : S.routing;
   const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:saveRouting,
-    fees:S.fees, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
+    fees:S.fees, feesByCell:S.feesByCell, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
     hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
@@ -6585,6 +6615,7 @@ async function loadScenario(id){
     S.schedRules = d.schedRules || null;
     S.schedStop = null;
     S.fees = d.fees || null;
+    S.feesByCell = d.feesByCell || null;
     if (d.hostMode)  S.hostMode  = d.hostMode;
     if (d.hostShare != null) S.hostShare = d.hostShare;
     if (d.hostFlat  != null) S.hostFlat  = d.hostFlat;
@@ -9329,6 +9360,7 @@ function atlasMoneyHtml(res){
         ${feeRows}
         <div class="atl-fees hd"><span></span><span>entry fee</span><span>to hosts</span></div>
         ${hostCtl}
+        ${feesByCellNote()}
         ${S.fees ? '<button class="atl-link" id="bsFeeReset" style="margin-top:12px">Back to published fees</button>' : ''}
         <div class="atl-note" style="margin-top:12px">Per-meet host payouts, including a figure set by hand for one meet, are under the tier table at left.</div>
       </div>
