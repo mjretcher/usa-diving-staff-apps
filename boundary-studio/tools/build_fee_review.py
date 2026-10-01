@@ -2,16 +2,16 @@
 """
 build_fee_review.py -- entry income for the committee report, on stated fee cards.
 
-Proposed fees (2026-10-01, Mike Retcher):
-  proportional options -- Regionals: $85 Group A/B springboard, $65 Group C
-    springboard, $55 Group D springboard, $45 every non-qualifying event
-    (platform at Regionals); Zones $90; Junior Nationals $125. Non-qualifying
-    events are $45 at every stop (incl. the Junior Nationals Open).
-  CCE Submission -- 2026 actual fees for its meet types, set explicitly on its
-    stored scenario 2026-10-01: Zones $90 (every entry), E/W/C $115, Nationals $125.
+Proposed fees (2026-10-01, Mike Retcher): the proportional options charge the
+CCE Submission's fees stop for stop -- stop 1 $90, stop 2 $115, Junior
+Nationals $125 -- except Group C ($65) and Group D ($55) springboard at the first
+stop, and $45 for every non-qualifying event at every stop (platform at
+Regionals, the Junior Nationals Open). The CCE Submission keeps its 2026 fees
+for its meet types (Zones $90 every entry, E/W/C $115, Nationals $125), set
+explicitly on its stored scenario 2026-10-01.
 
 Comparison cards (every option, stop for stop):
-  proposedCard -- stop 1 $85 / $65 / $55 / $45 as above; stop 2 $90; Nationals $125.
+  proposedCard -- stop 1 $90 / $65 / $55 / $45 as above; stop 2 $115; Nationals $125.
   cceCard      -- stop 1 $90 every entry; stop 2 $115; Nationals $125.
 Per-entry costs are the same everywhere: $25 to hosts, $4.95 DiveMeets.
 Entries are the stored projections (junior-pathway-2027-data.json); first-stop
@@ -25,7 +25,9 @@ import json
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 HOST, DM = 25, 4.95
-FEE1 = {'A': 85, 'B': 85, 'C': 65, 'D': 55, 'P': 45}
+FEE1 = {'A': 90, 'B': 90, 'C': 65, 'D': 55, 'P': 45}
+FEE2, FEE3 = 115, 125
+SWINGS = [-15, -10, -5, 5, 10, 15]
 OPEN_FEE = 45
 d = json.loads((ROOT / 'boundary-studio' / 'junior-pathway-2027-data.json').read_text())
 se = json.loads((ROOT / 'boundary-studio' / 'junior-pathway-2027-seasons.json').read_text())
@@ -38,8 +40,9 @@ def split_from_cells(cells_iter):
     return t
 
 cce_split = split_from_cells((c, v) for cs in adv['pools']['2026|FirstStop'].values() for c, v in cs.items())
-out = {'proposed': {'stop1': FEE1, 'stop2': 90, 'nats': 125, 'nonQualifying': OPEN_FEE},
-       'cards': {'proposed': {'stop1': FEE1, 'stop2': 90, 'nats': 125}, 'cce': {'stop1': 90, 'stop2': 115, 'nats': 125}},
+out = {'proposed': {'stop1': FEE1, 'stop2': FEE2, 'nats': FEE3, 'nonQualifying': OPEN_FEE},
+       'cards': {'proposed': {'stop1': FEE1, 'stop2': FEE2, 'nats': FEE3}, 'cce': {'stop1': 90, 'stop2': 115, 'nats': 125}},
+       'swings': SWINGS,
        'costPerEntry': {'hosts': HOST, 'diveMeets': DM}, 'scenarios': {}}
 for s in d['scenarios']:
     t = s['tiers']; e1, e2, e3 = t[0]['entries'], t[1]['entries'], t[-1]['entries']; n = e1 + e2 + e3
@@ -52,7 +55,7 @@ for s in d['scenarios']:
     def price(g, entries=n):
         cost = entries * (HOST + DM)
         return {'gross': round(g), 'dm': round(entries * DM), 'hosts': round(entries * HOST), 'usad': round(g - cost)}
-    prop_card = price(stop1_prop + e2 * 90 + e3 * 125)
+    prop_card = price(stop1_prop + e2 * FEE2 + e3 * FEE3)
     cce_card = price(e1 * 90 + e2 * 115 + e3 * 125)
     proposed = prop_card if s['kind'] == 'pq' else price(s['gross'])          # CCE: its 2026 actual fees
     sens = {}
@@ -60,9 +63,15 @@ for s in d['scenarios']:
         x = v.get(s['id'])
         if not x: continue
         f1, f2, f3 = x['entries']; m = f1 + f2 + f3
-        g = (f1 * stop1_prop / e1 + f2 * 90 + f3 * 125) if s['kind'] == 'pq' else x['gross']
+        g = (f1 * stop1_prop / e1 + f2 * FEE2 + f3 * FEE3) if s['kind'] == 'pq' else x['gross']
         sens[k] = price(g, m)
-    out['scenarios'][s['id']] = {'label': s['label'], 'kind': s['kind'], 'entries': [e1, e2, e3],
+    # Fee swings: every fee at one stop (or every stop) moved by $d, all else at the
+    # proposed fees. Host share and DiveMeets fees are per entry, so the whole
+    # change lands in what USA Diving keeps.
+    base = proposed['usad']
+    swing = {lab: {str(dd): round(base + dd * k) for dd in SWINGS} for lab, k in
+             (('stop1', e1), ('stop2', e2), ('nats', e3), ('all', n))}
+    out['scenarios'][s['id']] = {'swing': swing, 'perDollar': {'stop1': e1, 'stop2': e2, 'nats': e3, 'all': n},'label': s['label'], 'kind': s['kind'], 'entries': [e1, e2, e3],
                                  'stop1Split': {k: round(v) for k, v in sp.items()},
                                  'storedEngine': {'gross': s['gross'], 'usad': s['usad']},
                                  'proposed': proposed, 'proposedSensitivity': sens,

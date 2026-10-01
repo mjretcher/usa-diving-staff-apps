@@ -311,19 +311,28 @@ function moneyTable(){
    <tr><td>To hosts ($25 per entry)</td>${sc.map(s=>`<td class="n">${f(s.id,'proposed','hosts')}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'proposed','usad')}</td>`).join('')}</tr>
    ${['0.95','0.90'].map(k=>`<tr><td class="note">Keeps with ${Math.round((1-+k)*100)}% fewer divers</td>${sc.map(s=>{const x=F[s.id]&&F[s.id].proposedSensitivity&&F[s.id].proposedSensitivity[k];return `<td class="n note">${x?usd(x.usad):'—'}</td>`;}).join('')}</tr>`).join('')}
-   ${hd('Same fee at each stop: stop 1 $85 / $65 / $55 / $45, stop 2 $90, Nationals $125')}
+   ${hd('Same fees for all: stop 1 $90, Group C $65, Group D $55, non-qualifying $45; stop 2 $115; Nationals $125')}
    <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'proposedCard','gross')}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'proposedCard','usad')}</td>`).join('')}</tr>
-   ${hd('Same fee at each stop: stop 1 $90, stop 2 $115, Nationals $125')}
+   ${hd('Same fees for all: $90 every stop-1 entry; stop 2 $115; Nationals $125')}
    <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','gross')}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','usad')}</td>`).join('')}</tr>
   </table>`;
 }
+function swingTable(){
+  const sc=DATA.scenarios,F=FEES.scenarios,S=FEES.swings,lab={stop1:'Stop 1 fees',stop2:'Stop 2 fees',nats:'Junior Nationals fee',all:'Every fee, all stops'};
+  const cols=[...S.filter(x=>x<0),0,...S.filter(x=>x>0)];
+  const head=`<tr><th>Fee change</th>${cols.map(c=>`<th class="n${c===0?' tt':''}">${c===0?'Proposed':(c>0?'+$':'−$')+Math.abs(c)}</th>`).join('')}<th class="n">Each $1</th></tr>`;
+  const body=sc.map(s=>{const x=F[s.id];if(!x)return '';
+    return `<tr class="gh"><td colspan="${cols.length+2}" style="color:${SC_COL[s.id]}">${esc(s.label)}</td></tr>`+
+      ['stop1','stop2','nats','all'].map(k=>`<tr${k==='all'?' class="st"':''}><td>${lab[k]}</td>${cols.map(c=>`<td class="n${c===0?' tt':''}">${usd(c===0?x.proposed.usad:x.swing[k][String(c)])}</td>`).join('')}<td class="n note">${usd(x.perDollar[k])}</td></tr>`).join('');}).join('');
+  return `<table class="mx money">${head}${body}</table>`;
+}
 function feeNote(){
-  const sub=DATA.scenarios.find(x=>x.kind==='sub'),F=sub&&FEES.scenarios[sub.id],P=DATA.scenarios[0],FP=FEES.scenarios[P.id];
-  if(!F||!FP) return '';
+  const sub=DATA.scenarios.find(x=>x.kind==='sub'),F=sub&&FEES.scenarios[sub.id],P=DATA.scenarios[0];
+  if(!F) return '';
   const nP=P.tiers.reduce((a,t)=>a+t.entries,0),nC=F.entries.reduce((a,b)=>a+b,0);
-  return `<b>Proposed Regionals fees.</b> In the proportional options every Group C/D diver competes at Regionals, so their events now qualify: $85 Group A/B springboard, $65 Group C springboard, $55 Group D springboard, and $45 for every non-qualifying event (platform at Regionals, and the Junior Nationals Open). Zones $90, Junior Nationals $125. The CCE Submission is shown at the 2026 fees for its meet types: its first stop is a Zones meet, so every entry pays $90, and its second round an East/West/Central at $115. That is why it keeps more at these fees, from fewer entries (${fmt(nC)} against ${fmt(nP)}). Charged the same fee at each stop, on either card, the proportional options keep more.`;
+  return `<b>Fees.</b> The proportional options charge the CCE Submission’s fees stop for stop ($90, $115, $125), except at Regionals: Group C springboard $65, Group D $55, and $45 for any non-qualifying event (platform at Regionals, the Junior Nationals Open). With fees this close, the difference in income is mostly entries: ${fmt(nP)} for 12-6-1 against ${fmt(nC)} for the CCE Submission. The CCE Submission charges $90 for every first-stop entry, including Group C/D and platform, which narrows the gap.`;
 }
 
 /* ---------- Junior Nationals Open (junior-pathway-2027-open.json) ---------- */
@@ -379,7 +388,7 @@ const FAQ=[
  ['Why it is built this way',[
   ['Why can’t more Group A girls qualify?','Group A girls are the largest group and have three events, each with a round limit that keeps Nationals workable. In this projection about {AG} of Group A girls reach Nationals, against {AG25} under the 2025 rules.'],
   ['Why do Groups C/D finish Nationals early?','Every C/D event and every Open event finishes in the first days, freeing the pool for Group A/B competition and flighted training in the second half — the practice-time and safety problem that started this review.'],
-  ['Does this change entry fees?','Proposed for the proportional options: Regionals $85 (Group A/B springboard), $65 (Group C springboard), $55 (Group D springboard) and $45 for any non-qualifying event; Zones $90; Junior Nationals $125. Non-qualifying events, including the Junior Nationals Open, are $45 at every stop.'],
+  ['Does this change entry fees?','Proposed for the proportional options: the CCE Submission’s fees stop for stop (first stop $90, second stop $115, Junior Nationals $125), except Group C ($65) and Group D ($55) springboard at Regionals. Non-qualifying events, including platform at Regionals and the Junior Nationals Open, are $45 at every stop. The Entry income section shows each option with fees $5–$15 higher or lower.'],
  ]],
 ];
 function faqHTML(){
@@ -670,9 +679,12 @@ function render(){
   </section>
 
   <section class="card"><span class="num">10</span><h2>Entry income</h2>
-    <p class="lede">At the proposed fees the proportional options keep about $342,000 (12-6-1) and $339,000 (10-5-1); the CCE Submission, at its 2026 fees, about $364,000. Charged the same fee at each stop, the proportional options keep more, because they have more entries. Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses.</p>
+    <p class="lede">With the proportional options charging the CCE Submission’s fees (except reduced Group C/D fees at Regionals), 12-6-1 keeps about $406,000, 10-5-1 about $402,000 and the CCE Submission about $364,000. The fee-change table below shows how far each moves if fees end up higher or lower. Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses.</p>
     <div class="scroll">${moneyTable()}</div>
     <p class="note" style="margin-top:10px;font-size:13.5px">${feeNote()}</p>
+    <h3 class="sx-h">If fees change: what USA Diving keeps</h3>
+    <p class="note" style="margin:0 0 6px">Every fee at one stop moved up or down by $5, $10 or $15, all other fees as proposed. Host share and DiveMeets fees are per entry, so the whole change lands in what USA Diving keeps. “Each $1” is the entries at that stop.</p>
+    <div class="scroll">${swingTable()}</div>
   </section>
 
   <section class="card"><span class="num">11</span><h2>Frequently asked questions</h2>
