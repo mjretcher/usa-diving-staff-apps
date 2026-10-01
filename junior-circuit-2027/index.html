@@ -145,6 +145,7 @@ td.sub{color:var(--muted);font-size:12.5px}
 .mx th.tt,.mx td.tt{background:#f1f4fb;border-left:2px solid var(--line)}
 .mx .up{color:#1d7a45}.mx .dn{color:#b4232f}
 .sx-dl{font:700 12.5px Inter;color:var(--navy);background:#e7ecf8;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+table.money tr.gh td{background:var(--soft);font:700 11px Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--navy)}
 footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);font-size:12px}
 @media print{.top{position:static}.seg,.seg-l{display:none}body{background:#fff}.card{break-inside:avoid;border-color:#ccd3e2}details.faq{break-inside:avoid}}
 </style>
@@ -194,15 +195,17 @@ Promise.all([
   fetch(D+'junior-pathway-2027-data.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('report data HTTP '+r.status);return r.json();}),
   fetch(D+'junior-pathway-2027-maps.json?v=202609251230').then(r=>{if(!r.ok)throw new Error('map data HTTP '+r.status);return r.json();}),
   fetch(D+'junior-pathway-2027-visuals.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('visuals data HTTP '+r.status);return r.json();}),
-  fetch(D+'junior-pathway-2027-seasons.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('seasons data HTTP '+r.status);return r.json();})
-]).then(([d,m,v,se])=>{DATA=withoutRetired(d);MAPS=m;VIS=v;SEAS=se;
+  fetch(D+'junior-pathway-2027-seasons.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('seasons data HTTP '+r.status);return r.json();}),
+  fetch(D+'junior-pathway-2027-open.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('open data HTTP '+r.status);return r.json();}),
+  fetch(D+'junior-pathway-2027-fees.json?v='+Date.now()).then(r=>{if(!r.ok)throw new Error('fee data HTTP '+r.status);return r.json();})
+]).then(([d,m,v,se,op,fe])=>{OPEN=op;FEES=fe;DATA=withoutRetired(d);MAPS=m;VIS=v;SEAS=se;
   if(VIS&&VIS.pathway)VIS.pathway=VIS.pathway.filter(r=>!RETIRED.has(r.id));render();})
  .catch(e=>{$('#app').innerHTML='<div class="card">Could not load the report data: '+esc(e.message)+'</div>';});
 window.addEventListener('beforeprint',()=>document.querySelectorAll('details').forEach(d=>d.open=true));
 document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{SID=b.dataset.model;
   document.querySelectorAll('[data-model]').forEach(x=>x.setAttribute('aria-pressed',x===b));render();});
 
-let VIS=null,SEAS=null,SX={yr:'2025',cell:null,zone:null,stop:0,view:'both'};
+let VIS=null,OPEN=null,FEES=null,SEAS=null,SX={yr:'2025',cell:null,zone:null,stop:0,view:'both'};
 const scen=id=>DATA.scenarios.find(s=>s.id===id);
 const fmtN=n=>Math.round(n).toLocaleString('en-US');
 const lastTier=s=>s.tiers[s.tiers.length-1];
@@ -266,7 +269,7 @@ function pathHTML(s){
      <ul><li>Springboard qualifiers from Regionals, plus <b>platform by open entry</b> (${fmt(f.toZonesPlatform)}).</li><li><b>Groups A/B:</b> top 2 per Zone go straight to the Nationals semifinal; the rest of the Zone’s 55% share go to prelims.</li><li><b>Groups C/D:</b> 55% of each Zone event go to prelims.</li></ul>
      <div class="arrow">${fmt(f.directSemi)} to semifinal · ${fmt(f.abPrelims)} A/B and ${fmt(f.cdPrelims)} C/D to prelims</div></div>
    <div class="stop"><div class="k">Stop 3 · 1 meet</div><h3>Junior Nationals</h3><div class="big">${fmt(lastTier(s).entries)} <small>event entries</small></div>
-     <ul><li><b>Groups A/B:</b> prelims (up to 50 springboard / 38 platform) → semifinal the next day (36 / 24) → final of 12.</li><li><b>Groups C/D:</b> prelims and final the same day, all finished in the first days.</li><li><b>Junior Nationals Open:</b> a non-qualifying event for divers already at Nationals; the top 2 in each earn a prelim spot.</li></ul></div>
+     <ul><li><b>Groups A/B:</b> prelims (up to 50 springboard / 38 platform) → semifinal the next day (36 / 24) → final of 12.</li><li><b>Groups C/D:</b> prelims and final the same day, all finished in the first days.</li><li><b>Junior Nationals Open:</b> a diver who qualifies in one or two events may enter the Open in the event(s) they did not qualify for; the top 2 in each Open earn a prelim spot (section 03).</li></ul></div>
   </div>`;
 }
 
@@ -297,20 +300,62 @@ function reachBars(){
 
 /* ---------- money ---------- */
 function moneyTable(){
-  const sc=DATA.scenarios,sens=DATA.sensitivity||{};
-  return `<table><tr><th></th>${sc.map(s=>`<th class="n" style="color:${SC_COL[s.id]}">${esc(s.label)}</th>`).join('')}</tr>
+  const sc=DATA.scenarios,sens=DATA.sensitivity||{},F=FEES.scenarios;
+  const f=(id,k,x)=>F[id]&&F[id][k]?usd(F[id][k][x]):'—';
+  const hd=t=>`<tr class="gh"><td colspan="${sc.length+1}">${t}</td></tr>`;
+  return `<table class="money"><tr><th></th>${sc.map(s=>`<th class="n" style="color:${SC_COL[s.id]}">${esc(s.label)}</th>`).join('')}</tr>
+   <tr><td>Event entries, all stops</td>${sc.map(s=>`<td class="n">${fmt(s.tiers.reduce((a,t)=>a+t.entries,0))}</td>`).join('')}</tr>
+   ${hd('On the same fee card (fair comparison)')}
+   <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','gross')}</td>`).join('')}</tr>
+   <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'sameCard','usad')}</td>`).join('')}</tr>
+   ${hd('As each option was priced (fees differ by option)')}
    <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${usd(s.gross)}</td>`).join('')}</tr>
    <tr><td>DiveMeets fees</td>${sc.map(s=>`<td class="n">${usd(s.dm)}</td>`).join('')}</tr>
    <tr><td>To hosts ($25 per entry)</td>${sc.map(s=>`<td class="n">${usd(s.hosts)}</td>`).join('')}</tr>
    <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${usd(s.usad)}</td>`).join('')}</tr>
    ${['0.95','0.90'].filter(k=>sens[k]).map(k=>`<tr><td class="note">Keeps with ${Math.round((1-+k)*100)}% fewer divers</td>${sc.map(s=>`<td class="n note">${usd(sens[k][s.id]&&sens[k][s.id].usad)}</td>`).join('')}</tr>`).join('')}
+   ${hd('On the CCE Submission’s assumed fee card')}
+   <tr><td>Entry fees collected</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','gross')}</td>`).join('')}</tr>
+   <tr class="em"><td>USA Diving keeps</td>${sc.map(s=>`<td class="n">${f(s.id,'cceCard','usad')}</td>`).join('')}</tr>
   </table>`;
 }
 function feeNote(){
-  const p=scen(SID),first=p.tiers[0],sub=DATA.scenarios.find(x=>x.kind==='sub');
-  return `The two concepts charge the Regionals fee card at their first stop ($85 for Group A/B springboard, $45 for Groups C/D and platform); the CCE Submission charges the Zones fee ($90) at its first stop. At a flat $90 the ${esc(p.label)} first stop would collect ${usd(p.firstStopAt90)} instead of ${usd(first.gross)}. The rest of the difference is entries: ${fmt(first.entries)} at the concept’s first stop against ${fmt(sub.tiers[0].entries)} in the submissions, which count platform as qualifying there.`;
+  const c=FEES.cards,sub=DATA.scenarios.find(x=>x.kind==='sub'),F=sub&&FEES.scenarios[sub.id];
+  if(!F) return '';
+  return `<b>Why the CCE Submission looked higher.</b> Its stored scenario carries no fees, so it was priced by structure: $${c.cce.stop1} for every first-stop entry (Group C/D and platform included), $${c.cce.stop2} at its 3-meet second round (the East/West/Central rate) and $${c.cce.nats} at the Finals. The proportional options were priced at $${c.same.stop1AB} for Group A/B springboard and $${c.same.stop1Other} for Group C/D and platform at Regionals, and $${c.same.stop2} at Zones. On the same card the CCE Submission collects ${usd(F.sameCard.gross)} and keeps ${usd(F.sameCard.usad)}: the proportional options keep more because they have more entries (${fmt(DATA.scenarios[0].tiers.reduce((a,t)=>a+t.entries,0))} against ${fmt(F.entries.reduce((a,b)=>a+b,0))}). Its first stop also counts platform as qualifying (${fmt(F.entries[0])} entries against ${fmt(DATA.scenarios[0].tiers[0].entries)}). The CCE Submission’s own intended fees should be confirmed with the committee.`;
 }
 
+/* ---------- Junior Nationals Open (junior-pathway-2027-open.json) ---------- */
+function openHTML(){
+  const A=OPEN.asRun,P=OPEN.proportional,ev=['1M','3M','Platform'],bl={'1M':'1 m','3M':'3 m','Platform':'Platform'};
+  const groups=[];['A','B','C','D'].forEach(g=>['Girls','Boys'].forEach(x=>groups.push(`Group ${g} ${x}`)));
+  const cell=(e)=>{const a=A.events[e]||0,p=P.events[e]||0;return `<td class="n">${fmt(p)}<span class="note"> / ${fmt(a)}</span></td>`;};
+  const rows=groups.map(g=>`<tr><td>${g}</td>${ev.map(b=>cell(`${g} ${b}`)).join('')}<td class="n">${fmt(ev.reduce((t,b)=>t+(P.events[`${g} ${b}`]||0),0))}<span class="note"> / ${fmt(ev.reduce((t,b)=>t+(A.events[`${g} ${b}`]||0),0))}</span></td></tr>`).join('');
+  const r2=(lab,p,a,cls)=>`<tr class="${cls||''}"><td>${lab}</td><td class="n">${p}</td><td class="n">${a}</td></tr>`;
+  return `<div class="stops" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+     <div class="stop"><div class="k">Who can enter</div><h3>Qualified in 1 or 2 events</h3><p class="note" style="margin:6px 0 0">A diver at Junior Nationals in one or two individual events may enter the Open in the event(s) they did not qualify for, in their own age group.</p></div>
+     <div class="stop"><div class="k">How it runs</div><h3>Non-qualifying, early in the meet</h3><p class="note" style="margin:6px 0 0">A senior-length list (5 dives women, 6 men), held in the first days so it is finished before the Group A/B rounds.</p></div>
+     <div class="stop"><div class="k">What it earns</div><h3>Top 2 into prelims</h3><p class="note" style="margin:6px 0 0">The top 2 in each Open event earn a spot in that event's prelims, a second route in for a diver who missed one event at Zones.</p></div>
+   </div>
+   <h3 class="sx-h">If the Open had existed in 2025</h3>
+   <p class="note" style="margin:0 0 6px">Real 2025 divers. “Likely entries” counts the events a diver could enter and had already dived at 2025 Zones; “eligible” counts every event they could enter.</p>
+   <div class="scroll"><table><tr><th></th><th class="n">Proportional rule<br>on 2025</th><th class="n">2025<br>as run</th></tr>
+     ${r2('Divers at Junior Nationals',fmt(P.athletes),fmt(A.athletes))}
+     ${r2('… qualified in 1 event',fmt(P.byQualified['1']||0),fmt(A.byQualified['1']||0))}
+     ${r2('… qualified in 2 events',fmt(P.byQualified['2']||0),fmt(A.byQualified['2']||0))}
+     ${r2('… qualified in all 3 (no Open)',fmt(P.byQualified['3']||0),fmt(A.byQualified['3']||0))}
+     ${r2('Eligible Open entries',fmt(P.eligible),fmt(A.eligible))}
+     ${r2('Likely Open entries',fmt(P.likely),fmt(A.likely),'em')}
+     ${r2('… Groups A/B',fmt(P.likelyAB),fmt(A.likelyAB))}
+     ${r2('… Groups C/D',fmt(P.likelyCD),fmt(A.likelyCD))}
+   </table></div>
+   <h3 class="sx-h">Likely Open entries by event</h3>
+   <p class="note" style="margin:0 0 6px">Each cell: proportional rule <span class="note">/ 2025 as run</span>.</p>
+   <div class="scroll"><table class="mx"><tr><th>Event</th>${ev.map(b=>`<th class="n">${bl[b]}</th>`).join('')}<th class="n tt">All boards</th></tr>${rows}
+     <tr class="tot"><td>All</td>${ev.map(b=>`<td class="n">${fmt(groups.reduce((t,g)=>t+(P.events[`${g} ${b}`]||0),0))}<span class="note"> / ${fmt(groups.reduce((t,g)=>t+(A.events[`${g} ${b}`]||0),0))}</span></td>`).join('')}<td class="n tt">${fmt(P.likely)}<span class="note"> / ${fmt(A.likely)}</span></td></tr></table></div>
+   <div class="sx-say">Under the proportional rule about ${fmt(P.likely)} Open entries would be likely (${fmt(P.likelyAB)} Group A/B, ${fmt(P.likelyCD)} Group C/D), on top of the Junior Nationals field. The draft schedule plans 12 Group A/B Open events of up to 17 divers (204 places), which covers the likely Group A/B demand. Up to 24 more divers (2 per Group A/B Open event) would then join prelims, or 48 if Groups C/D also have an Open.</div>
+   <p class="note" style="margin-top:10px">The proportional row applies the 55% Zone rule to the real 2025 Zone results, with the Nationals event limits and 2026’s measured take-up (${Math.round(OPEN.takeUp*1000)/10}%); it lands near the engine’s Junior Nationals figure but is not identical to it. Not yet decided: the Open entry fee, and whether Groups C/D have an Open.</p>`;
+}
 /* ---------- FAQ (policy items are marked proposed) ---------- */
 const FAQ=[
  ['Qualifying',[
@@ -321,7 +366,6 @@ const FAQ=[
   ['How would I qualify for Junior Nationals from Zones?','Groups A/B: the top 2 in each Zone final go straight to the Nationals semifinal, and the rest of that Zone’s 55% share goes to Nationals prelims. Groups C/D: 55% of each Zone event goes to Nationals prelims. Rounds at Nationals are capped (prelims 50 springboard / 38 platform; semifinals 36 / 24); when someone declines, the spot rolls down to the next eligible U.S. diver.'],
   ['What happens to East / West / Central?','These two concepts do not have it: the season is Regionals → Zones → Junior Nationals. Both submissions keep a three-meet middle stop.'],
   ['What about platform?','Non-qualifying at Regionals ($45). Platform entry at Zones stays open, as it is today, and Junior Nationals platform qualification comes from Zones.'],
-  ['What is the Junior Nationals Open?','A non-qualifying event in the first days of Nationals, with a senior-length list (5 dives women, 6 men), for divers who qualified for Nationals in at least one event, in an event they did not qualify for. The top 2 in each Open event earn a spot in that event’s prelims.'],
  ]],
  ['Who is eligible',[
   ['Can foreign athletes compete?','Proposed (amends Article 102): non-U.S. citizens who live and train in the U.S. and are registered with USA Diving could compete at Regionals, Zones and Junior Nationals and advance through every round, but never take a qualifying spot from a U.S. citizen. They count toward round size limits. A final is the top 12 U.S. divers plus the two highest-ranked non-U.S. citizens, if any. Today Article 102 bars them from Junior Nationals without HP and CCE approval and gives them no qualifying spot or medal at Region or Zone level. Whether they could medal at Nationals is still open.'],
@@ -579,7 +623,12 @@ function render(){
     <div class="callout"><b>That is the whole concept.</b> At each stop, a set share of every event’s field moves on — 65% from Regionals to Zones, 55% from Zones to Junior Nationals — so a diver’s chance of advancing no longer depends on which meet they enter. A score threshold still lets anyone from an unusually strong meet through.</div>
   </section>
 
-  <section class="card"><span class="num">03</span><h2>What it would have done in real seasons</h2>
+  <section class="card"><span class="num">03</span><h2>The Junior Nationals Open</h2>
+    <p class="lede">A cornerstone of the proposal: every diver who reaches Junior Nationals in one or two events gets a second chance in the events they missed, without enlarging the qualifying rounds.</p>
+    ${openHTML()}
+  </section>
+
+  <section class="card"><span class="num">04</span><h2>What it would have done in real seasons</h2>
     <p class="lede">Real results, event by event. Each row is an event; each dot is one meet, placed at the share of that event's field who actually advanced. The navy line is the proportional share, the same for every event. Hover a dot for the meet, the field size and who went.</p>
     <h3 style="font-size:19px;margin:14px 0 2px">${esc(VIS.strip2026.title)}</h3>
     <div class="scroll">${PQVisuals.eventStrip(VIS.strip2026)}</div>
@@ -589,28 +638,28 @@ function render(){
     <p class="note">${fmtN(VIS.strip2025.events)} Zone events, ${fmtN(VIS.strip2025.field)} divers-in-events. ${fmtN(VIS.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmtN(VIS.strip2025.rule)} before round limits and take-up. Group A girls sent about a third from every Zone; many Group C/D boys events sent everyone.</p>
   </section>
 
-  <section class="card"><span class="num">04</span><h2>Run against real seasons, stop by stop</h2>
+  <section class="card"><span class="num">05</span><h2>Run against real seasons, stop by stop</h2>
     <p class="lede">The same divers who really competed, run through this proposal on this map. For each stop, each Region and each Zone, the proportional result sits next to what really happened to divers from the same counties.</p>
     <div id="seasons">${seasonsHTML()}</div>
     <p class="note" style="margin-top:12px">Projected with Boundary Studio’s engine from the real ${esc(Object.keys(SEAS.scenarios[SID]?SEAS.scenarios[SID].years:{}).join(' and '))} fields, each diver placed in the Region that covers their home county. Take-up (who accepts a place) is 2026’s measured rate in both seasons. The 2026 figures here are the same as the rest of this paper. Divers whose home county could not be found (1–2%) are left out of both sides. The Junior Nationals Open event is not counted. Data prepared ${esc(String(SEAS.generated).slice(0,10))}.</p>
   </section>
 
-  <section class="card"><span class="num">05</span><h2>Following one Zone through a season</h2>
+  <section class="card"><span class="num">06</span><h2>Following one Zone through a season</h2>
     <p class="lede">One event, one Zone, real divers: how the proportional rule would have moved them, next to what actually happened.</p>
     <div class="scroll">${PQVisuals.zoneWalkthrough(VIS.walkthrough)}</div>
   </section>
 
-  <section class="card"><span class="num">06</span><h2>The map: ${S.regions.length} Regions in ${S.zones.length} Zones</h2>
+  <section class="card"><span class="num">07</span><h2>The map: ${S.regions.length} Regions in ${S.zones.length} Zones</h2>
     <p class="lede">Each colour is a Region; navy lines and labels mark the Zone each Region feeds. Solid counties have USA Diving athletes; pale counties have none. Numbers are projected event entries at each meet. Switch layouts at the top of the page.</p>
     <div class="mapwrap"><div>${mapSVG()}</div><div class="zlist">${zoneList(s)}</div></div>
   </section>
 
-  <section class="card"><span class="num">07</span><h2>How an athlete moves through the season</h2>
+  <section class="card"><span class="num">08</span><h2>How an athlete moves through the season</h2>
     <p class="lede">${esc(s.label)}. Counts are projected event entries: one diver in one event.</p>
     ${pathHTML(s)}
   </section>
 
-  <section class="card"><span class="num">08</span><h2>What it does to the numbers</h2>
+  <section class="card"><span class="num">09</span><h2>What it does to the numbers</h2>
     <p class="lede">All three options on one basis, with the 2026 season for reference. Event entries throughout.</p>
     <div class="scroll">${PQVisuals.pathwayBars(VIS.pathway)}</div>
     <div class="scroll" style="margin-top:14px">${compareTable()}</div>
@@ -619,29 +668,31 @@ function render(){
     ${reachBars()}
   </section>
 
-  <section class="card"><span class="num">09</span><h2>Entry income</h2>
-    <p class="lede">Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses, as in every Boundary Studio scenario.</p>
+  <section class="card"><span class="num">10</span><h2>Entry income</h2>
+    <p class="lede">On the same fee card, the proportional options keep the most, because they have the most entries. The CCE Submission only looked higher because higher fees were assumed for it. Entry fees only, $25 per entry to hosts, DiveMeets fees passed through; no expenses.</p>
     <div class="scroll">${moneyTable()}</div>
-    <p class="note" style="margin-top:10px">${feeNote()}</p>
+    <p class="note" style="margin-top:10px;font-size:13.5px">${feeNote()}</p>
   </section>
 
-  <section class="card"><span class="num">10</span><h2>Frequently asked questions</h2>
+  <section class="card"><span class="num">11</span><h2>Frequently asked questions</h2>
     <p class="lede">Anything marked <span class="tag">proposed</span> is an idea for discussion, not a current rule.</p>
     ${faqHTML()}
   </section>
 
-  <section class="card"><span class="num">11</span><h2>Not decided yet</h2>
+  <section class="card"><span class="num">12</span><h2>Not decided yet</h2>
     <ul class="open">
       <li>Whether the concept goes forward at all, and on which map.</li>
       <li>The exact shares (65% and 55%) and the cross-meet score threshold.</li>
       <li>Where the Region and Zone lines finally fall; the maps here are working drafts.</li>
       <li>Whether foreign athletes could medal at Junior Nationals.</li>
-      <li>Fees for Groups C/D at Regionals.</li>
+      <li>Fees for Groups C/D at Regionals, and the Junior Nationals Open entry fee.</li>
+      <li>Whether Groups C/D also have a Junior Nationals Open.</li>
+      <li>The CCE Submission’s intended fees (it was stored without any).</li>
       <li>How many divers who only just qualify would actually attend. Take-up here is 2026’s measured rate, untested at these margins.</li>
     </ul>
   </section>
 
-  <section class="card"><span class="num">12</span><h2>How the figures were made</h2>
+  <section class="card"><span class="num">13</span><h2>How the figures were made</h2>
     <ul class="note" style="font-size:13.5px">${(DATA.assumptions||[]).map(a=>`<li>${esc(a.replace('The membership sensitivity below shows','The income table also shows'))}</li>`).join('')}</ul>
     <p class="note">Reference columns: ${DATA.references.map(r=>`${esc(r.label)} (${esc(r.basis)})`).join('; ')}. Maps are the stored Boundary Studio scenarios; outlines are drawn from their county assignments.</p>
     <details class="app"><summary>Appendix A · Junior Nationals round sizes (${esc(s.label)})</summary><div class="scroll">${roundSizes(s)}</div></details>
