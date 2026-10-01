@@ -4,7 +4,7 @@ build_pathway_seasons.py -- the proportional-qualification scenarios, run
 against real past seasons, stop by stop and area by area.
 
 Writes boundary-studio/junior-pathway-2027-seasons.json for section 04 of
-junior-pathway-2027.html.
+the 2027 Junior Circuit report (junior-circuit-2027/index.html).
 
 Method
   1. Boundary Studio's own engine projects each stored scenario
