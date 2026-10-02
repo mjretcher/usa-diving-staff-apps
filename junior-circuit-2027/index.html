@@ -181,7 +181,7 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
 const D='../boundary-studio/';
 /* Last change to this page, set on every commit (UTC). The stamp shown is the
    later of this and the data files' own build times. */
-const PAGE_UPDATED='2026-10-02T00:43:18Z';
+const PAGE_UPDATED='2026-10-02T00:47:06Z';
 function updatedStamp(){
   const iso=x=>{if(!x)return null;const t=String(x).trim().replace(' UTC','Z').replace(' ','T');const d=new Date(/Z$|[+-]\d\d:?\d\d$/.test(t)?t:t+'Z');return isNaN(d)?null:d;};
   const all=[PAGE_UPDATED,DATA&&DATA.generated,SEAS&&SEAS.generated,OPEN&&OPEN.generated,FEES&&FEES.generated].map(iso).filter(Boolean);
@@ -291,7 +291,7 @@ function pathHTML(s){
      <ul><li>Springboard qualifiers from Regionals, plus <b>platform by open entry</b> (${fmt(f.toZonesPlatform)}).</li><li><b>Groups A/B:</b> top 2 per Zone go straight to the Nationals semifinal; the rest of the Zone’s 55% share go to prelims.</li><li><b>Groups C/D:</b> 55% of each Zone event go to prelims.</li></ul>
      <div class="arrow">${fmt(f.directSemi)} to semifinal · ${fmt(f.abPrelims)} A/B and ${fmt(f.cdPrelims)} C/D to prelims</div></div>
    <div class="stop"><div class="k">Stop 3 · 1 meet</div><h3>Junior Nationals</h3><div class="big">${fmt(lastTier(s).entries)} <small>event entries</small></div>
-     <ul><li><b>Groups A/B:</b> prelims (up to 50 springboard / 38 platform) → semifinal the next day (36 / 24) → final of 12.</li><li><b>Groups C/D:</b> prelims and final the same day, all finished in the first days.</li><li><b>Junior Nationals Open:</b> a diver who qualifies in one or two events may enter the Open in the event(s) they did not qualify for; the top 2 in each Open earn a prelim spot (section 03).</li></ul></div>
+     <ul><li><b>Groups A/B:</b> prelims of up to 50 springboard / 38 platform, of which Zone qualifiers fill up to 48 / 36 and the Open’s top 2 take the last 2 → semifinal the next day (36 / 24), where prequalified and HPS athletes join directly → final of 12.</li><li><b>Groups C/D:</b> prelims and final the same day, all finished in the first days.</li><li><b>Junior Nationals Open:</b> a diver who qualifies in one or two events may enter the Open in the event(s) they did not qualify for; the top 2 in each Open earn a prelim spot (section 03).</li></ul></div>
   </div>`;
 }
 
@@ -367,7 +367,7 @@ function openHTML(){
   return `<div class="stops" style="grid-template-columns:repeat(3,minmax(0,1fr))">
      <div class="stop"><div class="k">Who can enter</div><h3>Qualified in 1 or 2 events</h3><p class="note" style="margin:6px 0 0">A diver at Junior Nationals in one or two individual events may enter the Open in the event(s) they did not qualify for, in their own age group.</p></div>
      <div class="stop"><div class="k">How it runs</div><h3>Non-qualifying, early in the meet</h3><p class="note" style="margin:6px 0 0">A senior-length list (5 dives women, 6 men), held in the first days so it is finished before the Group A/B rounds.</p></div>
-     <div class="stop"><div class="k">What it earns</div><h3>Top 2 into prelims</h3><p class="note" style="margin:6px 0 0">The top 2 in each Open event earn a spot in that event's prelims, a second route in for a diver who missed one event at Zones.</p></div>
+     <div class="stop"><div class="k">What it earns</div><h3>Top 2 into prelims</h3><p class="note" style="margin:6px 0 0">The top 2 in each Open event earn a spot in that event's prelims, a second route in for a diver who missed one event at Zones. In Group A/B events that are full, the last 2 of the 50 (springboard) or 38 (platform) prelim places are kept for them.</p></div>
    </div>
    <h3 class="sx-h">If the Open had existed in 2025</h3>
    <p class="note" style="margin:0 0 6px">Real 2025 divers. “Likely entries” counts the events a diver could enter and had already dived at 2025 Zones; “eligible” counts every event they could enter.</p>
@@ -553,6 +553,7 @@ function seasonsHTML(){
       <td class="n">${fmt(fz)}<div class="note">${fmt(op)} platform</div></td><td class="n sub">${fmt(az)}</td>
       <td class="n">${fmt(tj)}</td><td>${mbar(pct(tj,fz),col)}</td><td class="n sub">${fmt(aj)}</td><td class="n">${dTxt(tj,aj)}</td></tr>`;}).join('');
   const zT=`<table><tr><th>Zone</th><th class="n">Zone field<br>proportional</th><th class="n">${SX.yr} real<br>at Zones</th><th class="n">To Nationals<br>proportional</th><th>Share of Zone field</th><th class="n">${SX.yr} real at<br>Nationals</th><th class="n">Nationals<br>difference</th></tr>${zRows}
+    ${sumC(Y.jnOpen)?`<tr><td>Junior Nationals Open winners<div class="note">last 2 prelim places in each full Group A/B event</div></td><td class="n"></td><td class="n"></td><td class="n">${fmt(sumC(Y.jnOpen))}</td><td></td><td class="n"></td><td class="n"></td></tr>`:''}
     <tr class="em"><td>Junior Nationals</td><td class="n">${fmt(Y.totals.zones)}</td><td class="n">${fmt(realZ)}</td><td class="n">${fmt(Y.totals.jn)}</td><td>${mbar(pct(Y.totals.jn,Y.totals.zones),col)}</td><td class="n">${fmt(realJ)}</td><td class="n">${dTxt(Y.totals.jn,realJ)}</td></tr></table>`;
   return `<div class="sx-bar"><span class="note">Season</span><div class="sx-seg">${Object.keys(sc.years).map(y=>`<button data-sxyr="${y}" aria-pressed="${y===SX.yr}">${y}</button>`).join('')}</div>
       <span class="note">${esc(sc.name)} · switch the map layout at the top of the page</span></div>
@@ -595,9 +596,9 @@ function mxCell(p,a){
 function matrixHTML(Y){
   const D=mxData(Y),SPLIT=!!(D.jn&&Y.jnPrelim&&(SX.view==='prop'||SX.view==='both')),M=D.meets,cells=EVT_ORDER.filter(c=>M.some(m=>(m.p&&m.p[c])||(m.a&&m.a[c])));
   const tot=(o,f)=>o?Object.entries(o).reduce((t,[c,v])=>t+(f(c)?v:0),0):0;
-  const row=(lab,f,cls)=>{const ps=M.map(m=>tot(m.p,f)),as=M.map(m=>tot(m.a,f));const P=ps.reduce((x,y)=>x+y,0),A=as.reduce((x,y)=>x+y,0);
+  const row=(lab,f,cls)=>{const ps=M.map(m=>tot(m.p,f)),as=M.map(m=>tot(m.a,f));const P=ps.reduce((x,y)=>x+y,0)+(D.jn?tot(Y.jnOpen,f):0),A=as.reduce((x,y)=>x+y,0);
     const cell=(p,a,x='')=>{const h=mxCell(p,a);return `<td class="n ${x}${h===''?' z':''}">${h===''?'·':h}</td>`;};
-    const split=SPLIT?`<td class="n">${fmt(tot(Y.jnPrelim,f))}</td><td class="n">${fmt(tot(Y.jnSemi,f))||'·'}</td>`:'';
+    const op=tot(Y.jnOpen,f),split=SPLIT?`<td class="n">${fmt(tot(Y.jnPrelim,f)-op)}</td><td class="n">${op?fmt(op):'·'}</td><td class="n">${fmt(tot(Y.jnSemi,f))||'·'}</td>`:'';
     return `<tr class="${cls||''}"><td>${lab}</td>${M.map((m,i)=>cell(ps[i],as[i])).join('')}${cell(P,A,'tt')}${split}</tr>`;};
   let body='';
   ['A','B','C','D'].forEach(a=>{
@@ -607,7 +608,7 @@ function matrixHTML(Y){
     body+=row(`${AGE_L[a]} total`,x=>x[0]===a,'st');
   });
   body+=row('All events',()=>true,'tot');
-  const head=`<tr><th>Event</th>${M.map(m=>`<th class="n" title="${esc(m.sub)}">${esc(m.name)}</th>`).join('')}<th class="n tt">${D.jn?'Junior Nationals':'All meets'}</th>${SPLIT?'<th class="n">of which<br>prelims</th><th class="n">straight to<br>semifinal</th>':''}</tr>`;
+  const head=`<tr><th>Event</th>${M.map(m=>`<th class="n" title="${esc(m.sub)}">${esc(m.name)}</th>`).join('')}<th class="n tt">${D.jn?'Junior Nationals':'All meets'}</th>${SPLIT?'<th class="n">prelims,<br>from Zones</th><th class="n">prelims,<br>Open top 2</th><th class="n">straight to<br>semifinal</th>':''}</tr>`;
   return `<table class="mx">${head}${body}</table>`;
 }
 function matrixCSV(){
@@ -617,6 +618,7 @@ function matrixCSV(){
     Y.regions.forEach(r=>add('Regionals',r.name,r.first,r.actual.Regionals));
     Y.zones.forEach(z=>add('Zones',z.name,z.field,z.actual.Zones));
     Y.zones.forEach(z=>add('Junior Nationals','from '+z.name,z.toJN,z.actual.Nationals));
+    if(Y.jnOpen)add('Junior Nationals','Open top 2 (full Group A/B events)',Y.jnOpen,null);
   });
   const csv=out.map(r=>r.map(v=>/[",]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n');
   const b=new Blob([csv],{type:'text/csv'}),u=URL.createObjectURL(b),l=document.createElement('a');
@@ -631,7 +633,7 @@ function mxControls(){
 function mxNote(){
   const v=SX.view,real=SX.stop===0?'Regionals':SX.stop===1?'Zones':'Junior Nationals';
   const key=v==='both'?`Each cell: proportional <span style="color:#9aa2bb">/ ${SX.yr} as run</span>.`:v==='diff'?`Proportional minus ${SX.yr} as run.`:'';
-  const stopTxt=SX.stop===2?`Junior Nationals is one meet; each Zone column is what that Zone sends to it, and “Junior Nationals” is the whole event. In Groups A/B that is prelims (capped at 50 springboard, 38 platform) plus the top 2 from each Zone, who go straight to the semifinal; the last two columns show the split.`:`One column per meet.`;
+  const stopTxt=SX.stop===2?`Junior Nationals is one meet; each Zone column is what that Zone sends to it, and “Junior Nationals” is the whole event. In Groups A/B that is prelims (50 springboard, 38 platform: Zone qualifiers fill up to 48 / 36 and the Open’s top 2 take the last 2) plus the top 2 from each Zone, who go straight to the semifinal. The last three columns show the split; the Open’s top 2 in events below the limit are not counted.`:`One column per meet.`;
   return `<p class="note" style="margin:0 0 6px">${stopTxt} ${key} “As run” counts divers from the same counties at ${SX.yr} ${real}${SX.stop===0?' (the real 2025 Regional lines were different; these divers are regrouped by the proposed map)':''}. A dot means no entries.</p>`;
 }
 function mxWire(){
@@ -697,7 +699,7 @@ function checks(){
   });
   Object.entries(SEAS.scenarios).forEach(([id,x])=>{const s=scen(id),y=x.years['2026'];if(!s||!y)return;
     [['first stop',y.totals.first,s.tiers[0].entries],['Zones',y.totals.zones,s.tiers[1].entries],['Junior Nationals',y.totals.jn,lastTier(s).entries]].forEach(([l,a,b])=>{if(Math.abs(a-b)>0.5)bad.push(`${s.label}: seasons ${l} ${a} vs report ${b}`);});
-    Object.values(x.years).forEach(Y=>{const r=Y.regions.reduce((a,q)=>a+sumC(q.first),0),z=Y.zones.reduce((a,q)=>a+sumC(q.field),0),j=Y.zones.reduce((a,q)=>a+sumC(q.toJN),0);
+    Object.values(x.years).forEach(Y=>{const r=Y.regions.reduce((a,q)=>a+sumC(q.first),0),z=Y.zones.reduce((a,q)=>a+sumC(q.field),0),j=Y.zones.reduce((a,q)=>a+sumC(q.toJN),0)+(sumC(Y.jnOpen)||0);
       if(r!==Y.totals.first||z!==Y.totals.zones||j!==Y.totals.jn)bad.push(`${x.name}: seasons tables do not add up`);});});
   Object.entries(MAPS.scenarios).forEach(([id,S])=>{const s=scen(id);if(!s){bad.push(`map for ${id} has no projection`);return;}
     if(S.regions.length!==s.tiers[0].meets) bad.push(`${s.label}: map has ${S.regions.length} Regions, projection ${s.tiers[0].meets}`);

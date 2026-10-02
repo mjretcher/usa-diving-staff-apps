@@ -9,8 +9,9 @@ event(s) they did not qualify for. Top 2 in each Open event earn a prelim spot.
 Two bases, both from core.event_results (DiveMeets results):
   as run      -- who really competed at 2025 Junior Nationals.
   proportional-- the 55% Zone rule applied to the real 2025 Zone results
-                 (fields of 3 or fewer all advance; Nationals event limits
-                 60 / 48 Group A/B springboard / platform, 50 / 38 Group C/D),
+                 (fields of 3 or fewer all advance; Zone qualifiers limited to
+                 58 / 46 per Group A/B springboard / platform event, i.e. 48 / 36
+                 prelims plus the semifinal seeds; 50 / 38 Group C/D),
                  then 2026's measured 83.7% take-up, as in the engine.
 "Likely" Open entries = eligible boards the diver had already dived at 2025
 Zones; "eligible" = every board they could enter.
@@ -49,7 +50,9 @@ def main():
     share = lambda f: f if f <= 3 else min(f, math.floor(0.55 * f + 0.5))
     def cap(e):
         g = e.split()[1]; plat = e.endswith('Platform')
-        return (48 if plat else 60) if g in 'AB' else (38 if plat else 50)
+        # Zone qualifiers only: Group A/B prelims keep 2 places for Open winners
+        # (48 / 36 of 50 / 38), plus 10 straight to the semifinal.
+        return (46 if plat else 58) if g in 'AB' else (38 if plat else 50)
     lists = collections.defaultdict(list)
     for (z, e), m in ev.items():
         ranked = [d for d, _ in sorted(m.items(), key=lambda x: x[1])]

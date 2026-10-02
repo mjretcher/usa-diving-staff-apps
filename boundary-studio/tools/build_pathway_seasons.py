@@ -134,9 +134,17 @@ def build(d, y, pools):
 
     # Zone -> Junior Nationals, allocated to the billed Nationals field per event.
     z2j = [{c: 0 for c in cells} for _ in zn]; semi = [{c: 0 for c in cells} for _ in zn]
+    # Group A/B prelims at their limit (50 springboard, 38 platform): Zone
+    # qualifiers fill 48 / 36 and the Junior Nationals Open's top 2 take the last
+    # 2 (rule set 2026-10-01). The prelim size, and so the event total, is unchanged.
+    semiA0 = {c: sum(f['a'] for f in P['flows'] if f['fl'] == 1 and f['tl'] == 2 and f['tr'] == 'semi' and f['c'] == c) for c in cells}
+    jnOpen = {}
+    for c in cells:
+        lim = 38 if c[2] == 'P' else 50
+        if c[0] in 'AB' and jn[c] - min(jn[c], rint(semiA0[c])) >= lim: jnOpen[c] = 2
     for c in cells:
         w = [sum(f['a'] for f in P['flows'] if f['fl'] == 1 and f['tl'] == 2 and f['fg'] == zi and f['c'] == c) for zi in range(nZ)]
-        for zi, v in zip(range(nZ), lr_alloc(jn[c], w)): z2j[zi][c] = v
+        for zi, v in zip(range(nZ), lr_alloc(jn[c] - jnOpen.get(c, 0), w)): z2j[zi][c] = v
         for zi in range(nZ):
             semi[zi][c] = sum(f['n'] for f in P['flows'] if f['fl'] == 1 and f['tl'] == 2 and f['tr'] == 'semi' and f['fg'] == zi and f['c'] == c)
 
@@ -165,7 +173,7 @@ def build(d, y, pools):
     checks = [
         ('Regions add to first stop', S(first), S([{c: rint(v) for c, v in g.items()} for g in P['levels'][0]['groups']])),
         ('Region sends + platform open entry = Zone fields', S(r2z) + S(openZ), S(zone)),
-        ('Zone sends = Junior Nationals field', S(z2j), sum(jn.values())),
+        ('Zone sends + Open winners = Junior Nationals field', S(z2j) + sum(jnOpen.values()), sum(jn.values())),
     ]
     for lab, a, b in checks:
         if a != b: raise SystemExit(f'{d["id"]} {y}: check failed: {lab} ({a} vs {b})')
@@ -175,7 +183,7 @@ def build(d, y, pools):
     semiA = {c: sum(f['a'] for f in P['flows'] if f['fl'] == 1 and f['tl'] == 2 and f['tr'] == 'semi' and f['c'] == c) for c in cells}
     jnSemi = {c: min(jn[c], rint(v)) for c, v in semiA.items() if v > 0}
     jnPrelim = {c: jn[c] - jnSemi.get(c, 0) for c in cells if jn[c]}
-    return {'cells': cells, 'regions': regions, 'zones': zones, 'jn': jn, 'jnSemi': jnSemi, 'jnPrelim': jnPrelim,
+    return {'cells': cells, 'regions': regions, 'zones': zones, 'jn': jn, 'jnSemi': jnSemi, 'jnPrelim': jnPrelim, 'jnOpen': jnOpen,
             'totals': {'first': S(first), 'zones': S(zone), 'jn': sum(jn.values()), 'actual': real_tot},
             'checks': [{'label': l, 'value': a, 'pass': True} for l, a, _ in checks]}
 
