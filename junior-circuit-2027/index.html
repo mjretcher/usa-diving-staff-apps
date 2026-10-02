@@ -181,7 +181,7 @@ footer{max-width:1120px;margin:0 auto;padding:6px 22px 40px;color:var(--muted);f
 const D='../boundary-studio/';
 /* Last change to this page, set on every commit (UTC). The stamp shown is the
    later of this and the data files' own build times. */
-const PAGE_UPDATED='2026-10-01T17:35:45Z';
+const PAGE_UPDATED='2026-10-02T00:43:18Z';
 function updatedStamp(){
   const iso=x=>{if(!x)return null;const t=String(x).trim().replace(' UTC','Z').replace(' ','T');const d=new Date(/Z$|[+-]\d\d:?\d\d$/.test(t)?t:t+'Z');return isNaN(d)?null:d;};
   const all=[PAGE_UPDATED,DATA&&DATA.generated,SEAS&&SEAS.generated,OPEN&&OPEN.generated,FEES&&FEES.generated].map(iso).filter(Boolean);
@@ -583,7 +583,7 @@ function mxData(Y){
   const stop=SX.stop,is25=SX.yr==='2025';
   if(stop===0) return {meets:Y.regions.map(r=>({name:r.name,sub:r.zone,p:r.first,a:r.actual.Regionals})),realLabel:`${SX.yr} Regionals`};
   if(stop===1) return {meets:Y.zones.map(z=>({name:z.name,sub:z.regions.join(' · '),p:z.field,a:z.actual.Zones})),realLabel:`${SX.yr} Zones`};
-  return {meets:Y.zones.map(z=>({name:'From '+z.name,sub:'to Junior Nationals',p:z.toJN,a:z.actual.Nationals})),realLabel:`${SX.yr} Nationals`,jn:true};
+  return {meets:Y.zones.map(z=>({name:z.name,sub:'sent to Junior Nationals',p:z.toJN,a:z.actual.Nationals})),realLabel:`${SX.yr} Nationals`,jn:true};
 }
 function mxCell(p,a){
   const v=SX.view;
@@ -593,11 +593,12 @@ function mxCell(p,a){
   return (p||a)?`${fmt(p||0)}<i>/ ${fmt(a||0)}</i>`:'';
 }
 function matrixHTML(Y){
-  const D=mxData(Y),M=D.meets,cells=EVT_ORDER.filter(c=>M.some(m=>(m.p&&m.p[c])||(m.a&&m.a[c])));
+  const D=mxData(Y),SPLIT=!!(D.jn&&Y.jnPrelim&&(SX.view==='prop'||SX.view==='both')),M=D.meets,cells=EVT_ORDER.filter(c=>M.some(m=>(m.p&&m.p[c])||(m.a&&m.a[c])));
   const tot=(o,f)=>o?Object.entries(o).reduce((t,[c,v])=>t+(f(c)?v:0),0):0;
   const row=(lab,f,cls)=>{const ps=M.map(m=>tot(m.p,f)),as=M.map(m=>tot(m.a,f));const P=ps.reduce((x,y)=>x+y,0),A=as.reduce((x,y)=>x+y,0);
     const cell=(p,a,x='')=>{const h=mxCell(p,a);return `<td class="n ${x}${h===''?' z':''}">${h===''?'·':h}</td>`;};
-    return `<tr class="${cls||''}"><td>${lab}</td>${M.map((m,i)=>cell(ps[i],as[i])).join('')}${cell(P,A,'tt')}</tr>`;};
+    const split=SPLIT?`<td class="n">${fmt(tot(Y.jnPrelim,f))}</td><td class="n">${fmt(tot(Y.jnSemi,f))||'·'}</td>`:'';
+    return `<tr class="${cls||''}"><td>${lab}</td>${M.map((m,i)=>cell(ps[i],as[i])).join('')}${cell(P,A,'tt')}${split}</tr>`;};
   let body='';
   ['A','B','C','D'].forEach(a=>{
     const cs=cells.filter(c=>c[0]===a);if(!cs.length)return;
@@ -606,7 +607,7 @@ function matrixHTML(Y){
     body+=row(`${AGE_L[a]} total`,x=>x[0]===a,'st');
   });
   body+=row('All events',()=>true,'tot');
-  const head=`<tr><th>Event</th>${M.map(m=>`<th class="n" title="${esc(m.sub)}">${esc(m.name)}</th>`).join('')}<th class="n tt">${D.jn?'Junior Nationals':'All meets'}</th></tr>`;
+  const head=`<tr><th>Event</th>${M.map(m=>`<th class="n" title="${esc(m.sub)}">${esc(m.name)}</th>`).join('')}<th class="n tt">${D.jn?'Junior Nationals':'All meets'}</th>${SPLIT?'<th class="n">of which<br>prelims</th><th class="n">straight to<br>semifinal</th>':''}</tr>`;
   return `<table class="mx">${head}${body}</table>`;
 }
 function matrixCSV(){
@@ -630,7 +631,7 @@ function mxControls(){
 function mxNote(){
   const v=SX.view,real=SX.stop===0?'Regionals':SX.stop===1?'Zones':'Junior Nationals';
   const key=v==='both'?`Each cell: proportional <span style="color:#9aa2bb">/ ${SX.yr} as run</span>.`:v==='diff'?`Proportional minus ${SX.yr} as run.`:'';
-  const stopTxt=SX.stop===2?`Junior Nationals is one meet; each column is what each Zone sends to it, and the last column is the whole meet.`:`One column per meet.`;
+  const stopTxt=SX.stop===2?`Junior Nationals is one meet; each Zone column is what that Zone sends to it, and “Junior Nationals” is the whole event. In Groups A/B that is prelims (capped at 50 springboard, 38 platform) plus the top 2 from each Zone, who go straight to the semifinal; the last two columns show the split.`:`One column per meet.`;
   return `<p class="note" style="margin:0 0 6px">${stopTxt} ${key} “As run” counts divers from the same counties at ${SX.yr} ${real}${SX.stop===0?' (the real 2025 Regional lines were different; these divers are regrouped by the proposed map)':''}. A dot means no entries.</p>`;
 }
 function mxWire(){

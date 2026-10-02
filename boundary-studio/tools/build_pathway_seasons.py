@@ -170,7 +170,12 @@ def build(d, y, pools):
     for lab, a, b in checks:
         if a != b: raise SystemExit(f'{d["id"]} {y}: check failed: {lab} ({a} vs {b})')
     real_tot = {k: (sum(sum(r.values()) for r in v) if v else None) for k, v in act.items()}
-    return {'cells': cells, 'regions': regions, 'zones': zones, 'jn': jn,
+    # Junior Nationals split: divers going straight to the semifinal (top places
+    # from each Zone, after take-up) and the rest, who dive prelims (capped).
+    semiA = {c: sum(f['a'] for f in P['flows'] if f['fl'] == 1 and f['tl'] == 2 and f['tr'] == 'semi' and f['c'] == c) for c in cells}
+    jnSemi = {c: min(jn[c], rint(v)) for c, v in semiA.items() if v > 0}
+    jnPrelim = {c: jn[c] - jnSemi.get(c, 0) for c in cells if jn[c]}
+    return {'cells': cells, 'regions': regions, 'zones': zones, 'jn': jn, 'jnSemi': jnSemi, 'jnPrelim': jnPrelim,
             'totals': {'first': S(first), 'zones': S(zone), 'jn': sum(jn.values()), 'actual': real_tot},
             'checks': [{'label': l, 'value': a, 'pass': True} for l, a, _ in checks]}
 
