@@ -8,7 +8,9 @@ Output boundary-studio/nearby-data.json:
   years[YYYY].clubs  [name, lat, lon, rule, located_members, coaches_on_roster, uncertain]
   years[YYYY].unplaced  members whose ZIP is missing or not a US ZIP
 Output boundary-studio/nearby-places.json: every US ZIP [zip, lat, lon, city, state]
-for the search box.
+for the search box and for the page's live mode, which repeats this placement in the
+browser from the database (same 4-decimal ZIP centres). nearby-data.json is the
+saved copy the page falls back to if the live read fails.
 
 Club placement (Mike, 2026-10-05): a club with a coach sits at a coach's home ZIP --
 the coach who lives closest to the middle of the club's members when there are
@@ -123,6 +125,6 @@ for yr in YEARS:
 os.makedirs("boundary-studio", exist_ok=True)
 with open("boundary-studio/nearby-data.json", "w") as f:
     json.dump(out, f, separators=(",", ":"))
-places = sorted([z["zip_code"], round(float(z["lat"]), 3), round(float(z["long"]), 3), z["city"], z["state"]] for z in ALL)
+places = sorted([z["zip_code"], Z[z["zip_code"]][0], Z[z["zip_code"]][1], z["city"], z["state"]] for z in ALL)
 with open("boundary-studio/nearby-places.json", "w") as f:
     json.dump({"source": out["zip_locations"], "places": places}, f, separators=(",", ":"))

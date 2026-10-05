@@ -84,6 +84,61 @@
     return best ? { c: best, d: bd } : null;
   }
 
+
+  /* ---------- live read (no GitHub step needed after a roster import) ----------
+     Same rules as db/scripts/build_nearby_data.py, run in the browser against the
+     database. Only counts leave the database: no names, no member ids. */
+  const SQL_ZIPS = `WITH m AS (
+      SELECT membership_year y, member_id, min(left(zip5,5)) z,
+             bool_or(membership_type LIKE '%Athlete%') a,
+             bool_or(membership_type LIKE 'Competition Athlete%') ca,
+             bool_or(membership_type LIKE '%Coach%') co
+        FROM membership.members WHERE membership_year >= 2024 GROUP BY 1,2)
+    SELECT y, z, count(*)::int n, count(*) FILTER (WHERE a)::int a,
+           count(*) FILTER (WHERE ca)::int ca, count(*) FILTER (WHERE co)::int co
+      FROM m GROUP BY 1,2`;
+  const SQL_CLUBS = `WITH m AS (
+      SELECT membership_year y, member_id, min(left(zip5,5)) z
+        FROM membership.members WHERE membership_year >= 2024 GROUP BY 1,2)
+    SELECT r.membership_year y, r.club, m.z, count(DISTINCT r.member_id)::int n,
+           count(DISTINCT r.member_id) FILTER (WHERE r.membership_type LIKE '%Coach%')::int nc
+      FROM membership.members r JOIN m ON m.y = r.membership_year AND m.member_id = r.member_id
+     WHERE r.membership_year >= 2024 AND coalesce(r.club,'') <> '' GROUP BY 1,2,3`;
+  const SQL_LOADED = `SELECT membership_year y, max(loaded_at)::text t FROM membership.members WHERE membership_year >= 2024 GROUP BY 1`;
+
+  async function liveData() {
+    if (!window.NEON || !S.byZip) throw new Error('database connection not available');
+    const [zr, cr, lr] = await Promise.all([NEON.query(SQL_ZIPS), NEON.query(SQL_CLUBS), NEON.query(SQL_LOADED)]);
+    const years = {};
+    const Y = (y) => years[y] || (years[y] = { roster_loaded: null, members_total: 0, zips: {}, clubs: [], unplaced: { members: 0, athletes: 0, coaches: 0, clubs: [] } });
+    const loc = (z) => { const p = z && S.byZip.get(z); return p ? [p.lat, p.lon] : null; };
+    for (const r of zr.rows) {
+      const y = Y(String(r.y)); const n = +r.n, a = +r.a, ca = +r.ca, co = +r.co; y.members_total += n;
+      const p = loc(r.z);
+      if (p) y.zips[r.z] = [p[0], p[1], n, a, ca, co];
+      else { y.unplaced.members += n; y.unplaced.athletes += a; y.unplaced.coaches += co; }
+    }
+    for (const r of lr.rows) Y(String(r.y)).roster_loaded = r.t;
+    const byClub = new Map();
+    for (const r of cr.rows) {
+      const k = r.y + '\u0000' + r.club; let c = byClub.get(k);
+      if (!c) { c = { y: String(r.y), name: r.club, pts: [], coaches: 0 }; byClub.set(k, c); }
+      c.coaches += +r.nc;
+      const p = loc(r.z); if (p) c.pts.push({ z: r.z, p, n: +r.n, nc: +r.nc });
+    }
+    const names = [...byClub.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const c of names) {
+      const y = Y(c.y); const N = c.pts.reduce((s, q) => s + q.n, 0);
+      if (!N) { y.unplaced.clubs.push(c.name); continue; }
+      const mid = [c.pts.reduce((s, q) => s + q.p[0] * q.n, 0) / N, c.pts.reduce((s, q) => s + q.p[1] * q.n, 0) / N];
+      const cand = c.pts.filter((q) => q.nc > 0); const rule = cand.length ? 'coach' : 'member';
+      const pick = (cand.length ? cand : c.pts).slice().sort((a, b) =>
+        (miles(a.p[0], a.p[1], mid[0], mid[1]) - miles(b.p[0], b.p[1], mid[0], mid[1])) || (a.z < b.z ? -1 : 1))[0];
+      y.clubs.push([c.name, pick.p[0], pick.p[1], rule, N, c.coaches, rule === 'member' && N < 3]);
+    }
+    return years;
+  }
+
   /* ---------- counting ---------- */
   function compute() {
     const Y = S.data.years[S.year]; const R = S.radius;
@@ -296,13 +351,16 @@
     const D = S.data, Y = D.years[S.year], U = Y.unplaced || {};
     const loaded = Y.roster_loaded ? new Date(Y.roster_loaded).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'date not recorded';
     const nUnc = Y.clubs.filter((c) => c[6]).length;
-    $('prov').innerHTML = `<b>Where these numbers come from.</b> ${esc(S.year)} USA Diving membership roster, imported ${esc(loaded)}: ${fmt(Y.members_total)} unique members, Current and Pending.
+    const how = S.mode === 'live'
+      ? 'Read live from the membership database when this page opened, so a new roster import shows up on the next page load. '
+      : '<span class="tag unc">Saved copy</span> The live database read didn\u2019t work' + (S.liveError ? ' (' + esc(S.liveError) + ')' : '') + ', so this is the saved copy built ' + esc(D.built) + '. Reload to try the live read again. ';
+    $('prov').innerHTML = `<b>Where these numbers come from.</b> ${how}${esc(S.year)} USA Diving membership roster, imported ${esc(loaded)}: ${fmt(Y.members_total)} unique members, Current and Pending.
       Each member is counted once, at their home ZIP code. <b>Athletes</b> are any Athlete membership type (17U, 18+, Competition, Introductory); plain Lifetime members aren't counted as athletes because the type doesn't say.
       <b>Coaches</b> are Coach, Competition Coach and Lifetime Coach.
       <b>Distance</b> is straight-line miles from the place to the centre of the member's home ZIP code, not driving distance. A city is placed at the middle of its ZIP codes.
       <b>Clubs</b> have no stored address. ${esc(D.club_rule)} ${nUnc} of ${Y.clubs.length} clubs are flagged location uncertain.
       Not placed: ${fmt(U.members || 0)} members with no usable US ZIP code${(U.clubs || []).length ? ', and ' + U.clubs.length + ' club' + (U.clubs.length === 1 ? '' : 's') + ' with no placed members' : ''}.
-      ZIP locations: ${esc(D.zip_locations)}. Data built ${esc(D.built)}.`;
+      ZIP locations: ${esc(D.zip_locations)}.`;
   }
   function downloadCsv() {
     const res = compute();
@@ -334,17 +392,20 @@
   async function getJson(u) { const r = await fetch(u, { cache: 'no-cache' }); if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); }
   async function init() {
     try {
-      const [data, map] = await Promise.all([getJson('nearby-data.json'), getJson('nearby-map.json')]);
-      S.data = data; S.map = map;
-      S.year = Object.keys(data.years).sort().pop();
+      const [data, map, pl] = await Promise.all([getJson('nearby-data.json'), getJson('nearby-map.json'), getJson('nearby-places.json')]);
+      S.snapshot = data; S.map = map; indexPlaces(pl.places);
+      S.data = data; S.mode = 'saved';
     } catch (e) {
-      $('app').innerHTML = '<div class="card"><div class="empty">Couldn\u2019t load the membership data (' + esc(e.message) + '). Reload the page to try again.</div></div>';
+      $('app').innerHTML = '<div class="card"><div class="empty">Couldn\u2019t load the page data (' + esc(e.message) + '). Reload the page to try again.</div></div>';
       return;
     }
+    try {
+      const years = await liveData();
+      if (Object.keys(years).length) { S.data = Object.assign({}, S.snapshot, { years }); S.mode = 'live'; }
+    } catch (e) { S.liveError = e.message; }
+    S.year = Object.keys(S.data.years).sort().pop();
     readHash(); shell(); update();
-    try { const pl = await getJson('nearby-places.json'); indexPlaces(pl.places); }
-    catch (e) { $('err').textContent = 'The place list didn\u2019t load, so search is off. Reload the page to try again.'; }
   }
-  if (typeof window !== 'undefined') window.__nearby = { S, resolve, compute, miles, indexPlaces };
+  if (typeof window !== 'undefined') window.__nearby = { S, resolve, compute, miles, indexPlaces, liveData };
   init();
 })();
