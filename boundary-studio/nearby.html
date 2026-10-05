@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nearby · Boundary Studio · USA Diving</title>
+<link rel="icon" type="image/svg+xml" href="../shared/images/diver-mark.svg">
+<link rel="apple-touch-icon" href="../shared/images/diver-mark.png">
+<link rel="stylesheet" href="../shared/design.css?v=202610052343">
+<link rel="stylesheet" href="../shared/usad-overlays.css?v=202607202300">
+<style>
+:root{--navy:#171F69;--red:#E31937;--pool:#009AC7;--sky:#8FC3EA;--pg:#eef3f9;--ink:#13213a;--muted:#5a6a7e;--ln:#d8e0ec;
+--display:'Barlow Condensed','Arial Narrow',Arial,sans-serif;--ui:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--ink);font-family:var(--ui)}
+button,input,select{font:inherit}button{cursor:pointer}
+.skip-link{position:absolute;left:-9999px;top:0;z-index:10000;background:var(--navy);color:#fff;padding:10px 18px;text-decoration:none}
+.skip-link:focus{left:0}
+.top{background:linear-gradient(135deg,var(--navy),#0c1349);border-bottom:6px solid var(--red);color:#fff;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:16px}
+.brand-logo img{height:46px;width:auto;display:block}
+.brand-title{border-left:1px solid rgba(255,255,255,.22);padding-left:16px}
+.top h1{margin:0;font-family:var(--display);font-size:40px;line-height:.9;letter-spacing:.045em;text-transform:uppercase}
+.top p{margin:6px 0 0;color:#cfe3ff;font-size:13px}
+.top-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+a.hub-link{color:#8fc3ea;font-weight:700;font-size:12px;text-decoration:none}
+a.hub-link:hover{color:#fff}
+@media(max-width:640px){.top{padding:14px 18px}.brand-logo img{height:34px}.top h1{font-size:28px}.top-right{align-items:flex-start}}
+.wrap{max-width:1400px;margin:0 auto;padding:20px}
+.scope{background:#fff;border:1px solid var(--ln);border-left:5px solid var(--pool);border-radius:0;padding:10px 14px;font-size:13px;color:var(--ink);margin-bottom:14px}
+.card{background:#fff;border:1px solid var(--ln);border-radius:16px;box-shadow:0 8px 22px rgba(16,24,40,.06);margin-bottom:16px}
+.card-b{padding:16px 18px}
+.card h2{margin:0 0 4px;font-family:var(--display);font-size:24px;letter-spacing:.05em;text-transform:uppercase;color:var(--navy)}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.fld input,.fld select{height:40px;border:1px solid #c5cfdf;border-radius:8px;padding:0 10px;color:var(--ink);background:#fff;font-weight:500;font-size:14px}
+.fld input:focus,.fld select:focus,.btn:focus-visible{outline:3px solid var(--sky);outline-offset:1px}
+.search-wrap{position:relative}
+#siteQ{width:260px}
+.sugg{position:absolute;top:100%;left:0;right:0;z-index:20;background:#fff;border:1px solid #c5cfdf;border-radius:8px;margin-top:4px;box-shadow:0 10px 24px rgba(16,24,40,.12);max-height:280px;overflow:auto;padding:4px 0;list-style:none;margin-left:0}
+.sugg li{padding:8px 12px;font-size:14px;cursor:pointer}
+.sugg li[aria-selected="true"],.sugg li:hover{background:#e8f4fa}
+.btn{height:40px;border:1px solid var(--navy);background:var(--navy);color:#fff;border-radius:8px;padding:0 16px;font-weight:700;font-size:14px}
+.btn.ghost{background:#fff;color:var(--navy)}
+.btn:disabled{opacity:.5;cursor:default}
+.err{color:#b4142c;font-size:13px;font-weight:600;min-height:18px;margin-top:6px}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ln);border-radius:999px;padding:5px 6px 5px 12px;font-size:13px;font-weight:600;background:#fff}
+.chip .sw{width:12px;height:12px;border-radius:50%}
+.chip button{border:0;background:#eef1f6;color:var(--ink);border-radius:999px;width:24px;height:24px;font-size:14px;line-height:1}
+.examples{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted);margin-top:10px}
+.examples button{border:1px dashed #9fb0c9;background:#fff;color:var(--navy);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600}
+.map-card{position:relative}
+.map-tools{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:12px 18px 0}
+.map-tools .note{font-size:12px;color:var(--muted)}
+#map{width:100%;height:auto;display:block;cursor:crosshair;touch-action:manipulation}
+#map .land{fill:#e3e9f2}
+#map .mesh{fill:none;stroke:#fff;stroke-width:1}
+#map .nat{fill:none;stroke:#94a3b8;stroke-width:.8}
+#map .club{fill:#8a96aa;stroke:#fff;stroke-width:.6}
+#map .club.in{stroke:#fff;stroke-width:.9}
+#map .site-dot{stroke:#fff;stroke-width:1.6}
+#map .site-lbl{font-family:var(--ui);font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3px;fill:var(--ink)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:0 18px 14px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#8a96aa}
+.sites{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.site{background:#fff;border:1px solid var(--ln);border-top:6px solid var(--navy);border-radius:0 0 16px 16px;box-shadow:0 8px 22px rgba(16,24,40,.06);padding:14px 16px}
+.site h3{margin:0;font-family:var(--display);font-size:26px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink)}
+.site .where{font-size:12px;color:var(--muted);margin:2px 0 12px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{background:#f4f7fb;border-radius:10px;padding:10px 12px}
+.kpi .l{font-size:12px;font-weight:600;color:var(--muted)}
+.kpi .v{font-family:var(--mono);font-weight:600;font-size:28px;line-height:1.15;color:var(--navy)}
+.kpi .s{font-size:12px;color:var(--muted)}
+.kpi.wide{grid-column:span 2}
+.clubs-t{width:100%;border-collapse:collapse;font-size:13px}
+.clubs-t th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--ln);padding:4px 4px}
+.clubs-t td{border-bottom:1px solid #edf1f6;padding:6px 4px;vertical-align:top}
+.clubs-t td.num,.clubs-t th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:1px}
+.tag.unc{background:#fff4d6;color:#7a4b00;border:1px solid #f0d58a}
+.tag.small{background:#eef1f6;color:#3d4b60;border:1px solid #d6dde8}
+.basis{font-size:11px;color:var(--muted)}
+.more{margin-top:8px}
+.more button{border:0;background:none;color:var(--navy);font-weight:700;font-size:13px;padding:0;text-decoration:underline}
+.overlap{font-size:13px;line-height:1.6}
+.overlap table{border-collapse:collapse;font-size:13px;margin-top:6px;min-width:420px}
+.overlap th,.overlap td{border-bottom:1px solid #edf1f6;padding:6px 10px;text-align:left}
+.overlap td.num,.overlap th.num{text-align:right;font-family:var(--mono)}
+.scroll-x{overflow-x:auto}
+.prov{font-size:12px;color:var(--muted);line-height:1.6}
+.prov b{color:var(--ink)}
+.empty{padding:28px;text-align:center;color:var(--muted);font-size:14px}
+.loading{padding:60px;text-align:center;color:var(--muted);font-weight:600}
+@media print{.top,.controls,.examples,.map-tools button,.more{display:none}.card,.site{box-shadow:none}}
+</style>
+</head>
+<body>
+<a href="#mainWrap" class="skip-link">Skip to main content</a>
+<div class="top">
+  <div class="brand">
+    <a class="brand-logo" href="../index.html" title="USA Diving Staff Apps home" aria-label="USA Diving Staff Apps home">
+      <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false">
+    </a>
+    <div class="brand-title">
+      <h1>Nearby</h1>
+      <p>Clubs, athletes and coaches within a distance of any place</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <a class="hub-link" href="../index.html">&larr; Staff Apps Hub</a>
+    <a class="hub-link" href="index.html">Boundary Studio &rarr;</a>
+  </div>
+</div>
+<main class="wrap" id="mainWrap">
+  <div class="scope">Stand-alone reference tool for host-site planning (Olympic Trials, national championships) and general information. It is not connected to any Boundary Studio proposal or qualification pathway, and it does not rank or select athletes.</div>
+  <div id="app"><div class="loading">Loading membership data&hellip;</div></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="nearby.js?v=202610052343"></script>
+</body>
+</html>
