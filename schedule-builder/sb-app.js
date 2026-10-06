@@ -3562,6 +3562,135 @@ ${page}
 }
 // ── EVENTS-ONLY REPORT END ────────────────────────────────────────────
 
+// ── DAY-BY-DAY OVERVIEW (no times) ───────────────────────────────────
+// The schedule published before times are set: for each day, whether it is a
+// training day, which meetings happen, and which events are contested. It is
+// written for athletes and coaches planning travel, so it says what happens on
+// each day and nothing else:
+//  • every training-type block on a day collapses to one "Training" line
+//    (a day with only training reads "Training Day");
+//  • facility closures and internal blocks are left off — they only mean
+//    something next to a clock;
+//  • block notes are left off — they are where hand-typed times live;
+//  • the same event's rounds on one day merge ("Prelim & Final").
+// Classification reads the block title, so a block reads correctly here as
+// long as its title says what it is ("Technical Meeting", "Pool Closed").
+const OV_CLOSED_RE=/\b(closed|closure|unavailable)\b/i;
+const OV_MEETING_RE=/\bmeeting\b/i;
+const OV_TRAINING_RE=/\b(training|practice|warm[\s-]?ups?|open boards?|boards open)\b/i;
+function ovBlockKind(sess){
+  if(sess.hideFromPublic)return'skip';
+  const t=String(sess.title||'').trim()||String(((sess.events||[])[0]||{}).customLabel||'').trim();
+  if(OV_CLOSED_RE.test(t))return'skip';
+  if(OV_MEETING_RE.test(t))return'meeting';
+  if(OV_TRAINING_RE.test(t)||(sess.events||[]).some(e=>e.style==='Restricted Training'))return'training';
+  return t?'other':'skip';
+}
+function ovBlockLabel(sess){
+  // Drop anything after a spaced dash — "Open Training - Deck opens 30 minutes
+  // before" is a time instruction, not part of the name.
+  const t=String(sess.title||'').trim()||String(((sess.events||[])[0]||{}).customLabel||'').trim();
+  return t.split(/\s+[-\u2013\u2014]\s+/)[0].trim();
+}
+function ovRoundText(rounds){
+  const r=rounds.filter(Boolean);
+  if(!r.length)return'';
+  if(r.length===1)return r[0];
+  return r.slice(0,-1).join(', ')+' & '+r[r.length-1];
+}
+function ovDateParts(ds){
+  const n=datesPending()?dayNumberOf(ds):0;
+  if(n)return{dow:'Day',md:String(n)};
+  const d=new Date(`${ds}T00:00:00`);
+  if(isNaN(d))return{dow:'',md:String(ds||'')};
+  return{dow:d.toLocaleDateString('en-US',{weekday:'short'}),md:d.toLocaleDateString('en-US',{month:'short',day:'numeric'})};
+}
+function buildOverviewDay(day,timed){
+  const blocks=filterByEvent(timed.filter(s=>s.dayId===day.id));
+  const comp=blocks.filter(s=>!s.isPractice);
+  const firstComp=comp.length?Math.min(...comp.map(s=>Number(s.warmupStartMinutes))):Infinity;
+  let training=false;const before=[],after=[];const seen=new Set();
+  blocks.filter(s=>s.isPractice).forEach(s=>{
+    const k=ovBlockKind(s);
+    if(k==='skip')return;
+    if(k==='training'){training=true;return;}
+    const label=ovBlockLabel(s);const key=label.toLowerCase();
+    if(!label||seen.has(key))return;seen.add(key);
+    (Number(s.warmupStartMinutes)<firstComp?before:after).push(label);
+  });
+  // Competition: one line per event, its rounds on this day merged.
+  const evs=[];const byKey={};
+  comp.forEach(s=>(s.events||[]).forEach(ev=>{
+    if(ev.style!=='Individual'&&ev.style!=='Synchronized')return;
+    const name=evName(ev);
+    if(!byKey[name]){byKey[name]={name,rounds:[]};evs.push(byKey[name]);}
+    const r=evRound(ev);if(r&&!byKey[name].rounds.includes(r))byKey[name].rounds.push(r);
+  }));
+  if(!training&&!before.length&&!after.length&&!evs.length)return null;
+  const trainingOnly=training&&!evs.length&&!before.length&&!after.length;
+  return{day,training,trainingOnly,before,after,evs};
+}
+function overviewDayRow(o){
+  const p=ovDateParts(o.day.date);
+  const chips=[];
+  if(o.training)chips.push(`<span class="ov-chip ov-train">${o.trainingOnly?'Training Day':'Training'}</span>`);
+  o.before.forEach(l=>chips.push(`<span class="ov-chip ov-meet">${esc(l)}</span>`));
+  const evRows=o.evs.map(e=>`<div class="ov-ev"><span class="ov-ev-nm">${esc(e.name)}</span><span class="ov-ev-rd">${esc(ovRoundText(e.rounds))}</span></div>`).join('');
+  const afterChips=o.after.map(l=>`<span class="ov-chip ov-meet">${esc(l)}</span>`).join('');
+  return`<tr class="${o.trainingOnly?'ov-row ov-row-train':'ov-row'}">
+    <td class="ov-date"><span class="ov-dow">${esc(p.dow)}</span><span class="ov-md">${esc(p.md)}</span></td>
+    <td class="ov-body">
+      ${chips.length?`<div class="ov-chips">${chips.join('')}</div>`:''}
+      ${evRows?`<div class="ov-comp"><div class="ov-comp-lbl">Competition</div>${evRows}</div>`:''}
+      ${afterChips?`<div class="ov-chips ov-chips-after">${afterChips}</div>`:''}
+    </td></tr>`;
+}
+function openOverviewReport(fromGenerator){
+  const timed=fromGenerator&&typeof genTimedForPreview==='function'?genTimedForPreview(allTimed()):allTimed();
+  const rows=S.meet.days.map(d=>buildOverviewDay(d,timed)).filter(Boolean);
+  if(!rows.length){toast('Nothing to show yet — add training, meetings or events first');return;}
+  const title=(fromGenerator&&typeof genTitle==='function'&&genTitle())||S.meet.name||'Schedule';
+  const venue=[S.meet.venue,S.meet.city].filter(Boolean).join(' · ');
+  const page=`<div class="hd-page">
+<div class="hd-head"><div><div class="hd-meet">${esc(title)}</div>${venue?`<div class="hd-venue">${esc(venue)}</div>`:''}</div><div class="hd-date" style="font-size:18px">Schedule overview</div></div>
+<div class="hd-accent"></div>
+<table class="ov-tbl"><tbody>${rows.map(overviewDayRow).join('')}</tbody></table>
+<div class="hd-foot"><span>Session times will be published in the full schedule · Schedule subject to change</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div>
+</div>`;
+  const extraCss=`
+  .ov-tbl{width:100%;border-collapse:collapse}
+  .ov-row td{border-bottom:1.5px solid #E5E9F2;padding:6px 10px;vertical-align:top}
+  @media print{.ov-tbl{font-size:inherit}.hd-foot{margin-top:8px}.hd-head{padding:12px 20px}.hd-accent{margin-bottom:8px}}
+  .ov-row{page-break-inside:avoid}
+  .ov-date{width:74px;white-space:nowrap}
+  .ov-dow{display:block;font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#E31937;line-height:1}
+  .ov-md{display:block;font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-weight:700;font-size:20px;color:#171F69;line-height:1.1}
+  .ov-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .ov-chips-after{margin-top:7px}
+  .ov-chip{display:inline-block;font-size:12px;font-weight:700;border-radius:5px;padding:2px 9px;line-height:1.3}
+  .ov-train{background:#E3F4FA;color:#0A6E8C}
+  .ov-meet{background:#EEF0F8;color:#171F69}
+  .ov-row-train .ov-train{font-size:13px}
+  .ov-comp{margin-top:5px}
+  .ov-chips+.ov-comp{border-top:1px dashed #E5E9F2;padding-top:4px}
+  .ov-comp:first-child{margin-top:1px}
+  .ov-comp-lbl{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#94A3B8;margin-bottom:2px}
+  .ov-ev{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:1px 0}
+  .ov-ev-nm{font-weight:600;color:#0F172A}
+  .ov-ev-rd{color:#64748B;font-weight:600;white-space:nowrap}`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)} — Schedule overview</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>${HANDOUT_CSS}${extraCss}</style></head><body>
+<button class="hd-print" onclick="window.print()">Print</button>
+${page}
+<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Pop-up blocked — allow pop-ups for this site to print the overview');return;}
+  w.document.write(html);w.document.close();
+}
+// ── DAY-BY-DAY OVERVIEW END ───────────────────────────────────────────
+
 // ── EXCEL WORKBOOK EXPORT (one sheet per day + summary) ──────────────
 let _sheetJsLoading=null;
 function loadSheetJS(){
@@ -3634,6 +3763,7 @@ function renderExportModal(){
         <button class="move-btn" onclick="closeModal();exportMeetExcel()"><span><strong>Excel workbook (.xlsx)</strong><br><span style="font-size:11px;color:var(--tx3)">One sheet per day plus a meet summary — for ops staff who live in spreadsheets</span></span></button>
         <button class="move-btn" onclick="closeModal();openCoachHandout(UI.dayId)"><span><strong>This day only (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Same one-pager as the printer button on the day toolbar</span></span></button>
         <button class="move-btn" onclick="closeModal();openClubItineraries()"><span><strong>Club itineraries (print)</strong><br><span style="font-size:11px;color:var(--tx3)">One page per club — every diver's personal report times and events, whole meet</span></span></button>
+        <button class="move-btn" onclick="closeModal();openOverviewReport(false)"><span><strong>Schedule overview — no times (print)</strong><br><span style="font-size:11px;color:var(--tx3)">What happens each day — training days, meetings, and events — for publishing before times are set</span></span></button>
         <button class="move-btn" onclick="closeModal();openEventsOnlyReport()"><span><strong>Events by day (print)</strong><br><span style="font-size:11px;color:var(--tx3)">Just the events and which day they're on, in order — no times, no counts, whole meet on one page</span></span></button>
         <button class="move-btn" onclick="closeModal();openPresentation()"><span><strong>Presentation mode</strong><br><span style="font-size:11px;color:var(--tx3)">Full-screen scoreboard walkthrough — one day per screen, arrow keys to move</span></span></button>
         ${anyEventTags()?`<button class="move-btn" onclick="closeModal();splitByEvent()"><span><strong>Split into per-event schedules</strong><br><span style="font-size:11px;color:var(--tx3)">Creates a separate saved schedule for each tagged event (Junior / Senior / Qualifier) — this master stays untouched</span></span></button>`:''}
@@ -6283,7 +6413,8 @@ function renderGenerateModal(timed){
       ${aud==='broadcast'
         ?`${cfg.forCoaches?'':`<button class="btn" onclick="UI.bcastSessId=null;busy(this,exportBroadcast)">Run-of-show (.xlsx)</button>`}
            <button class="btn btn-p" onclick="UI.bcastSessId=null;printBroadcast()">${cfg.forCoaches?"Coaches' copy \u2014 Print / PDF":'Print / PDF'}</button>`
-        :`<button class="btn" onclick="busy(this,exportOpsTimeline)">Ops Timeline (.xlsx)</button>
+        :`<button class="btn" onclick="openOverviewReport(true)" title="What happens each day — training, meetings and events — with no times. Uses the scope and days picked above.">Overview — no times</button>
+           <button class="btn" onclick="busy(this,exportOpsTimeline)">Ops Timeline (.xlsx)</button>
            <button class="btn" onclick="busy(this,exportExcel)">Excel</button>
            <button class="btn btn-p" onclick="printReport()">Print / PDF</button>`}
     </div>
