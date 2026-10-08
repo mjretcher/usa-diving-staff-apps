@@ -10512,7 +10512,9 @@ function atlasReportHtml(res){
       if (!r) return ''; if (r.share != null) return `${Math.round(r.share*100)}% of each field`; return r.hi != null ? `top ${r.hi}` : ''; };
     const stops = {}; S.routing.forEach((_, L) => { stops[keyOf(L)] = {entries: billedAt(L), rule: L < S.routing.length - 1 ? ruleOf(L) : ''}; });
     const mine = {name: String(S.scenarioName || 'This proposal').replace(/\s*\(2027 scenario\)\s*$/, '').replace(/Proportional Qualification/, 'PQ').replace(/ — .*$/, '').slice(0, 24), sub: 'this proposal', kind: usesShare ? 'pq' : 'sub', highlight: true, stops};
-    const rows = [mine].concat(VD.pathway.filter(r => r.id !== S.scenarioId).map(r => Object.assign({}, r, {highlight: false})));
+    // Retired submissions stay out of committee papers, as in the public 2027 report (junior-circuit-2027 RETIRED).
+    const RETIRED_PAPER = ['bs-msix7ibe-nij21'];   // USA Diving National Office Submission (no longer under consideration)
+    const rows = [mine].concat(VD.pathway.filter(r => r.id !== S.scenarioId && !RETIRED_PAPER.includes(r.id)).map(r => Object.assign({}, r, {highlight: false})));
     const exName = C ? 'Exhibit C' : 'Exhibit B, continued';
     const sub = t => `<div style="margin-top:14px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#171f69">${t}</div>`;
     pF = `<article class="atl-pg" data-screen-label="Report pathway">${head2(exName)}
@@ -10532,7 +10534,7 @@ function atlasReportHtml(res){
   }
   const pN = (S.notes && S.notes.length) ? `<article class="atl-pg" data-screen-label="Report notes">${head2('Appendix')}
     <div class="atl-ex">Appendix. Proposal notes and open assumptions</div>
-    <ol style="padding-left:20px;line-height:1.5">${S.notes.map(n => `<li style="margin:0 0 8px">${esc(n)}</li>`).join('')}</ol>
+    <ol style="padding-left:20px;font-size:9pt;line-height:1.35">${S.notes.map(n => `<li style="margin:0 0 5px">${esc(n)}</li>`).join('')}</ol>
     <p class="atl-fn">These notes are stored with the proposal as written. Anything marked as an assumption to confirm is open until the proposal's author confirms or corrects it.</p>
     <div class="atl-pfoot"><span class="mono">Appendix</span></div></article>` : '';
   return tool + p1 + p2 + p3 + pF + pC + p4 + pN;
