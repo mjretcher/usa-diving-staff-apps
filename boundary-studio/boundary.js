@@ -168,6 +168,7 @@ const S = {
   atlBdL: 0, atlBdR: null,   // Projection: which level / round the breakdown shows
   cmpView: 'card', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
   reportText: {},       // edited wording on the board paper (unfrozen); frozen text lives on S.frozen
+  notes: null,          // the proposal's own notes (source, open assumptions): shown in the rail and as the paper's appendix
   atlMenu: false,
 };
 
@@ -3147,7 +3148,7 @@ async function newBlankProposal(){
     S.assign={}; S.regions=defaultRegions(12); S.levels=null; S.adv=defaultAdv();
     S.finalName='Junior Nationals'; S.compare=null;
     S.routing=null; S.arrival=null; S.seedPool=null; S.firstStopAll=false; S.platformReal=false; S.pathSaved=null; S.pathDirty=false; S.pathNotes=null;
-    S.frozen=null; S.schedPlans={}; S.reportText={}; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null; S._off25=null; S._ownRouting=false;
+    S.frozen=null; S.schedPlans={}; S.reportText={}; S.notes=null; S.savedAt=null; S.cmpIds=[]; S.cmpRes=null; S._off25=null; S._ownRouting=false;
     S.mapName=''; S.mapId=null; S.firstStopPlatform='held';
     syncLevels(); S.active=0; S.scenarioId=null; S.scenarioName=''; S.detailRegion=null; S.dirty=false; S.tierView=0;
     repaintAll(); renderPanel();
@@ -6491,7 +6492,7 @@ async function saveScenario(asNew){
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
     schedPlans:S.schedPlans, schedRules:S.schedRules,
-    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText,
+    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText, notes:S.notes || null,
     levels:saveLevels, finalName:S.finalName, adv:S.adv,
     mapName:S.mapName || null, mapId:S.mapId || null,
     firstStopPlatform:S.firstStopPlatform || 'held', v:4});
@@ -6603,6 +6604,7 @@ async function loadScenario(id){
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
     S.savedAt = row.u || null;
     S.reportText = d.reportText || {};
+    S.notes = Array.isArray(d.notes) && d.notes.length ? d.notes.map(String) : null;
     S.cmpIds = []; S.cmpRes = null;
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
@@ -8638,6 +8640,7 @@ function atlasMapHtml(){
             <button class="atl-pbtn" id="atlMapSave" title="Save only the map (counties, areas, level names)">Save map</button>
           </div>
         </div>
+        ${notesCardHtml()}
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
       <div class="atl-rail-sub">
@@ -9794,6 +9797,16 @@ function atlasXfadeTo(i){
    export; figures are not. Wording lives with the frozen record when there is
    one, so the PDF and the ledger agree; re-freezing resets it.
    ========================================================================= */
+/* The proposal's own notes: where it came from and the assumptions its author
+   still has to confirm. Stored on the proposal (d.notes, an array of plain
+   strings), never generated, so they read exactly as written. */
+function notesCardHtml(){
+  if (!S.notes || !S.notes.length) return '';
+  return `<details class="atl-mapcard" style="margin-top:8px">
+    <summary class="atl-card-lbl" style="cursor:pointer">Proposal notes <span>${fmt(S.notes.length)} · read before the numbers</span></summary>
+    <ol style="margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.45">${S.notes.map(n => `<li style="margin:0 0 5px">${esc(n)}</li>`).join('')}</ol>
+  </details>`;
+}
 function reportTextStore(){
   if (S.frozen){ if (!S.frozen.text) S.frozen.text = {}; return S.frozen.text; }
   return S.reportText || (S.reportText = {});
@@ -10517,7 +10530,12 @@ function atlasReportHtml(res){
       <p class="atl-fn">${fmt(VD.strip2025.events)} Zone events, ${fmt(VD.strip2025.field)} divers-in-events. ${fmt(VD.strip2025.actual)} reached 2025 Junior Nationals; 55% of every field would have sent ${fmt(VD.strip2025.rule)} before round limits and take-up.</p>
       ${pageFoot(6)}</article>` : '');
   }
-  return tool + p1 + p2 + p3 + pF + pC + p4;
+  const pN = (S.notes && S.notes.length) ? `<article class="atl-pg" data-screen-label="Report notes">${head2('Appendix')}
+    <div class="atl-ex">Appendix. Proposal notes and open assumptions</div>
+    <ol style="padding-left:20px;line-height:1.5">${S.notes.map(n => `<li style="margin:0 0 8px">${esc(n)}</li>`).join('')}</ol>
+    <p class="atl-fn">These notes are stored with the proposal as written. Anything marked as an assumption to confirm is open until the proposal's author confirms or corrects it.</p>
+    <div class="atl-pfoot"><span class="mono">Appendix</span></div></article>` : '';
+  return tool + p1 + p2 + p3 + pF + pC + p4 + pN;
 }
 
 function exportChangesCsv(){
