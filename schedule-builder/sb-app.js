@@ -86,7 +86,7 @@ function inferFolder(item){
   if(/senior|usa national|national qualifier/.test(nm))return 'Senior / USA Nationals';
   return 'Other';
 }
-const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true,showCues:true,forCoaches:false}};
+const AUD={public:{l:'Public',showWU:false,showSec:false,showTimes:false,startOnly:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},athletes:{l:'Athletes',showWU:true,showSec:false,showTimes:true,startOnly:false,showEntries:false,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},judges:{l:'Judges',showWU:true,showSec:true,showTimes:true,startOnly:false,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:false},internal:{l:'Operations',showWU:true,showSec:true,showTimes:true,startOnly:false,showEntries:true,practiceTop:false,showFlightCounts:true,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true},broadcast:{l:'Broadcast',showWU:true,showSec:true,showTimes:true,startOnly:false,showEntries:true,practiceTop:false,showFlightCounts:false,showUnsplitAlt:false,showSplitAlt:false,showIntros:true,showAwards:true,showInternalBlocks:true,showCues:true,forCoaches:false}};
 
 // ── UTILS ─────────────────────────────────────────────────────────────
 const uid=()=>Math.random().toString(36).slice(2,10);
@@ -6386,6 +6386,7 @@ function renderGenerateModal(timed){
           <div class="gen-toggles">
             <label class="togrow"><span>Warm-up times</span><span class="tog"><input type="checkbox" ${cfg.showWU?'checked':''} onchange="AUD['${aud}'].showWU=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Event start / end times</span><span class="tog"><input type="checkbox" ${cfg.showTimes?'checked':''} onchange="AUD['${aud}'].showTimes=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow" style="padding-left:14px;${cfg.showTimes?'':'opacity:.45'}" title="For posting a schedule before entries close. Competition events, session times and ceremonies show when they start, with no end time. Training and warm-up keep their full start and end."><span>Competition: start times only<span style="display:block;font-size:10.5px;color:var(--tx3);font-weight:400">Until entry counts are in. Training and warm-ups keep start and end.</span></span><span class="tog"><input type="checkbox" ${cfg.startOnly?'checked':''} ${cfg.showTimes?'':'disabled'} onchange="AUD['${aud}'].startOnly=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Event entries (divers)</span><span class="tog"><input type="checkbox" ${cfg.showEntries?'checked':''} onchange="AUD['${aud}'].showEntries=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Athlete introduction times</span><span class="tog"><input type="checkbox" ${cfg.showIntros!==false?'checked':''} onchange="AUD['${aud}'].showIntros=this.checked;genRender()"><span class="togsl"></span></span></label>
@@ -6641,7 +6642,7 @@ function renderPP(timed,cfg,titleOverride){
       <td class="pe-nm">${esc(nm)}${(ev._combined&&showLbl)?`<span class="pe-tag combined">Combined</span>`:''}${(ev._simul&&showLbl)?`<span class="pe-tag simul">Simultaneous</span>`:''}${splitNow?`<span class="pe-tag split">Split boards</span>`:''}${(splitNow&&cfg.showUnsplitAlt)?`<span class="pe-tag altsplit">Unsplit: ${fdur(altSplitEvDur(ev))}</span>`:''}${(!splitNow&&splitEligible&&cfg.showSplitAlt)?`<span class="pe-tag altsplit">If split: ${fdur(altSplitEvDur(ev))}</span>`:''}</td>
       ${cfg.showEntries?`<td class="pe-div">${divers?divers+'<span class="pe-u">divers</span>':'<span class="pe-dash">—</span>'}</td>`:''}
       ${cfg.showSec?`<td class="pe-sec">${ev._bcast?bcastEvSpd(ev):(ev.secondsPerDive||ev.defaultSpd||35)}<span class="pe-u">s/dive</span></td>`:''}
-      ${cfg.showTimes?`<td class="pe-tm">${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}</td>`:''}
+      ${cfg.showTimes?`<td class="pe-tm">${cfg.startOnly?`Starts ${f12(ev.eventStartMinutes)}`:`${f12(ev.eventStartMinutes)} – ${f12(ev.eventEndMinutes)}`}</td>`:''}
     </tr>`;
   }
   function pracBlock(sess){
@@ -6660,7 +6661,7 @@ function renderPP(timed,cfg,titleOverride){
   function ceremonyRow(o,cls){
     if(!o)return'';
     const ev=(o.evNames&&o.evNames.length)?`<span class="pp-x-ev">${esc(o.evNames.join(' · '))}</span>`:'';
-    const tm=o.moved?'':`<span class="pp-x-tm">${f12(o.start)} – ${f12(o.end)}</span>`;
+    const tm=o.moved?'':`<span class="pp-x-tm">${(cfg.showTimes&&cfg.startOnly)?`Starts ${f12(o.start)}`:`${f12(o.start)} – ${f12(o.end)}`}</span>`;
     return`<div class="pp-x ${cls}"><span class="pp-x-nm">${esc(o.label)}</span>${ev}${tm}</div>`;
   }
   function sessBlock(sess){
@@ -6672,7 +6673,7 @@ function renderPP(timed,cfg,titleOverride){
       <div class="pp-sess-hd">
         <span class="pp-sess-badge ${hasFinals?'finals':''}">${kind}</span>${(sess.timing&&sess.timing.bcastRows)?`<span class="pp-sess-badge" style="background:#009AC7">On air</span>`:''}
         <span class="pp-sess-n">Session ${n}</span>
-        ${cfg.showTimes?`<span class="pp-sess-win">${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}</span>`:''}
+        ${cfg.showTimes?`<span class="pp-sess-win">${cfg.startOnly?`Starts ${f12(t.eventStartMinutes)}`:`${f12(t.eventStartMinutes)} – ${f12(t.sessionEndMinutes)}`}</span>`:''}
         ${cfg.showWU?`<span class="pp-sess-wu">Warm-up ${f12(t.warmupStartMinutes)}–${f12(t.warmupEndMinutes)}</span>`:''}
       </div>
       ${(()=>{const nt=sessNoteFor(sess,cfg);return nt?`<div class="pp-note">${esc(nt)}</div>`:''})()}
