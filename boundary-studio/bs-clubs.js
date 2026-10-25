@@ -84,9 +84,9 @@ async function loadAll(){
   C.loading = true; render();
   try {
     const [geo, zipJ, roster, rowsR, peopleR, stampR] = await Promise.all([
-      fetch('../membership-analytics/boundary-data.json?v=202610251912').then(r => r.json()),
-      fetch('clubs-zip.json?v=202610251912').then(r => r.json()),
-      fetch('clubs-roster.json?v=202610251912').then(r => r.json()),
+      fetch('../membership-analytics/boundary-data.json?v=202610251932').then(r => r.json()),
+      fetch('clubs-zip.json?v=202610251932').then(r => r.json()),
+      fetch('clubs-roster.json?v=202610251932').then(r => r.json()),
       NEON.query(`SELECT membership_year::int AS y,
                          coalesce(trim(club),'')            AS club,
                          coalesce(trim(membership_type),'') AS t,
@@ -576,17 +576,28 @@ function pk(A, st){
     <span><b>${fmt(ls.filter(l=>!l.unatt && l.total).length)}</b> of ${fmt(ls.filter(l=>!l.unatt).length)} clubs with members</span>
     <span><b>${fmt(ls.filter(l=>l.unatt).reduce((a,l)=>a+l.total,0))}</b> Unattached</span>`;
 }
+/* Print tables. Every column on one landscape page is a must, so the numeric
+   column headers are set sideways: each membership type name reads on one line
+   and the number columns can be narrow, which leaves room for club names and
+   locations to sit on one line too. No column or figure is dropped. */
+const vth = (t, cls) => `<th class="v${cls ? ' ' + cls : ''}"><span>${esc(t)}</span></th>`;
 function printStateTable(A){
   const rows = A.states.slice().sort(stateOrder);
-  return `<table class="pt"><colgroup><col class="cn"><col class="cl"></colgroup><thead><tr><th class="l">State</th><th>Clubs w/ members</th>${C.types.map(t=>`<th>${esc(t)}</th>`).join('')}<th>Unattached</th><th class="tot">Total</th></tr></thead><tbody>
-    ${rows.map(s=>`<tr><td class="l">${esc(s.name)}</td><td>${fmt(s.clubsWith)}/${fmt(s.clubs)}</td>${C.types.map(t=>cell(s.by[t])).join('')}${cell(s.unatt)}<td class="tot">${fmt(s.total)}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td class="l">All</td><td>${fmt(rows.reduce((a,s)=>a+s.clubsWith,0))}/${fmt(rows.reduce((a,s)=>a+s.clubs,0))}</td>${C.types.map(t=>cell(A.typeTot[t])).join('')}${cell(rows.reduce((a,s)=>a+s.unatt,0))}<td class="tot">${fmt(A.total)}</td></tr></tfoot></table>`;
+  return `<table class="pt ps-t"><colgroup><col class="cn"><col class="cc">${C.types.map(()=>'<col>').join('')}<col><col class="ct"></colgroup><thead><tr><th class="l h">State</th>${vth('Clubs with members / clubs')}${C.types.map(t=>vth(t)).join('')}${vth('Unattached')}${vth('Total memberships','tot')}</tr></thead><tbody>
+    ${rows.map(s=>`<tr><td class="l">${esc(s.name)}</td><td>${fmt(s.clubsWith)} / ${fmt(s.clubs)}</td>${C.types.map(t=>cell(s.by[t])).join('')}${cell(s.unatt)}<td class="tot">${fmt(s.total)}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td class="l">All states</td><td>${fmt(rows.reduce((a,s)=>a+s.clubsWith,0))} / ${fmt(rows.reduce((a,s)=>a+s.clubs,0))}</td>${C.types.map(t=>cell(A.typeTot[t])).join('')}${cell(rows.reduce((a,s)=>a+s.unatt,0))}<td class="tot">${fmt(A.total)}</td></tr></tfoot></table>`;
+}
+function printLoc(l){
+  if (l.unatt) return '<span class="dim">Where members live</span>';
+  if (l.info.exact) return esc(l.info.city ? l.info.city + ' ' + l.info.zip : l.info.zip);
+  if (l.info.zip) return '<span class="ap">Approx. ' + esc(l.info.zip) + '</span>';
+  return '&mdash;';
 }
 function printClubTable(ls){
   const tot = { by: {}, total: 0, people: 0 };
   ls.forEach(l => { C.types.forEach(t => { if (l.by[t]) tot.by[t] = (tot.by[t] || 0) + l.by[t]; }); tot.total += l.total; tot.people += l.people; });
-  return `<table class="pt"><colgroup><col class="cn"><col class="cl"></colgroup><thead><tr><th class="l">Club</th><th class="l">Location</th>${C.types.map(t=>`<th>${esc(t)}</th>`).join('')}<th class="tot">Total</th><th>People</th></tr></thead><tbody>
-    ${ls.map(l=>`<tr class="${l.unatt?'un':''}"><td class="l">${esc(l.name)}</td><td class="l loc">${l.unatt ? 'Where members live' : l.info.exact ? esc((l.info.city ? l.info.city + ' ' : '') + l.info.zip) : l.info.zip ? 'Approx. ' + esc(l.info.zip) : '&mdash;'}</td>${C.types.map(t=>cell(l.by[t])).join('')}<td class="tot">${fmt(l.total)}</td><td>${fmt(l.people)}</td></tr>`).join('')}
+  return `<table class="pt"><colgroup><col class="cn"><col class="cl">${C.types.map(()=>'<col>').join('')}<col class="ct"><col class="cp"></colgroup><thead><tr><th class="l h">Club</th><th class="l h">Location</th>${C.types.map(t=>vth(t)).join('')}${vth('Total memberships','tot')}${vth('People')}</tr></thead><tbody>
+    ${ls.map(l=>`<tr class="${l.unatt?'un':''}"><td class="l">${l.unatt ? 'Unattached' : esc(l.name)}</td><td class="l loc">${printLoc(l)}</td>${C.types.map(t=>cell(l.by[t])).join('')}<td class="tot">${fmt(l.total)}</td><td>${fmt(l.people)}</td></tr>`).join('')}
     </tbody><tfoot><tr><td class="l">State total</td><td></td>${C.types.map(t=>cell(tot.by[t])).join('')}<td class="tot">${fmt(tot.total)}</td><td>${fmt(tot.people)}</td></tr></tfoot></table>`;
 }
 
