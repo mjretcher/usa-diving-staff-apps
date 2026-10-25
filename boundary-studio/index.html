@@ -1502,14 +1502,16 @@ tr[data-hl]:hover{background:#eef7fb}
 .cbx-method{margin:4px 2px 30px;max-width:1100px}
 @media(max-width:700px){.cbx-acts{margin-left:0}.cbx-kpis .big{font-size:34px}.cbx-f select{min-width:140px}}
 #cbxPrint{display:none}
-@page cbx{size:letter landscape;margin:0.35in}
+/* margin 0 so the browser has nowhere to print its own header/footer (date,
+   title, URL, page numbers); the white space is padding on the report instead,
+   repeated on every page a section runs onto. */
+@page cbx{size:letter landscape;margin:0}
 @media print{
   body.cbx-printing > *:not(#cbxPrint){display:none !important}
   body.cbx-printing #cbxPrint{display:block;page:cbx;font-family:'Inter',Arial,sans-serif;color:#13213a}
-  #cbxPrint .pp{break-after:page;page-break-after:always}
-  #cbxPrint .pp.st{break-after:auto;page-break-after:auto;break-inside:avoid;page-break-inside:avoid;margin-bottom:14pt}
-  #cbxPrint .pp.st + .pp.end{break-before:page;page-break-before:always}
-  #cbxPrint .pp.end{break-after:auto;page-break-after:auto}
+  #cbxPrint .pp{break-after:page;page-break-after:always;padding:0.35in 0.4in;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  #cbxPrint .pp.st{break-after:auto;page-break-after:auto;break-inside:avoid;page-break-inside:avoid;margin-bottom:0;padding-bottom:0.1in}
+  #cbxPrint .pp:last-child{break-after:auto;page-break-after:auto}
   #cbxPrint h1{font-family:'Barlow Condensed',Arial,sans-serif;font-size:22pt;color:#171F69;margin:0 0 2pt;text-transform:uppercase;letter-spacing:.04em}
   #cbxPrint h2{font-family:'Barlow Condensed',Arial,sans-serif;font-size:15pt;color:#171F69;margin:0 0 3pt;text-transform:uppercase;letter-spacing:.04em}
   #cbxPrint .ps{font-size:8.5pt;color:#555;margin-bottom:6pt}
@@ -1684,7 +1686,7 @@ tr[data-hl]:hover{background:#eef7fb}
   {"src":"bs-reports.js?v=202609251330"},
   {"src":"jc-report.js?v=202609250140","module":true},
   {"src":"pricing.js?v=202609250140"},
-  {"src":"bs-clubs.js?v=202610251530"}
+  {"src":"bs-clubs.js?v=202610251912"}
 ]</script>
 <script src="bs-shell.js?v=202610251530"></script>
 </body>

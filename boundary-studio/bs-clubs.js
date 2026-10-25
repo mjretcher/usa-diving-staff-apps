@@ -84,9 +84,9 @@ async function loadAll(){
   C.loading = true; render();
   try {
     const [geo, zipJ, roster, rowsR, peopleR, stampR] = await Promise.all([
-      fetch('../membership-analytics/boundary-data.json?v=202610251530').then(r => r.json()),
-      fetch('clubs-zip.json?v=202610251530').then(r => r.json()),
-      fetch('clubs-roster.json?v=202610251530').then(r => r.json()),
+      fetch('../membership-analytics/boundary-data.json?v=202610251912').then(r => r.json()),
+      fetch('clubs-zip.json?v=202610251912').then(r => r.json()),
+      fetch('clubs-roster.json?v=202610251912').then(r => r.json()),
       NEON.query(`SELECT membership_year::int AS y,
                          coalesce(trim(club),'')            AS club,
                          coalesce(trim(membership_type),'') AS t,
@@ -542,7 +542,7 @@ function printReport(onlyState){
   const old = $('cbxPrint'); if (old) old.remove();
   const el = document.createElement('div'); el.id = 'cbxPrint';
   const title = `USA Diving Clubs and Memberships &mdash; ${esc(yearLabel(C.year))}`;
-  const sub = `${esc(asOf(C.year))} &middot; printed ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}${C.type ? ' &middot; map and totals filtered to ' + esc(C.type) : ''}`;
+  const sub = `${esc(asOf(C.year))}${C.type ? ' &middot; map and totals filtered to ' + esc(C.type) : ''}`;
   const states = A.states.slice().sort(stateOrder).filter(s => !onlyState || s.st === onlyState);
   const savedState = C.state, savedQ = C.q, savedSel = C.selClub;
   C.selClub = null;
@@ -562,8 +562,6 @@ function printReport(onlyState){
       <div class="ps">${fmt(s.clubsWith)} of ${fmt(s.clubs)} clubs with members &middot; ${fmt(s.total)} memberships${s.unatt ? ' (' + fmt(s.unatt) + ' Unattached)' : ''}</div>
       ${printClubTable(ls)}</section>`;
   });
-  h += `<section class="pp end"><h2>Notes</h2><p>${methodNote()}</p>
-    <p>Source: membership.members in Neon (Webpoint member exports, names and contact details removed). Map positions: ${esc(C.zipMeta.source)}.</p></section>`;
   el.innerHTML = h;
   document.body.appendChild(el);
   C.state = savedState; C.q = savedQ; C.selClub = savedSel;
