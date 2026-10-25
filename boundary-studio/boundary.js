@@ -1174,8 +1174,9 @@ function renderCompare(){
   if (!ch) return '';
   const body = [...ch.rows.entries()].map(([an, inner])=>{
     const src = [...inner.entries()].sort((a,b)=>b[1].m-a[1].m || b[1].c-a[1].c);
-    const same = src.filter(([bn])=>bn===an).reduce((s,[,v])=>s+v.m, 0);
-    const from = src.filter(([bn])=>bn!==an).slice(0,4)
+    const pb = ch.pairOf.get(an);
+    const same = src.filter(([bn])=>bn===pb).reduce((s,[,v])=>s+v.m, 0);
+    const from = src.filter(([bn])=>bn!==pb).slice(0,4)
       .map(([bn,v])=>`<span class="bs-src">${esc(bn)} <b>${fmt(v.m)}</b></span>`).join('');
     return `<tr><td><b>${esc(an)}</b></td><td class="num">${fmt(same)}</td>
       <td>${from || '<span class="note">nothing new</span>'}</td></tr>`;
@@ -1188,7 +1189,7 @@ function renderCompare(){
     <table class="bs-table"><thead><tr>
       <th>Area now</th><th class="num">Members it keeps</th><th>Members it takes from</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <div class="note" style="margin-top:6px">Matched by area name. Rename areas to match the other proposal if you want a like-for-like read.</div>
+    <div class="note" style="margin-top:6px">${ch.pairedByName ? 'Areas are matched by name.' : 'The two maps name their areas differently, so each area is paired with the area of the other map it shares the most counties with.'}</div>
   </div>`;
 }
 
@@ -2595,10 +2596,8 @@ function renderFinancials(){
   const caveat = `${feesByCellNote()}<p class="note">Entry fees ${S.fees ? '<b>as typed above</b>' : 'at the published rate for each tier'},
       less the DiveMeets pass-through.
       Membership dues and the senior circuit are not here &mdash; Pricing Studio carries those.
-      <b>Filled</b> is entries against the places the rules make available at that tier &mdash; capacity, not a
-      forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
-      <b>Biggest &divide; smallest</b> is the number a single host cut lives or dies on: a tier far from 1&times;
-      cannot be paid by one rule, whatever the rule is.</p>`;
+      <b>Filled</b> is entries against the places the rules make available at that tier; a tier can run over 100% where the rules admit extra qualifiers by average score.
+      <b>Biggest &divide; smallest</b> compares the largest and smallest meet at a tier; the further from 1&times;, the harder it is for one host fee to suit every meet.</p>`;
 
   // No comparison loaded: the original single-scenario table, unchanged --
   // grouped columns only mean something once there's a second scenario to
@@ -4194,9 +4193,8 @@ function renderScheduleInspector(res){
       Two age groups are not put on the same board in a session unless it costs the session nothing.</p>
     <p class="note">Checked against those real schedules, this reproduces 12 of 14 sampled sessions to within 12%.
       The two it misses are dense three-event sessions where the host stacked a board and accepted a longer
-      session; there this model reads <i>longer</i> than the day actually ran, which is the safe direction for a
-      feasibility check. Sessions run back-to-back once started, with practice reserved before the first and
-      between each pair. Nothing here changes a real schedule; it is a plan to argue with.</p>`;
+      session; there this model reads <i>longer</i> than the day actually ran. Sessions run back-to-back once started, with practice reserved before the first and
+      between each pair.</p>`;
 }
 
 /* ============================================================================
@@ -5622,9 +5620,8 @@ function renderPathway(){
       ? `<p class="note" style="margin-top:12px">The <b>arrive</b> figure on each level is how big that field
           actually turns out to be against the size the rules alone would send &mdash; above 100% means athletes
           arrive by the average-score route as well as the bands; below means qualified athletes decline.
-          Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden. Places are counted,
-          never simulated: nothing here predicts who wins.
-          ${M==='money' ? ' A tier still marked <b>not measured</b> below has no real season to check it against and assumes full turnout &mdash; treat that figure as a ceiling, not a forecast.' : ''}</p>`
+          Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden.
+          ${M==='money' ? ' A tier still marked <b>not measured</b> below has no real season to check it against and assumes every qualifier attends.' : ''}</p>`
       : `<div class="ps-warn" style="margin-top:12px"><b>These are qualified places, not expected entries.</b>
           ${S.takeUp && S.takeUp.fallback
             ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
@@ -5634,7 +5631,7 @@ function renderPathway(){
       what a session costs and how long it runs, while divers tell you how many bodies need a bed and an award.
       Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
       gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
-      measured, so treat the headcount as indicative rather than a count.</p>` : ''}`;
+      measured; that headcount is an estimate.</p>` : ''}`;
   wirePathway();
 }
 
@@ -8330,13 +8327,58 @@ function zoneOutlineSvg(assignOf, Z){
   return defs + rings + labels;
 }
 
+/* Minimum-cost assignment (Hungarian method) on a square matrix. Returns
+   col[row]. Used to pair areas of two maps whose names differ. */
+function hungarianAssign(cost){
+  const n = cost.length, INF = 1e15;
+  const u = new Array(n+1).fill(0), v = new Array(n+1).fill(0), p = new Array(n+1).fill(0), way = new Array(n+1).fill(0);
+  for (let i = 1; i <= n; i++){
+    p[0] = i; let j0 = 0; const minv = new Array(n+1).fill(INF), used = new Array(n+1).fill(false);
+    do { used[j0] = true; const i0 = p[j0]; let delta = INF, j1 = 0;
+      for (let j = 1; j <= n; j++) if (!used[j]){
+        const cur = cost[i0-1][j-1] - u[i0] - v[j];
+        if (cur < minv[j]){ minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta){ delta = minv[j]; j1 = j; } }
+      for (let j = 0; j <= n; j++){ if (used[j]){ u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta; }
+      j0 = j1; } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const col = new Array(n).fill(-1);
+  for (let j = 1; j <= n; j++) if (p[j]) col[p[j]-1] = j-1;
+  return col;
+}
+
 /* ---------- churn between any two maps ----------
-   compareChurn() compared the live map with the Compare-with slot. The same
-   walk, generalised, so the Compare workspace can do it for every pinned map
-   and the board paper for its baseline. Matched by area name, as before. */
+   A county "changes" when its area under map A is not the area it was in under
+   map B. Areas are matched by name when both maps use the same set of names.
+   When the names differ (e.g. "Region 1" vs "Region Championship 1"), matching
+   by name would count every county as changed, so each area is instead paired
+   one-to-one with the area of the other map it shares the most counties with
+   (ties broken by members), and a county changes only when it leaves its pair. */
+function capFirst(t){ t = String(t == null ? '' : t); return t.charAt(0).toUpperCase() + t.slice(1); }
 function churnBetween(A, B){
   const y = S.year;
-  const nameOf = (map, ri) => (ri==null || ri<0 || !map.regions[ri]) ? '— unassigned —' : map.regions[ri].name;
+  const UN = '— unassigned —';
+  const nameOf = (map, ri) => (ri==null || ri<0 || !map.regions[ri]) ? UN : map.regions[ri].name;
+  const an0 = A.regions.map(r => r.name), bn0 = B.regions.map(r => r.name);
+  const sameNames = an0.length === bn0.length && new Set(an0).size === an0.length
+    && an0.every(x => bn0.includes(x));
+  // pairOf: A area name -> paired B area name (identity when names match).
+  const pairOf = new Map();
+  if (sameNames) an0.forEach(x => pairOf.set(x, x));
+  else {
+    const ov = an0.map(() => bn0.map(() => 0));
+    for (const c of S.geo.counties){
+      const a = A.assign[c.f], b = B.assign[c.f];
+      if (a==null || a<0 || !A.regions[a] || b==null || b<0 || !B.regions[b]) continue;
+      const st = S.geo.stats[c.f], m = (st && st[y]) ? st[y].m : 0;
+      ov[a][b] += 1e6 + m;              // counties first, members break ties
+    }
+    const N = Math.max(an0.length, bn0.length);
+    const cost = Array.from({length:N}, (_, i) => Array.from({length:N}, (_, j) => (i < an0.length && j < bn0.length) ? -ov[i][j] : 0));
+    const col = hungarianAssign(cost);
+    an0.forEach((x, i) => { const j = col[i]; if (j != null && j >= 0 && j < bn0.length && ov[i][j] > 0) pairOf.set(x, bn0[j]); });
+  }
   const rows = new Map();
   const changes = [];
   let moved = 0, movedM = 0, totM = 0;
@@ -8346,7 +8388,8 @@ function churnBetween(A, B){
     const st = S.geo.stats[f];
     const m = (st && st[y]) ? st[y].m : 0;
     totM += m;
-    if (an !== bn){
+    const same = an === UN ? bn === UN : pairOf.get(an) === bn;
+    if (!same){
       moved++; movedM += m;
       changes.push({f, county:c.n, st:c.st, from:bn, to:an, m});
     }
@@ -8356,7 +8399,7 @@ function churnBetween(A, B){
     rec.c++; rec.m += m; inner.set(bn, rec);
   }
   changes.sort((a,b) => b.m - a.m || a.county.localeCompare(b.county));
-  return {rows, moved, movedM, totM, changes,
+  return {rows, moved, movedM, totM, changes, pairOf, pairedByName: sameNames,
           sameStructure: A.regions.length === B.regions.length};
 }
 
@@ -9099,7 +9142,7 @@ function atlasPathwayHtml(res){
       what a session costs and how long it runs, while divers tell you how many bodies need a bed and an award.
       Diver counts come from the share of athletes measured contesting each combination of boards, per age group and
       gender. Anything marked <i>estimate</i> means this pathway has moved the mix of events away from what was
-      measured, so treat the headcount as indicative rather than a count. Places are counted, never simulated — nothing here predicts who wins.</p>`;
+      measured; that headcount is an estimate.</p>`;
 }
 
 function atlasEventGrid(L){
@@ -9218,8 +9261,7 @@ function atlasTakeUpNote(M){
     return `<p class="atl-note" style="margin-top:22px">The <b>arrive</b> figure on each level is how big that field
       actually turns out to be against the size the rules alone would send — above 100% means athletes
       arrive by the average-score route as well as the bands; below means qualified athletes decline.
-      Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden under Structure. Places are counted,
-      never simulated: nothing here predicts who wins.${M==='money' ? ' A tier marked <b>not measured</b> has no real season to check it against and assumes full turnout — treat that figure as a ceiling, not a forecast.' : ''}</p>`;
+      Defaults are measured from <b>${esc(S.takeUp.basis)}</b> and can be overridden under Structure.${M==='money' ? ' A tier marked <b>not measured</b> has no real season to check it against and assumes every qualifier attends.' : ''}</p>`;
   return `<div class="atl-warn" style="margin-top:22px"><b>These are qualified places, not expected entries.</b>
       ${S.takeUp && S.takeUp.fallback
         ? 'No calibrated alignment could be loaded, so there is no measured take-up to apply — every figure here assumes every qualifier turns up, which never happens.'
@@ -9266,8 +9308,8 @@ function atlasMoneyHtml(res){
   }
 
   const caveat = `<p class="atl-note" style="margin-top:12px">Entry fees ${S.fees ? '<b>as typed at right</b>' : 'at the published rate for each tier'}, less the DiveMeets pass-through ($${levyPerEntry().toFixed(2)} per entry in ${yearNumBoundary(S.year)}).
-      <b>Filled</b> is entries against the places the rules make available at that tier — capacity, not a forecast, so a tier can legitimately run over 100% where the rules admit extra qualifiers by average score.
-      <b>Biggest ÷ smallest</b> is the number a single host cut lives or dies on: a tier far from 1× cannot be paid by one rule, whatever the rule is.
+      <b>Filled</b> is entries against the places the rules make available at that tier; a tier can run over 100% where the rules admit extra qualifiers by average score.
+      <b>Biggest ÷ smallest</b> compares the largest and smallest meet at a tier; the further from 1×, the harder it is for one host fee to suit every meet.
       Membership dues and the senior circuit are in Pricing Studio, not here.</p>`;
 
   // What it costs an athlete to go
@@ -9562,12 +9604,8 @@ function atlasCompareHtml(){
       if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {dataF:true});
       if (!c.map) return '';
       const same = c.churn && c.churn.sameStructure;
-      const changed = outline && same ? (f => {
-        const a = S.assign[f], b = c.map.assign[f];
-        const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name;
-        const bn = (b==null||b<0||!c.map.regions[b]) ? null : c.map.regions[b].name;
-        return an !== bn;
-      }) : null;
+      const chg = same && c.churn.changes ? new Set(c.churn.changes.map(x => x.f)) : null;
+      const changed = outline && chg ? (f => chg.has(f)) : null;
       return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed, dataF:true});
     };
     if (view === 'side'){
@@ -9811,6 +9849,73 @@ function reportTextStore(){
   if (S.frozen){ if (!S.frozen.text) S.frozen.text = {}; return S.frozen.text; }
   return S.reportText || (S.reportText = {});
 }
+/* ---------- board paper: never clip ----------
+   Each paper page is a fixed letter-size sheet (overflow hidden, so print and
+   screen match). Text can grow -- a longer proposal name, an edited paragraph,
+   more areas -- and anything past the bottom edge used to be cut off. This pass
+   measures every page and moves whatever does not fit onto a continuation page
+   (a table is split between rows, its header repeated), then renumbers pages. */
+function reportReflow(root){
+  if (!root) return;
+  const pages = [...root.querySelectorAll('article.atl-pg')];
+  if (!pages.length || !pages[0].clientHeight) return;
+  const anyHead = root.querySelector('.atl-ph2 > span');
+  const headLeft = anyHead ? anyHead.innerHTML : '';
+  const bottomOf = (el, pg) => { const r = el.getBoundingClientRect(), pr = pg.getBoundingClientRect();
+    return r.bottom - pr.top + (parseFloat(getComputedStyle(el).marginBottom) || 0); };
+  const isHead = el => el.matches('.atl-sec, .atl-ex, .atl-exs, .atl-zleg-h, h1, h2, h3');
+  const gridCols = g => { const t = getComputedStyle(g).gridTemplateColumns; return t && t !== 'none' ? t.trim().split(/\s+/).length : 1; };
+  let guard = 0;
+  const fit = pg => {
+    if (++guard > 60) return;
+    const foot = pg.querySelector(':scope > .atl-pfoot');
+    const cs = getComputedStyle(pg);
+    const limit = pg.clientHeight - (parseFloat(cs.paddingBottom) || 0) - (foot ? foot.offsetHeight : 0);
+    const kids = [...pg.children].filter(el => el !== foot);
+    const startIdx = kids.length && kids[0].classList.contains('atl-ph2') ? 1 : 0;
+    let cut = -1;
+    for (let i = startIdx; i < kids.length; i++) if (bottomOf(kids[i], pg) > limit + 0.5){ cut = i; break; }
+    if (cut < 0) return;
+    const move = [];
+    const el = kids[cut];
+    if (el.classList.contains('atl-rt') && el.children.length){
+      // Split the table between rows.
+      const n = gridCols(el), cells = [...el.children];
+      const headN = cells.findIndex(c => !c.classList.contains('th'));
+      const hN = headN < 0 ? 0 : Math.ceil(headN / n) * n;
+      let rowCut = -1;
+      for (let r = hN; r < cells.length; r += n){
+        const rowBottom = Math.max(...cells.slice(r, r + n).map(c => c.getBoundingClientRect().bottom)) - pg.getBoundingClientRect().top;
+        if (rowBottom > limit + 0.5){ rowCut = r; break; }
+      }
+      if (rowCut > hN){
+        const g2 = el.cloneNode(false);
+        g2.style.marginTop = '14px';
+        cells.slice(0, hN).forEach(c => g2.appendChild(c.cloneNode(true)));
+        cells.slice(rowCut).forEach(c => g2.appendChild(c));
+        move.push(g2);
+      } else if (cut > startIdx) move.push(el);
+    } else if (cut > startIdx) move.push(el);
+    if (!move.length && cut === startIdx) return;     // a single block taller than a page: nothing to move it to
+    // Keep a heading with what follows it.
+    let back = cut - 1;
+    while (back > startIdx && isHead(kids[back]) && move[0] === el){ move.unshift(kids[back]); back--; }
+    move.push(...kids.slice(cut + 1));
+    const label = (pg.querySelector(':scope > .atl-ph2 > span:last-child') || {}).textContent || '';
+    const np = document.createElement('article');
+    np.className = 'atl-pg atl-pg-cont';
+    np.setAttribute('data-screen-label', (pg.getAttribute('data-screen-label') || 'Report') + ' (continued)');
+    np.innerHTML = `<div class="atl-ph2"><span>${headLeft}</span><span>${esc(label.replace(/ \(continued\)$/, '') ? label.replace(/ \(continued\)$/, '') + ' (continued)' : 'Continued')}</span></div>`;
+    move.forEach(m => np.appendChild(m));
+    if (foot) np.appendChild(foot.cloneNode(true));
+    pg.after(np);
+    fit(np);
+  };
+  pages.forEach(fit);
+  const all = [...root.querySelectorAll('article.atl-pg')];
+  all.forEach((pg, i) => { const f = pg.querySelector(':scope > .atl-pfoot .mono'); if (f) f.textContent = `Page ${i + 1} of ${all.length}`; });
+}
+
 function rt(key, dflt, tag, cls){
   const store = reportTextStore();
   const html = store[key] != null ? store[key] : dflt;
@@ -10272,7 +10377,7 @@ function atlasReportHtml(res){
     const m = t0.rows[i] ? t0.rows[i].m : 0, a = t0.rows[i] ? t0.rows[i].a : 0;
     const e = bal ? bal.totals[i] : null;
     const per = bal ? bal.per[i] : null;
-    const br = bx ? bx.regionRows.find(x => x.name === r.name) : null;
+    const br = bx ? bx.regionRows.find(x => x.name === ((churn && churn.pairOf && churn.pairOf.get(r.name)) || r.name)) : null;
     const dm = !bx ? null : (br ? m - br.m : 'new');
     const dTxt = dm == null ? '—' : dm === 'new' ? 'new' : dm === 0 ? '—' : (dm > 0 ? '+' : '−') + fmt(Math.abs(dm));
     const dCls = dm == null || dm === 'new' || dm === 0 ? 'c-muted' : (dm > 0 ? 'c-ok' : 'c-bad');
@@ -10290,23 +10395,23 @@ function atlasReportHtml(res){
   const p1 = `<article class="atl-pg" data-screen-label="Report p1">
     <div class="atl-mast"><div class="atl-ml"><img src="../shared/images/diver-mark.svg" alt=""><div><div class="atl-mb">USA Diving</div><div class="atl-ms">High Performance Operations</div></div></div>
       <div class="atl-mr"><div>Competition Committee · Board paper</div><div><span class="mono">${esc(paperId)}</span> · ${esc(name)}</div></div></div>
-    ${rt('title', `${esc(singulariseLevel(tierName(0)) || tierName(0))} boundary realignment: ${esc(S.scenarioName || 'untitled proposal')}`, 'h1')}
+    ${rt('title', `${esc(capFirst(singulariseLevel(tierName(0)) || tierName(0)))} boundary realignment: ${esc(S.scenarioName || 'untitled proposal')}`, 'h1')}
     ${rt('meta', `For discussion · Prepared ${longDate()} · Data build ${d10(stamps.advance_data)} · Season ${esc(yearLabelBoundary(S.year))}`, 'div', 'atl-meta')}
     <div class="atl-rec">${rt('h1', '1. Summary', 'div', 'atl-sec')}${rt('rec', recDefault, 'p')}</div>
-    ${rt('h2', `2. ${esc(tierName(0))} under this proposal`, 'div', 'atl-sec')}
-    <div class="atl-rt" style="grid-template-columns:18px 1.5fr 1fr 1fr 1fr 1fr 1fr">
+    ${rt('h2', `2. ${esc(capFirst(tierName(0)))} under this proposal`, 'div', 'atl-sec')}
+    <div class="atl-rt" style="grid-template-columns:18px 2.3fr 1fr 1fr 1fr 1fr 1.1fr">
       <div class="th first"></div><div class="th">${esc(singulariseLevel(tierName(0))||'Region')}</div><div class="th num">Members</div><div class="th num">Athletes (unique)</div><div class="th num">Event entries</div><div class="th num">vs even split</div><div class="th num last">Δ members ${baseName ? 'vs baseline' : '(no baseline)'}</div>
       ${regRows}
       <div class="tot first"></div><div class="tot">Total mapped</div><div class="tot num">${fmt(mappedM)}</div><div class="tot num">${fmt(mappedA)}</div><div class="tot num">${bal ? fmt(Math.round(bal.grand)) : '—'}</div><div class="tot num">${bal ? bal.spread.toFixed(1) + ' pp gap' : '—'}</div><div class="tot num last">${totDelta}</div>
     </div>
-    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` : ' No baseline proposal is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
+    ${rt('foot1', `Entries are competing entries from the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} field, reallocated county by county. "vs even split" is each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}'s share of entries against 1/${fmt(n)}, in percentage points.${unmappable > 0 ? ` Members with a foreign or invalid address (${fmt(unmappable)}) are excluded from every figure in this paper.` : ''}${bx ? ` Baseline: ${esc(baseName)}.` + (churn && !churn.pairedByName ? ` The two maps name their areas differently, so each ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} is compared with the baseline area it shares the most counties with; "new" marks one with no counterpart.` : '') : ' No baseline proposal is loaded, so no change column is shown — choose one in the toolbar above.'}`, 'p', 'atl-fn')}
     ${pageFoot(1)}</article>`;
 
   // Page 2 -- Exhibit A
   const changedVs = churn ? (f => { const a = S.assign[f], b = base.assign[f];
     const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name;
     const bn = (b==null||b<0||!base.regions[b]) ? null : base.regions[b].name;
-    return an !== bn; }) : null;
+    return an == null ? bn != null : churn.pairOf.get(an) !== bn; }) : null;
   // Zones on the same page: each Zone's members, summed from the regions it is
   // built from (the same member counts as the region legend above).
   const PZ = paperZones();
@@ -10318,13 +10423,13 @@ function atlasReportHtml(res){
     const partsLabel = ns => ns.every(x => /^Region\s+\S+$/i.test(x)) && ns.length > 1
       ? 'Regions ' + ns.map(x => x.replace(/^Region\s+/i, '')).join(ns.length === 2 ? ' & ' : ', ')
       : ns.join(', ');
-    return `<div class="atl-zleg-h">${esc(lvName)} <span>members, built from the ${esc(tierName(0).toLowerCase())} above</span></div>
-    <div class="atl-zleg" style="grid-template-columns:repeat(${PZ.names.length <= 6 ? PZ.names.length : 3},1fr)">${PZ.names.map((nm, zi) => `<div><span class="atl-zp">${esc(nm)}</span><span class="mono">${fmt(tot[zi])}</span><em>${esc(partsLabel(parts[zi]))}</em></div>`).join('')}</div>`;
+    return `<div class="atl-zleg-h">${esc(capFirst(lvName))} <span>members, built from the ${esc(tierName(0).toLowerCase())} above</span></div>
+    <div class="atl-zleg" style="grid-template-columns:repeat(${PZ.names.length <= 3 ? PZ.names.length : (PZ.names.length === 4 ? 2 : 3)},minmax(0,1fr))">${PZ.names.map((nm, zi) => `<div><span class="atl-zp">${esc(nm)}</span><span class="mono">${fmt(tot[zi])}</span><em>${esc(partsLabel(parts[zi]))}</em></div>`).join('')}</div>`;
   })() : '';
   const p2 = `<article class="atl-pg" data-screen-label="Report p2">${head2('Exhibit A')}
     ${rt('exA', `Exhibit A. Proposed ${esc(tierName(0).toLowerCase())} boundaries by county`, 'div', 'atl-ex')}
     ${rt(churn && !churn.moved ? 'exAs0' : 'exAs', `Every U.S. county is assigned to exactly one ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}. Solid counties have ${yearNumBoundary(S.year)} competitors; pale counties have none.${churn ? (churn.moved
-      ? ` ${mono(fmt(churn.moved))} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} relative to ${esc(baseName)}; Section 4 lists them.`
+      ? ` ${mono(fmt(churn.moved))} counties change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} relative to ${esc(baseName)}; Section 4 lists them.` + (churn.pairedByName ? '' : ` Because the two maps name their areas differently, each area is paired with the baseline area it shares the most counties with.`)
       : ` The county assignment is identical to ${esc(baseName)}: no county changes ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())}.`) : ''}`, 'div', 'atl-exs')}
     <svg viewBox="0 0 975 610" class="atl-static">${atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED, {zones: paperZones()})}</svg>
     <div class="atl-sum"><span>${mono(fmt(n))} ${esc(tierName(0).toLowerCase())}</span>
@@ -10366,7 +10471,7 @@ function atlasReportHtml(res){
   const tierRows = levels.map(L => { const t = fin.tiers[L];     return `<div class="first">${esc(t.name)}</div><div class="num">${fmt(Math.round(t.entries))}</div><div class="num">${fmt(t.meets)}</div><div class="num">${usd(t.gross)}</div><div class="num last">${usd(t.usad)}</div>`; }).join('');
   const p3 = `<article class="atl-pg" data-screen-label="Report p3">${head2('Exhibit B · Section 3')}
     ${rt('exB', 'Exhibit B. Pathway, projected fields and meets', 'div', 'atl-ex')}
-    ${rt('exBs', `${esc(pathwayPhrase().replace(/^its/, 'The proposal\u2019s').replace(/^the /, 'The '))} applied to the recommended map. Places are counted, never simulated.`, 'div', 'atl-exs')}
+    ${rt('exBs', `${esc(pathwayPhrase().replace(/^its/, 'The proposal\u2019s').replace(/^the /, 'The '))} applied to this map.`, 'div', 'atl-exs')}
     <div class="atl-exb" style="grid-template-columns:repeat(${S.routing.length},1fr)">${exb}</div>
     <div class="atl-rt" style="grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;margin-top:14px">
       <div class="th first">Event entries by level</div><div class="th num">Projected</div><div class="th num">Actual 2024</div><div class="th num">Actual 2025</div><div class="th num last">Actual 2026</div>
@@ -10390,7 +10495,7 @@ function atlasReportHtml(res){
   if (C){
     const cols = C.map((c,i) => ({name: i === 0 ? name : c.label, c}));
     const aShort = name.length > 34 ? name.slice(0,32).trim() + '…' : name;
-    const svgFor = (i) => { const c = C[i]; if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED); if (!c.map) return ''; const same = c.churn && c.churn.sameStructure; const changed = same ? (f => { const a = S.assign[f], b = c.map.assign[f]; const an = (a==null||a<0||!S.regions[a]) ? null : S.regions[a].name; const bn = (b==null||b<0||!c.map.regions[b]) ? null : c.map.regions[b].name; return an !== bn; }) : null; return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed}); };
+    const svgFor = (i) => { const c = C[i]; if (i === 0) return atlasStaticSvg(f => S.assign[f], ri => (S.regions[ri]||{}).color || ATLAS_UNASSIGNED); if (!c.map) return ''; const same = c.churn && c.churn.sameStructure; const chg = same && c.churn.changes ? new Set(c.churn.changes.map(x => x.f)) : null; const changed = chg ? (f => chg.has(f)) : null; return atlasStaticSvg(f => c.map.assign[f], ri => (c.map.regions[ri]||{}).color || ATLAS_UNASSIGNED, {changed}); };
     const dl = (v, b, f, inverse) => { if (b == null || v == null || !isFinite(v-b) || Math.round(v*10) === Math.round(b*10)) return ''; const up = v > b; return ` <span style="font-size:8.5pt;color:${(inverse ? !up : up) ? '#15803d' : '#b3122b'}">${up?'+':'−'}${f(Math.abs(v-b))}</span>`; };
     const fi = v => fmt(Math.round(v)), fpp = v => v.toFixed(1) + ' pp';
     const row = (label, get, f, inverse, strong) => `<div class="first" style="${strong?'font-weight:600':''}">${label}</div>` + C.map((c,i) => `<div class="num ${i===C.length-1?'last':''}" style="${strong?'font-weight:600':''}">${c.error ? '—' : (get(c) == null ? '—' : f(get(c)))}${i > 0 && !c.error ? dl(get(c), get(C[0]), f, inverse) : ''}</div>`).join('');
@@ -10414,7 +10519,7 @@ function atlasReportHtml(res){
     ].join('');
     const nLevC = Math.max(0, ...C.map(c => (c.levels||[]).length));
     const structColsFor = sub => `<div style="display:grid;grid-template-columns:repeat(${sub.length},1fr);gap:0;border:1px solid #c9d0dc;margin-top:12px;font-size:9pt;line-height:1.35">${sub.map(i => { const col = cols[i]; const c = col.c; return `<div style="padding:8px 10px;border-right:1px solid #c9d0dc;min-width:0">
-        <div style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;color:#171f69"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(col.name)}</span></div>
+        <div style="display:flex;align-items:center;gap:6px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11pt;color:#171f69"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow-wrap:anywhere;min-width:0">${esc(col.name)}</span></div>
         ${c.error ? `<div style="color:#b3122b">${esc(c.error)}</div>` : (c.levels||[]).map((l,L) => `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eceff4">
           <div style="font-weight:600;color:#0f1633">${esc(l.name)} <span style="color:#6b7385;font-weight:400">· ${l.stops} ${l.stops===1?'stop':'stops'} · ${(l.detail||[]).length} ${(l.detail||[]).length===1?'round':'rounds'}${l.offered != null ? ' · ' + l.offered + ' events' : ''}</span></div>
           <div><span class="mono">${fmt(Math.round(l.entries))}</span> event entries (projected)${L > 0 && l.qualified != null ? `: <span class="mono">${fmt(Math.round(l.qualified))}</span> places sent by ${esc(l.fromName || 'the level above')}, <span class="mono">${fmt(Math.round(l.arrivedFromPlaces))}</span> take them up (${Math.round((l.takeUpEff != null ? l.takeUpEff : 1)*100)}%, ${l.measured != null ? 'measured event by event' : 'assumed'})${Math.round(l.direct) >= 1 ? ` + <span class="mono">${fmt(Math.round(l.direct))}</span> entering directly` : ''}` : ' — the seeded field'}${l.actual != null ? `; actual ${yearNumBoundary(S.year)}: <span class="mono">${fmt(l.actual)}</span> event entries` : ''}</div>
@@ -10431,12 +10536,12 @@ function atlasReportHtml(res){
     <article class="atl-pg" data-screen-label="Report exhibit C2">${head2('Exhibit C, continued')}
       ${rt('exC', 'Exhibit C, continued. Maps and figures', 'div', 'atl-ex')}
       ${rt('exCs', `${cmpAsSaved ? 'Each proposal exactly as it was saved: its own map, pathway, fees and host model, run over the same season and measured behaviour.' : 'The same pathway, fees and season run over each map; only the boundaries differ.'} ${cols.some((c, i) => i > 0 && c.c && c.c.churn && c.c.churn.moved) ? `Counties outlined in red sit in a different area than in ${esc(name)}, which is the baseline every change is measured against.` : `Every proposal shown uses the same county map as ${esc(name)}, so no county is outlined; the differences are in structure, pathway and fees.`}`, 'div', 'atl-exs')}
-      <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? (c.c.churn.moved ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : `same county map as ${esc(aShort)}`) : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(${C.length},1fr);gap:14px;margin:16px 0 10px">${cols.map((c,i) => `<div style="min-width:0"><div style="display:flex;align-items:baseline;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12pt;color:#0f1633"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow-wrap:anywhere;min-width:0">${esc(c.name)}</span></div><svg viewBox="0 0 975 610" class="atl-static" style="margin:6px 0 0">${svgFor(i)}</svg><div style="font-size:8.5pt;color:#4b5568;margin-top:4px">${i===0 ? 'baseline' : c.c.error ? esc(c.c.error) : (c.c.churn && c.c.churn.sameStructure) ? (c.c.churn.moved ? `${fmt(c.c.churn.moved)} counties · ${fmt(c.c.churn.movedM)} members move vs ${esc(aShort)}` : `same county map as ${esc(aShort)}`) : 'different structure — county moves not comparable'}</div></div>`).join('')}</div>
       ${pageFoot(5 + flowPages + c1n)}</article>
     <article class="atl-pg" data-screen-label="Report exhibit C2b">${head2('Exhibit C, continued')}
       ${rt('exCt', 'Exhibit C, continued. Figures side by side', 'div', 'atl-ex')}
       <div class="atl-rt" style="grid-template-columns:2fr repeat(${C.length},1fr)">
-        <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Inter',sans-serif">${esc(c.name)}</span></div>`).join('')}
+        <div class="th first"></div>${cols.map((c,i) => `<div class="th num ${i===C.length-1?'last':''}" style="display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0"><span class="atl-let sm" style="background:${CMP_TAG[i]}">${CMP_LET[i]}</span><span style="overflow-wrap:anywhere;min-width:0;font-family:'Inter',sans-serif">${esc(c.name)}</span></div>`).join('')}
         ${rows}
       </div>
       ${rt('exCf', `Calibrated fields apply the measured take-up at each level. Green and red mark whether a change against ${esc(aShort)} is better or worse for that line.`, 'p', 'atl-fn')}
@@ -10453,7 +10558,7 @@ function atlasReportHtml(res){
       ${first ? rt('exF', C ? 'Exhibit C. How an athlete reaches Junior Nationals' : 'Exhibit B, continued. How an athlete reaches Junior Nationals', 'div', 'atl-ex') : ''}
       ${first ? rt('exFs', `Each round is a stop; each line a route out of it, as thick as the event entries it carries. Under each route: the place needed, places won → places taken up, and places won by board (1-meter · 3-meter · platform).`, 'div', 'atl-exs') : ''}
       ${two.map(fc => `<div style="margin-top:${first ? 4 : 4}px;break-inside:avoid">
-        <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;color:#171f69;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #eceff4">${C ? `<span class="atl-let sm" style="background:${CMP_TAG[fc.i]}">${CMP_LET[fc.i]}</span>` : ''}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(fc.name)}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5pt;color:#171f69;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #eceff4">${C ? `<span class="atl-let sm" style="background:${CMP_TAG[fc.i]}">${CMP_LET[fc.i]}</span>` : ''}<span style="overflow-wrap:anywhere;min-width:0">${esc(fc.name)}</span></div>
         ${fc.svg}</div>`).join('')}
       ${pg === flowPageList.length - 1 ? `<div style="display:flex;flex-wrap:wrap;gap:3px 14px;white-space:nowrap;font-size:7.5pt;color:#4b5568;margin-top:8px">
         <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#009ac7" stroke-width="5"/></svg> next level</span>
@@ -10475,12 +10580,12 @@ function atlasReportHtml(res){
     : 'No county changes ' + esc((singulariseLevel(tierName(0))||'region').toLowerCase()) + ' against the baseline.';
   const p4 = `<article class="atl-pg" data-screen-label="Report p4">${head2('Sections 4–5')}
     ${rt('h4', `4. Counties that change ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} ${vs}`, 'div', 'atl-sec m26b')}
-    <div class="atl-rt" style="grid-template-columns:1.5fr .5fr 1fr 1fr .7fr">
+    <div class="atl-rt" style="grid-template-columns:1.4fr .45fr 1fr 1.5fr .65fr">
       <div class="th first">County</div><div class="th">State</div><div class="th">From</div><div class="th">To</div><div class="th num last">Members</div>${chgRows}</div>
     ${rt('foot4', chgSummary, 'p', 'atl-fn')}
     ${rt('h5', '5. Methodology', 'div', 'atl-sec m26b')}
     ${rt('m1', `Members are counted from the membership export (data build ${d10(stamps.advance_data)}), geocoded to county by ZIP code, PII stripped. A member is attributed to the ${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} containing their home county. Athletes and coaches are counted separately.${unmappable > 0 ? ` ${fmt(unmappable)} members with a foreign or invalid address are excluded.` : ''}`, 'p', 'atl-m')}
-    ${rt('m2', `Competing entries are the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? ` (${esc(stamps.calibration_basis)})` : ''} where one exists, otherwise full turnout is assumed and the figure is a ceiling. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
+    ${rt('m2', `Competing entries are the real ${esc(seedStageLabel())} ${yearNumBoundary(S.year)} entries reallocated county by county. Advancement follows the route bands of ${esc(pathwayPhrase())}; take-up at each level is the measured arrival rate${stamps.calibration_basis ? `, measured on ${esc(stamps.calibration_basis)},` : ''} where one exists; otherwise every qualifier is counted as attending. Diver counts use the measured events-per-athlete mix${stamps.multiplicity ? ` (${d10(stamps.multiplicity)})` : ''}.`, 'p', 'atl-m')}
     ${inferredStageLevels().length ? `<p class="atl-m" style="color:#9a4a06">Stages worked out from meet counts, not set: ${inferredStageLevels().map(x => `${esc(tierName(x.L))} counts as ${esc(STAGE_LABEL[x.r.stage])} (${x.r.meets} ${x.r.meets === 1 ? 'meet' : 'meets'})`).join('; ')}. Set each on the Structure tab ("Counts as") to fix it.</p>` : ''}
     ${rt('m3', S.frozen ? `Figures were frozen from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) on ${d10(S.frozen.at)}${S.frozen.note ? ` (${esc(S.frozen.note)})` : ''} and are reproducible from that record. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`
                        : `Figures are live from the Boundary Studio proposal "${esc(name)}" (record ${mono(esc(id))}) and have not yet been frozen. Freeze the proposal before presenting so the record is reproducible. The county-by-${esc((singulariseLevel(tierName(0))||'region').toLowerCase())} appendix is supplied as a CSV with this paper.`, 'p', 'atl-m')}
@@ -10714,8 +10819,13 @@ function wireAtlasMain(main){
     // A baseline loaded but nothing pinned yet: build the side-by-side from it once.
     if (!S.cmpRes && S.compare && !S._repCmpTried){ S._repCmpTried = S.compare.id; S.cmpAxis = 'scenario'; S.cmpIds = [S.compare.id]; atlasRebuildCompare().then(() => { if (S.panelMode === 'report') atlasMain(); }); }
     else if (S.compare && S._repCmpTried && S._repCmpTried !== S.compare.id){ S._repCmpTried = null; }
+    reportReflow(main);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (S.panelMode === 'report') reportReflow(main); });
+    on('[data-rt]', 'blur', () => reportReflow(main));
+    if (!window._bsReflowPrint){ window._bsReflowPrint = true;
+      window.addEventListener('beforeprint', () => { if (S.panelMode === 'report') reportReflow($id('atlMain')); }); }
     const pr = $id('atlPrint');
-    if (pr) pr.addEventListener('click', () => window.print());
+    if (pr) pr.addEventListener('click', () => { reportReflow(main); window.print(); });
     const ap = $id('atlCsvAppendix');
     if (ap) ap.addEventListener('click', exportChangesCsv);
     if (!S.compare && !S._baseTried){ S._baseTried = true; loadCompare('seed-2026-official'); }
@@ -10775,7 +10885,7 @@ function classicBootView(el){
    to the Atlas presentation. */
 function classicShellHtml(){
   return `
-    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: nothing here assumes today's Region / Zone / E-W-C shape.
+    <div class="callout"><b>How it works:</b> pick an area chip, then click (or click-drag) counties to paint them in — or switch to <b>Paint whole state</b> for fast broad strokes, then refine county-by-county where the real lines matter (I&#8209;35, Southern&nbsp;California, Clark&nbsp;County). Unassigned counties are tinted navy by how many members live there, so the membership itself shows you where the lines want to go. Add or remove areas to test any structure &mdash; 12, 9, 6, whatever. Under <b>Names &amp; structure</b> you can rename every area and every level, and add or remove whole levels: the structure is not fixed to today's Region / Zone / E-W-C shape.
     <div class="bs-seedrow"><button class="tab" id="bsLoadOfficial" style="font-weight:800">Open official 2026 Regions</button>
       <span class="note">Traced from the published Regional Championship map plus the Region 4 / 10 / 11 / 12 notes.</span></div>
     <div class="bs-seedrow"><button class="tab" id="bsAutoOpen" style="font-weight:800;background:#009AC7;color:#fff;border-color:#009AC7">&#9889; Auto-draw the map&hellip;</button>

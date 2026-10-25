@@ -1797,7 +1797,7 @@ function renderAthleteCost(){
   }).join('');
   return `<div class="card"><div class="card-h">
       <h3>Cost to the athlete</h3>
-      <div class="note">What one athlete&rsquo;s family actually pays to go through the pathway. Entry fees and dues only &mdash; travel, lodging and coaching are not modelled.</div>
+      <div class="note">What one athlete&rsquo;s family actually pays to go through the pathway. Entry fees and dues only &mdash; travel, lodging and coaching are not included.</div>
     </div><div class="card-b">
     <div class="ps-inline" style="margin-top:0;padding-top:0;border:0">
       <label>Pathway <select id="psPreset">${presetOpts}<option value="custom"${PS.pathway.preset==='custom'?' selected':''}>Custom</option></select></label>
@@ -1949,7 +1949,7 @@ ${drifted ? `<div class="warn"><b>This scenario is off the calibrated baseline.<
 <b>Observed.</b> Regional entry volumes come from competition results joined to the membership roster by county, so they are exact for the map as drawn. Senior entry counts come from the live DiveMeets sync. The national field is anchored on ${PS.natSource==='live' ? `the live entry count for meet ${esc(PS.natMeet)}${PS.natFetched?', fetched '+esc(PS.natFetched):''}` : `a 28 July 2026 snapshot of ${fmt(NAT_FALLBACK_2026)} entries taken while signup was still open, because meet ${esc(PS.natMeet)} has no synced count`}.<br>
 <b>Reconstructed.</b> Zone volumes are rebuilt as advancement out of Regionals, plus athletes clearing the average 15th-place score, plus the cohort entering the circuit at Zones. This ties to the observed Zone field exactly at the calibrated baseline by construction, and is therefore a decomposition rather than an independent test.<br>
 <b>Modelled.</b> East/West/Central and ${esc(PS.finalName)} volumes are derived from the advancement rules, because no structure other than the one actually run has real results behind it.<br>
-<b>Assumptions.</b> Volume responses to price are the elasticity figures entered on the pricing screen, expressed as percentage of volume lost per 10% price increase; where these are zero the model holds volume fixed and reports pure price arithmetic. Membership counts are the live roster for ${yearNum()}${PS.year==='y26'?', which is a year-to-date figure and not directly comparable to a completed season':''}. Costs of delivery are not modelled: this is a revenue view only.
+<b>Assumptions.</b> Volume responses to price are the elasticity figures entered on the pricing screen, expressed as percentage of volume lost per 10% price increase; where these are zero the model holds volume fixed and reports pure price arithmetic. Membership counts are the live roster for ${yearNum()}${PS.year==='y26'?', which is a year-to-date figure and not directly comparable to a completed season':''}. Costs of delivery are not included; this is revenue only.
 </p>
 <div class="foot">USA Diving Pricing Studio &middot; generated ${when} &middot; figures recomputed at generation time from the live membership roster and competition results.</div>
 </div></body></html>`;

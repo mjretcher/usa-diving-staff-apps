@@ -604,7 +604,7 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-note">Entries are not people: athletes commonly contest two or three events, so an entry count
           tells you what a session costs and how long it runs, not how many bodies need a bed. Projected figures are
           qualified places carried up by the published rules and the take-up measured on the alignment that season
-          was actually run under &mdash; they are not a forecast of who wins.</p>
+          was actually run under.</p>
       </section>`;
     }
   },
@@ -977,7 +977,7 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
           three events, so the two answer different questions — entries decide session length and fee income,
           divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
-          of events away from what was measured, so read it as indicative.</p>
+          of events away from what was measured, so that count is an estimate.</p>
 
         <h3 class="mr-h3">The same field, four ways</h3>
         <p class="mr-p">These are four different kinds of number, not four estimates of the same one.
@@ -1548,8 +1548,7 @@ const BOUNDARY_SECTIONS = {
           return lines.length ? `<p class="mr-note mr-soft"><b>How complete the field behind this is.</b>
             Share of each real stage that resolved to a county, the rest being entries that could not be
             matched to a membership record with a usable zip code: ${lines.join(' &middot; ')}. Unmatched
-            entries are excluded, never estimated in — so a figure here is understated by roughly that
-            margin rather than wrong in an unknown direction. Full record in
+            entries are excluded, so a figure here is understated by roughly that margin. Full record in
             <b>${NAMES.boundary_defensibility}</b>.</p>` : '';
         })()}
 
@@ -1579,9 +1578,7 @@ const BOUNDARY_SECTIONS = {
           <tbody>${finHeadlineRows}</tbody></table>
         <p class="mr-note">Priced at today's standing fee card for all three systems — the same card CCE and the
           counter-proposal are already compared under — so a financial difference below is caused by how many
-          athletes and meets the rules produce, not by a different fee schedule. This is not what 2026 actually
-          collected under the old rules; it is what today's fee card would collect on that old structure's field,
-          held constant on purpose so the comparison isolates the rule change.</p>
+          athletes and meets the rules produce, not by a different fee schedule. These figures are today's fee card applied to the old structure's field, not what 2026 collected.</p>
 
         <h3 class="mr-h3">Financial breakdown</h3>
         <table class="mr-table"><thead><tr><th scope="col">&nbsp;</th>
@@ -1595,13 +1592,9 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-note">Membership dues, synchro and the senior circuit are not here — entry fees only, same
           as every other financial comparison in this report family.</p>
 
-        <p class="mr-note mr-warn"><b>What this is and is not.</b> This projects real 2026 entry volume through
-          each rule set on the same map — it is not a prediction of who will actually enter under a new circuit,
-          and it does not yet account for behaviour change (a bigger or smaller field can itself change how many
-          athletes choose to compete). Today's system starts its count at Regionals because Regions exist there;
-          both proposals start at Zones because Regions do not exist in either. That is a real structural
-          difference between old and new, not a gap in the comparison. The financial figures carry the same
-          caveat: they are entry-fee volume under today's rate card, not a revenue forecast.</p>
+        <p class="mr-note">Real 2026 entry volume is carried through each rule set on the same map, with the
+          same athletes entering. Today's system starts its count at Regionals because Regions exist there;
+          both proposals start at Zones because Regions do not exist in either. Financial figures are entry fees at today's rate card.</p>
       </section>`;
     }
   },
@@ -1875,9 +1868,7 @@ const EQUITY_SECTIONS = {
             <td class="mr-num">${rc.clubs_split_pct}%</td><td class="mr-soft">${fmt(rc.clubs_split)} of ${fmt(rc.clubs)} clubs</td></tr>
         </tbody></table>
         <p class="mr-note">A modest overall rate can still move a specific bar substantially where a
-          handful of strong athletes cluster near the cutoff — this is a real, rule-permitted pattern,
-          not noise to average away, and it's the honest reason today's-bar and under-this-map numbers
-          above can diverge from what a purely geographic model would predict.</p>` : '';
+          handful of strong athletes cluster near the cutoff ; that is why today's-bar and under-this-map numbers above can differ.</p>` : '';
 
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_equity}</h2>
@@ -1944,13 +1935,10 @@ const EQUITY_SECTIONS = {
         Combining counties into fewer, larger areas correctly raises the bar, because the same
         athletes then compete for one set of ${rank} places instead of several.</p>
         ${propBlocks || '<p class="mr-p mr-warn">Not enough counties with usable history fall inside this map to estimate.</p>'}
-        <p class="mr-note"><b>What this is and is not:</b> an estimate built from
-        ${esc((Q.years||[]).join(' and '))} Regionals results, keyed to each athlete's home county and
-        assuming the same athletes competing under different boundaries. It cannot predict who will
-        actually enter, it says nothing about athletes who change clubs, and it models only the
-        Regionals gate. The region-choice figures above are the honest measure of how far that
-        assumption can be wrong. Treat it as the relative ordering of areas, not a forecast of any
-        score.</p>
+        <p class="mr-note">Built from ${esc((Q.years||[]).join(' and '))} Regionals results, keyed to each
+        athlete's home county, with the same athletes competing under the new boundaries. Athletes who change
+        clubs are not reflected, and only the Regionals stage is covered. The region-choice figures above show
+        how often athletes competed outside their home region.</p>
       </section>`;
     }
   },
@@ -2356,11 +2344,10 @@ const FOCUSED_SECTIONS = {
           <tbody>${moneyRows}</tbody></table>` : ''}
         ${moneyNote}
 
-        <p class="mr-note"><b>On unique athletes, honestly.</b> The athlete counts above are derived from a
+        <p class="mr-note"><b>Unique athletes.</b> The athlete counts above are derived from a
           measured events-per-athlete rate, not from identified individuals — the entry data does not carry a
           reliable person identifier across meets. Anything marked <i>est.</i> means this pathway has shifted
-          the event mix away from what that rate was measured on. Treat athlete counts as good enough for
-          sizing beds and awards, and not as a roster. Where an exact headcount matters, the fee-paying
+          the event mix away from what that rate was measured on. Where an exact headcount matters, the fee-paying
           arrivals column is the one that is directly counted.</p>
       </section>`;
     }
@@ -2492,7 +2479,7 @@ const FOCUSED_SECTIONS = {
         <p class="mr-note">The final column is the share of that stage's real 2024 field that could be
           matched to a membership record with a usable zip code. 2024 resolves less completely than later
           seasons because the county lookup was built from 2025/2026 members, so athletes who left before
-          2025 are less likely to match. The unmatched remainder is excluded, never estimated.</p>`
+          2025 are less likely to match. The unmatched remainder is excluded.</p>`
         : `<p class="mr-p mr-warn">The 2024 entry pools are not loaded, so only the membership change above
             can be shown. Open Boundary Studio once and regenerate to include the re-based field.</p>`}
 
@@ -2592,8 +2579,7 @@ const FOCUSED_SECTIONS = {
         ${compRows ? `<h3 class="mr-h3">How complete the entry data is</h3>
         <p class="mr-note">Every real-season figure comes from matching a result to a membership record and
           then to a county. That match does not succeed for every entry. Unmatched entries are excluded from
-          the pools, never estimated into them — so a lower share here means a stage's field is
-          <em>understated</em>, not wrong in an unknown direction.</p>
+          the pools, so a lower share here means a stage's field is understated by that margin.</p>
         <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Season and stage</th>
           <th scope="col" class="mr-num">Real entries</th><th scope="col" class="mr-num">Resolved</th>
           <th scope="col" class="mr-num">Excluded</th><th scope="col" class="mr-num">Share resolved</th>
@@ -2629,8 +2615,7 @@ const FOCUSED_SECTIONS = {
             entry counts per stage, and fee income at published rates. These are counted from records, and
             are the figures to put in front of a committee.</td></tr>
           <tr><td><b>Projected by published rule</b></td><td>Field sizes carried up a pathway, calibrated to
-            a measured take-up rate. Reproducible and rule-driven, but a projection of qualified places —
-            not a roster, and not a forecast of who wins.</td></tr>
+            a measured take-up rate. Reproducible and rule-driven, projecting qualified places.</td></tr>
           <tr><td><b>Modelled, internal only</b></td><td class="mr-under">Maximum-capacity
             ceilings, decline re-based fields, unique-athlete estimates, and any stage marked
             <i>modelled</i> or <i>est.</i> These rest on assumptions that have not been measured. Use them
