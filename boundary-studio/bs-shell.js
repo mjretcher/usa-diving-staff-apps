@@ -28,6 +28,7 @@
       // reveal rather than at boot, because both are expensive.
       if (v === 'boundary' && window.renderBoundary) window.renderBoundary();
       if (v === 'pricing' && window.renderPricing) window.renderPricing();
+      if (v === 'clubs' && window.renderClubs) window.renderClubs();
     }));
   }
 
