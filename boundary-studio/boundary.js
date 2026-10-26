@@ -89,6 +89,9 @@ const POOLS = [
 
 const S = {
   geo: null,            // boundary-data.json
+  // State lines: when whole is on, every state stays in one area except the
+  // states listed in splitOk. Auto-draw obeys it; the Map only flags breaches.
+  statePolicy: {whole: false, splitOk: ['CA']},
   advData: null,        // advance-data.json
   regions: [],          // [{name, color}]  = tier 0 groups (the painted areas)
   assign: {},           // fips -> region index
@@ -6492,7 +6495,7 @@ async function saveScenario(asNew){
     arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText, notes:S.notes || null,
     levels:saveLevels, finalName:S.finalName, adv:S.adv,
     mapName:S.mapName || null, mapId:S.mapId || null,
-    firstStopPlatform:S.firstStopPlatform || 'held', v:4});
+    firstStopPlatform:S.firstStopPlatform || 'held', statePolicy:S.statePolicy, v:4});
   try {
     await NEON.query(
       `INSERT INTO membership.boundary_scenarios (id, name, data) VALUES ($1,$2,$3::jsonb)
@@ -6637,6 +6640,7 @@ async function loadScenario(id){
     if (!S.adv.pool) S.adv.pool = '2026|Zones';
     syncLevels();
     S.firstStopPlatform = d.firstStopPlatform === 'skip' ? 'skip' : 'held';
+    S.statePolicy = normStatePolicy(d.statePolicy);
     S.mapName = d.mapName || (isSeed(id) ? seedName(id, row.name) : '');
     S.mapId = d.mapId || null;
     S.scenarioId = id; S.scenarioOwner = row.owner == null ? null : String(row.owner); S.scenarioName = seedName(id, row.name); S.active = 0; S.detailRegion = null; S.dirty = false;
@@ -7013,6 +7017,113 @@ function autoAssignStates(A, weights, N, opts){
 
 const MI_PER_UNIT = 3.1;      // calibrated against known county-pair distances
 const TRAVEL_REF  = 250;      // miles; normalisation reference, not a limit
+
+/* ---------- state lines ----------
+   "Keep states whole, except ..." -- a state not on the exception list moves
+   as one block. Done by collapsing each kept state into a single node for the
+   optimiser (exception states stay county by county), so every other auto-draw
+   setting -- kept areas, today's map, time zones, age-group viability -- still
+   applies. The figures shown afterwards are recomputed county by county. */
+const US_STATES = {AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',
+  DE:'Delaware',DC:'District of Columbia',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',
+  IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',
+  MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',
+  NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',
+  RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',
+  WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming',PR:'Puerto Rico'};
+function normStatePolicy(p){
+  p = p || {};
+  const ok = Array.isArray(p.splitOk) ? p.splitOk.filter(x => typeof x === 'string' && x.length === 2) : ['CA'];
+  return {whole: !!p.whole, splitOk: [...new Set(ok)]};
+}
+/* Kept states that currently sit in more than one area of the base tier. */
+function splitKeptStates(assign, regions){
+  const pol = S.statePolicy;
+  if (!pol || !pol.whole || !S.geo) return [];
+  const ok = new Set(pol.splitOk || []);
+  const by = {};
+  for (const c of S.geo.counties){
+    if (ok.has(c.st)) continue;
+    const a = assign[c.f];
+    if (a == null || a < 0 || !regions[a]) continue;
+    (by[c.st] = by[c.st] || new Set()).add(a);
+  }
+  return Object.keys(by).filter(st => by[st].size > 1).sort()
+    .map(st => ({st, areas: [...by[st]].map(a => regions[a].name)}));
+}
+function smartAssignKeepStates(A, ctx, N, opts, splitOk){
+  const n = A.fips.length, ok = new Set(splitOk || []);
+  const W = ctx.weights;
+  const key = i => ok.has(A.st[i]) ? 'c' + i : 's' + A.st[i];
+  const bIdx = new Int32Array(n), keys = [], kIdx = {};
+  for (let i = 0; i < n; i++){ const k = key(i); if (kIdx[k] === undefined){ kIdx[k] = keys.length; keys.push(k); } bIdx[i] = kIdx[k]; }
+  const B = keys.length;
+  const members = Array.from({length:B}, () => []);
+  for (let i = 0; i < n; i++) members[bIdx[i]].push(i);
+  const bw = new Array(B).fill(0), bst = new Array(B), bcx = new Array(B), bcy = new Array(B);
+  const badj = Array.from({length:B}, () => new Set());
+  for (let b = 0; b < B; b++){
+    let sx = 0, sy = 0, sw = 0;
+    for (const i of members[b]){ const w = (W[i] || 0) + 0.001; bw[b] += W[i] || 0; sx += A.cx[i]*w; sy += A.cy[i]*w; sw += w; }
+    bcx[b] = sx/sw; bcy[b] = sy/sw; bst[b] = A.st[members[b][0]];
+  }
+  for (let i = 0; i < n; i++) for (const j of A.adj[i]){ const a = bIdx[i], c = bIdx[j]; if (a !== c){ badj[a].add(c); badj[c].add(a); } }
+  const BA = {fips: keys, st: bst, cx: bcx, cy: bcy, adj: badj.map(x => Array.from(x))};
+  // Majority (by weight) of a per-county value inside a block.
+  const major = (vals, b, skip) => { const t = {}; let best = null, bv = -1;
+    for (const i of members[b]){ const v = vals[i]; if (skip(v)) continue; t[v] = (t[v] || 0) + (W[i] || 0) + 0.001; if (t[v] > bv){ bv = t[v]; best = v; } }
+    return best; };
+  const ctxB = {weights: bw};
+  if (ctx.ages){ const NG = (ctx.ages[0] || []).length; ctxB.ages = members.map(ms => { const s2 = new Array(NG).fill(0); for (const i of ms) for (let g = 0; g < NG; g++) s2[g] += ctx.ages[i][g] || 0; return s2; }); }
+  if (ctx.baseline){
+    const lockedVals = ctx.locked ? ctx.baseline.map((v, i) => ctx.locked[i] ? v : -1) : null;
+    ctxB.baseline = members.map((ms, b) => { const lv = lockedVals ? major(lockedVals, b, v => v == null || v < 0) : null;
+      if (lv != null) return lv; const v = major(ctx.baseline, b, v => v == null || v < 0); return v == null ? -1 : v; });
+  }
+  if (ctx.locked) ctxB.locked = members.map(ms => ms.some(i => ctx.locked[i]));
+  const optsB = Object.assign({}, opts);
+  if (opts.tzOf) optsB.tzOf = members.map((ms, b) => { const v = major(opts.tzOf, b, v => v == null || v < 0); return v == null ? -1 : v; });
+  const res = smartAssign(BA, ctxB, N, optsB);
+  const assign = new Array(n);
+  for (let i = 0; i < n; i++) assign[i] = res.assign[bIdx[i]];
+  // County-level figures for what is shown.
+  const st = res.stats, wsum = new Array(N).fill(0), counties = new Array(N).fill(0);
+  let same = 0, baseTot = 0;
+  for (let i = 0; i < n; i++){ const r = assign[i]; if (r < 0) continue; wsum[r] += W[i] || 0; counties[r]++;
+    if (ctx.baseline){ baseTot += W[i] || 0; if (ctx.baseline[i] === r) same += W[i] || 0; } }
+  const mean = wsum.reduce((a, b) => a + b, 0) / N;
+  const sd = Math.sqrt(wsum.reduce((a, v) => a + (v - mean)*(v - mean), 0) / N);
+  const hostMin = opts.hostMin != null ? opts.hostMin : 25;
+  const insular = i => A.st[i] === 'AK' || A.st[i] === 'HI';
+  let tNum = 0, tDen = 0;
+  for (let r = 0; r < N; r++){
+    const cs = [], hs = [];
+    for (let i = 0; i < n; i++) if (assign[i] === r && !insular(i) && (W[i] || 0) > 0){ cs.push(i); if (W[i] >= hostMin) hs.push(i); }
+    if (!cs.length) continue;
+    let best = Infinity;
+    const cand = hs.length ? hs : [null];
+    for (const h of cand){
+      let hx, hy;
+      if (h == null){ let sx = 0, sy = 0, sw = 0; for (const i of cs){ sx += A.cx[i]*W[i]; sy += A.cy[i]*W[i]; sw += W[i]; } hx = sx/sw; hy = sy/sw; }
+      else { hx = A.cx[h]; hy = A.cy[h]; }
+      let sum = 0; for (const i of cs) sum += W[i] * Math.hypot(A.cx[i]-hx, A.cy[i]-hy) * MI_PER_UNIT;
+      if (sum < best) best = sum;
+    }
+    tNum += best; for (const i of cs) tDen += W[i];
+  }
+  st.weights = wsum; st.counties = counties;
+  st.min = Math.min(...wsum); st.max = Math.max(...wsum);
+  st.ratio = st.min > 0 ? st.max / st.min : Infinity;
+  st.spread = mean > 0 ? sd / mean : 0;
+  st.travelMi = tDen > 0 ? tNum / tDen : 0;
+  if (ctx.baseline) st.continuity = baseTot > 0 ? 1 - same / baseTot : 0;
+  delete st.chosenHost;
+  // Which states the map actually split.
+  const by = {};
+  for (let i = 0; i < n; i++){ const r = assign[i]; if (r < 0) continue; (by[A.st[i]] = by[A.st[i]] || new Set()).add(r); }
+  const splitStates = Object.keys(by).filter(s2 => by[s2].size > 1).sort().map(s2 => ({st: s2, n: by[s2].size}));
+  return {assign, stats: st, iterations: res.iterations, keepStates: true, splitStates};
+}
 
 function smartAssign(A, ctx, N, opts){
   opts = opts || {};
@@ -7606,7 +7717,7 @@ function picksNeedBase(){
   return (AUTO.picks||[]).some(k => (AUTO_PRESETS.find(x=>x.k===k)||{}).needsBase);
 }
 
-const AUTO = { n: 9, basis: 'members', whole: false, preset: 'blend', result: null,
+const AUTO = { n: 9, basis: 'members', preset: 'blend', result: null,
                busy: false, locks: [], stages: null, withNationals: true, prep: null, picks: ['blend'], tz: false,
                // Host sites are no longer a user choice, but the two things
                // that control did are separable and only one of them should go.
@@ -7840,14 +7951,25 @@ function renderAutoDialog(){
             </div>
             <div class="bs-auto-hint" style="margin-top:6px">Using ${yearLabelBoundary(S.year)} membership. Change the season on the map first for a different year.</div>
           </div>
-          <details class="aa-sec aa-more" ${AUTO.locks.length || AUTO.whole ? 'open' : ''}>
+          <div class="aa-sec">
+            <div class="aa-h"><span>4</span>State lines</div>
+            <div class="bs-auto-chips">
+              <button class="${!S.statePolicy.whole ? 'on' : ''}" onclick="window._bsStateWhole(false)">Split states freely</button>
+              <button class="${S.statePolicy.whole ? 'on' : ''}" onclick="window._bsStateWhole(true)">Keep states whole</button>
+            </div>
+            ${S.statePolicy.whole ? `<div class="bs-auto-hint" style="margin-top:8px">Every state stays in one area, except the states switched on here, which can be split county by county.</div>
+            <div class="bs-auto-chips aa-split">
+              ${[...new Set(['CA', 'TX'].concat(S.statePolicy.splitOk))].map(c => `<button class="sm ${S.statePolicy.splitOk.indexOf(c) >= 0 ? 'on' : ''}" onclick="window._bsStateSplit('${c}')" title="${S.statePolicy.splitOk.indexOf(c) >= 0 ? 'May be split. Click to keep whole' : 'Kept whole. Click to allow a split'}">${S.statePolicy.splitOk.indexOf(c) >= 0 ? '&#9986; ' : ''}${esc(US_STATES[c] || c)}</button>`).join('')}
+              <select class="aa-addst" onchange="if(this.value)window._bsStateSplit(this.value)"><option value="">+ Allow a split in…</option>${Object.keys(US_STATES).filter(c => c !== 'CA' && c !== 'TX' && S.statePolicy.splitOk.indexOf(c) < 0).sort((a, b) => US_STATES[a].localeCompare(US_STATES[b])).map(c => `<option value="${c}">${esc(US_STATES[c])}</option>`).join('')}</select>
+            </div>` : ''}
+          </div>
+          <details class="aa-sec aa-more" ${AUTO.locks.length ? 'open' : ''}>
             <summary>More options</summary>
             <div class="aa-sub">Keep these areas exactly as they are</div>
             <div class="bs-auto-chips">
               ${S.regions.map((rg, i) => `<button class="sm ${AUTO.locks.indexOf(i) >= 0 ? 'on' : ''}" onclick="window._bsAutoLock(${i})" style="border-left:5px solid ${rg.color}">${esc(rg.name || ('Area ' + (i + 1)))}</button>`).join('')}
               ${AUTO.locks.length ? `<button class="sm" onclick="window._bsAutoLock(-1)">Clear</button>` : ''}
             </div>
-            <label class="aa-check"><input type="checkbox" ${AUTO.whole ? 'checked' : ''} onchange="window._bsAutoWhole(this.checked)"> Never split a state (tidier lines, less even)</label>
           </details>
           ${AUTO.error ? `<div class="bs-auto-err">Could not load the map data: ${esc(AUTO.error)}</div>` : ''}
         </div>
@@ -7862,6 +7984,7 @@ function renderAutoDialog(){
             </div>
             <table class="bs-auto-tbl"><thead><tr><th>${esc(singulariseLevel(st[0].name) || 'Area')}</th>${prep.chain.length ? `<th>${esc(st[1] ? st[1].name : '')}</th>` : ''}<th class="num">${AUTO.basis === 'athletes' ? 'Athletes' : 'Members'}</th><th class="num">Counties</th></tr></thead>
               <tbody>${prep.size.map((w, i) => `<tr><td><span class="sw" style="background:${colOf(i)}"></span>${esc(areaOf(i) || ((singulariseLevel(st[0].name) || 'Area') + ' ' + (i + 1)))}</td>${prep.chain.length ? `<td>${esc(groupOf(i))}</td>` : ''}<td class="num">${fmt(Math.round(w))}</td><td class="num">${fmt(prep.cnt[i])}</td></tr>`).join('')}</tbody></table>
+            ${r.splitStates ? `<div class="bs-auto-hint aa-splitres">${(() => { const ok = new Set(S.statePolicy.splitOk); const xs = r.splitStates.filter(x => ok.has(x.st)); return xs.length ? 'Split: ' + xs.map(x => `${esc(US_STATES[x.st] || x.st)} into ${x.n} areas`).join(' · ') + '. Every other state is whole.' : 'No state is split.'; })()}</div>` : ''}
             <div class="bs-auto-legend">Numbers run from the northeast, and each area touches the next where the map allows. Areas are always connected.</div>`}
         </div>
       </div>
@@ -7920,7 +8043,10 @@ window._bsAutoPreset = function(k){
   AUTO.result = null; renderAutoDialog();
 };
 window._bsAutoBasis = function(b){ AUTO.basis=b; AUTO.result=null; renderAutoDialog(); };
-window._bsAutoWhole = function(v){ AUTO.whole=!!v; AUTO.result=null; renderAutoDialog(); };
+window._bsStateWhole = function(v){ S.statePolicy.whole = !!v; S.dirty = true; AUTO.result = null; AUTO.prep = null; renderAutoDialog(); try { renderConsequenceStrip(); } catch(e){} };
+window._bsStateSplit = function(c){ const l = S.statePolicy.splitOk, k = l.indexOf(c);
+  if (k >= 0) l.splice(k, 1); else l.push(c);
+  S.dirty = true; AUTO.result = null; AUTO.prep = null; renderAutoDialog(); try { renderConsequenceStrip(); } catch(e){} };
 
 window._bsAutoRun = function(){
   if (!_autoData) return;
@@ -7940,10 +8066,7 @@ window._bsAutoRun = function(){
       // Any blended objective that measures against today's map needs a
       // baseline, not just the first-ranked one.
       const needsBase = picksNeedBase();
-      if (AUTO.whole){
-        AUTO.result = autoAssignStates(A, w, AUTO.n);
-        AUTO.result.wholeStates = true;
-      } else {
+      {
         // "Keep today's map" measures against whatever is currently painted.
         let baseline = null;
         if (needsBase){
@@ -7968,9 +8091,10 @@ window._bsAutoRun = function(){
             });
           }
         }
-        AUTO.result = smartAssign(A, {weights:w, ages, baseline, locked}, AUTO.n,
-                                  Object.assign({restarts:4, hostMin:AUTO.hostMin, tzOf: AUTO.tz ? tzIndexFor(A) : null},
-                                                blendedOptions()));
+        const aOpts = Object.assign({restarts:4, hostMin:AUTO.hostMin, tzOf: AUTO.tz ? tzIndexFor(A) : null}, blendedOptions());
+        AUTO.result = S.statePolicy.whole
+          ? smartAssignKeepStates(A, {weights:w, ages, baseline, locked}, AUTO.n, aOpts, S.statePolicy.splitOk)
+          : smartAssign(A, {weights:w, ages, baseline, locked}, AUTO.n, aOpts);
       }
       AUTO.error = null;
     } catch(e){ AUTO.error = String(e.message||e); }
@@ -8246,6 +8370,14 @@ function consequenceCells(){
   const tn = tierName(S.tierView);
   const areasLabel = nAreas === 1 ? (singulariseLevel(tn) || tn) : (/s$/i.test(tn) ? tn : tn + 's');
   const out = [{k:'areas', label: areasLabel, value: fmt(nAreas), cls:''}];
+  if (S.tierView === 0 && S.statePolicy && S.statePolicy.whole){
+    const sp = splitKeptStates(S.assign, S.regions);
+    out.push(sp.length
+      ? {k:'states', label: sp.length === 1 ? 'state split' : 'states split', value: sp.map(x => esc(x.st)).join(', '), cls:'warn',
+         hint: 'Set to keep states whole, but these are in more than one area: ' + sp.map(x => `${US_STATES[x.st] || x.st} (${x.areas.join(', ')})`).join('; ') + '. Use Whole state to repaint, or allow the split in Auto-draw.'}
+      : {k:'states', label:'states whole', value:'&#10003;', cls:'ok',
+         hint: 'Every state is in one area' + (S.statePolicy.splitOk.length ? `, apart from ${S.statePolicy.splitOk.map(c => US_STATES[c] || c).join(' and ')}, which may be split.` : '.')});
+  }
   const bal = balanceAt(S.tierView);
   if (bal){
     if (bal.grand > 0 && bal.n > 1)
