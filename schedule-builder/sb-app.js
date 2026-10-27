@@ -1155,7 +1155,12 @@ function resolveConflict(idx){
 
 // ── EVENT CATALOG ─────────────────────────────────────────────────────
 function buildCatalog(meetType){
-  const def=MEET_TYPES[meetType]||MEET_TYPES.custom;const evs=[];
+  let def=MEET_TYPES[meetType]||MEET_TYPES.custom;const evs=[];
+  // The event planner lets a meet switch rounds on or off (e.g. Semifinals at
+  // Junior Nationals) without changing meet type. S.meet.rounds overrides the
+  // type's default round list for this schedule only.
+  const _mr=(typeof S!=='undefined'&&S&&S.meet&&S.meet.meetType===meetType&&Array.isArray(S.meet.rounds)&&S.meet.rounds.length)?S.meet.rounds:null;
+  if(_mr)def={...def,rounds:['Qualifier','Prelim','Semifinal','Final'].filter(r=>_mr.includes(r))};
   for(const grp of(def.groups||[])){for(const gender of['Girls','Boys']){for(const app of['1m','3m']){const nm=`${grp} ${gender} ${al(app)}`;const t=EV_TIMING[nm]||{};evs.push({id:`${grp}-${gender}-${app}`.toLowerCase().replace(/\s+/g,'-'),level:grp,gender,apparatus:app,style:'Individual',defaultDives:t.dives||6,defaultSpd:t.spd||35,rounds:def.rounds||['Qualifier']});}if(def.plat){const nm=`${grp} ${gender} Platform`;const t=EV_TIMING[nm]||{};evs.push({id:`${grp}-${gender}-platform`.toLowerCase().replace(/\s+/g,'-'),level:grp,gender,apparatus:'Platform',style:'Individual',defaultDives:t.dives||6,defaultSpd:t.spd||45,rounds:def.rounds||['Qualifier']});}}}
   if(def.senior){for(const gender of['Women','Men']){for(const app of['1m','3m','10m']){evs.push({id:`senior-${gender}-${app}`.toLowerCase(),level:'Senior',gender,apparatus:app,style:'Individual',defaultDives:gender==='Women'?5:6,defaultSpd:isPlatform(app)?38:32,rounds:def.rounds||['Qualifier']});}}}
   // Junior synchro — Group A/B (14-18) combined bracket, contested on 3-Meter
@@ -3191,6 +3196,7 @@ function renderBar(timed){
         ${(()=>{const h=computeHealth();const cls=h.score>=90?'good':h.score>=70?'ok':'bad';return`<button class="bb health-chip ${cls}" onclick="UI.modal='conflicts';render()" title="Schedule health — ${h.errs} error${h.errs===1?'':'s'}, ${h.warns} warning${h.warns===1?'':'s'}. Click for findings & one-click fixes."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="health-num">${h.score}</span></button>`})()}
         <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
         <div class="bar-sep"></div>
+        <button class="bb" onclick="openPlanner()" title="Put every event's rounds on days from one grid">Plan events</button>
         <button class="bb" onclick="openEntries()">Entries</button>
         <button class="bb" onclick="openProjections()">Projections</button>
         <button class="bb" onclick="openNewSchedule()" title="Start a new schedule — blank or from a template">New</button><button class="bb" onclick="openLibrary()">Library</button>
@@ -3264,7 +3270,7 @@ function renderTimeline(timed){
   if(!day)return`<div class="tl-body"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No days yet</div><div class="empty-sub">Click + in the day bar to add a competition day</div></div></div>`;
   let sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
-  if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Click "Add block" to start building this day</div></div></div>`;
+  if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Place events on days from one grid, or click "Add block" to build this day by hand</div><div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-p btn-sm" onclick="openPlanner()">Plan events across days</button><button class="btn btn-sm" onclick="showAddMenu()">Add block</button></div></div></div>`;
   sessions=filterByEvent(sessions);
   if(!sessions.length&&UI.eventFilter)return`<div class="tl-body"><div class="empty" style="margin-top:40px"><div class="empty-title">No ${esc(eventFilterLabel())} blocks this day</div><div class="empty-sub">Switch the event filter to All, or tag blocks via the editor ("Part of").</div></div></div>`;
   if(UI.timeScale)return renderTimelineScale(sessions,timed);
@@ -5070,6 +5076,7 @@ function paletteCommands(){
     EVENT_TAGS.forEach(t=>cmds.push({label:'Filter view: '+t.l,hint:'multi-event',run:()=>{UI.palette=null;UI.eventFilter=t.k;render()}}));
     cmds.push({label:'Filter view: everything',hint:'multi-event',run:()=>{UI.palette=null;UI.eventFilter=null;render()}});
   }
+  cmds.push({label:'Place events on days (event planner)',hint:'edit',run:()=>{UI.palette=null;openPlanner()}});
   cmds.push({label:'Add a day…',hint:'edit',run:()=>{UI.palette=null;addDay()}});
   cmds.push({label:(document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'),hint:'view',run:()=>{UI.palette=null;render();toggleTheme()}});
   return cmds;
@@ -5752,6 +5759,7 @@ function renderFacilityHoursModal(){
 
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,newSchedule:renderNewScheduleModal,setDates:renderSetDatesModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
+    ...(typeof renderPlannerModal==='function'?{'planner':renderPlannerModal}:{}),
     ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{}),
