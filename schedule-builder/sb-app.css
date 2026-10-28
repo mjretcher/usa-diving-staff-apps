@@ -2188,6 +2188,16 @@ html[data-theme="deck"] .note-old-txt{color:#F5DFB8}
 .pl-cnt.r-qualifier{background:var(--qual-bg);color:var(--qual)}
 .pl-cnt.empty{font-weight:500;color:var(--tx3)}
 .pl-cnt.lock{background:var(--surf3);color:var(--tx3)}
+.pl-cnt.brd{background:var(--surf);border:1px solid var(--bd2);color:var(--tx2);font-weight:600}
+.pl-cnt.hrs{background:var(--navy-soft);color:var(--navy)}
+.pl-cnt.hrs.est{border:1px dashed var(--navy)}
+.pl-cnt.clash{background:#FEF3C7;color:#92400E}
+html[data-theme="deck"] .pl-cnt.clash{background:#3A2A0C;color:#FCD34D}
+.pl-cell.clash{background:#FFFBEB;box-shadow:inset 0 0 0 1.5px #F59E0B}
+html[data-theme="deck"] .pl-cell.clash{background:#2A2110}
+.pl-status.warn{color:#B45309}
+.pl-fold{background:transparent;border:0;cursor:pointer;font:inherit;font-size:11px;font-weight:600;color:var(--navy);padding:2px 6px;border-radius:6px}
+.pl-fold:hover{background:var(--surf)}
 .pl-grp td{background:var(--navy-soft);padding:6px 10px;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:.02em;color:var(--navy)}
 .pl-grp .pl-sticky{background:#EEF0F7}
 html[data-theme="deck"] .pl-grp .pl-sticky{background:#1B2439}
@@ -2225,5 +2235,6 @@ html[data-theme="deck"] .pl-row.sel .pl-sticky{background:#12283A}
   .pl-sticky{min-width:130px;padding:5px 7px}
   .pl-name{white-space:normal;font-size:11.5px}
   .pl-th-day{min-width:100px}
-  .pl-chip{min-width:28px;height:28px}
+  .pl-chip{min-width:36px;height:36px;font-size:13px}
+  .pl-chip-s{font-size:9.5px}
 }

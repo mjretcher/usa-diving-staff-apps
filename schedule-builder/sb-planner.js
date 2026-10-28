@@ -245,6 +245,25 @@ window.plannerFollow=function(round){
   })});
   toast(n?`${n} ${ROUND_PLURAL[round]} now on the same day as their ${round==='Final'?'earlier round':'prelims'}`:`Nothing to move — ${ROUND_PLURAL[round].toLowerCase()} already follow their earlier round`);
 };
+// Bulk: the later rounds go on the day AFTER prelims (Junior Nationals runs
+// prelims one day, then semis and finals together the next). Selected rows,
+// or every row when nothing is selected. Finals land in their own session
+// after the semis because rounds never share a session.
+window.plannerNextDay=function(){
+  const keys=(UI.plannerSel&&UI.plannerSel.length)?UI.plannerSel:plannerRows().map(r=>r.key);
+  let n=0,noNext=0;
+  upd(s=>{keys.forEach(key=>{const row=rowByKey(key);if(!row)return;
+    const pre=findPlaced(s,key,'Prelim');if(!pre)return;
+    const di=s.meet.days.findIndex(d=>d.id===pre.sess.dayId);const next=s.meet.days[di+1];
+    if(!next){noNext++;return;}
+    if(dayLocked(next.id))return;
+    row.rounds.filter(r=>r==='Semifinal'||r==='Final').forEach(r=>{const cur=findPlaced(s,key,r);if(cur&&dayLocked(cur.sess.dayId))return;if(placeRound(s,row.p,r,next.id))n++;});
+  })});
+  toast(n?`${n} rounds placed the day after their prelims`:noNext?'Prelims on the last day have no next day — add a day first':'Nothing to move — later rounds already follow the day after prelims');
+};
+window.plannerCollapse=function(g){
+  const c=new Set(UI.plannerCollapsed||[]);if(c.has(g))c.delete(g);else c.add(g);UI.plannerCollapsed=[...c];render();
+};
 window.plannerClearAll=function(){
   askConfirm({title:'Take every event off the schedule?',message:'Every competition event is removed from every day. Practice blocks, meetings and the days themselves stay. You can undo with Cmd+Z.',confirmText:'Clear events',danger:true,onConfirm:()=>{
     upd(s=>{s.sessions.forEach(sess=>{if(sess.isPractice)return;if(sess.events.some(e=>isCompEv(e)&&dayLocked(sess.dayId)))return;sess.events=sess.events.filter(e=>!isCompEv(e));});
@@ -268,7 +287,10 @@ window.renderPlannerModal=function(){
   const rows=plannerRows();
   const placed=placedMap();
   const timed=allTimed();
-  const sessNum=new Map();timed.forEach(s=>{if(!s.isPractice)sessNum.set(s.id,getSessNum(s,timed))});
+  // Session numbers are day-relative here ("S2" = second session of that
+  // day) — the meet-wide number changes every time an earlier day changes.
+  const sessNum=new Map();days.forEach(d=>{let n=0;timed.filter(x=>x.dayId===d.id&&!x.isPractice&&x.events.some(isCompEv)).forEach(x=>sessNum.set(x.id,++n));});
+  const collapsed=new Set(UI.plannerCollapsed||[]);
   const f=UI.plannerFilter||{};
   const sel=new Set(UI.plannerSel||[]);
   const rounds=meetRounds();
@@ -280,13 +302,25 @@ window.renderPlannerModal=function(){
   const visible=rows.filter(r=>(!f.group||r.group===f.group)&&(!f.gender||r.gender===f.gender)&&(!f.board||r.p.apparatus===f.board));
 
   // Per-day counts by round, plus "sessions" so load is visible at a glance
-  const counts=days.map(d=>{const c={};let sessions=0;S.sessions.forEach(s=>{if(s.dayId!==d.id||s.isPractice)return;const evs=s.events.filter(isCompEv);if(evs.length)sessions++;evs.forEach(e=>c[e.round]=(c[e.round]||0)+1)});return{c,sessions}});
+  const counts=days.map(d=>{const c={},b={};let sessions=0,minutes=0,unsized=0;const squads=new Map();
+    timed.forEach(s=>{if(s.dayId!==d.id||s.isPractice)return;const evs=s.events.filter(isCompEv);if(!evs.length)return;sessions++;
+      minutes+=Math.max(0,s.timing.sessionEndMinutes-s.timing.warmupStartMinutes);
+      evs.forEach(e=>{c[e.round]=(c[e.round]||0)+1;const bk=isPlatform(e.apparatus)?'Platform':e.apparatus;b[bk]=(b[bk]||0)+1;if(e.round!=='Final'&&entryValue(e)<=0)unsized++;
+        if(e.style!=='Synchronized'){const sq=e.level+'|'+e.gender;if(!squads.has(sq))squads.set(sq,new Set());squads.get(sq).add(bk);}});});
+    // A squad (age group + gender) on two different boards in one day = the
+    // same athletes competing twice that day. Advisory only.
+    const clash=new Set();squads.forEach((boards,sq)=>{if(boards.size>1)clash.add(sq)});
+    return{c,b,sessions,minutes,unsized,clash}});
+  const clashTotal=counts.reduce((n,x)=>n+x.clash.size,0);
 
   let total=0,done=0,issues=0;
   const body=groups.map(g=>{
     const gRows=visible.filter(r=>r.group===g);if(!gRows.length)return'';
     const gKeys=gRows.map(r=>r.key);const gAll=gKeys.every(k=>sel.has(k));
-    const head=`<tr class="pl-grp"><td class="pl-sticky"><label class="pl-chk"><input type="checkbox" ${gAll?'checked':''} onchange="plannerSelectGroup('${esc(gKeys.join(','))}',this.checked)" aria-label="Select all ${esc(g)}"/><span>${esc(g)}</span></label></td><td colspan="${days.length+1}"></td></tr>`;
+    const isCol=collapsed.has(g);
+    const gPlaced=gRows.reduce((n,r)=>n+r.rounds.filter(rd=>placed.has(r.key+'|'+rd)).length,0),gTotal=gRows.reduce((n,r)=>n+r.rounds.length,0);
+    const head=`<tr class="pl-grp"><td class="pl-sticky"><label class="pl-chk"><input type="checkbox" ${gAll?'checked':''} onchange="plannerSelectGroup('${esc(gKeys.join(','))}',this.checked)" aria-label="Select all ${esc(g)}"/><span>${esc(g)}</span></label></td><td colspan="${days.length+1}"><button type="button" class="pl-fold" onclick="plannerCollapse('${esc(g)}')" aria-expanded="${isCol?'false':'true'}">${isCol?'Show':'Hide'} ${gRows.length} events · ${gPlaced} of ${gTotal} placed ${isCol?'▸':'▾'}</button></td></tr>`;
+    if(isCol){gRows.forEach(r=>{total+=r.rounds.length;done+=r.rounds.filter(rd=>placed.has(r.key+'|'+rd)).length;});return head;}
     const lines=gRows.map(r=>{
       const name=evName(r.p).replace(new RegExp('^'+r.group.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*'),'');
       const where={};r.rounds.forEach(rd=>{const hit=placed.get(r.key+'|'+rd);if(hit)where[rd]=hit});
@@ -294,16 +328,20 @@ window.renderPlannerModal=function(){
       // Order check: a later round on an earlier day than the round before it
       const bad=[];for(let i=1;i<r.rounds.length;i++){const a=where[r.rounds[i-1]],b=where[r.rounds[i]];if(a&&b&&dayIndex(b.sess.dayId)<dayIndex(a.sess.dayId))bad.push(ROUND_PLURAL[r.rounds[i]]+' before '+ROUND_PLURAL[r.rounds[i-1]].toLowerCase());}
       if(bad.length)issues++;
-      const cells=days.map(d=>{
+      const sq=r.p.level+'|'+r.p.gender;const rowBoard=isPlatform(r.p.apparatus)?'Platform':r.p.apparatus;
+      let rowClash=null;
+      const cells=days.map((d,di)=>{
         const lk=dayLocked(d.id);
-        return`<td class="pl-cell ${lk?'locked':''}">${r.rounds.map(rd=>{
+        const dayClash=r.p.style!=='Synchronized'&&counts[di].clash.has(sq)&&r.rounds.some(rd=>where[rd]&&where[rd].sess.dayId===d.id);
+        if(dayClash&&!rowClash)rowClash={day:shortDate(d.date),tip:`${r.p.level} ${r.p.gender} compete on another board ${shortDate(d.date)} as well — the same athletes twice in one day`};
+        return`<td class="pl-cell ${lk?'locked':''} ${dayClash?'clash':''}" ${dayClash?`title="${esc(r.p.level+' '+r.p.gender)} compete on another board this day too — same athletes twice in one day"`:''}>${r.rounds.map(rd=>{
           const hit=where[rd];const here=hit&&hit.sess.dayId===d.id;const elsewhere=hit&&!here;
           const sn=here?sessNum.get(hit.sess.id):null;
-          const tip=here?`${esc(evName(r.p))} ${ROUND_PLURAL[rd]} — ${esc(shortDate(d.date))}, Session ${sn}. Click to take it off.`:elsewhere?`${ROUND_PLURAL[rd]} are on ${esc(shortDate(dayOf(hit.sess.dayId)))}. Click to move them here.`:`Put ${ROUND_PLURAL[rd]} on ${esc(shortDate(d.date))}`;
+          const tip=here?`${esc(evName(r.p))} ${ROUND_PLURAL[rd]} — ${esc(shortDate(d.date))}, session ${sn} of that day. Click to take it off.`:elsewhere?`${ROUND_PLURAL[rd]} are on ${esc(shortDate(dayOf(hit.sess.dayId)))}. Click to move them here.`:`Put ${ROUND_PLURAL[rd]} on ${esc(shortDate(d.date))}`;
           return`<button type="button" class="pl-chip r-${rd.toLowerCase()} ${here?'on':''} ${elsewhere?'away':''}" ${lk?'disabled':''} title="${tip}" aria-label="${tip}" onclick="plannerToggle('${esc(r.key)}','${rd}','${d.id}')"><span class="pl-chip-l">${ROUND_SHORT[rd]}</span>${here?`<span class="pl-chip-s">S${sn}</span>`:''}</button>`;
         }).join('')}</td>`;
       }).join('');
-      const status=bad.length?`<span class="pl-status bad" title="${esc(bad.join('; '))}">${esc(bad[0])}</span>`:placedN===r.rounds.length?`<span class="pl-status ok">All ${r.rounds.length} placed</span>`:placedN?`<span class="pl-status part">${placedN} of ${r.rounds.length}</span>`:`<span class="pl-status none">Not placed</span>`;
+      const status=bad.length?`<span class="pl-status bad" title="${esc(bad.join('; '))}">${esc(bad[0])}</span>`:rowClash?`<span class="pl-status warn" title="${esc(rowClash.tip)}">Twice ${esc(rowClash.day)}</span>`:placedN===r.rounds.length?`<span class="pl-status ok">All ${r.rounds.length} placed</span>`:placedN?`<span class="pl-status part">${placedN} of ${r.rounds.length}</span>`:`<span class="pl-status none">Not placed</span>`;
       return`<tr class="pl-row ${sel.has(r.key)?'sel':''}"><td class="pl-sticky"><label class="pl-chk"><input type="checkbox" ${sel.has(r.key)?'checked':''} onchange="plannerSelect('${esc(r.key)}',this.checked)" aria-label="Select ${esc(evName(r.p))}"/><span class="pl-name">${esc(name)}${r.extra?' <em>(not in this meet type)</em>':''}</span></label></td>${cells}<td class="pl-statcell">${status}</td></tr>`;
     }).join('');
     return head+lines;
@@ -320,7 +358,7 @@ window.renderPlannerModal=function(){
 
   return`<div class="modal modal-xl pl-modal" onclick="event.stopPropagation()">
     <div class="modal-hd">
-      <div><span class="modal-title">Place events on days</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${done} of ${total} rounds placed${issues?` · <span style="color:var(--red)">${issues} event${issues===1?'':'s'} with a round out of order</span>`:''} · tap a chip to put that round on that day, tap again to take it off</div></div>
+      <div><span class="modal-title">Place events on days</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${done} of ${total} rounds placed${issues?` · <span style="color:var(--red)">${issues} event${issues===1?'':'s'} with a round out of order</span>`:''}${clashTotal?` · <span style="color:var(--warn)">${clashTotal} squad${clashTotal===1?'':'s'} on two boards in one day</span>`:''} · tap a chip to put that round on that day, tap again to take it off</div></div>
       <button class="modal-close" aria-label="Close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body pl-body" data-keepscroll="planner">
@@ -332,6 +370,7 @@ window.renderPlannerModal=function(){
         <div class="pl-fgroup"><span class="pl-flabel">Shortcuts</span>
           ${rounds.includes('Semifinal')?`<button type="button" class="chip" onclick="plannerFollow('Semifinal')" title="Semifinals go on the same day as their prelims (selected events, or all events when nothing is selected)">Semis follow prelims</button>`:''}
           ${rounds.includes('Final')?`<button type="button" class="chip" onclick="plannerFollow('Final')" title="Finals go on the same day as the round before them (selected events, or all events when nothing is selected)">Finals follow ${rounds.includes('Semifinal')?'semis':'prelims'}</button>`:''}
+          ${rounds.includes('Prelim')&&(rounds.includes('Semifinal')||rounds.includes('Final'))?`<button type="button" class="chip" onclick="plannerNextDay()" title="${rounds.includes('Semifinal')?'Semis and finals':'Finals'} go on the day after their prelims, in separate sessions (selected events, or all events when nothing is selected)">${rounds.includes('Semifinal')?'Semis + finals':'Finals'} day after prelims</button>`:''}
           <button type="button" class="chip" style="color:var(--red)" onclick="plannerClearAll()">Clear every event</button>
         </div>
       </div>
@@ -346,13 +385,16 @@ window.renderPlannerModal=function(){
       <table class="pl-table">
         <thead><tr>
           <th class="pl-sticky pl-th-ev">Event</th>
-          ${days.map((d,i)=>{const h=dayHead(d,i);const c=counts[i];const parts=rounds.filter(rd=>c.c[rd]).map(rd=>`<span class="pl-cnt r-${rd.toLowerCase()}">${c.c[rd]} ${ROUND_SHORT[rd]}</span>`);const lk=dayLocked(d.id);return`<th class="pl-th-day ${d.id===UI.dayId?'cur':''} ${lk?'locked':''}" title="${esc(fullDate(d.date))}${lk?' — locked':''}"><button type="button" class="pl-daybtn" onclick="closeModal();selectDay('${d.id}')" title="Open this day"><span class="pl-wd">${esc(h.wd)}</span><span class="pl-num">${esc(String(h.num))}</span></button><div class="pl-daycounts">${parts.length?parts.join(''):'<span class="pl-cnt empty">empty</span>'}${c.sessions?`<span class="pl-cnt sess">${c.sessions} sess</span>`:''}${lk?'<span class="pl-cnt lock">locked</span>':''}</div></th>`}).join('')}
+          ${days.map((d,i)=>{const h=dayHead(d,i);const c=counts[i];const parts=rounds.filter(rd=>c.c[rd]).map(rd=>`<span class="pl-cnt r-${rd.toLowerCase()}">${c.c[rd]} ${ROUND_SHORT[rd]}</span>`);const lk=dayLocked(d.id);
+            const boards=['1m','3m','Platform'].filter(b=>c.b[b]).map(b=>`<span class="pl-cnt brd">${c.b[b]} ${b==='Platform'?'PL':b.toUpperCase()}</span>`).join('');
+            const hrs=c.sessions?`<span class="pl-cnt hrs ${c.unsized?'est':''}" title="${c.unsized?`Competition time from current entry counts — ${c.unsized} prelim/semi event${c.unsized===1?' has':'s have'} no entries yet, so this will grow once Projections or Entries are filled in`:'Competition time from current entry counts, warm-ups included'}">${fdur(c.minutes)}${c.unsized?' +':''}</span>`:'';
+            const clash=c.clash.size?`<span class="pl-cnt clash" title="${esc([...c.clash].map(x=>x.replace('|',' ')).join(', '))} compete on two boards this day">${c.clash.size} twice</span>`:'';return`<th class="pl-th-day ${d.id===UI.dayId?'cur':''} ${lk?'locked':''}" title="${esc(fullDate(d.date))}${lk?' — locked':''}"><button type="button" class="pl-daybtn" onclick="closeModal();selectDay('${d.id}')" title="Open this day"><span class="pl-wd">${esc(h.wd)}</span><span class="pl-num">${esc(String(h.num))}</span></button><div class="pl-daycounts">${parts.length?parts.join(''):'<span class="pl-cnt empty">empty</span>'}${c.sessions?`<span class="pl-cnt sess">${c.sessions} sess</span>`:''}${lk?'<span class="pl-cnt lock">locked</span>':''}</div>${boards||hrs||clash?`<div class="pl-daycounts">${boards}${hrs}${clash}</div>`:''}</th>`}).join('')}
           <th class="pl-th-stat">Status</th>
         </tr></thead>
         <tbody>${body||`<tr><td colspan="${days.length+2}" style="padding:24px;text-align:center;color:var(--tx3)">No events match that filter</td></tr>`}</tbody>
       </table>
       </div>
-      <div class="pl-legend">${rounds.map(rd=>`<span class="pl-chip r-${rd.toLowerCase()} on demo"><span class="pl-chip-l">${ROUND_SHORT[rd]}</span></span> ${ROUND_PLURAL[rd]}`).join('')} <span class="pl-chip away demo"><span class="pl-chip-l">P</span></span> placed on another day · S3 = Session 3 on that day</div>
+      <div class="pl-legend">${rounds.map(rd=>`<span class="pl-chip r-${rd.toLowerCase()} on demo"><span class="pl-chip-l">${ROUND_SHORT[rd]}</span></span> ${ROUND_PLURAL[rd]}`).join('')} <span class="pl-chip away demo"><span class="pl-chip-l">P</span></span> placed on another day · S2 = second session of that day · <span class="pl-cnt clash">twice</span> = same age group and gender on two boards that day · hours marked + grow once entries are filled in</div>
       `}
     </div>
     <div class="modal-foot">
