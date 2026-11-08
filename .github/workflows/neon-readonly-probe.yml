@@ -1,0 +1,27 @@
+name: Neon read-only probe
+
+# Dispatch-only diagnostic: runs one SELECT in a READ ONLY transaction and
+# prints the rows to the log. For counting / checking data before a change.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sql:
+        description: "One SELECT statement"
+        required: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      - name: Run query
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SQL: ${{ github.event.inputs.sql }}
+        run: python db/scripts/neon_readonly_probe.py
