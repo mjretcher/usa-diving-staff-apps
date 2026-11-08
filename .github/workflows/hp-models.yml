@@ -1,0 +1,53 @@
+name: HP models (scoring environment, World conversion, age progression)
+
+# Rebuilds the hp_models schema from core.dive_sheets / core.result_phases.
+# Runs nightly after "Load core from crawl" (04:40 UTC, up to 3 h), and on any
+# change to the build script so a fix ships without anyone opening GitHub.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '45 8 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'db/scripts/build_hp_models.py'
+      - '.github/workflows/hp-models.yml'
+
+concurrency:
+  group: hp-models
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: pip install --quiet pandas numpy scipy psycopg2-binary
+      - name: Key safety scan
+        run: python db/scripts/key_safety_scan.py
+      - name: Build hp_models tables
+        shell: bash
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          mkdir -p db/audits
+          python db/scripts/build_hp_models.py 2>&1 | tee db/audits/hp_models.log
+      - name: Commit log
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/audits/hp_models.log || true
+          git commit -m "hp models log" || echo none
+          git pull --rebase --autostash -q || true
+          git push || true

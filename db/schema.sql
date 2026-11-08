@@ -1182,6 +1182,13 @@ CREATE TABLE IF NOT EXISTS membership.sales_ledger (
     PRIMARY KEY (year, month, item)
 );
 
+-- ── hp_models schema ──────────────────────────────────────────────
+-- The three High Performance models (scoring environment, domestic -> World
+-- conversion, age progression). Tables are OWNED and rebuilt nightly by
+-- db/scripts/build_hp_models.py (hp-models.yml); the method is stored in
+-- hp_models.method next to the numbers. Only the schema is created here.
+CREATE SCHEMA IF NOT EXISTS hp_models;
+
 -- ── analytics schema ──────────────────────────────────────────────
 -- Materialized analytics for the Athlete Evaluation app. Tables are
 -- OWNED and rebuilt by db/scripts/build_analytics.py (daily via
@@ -1269,9 +1276,12 @@ BEGIN
     -- PRIVILEGES line below is the durable fix: tables created by this same
     -- migration role in analytics inherit SELECT automatically, so a rebuild
     -- can no longer lock the browser role out.
-    GRANT USAGE ON SCHEMA core, analytics TO usad_app;
+    GRANT USAGE ON SCHEMA core, analytics, hp_models TO usad_app;
     GRANT SELECT ON ALL TABLES IN SCHEMA core      TO usad_app;
     GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO usad_app;
+    GRANT SELECT ON ALL TABLES IN SCHEMA hp_models TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA hp_models
+      GRANT SELECT ON TABLES TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA core
       GRANT SELECT ON TABLES TO usad_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA analytics
