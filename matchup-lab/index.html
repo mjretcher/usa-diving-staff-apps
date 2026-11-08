@@ -6,11 +6,12 @@
   <title>Matchup Lab — USA Diving Staff</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="../shared/design.css?v=20260715" />
-  <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260715" />
-  <link rel="stylesheet" href="styles.css?v=202607152151" />
+  <link rel="stylesheet" href="../shared/design.css?v=202611082200" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611082200" />
+  <link rel="stylesheet" href="styles.css?v=202611082200" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082200" />
 </head>
-<body>
+<body class="hp-app">
 
 <header class="app-topbar">
   <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
@@ -19,7 +20,7 @@
   <div class="topbar-divider"></div>
   <div class="topbar-identity">
     <div class="topbar-eyebrow">High Performance</div>
-    <div class="topbar-title">Synchro &amp; Mixed Matchup Lab</div>
+    <div class="topbar-title">Matchup Lab</div>
   </div>
   <nav class="hp-view-switch" aria-label="High Performance views">
     <a class="hp-view-tab" href="../criteria-simulator/">Standards Studio</a>
@@ -27,65 +28,108 @@
     <a class="hp-view-tab active" href="./" aria-current="page">Matchup Lab</a>
   </nav>
   <div class="topbar-spacer"></div>
+  <div class="topbar-metrics">
+    <span class="topbar-pill"><b id="mlKpiAthletes">—</b> athletes</span>
+    <span class="topbar-pill"><b id="mlKpiDives">—</b> voluntary dives</span>
+    <span class="topbar-pill topbar-source" id="mlKpiSource" data-source="neon">Live</span>
+  </div>
 </header>
 
-<main class="ml-wrap">
+<div class="hp-below">
+<nav class="hp-mobile-switch" aria-label="High Performance apps">
+  <a href="../criteria-simulator/">Standards</a>
+  <a href="../athlete-evaluation/">Athletes</a>
+  <a class="active" href="./" aria-current="page">Matchup</a>
+</nav>
 
-  <section class="panel ml-controls-panel">
-    <header class="panel-head">
-      <h2>Build a matchup pool</h2>
-      <p>Voluntary dives are the shared ground of a synchro list — assigned DD means the score is pure execution. Pick a discipline and mode, and every athlete's voluntary record loads from the scraped dive sheets.</p>
-    </header>
-    <div class="ml-controls">
-      <label class="ml-field"><span>Discipline</span>
-        <select id="mlDiscipline" class="sidebar-select">
-          <option value="3m" selected>3-meter</option>
-          <option value="Platform">Platform</option>
-          <option value="1m">1-meter</option>
-        </select>
-      </label>
-      <label class="ml-field"><span>Mode</span>
-        <select id="mlMode" class="sidebar-select">
-          <option value="Female" selected>Girls pairs</option>
-          <option value="Male">Boys pairs</option>
-          <option value="Mixed">Mixed pairs (one boy + one girl)</option>
-        </select>
-      </label>
-      <label class="ml-field"><span>Age group</span>
-        <select id="mlGroup" class="sidebar-select">
-          <option value="all" selected>All junior (14–18 synchro age)</option>
-          <option value="A">Group A only (16–18)</option>
-          <option value="B">Group B only (14–15)</option>
-        </select>
-      </label>
-      <label class="ml-field"><span>Meets</span>
-        <select id="mlMeets" class="sidebar-select">
-          <option value="both" selected>2025 Jr Nationals + 2026 Trials</option>
-          <option value="12838">2026 World Junior Trials only</option>
-          <option value="11609">2025 Junior Nationals only</option>
-        </select>
-      </label>
-      <button class="btn btn-primary" id="mlLoad">Load field</button>
-    </div>
-    <div class="ml-coverage" id="mlCoverage">
-      Coverage is honest and limited: per-dive Voluntary/Optional data exists for the
-      <b>2025 Junior Nationals</b> and the <b>2026 World Junior Trials</b> (and will include the
-      2026 Junior Nationals once results post). Older meets have no dive-level data, so an athlete
-      who skipped both meets won't appear here.
-    </div>
-  </section>
+<!-- Context bar: the whole scope in one row -->
+<div class="hp-ctxbar ml-ctx">
+  <label class="hp-field"><span>Event</span>
+    <select id="mlDiscipline" class="hp-select">
+      <option value="3m" selected>3-meter</option>
+      <option value="Platform">Platform</option>
+      <option value="1m">1-meter</option>
+    </select>
+  </label>
+  <label class="hp-field"><span>Pairs</span>
+    <select id="mlMode" class="hp-select">
+      <option value="Female" selected>Girls</option>
+      <option value="Male">Boys</option>
+      <option value="Mixed">Mixed (one boy + one girl)</option>
+    </select>
+  </label>
+  <label class="hp-field"><span>Age group</span>
+    <select id="mlGroup" class="hp-select">
+      <option value="all" selected>Synchro age: Groups A + B (14–18)</option>
+      <option value="A">Group A only (16–18)</option>
+      <option value="B">Group B only (14–15)</option>
+      <option value="C">Group C (12–13) — scouting</option>
+      <option value="D">Group D (11 &amp; under) — scouting</option>
+    </select>
+  </label>
+  <label class="hp-field"><span>Meets</span>
+    <select id="mlMeets" class="hp-select">
+      <option value="all" selected>All three meets on file</option>
+      <option value="12923">2026 Junior Nationals</option>
+      <option value="12838">2026 World Junior Trials</option>
+      <option value="11609">2025 Junior Nationals</option>
+    </select>
+  </label>
+  <div class="hp-ctx-grow"></div>
+  <button class="btn" id="mlLoad" type="button" title="Re-read the dive sheets from the database">Reload</button>
+</div>
 
-  <div id="mlLoading" class="loading-panel" hidden>
-    <div class="spinner"></div>
-    <div class="loading-text" id="mlLoadingText">Loading voluntary records…</div>
+<main class="hp-main hp-stack ml-wrap">
+
+  <div class="hp-note" id="mlCoverage">
+    <div><b>What this reads.</b> Every scored <b>voluntary</b> dive from the per-dive sheets of the
+    <b>2025 Junior Nationals</b>, the <b>2026 World Junior Trials</b> and the <b>2026 Junior Nationals</b>.
+    Voluntary dives carry an assigned DD, so the score is pure execution — the shared ground of a synchro list.
+    Older meets have no dive-level data; an athlete who missed all three will not appear.</div>
   </div>
 
-  <div id="mlResults" hidden>
+  <div id="mlLoading" class="hp-state" hidden>
+    <div class="spinner"></div>
+    <div id="mlLoadingText">Loading voluntary records…</div>
+  </div>
 
-    <section class="panel">
-      <header class="panel-head">
-        <h2>Voluntary execution profiles</h2>
-        <p id="mlProfilesSub">Each athlete's record on voluntary dives in scope. Check two or more athletes to compare them side by side.</p>
+  <div id="mlEmpty" class="hp-state" hidden></div>
+
+  <div id="mlResults" class="hp-stack" hidden>
+
+    <section class="kpi-row" id="mlKpis" aria-label="Field summary">
+      <div class="kpi-card kpi-accent-navy">
+        <div class="kpi-label">Athletes in scope</div>
+        <div class="kpi-value" id="mlKpiN">—</div>
+        <div class="kpi-foot">unique athletes · 2+ voluntary dives</div>
+      </div>
+      <div class="kpi-card kpi-accent-blue">
+        <div class="kpi-label">Field average</div>
+        <div class="kpi-value" id="mlKpiAvg">—</div>
+        <div class="kpi-foot">points per voluntary dive, mean of athlete averages</div>
+      </div>
+      <div class="kpi-card kpi-accent-green">
+        <div class="kpi-label">Top average</div>
+        <div class="kpi-value" id="mlKpiTop">—</div>
+        <div class="kpi-foot" id="mlKpiTopWho">—</div>
+      </div>
+      <div class="kpi-card kpi-accent-amber">
+        <div class="kpi-label">Voluntary dives read</div>
+        <div class="kpi-value" id="mlKpiDivesBody">—</div>
+        <div class="kpi-foot" id="mlKpiMeets">actual · scored dives in scope</div>
+      </div>
+    </section>
+
+    <section class="panel" id="mlProfilesPanel">
+      <header class="panel-head panel-head-row">
+        <div>
+          <h2>Voluntary execution profiles</h2>
+          <p id="mlProfilesSub">Each athlete's record on voluntary dives in scope. Tick two or more to compare dive by dive.</p>
+        </div>
+        <div class="panel-tools">
+          <input type="search" id="mlFilter" class="hp-input ml-filter" placeholder="Filter by name or club" aria-label="Filter athletes" />
+          <button class="btn btn-sm" id="mlClearPicks" type="button" hidden>Clear picks</button>
+        </div>
       </header>
       <div class="table-wrap">
         <table class="data-table" id="mlProfileTable">
@@ -93,12 +137,13 @@
             <tr>
               <th></th>
               <th class="sortable" data-sort="name">Athlete</th>
-              <th class="sortable" data-sort="team">Team</th>
+              <th class="sortable" data-sort="team">Club</th>
               <th>Group</th>
               <th class="num sortable" data-sort="dives">Vol dives</th>
               <th class="num sortable sort-desc" data-sort="avg">Avg / dive</th>
+              <th class="ml-bar-col">vs field</th>
               <th class="num sortable" data-sort="bestTotal">Best vol total</th>
-              <th class="num sortable" data-sort="consistency">Spread (σ)</th>
+              <th class="num sortable" data-sort="consistency">Spread</th>
               <th>Meets</th>
             </tr>
           </thead>
@@ -109,31 +154,29 @@
 
     <section class="panel" id="mlComparePanel" hidden>
       <header class="panel-head">
-        <h2>Side-by-side</h2>
-        <p>The checked athletes, dive by dive — shared voluntary dives are highlighted, because a synchro pair dives the same list.</p>
+        <h2>Side by side</h2>
+        <p>The ticked athletes, dive by dive. Highlighted rows are voluntary dives every ticked athlete has performed — the raw material of a shared list.</p>
       </header>
-      <div id="mlCompareBody"></div>
+      <div class="panel-body" id="mlCompareBody"></div>
     </section>
 
     <section class="panel">
       <header class="panel-head">
         <h2>Suggested pairings</h2>
-        <p id="mlPairsSub">Ranked by combined voluntary execution, with a bonus for shared voluntary dives. Advisory only — a starting point for the conversation, not a decision.</p>
+        <p id="mlPairsSub">Ranked by combined voluntary execution, with a bonus for shared voluntary dives and a penalty for mismatch. A starting point for the conversation, not a decision.</p>
       </header>
-      <div id="mlPairsBody"></div>
+      <div class="panel-body" id="mlPairsBody"></div>
     </section>
 
   </div>
-
-  <div id="mlEmpty" class="ml-empty">Pick a discipline and mode, then <b>Load field</b>.</div>
-
 </main>
+</div>
 
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
 <script src="../shared/neon-client.js?v=20260715"></script>
 <script src="../shared/usad-toast.js?v=20260715"></script>
-<script src="main.js?v=20260715"></script>
+<script src="main.js?v=202611082200"></script>
 
 </body>
 </html>

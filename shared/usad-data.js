@@ -73,9 +73,19 @@
     }
   }
 
-  async function readNeonVersion(versionKey) {
-    if (!versionKey || !window.NEON) return null;
+  async function readNeonVersion(versionKey, versionSql) {
+    if (!window.NEON) return null;
     try {
+      // versionSql: a query returning one row, one column, whose value changes
+      // whenever the data does (e.g. count || max(imported_at)). Preferred over
+      // an app_meta.config key, which nothing bumps when a crawl lands.
+      if (versionSql) {
+        const r = await window.NEON.query(versionSql, []);
+        const row = r.rows[0];
+        const v = row ? row[Object.keys(row)[0]] : null;
+        return v == null ? null : String(v);
+      }
+      if (!versionKey) return null;
       const r = await window.NEON.query(
         'SELECT value FROM app_meta.config WHERE key = $1', [versionKey]
       );
@@ -124,11 +134,11 @@
     try { cached = await idbGet(cacheKey); } catch (e) { cached = null; }
 
     // 2. Read remote version to see if cache is still fresh
-    const remoteVersion = await readNeonVersion(opts.versionKey);
+    const remoteVersion = await readNeonVersion(opts.versionKey, opts.versionSql);
 
     if (cached && remoteVersion && cached.version === remoteVersion) {
       progress(opts, 'Loaded from cache.');
-      return Object.assign({}, cached.payload, { _source: 'cache', _version: remoteVersion });
+      return Object.assign({}, cached.payload, { _source: 'cache', _version: remoteVersion, _fetchedAt: cached.fetchedAt });
     }
 
     // 3. Try Neon (fresh fetch)
@@ -143,7 +153,7 @@
       };
       try { await idbPut(record); } catch (e) { /* not fatal */ }
       progress(opts, 'Loaded from Neon.');
-      return Object.assign({}, payload, { _source: 'neon', _version: record.version });
+      return Object.assign({}, payload, { _source: 'neon', _version: record.version, _fetchedAt: record.fetchedAt });
     } catch (neonErr) {
       // 4. Use cache if we have any cache at all (even if version drifted)
       if (cached) {
@@ -151,6 +161,7 @@
         return Object.assign({}, cached.payload, {
           _source: 'cache-stale',
           _version: cached.version,
+          _fetchedAt: cached.fetchedAt,
           _neonError: String(neonErr.message || neonErr)
         });
       }

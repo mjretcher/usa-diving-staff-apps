@@ -64,7 +64,10 @@ const POOLS = {
     shortLabel: 'Senior USA',
     family: 'usa',
     presets: ['winterEligibility', 'winterQualifier', 'nationalQualifier', 'custom'],
-    match: (r) => r.competition_family === 'USA Diving' && [
+    // Individual events only. Synchro rows share the meet and carry a
+    // discipline like "Synchronized Platform", which normalises to Platform —
+    // left in, a synchro total would clear an individual score standard.
+    match: (r) => r.competition_family === 'USA Diving' && !r.is_synchronized && [
       'USA Diving Nationals', 'USA Diving Nationals Qualifier',
       'USA Diving Winter Nationals', 'USA Diving Winter Nationals Qualifier',
       'USA Diving Olympic Trials', 'USA Diving Olympic Trials Qualifier',
@@ -76,7 +79,7 @@ const POOLS = {
     shortLabel: 'NCAA',
     family: 'ncaa',
     presets: ['custom'],
-    match: (r) => r.competition_family === 'NCAA',
+    match: (r) => r.competition_family === 'NCAA' && !r.is_synchronized,
   },
   juniorAB: {
     id: 'juniorAB',
@@ -770,12 +773,59 @@ function renderScenarioStrip() {
     nationalQualifier: 'Nationals Qualifier',
     custom:            'Custom',
   })[els.criteriaPreset.value] || '—';
-  $('stripModel').textContent      = presetLabel;
-  $('stripScore').textContent      = els.scoreThreshold.value || '—';
-  $('stripDd').textContent         = els.ddThreshold.value || '—';
-  $('stripCutoff').textContent     = (num(els.topN.value) > 0) ? els.topN.value : '—';
-  $('stripQualified').textContent  = fmtInt(state.qualified.length);
-  $('stripBubble').textContent     = fmtInt(state.bubble.length);
+  // The old metrics strip is gone; the same figures live in the KPI row and
+  // the filter chips. Keep the preset label for the print/export titles.
+  state.presetLabel = presetLabel;
+  // Badge the "Who qualifies" tab with the live count so the answer is visible
+  // from every view.
+  const whoTab = document.querySelector('#ssViews .hp-tab[data-view="who"]');
+  if (whoTab) whoTab.innerHTML = `Who qualifies <span class="ss-tab-count">${fmtInt(state.qualified.length)}</span>`;
+}
+
+// ── Views (Set the standard / Who qualifies / Evidence / Past seasons) ────
+// One screen at a time instead of a 7,500px scroll. Charts measure their
+// container when they draw, so switching views re-renders.
+const VIEW_KEY = 'usad.standardsStudio.view';
+function setView(v, opts = {}) {
+  const views = document.querySelectorAll('.ss-view');
+  if (![...views].some(el => el.dataset.view === v)) v = 'decide';
+  state.view = v;
+  views.forEach(el => { el.hidden = el.dataset.view !== v; });
+  document.querySelectorAll('#ssViews .hp-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+  try { localStorage.setItem(VIEW_KEY, v); } catch {}
+  if (!opts.silent) {
+    history.replaceState(null, '', '#view=' + v);
+    if (state.data) recompute();
+    const ws = document.getElementById('workspace');
+    if (ws) ws.scrollTo({ top: 0 });
+    window.scrollTo({ top: 0 });
+  }
+}
+function initViews() {
+  const nav = $('ssViews');
+  if (nav) nav.addEventListener('click', (e) => {
+    const t = e.target.closest('.hp-tab'); if (!t) return;
+    setView(t.dataset.view);
+    closeDrawer();
+  });
+  const fromHash = (location.hash.match(/view=([a-z]+)/) || [])[1];
+  let saved = null; try { saved = localStorage.getItem(VIEW_KEY); } catch {}
+  setView(fromHash || saved || 'decide', { silent: true });
+
+  // Controls drawer (sidebar) on narrow screens
+  const btn = $('ssDrawerBtn'), bd = $('ssDrawerBackdrop');
+  if (btn) btn.addEventListener('click', () => {
+    const open = document.body.classList.toggle('ss-drawer-open');
+    btn.setAttribute('aria-expanded', String(open));
+    if (bd) bd.hidden = !open;
+  });
+  if (bd) bd.addEventListener('click', closeDrawer);
+}
+function closeDrawer() {
+  document.body.classList.remove('ss-drawer-open');
+  const btn = $('ssDrawerBtn'), bd = $('ssDrawerBackdrop');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  if (bd) bd.hidden = true;
 }
 
 // ── Filter UI population ───────────────────────────────────────────────────
@@ -807,6 +857,7 @@ function populatePoolSelect() {
 // pool, and which presets are offered.
 function refreshPoolScope() {
   const pool = activePool();
+  if (state.data) updateDataKpis();
 
   // Years with data in this pool, most recent first.
   const years = [...new Set(
@@ -1071,11 +1122,15 @@ function cmpChips(list, cls) {
   return shown + (list.length > 30 ? `<span class="dz-more">+${list.length - 30} more</span>` : '');
 }
 
-function runScenarioCompare() {
+async function runScenarioCompare() {
   const out = $('cmpResult');
   const a = scenarioById($('cmpA').value), b = scenarioById($('cmpB').value);
   if (!a || !b) { out.innerHTML = '<div class="cmp-note">Pick two saved scenarios first.</div>'; return; }
   if (a.id === b.id) { out.innerHTML = '<div class="cmp-note">Pick two different scenarios.</div>'; return; }
+  try {
+    await ensurePoolLoaded(a.snapshot.pool || 'seniorUsa');
+    await ensurePoolLoaded(b.snapshot.pool || 'seniorUsa');
+  } catch (e) { out.innerHTML = `<div class="cmp-note">Could not load the data for one of these scenarios: ${esc(e.message || e)}</div>`; return; }
   const original = snapshotScenario();
   let ra, rb;
   try {
@@ -1264,11 +1319,13 @@ async function scenarioRename() {
   renderScenarioStrip();
   await pushScenario(sc);
 }
-function scenarioLoad() {
+async function scenarioLoad() {
   const id = els.scenarioSelect.value;
   if (!id) { USAD.toast('Pick a scenario first.', { kind: 'warn' }); return; }
   const sc = state.scenarios.find(s => s.id === id);
   if (!sc) return;
+  try { await ensurePoolLoaded(sc.snapshot.pool || 'seniorUsa'); }
+  catch (e) { USAD.toast('Could not load that pool: ' + (e.message || e), { kind: 'error', duration: 6000 }); return; }
   state.activeScenarioId = id;
   els.scenarioName.value = sc.name;
   applyScenario(sc.snapshot);
@@ -1340,27 +1397,9 @@ function scenarioImport(file) {
   reader.readAsText(file);
 }
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────
-async function bootstrap() {
-  // Gather element refs
-  for (const id of [
-    'poolSelect','yearSelect',
-    'criteriaPreset','genderFilter','disciplineFilter','roundFilter','scoreMode',
-    'athleteScope','scoreThreshold','ddThreshold','topN','ruleMode','ddMode',
-    'scenarioSelect','scenarioName','scenarioStatus','scenarioImportFile'
-  ]) els[id] = $(id);
 
-  // Load data
-  const onProgress = (msg) => { $('loadingText').textContent = msg; };
-  let raw;
-  try {
-    raw = await USAD.data.load({
-      cacheKey: 'criteria-sim-results-v2',
-      versionKey: 'criteria_simulator_data_version',
-      fallback: { src: '../data/criteria-data.js', global: 'DIVE_APP_DATA' },
-      queries: [{
-        name: 'results',
-        sql:  `SELECT meet_id, meet_name, meet_year,
+// ── Pool-scoped data loading ───────────────────────────────────────────────
+const RESULT_COLS = `meet_id, meet_name, meet_year,
                       competition_family, competition_group,
                       event_id, event_round,
                       round_stage, place, diver_id, diver_name,
@@ -1373,33 +1412,122 @@ async function bootstrap() {
                       ncaa_women_springboard_raw_6_dive_score,
                       ncaa_women_springboard_5cat_dd_sum,
                       ncaa_women_springboard_repeated_category,
-                      ncaa_division
-               FROM core.result_phases`,
-      }],
-      onProgress,
-    });
+                      ncaa_division`;
+// SQL mirrors of POOLS[...].match — keep the two in step. The JS match still
+// runs on every row, so a looser SQL filter is safe; a tighter one is not.
+const SENIOR_USA_GROUPS = `('USA Diving Nationals','USA Diving Nationals Qualifier',
+   'USA Diving Winter Nationals','USA Diving Winter Nationals Qualifier',
+   'USA Diving Olympic Trials','USA Diving Olympic Trials Qualifier')`;
+const POOL_SQL_WHERE = {
+  // Senior USA + Junior A/B + World Aquatics (benchmarks) in one payload.
+  core: `(competition_family = 'USA Diving' AND competition_group IN ${SENIOR_USA_GROUPS})
+      OR (competition_family = 'USA Diving' AND competition_group = 'USA Diving Junior Nationals'
+          AND NOT COALESCE(is_synchronized, false)
+          AND (age_group IN ('Group A','Group B')
+               OR (age_group IS NULL AND (event_round ~ '\\m16-18\\m' OR event_round ~ '\\m14-15\\m'))))
+      OR competition_family = 'World Aquatics'`,
+  ncaa: `competition_family = 'NCAA'`,
+};
+const POOL_PAYLOAD = { seniorUsa: 'core', juniorAB: 'core', ncaa: 'ncaa' };
+const loadedPayloads = new Set();
+const pendingPayloads = new Map();
+
+function loadPoolPayload(key, onProgress) {
+  const where = POOL_SQL_WHERE[key];
+  return USAD.data.load({
+    cacheKey: 'criteria-sim-' + key + '-v3',
+    // Version = row count + newest import in this slice: changes when a crawl
+    // lands, so the IndexedDB copy refreshes itself. No static fallback —
+    // an old file shown as live data is worse than an honest error.
+    versionSql: `SELECT count(*)::text || '|' || coalesce(max(imported_at)::text,'') AS v
+                 FROM core.result_phases WHERE ${where}`,
+    queries: [{ name: 'results', sql: `SELECT ${RESULT_COLS} FROM core.result_phases WHERE ${where}` }],
+    onProgress,
+  });
+}
+
+function absorbPayload(key, raw) {
+  const rows = (raw.results || []).map(normaliseRow);
+  state.data.results = state.data.results.concat(rows);
+  loadedPayloads.add(key);
+  // The worse of the two sources wins the badge (neon < cache < cache-stale).
+  const rank = { neon: 0, cache: 1, 'cache-stale': 2 };
+  if ((rank[raw._source] ?? 3) > (rank[state.data._source] ?? 3)) {
+    state.data._source = raw._source; state.data._fetchedAt = raw._fetchedAt;
+  }
+  if (raw._version) {
+    const t = String(raw._version).split('|')[1];
+    if (t && (!state.data._newestImport || t > state.data._newestImport)) state.data._newestImport = t;
+  }
+}
+
+// Make sure the rows for a pool are in memory; NCAA is fetched on first use.
+async function ensurePoolLoaded(poolId) {
+  const key = POOL_PAYLOAD[poolId] || 'core';
+  if (loadedPayloads.has(key)) return;
+  if (pendingPayloads.has(key)) return pendingPayloads.get(key);
+  const p = (async () => {
+    const strip = $('loadingPanel');
+    if (strip) { strip.hidden = false; strip.classList.add('is-overlay'); }
+    try {
+      const raw = await loadPoolPayload(key, (m) => { $('loadingText').textContent = m; });
+      absorbPayload(key, raw);
+      updateDataKpis();
+    } finally {
+      if (strip) { strip.hidden = true; strip.classList.remove('is-overlay'); }
+      pendingPayloads.delete(key);
+    }
+  })();
+  pendingPayloads.set(key, p);
+  return p;
+}
+
+function updateDataKpis() {
+  // Topbar figures describe the active pool, not everything in memory.
+  const pool = activePool();
+  const rows = state.data.results.filter(pool.match);
+  $('kpiMeets').textContent    = fmtInt(new Set(rows.map(r => r.meet_id)).size);
+  $('kpiResults').textContent  = fmtInt(rows.length);
+  $('kpiAthletes').textContent = fmtInt(new Set(rows.map(r => athleteKey(r))).size);
+  const src = state.data._source || '—';
+  const label = { neon: 'Live', cache: 'Live (cached)', 'cache-stale': 'Cached copy' }[src] || src;
+  const imp = state.data._newestImport ? ' · updated ' + String(state.data._newestImport).slice(0, 10) : '';
+  const el = $('kpiSource');
+  el.textContent = label + imp;
+  el.dataset.source = src === 'cache' ? 'neon' : src;
+  el.title = src === 'cache-stale'
+    ? 'The database could not be reached; this is the last copy saved in this browser (' + (state.data._fetchedAt || '').slice(0, 16) + ').'
+    : 'Results come from the live database' + (state.data._newestImport ? '; newest import ' + state.data._newestImport.slice(0, 16) : '');
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+async function bootstrap() {
+  // Gather element refs
+  for (const id of [
+    'poolSelect','yearSelect',
+    'criteriaPreset','genderFilter','disciplineFilter','roundFilter','scoreMode',
+    'athleteScope','scoreThreshold','ddThreshold','topN','ruleMode','ddMode',
+    'scenarioSelect','scenarioName','scenarioStatus','scenarioImportFile'
+  ]) els[id] = $(id);
+
+  // Load data — pool-scoped, never the whole table.
+  // core.result_phases is ~400k rows; asking Neon for all of it exceeds the
+  // HTTP endpoint's 64 MB response cap, which is what used to push this app
+  // onto the stale static fallback. Each pool now has its own query, the
+  // Senior USA + Junior A/B + World Aquatics set loads at boot (~18k rows),
+  // and NCAA (~70k rows) loads the first time that pool is chosen.
+  const onProgress = (msg) => { $('loadingText').textContent = msg; };
+  let raw;
+  try {
+    raw = await loadPoolPayload('core', onProgress);
   } catch (e) {
-    $('loadingText').innerHTML = `<span style="color:var(--status-flag)">Could not load data: ${esc(e.message || e)}</span>`;
+    $('loadingText').innerHTML = `<span style="color:var(--status-flag)">Could not load results from the database: ${esc(e.message || e)}</span>`;
     USAD.toast('Data load failed', { kind: 'error', duration: 6000 });
     return;
   }
-
-  // raw shape: either { results: [...], _source } (from Neon) or
-  //            DIVE_APP_DATA-shaped object { results: [...], meta, _source } (from fallback)
-  const rawRows = raw.results || (raw._source === 'fallback' && raw.results) || [];
-  state.data = {
-    results: rawRows.map(normaliseRow),
-    _source: raw._source,
-  };
-
-  // KPIs
-  const uniqMeets    = new Set(state.data.results.map(r => r.meet_id)).size;
-  const uniqAthletes = new Set(state.data.results.map(r => athleteKey(r))).size;
-  $('kpiMeets').textContent    = fmtInt(uniqMeets);
-  $('kpiResults').textContent  = fmtInt(state.data.results.length);
-  $('kpiAthletes').textContent = fmtInt(uniqAthletes);
-  $('kpiSource').textContent   = raw._source || '—';
-  $('kpiSource').dataset.source = raw._source || '';
+  state.data = { results: [], _source: raw._source, _fetchedAt: raw._fetchedAt, _version: raw._version };
+  absorbPayload('core', raw);
+  updateDataKpis();
 
   // Populate filters
   populateFilters();
@@ -1415,6 +1543,7 @@ async function bootstrap() {
   // Wire events
   wireEvents();
   initEnhancements();
+  initViews();
 
   // Initial render
   recompute();
@@ -1423,8 +1552,12 @@ async function bootstrap() {
 function wireEvents() {
   // Pool — the primary scope decision. Changing it re-derives everything
   // downstream: available years, the meet list, and which presets apply.
-  els.poolSelect.addEventListener('change', () => {
+  els.poolSelect.addEventListener('change', async () => {
     state.pool = els.poolSelect.value;
+    els.poolSelect.disabled = true;
+    try { await ensurePoolLoaded(state.pool); }
+    catch (e) { USAD.toast('Could not load that pool: ' + (e.message || e), { kind: 'error', duration: 6000 }); }
+    finally { els.poolSelect.disabled = false; }
     refreshPoolScope();
     applyPresetDefaults(true);
     recompute();

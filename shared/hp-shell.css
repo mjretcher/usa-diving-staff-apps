@@ -1,0 +1,271 @@
+/* ============================================================
+   shared/hp-shell.css — the High Performance shell
+   One header, one context bar, one panel/table/KPI language for
+   Standards Studio, Athlete Evaluation and Matchup Lab.
+   Loaded AFTER each app's own stylesheet; scoped to body.hp-app.
+   Rules follow DESIGN.md at the repo root.
+   ============================================================ */
+
+body.hp-app { background: var(--bg); color: var(--ink); }
+body.hp-app [hidden] { display: none !important; }
+body.hp-app *, body.hp-app *::before, body.hp-app *::after { box-sizing: border-box; }
+
+/* ── Topbar: fixed, 52px, identical in all three apps ───────── */
+body.hp-app .app-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--topbar-h, 52px); min-height: 0; max-height: none;
+  padding: 0 16px 0 0; gap: 0; row-gap: 0;
+  display: flex; align-items: center; flex-wrap: nowrap;
+  background: var(--nav-bg); border-bottom: 1px solid var(--nav-border);
+  box-shadow: 0 1px 0 rgba(0,0,0,.25);
+}
+body.hp-app .topbar-brand {
+  display: flex; align-items: center; height: var(--topbar-h, 52px);
+  padding: 0 16px; min-width: 0; border-right: none; flex-shrink: 0;
+}
+body.hp-app .topbar-logo { height: 26px; width: auto; display: block; }
+body.hp-app .topbar-divider { width: 1px; height: 26px; background: rgba(255,255,255,.14); margin: 0 14px 0 0; flex-shrink: 0; }
+body.hp-app .topbar-identity { line-height: 1.1; min-width: 0; padding: 0; }
+body.hp-app .topbar-eyebrow { font: 700 9.5px/1 var(--font-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--nav-muted); margin-bottom: 3px; }
+body.hp-app .topbar-title { font: 700 18px/1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; color: #fff; white-space: nowrap; }
+body.hp-app .topbar-spacer { flex: 1 1 auto; }
+body.hp-app .hp-view-switch { margin-left: 18px; flex-shrink: 0; display: inline-flex; }
+body.hp-app .hp-view-tab.active { background: var(--brand-pool); color: #fff; }
+body.hp-app .topbar-metrics { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+body.hp-app .topbar-pill {
+  font: 500 11.5px/1 var(--font-ui); color: rgba(255,255,255,.82);
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+  padding: 6px 10px; border-radius: 999px; white-space: nowrap;
+}
+body.hp-app .topbar-pill b { font: 500 11.5px/1 var(--font-mono); color: #fff; font-variant-numeric: tabular-nums; }
+body.hp-app .topbar-source { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .02em; }
+body.hp-app .topbar-source[data-source="neon"]        { background: rgba(5,150,105,.22); border-color: rgba(5,150,105,.45); }
+body.hp-app .topbar-source[data-source="cache-stale"] { background: rgba(217,119,6,.25); border-color: rgba(217,119,6,.5); }
+body.hp-app .topbar-source[data-source="fallback"]    { background: rgba(227,25,55,.25); border-color: rgba(227,25,55,.5); }
+
+/* Everything under the fixed bar starts below it. */
+body.hp-app .hp-below { padding-top: var(--topbar-h, 52px); }
+
+/* ── Context bar: the one row under the topbar ──────────────── */
+body.hp-app .hp-ctxbar {
+  position: sticky; top: var(--topbar-h, 52px); z-index: 60;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 20px; background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+body.hp-app .hp-ctxbar .hp-ctx-grow { flex: 1 1 auto; }
+
+/* Text tabs (light surfaces) */
+body.hp-app .hp-tabs { display: flex; gap: 2px; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
+body.hp-app .hp-tabs::-webkit-scrollbar { display: none; }
+body.hp-app .hp-tab {
+  appearance: none; background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 8px 12px; margin-bottom: -11px; cursor: pointer; white-space: nowrap;
+  font: 600 13px/1.2 var(--font-ui); color: var(--ink-3); text-decoration: none;
+}
+body.hp-app .hp-tab:hover { color: var(--ink); }
+body.hp-app .hp-tab.active { color: var(--brand-blue); border-bottom-color: var(--brand-blue); }
+
+/* Pill tabs (sub-views) */
+body.hp-app .hp-pills { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+body.hp-app .hp-pill {
+  appearance: none; cursor: pointer; white-space: nowrap;
+  padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  font: 600 12px/1 var(--font-ui);
+  transition: background .12s, border-color .12s, color .12s;
+}
+body.hp-app .hp-pill:hover { border-color: var(--brand-pool); color: var(--brand-blue); }
+body.hp-app .hp-pill.active { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+body.hp-app .hp-pill[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ── Workspace ──────────────────────────────────────────────── */
+body.hp-app .hp-main { max-width: 1440px; margin: 0 auto; padding: 16px 20px 48px; }
+body.hp-app .hp-stack { display: grid; gap: 16px; }
+body.hp-app .hp-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+body.hp-app .hp-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+/* ── Panels ─────────────────────────────────────────────────── */
+body.hp-app .panel, body.hp-app .hp-panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: none; overflow: hidden;
+}
+body.hp-app .panel > .panel-head, body.hp-app .hp-panel > .panel-head {
+  background: none; color: inherit; border-bottom: 1px solid var(--line);
+  padding: 14px 18px 12px; display: flex; flex-direction: column; gap: 3px;
+  align-items: flex-start; text-align: left; justify-content: flex-start;
+}
+body.hp-app .panel-head h2, body.hp-app .panel-head .panel-title {
+  font: 700 18px/1.1 var(--font-display); letter-spacing: .02em; text-transform: uppercase;
+  color: var(--brand-blue); margin: 0;
+}
+body.hp-app .panel-head p { font: 400 12.5px/1.45 var(--font-ui); color: var(--ink-3); margin: 0; max-width: 90ch; }
+body.hp-app .panel-head .panel-tools { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+body.hp-app .panel-head.panel-head-row { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+body.hp-app .panel-body { padding: 16px 18px; }
+
+/* Collapsible panel */
+body.hp-app details.panel > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+body.hp-app details.panel > summary::-webkit-details-marker { display: none; }
+body.hp-app details.panel > summary::after {
+  content: ""; margin-left: auto; width: 8px; height: 8px; flex-shrink: 0;
+  border-right: 2px solid var(--ink-4); border-bottom: 2px solid var(--ink-4);
+  transform: rotate(45deg); transition: transform .15s;
+}
+body.hp-app details.panel[open] > summary::after { transform: rotate(-135deg); }
+body.hp-app details.panel[open] > summary { border-bottom: 1px solid var(--line); }
+body.hp-app details.panel > summary h2 { font: 700 18px/1.1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; color: var(--brand-blue); margin: 0; }
+body.hp-app details.panel > summary p { font: 400 12.5px/1.4 var(--font-ui); color: var(--ink-3); margin: 0; }
+body.hp-app details.panel > summary > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+/* ── KPI tiles ──────────────────────────────────────────────── */
+body.hp-app .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+body.hp-app .kpi-card {
+  background: var(--surface); border: 1px solid var(--line); border-top-width: 3px;
+  border-radius: var(--radius-lg); padding: 14px 16px 12px; box-shadow: none; transform: none;
+}
+body.hp-app .kpi-card:hover { box-shadow: none; transform: none; }
+body.hp-app .kpi-card.kpi-accent-blue,  body.hp-app .kpi-card.accent-blue  { border-top-color: var(--brand-pool); }
+body.hp-app .kpi-card.kpi-accent-green, body.hp-app .kpi-card.accent-green { border-top-color: var(--status-direct); }
+body.hp-app .kpi-card.kpi-accent-amber, body.hp-app .kpi-card.accent-amber { border-top-color: var(--status-replace); }
+body.hp-app .kpi-card.kpi-accent-red,   body.hp-app .kpi-card.accent-red   { border-top-color: var(--brand-red); }
+body.hp-app .kpi-card.kpi-accent-navy { border-top-color: var(--brand-blue); }
+body.hp-app .kpi-label { font: 700 10.5px/1.2 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+body.hp-app .kpi-value { font: 500 30px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: -.01em; }
+body.hp-app .kpi-foot, body.hp-app .kpi-sub { font: 500 11.5px/1.3 var(--font-ui); color: var(--ink-4); margin-top: 7px; }
+
+/* ── Tables ─────────────────────────────────────────────────── */
+body.hp-app .table-wrap { overflow: auto; max-width: 100%; }
+body.hp-app .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+body.hp-app .data-table thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--surface-2);
+  font: 700 10.5px/1.2 var(--font-ui); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+  text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+body.hp-app .data-table thead th:first-child, body.hp-app .data-table tbody td:first-child { padding-left: 18px; }
+body.hp-app .data-table tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line-2); vertical-align: middle; color: var(--ink-2); }
+body.hp-app .data-table tbody tr:last-child td { border-bottom: 0; }
+body.hp-app .data-table tbody tr:hover td { background: var(--surface-2); }
+body.hp-app .data-table th.num, body.hp-app .data-table td.num { text-align: right; }
+body.hp-app .data-table td.num, body.hp-app .data-table td.mono, body.hp-app .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+body.hp-app .data-table td.num { font-size: 12.5px; }
+body.hp-app .data-table th.sortable { cursor: pointer; user-select: none; }
+body.hp-app .data-table th.sortable:hover { color: var(--brand-blue); }
+body.hp-app .data-table th.sortable.sort-asc::after  { content: " \2191"; color: var(--brand-pool); }
+body.hp-app .data-table th.sortable.sort-desc::after { content: " \2193"; color: var(--brand-pool); }
+body.hp-app .data-table td.small, body.hp-app .small { font-size: 12px; color: var(--ink-3); }
+
+/* ── Buttons & inputs on light surfaces ─────────────────────── */
+body.hp-app .hp-main .btn, body.hp-app .hp-ctxbar .btn, body.hp-app .hp-btn {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: var(--radius-md);
+  font: 600 13px/1 var(--font-ui); border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  box-shadow: none; transform: none; transition: background .12s, border-color .12s, color .12s;
+}
+body.hp-app .hp-main .btn:hover, body.hp-app .hp-ctxbar .btn:hover, body.hp-app .hp-btn:hover { border-color: var(--brand-pool); color: var(--brand-blue); transform: none; box-shadow: none; }
+body.hp-app .hp-main .btn-primary, body.hp-app .hp-ctxbar .btn-primary, body.hp-app .hp-btn.primary { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+body.hp-app .hp-main .btn-primary:hover, body.hp-app .hp-ctxbar .btn-primary:hover, body.hp-app .hp-btn.primary:hover { background: var(--brand-blue-700); border-color: var(--brand-blue-700); color: #fff; }
+body.hp-app .hp-main .btn-danger, body.hp-app .hp-btn.danger { color: var(--brand-red); border-color: rgba(227,25,55,.35); }
+body.hp-app .hp-main .btn-danger:hover, body.hp-app .hp-btn.danger:hover { background: var(--brand-red); color: #fff; border-color: var(--brand-red); }
+body.hp-app .hp-main .btn-sm, body.hp-app .hp-btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+body.hp-app .hp-main .btn[disabled], body.hp-app .hp-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+body.hp-app .hp-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+body.hp-app .hp-field > span { font: 700 10.5px/1.2 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+body.hp-app .hp-select, body.hp-app .hp-input,
+body.hp-app .hp-main select.sidebar-select, body.hp-app .hp-main input.sidebar-input {
+  height: 36px; padding: 0 12px; border-radius: var(--radius-md); width: 100%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font: 500 13px/1 var(--font-ui);
+}
+body.hp-app .hp-select, body.hp-app .hp-main select.sidebar-select {
+  appearance: none; padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%235a6a7e' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center;
+}
+body.hp-app .hp-select:focus, body.hp-app .hp-input:focus,
+body.hp-app .hp-main select.sidebar-select:focus, body.hp-app .hp-main input.sidebar-input:focus { outline: none; border-color: var(--brand-pool); box-shadow: 0 0 0 3px rgba(0,154,199,.15); }
+body.hp-app .hp-main select.sidebar-select option { background: #fff; color: var(--ink); }
+
+/* ── Provenance / status chips ──────────────────────────────── */
+body.hp-app .hp-prov {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 10.5px/1 var(--font-mono); color: var(--ink-3);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; white-space: nowrap;
+}
+body.hp-app .hp-prov b { color: var(--ink); font-weight: 500; }
+body.hp-app .hp-badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 999px; font: 600 11px/1.2 var(--font-ui); border: 1px solid transparent; }
+body.hp-app .hp-badge.good { background: var(--status-direct-bg); color: var(--status-direct); border-color: var(--status-direct-border); }
+body.hp-app .hp-badge.info { background: var(--status-ewc-bg); color: var(--status-ewc); border-color: var(--status-ewc-border); }
+body.hp-app .hp-badge.warn { background: var(--status-replace-bg); color: var(--status-replace); border-color: var(--status-replace-border); }
+body.hp-app .hp-badge.out  { background: var(--status-out-bg); color: var(--status-out); }
+body.hp-app .hp-badge.flag { background: var(--status-flag-bg); color: var(--status-flag); }
+body.hp-app .hp-badge.navy { background: var(--brand-blue); color: #fff; }
+
+/* ── Notes (replace the old blue "coverage" boxes) ──────────── */
+body.hp-app .hp-note {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 14px; border-radius: var(--radius-md);
+  background: var(--surface-2); border: 1px solid var(--line);
+  font: 400 12.5px/1.5 var(--font-ui); color: var(--ink-2);
+}
+body.hp-app .hp-note::before { content: ""; width: 3px; align-self: stretch; border-radius: 2px; background: var(--brand-pool); flex-shrink: 0; }
+body.hp-app .hp-note.warn::before { background: var(--status-replace); }
+body.hp-app .hp-note.flag::before { background: var(--brand-red); }
+
+/* ── Empty / loading / error ────────────────────────────────── */
+body.hp-app .hp-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  min-height: 220px; padding: 32px; text-align: center; color: var(--ink-3); font-size: 13.5px;
+}
+body.hp-app .hp-state b { color: var(--ink); }
+body.hp-app .hp-state .spinner, body.hp-app .spinner {
+  width: 30px; height: 30px; border: 3px solid var(--line); border-top-color: var(--brand-pool);
+  border-radius: 50%; animation: hp-spin .8s linear infinite;
+}
+@keyframes hp-spin { to { transform: rotate(360deg); } }
+body.hp-app .hp-state.error { color: var(--brand-red); }
+
+/* ── Dark hero block (athlete header, scenario strip) ───────── */
+body.hp-app .hp-hero {
+  background: linear-gradient(135deg, var(--brand-blue-700) 0%, var(--brand-blue) 55%, var(--brand-blue-900) 100%);
+  color: #fff; border-radius: var(--radius-lg); padding: 20px 22px;
+}
+body.hp-app .hp-hero h1 { font: 800 34px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; margin: 0 0 4px; }
+body.hp-app .hp-hero .hp-hero-sub { color: var(--brand-sky); font: 500 13px/1.4 var(--font-ui); }
+
+/* ── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  body.hp-app .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.hp-app .hp-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  body.hp-app .topbar-metrics { display: none; }
+  body.hp-app .hp-view-switch { display: none; }
+}
+@media (max-width: 720px) {
+  body.hp-app .topbar-brand { padding: 0 12px; }
+  body.hp-app .topbar-logo { height: 22px; }
+  body.hp-app .topbar-divider { margin-right: 10px; }
+  body.hp-app .topbar-title { font-size: 16px; }
+  body.hp-app .hp-ctxbar { padding: 8px 12px; gap: 8px; }
+  body.hp-app .hp-main { padding: 12px 12px 40px; }
+  body.hp-app .kpi-row, body.hp-app .hp-grid-2, body.hp-app .hp-grid-3 { grid-template-columns: 1fr; }
+  body.hp-app .kpi-value { font-size: 26px; }
+  body.hp-app .panel-head, body.hp-app .panel-body { padding-left: 14px; padding-right: 14px; }
+  body.hp-app .hp-hero h1 { font-size: 28px; }
+}
+
+/* Mobile app switcher — the three HP apps, shown where the pill switch hides */
+body.hp-app .hp-mobile-switch { display: none; }
+@media (max-width: 900px) {
+  body.hp-app .hp-mobile-switch {
+    display: flex; gap: 0; background: var(--nav-bg); border-bottom: 1px solid var(--nav-border);
+  }
+  body.hp-app .hp-mobile-switch a {
+    flex: 1; text-align: center; padding: 9px 4px; text-decoration: none;
+    font: 600 11.5px/1.2 var(--font-ui); color: rgba(255,255,255,.65);
+    border-bottom: 2px solid transparent;
+  }
+  body.hp-app .hp-mobile-switch a.active { color: #fff; border-bottom-color: var(--brand-pool); }
+}

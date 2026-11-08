@@ -583,7 +583,7 @@ html { overflow-x: hidden; }
 .ae-pass-sub{font:600 13px Inter,sans-serif;color:#C9D2F2;margin-top:2px}
 .ae-pass-head .ae-chip{background:rgba(255,255,255,.14);color:#fff}
 .ae-pass-head .ae-chip-pool{background:rgba(143,195,234,.28);color:#DCEEFA}
-.ae-pass-head .ae-chip-red{background:rgba(227,25,55,.35);color:#FFD7DE}
+.ae-pass-head .ae-chip-red{background:rgba(143,195,234,.22);color:#DCEBFA;border-color:rgba(143,195,234,.6)}
 .ae-pass-head .ae-chip-soft{background:rgba(255,255,255,.10);color:#C9D2F2}
 .ae-pass-pbs{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .ae-pb{background:rgba(255,255,255,.10);border-radius:14px;padding:12px 18px;text-align:center;min-width:118px}
@@ -1294,4 +1294,31 @@ table.ae-dx .num { font: 700 13.5px 'JetBrains Mono', monospace; white-space: no
   margin-top: 11px; padding: 8px 12px; border-radius: 8px;
   background: rgba(227,25,55,.07); border: 1px solid rgba(227,25,55,.28);
   font: 600 11.5px Inter, sans-serif; color: var(--ink-2); line-height: 1.55;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v3 shell (2026-11) — fixed topbar + one context bar + pill row.
+   Shell/panel/table language from shared/hp-shell.css (loaded after this).
+   ════════════════════════════════════════════════════════════════════ */
+body.hp-app .ae-ctxbar { padding: 9px 20px; gap: 12px; box-shadow: none; }
+body.hp-app .ae-search { flex: 1 1 320px; max-width: 460px; min-width: 200px; }
+body.hp-app .ae-search-input { height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; font: 500 13.5px var(--font-ui); background: var(--surface-2); }
+body.hp-app .ae-search-input:focus { background: #fff; border-color: var(--brand-pool); box-shadow: 0 0 0 3px rgba(0,154,199,.15); }
+body.hp-app .ae-search-results { z-index: 80; }
+body.hp-app .ae-athlete-chip .ae-sel-athlete { padding: 5px 6px 5px 12px; }
+body.hp-app .ae-sel-athlete b { font: 700 14px/1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+body.hp-app .ae-export { display: flex; gap: 6px; }
+body.hp-app .ae-secrow { border: 0; margin: 0; gap: 2px; }
+body.hp-app .ae-secrow .hp-tab { font: 700 13px/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; font-size: 14px; padding: 9px 12px; margin-bottom: -10px; }
+body.hp-app .ae-subrow { padding: 0 0 14px; margin: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+body.hp-app .ae-subrow .hp-pill { flex: 0 0 auto; }
+body.hp-app .ae-workspace { padding: 14px 20px 60px; max-width: 1440px; }
+body.hp-app .ae-card { border-radius: var(--radius-lg); box-shadow: none; }
+body.hp-app .ae-freshness { font-family: var(--font-mono); }
+@media (max-width: 900px) {
+  body.hp-app .ae-ctxbar { padding: 8px 12px; gap: 8px; }
+  body.hp-app .ae-search { flex: 1 1 100%; max-width: none; }
+  body.hp-app .ae-secrow { order: 5; width: 100%; justify-content: space-between; }
+  body.hp-app .ae-secrow .hp-tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; }
+  body.hp-app .ae-workspace { padding: 12px 12px 48px; }
 }

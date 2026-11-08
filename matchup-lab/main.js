@@ -27,19 +27,20 @@ const f1 = (n) => isNum(n) ? n.toFixed(1) : '—';
 const f2 = (n) => isNum(n) ? n.toFixed(2) : '—';
 
 const MEET_NAMES = { '11609': '2025 Jr Nationals', '12838': '2026 Trials', '12923': '2026 Jr Nationals' };
+const ALL_MEETS = ['11609', '12838', '12923'];
 
-const state = { profiles: [], selected: new Set(), sortKey: 'avg', sortDesc: true };
+const state = { profiles: [], selected: new Set(), sortKey: 'avg', sortDesc: true, filter: '', rowsRead: 0 };
 
 /* ── Data ──────────────────────────────────────────────────── */
 // Era note: both covered meets are 2025+, where junior brackets are ALSO
 // encoded in event names ("Group A Boys 1m (16-18)"). Parse from event_name.
 function groupOf(eventName) {
-  const m = /Group\s+([AB])/i.exec(eventName || '');
+  const m = /Group\s+([ABCD])/i.exec(eventName || '');
   return m ? m[1].toUpperCase() : null;
 }
 
 async function loadVoluntaryRows(discipline, meets) {
-  const meetIds = meets === 'both' ? ['11609', '12838'] : [meets];
+  const meetIds = meets === 'all' ? ALL_MEETS : [meets];
   const r = await nq(
     `SELECT diver_id, diver_name, team_name, gender, meet_id, event_id, event_name,
             result_set_id, dive_number, score
@@ -59,13 +60,39 @@ async function loadVoluntaryRows(discipline, meets) {
 }
 
 /* ── Profile building ─────────────────────────────────────── */
+// A round only counts toward "best voluntary total" when it holds the full
+// voluntary list for that event. The full count is the most common per-round
+// voluntary count across the whole field in that event (5 for A/B), so a
+// round where the scrape caught one voluntary dive never posts as a "total".
+function fullVolCountByEvent(rows) {
+  const perRound = new Map(); // event_name -> Map(roundKey -> n)
+  for (const r of rows) {
+    const ev = r.event_name || '';
+    if (!perRound.has(ev)) perRound.set(ev, new Map());
+    const m = perRound.get(ev);
+    const k = `${r.meet_id}|${r.event_id}|${r.result_set_id}|${r.diver_id}`;
+    m.set(k, (m.get(k) || 0) + 1);
+  }
+  const out = new Map();
+  for (const [ev, m] of perRound) {
+    const freq = new Map();
+    for (const n of m.values()) freq.set(n, (freq.get(n) || 0) + 1);
+    let best = 0, bestN = 0;
+    for (const [n, f] of freq) if (f > bestN || (f === bestN && n > best)) { best = n; bestN = f; }
+    out.set(ev, best);
+  }
+  return out;
+}
+
 function buildProfiles(rows, mode, group) {
   const byDiver = new Map();
+  const fullCount = fullVolCountByEvent(rows);
   for (const r of rows) {
     if (mode !== 'Mixed' && r.gender !== mode) continue;
     if (mode === 'Mixed' && r.gender !== 'Male' && r.gender !== 'Female') continue;
     const g = r.group !== undefined ? r.group : groupOf(r.event_name);
-    if (group !== 'all' && g && g !== group) continue;
+    if (group === 'all') { if (g !== 'A' && g !== 'B') continue; }
+    else if (g !== group) continue;
     const k = r.diver_id;
     if (!byDiver.has(k)) byDiver.set(k, { id: k, name: r.diver_name, team: r.team_name, gender: r.gender, groups: new Set(), meets: new Set(), dives: [], byRound: new Map() });
     const p = byDiver.get(k);
@@ -73,8 +100,8 @@ function buildProfiles(rows, mode, group) {
     p.meets.add(r.meet_id);
     p.dives.push(r);
     const roundKey = `${r.meet_id}|${r.event_id}|${r.result_set_id}`;
-    if (!p.byRound.has(roundKey)) p.byRound.set(roundKey, 0);
-    p.byRound.set(roundKey, p.byRound.get(roundKey) + r.score);
+    if (!p.byRound.has(roundKey)) p.byRound.set(roundKey, { total: 0, n: 0, full: fullCount.get(r.event_name || '') || 0 });
+    const rr = p.byRound.get(roundKey); rr.total += r.score; rr.n += 1;
   }
   const out = [];
   for (const p of byDiver.values()) {
@@ -83,13 +110,15 @@ function buildProfiles(rows, mode, group) {
     if (n < 2) continue; // one stray voluntary is not a record
     const avg = scores.reduce((a, b) => a + b, 0) / n;
     const sd = Math.sqrt(scores.reduce((a, b) => a + (b - avg) ** 2, 0) / n);
-    const bestTotal = Math.max(...p.byRound.values());
+    const completeRounds = [...p.byRound.values()].filter(rr => rr.full > 0 && rr.n === rr.full);
+    const bestTotal = completeRounds.length ? Math.max(...completeRounds.map(rr => rr.total)) : null;
+    const bestTotalDives = completeRounds.length ? completeRounds.find(rr => rr.total === bestTotal).n : null;
     const diveNums = new Set(p.dives.map(d => d.dive_number));
     out.push({
       id: p.id, name: p.name, team: p.team, gender: p.gender,
       group: [...p.groups].sort().join('/') || '—',
       meets: [...p.meets].map(m => MEET_NAMES[m] || m).join(', '),
-      dives: n, avg, consistency: sd, bestTotal, diveNums,
+      dives: n, avg, consistency: sd, bestTotal, bestTotalDives, diveNums,
       perDive: aggregatePerDive(p.dives),
     });
   }
@@ -149,25 +178,53 @@ function sortProfiles() {
 
 function renderProfiles() {
   sortProfiles();
+  const all = state.profiles;
+  const q = state.filter.trim().toLowerCase();
+  const shown = q ? all.filter(p => (p.name + ' ' + p.team).toLowerCase().includes(q)) : all;
   $('mlProfilesSub').textContent =
-    `${state.profiles.length} athletes with 2+ voluntary dives in scope. Check athletes to compare side by side.`;
-  $('mlProfileRows').innerHTML = state.profiles.map(p => `
-    <tr>
+    `${all.length} athletes with 2+ voluntary dives in scope` + (q ? ` · ${shown.length} match "${state.filter.trim()}"` : '') +
+    `. Tick two or more to compare dive by dive.`;
+  const avgs = all.map(p => p.avg);
+  const lo = Math.min(...avgs), hi = Math.max(...avgs), fieldMean = avgs.reduce((a, b) => a + b, 0) / (avgs.length || 1);
+  const span = Math.max(hi - lo, 0.01);
+  const pct = (v) => Math.max(0, Math.min(100, ((v - lo) / span) * 100));
+  $('mlProfileRows').innerHTML = shown.map(p => `
+    <tr class="${state.selected.has(p.id) ? 'ml-row-picked' : ''}">
       <td><input type="checkbox" class="ml-pick" data-id="${esc(p.id)}" ${state.selected.has(p.id) ? 'checked' : ''} aria-label="Compare ${esc(p.name)}"></td>
-      <td class="ml-name">${esc(p.name)}${p.gender === 'Male' ? ' <span class="ml-g ml-g-m">M</span>' : ' <span class="ml-g ml-g-f">F</span>'}</td>
+      <td><span class="ml-name">${esc(p.name)}</span>${p.gender === 'Male' ? '<span class="ml-g ml-g-m">M</span>' : '<span class="ml-g ml-g-f">F</span>'}</td>
       <td class="small">${esc(p.team)}</td>
       <td>${esc(p.group)}</td>
       <td class="num">${p.dives}</td>
       <td class="num"><strong>${f1(p.avg)}</strong></td>
-      <td class="num">${f1(p.bestTotal)}</td>
-      <td class="num">${f1(p.consistency)}</td>
+      <td><div class="ml-bar" title="Field ${f1(lo)}–${f1(hi)}, mean ${f1(fieldMean)}"><i class="${p.avg >= fieldMean ? 'hi' : ''}" style="width:${pct(p.avg).toFixed(1)}%"></i><s style="left:${pct(fieldMean).toFixed(1)}%"></s></div></td>
+      <td class="num">${isNum(p.bestTotal) ? f1(p.bestTotal) + `<span class="ml-sub">${p.bestTotalDives} dives</span>` : '<span class="ml-na" title="No round with the full voluntary list on file">—</span>'}</td>
+      <td class="num">${f1(p.consistency)}<span class="ml-sub">σ per dive</span></td>
       <td class="small">${esc(p.meets)}</td>
     </tr>`).join('');
   document.querySelectorAll('.ml-pick').forEach(cb => cb.addEventListener('change', (e) => {
     const id = e.target.dataset.id;
     if (e.target.checked) state.selected.add(id); else state.selected.delete(id);
+    e.target.closest('tr').classList.toggle('ml-row-picked', e.target.checked);
+    $('mlClearPicks').hidden = state.selected.size === 0;
     renderCompare();
   }));
+  $('mlClearPicks').hidden = state.selected.size === 0;
+}
+
+function renderKpis(rows) {
+  const all = state.profiles;
+  const avgs = all.map(p => p.avg);
+  const mean = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  const top = all.length ? all.reduce((a, b) => (b.avg > a.avg ? b : a)) : null;
+  $('mlKpiN').textContent = all.length;
+  $('mlKpiAvg').textContent = f1(mean);
+  $('mlKpiTop').textContent = top ? f1(top.avg) : '—';
+  $('mlKpiTopWho').textContent = top ? `${top.name} · ${top.team}` : '—';
+  $('mlKpiDivesBody').textContent = rows.length.toLocaleString();
+  const meets = new Set(rows.map(r => r.meet_id));
+  $('mlKpiMeets').textContent = `actual · scored dives across ${meets.size} meet${meets.size === 1 ? '' : 's'}`;
+  $('mlKpiAthletes').textContent = all.length;
+  $('mlKpiDives').textContent = rows.length.toLocaleString();
 }
 
 function renderCompare() {
@@ -189,7 +246,7 @@ function renderCompare() {
           <span class="mono">${esc(d.num)}</span><span class="num">${f1(d.avg)}</span><span class="small">×${d.n}</span>
         </div>`).join('')}</div>
     </div>`).join('') + `</div>
-    <div class="ml-cc-foot"><span class="ml-cc-shared-swatch"></span> = voluntary dive every selected athlete has performed — the raw material of a shared synchro list.</div>`;
+    <div class="ml-cc-foot"><span class="ml-cc-shared-swatch"></span> voluntary dive every ticked athlete has performed. Avg is points per dive; ×n is how many times it was performed in scope.</div>`;
 }
 
 function renderPairs() {
@@ -202,7 +259,7 @@ function renderPairs() {
   $('mlPairsBody').innerHTML = `<div class="ml-pairs">` + pairs.map((p, i) => `
     <div class="ml-pair">
       <span class="ml-pair-rank">#${i + 1}</span>
-      <span class="ml-pair-names"><b>${esc(p.a.name)}</b> + <b>${esc(p.b.name)}</b>
+      <span class="ml-pair-names"><span class="ml-pair-line"><b>${esc(p.a.name)}</b><span>+</span><b>${esc(p.b.name)}</b></span>
         <em>${esc(p.a.team)}${p.a.team === p.b.team ? ' (same club)' : ' / ' + esc(p.b.team)}</em></span>
       <span class="ml-pair-math" title="combined avg + shared-dive bonus − balance penalty">
         ${f1(p.combined)} combined
@@ -216,30 +273,42 @@ function renderPairs() {
 
 /* ── Flow ─────────────────────────────────────────────────── */
 async function loadField() {
+  const seq = ++loadSeq;
+  $('mlEmpty').classList.remove('error');
   $('mlEmpty').hidden = true; $('mlResults').hidden = true; $('mlLoading').hidden = false;
   try {
     const rows = await loadVoluntaryRows($('mlDiscipline').value, $('mlMeets').value);
+    if (seq !== loadSeq) return; // a newer selection superseded this one
     state.profiles = buildProfiles(rows, $('mlMode').value, $('mlGroup').value);
     state.selected.clear();
     $('mlLoading').hidden = true;
     if (!state.profiles.length) {
       $('mlEmpty').hidden = false;
-      $('mlEmpty').innerHTML = 'No athletes with voluntary dives found for that scope. Platform fields are smaller — try widening to both meets or all junior.';
+      $('mlEmpty').innerHTML = '<b>No athletes with two or more voluntary dives in this scope.</b><span>Platform fields are small. Try all three meets, or the combined Group A + B scope.</span>';
+      $('mlKpiAthletes').textContent = '0'; $('mlKpiDives').textContent = rows.length.toLocaleString();
       return;
     }
     $('mlResults').hidden = false;
-    renderProfiles(); renderCompare(); renderPairs();
+    renderKpis(rows); renderProfiles(); renderCompare(); renderPairs();
   } catch (err) {
+    if (seq !== loadSeq) return;
     $('mlLoading').hidden = true; $('mlEmpty').hidden = false;
-    $('mlEmpty').innerHTML = 'Could not load from the database: ' + esc(err.message || String(err));
+    $('mlEmpty').classList.add('error');
+    $('mlEmpty').innerHTML = '<b>Could not read the dive sheets from the database.</b><span>' + esc(err.message || String(err)) + '</span>';
   }
 }
 
+let loadSeq = 0;
 function wire() {
   $('mlLoad').addEventListener('click', loadField);
+  ['mlDiscipline', 'mlMode', 'mlGroup', 'mlMeets'].forEach(id => $(id).addEventListener('change', loadField));
+  $('mlFilter').addEventListener('input', (e) => { state.filter = e.target.value; renderProfiles(); });
+  $('mlClearPicks').addEventListener('click', () => { state.selected.clear(); renderProfiles(); renderCompare(); });
   document.querySelectorAll('#mlProfileTable th.sortable').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.sort;
     if (state.sortKey === k) state.sortDesc = !state.sortDesc; else { state.sortKey = k; state.sortDesc = true; }
+    document.querySelectorAll('#mlProfileTable th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+    th.classList.add(state.sortDesc ? 'sort-desc' : 'sort-asc');
     renderProfiles(); renderCompare();
   }));
 }
@@ -247,6 +316,7 @@ function wire() {
 if (typeof window !== 'undefined') {
   window.__ML_TEST__ = { buildProfiles, buildPairs, pairScore, groupOf, state };
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+function start() { wire(); loadField(); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 
 })();

@@ -170,15 +170,14 @@
 
   /* ---------- boot ---------- */
   async function boot() {
-    const tabs = document.getElementById('aeTabs');
-    tabs.classList.add('ae-tabs-stacked');
-    tabs.innerHTML =
-      `<div class="ae-secrow">${SECTIONS.map((sc) =>
-        `<button class="ae-sec" data-section="${sc.id}" onclick="AEApp.goSection('${sc.id}')">${esc(sc.label)}</button>`
-      ).join('')}</div>` +
-      `<div class="ae-subrow">${VIEWS.map((v) =>
-        `<button class="ae-tab" data-view="${v.id}" data-section="${v.section}" onclick="AEApp.go('${v.id}')">${esc(v.label)}</button>`
-      ).join('')}</div>`;
+    // Sections live in the context bar; the section's views are a pill row
+    // at the top of the workspace. Two rows above content, never four.
+    document.getElementById('aeSections').innerHTML = SECTIONS.map((sc) =>
+      `<button class="hp-tab ae-sec" type="button" data-section="${sc.id}" onclick="AEApp.goSection('${sc.id}')">${esc(sc.label)}</button>`
+    ).join('');
+    document.getElementById('aeTabs').innerHTML = VIEWS.map((v) =>
+      `<button class="hp-pill ae-tab" type="button" data-view="${v.id}" data-section="${v.section}" onclick="AEApp.go('${v.id}')">${esc(v.label)}</button>`
+    ).join('');
 
     const inp = document.getElementById('aeSearchInput');
     inp.addEventListener('input', (e) => onSearchInput(e.target.value));
@@ -191,7 +190,8 @@
     window.AE.buildMeta().then((m) => {
       const el = document.getElementById('aeFreshness');
       if (el && (m.built || m.latest_import)) {
-        el.textContent = `analytics ${m.built || '—'} · latest scrape ${m.latest_import || '—'} · scraper active`;
+        el.textContent = `Live · analytics ${m.built || '—'} · dive sheets ${m.latest_import || '—'}`;
+        el.title = 'Results come from the live database. "analytics" is the last analytics rebuild; "dive sheets" is the newest per-dive import.';
         el.hidden = false;
       }
     }).catch(() => {});

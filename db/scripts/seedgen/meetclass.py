@@ -41,10 +41,17 @@ CANONICAL = [
 
     ("USA Diving Nationals Qualifier",
      lambda n, s: re.search(r"national\s+champion\w*\s+qualifier", n, re.I)
-     or re.search(r"senior\s+national\s+qualifier", n, re.I)),
+     or re.search(r"senior\s+national\s+qualifier", n, re.I)
+     # 2026 naming: "2026 USA Diving Summer Nationals Qualifier"
+     or re.search(r"usa\s+diving\s+summer\s+nationals?\s+qualifier", n, re.I)),
     ("USA Diving Nationals",
      lambda n, s: re.search(r"(senior\s+national\s+diving\s+champion|"
-                            r"usa\s+diving\s+national\s+champion)", n, re.I)),
+                            r"usa\s+diving\s+national\s+champion)", n, re.I)
+     # 2026 naming: "2026 USA Diving Summer Nationals" (senior + synchro events only;
+     # the 2015-2017 combined "National Diving Championships" that also carried
+     # Junior Nationals are deliberately NOT matched here).
+     or (re.search(r"usa\s+diving\s+summer\s+nationals?\b", n, re.I)
+         and not re.search(r"region|zone|junior|qualifier", n, re.I))),
 ]
 
 _WA_MEETS = {"12722"}  # 2026 American Cup: USA Diving sanction, World Aquatics event

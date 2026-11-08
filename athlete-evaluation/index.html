@@ -8,12 +8,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=20260628" />
-  <link rel="stylesheet" href="styles.css?v=202608051415" />
+  <link rel="stylesheet" href="styles.css?v=202611082200" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082200" />
 </head>
-<body>
+<body class="hp-app">
 
-<div class="ae-headstack">
-<header class="app-topbar ae-topbar">
+<header class="app-topbar">
   <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
     <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" class="topbar-logo" />
   </a>
@@ -28,25 +28,36 @@
     <a class="hp-view-tab" href="../matchup-lab/">Matchup Lab</a>
   </nav>
   <div class="topbar-spacer"></div>
-  <span id="aeFreshness" class="ae-freshness" hidden></span>
+  <div class="topbar-metrics">
+    <span id="aeFreshness" class="topbar-pill topbar-source" data-source="neon" hidden></span>
+  </div>
 </header>
 
-<!-- ── Athlete context bar: search + view tabs ─────────────── -->
-<div class="ae-ctxbar">
+<div class="hp-below">
+<nav class="hp-mobile-switch" aria-label="High Performance apps">
+  <a href="../criteria-simulator/">Standards</a>
+  <a class="active" href="./" aria-current="page">Athletes</a>
+  <a href="../matchup-lab/">Matchup</a>
+</nav>
+
+<!-- Context bar: who you are looking at, and where -->
+<div class="hp-ctxbar ae-ctxbar">
   <div class="ae-search">
     <input type="search" id="aeSearchInput" class="ae-search-input" placeholder="Search athletes or meets…" autocomplete="off"/>
     <div id="aeSearchResults" class="ae-search-results" hidden></div>
   </div>
   <div id="aeAthleteChip" class="ae-athlete-chip"></div>
   <div id="aeExport" class="ae-export" hidden>
-    <button class="ae-exp-btn" onclick="AEApp.report()" title="Full evaluation report, sized to print or save as PDF">Report</button>
-    <button class="ae-exp-btn" onclick="AEApp.excel()" title="Formatted Excel workbook — summary, dive groups, dive by dive, every dive, meet history">Excel</button>
+    <button class="btn btn-sm" onclick="AEApp.report()" title="Full evaluation report, sized to print or save as PDF">Report</button>
+    <button class="btn btn-sm" onclick="AEApp.excel()" title="Formatted Excel workbook — summary, dive groups, dive by dive, every dive, meet history">Excel</button>
   </div>
-  <nav id="aeTabs" class="ae-tabs" aria-label="Evaluation views"></nav>
+  <div class="hp-ctx-grow"></div>
+  <nav id="aeSections" class="hp-tabs ae-secrow" aria-label="Evaluation sections"></nav>
 </div>
-</div><!-- /ae-headstack -->
 
-<div class="hp-workspace ae-workspace" id="workspace">
+<div class="hp-workspace ae-workspace hp-main" id="workspace">
+<nav id="aeTabs" class="hp-pills ae-subrow" aria-label="Evaluation views"></nav>
+
 
 <div id="view-field"><div id="fieldRoot"></div></div>
 
@@ -63,6 +74,7 @@
 <div id="view-medaltrack" class="ae-view" hidden></div>
 
 </div><!-- /hp-workspace -->
+</div><!-- /hp-below -->
 
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
@@ -87,7 +99,7 @@
 <script src="ae-value.js?v=202608051"></script>
 <script src="ae-gap.js?v=202608051"></script>
 <script src="ae-report.js?v=202608051"></script>
-<script src="app.js?v=202608051348"></script>
+<script src="app.js?v=202611082200"></script>
 
 </body>
 </html>

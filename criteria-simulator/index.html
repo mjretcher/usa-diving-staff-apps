@@ -8,9 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202607161603" />
+  <link rel="stylesheet" href="styles.css?v=202611082200" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082200" />
 </head>
-<body>
+<body class="hp-app">
 
 <!-- TOPBAR -->
 <header class="app-topbar">
@@ -36,31 +37,38 @@
   </div>
 </header>
 
-<!-- SCENARIO STRIP -->
-<nav class="scenario-strip" aria-label="Active scenario">
-  <div class="scenario-strip-name">
-    <span class="scenario-strip-eyebrow">Active scenario</span>
-    <strong id="scenarioStripName">Unsaved scenario</strong>
-  </div>
-  <div class="scenario-strip-metrics">
-    <span><b>Model</b> <em id="stripModel">—</em></span>
-    <span><b>Score</b> <em id="stripScore">—</em></span>
-    <span><b>DD</b> <em id="stripDd">—</em></span>
-    <span><b>Cutoff</b> <em id="stripCutoff">—</em></span>
-    <span><b>Qualified</b> <em id="stripQualified">0</em></span>
-    <span><b>Bubble</b> <em id="stripBubble">0</em></span>
-  </div>
-  <div class="scenario-strip-actions">
-    <button class="btn btn-primary" id="btnExportWord">Export criteria draft (Word)</button>
-    <button class="btn btn-ghost" id="btnPrintReport">Print report</button>
-    <button class="btn btn-ghost" id="btnCopySummary">Copy summary</button>
-  </div>
+<div class="hp-below">
+<nav class="hp-mobile-switch" aria-label="High Performance apps">
+  <a class="active" href="./" aria-current="page">Standards</a>
+  <a href="../athlete-evaluation/">Athletes</a>
+  <a href="../matchup-lab/">Matchup</a>
 </nav>
+
+<!-- CONTEXT BAR: views + scenario + exports -->
+<div class="hp-ctxbar ss-ctx">
+  <button class="btn btn-sm ss-drawer-btn" id="ssDrawerBtn" type="button" aria-controls="ssSidebar" aria-expanded="false">Controls</button>
+  <nav class="hp-tabs ss-views" id="ssViews" aria-label="Standards Studio views">
+    <button class="hp-tab active" data-view="decide" type="button">Set the standard</button>
+    <button class="hp-tab" data-view="who" type="button">Who qualifies</button>
+    <button class="hp-tab" data-view="evidence" type="button">Evidence</button>
+    <button class="hp-tab" data-view="backtest" type="button">Past seasons</button>
+  </nav>
+  <div class="hp-ctx-grow"></div>
+  <div class="ss-scenario-chip" title="The scenario whose settings are loaded in the controls">
+    <span>Scenario</span><strong id="scenarioStripName">Unsaved scenario</strong>
+  </div>
+  <div class="ss-ctx-actions">
+    <button class="btn btn-primary btn-sm" id="btnExportWord">Export criteria draft (Word)</button>
+    <button class="btn btn-sm" id="btnPrintReport">Print report</button>
+    <button class="btn btn-sm" id="btnCopySummary">Copy summary</button>
+  </div>
+</div>
 
 <!-- SHELL -->
 <div class="app-body">
 
-  <aside class="control-sidebar" aria-label="Criteria controls">
+  <div class="ss-drawer-backdrop" id="ssDrawerBackdrop" hidden></div>
+  <aside class="control-sidebar" id="ssSidebar" aria-label="Criteria controls">
 
     <div class="sidebar-section cs2-scope-section">
       <div class="sidebar-section-title">Authoring Scope</div>
@@ -209,6 +217,7 @@
 
     <div id="mainContent" hidden>
 
+<div class="ss-view" data-view="decide">
       <section class="cs2-trust" id="trustStrip" aria-label="Data trust and coverage">
         <div class="cs2-trust-tile"><span class="cs2-trust-l">Results in scope</span><b id="trustScope">—</b><span class="cs2-trust-f" id="trustScopeFoot"></span></div>
         <div class="cs2-trust-tile"><span class="cs2-trust-l">Placement known</span><b id="trustPlace">—</b><span class="cs2-trust-f">of results in scope</span></div>
@@ -230,13 +239,6 @@
         <span class="filter-chip" id="chipDdWrap"><b>DD ≥</b> <em id="chipDd">—</em></span>
         <span class="filter-chip" id="chipTopNWrap"><b>Place ≤</b> <em id="chipTopN">—</em></span>
         <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeets">All</em></span>
-        <div class="section-nav">
-          <a href="#hero">Summary</a>
-          <a href="#qualified">Who qualifies</a>
-          <a href="#bubble">Bubble</a>
-          <a href="#dzLadderPanel">Move the bar</a>
-          <a href="#explorer">Field analytics</a>
-        </div>
       </nav>
 
       <section id="hero" class="kpi-row" aria-label="Scenario summary">
@@ -295,6 +297,42 @@
         </section>
       </div>
 
+      <!-- What-if simulator — the namesake feature -->
+      <section class="panel cs2-whatif" id="whatIf">
+        <header class="panel-head">
+          <h2>What-if simulator</h2>
+          <p>Type a hypothetical result and see instantly whether it meets the active standard.</p>
+        </header>
+        <div class="cs2-wif-grid">
+          <label class="cs2-wif-field"><span>Gender</span>
+            <select id="wifGender" class="sidebar-select">
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+            </select>
+          </label>
+          <label class="cs2-wif-field"><span>Event</span>
+            <select id="wifEvent" class="sidebar-select">
+              <option value="1m">1m</option>
+              <option value="3m" selected>3m</option>
+              <option value="Platform">Platform</option>
+            </select>
+          </label>
+          <label class="cs2-wif-field"><span>Score</span>
+            <input id="wifScore" class="sidebar-input" type="number" min="0" step="0.05" placeholder="e.g. 258" />
+          </label>
+          <label class="cs2-wif-field"><span>DD total <em>(optional)</em></span>
+            <input id="wifDd" class="sidebar-input" type="number" min="0" step="0.1" placeholder="e.g. 13.5" />
+          </label>
+          <label class="cs2-wif-field"><span>Place <em>(optional)</em></span>
+            <input id="wifPlace" class="sidebar-input" type="number" min="1" step="1" placeholder="e.g. 4" />
+          </label>
+        </div>
+        <div class="cs2-wif-result" id="wifResult">Enter a score to simulate against the active model.</div>
+      </section>
+
+</div><!-- /decide -->
+
+<div class="ss-view" data-view="who">
       <!-- WHO panels — the answer, names first, open by default -->
       <details id="qualified" class="panel dz-who" open>
         <summary>
@@ -364,9 +402,9 @@
         <div id="cmpResult" class="cmp-result"></div>
       </details>
 
+</div><!-- /who -->
 
-      <div class="dz-analytics-divider"><span>Field analytics — the evidence behind the decision</span></div>
-
+<div class="ss-view" data-view="evidence">
       <section class="panel cs2-explorer" id="explorer">
         <header class="panel-head">
           <h2>Threshold Explorer — qualifiers across every standard</h2>
@@ -388,53 +426,12 @@
         <div id="surfaceBody"></div>
       </section>
 
-      <!-- What-if simulator — the namesake feature -->
-      <section class="panel cs2-whatif" id="whatIf">
-        <header class="panel-head">
-          <h2>What-if simulator</h2>
-          <p>Type a hypothetical result and see instantly whether it meets the active standard.</p>
-        </header>
-        <div class="cs2-wif-grid">
-          <label class="cs2-wif-field"><span>Gender</span>
-            <select id="wifGender" class="sidebar-select">
-              <option value="Female">Female</option>
-              <option value="Male">Male</option>
-            </select>
-          </label>
-          <label class="cs2-wif-field"><span>Event</span>
-            <select id="wifEvent" class="sidebar-select">
-              <option value="1m">1m</option>
-              <option value="3m" selected>3m</option>
-              <option value="Platform">Platform</option>
-            </select>
-          </label>
-          <label class="cs2-wif-field"><span>Score</span>
-            <input id="wifScore" class="sidebar-input" type="number" min="0" step="0.05" placeholder="e.g. 258" />
-          </label>
-          <label class="cs2-wif-field"><span>DD total <em>(optional)</em></span>
-            <input id="wifDd" class="sidebar-input" type="number" min="0" step="0.1" placeholder="e.g. 13.5" />
-          </label>
-          <label class="cs2-wif-field"><span>Place <em>(optional)</em></span>
-            <input id="wifPlace" class="sidebar-input" type="number" min="1" step="1" placeholder="e.g. 4" />
-          </label>
-        </div>
-        <div class="cs2-wif-result" id="wifResult">Enter a score to simulate against the active model.</div>
-      </section>
-
       <section class="panel cs2-sensitivity" id="sensitivity">
         <header class="panel-head">
           <h2>Sensitivity — what moves the count</h2>
           <p>How many athletes qualify if you nudge the standard up or down.</p>
         </header>
         <div id="sensitivityBody"></div>
-      </section>
-
-      <section class="panel cs2-sensitivity" id="backtest">
-        <header class="panel-head">
-          <h2>Multi-Year Backtest</h2>
-          <p>The current standard applied to each past season, one year at a time — never summed across years.</p>
-        </header>
-        <div id="backtestBody"></div>
       </section>
 
       <div class="dual-grid">
@@ -507,7 +504,18 @@
         </section>
       </div>
 
-      <details id="standardsInUse" class="panel">
+</div><!-- /evidence -->
+
+<div class="ss-view" data-view="backtest">
+      <section class="panel cs2-sensitivity" id="backtest">
+        <header class="panel-head">
+          <h2>Multi-Year Backtest</h2>
+          <p>The current standard applied to each past season, one year at a time — never summed across years.</p>
+        </header>
+        <div id="backtestBody"></div>
+      </section>
+
+      <details id="standardsInUse" class="panel" open>
         <summary>
           <h2>Standards in use — 2025–26 season (confirm)</h2>
           <p>The exact score standards and DD minimums this tool applies. Confirm they match the current published criteria before relying on results.</p>
@@ -515,10 +523,13 @@
         <div id="standardsBody" class="table-wrap"></div>
       </details>
 
+</div><!-- /backtest -->
+
     </div>
 
   </main>
 </div>
+</div><!-- /hp-below -->
 
 <div id="drilldownOverlay" class="drilldown-overlay" hidden></div>
 <aside id="drilldownPanel" class="drilldown-panel" hidden aria-labelledby="drilldownTitle">
@@ -535,11 +546,11 @@
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
 <script src="../shared/neon-client.js?v=20260627"></script>
-<script src="../shared/usad-data.js?v=20260627"></script>
+<script src="../shared/usad-data.js?v=202611082200"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
-<script src="scenario-sync.js?v=202607132128"></script>
-<script src="main.js?v=202607161603"></script>
+<script src="scenario-sync.js?v=202611082200"></script>
+<script src="main.js?v=202611082200"></script>
 
 </body>
 </html>

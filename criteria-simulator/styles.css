@@ -915,3 +915,101 @@ details.panel > summary p {
 .dz-name.cmp-b { border-color: var(--brand-pool); background: #eef8fc; }
 .cmp-foot { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; padding-bottom: 12px; }
 #scenarioCompare .cmp-controls, #scenarioCompare .cmp-result { padding-left: 0; }
+
+/* Lazy pool load (NCAA on first use): the spinner sits over the workspace
+   instead of replacing it, so the page you were reading stays put. */
+.loading-panel.is-overlay {
+  position: fixed; inset: 0; z-index: 60; min-height: 0;
+  background: rgba(255,255,255,.72); backdrop-filter: blur(2px);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   v3 shell (2026-11) — views, context bar, controls drawer.
+   Shell/panel/table language comes from shared/hp-shell.css (loaded after
+   this file); these rules are the Standards-Studio-specific layout.
+   ════════════════════════════════════════════════════════════════════ */
+:root { --ss-head: calc(var(--topbar-h) + 55px); }
+
+body.hp-app .app-body {
+  display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  padding-top: 0; min-height: calc(100vh - var(--ss-head));
+}
+body.hp-app .control-sidebar {
+  position: sticky; top: var(--ss-head); align-self: start;
+  height: calc(100vh - var(--ss-head)); overflow-y: auto;
+  background: var(--nav-bg); color: var(--nav-ink);
+}
+body.hp-app .app-workspace { padding: 16px 20px 48px; background: var(--bg); overflow: visible; }
+body.hp-app .panel { margin-bottom: 16px; }
+body.hp-app .cs2-trust { margin-bottom: 16px; background: var(--line); }
+body.hp-app .cs2-trust-tile b { font: 500 20px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+body.hp-app .cs2-trust-tile b#trustBasis { font: 700 15px/1.3 var(--font-ui); }
+body.hp-app .filter-strip { padding: 10px 14px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); }
+body.hp-app #mainContent .kpi-row { margin-bottom: 16px; }
+body.hp-app .kpi-card .kpi-value { font-family: var(--font-mono); font-weight: 500; }
+body.hp-app .dz-grid { margin-bottom: 16px; }
+body.hp-app .dz-grid > .panel { margin-bottom: 0; }
+body.hp-app .dual-grid > .panel { margin-bottom: 0; }
+body.hp-app .dual-grid { margin-bottom: 16px; }
+body.hp-app details.panel.dz-who > summary { gap: 4px; flex-direction: column; align-items: flex-start; position: relative; padding-right: 40px; }
+body.hp-app details.panel.dz-who > summary::after { position: absolute; right: 20px; top: 22px; margin: 0; }
+body.hp-app details.panel#standardsInUse > summary { flex-direction: column; align-items: flex-start; gap: 4px; position: relative; padding-right: 40px; }
+body.hp-app details.panel#standardsInUse > summary::after { position: absolute; right: 20px; top: 22px; margin: 0; }
+body.hp-app details.panel#scenarioCompare > summary { flex-direction: column; align-items: flex-start; gap: 4px; position: relative; padding-right: 40px; }
+body.hp-app details.panel#scenarioCompare > summary::after { position: absolute; right: 20px; top: 22px; margin: 0; }
+
+/* Context bar pieces */
+.ss-ctx { min-height: 55px; }
+.ss-views .hp-tab { font-size: 13.5px; padding: 10px 14px; margin-bottom: -11px; }
+.ss-tab-count {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font: 500 11px/1.4 var(--font-mono); background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2);
+}
+.ss-views .hp-tab.active .ss-tab-count { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.ss-scenario-chip {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 320px; min-width: 0;
+  padding: 5px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
+}
+.ss-scenario-chip span { font: 700 10px/1 var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.ss-scenario-chip strong { font: 600 12.5px/1.2 var(--font-ui); color: var(--brand-blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ss-ctx-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ss-drawer-btn { display: none; }
+.ss-drawer-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(13,16,64,.45); }
+
+/* Sidebar inputs: keep the dark look but align with the shell's sizing */
+body.hp-app .control-sidebar .sidebar-select,
+body.hp-app .control-sidebar .sidebar-input { height: 34px; border-radius: 8px; }
+body.hp-app .control-sidebar .btn { height: 32px; font-size: 12.5px; border-radius: 8px; }
+
+@media (max-width: 1280px) {
+  body.hp-app .hp-ctxbar .ss-ctx-actions .btn:not(.btn-primary) { display: none; }
+}
+@media (max-width: 900px) {
+  :root { --ss-head: var(--topbar-h); }
+  body.hp-app .app-body { grid-template-columns: 1fr; }
+  .ss-drawer-btn { display: inline-flex; }
+  body.hp-app .control-sidebar {
+    position: fixed; top: var(--topbar-h); left: 0; bottom: 0; z-index: 95;
+    width: min(320px, 88vw); height: auto;
+    transform: translateX(-104%); transition: transform .2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  body.ss-drawer-open .control-sidebar { transform: translateX(0); }
+  .ss-scenario-chip { display: none; }
+  body.hp-app .hp-ctxbar .ss-ctx-actions .btn:not(.btn-primary) { display: none; }
+  .ss-ctx-actions .btn-primary { font-size: 12px; padding: 0 10px; }
+  .ss-views { order: 1; width: 100%; margin-top: 0; }
+  :root { --ss-head: var(--topbar-h); }
+  .ss-views .hp-tab { padding: 8px 10px; font-size: 13px; }
+  body.hp-app .app-workspace { padding: 12px 12px 40px; }
+  body.hp-app .cs2-trust { grid-template-columns: repeat(2, 1fr); }
+  body.hp-app .cs2-trust-standards { grid-column: 1 / -1; }
+  .dz-bar-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .dz-bar-readout { flex-direction: row; align-items: baseline; gap: 10px; }
+}
+body.hp-app .hp-ctxbar .btn.ss-drawer-btn { display: none; }
+@media (max-width: 900px) { body.hp-app .hp-ctxbar .btn.ss-drawer-btn { display: inline-flex; } }
+.filter-chip.cs2-chip-pool { background: var(--brand-blue); border-color: var(--brand-blue); }
+.filter-chip.cs2-chip-pool b { color: rgba(255,255,255,.7); }
+.filter-chip.cs2-chip-pool em { color: #fff; }
+body.hp-app .cs2-trust-tile b#trustStandards { font: 700 15px/1.3 var(--font-ui); }
