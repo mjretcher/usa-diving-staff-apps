@@ -1,0 +1,27 @@
+/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py:86: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  return pd.read_sql_query(query, conn)
+[  22.5s] loaded 2,034,982 individual dives
+/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py:86: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  return pd.read_sql_query(query, conn)
+[  27.1s] model3: 1,624,417 connected dives of 2,034,982; panels 31,020
+[  60.2s] model3: converged in 40 iterations (max delta 9.03e-05)
+[ 108.2s] model3: split-half reliability all 0.667, n>=60 0.763 (8190 panels)
+/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py:86: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  return pd.read_sql_query(query, conn)
+[ 111.2s] model4: 26 pairs; fit {"n": 26, "intercept": 22.47, "slope": 0.864, "r": 0.927, "rmse": 23.51, "ratio_mean": 0.934, "ratio_sd": 0.068, "seasons": "2025,2026"}
+/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py:232: UserWarning: This pattern is interpreted as a regular expression, and has match groups. To actually get the groups, use str.extract.
+  en.str.contains(r"Group\s*D|\b11\s*(&|and)\s*under\b|\b10\s*-\s*11\b|\b9\s*(&|and)\s*under\b", regex=True)], ["A", "B", "C", "D"], None)
+[ 116.8s] model5: 12,688 athletes with junior group history; consistent 11,518
+[ 117.8s] model5: 46,197 athlete-seasons; 88 band rows
+Traceback (most recent call last):
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py", line 325, in <module>
+    main()
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py", line 321, in main
+    write_tables(conn, tables)
+  File "/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py", line 275, in write_tables
+    elif np.issubdtype(dt, np.bool_): t = "boolean"
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/numpy/_core/numerictypes.py", line 477, in issubdtype
+    arg1 = dtype(arg1).type
+           ^^^^^^^^^^^
+TypeError: Cannot interpret '<StringDtype(storage='python', na_value=nan)>' as a data type
