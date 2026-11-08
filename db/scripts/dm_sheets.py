@@ -85,12 +85,21 @@ def _target_scope(tag):
             "AND (%s = '*' OR t.tag = %s))",
             (tag, tag), f"target_tag={tag!r}")
 
+# Meets catalogued while DiveMeets' MeetInfo page was blocked (late Oct 2026
+# onward) have no sanction on file, so the sanction scopes below cannot see
+# them. Every such meet is crawled — NCAA, international and club meets
+# alike — and the family is labelled unknown downstream until the catalog
+# repairs the row from MeetInfo. Roughly 150 new meet ids a month.
+def _unknown_sanction_scope():
+    return ("m.sanction IS NULL AND m.info->>'_meetinfo_blocked' = 'true'",
+            (), "sanction unknown (MeetInfo blocked) — every new meet")
+
 def build_scopes():
     if TARGET_TAG:
         return [_target_scope(TARGET_TAG)]
     if SANCTION_ENV:
         return [_sanction_scope(SANCTION_ENV)]
-    return [_sanction_scope("USA Diving"), _target_scope("*")]
+    return [_unknown_sanction_scope(), _sanction_scope("USA Diving"), _target_scope("*")]
 SLEEP_S = 0.7
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")

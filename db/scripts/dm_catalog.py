@@ -50,6 +50,23 @@ class MeetInfoForbidden(Exception):
     """DiveMeets returned HTTP 403 for a page. Nothing is written for that
     id — a 403 says nothing about whether the meet exists."""
 
+# Since late Oct 2026 /MeetInfo sits behind a Cloudflare challenge and answers
+# 403 to this crawler, while /MeetResults still answers normally. When that
+# happens the run switches to "bridge" mode: new ids are catalogued from the
+# MeetResults header (name, venue, dates) and the row is flagged
+# info._meetinfo_blocked = true with sanction / type / address left NULL,
+# because those fields exist only on MeetInfo. Flagged rows are re-fetched
+# from MeetInfo first thing on every later run, so the gaps fill themselves
+# as soon as the page is reachable again. Downstream, an unknown sanction is
+# labelled as unknown — never assumed to be USA Diving.
+MEETINFO_BLOCKED = False
+BRIDGE_INFO = {"_meetinfo_blocked": True,
+               "_source": "MeetResults header only",
+               "_note": "DiveMeets /MeetInfo returned HTTP 403 when this row "
+                        "was crawled; sanction, type and address are not on "
+                        "file for this meet. Re-fetched automatically once "
+                        "MeetInfo is reachable."}
+
 LOG = []
 def log(msg):
     print(msg, flush=True)
@@ -150,23 +167,44 @@ def main():
 
     budget = BATCH
     n_ok = n_404 = 0
+    n_bridge = 0
     newest_seen = None
 
     def crawl_one(meet_id):
-        nonlocal n_ok, n_404, newest_seen
-        status, h = fetch(f"https://new.divemeets.com/MeetInfo/{meet_id}")
+        nonlocal n_ok, n_404, newest_seen, n_bridge
+        global MEETINFO_BLOCKED
+        bridged = False
         parsed = {"meet_name": None, "venue": None, "dates_raw": None,
                   "start_date": None, "end_date": None, "info": {}}
+        if not MEETINFO_BLOCKED:
+            try:
+                status, h = fetch(f"https://new.divemeets.com/MeetInfo/{meet_id}")
+            except MeetInfoForbidden:
+                MEETINFO_BLOCKED = True
+                log(f"MeetInfo/{meet_id}: HTTP 403 (Cloudflare) — switching to "
+                    f"MeetResults bridge for the rest of this run")
+        if MEETINFO_BLOCKED:
+            # MeetResults may also be refused; that raises MeetInfoForbidden
+            # and pauses the run, as before.
+            status, h = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
+            bridged = True
         if status == 200 and h:
             parsed = parse_meet_page(h)
         if status in (404, 500) or (status == 200 and not parsed["meet_name"]):
             # dead id, or an empty 200 template (unpublished id) — DiveMeets
             # serves a headerless 200 page for ids with no meet. Some meets
-            # hide info but show results, so try the fallback page.
-            status2, h2 = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
-            p2 = parse_meet_page(h2) if status2 == 200 else None
+            # hide info but show results, so try the fallback page (already
+            # fetched when bridging, so don't fetch it twice).
+            if bridged:
+                status2, h2 = status, ""
+            else:
+                status2, h2 = fetch(f"https://new.divemeets.com/MeetResults/{meet_id}")
+            p2 = parse_meet_page(h2) if status2 == 200 and h2 else None
             if p2 and p2["meet_name"]:
                 status, parsed = 200, p2
+                parsed["info"] = dict(parsed["info"],
+                    _source="MeetResults header only",
+                    _note="MeetInfo page carried no meet header for this id")
             else:
                 if status == 200:
                     status = 204  # synthetic: page exists but holds no meet
@@ -177,6 +215,9 @@ def main():
             if sd and (newest_seen is None or sd > newest_seen):
                 newest_seen = sd
         info = parsed["info"]
+        if bridged and status == 200:
+            info = dict(info); info.update(BRIDGE_INFO)
+            n_bridge += 1
         cur.execute(
             """INSERT INTO divemeets.meets
                (meet_id, http_status, meet_name, venue, start_date, end_date,
@@ -211,6 +252,33 @@ def main():
         log(f"batch done: {n_ok} meets, {n_404} dead ids, newest: {newest_seen}")
         cur.close(); conn.close()
         return
+
+    # ---- Phase 0: refill rows catalogued from MeetResults while MeetInfo ----
+    # was blocked. One MeetInfo fetch tells us whether the block is still on;
+    # if it is, skip (the fetch flips MEETINFO_BLOCKED and the rest of the run
+    # bridges). If it is not, re-crawl flagged rows newest-first within budget.
+    cur.execute("""SELECT meet_id FROM divemeets.meets
+                   WHERE info->>'_meetinfo_blocked' = 'true'
+                   ORDER BY meet_id DESC""")
+    flagged = [r[0] for r in cur.fetchall()]
+    if flagged:
+        log(f"{len(flagged)} rows catalogued without MeetInfo; probing MeetInfo/{flagged[0]}")
+        repaired = 0
+        for meet_id in flagged:
+            if budget <= 0 or MEETINFO_BLOCKED:
+                break
+            crawl_one(meet_id)
+            budget -= 1
+            if not MEETINFO_BLOCKED:
+                repaired += 1
+                if repaired % 50 == 0:
+                    conn.commit()
+        conn.commit()
+        if MEETINFO_BLOCKED:
+            log(f"MeetInfo still blocked; {len(flagged)} rows keep sanction unknown")
+        else:
+            log(f"repaired {repaired} of {len(flagged)} rows from MeetInfo"
+                + ("" if repaired == len(flagged) else " (budget; rest next run)"))
 
     # ---- Phase 1: upward top-up (newest meets have the highest ids) ----
     # Walk up from the highest live id until several consecutive dead ids.
@@ -283,7 +351,8 @@ def main():
             _set_config(cur, "dm_catalog_done", json.dumps(True))
             conn.commit()
             break
-    log(f"run done: {n_ok} meets, {n_404} dead ids, newest seen: {newest_seen}")
+    log(f"run done: {n_ok} meets, {n_404} dead ids, newest seen: {newest_seen}"
+        + (f"; {n_bridge} catalogued from MeetResults only (MeetInfo blocked)" if n_bridge else ""))
     cur.close(); conn.close()
 
 def _set_config(cur, key, value):
@@ -314,11 +383,9 @@ if __name__ == "__main__":
         # hour for a known external block is noise, not signal). The
         # condition is still visible: dm_catalog_last_run carries ok=false
         # and a plain-English reason, and the log says the same.
-        msg = (f"PAUSED: DiveMeets returned HTTP 403 for {e}. The catalog "
-               f"crawl cannot run until DiveMeets allows MeetInfo pages "
-               f"again (MeetResults pages still work). Nothing was written "
-               f"for that id. Ask DiveMeets (Paul) whether MeetInfo access "
-               f"from automated clients changed in late Oct 2026.")
+        msg = (f"PAUSED: DiveMeets returned HTTP 403 for {e}, so even the "
+               f"MeetResults bridge is refused. Nothing was written for that "
+               f"id. Ask DiveMeets (Paul) about automated access.")
         log(msg)
         try:
             if CONN is not None and not CONN.closed:

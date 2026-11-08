@@ -63,6 +63,15 @@ def _target_scope(tag):
             "WHERE t.meet_id = m.meet_id AND (%s = '*' OR t.tag = %s))",
             (tag, tag), f"target_tag={tag!r}")
 
+# Meets catalogued while DiveMeets' MeetInfo page was blocked (late Oct 2026
+# onward) have no sanction on file, so the sanction scopes below cannot see
+# them. Every such meet is crawled — NCAA, international and club meets
+# alike — and the family is labelled unknown downstream until the catalog
+# repairs the row from MeetInfo. Roughly 150 new meet ids a month.
+def _unknown_sanction_scope():
+    return ("m.sanction IS NULL AND m.info->>'_meetinfo_blocked' = 'true'",
+            (), "sanction unknown (MeetInfo blocked) — every new meet")
+
 # A scheduled run drains this whole chain in priority order, falling through
 # as each queue empties, rather than relying on which cron string fired.
 #
@@ -73,15 +82,16 @@ def _target_scope(tag):
 # the NCAA crawl sat at 32 of 380 meets for 31 hours while the logs cheerfully
 # reported success. Chaining in the script removes that whole class of bug:
 # there is nothing to keep in sync with the schedule.
-DEFAULT_CHAIN = ["USA Diving", "Amateur Athletic Union (AAU)", "*targets*"]
+DEFAULT_CHAIN = ["*unknown*", "USA Diving", "Amateur Athletic Union (AAU)", "*targets*"]
 
 def build_scopes():
     if TARGET_TAG:
         return [_target_scope(TARGET_TAG)]
     if SANCTION_ENV:
         return [_sanction_scope(SANCTION_ENV)]
-    return [_target_scope("*") if s == "*targets*" else _sanction_scope(s)
-            for s in DEFAULT_CHAIN]
+    return [_target_scope("*") if s == "*targets*"
+            else _unknown_sanction_scope() if s == "*unknown*"
+            else _sanction_scope(s) for s in DEFAULT_CHAIN]
 SLEEP_S = 0.8
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")

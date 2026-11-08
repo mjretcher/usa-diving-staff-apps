@@ -58,9 +58,15 @@ def _ncaa(sanction):
     return bool(re.search(r"NCAA|National Collegiate", sanction or "", re.I))
 
 
+UNKNOWN_FAMILY = "Unknown (sanction not on file)"
+
 def competition_family(meet_id, meet_name, sanction):
     if str(meet_id) in _WA_MEETS:
         return "World Aquatics"
+    if not (sanction or "").strip():
+        # No sanctioning body on the catalog row (DiveMeets MeetInfo was
+        # unreachable when it was crawled). Say so; never assume USA Diving.
+        return UNKNOWN_FAMILY
     if _ncaa(sanction):
         return "NCAA"
     if re.search(r"World Aquatics|FINA", sanction or "", re.I):
