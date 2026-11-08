@@ -83,7 +83,10 @@ def connect():
     return psycopg2.connect(CONN)
 
 def read_sql(conn, query):
-    return pd.read_sql_query(query, conn)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return pd.read_sql_query(query, conn)
 
 def load_dives(conn):
     if DEV_PARQUET:
@@ -229,7 +232,7 @@ def model5(df):
     en = df["event_name"].fillna("")
     grp = np.select([en.str.contains(r"Group\s*A|\b16\s*-\s*18\b", regex=True), en.str.contains(r"Group\s*B|\b14\s*-\s*15\b", regex=True),
                      en.str.contains(r"Group\s*C|\b12\s*-\s*13\b", regex=True),
-                     en.str.contains(r"Group\s*D|\b11\s*(&|and)\s*under\b|\b10\s*-\s*11\b|\b9\s*(&|and)\s*under\b", regex=True)], ["A", "B", "C", "D"], None)
+                     en.str.contains(r"Group\s*D|\b11\s*(?:&|and)\s*under\b|\b10\s*-\s*11\b|\b9\s*(?:&|and)\s*under\b", regex=True)], ["A", "B", "C", "D"], None)
     d = df.assign(grp=grp)
     obs = d.dropna(subset=["grp"]).groupby(["diver_id", "meet_year", "grp"]).size().reset_index()[["diver_id", "meet_year", "grp"]]
     obs["lo"] = obs["meet_year"] - obs["grp"].map(lambda g: AGE[g][1]); obs["hi"] = obs["meet_year"] - obs["grp"].map(lambda g: AGE[g][0])
@@ -269,12 +272,14 @@ def write_tables(conn, tables):
         frame = frame.copy()
         frame["method_version"] = METHOD_VERSION
         cols = []
+        from pandas.api import types as pt
         for c in frame.columns:
             dt = frame[c].dtype
-            if c.endswith("_id") or c in ("dm_id", "diver_id", "meet_id"): t = "text"; frame[c] = frame[c].astype(str).where(frame[c].notna(), None)
-            elif np.issubdtype(dt, np.bool_): t = "boolean"
-            elif np.issubdtype(dt, np.integer): t = "bigint"
-            elif np.issubdtype(dt, np.floating): t = "double precision"
+            if c.endswith("_id") or c in ("dm_id", "diver_id", "meet_id"):
+                t = "text"; frame[c] = frame[c].astype(object).where(frame[c].notna(), None).map(lambda v: None if v is None else str(v))
+            elif pt.is_bool_dtype(dt): t = "boolean"
+            elif pt.is_integer_dtype(dt): t = "bigint"
+            elif pt.is_float_dtype(dt): t = "double precision"
             else: t = "text"
             cols.append(f'"{c}" {t}')
         cur.execute(f"DROP TABLE IF EXISTS hp_models.{name}_new")
