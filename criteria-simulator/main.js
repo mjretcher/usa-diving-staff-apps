@@ -1546,9 +1546,10 @@ async function loadSimTable() {
   if (state.sim.key === key && state.sim.rows) return;
   state.sim.key = key; state.sim.rows = null; state.sim.loading = true;
   try {
-    const r = await NEON.query(`SELECT diver_id, diver_name, n_obs, list_source, list_year, list_dd, list_json, sim_p10, sim_p50, sim_p90, quantiles_json,
-                                       published_standard, p_clear_standard, world_equiv, p_clear_world_equiv, day_sd, season_max
-                                FROM hp_models.sim_athlete WHERE gender = $1 AND discipline = $2`, [g, d]);
+    const r = await NEON.query(`SELECT s.diver_id, s.diver_name, s.n_obs, s.list_source, s.list_year, s.list_dd, s.list_json, s.sim_p10, s.sim_p50, s.sim_p90, s.quantiles_json,
+                                       s.published_standard, s.p_clear_standard, s.world_equiv, s.p_clear_world_equiv, s.day_sd, s.season_max, a.nat
+                                FROM hp_models.sim_athlete s LEFT JOIN analytics.athlete_directory a ON a.canonical_id = s.diver_id
+                                WHERE s.gender = $1 AND s.discipline = $2`, [g, d]);
     state.sim.rows = r.rows.map(x => ({ ...x, q: JSON.parse(x.quantiles_json || '[]').map(Number), list: JSON.parse(x.list_json || '[]'),
       sim_p50: num(x.sim_p50), sim_p10: num(x.sim_p10), sim_p90: num(x.sim_p90), list_dd: num(x.list_dd), n_obs: num(x.n_obs) }));
     state.sim.error = null;
@@ -1573,7 +1574,13 @@ function renderSimPanel() {
   if (s.error) { host.innerHTML = `<div class="source-impact-empty">The simulation model has not been built yet (${esc(s.error)}). It builds nightly; this fills in on its own.</div>`; return; }
   const std = num(els.scoreThreshold.value);
   const eq = worldEquivFor(els.genderFilter.value, els.disciplineFilter.value); const weq = eq ? num(eq.domestic_equiv_final) : null;
-  const rows = s.rows.map(r => ({ ...r, p: pAtLeast(r.q, std), pw: isNum(weq) ? pAtLeast(r.q, weq) : null })).filter(r => r.p != null).sort((a, b) => b.p - a.p);
+  // Same athlete-scope rule as the results table (nationality from the athlete directory).
+  const scope = els.athleteScope.value;
+  const inScopeNat = (nat) => scope === 'all' ? true
+    : scope === 'knownInternational' ? (nat && nat !== 'USA' && nat !== 'US')
+    : scope === 'knownUsa' ? (nat === 'USA' || nat === 'US')
+    : !(nat && nat !== 'USA' && nat !== 'US'); // usaDomestic: USA or unknown
+  const rows = s.rows.filter(r => inScopeNat(r.nat)).map(r => ({ ...r, p: pAtLeast(r.q, std), pw: isNum(weq) ? pAtLeast(r.q, weq) : null })).filter(r => r.p != null).sort((a, b) => b.p - a.p);
   if (!rows.length) { host.innerHTML = '<div class="source-impact-empty">No athletes simulated for this event yet.</div>'; return; }
   const likely = rows.filter(r => r.p >= 0.5).length, expected = rows.reduce((a, r) => a + r.p, 0);
   const inScope = new Set(state.qualified.map(r => String(r.diver_id)));
@@ -1583,7 +1590,7 @@ function renderSimPanel() {
       <div class="sim-kpi"><span>Expected qualifiers in one competition</span><b>${expected.toFixed(1)}</b><small>sum of each athlete's probability</small></div>
       <div class="sim-kpi"><span>Cleared it once this season</span><b>${state.qualified.length}</b><small>the current "who qualifies" count</small></div>
     </div>
-    <div id="simChart" class="usad-chart" style="height:${Math.max(220, Math.min(rows.length, 30) * 22 + 70)}px"></div>
+    <div id="simChart" class="usad-chart" style="height:${Math.max(220, Math.min(rows.length, window.innerWidth < 720 ? 12 : 30) * 22 + 70)}px"></div>
     <div class="table-wrap"><table class="data-table sim-table"><thead><tr><th>Athlete</th><th class="num">P(≥ ${isNum(std) ? Math.round(std) : '—'})</th>${isNum(weq) ? `<th class="num">P(≥ ${Math.round(weq)} World)</th>` : ''}<th class="num">Median</th><th class="num">10–90%</th><th class="num">List DD</th><th>List from</th><th class="num">Dives on record</th><th>Qualified once</th></tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td><b>${esc(r.diver_name)}</b></td>
@@ -1594,13 +1601,13 @@ function renderSimPanel() {
       <td>${inScope.has(String(r.diver_id)) ? '<span class="hp-badge navy">yes</span>' : '<span class="small">no</span>'}</td></tr>`).join('')}</tbody></table></div>
     <div class="small" style="margin-top:10px">Senior-format list (${rows[0].list.length} optional dives). Each dive is drawn from the athlete's own championship-adjusted record for that dive since ${rows[0].season_max - 2}, blended with the field's record when hers is thin, with a shared good-day/bad-day draw (sd ${esc(rows[0].day_sd)} per dive). "Qualified once" is the current Who-qualifies list. Method: Simulated totals (Model 6).</div>`;
   if (!window.echarts || !window.USAD.charts) return;
-  const { colors: C, MONO, UI } = USAD.charts; const top = rows.slice(0, 30);
+  const { colors: C, MONO, UI } = USAD.charts; const narrow = window.innerWidth < 720; const top = rows.slice(0, narrow ? 12 : 30);
   USAD.charts.mount($('simChart'), {
-    grid: { left: 150, right: 70, top: 28, bottom: 36 },
+    grid: { left: narrow ? 110 : 150, right: narrow ? 44 : 70, top: 28, bottom: 36 },
     tooltip: { formatter: p => { const r = top[top.length - 1 - p.dataIndex]; return `<b>${esc(r.diver_name)}</b><br>P(≥${Math.round(std)}) <b style="font-family:${MONO}">${Math.round(r.p * 100)}%</b>${isNum(weq) ? ` · P(≥${Math.round(weq)}) ${Math.round(r.pw * 100)}%` : ''}<br>median ${fmt1(r.sim_p50)}, 10–90% ${Math.round(r.sim_p10)}–${Math.round(r.sim_p90)}`; } },
     legend: { top: 0, right: 0, data: ['P(clear the standard)'].concat(isNum(weq) ? ['P(World-final equivalent)'] : []) },
     xAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' }, name: 'probability in one competition', nameLocation: 'middle', nameGap: 24 },
-    yAxis: { type: 'category', data: top.map(r => r.diver_name).reverse(), axisLabel: { fontFamily: UI, fontSize: 11.5, color: C.ink2 } },
+    yAxis: { type: 'category', data: top.map(r => narrow ? r.diver_name.split(' ').slice(-1)[0] : r.diver_name).reverse(), axisLabel: { fontFamily: UI, fontSize: 11.5, color: C.ink2 } },
     series: [
       { name: 'P(clear the standard)', type: 'bar', data: top.map(r => r.p).reverse(), barMaxWidth: 12, itemStyle: { color: (p) => p.value >= 0.5 ? C.navy : C.pool }, label: { show: true, position: 'right', formatter: p => (p.value * 100).toFixed(0) + '%', fontFamily: MONO, fontSize: 10.5, color: C.ink2 } },
       ...(isNum(weq) ? [{ name: 'P(World-final equivalent)', type: 'scatter', data: top.map(r => r.pw).reverse(), symbol: 'diamond', symbolSize: 9, itemStyle: { color: C.warn } }] : []),

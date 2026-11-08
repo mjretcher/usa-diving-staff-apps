@@ -119,6 +119,29 @@
   /* ---------- athlete bundle (cached) ---------- */
   const _cache = new Map();
 
+  // Dive sheets with the Model 3 scoring-environment columns when hp_models is
+  // built (severity of the panel, championship level of its cohort). Falls back
+  // to the plain sheets if the schema is absent.
+  const SHEET_COLS = `d.meet_id, d.meet_year, d.competition_family, d.event_id, d.event_name, d.gender,
+                d.discipline, d.round_stage, d.dive_order, d.dive_number, d.height, d.description,
+                d.dd, d.score, d.judges_scores, d.running_total_points, d.round_place,
+                d.dive_category_code, d.optional_voluntary,
+                d.dive_bucket, d.dive_group_code, d.dive_group_label, d.dive_code_norm`;
+  async function sheetsQuery(ids) {
+    try {
+      return await q(`SELECT ${SHEET_COLS}, p.severity AS env_severity, c.champ_severity AS env_champ_ref
+         FROM core.dive_sheets d
+         LEFT JOIN hp_models.panel_environment p ON p.panel_key = d.meet_id::text || '|' || coalesce(d.event_name,'') || '|' || coalesce(d.round_stage,'')
+         LEFT JOIN hp_models.cohort_reference c ON c.component_id = p.component_id
+         WHERE d.diver_id = $1 OR d.diver_id = $2
+         ORDER BY d.meet_year, d.meet_id, d.event_id, d.round_stage, d.dive_order`, ids);
+    } catch (e) {
+      console.warn('[AE] hp_models join unavailable for sheets:', e.message);
+      return q(`SELECT ${SHEET_COLS} FROM core.dive_sheets d WHERE d.diver_id = $1 OR d.diver_id = $2
+                ORDER BY d.meet_year, d.meet_id, d.event_id, d.round_stage, d.dive_order`, ids);
+    }
+  }
+
   async function loadAthlete(canonicalId) {
     if (_cache.has(canonicalId)) return _cache.get(canonicalId);
     const idr = await q(
@@ -139,14 +162,7 @@
          FROM core.result_phases
          WHERE diver_id = $1 OR diver_id = $2
          ORDER BY meet_year, meet_id, event_id`, ids),
-      q(`SELECT meet_id, meet_year, competition_family, event_id, event_name, gender,
-                discipline, round_stage, dive_order, dive_number, height, description,
-                dd, score, judges_scores, running_total_points, round_place,
-                dive_category_code, optional_voluntary,
-                dive_bucket, dive_group_code, dive_group_label, dive_code_norm
-         FROM core.dive_sheets
-         WHERE diver_id = $1 OR diver_id = $2
-         ORDER BY meet_year, meet_id, event_id, round_stage, dive_order`, ids),
+      sheetsQuery(ids),
     ]);
 
     // numeric coercion once (Neon returns strings)
@@ -165,6 +181,11 @@
       r.dive_order = num(r.dive_order); r.round_place = num(r.round_place);
       r.running_total_points = num(r.running_total_points);
       r._exec = execOf(r); r._cat = catOf(r);
+      // Championship-adjusted execution (Model 3): what this dive would have
+      // scored at a US senior championship panel of its cohort-season.
+      const sev = num(r.env_severity), ref = num(r.env_champ_ref);
+      r._adj = (r._exec != null && sev != null && ref != null) ? Math.max(0, Math.min(10, r._exec - (sev - ref))) : r._exec;
+      r._adjusted = (r._exec != null && sev != null && ref != null);
     });
 
     const bundle = { ident, phases: phases.rows, sheets: sheets.rows };
@@ -183,7 +204,7 @@
       if (!by.has(key)) by.set(key, { key, dive: r.dive_number, height: r.height || r.discipline, desc: r.description, samples: [] });
       const g = by.get(key);
       g.desc = g.desc || r.description;
-      g.samples.push({ exec: r._exec, score: r.score, dd: r.dd, year: r.meet_year, meet: r.meet_id, stage: r.round_stage, family: r.competition_family, cat: r._cat });
+      g.samples.push({ exec: r._exec, adj: r._adj != null ? r._adj : r._exec, score: r.score, dd: r.dd, year: r.meet_year, meet: r.meet_id, stage: r.round_stage, family: r.competition_family, cat: r._cat, group: r.dive_group_code || (String(r.dive_number).startsWith('5') ? '5' : String(r.dive_number)[0]) });
     });
     const out = [];
     by.forEach((g) => {
@@ -193,7 +214,7 @@
       const latestDD = g.samples.slice().sort((a, b) => b.year - a.year)[0].dd;
       const st = {
         key: g.key, dive: g.dive, height: g.height, desc: g.desc,
-        cat: g.samples[0].cat, samples: g.samples,
+        cat: g.samples[0].cat, samples: g.samples, group: g.samples[0].group,
         n: ex.length,
         avgExec: mean(ex), sdExec: sd(ex),
         minExec: sorted[0], maxExec: sorted[sorted.length - 1],
