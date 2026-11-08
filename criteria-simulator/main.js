@@ -205,6 +205,10 @@ function normaliseRow(r) {
     dropped_cat:   r.ncaa_women_springboard_repeated_category ?? r.dropped_cat ?? r.droppedCat ?? null,
     ncaa_5cat_dd:  num(r.ncaa_women_springboard_5cat_dd_sum),
     ncaa_division: r.ncaa_division ?? null,
+    phase_dd_sum:  num(r.phase_dd_sum),
+    // Model 3 (scoring environment), present when hp_models is built
+    env_severity:  num(r.env_severity),
+    env_champ_ref: num(r.env_champ_ref),
     // Carry-through
     _raw: r,
   };
@@ -224,8 +228,21 @@ function normaliseGender(g) {
 }
 
 // ── Scoring helpers ────────────────────────────────────────────────────────
+// Restate a non-cumulative score as if judged by this cohort's US Senior
+// championship panels (Model 3). total - 3 x (panel severity - championship
+// level) x list DD. Needs the panel's estimate and the list DD; otherwise null.
+function championshipRestated(row) {
+  const base = isNum(row.phase_score) ? row.phase_score : (isNum(row.posted_score) ? row.posted_score : null);
+  if (!isNum(base) || !isNum(row.env_severity) || !isNum(row.env_champ_ref) || !isNum(row.phase_dd_sum)) return null;
+  return base - 3 * (row.env_severity - row.env_champ_ref) * row.phase_dd_sum;
+}
 function scoreForRow(row) {
   const mode = els.scoreMode.value;
+  if (mode === 'championshipPanel') {
+    const v = championshipRestated(row);
+    if (isNum(v)) return v;
+    // No panel estimate for this result: fall back to the plain score and say so in the basis label.
+  }
   if (mode === 'ncaaWomen5Category' && isNum(row.ncaa_total)) return row.ncaa_total;
   if (mode === 'posted'              && isNum(row.posted_score)) return row.posted_score;
   if (mode === 'phasePreferred'      && isNum(row.phase_score))  return row.phase_score;
@@ -236,6 +253,7 @@ function scoreForRow(row) {
 }
 function scoreBasisLabel(row) {
   const mode = els.scoreMode.value;
+  if (mode === 'championshipPanel') return isNum(championshipRestated(row)) ? 'Restated' : 'Phase (no panel est.)';
   if (mode === 'ncaaWomen5Category' && isNum(row.ncaa_total)) return 'NCAA 5-cat';
   if (mode === 'posted')             return 'Posted';
   if (mode === 'phasePreferred')     return 'Phase';
@@ -510,63 +528,33 @@ function renderScoreHistogram() {
   const target = $('scoreHistogram');
   if (!target) return;
   const scored = state.evaluated.filter(r => isNum(r.analysis_score));
-  if (!scored.length) {
-    target.innerHTML = '<div class="source-impact-empty">No scored results.</div>';
-    return;
-  }
+  if (!scored.length) { target.innerHTML = '<div class="source-impact-empty">No scored results.</div>'; return; }
   const threshold = scored.find(r => isNum(r.threshold_used))?.threshold_used ?? null;
   const scores = scored.map(r => r.analysis_score);
-  const lo = Math.min(...scores);
-  const hi = Math.max(...scores);
-  const range = (hi - lo) || 1;
-  const N = 24;
-  const step = range / N;
-  const buckets = new Array(N).fill(0).map(() => ({ below: 0, above: 0 }));
+  const lo = Math.min(...scores), hi = Math.max(...scores);
+  const step = (hi - lo) > 120 ? 10 : 5;
+  const b0 = Math.floor(lo / step) * step, b1 = Math.floor(hi / step) * step;
+  const cats = []; for (let b = b0; b <= b1; b += step) cats.push(b);
+  const below = cats.map(() => 0), above = cats.map(() => 0);
   for (const r of scored) {
-    let i = Math.floor((r.analysis_score - lo) / step);
-    if (i >= N) i = N - 1;
-    if (i < 0)  i = 0;
-    const passing = isNum(threshold) && r.analysis_score >= threshold;
-    if (passing) buckets[i].above++; else buckets[i].below++;
+    const i = Math.min(cats.length - 1, Math.max(0, Math.floor((r.analysis_score - b0) / step)));
+    if (isNum(threshold) && r.analysis_score >= threshold) above[i]++; else below[i]++;
   }
-  const maxCount = Math.max(...buckets.map(b => b.below + b.above), 1);
-  const W = 700, H = 200;
-  const padL = 32, padR = 14, padT = 16, padB = 24;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-  const barW = innerW / N;
-  let bars = '';
-  for (let i = 0; i < N; i++) {
-    const x = padL + i * barW;
-    const total = buckets[i].below + buckets[i].above;
-    const totalH = (total / maxCount) * innerH;
-    const aboveH = (buckets[i].above / maxCount) * innerH;
-    const belowH = totalH - aboveH;
-    const yBelowTop = padT + innerH - belowH;
-    const yAboveTop = padT + innerH - totalH;
-    if (belowH > 0) bars += `<rect class="bar" x="${(x+1).toFixed(1)}" y="${yBelowTop.toFixed(1)}" width="${(barW-2).toFixed(1)}" height="${belowH.toFixed(1)}" />`;
-    if (aboveH > 0) bars += `<rect class="bar qualified" x="${(x+1).toFixed(1)}" y="${yAboveTop.toFixed(1)}" width="${(barW-2).toFixed(1)}" height="${aboveH.toFixed(1)}" />`;
-  }
-  // Threshold line
-  let thresh = '';
-  if (isNum(threshold) && threshold >= lo && threshold <= hi) {
-    const tx = padL + ((threshold - lo) / range) * innerW;
-    thresh = `
-      <line class="threshold-line" x1="${tx.toFixed(1)}" y1="${padT}" x2="${tx.toFixed(1)}" y2="${(padT + innerH).toFixed(1)}" />
-      <text class="threshold-label" x="${(tx + 5).toFixed(1)}" y="${(padT + 12).toFixed(1)}">≥ ${threshold.toFixed(0)}</text>
-    `;
-  }
-  // Axis
-  const axisY = padT + innerH;
-  const axis = `
-    <line class="axis-line" x1="${padL}" y1="${axisY}" x2="${padL + innerW}" y2="${axisY}" />
-    <text class="axis-label" x="${padL}" y="${H - 6}" text-anchor="start">${lo.toFixed(0)}</text>
-    <text class="axis-label" x="${(padL + innerW/2).toFixed(1)}" y="${H - 6}" text-anchor="middle">score</text>
-    <text class="axis-label" x="${padL + innerW}" y="${H - 6}" text-anchor="end">${hi.toFixed(0)}</text>
-    <text class="axis-label" x="${padL - 4}" y="${(padT + 8).toFixed(1)}" text-anchor="end">${maxCount}</text>
-    <text class="axis-label" x="${padL - 4}" y="${axisY}" text-anchor="end">0</text>
-  `;
-  target.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}${thresh}${axis}</svg>`;
+  target.innerHTML = '<div id="histChart" class="usad-chart" style="height:240px"></div>';
+  if (!window.echarts || !window.USAD.charts) return;
+  const { colors: C, MONO } = USAD.charts;
+  const marks = [];
+  if (isNum(threshold)) marks.push({ xAxis: (threshold - b0) / step - 0.5, lineStyle: { color: C.red, width: 1.5 }, label: { formatter: `standard ${Math.round(threshold)}`, position: 'insideEndTop', rotate: 0, distance: [6, 4], fontFamily: MONO, fontSize: 11, color: C.red, backgroundColor: 'rgba(255,255,255,.9)', padding: [2, 4] } });
+  USAD.charts.mount(target.firstChild, {
+    grid: { left: 40, right: 16, top: 30, bottom: 34 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => `<b style="font-family:${MONO}">${p[0].name}–${+p[0].name + step}</b><br>${p.map(x => `${x.seriesName}: <b>${x.value}</b>`).join('<br>')}` },
+    xAxis: { type: 'category', data: cats, axisLabel: { interval: Math.max(0, Math.round(cats.length / 8) - 1) } },
+    yAxis: { type: 'value', minInterval: 1, name: 'results' },
+    series: [
+      { name: 'Below standard', type: 'bar', stack: 'h', data: below, itemStyle: { color: C.pool } },
+      { name: 'At or above', type: 'bar', stack: 'h', data: above, itemStyle: { color: C.good }, markLine: { symbol: 'none', silent: true, animation: false, data: marks } },
+    ],
+  }, { filename: 'score-distribution' });
 }
 
 function renderBreakdown() {
@@ -619,6 +607,7 @@ function renderFilterStrip() {
   $('chipRound').textContent      = els.roundFilter.value === 'any' ? 'Any' : els.roundFilter.value;
   const basisLabels = {
     ncaaWomen5Category: 'NCAA 5-cat',
+    championshipPanel:  'Championship-panel restated',
     phaseOrStandalone:  'Non-cumulative',
     posted:             'Posted',
     phasePreferred:     'Phase preferred',
@@ -1432,8 +1421,29 @@ const POOL_PAYLOAD = { seniorUsa: 'core', juniorAB: 'core', ncaa: 'ncaa' };
 const loadedPayloads = new Set();
 const pendingPayloads = new Map();
 
-function loadPoolPayload(key, onProgress) {
+// Model 3 columns ride along with every result when hp_models is built:
+// the panel's severity and its cohort's championship level. If the schema is
+// not there yet the join fails and we load the plain rows.
+const RESULT_SQL_JOINED = (where) => `SELECT ${RESULT_COLS.replace(/(^|\n)\s*/g, ' ').trim().split(',').map(c => 'r.' + c.trim()).join(', ')},
+         p.severity AS env_severity, c.champ_severity AS env_champ_ref
+       FROM core.result_phases r
+       LEFT JOIN hp_models.panel_environment p ON p.panel_key = r.meet_id::text || '|' || coalesce(r.event_round,'') || '|' || coalesce(r.round_stage,'')
+       LEFT JOIN hp_models.cohort_reference c ON c.component_id = p.component_id
+       WHERE ${where.replace(/\b(competition_family|competition_group|is_synchronized|age_group|event_round)\b/g, 'r.$1')}`;
+async function loadPoolPayload(key, onProgress) {
   const where = POOL_SQL_WHERE[key];
+  try {
+    return await USAD.data.load({
+      cacheKey: 'criteria-sim-' + key + '-v4',
+      versionSql: `SELECT count(*)::text || '|' || coalesce(max(imported_at)::text,'') || '|' || coalesce((SELECT max(built_at)::text FROM hp_models.panel_environment),'') AS v
+                   FROM core.result_phases WHERE ${where}`,
+      queries: [{ name: 'results', sql: RESULT_SQL_JOINED(where) }],
+      onProgress,
+    });
+  } catch (e) {
+    console.warn('[standards] hp_models join unavailable, loading plain results:', e.message);
+    state.modelsUnavailable = true;
+  }
   return USAD.data.load({
     cacheKey: 'criteria-sim-' + key + '-v3',
     // Version = row count + newest import in this slice: changes when a crawl
@@ -1480,6 +1490,52 @@ async function ensurePoolLoaded(poolId) {
   })();
   pendingPayloads.set(key, p);
   return p;
+}
+
+// Small hp_models tables (Model 4: World conversion + cuts). Loaded once;
+// absent until the nightly build has run the first time.
+async function loadModelTables() {
+  state.models = state.models || {};
+  try {
+    const [eq, fit, meth] = await Promise.all([
+      NEON.query('SELECT * FROM hp_models.world_standard_equiv'),
+      NEON.query('SELECT * FROM hp_models.world_conversion_fit'),
+      NEON.query('SELECT model, title, method, stats, built_at FROM hp_models.method'),
+    ]);
+    state.models.equiv = eq.rows; state.models.fit = fit.rows[0] || null; state.models.method = meth.rows;
+    state.models.ok = true;
+  } catch (e) {
+    state.models.ok = false; state.models.error = e.message;
+  }
+  try { renderWorldEquivalent(); renderThresholdExplorer(); } catch (e) { /* not rendered yet */ }
+}
+function worldEquivFor(gender, discipline) {
+  const m = state.models; if (!m || !m.ok) return null;
+  const g = normaliseGender(gender), d = normaliseDiscipline(discipline);
+  return (m.equiv || []).find(r => normaliseGender(r.gender) === g && normaliseDiscipline(r.discipline) === d) || null;
+}
+function renderWorldEquivalent() {
+  const host = $('worldEquivBody'); if (!host) return;
+  const m = state.models;
+  if (!m || !m.ok) { host.innerHTML = `<div class="source-impact-empty">The World conversion model has not been built yet. It builds nightly from the dive sheets; this panel fills itself in once it exists.</div>`; return; }
+  if (poolFamily() !== 'usa') { host.innerHTML = '<div class="source-impact-empty">World Aquatics scores are on the Senior USA scale only. Switch to the Senior USA pool to use this.</div>'; return; }
+  const eq = worldEquivFor(els.genderFilter.value, els.disciplineFilter.value), fit = m.fit;
+  if (!eq || !fit) { host.innerHTML = '<div class="source-impact-empty">No World Aquatics reference events for this event yet.</div>'; return; }
+  const curStd = num(els.scoreThreshold.value);
+  const n = (v) => isNum(num(v)) ? Math.round(num(v)) : '—';
+  const equiv = num(eq.domestic_equiv_final), lo = num(eq.domestic_equiv_final_low), hi = num(eq.domestic_equiv_final_high);
+  const gapTxt = isNum(curStd) && isNum(equiv) ? (curStd >= equiv ? `Your standard is <b>${Math.round(curStd - equiv)} above</b> the World-final line.` : `Your standard is <b>${Math.round(equiv - curStd)} below</b> the World-final line.`) : '';
+  host.innerHTML = `
+    <div class="we-grid">
+      <div class="we-tile"><span>World final cut</span><b>${n(eq.cut12_median)}</b><small>median 12th-place prelim score, ${esc(eq.n_events)} World Aquatics event${eq.n_events == 1 ? '' : 's'} 2025–26</small></div>
+      <div class="we-tile we-main"><span>Domestic season mean that converts to it</span><b>${n(equiv)}</b><small>range ${n(lo)}–${n(hi)} · World prelim ≈ ${(num(fit.ratio_mean) * 100).toFixed(1)}% of domestic season mean (±${(num(fit.ratio_sd) * 100).toFixed(1)}), ${esc(fit.n)} athlete-seasons</small></div>
+      <div class="we-tile"><span>Your current standard</span><b>${isNum(curStd) ? Math.round(curStd) : '—'}</b><small>${gapTxt || 'Set a score standard to compare.'}</small></div>
+    </div>
+    <div class="we-actions">
+      <button class="btn btn-sm" type="button" id="weApply">Set the standard to ${n(equiv)}</button>
+      <span class="small">This is the 50% line: half of athletes carrying that season mean would be expected to make the World final, half would not. A season <i>mean</i> is the input, not a single best score.</span>
+    </div>`;
+  const b = $('weApply'); if (b) b.addEventListener('click', () => { els.scoreThreshold.value = Math.round(equiv); state.thresholdEdited = true; recompute(); });
 }
 
 function updateDataKpis() {
@@ -1544,6 +1600,7 @@ async function bootstrap() {
   wireEvents();
   initEnhancements();
   initViews();
+  loadModelTables();
 
   // Initial render
   recompute();
@@ -1703,7 +1760,7 @@ function renderTrustStrip() {
   $('trustPlace').textContent = fmtPct(pct(placeKnown, inScope.length));
 
   const basisLabels = {
-    ncaaWomen5Category: 'NCAA 5-cat',
+    ncaaWomen5Category: 'NCAA 5-cat', championshipPanel: 'Championship-panel restated',
     posted: 'Posted', phasePreferred: 'Phase', phaseOrStandalone: 'Non-cumulative',
   };
   $('trustBasis').textContent = basisLabels[els.scoreMode.value] || '—';
@@ -2424,49 +2481,52 @@ function renderThresholdExplorer() {
   const yMax = Math.max(1, ...sweep.map(s => s.n));
   state._sweep = { sweep, yMax };
 
-  const W = 760, H = 340, ml = 48, mr = 18, mt = 22, mb = 44, pw = W - ml - mr, ph = H - mt - mb;
-  const X = x => ml + (x - lo) / (hi - lo) * pw;
-  const Y = n => mt + ph - (n / yMax) * ph;
-  let line = '', area = `M ${X(sweep[0].x).toFixed(1)} ${Y(0).toFixed(1)}`;
-  sweep.forEach((s, i) => { const px = X(s.x).toFixed(1), py = Y(s.n).toFixed(1); line += (i ? ' L ' : 'M ') + px + ' ' + py; area += ' L ' + px + ' ' + py; });
-  area += ` L ${X(sweep[sweep.length - 1].x).toFixed(1)} ${Y(0).toFixed(1)} Z`;
-
-  const yStep = niceStep(yMax / 4), yt = [];
-  for (let v = 0; v <= yMax + 0.001; v += yStep) yt.push(v);
-  const xt = []; for (let i = 0; i <= 5; i++) xt.push(lo + (hi - lo) * i / 5);
   const curN = isNum(curStd) ? qualCountWith(curStd, curDd) : null;
-  const marks = [];
-  if (isNum(curStd)) marks.push({ x: curStd, color: '#171f69', dash: '', text: `Your standard (${Math.round(curStd)})` });
-  if (wb) {
-    marks.push({ x: wb.finalist, color: '#c39a3e', dash: '5 4', text: `World finalist (${Math.round(wb.finalist)})` });
-    marks.push({ x: wb.medal, color: '#8a6d1a', dash: '5 4', text: `World medal (${Math.round(wb.medal)})` });
-  }
-  const inRange = marks.filter(m => isNum(m.x) && m.x >= lo && m.x <= hi)
-    .map(m => Object.assign({}, m, { px: X(m.x) })).sort((a, b) => a.px - b.px);
-  const markLines = inRange.map(m => `<line x1="${m.px.toFixed(1)}" y1="${mt}" x2="${m.px.toFixed(1)}" y2="${mt + ph}" stroke="${m.color}" stroke-width="2"${m.dash ? ` stroke-dasharray="${m.dash}"` : ''}/>`).join('');
-  let _lvl = 0, _prev = -999;
-  const markLabels = inRange.map(m => {
-    if (m.px - _prev < 130) _lvl = Math.min(_lvl + 1, 2); else _lvl = 0;
-    _prev = m.px;
-    const ly = mt - 7 + _lvl * 15;
-    return `<text x="${m.px.toFixed(1)}" y="${ly}" text-anchor="middle" class="cs2-ex-vlab" fill="${m.color}">${esc(m.text)}</text>`;
-  }).join('');
-
-  const svg = `<svg viewBox="0 0 ${W} ${H}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by score standard">`
-    + yt.map(v => `<line x1="${ml}" y1="${Y(v).toFixed(1)}" x2="${W - mr}" y2="${Y(v).toFixed(1)}" class="cs2-ex-grid"/><text x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${Math.round(v)}</text>`).join('')
-    + `<path d="${area}" class="cs2-ex-area"/><path d="${line}" class="cs2-ex-line"/>`
-    + markLines + markLabels
-    + xt.map(x => `<text x="${X(x).toFixed(1)}" y="${(mt + ph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${Math.round(x)}</text>`).join('')
-    + `<text x="${W - mr}" y="${H - 6}" text-anchor="end" class="cs2-ex-axis">score standard →</text>`
-    + `</svg>`;
+  const eq = worldEquivFor(els.genderFilter.value, els.disciplineFilter.value);
+  const weq = eq ? num(eq.domestic_equiv_final) : null;
+  if (isNum(weq)) { lo = Math.min(lo, weq - pad); hi = Math.max(hi, weq + pad); }
 
   const curNote = isNum(curStd)
-    ? `<b>${curN}</b> athletes clear your current standard of <b>${Math.round(curStd)}</b> in this scope.`
-    : 'Set a score standard to mark it on the curve.';
+    ? `<b>${curN}</b> athletes clear your current standard of <b>${Math.round(curStd)}</b> in this scope. Tap the curve to move the standard; drag the band below it to zoom.`
+    : 'Set a score standard to mark it on the curve. Tap the curve to set one.';
   const wbNote = wb
-    ? `Gold lines: a median World finalist sits at <b>${Math.round(wb.finalist)}</b> and a median medalist at <b>${Math.round(wb.medal)}</b> (${wb.n} World Aquatics ${d} finals).`
+    ? `Amber lines: a median World finalist posted <b>${Math.round(wb.finalist)}</b> and a median medalist <b>${Math.round(wb.medal)}</b> in ${wb.n} World Aquatics ${d} finals.`
     : `No World Aquatics ${d} finals available for an international overlay.`;
-  host.innerHTML = `<div class="cs2-ex-head">${curNote}</div>${svg}<div class="cs2-ex-foot">${wbNote}</div>`;
+  const weNote = isNum(weq) ? ` Navy dashed line: the domestic season mean that converts to a World final (<b>${Math.round(weq)}</b>, Model 4).` : '';
+  host.innerHTML = `<div class="cs2-ex-head">${curNote}</div><div id="explorerChart" class="usad-chart" style="height:340px"></div><div class="cs2-ex-foot">${wbNote}${weNote}</div>`;
+
+  if (!window.echarts || !window.USAD.charts) { host.insertAdjacentHTML('beforeend', '<div class="source-impact-empty">Chart library did not load.</div>'); updateInverse(); return; }
+  const { colors: C, MONO } = USAD.charts;
+  const vlabel = (text, color) => ({ formatter: text, position: 'insideEndTop', rotate: 0, distance: [6, 4], fontFamily: MONO, fontSize: 11, color, backgroundColor: 'rgba(255,255,255,.9)', padding: [2, 4], borderRadius: 3 });
+  const marks = [];
+  if (isNum(curStd)) marks.push({ xAxis: curStd, lineStyle: { color: C.red, width: 1.5 }, label: vlabel(`your standard ${Math.round(curStd)}  ·  ${curN} qualify`, C.red) });
+  if (wb) {
+    marks.push({ xAxis: wb.finalist, lineStyle: { color: '#c39a3e', type: [4, 4], width: 1.5 }, label: vlabel(`World finalist ${Math.round(wb.finalist)}`, '#8a6d1a') });
+    marks.push({ xAxis: wb.medal, lineStyle: { color: '#c39a3e', type: [4, 4], width: 1.5 }, label: vlabel(`World medal ${Math.round(wb.medal)}`, '#8a6d1a') });
+  }
+  if (isNum(weq)) marks.push({ xAxis: weq, lineStyle: { color: C.navy, type: [6, 4], width: 1.5 }, label: vlabel(`World-final equivalent ${Math.round(weq)}`, C.navy) });
+  // Stagger labels that would collide: sort by x and step each close neighbour down a row.
+  marks.sort((a, b) => a.xAxis - b.xAxis);
+  let prevX = -Infinity, row = 0;
+  marks.forEach((mk) => { row = (mk.xAxis - prevX) < (hi - lo) * 0.22 ? (row + 1) % 3 : 0; prevX = mk.xAxis; mk.label.distance = [6, 4 + row * 18]; });
+  const el = $('explorerChart');
+  const chart = USAD.charts.mount(el, {
+    grid: { left: 48, right: 24, top: 32, bottom: 78 },
+    tooltip: { trigger: 'axis', formatter: p => `<b style="font-family:${MONO}">${p[0].value[0].toFixed(1)}</b> standard → <b>${p[0].value[1]}</b> qualify` },
+    xAxis: { type: 'value', min: Math.floor(lo), max: Math.ceil(hi), name: 'score standard', nameLocation: 'middle', nameGap: 26 },
+    yAxis: { type: 'value', name: 'athletes', minInterval: 1 },
+    dataZoom: [{ type: 'slider', height: 20, bottom: 10, labelFormatter: v => v.toFixed(0) }, { type: 'inside' }],
+    series: [{ type: 'line', step: 'end', data: sweep.map(s => [s.x, s.n]), symbol: 'none', lineStyle: { color: C.navy, width: 2 }, areaStyle: { color: 'rgba(0,154,199,.12)' },
+      markLine: { symbol: 'none', silent: true, animation: false, data: marks },
+      markPoint: isNum(curStd) ? { data: [{ coord: [curStd, curN], symbol: 'circle', symbolSize: 12, itemStyle: { color: '#fff', borderColor: C.red, borderWidth: 2.5 }, label: { show: false } }] } : undefined }],
+  }, { filename: 'threshold-explorer' });
+  chart.getZr().on('click', (ev) => {
+    const pt = chart.convertFromPixel({ xAxisIndex: 0 }, [ev.offsetX, ev.offsetY]);
+    const x = Array.isArray(pt) ? pt[0] : pt;
+    if (!isNum(x)) return;
+    els.scoreThreshold.value = (Math.round(x * 2) / 2).toFixed(1);
+    state.thresholdEdited = true; recompute();
+  });
   updateInverse();
 }
 
@@ -2667,6 +2727,7 @@ function renderEnhancements() {
   try { renderSensitivity(); } catch (e) {}
   try { renderBacktest(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
+  try { renderWorldEquivalent(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
   try { renderStandardsPanel(); } catch (e) {}
 }

@@ -36,6 +36,13 @@
     if (!st.meetId) return renderFinder(root);
 
     if (!st.meet) st.meet = await window.AE.meetInfo(st.meetId);
+    if (st.env === undefined) {
+      // Model 3: this meet's scoring environment, per panel (event x round).
+      try {
+        const r = await window.NEON.query(`SELECT event_name, round_stage, n_connected, severity, reliable FROM hp_models.panel_environment WHERE meet_id = $1`, [String(st.meetId)]);
+        st.env = r.rows;
+      } catch (e) { st.env = null; }
+    }
     if (!st.events) {
       st.events = await window.AE.meetEvents(st.meetId);
       if (!st.eventKey) {
@@ -157,7 +164,28 @@
           </div>
           <button class="ae-btn-ghost" onclick="AEMeet.back()">← All meets</button>
         </div>
+        ${envLine()}
       </div>`;
+  }
+
+  // One line on how this meet's panels scored, from Model 3. Shown for the
+  // event currently open when its panel has an estimate; otherwise the meet.
+  function envLine() {
+    if (!st.env || !st.env.length) return '';
+    const ev = currentEvent();
+    let row = null;
+    if (ev) row = st.env.find((e) => e.round_stage === ev.round_stage && String(e.event_name || '').startsWith(String(ev.event_name || '').replace(/\s*\(.*$/, ''))) || null;
+    const pts = (sev, dd, n) => sev * 3 * dd * n;
+    if (row && row.severity != null) {
+      const sev = +row.severity, dd = ev.discipline === 'Platform' ? 3.0 : 2.9, n = ev.gender === 'Female' ? 5 : 6;
+      const p = pts(sev, dd, n);
+      const dir = p < -1 ? `scored about <b>${Math.abs(p).toFixed(0)} points lower</b> than` : p > 1 ? `scored about <b>${p.toFixed(0)} points higher</b> than` : 'scored <b>in line with</b>';
+      return `<div class="ae-mh-env">This event's panel ${dir} the typical panel for this cohort that season, on a ${n}-dive list at DD ${dd.toFixed(1)}${+row.reliable ? '' : ' <span class="ae-soft">(estimate from under 60 connected dives)</span>'}. <span class="ae-soft">Scoring environment, Model 3 · ${esc(row.n_connected)} connected dives</span></div>`;
+    }
+    const w = st.env.filter((e) => e.severity != null); if (!w.length) return '';
+    const tot = w.reduce((a, e) => a + +e.n_connected, 0); const sev = w.reduce((a, e) => a + +e.severity * +e.n_connected, 0) / tot;
+    const p = pts(sev, 2.9, 6);
+    return `<div class="ae-mh-env">Across the meet, panels scored about <b>${p < 0 ? Math.abs(p).toFixed(0) + ' points lower' : p.toFixed(0) + ' points higher'}</b> than typical panels for these cohorts that season (6-dive list at DD 2.9). <span class="ae-soft">Scoring environment, Model 3 · ${w.length} panels</span></div>`;
   }
 
   function eventPicker() {
@@ -603,12 +631,12 @@
     // the first form, because it switches view straight afterwards and a
     // repaint here would render whichever view you were on beforehand.
     select(id) {
-      st.meetId = id; st.meet = null; st.events = null;
+      st.meetId = id; st.meet = null; st.events = null; st.env = undefined;
       st.eventKey = null; st.rows = null; st.pop = null; st.official = null; st.focus = null;
     },
     open(id) { this.select(id); window.AEApp.rerender(); },
     back() {
-      st.meetId = null; st.meet = null; st.events = null;
+      st.meetId = null; st.meet = null; st.events = null; st.env = undefined;
       st.eventKey = null; st.rows = null; st.pop = null; st.official = null; st.focus = null;
       window.AEApp.rerender();
     },

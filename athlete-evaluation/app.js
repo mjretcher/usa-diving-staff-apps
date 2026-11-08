@@ -26,6 +26,7 @@
     { id: 'value',    section: 'athlete', label: 'Value & risk',      el: 'view-value',    athlete: true, mod: () => window.AEValue },
     { id: 'listlab',  section: 'athlete', label: 'Dive list',          el: 'view-listlab',  athlete: true, mod: () => window.AEListLab },
     { id: 'pressure', section: 'athlete', label: 'Under pressure',     el: 'view-pressure', athlete: true, mod: () => window.AEPressure },
+    { id: 'age',      section: 'athlete', label: 'Age progression',    el: 'view-age',      athlete: false, mod: () => window.AEAge },
 
     { id: 'gap',      section: 'compare', label: 'Gap to the podium',  el: 'view-gap',      athlete: true, mod: () => window.AEGap },
     { id: 'podium',   section: 'compare', label: 'List vs the field',    el: 'view-podium',   athlete: true, mod: () => window.AEPodium },

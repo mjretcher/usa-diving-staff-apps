@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202611082200" />
-  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082200" />
+  <link rel="stylesheet" href="styles.css?v=202611082330" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082330" />
 </head>
 <body class="hp-app">
 
@@ -146,6 +146,7 @@
           <select id="scoreMode" class="sidebar-select">
             <option value="ncaaWomen5Category">NCAA women's 5-cat derived</option>
             <option value="phaseOrStandalone">Non-cumulative</option>
+            <option value="championshipPanel">Restated to championship panel</option>
             <option value="posted">Posted score</option>
             <option value="phasePreferred">Phase score preferred</option>
           </select>
@@ -296,6 +297,14 @@
           <div id="dzLadder"></div>
         </section>
       </div>
+
+      <section class="panel cs2-world" id="worldEquiv">
+        <header class="panel-head">
+          <h2>What a World final takes, as a domestic standard</h2>
+          <p>The 12th-place preliminary score at World Aquatics events, converted to the domestic season mean that produces it. Set backwards from the target instead of argued forwards from a round number.</p>
+        </header>
+        <div id="worldEquivBody" class="panel-body"></div>
+      </section>
 
       <!-- What-if simulator — the namesake feature -->
       <section class="panel cs2-whatif" id="whatIf">
@@ -547,10 +556,12 @@
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
 <script src="../shared/neon-client.js?v=20260627"></script>
 <script src="../shared/usad-data.js?v=202611082200"></script>
+<script src="../shared/vendor/echarts.min.js?v=5"></script>
+<script src="../shared/usad-echarts-theme.js?v=202611082330"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202611082200"></script>
-<script src="main.js?v=202611082200"></script>
+<script src="main.js?v=202611082330"></script>
 
 </body>
 </html>

@@ -1322,3 +1322,17 @@ body.hp-app .ae-freshness { font-family: var(--font-mono); }
   body.hp-app .ae-secrow .hp-tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; }
   body.hp-app .ae-workspace { padding: 12px 12px 48px; }
 }
+
+/* Age progression (Model 5) */
+.usad-chart { position: relative; width: 100%; }
+.usad-chart-dl { position: absolute; top: 4px; right: 4px; z-index: 3; font: 600 10.5px var(--font-ui); color: var(--ink-3); background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; cursor: pointer; }
+.ae-age-boards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ae-age-board h4 { font: 700 16px/1.1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; color: var(--brand-blue); margin: 0 0 8px; }
+.ae-age-board .data-table { font-size: 12.5px; }
+.ae-link { color: var(--brand-blue); font-weight: 600; text-decoration: none; }
+.ae-link:hover { text-decoration: underline; }
+details.ae-method > summary { cursor: pointer; font-size: 13px; color: var(--ink-2); list-style: none; }
+details.ae-method > summary::-webkit-details-marker { display: none; }
+.ae-method-text { white-space: pre-wrap; font: 400 12px/1.55 var(--font-ui); color: var(--ink-2); margin: 12px 0 0; }
+@media (max-width: 1000px) { .ae-age-boards { grid-template-columns: 1fr; } }
+.ae-mh-env { margin-top: 10px; padding: 8px 12px; border-left: 3px solid var(--brand-pool); background: rgba(0,154,199,.06); border-radius: 6px; font: 400 12.5px/1.5 var(--font-ui); color: var(--ink-2); }
