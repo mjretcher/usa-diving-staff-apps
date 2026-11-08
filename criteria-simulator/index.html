@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202611082330" />
+  <link rel="stylesheet" href="styles.css?v=202611090010" />
   <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082330" />
 </head>
 <body class="hp-app">
@@ -397,6 +397,14 @@
         </div>
       </details>
 
+      <details id="simPanel" class="panel dz-who" open>
+        <summary>
+          <h2>How often each athlete clears the standard</h2>
+          <p id="simSubtitle">Simulated: every dive in the athlete's current list drawn from her own championship-adjusted record, 10,000 competitions. The probability re-reads as you move the standard.</p>
+        </summary>
+        <div id="simBody" class="panel-body"></div>
+      </details>
+
       <details id="scenarioCompare" class="panel dz-who">
         <summary>
           <h2>Compare two scenarios — who swings</h2>
@@ -561,7 +569,7 @@
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202611082200"></script>
-<script src="main.js?v=202611082330"></script>
+<script src="main.js?v=202611090010"></script>
 
 </body>
 </html>

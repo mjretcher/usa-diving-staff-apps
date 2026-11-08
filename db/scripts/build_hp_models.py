@@ -8,6 +8,7 @@ the `hp_models` schema from core.dive_sheets / core.result_phases.
   Model 4  Domestic -> World      hp_models.world_conversion_pairs, world_conversion_fit,
                                   world_cuts, world_standard_equiv
   Model 5  Age progression        hp_models.age_window, athlete_season_ppd, age_bands
+  Model 6  Simulated totals        hp_models.sim_athlete (per athlete x board, Senior USA pool)
 
 Every table carries method_version and built_at. The method is written to
 hp_models.method (one row per model) in plain English so the apps can show it
@@ -61,13 +62,31 @@ MODEL 5 -- age progression
   assigned DD and would understate difficulty). Bands = percentiles of all
   athlete-seasons with window width <= 2 and 6+ optional dives, per gender x
   board x age, published only where n >= 40.
+
+MODEL 6 -- simulated totals (how often an athlete clears a standard)
+  Pool: athletes with an individual result at a US senior championship meet in
+  the last two seasons, per gender x board. List: the athlete's most recent
+  round in the senior format (women 5 / men 6 optional dives, distinct dive
+  codes); if none, built from their best optional dive per dive group by
+  expected points (men may use a group twice).
+  Each dive's execution is drawn from the athlete's own championship-adjusted
+  record for that dive (Model 3 restatement, 2024+), with probability
+  n/(n+4), otherwise from the field's record for the dive code on that board
+  (or the whole board when the code is rare). A shared per-competition "day"
+  draw, N(0, sd) with sd estimated from round-mean residuals beyond
+  independence, is added to every dive. Total = sum of 3 x DD x execution.
+  10,000 competitions per athlete; stored as 99 quantiles so any standard's
+  probability can be read later. Calibration on women's 3m: simulated median
+  vs actual round mean r = 0.94, +3 pts bias, 85% of rounds inside the 10-90
+  band. Published standards (Winter Nationals 2025-26) and the Model 4 World
+  equivalents are evaluated and stored alongside.
 ------------------------------------------------------------------------------
 """
 import os, sys, io, json, time, re
 import numpy as np, pandas as pd
 import scipy.sparse as sp, scipy.sparse.csgraph as cg
 
-METHOD_VERSION = "hp-models-2026-11-08.1"
+METHOD_VERSION = "hp-models-2026-11-08.2"
 CONN = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
 DEV_PARQUET = os.environ.get("HP_MODELS_DEV_PARQUET")  # local testing without a database
 K_P = 20.0
@@ -264,6 +283,77 @@ def model5(df):
     log(f"model5: {len(m):,} athlete-seasons; {len(bands)} band rows")
     return win, m, bands
 
+# ── model 6 ───────────────────────────────────────────────────────────────
+WINTER_STD = {("Female","1m"): 235, ("Female","3m"): 260, ("Female","Platform"): 250, ("Male","1m"): 318, ("Male","3m"): 360, ("Male","Platform"): 330}
+TARGET_N = {"Female": 5, "Male": 6}
+K_OWN = 4.0; NSIM = 10000; SEASONS_BACK = 2
+def model6(df, pan, cohort, conn, eq):
+    rng = np.random.default_rng(7)
+    pan_i = pan.set_index("panel_key")
+    ref = cohort.set_index("component_id")["champ_severity"]
+    d = df.join(pan_i[["severity", "component_id"]], on="panel")
+    d["champ_ref"] = d["component_id"].map(ref)
+    d["adj"] = (d["exec"] - (d["severity"] - d["champ_ref"]).fillna(0)).clip(0, 10)
+    maxyear = int(d["meet_year"].max())
+    d = d[(d["meet_year"] >= maxyear - SEASONS_BACK) & (d["competition_family"] != "World Aquatics")]
+    # pool: senior championship competitors in the last two seasons
+    if DEV_PARQUET:
+        import json as _j; base = os.path.dirname(DEV_PARQUET)
+        ss = _j.load(open(os.path.join(base, "ss_rows.json"))); cols = [x["name"] for x in ss["fields"]]
+        pool = pd.DataFrame(ss["rows"], columns=cols); pool["gender"] = "Female"; pool["discipline"] = "1m"
+        # dev file is women's 1m only; widen with everyone who dived a senior-format round
+        pool = None
+    else:
+        pool = read_sql(conn, f"""SELECT DISTINCT diver_id::text AS diver_id, gender, discipline FROM core.result_phases
+                                  WHERE competition_family = 'USA Diving' AND competition_group IN {SENIOR_GROUPS}
+                                    AND NOT COALESCE(is_synchronized, false) AND meet_year >= {maxyear - SEASONS_BACK}""")
+    eqmap = {(r["gender"], r["discipline"]): float(r["domestic_equiv_final"]) for _, r in eq.iterrows()} if len(eq) else {}
+    out = []
+    for (g, b), sub in d.groupby(["gender", "discipline"]):
+        if (g, b) not in WINTER_STD: continue
+        n_target = TARGET_N[g]
+        field = {dv: grp["adj"].values for dv, grp in sub.groupby("dive") if len(grp) >= 30}
+        field_all = sub["adj"].values
+        res = sub["adj"] - sub.groupby(["diver_id", "dive"])["adj"].transform("mean")
+        rm = res.groupby([sub["diver_id"], sub["meet_id"], sub["event_name"], sub["round_stage"]]).agg(["mean", "count"]); rm = rm[rm["count"] >= 5]
+        day_sd = float(np.sqrt(max(0.0, rm["mean"].var() - (res.std() ** 2 / rm["count"]).mean()))) if len(rm) > 20 else 0.25
+        if pool is not None:
+            ids = set(pool[(pool["gender"] == g) & (pool["discipline"] == b)]["diver_id"].astype(str))
+        else:
+            ids = set(sub["diver_id"].astype(str).unique())
+        sub = sub[sub["diver_id"].astype(str).isin(ids)]
+        for aid, ga in sub.groupby(sub["diver_id"].astype(str)):
+            rounds = [(k, r) for k, r in ga.groupby(["meet_year", "meet_id", "event_name", "round_stage"])
+                      if len(r) == n_target and (r["optional_voluntary"] == "O").all() and r["dive"].nunique() == n_target]
+            if rounds:
+                k, r = max(rounds, key=lambda kr: (kr[0][0], str(kr[0][1]))); lst = r[["dive", "dd"]].drop_duplicates("dive"); src = "latest senior-format list"; lst_meet = str(k[1]); lst_year = int(k[0])
+            else:
+                opt = ga[ga["optional_voluntary"] == "O"].copy()
+                if opt.empty: continue
+                opt["grp"] = opt["dive"].map(lambda x: "5" if str(x).startswith("5") else str(x)[:1])
+                ex = opt.groupby(["grp", "dive"]).agg(dd=("dd", "max"), m=("adj", "mean")).reset_index(); ex["pts"] = 3 * ex["dd"] * ex["m"]
+                ex = ex.sort_values("pts", ascending=False); per_group = 1 if g == "Female" else 2
+                ex["rank_in_grp"] = ex.groupby("grp").cumcount(); pick = ex[ex["rank_in_grp"] < per_group].head(n_target)
+                if len(pick) < n_target: continue
+                lst = pick[["dive", "dd"]]; src = "built from best optional per dive group"; lst_meet = None; lst_year = None
+            own = {dv: x["adj"].values for dv, x in ga.groupby("dive")}
+            draws = np.zeros(NSIM); day = rng.normal(0, day_sd, NSIM); detail = []
+            for dv, dd in zip(lst["dive"], lst["dd"].astype(float)):
+                o = own.get(dv, np.array([])); n = len(o); prior = field.get(dv, field_all)
+                use_own = rng.random(NSIM) < (n / (n + K_OWN))
+                e = np.where(use_own, rng.choice(o, NSIM) if n else 0.0, rng.choice(prior, NSIM))
+                e = np.clip(e + day, 0, 10); draws += 3 * dd * e
+                detail.append({"dive": dv, "dd": round(float(dd), 1), "n": int(n), "own_mean": (round(float(o.mean()), 2) if n else None), "prior_mean": round(float(prior.mean()), 2), "under4": (round(float((o < 4).mean()), 2) if n else None)})
+            qs = np.percentile(draws, np.arange(1, 100))
+            std = WINTER_STD[(g, b)]; weq = eqmap.get((g, b))
+            out.append({"diver_id": aid, "diver_name": ga["diver_name"].iloc[0], "gender": g, "discipline": b, "season_max": maxyear, "n_obs": int(len(ga)),
+                        "list_source": src, "list_meet_id": lst_meet, "list_year": lst_year, "list_dd": round(float(lst["dd"].astype(float).sum()), 1), "list_json": json.dumps(detail),
+                        "sim_p10": float(qs[9]), "sim_p50": float(qs[49]), "sim_p90": float(qs[89]), "quantiles_json": json.dumps([round(float(x), 1) for x in qs]),
+                        "published_standard": std, "p_clear_standard": float((draws >= std).mean()),
+                        "world_equiv": weq, "p_clear_world_equiv": (float((draws >= weq).mean()) if weq else None), "day_sd": round(day_sd, 3)})
+        log(f"model6: {g} {b}: {sum(1 for o in out if o['gender']==g and o['discipline']==b)} athletes simulated (day sd {day_sd:.3f})")
+    return pd.DataFrame(out)
+
 # ── write ─────────────────────────────────────────────────────────────────
 def write_tables(conn, tables):
     cur = conn.cursor()
@@ -292,6 +382,7 @@ def write_tables(conn, tables):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_panel_meet ON hp_models.panel_environment(meet_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_asp_diver ON hp_models.athlete_season_ppd(diver_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_bands ON hp_models.age_bands(gender, discipline, age)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_sim ON hp_models.sim_athlete(gender, discipline)")
     cur.execute("""DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
                      GRANT USAGE ON SCHEMA hp_models TO usad_app; GRANT SELECT ON ALL TABLES IN SCHEMA hp_models TO usad_app; END IF; END $$;""")
     cur.execute("""INSERT INTO app_meta.config (key, value) VALUES ('hp_models_last_run', %s)
@@ -306,6 +397,7 @@ def method_rows(stats3, fit4):
         {"model": "scoring_environment", "title": "Scoring environment (Model 3)", "method": section("3"), "stats": json.dumps(stats3)},
         {"model": "world_conversion", "title": "Domestic season to World Aquatics (Model 4)", "method": section("4"), "stats": json.dumps(fit4)},
         {"model": "age_progression", "title": "Age progression (Model 5)", "method": section("5"), "stats": "{}"},
+        {"model": "simulated_totals", "title": "Simulated totals (Model 6)", "method": section("6"), "stats": "{}"},
     ])
 
 def main():
@@ -315,7 +407,8 @@ def main():
     pan, meet, cohort, stats3 = model3(df, links)
     pairs, fit4, cuts, eq = model4(conn, pan)
     win, seasons, bands = model5(df)
-    tables = {"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
+    sim = model6(df, pan, cohort, conn, eq)
+    tables = {"sim_athlete": sim,"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
               "world_conversion_pairs": pairs, "world_conversion_fit": pd.DataFrame([fit4]) if fit4 else pd.DataFrame(columns=["n"]),
               "world_cuts": cuts, "world_standard_equiv": eq, "age_window": win, "athlete_season_ppd": seasons, "age_bands": bands,
               "method": method_rows(stats3, fit4)}

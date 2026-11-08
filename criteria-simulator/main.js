@@ -1538,6 +1538,77 @@ function renderWorldEquivalent() {
   const b = $('weApply'); if (b) b.addEventListener('click', () => { els.scoreThreshold.value = Math.round(equiv); state.thresholdEdited = true; recompute(); });
 }
 
+// ── Model 6: simulated totals per athlete ─────────────────────────────────
+async function loadSimTable() {
+  state.sim = state.sim || {};
+  const g = normaliseGender(els.genderFilter.value), d = normaliseDiscipline(els.disciplineFilter.value);
+  const key = g + '|' + d;
+  if (state.sim.key === key && state.sim.rows) return;
+  state.sim.key = key; state.sim.rows = null; state.sim.loading = true;
+  try {
+    const r = await NEON.query(`SELECT diver_id, diver_name, n_obs, list_source, list_year, list_dd, list_json, sim_p10, sim_p50, sim_p90, quantiles_json,
+                                       published_standard, p_clear_standard, world_equiv, p_clear_world_equiv, day_sd, season_max
+                                FROM hp_models.sim_athlete WHERE gender = $1 AND discipline = $2`, [g, d]);
+    state.sim.rows = r.rows.map(x => ({ ...x, q: JSON.parse(x.quantiles_json || '[]').map(Number), list: JSON.parse(x.list_json || '[]'),
+      sim_p50: num(x.sim_p50), sim_p10: num(x.sim_p10), sim_p90: num(x.sim_p90), list_dd: num(x.list_dd), n_obs: num(x.n_obs) }));
+    state.sim.error = null;
+  } catch (e) { state.sim.rows = []; state.sim.error = e.message; }
+  state.sim.loading = false;
+  renderSimPanel();
+}
+// P(total >= x) from 99 stored quantiles (q[i] = (i+1)th percentile).
+function pAtLeast(q, x) {
+  if (!q || q.length < 99 || !isNum(x)) return null;
+  if (x <= q[0]) return 0.995; if (x > q[98]) return 0.005;
+  let i = 0; while (i < 99 && q[i] < x) i++;
+  // linear interpolation between percentiles i and i+1
+  const lo = q[i - 1], hi = q[i]; const frac = hi > lo ? (x - lo) / (hi - lo) : 0;
+  const pct = (i + frac) / 100; return Math.max(0, Math.min(1, 1 - pct));
+}
+function renderSimPanel() {
+  const host = $('simBody'); if (!host) return;
+  if (poolFamily() !== 'usa') { host.innerHTML = '<div class="source-impact-empty">Simulated totals are built for the Senior USA pool. Switch pools to use this.</div>'; return; }
+  const s = state.sim || {};
+  if (s.loading || !s.rows) { host.innerHTML = '<div class="source-impact-empty">Loading the simulation…</div>'; return; }
+  if (s.error) { host.innerHTML = `<div class="source-impact-empty">The simulation model has not been built yet (${esc(s.error)}). It builds nightly; this fills in on its own.</div>`; return; }
+  const std = num(els.scoreThreshold.value);
+  const eq = worldEquivFor(els.genderFilter.value, els.disciplineFilter.value); const weq = eq ? num(eq.domestic_equiv_final) : null;
+  const rows = s.rows.map(r => ({ ...r, p: pAtLeast(r.q, std), pw: isNum(weq) ? pAtLeast(r.q, weq) : null })).filter(r => r.p != null).sort((a, b) => b.p - a.p);
+  if (!rows.length) { host.innerHTML = '<div class="source-impact-empty">No athletes simulated for this event yet.</div>'; return; }
+  const likely = rows.filter(r => r.p >= 0.5).length, expected = rows.reduce((a, r) => a + r.p, 0);
+  const inScope = new Set(state.qualified.map(r => String(r.diver_id)));
+  host.innerHTML = `
+    <div class="sim-head">
+      <div class="sim-kpi"><span>Clear ${isNum(std) ? Math.round(std) : '—'} more often than not</span><b>${likely}</b><small>of ${rows.length} simulated athletes</small></div>
+      <div class="sim-kpi"><span>Expected qualifiers in one competition</span><b>${expected.toFixed(1)}</b><small>sum of each athlete's probability</small></div>
+      <div class="sim-kpi"><span>Cleared it once this season</span><b>${state.qualified.length}</b><small>the current "who qualifies" count</small></div>
+    </div>
+    <div id="simChart" class="usad-chart" style="height:${Math.max(220, Math.min(rows.length, 30) * 22 + 70)}px"></div>
+    <div class="table-wrap"><table class="data-table sim-table"><thead><tr><th>Athlete</th><th class="num">P(≥ ${isNum(std) ? Math.round(std) : '—'})</th>${isNum(weq) ? `<th class="num">P(≥ ${Math.round(weq)} World)</th>` : ''}<th class="num">Median</th><th class="num">10–90%</th><th class="num">List DD</th><th>List from</th><th class="num">Dives on record</th><th>Qualified once</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td><b>${esc(r.diver_name)}</b></td>
+      <td class="num"><span class="hp-badge ${r.p >= 0.75 ? 'good' : r.p >= 0.5 ? 'info' : r.p >= 0.25 ? 'warn' : 'out'}">${Math.round(r.p * 100)}%</span></td>
+      ${isNum(weq) ? `<td class="num">${Math.round(r.pw * 100)}%</td>` : ''}
+      <td class="num">${fmt1(r.sim_p50)}</td><td class="num">${Math.round(r.sim_p10)}–${Math.round(r.sim_p90)}</td><td class="num">${fmt1(r.list_dd)}</td>
+      <td class="small">${esc(r.list_source)}${r.list_year ? ' · ' + esc(r.list_year) : ''}</td><td class="num">${fmtInt(r.n_obs)}${r.n_obs < 30 ? ' <span class="small">thin</span>' : ''}</td>
+      <td>${inScope.has(String(r.diver_id)) ? '<span class="hp-badge navy">yes</span>' : '<span class="small">no</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="small" style="margin-top:10px">Senior-format list (${rows[0].list.length} optional dives). Each dive is drawn from the athlete's own championship-adjusted record for that dive since ${rows[0].season_max - 2}, blended with the field's record when hers is thin, with a shared good-day/bad-day draw (sd ${esc(rows[0].day_sd)} per dive). "Qualified once" is the current Who-qualifies list. Method: Simulated totals (Model 6).</div>`;
+  if (!window.echarts || !window.USAD.charts) return;
+  const { colors: C, MONO, UI } = USAD.charts; const top = rows.slice(0, 30);
+  USAD.charts.mount($('simChart'), {
+    grid: { left: 150, right: 70, top: 28, bottom: 36 },
+    tooltip: { formatter: p => { const r = top[top.length - 1 - p.dataIndex]; return `<b>${esc(r.diver_name)}</b><br>P(≥${Math.round(std)}) <b style="font-family:${MONO}">${Math.round(r.p * 100)}%</b>${isNum(weq) ? ` · P(≥${Math.round(weq)}) ${Math.round(r.pw * 100)}%` : ''}<br>median ${fmt1(r.sim_p50)}, 10–90% ${Math.round(r.sim_p10)}–${Math.round(r.sim_p90)}`; } },
+    legend: { top: 0, right: 0, data: ['P(clear the standard)'].concat(isNum(weq) ? ['P(World-final equivalent)'] : []) },
+    xAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' }, name: 'probability in one competition', nameLocation: 'middle', nameGap: 24 },
+    yAxis: { type: 'category', data: top.map(r => r.diver_name).reverse(), axisLabel: { fontFamily: UI, fontSize: 11.5, color: C.ink2 } },
+    series: [
+      { name: 'P(clear the standard)', type: 'bar', data: top.map(r => r.p).reverse(), barMaxWidth: 12, itemStyle: { color: (p) => p.value >= 0.5 ? C.navy : C.pool }, label: { show: true, position: 'right', formatter: p => (p.value * 100).toFixed(0) + '%', fontFamily: MONO, fontSize: 10.5, color: C.ink2 } },
+      ...(isNum(weq) ? [{ name: 'P(World-final equivalent)', type: 'scatter', data: top.map(r => r.pw).reverse(), symbol: 'diamond', symbolSize: 9, itemStyle: { color: C.warn } }] : []),
+      { type: 'line', data: [], markLine: { symbol: 'none', silent: true, animation: false, data: [{ xAxis: 0.5, lineStyle: { color: C.red, width: 1.5 }, label: { formatter: 'coin flip', position: 'insideEndTop', rotate: 0, fontFamily: MONO, fontSize: 11, color: C.red } }] } },
+    ],
+  }, { filename: 'simulated-clearance' });
+}
+
 function updateDataKpis() {
   // Topbar figures describe the active pool, not everything in memory.
   const pool = activePool();
@@ -2728,6 +2799,7 @@ function renderEnhancements() {
   try { renderBacktest(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderWorldEquivalent(); } catch (e) {}
+  try { if (poolFamily() === 'usa') loadSimTable().then(() => {}); renderSimPanel(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
   try { renderStandardsPanel(); } catch (e) {}
 }
