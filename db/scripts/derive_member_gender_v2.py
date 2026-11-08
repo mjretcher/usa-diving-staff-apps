@@ -106,7 +106,7 @@ def main():
         if k and gg: votes[k]["core.dive_sheets"][gg] += 1
 
     cur.execute("""select r.diver_name, e.gender from scoresandmore.event_results r
-                   join scoresandmore.meet_events e on e.event_id = r.event_id
+                   join scoresandmore.meet_events e on e.meet_id = r.meet_id and e.event_id = r.event_id
                    where r.diver_name is not null and e.gender is not null and lower(coalesce(e.synchro,'')) not in ('true','t','1','yes','y','synchro')""")
     for n, g in cur:
         k, gg = key_from_full(n), g2(g)

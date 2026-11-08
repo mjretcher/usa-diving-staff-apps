@@ -16,24 +16,12 @@ on:
         description: "If set, ONLY capture a raw DiveSheets page sample for this event id (parser design aid). Uses the first meet in the list."
         required: false
         default: ""
-  schedule:
-    # Daily at 10:05 UTC (~6 AM ET) while registration is open / meets approach.
-    # Compute cost on Neon is driven by how often it is woken, not by how much
-    # work is done, so this should be switched off once the season closes
-    # rather than left running against meets that are over.
-    - cron: "5 10 * * *"
-    # Meet-window top-ups for the 2026 Senior meets in Morgantown: the National
-    # Championships Qualifier (5-6 Aug) and the National Championships (7-11
-    # Aug), at 11:05am and 6:05pm ET alongside the 6:05am daily run. Entries can
-    # technically change until three hours before an event, but the late fee is
-    # steep enough that late signups are uncommon — this is a light top-up so
-    # the apps are never a day stale, NOT a poll.
-    # Date-scoped, so they stop on their own after 11 Aug. REMOVE these two
-    # lines afterwards: otherwise they fire on the same calendar days next year
-    # against stale meet numbers, because scheduled runs carry no inputs and
-    # fall back to the default list below.
-    - cron: "5 15 5-11 8 *"
-    - cron: "5 22 5-11 8 *"
+  # No schedule. The 2026 meets this synced (12923/12924/12925) ended 11 Aug
+  # 2026; the daily run kept polling them and, once DiveMeets began answering
+  # 403 for MeetInfo pages in late Oct 2026, failed every morning. Schedule
+  # removed 2026-11-08. When the next meet window opens, add a cron back here
+  # (daily 10:05 UTC worked well) and set the default meet_ids list to the new
+  # meet numbers.
 
 permissions:
   contents: write

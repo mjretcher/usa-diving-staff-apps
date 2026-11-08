@@ -46,6 +46,10 @@ SLEEP_S = 0.6
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 
+class MeetInfoForbidden(Exception):
+    """DiveMeets returned HTTP 403 for a page. Nothing is written for that
+    id — a 403 says nothing about whether the meet exists."""
+
 LOG = []
 def log(msg):
     print(msg, flush=True)
@@ -78,8 +82,14 @@ def fetch(url):
                 seen_500 = True
                 time.sleep(2)
                 continue
+            if e.code == 403:
+                # Since late Oct 2026 DiveMeets answers 403 for every
+                # /MeetInfo page from the runner (MeetResults still works).
+                # Retrying does not change the answer; surface it to the
+                # caller, which pauses the crawl rather than failing the job.
+                raise MeetInfoForbidden(url)
             last = e
-            if e.code in (403, 429, 503):
+            if e.code in (429, 503):
                 # potential Cloudflare / rate limiting — back off hard
                 time.sleep(20 * (attempt + 1))
             else:
@@ -129,10 +139,14 @@ def parse_meet_page(h):
             out["info"][lab] = val
     return out
 
+CONN = None  # set by main() so the 403 handler can commit work done so far
+
 def main():
+    global CONN
     conn = psycopg2.connect(DB_URL)
     conn.autocommit = False
     cur = conn.cursor()
+    CONN = conn
 
     budget = BATCH
     n_ok = n_404 = 0
@@ -293,6 +307,27 @@ if __name__ == "__main__":
     try:
         main()
         report(True)
+    except MeetInfoForbidden as e:
+        # Known condition, not a code failure: DiveMeets is refusing the
+        # MeetInfo page. The crawl cannot make progress until access is
+        # restored, so stop here without failing the job (a red run every
+        # hour for a known external block is noise, not signal). The
+        # condition is still visible: dm_catalog_last_run carries ok=false
+        # and a plain-English reason, and the log says the same.
+        msg = (f"PAUSED: DiveMeets returned HTTP 403 for {e}. The catalog "
+               f"crawl cannot run until DiveMeets allows MeetInfo pages "
+               f"again (MeetResults pages still work). Nothing was written "
+               f"for that id. Ask DiveMeets (Paul) whether MeetInfo access "
+               f"from automated clients changed in late Oct 2026.")
+        log(msg)
+        try:
+            if CONN is not None and not CONN.closed:
+                CONN.commit()   # keep ids crawled before the block
+                CONN.close()
+        except Exception:
+            traceback.print_exc()
+        report(False, msg)
+        sys.exit(0)
     except Exception:
         err = traceback.format_exc()
         print(err, file=sys.stderr)
