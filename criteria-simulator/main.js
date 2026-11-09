@@ -790,7 +790,28 @@ function setView(v, opts = {}) {
     window.scrollTo({ top: 0 });
   }
 }
+// Filter chips are read-outs AND the way in on a phone: tapping one opens the
+// controls (drawer on narrow screens) and focuses the matching control.
+function initChipTaps() {
+  document.querySelectorAll('.filter-chip[data-control]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const id = chip.dataset.control; const ctl = $(id); if (!ctl) return;
+      if (window.innerWidth <= 900) {
+        document.body.classList.add('ss-drawer-open');
+        const btn = $('ssDrawerBtn'), bd = $('ssDrawerBackdrop');
+        if (btn) btn.setAttribute('aria-expanded', 'true'); if (bd) bd.hidden = false;
+      }
+      setTimeout(() => {
+        ctl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (ctl.tagName === 'SELECT' || ctl.tagName === 'INPUT') { ctl.focus(); if (ctl.tagName === 'SELECT' && typeof ctl.showPicker === 'function') { try { ctl.showPicker(); } catch (e) {} } }
+        else ctl.click();
+        ctl.classList.add('ss-flash'); setTimeout(() => ctl.classList.remove('ss-flash'), 1600);
+      }, window.innerWidth <= 900 ? 260 : 0);
+    });
+  });
+}
 function initViews() {
+  initChipTaps();
   const nav = $('ssViews');
   if (nav) nav.addEventListener('click', (e) => {
     const t = e.target.closest('.hp-tab'); if (!t) return;
@@ -1852,6 +1873,23 @@ function renderTrustStrip() {
 
   const ts = $('trustStandards');
   if (ts) ts.textContent = `${activePool().shortLabel} · ${state.year ?? '—'}`;
+  // Published-criteria check: does the active score standard match Table 1 of
+  // the 2026 Winter Nationals criteria (amended 10/26/2026) for this event?
+  const foot = $('trustStandardsFoot');
+  if (foot) {
+    const pub = scoreThresholdForSelection(els.genderFilter.value, els.disciplineFilter.value, poolFamily());
+    const cur = num(els.scoreThreshold.value);
+    const pubDd = ddMinimumForSelection(els.genderFilter.value, els.disciplineFilter.value, 'winterEligibility');
+    const curDd = num(els.ddThreshold.value);
+    if (!isNum(pub)) { foot.textContent = 'no published standard for this pool'; foot.className = 'cs2-trust-foot'; }
+    else if (isNum(cur) && Math.abs(cur - pub) < 0.01 && (!isNum(curDd) || !isNum(pubDd) || Math.abs(curDd - pubDd) < 0.01)) {
+      foot.innerHTML = `matches published 2026 Winter Nationals criteria (${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}) · <a href="https://www.usadiving.org/2026-winter-national-championships" target="_blank" rel="noopener">source, amended 10/26/2026</a>`;
+      foot.className = 'cs2-trust-foot is-ok';
+    } else {
+      foot.innerHTML = `edited: published is ${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}, you are testing ${isNum(cur) ? Math.round(cur) : '—'}${isNum(curDd) ? ' · DD ' + curDd : ''}`;
+      foot.className = 'cs2-trust-foot is-edited';
+    }
+  }
 }
 
 function activeStandardFor(gender, discipline) {

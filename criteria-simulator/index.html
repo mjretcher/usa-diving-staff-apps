@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202611090030" />
+  <link rel="stylesheet" href="styles.css?v=202611091000" />
   <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082330" />
 </head>
 <body class="hp-app">
@@ -224,22 +224,22 @@
         <div class="cs2-trust-tile"><span class="cs2-trust-l">Placement known</span><b id="trustPlace">—</b><span class="cs2-trust-f">of results in scope</span></div>
         <div class="cs2-trust-tile"><span class="cs2-trust-l">Score basis</span><b id="trustBasis">—</b><span class="cs2-trust-f" id="trustBasisFoot"></span></div>
         <div class="cs2-trust-tile"><span class="cs2-trust-l">DD known</span><b id="trustDd">—</b><span class="cs2-trust-f">needed for DD checks</span></div>
-        <div class="cs2-trust-tile cs2-trust-standards"><span class="cs2-trust-l">Standards</span><b id="trustStandards">2025–26</b><span class="cs2-trust-f cs2-confirm">confirm vs published</span></div>
+        <div class="cs2-trust-tile cs2-trust-standards"><span class="cs2-trust-l">Standards</span><b id="trustStandards">2025–26</b><span class="cs2-trust-f" id="trustStandardsFoot">checking against the published criteria…</span></div>
       </section>
 
       <!-- Filter chip strip: shows current scope, click any chip to reset that filter -->
       <nav class="filter-strip" aria-label="Active filter summary">
-        <span class="filter-chip active cs2-chip-pool"><b>Pool</b> <em id="chipPool">—</em></span>
-        <span class="filter-chip active cs2-chip-pool"><b>Year</b> <em id="chipYear">—</em></span>
-        <span class="filter-chip active"><b>Model</b> <em id="chipPreset">—</em></span>
-        <span class="filter-chip active"><b>Gender</b> <em id="chipGender">—</em></span>
-        <span class="filter-chip active"><b>Event</b> <em id="chipDiscipline">—</em></span>
-        <span class="filter-chip" id="chipRoundWrap"><b>Round</b> <em id="chipRound">Any</em></span>
-        <span class="filter-chip"><b>Score basis</b> <em id="chipBasis">—</em></span>
-        <span class="filter-chip" id="chipScoreWrap"><b>Score ≥</b> <em id="chipScore">—</em></span>
-        <span class="filter-chip" id="chipDdWrap"><b>DD ≥</b> <em id="chipDd">—</em></span>
-        <span class="filter-chip" id="chipTopNWrap"><b>Place ≤</b> <em id="chipTopN">—</em></span>
-        <span class="filter-chip" id="chipMeetsWrap"><b>Meets</b> <em id="chipMeets">All</em></span>
+        <button type="button" class="filter-chip active cs2-chip-pool" data-control="poolSelect" title="Change pool"><b>Pool</b> <em id="chipPool">—</em></button>
+        <button type="button" class="filter-chip active cs2-chip-pool" data-control="yearSelect" title="Change year"><b>Year</b> <em id="chipYear">—</em></button>
+        <button type="button" class="filter-chip active" data-control="criteriaPreset" title="Change model"><b>Model</b> <em id="chipPreset">—</em></button>
+        <button type="button" class="filter-chip active" data-control="genderFilter" title="Change gender"><b>Gender</b> <em id="chipGender">—</em></button>
+        <button type="button" class="filter-chip active" data-control="disciplineFilter" title="Change event"><b>Event</b> <em id="chipDiscipline">—</em></button>
+        <button type="button" class="filter-chip" id="chipRoundWrap" data-control="roundFilter" title="Change round"><b>Round</b> <em id="chipRound">Any</em></button>
+        <button type="button" class="filter-chip" data-control="scoreMode" title="Change score basis"><b>Score basis</b> <em id="chipBasis">—</em></button>
+        <button type="button" class="filter-chip" id="chipScoreWrap" data-control="scoreThreshold" title="Change score ≥"><b>Score ≥</b> <em id="chipScore">—</em></button>
+        <button type="button" class="filter-chip" id="chipDdWrap" data-control="ddThreshold" title="Change dd ≥"><b>DD ≥</b> <em id="chipDd">—</em></button>
+        <button type="button" class="filter-chip" id="chipTopNWrap" data-control="topN" title="Change place ≤"><b>Place ≤</b> <em id="chipTopN">—</em></button>
+        <button type="button" class="filter-chip" id="chipMeetsWrap" data-control="btnPickMeets" title="Change meets"><b>Meets</b> <em id="chipMeets">All</em></button>
       </nav>
 
       <section id="hero" class="kpi-row" aria-label="Scenario summary">
@@ -569,7 +569,7 @@
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202611082200"></script>
-<script src="main.js?v=202611090030"></script>
+<script src="main.js?v=202611091000"></script>
 
 </body>
 </html>
