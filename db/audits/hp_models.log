@@ -1,28 +1,28 @@
-[  25.1s] loaded 2,034,982 individual dives
+[  25.3s] loaded 2,034,982 individual dives
 [  30.5s] model3: 1,624,417 connected dives of 2,034,982; panels 31,020
-[  79.3s] model3: converged in 40 iterations (max delta 9.03e-05)
-[ 142.3s] model3: split-half reliability all 0.668, n>=60 0.763 (8190 panels)
-[ 147.8s] model4: 26 pairs; fit {"n": 26, "intercept": 22.47, "slope": 0.864, "r": 0.927, "rmse": 23.51, "ratio_mean": 0.934, "ratio_sd": 0.068, "seasons": "2025,2026"}
-[ 158.0s] model5: 12,688 athletes with junior group history; consistent 11,518
-[ 159.5s] model5: 46,197 athlete-seasons; 88 band rows
-[ 161.3s] model6: Female 1m: 110 athletes simulated (day sd 0.196)
-[ 162.5s] model6: Female 3m: 135 athletes simulated (day sd 0.212)
-[ 163.3s] model6: Female Platform: 86 athletes simulated (day sd 0.219)
-[ 164.4s] model6: Male 1m: 98 athletes simulated (day sd 0.270)
-[ 165.9s] model6: Male 3m: 148 athletes simulated (day sd 0.265)
-[ 166.4s] model6: Male Platform: 53 athletes simulated (day sd 0.276)
-[ 167.4s] wrote hp_models.sim_athlete: 630 rows
-[ 168.2s] wrote hp_models.panel_environment: 31,020 rows
-[ 168.6s] wrote hp_models.meet_environment: 1,601 rows
-[ 168.9s] wrote hp_models.cohort_reference: 1,493 rows
-[ 169.2s] wrote hp_models.world_conversion_pairs: 26 rows
-[ 169.5s] wrote hp_models.world_conversion_fit: 1 rows
-[ 169.9s] wrote hp_models.world_cuts: 26 rows
-[ 170.2s] wrote hp_models.world_standard_equiv: 6 rows
-[ 170.6s] wrote hp_models.age_window: 12,688 rows
-[ 171.9s] wrote hp_models.athlete_season_ppd: 46,197 rows
-[ 172.2s] wrote hp_models.age_bands: 88 rows
-[ 172.5s] wrote hp_models.method: 4 rows
+[  76.7s] model3: converged in 40 iterations (max delta 9.03e-05)
+[ 138.5s] model3: split-half reliability all 0.667, n>=60 0.763 (8190 panels)
+[ 143.7s] model4: 26 pairs; fit {"n": 26, "intercept": 22.47, "slope": 0.864, "r": 0.927, "rmse": 23.51, "ratio_mean": 0.934, "ratio_sd": 0.068, "seasons": "2025,2026"}
+[ 153.8s] model5: 12,688 athletes with junior group history; consistent 11,518
+[ 155.3s] model5: 46,197 athlete-seasons; 88 band rows
+[ 157.1s] model6: Female 1m: 110 athletes simulated (day sd 0.196)
+[ 158.2s] model6: Female 3m: 135 athletes simulated (day sd 0.212)
+[ 159.1s] model6: Female Platform: 86 athletes simulated (day sd 0.219)
+[ 160.1s] model6: Male 1m: 98 athletes simulated (day sd 0.270)
+[ 161.5s] model6: Male 3m: 148 athletes simulated (day sd 0.265)
+[ 162.1s] model6: Male Platform: 53 athletes simulated (day sd 0.276)
+[ 163.0s] wrote hp_models.sim_athlete: 630 rows
+[ 163.9s] wrote hp_models.panel_environment: 31,020 rows
+[ 164.2s] wrote hp_models.meet_environment: 1,601 rows
+[ 164.5s] wrote hp_models.cohort_reference: 1,493 rows
+[ 164.9s] wrote hp_models.world_conversion_pairs: 26 rows
+[ 165.2s] wrote hp_models.world_conversion_fit: 1 rows
+[ 165.5s] wrote hp_models.world_cuts: 26 rows
+[ 165.8s] wrote hp_models.world_standard_equiv: 6 rows
+[ 166.2s] wrote hp_models.age_window: 12,688 rows
+[ 167.0s] wrote hp_models.athlete_season_ppd: 46,197 rows
+[ 167.3s] wrote hp_models.age_bands: 88 rows
+[ 167.6s] wrote hp_models.method: 4 rows
 /home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/build_hp_models.py:389: Pandas4Warning: Timestamp.utcnow is deprecated and will be removed in a future version. Use Timestamp.now('UTC') instead.
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""", (json.dumps({"at": pd.Timestamp.utcnow().isoformat(), "ok": True, "method_version": METHOD_VERSION}),))
-[ 173.0s] committed; usad_app SELECT granted on hp_models
+[ 168.1s] committed; usad_app SELECT granted on hp_models
