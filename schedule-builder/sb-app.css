@@ -1538,6 +1538,13 @@ html[data-theme="deck"] .ts-card.along{background:rgba(0,154,199,.13)}
 .hours-note b{color:var(--navy);font-weight:700}
 .hours-note.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E}
 .hours-note.bad{background:#FEF2F2;border-color:#FECACA;color:#991B1B;font-weight:600}
+.poolclose-card{display:flex;align-items:center;gap:9px;margin:8px 0;padding:9px 14px;border-radius:10px;background:#FDF0F2;border:1px solid #F5C2CA;border-left:4px solid #E31937;color:#8E1223;font-size:12.5px;font-weight:700;flex-shrink:0}
+.poolclose-card[role=button]{cursor:pointer}
+.poolclose-card[role=button]:hover{background:#FBE3E7}
+.poolclose-card svg{width:15px;height:15px;flex-shrink:0}
+.poolclose-tm{margin-left:auto;font-variant-numeric:tabular-nums}
+html[data-theme="deck"] .poolclose-card{background:rgba(227,25,55,.14);border-color:rgba(227,25,55,.4);color:#FFB3BE}
+html[data-theme="deck"] .poolclose-card[role=button]:hover{background:rgba(227,25,55,.2)}
 .hours-check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--tx);cursor:pointer;margin:2px 0 10px}
 .hours-check input{width:16px;height:16px;accent-color:var(--navy);cursor:pointer}
 .hours-help{font-size:11px;color:var(--tx3);line-height:1.5;margin:0 0 14px}

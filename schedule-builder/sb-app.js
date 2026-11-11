@@ -3301,6 +3301,12 @@ function renderLockBanner(){
   </div>`;
 }
 
+// Marker on the working schedule for a day set to close the pool after its last
+// event, so the setting is visible without opening Facility hours. Click opens it.
+function renderPoolCloseCard(pc){
+  const lk=dayLocked(UI.dayId);
+  return`<div class="poolclose-card" ${lk?'':`role="button" tabindex="0" onclick="openFacilityHours('${UI.dayId}')" onkeydown="if(event.key==='Enter')openFacilityHours('${UI.dayId}')"`} title="Set in Facility hours for this day. The time follows the last event."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg><span class="poolclose-t">Pool closes after the last event</span><span class="poolclose-tm">${f12(pc.end)}</span></div>`;
+}
 // ── TIMELINE BODY ─────────────────────────────────────────────────────
 function renderTimeline(timed){
   const day=S.meet.days.find(d=>d.id===UI.dayId);
@@ -3310,7 +3316,9 @@ function renderTimeline(timed){
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Place events on days from one grid, or click "Add block" to build this day by hand</div><div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-p btn-sm" onclick="openPlanner()">Plan events across days</button><button class="btn btn-sm" onclick="showAddMenu()">Add block</button></div></div></div>`;
   sessions=filterByEvent(sessions);
   if(!sessions.length&&UI.eventFilter)return`<div class="tl-body"><div class="empty" style="margin-top:40px"><div class="empty-title">No ${esc(eventFilterLabel())} blocks this day</div><div class="empty-sub">Switch the event filter to All, or tag blocks via the editor ("Part of").</div></div></div>`;
-  if(UI.timeScale)return renderTimelineScale(sessions,timed);
+  const pcl=poolCloseAfterLast(UI.dayId,timed);
+  let pclDone=false;
+  if(UI.timeScale)return renderTimelineScale(sessions,timed,pcl);
   const parts=[];
   // Group the day into rows: each block in the straight stack, plus any blocks
   // pinned to run at the same time as it, nested underneath. Gap chips only ever
@@ -3332,7 +3340,9 @@ function renderTimeline(timed){
     const along=(attached.get(sess2.id)||[]).map(p=>renderAlongsideBlock(p,timed,warns,sess2)).join('');
     parts.push(along?`<div class="tl-row">${renderCard(sess2,timed,warns)}${along}</div>`:renderCard(sess2,timed,warns));
     if(!isParallel(sess2))prevStack=sess2;
+    if(pcl&&sess2.id===pcl.sess.id){parts.push(renderPoolCloseCard(pcl));pclDone=true;}
   });
+  if(pcl&&!pclDone)parts.push(renderPoolCloseCard(pcl));
   return`<div class="tl-body">
     ${parts.join('')}
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
@@ -3342,7 +3352,7 @@ function renderTimeline(timed){
 // Time-scale view: block heights are proportional to real durations against an
 // hour ruler, so a 4-hour warm-up literally towers over a 1-hour meeting and
 // dead time appears as visible empty space. Click any block to open it.
-function renderTimelineScale(sessions,timed){
+function renderTimelineScale(sessions,timed,pcl){
   const PX=1.1; // pixels per minute
   const rangeStart=Math.floor(Math.min(...sessions.map(s=>s.timing.warmupStartMinutes))/60)*60;
   const rangeEnd=Math.ceil(Math.max(...sessions.map(s=>s.timing.sessionEndMinutes))/60)*60;
@@ -3379,6 +3389,7 @@ function renderTimelineScale(sessions,timed){
   }).join('');
   return`<div class="tl-body">
     <div class="ts-wrap" data-px="${PX}" style="height:${H+20}px">${hours}<div class="ts-cards">${cards}</div></div>
+    ${pcl?renderPoolCloseCard(pcl):''}
     <div class="addrow"><div class="addrow-line"></div><button class="addrow-btn" onclick="showAddMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg> Add session or practice</button><div class="addrow-line"></div></div>
   </div>`;
 }
