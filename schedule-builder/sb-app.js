@@ -1786,7 +1786,7 @@ function poolCloseAfterLast(dayId,timed){
 // Wording used on every printed output. withTime=false leaves the clock time out
 // (outputs that do not print end times).
 function poolCloseText(pc,withTime){
-  return`Pool closes after the last event${withTime?`, about ${f12(pc.end)}`:''}. No warm-ups or training after that.`;
+  return`Pool closes after the last event${withTime?`, about ${f12(pc.end)}`:''}`;
 }
 // Whether an output prints the clock time on the pool-closing line. Follows the
 // output's end times unless its "Pool closing time" switch has been set by hand.
@@ -3446,7 +3446,7 @@ function buildHandoutDayHTML(day,timed,os){
     return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${handoutAlongTag(sess,timed)}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${cnote?`<div class="hd-note">${esc(cnote)}</div>`:''}${wu}${evs}</td></tr>`;
   }).join('');
   const pc=poolCloseAfterLast(day.id);
-  const closeRow=pc?`<tr class="hd-close"><td class="hd-time">${f12(pc.end)}</td><td><div class="hd-name">Pool closes</div><div class="hd-close-note">After the last event. No warm-ups or training after that.</div></td></tr>`:'';
+  const closeRow=pc?`<tr class="hd-close"><td class="hd-time">${f12(pc.end)}</td><td><div class="hd-name">Pool closes</div><div class="hd-close-note">After the last event</div></td></tr>`:'';
   return`<div class="hd-page">
 <div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
 <div class="hd-accent"></div>
@@ -3793,7 +3793,7 @@ async function exportMeetExcel(){
     });
     if(!ds.length)aoa.push(['(nothing scheduled)']);
     const pcx=poolCloseAfterLast(day.id,timed);
-    if(pcx&&ds.length)aoa.push([f12(pcx.end),'','Pool closes','After the last event. No warm-ups or training after that.','','']);
+    if(pcx&&ds.length)aoa.push([f12(pcx.end),'','Pool closes','After the last event','','']);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols']=[{wch:10},{wch:10},{wch:24},{wch:44},{wch:10},{wch:30}];
     XLSX.utils.book_append_sheet(wb,ws,_sheetNameFor(day.date));
