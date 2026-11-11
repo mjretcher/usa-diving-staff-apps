@@ -1788,6 +1788,9 @@ function poolCloseAfterLast(dayId,timed){
 function poolCloseText(pc,withTime){
   return`Pool closes after the last event${withTime?`, about ${f12(pc.end)}`:''}. No warm-ups or training after that.`;
 }
+// Whether an output prints the clock time on the pool-closing line. Follows the
+// output's end times unless its "Pool closing time" switch has been set by hand.
+function poolCloseTimeShown(cfg){return cfg.showPoolClose!=null?!!cfg.showPoolClose:!!(cfg.showTimes&&!cfg.startOnly);}
 function isPoolUseBlock(sess){
   if(!sess.isPractice)return false;
   const t=String(sess.title||'').trim()||String(((sess.events||[])[0]||{}).customLabel||'').trim();
@@ -6448,6 +6451,7 @@ function renderGenerateModal(timed){
             <label class="togrow"><span>Seconds per dive</span><span class="tog"><input type="checkbox" ${cfg.showSec?'checked':''} onchange="AUD['${aud}'].showSec=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Athlete introduction times</span><span class="tog"><input type="checkbox" ${cfg.showIntros!==false?'checked':''} onchange="AUD['${aud}'].showIntros=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Awards ceremony times</span><span class="tog"><input type="checkbox" ${cfg.showAwards!==false?'checked':''} onchange="AUD['${aud}'].showAwards=this.checked;genRender()"><span class="togsl"></span></span></label>
+            <label class="togrow" title="Only affects days set to close the pool after the last event (Facility hours). Off prints the notice without a time."><span>Pool closing time<span style="display:block;font-size:10.5px;color:var(--tx3);font-weight:400">On days that close after the last event.</span></span><span class="tog"><input type="checkbox" ${poolCloseTimeShown(cfg)?'checked':''} onchange="AUD['${aud}'].showPoolClose=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Group practice at top of day</span><span class="tog"><input type="checkbox" ${cfg.practiceTop?'checked':''} onchange="AUD['${aud}'].practiceTop=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Flighted warm-up athlete counts</span><span class="tog"><input type="checkbox" ${cfg.showFlightCounts?'checked':''} onchange="AUD['${aud}'].showFlightCounts=this.checked;genRender()"><span class="togsl"></span></span></label>
             <label class="togrow"><span>Split-board events: show unsplit time</span><span class="tog"><input type="checkbox" ${cfg.showUnsplitAlt?'checked':''} onchange="AUD['${aud}'].showUnsplitAlt=this.checked;genRender()"><span class="togsl"></span></span></label>
@@ -6746,7 +6750,7 @@ function renderPP(timed,cfg,titleOverride){
     return`<div class="pp-day">
       <div class="pp-day-hd"><span class="pp-day-dot"></span>${esc(fullDate(d.day.date))}</div>
       ${ordered.map(sess=>sess.isPractice?pracBlock(sess):sessBlock(sess)).join('')}
-      ${(()=>{const pc=poolCloseAfterLast(d.day.id,fullTimed);return pc?`<div class="pp-close">${esc(poolCloseText(pc,cfg.showTimes&&!cfg.startOnly))}</div>`:''})()}
+      ${(()=>{const pc=poolCloseAfterLast(d.day.id,fullTimed);return pc?`<div class="pp-close">${esc(poolCloseText(pc,poolCloseTimeShown(cfg)))}</div>`:''})()}
     </div>`;
   }
 
