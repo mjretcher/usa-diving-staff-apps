@@ -584,7 +584,7 @@ function protectedFingerprint(st,ids,includeMeet){
   ids.forEach(id=>{
     const d=days.find(x=>x.id===id)||{};
     fp[id]=JSON.stringify({
-      date:d.date,openMinutes:d.openMinutes,closeMinutes:d.closeMinutes,eventTag:d.eventTag,
+      date:d.date,openMinutes:d.openMinutes,closeMinutes:d.closeMinutes,closeAfterLast:d.closeAfterLast||undefined,eventTag:d.eventTag,
       sessions:(st.sessions||[]).filter(x=>x.dayId===id)
     });
   });
@@ -975,8 +975,10 @@ function detectConflicts(){
         }
       }
     }
+    const pcl=poolCloseAfterLast(day.id,timed);
     sessions.forEach(s=>{
       const sn=s.isPractice?(s.title||'Open Training'):'Session '+getSessNum(s,timed);
+      if(pcl&&isPoolUseBlock(s)&&s.timing.sessionEndMinutes>pcl.end)issues.push({sev:'warn',title:'Training after the pool closes',detail:`${sn} runs until ${f12(s.timing.sessionEndMinutes)}, but this day is set to close the pool after the last event (${f12(pcl.end)})`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
       // Day boundary
       if(s.timing.warmupStartMinutes<openM)issues.push({sev:'warn',title:'Starts before venue opens',detail:`${sn} starts ${f12(s.timing.warmupStartMinutes)}, venue opens ${f12(openM)}`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
       if(s.timing.sessionEndMinutes>closeM)issues.push({sev:'warn',title:'Runs past venue close',detail:`${sn} ends ${f12(s.timing.sessionEndMinutes)}, venue closes ${f12(closeM)}`,loc:dayLabel,fixSessId:s.id,dayId:day.id,fixHint:'edit'});
@@ -1760,20 +1762,52 @@ function blocksOutsideHours(dayId){
   const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
   return timedForDay(dayId).filter(s=>s.timing.warmupStartMinutes<open||s.timing.sessionEndMinutes>close).length;
 }
+// ── POOL CLOSES AFTER THE LAST EVENT ──────────────────────────────────
+// A per-day checkbox. When on, the pool is closed to warm-ups and training once
+// the day's last competition session ends. Nothing is stored except the flag:
+// the time is read from the schedule every time it is shown, so it follows any
+// change to the day. The "Pool closes" time above stays the venue's hard limit.
+function dayClosesAfterLast(dayId){const d=(S.meet.days||[]).find(x=>x.id===dayId);return !!(d&&d.closeAfterLast);}
+function setDayCloseAfterLast(dayId,on){upd(s=>{const d=s.meet.days.find(x=>x.id===dayId);if(d)d.closeAfterLast=!!on;});}
+// The day's last competition session, from the full schedule (not a filtered view).
+function dayLastEvent(dayId,timed){
+  const comp=(timed||allTimed()).filter(x=>x.dayId===dayId&&!x.isPractice&&(x.events||[]).length&&x.timing);
+  if(!comp.length)return null;
+  const last=comp.reduce((a,b)=>b.timing.sessionEndMinutes>a.timing.sessionEndMinutes?b:a);
+  const evs=(last.timing.events||[]).filter(e=>e.eventEndMinutes!=null);
+  const ev=evs.length?evs.reduce((a,b)=>b.eventEndMinutes>a.eventEndMinutes?b:a):null;
+  return{sess:last,end:last.timing.sessionEndMinutes,evLabel:ev?evName(ev):''};
+}
+// Closing time to print for a day, or null when the box is off or the day has no events.
+function poolCloseAfterLast(dayId,timed){
+  if(!dayClosesAfterLast(dayId))return null;
+  return dayLastEvent(dayId,timed);
+}
+// Wording used on every printed output. withTime=false leaves the clock time out
+// (outputs that do not print end times).
+function poolCloseText(pc,withTime){
+  return`Pool closes after the last event${withTime?`, about ${f12(pc.end)}`:''}. No warm-ups or training after that.`;
+}
+function isPoolUseBlock(sess){
+  if(!sess.isPractice)return false;
+  const t=String(sess.title||'').trim()||String(((sess.events||[])[0]||{}).customLabel||'').trim();
+  if(OV_CLOSED_RE.test(t)||OV_MEETING_RE.test(t))return false;
+  return OV_TRAINING_RE.test(t)||(sess.events||[]).some(e=>e.style==='Restricted Training');
+}
 function openFacilityHours(dayId){
   if(dayLocked(dayId)){lockRefused();return;}UI.modal='facility-hours';UI.hoursDayId=dayId||UI.dayId;render();}
 // Copy this day's hours onto every other day — venues rarely change their hours
 // mid-meet, so setting them once and stamping them across is the common case.
 function applyHoursToAllDays(dayId){
-  const open=dayOpenFor(dayId),close=dayCloseFor(dayId);
+  const open=dayOpenFor(dayId),close=dayCloseFor(dayId),cal=dayClosesAfterLast(dayId);
   const others=(S.meet.days||[]).filter(d=>d.id!==dayId).length;
   if(!others){toast('This is the only day');return;}
   askConfirm({
     title:'Use these hours every day?',
-    message:`All ${others} other day${others===1?'':'s'} will be set to ${f12(open)} - ${f12(close)}. You can undo with Cmd+Z.`,
+    message:`All ${others} other day${others===1?'':'s'} will be set to ${f12(open)} - ${f12(close)}${cal?', and the pool will close after the last event on each day':''}. You can undo with Cmd+Z.`,
     confirmText:'Apply to all days',
     onConfirm:()=>{
-      upd(s=>{s.meet.days.forEach(d=>{d.openMinutes=open;d.closeMinutes=close;reflowDay(s,d.id);});});
+      upd(s=>{s.meet.days.forEach(d=>{d.openMinutes=open;d.closeMinutes=close;d.closeAfterLast=cal;reflowDay(s,d.id);});});
       toast(`Facility hours set on all ${others+1} days`);
     }
   });
@@ -3236,7 +3270,7 @@ function renderTlBar(timed){
       <button class="evf-chip ${UI.eventFilter==='shared'?'on':''}" onclick="UI.eventFilter='shared';render()">Shared</button>
     </div>`:''}
     <div class="tl-spacer"></div>
-    ${day?`<button class="tl-hours ${blocksOutsideHours(UI.dayId)?'warn':''}" ${lk?'disabled':`onclick="openFacilityHours('${UI.dayId}')"`} title="Set when the pool opens and closes on this day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pool ${f12(dayOpenFor(UI.dayId))} – ${f12(dayCloseFor(UI.dayId))}</button>`:''}
+    ${day?`<button class="tl-hours ${blocksOutsideHours(UI.dayId)?'warn':''}" ${lk?'disabled':`onclick="openFacilityHours('${UI.dayId}')"`} title="Set when the pool opens and closes on this day"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Pool ${f12(dayOpenFor(UI.dayId))} – ${(()=>{const pc=poolCloseAfterLast(UI.dayId);return pc?f12(pc.end)+' (after last event)':f12(dayCloseFor(UI.dayId));})()}</button>`:''}
     ${dayStart!==null?`<span class="tl-day-info"><b>${comp}</b> sessions · <b>${f12(dayStart)}</b>–<b>${f12(dayEnd)}</b> · ${fdur(dayEnd-dayStart)}</span>`:''}
     ${daySess.length?`<button class="tl-iconbtn ${UI.timeScale?'active':''}" onclick="UI.timeScale=!UI.timeScale;render()" title="${UI.timeScale?'Switch to list view':'Switch to time-scale view — block heights match real durations'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v18M4 5h6M4 9h10M4 13h6M4 17h10M4 21h6"/></svg></button>`:''}
     ${daySess.length?`<button class="tl-iconbtn" onclick="openCoachHandout('${UI.dayId}')" title="Print coach handout — one page for the pool door"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>`:''}
@@ -3377,6 +3411,8 @@ const HANDOUT_CSS=`
   .hd-flight-bar{display:inline-block;width:3px;height:12px;border-radius:2px}
   .hd-flight-time{color:#64748B;font-weight:600;margin-left:auto;font-variant-numeric:tabular-nums}
   .hd-note{font-size:11px;color:#64748B;margin-top:2px;font-style:italic}
+  .hd-close .hd-time,.hd-close .hd-name{color:#E31937}
+  .hd-close-note{font-size:12px;color:#334155}
   .hd-awards{color:#E31937;font-size:11px;font-weight:700;text-transform:uppercase}
   .hd-along{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#0A6E8C;background:#E3F4FA;border:1px solid #B9E2F0;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:middle}
   .hd-foot{margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#94A3B8}
@@ -3406,10 +3442,12 @@ function buildHandoutDayHTML(day,timed,os){
     const cnote=sessNoteFor(sess,os);
     return`<tr><td class="hd-time">${f12(t.eventStartMinutes)}<span class="hd-time-end">– ${f12(t.sessionEndMinutes)}</span></td><td><div class="hd-name">Session ${n}${handoutAlongTag(sess,timed)}${sess.awardsEnabled?' <span class="hd-awards">+ Awards</span>':''}</div>${cnote?`<div class="hd-note">${esc(cnote)}</div>`:''}${wu}${evs}</td></tr>`;
   }).join('');
+  const pc=poolCloseAfterLast(day.id);
+  const closeRow=pc?`<tr class="hd-close"><td class="hd-time">${f12(pc.end)}</td><td><div class="hd-name">Pool closes</div><div class="hd-close-note">After the last event. No warm-ups or training after that.</div></td></tr>`:'';
   return`<div class="hd-page">
 <div class="hd-head"><div><div class="hd-meet">${esc(S.meet.name||'Schedule')}</div>${S.meet.venue?`<div class="hd-venue">${esc(S.meet.venue)}${S.meet.city?' · '+esc(S.meet.city):''}${eventFilterLabel()?' · '+eventFilterLabel():''}</div>`:''}</div><div class="hd-date">${fullDate(day.date)}</div></div>
 <div class="hd-accent"></div>
-<table>${rows}</table>
+<table>${rows}${closeRow}</table>
 <div class="hd-foot"><span>${os.showSubjectToChange!==false?'All times subject to change':''}</span><span>USA Diving · printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span></div>
 </div>`;
 }
@@ -3632,6 +3670,7 @@ function buildOverviewDay(day,timed){
     if(!byKey[name]){byKey[name]={name,rounds:[]};evs.push(byKey[name]);}
     const r=evRound(ev);if(r&&!byKey[name].rounds.includes(r))byKey[name].rounds.push(r);
   }));
+  if(evs.length&&poolCloseAfterLast(day.id))after.push('Pool closes after the last event');
   if(!training&&!before.length&&!after.length&&!evs.length)return null;
   const trainingOnly=training&&!evs.length&&!before.length&&!after.length;
   return{day,training,trainingOnly,before,after,evs};
@@ -3750,6 +3789,8 @@ async function exportMeetExcel(){
       }
     });
     if(!ds.length)aoa.push(['(nothing scheduled)']);
+    const pcx=poolCloseAfterLast(day.id,timed);
+    if(pcx&&ds.length)aoa.push([f12(pcx.end),'','Pool closes','After the last event. No warm-ups or training after that.','','']);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols']=[{wch:10},{wch:10},{wch:24},{wch:44},{wch:10},{wch:30}];
     XLSX.utils.book_append_sheet(wb,ws,_sheetNameFor(day.date));
@@ -5739,6 +5780,9 @@ function renderFacilityHoursModal(){
   const bad=close<=open;
   const outside=blocksOutsideHours(dayId);
   const others=(S.meet.days||[]).length-1;
+  const cal=dayClosesAfterLast(dayId);
+  const le=cal?dayLastEvent(dayId):null;
+  const late=le?timedForDay(dayId).filter(x=>isPoolUseBlock(x)&&x.timing.sessionEndMinutes>le.end).length:0;
   return`<div class="modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><div><span class="modal-title">Facility hours</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(fullDate(day.date))}</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
@@ -5750,6 +5794,11 @@ function renderFacilityHoursModal(){
         ?`<div class="hours-note bad">Closing time is before opening time — fix one of them or blocks won't lay out correctly.</div>`
         :`<div class="hours-note">Open for <b>${fdur(close-open)}</b> on this day.</div>`}
       ${outside?`<div class="hours-note warn">${outside} block${outside===1?'':'s'} on this day fall${outside===1?'s':''} outside these hours. Nothing was moved — check the health panel to see which.</div>`:''}
+      <label class="hours-check"><input type="checkbox" ${cal?'checked':''} onchange="setDayCloseAfterLast('${dayId}',this.checked)"/> Pool closes after the last event</label>
+      ${cal?(le
+        ?`<div class="hours-note">Closed to warm-ups and training from <b>${f12(le.end)}</b>, when ${esc(sessLabelOf(le.sess))} ends${le.evLabel?` (${esc(le.evLabel)})`:''}. This time follows the schedule and prints on the schedules and handouts.</div>`
+        :`<div class="hours-note">No competition events on this day yet, so nothing prints until there are.</div>`):''}
+      ${late?`<div class="hours-note warn">${late} training block${late===1?'':'s'} on this day run${late===1?'s':''} after the last event. Nothing was moved.</div>`:''}
       <p class="hours-help">These hours don't move any blocks on their own. They set the earliest time the auto-stacker will start a block, they're what "fit to facility close" ends at, and anything scheduled outside them gets flagged in the health check.</p>
       ${others>0?`<button class="btn btn-sm" onclick="applyHoursToAllDays('${dayId}')">Use these hours on all ${others+1} days</button>`:''}
     </div>
@@ -6500,6 +6549,7 @@ html,body{background:#fff;font-family:'Inter',system-ui,sans-serif;color:#1a1c2e
    compete with the times but readable at arm's length on a printed sheet. */
 .pp-note{font-size:10.5px;line-height:1.4;color:#475569;margin-top:3px;padding-left:9px;border-left:2px solid #C9D2E3}
 .pp-prac-f{display:flex;justify-content:space-between;font-size:10px;color:var(--gray);font-weight:500;max-width:320px}
+.pp-close{font-size:11px;font-weight:700;color:#8E1223;background:#FDF0F2;border-left:3px solid var(--red);border-radius:0 6px 6px 0;padding:5px 12px;margin-bottom:8px;break-inside:avoid}
 /* Footer */
 .pp-ft{display:flex;justify-content:space-between;align-items:center;padding:8px 22px;border-top:2px solid var(--navy);font-size:9px;font-weight:600;color:var(--gray);margin-top:auto}
 .pp-ft-l{color:var(--navy);font-weight:700}
@@ -6590,6 +6640,7 @@ function renderPP(timed,cfg,titleOverride){
     return`<div class="pp"><div class="pp-empty">${esc(msg)}</div></div>`;
   }
   const showLbl=S.meet.showCombineLabels!==false;
+  const fullTimed=allTimed();
   const meetName=esc(titleOverride!=null?titleOverride:(S.meet.name||'Championship'));
   const today=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
@@ -6695,6 +6746,7 @@ function renderPP(timed,cfg,titleOverride){
     return`<div class="pp-day">
       <div class="pp-day-hd"><span class="pp-day-dot"></span>${esc(fullDate(d.day.date))}</div>
       ${ordered.map(sess=>sess.isPractice?pracBlock(sess):sessBlock(sess)).join('')}
+      ${(()=>{const pc=poolCloseAfterLast(d.day.id,fullTimed);return pc?`<div class="pp-close">${esc(poolCloseText(pc,cfg.showTimes&&!cfg.startOnly))}</div>`:''})()}
     </div>`;
   }
 

@@ -960,6 +960,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pe-u{font-size:9px;font-weight:600;color:var(--gray);margin-left:3px;text-transform:lowercase}
 .pe-dash{color:#C8CCD6}
 /* Open Training — left-bordered block, NO tiny logo (kept clean per brand) */
+.pp-close{font-size:12px;font-weight:700;color:#8E1223;background:#FDF0F2;border-left:3px solid #E31937;border-radius:0 7px 7px 0;padding:7px 14px;margin-bottom:11px;break-inside:avoid}
 .pp-prac{background:#F5F7FB;border-left:3px solid var(--navy);border-radius:0 7px 7px 0;padding:9px 14px;margin-bottom:11px;break-inside:avoid}
 .pp-prac-t{display:flex;align-items:center;gap:10px}
 .pp-prac-name{font-size:13px;font-weight:700;color:var(--navy)}
@@ -1537,6 +1538,8 @@ html[data-theme="deck"] .ts-card.along{background:rgba(0,154,199,.13)}
 .hours-note b{color:var(--navy);font-weight:700}
 .hours-note.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E}
 .hours-note.bad{background:#FEF2F2;border-color:#FECACA;color:#991B1B;font-weight:600}
+.hours-check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--tx);cursor:pointer;margin:2px 0 10px}
+.hours-check input{width:16px;height:16px;accent-color:var(--navy);cursor:pointer}
 .hours-help{font-size:11px;color:var(--tx3);line-height:1.5;margin:0 0 14px}
 html[data-theme="deck"] .tl-hours{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
 html[data-theme="deck"] .hours-note{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
