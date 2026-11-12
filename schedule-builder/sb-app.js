@@ -236,7 +236,7 @@ let _heartbeatT=null;
 function startHeartbeat(){
   clearInterval(_heartbeatT);
   _heartbeatT=setInterval(async()=>{
-    if(sync.err){
+    if(sync.err&&!(typeof syncIdle==='function'&&syncIdle())){
       try{
         await nq('SELECT 1');
         sync.ok=true;sync.err=null;_pollFailures=0;setSyncDot('ok');
@@ -439,12 +439,41 @@ async function loadFromNeon(id,opts={}){
   catch(e){if(!opts.silent)toast('Could not load');return null}
 }
 let presT=null,pollT=null,_pollFailures=0,_conflictNoticed=false;
+// ── PAUSE WHEN NOBODY IS USING THE TAB ────────────────────────────────
+// The 8-second check for other people's changes is what keeps the database
+// awake, and it used to run for as long as the tab existed, in the background and
+// overnight. It now stops when the tab is hidden, or after SYNC_IDLE_MS with no
+// mouse, key or touch input, and picks up with an immediate check the moment the
+// tab is used again. Saving is separate and is never paused. While meet-day
+// recording is on and the tab is visible it keeps running, because a deck screen
+// is watched without being touched.
+const SYNC_IDLE_MS=180000;
+let _lastActive=Date.now(),_syncPaused=false,_syncTick=null;
+function syncIdle(){
+  if(document.hidden)return true;
+  if(typeof liveOn==='function'&&liveOn())return false;
+  return Date.now()-_lastActive>SYNC_IDLE_MS;
+}
+function syncPauseLabel(){
+  const l=document.querySelector('.sync-lbl');
+  if(l&&_syncPaused&&!/Saving|Offline|paused/.test(l.textContent))l.textContent+=' \u00b7 updates paused';
+}
+function syncWake(){
+  _lastActive=Date.now();
+  if(!_syncPaused||document.hidden)return;
+  _syncPaused=false;
+  if(_syncTick&&S.currentLibraryId)_syncTick();
+}
+['pointerdown','keydown','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,syncWake,{passive:true,capture:true}));
+let _mmT=0;window.addEventListener('mousemove',()=>{const n=Date.now();if(n-_mmT>2000){_mmT=n;syncWake();}},{passive:true});
+window.addEventListener('focus',syncWake);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncWake();});
 // Snapshot whatever is currently in the cloud into version history, WITHOUT loading it,
 // so a copy we are about to overwrite is always recoverable from Version history.
 async function startSync(){
   clearInterval(presT);clearTimeout(pollT);
   _pollFailures=0;
-  presT=setInterval(()=>S.currentLibraryId&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),30000);
+  presT=setInterval(()=>S.currentLibraryId&&!syncIdle()&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),30000);
   // Poll for remote changes, backing off if Neon is unreachable
   const tick=async()=>{
     if(!S.currentLibraryId)return;
@@ -494,8 +523,14 @@ async function startSync(){
   const scheduleNext=()=>{
     if(_pollFailures>0){nextDelay=Math.min(60000,8000*Math.pow(2,Math.min(3,_pollFailures-1)));}
     else nextDelay=8000;
-    pollT=setTimeout(async()=>{await tick();scheduleNext();},nextDelay);
+    pollT=setTimeout(async()=>{
+      // Idle or hidden: stop here. No timer is left running; syncWake() restarts it.
+      if(syncIdle()){_syncPaused=true;pollT=null;syncPauseLabel();return;}
+      await tick();scheduleNext();
+    },nextDelay);
   };
+  _syncTick=async()=>{clearTimeout(pollT);await tick();scheduleNext();};
+  _syncPaused=false;
   await tick();scheduleNext();
 }
 let lastSavedAt=null;
@@ -521,6 +556,7 @@ setInterval(()=>{
   const l=document.querySelector('.sync-lbl');
   if(l&&!l.textContent.startsWith('Saving')&&!l.textContent.startsWith('Offline')){
     l.textContent='Saved '+fmtRelativeTime(lastSavedAt||lastSynced||S.updatedAt);
+    if(typeof syncPauseLabel==='function')syncPauseLabel();
   }
 },15000);
 
