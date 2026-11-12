@@ -1,26 +1,37 @@
-rows read: 8534
+meet | gender | discipline | synchro | round | athletes
+USA Diving Winter Nationals | Female | 1m | False | Final | 14
+USA Diving Winter Nationals | Female | 1m | False | Prelim | 29
+USA Diving Winter Nationals | Female | 3m | False | Final | 15
+USA Diving Winter Nationals | Female | 3m | False | Prelim | 31
+USA Diving Winter Nationals | Female | Platform | False | Final | 14
+USA Diving Winter Nationals | Female | Platform | False | Prelim | 26
+USA Diving Winter Nationals | Male | 1m | False | Final | 14
+USA Diving Winter Nationals | Male | 1m | False | Prelim | 31
+USA Diving Winter Nationals | Male | 3m | False | Final | 14
+USA Diving Winter Nationals | Male | 3m | False | Prelim | 37
+USA Diving Winter Nationals | Male | Platform | False | Final | 12
+USA Diving Winter Nationals | Male | Platform | False | Prelim | 24
+USA Diving Winter Nationals | Female | Synchronized 3m | True | Final | 5
+USA Diving Winter Nationals | Female | Synchronized 3m | True | Prelim | 5
+USA Diving Winter Nationals | Female | Synchronized Platform | True | Final | 4
+USA Diving Winter Nationals | Female | Synchronized Platform | True | Prelim | 4
+USA Diving Winter Nationals | Male | Synchronized 3m | True | Final | 7
+USA Diving Winter Nationals | Male | Synchronized 3m | True | Prelim | 7
+USA Diving Winter Nationals | Male | Synchronized Platform | True | Final | 5
+USA Diving Winter Nationals | Male | Synchronized Platform | True | Prelim | 5
+USA Diving Winter Nationals Qualifier | Female | 1m | False | Final | 35
+USA Diving Winter Nationals Qualifier | Female | 3m | False | Final | 38
+USA Diving Winter Nationals Qualifier | Female | Platform | False | Final | 17
+USA Diving Winter Nationals Qualifier | Male | 1m | False | Final | 23
+USA Diving Winter Nationals Qualifier | Male | 3m | False | Final | 33
+USA Diving Winter Nationals Qualifier | Male | Platform | False | Final | 8
 
-qualifying rows by route and status:
-   ('conf', 'look') 2
-   ('conf', 'ok') 968
-   ('ncaa', 'ok') 345
-   ('usa', 'ok') 301
-   ('wa', 'ok') 65
-   ('zone', 'ok') 921
+in the championship event and also in the same qualifier event:
+Female | 1m | 3
+Female | 3m | 4
+Female | Platform | 5
+Male | 1m | 4
+Male | 3m | 4
+Male | Platform | 3
 
-athletes per event (one per athlete):
-event | meets the score | conference only | needs a look
-Women 1m | 73 | 48 | 2
-Women 3m | 73 | 31 | 0
-Women Platform | 77 | 29 | 0
-Men 1m | 96 | 46 | 0
-Men 3m | 83 | 23 | 0
-Men Platform | 85 | 13 | 0
-
-2026 results loaded through: (datetime.date(2026, 11, 11), 405)
-
-rows without a dive count, USA Diving senior meets:
-   ('USA Diving Nationals', 0, 493)
-   ('USA Diving Nationals Qualifier', 0, 180)
-   ('USA Diving Winter Nationals', 0, 261)
-   ('USA Diving Winter Nationals Qualifier', 0, 154)
+gender values: [('Female', 237), ('Male', 220)]
