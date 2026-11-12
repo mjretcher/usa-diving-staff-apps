@@ -22,9 +22,9 @@ const NATIONAL_DD_MINIMUMS = {
 };
 const PRESET_NOTES = {
   winterEligibility:
-    'Athletes qualify by meeting score standards at approved source meets. DD is required to compete at Winter Nationals but may be earned separately.',
+    'Athletes qualify by meeting the Table 1 score standard at any Table 2 meet in the two-year window. Every source is read on its own optional count (USA 5 or 6, NCAA 6, Junior A/B optionals) and restated to the USA basis, so one bar moves every source together. DD is required to compete at Winter Nationals but may be earned separately.',
   winterQualifier:
-    'Winter Qualifier advancement: 1m and 3m use top 3 OR score standard; platform uses top 5 OR score standard.',
+    'Winter Qualifier advancement (2026 criteria): top 6 OR the Table 1 score standard, in each of 1m, 3m and 10m.',
   nationalQualifier:
     'USA Nationals qualifier: top 12 finishers in the qualifier event advance to USA Diving National Championships.',
   custom:
@@ -103,7 +103,114 @@ const POOLS = {
     },
   },
 };
-const POOL_ORDER = ['seniorUsa', 'ncaa', 'juniorAB'];
+// ── Winter Nationals eligibility: every Table 2 source, one per-optional bar ──
+// The published standards are per optional dive times the number of optionals
+// in each source's format (47/opt → USA women 5 opt = 235, NCAA 6 opt = 282,
+// Junior Group A 4 opt = 188). So the cross-source pool restates every score
+// to the USA basis before it meets the bar; the bar itself stays one number.
+const SENIOR_USA_GROUP_LIST = [
+  'USA Diving Nationals', 'USA Diving Nationals Qualifier',
+  'USA Diving Winter Nationals', 'USA Diving Winter Nationals Qualifier',
+  'USA Diving Olympic Trials', 'USA Diving Olympic Trials Qualifier',
+];
+// NCAA Division I conference championships approved by the HPD, by competition
+// year. Source: USA Diving Approved Conference Championships.xlsx (Events /
+// All Events - Master Documents / Policies & Procedures). No 2026 list has
+// been issued yet, so 2026 conference meets stay out until it is.
+const APPROVED_CONFERENCES = {
+  2024: [/ACC Diving/i, /Big 12/i, /\bB1G\b|Big Ten/i, /Ivy League/i, /Mountain West/i,
+         /Pac[ -]?12/i, /SEC Diving/i, /Mid American Conference Mens/i, /Mountain Pacific Sports Federation/i],
+  2025: [/ACC Diving/i, /Big 12/i, /\bB1G\b|Big Ten/i, /Ivy League/i, /Mountain West/i,
+         /SEC Diving/i, /Mid American Conference/i, /Missouri Valley/i],
+};
+// Optional dives in the optionals-only (final) phase at Junior Nationals,
+// verified against core.result_phases for 2025 and 2026.
+const JUNIOR_OPTIONALS = {
+  Female: { 'Group A': 4, 'Group B': 3 },
+  Male:   { 'Group A': 5, 'Group B': 4 },
+};
+function juniorGroupOf(r) {
+  if (r.age_group === 'Group A' || r.age_group === 'Group B') return r.age_group;
+  if (r.age_group) return null;
+  const en = String(r.event_round || r.event_name || '');
+  if (/\b16-18\b/.test(en)) return 'Group A';
+  if (/\b14-15\b/.test(en)) return 'Group B';
+  return null;
+}
+// USA-basis optional count for the standard: women 5, men 6 (all boards).
+function usaBasisOptionals(gender) { return normaliseGender(gender) === 'Male' ? 6 : 5; }
+// Default optionals when the phase dive count is missing (posted-only rows).
+function defaultOptionals(gender, discipline, ncaa) {
+  const g = normaliseGender(gender);
+  if (g === 'Male') return 6;
+  return (ncaa && discipline !== 'Platform') ? 6 : 5;
+}
+const ELIG_LABELS = {
+  usadSenior: 'USA Diving senior', jrNatA: 'Junior Nationals Group A optionals', jrNatB: 'Junior Nationals Group B optionals',
+  ncaaZone: 'NCAA Zone', ncaaD1: 'NCAA Division I Championships', ncaaConference: 'NCAA conference (HPD approved)',
+  ncaaD2D3: 'NCAA Division II/III Championships final', worldAquatics: 'World Aquatics',
+};
+// Classify a row as a Table 2 source, or null when it does not count toward
+// Winter Nationals eligibility. Memoised on the row; nothing here is dynamic.
+function eligibilitySource(r) {
+  if (r._elig !== undefined) return r._elig;
+  let out = null;
+  const grp = r.competition_group || '';
+  const nd  = r.n_dives;
+  if (!r.is_synchronized) {
+    if (r.competition_family === 'USA Diving') {
+      if (SENIOR_USA_GROUP_LIST.includes(grp)) {
+        out = { cls: 'usadSenior', optionals: isNum(nd) ? nd : defaultOptionals(r.gender, r.discipline, false) };
+      } else if (grp === 'USA Diving Junior Nationals') {
+        const ag = juniorGroupOf(r);
+        const exp = ag ? JUNIOR_OPTIONALS[normaliseGender(r.gender)]?.[ag] : null;
+        // Only the optionals-only phase counts ("Group A and B – optionals only").
+        if (exp && nd === exp) out = { cls: ag === 'Group A' ? 'jrNatA' : 'jrNatB', optionals: exp };
+      }
+    } else if (r.competition_family === 'NCAA') {
+      let cls = null;
+      if (/\bZONE\b/i.test(grp)) cls = 'ncaaZone';
+      else if (grp === 'NCAA Division I Championships') cls = 'ncaaD1';
+      else if (/Division (II|III) Championships/i.test(grp) && !/Region/i.test(grp)) cls = 'ncaaD2D3';
+      else if ((APPROVED_CONFERENCES[r.meet_year] || []).some(re => re.test(grp))) cls = 'ncaaConference';
+      // 10/26/2026 amendment: D2/D3 counts on 1m and 3m, championship final only.
+      if (cls === 'ncaaD2D3' && (r.discipline === 'Platform' || r.round_stage !== 'Final')) cls = null;
+      if (cls) out = { cls, optionals: isNum(nd) ? nd : defaultOptionals(r.gender, r.discipline, true) };
+    } else if (r.competition_family === 'World Aquatics') {
+      out = { cls: 'worldAquatics', optionals: isNum(nd) ? nd : defaultOptionals(r.gender, r.discipline, false) };
+    }
+  }
+  if (out) out.label = ELIG_LABELS[out.cls];
+  r._elig = out;
+  return out;
+}
+POOLS.winterEligibility = {
+  id: 'winterEligibility',
+  label: 'Winter Nationals eligibility (all Table 2 sources, per-optional basis)',
+  shortLabel: 'Winter eligibility',
+  family: 'usa',        // standards and DD tables are stated on the USA basis
+  crossSource: true,    // scores restated to the USA basis via optional counts
+  yearWindow: 2,        // Table 2 lists two competition years
+  presets: ['winterEligibility', 'custom'],
+  match: (r) => eligibilitySource(r) != null,
+};
+const POOL_ORDER = ['seniorUsa', 'winterEligibility', 'ncaa', 'juniorAB'];
+
+// Years the live evaluation reads. One year for ordinary pools; the
+// eligibility pool reads the selected year and the one before it.
+function yearsInScope() {
+  const y = state.year;
+  if (!isNum(y)) return [];
+  const w = activePool().yearWindow || 1;
+  const out = [];
+  for (let i = 0; i < w; i++) out.push(y - i);
+  return out;
+}
+function yearsLabel() {
+  const ys = yearsInScope();
+  if (!ys.length) return '—';
+  return ys.length === 1 ? String(ys[0]) : `${Math.min(...ys)} to ${Math.max(...ys)}`;
+}
 
 function activePool() { return POOLS[state.pool] || POOLS.seniorUsa; }
 function poolFamily() { return activePool().family; }
@@ -236,7 +343,25 @@ function championshipRestated(row) {
   if (!isNum(base) || !isNum(row.env_severity) || !isNum(row.env_champ_ref) || !isNum(row.phase_dd_sum)) return null;
   return base - 3 * (row.env_severity - row.env_champ_ref) * row.phase_dd_sum;
 }
+// Factor that restates this row's score onto the USA basis (per optional ×
+// USA optional count). 1 outside the cross-source pool.
+function basisScaleForRow(row) {
+  if (!activePool().crossSource) return 1;
+  const src = eligibilitySource(row);
+  if (!src) return 1;
+  let rowOpt = src.optionals;
+  if (els.scoreMode.value === 'ncaaWomen5Category' && isNum(row.ncaa_total)) rowOpt = 5; // 5-cat is already a 5-dive total
+  const target = usaBasisOptionals(row.gender);
+  if (!isNum(rowOpt) || rowOpt <= 0) return 1;
+  return target / rowOpt;
+}
 function scoreForRow(row) {
+  const raw = rawScoreForRow(row);
+  if (!isNum(raw)) return null;
+  const k = basisScaleForRow(row);
+  return k === 1 ? raw : Math.round(raw * k * 100) / 100;
+}
+function rawScoreForRow(row) {
   const mode = els.scoreMode.value;
   if (mode === 'championshipPanel') {
     const v = championshipRestated(row);
@@ -253,11 +378,18 @@ function scoreForRow(row) {
 }
 function scoreBasisLabel(row) {
   const mode = els.scoreMode.value;
-  if (mode === 'championshipPanel') return isNum(championshipRestated(row)) ? 'Restated' : 'Phase (no panel est.)';
-  if (mode === 'ncaaWomen5Category' && isNum(row.ncaa_total)) return 'NCAA 5-cat';
-  if (mode === 'posted')             return 'Posted';
-  if (mode === 'phasePreferred')     return 'Phase';
-  return isNum(row.phase_score) ? 'Phase' : 'Posted';
+  let base;
+  if (mode === 'championshipPanel') base = isNum(championshipRestated(row)) ? 'Restated' : 'Phase (no panel est.)';
+  else if (mode === 'ncaaWomen5Category' && isNum(row.ncaa_total)) base = 'NCAA 5-cat';
+  else if (mode === 'posted')         base = 'Posted';
+  else if (mode === 'phasePreferred') base = 'Phase';
+  else base = isNum(row.phase_score) ? 'Phase' : 'Posted';
+  const k = basisScaleForRow(row);
+  if (k !== 1) {
+    const src = eligibilitySource(row);
+    base += ` · ${src.optionals} opt → ${usaBasisOptionals(row.gender)}-opt equiv`;
+  }
+  return base;
 }
 function ddMinimumForSelection(gender, discipline, preset) {
   // These DD tables were published for the Senior USA pool specifically.
@@ -312,12 +444,18 @@ function evaluateRow(row) {
   if (rule === 'topNOrScore') rulePass = topPass || scorePass;
 
   const qualified = rulePass && dd.pass;
+  const rawScore = rawScoreForRow(row);
+  const scale    = basisScaleForRow(row);
+  const src      = activePool().crossSource ? eligibilitySource(row) : null;
+  const scoreTxt = scale === 1
+    ? `Score ${fmtScore(score)}`
+    : `Score ${fmtScore(rawScore)} on ${src.optionals} opt (${fmtScore(rawScore / src.optionals)}/opt) = ${fmtScore(score)} equiv`;
 
   let reason;
   if (qualified) {
     const reasons = [];
     if (topPass)   reasons.push(`Top ${topN} (placed ${row.place})`);
-    if (scorePass) reasons.push(`Score ${fmtScore(score)} ≥ ${fmtScore(threshold)}`);
+    if (scorePass) reasons.push(`${scoreTxt} ≥ ${fmtScore(threshold)}`);
     if (dd.status === 'pass')        reasons.push(`DD ${fmtDd(dd.total)} ≥ ${fmtDd(dd.minimum)}`);
     if (dd.status === 'ignored')     reasons.push('DD ignored');
     if (dd.status === 'unknownPass') reasons.push('DD unknown (accepted)');
@@ -325,7 +463,7 @@ function evaluateRow(row) {
   } else {
     const fails = [];
     if (rule !== 'topNOnly'  && isNum(threshold) && !scorePass)
-      fails.push(`Score ${fmtScore(score)} < ${fmtScore(threshold)}`);
+      fails.push(`${scoreTxt} < ${fmtScore(threshold)}`);
     if (rule !== 'scoreOnly' && topN > 0 && !topPass)
       fails.push(isNum(row.place) ? `Placed ${row.place} (need top ${topN})` : `No placement`);
     if (!dd.pass) fails.push(`DD ${fmtDd(dd.total)} < ${fmtDd(dd.minimum)}`);
@@ -335,6 +473,9 @@ function evaluateRow(row) {
   return {
     ...row,
     analysis_score: score,
+    raw_score: rawScore,
+    basis_scale: scale,
+    source_class: src ? src.label : null,
     threshold_used: threshold,
     score_basis: scoreBasis,
     dd_total_used: dd.total,
@@ -383,7 +524,7 @@ function bubbleCandidates(rows, qualified) {
 function rowsForCurrentFilters() {
   if (!state.data) return [];
   const pool       = activePool();
-  const year       = state.year;
+  const years      = yearsInScope();
   const gender     = els.genderFilter.value;
   const discipline = els.disciplineFilter.value;
   const round      = els.roundFilter.value;
@@ -393,7 +534,7 @@ function rowsForCurrentFilters() {
 
   return state.data.results.filter(r => {
     if (!pool.match(r)) return false;
-    if (year && r.meet_year !== year) return false;
+    if (years.length && !years.includes(r.meet_year)) return false;
     if (gender     && normaliseGender(r.gender) !== gender) return false;
     if (discipline && r.discipline !== discipline) return false;
     if (round !== 'any' && r.round_stage !== round) return false;
@@ -600,7 +741,7 @@ function renderFilterStrip() {
     custom:            'Custom',
   };
   $('chipPool').textContent       = activePool().shortLabel;
-  $('chipYear').textContent       = state.year ?? '—';
+  $('chipYear').textContent       = yearsLabel();
   $('chipPreset').textContent     = presetLabels[els.criteriaPreset.value] || '—';
   $('chipGender').textContent     = els.genderFilter.value || '—';
   $('chipDiscipline').textContent = els.disciplineFilter.value || '—';
@@ -901,13 +1042,13 @@ function refreshPoolScope() {
 // Meet lookup scoped to pool + year — this is the refinement layer under
 // the primary pool/year scope, not an independent way to mix pools.
 function rebuildMeetsForScope() {
-  const pool = activePool();
-  const year = state.year;
+  const pool  = activePool();
+  const years = yearsInScope();
   state.meetsById = new Map();
   for (const r of state.data.results) {
     if (!r.meet_id) continue;
     if (!pool.match(r)) continue;
-    if (year && r.meet_year !== year) continue;
+    if (years.length && !years.includes(r.meet_year)) continue;
     const cur = state.meetsById.get(r.meet_id);
     if (cur) cur.count++;
     else state.meetsById.set(r.meet_id, {
@@ -962,7 +1103,11 @@ function applyPresetDefaults(initialRun) {
     els.roundFilter.value = 'any';
     els.scoreMode.value  = 'phaseOrStandalone';
     els.ddMode.value     = 'ignore';
-    state.selectedMeetIds = meetIdsForSources(PRESET_SOURCES.winterEligibility);
+    // Table 2 is the U.S. citizen list; non-U.S. athletes qualify off a different list.
+    if (activePool().crossSource) els.athleteScope.value = 'usaDomestic';
+    state.selectedMeetIds = activePool().crossSource
+      ? new Set([...state.meetsById.keys()])
+      : meetIdsForSources(PRESET_SOURCES.winterEligibility);
   } else if (preset === 'winterQualifier') {
     els.ruleMode.value   = 'topNOrScore';
     els.roundFilter.value = 'Final';
@@ -993,7 +1138,7 @@ function applyEventDefaults() {
     els.scoreThreshold.value = '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
   } else if (preset === 'winterQualifier') {
-    els.topN.value = discipline === 'Platform' ? 5 : 3;
+    els.topN.value = 6;
     els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, poolFamily()) || '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
   } else if (preset === 'winterEligibility') {
@@ -1438,7 +1583,7 @@ const POOL_SQL_WHERE = {
       OR competition_family = 'World Aquatics'`,
   ncaa: `competition_family = 'NCAA'`,
 };
-const POOL_PAYLOAD = { seniorUsa: 'core', juniorAB: 'core', ncaa: 'ncaa' };
+const POOL_PAYLOAD = { seniorUsa: ['core'], juniorAB: ['core'], ncaa: ['ncaa'], winterEligibility: ['core', 'ncaa'] };
 const loadedPayloads = new Set();
 const pendingPayloads = new Map();
 
@@ -1494,7 +1639,10 @@ function absorbPayload(key, raw) {
 
 // Make sure the rows for a pool are in memory; NCAA is fetched on first use.
 async function ensurePoolLoaded(poolId) {
-  const key = POOL_PAYLOAD[poolId] || 'core';
+  const keys = POOL_PAYLOAD[poolId] || ['core'];
+  for (const key of keys) await ensurePayloadLoaded(key);
+}
+async function ensurePayloadLoaded(key) {
   if (loadedPayloads.has(key)) return;
   if (pendingPayloads.has(key)) return pendingPayloads.get(key);
   const p = (async () => {
@@ -1872,7 +2020,7 @@ function renderTrustStrip() {
   $('trustDd').textContent = fmtPct(pct(ddKnown, inScope.length));
 
   const ts = $('trustStandards');
-  if (ts) ts.textContent = `${activePool().shortLabel} · ${state.year ?? '—'}`;
+  if (ts) ts.textContent = `${activePool().shortLabel} · ${yearsLabel()}`;
   // Published-criteria check: does the active score standard match Table 1 of
   // the 2026 Winter Nationals criteria (amended 10/26/2026) for this event?
   const foot = $('trustStandardsFoot');
@@ -2099,7 +2247,7 @@ function printReport() {
     <div class="meta">${esc(name)} · generated ${new Date().toLocaleString()}</div>
     <div class="pills">
       <span>Pool: ${esc(activePool().shortLabel)}</span>
-      <span>Year: ${esc(String(state.year ?? '—'))}</span>
+      <span>Year: ${esc(yearsLabel())}</span>
       <span>Model: ${esc(presetText)}</span>
       <span>Event: ${esc(els.genderFilter.value)} ${esc(els.disciplineFilter.value)}</span>
       <span>Round: ${esc(els.roundFilter.value)}</span>
@@ -2385,7 +2533,27 @@ function renderDecisionZone() {
         <span class="dz-lad-count">${r.count} <em class="${r.count > baseSet.size ? 'up' : r.count < baseSet.size ? 'down' : ''}">${r.count === baseSet.size ? '±0' : (r.count > baseSet.size ? '+' : '') + (r.count - baseSet.size)}</em></span>
         <span class="dz-lad-names">${r.d < 0 ? nameChips(r.changed, 'add') : nameChips(r.changed, 'drop')}</span>
       </div>`).join('')}
-    <div class="dz-lad-foot">Below the bar = athletes <b>added</b> if you lower it. Above = athletes <b>dropped</b> if you raise it. DD standard held at ${isNum(curDd) ? fmt1(curDd) : 'n/a'}.</div>`;
+    <div class="dz-lad-foot">Below the bar = athletes <b>added</b> if you lower it. Above = athletes <b>dropped</b> if you raise it. DD standard held at ${isNum(curDd) ? fmt1(curDd) : 'n/a'}.</div>
+    ${perOptionalFoot(curStd)}`;
+}
+
+// In the cross-source pool the bar is one per-optional value; show what it
+// means in each source's own total so the HPD can check it against Table 1.
+function perOptionalFoot(curStd) {
+  if (!activePool().crossSource || !isNum(curStd)) return '';
+  const g = normaliseGender(els.genderFilter.value) || 'Female';
+  const d = els.disciplineFilter.value;
+  const target = usaBasisOptionals(g);
+  const po = curStd / target;
+  const ncaaOpt = defaultOptionals(g, d, true);
+  const jrA = JUNIOR_OPTIONALS[g]?.['Group A'], jrB = JUNIOR_OPTIONALS[g]?.['Group B'];
+  const parts = [`USA ${target} opt <b>${fmt1(curStd)}</b>`, `NCAA ${ncaaOpt} opt <b>${fmt1(po * ncaaOpt)}</b>`];
+  if (jrA) parts.push(`Junior A ${jrA} opt <b>${fmt1(po * jrA)}</b>`);
+  if (jrB) parts.push(`Junior B ${jrB} opt <b>${fmt1(po * jrB)}</b>`);
+  const yrs = yearsInScope();
+  const noConf = yrs.filter(y => !APPROVED_CONFERENCES[y]);
+  const confNote = noConf.length ? ` NCAA conference championships for ${noConf.join(' and ')} are excluded until the HPD approval list is issued.` : '';
+  return `<div class="dz-lad-foot"><b>${po.toFixed(2)} per optional</b> · ${parts.join(' · ')}. Scores from every source are restated to the USA basis before they meet the bar.${confNote}</div>`;
 }
 
 // ── Drag-the-bar slider: direct manipulation of the score standard ────────
