@@ -113,16 +113,22 @@ const SENIOR_USA_GROUP_LIST = [
   'USA Diving Winter Nationals', 'USA Diving Winter Nationals Qualifier',
   'USA Diving Olympic Trials', 'USA Diving Olympic Trials Qualifier',
 ];
-// NCAA Division I conference championships approved by the HPD, by competition
-// year. Source: USA Diving Approved Conference Championships.xlsx (Events /
-// All Events - Master Documents / Policies & Procedures). No 2026 list has
-// been issued yet, so 2026 conference meets stay out until it is.
+// NCAA Division I conference championships approved by the HPD. Source: USA
+// Diving Approved Conference Championships.xlsx (Events / All Events - Master
+// Documents / Policies & Procedures). The same conferences are approved for
+// every qualification purpose, so a year without its own row uses the most
+// recent list on file.
 const APPROVED_CONFERENCES = {
   2024: [/ACC Diving/i, /Big 12/i, /\bB1G\b|Big Ten/i, /Ivy League/i, /Mountain West/i,
          /Pac[ -]?12/i, /SEC Diving/i, /Mid American Conference Mens/i, /Mountain Pacific Sports Federation/i],
   2025: [/ACC Diving/i, /Big 12/i, /\bB1G\b|Big Ten/i, /Ivy League/i, /Mountain West/i,
          /SEC Diving/i, /Mid American Conference/i, /Missouri Valley/i],
 };
+function approvedConferencesFor(year) {
+  if (APPROVED_CONFERENCES[year]) return APPROVED_CONFERENCES[year];
+  const latest = Math.max(...Object.keys(APPROVED_CONFERENCES).map(Number));
+  return isNum(year) && year > latest ? APPROVED_CONFERENCES[latest] : [];
+}
 // Optional dives in the optionals-only (final) phase at Junior Nationals,
 // verified against core.result_phases for 2025 and 2026.
 const JUNIOR_OPTIONALS = {
@@ -172,7 +178,7 @@ function eligibilitySource(r) {
       if (/\bZONE\b/i.test(grp)) cls = 'ncaaZone';
       else if (grp === 'NCAA Division I Championships') cls = 'ncaaD1';
       else if (/Division (II|III) Championships/i.test(grp) && !/Region/i.test(grp)) cls = 'ncaaD2D3';
-      else if ((APPROVED_CONFERENCES[r.meet_year] || []).some(re => re.test(grp))) cls = 'ncaaConference';
+      else if (approvedConferencesFor(r.meet_year).some(re => re.test(grp))) cls = 'ncaaConference';
       // 10/26/2026 amendment: D2/D3 counts on 1m and 3m, championship final only.
       if (cls === 'ncaaD2D3' && (r.discipline === 'Platform' || r.round_stage !== 'Final')) cls = null;
       if (cls) out = { cls, optionals: isNum(nd) ? nd : defaultOptionals(r.gender, r.discipline, true) };
@@ -1622,8 +1628,47 @@ async function loadPoolPayload(key, onProgress) {
   });
 }
 
+// Domestic rows carry no nationality. Fill it from what the apps already know:
+// the athlete directory (nation from World Aquatics appearances, joined through
+// id_map) and the Junior Results athlete status master (foreign and dual
+// declarations). A declaration wins over the directory. Rows that already
+// carry a nat (World Aquatics results) are left alone.
+async function loadNationality() {
+  if (state.natMap) return;
+  state.natMap = new Map();
+  try {
+    const r = await NEON.query(`
+      SELECT m.source_id::text AS diver_id, a.nat, 1 AS prio
+        FROM analytics.id_map m JOIN analytics.athlete_directory a ON a.canonical_id = m.canonical_id
+       WHERE a.nat IS NOT NULL
+      UNION ALL
+      SELECT s.dive_meets_id::text, COALESCE(NULLIF(s.federation_represented, ''), 'FOREIGN'), 2
+        FROM junior_results.athlete_status s
+       WHERE s.dive_meets_id IS NOT NULL AND s.dive_meets_id <> ''
+         AND (s.foreign_declared OR (s.dual_declared AND s.dual_other_country))`, []);
+    for (const row of r.rows) {
+      const cur = state.natMap.get(row.diver_id);
+      if (!cur || row.prio > cur.prio) state.natMap.set(row.diver_id, { nat: row.nat, prio: row.prio });
+    }
+  } catch (e) {
+    console.warn('[standards] nationality overlay unavailable:', e.message);
+  }
+  state.natCount = state.natMap.size;
+}
+function applyNationality(rows) {
+  if (!state.natMap || !state.natMap.size) return;
+  for (const r of rows) {
+    if (r.nat) continue;
+    const hit = state.natMap.get(String(r.diver_id));
+    if (!hit) continue;
+    r.nat = hit.nat;
+    r.is_usa = hit.nat === 'USA' || hit.nat === 'US';
+  }
+}
+
 function absorbPayload(key, raw) {
   const rows = (raw.results || []).map(normaliseRow);
+  applyNationality(rows);
   state.data.results = state.data.results.concat(rows);
   loadedPayloads.add(key);
   // The worse of the two sources wins the badge (neon < cache < cache-stale).
@@ -1829,6 +1874,7 @@ async function bootstrap() {
     return;
   }
   state.data = { results: [], _source: raw._source, _fetchedAt: raw._fetchedAt, _version: raw._version };
+  await loadNationality();
   absorbPayload('core', raw);
   updateDataKpis();
 
@@ -2550,10 +2596,8 @@ function perOptionalFoot(curStd) {
   const parts = [`USA ${target} opt <b>${fmt1(curStd)}</b>`, `NCAA ${ncaaOpt} opt <b>${fmt1(po * ncaaOpt)}</b>`];
   if (jrA) parts.push(`Junior A ${jrA} opt <b>${fmt1(po * jrA)}</b>`);
   if (jrB) parts.push(`Junior B ${jrB} opt <b>${fmt1(po * jrB)}</b>`);
-  const yrs = yearsInScope();
-  const noConf = yrs.filter(y => !APPROVED_CONFERENCES[y]);
-  const confNote = noConf.length ? ` NCAA conference championships for ${noConf.join(' and ')} are excluded until the HPD approval list is issued.` : '';
-  return `<div class="dz-lad-foot"><b>${po.toFixed(2)} per optional</b> · ${parts.join(' · ')}. Scores from every source are restated to the USA basis before they meet the bar.${confNote}</div>`;
+  const natNote = state.natCount ? ` Nationality for ${fmtInt(state.natCount)} athletes comes from World Aquatics appearances and the Junior Results declarations; everyone else counts as domestic.` : '';
+  return `<div class="dz-lad-foot"><b>${po.toFixed(2)} per optional</b> · ${parts.join(' · ')}. Scores from every source are restated to the USA basis before they meet the bar. NCAA conference championships are the HPD-approved list from the master events file.${natNote}</div>`;
 }
 
 // ── Drag-the-bar slider: direct manipulation of the score standard ────────
