@@ -167,7 +167,8 @@ const S = {
   // is the two-card panel it replaces, kept reachable until parity is signed off.
   ui: 'atlas',
   savedAt: null,        // when this proposal was last written, for the status chip
-  atlMetric: 'members', // what the Map rail's rows count
+  atlMetric: 'overview', // what the Map rail's rows count
+  atlBal: 't_comp',      // which Overview column the bars and over/under figures balance on
   atlBdL: 0, atlBdR: null,   // Projection: which level / round the breakdown shows
   cmpView: 'card', cmpOutline: true, cmpX: 0,   // Compare: layout, red outlines, crossfade column
   reportText: {},       // edited wording on the board paper (unfrozen); frozen text lives on S.frozen
@@ -8759,10 +8760,13 @@ function atlasMapHtml(){
   const tv = S.tierView;
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
   const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}" title="${esc(tierName(i))}">${esc(tierName(i))}</button>`).join('');
-  const metric = S.atlMetric || 'members';
+  const metric = S.atlMetric || 'overview';
   const yn = yearNumBoundary(S.year);
   const noTypes = mtypeYearOk() ? '' : ' (2026 only)';
   const metricGroups = [
+    ['Overview', [
+      ['overview', 'Overview: athletes, coaches, clubs and members'],
+    ]],
     [`Members · ${yn}`, [
       ['members',  'All members (every membership type)'],
       ['athletes', 'All athletes (Athlete, Competition Athlete, Introductory)'],
@@ -8942,9 +8946,87 @@ function atlasRailBreakdown(t, metric){
     : `${poolName}, by board. One entry per diver per event, so a diver in 1M, 3M and platform counts three times. <b>1M</b> 1 meter · <b>3M</b> 3 meter · <b>PL</b> platform, then boys / girls. This is the real field placed by where each diver lives, so at the first stop it adds up to the event-entry total.`;
 }
 
+/* Overview: every area's Competition Athletes, athletes, coaches, clubs and
+   members side by side, so nothing has to be picked or clicked into. One column
+   is the one being balanced (S.atlBal, Competition Athletes by default): the bar,
+   the tick and the over/under figure are for that column, and the figure is in
+   people against an even split (total / number of areas), not percentage points.
+   Same tallies the single-count views read. */
+const OV_COLS = [
+  {k:'t_comp',   short:'Comp',     label:'Competition Athletes', unit:'Competition Athletes', typed:true},
+  {k:'athletes', short:'Athletes', label:'All athletes',         unit:'athletes'},
+  {k:'coaches',  short:'Coaches',  label:'All coaches',          unit:'coaches'},
+  {k:'clubs',    short:'Clubs',    label:'Clubs',                unit:'clubs'},
+  {k:'members',  short:'Members',  label:'All members',          unit:'members'},
+];
+function atlasRailOverview(t){
+  const box = $id('atlRows');
+  const typed = memberTypeTallies(t.TG);           // null unless the year has exact types (2026)
+  const val = (c, r, gi) => c.k === 't_comp' ? (typed ? typed[gi].t_comp : null)
+    : c.k === 'athletes' ? r.a : c.k === 'coaches' ? r.c : c.k === 'clubs' ? r.cl.size : r.m;
+  let balK = S.atlBal || 't_comp';
+  if (!OV_COLS.some(c => c.k === balK)) balK = 't_comp';
+  const fellBack = balK === 't_comp' && !typed;
+  if (fellBack) balK = 'athletes';
+  const bc = OV_COLS.find(c => c.k === balK);
+  const n = t.rows.length;
+  const vals = t.rows.map((r,gi) => val(bc, r, gi));
+  const sum = vals.reduce((a,b)=>a+b, 0);
+  const even = n ? sum / n : 0;
+  const maxV = Math.max(...vals, even, 0.0001) * 1.12;
+  // Clubs with members in two areas appear in both rows; the national figure counts each once.
+  const clubAll = new Set(); t.rows.forEach(r => r.cl.forEach(x => clubAll.add(x)));
+  const totals = OV_COLS.map(c => c.k === 't_comp' && !typed ? null : c.k === 'clubs' ? clubAll.size : t.rows.reduce((a,r,gi)=>a+val(c,r,gi), 0));
+  const nameOf = gi => t.TG.groups[gi].name;
+  let hi = 0, lo = 0; vals.forEach((v,i) => { if (v > vals[hi]) hi = i; if (v < vals[lo]) lo = i; });
+  const ou = d => { const x = Math.round(d); return x === 0 ? 'even' : `${fmt(Math.abs(x))} ${x > 0 ? 'over' : 'under'}`; };
+  const head = `<div class="atl-ov-sum">
+      <div class="atl-ov-sum-h">Balancing on <b>${esc(bc.label)}</b></div>
+      ${n && sum > 0 ? `<div class="atl-ov-sum-l"><span><b class="mono">${fmt(sum)}</b> total</span><span><b class="mono">${fmt(Math.round(even))}</b> each if split evenly</span></div>
+      <div class="atl-ov-sum-l"><span>Largest: ${esc(nameOf(hi))} <b class="mono">${fmt(vals[hi])}</b> (${ou(vals[hi]-even)})</span></div>
+      <div class="atl-ov-sum-l"><span>Smallest: ${esc(nameOf(lo))} <b class="mono">${fmt(vals[lo])}</b> (${ou(vals[lo]-even)})</span></div>` : `<div class="atl-ov-sum-l"><span>No ${esc(bc.unit)} placed in an area yet.</span></div>`}
+    </div>
+    <div class="atl-ov-head" role="group" aria-label="Column to balance on">${OV_COLS.map((c,i) => {
+      const off = c.k === 't_comp' && !typed;
+      return `<button class="atl-ov-col ${c.k===balK?'on':''}" data-ovcol="${c.k}" ${off?'disabled':''} title="${off ? 'Competition Athletes can only be counted for 2026' : 'Balance on ' + esc(c.label)}"><span>${esc(c.short)}</span><b class="mono">${totals[i]==null?'—':fmt(totals[i])}</b></button>`;
+    }).join('')}</div>`;
+  const rows = t.rows.map((r,gi) => {
+    const v = vals[gi], diff = v - even;
+    const dc = sum <= 0 ? '' : Math.abs(diff) < even*0.15 ? '' : (diff > 0 ? 'c-warn' : 'c-bad');
+    const on = S.tierView === 0 && S.active === gi;
+    const col = groupColor(gi);
+    const cells = OV_COLS.map(c => { const x = val(c, r, gi); return `<span class="${c.k===balK?'on':''}">${x==null?'—':fmt(x)}</span>`; }).join('');
+    return `<button class="atl-row atl-row-ov ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Double-click for its zip codes'}">
+      <span class="atl-sw" style="background:${col}"></span>
+      <span class="atl-row-name">${esc(nameOf(gi))}</span>
+      <span class="atl-ov-ou mono ${dc}">${sum > 0 ? ou(diff) : ''}</span>
+      <span class="atl-ov-cells mono">${cells}</span>
+      <span class="atl-row-bar"><span class="atl-bar"><i style="width:${(100*v/maxV).toFixed(1)}%;background:${col}"></i><b style="left:${(100*even/maxV).toFixed(1)}%"></b></span></span>
+    </button>`;
+  }).join('');
+  box.innerHTML = head + rows;
+  box.querySelectorAll('.atl-ov-col').forEach(b => b.addEventListener('click', () => { S.atlBal = b.dataset.ovcol; atlasRailOverview(t); }));
+  box.querySelectorAll('.atl-row').forEach(b => {
+    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+    b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
+  });
+  const un = $id('atlUnassigned');
+  const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
+  if (un) un.textContent = unC > 0 ? `${fmt(unC)} counties · ${fmt(t.un.m)} members unassigned` : 'every county assigned';
+  const note = $id('atlRailNote');
+  if (note){
+    const unmappable = S.totals[S.year] - (t.rows.reduce((a,r)=>a+r.m,0) + t.un.m);
+    note.innerHTML = `Each row shows Competition Athletes, all athletes, all coaches, clubs and all members living in the area. Click a column heading to balance on it: the bar, its tick and the over or under figure are for that column, against an even split. `
+      + `Competition Athletes are the 17U and AQUA Age 18+ Competition Athlete memberships. A club with members in two areas is counted in both rows and once in the heading. Tallies: ${esc(yearLabelBoundary(S.year))}.`
+      + (fellBack ? ` Competition Athletes can only be counted for 2026, so this year balances on all athletes.` : '')
+      + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
+  }
+}
+
 function atlasRailRows(t){
   const box = $id('atlRows'); if (!box || !t) return;
-  const metric = S.atlMetric || 'members';
+  const metric = S.atlMetric || 'overview';
+  if (metric === 'overview'){ atlasRailOverview(t); return; }
   if (BREAKDOWN_METRICS.includes(metric)){
     atlasRailBreakdown(t, metric);
     const un = $id('atlUnassigned');
