@@ -2989,7 +2989,19 @@ async function loadProjRows(){
 }
 // Background loader used wherever projection counts are needed (flight tagging, print) but the
 // Projections panel itself hasn't been opened yet this session. Guarded so it only fires once.
+// The projected field is the Junior Nationals field (Group A to D). It only means
+// something on a schedule that has junior age-group events, or on one with no
+// competition events yet that could still become a junior meet. On a senior-only
+// schedule (Winter Nationals, Summer Nationals) the Projections panel, the
+// athlete-impact figures and the background load are all left out.
+function projectionsApply(){
+  const evs=(S.sessions||[]).filter(x=>!x.isPractice).flatMap(x=>x.events||[]).filter(e=>e.style!=='Custom Block');
+  if(evs.some(e=>/^Group [A-D]\b/.test(e.level||'')))return true;
+  if(evs.length)return false;
+  return S.meet.meetType!=='usaNationals';
+}
 function ensureProjDataLoaded(){
+  if(!projectionsApply())return;
   if(UI.projRows!=null||UI._projBgLoading)return;
   UI._projBgLoading=true;
   loadProjRows().then(rows=>{UI.projRows=rows}).catch(()=>{UI.projRows=[]}).finally(()=>{UI._projBgLoading=false;render()});
@@ -3313,7 +3325,7 @@ function renderBar(timed){
         <button class="bb" onclick="openPlanner()" title="Put every event's rounds on days from one grid">Plan events</button>
         ${typeof openFormat==='function'?`<button class="bb" onclick="openFormat()" title="The meet's published rules: finalists, qualifier advancement, dives and DD minimums. Shows the longest each day can run.">Format</button>`:''}
         <button class="bb" onclick="openEntries()">Entries</button>
-        <button class="bb" onclick="openProjections()">Projections</button>
+        ${projectionsApply()?`<button class="bb" onclick="openProjections()">Projections</button>`:`<button class="bb" onclick="openEntrySync()" title="Pull live registered entry counts from DiveMeets">Sync entries</button>`}
         <button class="bb" onclick="openNewSchedule()" title="Start a new schedule — blank or from a template">New</button><button class="bb" onclick="openLibrary()">Library</button>
         <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
         <div class="bar-sep"></div>
@@ -5199,7 +5211,7 @@ function paletteCommands(){
   cmds.push({label:'Print this day (coach handout)',hint:'export',run:()=>{UI.palette=null;render();openCoachHandout(UI.dayId)}});
   cmds.push({label:'Club itineraries (print)',hint:'export',run:()=>{UI.palette=null;render();openClubItineraries()}});
   cmds.push({label:'Sync actual entries (DiveMeets)',hint:'data',run:()=>{UI.palette=null;openEntrySync()}});
-  cmds.push({label:'Projections',hint:'data',run:()=>{UI.palette=null;openProjections()}});
+  if(projectionsApply())cmds.push({label:'Projections (Junior Nationals field)',hint:'data',run:()=>{UI.palette=null;openProjections()}});
   cmds.push({label:'Version history',hint:'safety',run:()=>{UI.palette=null;openHistory()}});
   cmds.push({label:'Snapshot now…',hint:'safety',run:()=>{UI.palette=null;render();snapshotNow()}});
   cmds.push({label:'Copy this day…',hint:'edit',run:()=>{UI.palette=null;openCopyDay(UI.dayId)}});
@@ -5373,6 +5385,7 @@ function diverAppearancesForDay(dayId,timed){
 }
 // Meet-wide advisory metrics for the Health panel
 function computeAthleteImpact(timed){
+  if(!projectionsApply())return null;
   if(!UI.projRows||!UI.projRows.length)return null;
   let tightTurnarounds=0,tripleDayDivers=0,longestDay=null;
   const tightDetails=[];
