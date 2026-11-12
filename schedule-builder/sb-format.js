@@ -412,7 +412,7 @@ async function qcLoad(){
     try{const m=await nq(`SELECT max(imported_at) FROM core.result_phases WHERE meet_year=2026`);QC.asOf=m.rows&&m.rows[0]&&m.rows[0][0]?String(m.rows[0][0]).slice(0,10):null;}catch{}
     QC.state='ready';
   }catch(e){QC.state='error';QC.err=(e&&e.message)||'Could not read the results database';}
-  if(UI.modal==='qualcheck')render();
+  if(UI.modal==='qualcheck'||UI.modal==='srproj')render();
 }
 function qcRoute(row){
   if(row.fam==='World Aquatics')return{k:'wa',l:'World Aquatics event',ncaa:false};
@@ -522,4 +522,152 @@ function renderQualCheckModal(){
       <p class="fm-help">Results as loaded${QC.asOf?` through ${esc(QC.asOf)}`:''}. ${QC.rows.length} result rows at or above the lowest standard were read.</p>`;
   }
   return`<div class="modal fm-modal fm-wide" onclick="event.stopPropagation()">${hd}<div class="modal-body">${body}</div>${foot}</div>`;
+}
+
+// ── SENIOR PROJECTIONS ────────────────────────────────────────────────
+// For a senior meet there is no qualification pipeline to project from, so the
+// planning numbers come from two places: what the same meet drew last year, and
+// how many athletes hold a qualifying score this year. Read live from the
+// results database; nothing is stored until "Use last year's numbers" is pressed.
+let SP={state:'idle',key:'',data:null,err:null};
+function srMeetFamily(){
+  const n=String((S.meet&&S.meet.name)||'');
+  const hasSenior=(S.sessions||[]).some(x=>!x.isPractice&&(x.events||[]).some(e=>/^Senior|^National Qualifier/.test(e.level||'')));
+  if(!hasSenior)return null;
+  if(/winter/i.test(n))return{champ:'USA Diving Winter Nationals',qual:'USA Diving Winter Nationals Qualifier',label:'Winter Nationals'};
+  if(/national/i.test(n)||S.meet.meetType==='usaNationals')return{champ:'USA Diving Nationals',qual:'USA Diving Nationals Qualifier',label:'National Championships'};
+  return null;
+}
+function srYear(){const y=parseInt(((S.meet.days||[])[0]||{}).date,10);return(y>=2000&&y<=2100)?y:new Date().getFullYear();}
+function srApp(d){const t=String(d||'').toLowerCase();return/10|plat/.test(t)?'10m':/3/.test(t)?'3m':/1/.test(t)?'1m':t;}
+function openSeniorProjections(){
+  UI.modal='srproj';render();
+  const fam=srMeetFamily();if(!fam)return;
+  const key=fam.champ+'|'+(srYear()-1);
+  if(SP.state==='idle'||SP.key!==key)srLoad();
+  if(fmt()&&QC.state==='idle')qcLoad();
+}
+async function srLoad(){
+  const fam=srMeetFamily();if(!fam)return;
+  const yr=srYear()-1;
+  SP={state:'loading',key:fam.champ+'|'+yr,data:null,err:null};if(UI.modal==='srproj')render();
+  try{
+    const a=await nq(`SELECT competition_group,gender,discipline,COALESCE(is_synchronized,false),round_stage,count(DISTINCT diver_id)
+      FROM core.result_phases WHERE meet_year=$1 AND competition_group IN ($2,$3) AND gender IN ('Female','Male') GROUP BY 1,2,3,4,5`,[yr,fam.champ,fam.qual]);
+    const b=await nq(`SELECT c.gender,c.discipline,count(DISTINCT c.diver_id)
+      FROM core.result_phases c WHERE c.meet_year=$1 AND c.competition_group=$2 AND COALESCE(c.is_synchronized,false)=false AND c.gender IN ('Female','Male')
+        AND EXISTS(SELECT 1 FROM core.result_phases q WHERE q.meet_year=c.meet_year AND q.competition_group=$3 AND q.diver_id=c.diver_id AND q.gender=c.gender AND q.discipline=c.discipline AND COALESCE(q.is_synchronized,false)=false)
+      GROUP BY 1,2`,[yr,fam.champ,fam.qual]);
+    const ev={};
+    const slot=(g,d,syn)=>{const k=(g==='Female'?'Women':'Men')+'|'+srApp(d)+'|'+(syn?'s':'i');return ev[k]||(ev[k]={qual:null,prelim:null,final:null,any:null,via:null});};
+    (a.rows||[]).forEach(r=>{
+      const syn=r[3]===true||r[3]==='t'||r[3]==='true';const s=slot(r[1],r[2],syn);const n=Number(r[5])||0;const rs=String(r[4]||'');
+      if(r[0]===fam.qual){s.qual=Math.max(s.qual||0,n);return;}
+      s.any=Math.max(s.any||0,n);
+      if(/prelim/i.test(rs))s.prelim=Math.max(s.prelim||0,n);
+      else if(/^final/i.test(rs))s.final=Math.max(s.final||0,n);
+    });
+    (b.rows||[]).forEach(r=>{slot(r[0],r[1],false).via=Number(r[2])||0;});
+    // A meet run as a straight final has no prelim rows; the field is whatever competed.
+    Object.values(ev).forEach(s=>{if(s.prelim==null&&s.any!=null)s.prelim=s.any;});
+    SP={state:'ready',key:fam.champ+'|'+yr,data:{yr,fam,ev},err:null};
+  }catch(e){SP={state:'error',key:SP.key,data:null,err:(e&&e.message)||'Could not read the results database'};}
+  if(UI.modal==='srproj')render();
+}
+// One line per event on this schedule, with last year's fields beside what the
+// schedule is sized for now.
+function srRows(){
+  const d=SP.data;if(!d)return[];
+  const out=new Map();
+  (S.sessions||[]).forEach(sess=>{
+    if(sess.isPractice)return;
+    (sess.events||[]).forEach(e=>{
+      if(e.style!=='Individual'&&e.style!=='Synchronized')return;
+      if(/^Group |^Junior/i.test(e.level||''))return;
+      const syn=e.style==='Synchronized';const a=srApp(e.apparatus);
+      const k=e.gender+'|'+a+'|'+(syn?'s':'i');
+      if(!out.has(k))out.set(k,{k,g:e.gender,a,syn,label:`${e.gender} ${syn?'Synchro ':''}${fmtAppLabel(a)}`,now:{},ly:d.ev[k]||{}});
+      const r=out.get(k);
+      if(e.round==='Qualifier')r.now.qual=entryValue(e);
+      else if(e.round==='Prelim'){r.now.prelim=entryValue(e);r.now.adv=advanceInValue(e);}
+      else if(e.round==='Final')r.now.final=entryValue(e);
+    });
+  });
+  const ord=k=>{const[g,a,s]=k.split('|');return(s==='s'?100:0)+(g==='Women'?0:10)+['1m','3m','10m'].indexOf(a);};
+  return[...out.values()].sort((x,y)=>ord(x.k)-ord(y.k));
+}
+function srUseLastYear(){
+  const rows=srRows().filter(r=>r.ly&&(r.ly.prelim!=null||r.ly.qual!=null));
+  if(!rows.length){toast('No matching events from last year');return;}
+  askConfirm({title:'Use last year’s numbers?',
+    message:`Projected entries on ${rows.length} event${rows.length===1?'':'s'} will be set to what the ${SP.data.yr} ${SP.data.fam.label} drew, and finals re-sized from their prelims. Start times are not changed, and actual entries already typed are left alone. You can undo with Cmd+Z.`,
+    confirmText:'Use last year’s numbers',
+    onConfirm:()=>{
+      let n=0;
+      upd(s=>{
+        const by=new Map(rows.map(r=>[r.k,r.ly]));
+        const hasQual=new Set();
+        s.sessions.forEach(sess=>(sess.events||[]).forEach(e=>{if(e.round==='Qualifier'&&e.style==='Individual')hasQual.add(e.gender+'|'+srApp(e.apparatus));}));
+        const field={};
+        s.sessions.forEach(sess=>{
+          if(sess.isPractice)return;
+          (sess.events||[]).forEach(e=>{
+            if(e.style!=='Individual'&&e.style!=='Synchronized')return;
+            const syn=e.style==='Synchronized';const k=e.gender+'|'+srApp(e.apparatus)+'|'+(syn?'s':'i');
+            const ly=by.get(k);if(!ly)return;
+            const actual=e.finalDivers!=null&&e.finalDivers!==''&&e.round!=='Final';
+            if(e.round==='Qualifier'&&ly.qual!=null){if(!actual){e.projectedDivers=ly.qual;e.numberOfDivers=ly.qual;e.autoProjected=true;n++;}}
+            else if(e.round==='Prelim'&&ly.prelim!=null){
+              const via=(!syn&&hasQual.has(e.gender+'|'+srApp(e.apparatus))&&ly.via!=null)?Math.min(ly.via,ly.prelim):0;
+              if(!actual){e.projectedDivers=ly.prelim-via;e.numberOfDivers=ly.prelim;e.autoProjected=true;if(via)e.advanceIn=via;n++;}
+              field[k]=actual?null:ly.prelim;
+            }
+          });
+        });
+        s.sessions.forEach(sess=>(sess.events||[]).forEach(e=>{
+          if(e.round!=='Final'||(e.style!=='Individual'&&e.style!=='Synchronized'))return;
+          const k=e.gender+'|'+srApp(e.apparatus)+'|'+(e.style==='Synchronized'?'s':'i');
+          if(field[k]==null)return;
+          const t=Math.min(12,field[k]);e.projectedDivers=t;e.finalDivers=t;e.numberOfDivers=t;e.autoFinals=true;
+        }));
+        // Start times are deliberately left alone: re-stacking here would pull hand-set
+        // session times earlier. A prelim that now runs into the next block shows up
+        // in Schedule health, where it can be spaced with one click.
+      });
+      const clash=detectConflicts().filter(i=>i.sev==='err').length;
+      toast(`${n} event${n===1?'':'s'} set from last year. No start times were changed.${clash?' Schedule health now shows '+clash+' overlap'+(clash===1?'':'s')+' to space out.':''}`,5000);
+    }});
+}
+function renderSeniorProjModal(){
+  const fam=srMeetFamily();
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Projections${SP.data?` from the ${SP.data.yr} ${esc(SP.data.fam.label)}`:''}</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">What the same meet drew last year, beside what this schedule is sized for and how many athletes hold a qualifying score.</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">&times;</button></div>`;
+  let body,canFill=false;
+  if(!fam)body=`<p class="fm-help">This schedule has no senior events to project.</p>`;
+  else if(SP.state==='loading'||SP.state==='idle')body=`<div class="hours-note">Reading last year’s results…</div>`;
+  else if(SP.state==='error')body=`<div class="hours-note bad">Could not read the results database: ${esc(SP.err)}</div>`;
+  else{
+    const rows=srRows();
+    const A=(fmt()&&QC.state==='ready')?qcAnalyse():null;
+    const elig=r=>{
+      if(r.syn)return'';
+      if(!fmt())return'<span class="fm-ok">add a meet format</span>';
+      if(QC.state!=='ready')return'<span class="fm-ok">reading…</span>';
+      const e=A.events.find(x=>x.key===r.g+'|'+r.a);if(!e)return'';
+      return`<b>${e.ok.length}</b>${e.conf.length?` <span class="fm-ok">+ ${e.conf.length} conference only</span>`:''}`;
+    };
+    const pair=(ly,now)=>`<td>${ly==null?'<span class="fm-ok">none</span>':ly}</td><td class="${now!=null&&ly!=null&&now!==ly?'sp-diff':''}">${now==null?'':now}</td>`;
+    const anyQ=rows.some(r=>r.now.qual!=null||r.ly.qual!=null);
+    canFill=rows.some(r=>r.ly.prelim!=null||r.ly.qual!=null);
+    body=rows.length?`<table class="fm-tbl sp-tbl"><thead>
+        <tr><th rowspan="2">Event</th>${anyQ?'<th colspan="2">Qualifier</th>':''}<th colspan="3">Prelim</th><th colspan="2">Final</th><th rowspan="2">Hold a qualifying score</th></tr>
+        <tr>${anyQ?`<th>${SP.data.yr}</th><th>Schedule</th>`:''}<th>${SP.data.yr}</th><th>Schedule</th><th>Via qualifier in ${SP.data.yr}</th><th>${SP.data.yr}</th><th>Schedule</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr><td class="fm-ev">${esc(r.label)}</td>${anyQ?pair(r.ly.qual,r.now.qual):''}${pair(r.ly.prelim,r.now.prelim)}<td>${r.syn||r.ly.via==null?'':r.ly.via}${r.now.adv?` <span class="fm-ok">(${r.now.adv} counted now)</span>`:''}</td>${pair(r.ly.final,r.now.final)}<td>${elig(r)}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="fm-help">${SP.data.yr} columns count athletes (teams for synchro) who competed in that round. "Via qualifier" is how many of that prelim field had also competed in the same event at the qualifier. A highlighted schedule number differs from last year. Synchro numbers are teams.</p>
+      <p class="fm-help">"Hold a qualifying score" is this year’s ceiling for each event, from the qualifying scores check. Rosters, petitions and citizenship are not in it.</p>`
+      :`<p class="fm-help">No senior events on this schedule yet.</p>`;
+  }
+  return`<div class="modal fm-modal fm-wide" onclick="event.stopPropagation()">${hd}<div class="modal-body">${body}</div>
+    <div class="modal-foot">${fmt()?`<button class="btn btn-gh" onclick="openQualCheck()">Qualifying scores check</button>`:`<button class="btn btn-gh" onclick="openFormat()">Add a meet format</button>`}<div style="flex:1"></div>
+    ${canFill&&!S.locked?`<button class="btn" onclick="srUseLastYear()">Use last year’s numbers</button>`:''}<button class="btn btn-p" onclick="closeModal()">Done</button></div></div>`;
 }

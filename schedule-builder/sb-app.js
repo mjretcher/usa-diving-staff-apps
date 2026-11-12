@@ -3325,7 +3325,7 @@ function renderBar(timed){
         <button class="bb" onclick="openPlanner()" title="Put every event's rounds on days from one grid">Plan events</button>
         ${typeof openFormat==='function'?`<button class="bb" onclick="openFormat()" title="The meet's published rules: finalists, qualifier advancement, dives and DD minimums. Shows the longest each day can run.">Format</button>`:''}
         <button class="bb" onclick="openEntries()">Entries</button>
-        ${projectionsApply()?`<button class="bb" onclick="openProjections()">Projections</button>`:`<button class="bb" onclick="openEntrySync()" title="Pull live registered entry counts from DiveMeets">Sync entries</button>`}
+        ${projectionsApply()?`<button class="bb" onclick="openProjections()">Projections</button>`:((typeof srMeetFamily==='function'&&srMeetFamily())?`<button class="bb" onclick="openSeniorProjections()" title="Last year's fields for this meet beside what the schedule is sized for">Projections</button>`:'')}
         <button class="bb" onclick="openNewSchedule()" title="Start a new schedule — blank or from a template">New</button><button class="bb" onclick="openLibrary()">Library</button>
         <button class="bb icon-only" onclick="openHistory()" title="Version history" ${S.currentLibraryId?'':'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg></button>
         <div class="bar-sep"></div>
@@ -5211,6 +5211,7 @@ function paletteCommands(){
   cmds.push({label:'Print this day (coach handout)',hint:'export',run:()=>{UI.palette=null;render();openCoachHandout(UI.dayId)}});
   cmds.push({label:'Club itineraries (print)',hint:'export',run:()=>{UI.palette=null;render();openClubItineraries()}});
   cmds.push({label:'Sync actual entries (DiveMeets)',hint:'data',run:()=>{UI.palette=null;openEntrySync()}});
+  if(typeof srMeetFamily==='function'&&srMeetFamily()&&!projectionsApply())cmds.push({label:'Projections (last year\u2019s fields)',hint:'data',run:()=>{UI.palette=null;openSeniorProjections()}});
   if(projectionsApply())cmds.push({label:'Projections (Junior Nationals field)',hint:'data',run:()=>{UI.palette=null;openProjections()}});
   cmds.push({label:'Version history',hint:'safety',run:()=>{UI.palette=null;openHistory()}});
   cmds.push({label:'Snapshot now…',hint:'safety',run:()=>{UI.palette=null;render();snapshotNow()}});
@@ -5941,6 +5942,7 @@ function renderModal(timed){
     ...(typeof renderPlannerModal==='function'?{'planner':renderPlannerModal}:{}),
     ...(typeof renderFormatModal==='function'?{'format':renderFormatModal}:{}),
     ...(typeof renderQualCheckModal==='function'?{'qualcheck':renderQualCheckModal}:{}),
+    ...(typeof renderSeniorProjModal==='function'?{'srproj':renderSeniorProjModal}:{}),
     ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{}),
