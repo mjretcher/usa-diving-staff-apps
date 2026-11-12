@@ -1,0 +1,9 @@
+2026 in the database: 5537 rows, 5533 members, last import 2026-11-12T21:42:54+00:00
+map file was last built from: a hand build (Sept 2026)
+gate 2024: counties differing m 0, athletes 0, coaches 0, clubs 0; zips differing 0 -> reproduces exactly
+gate 2025: counties differing m 0, athletes 0, coaches 0, clubs 0; zips differing 0 -> reproduces exactly
+
+2026 rebuilt. Members on the map 4730 -> 5505; athletes 3862 -> 4576; coaches 619 -> 664.
+Members in the database 5533; placed in a county 5505; not mappable 28 (foreign address or a zip with no known county).
+Zip codes added to the map this build: 116. New clubs: 6 (University of Missouri, Canandaigua Masters Diving, Western Carolina Diving, Pine Richland Aquatics, Hill City Diving Club, Loveland Boardworks).
+Counties with members in 2026: 530.
