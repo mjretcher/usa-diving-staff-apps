@@ -1158,6 +1158,8 @@ function detectConflicts(){
       });
     });
   })();
+  // Meet format: longest case under the published rules, dive counts, qualifier rule.
+  if(typeof formatIssues==='function'){try{issues.push(...formatIssues());}catch(e){console.error('formatIssues failed:',e);}}
   return issues;
 }
 // Open the right place to fix a given conflict, then act
@@ -3309,6 +3311,7 @@ function renderBar(timed){
         <button class="bar-status ${st}" onclick="cycleStatus()" title="Click to advance status">${STATUS_LBL[st]}</button>
         <div class="bar-sep"></div>
         <button class="bb" onclick="openPlanner()" title="Put every event's rounds on days from one grid">Plan events</button>
+        ${typeof openFormat==='function'?`<button class="bb" onclick="openFormat()" title="The meet's published rules: finalists, qualifier advancement, dives and DD minimums. Shows the longest each day can run.">Format</button>`:''}
         <button class="bb" onclick="openEntries()">Entries</button>
         <button class="bb" onclick="openProjections()">Projections</button>
         <button class="bb" onclick="openNewSchedule()" title="Start a new schedule — blank or from a template">New</button><button class="bb" onclick="openLibrary()">Library</button>
@@ -5207,6 +5210,7 @@ function paletteCommands(){
     cmds.push({label:'Filter view: everything',hint:'multi-event',run:()=>{UI.palette=null;UI.eventFilter=null;render()}});
   }
   cmds.push({label:'Place events on days (event planner)',hint:'edit',run:()=>{UI.palette=null;openPlanner()}});
+  if(typeof openFormat==='function')cmds.push({label:'Meet format (finalists, qualifier rule, DD minimums)',hint:'edit',run:()=>{UI.palette=null;openFormat()}});
   cmds.push({label:'Add a day…',hint:'edit',run:()=>{UI.palette=null;addDay()}});
   cmds.push({label:(document.documentElement.dataset.theme==='deck'?'Light mode':'Deck mode (dark)'),hint:'view',run:()=>{UI.palette=null;render();toggleTheme()}});
   return cmds;
@@ -5898,6 +5902,7 @@ function renderFacilityHoursModal(){
 function renderModal(timed){
   const fns={meet:renderMeetModal,'add-event':renderPickerModal,library:renderLibraryModal,generate:renderGenerateModal,'facility-hours':renderFacilityHoursModal,'add-block':renderAddBlockModal,conflicts:renderConflictsModal,history:renderHistoryModal,shortcuts:renderShortcutsModal,saveDialog:renderSaveDialogModal,projections:renderProjectionsModal,'add-day':renderAddDayModal,newSchedule:renderNewScheduleModal,setDates:renderSetDatesModal,'copy-day':renderCopyDayModal,overview:renderOverviewModal,'entry-sync':renderEntrySyncModal,'export':renderExportModal,'import-blocks':renderImportBlocksModal,'pa-cues':renderPaCueModal,'bcast-preview':renderBcastPreviewModal,'bcast-copy':renderBcastCopyModal,
     ...(typeof renderPlannerModal==='function'?{'planner':renderPlannerModal}:{}),
+    ...(typeof renderFormatModal==='function'?{'format':renderFormatModal}:{}),
     ...(typeof renderAnnModal==='function'?{'announcer':renderAnnModal}:{}),
     ...(typeof renderLiveTimesModal==='function'?{'live-times':renderLiveTimesModal}:{}),
     ...(typeof renderLiveApproveModal==='function'?{'live-approve':renderLiveApproveModal}:{}),

@@ -2250,3 +2250,24 @@ html[data-theme="deck"] .pl-row.sel .pl-sticky{background:#12283A}
   .pl-chip{min-width:36px;height:36px;font-size:13px}
   .pl-chip-s{font-size:9.5px}
 }
+
+/* Meet format panel */
+.fm-modal .modal-body{font-size:13px}
+.fm-sec{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin:16px 0 6px}
+.fm-line{line-height:2.2;color:var(--tx)}
+.fm-line .fm-n{display:inline-block;height:28px;padding:0 6px;text-align:center;vertical-align:middle}
+.fm-chk{display:inline-flex;align-items:center;gap:6px;margin-left:4px;cursor:pointer}
+.fm-chk input{width:15px;height:15px;accent-color:var(--navy)}
+.fm-help{font-size:11px;color:var(--tx3);line-height:1.5;margin:4px 0 0}
+.fm-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.fm-tbl th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);padding:5px 8px;border-bottom:1px solid var(--bd)}
+.fm-tbl td{padding:4px 8px;border-bottom:1px solid var(--bd);vertical-align:middle;font-variant-numeric:tabular-nums}
+.fm-tbl .fm-n{height:28px;padding:0 6px}
+.fm-ev{font-weight:600;white-space:nowrap}
+.fm-eff td{padding:8px}
+.fm-late{font-weight:700;color:var(--navy)}
+.fm-plus{font-size:11px;font-weight:700;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:5px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+.fm-why{font-size:12px;line-height:1.5;color:var(--tx2)}
+.fm-bad{color:#991B1B;font-weight:600}
+.fm-ok{color:var(--tx3)}
+.fm-wide{width:min(900px,calc(100vw - 40px))}
