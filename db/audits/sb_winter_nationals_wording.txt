@@ -1,0 +1,28 @@
+/home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/db/scripts/sb_fix_winter_nationals_wording.py:72: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  data["updatedAt"] = __import__("datetime").datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+schedule: 2026 USA Diving Winter National Championships & Winter National Championships Qualifier | updated_at: 2026-11-12 01:13:47.318629+00:00
+meet.name: 2026 USA Diving Winter National Championships & Winter National Championships Qualifier
+meet.venue (before): 'City of Midland Aquatic Center' | meet.city: 'Midland, Texas'
+days: [('b91qko04', '2026-12-07'), ('day-2026-08-04', '2026-12-08'), ('day-2026-08-05', '2026-12-09'), ('day-2026-08-06', '2026-12-10'), ('day-2026-08-07', '2026-12-11'), ('day-2026-08-08', '2026-12-12'), ('day-2026-08-09', '2026-12-13'), ('day-2026-08-10', '2026-12-14'), ('day-2026-08-11', '2026-12-15')]
+
+17 change(s):
+  meet.venue: 'City of Midland Aquatic Center' -> 'O’Shaughnessy Diving Center'
+  block 'Open Training' (sr-senior-open-training) notes: 'USA Nationals senior open training.' -> ''
+  block 'Open Training' (sr-senior-open-training) label: 'Senior open training' -> 'Open Training'
+  block 'Open Training' (sr-open-warmup-aug05) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Training' (sr-open-warmup-aug05) label: 'Restricted senior/qualifier open warm-up' -> 'Open Training'
+  block 'Open training' (sr-open-training-aug05) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open training' (sr-open-training-aug05) label: 'Restricted senior/qualifier open training' -> 'Open training'
+  block 'Open Training' (sr-restricted-aug07-am) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Training' (sr-restricted-aug07-am) label: 'USA Nationals restricted open boards' -> 'Open Training'
+  block 'Open Training' (sr-restricted-aug08-am) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Training' (sr-restricted-aug08-am) label: 'USA Nationals restricted open boards' -> 'Open Training'
+  block 'Open Training' (sr-restricted-aug09-am) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Training' (sr-restricted-aug09-am) label: 'USA Nationals restricted open boards' -> 'Open Training'
+  block 'Open Training' (sr-restricted-aug10-am) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Training' (sr-restricted-aug10-am) label: 'USA Nationals restricted open boards' -> 'Open Training'
+  block 'Open Boards' (sr-restricted-aug11-am) notes: 'Restricted: USA Nationals / National Qualifier entrants only.' -> ''
+  block 'Open Boards' (sr-restricted-aug11-am) label: 'USA Nationals restricted open boards' -> 'Open Boards'
+still mentioning summer wording after the fix: ['"Senior / USA Nationals"']
+
+Written. New updated_at: 2026-11-12 01:31:23.143902+00:00 | previous copy kept in Version history.
