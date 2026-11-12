@@ -299,6 +299,7 @@ function renderFormatModal(){
     <div class="modal-foot">
       ${S.locked?'':`<button class="btn btn-gh" onclick="fmtRemove()">Remove format</button>`}
       <div style="flex:1"></div>
+      <button class="btn" onclick="openQualCheck()" title="Who has a qualifying score, from the results database">Qualifying scores check</button>
       <button class="btn" onclick="printFormatDoc()">Print format document</button>
       <button class="btn btn-p" onclick="closeModal()">Done</button>
     </div></div>`;
@@ -373,4 +374,152 @@ h3,table,ul{break-inside:avoid}@page{size:letter portrait;margin:0.75in}@media p
 .np{position:fixed;top:10px;right:10px;font:600 13px Arial;padding:8px 16px;border:1px solid #000;background:#fff;cursor:pointer}`;
   w.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>${esc((fmt().title||S.meet.name||'Meet')+' Advancement and Event Format')}</title><style>${css}</style></head><body><button class="np" onclick="window.print()">Print</button>${body}</body></html>`);
   w.document.close();
+}
+
+// ── QUALIFYING SCORES CHECK ───────────────────────────────────────────
+// An independent look at who has a qualifying score, read live from the results
+// database (nothing is stored). It applies the format's Table 1 scores to the
+// competitions it can identify, one round at a time, and keeps anything whose
+// list length it cannot confirm in a separate group. It is a second list to hold
+// against the one DiveMeets builds; the published criteria decide who is in.
+const QC_USA_GROUPS=['USA Diving Nationals','USA Diving Nationals Qualifier','USA Diving Winter Nationals','USA Diving Winter Nationals Qualifier'];
+const QC_NOT_CHECKED=[
+  'National Team members and Junior High Performance Squad members (rosters are not in the results data)',
+  'Junior Nationals Group A and B (the standard is on optional dives only)',
+  'NCAA Division II and III champions',
+  'Scores at a home country’s national championships, and anything approved by petition',
+  'Citizenship and federation permission (nationality is blank on most result rows)'
+];
+let QC={state:'idle',rows:null,err:null,asOf:null,paste:'',ev:''};
+function openQualCheck(){UI.modal='qualcheck';render();if(QC.state==='idle')qcLoad();}
+async function qcLoad(){
+  const f=fmt();if(!f)return;
+  QC.state='loading';QC.err=null;if(UI.modal==='qualcheck')render();
+  const lows=(f.rows||[]).flatMap(r=>[fmtNum(r.score),fmtNum(r.ncaa)]).filter(v=>v!=null);
+  const floor=lows.length?Math.min(...lows):0;
+  const sql=`SELECT diver_id,diver_name,team_name,nat,gender,discipline,meet_name,meet_year,competition_family,competition_group,round_stage,phase_dive_count,phase_score_from_dives,posted_score,score_is_cumulative
+    FROM core.result_phases
+    WHERE meet_year IN (2025,2026) AND COALESCE(is_synchronized,false)=false
+      AND gender IN ('Female','Male') AND discipline IN ('1m','3m','Platform')
+      AND GREATEST(COALESCE(phase_score_from_dives,0),COALESCE(posted_score,0))>=$1
+      AND ((competition_group IN (${QC_USA_GROUPS.map(g=>"'"+g.replace(/'/g,"''")+"'").join(',')}) AND event_level='Senior')
+        OR (competition_family='World Aquatics' AND nat IN ('USA','United States'))
+        OR (competition_family='NCAA' AND ncaa_division='Division I' AND (competition_group ILIKE '%zone%' OR competition_group ILIKE '%championship%')))`;
+  try{
+    const r=await nq(sql,[floor]);
+    QC.rows=(r.rows||[]).map(a=>({id:a[0],name:a[1],team:a[2],nat:a[3],g:a[4]==='Female'?'Women':'Men',d:a[5],meet:a[6],year:Number(a[7]),fam:a[8],grp:a[9],round:a[10],
+      n:a[11]==null?null:Number(a[11]),phase:a[12]==null?null:Number(a[12]),posted:a[13]==null?null:Number(a[13]),cum:a[14]===true||a[14]==='t'||a[14]==='true'}));
+    try{const m=await nq(`SELECT max(imported_at) FROM core.result_phases WHERE meet_year=2026`);QC.asOf=m.rows&&m.rows[0]&&m.rows[0][0]?String(m.rows[0][0]).slice(0,10):null;}catch{}
+    QC.state='ready';
+  }catch(e){QC.state='error';QC.err=(e&&e.message)||'Could not read the results database';}
+  if(UI.modal==='qualcheck')render();
+}
+function qcRoute(row){
+  if(row.fam==='World Aquatics')return{k:'wa',l:'World Aquatics event',ncaa:false};
+  if(row.fam==='NCAA'){
+    if(/zone/i.test(row.grp||''))return{k:'zone',l:'NCAA Division I Zone',ncaa:true};
+    if(/^NCAA Division I Championships$/i.test(row.grp||''))return{k:'ncaa',l:'NCAA Division I Championships',ncaa:true};
+    return{k:'conf',l:'NCAA Division I conference (needs HPD approval)',ncaa:true};
+  }
+  return{k:'usa',l:row.grp||'USA Diving',ncaa:false};
+}
+// Sort every row into: meets the score with the list length confirmed, or meets
+// it on paper but the list length is missing or different. One line per athlete
+// per event, best confirmed score first.
+function qcAnalyse(){
+  const f=fmt();if(!f||!QC.rows)return{events:[]};
+  const key=d=>d==='Platform'?'10m':String(d).toLowerCase();
+  const by=new Map();
+  QC.rows.forEach(row=>{
+    const fr=(f.rows||[]).find(x=>x.g===row.g&&x.a===key(row.d));if(!fr)return;
+    const rt=qcRoute(row);
+    const thr=fmtNum(rt.ncaa?(fr.ncaa!==''&&fr.ncaa!=null?fr.ncaa:fr.score):fr.score);if(thr==null)return;
+    const opt=fmtNum(fr.opt);
+    const expect=opt?Math.round(thr/opt):fmtNum(fr.dives);
+    // A cumulative posted total is prelim plus final; only the round's own dives count.
+    const own=row.phase!=null?row.phase:(row.cum?null:row.posted);
+    let status=null,score=own;
+    if(own!=null&&own>=thr&&row.n!=null&&row.n===expect)status='ok';
+    else if(own!=null&&own>=thr)status='look';
+    else if(own==null&&row.posted!=null&&row.posted>=thr){status='look';score=row.posted;}
+    if(!status)return;
+    const why=status==='ok'?'':(row.n==null?'dive count not recorded':(row.n!==expect?`${row.n} dives, standard is on ${expect}`:(row.cum&&row.phase==null?'cumulative total only':'')));
+    const evKey=fr.g+'|'+fr.a;
+    const k=evKey+'|'+(row.id||row.name);
+    const cur=by.get(k);
+    const cand={evKey,g:fr.g,a:fr.a,id:row.id,name:row.name,team:row.team,nat:row.nat,score,thr,status,why,meet:row.meet,year:row.year,round:row.round,n:row.n,route:rt.l,routeK:rt.k,routes:new Set([rt.k])};
+    if(!cur){by.set(k,cand);return;}
+    cur.routes.add(rt.k);
+    const better=(cand.status==='ok'&&cur.status!=='ok')||(cand.status===cur.status&&(cand.routeK!=='conf'&&cur.routeK==='conf'||(cand.routeK==='conf')===(cur.routeK==='conf')&&cand.score>cur.score));
+    if(better){cand.routes=cur.routes;by.set(k,cand);}
+  });
+  const events=(f.rows||[]).map(fr=>{
+    const list=[...by.values()].filter(x=>x.evKey===fr.g+'|'+fr.a);
+    // Conference-only athletes are held apart: the route needs an approval this page cannot see.
+    const confOnly=x=>x.routes.size===1&&x.routes.has('conf');
+    const ok=list.filter(x=>x.status==='ok'&&!confOnly(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    const conf=list.filter(x=>x.status==='ok'&&confOnly(x)).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    const look=list.filter(x=>x.status==='look').sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    return{key:fr.g+'|'+fr.a,label:`${fr.g} ${fmtAppLabel(fr.a)}`,thr:fr.score,ncaa:fr.ncaa,ok,conf,look};
+  });
+  return{events};
+}
+function qcNorm(s){
+  s=String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  if(s.includes(','))s=s.split(',').map(x=>x.trim()).reverse().join(' ');
+  return s.replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+}
+// Names pasted from the DiveMeets list that have no qualifying score here.
+function qcCompare(A){
+  const names=String(QC.paste||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  if(!names.length)return null;
+  const have=new Map();
+  A.events.forEach(e=>[...e.ok,...e.conf,...e.look].forEach(x=>{const k=qcNorm(x.name);if(!have.has(k))have.set(k,[]);have.get(k).push(e.label+(x.status==='look'?' (needs a look)':e.conf.includes(x)?' (conference only)':''));}));
+  const missing=[],found=[];
+  names.forEach(n=>{const k=qcNorm(n);if(!k)return;(have.has(k)?found:missing).push({n,where:have.get(k)||[]});});
+  return{total:names.length,missing,found};
+}
+function qcSetPaste(v){QC.paste=v;render();}
+function qcCsv(){
+  const A=qcAnalyse();const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const lines=[['Event','Athlete','Team','Group','Score','Standard','Dives','Meet','Round','Route','Note'].join(',')];
+  A.events.forEach(e=>[['Meets the score',e.ok],['Conference only',e.conf],['Needs a look',e.look]].forEach(([grp,l])=>l.forEach(x=>lines.push([e.label,x.name,x.team,grp,x.score,x.thr,x.n,x.meet,x.round,x.route,x.why].map(q).join(','))))); 
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='qualifying-scores-check.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function renderQualCheckModal(){
+  const f=fmt();
+  const hd=`<div class="modal-hd"><div><span class="modal-title">Qualifying scores check</span><div style="font-size:11px;color:var(--tx3);margin-top:2px">Who has a Table 1 score at a Table 2 competition, from the results database. A second list to hold against the DiveMeets list.</div></div><button class="modal-close" aria-label="Close" onclick="closeModal()">&times;</button></div>`;
+  const foot=`<div class="modal-foot"><button class="btn btn-gh" onclick="openFormat()">Back to format</button><div style="flex:1"></div>${QC.state==='ready'?`<button class="btn" onclick="qcCsv()">Download CSV</button>`:''}<button class="btn" onclick="QC.state='idle';qcLoad()">Refresh</button><button class="btn btn-p" onclick="closeModal()">Done</button></div>`;
+  let body;
+  if(!f)body=`<p class="fm-help">Add a meet format first. The check uses its qualifying scores.</p>`;
+  else if(QC.state==='loading'||QC.state==='idle')body=`<div class="hours-note">Reading results…</div>`;
+  else if(QC.state==='error')body=`<div class="hours-note bad">Could not read the results database: ${esc(QC.err)}</div>`;
+  else{
+    const A=qcAnalyse();const cmp=qcCompare(A);
+    const cur=A.events.find(e=>e.key===QC.ev)||A.events[0];
+    const tabs=A.events.map(e=>`<button class="evf-chip ${cur&&e.key===cur.key?'on':''}" onclick="QC.ev='${e.key}';render()">${esc(e.label)} <b>${e.ok.length}</b></button>`).join('');
+    const tbl=(l,showWhy)=>l.length?`<table class="fm-tbl"><thead><tr><th>Athlete</th><th>Team</th><th>Score</th><th>Dives</th><th>Where</th>${showWhy?'<th>Why it needs a look</th>':''}</tr></thead><tbody>${l.map(x=>`<tr><td class="fm-ev">${esc(x.name)}</td><td>${esc(x.team||'')}</td><td>${x.score!=null?Number(x.score).toFixed(2):''}</td><td>${x.n==null?'':x.n}</td><td class="fm-why">${esc(x.meet)}${x.round?', '+esc(x.round):''}<div class="fm-ok">${esc(x.route)}</div></td>${showWhy?`<td class="fm-why">${esc(x.why)}</td>`:''}</tr>`).join('')}</tbody></table>`:`<p class="fm-help">None.</p>`;
+    const cmpHtml=cmp?`<div class="hours-note ${cmp.missing.length?'warn':''}">${cmp.total} name${cmp.total===1?'':'s'} pasted. ${cmp.found.length} ha${cmp.found.length===1?'s':'ve'} a qualifying score here. <b>${cmp.missing.length}</b> do${cmp.missing.length===1?'es':''} not${cmp.missing.length?', so check these by hand':''}.</div>
+      ${cmp.missing.length?`<div class="qc-miss">${cmp.missing.map(m=>`<span>${esc(m.n)}</span>`).join('')}</div><p class="fm-help">A name can be missing here and still be correctly qualified by a route this page does not check (listed at the bottom), or because the name is spelled differently in the results.</p>`:''}`:'';
+    body=`
+      <div class="fm-sec">Compare with the DiveMeets list</div>
+      <textarea class="fi" rows="4" style="width:100%;font-size:12px;line-height:1.5" placeholder="Paste the qualified athletes' names here, one per line (First Last or Last, First)" onchange="qcSetPaste(this.value)">${esc(QC.paste)}</textarea>
+      ${cmpHtml}
+      <div class="fm-sec">By event</div>
+      <div class="evf-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${tabs}</div>
+      ${cur?`
+      <div class="qc-h">Meets the score, list length confirmed <span>${cur.ok.length}</span></div>
+      <p class="fm-help">Standard ${esc(cur.thr)}${cur.ncaa!==''&&cur.ncaa!=null&&Number(cur.ncaa)!==Number(cur.thr)?` (${esc(cur.ncaa)} at NCAA events)`:''}. One line per athlete, best confirmed score. Scores are a single round's own dives, never a prelim-plus-final total.</p>
+      ${tbl(cur.ok)}
+      <div class="qc-h">Score only at a conference championship <span>${cur.conf.length}</span></div>
+      <p class="fm-help">Counts only if High Performance approved that conference meet.</p>
+      ${tbl(cur.conf)}
+      <div class="qc-h">Needs a look <span>${cur.look.length}</span></div>
+      <p class="fm-help">The number clears the standard but the list length is missing or different, so it is not counted above.</p>
+      ${tbl(cur.look,true)}`:''}
+      <div class="fm-sec">Not checked here</div>
+      <ul class="qc-not">${QC_NOT_CHECKED.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <p class="fm-help">Results as loaded${QC.asOf?` through ${esc(QC.asOf)}`:''}. ${QC.rows.length} result rows at or above the lowest standard were read.</p>`;
+  }
+  return`<div class="modal fm-modal fm-wide" onclick="event.stopPropagation()">${hd}<div class="modal-body">${body}</div>${foot}</div>`;
 }
