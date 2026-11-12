@@ -1,0 +1,38 @@
+name: Schedule Builder - Winter Nationals venue and wording fix
+
+# One-off, idempotent data fix. Runs when the script lands or changes, and on
+# demand. Output is committed to db/audits so it can be read without the logs.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - db/scripts/sb_fix_winter_nationals_wording.py
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install psycopg2-binary
+      - shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -o pipefail
+          mkdir -p db/audits
+          python db/scripts/sb_fix_winter_nationals_wording.py 2>&1 | tee db/audits/sb_winter_nationals_wording.txt
+      - if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/audits/sb_winter_nationals_wording.txt
+          git commit -m "Schedule Builder: Winter Nationals venue and wording fix log" || echo none
+          git pull --rebase --autostash -q || true
+          git push
