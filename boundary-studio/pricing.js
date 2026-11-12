@@ -163,7 +163,7 @@ const PS = {
   adv:null, age:null,                 // advance-data.json, age-data.json
   regions:[], assign:{}, levels:null, finalName:'Junior Nationals',
   boundaryId:null, boundaryName:'Official 2026 Alignment',
-  year:'y26',
+  year:(window.BS_SEASON ? window.BS_SEASON.get() : 'y26'),   // shared with Boundary Studio (bs-shell.js)
   fees:null, flow:null,
   prices:{}, mElast:{}, eElast:{}, sElast:{},   // price overrides + elasticities
   prequal:0,                          // HPS Tier 3 pre-qualified entries into the final
@@ -194,6 +194,15 @@ const usd  = n => '$' + Math.round(Number(n)||0).toLocaleString('en-US');
 const usd1 = n => { const v=Number(n)||0; return (v<0?'-':'') + '$' + Math.abs(Math.round(v)).toLocaleString('en-US'); };
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function msg(t){ if (window.USADToast) USADToast(t); else console.log(t); }
+// Season changed in Boundary Studio: follow it.
+window.addEventListener('bs-season', async e => {
+  const y = e.detail && e.detail.year;
+  if (!y || e.detail.src === 'pricing' || PS.year === y) return;
+  PS.year = y;
+  if (!PS.ready) return;
+  try { await loadCounts(); await loadNationalActual(); deriveCalibration(); calibratePrequal(); snapshotBaseline(); render(); }
+  catch(err){ console.error('pricing season change', err); }
+});
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
 /* ---------- structure helpers ---------- */
@@ -2131,6 +2140,7 @@ function wire(){
 
   host.querySelectorAll('.ps-seg button').forEach(b => b.addEventListener('click', async () => {
     PS.year = b.dataset.year;
+    if (window.BS_SEASON) window.BS_SEASON.set(PS.year, 'pricing');
     await loadCounts(); await loadNationalActual(); deriveCalibration(); calibratePrequal(); snapshotBaseline(); render();
   }));
 
@@ -2222,7 +2232,9 @@ async function loadScenario(id){
     if (!r.rows.length){ msg('Scenario not found.'); return; }
     const d = typeof r.rows[0].data === 'string' ? JSON.parse(r.rows[0].data) : r.rows[0].data;
     if (d.boundaryId && d.boundaryId !== PS.boundaryId) await applyBoundary(d.boundaryId);
-    const newYear = (d.year === 'y24' || d.year === 'y25') ? d.year : 'y26';
+    // The app's season wins over the one the scenario was saved on, so pricing and
+    // the boundary tabs always read the same season.
+    const newYear = window.BS_SEASON ? window.BS_SEASON.get() : ((d.year === 'y24' || d.year === 'y25') ? d.year : 'y26');
     const yearChanged = newYear !== PS.year;
     PS.year = newYear;
     await loadCounts();

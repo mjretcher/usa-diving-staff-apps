@@ -229,11 +229,30 @@ async function load(){
        RETURNING member_id`, [M.year, stamp]);
     const after = await countYear(M.year);
     M.result = {before, after, written, removed: (gone.rows||[]).length, stamp};
+    M.result.rebuild = await requestBoundaryRebuild();
   } catch(e){
     console.error(e);
     M.err = String(e && e.message || e);
   }
   M.busy = false; M.progress = 0; render();
+}
+
+/* Boundary Studio's map reads county counts from files, not from the database,
+   so an import here used to leave the map on old numbers until someone ran a
+   build by hand. Ask GitHub to run that build now. If the request cannot be
+   sent the once-a-day check still picks the import up. */
+async function requestBoundaryRebuild(){
+  const cfg = window.USAD_CONFIG || {};
+  const tok = cfg.syncToken, repo = cfg.repo || 'mjretcher/usa-diving-staff-apps';
+  if (!tok) return 'later';
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/build-boundary-membership.yml/dispatches`, {
+      method:'POST',
+      headers:{'Authorization':'Bearer ' + tok, 'Accept':'application/vnd.github+json', 'Content-Type':'application/json'},
+      body: JSON.stringify({ref:'main'})
+    });
+    return (r.ok || r.status === 204) ? 'started' : 'later';
+  } catch(e){ console.error('boundary rebuild request', e); return 'later'; }
 }
 
 async function countYear(y){
@@ -287,6 +306,8 @@ function render(){
       ${M.result.removed ? `${fmt(M.result.removed)} member row${M.result.removed===1?'':'s'} that
         this export no longer contains ${M.result.removed===1?'was':'were'} removed.` : 'Nothing needed removing.'}
       ${M.result.before!=null ? `The year held ${fmt(M.result.before)} rows before and ${fmt(M.result.after)} now.` : ''}
+      ${M.result.rebuild === 'started' ? `Boundary Studio's map is being rebuilt from these numbers and will show them in about five minutes.`
+        : M.result.rebuild === 'later' ? `Boundary Studio's map will pick these numbers up at its next daily rebuild.` : ''}
       Reload the page to see it flow through the rest of the tab.</div>`;
 
   const err = !M.err ? '' : `

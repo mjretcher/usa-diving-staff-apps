@@ -14,6 +14,26 @@
 (function () {
   'use strict';
 
+  /* One season for the whole app. Boundary Studio's tabs (Map, Structure,
+     Projection, Money, Schedule, Compare, Report) and Pricing Studio each used
+     to hold their own season: the map opened on 2025, pricing on 2026, and a
+     saved proposal switched it again. They now all read and write this, so the
+     membership and results behind every number on screen are the same season.
+     Default is the current season. Remembered per browser. */
+  const SEASON_KEY = 'usad.bs.season', SEASONS = ['y24', 'y25', 'y26'], SEASON_DEFAULT = 'y26';
+  window.BS_SEASON = {
+    get() {
+      let v = null; try { v = localStorage.getItem(SEASON_KEY); } catch (e) {}
+      return SEASONS.includes(v) ? v : SEASON_DEFAULT;
+    },
+    set(y, src) {
+      if (!SEASONS.includes(y)) return;
+      try { localStorage.setItem(SEASON_KEY, y); } catch (e) {}
+      window.dispatchEvent(new CustomEvent('bs-season', { detail: { year: y, src: src || '' } }));
+    },
+    label(y) { return y === 'y24' ? '2024' : y === 'y25' ? '2025' : '2026 year to date'; },
+  };
+
   const byId = (id) => document.getElementById(id);
 
   function wireTabs() {

@@ -97,7 +97,7 @@ const S = {
   assign: {},           // fips -> region index
   active: 0,            // active region index (-1 = eraser)
   tool: 'county',       // county | state | pan
-  year: 'y25',          // y24 (complete) | y25 (complete) | y26 (YTD)
+  year: (window.BS_SEASON ? window.BS_SEASON.get() : 'y26'),   // y24 (complete) | y25 (complete) | y26 (YTD). Shared with Pricing Studio through BS_SEASON (bs-shell.js).
   zoom: {k:1, x:0, y:0},
   painting: false,
   detailRegion: null,   // group index (in current tier view) for zip drill-down
@@ -4999,7 +4999,7 @@ function paletteItems(){
   add('Open the older 2026 draft', 'Superseded draft built from which Regional each club attended — not the published map', ()=>loadScenario('seed-2026-alignment'), 'Maps');
   add('Reset the map view', 'Zoom back out', ()=>{ S.zoom={k:1,x:0,y:0}; applyZoom(); }, 'Map');
   [['y24','2024'],['y25','2025'],['y26','2026 YTD']].forEach(([k,l]) => add('Season: ' + l, 'Count members from this season',
-    ()=>{ S.year = k; applyOfficialSeason(); repaintAll(); renderPanel(); }, 'Season'));
+    ()=>{ S.year = k; seasonPicked(); applyOfficialSeason(); repaintAll(); renderPanel(); }, 'Season'));
   add('Save as a copy', 'A new proposal with the same map', ()=>saveScenario(true), 'Record');
   add('New proposal', 'Start from a blank map', ()=>{ const b = document.getElementById('bsNew'); if (b) b.click(); }, 'Record');
   add('Export zips CSV', '', exportCsv, 'Export');
@@ -6186,9 +6186,9 @@ function wirePanel(){
   bind('bsToolCounty', ()=>{S.tool='county'; renderPanel();});
   bind('bsToolState', ()=>{S.tool='state'; renderPanel();});
   bind('bsToolPan', ()=>{S.tool='pan'; renderPanel();});
-  bind('bsY24', ()=>{S.year='y24'; repaintAll(); renderPanel();});
-  bind('bsY25', ()=>{S.year='y25'; repaintAll(); renderPanel();});
-  bind('bsY26', ()=>{S.year='y26'; repaintAll(); renderPanel();});
+  bind('bsY24', ()=>{S.year='y24'; seasonPicked(); repaintAll(); renderPanel();});
+  bind('bsY25', ()=>{S.year='y25'; seasonPicked(); repaintAll(); renderPanel();});
+  bind('bsY26', ()=>{S.year='y26'; seasonPicked(); repaintAll(); renderPanel();});
   bind('bsZoomIn', ()=>{S.zoom.k=Math.min(14,S.zoom.k*1.4); applyZoom();});
   bind('bsZoomOut', ()=>{S.zoom.k=Math.max(1,S.zoom.k/1.4); if(S.zoom.k===1){S.zoom.x=0;S.zoom.y=0;} applyZoom();});
   bind('bsZoomReset', ()=>{S.zoom={k:1,x:0,y:0}; applyZoom();});
@@ -6450,6 +6450,16 @@ function neonMsg(e){
   return m;
 }
 
+/* The season was picked here: tell the rest of the app (Pricing Studio) and
+   remember it. Internal, temporary switches of S.year (financialsForYear and the
+   side-by-side comparisons) deliberately do not call this. */
+function seasonPicked(){ if (window.BS_SEASON) window.BS_SEASON.set(S.year, 'boundary'); }
+window.addEventListener('bs-season', e => {
+  const y = e.detail && e.detail.year;
+  if (!y || (e.detail.src === 'boundary') || S.year === y) return;
+  S.year = y;
+  if (S.geo){ try { applyOfficialSeason(); repaintAll(); renderPanel(); } catch(err){ console.error('season change', err); } }
+});
 function msg(t){
   if (atlasOn()){ atlasToast(t, /^(Saved|Frozen|Loaded|Deleted|Generated|Recoloured|Drew)/.test(t)); return; }
   const m=document.getElementById('bsMsg'); if(m){ m.textContent=t; setTimeout(()=>{ if(m.textContent===t) m.textContent=''; }, 4000);} }
@@ -6609,7 +6619,15 @@ async function loadScenario(id){
     S.cmpIds = []; S.cmpRes = null;
     S.regions = d.regions && d.regions.length ? d.regions : defaultRegions(12);
     S.assign = d.assign || {};
-    S.year = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
+    // A saved proposal no longer switches the season. It opens on the season the
+    // app is on, so its numbers match Money, Projection and Pricing Studio; say so
+    // when that differs from the season it was saved on.
+    { const savedY = (d.year === 'y24' || d.year === 'y26') ? d.year : 'y25';
+      S.year = window.BS_SEASON ? window.BS_SEASON.get() : savedY;
+      if (savedY !== S.year && window.BS_SEASON){
+        const L = window.BS_SEASON.label;
+        setTimeout(() => msg(`Saved on ${L(savedY)} numbers. Showing ${L(S.year)}; change the season to see it as saved.`), 1200);
+      } }
     S.routing = (d.routing && d.routing.length) ? d.routing : null;   // null -> rebuilt from the current rules
     S._ownRouting = !!(d.routing && d.routing.length); S._off25 = null;
     S.pathSaved = null; S.pathDirty = false;   // this is the map's own copy, not a library pathway
@@ -7884,6 +7902,18 @@ function autoGroupNames(t, k, name, cents, stage){
 function renderAutoDialog(){
   const d = document.getElementById('bsAutoModal');
   if (!d) return;
+  // Every click here redraws the whole panel. Without this the two scrolling
+  // columns snapped back to the top, so changing anything below the first screen
+  // threw you back up. Remember where each column was (and which field had
+  // focus) and put them back after the redraw.
+  const _keep = ['.aa-left', '.aa-right'].map(q => { const e = d.querySelector(q); return e ? e.scrollTop : 0; });
+  const _ae = document.activeElement;
+  const _focusLbl = (_ae && d.contains(_ae) && _ae.getAttribute) ? _ae.getAttribute('aria-label') : null;
+  const _restoreAuto = () => {
+    ['.aa-left', '.aa-right'].forEach((q, i) => { const e = d.querySelector(q); if (e && _keep[i]) e.scrollTop = _keep[i]; });
+    if (_focusLbl){ const f = [...d.querySelectorAll('[aria-label]')].find(x => x.getAttribute('aria-label') === _focusLbl); if (f && f !== document.activeElement){ try { f.focus({preventScroll:true}); } catch(e){} } }
+  };
+  setTimeout(_restoreAuto, 0);
   const ready = !!_autoData;
   const r = AUTO.result;
   const probs = autoStageProblems();
@@ -7999,6 +8029,7 @@ function renderAutoDialog(){
       </div>
     </div>
   </div>`;
+  _restoreAuto();
 }
 
 window._bsAutoClose = function(){ const d=document.getElementById('bsAutoModal'); if(d) d.remove(); };
@@ -8673,7 +8704,7 @@ function atlasHeader(){
   bind('atlRecolour', () => { S.atlMenu = false; recolourWithRamp(); });
   bind('bsSepColors', () => { S.atlMenu = false; separateAdjacentColors(); });
   h.querySelectorAll('[data-atlyear]').forEach(b => b.addEventListener('click', () => {
-    S.year = b.dataset.atlyear; S.atlMenu = false; applyOfficialSeason(); repaintAll(); renderPanel();
+    S.year = b.dataset.atlyear; S.atlMenu = false; seasonPicked(); applyOfficialSeason(); repaintAll(); renderPanel();
   }));
   atlasSchedBadge();
 }
@@ -8756,6 +8787,15 @@ function atlasPlaceSvg(){
 /* ============================================================================
    MAP WORKSPACE
    ========================================================================= */
+/* How current the membership behind the map is. 2026 is rebuilt from the
+   database after every import; 2024 and 2025 are complete seasons. */
+function membershipAsOfHtml(){
+  if (S.year !== 'y26') return `<span class="atl-asof">${esc(yearNumBoundary(S.year))} membership, complete season</span>`;
+  if (!S.asOf) return `<span class="atl-asof">2026 membership as loaded in September 2026</span>`;
+  const d = new Date(S.asOf);
+  const when = isNaN(d) ? '' : d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  return `<span class="atl-asof" title="Rebuilt from the membership database after each import in Membership Analytics">2026 membership as of the ${esc(when)} import</span>`;
+}
 function atlasMapHtml(){
   const tv = S.tierView;
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
@@ -8825,6 +8865,7 @@ function atlasMapHtml(){
       <div class="atl-rail-sub">
         <span>${esc(tierName(tv))} · <select class="atl-sel quiet" id="atlYear" title="Season the tallies are counted from">${yearOpts}</select></span>
         <select class="atl-sel" id="atlMetric" title="What the rows count">${metricOpts}</select>
+        ${membershipAsOfHtml()}
       </div>
       <div class="atl-rail-list">
         <div id="atlRows"></div>
@@ -9133,7 +9174,7 @@ function wireAtlasMap(){
     S.tierView = +b.dataset.tierv; S.detailRegion = null; repaintAll(); renderPanel();
   }));
   const yr = $id('atlYear');
-  if (yr) yr.addEventListener('change', () => { S.year = yr.value; applyOfficialSeason(); repaintAll(); renderPanel(); });
+  if (yr) yr.addEventListener('change', () => { S.year = yr.value; seasonPicked(); applyOfficialSeason(); repaintAll(); renderPanel(); });
   const lr = $id('bsLoadRail');
   if (lr) lr.addEventListener('change', () => { if (lr.value) loadScenario(lr.value); });
   const on = (id, f) => { const e = $id(id); if (e) e.addEventListener('click', f); };
@@ -11128,18 +11169,23 @@ window.renderBoundary = async function(){
   try { S.ui = localStorage.getItem('bsUi') === 'classic' ? 'classic' : 'atlas'; } catch(e){ S.ui = 'atlas'; }
   el.innerHTML = '<div class="loading">Loading county map&hellip;</div>';
   try {
-    S.geo = await (await fetch(DATA_DIR + 'boundary-data.json?v=202609041900')).json();
+    // These three are rebuilt from the membership database after every import
+    // (build-boundary-membership.yml), so always check for a newer copy instead
+    // of trusting a cached one.
+    S.geo = await (await fetch(DATA_DIR + 'boundary-data.json', {cache:'no-cache'})).json();
+    const live = S.geo.meta && S.geo.meta.y26;
+    if (live && live.members_total){ S.totals.y26 = live.members_total; S.asOf = live.loaded_at || live.built || null; }
   } catch(e){
     el.innerHTML = `<div class="card"><div class="card-b"><div class="callout warn"><b>Boundary data failed to load.</b> ${esc(e.message||e)}</div></div></div>`;
     return;
   }
-  try { S.compAth = (await (await fetch(DATA_DIR + 'comp-athletes-data.json?v=20260917')).json()).counties; }
+  try { S.compAth = (await (await fetch(DATA_DIR + 'comp-athletes-data.json', {cache:'no-cache'})).json()).counties; }
   catch(e){ S.compAth = null; }
   try { S.age = await (await fetch(DATA_DIR + 'age-data.json?v=202609041900')).json(); }
   catch(e){ S.age = {}; }
   try { S.advData = await (await fetch(DATA_DIR + 'advance-data.json?v=202607231600')).json(); }
   catch(e){ S.advData = {pools:{}, totals:{}}; }
-  try { S.mtypes = buildMemberTypes(await (await fetch(DATA_DIR + 'membership-geo.json?v=202609151600')).json()); }
+  try { S.mtypes = buildMemberTypes(await (await fetch(DATA_DIR + 'membership-geo.json', {cache:'no-cache'})).json()); }
   catch(e){ S.mtypes = null; }
   S.regions = defaultRegions(12);
   S.levels = defaultLevels(12);
