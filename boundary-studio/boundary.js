@@ -9021,11 +9021,12 @@ function atlasRailOverview(t){
   const nameOf = gi => t.TG.groups[gi].name;
   let hi = 0, lo = 0; vals.forEach((v,i) => { if (v > vals[hi]) hi = i; if (v < vals[lo]) lo = i; });
   const ou = d => { const x = Math.round(d); return x === 0 ? 'even' : `${fmt(Math.abs(x))} ${x > 0 ? 'over' : 'under'}`; };
+  const ouCls = d => (sum <= 0 || Math.abs(d) < even*0.15) ? '' : (d > 0 ? 'c-warn' : 'c-bad');
   const head = `<div class="atl-ov-sum">
       <div class="atl-ov-sum-h">Balancing on <b>${esc(bc.label)}</b></div>
-      ${n && sum > 0 ? `<div class="atl-ov-sum-l"><span><b class="mono">${fmt(sum)}</b> total</span><span><b class="mono">${fmt(Math.round(even))}</b> each if split evenly</span></div>
-      <div class="atl-ov-sum-l"><span>Largest: ${esc(nameOf(hi))} <b class="mono">${fmt(vals[hi])}</b> (${ou(vals[hi]-even)})</span></div>
-      <div class="atl-ov-sum-l"><span>Smallest: ${esc(nameOf(lo))} <b class="mono">${fmt(vals[lo])}</b> (${ou(vals[lo]-even)})</span></div>` : `<div class="atl-ov-sum-l"><span>No ${esc(bc.unit)} placed in an area yet.</span></div>`}
+      ${n && sum > 0 ? `<div class="atl-ov-kv"><span>Total</span><b class="mono">${fmt(sum)}</b><span>Even split</span><b class="mono">${fmt(Math.round(even))} each</b></div>
+      <div class="atl-ov-ext"><span>Largest</span><span class="nm" title="${esc(nameOf(hi))}">${esc(nameOf(hi))}</span><b class="mono">${fmt(vals[hi])}</b><i class="mono ${ouCls(vals[hi]-even)}">${ou(vals[hi]-even)}</i></div>
+      <div class="atl-ov-ext"><span>Smallest</span><span class="nm" title="${esc(nameOf(lo))}">${esc(nameOf(lo))}</span><b class="mono">${fmt(vals[lo])}</b><i class="mono ${ouCls(vals[lo]-even)}">${ou(vals[lo]-even)}</i></div>` : `<div class="atl-ov-sum-l"><span>No ${esc(bc.unit)} placed in an area yet.</span></div>`}
     </div>
     <div class="atl-ov-head" role="group" aria-label="Column to balance on">${OV_COLS.map((c,i) => {
       const off = c.k === 't_comp' && !typed;
