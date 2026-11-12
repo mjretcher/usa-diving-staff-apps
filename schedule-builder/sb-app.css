@@ -75,6 +75,8 @@ button{cursor:pointer;border:none;background:none}
 .sync-pip{width:7px;height:7px;border-radius:50%;background:#4ADE80;transition:.3s;flex-shrink:0;box-shadow:0 0 0 3px rgba(74,222,128,.15)}
 .sync-pip.saving{background:#FBBF24;box-shadow:0 0 0 3px rgba(251,191,36,.15)}
 .sync-pip.error{background:#F87171;box-shadow:0 0 0 3px rgba(248,113,113,.15)}
+.sync-others{font-size:11px;font-weight:600;color:#8FC3EA;white-space:nowrap;padding-left:8px;margin-left:2px;border-left:1px solid rgba(255,255,255,.14)}
+.sync-others[hidden]{display:none}
 .sync-lbl{font-size:11px;color:rgba(255,255,255,.4);white-space:nowrap}
 
 /* ════ WORKSPACE ════ */

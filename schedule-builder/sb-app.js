@@ -331,9 +331,7 @@ async function doSave(){
         // stale copy on its next cycle. Safe only because it is archived above.
         S.dirty=false;
         try{localStorage.setItem(SK,JSON.stringify(S))}catch{}
-        const active=document.activeElement;
-        const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
-        if(!isTyping)await loadFromNeon(S.currentLibraryId,{silent:true});
+        if(!isTypingNow())await loadFromNeon(S.currentLibraryId,{silent:true});
       }
       // If the archive failed, the on-screen work is deliberately left exactly
       // where it is. Pulling the remote over it would be the one move that
@@ -448,6 +446,37 @@ let presT=null,pollT=null,_pollFailures=0,_conflictNoticed=false;
 // recording is on and the tab is visible it keeps running, because a deck screen
 // is watched without being touched.
 const SYNC_IDLE_MS=180000;
+// Is the person entering a value right now? Only then do we hold back a colleague's
+// changes. A checkbox, radio, dropdown or button that merely kept focus after a
+// click is not typing, and used to stall updates until something else was clicked.
+function isTypingNow(){
+  const a=document.activeElement;
+  if(!a)return false;
+  if(a.isContentEditable||a.tagName==='TEXTAREA')return true;
+  if(a.tagName!=='INPUT')return false;
+  return!/^(checkbox|radio|button|submit|reset|range|color|file|image)$/i.test(a.type||'text');
+}
+// Other browsers active in this schedule in the last 75 seconds. Each active
+// browser writes its row every 30s and stops when hidden or idle, so this is
+// "working in it now", not "has a tab open somewhere".
+let _others=0,_lastPollAt=0,_lastRemoteNote=0,_presN=0;
+function presenceWrite(){
+  if(!S.currentLibraryId)return;
+  nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{});
+}
+async function presenceRead(){
+  if(!S.currentLibraryId)return;
+  try{
+    const r=await nq(`SELECT count(*) FROM schedule_builder.presence WHERE schedule_id=$1 AND editor_id<>$2 AND updated_at>now()-interval '75 seconds'`,[S.currentLibraryId,EDITOR_ID]);
+    const n=Number(r.rows&&r.rows[0]&&r.rows[0][0])||0;
+    if(n!==_others){_others=n;othersLabel();}
+  }catch{}
+}
+function othersText(){return _others>0?`${_others} other ${_others===1?'person':'people'} in this schedule`:'';}
+function othersLabel(){
+  const el=document.querySelector('.sync-others');
+  if(el){el.textContent=othersText();el.hidden=!_others;}
+}
 let _lastActive=Date.now(),_syncPaused=false,_syncTick=null;
 function syncIdle(){
   if(document.hidden)return true;
@@ -458,11 +487,17 @@ function syncPauseLabel(){
   const l=document.querySelector('.sync-lbl');
   if(l&&_syncPaused&&!/Saving|Offline|paused/.test(l.textContent))l.textContent+=' \u00b7 updates paused';
 }
-function syncWake(){
+function syncWake(e){
   _lastActive=Date.now();
-  if(!_syncPaused||document.hidden)return;
-  _syncPaused=false;
-  if(_syncTick&&S.currentLibraryId)_syncTick();
+  if(document.hidden)return;
+  if(_syncPaused){
+    _syncPaused=false;
+    if(_syncTick&&S.currentLibraryId){presenceWrite();_presN=0;_syncTick();}
+    return;
+  }
+  // About to do something: if the last check is more than 3s old, check now
+  // instead of waiting out the 8s cycle, so an edit lands on the current copy.
+  if(e&&(e.type==='pointerdown'||e.type==='keydown')&&_syncTick&&S.currentLibraryId&&Date.now()-_lastPollAt>3000){_lastPollAt=Date.now();_syncTick();}
 }
 ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>window.addEventListener(ev,syncWake,{passive:true,capture:true}));
 let _mmT=0;window.addEventListener('mousemove',()=>{const n=Date.now();if(n-_mmT>2000){_mmT=n;syncWake();}},{passive:true});
@@ -473,10 +508,13 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncWake()
 async function startSync(){
   clearInterval(presT);clearTimeout(pollT);
   _pollFailures=0;
-  presT=setInterval(()=>S.currentLibraryId&&!syncIdle()&&nq(`INSERT INTO schedule_builder.presence(editor_id,schedule_id,updated_at)VALUES($1,$2,now())ON CONFLICT(editor_id)DO UPDATE SET schedule_id=EXCLUDED.schedule_id,updated_at=now()`,[EDITOR_ID,S.currentLibraryId]).catch(()=>{}),30000);
+  presT=setInterval(()=>{if(S.currentLibraryId&&!syncIdle())presenceWrite();},30000);
+  presenceWrite();
   // Poll for remote changes, backing off if Neon is unreachable
   const tick=async()=>{
     if(!S.currentLibraryId)return;
+    _lastPollAt=Date.now();
+    if(_presN++%3===0)presenceRead();
     try{
       const r=await nq(`SELECT s.updated_at, rs.updated_at FROM schedule_builder.schedules s LEFT JOIN schedule_builder.run_sheets rs ON rs.schedule_id=s.id WHERE s.id=$1`,[S.currentLibraryId]);
       const _remote=r.rows?.length?parseNeonTimestamp(String(r.rows[0][0])):null;
@@ -492,8 +530,7 @@ async function startSync(){
         // not-yet-committed typing) while someone's actively in a text
         // field. If they are, skip this cycle — the next poll 8s later
         // will pick up the remote change once they've paused or blurred.
-        const active=document.activeElement;
-        const isTyping=active&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+        const isTyping=isTypingNow();
         if(!isTyping){
           if(S.dirty){
             // Both sides moved: this browser has edits that never reached the cloud
@@ -507,7 +544,9 @@ async function startSync(){
               await doSave();
             }
           }else{
-            await loadFromNeon(S.currentLibraryId,{silent:true});
+            const got=await loadFromNeon(S.currentLibraryId,{silent:true});
+            // Say so, but not on every save while a colleague is mid-flow.
+            if(got&&Date.now()-_lastRemoteNote>60000){_lastRemoteNote=Date.now();toast('Updated with changes made on another device',3500);}
           }
         }
       }
@@ -3278,7 +3317,7 @@ function renderBar(timed){
         <button class="bb" onclick="saveSchedule()">Save</button>
         <button class="bb red" onclick="UI.modal='generate';render()">Generate</button>
       </div>
-      <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span></div>
+      <div class="bar-sync" ${sync.err?'onclick="retryCloudSync()" title="Click to retry cloud connection" style="cursor:pointer"':''}><div class="sync-pip ${sync.saving?'saving':sync.err?'error':''}"></div><span class="sync-lbl">${sync.saving?'Saving…':sync.err?'Offline — tap to retry':'Saved '+fmtRelativeTime(lastSavedAt||S.updatedAt)}</span><span class="sync-others" ${_others?'':'hidden'} title="Active in this schedule in the last minute. Their changes appear here within a few seconds.">${othersText()}</span></div>
     </div>
     <div class="bar-days-row">
       <div class="bar-days">${days}<button class="dp-add" aria-label="Add day" onclick="addDay()" title="Add day">+</button></div>
