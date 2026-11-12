@@ -1,0 +1,1098 @@
+
+## columns
+column_name | data_type
+id | bigint
+meet_id | text
+event_id | text
+result_set_id | text
+sheet_key | text
+diver_id | text
+diver_name | text
+team_name | text
+team_id | text
+nat | text
+place | numeric
+posted_score | numeric
+phase_score_from_dives | numeric
+phase_dive_count | smallint
+phase_dd_sum | numeric
+score_delta_posted_minus_phase | numeric
+score_is_cumulative | boolean
+score_analysis_mode | text
+meet_name | text
+meet_year | smallint
+competition_family | text
+competition_group | text
+ncaa_division | text
+gender | text
+discipline | text
+event_level | text
+age_group | text
+event_round | text
+round_stage | text
+is_synchronized | boolean
+source_system | text
+ncaa_women_springboard_raw_6_dive_score | numeric
+ncaa_women_springboard_5cat_score | numeric
+ncaa_women_springboard_5cat_dd_sum | numeric
+ncaa_women_springboard_repeated_category | text
+ncaa_women_springboard_dropped_dive_number | text
+ncaa_women_springboard_dropped_dive_score | numeric
+ncaa_women_springboard_adjustment_status | text
+ncaa_women_springboard_adjustment_note | text
+imported_at | timestamp with time zone
+diver2_id | text
+diver2_name | text
+team2_name | text
+
+## families 2025-26
+meet_year | competition_family | competition_group | ncaa_division | event_level | rows | meets
+2025 | NCAA | 2025 A10 Conference Swimming and Diving Championships | Division I | Senior/Open | 184 | 1
+2025 | NCAA | 2025 ACC Diving Men and Women Championships | Division I | Senior/Open | 316 | 1
+2025 | NCAA | 2025 American Womens Swimming and Diving Championship | Division I | Senior/Open | 131 | 1
+2025 | NCAA | 2025 Atlantic Sun Diving Championships | Division I | Senior/Open | 123 | 1
+2025 | NCAA | 2025 B1G Mens Swimming and Diving Championships | Division I | Senior/Open | 148 | 1
+2025 | NCAA | 2025 B1G Womens Swimming and Diving Championships | Division I | Senior/Open | 236 | 1
+2025 | NCAA | 2025 Big 12 Conference Swimming and Diving Championships | Division I | Senior/Open | 311 | 1
+2025 | NCAA | 2025 Big West Men and Women Swimming and Diving Championship | Division I | Senior/Open | 118 | 1
+2025 | NCAA | 2025 CAA Conference Swimming and Diving Championships | Division I | Senior/Open | 127 | 1
+2025 | NCAA | 2025 ECAC Swimming and Diving Championships | Multi-division | Senior/Open | 128 | 2
+2025 | NCAA | 2025 Horizon League Diving Championships | Division I | Senior/Open | 132 | 1
+2025 | NCAA | 2025 Mens Ivy League Championships | Division I | Senior/Open | 84 | 1
+2025 | NCAA | 2025 Mid American Conference Womens Championships | Division I | Senior/Open | 106 | 1
+2025 | NCAA | 2025 Missouri Valley Mens Diving Championships | Division I | Senior/Open | 70 | 1
+2025 | NCAA | 2025 Missouri Valley Women Diving Championships | Division I | Senior/Open | 103 | 1
+2025 | NCAA | 2025 Mountain West Conference Diving Championships | Division I | Senior/Open | 144 | 1
+2025 | NCAA | 2025 NCAA ZONE A CHAMPIONSHIPS | Division I | Senior/Open | 401 | 1
+2025 | NCAA | 2025 NCAA ZONE B CHAMPIONSHIPS | Division I | Senior/Open | 324 | 1
+2025 | NCAA | 2025 NCAA ZONE C CHAMPIONSHIPS | Division I | Senior/Open | 349 | 1
+2025 | NCAA | 2025 NCAA ZONE D CHAMPIONSHIPS | Division I | Senior/Open | 317 | 1
+2025 | NCAA | 2025 NCAA ZONE E CHAMPIONSHIPS | Division I | Senior/Open | 338 | 1
+2025 | NCAA | 2025 Northeast Conference Championships | Division I | Senior/Open | 90 | 1
+2025 | NCAA | 2025 Patriot League Diving Championship | Division I | Senior/Open | 196 | 1
+2025 | NCAA | 2025 SEC Diving Championships | Division I | Senior/Open | 327 | 1
+2025 | NCAA | 2025 Summit League Swimming and Diving Championships | Division I | Senior/Open | 153 | 1
+2025 | NCAA | 2025 Sun Belt Conference Swimming and Diving Championships | Division I | Senior/Open | 76 | 1
+2025 | NCAA | 2025 WAC Mens and Womens Swimming and Diving Championships | Division I | Senior/Open | 233 | 1
+2025 | NCAA | 2025 Womens Ivy League Championships | Division I | Senior/Open | 112 | 1
+2025 | NCAA | America East Conference Swimmimg and Diving Championships | Division I | Senior/Open | 130 | 1
+2025 | NCAA | BIG EAST Swimming and Diving Championships | Division I | Senior/Open | 119 | 1
+2025 | NCAA | Mountain Pacific Sports Federation Diving Championships | Division I | Senior/Open | 27 | 1
+2025 | NCAA | NCAA Division I Championships | Division I | Senior/Open | 381 | 2
+2025 | USA Diving | 2025 AAU Central District Qualifier |  | Other | 78 | 1
+2025 | USA Diving | 2025 Arizona Association State Championships |  | Other | 219 | 1
+2025 | USA Diving | 2025 Arizona Association State Championships |  | Senior | 2 | 1
+2025 | USA Diving | 2025 California State Games |  | Other | 37 | 1
+2025 | USA Diving | 2025 Chris Vonk JO Invitational |  | Other | 315 | 1
+2025 | USA Diving | 2025 Chris Vonk JO Invitational |  | Senior | 18 | 1
+2025 | USA Diving | 2025 Conroe Diving Club Spring Invitational |  | Other | 285 | 1
+2025 | USA Diving | 2025 Conroe Fall Classic |  | Other | 187 | 1
+2025 | USA Diving | 2025 Crown Valley Divers Fall Invitational |  | Other | 139 | 1
+2025 | USA Diving | 2025 Crown Valley Divers Fall Invitational |  | Senior | 11 | 1
+2025 | USA Diving | 2025 DMD Classic |  | Other | 261 | 1
+2025 | USA Diving | 2025 DMD Classic |  | Senior | 9 | 1
+2025 | USA Diving | 2025 David Nielsen Invitational |  | Other | 87 | 1
+2025 | USA Diving | 2025 David Nielsen Invitational |  | Senior | 4 | 1
+2025 | USA Diving | 2025 EVDC Winter Classic |  | Other | 150 | 1
+2025 | USA Diving | 2025 EVDC Winter Classic |  | Senior | 3 | 1
+2025 | USA Diving | 2025 GA Diving Winter Invite |  | Other | 205 | 1
+2025 | USA Diving | 2025 GC DIVERS NEW YEARS INVITATIONAL |  | Other | 125 | 1
+2025 | USA Diving | 2025 MAC Invitational |  | Other | 169 | 1
+2025 | USA Diving | 2025 MAC Invitational |  | Senior | 11 | 1
+2025 | USA Diving | 2025 MASTERS DIVING SPRING CHAMPIONSHIPS |  | Other | 214 | 1
+2025 | USA Diving | 2025 MASTERS DIVING SUMMER CHAMPIONSHIPS |  | Other | 131 | 1
+2025 | USA Diving | 2025 Marlins Cold Turkey Diving Invite |  | Other | 358 | 1
+2025 | USA Diving | 2025 Moose Moss Invitational |  | Other | 132 | 1
+2025 | USA Diving | 2025 North Star Diving Club Region 8 Platform Invitational |  | Other | 13 | 1
+2025 | USA Diving | 2025 Patriot Diving Summer Invite |  | Other | 58 | 1
+2025 | USA Diving | 2025 Ron OBrien JO Invitational |  | Other | 555 | 1
+2025 | USA Diving | 2025 Ron OBrien JO Invitational |  | Senior | 17 | 1
+2025 | USA Diving | 2025 Ron OBrien Novice Invitational |  | Other | 225 | 1
+2025 | USA Diving | 2025 Schroeder Spring Forward Invite |  | Other | 314 | 1
+2025 | USA Diving | 2025 Schroeder Winter Invite |  | Other | 255 | 1
+2025 | USA Diving | 2025 The Carolina BIG DIVE |  | Other | 453 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 1 Championships |  | Junior | 263 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 10 Championships |  | Junior | 327 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 11 Championships |  | Junior | 192 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 12 Championships |  | Junior | 302 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 2 Championships |  | Junior | 345 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 3 Championships |  | Junior | 231 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 4 Championships |  | Junior | 185 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 5 Championships |  | Junior | 288 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 6 Championships |  | Junior | 221 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 7 Championships |  | Junior | 158 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 8 Championships |  | Junior | 175 | 1
+2025 | USA Diving | 2025 USA Diving Junior Region 9 Championships |  | Junior | 221 | 1
+2025 | USA Diving | 2025 USA Diving Zone A Championships |  | Other | 547 | 1
+2025 | USA Diving | 2025 USA Diving Zone B Championships |  | Other | 340 | 1
+2025 | USA Diving | 2025 USA Diving Zone C Championships |  | Other | 381 | 1
+2025 | USA Diving | 2025 USA Diving Zone D Championships |  | Other | 303 | 1
+2025 | USA Diving | 2025 USA Diving Zone E Championships |  | Other | 469 | 1
+2025 | USA Diving | 2025 USA Diving Zone F Championships |  | Other | 403 | 1
+2025 | USA Diving | 21th Annual Dick Wilson Memorial Invitational |  | Other | 377 | 1
+2025 | USA Diving | 31th Annual Cactus Invitational |  | Other | 212 | 1
+2025 | USA Diving | 31th Annual Cactus Invitational |  | Senior | 4 | 1
+2025 | USA Diving | 4rd Annual Los Alamitos Divers Invite |  | Other | 281 | 1
+2025 | USA Diving | 6th Annual Jersey Diving Academy Invite |  | Other | 217 | 1
+2025 | USA Diving | 707 Diving Invitational |  | Other | 74 | 1
+2025 | USA Diving | 7th ANNUAL HOUSTON HOLIDAY HOEDOWN |  | Other | 488 | 1
+2025 | USA Diving | Alexandria Invite |  | Other | 231 | 1
+2025 | USA Diving | Atlanta Diving Invitational |  | Other | 255 | 1
+2025 | USA Diving | Black Gold Invitational |  | Other | 105 | 1
+2025 | USA Diving | CDC Invitational |  | Other | 182 | 1
+2025 | USA Diving | CDC Invitational |  | Senior | 6 | 1
+2025 | USA Diving | CdS - Fall Novice Invite |  | Other | 92 | 1
+2025 | USA Diving | CdS - Summer Novice Invite |  | Other | 65 | 1
+2025 | USA Diving | Classic City Invitational |  | Other | 221 | 1
+2025 | USA Diving | Coast Divers Winter Invite |  | Other | 145 | 1
+2025 | USA Diving | Coast Divers Winter Invite |  | Senior | 17 | 1
+2025 | USA Diving | DMD Local Club Series |  | Other | 144 | 1
+2025 | USA Diving | Davis Diving Pre-Region Invitational |  | Other | 128 | 1
+2025 | USA Diving | Diamondback Pumpjack Invitational |  | Other | 140 | 1
+2025 | USA Diving | Diamondback Pumpjack Invitational |  | Senior | 2 | 1
+2025 | USA Diving | GC DIVERS Local Series |  | Other | 197 | 1
+2025 | USA Diving | Jersey Diving Academy Summer Invite |  | Other | 109 | 1
+2025 | USA Diving | Knight Novice Meet |  | Other | 76 | 1
+2025 | USA Diving | LEE BRENNAN Memorial Invitational |  | Other | 160 | 1
+2025 | USA Diving | LEE BRENNAN Memorial Invitational |  | Senior | 5 | 1
+2025 | USA Diving | Los Alamitos Divers Fall Invite |  | Other | 193 | 1
+2025 | USA Diving | Mansfield Diving Local Meet Series |  | Other | 246 | 1
+2025 | USA Diving | Mansfield Summer Invitational |  | Other | 154 | 1
+2025 | USA Diving | NAz Diving Junior Platform Invite |  | Junior | 20 | 1
+2025 | USA Diving | Orlando All Star Invitational |  | Other | 134 | 1
+2025 | USA Diving | Orlando All Star Invitational |  | Senior | 3 | 1
+2025 | USA Diving | Plantation Back to School Invitational |  | Other | 112 | 1
+2025 | USA Diving | Plantation Diving Invitational |  | Other | 86 | 1
+2025 | USA Diving | Plantation Diving Invitational |  | Senior | 1 | 1
+2025 | USA Diving | Red White and Blue Platform and Synchro Invitational |  | Other | 34 | 1
+2025 | USA Diving | Red Wolf Spring AAU Diving Invite |  | Other | 189 | 1
+2025 | USA Diving | Region 3 Tower Invite |  | Other | 19 | 1
+2025 | USA Diving | Region 3 Tower Invite |  | Senior | 4 | 1
+2025 | USA Diving | Region 5 2025 Spring Showcase |  | Other | 76 | 1
+2025 | USA Diving | Rip Dives on the Hill 2025 |  | Other | 118 | 1
+2025 | USA Diving | RipTide Open |  | Senior | 6 | 1
+2025 | USA Diving | Snowman Invite @Rose Bowl Diving |  | Other | 238 | 1
+2025 | USA Diving | Summer Splash Invite |  | Other | 9 | 1
+2025 | USA Diving | Summer Splash Invite |  | Senior | 4 | 1
+2025 | USA Diving | Superior High Dive Challenge |  | Other | 15 | 1
+2025 | USA Diving | The Coastal Classic |  | Other | 55 | 1
+2025 | USA Diving | The Kimball Cup AAU Diving |  | Other | 275 | 1
+2025 | USA Diving | Turkey Dive on the Hill |  | Other | 224 | 1
+2025 | USA Diving | Turkey Dive on the Hill |  | Senior | 2 | 1
+2025 | USA Diving | USA Diving Junior Nationals |  | Junior | 1713 | 1
+2025 | USA Diving | USA Diving Nationals |  | Senior | 286 | 1
+2025 | USA Diving | USA Diving Nationals Qualifier |  | Senior | 83 | 1
+2025 | USA Diving | USA Diving Winter Nationals |  | Senior | 261 | 1
+2025 | USA Diving | USA Diving Winter Nationals Qualifier |  | Senior | 154 | 1
+2025 | USA Diving | Wellington Invitational |  | Other | 35 | 1
+2025 | USA Diving | Wendy Wyland Memorial Invitational |  | Other | 383 | 1
+2025 | USA Diving | Wendy Wyland Memorial Invitational |  | Senior | 8 | 1
+2025 | USA Diving | West Texas Invitational |  | Other | 57 | 1
+2025 | USA Diving | West Texas Invitational |  | Senior | 4 | 1
+2025 | USA Diving | Whirlwind Winter Weekend 2025 |  | Other | 286 | 1
+2025 | USA Diving | Woodlands Diving Skills Challenge 2025 |  | Other | 218 | 1
+2025 | World Aquatics | World Aquatics Championships |  | Senior/Open | 482 | 1
+2025 | World Aquatics | World Aquatics Recognized Event |  | Senior/Open | 72 | 1
+2025 | World Aquatics | World Aquatics World Cup |  | Senior/Open | 396 | 3
+2026 | NCAA | 2026 A10 Conference Swimming and Diving Championships | Division I | Senior/Open | 174 | 1
+2026 | NCAA | 2026 ACC Diving Men and Women Championships | Division I | Senior/Open | 275 | 1
+2026 | NCAA | 2026 American Womens Swimming and Diving Championship | Division I | Senior/Open | 195 | 1
+2026 | NCAA | 2026 Atlantic Sun Diving Championships | Division I | Senior/Open | 159 | 1
+2026 | NCAA | 2026 B1G Mens Swimming and Diving Championships | Division I | Senior/Open | 152 | 1
+2026 | NCAA | 2026 B1G Womens Swimming and Diving Championships | Division I | Senior/Open | 239 | 1
+2026 | NCAA | 2026 Big 12 Conference Dive Championships | Division I | Senior/Open | 300 | 1
+2026 | NCAA | 2026 Big West Men and Women Swimming and Diving Championship | Division I | Senior/Open | 120 | 1
+2026 | NCAA | 2026 CAA Conference Swimming and Diving Championships | Division I | Senior/Open | 104 | 1
+2026 | NCAA | 2026 ECAC Swimming and Diving Championships | Multi-division | Senior/Open | 77 | 1
+2026 | NCAA | 2026 Horizon League Diving Championships | Division I | Senior/Open | 124 | 1
+2026 | NCAA | 2026 Mens Ivy League Championships | Division I | Senior/Open | 93 | 1
+2026 | NCAA | 2026 Mid American Conference Womens Championships | Division I | Senior/Open | 117 | 1
+2026 | NCAA | 2026 Missouri Valley Men and Women Diving Championships | Division I | Senior/Open | 167 | 1
+2026 | NCAA | 2026 Mountain West Conference Diving Championships | Division I | Senior/Open | 177 | 1
+2026 | NCAA | 2026 NCAA Division III Region 1 Diving Championships | Division III | Senior/Open | 107 | 1
+2026 | NCAA | 2026 NCAA Division III Region 2 Diving Championships | Division III | Senior/Open | 94 | 1
+2026 | NCAA | 2026 NCAA Division III Region 3 Diving Championships | Division III | Senior/Open | 79 | 1
+2026 | NCAA | 2026 NCAA Division III Region 4 Diving Championships | Division III | Senior/Open | 77 | 1
+2026 | NCAA | 2026 NCAA ZONE A CHAMPIONSHIPS | Division I | Senior/Open | 406 | 1
+2026 | NCAA | 2026 NCAA ZONE B CHAMPIONSHIPS | Division I | Senior/Open | 303 | 1
+2026 | NCAA | 2026 NCAA ZONE C CHAMPIONSHIPS | Division I | Senior/Open | 354 | 1
+2026 | NCAA | 2026 NCAA ZONE D CHAMPIONSHIPS | Division I | Senior/Open | 298 | 1
+2026 | NCAA | 2026 NCAA ZONE E CHAMPIONSHIPS | Division I | Senior/Open | 352 | 1
+2026 | NCAA | 2026 Northeast Conference Championships | Division I | Senior/Open | 84 | 1
+2026 | NCAA | 2026 Patriot League Diving Championship | Division I | Senior/Open | 188 | 1
+2026 | NCAA | 2026 SEC Diving Championships | Division I | Senior/Open | 312 | 1
+2026 | NCAA | 2026 Summit League Swimming and Diving Championships | Division I | Senior/Open | 160 | 1
+2026 | NCAA | 2026 Womens Ivy League Championships | Division I | Senior/Open | 106 | 1
+2026 | NCAA | AFA vs CSU vs UNM | Division I | Senior/Open | 32 | 1
+2026 | NCAA | AFA vs UNCO | Division I | Senior/Open | 16 | 1
+2026 | NCAA | ARIZ vs ASU | Division I | Senior/Open | 27 | 1
+2026 | NCAA | ASU vs GCU | Division I | Senior/Open | 28 | 1
+2026 | NCAA | AUB vs FLA | Division I | Senior/Open | 33 | 1
+2026 | NCAA | AUSF vs STCL | Division I | Senior/Open | 18 | 1
+2026 | NCAA | America East Conference Swimmimg and Diving Championships | Division I | Senior/Open | 122 | 1
+2026 | NCAA | Army Invite | Division I | Senior/Open | 20 | 1
+2026 | NCAA | Auburn First Chance | Division I | Senior/Open | 19 | 1
+2026 | NCAA | BALL vs BUFF | Division I | Senior/Open | 21 | 1
+2026 | NCAA | BALL vs INDI | Division I | Senior/Open | 30 | 1
+2026 | NCAA | BALL vs INSU | Division I | Senior/Open | 27 | 1
+2026 | NCAA | BAMA vs AUB | Division I | Senior/Open | 30 | 1
+2026 | NCAA | BAMA vs GT | Division I | Senior/Open | 21 | 1
+2026 | NCAA | BGSU vs TOL | Division I | Senior/Open | 10 | 1
+2026 | NCAA | BIG EAST Swimming and Diving Championships | Division I | Senior/Open | 116 | 1
+2026 | NCAA | BING vs WAG | Division I | Senior/Open | 24 | 1
+2026 | NCAA | BIU vs WHIT | Division I | Senior/Open | 18 | 1
+2026 | NCAA | BIU vs Westmont & The Master's Dual Meet | Division I | Senior/Open | 11 | 1
+2026 | NCAA | BRNT vs BRGP | Division I | Senior/Open | 14 | 1
+2026 | NCAA | BRNT vs MC | Division I | Senior/Open | 31 | 1
+2026 | NCAA | BROW vs CUBC | Division I | Senior/Open | 32 | 1
+2026 | NCAA | BU vs BRNT | Division I | Senior/Open | 34 | 1
+2026 | NCAA | BU vs MIT | Division I | Senior/Open | 37 | 1
+2026 | NCAA | BUCK vs LASU vs PSU | Division I | Senior/Open | 38 | 1
+2026 | NCAA | BUCK vs LEHU | Division I | Senior/Open | 24 | 1
+2026 | NCAA | BUFF vs DUQU | Division I | Senior/Open | 20 | 1
+2026 | NCAA | BUFF vs MU | Division I | Senior/Open | 24 | 1
+2026 | NCAA | BYU vs AFA vs MESA | Division I | Senior/Open | 60 | 1
+2026 | NCAA | BYU vs UTAH | Division I | Senior/Open | 30 | 1
+2026 | NCAA | Barry Schockmel Diving Classic | Division I | Senior/Open | 35 | 1
+2026 | NCAA | CAL vs STAN - Women | Division I | Senior/Open | 9 | 1
+2026 | NCAA | CAN vs RIDE | Division I | Senior/Open | 17 | 1
+2026 | NCAA | CBU vs GCU | Division I | Senior/Open | 25 | 1
+2026 | NCAA | CC vs TRAN vs UOTC | Division I | Senior/Open | 34 | 1
+2026 | NCAA | CORU vs BROW | Division I | Senior/Open | 25 | 1
+2026 | NCAA | CORU vs LEMC | Division I | Senior/Open | 20 | 1
+2026 | NCAA | CORU vs STBU | Division I | Senior/Open | 25 | 1
+2026 | NCAA | CSU vs UNCO | Division I | Senior/Open | 18 | 1
+2026 | NCAA | CUBC vs CORU (Men) | Division I | Senior/Open | 14 | 1
+2026 | NCAA | CUBC vs CORU (Women) | Division I | Senior/Open | 14 | 1
+2026 | NCAA | CUBC vs DART (Men) | Division I | Senior/Open | 17 | 1
+2026 | NCAA | CUBC vs DART (Women) | Division I | Senior/Open | 15 | 1
+2026 | NCAA | CUSP vs UM | Division I | Senior/Open | 10 | 1
+2026 | NCAA | Cleveland State University vs JCU vs BWC | Division I | Senior/Open | 11 | 1
+2026 | NCAA | Cleveland State University vs NIAG | Division I | Senior/Open | 6 | 1
+2026 | NCAA | Cleveland State University vs Oakland | Division I | Senior/Open | 20 | 1
+2026 | NCAA | Colgate vs Boston University vs Fairfield | Division I | Senior/Open | 36 | 1
+2026 | NCAA | Colgate vs Holy Cross | Division I | Senior/Open | 29 | 1
+2026 | NCAA | Colonel Classic | Division I | Senior/Open | 38 | 1
+2026 | NCAA | Connecticut vs Sacred Heart vs Holy Cross | Division I | Senior/Open | 30 | 1
+2026 | NCAA | Coyote Invite @USD | Division I | Senior/Open | 66 | 1
+2026 | NCAA | DAVE vs SVSU | Division I | Senior/Open | 24 | 1
+2026 | NCAA | DENI vs OWU | Division I | Senior/Open | 13 | 1
+2026 | NCAA | DENV vs BYU | Division I | Senior/Open | 28 | 1
+2026 | NCAA | DENV vs DIGG | Division I | Senior/Open | 13 | 1
+2026 | NCAA | DENV vs UNM vs UTAH (M) | Division I | Senior/Open | 26 | 1
+2026 | NCAA | DENV vs WYO vs MESA | Division I | Senior/Open | 44 | 1
+2026 | NCAA | DIGG vs AFA | Division I | Senior/Open | 14 | 1
+2026 | NCAA | DIGG vs WCU | Division I | Senior/Open | 2 | 1
+2026 | NCAA | DREX vs TU | Division I | Senior/Open | 22 | 1
+2026 | NCAA | DSU vs Montevallo | Division I | Senior/Open | 3 | 1
+2026 | NCAA | DU vs MISS | Division I | Senior/Open | 11 | 1
+2026 | NCAA | DU vs SWBU | Division I | Senior/Open | 10 | 1
+2026 | NCAA | DUKE vs GT | Division I | Senior/Open | 30 | 1
+2026 | NCAA | DUQU vs STBU | Division I | Senior/Open | 20 | 1
+2026 | NCAA | Dave Hrovat Invitational | Division I | Senior/Open | 48 | 1
+2026 | NCAA | Dragon Invite | Division I | Senior/Open | 20 | 1
+2026 | NCAA | ECU vs GSU | Division I | Senior/Open | 18 | 1
+2026 | NCAA | EMIU vs BALL | Division I | Senior/Open | 15 | 1
+2026 | NCAA | FAU vs FIU | Division I | Senior/Open | 12 | 1
+2026 | NCAA | FAU vs STU vs IRSC | Division I | Senior/Open | 33 | 1
+2026 | NCAA | FAU vs UNT vs UMIN vs WAG | Division I | Senior/Open | 51 | 1
+2026 | NCAA | FIU Diving Invite @FIU | Division I | Senior/Open | 43 | 1
+2026 | NCAA | FIU vs FAU (Platform) | Division I | Senior/Open | 12 | 1
+2026 | NCAA | FIU vs FGCU | Division I | Senior/Open | 18 | 1
+2026 | NCAA | FIU vs MIAF vs HARV | Division I | Senior/Open | 27 | 1
+2026 | NCAA | FLA vs FSU | Division I | Senior/Open | 44 | 1
+2026 | NCAA | FORD vs MASS | Division I | Senior/Open | 27 | 1
+2026 | NCAA | FS vs DAVI | Division I | Senior/Open | 20 | 1
+2026 | NCAA | FU vs SACR vs UBPT | Division I | Senior/Open | 20 | 1
+2026 | NCAA | First Chance Meet | Division I | Senior/Open | 30 | 1
+2026 | NCAA | GCU vs UNLV | Division I | Senior/Open | 16 | 1
+2026 | NCAA | GMU vs GTWU | Division I | Senior/Open | 30 | 1
+2026 | NCAA | GRCG vs IWCC vs ICCC | Division I | Senior/Open | 14 | 1
+2026 | NCAA | GT v South Carolina | Division I | Senior/Open | 18 | 1
+2026 | NCAA | GT vs OSU | Division I | Senior/Open | 17 | 1
+2026 | NCAA | GTWU vs SHU | Division I | Senior/Open | 29 | 1
+2026 | NCAA | GTWU vs UMW | Division I | Senior/Open | 12 | 1
+2026 | NCAA | GVSU vs DAVE | Division I | Senior/Open | 31 | 1
+2026 | NCAA | GW vs GTWU | Division I | Senior/Open | 30 | 1
+2026 | NCAA | Grinnell Invite @GRCG | Division I | Senior/Open | 20 | 1
+2026 | NCAA | Grove City vs Duquesne vs Clarion | Division I | Senior/Open | 36 | 1
+2026 | NCAA | HARV vs BROW (Men) | Division I | Senior/Open | 18 | 1
+2026 | NCAA | HARV vs PENN vs BC | Division I | Senior/Open | 33 | 1
+2026 | NCAA | HARV vs PRIN vs YALE | Division I | Senior/Open | 64 | 1
+2026 | NCAA | HAWA vs BYU | Division I | Senior/Open | 28 | 1
+2026 | NCAA | HOW vs CUA Senior Meet | Division I | Senior/Open | 19 | 1
+2026 | NCAA | HU First Chance Meet | Division I | Senior/Open | 17 | 1
+2026 | NCAA | HU vs RICE | Division I | Senior/Open | 10 | 1
+2026 | NCAA | IA vs UIUC vs UNL | Division I | Senior/Open | 40 | 1
+2026 | NCAA | IA vs UST | Division I | Senior/Open | 17 | 1
+2026 | NCAA | ILSU vs UNI | Division I | Senior/Open | 18 | 1
+2026 | NCAA | IND vs PUR | Division I | Senior/Open | 34 | 1
+2026 | NCAA | IND vs UL | Division I | Senior/Open | 30 | 1
+2026 | NCAA | INDI vs WC | Division I | Senior/Open | 21 | 1
+2026 | NCAA | ISU vs IA | Division I | Senior/Open | 25 | 1
+2026 | NCAA | ISU vs KANS | Division I | Senior/Open | 24 | 1
+2026 | NCAA | JMU vs NAVY | Division I | Senior/Open | 16 | 1
+2026 | NCAA | KALC vs ALMC | Division I | Senior/Open | 21 | 1
+2026 | NCAA | KANS vs UARK | Division I | Senior/Open | 20 | 1
+2026 | NCAA | LASU vs FORD | Division I | Senior/Open | 31 | 1
+2026 | NCAA | LC vs MSMU | Division I | Senior/Open | 19 | 1
+2026 | NCAA | LC vs NJIT | Division I | Senior/Open | 12 | 1
+2026 | NCAA | LC vs RIDE | Division I | Senior/Open | 28 | 1
+2026 | NCAA | LEMC vs CAN | Division I | Senior/Open | 10 | 1
+2026 | NCAA | LSU vs TU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | LU vs CMPL vs GW | Division I | Senior/Open | 21 | 1
+2026 | NCAA | Last Chance CMU | Division I | Senior/Open | 22 | 1
+2026 | NCAA | Little Rock vs UTRGV | Division I | Senior/Open | 4 | 1
+2026 | NCAA | Louisville First Chance | Division I | Senior/Open | 9 | 1
+2026 | NCAA | Loyola vs Army West Point | Division I | Senior/Open | 35 | 1
+2026 | NCAA | Loyola vs Bucknell | Division I | Senior/Open | 29 | 1
+2026 | NCAA | MANK vs MSUM | Division I | Senior/Open | 14 | 1
+2026 | NCAA | MARS vs DUQU | Division I | Senior/Open | 20 | 1
+2026 | NCAA | MARS vs DUQU vs BGSU | Division I | Senior/Open | 31 | 1
+2026 | NCAA | MARS vs TOL | Division I | Senior/Open | 10 | 1
+2026 | NCAA | MASS vs BRNT | Division I | Senior/Open | 30 | 1
+2026 | NCAA | MASS vs FU | Division I | Senior/Open | 24 | 1
+2026 | NCAA | MAUN vs FAIR vs HLDC | Division I | Senior/Open | 2 | 1
+2026 | NCAA | MC vs BING | Division I | Senior/Open | 37 | 1
+2026 | NCAA | MIAF vs ND vs UNC | Division I | Senior/Open | 38 | 1
+2026 | NCAA | MICH vs DENI | Division I | Senior/Open | 19 | 1
+2026 | NCAA | MICH vs IND | Division I | Senior/Open | 33 | 1
+2026 | NCAA | MIZZOU vs SIU | Division I | Senior/Open | 22 | 1
+2026 | NCAA | MSUM vs UMary | Division I | Senior/Open | 8 | 1
+2026 | NCAA | MU vs EMIU vs BALL | Division I | Senior/Open | 32 | 1
+2026 | NCAA | MU vs KC vs XVIR | Division I | Senior/Open | 30 | 1
+2026 | NCAA | Mardi Gras Invite 2026 | Division I | Senior/Open | 36 | 1
+2026 | NCAA | Michigan-Illinois Quad Meet | Division I | Senior/Open | 42 | 1
+2026 | NCAA | Mountain Pacific Sports Federation Diving Championships | Division I | Senior/Open | 221 | 1
+2026 | NCAA | NAVY vs CUBC | Division I | Senior/Open | 19 | 1
+2026 | NCAA | NAVY vs UDEL vs PRIN vs KC | Division I | Senior/Open | 85 | 1
+2026 | NCAA | NAZU vs CSU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | NCAA Division I Championships | Division I | Senior/Open | 333 | 2
+2026 | NCAA | NCSU vs UNCW | Division I | Senior/Open | 20 | 1
+2026 | NCAA | NCSU vs UVA | Division I | Senior/Open | 6 | 1
+2026 | NCAA | NE vs STBR | Division I | Senior/Open | 12 | 1
+2026 | NCAA | NJIT vs RIDE vs STBR | Division I | Senior/Open | 19 | 1
+2026 | NCAA | NMU vs LSSU | Division I | Senior/Open | 17 | 1
+2026 | NCAA | NMU vs UWSP | Division I | Senior/Open | 27 | 1
+2026 | NCAA | NU vs WISC | Division I | Senior/Open | 26 | 1
+2026 | NCAA | Northeastern Diving Invitational | Division I | Senior/Open | 21 | 1
+2026 | NCAA | OAKU vs DENI vs MU | Division I | Senior/Open | 39 | 1
+2026 | NCAA | OAKU vs WSUM | Division I | Senior/Open | 22 | 1
+2026 | NCAA | OBU vs HSU - Rescheduled Again | Division I | Senior/Open | 9 | 1
+2026 | NCAA | OMAHA vs UNI vs ST THOMAS | Division I | Senior/Open | 49 | 1
+2026 | NCAA | OMAHA vs USD | Division I | Senior/Open | 36 | 1
+2026 | NCAA | OSU vs MICH | Division I | Senior/Open | 28 | 1
+2026 | NCAA | OSU vs PITT | Division I | Senior/Open | 41 | 1
+2026 | NCAA | OU vs BGSU | Division I | Senior/Open | 23 | 1
+2026 | NCAA | PA DII Diving Invite | Division I | Senior/Open | 41 | 1
+2026 | NCAA | PA DII Last Chance Diving Invite (Official Meet) | Division I | Senior/Open | 49 | 1
+2026 | NCAA | PACE vs BEN | Division I | Senior/Open | 8 | 1
+2026 | NCAA | PACE vs Felician | Division I | Senior/Open | 2 | 1
+2026 | NCAA | PENN vs DART vs YALE - M&W | Division I | Senior/Open | 36 | 1
+2026 | NCAA | PENN vs DREX (M&W) | Division I | Senior/Open | 22 | 1
+2026 | NCAA | PENN vs LASU (Men) | Division I | Senior/Open | 9 | 1
+2026 | NCAA | PITT vs VU | Division I | Senior/Open | 34 | 1
+2026 | NCAA | POMO vs CLMC | Division I | Senior/Open | 30 | 1
+2026 | NCAA | POMO vs CUI vs BIU | Division I | Senior/Open | 24 | 1
+2026 | NCAA | POMO vs WHIT | Division I | Senior/Open | 18 | 1
+2026 | NCAA | PRIN vs PSU vs VT | Division I | Senior/Open | 37 | 1
+2026 | NCAA | PROV vs CHCR 1 | Division I | Senior/Open | 15 | 1
+2026 | NCAA | PROV vs CHCR 2 | Division I | Senior/Open | 15 | 1
+2026 | NCAA | PSU vs GW | Division I | Senior/Open | 36 | 1
+2026 | NCAA | PUR vs NU vs UMIN | Division I | Senior/Open | 55 | 1
+2026 | NCAA | PUR vs SIU | Division I | Senior/Open | 17 | 1
+2026 | NCAA | PUR vs UIUC | Division I | Senior/Open | 17 | 1
+2026 | NCAA | Pepp vs APU | Division I | Senior/Open | 14 | 1
+2026 | NCAA | Pepp vs USD | Division I | Senior/Open | 18 | 1
+2026 | NCAA | RIDE vs FORD | Division I | Senior/Open | 22 | 1
+2026 | NCAA | RUTG vs LASU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | Rutgers Platform Invitational | Division I | Senior/Open | 18 | 1
+2026 | NCAA | SACR vs CCSU | Division I | Senior/Open | 16 | 2
+2026 | NCAA | SCAR vs VT | Division I | Senior/Open | 14 | 1
+2026 | NCAA | SCSU Diving invite 2026 | Division I | Senior/Open | 35 | 1
+2026 | NCAA | SCSU V SDSU | Division I | Senior/Open | 8 | 1
+2026 | NCAA | SCSU vs AU | Division I | Senior/Open | 4 | 1
+2026 | NCAA | SCSU vs BEN | Division I | Senior/Open | 10 | 1
+2026 | NCAA | SCSU vs MMA | Division I | Senior/Open | 11 | 1
+2026 | NCAA | SDSU vs PU | Division I | Senior/Open | 20 | 1
+2026 | NCAA | SDSU vs UOSD | Division I | Senior/Open | 20 | 1
+2026 | NCAA | SHU vs UCON | Division I | Senior/Open | 17 | 1
+2026 | NCAA | SHU vs WAG | Division I | Senior/Open | 15 | 1
+2026 | NCAA | SIU vs INSU vs UEVA | Division I | Senior/Open | 25 | 1
+2026 | NCAA | SIU vs MCU | Division I | Senior/Open | 11 | 1
+2026 | NCAA | STAN vs CAL | Division I | Senior/Open | 14 | 1
+2026 | NCAA | STAN vs SJSU | Division I | Senior/Open | 12 | 1
+2026 | NCAA | STAT vs BARU | Division I | Senior/Open | 4 | 1
+2026 | NCAA | STAT vs BC | Division I | Senior/Open | 4 | 1
+2026 | NCAA | STAT vs BRGP | Division I | Senior/Open | 9 | 1
+2026 | NCAA | STBU vs COLG | Division I | Senior/Open | 24 | 1
+2026 | NCAA | STLU vs OMAH | Division I | Senior/Open | 24 | 2
+2026 | NCAA | SVSU vs ASHU | Division I | Senior/Open | 17 | 1
+2026 | NCAA | SVSU vs LSSU | Division I | Senior/Open | 6 | 1
+2026 | NCAA | TAM vs BAMA | Division I | Senior/Open | 30 | 1
+2026 | NCAA | TAM vs TEX | Division I | Senior/Open | 34 | 1
+2026 | NCAA | TCNJ vs MONT | Division I | Senior/Open | 20 | 1
+2026 | NCAA | TCNJ vs RU | Division I | Senior/Open | 14 | 1
+2026 | NCAA | TCNJ vs SWRM | Division I | Senior/Open | 15 | 1
+2026 | NCAA | TCU vs TUTX | Division I | Senior/Open | 26 | 1
+2026 | NCAA | TCU vs UTPB | Division I | Senior/Open | 19 | 1
+2026 | NCAA | TENN vs DUKE | Division I | Senior/Open | 26 | 1
+2026 | NCAA | TEX - OSU - UL | Division I | Senior/Open | 41 | 1
+2026 | NCAA | TEX vs UIW vs TUTX vs TCU | Division I | Senior/Open | 15 | 1
+2026 | NCAA | TOL vs BGSU | Division I | Senior/Open | 6 | 1
+2026 | NCAA | TU vs GW | Division I | Senior/Open | 28 | 1
+2026 | NCAA | TU vs NAVY | Division I | Senior/Open | 16 | 1
+2026 | NCAA | TU vs UMBC | Division I | Senior/Open | 32 | 1
+2026 | NCAA | Tate Ramsden Invite | Division I | Senior/Open | 39 | 1
+2026 | NCAA | Towson Diving Invitational | Division I | Senior/Open | 50 | 1
+2026 | NCAA | UARK vs UNT | Division I | Senior/Open | 32 | 1
+2026 | NCAA | UCHI vs CALC | Division I | Senior/Open | 24 | 1
+2026 | NCAA | UCHI vs NU | Division I | Senior/Open | 32 | 1
+2026 | NCAA | UCHI vs UIC | Division I | Senior/Open | 28 | 1
+2026 | NCAA | UCIN vs XVIR | Division I | Senior/Open | 6 | 1
+2026 | NCAA | UCLA vs CAL | Division I | Senior/Open | 12 | 1
+2026 | NCAA | UCLA vs NEV vs USC | Division I | Senior/Open | 36 | 1
+2026 | NCAA | UCLA vs STAN | Division I | Senior/Open | 12 | 1
+2026 | NCAA | UCON vs MASS | Division I | Senior/Open | 25 | 1
+2026 | NCAA | UCON vs PROV | Division I | Senior/Open | 19 | 1
+2026 | NCAA | UCON vs UVM | Division I | Senior/Open | 17 | 1
+2026 | NCAA | UCSC vs CSUB | Division I | Senior/Open | 23 | 1
+2026 | NCAA | UCSC vs Simpson | Division I | Senior/Open | 26 | 1
+2026 | NCAA | UDEL vs GMU | Division I | Senior/Open | 28 | 1
+2026 | NCAA | UEVA vs UIC | Division I | Senior/Open | 26 | 1
+2026 | NCAA | UGA vs EMU | Division I | Senior/Open | 18 | 1
+2026 | NCAA | UGA vs TENN | Division I | Senior/Open | 18 | 1
+2026 | NCAA | UGA vs UARK vs FSU | Division I | Senior/Open | 34 | 1
+2026 | NCAA | UIC Diving Invite @ University of Illinois at Chicago | Division I | Senior/Open | 75 | 1
+2026 | NCAA | UIC vs MISS | Division I | Senior/Open | 30 | 2
+2026 | NCAA | UK vs MIZ | Division I | Senior/Open | 30 | 1
+2026 | NCAA | UK vs ND | Division I | Senior/Open | 32 | 1
+2026 | NCAA | UK vs TAM | Division I | Senior/Open | 34 | 1
+2026 | NCAA | UK vs UCIN | Division I | Senior/Open | 26 | 1
+2026 | NCAA | UL Saturday Last Chance AM | Division I | Senior/Open | 14 | 1
+2026 | NCAA | UL Saturday Last Chance PM | Division I | Senior/Open | 12 | 1
+2026 | NCAA | UL vs MIZ | Division I | Senior/Open | 26 | 1
+2026 | NCAA | UL vs UCIN | Division I | Senior/Open | 22 | 1
+2026 | NCAA | UM vs UJ | Division I | Senior/Open | 1 | 1
+2026 | NCAA | UMBC vs UMW | Division I | Senior/Open | 24 | 1
+2026 | NCAA | UMEO vs BOWD | Division I | Senior/Open | 18 | 1
+2026 | NCAA | UMEO vs PROV | Division I | Senior/Open | 22 | 1
+2026 | NCAA | UMEO vs UNH | Division I | Senior/Open | 8 | 1
+2026 | NCAA | UMIN vs SDKS vs UST | Division I | Senior/Open | 37 | 1
+2026 | NCAA | UNC vs NCSU | Division I | Senior/Open | 12 | 1
+2026 | NCAA | UNC vs UNCW vs BC | Division I | Senior/Open | 29 | 1
+2026 | NCAA | UNCO vs WSU | Division I | Senior/Open | 8 | 1
+2026 | NCAA | UNH vs RI | Division I | Senior/Open | 10 | 1
+2026 | NCAA | UNH vs UCON | Division I | Senior/Open | 14 | 1
+2026 | NCAA | UNI vs ISU vs UST | Division I | Senior/Open | 27 | 1
+2026 | NCAA | UNL vs RUTG | Division I | Senior/Open | 21 | 1
+2026 | NCAA | UNLV vs FPU | Division I | Senior/Open | 8 | 1
+2026 | NCAA | UNLV vs NEV | Division I | Senior/Open | 15 | 1
+2026 | NCAA | UNM vs NAZU | Division I | Senior/Open | 18 | 1
+2026 | NCAA | UOSD vs UCSD Event 1 | Division I | Senior/Open | 4 | 1
+2026 | NCAA | UOSD vs UCSD Event 2 | Division I | Senior/Open | 4 | 1
+2026 | NCAA | UOSD vs VBLT @ SDSU | Division I | Senior/Open | 14 | 1
+2026 | NCAA | URI vs CCSU | Division I | Senior/Open | 15 | 1
+2026 | NCAA | URI vs UVM | Division I | Senior/Open | 12 | 1
+2026 | NCAA | URVA vs JMU | Division I | Senior/Open | 9 | 1
+2026 | NCAA | URVA vs ODU vs ECU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | USC vs CAL | Division I | Senior/Open | 28 | 1
+2026 | NCAA | USC vs STAN | Division I | Senior/Open | 28 | 1
+2026 | NCAA | USD vs SDKS | Division I | Senior/Open | 22 | 1
+2026 | NCAA | USI vs UEVA | Division I | Senior/Open | 25 | 1
+2026 | NCAA | USI vs UIC | Division I | Senior/Open | 35 | 1
+2026 | NCAA | USMA vs BUCK | Division I | Senior/Open | 29 | 1
+2026 | NCAA | UST vs AUSF | Division I | Senior/Open | 22 | 1
+2026 | NCAA | UST vs USD | Division I | Senior/Open | 35 | 1
+2026 | NCAA | UTAH vs SMU | Division I | Senior/Open | 27 | 1
+2026 | NCAA | UTRG vs NMSU | Division I | Senior/Open | 14 | 1
+2026 | NCAA | UVM vs SIEN | Division I | Senior/Open | 14 | 1
+2026 | NCAA | UW - Milwaukee vs UWGB | Division I | Senior/Open | 10 | 1
+2026 | NCAA | UW Milwaukee vs UWSP | Division I | Senior/Open | 27 | 1
+2026 | NCAA | UW-Milwaukee vs MSOE | Division I | Senior/Open | 18 | 1
+2026 | NCAA | UWF vs OBU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | UWF vs TU | Division I | Senior/Open | 16 | 1
+2026 | NCAA | UWLC vs UWSP | Division I | Senior/Open | 41 | 1
+2026 | NCAA | VMI vs HOW | Division I | Senior/Open | 23 | 1
+2026 | NCAA | VMI vs WLEE | Division I | Senior/Open | 14 | 1
+2026 | NCAA | VT vs QUOC | Division I | Senior/Open | 8 | 1
+2026 | NCAA | VT vs UVA | Division I | Senior/Open | 10 | 1
+2026 | NCAA | VU Instrasquad Meet | Division I | Senior/Open | 2 | 1
+2026 | NCAA | VU vs JMU | Division I | Senior/Open | 20 | 1
+2026 | NCAA | VU vs SHU | Division I | Senior/Open | 8 | 1
+2026 | NCAA | VU vs URVA | Division I | Senior/Open | 18 | 1
+2026 | NCAA | WCU vs ASU | Division I | Senior/Open | 1 | 1
+2026 | NCAA | WCUP vs PENN | Division I | Senior/Open | 23 | 1
+2026 | NCAA | WSUM vs DAVE | Division I | Senior/Open | 30 | 1
+2026 | NCAA | WSUM vs GVSU | Division I | Senior/Open | 32 | 1
+2026 | NCAA | WVU vs PITT | Division I | Senior/Open | 48 | 1
+2026 | NCAA | WVU vs PSU | Division I | Senior/Open | 33 | 1
+2026 | NCAA | WVU vs VU vs DUQU | Division I | Senior/Open | 37 | 1
+2026 | NCAA | WYO vs WSU | Division I | Senior/Open | 6 | 1
+2026 | NCAA | Western PA Invite | Division I | Senior/Open | 10 | 1
+2026 | NCAA | YALE vs CORU | Division I | Senior/Open | 31 | 1
+2026 | NCAA | YSU vs INDI | Division I | Senior/Open | 25 | 1
+2026 | USA Diving | 2026 Arizona Association State Championships |  | Other | 72 | 1
+2026 | USA Diving | 2026 California State Games |  | Other | 78 | 1
+2026 | USA Diving | 2026 Conroe Diving Spring Invitational |  | Other | 159 | 1
+2026 | USA Diving | 2026 DMD Classic |  | Other | 301 | 1
+2026 | USA Diving | 2026 David Nielsen Invitational |  | Other | 100 | 1
+2026 | USA Diving | 2026 GA Diving Winter Invite |  | Other | 174 | 1
+2026 | USA Diving | 2026 MASTERS DIVING SPRING CHAMPIONSHIPS |  | Other | 192 | 1
+2026 | USA Diving | 2026 MASTERS DIVING SUMMER CHAMPIONSHIPS |  | Other | 194 | 1
+2026 | USA Diving | 2026 Moose Moss Invitational |  | Other | 259 | 1
+2026 | USA Diving | 2026 Moose Moss Invitational |  | Senior | 4 | 1
+2026 | USA Diving | 2026 Patriot Diving Summer Invite |  | Other | 46 | 1
+2026 | USA Diving | 2026 The Carolina BIG DIVE |  | Other | 414 | 1
+2026 | USA Diving | 2026 USA Diving Central Championship |  | Other | 490 | 1
+2026 | USA Diving | 2026 USA Diving East Championship |  | Other | 660 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 1 Championships |  | Junior | 259 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 10 Championships |  | Junior | 168 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 11 Championships |  | Junior | 186 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 12 Championships |  | Junior | 216 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 2 Championships |  | Junior | 302 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 3 Championships |  | Junior | 278 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 4 Championships |  | Junior | 162 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 5 Championships |  | Junior | 165 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 6 Championships |  | Junior | 256 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 7 Championships |  | Junior | 108 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 8 Championships |  | Junior | 155 | 1
+2026 | USA Diving | 2026 USA Diving Junior Region 9 Championships |  | Junior | 153 | 1
+2026 | USA Diving | 2026 USA Diving Junior World Championships Trials |  | Junior | 388 | 1
+2026 | USA Diving | 2026 USA Diving West Championship |  | Other | 608 | 1
+2026 | USA Diving | 2026 USA Diving Zone A Championships |  | Other | 491 | 1
+2026 | USA Diving | 2026 USA Diving Zone B Championships |  | Other | 396 | 1
+2026 | USA Diving | 2026 USA Diving Zone C Championships |  | Other | 385 | 1
+2026 | USA Diving | 2026 USA Diving Zone D Championships |  | Other | 296 | 1
+2026 | USA Diving | 2026 USA Diving Zone E Championships |  | Other | 321 | 1
+2026 | USA Diving | 2026 USA Diving Zone F Championships |  | Other | 510 | 1
+2026 | USA Diving | 22th Annual Dick Wilson Memorial Invitational |  | Other | 406 | 1
+2026 | USA Diving | 32th Annual Cactus Invitational |  | Other | 165 | 1
+2026 | USA Diving | 32th Annual Cactus Invitational |  | Senior | 4 | 1
+2026 | USA Diving | 5th Annual Los Alamitos Divers Invite |  | Other | 253 | 1
+2026 | USA Diving | 5th Annual Los Alamitos Divers Invite |  | Senior | 17 | 1
+2026 | USA Diving | Black Gold Invitational |  | Other | 86 | 1
+2026 | USA Diving | Black Gold Invitational |  | Senior | 2 | 1
+2026 | USA Diving | CdS - Spring Novice Invite |  | Other | 32 | 1
+2026 | USA Diving | Classic City Invitational |  | Other | 182 | 1
+2026 | USA Diving | Coast Divers Winter Invite |  | Other | 139 | 1
+2026 | USA Diving | Coast Divers Winter Invite |  | Senior | 3 | 1
+2026 | USA Diving | DMD Local FC/Novice Meet |  | Other | 130 | 1
+2026 | USA Diving | GC DIVERS Local Series |  | Other | 70 | 1
+2026 | USA Diving | Jersey Diving Academy Summer Invite |  | Other | 69 | 1
+2026 | USA Diving | Knight Invite |  | Other | 312 | 1
+2026 | USA Diving | Last Chance District Invitational |  | Other | 70 | 1
+2026 | USA Diving | Laura Wilkinson Golden Invitational |  | Other | 198 | 1
+2026 | USA Diving | Long Island Divers Team Diving Invitational |  | Other | 102 | 1
+2026 | USA Diving | Mansfield Diving Local Meet Series |  | Other | 169 | 1
+2026 | USA Diving | Mansfield Summer Invitational |  | Other | 131 | 1
+2026 | USA Diving | Plantation Back To School Invitational |  | Other | 85 | 1
+2026 | USA Diving | Plantation Diving Invitational |  | Other | 28 | 1
+2026 | USA Diving | Rip Dives on the Hill |  | Other | 96 | 1
+2026 | USA Diving | Summer Splash Invite |  | Other | 14 | 1
+2026 | USA Diving | Summer Splash Invite |  | Senior | 17 | 1
+2026 | USA Diving | The Kimball Cup AAU Diving |  | Other | 137 | 1
+2026 | USA Diving | USA Diving Junior Nationals |  | Junior | 1020 | 1
+2026 | USA Diving | USA Diving Nationals |  | Senior | 207 | 1
+2026 | USA Diving | USA Diving Nationals Qualifier |  | Senior | 97 | 1
+2026 | USA Diving | Wellington Invitational |  | Other | 106 | 1
+2026 | USA Diving | Wendy Wyland Memorial Invitational |  | Other | 446 | 1
+2026 | USA Diving | Wendy Wyland Memorial Invitational |  | Senior | 10 | 1
+2026 | USA Diving | Whirlwind Winter Weekend 2026 |  | Other | 260 | 1
+2026 | World Aquatics | World Aquatics Recognized Event |  | Senior/Open | 161 | 1
+2026 | World Aquatics | World Aquatics World Cup |  | Senior/Open | 247 | 2
+
+## USA Diving senior-side meets 2025-26
+meet_year | meet_id | meet_name | competition_family | competition_group | rows | divers
+2025 | 11609 | 2025 USA Diving Junior National Championships | USA Diving | USA Diving Junior Nationals | 1713 | 576
+2025 | 11547 | 2025 USA Diving National Championships | USA Diving | USA Diving Nationals | 286 | 99
+2025 | 11546 | 2025 USA Diving National Championships Qualifier | USA Diving | USA Diving Nationals Qualifier | 83 | 49
+2025 | 12068 | 2025 USA Diving Winter Nationals | USA Diving | USA Diving Winter Nationals | 261 | 122
+2025 | 12067 | 2025 Winter Nationals Qualifier | USA Diving | USA Diving Winter Nationals Qualifier | 154 | 93
+2025 | WA-4725 | World Aquatics Championships - Singapore 2025 | World Aquatics | World Aquatics Championships | 482 | 250
+2025 | WA-4783 | World Aquatics Diving World Cup 2025 | World Aquatics | World Aquatics World Cup | 147 | 98
+2025 | WA-4847 | World Aquatics Diving World Cup 2025 | World Aquatics | World Aquatics World Cup | 154 | 104
+2025 | WA-4784 | World Aquatics Diving World Cup 2025 - Super Final | World Aquatics | World Aquatics World Cup | 95 | 55
+2026 | 12923 | 2026 USA Diving Junior Nationals | USA Diving | USA Diving Junior Nationals | 1020 | 341
+2026 | 12838 | 2026 USA Diving Junior World Championships Trials | USA Diving | 2026 USA Diving Junior World Championships Trials | 388 | 119
+2026 | 12925 | 2026 USA Diving Summer Nationals | USA Diving | USA Diving Nationals | 207 | 99
+2026 | 12924 | 2026 USA Diving Summer Nationals Qualifier | USA Diving | USA Diving Nationals Qualifier | 97 | 61
+2026 | WA-5018 | World Aquatics Diving World Cup 2026 | World Aquatics | World Aquatics World Cup | 151 | 101
+2026 | WA-5019 | World Aquatics Diving World Cup 2026 - Super Final | World Aquatics | World Aquatics World Cup | 96 | 56
+
+## NCAA meets 2025-26 by family/group
+meet_year | competition_group | ncaa_division | meets | rows | min | max
+2025 | 2025 A10 Conference Swimming and Diving Championships | Division I | 1 | 184 | 2025 A10 Conference Swimming and Diving Championships | 2025 A10 Conference Swimming and Diving Championships
+2025 | 2025 ACC Diving Men and Women Championships | Division I | 1 | 316 | 2025 ACC Diving Men and Women Championships | 2025 ACC Diving Men and Women Championships
+2025 | 2025 American Womens Swimming and Diving Championship | Division I | 1 | 131 | 2025 American Womens Swimming and Diving Championship | 2025 American Womens Swimming and Diving Championship
+2025 | 2025 Atlantic Sun Diving Championships | Division I | 1 | 123 | 2025 Atlantic Sun Diving Championships | 2025 Atlantic Sun Diving Championships
+2025 | 2025 B1G Mens Swimming and Diving Championships | Division I | 1 | 148 | 2025 B1G Mens Swimming and Diving Championships | 2025 B1G Mens Swimming and Diving Championships
+2025 | 2025 B1G Womens Swimming and Diving Championships | Division I | 1 | 236 | 2025 B1G Womens Swimming and Diving Championships | 2025 B1G Womens Swimming and Diving Championships
+2025 | 2025 Big 12 Conference Swimming and Diving Championships | Division I | 1 | 311 | 2025 Big 12 Conference Swimming and Diving Championships | 2025 Big 12 Conference Swimming and Diving Championships
+2025 | 2025 Big West Men and Women Swimming and Diving Championship | Division I | 1 | 118 | 2025 Big West Men and Women Swimming and Diving Championship | 2025 Big West Men and Women Swimming and Diving Championship
+2025 | 2025 CAA Conference Swimming and Diving Championships | Division I | 1 | 127 | 2025 CAA Conference Swimming and Diving Championships | 2025 CAA Conference Swimming and Diving Championships
+2025 | 2025 ECAC Swimming and Diving Championships | Multi-division | 2 | 128 | 2025 ECAC Swimming and Diving Championships | 2025 ECAC Swimming and Diving Championships
+2025 | 2025 Horizon League Diving Championships | Division I | 1 | 132 | 2025 Horizon League Diving Championships | 2025 Horizon League Diving Championships
+2025 | 2025 Mens Ivy League Championships | Division I | 1 | 84 | 2025 Mens Ivy League Championships | 2025 Mens Ivy League Championships
+2025 | 2025 Mid American Conference Womens Championships | Division I | 1 | 106 | 2025 Mid American Conference Womens Championships | 2025 Mid American Conference Womens Championships
+2025 | 2025 Missouri Valley Mens Diving Championships | Division I | 1 | 70 | 2025 Missouri Valley Mens Diving Championships | 2025 Missouri Valley Mens Diving Championships
+2025 | 2025 Missouri Valley Women Diving Championships | Division I | 1 | 103 | 2025 Missouri Valley Women Diving Championships | 2025 Missouri Valley Women Diving Championships
+2025 | 2025 Mountain West Conference Diving Championships | Division I | 1 | 144 | 2025 Mountain West Conference Diving Championships | 2025 Mountain West Conference Diving Championships
+2025 | 2025 NCAA ZONE A CHAMPIONSHIPS | Division I | 1 | 401 | 2025 NCAA ZONE A CHAMPIONSHIPS | 2025 NCAA ZONE A CHAMPIONSHIPS
+2025 | 2025 NCAA ZONE B CHAMPIONSHIPS | Division I | 1 | 324 | 2025 NCAA ZONE B CHAMPIONSHIPS | 2025 NCAA ZONE B CHAMPIONSHIPS
+2025 | 2025 NCAA ZONE C CHAMPIONSHIPS | Division I | 1 | 349 | 2025 NCAA ZONE C CHAMPIONSHIPS | 2025 NCAA ZONE C CHAMPIONSHIPS
+2025 | 2025 NCAA ZONE D CHAMPIONSHIPS | Division I | 1 | 317 | 2025 NCAA ZONE D CHAMPIONSHIPS | 2025 NCAA ZONE D CHAMPIONSHIPS
+2025 | 2025 NCAA ZONE E CHAMPIONSHIPS | Division I | 1 | 338 | 2025 NCAA ZONE E CHAMPIONSHIPS | 2025 NCAA ZONE E CHAMPIONSHIPS
+2025 | 2025 Northeast Conference Championships | Division I | 1 | 90 | 2025 Northeast Conference Championships | 2025 Northeast Conference Championships
+2025 | 2025 Patriot League Diving Championship | Division I | 1 | 196 | 2025 Patriot League Diving Championship | 2025 Patriot League Diving Championship
+2025 | 2025 SEC Diving Championships | Division I | 1 | 327 | 2025 SEC Diving Championships | 2025 SEC Diving Championships
+2025 | 2025 Summit League Swimming and Diving Championships | Division I | 1 | 153 | 2025 Summit League Swimming and Diving Championships | 2025 Summit League Swimming and Diving Championships
+2025 | 2025 Sun Belt Conference Swimming and Diving Championships | Division I | 1 | 76 | 2025 Sun Belt Conference Swimming and Diving Championships | 2025 Sun Belt Conference Swimming and Diving Championships
+2025 | 2025 WAC Mens and Womens Swimming and Diving Championships | Division I | 1 | 233 | 2025 WAC Mens and Womens Swimming and Diving Championships | 2025 WAC Mens and Womens Swimming and Diving Championships
+2025 | 2025 Womens Ivy League Championships | Division I | 1 | 112 | 2025 Womens Ivy League Championships | 2025 Womens Ivy League Championships
+2025 | America East Conference Swimmimg and Diving Championships | Division I | 1 | 130 | America East Conference Swimmimg and Diving Championships | America East Conference Swimmimg and Diving Championships
+2025 | BIG EAST Swimming and Diving Championships | Division I | 1 | 119 | BIG EAST Swimming and Diving Championships | BIG EAST Swimming and Diving Championships
+2025 | Mountain Pacific Sports Federation Diving Championships | Division I | 1 | 27 | Mountain Pacific Sports Federation Diving Championships | Mountain Pacific Sports Federation Diving Championships
+2025 | NCAA Division I Championships | Division I | 2 | 381 | 2025 NCAA Div I Mens Swimming and Diving Championships | 2025 NCAA Div I Womens Swimming and Diving Championships
+2026 | 2026 A10 Conference Swimming and Diving Championships | Division I | 1 | 174 | 2026 A10 Conference Swimming and Diving Championships | 2026 A10 Conference Swimming and Diving Championships
+2026 | 2026 ACC Diving Men and Women Championships | Division I | 1 | 275 | 2026 ACC Diving Men and Women Championships | 2026 ACC Diving Men and Women Championships
+2026 | 2026 American Womens Swimming and Diving Championship | Division I | 1 | 195 | 2026 American Womens Swimming and Diving Championship | 2026 American Womens Swimming and Diving Championship
+2026 | 2026 Atlantic Sun Diving Championships | Division I | 1 | 159 | 2026 Atlantic Sun Diving Championships | 2026 Atlantic Sun Diving Championships
+2026 | 2026 B1G Mens Swimming and Diving Championships | Division I | 1 | 152 | 2026 B1G Mens Swimming and Diving Championships | 2026 B1G Mens Swimming and Diving Championships
+2026 | 2026 B1G Womens Swimming and Diving Championships | Division I | 1 | 239 | 2026 B1G Womens Swimming and Diving Championships | 2026 B1G Womens Swimming and Diving Championships
+2026 | 2026 Big 12 Conference Dive Championships | Division I | 1 | 300 | 2026 Big 12 Conference Dive Championships | 2026 Big 12 Conference Dive Championships
+2026 | 2026 Big West Men and Women Swimming and Diving Championship | Division I | 1 | 120 | 2026 Big West Men and Women Swimming and Diving Championship | 2026 Big West Men and Women Swimming and Diving Championship
+2026 | 2026 CAA Conference Swimming and Diving Championships | Division I | 1 | 104 | 2026 CAA Conference Swimming and Diving Championships | 2026 CAA Conference Swimming and Diving Championships
+2026 | 2026 ECAC Swimming and Diving Championships | Multi-division | 1 | 77 | 2026 ECAC Swimming and Diving Championships | 2026 ECAC Swimming and Diving Championships
+2026 | 2026 Horizon League Diving Championships | Division I | 1 | 124 | 2026 Horizon League Diving Championships | 2026 Horizon League Diving Championships
+2026 | 2026 Mens Ivy League Championships | Division I | 1 | 93 | 2026 Mens Ivy League Championships | 2026 Mens Ivy League Championships
+2026 | 2026 Mid American Conference Womens Championships | Division I | 1 | 117 | 2026 Mid American Conference Womens Championships | 2026 Mid American Conference Womens Championships
+2026 | 2026 Missouri Valley Men and Women Diving Championships | Division I | 1 | 167 | 2026 Missouri Valley Men and Women Diving Championships | 2026 Missouri Valley Men and Women Diving Championships
+2026 | 2026 Mountain West Conference Diving Championships | Division I | 1 | 177 | 2026 Mountain West Conference Diving Championships | 2026 Mountain West Conference Diving Championships
+2026 | 2026 NCAA Division III Region 1 Diving Championships | Division III | 1 | 107 | 2026 NCAA Division III Region 1 Diving Championships | 2026 NCAA Division III Region 1 Diving Championships
+2026 | 2026 NCAA Division III Region 2 Diving Championships | Division III | 1 | 94 | 2026 NCAA Division III Region 2 Diving Championships | 2026 NCAA Division III Region 2 Diving Championships
+2026 | 2026 NCAA Division III Region 3 Diving Championships | Division III | 1 | 79 | 2026 NCAA Division III Region 3 Diving Championships | 2026 NCAA Division III Region 3 Diving Championships
+2026 | 2026 NCAA Division III Region 4 Diving Championships | Division III | 1 | 77 | 2026 NCAA Division III Region 4 Diving Championships | 2026 NCAA Division III Region 4 Diving Championships
+2026 | 2026 NCAA ZONE A CHAMPIONSHIPS | Division I | 1 | 406 | 2026 NCAA ZONE A CHAMPIONSHIPS | 2026 NCAA ZONE A CHAMPIONSHIPS
+2026 | 2026 NCAA ZONE B CHAMPIONSHIPS | Division I | 1 | 303 | 2026 NCAA ZONE B CHAMPIONSHIPS | 2026 NCAA ZONE B CHAMPIONSHIPS
+2026 | 2026 NCAA ZONE C CHAMPIONSHIPS | Division I | 1 | 354 | 2026 NCAA ZONE C CHAMPIONSHIPS | 2026 NCAA ZONE C CHAMPIONSHIPS
+2026 | 2026 NCAA ZONE D CHAMPIONSHIPS | Division I | 1 | 298 | 2026 NCAA ZONE D CHAMPIONSHIPS | 2026 NCAA ZONE D CHAMPIONSHIPS
+2026 | 2026 NCAA ZONE E CHAMPIONSHIPS | Division I | 1 | 352 | 2026 NCAA ZONE E CHAMPIONSHIPS | 2026 NCAA ZONE E CHAMPIONSHIPS
+2026 | 2026 Northeast Conference Championships | Division I | 1 | 84 | 2026 Northeast Conference Championships | 2026 Northeast Conference Championships
+2026 | 2026 Patriot League Diving Championship | Division I | 1 | 188 | 2026 Patriot League Diving Championship | 2026 Patriot League Diving Championship
+2026 | 2026 SEC Diving Championships | Division I | 1 | 312 | 2026 SEC Diving Championships | 2026 SEC Diving Championships
+2026 | 2026 Summit League Swimming and Diving Championships | Division I | 1 | 160 | 2026 Summit League Swimming and Diving Championships | 2026 Summit League Swimming and Diving Championships
+2026 | 2026 Womens Ivy League Championships | Division I | 1 | 106 | 2026 Womens Ivy League Championships | 2026 Womens Ivy League Championships
+2026 | AFA vs CSU vs UNM | Division I | 1 | 32 | AFA vs CSU vs UNM | AFA vs CSU vs UNM
+2026 | AFA vs UNCO | Division I | 1 | 16 | AFA vs UNCO | AFA vs UNCO
+2026 | ARIZ vs ASU | Division I | 1 | 27 | ARIZ vs ASU | ARIZ vs ASU
+2026 | ASU vs GCU | Division I | 1 | 28 | ASU vs GCU | ASU vs GCU
+2026 | AUB vs FLA | Division I | 1 | 33 | AUB vs FLA | AUB vs FLA
+2026 | AUSF vs STCL | Division I | 1 | 18 | AUSF vs STCL | AUSF vs STCL
+2026 | America East Conference Swimmimg and Diving Championships | Division I | 1 | 122 | America East Conference Swimmimg and Diving Championships | America East Conference Swimmimg and Diving Championships
+2026 | Army Invite | Division I | 1 | 20 | Army Invite | Army Invite
+2026 | Auburn First Chance | Division I | 1 | 19 | Auburn First Chance | Auburn First Chance
+2026 | BALL vs BUFF | Division I | 1 | 21 | BALL vs BUFF | BALL vs BUFF
+2026 | BALL vs INDI | Division I | 1 | 30 | BALL vs INDI | BALL vs INDI
+2026 | BALL vs INSU | Division I | 1 | 27 | BALL vs INSU | BALL vs INSU
+2026 | BAMA vs AUB | Division I | 1 | 30 | BAMA vs AUB | BAMA vs AUB
+2026 | BAMA vs GT | Division I | 1 | 21 | BAMA vs GT | BAMA vs GT
+2026 | BGSU vs TOL | Division I | 1 | 10 | BGSU vs TOL | BGSU vs TOL
+2026 | BIG EAST Swimming and Diving Championships | Division I | 1 | 116 | BIG EAST Swimming and Diving Championships | BIG EAST Swimming and Diving Championships
+2026 | BING vs WAG | Division I | 1 | 24 | BING vs WAG | BING vs WAG
+2026 | BIU vs WHIT | Division I | 1 | 18 | BIU vs WHIT | BIU vs WHIT
+2026 | BIU vs Westmont & The Master's Dual Meet | Division I | 1 | 11 | BIU vs Westmont & The Master's Dual Meet | BIU vs Westmont & The Master's Dual Meet
+2026 | BRNT vs BRGP | Division I | 1 | 14 | BRNT vs BRGP | BRNT vs BRGP
+2026 | BRNT vs MC | Division I | 1 | 31 | BRNT vs MC | BRNT vs MC
+2026 | BROW vs CUBC | Division I | 1 | 32 | BROW vs CUBC | BROW vs CUBC
+2026 | BU vs BRNT | Division I | 1 | 34 | BU vs BRNT | BU vs BRNT
+2026 | BU vs MIT | Division I | 1 | 37 | BU vs MIT | BU vs MIT
+2026 | BUCK vs LASU vs PSU | Division I | 1 | 38 | BUCK vs LASU vs PSU | BUCK vs LASU vs PSU
+2026 | BUCK vs LEHU | Division I | 1 | 24 | BUCK vs LEHU | BUCK vs LEHU
+2026 | BUFF vs DUQU | Division I | 1 | 20 | BUFF vs DUQU | BUFF vs DUQU
+2026 | BUFF vs MU | Division I | 1 | 24 | BUFF vs MU | BUFF vs MU
+2026 | BYU vs AFA vs MESA | Division I | 1 | 60 | BYU vs AFA vs MESA | BYU vs AFA vs MESA
+2026 | BYU vs UTAH | Division I | 1 | 30 | BYU vs UTAH | BYU vs UTAH
+2026 | Barry Schockmel Diving Classic | Division I | 1 | 35 | Barry Schockmel Diving Classic | Barry Schockmel Diving Classic
+2026 | CAL vs STAN - Women | Division I | 1 | 9 | CAL vs STAN - Women | CAL vs STAN - Women
+2026 | CAN vs RIDE | Division I | 1 | 17 | CAN vs RIDE | CAN vs RIDE
+2026 | CBU vs GCU | Division I | 1 | 25 | CBU vs GCU | CBU vs GCU
+2026 | CC vs TRAN vs UOTC | Division I | 1 | 34 | CC vs TRAN vs UOTC | CC vs TRAN vs UOTC
+2026 | CORU vs BROW | Division I | 1 | 25 | CORU vs BROW | CORU vs BROW
+2026 | CORU vs LEMC | Division I | 1 | 20 | CORU vs LEMC | CORU vs LEMC
+2026 | CORU vs STBU | Division I | 1 | 25 | CORU vs STBU | CORU vs STBU
+2026 | CSU vs UNCO | Division I | 1 | 18 | CSU vs UNCO | CSU vs UNCO
+2026 | CUBC vs CORU (Men) | Division I | 1 | 14 | CUBC vs CORU (Men) | CUBC vs CORU (Men)
+2026 | CUBC vs CORU (Women) | Division I | 1 | 14 | CUBC vs CORU (Women) | CUBC vs CORU (Women)
+2026 | CUBC vs DART (Men) | Division I | 1 | 17 | CUBC vs DART (Men) | CUBC vs DART (Men)
+2026 | CUBC vs DART (Women) | Division I | 1 | 15 | CUBC vs DART (Women) | CUBC vs DART (Women)
+2026 | CUSP vs UM | Division I | 1 | 10 | CUSP vs UM | CUSP vs UM
+2026 | Cleveland State University vs JCU vs BWC | Division I | 1 | 11 | Cleveland State University vs JCU vs BWC | Cleveland State University vs JCU vs BWC
+2026 | Cleveland State University vs NIAG | Division I | 1 | 6 | Cleveland State University vs NIAG | Cleveland State University vs NIAG
+2026 | Cleveland State University vs Oakland | Division I | 1 | 20 | Cleveland State University vs Oakland | Cleveland State University vs Oakland
+2026 | Colgate vs Boston University vs Fairfield | Division I | 1 | 36 | Colgate vs Boston University vs Fairfield | Colgate vs Boston University vs Fairfield
+2026 | Colgate vs Holy Cross | Division I | 1 | 29 | Colgate vs Holy Cross | Colgate vs Holy Cross
+2026 | Colonel Classic | Division I | 1 | 38 | Colonel Classic | Colonel Classic
+2026 | Connecticut vs Sacred Heart vs Holy Cross | Division I | 1 | 30 | Connecticut vs Sacred Heart vs Holy Cross | Connecticut vs Sacred Heart vs Holy Cross
+2026 | Coyote Invite @USD | Division I | 1 | 66 | Coyote Invite @USD | Coyote Invite @USD
+2026 | DAVE vs SVSU | Division I | 1 | 24 | DAVE vs SVSU | DAVE vs SVSU
+2026 | DENI vs OWU | Division I | 1 | 13 | DENI vs OWU | DENI vs OWU
+2026 | DENV vs BYU | Division I | 1 | 28 | DENV vs BYU | DENV vs BYU
+2026 | DENV vs DIGG | Division I | 1 | 13 | DENV vs DIGG | DENV vs DIGG
+2026 | DENV vs UNM vs UTAH (M) | Division I | 1 | 26 | DENV vs UNM vs UTAH (M) | DENV vs UNM vs UTAH (M)
+2026 | DENV vs WYO vs MESA | Division I | 1 | 44 | DENV vs WYO vs MESA | DENV vs WYO vs MESA
+2026 | DIGG vs AFA | Division I | 1 | 14 | DIGG vs AFA | DIGG vs AFA
+2026 | DIGG vs WCU | Division I | 1 | 2 | DIGG vs WCU | DIGG vs WCU
+2026 | DREX vs TU | Division I | 1 | 22 | DREX vs TU | DREX vs TU
+2026 | DSU vs Montevallo | Division I | 1 | 3 | DSU vs Montevallo | DSU vs Montevallo
+2026 | DU vs MISS | Division I | 1 | 11 | DU vs MISS | DU vs MISS
+2026 | DU vs SWBU | Division I | 1 | 10 | DU vs SWBU | DU vs SWBU
+2026 | DUKE vs GT | Division I | 1 | 30 | DUKE vs GT | DUKE vs GT
+2026 | DUQU vs STBU | Division I | 1 | 20 | DUQU vs STBU | DUQU vs STBU
+2026 | Dave Hrovat Invitational | Division I | 1 | 48 | Dave Hrovat Invitational | Dave Hrovat Invitational
+2026 | Dragon Invite | Division I | 1 | 20 | Dragon Invite | Dragon Invite
+2026 | ECU vs GSU | Division I | 1 | 18 | ECU vs GSU | ECU vs GSU
+2026 | EMIU vs BALL | Division I | 1 | 15 | EMIU vs BALL | EMIU vs BALL
+2026 | FAU vs FIU | Division I | 1 | 12 | FAU vs FIU | FAU vs FIU
+2026 | FAU vs STU vs IRSC | Division I | 1 | 33 | FAU vs STU vs IRSC | FAU vs STU vs IRSC
+2026 | FAU vs UNT vs UMIN vs WAG | Division I | 1 | 51 | FAU vs UNT vs UMIN vs WAG | FAU vs UNT vs UMIN vs WAG
+2026 | FIU Diving Invite @FIU | Division I | 1 | 43 | FIU Diving Invite @FIU | FIU Diving Invite @FIU
+2026 | FIU vs FAU (Platform) | Division I | 1 | 12 | FIU vs FAU (Platform) | FIU vs FAU (Platform)
+2026 | FIU vs FGCU | Division I | 1 | 18 | FIU vs FGCU | FIU vs FGCU
+2026 | FIU vs MIAF vs HARV | Division I | 1 | 27 | FIU vs MIAF vs HARV | FIU vs MIAF vs HARV
+2026 | FLA vs FSU | Division I | 1 | 44 | FLA vs FSU | FLA vs FSU
+2026 | FORD vs MASS | Division I | 1 | 27 | FORD vs MASS | FORD vs MASS
+2026 | FS vs DAVI | Division I | 1 | 20 | FS vs DAVI | FS vs DAVI
+2026 | FU vs SACR vs UBPT | Division I | 1 | 20 | FU vs SACR vs UBPT | FU vs SACR vs UBPT
+2026 | First Chance Meet | Division I | 1 | 30 | First Chance Meet | First Chance Meet
+2026 | GCU vs UNLV | Division I | 1 | 16 | GCU vs UNLV | GCU vs UNLV
+2026 | GMU vs GTWU | Division I | 1 | 30 | GMU vs GTWU | GMU vs GTWU
+2026 | GRCG vs IWCC vs ICCC | Division I | 1 | 14 | GRCG vs IWCC vs ICCC | GRCG vs IWCC vs ICCC
+2026 | GT v South Carolina | Division I | 1 | 18 | GT v South Carolina | GT v South Carolina
+2026 | GT vs OSU | Division I | 1 | 17 | GT vs OSU | GT vs OSU
+2026 | GTWU vs SHU | Division I | 1 | 29 | GTWU vs SHU | GTWU vs SHU
+2026 | GTWU vs UMW | Division I | 1 | 12 | GTWU vs UMW | GTWU vs UMW
+2026 | GVSU vs DAVE | Division I | 1 | 31 | GVSU vs DAVE | GVSU vs DAVE
+2026 | GW vs GTWU | Division I | 1 | 30 | GW vs GTWU | GW vs GTWU
+2026 | Grinnell Invite @GRCG | Division I | 1 | 20 | Grinnell Invite @GRCG | Grinnell Invite @GRCG
+2026 | Grove City vs Duquesne vs Clarion | Division I | 1 | 36 | Grove City vs Duquesne vs Clarion | Grove City vs Duquesne vs Clarion
+2026 | HARV vs BROW (Men) | Division I | 1 | 18 | HARV vs BROW (Men) | HARV vs BROW (Men)
+2026 | HARV vs PENN vs BC | Division I | 1 | 33 | HARV vs PENN vs BC | HARV vs PENN vs BC
+2026 | HARV vs PRIN vs YALE | Division I | 1 | 64 | HARV vs PRIN vs YALE | HARV vs PRIN vs YALE
+2026 | HAWA vs BYU | Division I | 1 | 28 | HAWA vs BYU | HAWA vs BYU
+2026 | HOW vs CUA Senior Meet | Division I | 1 | 19 | HOW vs CUA Senior Meet | HOW vs CUA Senior Meet
+2026 | HU First Chance Meet | Division I | 1 | 17 | HU First Chance Meet | HU First Chance Meet
+2026 | HU vs RICE | Division I | 1 | 10 | HU vs RICE | HU vs RICE
+2026 | IA vs UIUC vs UNL | Division I | 1 | 40 | IA vs UIUC vs UNL | IA vs UIUC vs UNL
+2026 | IA vs UST | Division I | 1 | 17 | IA vs UST | IA vs UST
+2026 | ILSU vs UNI | Division I | 1 | 18 | ILSU vs UNI | ILSU vs UNI
+2026 | IND vs PUR | Division I | 1 | 34 | IND vs PUR | IND vs PUR
+2026 | IND vs UL | Division I | 1 | 30 | IND vs UL | IND vs UL
+2026 | INDI vs WC | Division I | 1 | 21 | INDI vs WC | INDI vs WC
+2026 | ISU vs IA | Division I | 1 | 25 | ISU vs IA | ISU vs IA
+2026 | ISU vs KANS | Division I | 1 | 24 | ISU vs KANS | ISU vs KANS
+2026 | JMU vs NAVY | Division I | 1 | 16 | JMU vs NAVY | JMU vs NAVY
+2026 | KALC vs ALMC | Division I | 1 | 21 | KALC vs ALMC | KALC vs ALMC
+2026 | KANS vs UARK | Division I | 1 | 20 | KANS vs UARK | KANS vs UARK
+2026 | LASU vs FORD | Division I | 1 | 31 | LASU vs FORD | LASU vs FORD
+2026 | LC vs MSMU | Division I | 1 | 19 | LC vs MSMU | LC vs MSMU
+2026 | LC vs NJIT | Division I | 1 | 12 | LC vs NJIT | LC vs NJIT
+2026 | LC vs RIDE | Division I | 1 | 28 | LC vs RIDE | LC vs RIDE
+2026 | LEMC vs CAN | Division I | 1 | 10 | LEMC vs CAN | LEMC vs CAN
+2026 | LSU vs TU | Division I | 1 | 16 | LSU vs TU | LSU vs TU
+2026 | LU vs CMPL vs GW | Division I | 1 | 21 | LU vs CMPL vs GW | LU vs CMPL vs GW
+2026 | Last Chance CMU | Division I | 1 | 22 | Last Chance CMU | Last Chance CMU
+2026 | Little Rock vs UTRGV | Division I | 1 | 4 | Little Rock vs UTRGV | Little Rock vs UTRGV
+2026 | Louisville First Chance | Division I | 1 | 9 | Louisville First Chance | Louisville First Chance
+2026 | Loyola vs Army West Point | Division I | 1 | 35 | Loyola vs Army West Point | Loyola vs Army West Point
+2026 | Loyola vs Bucknell | Division I | 1 | 29 | Loyola vs Bucknell | Loyola vs Bucknell
+2026 | MANK vs MSUM | Division I | 1 | 14 | MANK vs MSUM | MANK vs MSUM
+2026 | MARS vs DUQU | Division I | 1 | 20 | MARS vs DUQU | MARS vs DUQU
+2026 | MARS vs DUQU vs BGSU | Division I | 1 | 31 | MARS vs DUQU vs BGSU | MARS vs DUQU vs BGSU
+2026 | MARS vs TOL | Division I | 1 | 10 | MARS vs TOL | MARS vs TOL
+2026 | MASS vs BRNT | Division I | 1 | 30 | MASS vs BRNT | MASS vs BRNT
+2026 | MASS vs FU | Division I | 1 | 24 | MASS vs FU | MASS vs FU
+2026 | MAUN vs FAIR vs HLDC | Division I | 1 | 2 | MAUN vs FAIR vs HLDC | MAUN vs FAIR vs HLDC
+2026 | MC vs BING | Division I | 1 | 37 | MC vs BING | MC vs BING
+2026 | MIAF vs ND vs UNC | Division I | 1 | 38 | MIAF vs ND vs UNC | MIAF vs ND vs UNC
+2026 | MICH vs DENI | Division I | 1 | 19 | MICH vs DENI | MICH vs DENI
+2026 | MICH vs IND | Division I | 1 | 33 | MICH vs IND | MICH vs IND
+2026 | MIZZOU vs SIU | Division I | 1 | 22 | MIZZOU vs SIU | MIZZOU vs SIU
+2026 | MSUM vs UMary | Division I | 1 | 8 | MSUM vs UMary | MSUM vs UMary
+2026 | MU vs EMIU vs BALL | Division I | 1 | 32 | MU vs EMIU vs BALL | MU vs EMIU vs BALL
+2026 | MU vs KC vs XVIR | Division I | 1 | 30 | MU vs KC vs XVIR | MU vs KC vs XVIR
+2026 | Mardi Gras Invite 2026 | Division I | 1 | 36 | Mardi Gras Invite 2026 | Mardi Gras Invite 2026
+2026 | Michigan-Illinois Quad Meet | Division I | 1 | 42 | Michigan-Illinois Quad Meet | Michigan-Illinois Quad Meet
+2026 | Mountain Pacific Sports Federation Diving Championships | Division I | 1 | 221 | Mountain Pacific Sports Federation Diving Championships | Mountain Pacific Sports Federation Diving Championships
+2026 | NAVY vs CUBC | Division I | 1 | 19 | NAVY vs CUBC | NAVY vs CUBC
+2026 | NAVY vs UDEL vs PRIN vs KC | Division I | 1 | 85 | NAVY vs UDEL vs PRIN vs KC | NAVY vs UDEL vs PRIN vs KC
+2026 | NAZU vs CSU | Division I | 1 | 16 | NAZU vs CSU | NAZU vs CSU
+2026 | NCAA Division I Championships | Division I | 2 | 333 | 2026 NCAA Div I Mens Swimming and Diving Championships | 2026 NCAA Div I Womens Swimming and Diving Champions
+2026 | NCSU vs UNCW | Division I | 1 | 20 | NCSU vs UNCW | NCSU vs UNCW
+2026 | NCSU vs UVA | Division I | 1 | 6 | NCSU vs UVA | NCSU vs UVA
+2026 | NE vs STBR | Division I | 1 | 12 | NE vs STBR | NE vs STBR
+2026 | NJIT vs RIDE vs STBR | Division I | 1 | 19 | NJIT vs RIDE vs STBR | NJIT vs RIDE vs STBR
+2026 | NMU vs LSSU | Division I | 1 | 17 | NMU vs LSSU | NMU vs LSSU
+2026 | NMU vs UWSP | Division I | 1 | 27 | NMU vs UWSP | NMU vs UWSP
+2026 | NU vs WISC | Division I | 1 | 26 | NU vs WISC | NU vs WISC
+2026 | Northeastern Diving Invitational | Division I | 1 | 21 | Northeastern Diving Invitational | Northeastern Diving Invitational
+2026 | OAKU vs DENI vs MU | Division I | 1 | 39 | OAKU vs DENI vs MU | OAKU vs DENI vs MU
+2026 | OAKU vs WSUM | Division I | 1 | 22 | OAKU vs WSUM | OAKU vs WSUM
+2026 | OBU vs HSU - Rescheduled Again | Division I | 1 | 9 | OBU vs HSU - Rescheduled Again | OBU vs HSU - Rescheduled Again
+2026 | OMAHA vs UNI vs ST THOMAS | Division I | 1 | 49 | OMAHA vs UNI vs ST THOMAS | OMAHA vs UNI vs ST THOMAS
+2026 | OMAHA vs USD | Division I | 1 | 36 | OMAHA vs USD | OMAHA vs USD
+2026 | OSU vs MICH | Division I | 1 | 28 | OSU vs MICH | OSU vs MICH
+2026 | OSU vs PITT | Division I | 1 | 41 | OSU vs PITT | OSU vs PITT
+2026 | OU vs BGSU | Division I | 1 | 23 | OU vs BGSU | OU vs BGSU
+2026 | PA DII Diving Invite | Division I | 1 | 41 | PA DII Diving Invite | PA DII Diving Invite
+2026 | PA DII Last Chance Diving Invite (Official Meet) | Division I | 1 | 49 | PA DII Last Chance Diving Invite (Official Meet) | PA DII Last Chance Diving Invite (Official Meet)
+2026 | PACE vs BEN | Division I | 1 | 8 | PACE vs BEN | PACE vs BEN
+2026 | PACE vs Felician | Division I | 1 | 2 | PACE vs Felician | PACE vs Felician
+2026 | PENN vs DART vs YALE - M&W | Division I | 1 | 36 | PENN vs DART vs YALE - M&W | PENN vs DART vs YALE - M&W
+2026 | PENN vs DREX (M&W) | Division I | 1 | 22 | PENN vs DREX (M&W) | PENN vs DREX (M&W)
+2026 | PENN vs LASU (Men) | Division I | 1 | 9 | PENN vs LASU (Men) | PENN vs LASU (Men)
+2026 | PITT vs VU | Division I | 1 | 34 | PITT vs VU | PITT vs VU
+2026 | POMO vs CLMC | Division I | 1 | 30 | POMO vs CLMC | POMO vs CLMC
+2026 | POMO vs CUI vs BIU | Division I | 1 | 24 | POMO vs CUI vs BIU | POMO vs CUI vs BIU
+2026 | POMO vs WHIT | Division I | 1 | 18 | POMO vs WHIT | POMO vs WHIT
+2026 | PRIN vs PSU vs VT | Division I | 1 | 37 | PRIN vs PSU vs VT | PRIN vs PSU vs VT
+2026 | PROV vs CHCR 1 | Division I | 1 | 15 | PROV vs CHCR 1 | PROV vs CHCR 1
+2026 | PROV vs CHCR 2 | Division I | 1 | 15 | PROV vs CHCR 2 | PROV vs CHCR 2
+2026 | PSU vs GW | Division I | 1 | 36 | PSU vs GW | PSU vs GW
+2026 | PUR vs NU vs UMIN | Division I | 1 | 55 | PUR vs NU vs UMIN | PUR vs NU vs UMIN
+2026 | PUR vs SIU | Division I | 1 | 17 | PUR vs SIU | PUR vs SIU
+2026 | PUR vs UIUC | Division I | 1 | 17 | PUR vs UIUC | PUR vs UIUC
+2026 | Pepp vs APU | Division I | 1 | 14 | Pepp vs APU | Pepp vs APU
+2026 | Pepp vs USD | Division I | 1 | 18 | Pepp vs USD | Pepp vs USD
+2026 | RIDE vs FORD | Division I | 1 | 22 | RIDE vs FORD | RIDE vs FORD
+2026 | RUTG vs LASU | Division I | 1 | 16 | RUTG vs LASU | RUTG vs LASU
+2026 | Rutgers Platform Invitational | Division I | 1 | 18 | Rutgers Platform Invitational | Rutgers Platform Invitational
+2026 | SACR vs CCSU | Division I | 2 | 16 | SACR vs CCSU | SACR vs CCSU
+2026 | SCAR vs VT | Division I | 1 | 14 | SCAR vs VT | SCAR vs VT
+2026 | SCSU Diving invite 2026 | Division I | 1 | 35 | SCSU Diving invite 2026 | SCSU Diving invite 2026
+2026 | SCSU V SDSU | Division I | 1 | 8 | SCSU V SDSU | SCSU V SDSU
+2026 | SCSU vs AU | Division I | 1 | 4 | SCSU vs AU | SCSU vs AU
+2026 | SCSU vs BEN | Division I | 1 | 10 | SCSU vs BEN | SCSU vs BEN
+2026 | SCSU vs MMA | Division I | 1 | 11 | SCSU vs MMA | SCSU vs MMA
+2026 | SDSU vs PU | Division I | 1 | 20 | SDSU vs PU | SDSU vs PU
+2026 | SDSU vs UOSD | Division I | 1 | 20 | SDSU vs UOSD | SDSU vs UOSD
+2026 | SHU vs UCON | Division I | 1 | 17 | SHU vs UCON | SHU vs UCON
+2026 | SHU vs WAG | Division I | 1 | 15 | SHU vs WAG | SHU vs WAG
+2026 | SIU vs INSU vs UEVA | Division I | 1 | 25 | SIU vs INSU vs UEVA | SIU vs INSU vs UEVA
+2026 | SIU vs MCU | Division I | 1 | 11 | SIU vs MCU | SIU vs MCU
+2026 | STAN vs CAL | Division I | 1 | 14 | STAN vs CAL | STAN vs CAL
+2026 | STAN vs SJSU | Division I | 1 | 12 | STAN vs SJSU | STAN vs SJSU
+2026 | STAT vs BARU | Division I | 1 | 4 | STAT vs BARU | STAT vs BARU
+2026 | STAT vs BC | Division I | 1 | 4 | STAT vs BC | STAT vs BC
+2026 | STAT vs BRGP | Division I | 1 | 9 | STAT vs BRGP | STAT vs BRGP
+2026 | STBU vs COLG | Division I | 1 | 24 | STBU vs COLG | STBU vs COLG
+2026 | STLU vs OMAH | Division I | 2 | 24 | STLU vs OMAH | STLU vs OMAH
+2026 | SVSU vs ASHU | Division I | 1 | 17 | SVSU vs ASHU | SVSU vs ASHU
+2026 | SVSU vs LSSU | Division I | 1 | 6 | SVSU vs LSSU | SVSU vs LSSU
+2026 | TAM vs BAMA | Division I | 1 | 30 | TAM vs BAMA | TAM vs BAMA
+2026 | TAM vs TEX | Division I | 1 | 34 | TAM vs TEX | TAM vs TEX
+2026 | TCNJ vs MONT | Division I | 1 | 20 | TCNJ vs MONT | TCNJ vs MONT
+2026 | TCNJ vs RU | Division I | 1 | 14 | TCNJ vs RU | TCNJ vs RU
+2026 | TCNJ vs SWRM | Division I | 1 | 15 | TCNJ vs SWRM | TCNJ vs SWRM
+2026 | TCU vs TUTX | Division I | 1 | 26 | TCU vs TUTX | TCU vs TUTX
+2026 | TCU vs UTPB | Division I | 1 | 19 | TCU vs UTPB | TCU vs UTPB
+2026 | TENN vs DUKE | Division I | 1 | 26 | TENN vs DUKE | TENN vs DUKE
+2026 | TEX - OSU - UL | Division I | 1 | 41 | TEX - OSU - UL | TEX - OSU - UL
+2026 | TEX vs UIW vs TUTX vs TCU | Division I | 1 | 15 | TEX vs UIW vs TUTX vs TCU | TEX vs UIW vs TUTX vs TCU
+2026 | TOL vs BGSU | Division I | 1 | 6 | TOL vs BGSU | TOL vs BGSU
+2026 | TU vs GW | Division I | 1 | 28 | TU vs GW | TU vs GW
+2026 | TU vs NAVY | Division I | 1 | 16 | TU vs NAVY | TU vs NAVY
+2026 | TU vs UMBC | Division I | 1 | 32 | TU vs UMBC | TU vs UMBC
+2026 | Tate Ramsden Invite | Division I | 1 | 39 | Tate Ramsden Invite | Tate Ramsden Invite
+2026 | Towson Diving Invitational | Division I | 1 | 50 | Towson Diving Invitational | Towson Diving Invitational
+2026 | UARK vs UNT | Division I | 1 | 32 | UARK vs UNT | UARK vs UNT
+2026 | UCHI vs CALC | Division I | 1 | 24 | UCHI vs CALC | UCHI vs CALC
+2026 | UCHI vs NU | Division I | 1 | 32 | UCHI vs NU | UCHI vs NU
+2026 | UCHI vs UIC | Division I | 1 | 28 | UCHI vs UIC | UCHI vs UIC
+2026 | UCIN vs XVIR | Division I | 1 | 6 | UCIN vs XVIR | UCIN vs XVIR
+2026 | UCLA vs CAL | Division I | 1 | 12 | UCLA vs CAL | UCLA vs CAL
+2026 | UCLA vs NEV vs USC | Division I | 1 | 36 | UCLA vs NEV vs USC | UCLA vs NEV vs USC
+2026 | UCLA vs STAN | Division I | 1 | 12 | UCLA vs STAN | UCLA vs STAN
+2026 | UCON vs MASS | Division I | 1 | 25 | UCON vs MASS | UCON vs MASS
+2026 | UCON vs PROV | Division I | 1 | 19 | UCON vs PROV | UCON vs PROV
+2026 | UCON vs UVM | Division I | 1 | 17 | UCON vs UVM | UCON vs UVM
+2026 | UCSC vs CSUB | Division I | 1 | 23 | UCSC vs CSUB | UCSC vs CSUB
+2026 | UCSC vs Simpson | Division I | 1 | 26 | UCSC vs Simpson | UCSC vs Simpson
+2026 | UDEL vs GMU | Division I | 1 | 28 | UDEL vs GMU | UDEL vs GMU
+2026 | UEVA vs UIC | Division I | 1 | 26 | UEVA vs UIC | UEVA vs UIC
+2026 | UGA vs EMU | Division I | 1 | 18 | UGA vs EMU | UGA vs EMU
+2026 | UGA vs TENN | Division I | 1 | 18 | UGA vs TENN | UGA vs TENN
+2026 | UGA vs UARK vs FSU | Division I | 1 | 34 | UGA vs UARK vs FSU | UGA vs UARK vs FSU
+2026 | UIC Diving Invite @ University of Illinois at Chicago | Division I | 1 | 75 | UIC Diving Invite @ University of Illinois at Chicago | UIC Diving Invite @ University of Illinois at Chicago
+2026 | UIC vs MISS | Division I | 2 | 30 | UIC vs MISS | UIC vs MISS
+2026 | UK vs MIZ | Division I | 1 | 30 | UK vs MIZ | UK vs MIZ
+2026 | UK vs ND | Division I | 1 | 32 | UK vs ND | UK vs ND
+2026 | UK vs TAM | Division I | 1 | 34 | UK vs TAM | UK vs TAM
+2026 | UK vs UCIN | Division I | 1 | 26 | UK vs UCIN | UK vs UCIN
+2026 | UL Saturday Last Chance AM | Division I | 1 | 14 | UL Saturday Last Chance AM | UL Saturday Last Chance AM
+2026 | UL Saturday Last Chance PM | Division I | 1 | 12 | UL Saturday Last Chance PM | UL Saturday Last Chance PM
+2026 | UL vs MIZ | Division I | 1 | 26 | UL vs MIZ | UL vs MIZ
+2026 | UL vs UCIN | Division I | 1 | 22 | UL vs UCIN | UL vs UCIN
+2026 | UM vs UJ | Division I | 1 | 1 | UM vs UJ | UM vs UJ
+2026 | UMBC vs UMW | Division I | 1 | 24 | UMBC vs UMW | UMBC vs UMW
+2026 | UMEO vs BOWD | Division I | 1 | 18 | UMEO vs BOWD | UMEO vs BOWD
+2026 | UMEO vs PROV | Division I | 1 | 22 | UMEO vs PROV | UMEO vs PROV
+2026 | UMEO vs UNH | Division I | 1 | 8 | UMEO vs UNH | UMEO vs UNH
+2026 | UMIN vs SDKS vs UST | Division I | 1 | 37 | UMIN vs SDKS vs UST | UMIN vs SDKS vs UST
+2026 | UNC vs NCSU | Division I | 1 | 12 | UNC vs NCSU | UNC vs NCSU
+2026 | UNC vs UNCW vs BC | Division I | 1 | 29 | UNC vs UNCW vs BC | UNC vs UNCW vs BC
+2026 | UNCO vs WSU | Division I | 1 | 8 | UNCO vs WSU | UNCO vs WSU
+2026 | UNH vs RI | Division I | 1 | 10 | UNH vs RI | UNH vs RI
+2026 | UNH vs UCON | Division I | 1 | 14 | UNH vs UCON | UNH vs UCON
+2026 | UNI vs ISU vs UST | Division I | 1 | 27 | UNI vs ISU vs UST | UNI vs ISU vs UST
+2026 | UNL vs RUTG | Division I | 1 | 21 | UNL vs RUTG | UNL vs RUTG
+2026 | UNLV vs FPU | Division I | 1 | 8 | UNLV vs FPU | UNLV vs FPU
+2026 | UNLV vs NEV | Division I | 1 | 15 | UNLV vs NEV | UNLV vs NEV
+2026 | UNM vs NAZU | Division I | 1 | 18 | UNM vs NAZU | UNM vs NAZU
+2026 | UOSD vs UCSD Event 1 | Division I | 1 | 4 | UOSD vs UCSD Event 1 | UOSD vs UCSD Event 1
+2026 | UOSD vs UCSD Event 2 | Division I | 1 | 4 | UOSD vs UCSD Event 2 | UOSD vs UCSD Event 2
+2026 | UOSD vs VBLT @ SDSU | Division I | 1 | 14 | UOSD vs VBLT @ SDSU | UOSD vs VBLT @ SDSU
+2026 | URI vs CCSU | Division I | 1 | 15 | URI vs CCSU | URI vs CCSU
+2026 | URI vs UVM | Division I | 1 | 12 | URI vs UVM | URI vs UVM
+2026 | URVA vs JMU | Division I | 1 | 9 | URVA vs JMU | URVA vs JMU
+2026 | URVA vs ODU vs ECU | Division I | 1 | 16 | URVA vs ODU vs ECU | URVA vs ODU vs ECU
+2026 | USC vs CAL | Division I | 1 | 28 | USC vs CAL | USC vs CAL
+2026 | USC vs STAN | Division I | 1 | 28 | USC vs STAN | USC vs STAN
+2026 | USD vs SDKS | Division I | 1 | 22 | USD vs SDKS | USD vs SDKS
+2026 | USI vs UEVA | Division I | 1 | 25 | USI vs UEVA | USI vs UEVA
+2026 | USI vs UIC | Division I | 1 | 35 | USI vs UIC | USI vs UIC
+2026 | USMA vs BUCK | Division I | 1 | 29 | USMA vs BUCK | USMA vs BUCK
+2026 | UST vs AUSF | Division I | 1 | 22 | UST vs AUSF | UST vs AUSF
+2026 | UST vs USD | Division I | 1 | 35 | UST vs USD | UST vs USD
+2026 | UTAH vs SMU | Division I | 1 | 27 | UTAH vs SMU | UTAH vs SMU
+2026 | UTRG vs NMSU | Division I | 1 | 14 | UTRG vs NMSU | UTRG vs NMSU
+2026 | UVM vs SIEN | Division I | 1 | 14 | UVM vs SIEN | UVM vs SIEN
+2026 | UW - Milwaukee vs UWGB | Division I | 1 | 10 | UW - Milwaukee vs UWGB | UW - Milwaukee vs UWGB
+2026 | UW Milwaukee vs UWSP | Division I | 1 | 27 | UW Milwaukee vs UWSP | UW Milwaukee vs UWSP
+2026 | UW-Milwaukee vs MSOE | Division I | 1 | 18 | UW-Milwaukee vs MSOE | UW-Milwaukee vs MSOE
+2026 | UWF vs OBU | Division I | 1 | 16 | UWF vs OBU | UWF vs OBU
+2026 | UWF vs TU | Division I | 1 | 16 | UWF vs TU | UWF vs TU
+2026 | UWLC vs UWSP | Division I | 1 | 41 | UWLC vs UWSP | UWLC vs UWSP
+2026 | VMI vs HOW | Division I | 1 | 23 | VMI vs HOW | VMI vs HOW
+2026 | VMI vs WLEE | Division I | 1 | 14 | VMI vs WLEE | VMI vs WLEE
+2026 | VT vs QUOC | Division I | 1 | 8 | VT vs QUOC | VT vs QUOC
+2026 | VT vs UVA | Division I | 1 | 10 | VT vs UVA | VT vs UVA
+2026 | VU Instrasquad Meet | Division I | 1 | 2 | VU Instrasquad Meet | VU Instrasquad Meet
+2026 | VU vs JMU | Division I | 1 | 20 | VU vs JMU | VU vs JMU
+2026 | VU vs SHU | Division I | 1 | 8 | VU vs SHU | VU vs SHU
+2026 | VU vs URVA | Division I | 1 | 18 | VU vs URVA | VU vs URVA
+2026 | WCU vs ASU | Division I | 1 | 1 | WCU vs ASU | WCU vs ASU
+2026 | WCUP vs PENN | Division I | 1 | 23 | WCUP vs PENN | WCUP vs PENN
+2026 | WSUM vs DAVE | Division I | 1 | 30 | WSUM vs DAVE | WSUM vs DAVE
+2026 | WSUM vs GVSU | Division I | 1 | 32 | WSUM vs GVSU | WSUM vs GVSU
+2026 | WVU vs PITT | Division I | 1 | 48 | WVU vs PITT | WVU vs PITT
+2026 | WVU vs PSU | Division I | 1 | 33 | WVU vs PSU | WVU vs PSU
+2026 | WVU vs VU vs DUQU | Division I | 1 | 37 | WVU vs VU vs DUQU | WVU vs VU vs DUQU
+2026 | WYO vs WSU | Division I | 1 | 6 | WYO vs WSU | WYO vs WSU
+2026 | Western PA Invite | Division I | 1 | 10 | Western PA Invite | Western PA Invite
+2026 | YALE vs CORU | Division I | 1 | 31 | YALE vs CORU | YALE vs CORU
+2026 | YSU vs INDI | Division I | 1 | 25 | YSU vs INDI | YSU vs INDI
+
+## rounds / dive counts / cumulative, senior-level 2025-26
+event_level | gender | discipline | event_round | round_stage | phase_dive_count | score_is_cumulative | rows
+Senior | Female | 3m | Senior Women 3m (Final) | Final | 5 | False | 106
+Senior | Male | 3m | Senior Men 3m (Prelim / Quarterfinal) | Prelim | 6 | False | 100
+Senior | Female | 1m | Senior Women 1m (Final) | Final | 5 | False | 91
+Senior | Male | 3m | Senior Men 3m (Final) | Final | 6 | False | 89
+Senior | Female | 3m | Senior Women 3m (Prelim / Quarterfinal) | Prelim | 5 | False | 84
+Senior | Male | 1m | Senior Men 1m (Prelim / Quarterfinal) | Prelim | 6 | False | 79
+Senior | Female | 1m | Senior Women 1m (Prelim / Quarterfinal) | Prelim | 5 | False | 76
+Senior | Male | 1m | Senior Men 1m (Final) | Final | 6 | False | 68
+Senior | Female | Platform | Senior Women Platform (Prelim / Quarterfinal) | Prelim | 5 | False | 65
+Senior | Male | Platform | Senior Men Platform (Prelim / Quarterfinal) | Prelim | 6 | False | 55
+Senior | Female | 3m | Senior Women 3m (Final) | Final |  | False | 42
+Senior | Female | Platform | Senior Women Platform (Final) | Final | 5 | False | 40
+Senior | Female | Platform | Senior Women Platform (Final) | Final | 5 | True | 39
+Senior | Male | 3m | Senior Men 3m (Final) | Final | 6 | True | 39
+Senior | Female | 3m | Senior Women 3m (Final) | Final | 5 | True | 39
+Senior | Male | Platform | Senior Men Platform (Final) | Final | 6 | True | 37
+Senior | Female | 1m | Senior Women 1m (Final) | Final | 5 | True | 34
+Senior | Male | 1m | Senior Men 1m (Final) | Final | 6 | True | 34
+Senior | Female | 1m | Senior Women 1m (Final) | Final |  | False | 33
+Senior | Male | Platform | Senior Men Platform (Final) | Final | 6 | False | 30
+Senior | Female | Platform | Senior Women Platform (Semifinal / Semifinal A) | Semifinal | 5 | False | 20
+Senior | Female | 3m | Senior Women 3m (Semifinal / Semifinal A) | Semifinal | 5 | False | 18
+Senior | Male | 3m | Senior Men 3m (Semifinal / Semifinal A) | Semifinal | 6 | False | 18
+Senior | Male | Platform | Senior Men Platform (Semifinal / Semifinal A) | Semifinal | 6 | False | 16
+Senior | Male | 1m | Senior Men 1m (Final) | Final |  | False | 15
+Senior | Male | 3m | Senior Men 3m (Final) | Final |  | False | 10
+Senior | Female | Platform | Senior Women Platform (Final) | Final |  | False | 5
+Senior | Male | Platform | Senior Men Platform (Final) | Final |  | False | 3
+Senior | Male | Platform | Senior Men Platform (Prelim / Quarterfinal) | Prelim | 6 | True | 1
+
+## event_level x age_group values 2025-26
+event_level | age_group | gender | discipline | count
+Senior/Open |  | Female | 1m | 5125
+Senior/Open |  | Female | 3m | 4916
+Senior/Open |  | Male | 1m | 3185
+Senior/Open |  | Male | 3m | 3138
+Other | Group A | Female | 1m | 1836
+Other | Group C | Female | 1m | 1673
+Senior/Open |  | Female | Platform | 1602
+Other | Group A | Female | 3m | 1551
+Other | Group B | Female | 1m | 1416
+Other | Group D | Female | 1m | 1404
+Other | Group C | Female | 3m | 1403
+Other |  | Female | 1m | 1342
+Other |  | Female | 3m | 1194
+Other | Group D | Female | 3m | 1167
+Other | Group B | Female | 3m | 1150
+Senior/Open |  | Male | Platform | 1074
+Other | Group A | Male | 1m | 1023
+Junior | Group A | Female | 1m | 1017
+Other | Group A | Male | 3m | 942
+Junior | Group A | Female | 3m | 904
+Other | Group C | Male | 1m | 738
+Other | Group B | Male | 1m | 721
+Other | Group D | Male | 1m | 717
+Other |  | Male | 1m | 662
+Other | Group C | Male | 3m | 642
+Other | Group B | Male | 3m | 635
+Junior | Group A | Male | 1m | 627
+Junior | Group B | Female | 1m | 620
+Other | Group A | Female | Platform | 607
+Other |  | Male | 3m | 605
+Other | Group D | Male | 3m | 594
+Junior | Group A | Male | 3m | 581
+Junior | Group B | Female | 3m | 551
+Junior | Group C | Female | 1m | 434
+Other | Group B | Female | Platform | 416
+Junior | Group B | Male | 1m | 385
+Junior | Group C | Female | 3m | 363
+Junior | Group B | Male | 3m | 358
+Other | Group C | Female | Platform | 344
+Other | Group A | Male | Platform | 331
+Junior | Group D | Female | 1m | 295
+Senior | Senior | Female | 3m | 289
+Senior/Open | Senior | Male | 3m | 280
+Junior | Group C | Male | 1m | 266
+Senior | Senior | Male | 3m | 256
+Senior/Open | Senior | Female | 3m | 251
+Junior | Group D | Male | 1m | 248
+Junior | Group D | Female | 3m | 248
+Senior/Open | Senior | Male | Platform | 235
+Senior | Senior | Female | 1m | 234
+Junior | Group C | Male | 3m | 229
+Other | Group B | Male | Platform | 227
+Senior/Open | Senior | Female | Platform | 226
+Junior | Group D | Male | 3m | 211
+Senior/Open |  | Female |  | 204
+Senior | Senior | Male | 1m | 196
+Junior | Group A | Female | Platform | 192
+Other | Group D | Female | Platform | 192
+Other | Group C | Male | Platform | 175
+Junior | Group B | Female | Platform | 171
+
+## nat population
+nat_blank | count
+False | 1528
+True | 53922
+
+## role can read
+has_table_privilege | has_table_privilege
+True | True
