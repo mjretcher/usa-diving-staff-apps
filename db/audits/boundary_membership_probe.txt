@@ -1,0 +1,40 @@
+year | rows | distinct members | last loaded | rows with no zip
+2024 | 6523 | 6519 | 2026-07-20 12:39:52.603775+00:00 | 7
+2025 | 5885 | 5881 | 2026-07-20 12:39:55.654364+00:00 | 19
+2026 | 5537 | 5533 | 2026-11-12 21:42:54.135000+00:00 | 3
+
+year | member_status | rows
+2024 | Lapsed | 4057
+2024 | Current | 2270
+2024 | Pending | 174
+2024 | None | 12
+2024 | Suspended | 9
+2024 | Unpaid | 1
+2025 | Current | 3061
+2025 | Lapsed | 2604
+2025 | Pending | 205
+2025 | Suspended | 8
+2025 | None | 6
+2025 | Unpaid | 1
+2026 | Current | 5150
+2026 | Pending | 387
+
+=== 2024: 6523 rows; file total m = 5825, a = 4879, c = 684
+  rule 'rows': total m 5829 a 4879 c 684 unmappable 694 | counties differing: m 4, a 0, c 0, a(distinct ids) 0, c(distinct ids) 0, club count 0, club set 0 of 491 | zips differing 4 of 2840
+  rule 'distinct member (first row)': total m 5825 a 4879 c 682 unmappable 694 | counties differing: m 0, a 0, c 2, a(distinct ids) 0, c(distinct ids) 0, club count 0, club set 0 of 491 | zips differing 0 of 2840
+
+=== 2025: 5885 rows; file total m = 5845, a = 4861, c = 722
+  rule 'rows': total m 5849 a 4861 c 722 unmappable 36 | counties differing: m 4, a 0, c 0, a(distinct ids) 0, c(distinct ids) 0, club count 0, club set 0 of 612 | zips differing 4 of 2840
+  rule 'distinct member (first row)': total m 5845 a 4861 c 720 unmappable 36 | counties differing: m 0, a 0, c 2, a(distinct ids) 0, c(distinct ids) 0, club count 0, club set 0 of 612 | zips differing 0 of 2840
+
+=== 2026: 5537 rows; file total m = 4730, a = 3862, c = 619
+  rule 'rows': total m 5368 a 4458 c 647 unmappable 169 | counties differing: m 150, a 139, c 36, a(distinct ids) 139, c(distinct ids) 36, club count 57, club set 66 of 612 | zips differing 411 of 2840
+  rule 'distinct member (first row)': total m 5364 a 4458 c 645 unmappable 169 | counties differing: m 150, a 139, c 36, a(distinct ids) 139, c(distinct ids) 36, club count 57, club set 66 of 612 | zips differing 407 of 2840
+
+2026 zips in the database: 2345; not in the map's zip list: 138 zips, 169 rows
+clubs-zip.json keys: ['built', 'source', 'zips']
+clubs-zip zips: 42555 | sample: [('10001', [869.7, 214.9, 'NY', '36061']), ('10002', [870, 215.6, 'NY', '36061'])]
+of the new 2026 zips, covered by clubs-zip.json: 116 rows 141
+
+ingest_log cols: ['id', 'membership_year', 'source_file', 'row_count', 'loaded_at', 'notes']
+ingest_log: (3, datetime.datetime(2026, 7, 20, 12, 39, 58, 289003, tzinfo=datetime.timezone.utc))
