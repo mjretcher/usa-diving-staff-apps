@@ -2276,3 +2276,14 @@ html[data-theme="deck"] .pl-row.sel .pl-sticky{background:#12283A}
 .qc-miss{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px}
 .qc-miss span{font-size:12px;font-weight:600;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;border-radius:6px;padding:2px 8px}
 .qc-not{margin:0 0 6px 18px;padding:0;font-size:12px;line-height:1.6;color:var(--tx2)}
+.conflict-acts{margin-left:auto;display:flex;flex-direction:column;gap:5px;align-items:stretch;align-self:center;flex-shrink:0}
+.conflict-acts .conflict-fix{margin-left:0}
+.conflict-dismiss{height:26px;padding:0 13px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid var(--bd2);background:var(--surf);color:var(--tx2);cursor:pointer;transition:.12s}
+.conflict-dismiss:hover{border-color:var(--bd3);color:var(--tx)}
+.conflict-dismissed{margin-top:14px;border-top:1px solid var(--bd);padding-top:10px}
+.conflict-dismissed summary{font-size:12px;font-weight:600;color:var(--tx2);cursor:pointer}
+.conflict-drow{display:flex;align-items:center;gap:12px;padding:8px 2px;border-bottom:1px solid var(--bd);font-size:12px}
+.conflict-drow>div{flex:1;min-width:0}
+.conflict-drow b{display:block;font-weight:600;color:var(--tx)}
+.conflict-drow span{display:block;color:var(--tx2);line-height:1.4}
+.conflict-drow em{font-style:normal;font-size:11px;color:var(--tx3)}

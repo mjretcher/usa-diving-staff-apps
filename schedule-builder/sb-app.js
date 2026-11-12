@@ -3274,7 +3274,7 @@ function renderBar(timed){
   // weekday and a calendar number that would be pure fiction.
   const _dpend=datesPending();
   const days=S.meet.days.map((d,di)=>{const dt=dayEventTagOf(d);const dd=new Date(`${d.date}T00:00:00`);const wd=_dpend?'DAY':(isNaN(dd)?d.date:dd.toLocaleDateString('en-US',{weekday:'short'}));const dn=_dpend?(di+1):(isNaN(dd)?'':dd.getDate());const dlk=dayLocked(d.id);return`<button class="dp ${d.id===UI.dayId?'active':''} ${dlk?'locked':''}" onclick="selectDay('${d.id}')" data-day="${d.id}" title="${fullDate(d.date)}${dt?' — '+dt.l:''}${dlk?' — locked, read-only':''}">${dt?`<span class="dp-tag-dot" style="background:${dt.c}"></span>`:''}<span class="dp-wd">${wd}</span><span class="dp-num">${dn}</span>${dlk?`<span class="dp-lock" aria-label="locked">\u{1F512}</span>`:''}</button>`}).join('');
-  const conflicts=detectConflicts();
+  const conflicts=detectConflicts().filter(i=>!healthDismissed(i));
   const errCount=conflicts.filter(c=>c.sev==='err').length;
   const conflictBadge=conflicts.length?`<span style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;border-radius:8px;background:${errCount?'var(--red)':'var(--warn)'};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 3px">${conflicts.length}</span>`:'';
   return`<header class="bar">
@@ -5289,12 +5289,36 @@ try{document.documentElement.dataset.theme=localStorage.getItem('sbTheme')||''}c
 // ── SCHEDULE HEALTH ───────────────────────────────────────────────────
 // One number that grades the whole meet against the validation rules:
 // 100 minus weighted penalties (errors 10, warnings 4, info 1), floor 25.
+// A finding's identity for "dismiss for good". Built from what it is and where it
+// is, with clock times and counts taken out of the wording, so it stays dismissed
+// when the day is re-timed but a different finding on the same block still shows.
+function healthKey(i){
+  const d=String(i.detail||'').replace(/\d{1,2}:\d{2}\s*(AM|PM)?/gi,'#').replace(/\d+(\.\d+)?/g,'#');
+  return[i.title||'',i.fixSessId||'',i.dayId||'',d].join('|');
+}
+function healthDismissed(i){return i.sev!=='err'&&(S.dismissedHealth||[]).includes(healthKey(i));}
+function dismissHealth(idx){
+  const c=detectConflicts()[idx];if(!c||c.sev==='err')return;
+  const k=healthKey(c);
+  upd(s=>{if(!s.dismissedHealth)s.dismissedHealth=[];if(!s.dismissedHealth.includes(k))s.dismissedHealth.push(k);});
+  toast('Dismissed. It stays hidden on this schedule for everyone until restored.',3200);
+}
+function restoreHealth(idx){
+  const c=detectConflicts()[idx];if(!c)return;
+  const k=healthKey(c);
+  upd(s=>{s.dismissedHealth=(s.dismissedHealth||[]).filter(x=>x!==k);});
+}
+// Score: errors 10, warnings 4. Notes are information and cost nothing, and
+// anything dismissed is left out. `all` keeps the full list so row indexes line
+// up with resolveConflict(), which reads detectConflicts() directly.
 function computeHealth(){
-  const issues=detectConflicts();
+  const all=detectConflicts();
+  const issues=all.filter(i=>!healthDismissed(i));
+  const dismissed=all.filter(i=>healthDismissed(i));
   let score=100;
-  issues.forEach(i=>{score-=i.sev==='err'?10:i.sev==='warn'?4:1});
+  issues.forEach(i=>{score-=i.sev==='err'?10:i.sev==='warn'?4:0});
   score=Math.max(25,score);
-  return{score,issues,errs:issues.filter(i=>i.sev==='err').length,warns:issues.filter(i=>i.sev==='warn').length};
+  return{score,issues,all,dismissed,errs:issues.filter(i=>i.sev==='err').length,warns:issues.filter(i=>i.sev==='warn').length};
 }
 
 // ── ATHLETE INTELLIGENCE (advisory only) ─────────────────────────────
@@ -6026,13 +6050,14 @@ function renderConflictsModal(){
     <div class="modal-body">
       ${impactSection}
       ${conflicts.length?`<div class="conflicts-list">${ordered.map((c)=>{
-        const realIdx=conflicts.indexOf(c);
+        const realIdx=h.all.indexOf(c);
         const fixLabel=c.fixHint==='autoSpace'?'Auto-fix spacing':c.fixHint==='entries'?'Enter counts':'Open & fix';
         return`<div class="conflict-item ${c.sev} clickable" onclick="resolveConflict(${realIdx})">
         <div class="conflict-icon ${c.sev}">${c.sev==='err'?'!':c.sev==='warn'?'!':'i'}</div>
         <div class="conflict-body"><div class="conflict-title">${esc(c.title)}</div><div class="conflict-detail">${esc(c.detail)}</div><div class="conflict-loc">${esc(c.loc)}</div></div>
-        <button class="conflict-fix" onclick="event.stopPropagation();resolveConflict(${realIdx})">${fixLabel} →</button>
-      </div>`;}).join('')}</div>`:`<div class="conflict-ok"><div class="conflict-ok-icon">✓</div><div class="empty-title">No conflicts found</div><div class="empty-sub">Your schedule looks clean — no overlaps, boundary issues, or missing entries.</div></div>`}
+        <div class="conflict-acts"><button class="conflict-fix" onclick="event.stopPropagation();resolveConflict(${realIdx})">${fixLabel} →</button>${c.sev!=='err'?`<button class="conflict-dismiss" title="Hide this for good on this schedule. It can be restored from the Dismissed list below." onclick="event.stopPropagation();dismissHealth(${realIdx})">Dismiss</button>`:''}</div>
+      </div>`;}).join('')}</div>`:`<div class="conflict-ok"><div class="conflict-ok-icon">✓</div><div class="empty-title">No conflicts found</div><div class="empty-sub">${h.dismissed.length?'Nothing open. Dismissed items are listed below.':'Your schedule looks clean — no overlaps, boundary issues, or missing entries.'}</div></div>`}
+      ${h.dismissed.length?`<details class="conflict-dismissed"><summary>Dismissed (${h.dismissed.length})</summary>${h.dismissed.map(c=>`<div class="conflict-drow"><div><b>${esc(c.title)}</b><span>${esc(c.detail)}</span><em>${esc(c.loc)}</em></div><button class="btn btn-sm" onclick="restoreHealth(${h.all.indexOf(c)})">Restore</button></div>`).join('')}</details>`:''}
     </div>
     <div class="modal-foot"><button class="btn btn-p" onclick="closeModal()">Done</button></div>
   </div>`;
