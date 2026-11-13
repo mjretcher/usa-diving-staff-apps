@@ -7691,11 +7691,29 @@ function loadAutoData(){
 }
 
 // County weights for the current year, in auto-data county order.
+/* What the auto-draw can even out. The two membership-type counts exist for
+   2026 only (the year the import keeps exact types); in another season they
+   fall back to all athletes. */
+const AUTO_BASES = [
+  {k:'t_comp',   label:'Competition Athletes', col:'Comp athletes',   typed:true, hint:'The members who can enter Regionals'},
+  {k:'t_ath',    label:'Athlete members',      col:'Athlete members', typed:true, hint:'Athlete (17U and AQUA Age 18+) memberships, not Competition Athlete'},
+  {k:'athletes', label:'All athletes',         col:'Athletes',        hint:'Athlete, Competition Athlete and Introductory together'},
+  {k:'members',  label:'All members',          col:'Members',         hint:'Every membership type, coaches and officials included'},
+];
+function autoBasis(){
+  const b = AUTO_BASES.find(x => x.k === AUTO.basis) || AUTO_BASES[3];
+  return b.typed && !mtypeYearOk() ? AUTO_BASES[2] : b;
+}
 function autoWeights(A, basis){
   const st = S.geo.stats, y = S.year;
+  const b = AUTO_BASES.find(x => x.k === basis) || AUTO_BASES[3];
+  if (b.typed && mtypeYearOk()){
+    const types = MTYPE_METRICS[b.k].types, by = S.mtypes.byCounty;
+    return A.fips.map(f => { const t = by[f] && by[f][y]; return t ? types.reduce((a, ty) => a + (t[ty] || 0), 0) : 0; });
+  }
   return A.fips.map(f => {
     const s = st[f]; if (!s || !s[y]) return 0;
-    return basis === 'athletes' ? (s[y].a || 0) : (s[y].m || 0);
+    return (b.k === 'members') ? (s[y].m || 0) : (s[y].a || 0);
   });
 }
 
@@ -7742,7 +7760,7 @@ function picksNeedBase(){
   return (AUTO.picks||[]).some(k => (AUTO_PRESETS.find(x=>x.k===k)||{}).needsBase);
 }
 
-const AUTO = { n: 9, basis: 'members', preset: 'blend', result: null,
+const AUTO = { n: 9, basis: 't_comp', preset: 'blend', result: null,
                busy: false, locks: [], stages: null, withNationals: true, prep: null, picks: ['blend'], tz: false,
                // Host sites are no longer a user choice, but the two things
                // that control did are separable and only one of them should go.
@@ -7983,8 +8001,8 @@ function renderAutoDialog(){
           <div class="aa-sec">
             <div class="aa-h"><span>3</span>Balance by</div>
             <div class="bs-auto-chips">
-              <button class="${AUTO.basis === 'members' ? 'on' : ''}" onclick="window._bsAutoBasis('members')">All members</button>
-              <button class="${AUTO.basis === 'athletes' ? 'on' : ''}" onclick="window._bsAutoBasis('athletes')">Athletes only</button>
+              ${AUTO_BASES.map(b => { const off = b.typed && !mtypeYearOk();
+                return `<button class="${autoBasis().k === b.k ? 'on' : ''}" ${off ? 'disabled' : ''} title="${esc(off ? 'Counted by membership type for 2026 only' : b.hint)}" onclick="window._bsAutoBasis('${b.k}')">${esc(b.label)}</button>`; }).join('')}
             </div>
             <div class="bs-auto-hint" style="margin-top:6px">Using ${yearLabelBoundary(S.year)} membership. Change the season on the map first for a different year.</div>
           </div>
@@ -8019,7 +8037,7 @@ function renderAutoDialog(){
               ${r.stats.travelMi != null ? `<div><b>${Math.round(r.stats.travelMi)} mi</b><span>average trip to the area centre</span></div>` : ''}
               ${(r.stats.continuity != null && r.stats.continuity > 0) ? `<div><b>${Math.round(100 * (1 - r.stats.continuity))}%</b><span>of members stay where they are</span></div>` : ''}
             </div>
-            <table class="bs-auto-tbl"><thead><tr><th>${esc(singulariseLevel(st[0].name) || 'Area')}</th>${prep.chain.length ? `<th>${esc(st[1] ? st[1].name : '')}</th>` : ''}<th class="num">${AUTO.basis === 'athletes' ? 'Athletes' : 'Members'}</th><th class="num">Counties</th></tr></thead>
+            <table class="bs-auto-tbl"><thead><tr><th>${esc(singulariseLevel(st[0].name) || 'Area')}</th>${prep.chain.length ? `<th>${esc(st[1] ? st[1].name : '')}</th>` : ''}<th class="num">${esc(autoBasis().col)}</th><th class="num">Counties</th></tr></thead>
               <tbody>${prep.size.map((w, i) => `<tr><td><span class="sw" style="background:${colOf(i)}"></span>${esc(areaOf(i) || ((singulariseLevel(st[0].name) || 'Area') + ' ' + (i + 1)))}</td>${prep.chain.length ? `<td>${esc(groupOf(i))}</td>` : ''}<td class="num">${fmt(Math.round(w))}</td><td class="num">${fmt(prep.cnt[i])}</td></tr>`).join('')}</tbody></table>
             ${r.splitStates ? `<div class="bs-auto-hint aa-splitres">${(() => { const ok = new Set(S.statePolicy.splitOk); const xs = r.splitStates.filter(x => ok.has(x.st)); return xs.length ? 'Split: ' + xs.map(x => `${esc(US_STATES[x.st] || x.st)} into ${x.n} areas`).join(' · ') + '. Every other state is whole.' : 'No state is split.'; })()}</div>` : ''}
             <div class="bs-auto-legend">Numbers run from the northeast, and each area touches the next where the map allows. Areas are always connected.</div>`}
