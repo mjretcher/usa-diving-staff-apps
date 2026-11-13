@@ -3170,9 +3170,12 @@ function bsPick(opts){
     const list = q => groups.map(g => {
       const rows = items.filter(i => (i.group || '') === g && (!q || (i.label + ' ' + (i.sub || '')).toLowerCase().includes(q)));
       if (!rows.length) return '';
-      return (g ? `<div class="bs-pick-g">${esc(g)}</div>` : '') + rows.map(i =>
-        `<button class="bs-pick-row${i.big ? ' big' : ''}${i.current ? ' cur' : ''}" data-pick="${esc(i.id)}">
-          <b>${esc(i.label)}</b>${i.tag ? `<span class="bs-pick-tag">${esc(i.tag)}</span>` : ''}${i.sub ? `<span>${esc(i.sub)}</span>` : ''}</button>`).join('');
+      return (g ? `<div class="bs-pick-g">${esc(g)}</div>` : '') + rows.map(i => {
+        const row = `<button class="bs-pick-row${i.big ? ' big' : ''}${i.current ? ' cur' : ''}" data-pick="${esc(i.id)}">
+          <b>${esc(i.label)}</b>${i.tag ? `<span class="bs-pick-tag">${esc(i.tag)}</span>` : ''}${i.sub ? `<span>${esc(i.sub)}</span>` : ''}</button>`;
+        // An item that can be deleted carries its own Delete button beside the row.
+        return i.del ? `<div class="bs-pick-pair">${row}<button class="bs-pick-del" data-pick="del:${esc(i.del)}" title="Delete ${esc(i.label)} from the map library">Delete</button></div>` : row;
+      }).join('');
     }).join('') || '<div class="bs-pick-none">Nothing matches.</div>';
     wrap.innerHTML = `
       <div class="bs-dlg bs-pick" role="dialog" aria-modal="true" aria-label="${esc(opts.title || '')}">
@@ -3243,11 +3246,12 @@ async function changeMapPicker(){
   const items = [
     {id: 'auto', group: 'Make a new map', label: '⚡ Auto-draw a map', sub: 'Divide the country into the stops and areas you choose.'},
     {id: 'blank', group: 'Make a new map', label: 'Blank map', sub: 'Clear every county and paint it yourself.'},
-    ...L.filter(m => m.src === 'library').map(m => ({id: m.id, group: 'Saved maps', label: m.name, current: m.libId && m.libId === S.mapId, sub: `${m.n} areas · saved ${m.u}`})),
+    ...L.filter(m => m.src === 'library').map(m => ({id: m.id, group: 'Saved maps', label: m.name, current: m.libId && m.libId === S.mapId, sub: `${m.n} areas · saved ${m.u}`, del: m.libId})),
     ...L.filter(m => m.src === 'scenario' && m.scId !== S.scenarioId).map(m => ({id: m.id, group: 'Map from another proposal', label: m.name, sub: `${m.n} areas${m.scenario !== m.name ? ' · in “' + m.scenario + '”' : ''}`})),
   ];
   const id = await bsPick({title: 'Change the map', intro: 'The proposal keeps its pathway, fees and schedule; only the map changes. Undo puts the old map back.', items});
   if (!id) return;
+  if (id.startsWith('del:')){ await deleteMap(id.slice(4)); return changeMapPicker(); }
   if (id === 'auto') return openAutoDialog();
   if (id === 'blank'){
     pushUndo(); S.assign = {}; S.mapName = ''; S.mapId = null; S.dirty = true;
