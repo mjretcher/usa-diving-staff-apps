@@ -9655,6 +9655,7 @@ function atlasRailOverview(t){
       <span class="atl-sw" style="background:${col}"></span>
       <span class="atl-row-name">${esc(nameOf(gi))}</span>
       <span class="atl-ov-ou mono ${dc}">${sum > 0 ? ou(diff) : ''}</span>
+      <span class="atl-ov-cells atl-ov-lbl">${OV_COLS.map(c => `<span class="${c.k===balK?'on':''}">${esc(c.short)}</span>`).join('')}</span>
       <span class="atl-ov-cells mono">${cells}</span>${chg}
       <span class="atl-row-bar"><span class="atl-bar"><i style="width:${(100*v/maxV).toFixed(1)}%;background:${col}"></i><b style="left:${(100*even/maxV).toFixed(1)}%"></b></span></span>
     </button>`;
