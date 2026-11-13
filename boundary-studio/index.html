@@ -1514,6 +1514,10 @@ tr[data-hl]:hover{background:#eef7fb}
 .wrap{padding-top:0}
 #viewPricing.active,#viewClubs.active{padding-top:18px}
 
+#bsNewVer{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:14px;background:#171f69;color:#fff;border-radius:10px;padding:10px 12px 10px 16px;font:600 13.5px Inter,system-ui,sans-serif;box-shadow:0 12px 32px rgba(11,18,64,.35);max-width:calc(100vw - 32px)}
+#bsNewVer button{flex:none;border:0;border-radius:7px;background:#fff;color:#171f69;font:inherit;font-weight:700;padding:7px 12px;cursor:pointer}
+@media print{#bsNewVer{display:none}}
+
 /* ---- Meeting tools: starting point, options, fade, pins, meeting view ---- */
 .atl-meet{margin:6px 16px 4px;padding:8px 10px;border:1px solid #dfe3ea;border-radius:8px;background:#f8f9fb;display:flex;flex-direction:column;gap:7px}
 .atl-meet:empty{display:none}
@@ -1854,6 +1858,33 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') set(false); });
 })();
 </script>
+<script>
+/* Tell an open tab when a newer build has been published. Reads this page's own
+   file again (no database) when the tab regains focus, at most once a minute,
+   and compares the boundary.js version with the one this tab loaded. */
+(function(){
+  var re = /boundary\.js\?v=(\d+)/, mine = null, last = 0, shown = false;
+  function check(){
+    if (!mine) mine = (document.documentElement.innerHTML.match(re) || [])[1];   // read once the page has loaded
+    if (!mine || shown || document.hidden || Date.now() - last < 60000) return;
+    last = Date.now();
+    fetch(location.pathname + '?vc=' + Date.now(), {cache: 'no-store'}).then(function(r){ return r.ok ? r.text() : ''; }).then(function(t){
+      var v = (t.match(re) || [])[1];
+      if (!v || v === mine || shown) return;
+      shown = true;
+      var bar = document.createElement('div');
+      bar.id = 'bsNewVer';
+      bar.innerHTML = '<span>A newer version of Boundary Studio is available. Save your work first if you have unsaved changes.</span><button>Reload now</button>';
+      bar.querySelector('button').addEventListener('click', function(){ location.reload(); });
+      document.body.appendChild(bar);
+    }).catch(function(){});
+  }
+  document.addEventListener('visibilitychange', check);
+  window.addEventListener('focus', check);
+  setInterval(check, 300000);
+  setTimeout(check, 90000);
+})();
+</script>
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
 <script src="../shared/neon-client.js?v=202609172030"></script>
@@ -1866,7 +1897,7 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
   {"src":"routing.js?v=202609250345"},
   {"src":"pq-visuals.js?v=202610011500"},
   {"src":"scenario-schedule-engine.js?v=202608281800"},
-  {"src":"boundary.js?v=202611130500"},
+  {"src":"boundary.js?v=202611131630"},
   {"src":"bs-reports.js?v=202611130230"},
   {"src":"jc-report.js?v=202609250140","module":true},
   {"src":"pricing.js?v=202611122330"},
