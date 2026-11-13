@@ -86,14 +86,15 @@
     if (!usable.length) {
       return '<div class="ae-empty">Not enough attempts yet to compare any group.</div>';
     }
-    const w = 720, rowH = 34, padT = 26, padB = 24, padL = 150, padR = 60;
+    const narrow = window.innerWidth < 720;
+    const w = narrow ? Math.max(300, window.innerWidth - 68) : 720, rowH = 34, padT = 26, padB = 24, padL = narrow ? 118 : 150, padR = narrow ? 50 : 60;
     const h = padT + padB + usable.length * rowH;
     const maxAbs = Math.max(0.35, ...usable.map((r) => Math.abs(r.diff)));
     const mid = padL + (w - padL - padR) / 2;
     const X = (v) => mid + (v / maxAbs) * ((w - padL - padR) / 2);
 
     let s = `<svg viewBox="0 0 ${w} ${h}" class="ae-svg" role="img" aria-label="Execution gap by dive group">`;
-    [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs].forEach((t) => {
+    (narrow ? [-maxAbs, 0, maxAbs] : [-maxAbs, -maxAbs / 2, 0, maxAbs / 2, maxAbs]).forEach((t) => {
       s += `<line x1="${X(t)}" y1="${padT - 8}" x2="${X(t)}" y2="${h - padB}" stroke="${GRID}"/>` +
            `<text x="${X(t)}" y="${padT - 12}" text-anchor="middle" class="ae-tick">${t > 0 ? '+' : ''}${t.toFixed(1)}</text>`;
     });

@@ -122,7 +122,8 @@
     if (pts.length < 2) {
       return `<div class="ae-empty">Not enough dives with ${MIN_N}+ attempts to plot a portfolio yet.</div>`;
     }
-    const w = 760, h = 420, padL = 62, padR = 22, padT = 22, padB = 54;
+    const narrow = window.innerWidth < 720;
+    const w = narrow ? Math.max(300, window.innerWidth - 68) : 760, h = narrow ? 340 : 420, padL = narrow ? 46 : 62, padR = narrow ? 12 : 22, padT = 22, padB = 54;
     const exs = pts.map((d) => d.ev), sps = pts.map((d) => d.spread);
     const x0 = Math.min(...exs) * 0.92, x1 = Math.max(...exs) * 1.05;
     const y0 = 0, y1 = Math.max(...sps) * 1.12 || 1;
@@ -190,8 +191,10 @@
       byPhase.get(k).rows.push(r);
     });
     const best = [...byPhase.values()]
-      .filter((p) => p.rows.length >= Math.min(size, 4))
-      .sort((a, b) => b.year - a.year || b.rows.length - a.rows.length)[0];
+      // Exactly this many dives: a 6-dive list is never compared with a
+      // 5-dive format (or the reverse), since the totals are not like for like.
+      .filter((p) => p.rows.length === size)
+      .sort((a, b) => b.year - a.year)[0];
     return best ? best.rows.sort((a, b) => a.dive_order - b.dive_order) : [];
   }
 
@@ -225,7 +228,15 @@
     const gender = (b.sheets.find((r) => r.gender) || {}).gender || null;
     const formats = window.AERules.formatsFor(gender, st.disc);
     if (!st.formatId || !formats.some((f) => f.id === st.formatId)) {
-      st.formatId = formats.length ? formats[0].id : null;
+      // Open on the format the athlete last competed in on this board: their
+      // junior age group if that is where they last dived, otherwise senior.
+      const lastRow = (b.phases || []).filter((r) => !(r.is_synchronized === true || /^Synchro/i.test(r.discipline || '')) && (!st.disc || r.discipline === st.disc))
+        .sort((x, y) => (+y.meet_year || 0) - (+x.meet_year || 0))[0];
+      const grp = lastRow && /Group ([A-D])/.exec(lastRow.age_group || '');
+      const want = (lastRow && lastRow.event_level === 'Junior' && grp)
+        ? formats.find((f) => f.level === 'Junior' && f.group === grp[1])
+        : formats.find((f) => f.level === 'Senior');
+      st.formatId = (want || formats[0] || {}).id || null;
     }
     const format = window.AERules.byId(st.formatId);
     const build = bestList(dives, format, st.disc);
@@ -299,8 +310,11 @@
             no repeated dive number, group and difficulty requirements met.</div>`}
         ${format && format.note ? `<p class="ae-soft">${esc(format.note)}</p>` : ''}
         ${format && format.confirm ? `<div class="ae-warn-note">${esc(format.confirm)}</div>` : ''}
-        ${actual.length ? `<p class="ae-soft" style="margin-top:10px">
-            Their most recent full list of this size expects <b>${f1(aT.ev)}</b> points
+        ${(format && actual.length !== format.dives) ? `<p class="ae-soft" style="margin-top:10px">
+            No ${format.dives}-dive list on record for this athlete on this board, so there is no
+            performed list to set beside this one.</p>` : ''}
+        ${(format && actual.length === format.dives) ? `<p class="ae-soft" style="margin-top:10px">
+            Their most recent ${format.dives}-dive list expects <b>${f1(aT.ev)}</b> points
             (floor ${f1(aT.floor)}, ceiling ${f1(aT.ceiling)}, total DD ${f1(aT.dd)}).
             ${pT.ev - aT.ev > 0.5
               ? `The selection above expects <b>${f1(pT.ev - aT.ev)} more points</b> — though it is

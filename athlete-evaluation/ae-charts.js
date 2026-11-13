@@ -27,8 +27,11 @@
   function trajectory(opts) {
     // opts: { points:[{x(yearFloat), y, label, color, big}], line:[{x,y}],
     //         refs:[{y,label,color,dash}], w,h, yLabel }
-    const w = opts.w || 860, h = opts.h || 300;
-    const padL = 52, padR = 16, padT = 14, padB = 30;
+    // On a phone the chart is drawn at the screen's own width so the type is
+    // full size, instead of a desktop drawing scaled down to a thumbnail.
+    const narrow = window.innerWidth < 720;
+    const w = narrow ? Math.max(300, Math.min(window.innerWidth - 68, opts.w || 860)) : (opts.w || 860), h = narrow ? 250 : (opts.h || 300);
+    const padL = narrow ? 40 : 52, padR = narrow ? 8 : 16, padT = 14, padB = 30;
     const pts = opts.points.filter((p) => p.y != null);
     if (!pts.length) return `<div class="ae-empty">No scores to plot for this filter.</div>`;
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y).concat((opts.refs || []).map((r) => r.y));
@@ -42,8 +45,10 @@
       s += `<line x1="${padL}" y1="${Y(t)}" x2="${w - padR}" y2="${Y(t)}" stroke="${GRID}"/>` +
            `<text x="${padL - 7}" y="${Y(t) + 4}" text-anchor="end" class="ae-tick">${Math.round(t)}</text>`;
     });
+    const pxPerYear = (w - padL - padR) / (xMax - xMin), yStep = Math.max(1, Math.ceil((narrow ? 30 : 38) / pxPerYear));
     for (let yr = Math.ceil(xMin); yr <= Math.floor(xMax); yr++) {
-      s += `<text x="${X(yr + 0.4)}" y="${h - 8}" text-anchor="middle" class="ae-tick">${yr}</text>`;
+      if ((Math.floor(xMax) - yr) % yStep) continue;   // thin from the latest year back
+      s += `<text x="${X(yr + 0.4)}" y="${h - 8}" text-anchor="middle" class="ae-tick">${narrow ? "'" + String(yr).slice(2) : yr}</text>`;
     }
     (opts.refs || []).forEach((r) => {
       if (r.y == null || r.y < yMin || r.y > yMax) return;

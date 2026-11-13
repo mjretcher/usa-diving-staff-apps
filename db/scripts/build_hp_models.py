@@ -86,7 +86,7 @@ import os, sys, io, json, time, re
 import numpy as np, pandas as pd
 import scipy.sparse as sp, scipy.sparse.csgraph as cg
 
-METHOD_VERSION = "hp-models-2026-11-08.2"
+METHOD_VERSION = "hp-models-2026-11-13.1"
 CONN = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
 DEV_PARQUET = os.environ.get("HP_MODELS_DEV_PARQUET")  # local testing without a database
 K_P = 20.0
@@ -254,6 +254,15 @@ def model5(df):
                      en.str.contains(r"Group\s*D|\b11\s*(?:&|and)\s*under\b|\b10\s*-\s*11\b|\b9\s*(?:&|and)\s*under\b", regex=True)], ["A", "B", "C", "D"], None)
     d = df.assign(grp=grp)
     obs = d.dropna(subset=["grp"]).groupby(["diver_id", "meet_year", "grp"]).size().reset_index()[["diver_id", "meet_year", "grp"]]
+    # An athlete may dive up into an older group but never down into a younger
+    # one, so within a season the youngest group entered is the one that bounds
+    # their age. Using every group entered made each dive-up season contradict
+    # itself (Group B and Group A in one year share no birth year) and dropped
+    # those athletes, who are disproportionately the strongest juniors.
+    obs["rank"] = obs["grp"].map({"D": 0, "C": 1, "B": 2, "A": 3})
+    n_all = len(obs)
+    obs = obs.sort_values("rank").drop_duplicates(["diver_id", "meet_year"], keep="first").drop(columns=["rank"])
+    log(f"model5: {n_all - len(obs):,} dive-up season entries set aside (youngest group per season kept)")
     obs["lo"] = obs["meet_year"] - obs["grp"].map(lambda g: AGE[g][1]); obs["hi"] = obs["meet_year"] - obs["grp"].map(lambda g: AGE[g][0])
     win = obs.groupby("diver_id").agg(birth_lo=("lo", "max"), birth_hi=("hi", "min"), n_seasons=("meet_year", "nunique"), first_season=("meet_year", "min"), last_season=("meet_year", "max")).reset_index()
     win["consistent"] = win["birth_lo"] <= win["birth_hi"]

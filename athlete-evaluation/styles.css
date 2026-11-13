@@ -1339,3 +1339,28 @@ details.ae-method > summary::-webkit-details-marker { display: none; }
 .ae-swaps { margin-top: 14px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
 .ae-swaps-h { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: 13px; color: var(--ink); }
 .ae-swaps .data-table td, .ae-swaps .data-table th { padding: 6px 10px; }
+
+/* ── 2026-11-13 pass ─────────────────────────────────────────────── */
+/* Hand-drawn charts stop growing past the size they were designed at, so type
+   does not balloon on a wide monitor. */
+.ae-svg { max-width: 1000px; }
+/* Base look for the plain tables (Group by group, List construction, Every
+   dive, field tables). Same language as .data-table. */
+.ae-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ae-tbl thead th {
+  background: var(--surface-2, #F5F7FC); color: var(--ink-2, #5A6079);
+  font-weight: 700; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line, #DDE2EE); white-space: nowrap;
+}
+.ae-tbl tbody td { padding: 8px 12px; border-bottom: 1px solid var(--line-2, #EEF1F7); color: var(--ink, #1C2340); }
+.ae-tbl th.r, .ae-tbl td.r, .ae-tbl th.num, .ae-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ae-tbl td.r, .ae-tbl td.num { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; }
+.ae-tbl tbody tr:hover { background: var(--surface-2, #F5F7FC); }
+.ae-tbl tbody tr:last-child td { border-bottom: 0; }
+@media (max-width: 720px) {
+  /* wider than the screen: the table scrolls sideways inside its card */
+  .ae-tbl { font-size: 12px; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ae-tbl thead th { padding: 8px 8px; font-size: 10px; }
+  .ae-tbl tbody td:first-child { white-space: nowrap; }
+  .ae-tbl tbody td { padding: 7px 8px; }
+}

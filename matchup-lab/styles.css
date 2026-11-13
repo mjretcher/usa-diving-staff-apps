@@ -62,3 +62,27 @@
   .ml-filter { width: 100%; }
   .ml-bar-col, .ml-bar { display: none; }
 }
+
+/* ── 2026-11-13: phone layout ────────────────────────────────────── */
+.ml-club-sub { display: none; }
+@media (max-width: 720px) {
+  /* Summary tiles two across instead of four full-width cards. */
+  #mlKpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #mlKpis .kpi-card { padding: 12px 14px; min-width: 0; }
+  #mlKpis .kpi-value { font-size: 24px; }
+  #mlKpis .kpi-foot { font-size: 11px; }
+  /* Club and group fold under the name so the average and best total stay on screen. */
+  .ml-c-club, .ml-c-group, .ml-c-dives, .ml-c-spread, .ml-c-meets { display: none; }
+  .ml-club-sub { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 400; margin-top: 2px; }
+  #mlProfilesPanel .data-table th, #mlProfilesPanel .data-table td { padding-left: 8px; padding-right: 8px; }
+}
+@media (max-width: 720px) {
+  /* Four stacked filters pinned to the top cost a third of a phone screen. */
+  body.hp-app .hp-ctxbar.ml-ctx, .ml-ctx { position: static; }
+  #mlProfilesPanel .data-table td:first-child, #mlProfilesPanel .data-table th:first-child { width: 28px; padding-right: 0; }
+  .ml-sub { display: block; }
+}
+@media (max-width: 720px) {
+  #mlProfilesPanel .data-table thead th { white-space: normal; line-height: 1.2; }
+  #mlProfilesPanel .data-table { table-layout: auto; width: 100%; }
+}

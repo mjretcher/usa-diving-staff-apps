@@ -92,7 +92,8 @@
 
   function distChart(a, bar, prob) {
     if (a.sd == null || a.sd <= 0 || !bar) return '';
-    const w = 700, h = 210, padL = 40, padR = 20, padT = 16, padB = 40;
+    const narrow = window.innerWidth < 720;
+    const w = narrow ? Math.max(300, window.innerWidth - 68) : 700, h = 210, padL = narrow ? 30 : 40, padR = narrow ? 10 : 20, padT = 16, padB = 40;
     const lo = Math.min(a.mean - 3 * a.sd, bar.mean - 3 * (bar.sd || 10));
     const hi = Math.max(a.mean + 3 * a.sd, bar.mean + 3 * (bar.sd || 10));
     const X = (v) => padL + ((v - lo) / (hi - lo)) * (w - padL - padR);

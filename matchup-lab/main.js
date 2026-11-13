@@ -191,15 +191,15 @@ function renderProfiles() {
   $('mlProfileRows').innerHTML = shown.map(p => `
     <tr class="${state.selected.has(p.id) ? 'ml-row-picked' : ''}">
       <td><input type="checkbox" class="ml-pick" data-id="${esc(p.id)}" ${state.selected.has(p.id) ? 'checked' : ''} aria-label="Compare ${esc(p.name)}"></td>
-      <td><span class="ml-name">${esc(p.name)}</span>${p.gender === 'Male' ? '<span class="ml-g ml-g-m">M</span>' : '<span class="ml-g ml-g-f">F</span>'}</td>
-      <td class="small">${esc(p.team)}</td>
-      <td>${esc(p.group)}</td>
-      <td class="num">${p.dives}</td>
+      <td><span class="ml-name">${esc(p.name)}</span>${p.gender === 'Male' ? '<span class="ml-g ml-g-m">M</span>' : '<span class="ml-g ml-g-f">F</span>'}<span class="ml-club-sub">${esc(p.team)} · Group ${esc(p.group)}</span></td>
+      <td class="small ml-c-club">${esc(p.team)}</td>
+      <td class="ml-c-group">${esc(p.group)}</td>
+      <td class="num ml-c-dives">${p.dives}</td>
       <td class="num"><strong>${f1(p.avg)}</strong></td>
-      <td><div class="ml-bar" title="Field ${f1(lo)}–${f1(hi)}, mean ${f1(fieldMean)}"><i class="${p.avg >= fieldMean ? 'hi' : ''}" style="width:${pct(p.avg).toFixed(1)}%"></i><s style="left:${pct(fieldMean).toFixed(1)}%"></s></div></td>
+      <td class="ml-bar-col"><div class="ml-bar" title="Field ${f1(lo)}–${f1(hi)}, mean ${f1(fieldMean)}"><i class="${p.avg >= fieldMean ? 'hi' : ''}" style="width:${pct(p.avg).toFixed(1)}%"></i><s style="left:${pct(fieldMean).toFixed(1)}%"></s></div></td>
       <td class="num">${isNum(p.bestTotal) ? f1(p.bestTotal) + `<span class="ml-sub">${p.bestTotalDives} dives</span>` : '<span class="ml-na" title="No round with the full voluntary list on file">—</span>'}</td>
-      <td class="num">${f1(p.consistency)}<span class="ml-sub">σ per dive</span></td>
-      <td class="small">${esc(p.meets)}</td>
+      <td class="num ml-c-spread">${f1(p.consistency)}<span class="ml-sub">σ per dive</span></td>
+      <td class="small ml-c-meets">${esc(p.meets)}</td>
     </tr>`).join('');
   document.querySelectorAll('.ml-pick').forEach(cb => cb.addEventListener('change', (e) => {
     const id = e.target.dataset.id;
