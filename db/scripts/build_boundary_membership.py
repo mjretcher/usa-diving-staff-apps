@@ -80,7 +80,11 @@ def main():
         return cur.fetchall()
 
     # 1. Gate: the rule must still reproduce the completed seasons exactly.
-    z2c = {z: f for f, r in st.items() for z in r["z"]}
+    # Zips a build has added since the file was made by hand are left out of the
+    # gate: the completed seasons were counted without them, and they stay that way.
+    added_before = set(meta.get("added_zips", []))
+    z2c_all = {z: f for f, r in st.items() for z in r["z"]}
+    z2c = {z: f for z, f in z2c_all.items() if z not in added_before}
     ok = True
     for yk, yr in FROZEN:
         C = count(rows_for(yr), z2c)
@@ -100,6 +104,8 @@ def main():
 
     # 2. Live season. Place zips the map has not seen, where a county is known.
     R = rows_for(LIVE[1])
+    z2c = z2c_all
+    new_zips = []
     cz = (json.load(open(CZ_PATH, encoding="utf-8")).get("zips") or {})
     county_ok = {c["f"] for c in B["counties"]}
     added_zips = 0
@@ -109,7 +115,7 @@ def main():
         f = rec[3] if rec and len(rec) > 3 else None
         if not f or f not in county_ok: continue
         if f not in st: st[f] = {"y25": {"m": 0, "a": 0, "c": 0, "cl": []}, "y26": {"m": 0, "a": 0, "c": 0, "cl": []}, "z": {}}
-        st[f]["z"][z] = [0, 0, 0]; z2c[z] = f; added_zips += 1
+        st[f]["z"][z] = [0, 0, 0]; z2c[z] = f; added_zips += 1; new_zips.append(z)
     C = count(R, z2c)
     before = {k: sum(r["y26"][k] for r in st.values() if "y26" in r) for k in ("m", "a", "c")}
     club_ix = {name: i for i, name in enumerate(clubs)}
@@ -132,6 +138,7 @@ def main():
         if club and f: per[club][f].add(mid)
     B["clubHome"] = {str(club_ix[nm]): sorted(d.items(), key=lambda kv: (-len(kv[1]), kv[0]))[0][0]
                      for nm, d in per.items() if nm in club_ix}
+    meta["added_zips"] = sorted(added_before | set(new_zips))
     meta["y26"] = {"built": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                    "source": "membership.members, membership_year=2026 (db/scripts/build_boundary_membership.py)",
                    "loaded_at": loaded_iso, "rows": n_rows, "members_total": n_members,
