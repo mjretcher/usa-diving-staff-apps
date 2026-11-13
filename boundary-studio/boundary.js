@@ -8835,7 +8835,7 @@ function membershipAsOfHtml(){
    - Fade: which counties are drawn pale -- no members, no club, or none.
    - Club pins: one dot per club.
    - Meeting view: hides everything except the map, the tools and the table.
-   - One-page summary: the map and the table on a single page.
+   - Summary: the map and the table, one page per level (Regions, then Zones).
    Starting point, options and the fade choice are kept in this browser
    (localStorage), not in the database: they are working copies for a session,
    and saving a proposal or a map is still the way to keep one for good.
@@ -9033,8 +9033,8 @@ function meetBarHtml(){
       </select>
       <label class="mt-chk" title="A dot for every club"><input type="checkbox" id="mtPins" ${m.pins?'checked':''}> Club pins</label>${pinNote}</span></div>
     ${S.meetView ? '' : `<div class="mt-r"><span class="mt-btns"><button class="mt-b prim" id="mtMeet" title="Hide everything except the map, the tools and this table. Painting still works.">Meeting view</button>
-      <button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">One-page summary</button></span></div>`}
-    ${S.meetView ? `<div class="mt-r"><span class="mt-btns"><button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">One-page summary</button></span></div>` : ''}`;
+      <button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">Summary to print</button></span></div>`}
+    ${S.meetView ? `<div class="mt-r"><span class="mt-btns"><button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">Summary to print</button></span></div>` : ''}`;
 }
 function meetBarRefresh(){
   const box = $id('atlMeet'); if (!box) return;
@@ -9086,7 +9086,8 @@ function meetView(on){
 }
 
 /* ---------- one-page summary ---------- */
-function mapSummaryHtml(){
+/* One page of the summary, for the level on screen (S.tierView). */
+function mapSummaryPage(){
   const t = computeTallies(), typed = memberTypeTallies(t.TG), m = meetStore();
   const val = (c, r, gi) => c.k === 't_comp' ? (typed ? typed[gi].t_comp : null)
     : c.k === 'athletes' ? r.a : c.k === 'coaches' ? r.c : c.k === 'clubs' ? r.cl.size : r.m;
@@ -9097,7 +9098,7 @@ function mapSummaryHtml(){
   const vals = t.rows.map((r,gi) => val(bc, r, gi)), sum = vals.reduce((a,b) => a + b, 0), even = t.rows.length ? sum / t.rows.length : 0;
   const B = meetBaseTallies(), showChg = !!B && meetMoved(m.base) > 0;
   const ou = d => { const x = Math.round(d); return x === 0 ? 'even' : `${fmt(Math.abs(x))} ${x > 0 ? 'over' : 'under'}`; };
-  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th>${cols.map(c => `<th class="${c.k===balK?'b':''}">${esc(c.short)}</th>`).join('')}<th>Over or under</th>${showChg ? '<th>Change</th>' : ''}</tr>`;
+  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th>${cols.map(c => `<th class="${c.k===balK?'b':''}">${esc(c.k === 't_comp' ? 'Competition Athletes' : c.short)}</th>`).join('')}<th>Over or under</th>${showChg ? '<th>Change</th>' : ''}</tr>`;
   const body = t.rows.map((r,gi) => {
     const br = meetBaseRow(B, t, gi);
     const chg = !showChg ? '' : `<td>${br && br[balK] != null ? (meetSigned(vals[gi] - br[balK]) || '0') : 'new'}</td>`;
@@ -9118,35 +9119,51 @@ function mapSummaryHtml(){
   const g = clubGeo();
   const notes = [
     `Balancing on ${bc.label}. "Over or under" compares each area with the total divided equally.`,
-    typed ? 'Comp is Competition Athlete members (17U and AQUA Age 18+).' : '',
+    typed ? 'Competition Athletes are the 17U and AQUA Age 18+ Competition Athlete memberships.' : '',
     'Members are counted in the county where they live. A club with members in two areas is counted in both rows and once in the total.',
     showChg ? `Change is in ${bc.label} since the starting point marked ${meetClock(m.base.at)}.` : '',
     unC > 0 ? `${fmt(unC)} counties with ${fmt(t.un.m)} members are not in any area.` : '',
     meetFadeText(),
     m.pins && g ? `Dots are clubs: solid at the club address (${fmt(g.exact)}), hollow where the location is estimated from where members live (${fmt(g.est)}).` : '',
   ].filter(Boolean).join(' ');
+  return `<section class="pg">
+    <h1>${esc(S.mapName || S.scenarioName || 'Boundary map')}</h1>
+    <p class="sub">${esc(tierName(S.tierView))}. ${esc(asOf)}. Printed ${esc(printed)}.</p>
+    <div class="map"><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${svg}</svg></div>
+    <table class="${t.rows.length > 18 ? 'tight' : ''}"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
+    <p class="notes">${esc(notes)}</p>
+  </section>`;
+}
+/* The whole summary: a page for the first level, then a page for the second
+   (Zones) when the map has one with at least two groups. Each page is counted
+   by putting that level on screen for the length of the count. */
+function mapSummaryHtml(){
+  const keep = {tv: S.tierView, tally: S._tally, of: S._of};
+  const levels = [0];
+  if (S.levels && S.levels.length > 1 && S.levels[1].groups && S.levels[1].groups.length >= 2) levels.push(1);
+  const pages = [];
+  try {
+    for (const L of levels){ S.tierView = L; S._tally = null; S._of = null; pages.push(mapSummaryPage()); }
+  } finally { S.tierView = keep.tv; S._tally = keep.tally; S._of = keep.of; }
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(S.mapName || S.scenarioName || 'Boundary map')}</title><style>
     @page{size:letter portrait;margin:.45in}
     *{box-sizing:border-box}
-    html,body{margin:0;padding:0;overflow:hidden;background:#fff;color:#000;font:10pt Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    html,body{margin:0;padding:0;background:#fff;color:#000;font:10pt Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .pg{break-after:page;page-break-after:always}
+    .pg:last-child{break-after:auto;page-break-after:auto}
     h1{font-size:17pt;margin:0 0 2pt}
     .sub{font-size:9.5pt;margin:0 0 10pt}
     .map{margin:0 0 8pt}.map svg{width:100%;height:auto;display:block}
-    table{border-collapse:collapse;width:100%;font-size:${t.rows.length > 18 ? 8.5 : 10}pt}
-    th,td{padding:${t.rows.length > 18 ? 2.5 : 4}pt 4pt;text-align:right;border-bottom:.5pt solid #999;white-space:nowrap}
+    table{border-collapse:collapse;width:100%;font-size:10pt}
+    th,td{padding:4pt 4pt;text-align:right;border-bottom:.5pt solid #999;white-space:nowrap}
+    table.tight{font-size:8.5pt}table.tight th,table.tight td{padding:2.5pt 4pt}
     th{font-weight:700;border-bottom:1pt solid #000;vertical-align:bottom;white-space:normal;font-size:8.5pt}
     .l{text-align:left;white-space:nowrap}
     td.b,th.b{font-weight:700}
     td i{display:inline-block;width:9pt;height:9pt;margin-right:5pt;vertical-align:-1pt;border:.5pt solid #000}
     tr.tot td{font-weight:700;border-top:1pt solid #000;border-bottom:0}
     .notes{font-size:8pt;margin-top:10pt;line-height:1.35}
-  </style></head><body>
-    <h1>${esc(S.mapName || S.scenarioName || 'Boundary map')}</h1>
-    <p class="sub">${esc(tierName(S.tierView))}. ${esc(asOf)}. Printed ${esc(printed)}.</p>
-    <div class="map"><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${svg}</svg></div>
-    <table><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
-    <p class="notes">${esc(notes)}</p>
-  </body></html>`;
+  </style></head><body>${pages.join('')}</body></html>`;
 }
 function printMapSummary(){
   let html;
@@ -9330,7 +9347,7 @@ function cmpData(lk, rk){
 function cmpTableHtml(D){
   const others = D.cols.filter(c => c.k !== D.balK);
   const sg = d => d == null ? '' : (meetSigned(d) || '0');
-  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th><th>${esc(D.bc.short)}, ${esc(D.lName)}</th><th>${esc(D.bc.short)}, ${esc(D.rName)}</th><th class="b">Difference</th>${others.map(c => `<th>${esc(c.short)}</th>`).join('')}</tr>`;
+  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th><th>${esc(D.bc.label)}, ${esc(D.lName)}</th><th>${esc(D.bc.label)}, ${esc(D.rName)}</th><th class="b">Difference</th>${others.map(c => `<th>${esc(c.short)}</th>`).join('')}</tr>`;
   const body = D.rows.map(x => `<tr><td class="l"><i style="background:${x.color}"></i>${esc(x.name)}</td>
       <td>${x.l ? fmt(x.l[D.balK]) : 'not in this map'}</td><td>${fmt(x.r[D.balK])}</td><td class="b">${x.l ? sg(x.r[D.balK] - x.l[D.balK]) : ''}</td>
       ${others.map(c => `<td>${x.l ? sg(x.r[c.k] - x.l[c.k]) : ''}</td>`).join('')}</tr>`).join('');
