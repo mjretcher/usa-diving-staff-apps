@@ -882,7 +882,7 @@ tr[data-hl]:hover{background:#eef7fb}
 
 /* --- header --- */
 .atl-head{height:56px;background:#fff;border-bottom:1px solid #dfe3ea;display:flex;align-items:center;padding:0 24px;gap:24px;position:sticky;top:0;z-index:30}
-.atl-brand{display:flex;align-items:center;gap:14px;min-width:290px}
+.atl-brand{display:none}
 .atl-brand img{height:30px;width:auto;display:block;flex:none}
 .atl-brand div{display:flex;flex-direction:column;line-height:1.05}
 .atl-brand b{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#171f69;letter-spacing:.01em}
@@ -939,7 +939,7 @@ tr[data-hl]:hover{background:#eef7fb}
 
 /* --- Map workspace --- */
 .atl-main{flex:1;min-height:0}
-.atl-main.atl-map{display:grid;grid-template-columns:372px minmax(0,1fr);grid-template-rows:minmax(0,1fr);flex:0 0 auto;height:calc(var(--atl-map-h, calc(100vh - 108px)) + 52px);position:relative}
+.atl-main.atl-map{display:grid;grid-template-columns:440px minmax(0,1fr);grid-template-rows:minmax(0,1fr);flex:0 0 auto;height:calc(var(--atl-map-h, calc(100vh - 108px)) + 52px);position:relative}
 .atl:has(> .atl-main.atl-map){min-height:0}
 .atl-rail{background:#fff;border-right:1px solid #dfe3ea;display:flex;flex-direction:column;overflow:hidden;min-height:0;min-width:0}
 .atl-rail *{min-width:0}
@@ -961,7 +961,24 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-tower-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#5a6480;margin-bottom:6px}
 .atl-tower .atl-note{margin-top:6px}
 .atl-rail-start.empty{border-color:#009AC7;box-shadow:0 0 0 3px rgba(0,154,199,.12)}
-.atl-rail-top{padding:22px 22px 14px;border-bottom:1px solid #eceff4}
+.atl-rail-top{padding:12px 22px 14px;border-bottom:1px solid #eceff4}
+@media(max-width:1250px){.atl-main.atl-map{grid-template-columns:372px minmax(0,1fr)}}
+.atl-fold{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:7px 0;font:inherit;text-align:left;cursor:pointer;border-bottom:1px solid #eceff4;color:#171f69}
+.atl-fold.open{border-bottom:0;padding-bottom:2px}
+.atl-fold-l{flex:none;width:92px;font-size:11.5px;font-weight:700;color:#6b7385}
+.atl-fold-v{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:600}
+.atl-fold-v small{font-weight:500;font-size:12px;color:#6b7385;margin-left:6px}
+.atl-fold-a{flex:none;border:1px solid #cdd6e4;background:#fff;color:#171f69;border-radius:6px;padding:3px 9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.atl-fold-a:hover{border-color:#171f69}
+.atl-fold-c{flex:none;width:14px;text-align:center;font-size:11px;color:#6b7385}
+.atl-foldbody{padding:4px 0 10px;border-bottom:1px solid #eceff4}
+.atl-meet .atl-fold{border-bottom:0;padding:0}
+.atl-foldbody .atl-mapcard>.atl-card-lbl{display:none}
+.atl .atl-mapsec .atl-tools{gap:3px}
+.atl .atl-mapsec .atl-tools .atl-seg button{padding:7px 9px}
+.atl .atl-mapsec .atl-tools>button{padding:7px 8px}
+@media(max-width:1640px){.atl-tools .atl-pc-lbl{display:none}}
+.atl-meet .atl-fold.open{padding-bottom:4px;border-bottom:1px solid #dfe3ea}
 .atl-rail-id{font-size:12px;color:#6b7385;display:flex;gap:8px;align-items:center;white-space:nowrap;overflow:hidden}
 .atl-rail-id .mono{color:#171f69;overflow:hidden;text-overflow:ellipsis}
 .atl-rail-name{display:block;width:100%;margin-top:4px;border:0;padding:0;background:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;line-height:1.05;color:#0f1633;outline:none}
@@ -1472,6 +1489,29 @@ tr[data-hl]:hover{background:#eef7fb}
 }
 
 
+/* ---- One slim top bar: logo, section tabs, Reports menu, hub links ---- */
+.top{padding:9px 20px;border-bottom-width:3px;gap:16px;flex-wrap:nowrap;position:relative;z-index:40}
+.top .brand{gap:18px;min-width:0;flex:1 1 auto}
+.top .brand-logo img{height:30px}
+.top .view-tabs{margin:0;gap:6px;flex-wrap:nowrap}
+.top .view-tabs .tab{background:transparent;color:#dfe6fb;border-color:rgba(255,255,255,.28);box-shadow:none;padding:7px 15px;font-weight:700;white-space:nowrap}
+.top .view-tabs .tab:hover{border-color:#fff;color:#fff}
+.top .view-tabs .tab.active{background:#fff;color:var(--navy);border-color:#fff}
+.top-rep{position:relative;flex:none}
+.top-rep-btn{background:transparent;color:#dfe6fb;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:7px 15px;font-weight:700;font-size:13px;white-space:nowrap}
+.top-rep-btn:hover,.top-rep.open .top-rep-btn{border-color:#fff;color:#fff}
+.top-rep #mr-bar{display:none;position:absolute;left:0;top:calc(100% + 8px);margin:0;padding:8px;width:250px;flex-direction:column;align-items:stretch;gap:6px;background:#fff;border:1px solid #cdd6e4;border-radius:10px;box-shadow:0 14px 34px rgba(11,18,64,.22)}
+.top-rep.open #mr-bar{display:flex}
+.top-rep #mr-bar .mr-bar-lbl{display:none}
+.top-rep #mr-bar .mr-bar-btn{border-radius:7px;text-align:left;width:100%}
+.top-rep #mr-bar .mr-bar-note{margin:2px 4px 0;font-size:11.5px}
+.top .top-right{flex-direction:row;align-items:center;gap:16px;flex:none}
+.top .top-meta{display:none}
+.top .hub-link{white-space:nowrap}
+@media(max-width:1180px){.top{flex-wrap:wrap}.top .brand{flex-wrap:wrap}}
+.wrap{padding-top:0}
+#viewPricing.active,#viewClubs.active{padding-top:18px}
+
 /* ---- Meeting tools: starting point, options, fade, pins, meeting view ---- */
 .atl-meet{margin:6px 16px 4px;padding:8px 10px;border:1px solid #dfe3ea;border-radius:8px;background:#f8f9fb;display:flex;flex-direction:column;gap:7px}
 .atl-meet:empty{display:none}
@@ -1672,7 +1712,7 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
 /* ---- Boundary Studio uses the whole screen on wide monitors ---- */
 #mainWrap:has(#viewBoundary.active){max-width:none;padding-left:16px;padding-right:16px}
 #mainWrap:has(#viewBoundary.active) .atl{margin:0 -16px}
-@media(min-width:1700px){.atl-main.atl-map{grid-template-columns:400px minmax(0,1fr)}.atl-main.atl-structure{grid-template-columns:460px 1fr}}
+@media(min-width:1700px){.atl-main.atl-map{grid-template-columns:470px minmax(0,1fr)}.atl-main.atl-structure{grid-template-columns:460px 1fr}}
 /* long scenario names wrap instead of being cut off */
 .atl-rail-name{white-space:normal;overflow-wrap:anywhere;field-sizing:content;resize:none;min-height:1.1em}
 /* the workspace tabs read as tabs */
@@ -1780,10 +1820,12 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
     <a class="brand-logo" href="../index.html" title="USA Diving Staff Apps home" aria-label="USA Diving Staff Apps home">
       <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" draggable="false">
     </a>
-    <div class="brand-title">
-      <h1>Boundary Studio</h1>
-      <p>Region design, qualification pathways, entry economics &amp; committee papers</p>
+    <div class="view-tabs" id="tabs" role="tablist" aria-label="Boundary Studio sections">
+      <button class="tab active" data-view="boundary" title="Region design, qualification pathways, entry economics and committee papers">Boundary Studio</button>
+      <button class="tab" data-view="pricing">Pricing Studio</button>
+      <button class="tab" data-view="clubs">Clubs</button>
     </div>
+    <div class="top-rep" id="topRep"><button class="top-rep-btn" id="topRepBtn" aria-haspopup="true" aria-expanded="false">Reports &#9662;</button></div>
   </div>
   <div class="top-right">
     <a class="hub-link" href="../index.html">&larr; Staff Apps Hub</a>
@@ -1794,17 +1836,22 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
 </div>
 
 <div class="wrap" id="mainWrap">
-  <div class="view-tabs" id="tabs">
-    <button class="tab active" data-view="boundary">Boundary Studio</button>
-    <button class="tab" data-view="pricing">Pricing Studio</button>
-    <button class="tab" data-view="clubs">Clubs</button>
-  </div>
-
   <div id="viewBoundary" class="view active"><div class="loading">Loading boundary data&hellip;</div></div>
   <div id="viewPricing" class="view"><div class="loading">Loading&hellip;</div></div>
   <div id="viewClubs" class="view"><div class="loading">Loading&hellip;</div></div>
 </div>
 
+<script>
+/* Reports menu in the top bar: bs-reports.js puts its buttons inside #topRep. */
+(function(){
+  var box = document.getElementById('topRep'), btn = document.getElementById('topRepBtn');
+  if (!box || !btn) return;
+  function set(open){ box.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  btn.addEventListener('click', function(e){ e.stopPropagation(); set(!box.classList.contains('open')); });
+  document.addEventListener('click', function(e){ if (!box.contains(e.target) || e.target.closest('.mr-bar-btn')) set(false); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') set(false); });
+})();
+</script>
 <script src="../data/config.js?v=202607262115"></script>
 <script src="../shared/usad-error-log.js?v=202609012030"></script>
 <script src="../shared/neon-client.js?v=202609172030"></script>
@@ -1817,8 +1864,8 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
   {"src":"routing.js?v=202609250345"},
   {"src":"pq-visuals.js?v=202610011500"},
   {"src":"scenario-schedule-engine.js?v=202608281800"},
-  {"src":"boundary.js?v=202611130155"},
-  {"src":"bs-reports.js?v=202610251610"},
+  {"src":"boundary.js?v=202611130230"},
+  {"src":"bs-reports.js?v=202611130230"},
   {"src":"jc-report.js?v=202609250140","module":true},
   {"src":"pricing.js?v=202611122330"},
   {"src":"bs-clubs.js?v=202610251932"}

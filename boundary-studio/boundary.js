@@ -8999,7 +8999,10 @@ function meetBarHtml(){
     ? `<button class="mt-b" data-optsave="${m.cur}" title="Replace Option ${m.cur} with the map on screen">Update ${m.cur}</button>` : '';
   const g = clubGeo();
   const pinNote = m.pins && g ? `<span class="mt-key"><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#111827"/></svg>club address <svg width="12" height="12"><circle cx="6" cy="6" r="3.6" fill="#fff" stroke="#111827" stroke-width="1.2"/></svg>estimated</span>` : '';
-  return `${S.meetView ? `<div class="mt-title"><div><b>${esc(S.mapName || S.scenarioName || 'Boundary map')}</b>${membershipAsOfHtml()}</div><button class="mt-b" id="mtExit" title="Leave meeting view (Esc)">Exit meeting view</button></div>` : ''}
+  const sumTxt = [b ? 'starting point ' + meetClock(b.at) : '', ['A','B','C'].filter(L => m.opts[L]).length ? 'kept ' + ['A','B','C'].filter(L => m.opts[L]).join(', ') : '',
+                  m.fade === 'clubs' ? 'fading by clubs' : m.fade === 'none' ? 'no fade' : '', m.pins ? 'pins on' : ''].filter(Boolean).join(' · ') || 'starting point, options, suggestions, summary';
+  if (!S.meetView && isFolded('meet')) return railFold('meet', 'Meeting tools', `<small style="margin-left:0">${esc(sumTxt)}</small>`, ['mtMeet', 'Meeting view', 'Hide everything except the map, the tools and this table']);
+  return `${S.meetView ? '' : railFold('meet', 'Meeting tools', '', null)}${S.meetView ? `<div class="mt-title"><div><b>${esc(S.mapName || S.scenarioName || 'Boundary map')}</b>${membershipAsOfHtml()}</div><button class="mt-b" id="mtExit" title="Leave meeting view (Esc)">Exit meeting view</button></div>` : ''}
     <div class="mt-r"><span class="mt-l">Starting point</span>${baseRow}</div>
     <div class="mt-r"><span class="mt-l">Options</span><span class="mt-btns">${chips}${upd}<button class="mt-b" id="mtCmpBtn" title="Two of these maps next to each other, with the difference for each area">Side by side</button></span></div>
     <div class="mt-r"><span class="mt-l">Balance</span><span class="mt-btns"><button class="mt-b" id="mtSugBtn" title="Border counties that would bring an area that is over closer to a smaller neighbour">${S.sugOpen ? 'Hide suggestions' : 'Suggest moves'}</button></span></div>
@@ -9019,6 +9022,7 @@ function meetBarRefresh(){
   const box = $id('atlMeet'); if (!box) return;
   if (box.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
   box.innerHTML = meetBarHtml();
+  railFoldWire(box);
   const m = meetStore();
   const on = (id, f) => { const e = $id(id); if (e) e.addEventListener('click', f); };
   const again = () => { S._baseT = null; atlasRailRows(computeTallies()); };
@@ -9403,8 +9407,42 @@ function printHtmlDoc(html){
   setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } try { window.focus(); } catch(e){} }, 150);
 }
 
+/* Fold-away sections of the left panel. The choice is kept in this browser.
+   Until one is made: Proposal and Map are folded once a map is loaded and open
+   while there is none; Meeting tools start folded. */
+const FOLD_KEY = 'usad.bs.fold';
+function foldStore(){
+  if (!S._fold){ try { S._fold = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') || {}; } catch(e){ S._fold = {}; } }
+  return S._fold;
+}
+function isFolded(k){
+  const f = foldStore();
+  if (k in f) return !!f[k];
+  return k === 'meet' ? true : Object.keys(S.assign || {}).length > 0;
+}
+function railFold(k, label, valueHtml, action){
+  const folded = isFolded(k);
+  return `<div class="atl-fold ${folded ? '' : 'open'}" data-fold="${k}" role="button" tabindex="0" aria-expanded="${folded ? 'false' : 'true'}" title="${folded ? 'Show' : 'Hide'} ${esc(label.toLowerCase())}">
+    <span class="atl-fold-l">${esc(label)}</span><span class="atl-fold-v">${folded ? valueHtml : ''}</span>
+    ${folded && action ? `<button class="atl-fold-a" id="${action[0]}" title="${esc(action[2])}">${esc(action[1])}</button>` : ''}
+    <span class="atl-fold-c">${folded ? '\u25B8' : '\u25BE'}</span></div>`;
+}
+function railFoldWire(root){
+  root.querySelectorAll('[data-fold]').forEach(el => {
+    const go = e => {
+      if (e.target.closest('.atl-fold-a')) return;
+      const k = el.dataset.fold, f = foldStore();
+      f[k] = !isFolded(k);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(f)); } catch(err){}
+      if (k === 'meet') meetBarRefresh(); else atlasMain();
+    };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); e.stopPropagation(); go(e); } });
+  });
+}
 function atlasMapHtml(){
   const tv = S.tierView;
+  const hasMap = Object.keys(S.assign || {}).length > 0;
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
   const seg = Array.from({length:levelCount()}, (_,i)=>`<button data-tierv="${i}" class="${tv===i?'on':''}" title="${esc(tierName(i))}">${esc(tierName(i))}</button>`).join('');
   const metric = S.atlMetric || 'overview';
@@ -9451,21 +9489,25 @@ function atlasMapHtml(){
   return `
     <aside class="atl-rail">
       <div class="atl-rail-top">
-        <div class="atl-card-lbl">Proposal <span>${S.dirty ? 'unsaved changes' : S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}${S.scenarioId && isSeed(S.scenarioId) ? ' · reference map' : ''}</span></div>
+        ${railFold('prop', 'Proposal', `${esc(S.scenarioName || 'Unsaved proposal')}<small>${S.dirty ? 'unsaved changes' : S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}</small>`, ['atlPropOpen', 'Open…', 'Open a saved proposal'])}
+        ${isFolded('prop') ? '' : `<div class="atl-foldbody">
+        <div class="atl-card-lbl"><span>${S.dirty ? 'unsaved changes' : S.savedAt ? 'saved ' + esc(S.savedAt) : 'not saved yet'}${S.scenarioId && isSeed(S.scenarioId) ? ' · reference map' : ''}</span></div>
         <textarea class="atl-rail-name" id="bsName" rows="1" placeholder="Name this proposal" title="Proposal name" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">${esc(S.scenarioName)}</textarea>
         <div class="atl-btnrow">
           <button class="atl-pbtn" id="atlPropOpen" title="Open a saved proposal">Open…</button>
           <button class="atl-pbtn" id="atlPropNew" title="Start a new proposal">New…</button>
           <button class="atl-pbtn" id="atlPropCopy" title="Copy a saved proposal and choose its map">Copy…</button>
-        </div>
-        <div class="atl-mapcard${Object.keys(S.assign || {}).length ? '' : ' empty'}">
-          <div class="atl-card-lbl">Map <span>${Object.keys(S.assign || {}).length ? (S.mapId ? 'saved map' : 'part of this proposal') : 'empty — draw or pick one'}</span></div>
+        </div></div>`}
+        ${railFold('map', 'Map', `${esc(S.mapName || (hasMap ? 'Unnamed map' : 'None yet'))}<small>${hasMap ? (S.mapId ? 'saved map' : 'part of this proposal') : 'draw or pick one'}</small>`, ['atlMapChange', hasMap ? 'Change…' : 'Choose…', 'Auto-draw, pick a saved map, or start blank'])}
+        ${isFolded('map') ? '' : `<div class="atl-foldbody">
+        <div class="atl-mapcard${hasMap ? '' : ' empty'}">
+          <div class="atl-card-lbl">Map <span>${hasMap ? (S.mapId ? 'saved map' : 'part of this proposal') : 'empty — draw or pick one'}</span></div>
           <input class="atl-in atl-mapname" id="atlMapName" value="${esc(S.mapName || '')}" placeholder="Name this map" title="The map's own name — separate from the proposal name">
           <div class="atl-btnrow">
-            <button class="atl-pbtn prim" id="atlMapChange" title="Auto-draw, pick a saved map, or start blank — the pathway and fees stay">${Object.keys(S.assign || {}).length ? 'Change map…' : 'Choose a map…'}</button>
+            <button class="atl-pbtn prim" id="atlMapChange" title="Auto-draw, pick a saved map, or start blank — the pathway and fees stay">${hasMap ? 'Change map…' : 'Choose a map…'}</button>
             <button class="atl-pbtn" id="atlMapSave" title="Save only the map (counties, areas, level names)">Save map</button>
           </div>
-        </div>
+        </div></div>`}
         ${notesCardHtml()}
         <div class="atl-seg" id="atlTierSeg">${seg}</div>
       </div>
@@ -9829,6 +9871,7 @@ function wireAtlasMap(){
   const main = $id('atlMain'); if (!main) return;
   const nm = $id('bsName');
   if (nm) nm.addEventListener('input', () => { S.scenarioName = nm.value; S.dirty = true; atlasStatus(); });
+  const rt = main.querySelector('.atl-rail-top'); if (rt) railFoldWire(rt);
   main.querySelectorAll('#atlTierSeg [data-tierv]').forEach(b => b.addEventListener('click', () => {
     S.tierView = +b.dataset.tierv; S.detailRegion = null; repaintAll(); renderPanel();
   }));

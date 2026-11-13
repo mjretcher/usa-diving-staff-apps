@@ -3095,7 +3095,8 @@ function mount(){
     <button class="mr-bar-btn" onclick="window._mrShare()"
             title="Copy a link that opens this same view">Share this view</button>
     <span class="mr-bar-note">Every report prints straight to PDF.</span>`;
-  tabs.parentNode.insertBefore(bar, tabs.nextSibling);
+  const rep = document.getElementById('topRep');          // the Reports menu in the top bar
+  if (rep) rep.appendChild(bar); else tabs.parentNode.insertBefore(bar, tabs.nextSibling);
   window._mrOpenBuilder = function(preset){ openBuilder(preset); };
   applyShareHash();
 }
