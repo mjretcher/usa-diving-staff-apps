@@ -8321,6 +8321,7 @@ function injectAutoCSS(){
 const ATLAS_RAMP = ['#434baa','#cf7b26','#009ba3','#a44a94','#6c9539','#b18e15',
                     '#0c82bf','#0a9068','#714ca6','#ca5551','#57acc5','#007570'];
 const ATLAS_UNASSIGNED = '#dfe8f2';
+const ATLAS_L1_ORDER = [0,5,9,2,4,3,7,1,8,6,10,11];
 const ATLAS_INK = {navy:'#171f69', red:'#e31937', pool:'#009ac7', muted:'#6b7385',
                    ok:'#15803d', warn:'#b45309', bad:'#b3122b'};
 const atlasOn = () => S.ui === 'atlas';
@@ -8328,7 +8329,12 @@ const unassignedBase = () => atlasOn() ? ATLAS_UNASSIGNED : UNASSIGNED_BASE;
 
 function atlasLevelColor(level, gi){
   if (level === 0) return (S.regions[gi] && S.regions[gi].color) || ATLAS_UNASSIGNED;
-  if (level === 1) return ATLAS_RAMP[gi < 3 ? [0,5,9][gi] : (gi*4 + 2) % ATLAS_RAMP.length];
+  // A colour picked by hand for this group wins over the default order.
+  const g = S.levels[level] && S.levels[level].groups && S.levels[level].groups[gi];
+  if (g && g.color) return g.color;
+  // Default order for the second level keeps the first six well apart:
+  // navy, gold, red, teal, green, magenta, then the rest of the ramp.
+  if (level === 1) return ATLAS_RAMP[ATLAS_L1_ORDER[gi % ATLAS_L1_ORDER.length]];
   return ATLAS_RAMP[(gi*3 + level) % ATLAS_RAMP.length];
 }
 
@@ -9674,9 +9680,48 @@ function atlasRailOverview(t){
   }
 }
 
+/* Click an area's colour square in the rail to change its colour. Works at
+   every level: the first level sets the area's own colour, higher levels set a
+   colour for the group, kept with the map. */
+function railSetColor(gi, col){
+  pushUndo();
+  if (S.tierView === 0){ if (S.regions[gi]) S.regions[gi].color = col || ATLAS_RAMP[gi % ATLAS_RAMP.length]; }
+  else {
+    const g = S.levels[S.tierView] && S.levels[S.tierView].groups[gi]; if (!g) return;
+    if (col) g.color = col; else delete g.color;
+  }
+  S.dirty = true; repaintAll(); renderPanel();
+}
+function railSwatchWire(box){
+  if (box._swWired) return;
+  box._swWired = true;
+  box.addEventListener('click', e => {
+    const sw = e.target.closest('.atl-sw'); if (!sw) return;
+    const row = sw.closest('.atl-row[data-hl]'); if (!row) return;
+    e.stopPropagation(); e.preventDefault();
+    const gi = +row.dataset.hl;
+    const open = box.querySelector('.atl-pal-rail');
+    if (open){ const same = +open.dataset.gi === gi; open.remove(); if (same) return; }
+    const cur = groupColor(gi);
+    const pal = document.createElement('div');
+    pal.className = 'atl-pal atl-pal-rail'; pal.dataset.gi = gi;
+    pal.innerHTML = [...new Set(ATLAS_RAMP.concat(PALETTE))].map(c => `<button data-col="${esc(c)}" class="${c.toLowerCase()===String(cur).toLowerCase()?'on':''}" style="background:${c}" title="${esc(c)}"></button>`).join('')
+      + `<label class="atl-pal-any" title="Pick any colour"><input type="color" value="${/^#[0-9a-f]{6}$/i.test(cur) ? cur : '#434baa'}">Other</label>`
+      + (S.tierView > 0 ? '<button class="atl-pal-def" data-col="">Default</button>' : '');
+    row.after(pal);
+    pal.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const b = ev.target.closest('button[data-col]'); if (!b) return;
+      railSetColor(gi, b.dataset.col || null);
+    });
+    pal.querySelector('input[type=color]').addEventListener('change', ev => railSetColor(gi, ev.target.value));
+  }, true);
+  box.addEventListener('dblclick', e => { if (e.target.closest('.atl-sw')) e.stopPropagation(); }, true);
+}
 function atlasRailRows(t){
   const box = $id('atlRows'); if (!box || !t) return;
   const metric = S.atlMetric || 'overview';
+  railSwatchWire(box);
   const mm = meetStore();
   if ((mm.fade === 'clubs' || mm.pins) && !S._clubRaw) clubGeoLoad();
   meetBarRefresh();

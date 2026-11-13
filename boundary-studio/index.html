@@ -1105,6 +1105,13 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-pal{display:flex;flex-wrap:wrap;gap:4px;padding:6px 0 8px 28px}
 .atl-pal button{width:18px;height:18px;border-radius:4px;border:1px solid rgba(0,0,0,.12)}
 .atl-pal button:hover{outline:2px solid #009ac7;outline-offset:1px}
+.atl-row .atl-sw{cursor:pointer}
+.atl-pal.atl-pal-rail{padding:8px 6px 10px 30px;align-items:center;gap:5px;background:#f8f9fb;border-bottom:1px solid #eceff4}
+.atl-pal-rail button[data-col]{width:22px;height:22px;cursor:pointer;padding:0}
+.atl-pal-rail button.on{outline:2px solid #171f69;outline-offset:1px}
+.atl-pal-rail .atl-pal-def{width:auto;height:22px;padding:0 8px;background:#fff;border:1px solid #cdd6e4;font:inherit;font-size:12px;font-weight:600;color:#171f69}
+.atl-pal-any{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:#171f69;border:1px solid #cdd6e4;border-radius:4px;background:#fff;padding:0 6px 0 2px;height:22px;cursor:pointer}
+.atl-pal-any input{width:20px;height:18px;border:0;padding:0;background:none;cursor:pointer}
 .atl-topmeet{margin-top:18px;display:flex;align-items:center;gap:10px}
 .atl-topmeet span{font-size:12.5px;color:#6b7385;white-space:nowrap}
 .atl-topmeet .atl-in{flex:1}
@@ -1806,7 +1813,7 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
   {"src":"routing.js?v=202609250345"},
   {"src":"pq-visuals.js?v=202610011500"},
   {"src":"scenario-schedule-engine.js?v=202608281800"},
-  {"src":"boundary.js?v=202611130115"},
+  {"src":"boundary.js?v=202611130130"},
   {"src":"bs-reports.js?v=202610251610"},
   {"src":"jc-report.js?v=202609250140","module":true},
   {"src":"pricing.js?v=202611122330"},
