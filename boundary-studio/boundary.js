@@ -8649,8 +8649,8 @@ function atlasHeader(){
   const h = $id('atlHead'); if (!h) return;
   const menuOpen = !!S.atlMenu;
   h.innerHTML = `
-    <div class="atl-brand"><img src="../shared/images/diver-mark.svg" alt="">
-      <div><b>Boundary Studio</b><span>USA Diving · Staff Platform</span></div></div>
+    <div class="atl-brand"><img src="../shared/images/logo-color-horizontal.png" alt="USA Diving">
+      <div><b>Boundary Studio</b><span>Staff Platform</span></div></div>
     <nav class="atl-nav">${INSPECTORS.map(t => `<button data-atlnav="${t.k}" class="${S.panelMode===t.k?'on':''}" title="${esc(t.hint)}">${esc(t.label)}${t.k==='schedule'?'<span id="atlSchedBadge"></span>':''}</button>`).join('')}</nav>
     <div class="atl-head-r">
       <button class="atl-chip ${S.dirty?'dirty':''}" id="atlChip" title="Proposal menu: open, new, copy, compare, season, export">
