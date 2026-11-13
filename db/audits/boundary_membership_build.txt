@@ -1,6 +1,10 @@
 2026 in the database: 5537 rows, 5533 members, last import 2026-11-12T21:42:54+00:00
 map file was last built from: 2026-11-12T21:42:54+00:00
-gate 2024: counties differing m 22, athletes 21, coaches 2, clubs 4; zips differing 25 -> DOES NOT REPRODUCE
+gate 2024: counties differing m 0, athletes 0, coaches 0, clubs 0; zips differing 0 -> reproduces exactly
 gate 2025: counties differing m 0, athletes 0, coaches 0, clubs 0; zips differing 0 -> reproduces exactly
 
-NOT WRITTEN. The counting rule no longer reproduces a completed season, so the 2026 rebuild is not trusted. The map keeps its previous numbers.
+2026 rebuilt. Members on the map 5505 -> 5505; athletes 4576 -> 4576; coaches 664 -> 664.
+Members in the database 5533; placed in a county 5505; not mappable 28 (foreign address or a zip with no known county).
+Zip codes added to the map this build: 0. New clubs: 0.
+Club home counties written: 217.
+Counties with members in 2026: 530.
