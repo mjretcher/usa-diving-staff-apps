@@ -145,12 +145,37 @@ dm_byk, wa_byk = index_by_key(dm), index_by_key(wa)
 identities, linked = [], 0
 wa_linked_ids = set()
 
+# Reviewed links for the same person entered under a different given name in
+# the two systems (World Aquatics uses the short or legal form). These are
+# never guessed: each pair was checked by hand, and a pair is only applied
+# when the World Aquatics name key and the DiveMeets id each match exactly
+# one athlete. Anything else is logged and left unlinked.
+REVIEWED_ALIASES = {
+    # World Aquatics name key : DiveMeets diver_id
+    "sophia verzyl": "43980",   # Sophie Verzyl
+    "max weinrich":  "40067",   # Maxwell Weinrich
+    "harris nick":   "37692",   # Nicholas Harris
+}
+dm_by_id = {a["diver_id"]: a for a in dm}
+reviewed = {}
+for wk, dm_id in REVIEWED_ALIASES.items():
+    cands = wa_byk.get(wk, [])
+    if len(cands) == 1 and dm_id in dm_by_id:
+        reviewed[dm_id] = cands[0]
+    else:
+        log(f"reviewed alias not applied: {wk!r} -> {dm_id} ({len(cands)} World Aquatics matches, DiveMeets id {'found' if dm_id in dm_by_id else 'missing'})")
+
 for a in dm:
     k = a["_key"]
     wa_match, method, note = None, "dm_only", None
     if k and len(dm_byk.get(k, [])) == 1 and len(wa_byk.get(k, [])) == 1:
         wa_match = wa_byk[k][0]
         method = "name_token_exact"
+        wa_linked_ids.add(wa_match["diver_id"])
+        linked += 1
+    elif a["diver_id"] in reviewed:
+        wa_match = reviewed[a["diver_id"]]
+        method, note = "reviewed_alias", f"same athlete as World Aquatics '{wa_match['diver_name']}'"
         wa_linked_ids.add(wa_match["diver_id"])
         linked += 1
     elif k and k in wa_byk and (len(dm_byk[k]) > 1 or len(wa_byk[k]) > 1):
@@ -180,7 +205,10 @@ for a in wa:
         "families": a["families"], "note": None,
     })
 
-log(f"identities: {len(identities)} total, {linked} DM<->WA links auto-accepted")
+log(f"identities: {len(identities)} total, {linked} DM<->WA links ({len(reviewed)} reviewed aliases)")
+unlinked_usa = sorted(i["display_name"] for i in identities if i["match_method"] == "wa_only" and i["nat"] == "USA")
+if unlinked_usa:
+    log("World Aquatics USA athletes with no DiveMeets link (review for REVIEWED_ALIASES): " + "; ".join(unlinked_usa))
 
 cols = ["canonical_id","dm_id","wa_id","display_name","name_key","nat","match_method","first_year","last_year","families","note"]
 for i in range(0, len(identities), 400):

@@ -52,7 +52,7 @@
     const latestBench = bench.find((x) => x.final_cut != null || x.medal_score != null);
 
     const iv = b.ident;
-    const linked = iv.wa_id && iv.match_method === 'name_token_exact';
+    const linked = iv.wa_id && (iv.match_method === 'name_token_exact' || iv.match_method === 'reviewed_alias');
     const synN = b.phases.filter((p) => p.is_synchronized === true || /^Synchro/i.test(p.discipline || '')).length;
 
     root.innerHTML = `

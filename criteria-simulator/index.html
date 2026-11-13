@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="../shared/design.css?v=202607132128" />
   <link rel="stylesheet" href="../shared/usad-overlays.css?v=202607132128" />
-  <link rel="stylesheet" href="styles.css?v=202611091000" />
-  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082330" />
+  <link rel="stylesheet" href="styles.css?v=202611131500" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611131500" />
 </head>
 <body class="hp-app">
 
@@ -77,33 +77,6 @@
       <select id="poolSelect" class="sidebar-select"></select>
       <span class="sidebar-label">Year</span>
       <select id="yearSelect" class="sidebar-select"></select>
-    </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">Scenario Manager</div>
-      <span class="sidebar-label">Saved scenario</span>
-      <select id="scenarioSelect" class="sidebar-select"></select>
-      <span class="sidebar-label">Scenario name</span>
-      <input id="scenarioName" class="sidebar-input" type="text" placeholder="Name this criteria setup" />
-      <div id="scenarioStatus" class="sidebar-help"></div>
-      <div class="sidebar-actions-grid">
-        <button class="btn btn-primary" id="scenarioCreate">Create</button>
-        <button class="btn btn-primary" id="scenarioSave">Save</button>
-        <button class="btn btn-ghost" id="scenarioDuplicate">Duplicate</button>
-        <button class="btn btn-ghost" id="scenarioRename">Rename</button>
-        <button class="btn btn-ghost" id="scenarioLoad">Load</button>
-        <button class="btn btn-danger" id="scenarioDelete">Delete</button>
-      </div>
-      <div class="sidebar-actions-grid">
-        <button class="btn btn-ghost" id="scenarioExport">Export JSON</button>
-        <button class="btn btn-ghost" id="scenarioImport">Import JSON</button>
-      </div>
-      <button class="btn btn-ghost sidebar-wide-btn" id="scenarioResetPreset">Reset to preset defaults</button>
-      <div class="sidebar-actions-row">
-        <button class="btn btn-ghost btn-sm sidebar-wide-btn" id="scenarioRefresh">Refresh shared scenarios</button>
-      </div>
-      <div id="scenarioSyncStatus" class="sidebar-help">Shared with all staff. Auto-syncs every 45s.</div>
-      <input id="scenarioImportFile" type="file" accept="application/json,.json" hidden />
     </div>
 
     <div class="sidebar-section">
@@ -205,6 +178,33 @@
       </div>
       <div id="meetPicker" class="meet-picker" role="group" aria-label="Meet sources"></div>
       <div id="meetPickerHelp" class="sidebar-help"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Scenario Manager</div>
+      <span class="sidebar-label">Saved scenario</span>
+      <select id="scenarioSelect" class="sidebar-select"></select>
+      <span class="sidebar-label">Scenario name</span>
+      <input id="scenarioName" class="sidebar-input" type="text" placeholder="Name this criteria setup" />
+      <div id="scenarioStatus" class="sidebar-help"></div>
+      <div class="sidebar-actions-grid">
+        <button class="btn btn-primary" id="scenarioCreate">Create</button>
+        <button class="btn btn-primary" id="scenarioSave">Save</button>
+        <button class="btn btn-ghost" id="scenarioDuplicate">Duplicate</button>
+        <button class="btn btn-ghost" id="scenarioRename">Rename</button>
+        <button class="btn btn-ghost" id="scenarioLoad">Load</button>
+        <button class="btn btn-danger" id="scenarioDelete">Delete</button>
+      </div>
+      <div class="sidebar-actions-grid">
+        <button class="btn btn-ghost" id="scenarioExport">Export JSON</button>
+        <button class="btn btn-ghost" id="scenarioImport">Import JSON</button>
+      </div>
+      <button class="btn btn-ghost sidebar-wide-btn" id="scenarioResetPreset">Reset to preset defaults</button>
+      <div class="sidebar-actions-row">
+        <button class="btn btn-ghost btn-sm sidebar-wide-btn" id="scenarioRefresh">Refresh shared scenarios</button>
+      </div>
+      <div id="scenarioSyncStatus" class="sidebar-help">Shared with all staff. Auto-syncs every 45s.</div>
+      <input id="scenarioImportFile" type="file" accept="application/json,.json" hidden />
     </div>
 
   </aside>
@@ -352,18 +352,18 @@
           <table class="data-table" id="qualifiedTable">
             <thead>
               <tr>
-                <th class="sortable" data-sort="diver_name">Name</th>
-                <th class="sortable" data-sort="team_name">Team</th>
-                <th class="sortable" data-sort="meet_name">Meet</th>
-                <th class="sortable" data-sort="round_stage">Round</th>
-                <th class="num sortable" data-sort="place">Place</th>
-                <th class="num sortable sort-desc" data-sort="analysis_score">Score</th>
-                <th class="num sortable" data-sort="threshold_used">Standard</th>
-                <th>Basis</th>
-                <th class="num sortable" data-sort="dd_total_used">DD</th>
-                <th class="num sortable" data-sort="dd_minimum_used">DD min</th>
-                <th>DD status</th>
-                <th>Reason</th>
+                <th class="sortable c-name" data-sort="diver_name">Name</th>
+                <th class="sortable c-team" data-sort="team_name">Team</th>
+                <th class="sortable c-meet" data-sort="meet_name">Meet</th>
+                <th class="sortable c-round" data-sort="round_stage">Round</th>
+                <th class="num sortable c-place" data-sort="place">Place</th>
+                <th class="num sortable sort-desc c-score" data-sort="analysis_score">Score</th>
+                <th class="num sortable c-std" data-sort="threshold_used">Standard</th>
+                <th class="c-basis">Basis</th>
+                <th class="num sortable c-dd" data-sort="dd_total_used">DD</th>
+                <th class="num sortable c-ddmin" data-sort="dd_minimum_used">DD min</th>
+                <th class="c-ddstatus">DD status</th>
+                <th class="c-reason">Reason</th>
               </tr>
             </thead>
             <tbody id="qualifiedRows"></tbody>
@@ -380,16 +380,16 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Team</th>
-                <th>Meet</th>
-                <th>Round</th>
-                <th class="num">Score</th>
-                <th class="num">Standard</th>
-                <th class="num">Gap</th>
-                <th class="num">DD</th>
-                <th class="num">DD min</th>
-                <th>DD status</th>
+                <th class="c-name">Name</th>
+                <th class="c-team">Team</th>
+                <th class="c-meet">Meet</th>
+                <th class="c-round">Round</th>
+                <th class="num c-score">Score</th>
+                <th class="num c-std">Standard</th>
+                <th class="num c-gap">Gap</th>
+                <th class="num c-dd">DD</th>
+                <th class="num c-ddmin">DD min</th>
+                <th class="c-ddstatus">DD status</th>
               </tr>
             </thead>
             <tbody id="bubbleRows"></tbody>
@@ -534,8 +534,8 @@
 
       <details id="standardsInUse" class="panel" open>
         <summary>
-          <h2>Standards in use — 2025–26 season (confirm)</h2>
-          <p>The exact score standards and DD minimums this tool applies. Confirm they match the current published criteria before relying on results.</p>
+          <h2>Published criteria the tool applies</h2>
+          <p>2026 Winter Nationals Eligibility Criteria, amended 10/26/2026: Tables 1 to 4 as printed, with the per-optional basis.</p>
         </summary>
         <div id="standardsBody" class="table-wrap"></div>
       </details>
@@ -565,11 +565,11 @@
 <script src="../shared/neon-client.js?v=20260627"></script>
 <script src="../shared/usad-data.js?v=202611082200"></script>
 <script src="../shared/vendor/echarts.min.js?v=5"></script>
-<script src="../shared/usad-echarts-theme.js?v=202611082330"></script>
+<script src="../shared/usad-echarts-theme.js?v=202611131500"></script>
 <script src="../shared/usad-modal.js?v=20260627"></script>
 <script src="../shared/usad-toast.js?v=20260627"></script>
 <script src="scenario-sync.js?v=202611082200"></script>
-<script src="main.js?v=202611111400"></script>
+<script src="main.js?v=202611131500"></script>
 
 </body>
 </html>

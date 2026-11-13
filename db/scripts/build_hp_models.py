@@ -128,7 +128,7 @@ def load_links(conn):
     if DEV_PARQUET and os.path.exists(os.path.join(os.path.dirname(DEV_PARQUET), "links.json")):
         rows = json.load(open(os.path.join(os.path.dirname(DEV_PARQUET), "links.json")))["rows"]
         return {r[1]: str(r[0]) for r in rows}
-    d = read_sql(conn, "SELECT canonical_id, wa_id FROM analytics.athlete_directory WHERE wa_id IS NOT NULL AND match_method = 'name_token_exact'")
+    d = read_sql(conn, "SELECT canonical_id, wa_id FROM analytics.athlete_directory WHERE wa_id IS NOT NULL AND match_method IN ('name_token_exact', 'reviewed_alias')")
     return {r.wa_id: str(r.canonical_id) for r in d.itertuples()}
 
 # ── model 3 ───────────────────────────────────────────────────────────────
@@ -206,11 +206,11 @@ def model4(conn, pan):
         wa = read_sql(conn, """SELECT a.canonical_id AS dm_id, a.wa_id, a.display_name, r.meet_year, r.meet_name, r.event_round, r.round_stage, r.gender, r.discipline,
                                       r.place, r.posted_score, r.phase_dd_sum, r.phase_dive_count, r.score_is_cumulative
                                FROM analytics.athlete_directory a JOIN core.result_phases r ON r.diver_id = a.wa_id
-                               WHERE a.match_method = 'name_token_exact' AND a.nat = 'USA' AND r.competition_family = 'World Aquatics' AND NOT COALESCE(r.is_synchronized, false)""")
+                               WHERE a.match_method IN ('name_token_exact', 'reviewed_alias') AND a.nat = 'USA' AND r.competition_family = 'World Aquatics' AND NOT COALESCE(r.is_synchronized, false)""")
         dom = read_sql(conn, """SELECT a.canonical_id AS dm_id, r.meet_id, r.meet_year, r.meet_name, r.competition_group, r.event_round, r.round_stage, r.gender, r.discipline,
                                        r.place, r.posted_score, r.phase_score_from_dives, r.phase_dd_sum, r.phase_dive_count, r.score_is_cumulative
                                 FROM analytics.athlete_directory a JOIN core.result_phases r ON r.diver_id = a.canonical_id
-                                WHERE a.match_method = 'name_token_exact' AND a.nat = 'USA' AND r.competition_family = 'USA Diving'
+                                WHERE a.match_method IN ('name_token_exact', 'reviewed_alias') AND a.nat = 'USA' AND r.competition_family = 'USA Diving'
                                   AND NOT COALESCE(r.is_synchronized, false) AND r.event_level IN ('Senior', 'Senior/Open')""")
         waall = read_sql(conn, """SELECT meet_year, meet_name, event_round, round_stage, gender, discipline, place, posted_score, phase_dive_count, nat
                                   FROM core.result_phases WHERE competition_family = 'World Aquatics' AND NOT COALESCE(is_synchronized, false)""")

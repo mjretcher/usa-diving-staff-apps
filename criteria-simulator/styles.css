@@ -1069,3 +1069,52 @@ button.filter-chip:hover { border-color: var(--brand-pool); }
   .dz-lad-names .dz-lad-chip, .dz-lad-names span { font-size: 11.5px; }
   .cs2-trust { grid-template-columns: 1fr 1fr; }
 }
+
+/* ════════ 2026-11-13 pass ════════ */
+/* Panel bodies that were flush against the panel edge */
+body.hp-app .app-workspace #dzContext, body.hp-app .app-workspace #dzLadder,
+body.hp-app .app-workspace .cs2-wif-grid, body.hp-app .app-workspace .cmp-controls,
+body.hp-app .app-workspace #cmpResult, body.hp-app .app-workspace #explorerBody,
+body.hp-app .app-workspace .cs2-ex-inv, body.hp-app .app-workspace #surfaceBody,
+body.hp-app .app-workspace #sensitivityBody, body.hp-app .app-workspace #backtestBody,
+body.hp-app .app-workspace #standardsBody > :not(table) { padding-left: 18px; padding-right: 18px; }
+body.hp-app .app-workspace #dzContext, body.hp-app .app-workspace #dzLadder,
+body.hp-app .app-workspace #explorerBody, body.hp-app .app-workspace #surfaceBody,
+body.hp-app .app-workspace #sensitivityBody, body.hp-app .app-workspace #backtestBody { padding-top: 14px; padding-bottom: 16px; }
+body.hp-app .app-workspace .cs2-wif-grid { padding-top: 14px; }
+body.hp-app .app-workspace .cs2-wif-result { margin: 12px 18px 16px; }
+body.hp-app .app-workspace .cs2-ex-inv { padding-bottom: 16px; }
+body.hp-app #dzBarPanel .dz-bar-row { padding: 14px 18px; }
+body.hp-app .cs2-sens-row { padding-right: 6px; }
+/* The gap sentence under "Your current standard" inherited the tile's big number */
+.we-tile small b { font: 700 11.5px/1.4 var(--font-ui); color: var(--ink); display: inline; }
+
+/* Result tables: name over team, meet over round; detail columns step away as space runs out */
+.data-table .c-sub { display: none; font: 400 11.5px/1.3 var(--font-ui); color: var(--ink-3); margin-top: 2px; }
+.data-table td.c-name b { font-weight: 600; color: var(--ink); }
+.data-table td.c-score b { font-weight: 600; color: var(--brand-blue); }
+.data-table td.c-meet { min-width: 220px; }
+.data-table tr.row-more td { text-align: center; padding: 12px; background: var(--surface-2); }
+.data-table .c-reason { display: none; }
+@media (max-width: 1500px) { .data-table .c-basis, .data-table .c-ddstatus { display: none; } }
+@media (max-width: 1180px) {
+  .data-table .c-team, .data-table .c-round, .data-table .c-place { display: none; }
+  .data-table .c-sub { display: block; }
+  .data-table td.c-meet { min-width: 0; }
+}
+@media (max-width: 720px) {
+  .data-table .c-std, .data-table .c-dd, .data-table .c-ddmin { display: none; }
+  #qualifiedTable, #bubble .data-table { font-size: 13px; }
+  #qualifiedTable td, #bubble .data-table td { padding: 9px 8px; }
+  #qualifiedTable td:first-child, #bubble .data-table td:first-child, #qualifiedTable th:first-child, #bubble .data-table th:first-child { padding-left: 12px; }
+  .data-table td.c-meet { font-size: 12px; color: var(--ink-2); }
+  .sim-head { gap: 8px; }
+}
+/* Published criteria panel */
+.cs2-std-table { margin-bottom: 14px; }
+.cs2-std-table tr.cs2-std-per td { color: var(--ink-3); font-size: 12px; background: var(--surface-2); }
+.cs2-std-sources { font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px; }
+.cs2-std-sources ul { margin: 6px 0 8px 18px; padding: 0; } .cs2-std-sources li { margin: 2px 0; }
+.cs2-std-sources span { color: var(--ink-3); }
+body.hp-app .app-workspace #standardsBody > .cs2-std-note { padding-top: 14px; }
+@media (max-width: 720px) { .usad-chart-dl { display: none; } }

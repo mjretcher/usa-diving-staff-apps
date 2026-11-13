@@ -226,7 +226,7 @@ const state = {
   data: null,           // { results: [...], _source }
   meetsById: new Map(), // meet_id -> { meet_id, name, source, count }
   selectedMeetIds: new Set(),
-  pool: 'seniorUsa',
+  pool: 'winterEligibility',
   year: null,           // single year in scope for the live evaluation
   availableYears: [],   // years with data in the active pool
   scenarios: [],
@@ -557,6 +557,7 @@ function rowsForCurrentFilters() {
 }
 
 function recompute() {
+  saveLast();
   if (!state.data) return;
   const filtered  = rowsForCurrentFilters();
   const evaluated = filtered.map(evaluateRow);
@@ -790,8 +791,18 @@ function renderHero() {
   const dds    = state.qualified.map(r => r.dd_total_used).filter(isNum);
   $('heroAvgScore').textContent = scores.length
     ? fmtScore(scores.reduce((a,b) => a+b, 0) / scores.length) : '—';
-  $('heroAvgDd').textContent = dds.length
-    ? fmtDd(dds.reduce((a,b) => a+b, 0) / dds.length) : '—';
+  // In the cross-source pool the lists differ in length, so a DD total would
+  // average 3- to 6-dive lists together. Show DD per optional dive instead.
+  const card = $('heroAvgDd').closest('.kpi-card');
+  const lab = card && card.querySelector('.kpi-label'), foot = card && card.querySelector('.kpi-foot');
+  if (activePool().crossSource) {
+    const per = state.qualified.map(r => { const src = eligibilitySource(r); return (src && isNum(r.dd_total_used) && src.optionals > 0) ? r.dd_total_used / src.optionals : null; }).filter(isNum);
+    $('heroAvgDd').textContent = per.length ? (per.reduce((a,b) => a+b, 0) / per.length).toFixed(2) : '—';
+    if (lab) lab.textContent = 'Average DD per optional'; if (foot) foot.textContent = 'Lists differ in length across sources';
+  } else {
+    $('heroAvgDd').textContent = dds.length ? fmtDd(dds.reduce((a,b) => a+b, 0) / dds.length) : '—';
+    if (lab) lab.textContent = 'Average Qualifying DD'; if (foot) foot.textContent = 'When DD is known';
+  }
 }
 
 function renderSourceImpact() {
@@ -827,18 +838,18 @@ function ddStatusLabel(status) {
 function rowCellsForQualified(r, i) {
   return `
     <tr class="row-clickable" data-index="${i}" tabindex="0">
-      <td>${esc(r.diver_name)}</td>
-      <td>${esc(r.team_name || r.nat || '')}</td>
-      <td>${esc(r.meet_name)}</td>
-      <td>${esc(r.round_stage)}</td>
-      <td class="num">${isNum(r.place) ? r.place : '—'}</td>
-      <td class="num">${fmtScore(r.analysis_score)}</td>
-      <td class="num">${fmtScore(r.threshold_used)}</td>
-      <td>${esc(r.score_basis)}</td>
-      <td class="num">${fmtDd(r.dd_total_used)}</td>
-      <td class="num">${fmtDd(r.dd_minimum_used)}</td>
-      <td class="dd-status-${esc(r.dd_status)}">${ddStatusLabel(r.dd_status)}</td>
-      <td>${esc(r.reason)}</td>
+      <td class="c-name"><b>${esc(r.diver_name)}</b><span class="c-sub">${esc(r.team_name || r.nat || '')}</span></td>
+      <td class="c-team">${esc(r.team_name || r.nat || '')}</td>
+      <td class="c-meet">${esc(r.meet_name)}<span class="c-sub">${esc(r.round_stage)}${isNum(r.place) && r.place > 0 ? ' · place ' + r.place : ''}</span></td>
+      <td class="c-round">${esc(r.round_stage)}</td>
+      <td class="num c-place">${isNum(r.place) && r.place > 0 ? r.place : '—'}</td>
+      <td class="num c-score"><b>${fmtScore(r.analysis_score)}</b></td>
+      <td class="num c-std">${fmtScore(r.threshold_used)}</td>
+      <td class="c-basis">${esc(r.score_basis)}</td>
+      <td class="num c-dd">${fmtDd(r.dd_total_used)}</td>
+      <td class="num c-ddmin">${fmtDd(r.dd_minimum_used)}</td>
+      <td class="c-ddstatus dd-status-${esc(r.dd_status)}">${ddStatusLabel(r.dd_status)}</td>
+      <td class="c-reason">${esc(r.reason)}</td>
     </tr>`;
 }
 function renderQualifiedTable() {
@@ -879,16 +890,16 @@ function renderQualifiedTable() {
 function rowCellsForBubble(r, i) {
   return `
     <tr class="row-clickable" data-bubble-index="${i}" tabindex="0">
-      <td>${esc(r.diver_name)}</td>
-      <td>${esc(r.team_name || r.nat || '')}</td>
-      <td>${esc(r.meet_name)}</td>
-      <td>${esc(r.round_stage)}</td>
-      <td class="num">${fmtScore(r.analysis_score)}</td>
-      <td class="num">${fmtScore(r.threshold_used)}</td>
-      <td class="num">${fmtScore(r.threshold_gap)}</td>
-      <td class="num">${fmtDd(r.dd_total_used)}</td>
-      <td class="num">${fmtDd(r.dd_minimum_used)}</td>
-      <td class="dd-status-${esc(r.dd_status)}">${ddStatusLabel(r.dd_status)}</td>
+      <td class="c-name"><b>${esc(r.diver_name)}</b><span class="c-sub">${esc(r.team_name || r.nat || '')}</span></td>
+      <td class="c-team">${esc(r.team_name || r.nat || '')}</td>
+      <td class="c-meet">${esc(r.meet_name)}<span class="c-sub">${esc(r.round_stage)}</span></td>
+      <td class="c-round">${esc(r.round_stage)}</td>
+      <td class="num c-score"><b>${fmtScore(r.analysis_score)}</b></td>
+      <td class="num c-std">${fmtScore(r.threshold_used)}</td>
+      <td class="num c-gap">${fmtScore(r.threshold_gap)}</td>
+      <td class="num c-dd">${fmtDd(r.dd_total_used)}</td>
+      <td class="num c-ddmin">${fmtDd(r.dd_minimum_used)}</td>
+      <td class="c-ddstatus dd-status-${esc(r.dd_status)}">${ddStatusLabel(r.dd_status)}</td>
     </tr>`;
 }
 function renderBubbleTable() {
@@ -897,7 +908,13 @@ function renderBubbleTable() {
     tbody.innerHTML = '<tr class="row-empty"><td colspan="10">No bubble athletes under this scenario.</td></tr>';
     return;
   }
-  tbody.innerHTML = state.bubble.map((r,i) => rowCellsForBubble(r, i)).join('');
+  const LIMIT = 12;
+  const showAll = state.bubbleShowAll || state.bubble.length <= LIMIT;
+  const rows = showAll ? state.bubble : state.bubble.slice(0, LIMIT);
+  tbody.innerHTML = rows.map((r,i) => rowCellsForBubble(r, i)).join('') +
+    (showAll ? '' : `<tr class="row-more"><td colspan="10"><button type="button" class="btn btn-sm" id="bubbleShowAll">Show the other ${state.bubble.length - LIMIT} · furthest is ${fmtScore(state.bubble[state.bubble.length - 1].threshold_gap)} below</button></td></tr>`);
+  const more = $('bubbleShowAll');
+  if (more) more.addEventListener('click', (e) => { e.stopPropagation(); const y = window.scrollY; state.bubbleShowAll = true; renderBubbleTable(); window.scrollTo(0, y); });
 }
 
 function renderScenarioStrip() {
@@ -1176,6 +1193,7 @@ function openDrilldown(row) {
       <div class="drilldown-row"><dt>DD total</dt><dd>${fmtDd(row.dd_total_used)}</dd></div>
       <div class="drilldown-row"><dt>DD minimum</dt><dd>${fmtDd(row.dd_minimum_used)}</dd></div>
       <div class="drilldown-row"><dt>DD status</dt><dd>${ddStatusLabel(row.dd_status)}</dd></div>
+      ${row.reason ? `<div class="drilldown-row"><dt>Why</dt><dd>${esc(row.reason)}</dd></div>` : ''}
       <div class="drilldown-row"><dt>Qualified</dt><dd>${row.qualified ? '<strong style="color:var(--status-direct)">Yes</strong>' : '<strong style="color:var(--status-flag)">No</strong>'}</dd></div>
     </dl>
     <div class="drilldown-reason"><strong>Reason:</strong> ${esc(row.reason)}</div>
@@ -1654,8 +1672,28 @@ async function loadNationality() {
     console.warn('[standards] nationality overlay unavailable:', e.message);
   }
   state.natCount = state.natMap.size;
+  // One athlete, one identity. World Aquatics results arrive under a World
+  // Aquatics id; the athlete directory links those to the DiveMeets id for the
+  // same person. Without this an athlete with results in both systems is
+  // counted twice in every unique-athlete count.
+  state.canonMap = new Map();
+  try {
+    const r = await NEON.query(`
+      SELECT m.source_id::text AS source_id, m.canonical_id::text AS canonical_id, a.display_name
+        FROM analytics.id_map m JOIN analytics.athlete_directory a ON a.canonical_id = m.canonical_id
+       WHERE m.source_id <> m.canonical_id`, []);
+    for (const row of r.rows) state.canonMap.set(row.source_id, { id: row.canonical_id, name: row.display_name });
+  } catch (e) {
+    console.warn('[standards] athlete identity links unavailable:', e.message);
+  }
 }
 function applyNationality(rows) {
+  if (state.canonMap && state.canonMap.size) {
+    for (const r of rows) {
+      const c = state.canonMap.get(String(r.diver_id));
+      if (c) { r.source_diver_id = r.diver_id; r.diver_id = c.id; if (c.name) r.diver_name = c.name; }
+    }
+  }
   if (!state.natMap || !state.natMap.size) return;
   for (const r of rows) {
     if (r.nat) continue;
@@ -1683,6 +1721,13 @@ function absorbPayload(key, raw) {
 }
 
 // Make sure the rows for a pool are in memory; NCAA is fetched on first use.
+// Where the last visit left off: pool, gender and event only (never the bar —
+// an edited standard should not silently come back as if it were published).
+const LAST_KEY = 'usad.standardsStudio.last';
+function readLast() { try { return JSON.parse(localStorage.getItem(LAST_KEY) || '{}') || {}; } catch { return {}; } }
+function saveLast() {
+  try { localStorage.setItem(LAST_KEY, JSON.stringify({ pool: state.pool, gender: els.genderFilter.value, discipline: els.disciplineFilter.value })); } catch {}
+}
 async function ensurePoolLoaded(poolId) {
   const keys = POOL_PAYLOAD[poolId] || ['core'];
   for (const key of keys) await ensurePayloadLoaded(key);
@@ -1780,6 +1825,7 @@ function pAtLeast(q, x) {
   const lo = q[i - 1], hi = q[i]; const frac = hi > lo ? (x - lo) / (hi - lo) : 0;
   const pct = (i + frac) / 100; return Math.max(0, Math.min(1, 1 - pct));
 }
+const SIM_LIMIT = 25;
 function renderSimPanel() {
   const host = $('simBody'); if (!host) return;
   if (poolFamily() !== 'usa') { host.innerHTML = '<div class="source-impact-empty">Simulated totals are built for the Senior USA pool. Switch pools to use this.</div>'; return; }
@@ -1806,21 +1852,23 @@ function renderSimPanel() {
     </div>
     <div id="simChart" class="usad-chart" style="height:${Math.max(220, Math.min(rows.length, window.innerWidth < 720 ? 12 : 30) * 22 + 70)}px"></div>
     <div class="table-wrap"><table class="data-table sim-table"><thead><tr><th>Athlete</th><th class="num">P(≥ ${isNum(std) ? Math.round(std) : '—'})</th>${isNum(weq) ? `<th class="num">P(≥ ${Math.round(weq)} World)</th>` : ''}<th class="num">Median</th><th class="num">10–90%</th><th class="num">List DD</th><th>List from</th><th class="num">Dives on record</th><th>Qualified once</th></tr></thead>
-    <tbody>${rows.map(r => `<tr>
+    <tbody>${(state.simShowAll ? rows : rows.slice(0, SIM_LIMIT)).map(r => `<tr>
       <td><b>${esc(r.diver_name)}</b></td>
       <td class="num"><span class="hp-badge ${r.p >= 0.75 ? 'good' : r.p >= 0.5 ? 'info' : r.p >= 0.25 ? 'warn' : 'out'}">${Math.round(r.p * 100)}%</span></td>
       ${isNum(weq) ? `<td class="num">${Math.round(r.pw * 100)}%</td>` : ''}
       <td class="num">${fmt1(r.sim_p50)}</td><td class="num">${Math.round(r.sim_p10)}–${Math.round(r.sim_p90)}</td><td class="num">${fmt1(r.list_dd)}</td>
       <td class="small">${esc(r.list_source)}${r.list_year ? ' · ' + esc(r.list_year) : ''}</td><td class="num">${fmtInt(r.n_obs)}${r.n_obs < 30 ? ' <span class="small">thin</span>' : ''}</td>
-      <td>${inScope.has(String(r.diver_id)) ? '<span class="hp-badge navy">yes</span>' : '<span class="small">no</span>'}</td></tr>`).join('')}</tbody></table></div>
+      <td>${inScope.has(String(r.diver_id)) ? '<span class="hp-badge navy">yes</span>' : '<span class="small">no</span>'}</td></tr>`).join('')}${(!state.simShowAll && rows.length > SIM_LIMIT) ? `<tr class="row-more"><td colspan="9"><button type="button" class="btn btn-sm" id="simShowAll">Show the other ${rows.length - SIM_LIMIT} · all below ${Math.round(rows[SIM_LIMIT].p * 100)}%</button></td></tr>` : ''}</tbody></table></div>
     <div class="small" style="margin-top:10px">Senior-format list (${rows[0].list.length} optional dives). Each dive is drawn from the athlete's own championship-adjusted record for that dive since ${rows[0].season_max - 2}, blended with the field's record when hers is thin, with a shared good-day/bad-day draw (sd ${esc(rows[0].day_sd)} per dive). "Qualified once" is the current Who-qualifies list. Method: Simulated totals (Model 6).</div>`;
+  const simMore = $('simShowAll');
+  if (simMore) simMore.addEventListener('click', () => { const y = window.scrollY; state.simShowAll = true; renderSimPanel(); window.scrollTo(0, y); });
   if (!window.echarts || !window.USAD.charts) return;
   const { colors: C, MONO, UI } = USAD.charts; const narrow = window.innerWidth < 720; const top = rows.slice(0, narrow ? 12 : 30);
   USAD.charts.mount($('simChart'), {
-    grid: { left: narrow ? 110 : 150, right: narrow ? 44 : 70, top: 28, bottom: 36 },
+    grid: { left: narrow ? 110 : 150, right: narrow ? 44 : 70, top: 22, bottom: 56 },
     tooltip: { formatter: p => { const r = top[top.length - 1 - p.dataIndex]; return `<b>${esc(r.diver_name)}</b><br>P(≥${Math.round(std)}) <b style="font-family:${MONO}">${Math.round(r.p * 100)}%</b>${isNum(weq) ? ` · P(≥${Math.round(weq)}) ${Math.round(r.pw * 100)}%` : ''}<br>median ${fmt1(r.sim_p50)}, 10–90% ${Math.round(r.sim_p10)}–${Math.round(r.sim_p90)}`; } },
-    legend: { top: 0, right: 0, data: ['P(clear the standard)'].concat(isNum(weq) ? ['P(World-final equivalent)'] : []) },
-    xAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' }, name: 'probability in one competition', nameLocation: 'middle', nameGap: 24 },
+    legend: { bottom: 0, left: 'center', data: ['P(clear the standard)'].concat(isNum(weq) ? ['P(World-final equivalent)'] : []) },
+    xAxis: { type: 'value', min: 0, max: 1, axisLabel: { formatter: v => (v * 100).toFixed(0) + '%' } },
     yAxis: { type: 'category', data: top.map(r => narrow ? r.diver_name.split(' ').slice(-1)[0] : r.diver_name).reverse(), axisLabel: { fontFamily: UI, fontSize: 11.5, color: C.ink2 } },
     series: [
       { name: 'P(clear the standard)', type: 'bar', data: top.map(r => r.p).reverse(), barMaxWidth: 12, itemStyle: { color: (p) => p.value >= 0.5 ? C.navy : C.pool }, label: { show: true, position: 'right', formatter: p => (p.value * 100).toFixed(0) + '%', fontFamily: MONO, fontSize: 10.5, color: C.ink2 } },
@@ -1865,6 +1913,12 @@ async function bootstrap() {
   // Senior USA + Junior A/B + World Aquatics set loads at boot (~18k rows),
   // and NCAA (~70k rows) loads the first time that pool is chosen.
   const onProgress = (msg) => { $('loadingText').textContent = msg; };
+  // Open where the last visit left off (pool, gender, event), else on the
+  // Winter eligibility pool. Its NCAA payload loads alongside the core one.
+  const last = readLast();
+  if (last.pool && POOLS[last.pool]) state.pool = last.pool;
+  const needNcaa = (POOL_PAYLOAD[state.pool] || []).includes('ncaa');
+  const ncaaP = needNcaa ? loadPoolPayload('ncaa', () => {}).catch((e) => { console.warn('[standards] NCAA payload failed at boot:', e.message); return null; }) : null;
   let raw;
   try {
     raw = await loadPoolPayload('core', onProgress);
@@ -1876,10 +1930,19 @@ async function bootstrap() {
   state.data = { results: [], _source: raw._source, _fetchedAt: raw._fetchedAt, _version: raw._version };
   await loadNationality();
   absorbPayload('core', raw);
+  if (ncaaP) {
+    onProgress('Loading NCAA results…');
+    const n = await ncaaP;
+    if (n) absorbPayload('ncaa', n);
+    else { state.pool = 'seniorUsa'; USAD.toast('NCAA results could not be loaded; showing the Senior USA pool.', { kind: 'warn', duration: 6000 }); }
+  }
   updateDataKpis();
 
   // Populate filters
   populateFilters();
+  for (const [id, key] of [['genderFilter', 'gender'], ['disciplineFilter', 'discipline']]) {
+    if (last[key] && [...els[id].options].some(o => o.value === last[key])) els[id].value = last[key];
+  }
   loadScenarios();
 
   // Apply default preset
@@ -2232,28 +2295,56 @@ function standardsTableHtml(title, table, fmt) {
   return `<table class="data-table cs2-std-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
+// Published 2026 Winter Nationals Eligibility Criteria, amended 10/26/2026
+// (usadiving.org/2026-winter-national-championships). Tables 1–4 as printed.
+const PUBLISHED_2026 = {
+  url: 'https://www.usadiving.org/2026-winter-national-championships',
+  label: '2026 Winter Nationals Eligibility Criteria, amended 10/26/2026',
+  senior: [
+    ['Senior women · USA Diving events', 5, 235, 260, 250],
+    ['Senior women · NCAA events',       6, 282, 312, 250],
+    ['Senior men · USA Diving and NCAA', 6, 318, 360, 330],
+  ],
+  junior: [
+    ['Group A girls', 4, 188, 208, 200], ['Group A boys', 5, 265, 300, 275],
+    ['Group B girls', 3, 141, 156, 150], ['Group B boys', 4, 212, 240, 220],
+  ],
+  perOpt: { women: [47, 52, 50], men: [53, 60, 55] },
+  synchroDd: [['Women', '12.3 (8.3 optionals)', '12.2 (8.2 optionals)'], ['Men', '15.7 (11.7 optionals)', '15.9 (11.9 optionals)']],
+  sources: ['NCAA Division I Zone Championships (2025, 2026)', 'NCAA Division I Championships (2025, 2026)',
+    'NCAA Division I Conference Championships (2025, 2026), approved by HPD', 'USA Diving National Championships (2025, 2026)',
+    'USA Diving National Championships Qualifier (2025, 2026)', 'USA Diving Junior National Championships (2025, 2026), Group A and B only',
+    'USA Diving Winter National Championships (2025)', 'USA Diving Winter Nationals Qualifier (2025, 2026)', 'World Aquatics Events (2025, 2026)',
+    '2026 NCAA Division II and Division III Championships: top-placing U.S. citizen on 1m and 3m, six optionals in the final (added 10/26)'],
+};
 function renderStandardsPanel() {
   const body = $('standardsBody');
   if (!body) return;
-  // Re-render whenever the pool changes (was previously cached once).
   if (body.dataset.renderedPool === state.pool) return;
   body.dataset.renderedPool = state.pool;
   const f = (v) => isNum(v) ? v : '—';
   const pool = activePool();
-  if (pool.id === 'seniorUsa') {
-    body.innerHTML = `
-      <p class="cs2-std-note">Source: USA Diving published selection criteria for the Senior pool. Confirm these match the current season before use.</p>
-      ${standardsTableHtml('Score standard · USA', { Female: WINTER_SCORE_STANDARDS.Female.usa, Male: WINTER_SCORE_STANDARDS.Male.usa }, f)}
-      ${standardsTableHtml('DD minimum · Winter', WINTER_DD_MINIMUMS, f)}
-      ${standardsTableHtml('DD minimum · Nationals', NATIONAL_DD_MINIMUMS, f)}`;
-  } else if (pool.id === 'ncaa') {
-    body.innerHTML = `
-      <p class="cs2-std-note">Source: USA Diving published selection criteria — NCAA score standards. Confirm these match the current season before use. No DD minimum is published for the NCAA pool in this tool.</p>
-      ${standardsTableHtml('Score standard · NCAA', { Female: WINTER_SCORE_STANDARDS.Female.ncaa, Male: WINTER_SCORE_STANDARDS.Male.ncaa }, f)}`;
-  } else {
-    body.innerHTML = `
-      <p class="cs2-std-note">No published score standard or DD minimum is encoded for the Junior A/B pool. The bar here is authored fresh each season — set your own Score and DD values in the sidebar and this tool evaluates the field against them. Nothing is pre-filled, so nothing can be silently wrong.</p>`;
+  if (pool.id === 'juniorAB') {
+    body.innerHTML = `<p class="cs2-std-note">No published score standard or DD minimum is loaded for the Junior A/B pool on its own. Set a Score and DD in the controls and the tool evaluates the field against them. For Winter Nationals eligibility, Junior A/B results are read in the Winter eligibility pool against the Group A and B standards below.</p>`;
+    body.dataset.renderedPool = '';
   }
+  const P = PUBLISHED_2026;
+  const t1 = (rows, perOptOf) => `<table class="data-table cs2-std-table"><thead><tr><th>Minimum qualifying score</th><th class="num">Optionals</th><th class="num">1m</th><th class="num">3m</th><th class="num">Platform</th></tr></thead><tbody>${
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td class="num">${r[1]}</td>${[2, 3, 4].map(i => `<td class="num"><b>${r[i]}</b></td>`).join('')}</tr>`).join('')}
+    <tr class="cs2-std-per"><td>Per optional dive</td><td></td>${perOptOf.map(v => `<td class="num">${v}</td>`).join('')}</tr></tbody></table>`;
+  const html = `
+    <p class="cs2-std-note">These are the numbers the tool applies, as printed in the <a href="${P.url}" target="_blank" rel="noopener">${esc(P.label)}</a>. Every standard is a per-optional value times the optionals in that format, which is why one bar moves every source together in the Winter eligibility pool.</p>
+    ${t1(P.senior.slice(0, 2), P.perOpt.women)}
+    ${t1(P.senior.slice(2), P.perOpt.men)}
+    <table class="data-table cs2-std-table"><thead><tr><th>Junior Nationals, optionals only</th><th class="num">Optionals</th><th class="num">1m</th><th class="num">3m</th><th class="num">Platform</th></tr></thead><tbody>${
+      P.junior.map(r => `<tr><td>${esc(r[0])}</td><td class="num">${r[1]}</td>${[2, 3, 4].map(i => `<td class="num"><b>${r[i]}</b></td>`).join('')}</tr>`).join('')}</tbody></table>
+    ${standardsTableHtml('Minimum DD to enter · individual (Table 3)', WINTER_DD_MINIMUMS, f)}
+    <table class="data-table cs2-std-table"><thead><tr><th>Minimum total DD · synchro (Table 4)</th><th class="num">Synchro 3m</th><th class="num">Synchro 10m</th></tr></thead><tbody>${
+      P.synchroDd.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('')}</tbody></table>
+    <div class="cs2-std-sources"><b>Where a qualifying score may be achieved (Table 2)</b><ul>${P.sources.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      <span>DD is not needed to earn the score, only to enter. National Team members may enter any event.</span></div>
+    ${standardsTableHtml('Summer Nationals DD minimum, as loaded (not yet checked against the 2026 Nationals criteria)', NATIONAL_DD_MINIMUMS, f)}`;
+  body.innerHTML = (pool.id === 'juniorAB' ? body.innerHTML : '') + html;
 }
 
 function pathToQualificationHtml(row) {
@@ -2833,16 +2924,25 @@ function renderThresholdExplorer() {
     marks.push({ xAxis: wb.medal, lineStyle: { color: '#c39a3e', type: [4, 4], width: 1.5 }, label: vlabel(`World medal ${Math.round(wb.medal)}`, '#8a6d1a') });
   }
   if (isNum(weq)) marks.push({ xAxis: weq, lineStyle: { color: C.navy, type: [6, 4], width: 1.5 }, label: vlabel(`World-final equivalent ${Math.round(weq)}`, C.navy) });
-  // Stagger labels that would collide: sort by x and step each close neighbour down a row.
+  // Labels sit above the plot, one row each when neighbours are close, so they
+  // never cover the curve or each other. Phones get the short wording.
+  const narrowEx = window.innerWidth < 720;
+  const shortTxt = { your: (v) => `yours ${v}`, fin: (v) => `WA final ${v}`, med: (v) => `WA medal ${v}`, weq: (v) => `World eq. ${v}` };
+  marks.forEach((mk) => {
+    const t = String(mk.label.formatter);
+    mk.label.position = 'end'; mk.label.rotate = 0;
+    if (narrowEx) mk.label.formatter = t.startsWith('your') ? shortTxt.your(Math.round(mk.xAxis)) : t.includes('finalist') ? shortTxt.fin(Math.round(mk.xAxis)) : t.includes('medal') ? shortTxt.med(Math.round(mk.xAxis)) : shortTxt.weq(Math.round(mk.xAxis));
+  });
   marks.sort((a, b) => a.xAxis - b.xAxis);
-  let prevX = -Infinity, row = 0;
-  marks.forEach((mk) => { row = (mk.xAxis - prevX) < (hi - lo) * 0.22 ? (row + 1) % 3 : 0; prevX = mk.xAxis; mk.label.distance = [6, 4 + row * 18]; });
+  const span = (hi - lo) || 1, need = narrowEx ? 0.30 : 0.20; const rowLast = [-Infinity, -Infinity, -Infinity, -Infinity];
+  marks.forEach((mk) => { let r = rowLast.findIndex((x) => (mk.xAxis - x) / span >= need); if (r < 0) r = 0; rowLast[r] = mk.xAxis; mk.label.distance = 4 + r * 17; mk._row = r; });
+  const labelRows = Math.max(0, ...marks.map((m) => m._row)) + 1;
   const el = $('explorerChart');
   const chart = USAD.charts.mount(el, {
-    grid: { left: 48, right: 24, top: 32, bottom: 78 },
+    grid: { left: 48, right: 28, top: 14 + labelRows * 17, bottom: 78 },
     tooltip: { trigger: 'axis', formatter: p => `<b style="font-family:${MONO}">${p[0].value[0].toFixed(1)}</b> standard → <b>${p[0].value[1]}</b> qualify` },
-    xAxis: { type: 'value', min: Math.floor(lo), max: Math.ceil(hi), name: 'score standard', nameLocation: 'middle', nameGap: 26 },
-    yAxis: { type: 'value', name: 'athletes', minInterval: 1 },
+    xAxis: { type: 'value', min: Math.floor(lo / 10) * 10, max: Math.ceil(hi / 10) * 10, name: 'score standard', nameLocation: 'middle', nameGap: 26 },
+    yAxis: { type: 'value', minInterval: 1 },
     dataZoom: [{ type: 'slider', height: 20, bottom: 10, labelFormatter: v => v.toFixed(0) }, { type: 'inside' }],
     series: [{ type: 'line', step: 'end', data: sweep.map(s => [s.x, s.n]), symbol: 'none', lineStyle: { color: C.navy, width: 2 }, areaStyle: { color: 'rgba(0,154,199,.12)' },
       markLine: { symbol: 'none', silent: true, animation: false, data: marks },
@@ -2886,88 +2986,97 @@ function renderDecisionSurface() {
     return;
   }
 
-  let dlo = ddKnown[0], dhi = ddKnown[ddKnown.length - 1];
-  if (isNum(curDd)) { dlo = Math.min(dlo, curDd); dhi = Math.max(dhi, curDd); }
-  const dpad = (dhi - dlo) * 0.06 || 0.3; dlo -= dpad; dhi += dpad;
+  // DD totals are only like-for-like when every list has the same number of
+  // dives. The Winter eligibility pool mixes 5- and 6-optional lists with
+  // junior optionals-only phases, and the published rule needs no DD to earn
+  // the score, so no DD surface is drawn there.
+  if (state.pool === 'winterEligibility') {
+    host.innerHTML = `<div class="cs2-ex-foot">A DD minimum is not part of earning eligibility (Table 3 applies when entering Winter Nationals), and this pool mixes lists of different lengths, so DD totals here are not on one basis. Open the <b>Senior USA</b> pool to test a DD minimum on like-for-like lists.</div>`;
+    return;
+  }
+  // Frame the surface on the part of the field where the decision is made:
+  // from about the middle of the field up, and the DD range most lists sit in.
+  const qv = (arr, p) => arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))];
+  let dlo = qv(ddKnown, 0.03), dhi = qv(ddKnown, 0.97);
+  if (isNum(curDd)) { dlo = Math.min(dlo, curDd - 0.4); dhi = Math.max(dhi, curDd + 0.4); }
+  dlo = Math.floor(dlo * 5) / 5; dhi = Math.ceil(dhi * 5) / 5;
 
   const scores = rows.map(scoreForRow).filter(isNum).sort((a, b) => a - b);
-  let slo = scores[0], shi = scores[scores.length - 1];
   const wb = worldBenchmarks(els.genderFilter.value, els.disciplineFilter.value);
-  [curStd, wb && wb.finalist].forEach(v => { if (isNum(v)) { slo = Math.min(slo, v); shi = Math.max(shi, v); } });
-  const spad = (shi - slo) * 0.04 || 5; slo -= spad; shi += spad;
-
+  let slo = qv(scores, 0.4), shi = scores[scores.length - 1];
+  [curStd, wb && wb.finalist].forEach(v => { if (isNum(v)) { slo = Math.min(slo, v - 20); shi = Math.max(shi, v + 10); } });
+  slo = Math.floor(slo / 5) * 5; shi = Math.ceil(shi / 5) * 5;
   const topOnly = els.ruleMode.value === 'topNOnly';
+  const narrow = window.innerWidth < 720;
 
-  // ── DD sweep curve (hold score at current standard) ──
-  const DS = 70, dsweep = [];
-  for (let i = 0; i <= DS; i++) { const dd = dlo + (dhi - dlo) * i / DS; dsweep.push({ dd, n: qualCountWith(curStd, dd, 'knownOnly') }); }
-  const dyMax = Math.max(1, ...dsweep.map(s => s.n));
-  const cW = 760, cH = 200, cml = 48, cmr = 18, cmt = 18, cmb = 36, cpw = cW - cml - cmr, cph = cH - cmt - cmb;
-  const cX = dd => cml + (dd - dlo) / (dhi - dlo) * cpw;
-  const cY = n => cmt + cph - (n / dyMax) * cph;
-  let cl = '', ca = `M ${cX(dsweep[0].dd).toFixed(1)} ${cY(0).toFixed(1)}`;
-  dsweep.forEach((s, i) => { const px = cX(s.dd).toFixed(1), py = cY(s.n).toFixed(1); cl += (i ? ' L ' : 'M ') + px + ' ' + py; ca += ' L ' + px + ' ' + py; });
-  ca += ` L ${cX(dsweep[DS].dd).toFixed(1)} ${cY(0).toFixed(1)} Z`;
-  const cyStep = niceStep(dyMax / 3), cyt = []; for (let v = 0; v <= dyMax + 0.001; v += cyStep) cyt.push(v);
-  const cxt = []; for (let i = 0; i <= 5; i++) cxt.push(dlo + (dhi - dlo) * i / 5);
+  // ── DD lever alone (score held at the current standard) ──
+  const dstep = 0.1, dsweep = [];
+  for (let dd = dlo; dd <= dhi + 1e-9; dd += dstep) dsweep.push([+dd.toFixed(1), qualCountWith(curStd, dd, 'knownOnly')]);
   const curDdN = isNum(curDd) ? qualCountWith(curStd, curDd, 'knownOnly') : null;
-  const ddMark = (isNum(curDd) && curDd >= dlo && curDd <= dhi)
-    ? `<line x1="${cX(curDd).toFixed(1)}" y1="${cmt}" x2="${cX(curDd).toFixed(1)}" y2="${cmt + cph}" stroke="#171f69" stroke-width="2"/><text x="${cX(curDd).toFixed(1)}" y="${cmt - 6}" text-anchor="middle" class="cs2-ex-vlab" fill="#171f69">DD ${curDd.toFixed(1)}${curDdN != null ? ' · ' + curDdN : ''}</text>` : '';
-  const ddCurve = `<svg viewBox="0 0 ${cW} ${cH}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by DD minimum">`
-    + cyt.map(v => `<line x1="${cml}" y1="${cY(v).toFixed(1)}" x2="${cW - cmr}" y2="${cY(v).toFixed(1)}" class="cs2-ex-grid"/><text x="${cml - 8}" y="${(cY(v) + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${Math.round(v)}</text>`).join('')
-    + `<path d="${ca}" class="cs2-ex-area cs2-ex-area2"/><path d="${cl}" class="cs2-ex-line cs2-ex-line2"/>${ddMark}`
-    + cxt.map(dd => `<text x="${cX(dd).toFixed(1)}" y="${(cmt + cph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${dd.toFixed(1)}</text>`).join('')
-    + `<text x="${cW - cmr}" y="${cH - 4}" text-anchor="end" class="cs2-ex-axis">DD minimum →</text></svg>`;
 
   // ── score × DD grid ──
-  const COLS = 18, ROWS = 12;
-  const grid = [], colS = [], rowD = [];
-  let gMax = 0;
-  for (let c = 0; c < COLS; c++) colS.push(slo + (c + 0.5) / COLS * (shi - slo));
-  for (let r = 0; r < ROWS; r++) rowD.push(dlo + (r + 0.5) / ROWS * (dhi - dlo));
-  for (let r = 0; r < ROWS; r++) {
-    grid[r] = [];
-    for (let c = 0; c < COLS; c++) { const n = topOnly ? qualCountWith(0, rowD[r], 'knownOnly') : qualCountWith(colS[c], rowD[r], 'knownOnly'); grid[r][c] = n; if (n > gMax) gMax = n; }
-  }
-  const gW = 760, gH = 360, gml = 56, gmr = 16, gmt = 14, gmb = 40, gpw = gW - gml - gmr, gph = gH - gmt - gmb;
-  const cw = gpw / COLS, ch = gph / ROWS;
-  const cellX = c => gml + c * cw;
-  const cellY = r => gmt + (ROWS - 1 - r) * ch;   // higher DD at top
-  let cells = '';
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    cells += `<rect x="${cellX(c).toFixed(1)}" y="${cellY(r).toFixed(1)}" width="${(cw + 0.6).toFixed(1)}" height="${(ch + 0.6).toFixed(1)}" fill="${heatColor(gMax ? grid[r][c] / gMax : 0)}"/>`;
-  }
-  // current cell outline
-  let curCell = '';
-  if (isNum(curStd) && isNum(curDd)) {
-    const ci = Math.round((curStd - slo) / (shi - slo) * COLS - 0.5);
-    const ri = Math.round((curDd - dlo) / (dhi - dlo) * ROWS - 0.5);
-    if (ci >= 0 && ci < COLS && ri >= 0 && ri < ROWS) {
-      curCell = `<rect x="${cellX(ci).toFixed(1)}" y="${cellY(ri).toFixed(1)}" width="${cw.toFixed(1)}" height="${ch.toFixed(1)}" fill="none" stroke="#fff" stroke-width="2.5"/><rect x="${(cellX(ci) + 1.2).toFixed(1)}" y="${(cellY(ri) + 1.2).toFixed(1)}" width="${(cw - 2.4).toFixed(1)}" height="${(ch - 2.4).toFixed(1)}" fill="none" stroke="#0d1117" stroke-width="1"/>`;
-    }
-  }
-  // world finalist vertical reference
-  let wbLine = '';
-  if (wb && !topOnly && wb.finalist >= slo && wb.finalist <= shi) {
-    const wx = (gml + (wb.finalist - slo) / (shi - slo) * gpw).toFixed(1);
-    wbLine = `<line x1="${wx}" y1="${gmt}" x2="${wx}" y2="${gmt + gph}" stroke="#c39a3e" stroke-width="2" stroke-dasharray="5 4"/><text x="${wx}" y="${gmt - 3}" text-anchor="middle" class="cs2-ex-vlab" fill="#c39a3e">World finalist</text>`;
-  }
-  const gx = []; for (let i = 0; i <= 5; i++) { const c = Math.round(i / 5 * (COLS - 1)); gx.push(c); }
-  const gy = [0, Math.round(ROWS / 2), ROWS - 1];
-  const gridSvg = `<svg viewBox="0 0 ${gW} ${gH}" class="cs2-ex-svg" role="img" aria-label="Qualifiers by score and DD">`
-    + cells + curCell + wbLine
-    + gx.map(c => `<text x="${(cellX(c) + cw / 2).toFixed(1)}" y="${(gmt + gph + 16).toFixed(1)}" text-anchor="middle" class="cs2-ex-xlab">${topOnly ? '' : Math.round(colS[c])}</text>`).join('')
-    + gy.map(r => `<text x="${gml - 8}" y="${(cellY(r) + ch / 2 + 4).toFixed(1)}" text-anchor="end" class="cs2-ex-ylab">${rowD[r].toFixed(1)}</text>`).join('')
-    + `<text x="${gml}" y="${gH - 4}" class="cs2-ex-axis">${topOnly ? 'score does not gate (placement rule)' : 'score standard →'}</text>`
-    + `<text x="${gml - 48}" y="${gmt - 2}" class="cs2-ex-axis">DD min</text></svg>`;
+  // Columns and rows are anchored on the current standard so it is always
+  // exactly one of the cells rather than the nearest one.
+  const COLS = narrow ? 10 : 16, ROWS = narrow ? 8 : 10;
+  const sStep = Math.max(1, niceStep((shi - slo) / COLS)), dStepG = Math.max(0.1, Math.ceil(((dhi - dlo) / ROWS) * 10) / 10);
+  const ladder = (lo, hi, step, anchor, dp) => {
+    const a = isNum(anchor) ? anchor : lo, out = [];
+    for (let k = Math.ceil((lo - a) / step - 1e-9); a + k * step <= hi + 1e-9 && out.length < 40; k++) out.push(+(a + k * step).toFixed(dp));
+    return out;
+  };
+  const colS = ladder(slo, shi, sStep, curStd, 0), rowD = ladder(dlo, dhi, dStepG, curDd, 1);
+  const cells = []; let gMax = 0;
+  rowD.forEach((dd, r) => colS.forEach((sc, c) => { const n = topOnly ? qualCountWith(0, dd, 'knownOnly') : qualCountWith(sc, dd, 'knownOnly'); cells.push([c, r, n]); if (n > gMax) gMax = n; }));
+  const nearest = (arr, v) => arr.reduce((bi, x, i) => Math.abs(x - v) < Math.abs(arr[bi] - v) ? i : bi, 0);
 
-  // legend
-  const legStops = [0, 0.25, 0.5, 0.75, 1].map(t => `<span class="cs2-ex-legsw" style="background:${heatColor(t)}"></span>`).join('');
-  const legend = `<div class="cs2-ex-legend"><span>fewer qualify</span>${legStops}<span>more (${gMax})</span></div>`;
+  host.innerHTML = `<div class="cs2-ex-foot">${covNote}</div>
+    <div class="cs2-surf-sub">The DD lever alone: athletes who qualify as the DD minimum rises, score held at ${isNum(curStd) ? Math.round(curStd) : '—'}.</div>
+    <div id="ddLeverChart" class="usad-chart" style="height:200px"></div>
+    <div class="cs2-surf-sub">Both levers together: athletes who clear each score and DD pair. The outlined cell is the current standard${topOnly ? '' : '; tap a cell to set both'}.</div>
+    <div id="surfaceChart" class="usad-chart" style="height:${narrow ? 300 : 360}px"></div>`;
+  if (!window.echarts || !window.USAD.charts) return;
+  const { colors: C, MONO } = USAD.charts;
+  USAD.charts.mount($('ddLeverChart'), {
+    grid: { left: 44, right: 20, top: 26, bottom: 40 },
+    tooltip: { trigger: 'axis', formatter: p => `DD minimum <b style="font-family:${MONO}">${p[0].value[0].toFixed(1)}</b> → <b>${p[0].value[1]}</b> qualify` },
+    xAxis: { type: 'value', min: dlo, max: dhi, name: 'DD minimum (list total)', nameLocation: 'middle', nameGap: 24 },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [{ type: 'line', step: 'end', data: dsweep, symbol: 'none', lineStyle: { color: C.pool, width: 2 }, areaStyle: { color: 'rgba(0,154,199,.14)' },
+      markLine: isNum(curDd) ? { symbol: 'none', silent: true, animation: false, data: [{ xAxis: curDd, lineStyle: { color: C.navy, width: 1.5 }, label: { formatter: `DD ${curDd.toFixed(1)}${curDdN != null ? ' · ' + curDdN + ' qualify' : ''}`, position: 'end', rotate: 0, fontFamily: MONO, fontSize: 11, color: C.navy } }] } : undefined }],
+  }, { filename: 'dd-lever' });
 
-  host.innerHTML = `<div class="cs2-ex-foot">${covNote}</div>`
-    + `<div class="cs2-surf-sub">The DD lever alone — qualifiers as the DD minimum rises (score held at ${isNum(curStd) ? Math.round(curStd) : '—'}):</div>${ddCurve}`
-    + `<div class="cs2-surf-sub">Both levers together — every score × DD combination. The outlined cell is your current standard.</div>${gridSvg}${legend}`;
+  const ci = isNum(curStd) ? nearest(colS, curStd) : -1, ri = isNum(curDd) ? nearest(rowD, curDd) : -1;
+  const surf = USAD.charts.mount($('surfaceChart'), {
+    grid: { left: 48, right: 16, top: 26, bottom: 62 },
+    tooltip: { formatter: p => `score ≥ <b style="font-family:${MONO}">${colS[p.value[0]]}</b> and DD ≥ <b style="font-family:${MONO}">${rowD[p.value[1]].toFixed(1)}</b><br><b>${p.value[2]}</b> unique athletes clear both` },
+    xAxis: { type: 'category', data: colS, name: topOnly ? 'score does not gate (placement rule)' : 'score standard', nameLocation: 'middle', nameGap: 24, axisLabel: { interval: narrow ? 1 : 1 } },
+    yAxis: { type: 'category', data: rowD.map(v => v.toFixed(1)), name: 'DD minimum', nameLocation: 'end', nameTextStyle: { align: 'left', padding: [0, 0, 0, -40] }, axisLabel: { interval: 0 } },
+    visualMap: { min: 0, max: Math.max(1, gMax), calculable: false, orient: 'horizontal', left: 'center', bottom: 0, itemHeight: 120, itemWidth: 9, text: [`${gMax}`, '0'] },
+    series: [{ type: 'heatmap', progressive: 0,
+      data: cells.map(v => ({ value: v, label: { color: (gMax && v[2] / gMax > 0.45) ? '#fff' : '#1c2340' } })),
+      label: { show: true, formatter: p => p.value[2], fontFamily: MONO, fontSize: narrow ? 9 : 11 },
+      emphasis: { itemStyle: { borderColor: C.navy, borderWidth: 2 } },
+    }],
+  }, { filename: 'score-dd-surface' });
+  if (ci >= 0 && ri >= 0) {
+    let lastKey = '';
+    const outline = () => {
+      const p1 = surf.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [ci, ri]); if (!p1) return;
+      const p0 = surf.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [0, 0]), pX = surf.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [1, 0]), pY = surf.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [0, 1]);
+      const w = colS.length > 1 ? Math.abs(pX[0] - p0[0]) : 40, h = rowD.length > 1 ? Math.abs(pY[1] - p0[1]) : 30;
+      const key = [p1[0], p1[1], w, h].map(Math.round).join(',');
+      if (key === lastKey) return;   // 'finished' fires after every paint; only redraw when the cell moved
+      lastKey = key;
+      surf.setOption({ graphic: [{ id: 'cur', type: 'rect', shape: { x: p1[0] - w / 2, y: p1[1] - h / 2, width: w, height: h }, style: { fill: 'transparent', stroke: C.red, lineWidth: 2.5 }, z: 100, silent: true }] });
+    };
+    outline(); surf.on('finished', outline);
+  }
+  if (!topOnly) surf.on('click', (p) => {
+    if (!p.value) return;
+    els.scoreThreshold.value = colS[p.value[0]]; els.ddThreshold.value = rowD[p.value[1]].toFixed(1);
+    if (els.ddMode.value === 'ignore') els.ddMode.value = 'knownOnly';
+    state.thresholdEdited = true; state.ddThresholdEdited = true; recompute();
+  });
 }
 
 // ── Multi-year backtest ────────────────────────────────────────────────────
@@ -3032,20 +3141,33 @@ function renderBacktest() {
   }
   const curScore = num(els.scoreThreshold.value);
   const curDd    = num(els.ddThreshold.value);
-  const rows = years.map(y => ({ year: y, count: qualCountForYear(y, curScore, curDd), isCurrent: y === state.year }));
-  const max  = Math.max(1, ...rows.map(r => r.count));
-  const body = rows.map(r => `
-    <div class="cs2-sens-row ${r.isCurrent ? 'is-current' : ''}">
-      <span class="cs2-sens-th">${r.year}${r.isCurrent ? ' · active' : ''}</span>
-      <span class="cs2-sens-bar"><span class="cs2-sens-fill" style="width:${Math.round(r.count / max * 100)}%"></span></span>
-      <span class="cs2-sens-n">${r.count}</span>
-    </div>`).join('');
+  const rows = years.map(y => {
+    const field = new Set(rowsForYear(y).filter(r => isNum(scoreForRow(r))).map(r => athleteKey(r))).size;
+    return { year: y, field, count: field ? qualCountForYear(y, curScore, curDd) : null, isCurrent: y === state.year };
+  });
   const stdTxt = [
     isNum(curScore) ? `score ${fmtScore(curScore)}` : null,
     isNum(curDd) ? `DD ${fmtDd(curDd)}` : null,
     (num(els.topN.value) > 0) ? `top ${els.topN.value}` : null,
   ].filter(Boolean).join(' · ') || 'the current rule';
-  host.innerHTML = `<div class="cs2-sens-baseline">If <b>${esc(stdTxt)}</b> had been the bar in each season (${esc(activePool().shortLabel)} pool, same event/round filters as now):</div><div class="cs2-sens-ladders">${body}</div>`;
+  const withData = rows.filter(r => r.field > 0).sort((a, b) => a.year - b.year);
+  const empty = rows.filter(r => !r.field).map(r => r.year).sort();
+  host.innerHTML = `<div class="cs2-sens-baseline">If <b>${esc(stdTxt)}</b> had been the bar in each season (${esc(activePool().shortLabel)} pool, same event and round filters as now). Dark bar = unique athletes who qualify; light bar = unique athletes with a scored result that season.</div>
+    <div id="backtestChart" class="usad-chart" style="height:260px"></div>
+    ${empty.length ? `<div class="cs2-ex-foot">No results in this scope for ${empty.join(', ')}; those seasons are left off, not counted as zero.</div>` : ''}`;
+  if (!window.echarts || !window.USAD.charts || !withData.length) return;
+  const { colors: C, MONO } = USAD.charts;
+  USAD.charts.mount($('backtestChart'), {
+    grid: { left: 44, right: 16, top: 30, bottom: 28 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: p => { const r = withData[p[0].dataIndex]; return `<b>${r.year}</b><br>${r.count} of ${r.field} unique athletes qualify (${Math.round(100 * r.count / r.field)}%)`; } },
+    legend: { top: 0, left: 44 },
+    xAxis: { type: 'category', data: withData.map(r => r.year + (r.isCurrent ? ' ·' : '')) },
+    yAxis: { type: 'value', minInterval: 1 },
+    series: [
+      { name: 'Qualify', type: 'bar', data: withData.map(r => r.count), itemStyle: { color: C.navy }, barGap: '-100%', z: 3, label: { show: true, position: 'top', fontFamily: MONO, fontSize: 11, color: C.navy } },
+      { name: 'Field (unique athletes)', type: 'bar', data: withData.map(r => r.field), itemStyle: { color: 'rgba(143,195,234,.45)' }, z: 1 },
+    ],
+  }, { filename: 'past-seasons' });
 }
 
 function renderEnhancements() {
