@@ -1497,6 +1497,32 @@ tr[data-hl]:hover{background:#eef7fb}
 .atl-ov-cells.atl-ov-chg{margin-top:2px;font-size:12px;color:#6b7385;min-height:15px}
 .atl-ov-cells.atl-ov-chg span.on{color:#171f69}
 .atl-ov-cells.atl-ov-chg span.new{grid-column:1 / -1;text-align:right}
+.mt-sug{display:flex;flex-direction:column;gap:6px;border-top:1px solid #dfe3ea;padding-top:7px}
+.mt-sug-n{font-size:12px;color:#6b7385;line-height:1.4}
+.mt-sug-i{border:1px solid #dfe3ea;border-radius:6px;background:#fff;padding:6px 8px}
+.mt-sug-i:hover{border-color:#e31937}
+.mt-sug-t{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#171f69}
+.mt-sug-d{font-size:12px;color:#3b4460;line-height:1.45}
+.mt-sug-d i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 4px 0 0;vertical-align:-1px}
+.mt-sug-d i+*{margin:0}
+.mt-cmp-back{position:fixed;inset:0;z-index:200;background:rgba(11,18,64,.45);display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto}
+.mt-cmp{background:#fff;border-radius:10px;width:min(1500px,100%);padding:16px 20px 18px;box-shadow:0 20px 60px rgba(11,18,64,.3);font-family:Inter,system-ui,sans-serif;color:#171f69}
+.mt-cmp-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.mt-cmp-h b{font-size:18px;margin-right:6px}
+.mt-cmp-h span{font-size:13px;color:#6b7385}
+.mt-cmp-h .atl-sel{border:1px solid #cdd6e4;border-radius:6px;padding:6px 8px;font:inherit;font-size:13.5px;color:#171f69;background:#fff}
+.mt-cmp-sp{flex:1}
+.mt-cmp-maps{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.mt-cmp-maps svg{width:100%;height:auto;display:block}
+.mt-cmp-cap{font-size:15px;font-weight:700;margin-bottom:2px}
+.mt-cmp-t{border-collapse:collapse;width:100%;margin-top:10px;font-size:14px;font-variant-numeric:tabular-nums}
+.mt-cmp-t th,.mt-cmp-t td{padding:5px 8px;text-align:right;border-bottom:1px solid #e3e7ee;white-space:nowrap}
+.mt-cmp-t th{font-size:12px;color:#6b7385;border-bottom:1px solid #171f69;vertical-align:bottom}
+.mt-cmp-t .l{text-align:left}
+.mt-cmp-t .b{font-weight:700;color:#171f69}
+.mt-cmp-t td i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+.mt-cmp-t tr.tot td{font-weight:700;border-top:1px solid #171f69;border-bottom:0}
+.mt-cmp-n{font-size:12.5px;color:#6b7385;line-height:1.45;margin:10px 0 0}
 #bsPins circle{vector-effect:non-scaling-stroke}
 .atl #bsSvg.fade-clubs path.bcty.e{fill-opacity:.3}
 
@@ -1776,7 +1802,7 @@ body.bs-meet .atl-rail-note{font-size:12.5px;color:#6b7385}
   {"src":"routing.js?v=202609250345"},
   {"src":"pq-visuals.js?v=202610011500"},
   {"src":"scenario-schedule-engine.js?v=202608281800"},
-  {"src":"boundary.js?v=202611130030"},
+  {"src":"boundary.js?v=202611130100"},
   {"src":"bs-reports.js?v=202610251610"},
   {"src":"jc-report.js?v=202609250140","module":true},
   {"src":"pricing.js?v=202611122330"},

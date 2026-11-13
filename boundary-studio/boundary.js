@@ -8991,7 +8991,9 @@ function meetBarHtml(){
   const pinNote = m.pins && g ? `<span class="mt-key"><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#111827"/></svg>club address <svg width="12" height="12"><circle cx="6" cy="6" r="3.6" fill="#fff" stroke="#111827" stroke-width="1.2"/></svg>estimated</span>` : '';
   return `${S.meetView ? `<div class="mt-title"><div><b>${esc(S.mapName || S.scenarioName || 'Boundary map')}</b>${membershipAsOfHtml()}</div><button class="mt-b" id="mtExit" title="Leave meeting view (Esc)">Exit meeting view</button></div>` : ''}
     <div class="mt-r"><span class="mt-l">Starting point</span>${baseRow}</div>
-    <div class="mt-r"><span class="mt-l">Options</span><span class="mt-btns">${chips}${upd}</span></div>
+    <div class="mt-r"><span class="mt-l">Options</span><span class="mt-btns">${chips}${upd}<button class="mt-b" id="mtCmpBtn" title="Two of these maps next to each other, with the difference for each area">Side by side</button></span></div>
+    <div class="mt-r"><span class="mt-l">Balance</span><span class="mt-btns"><button class="mt-b" id="mtSugBtn" title="Border counties that would bring an area that is over closer to a smaller neighbour">${S.sugOpen ? 'Hide suggestions' : 'Suggest moves'}</button></span></div>
+    ${S.sugOpen ? `<div class="mt-sug" id="mtSug">${S._sugHtml || '<div class="mt-sug-n">Working it out.</div>'}</div>` : ''}
     <div class="mt-r"><span class="mt-l">Counties</span><span class="mt-btns">
       <select class="atl-sel" id="mtFade" title="Which counties are drawn pale">
         <option value="members" ${m.fade==='members'?'selected':''}>Fade counties with no members</option>
@@ -9033,6 +9035,9 @@ function meetBarRefresh(){
   });
   const pn = $id('mtPins');
   if (pn) pn.addEventListener('change', () => { m.pins = pn.checked; meetSave(); meetPins(); meetBarRefresh(); });
+  on('mtCmpBtn', cmpOpen);
+  on('mtSugBtn', () => { S.sugOpen = !S.sugOpen; S._sugHtml = ''; sugHighlight(null); meetBarRefresh(); });
+  if (S.sugOpen) sugRefresh();
   on('mtMeet', () => meetView(true));
   on('mtExit', () => meetView(false));
   on('mtPdf', printMapSummary);
@@ -9121,8 +9126,271 @@ function printMapSummary(){
   document.body.appendChild(fr);
   const doc = fr.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
-  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } }, 150);
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } try { window.focus(); } catch(e){} }, 150);
   atlasToast('Summary ready. Choose Save as PDF in the print window to keep a copy.', true);
+}
+
+/* ---------- suggested moves ----------
+   One county at a time, from an area that is over an even split to a
+   neighbouring area that holds fewer, ranked by how much the move closes the
+   gap between the two. A county is only offered when taking it out leaves the rest
+   of its area in one piece. The list is advice: nothing moves until Move is
+   pressed, and each move is one Undo step. */
+function sugCountyVal(fips, k){
+  const st = S.geo.stats[fips], y = st && st[S.year];
+  if (k === 't_comp'){
+    const rec = S.mtypes && S.mtypes.byCounty[fips], t = rec && rec[S.year];
+    if (!t) return 0;
+    return MTYPE_METRICS.t_comp.types.reduce((a, ty) => a + (t[ty] || 0), 0);
+  }
+  if (!y) return 0;
+  return k === 'athletes' ? y.a : k === 'coaches' ? y.c : y.m;
+}
+async function sugCompute(){
+  let A = null;
+  try { A = await loadAutoData(); } catch(e){ A = null; }
+  if (!A || !A.adj || !A.fips) return {err: 'The county border list could not be loaded.'};
+  if (S.tierView !== 0) return {err: 'Suggestions work on the first level, where counties are painted.'};
+  const typed = mtypeYearOk();
+  let k = S.atlBal || 't_comp';
+  if (k === 't_comp' && !typed) k = 'athletes';
+  if (k === 'clubs') return {err: 'Suggestions are not offered when balancing on clubs, because a club can count in two areas. Pick another column.'};
+  const n = S.regions.length, V = new Array(n).fill(0);
+  const reg = A.fips.map(f => { const r = S.assign[f]; return (r == null || r < 0 || r >= n) ? -1 : r; });
+  const val = A.fips.map(f => sugCountyVal(f, k));
+  reg.forEach((r, i) => { if (r >= 0) V[r] += val[i]; });
+  const sum = V.reduce((a, b) => a + b, 0), even = n ? sum / n : 0;
+  const out = [];
+  // Does area r stay in one piece around county i once i leaves?
+  const holds = (i, r) => {
+    const nb = A.adj[i].filter(j => reg[j] === r);
+    if (nb.length <= 1) return nb.length === 1;      // 0 = the county is an island already; leave it
+    const want = new Set(nb), seen = new Set([nb[0]]); let q = [nb[0]], left = want.size - 1;
+    while (q.length && left > 0){
+      const nx = [];
+      for (const a of q) for (const b of A.adj[a]){
+        if (b === i || reg[b] !== r || seen.has(b)) continue;
+        seen.add(b); nx.push(b);
+        if (want.has(b)) left--;
+      }
+      q = nx;
+    }
+    return left === 0;
+  };
+  for (let i = 0; i < A.fips.length; i++){
+    const r = reg[i], v = val[i];
+    if (r < 0 || v <= 0 || V[r] <= even) continue;
+    let best = -1;
+    for (const j of A.adj[i]){
+      const s = reg[j];
+      if (s < 0 || s === r) continue;
+      if (V[r] - V[s] - v <= 0) continue;            // would overshoot: the gap would not shrink
+      if (best < 0 || V[s] < V[best]) best = s;
+    }
+    if (best < 0 || !holds(i, r)) continue;
+    const st = S.geo.stats[A.fips[i]], y = st && st[S.year];
+    out.push({f: A.fips[i], from: r, to: best, v, m: y ? y.m : 0, gain: 2 * v * (V[r] - V[best] - v),
+              gap0: V[r] - V[best], gap1: V[r] - V[best] - 2 * v});
+  }
+  out.sort((a, b) => b.gain - a.gain || a.m - b.m);
+  return {k, list: out.slice(0, 6), total: out.length};
+}
+function sugHighlight(fips){
+  const g = document.getElementById('bsSvgG'); if (!g) return;
+  let el = document.getElementById('bsSugHi');
+  if (!fips){ if (el) el.remove(); return; }
+  const c = S.geo.counties.find(x => x.f === fips); if (!c) return;
+  if (!el){ el = document.createElementNS('http://www.w3.org/2000/svg', 'path'); el.id = 'bsSugHi'; el.setAttribute('pointer-events', 'none'); el.setAttribute('fill', 'none'); el.setAttribute('stroke', '#e31937'); el.setAttribute('stroke-linejoin', 'round'); }
+  el.setAttribute('d', c.d); el.setAttribute('stroke-width', (3 / Math.sqrt(S.zoom.k || 1)).toFixed(2));
+  g.appendChild(el);
+}
+async function sugRefresh(){
+  const box = $id('mtSug'); if (!box || !S.sugOpen) return;
+  const tick = (S._sugTick = (S._sugTick || 0) + 1);
+  const res = await sugCompute();
+  if (tick !== S._sugTick || !$id('mtSug')) return;
+  const bx = $id('mtSug');
+  if (res.err){ bx.innerHTML = `<div class="mt-sug-n">${esc(res.err)}</div>`; return; }
+  const col = OV_COLS.find(c => c.k === res.k), unit = col ? col.unit : 'members';
+  if (!res.list.length){ bx.innerHTML = `<div class="mt-sug-n">No single county would bring an area that is over closer to a smaller neighbour, counting ${esc(unit)}.</div>`; return; }
+  bx.innerHTML = `<div class="mt-sug-n">Counting ${esc(unit)}. Hover to see the county on the map.</div>` + res.list.map((s, i) => {
+    const c = S.geo.counties.find(x => x.f === s.f);
+    const suffix = /Parish|Borough|city|Census Area|Municipality/.test(c.n) ? '' : ' County';
+    return `<div class="mt-sug-i" data-sugf="${s.f}">
+      <div class="mt-sug-t"><b>${esc(c.n)}${suffix}, ${esc(c.st)}</b><button class="mt-b" data-sugmove="${i}" title="Move this county. Undo puts it back.">Move</button></div>
+      <div class="mt-sug-d"><i style="background:${groupColor(s.from)}"></i>${esc(S.regions[s.from].name)} to <i style="background:${groupColor(s.to)};margin-left:3px"></i>${esc(S.regions[s.to].name)}</div>
+      <div class="mt-sug-d">${fmt(s.v)} ${esc(unit)}${res.k !== 'members' ? `, ${fmt(s.m)} members in all` : ''}. Gap between the two: ${fmt(s.gap0)} to ${fmt(Math.abs(s.gap1))}.</div>
+    </div>`;
+  }).join('') + (res.total > res.list.length ? `<div class="mt-sug-n">${fmt(res.total - res.list.length)} more possible. The list refreshes after each move.</div>` : '');
+  bx.querySelectorAll('[data-sugf]').forEach(el => {
+    el.addEventListener('mouseenter', () => sugHighlight(el.dataset.sugf));
+    el.addEventListener('mouseleave', () => sugHighlight(null));
+  });
+  bx.querySelectorAll('[data-sugmove]').forEach(b => b.addEventListener('click', () => {
+    const s = res.list[+b.dataset.sugmove]; if (!s) return;
+    if (S.assign[s.f] !== s.from){ sugRefresh(); return; }
+    pushUndo();
+    S.assign[s.f] = s.to; S.dirty = true; S._uKey = null;
+    if (!tallyMove(s.f, s.from, s.to)) tallyInvalidate();
+    sugHighlight(null);
+    repaintAll(); refreshHistoryButtons(); atlasStatus();
+    renderNumbers();
+  }));
+  S._sugHtml = bx.innerHTML;
+}
+
+/* ---------- two maps side by side ---------- */
+function meetSnapTallies(sn){
+  if (!sn) return null;
+  const key = sn.at + '|' + S.year + '|' + S.tierView;
+  S._snapT = S._snapT || {};
+  if (S._snapT[key]) return S._snapT[key];
+  const keep = {assign: S.assign, regions: S.regions, levels: S.levels, finalName: S.finalName, tally: S._tally, of: S._of};
+  let val = null;
+  try {
+    S.assign = sn.assign; S.regions = JSON.parse(JSON.stringify(sn.regions)); S.levels = JSON.parse(JSON.stringify(sn.levels));
+    const t = tallyBatch(), typed = memberTypeTallies(t.TG);
+    val = {names: t.TG.groups.map(g => g.name), of: t.TG.of.slice(), nReg: S.regions.length,
+           colors: t.TG.groups.map((_, gi) => groupColor(gi)),
+           rows: t.rows.map((r,gi) => ({t_comp: typed ? typed[gi].t_comp : null, athletes: r.a, coaches: r.c, clubs: r.cl.size, members: r.m}))};
+  } catch(e){ console.error('map tallies', e); val = null; }
+  finally { S.assign = keep.assign; S.regions = keep.regions; S.levels = keep.levels; S.finalName = keep.finalName; S._tally = keep.tally; S._of = keep.of; }
+  if (val) S._snapT[key] = val;
+  return val;
+}
+function cmpChoices(){
+  const m = meetStore(), out = [['now', 'Map on screen']];
+  if (m.base) out.push(['base', 'Starting point']);
+  ['A','B','C'].forEach(L => { if (m.opts[L]) out.push([L, 'Option ' + L]); });
+  return out;
+}
+function cmpSnap(k){
+  const m = meetStore();
+  if (k === 'now'){ const s = meetSnap(); s.at = 'now' + Date.now(); return s; }
+  return k === 'base' ? m.base : m.opts[k];
+}
+/* Everything the screen and the printed page both need. */
+function cmpData(lk, rk){
+  const names = Object.fromEntries(cmpChoices());
+  const L = cmpSnap(lk), R = cmpSnap(rk); if (!L || !R) return null;
+  const TL = meetSnapTallies(L), TR = meetSnapTallies(R); if (!TL || !TR) return null;
+  const typed = TL.rows.length && TL.rows[0].t_comp != null;
+  let balK = S.atlBal || 't_comp';
+  if (!OV_COLS.some(c => c.k === balK) || (balK === 't_comp' && !typed)) balK = typed ? 't_comp' : 'athletes';
+  const cols = OV_COLS.filter(c => !(c.k === 't_comp' && !typed));
+  const grp = (sn, T) => f => { const ri = sn.assign[f]; return (ri == null || ri < 0 || ri >= T.nReg) ? -1 : T.of[ri]; };
+  const gL = grp(L, TL), gR = grp(R, TR);
+  // The same area in both maps: by position when the lists match, otherwise by name.
+  const sameList = TL.names.length === TR.names.length && TL.names.every((n, i) => n === TR.names[i]);
+  const pair = TR.names.map((n, i) => sameList ? i : (TL.names.indexOf(n) >= 0 && TL.names.indexOf(n, TL.names.indexOf(n) + 1) < 0 ? TL.names.indexOf(n) : -1));
+  const diff = new Set();
+  for (const c of S.geo.counties){ const a = gL(c.f), b = gR(c.f), pb = b < 0 ? -1 : pair[b]; if ((b >= 0 && pb < 0) || pb !== a) diff.add(c.f); }
+  const svg = (g, T, mark) => atlasStaticSvg(g, gi => T.colors[gi], {faded: countyFaded, changed: mark ? (f => diff.has(f)) : null});
+  const rows = TR.names.map((n, i) => ({name: n, color: TR.colors[i], r: TR.rows[i], l: pair[i] >= 0 ? TL.rows[pair[i]] : null}));
+  const gone = TL.names.filter((n, i) => !pair.includes(i));
+  const sumOf = (T, k) => T.rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const spread = T => { const v = T.rows.map(r => r[balK] || 0); return v.length ? Math.max(...v) - Math.min(...v) : 0; };
+  return {lName: names[lk], rName: names[rk], balK, bc: OV_COLS.find(c => c.k === balK), cols, rows, gone, moved: diff.size,
+          svgL: svg(gL, TL, false), svgR: svg(gR, TR, true), spreadL: spread(TL), spreadR: spread(TR),
+          evenL: TL.rows.length ? sumOf(TL, balK) / TL.rows.length : 0, evenR: TR.rows.length ? sumOf(TR, balK) / TR.rows.length : 0,
+          nL: TL.rows.length, nR: TR.rows.length};
+}
+function cmpTableHtml(D){
+  const others = D.cols.filter(c => c.k !== D.balK);
+  const sg = d => d == null ? '' : (meetSigned(d) || '0');
+  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th><th>${esc(D.bc.short)}, ${esc(D.lName)}</th><th>${esc(D.bc.short)}, ${esc(D.rName)}</th><th class="b">Difference</th>${others.map(c => `<th>${esc(c.short)}</th>`).join('')}</tr>`;
+  const body = D.rows.map(x => `<tr><td class="l"><i style="background:${x.color}"></i>${esc(x.name)}</td>
+      <td>${x.l ? fmt(x.l[D.balK]) : 'not in this map'}</td><td>${fmt(x.r[D.balK])}</td><td class="b">${x.l ? sg(x.r[D.balK] - x.l[D.balK]) : ''}</td>
+      ${others.map(c => `<td>${x.l ? sg(x.r[c.k] - x.l[c.k]) : ''}</td>`).join('')}</tr>`).join('');
+  const foot = `<tr class="tot"><td class="l">Largest minus smallest</td><td>${fmt(D.spreadL)}</td><td>${fmt(D.spreadR)}</td><td class="b">${sg(D.spreadR - D.spreadL)}</td>${others.map(() => '<td></td>').join('')}</tr>`;
+  return `<table class="mt-cmp-t"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>`;
+}
+function cmpNotes(D){
+  return [
+    `${fmt(D.moved)} ${D.moved === 1 ? 'county is' : 'counties are'} in a different area in ${D.rName} than in ${D.lName}${D.moved ? ', outlined in red on the second map' : ''}.`,
+    `Difference is ${D.rName} minus ${D.lName}, in ${D.bc.label}. The columns to its right are the same difference for the other counts.`,
+    `An even split would be ${fmt(Math.round(D.evenL))} each in ${D.lName}${D.nL !== D.nR || Math.round(D.evenL) !== Math.round(D.evenR) ? ` and ${fmt(Math.round(D.evenR))} each in ${D.rName}` : ' and the same in ' + D.rName}.`,
+    D.gone.length ? `In ${D.lName} only: ${D.gone.join(', ')}.` : '',
+    meetFadeText(),
+  ].filter(Boolean).join(' ');
+}
+function cmpOpen(){
+  const ch = cmpChoices();
+  if (ch.length < 2){ msg('Keep at least one option or mark a starting point first, so there are two maps to compare.'); return; }
+  const m = meetStore();
+  if (S._snapT) Object.keys(S._snapT).forEach(k => { if (k.startsWith('now')) delete S._snapT[k]; });
+  let lk = S._cmpL && ch.some(c => c[0] === S._cmpL) ? S._cmpL : (m.base ? 'base' : ch[1][0]);
+  let rk = S._cmpR && ch.some(c => c[0] === S._cmpR) ? S._cmpR : 'now';
+  if (lk === rk) rk = ch.find(c => c[0] !== lk)[0];
+  const old = document.getElementById('mtCmp'); if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'mtCmp'; wrap.className = 'mt-cmp-back';
+  document.body.appendChild(wrap);
+  const close = () => { document.removeEventListener('keydown', key, true); wrap.remove(); };
+  const key = e => { if (e.key === 'Escape'){ e.stopPropagation(); e.preventDefault(); close(); } };
+  document.addEventListener('keydown', key, true);
+  const draw = () => {
+    S._cmpL = lk; S._cmpR = rk;
+    const D = cmpData(lk, rk);
+    const sel = (id, v) => `<select class="atl-sel" id="${id}">${ch.map(c => `<option value="${c[0]}" ${c[0]===v?'selected':''}>${esc(c[1])}</option>`).join('')}</select>`;
+    wrap.innerHTML = `<div class="mt-cmp" role="dialog" aria-modal="true" aria-label="Two maps side by side">
+      <div class="mt-cmp-h"><b>Side by side</b>${sel('mtCmpL', lk)}<span>and</span>${sel('mtCmpR', rk)}
+        <span class="mt-cmp-sp"></span><button class="mt-b" id="mtCmpPrint" ${D ? '' : 'disabled'}>Print or save as PDF</button><button class="mt-b prim" id="mtCmpClose">Close</button></div>
+      ${D ? `<div class="mt-cmp-maps">
+          <div><div class="mt-cmp-cap">${esc(D.lName)}</div><svg viewBox="0 0 975 610">${D.svgL}</svg></div>
+          <div><div class="mt-cmp-cap">${esc(D.rName)}</div><svg viewBox="0 0 975 610">${D.svgR}</svg></div>
+        </div>${cmpTableHtml(D)}<p class="mt-cmp-n">${esc(cmpNotes(D))}</p>`
+        : '<p class="mt-cmp-n">Could not count one of these maps at this level.</p>'}
+    </div>`;
+    wrap.querySelector('#mtCmpL').addEventListener('change', e => { lk = e.target.value; if (lk === rk) rk = ch.find(c => c[0] !== lk)[0]; draw(); });
+    wrap.querySelector('#mtCmpR').addEventListener('change', e => { rk = e.target.value; if (lk === rk) lk = ch.find(c => c[0] !== rk)[0]; draw(); });
+    wrap.querySelector('#mtCmpClose').addEventListener('click', close);
+    wrap.querySelector('#mtCmpPrint').addEventListener('click', () => { if (D) printHtmlDoc(cmpPrintHtml(D)); });
+  };
+  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+  draw();
+}
+function cmpPrintHtml(D){
+  const d = S.asOf ? new Date(S.asOf) : null;
+  const asOf = S.year === 'y26'
+    ? (d && !isNaN(d) ? `2026 membership as of the ${d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})} import` : '2026 membership')
+    : `${yearNumBoundary(S.year)} membership, complete season`;
+  const now = new Date();
+  const printed = now.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) + ', ' + now.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  const title = (S.mapName || S.scenarioName || 'Boundary map') + ': ' + D.lName + ' and ' + D.rName;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+    @page{size:letter landscape;margin:.4in}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;overflow:hidden;background:#fff;color:#000;font:10pt Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    h1{font-size:16pt;margin:0 0 2pt}
+    .sub{font-size:9.5pt;margin:0 0 6pt}
+    .maps{display:flex;gap:.2in}.maps>div{flex:1 1 0;min-width:0}.maps svg{width:100%;height:auto;display:block}
+    .cap{font-weight:700;font-size:11pt;margin-bottom:2pt}
+    table{border-collapse:collapse;width:100%;margin-top:6pt;font-size:${D.rows.length > 14 ? 7.5 : 9}pt}
+    th,td{padding:${D.rows.length > 14 ? 1.5 : 2.5}pt 4pt;text-align:right;border-bottom:.5pt solid #999;white-space:nowrap}
+    th{font-weight:700;border-bottom:1pt solid #000;vertical-align:bottom;font-size:8pt}
+    .l{text-align:left}td.b,th.b{font-weight:700}
+    td i{display:inline-block;width:8pt;height:8pt;margin-right:5pt;vertical-align:-1pt;border:.5pt solid #000}
+    tr.tot td{font-weight:700;border-top:1pt solid #000;border-bottom:0}
+    .notes{font-size:8pt;margin:6pt 0 0;line-height:1.3}
+  </style></head><body>
+    <h1>${esc(title)}</h1>
+    <p class="sub">${esc(tierName(S.tierView))}. ${esc(asOf)}. Printed ${esc(printed)}.</p>
+    <div class="maps"><div><div class="cap">${esc(D.lName)}</div><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${D.svgL}</svg></div>
+      <div><div class="cap">${esc(D.rName)}</div><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${D.svgR}</svg></div></div>
+    ${cmpTableHtml(D)}
+    <p class="notes">${esc(cmpNotes(D))}</p>
+  </body></html>`;
+}
+function printHtmlDoc(html){
+  const old = document.getElementById('bsSumFrame'); if (old) old.remove();
+  const fr = document.createElement('iframe');
+  fr.id = 'bsSumFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(fr);
+  const doc = fr.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } try { window.focus(); } catch(e){} }, 150);
 }
 
 function atlasMapHtml(){
@@ -11438,7 +11706,7 @@ function atlasKeys(e){
   const mod = e.ctrlKey || e.metaKey;
   if (mod && (e.key||'').toLowerCase() === 's'){ e.preventDefault(); saveScenario(false); return true; }
   if (typing || mod || e.altKey) return false;
-  if (e.key === 'Escape' && S.meetView && !document.querySelector('.bs-dlg-back')){ meetView(false); return true; }
+  if (e.key === 'Escape' && S.meetView && !document.querySelector('.bs-dlg-back, .mt-cmp-back')){ meetView(false); return true; }
   if (e.key === 'Escape' && S.atlMenu){ S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; return true; }
   if (S.panelMode !== 'map') return false;
   if (e.key === ' ' || e.code === 'Space'){
