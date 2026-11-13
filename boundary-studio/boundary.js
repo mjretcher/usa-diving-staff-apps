@@ -6071,6 +6071,7 @@ function wireMap(){
     const onCounty = e.target.closest('path.bcty');
     if (S.tool==='pan' || S._spacePan || e.button === 1 || e.button === 2 || (!onCounty && e.button === 0)){ e.preventDefault(); beginPan(e); return; }
     const t = onCounty; if (!t) return;
+    if (atlasOn() && S.tierView > 0){ e.preventDefault(); groupAssignClick(t.dataset.f); return; }
     S._pre = snapshot();           // one undo step per stroke, not per county
     S.painting = true;
     if (S.tool==='state') assignState(t.dataset.f && S.geo.counties.find(c=>c.f===t.dataset.f).st);
@@ -6088,6 +6089,7 @@ function wireMap(){
     }
     const t = e.target.closest('path.bcty');
     if (!t) showPreview(null);
+    if (atlasOn() && S.tierView > 0 && S.tool !== 'pan') groupHover(t ? t.dataset.f : null);
     if (t){
       if (S.painting && S.tool==='county'){
         // Brush radius: paint everything within N steps of the cursor county.
@@ -6126,7 +6128,9 @@ function wireMap(){
             ? `<div class="atl-tip-s">${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips</div>`
             : '<div class="atl-tip-s">Nobody registered here this season</div>') +
           ((cg => cg && cg.byCounty[c.f] ? `<div class="atl-tip-s">Club${cg.byCounty[c.f].length > 1 ? 's' : ''} here: ${esc(cg.byCounty[c.f].slice(0, 4).join(', '))}${cg.byCounty[c.f].length > 4 ? ' and ' + (cg.byCounty[c.f].length - 4) + ' more' : ''}</div>` : '')((meetStore().fade === 'clubs' || meetStore().pins) ? clubGeo() : null)) +
-          (S.tool !== 'pan' && S.tierView === 0 && target !== regionNow ? `<div class="atl-tip-p">Paint → <b>${esc(target)}</b></div>` : '');
+          (S.tool !== 'pan' && S.tierView === 0 && target !== regionNow ? `<div class="atl-tip-p">Paint → <b>${esc(target)}</b></div>` : '') +
+          ((ci, g) => S.tierView > 0 && S.tool !== 'pan' && ci >= 0 && g >= 0 && S.levels[S.tierView].of[ci] !== g
+            ? `<div class="atl-tip-p">Click: put <b>${esc(childName(ci))}</b> in <b>${esc(S.levels[S.tierView].groups[g].name)}</b></div>` : '')(childOfCounty(c.f), activeGroup());
         return;
       }
       tip.innerHTML = `<b>${esc(c.n)} County, ${esc(c.st)}</b><br>` +
@@ -6147,7 +6151,7 @@ function wireMap(){
     S.painting=false; panStart=null; svg.classList.remove('panning');
   };
   svg.addEventListener('pointerup', stop);
-  svg.addEventListener('pointerleave', e=>{ if (!panStart) stop(); tip.style.display='none'; });
+  svg.addEventListener('pointerleave', e=>{ if (!panStart) stop(); tip.style.display='none'; groupHover(null); });
   svg.addEventListener('lostpointercapture', () => { if (panStart) stop(); });
   svg.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -9566,15 +9570,17 @@ function atlasMapHtml(){
         <span class="atl-painting" id="atlPainting">${atlasPaintingChip()}</span>
         <span class="atl-vr"></span>
         <div class="atl-seg">
-          <button data-atltool="county" class="${S.tool==='county'?'on':''}" title="Click or drag across counties to add them to the selected ${esc(tierLabel)}">🖌 Paint counties</button>
-          <button data-atltool="state" class="${S.tool==='state'?'on':''}" title="Click a state to add every county in it">Whole state</button>
+          ${S.tierView > 0
+            ? `<button data-atltool="county" class="${S.tool!=='pan'?'on':''}" title="Click an area on the map to put it in the group picked on the left">Assign by clicking</button>`
+            : `<button data-atltool="county" class="${S.tool==='county'?'on':''}" title="Click or drag across counties to add them to the selected ${esc(tierLabel)}">🖌 Paint counties</button>
+          <button data-atltool="state" class="${S.tool==='state'?'on':''}" title="Click a state to add every county in it">Whole state</button>`}
           <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to move the map. You can also hold Space and drag, or drag from empty space, in any tool.">✋ Move map</button>
         </div>
         <span class="atl-vr"></span>
         <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Undo (Ctrl/⌘ Z)">↶ Undo</button>
         <button id="bsRedo" ${S.redo.length?'':'disabled'} title="Redo (Ctrl/⌘ ⇧ Z)">Redo ↷</button>
         <span class="atl-vr"></span>
-        <span class="atl-brush" title="How many counties one click paints. [ and ] also change it."><button id="bsBrushDown" aria-label="Smaller brush">−</button>Brush <b id="bsBrushLbl">${S.brush===0?'1 county':S.brush+' rings'}</b><button id="bsBrushUp" aria-label="Bigger brush">+</button></span>
+        <span class="atl-brush" ${S.tierView > 0 ? 'style="display:none"' : ''} title="How many counties one click paints. [ and ] also change it."><button id="bsBrushDown" aria-label="Smaller brush">−</button>Brush <b id="bsBrushLbl">${S.brush===0?'1 county':S.brush+' rings'}</b><button id="bsBrushUp" aria-label="Bigger brush">+</button></span>
         <span class="atl-vr"></span>
         <span class="atl-zoom"><button id="atlZoomOut" aria-label="Zoom out" title="Zoom out (−)">−</button><button id="atlZoomIn" aria-label="Zoom in" title="Zoom in (+)">+</button></span>
         <button id="atlZoomReset" title="Show the whole country">Fit map</button>
@@ -9606,7 +9612,7 @@ function atlasRailBreakdown(t, metric){
   const DC = ['#009AC7','#171F69','#E31937'];
   box.innerHTML = t.rows.map((r,gi) => {
     const col = groupColor(gi);
-    const on = S.tierView === 0 && S.active === gi;
+    const on = S.tierView === 0 ? S.active === gi : activeGroup() === gi;
     let total, segs, nums;
     if (metric === 'age'){
       const ag = r.ag; total = ag.reduce((s,x)=>s+x,0);
@@ -9721,14 +9727,14 @@ function atlasRailOverview(t){
   const rows = t.rows.map((r,gi) => {
     const v = vals[gi], diff = v - even;
     const dc = sum <= 0 ? '' : Math.abs(diff) < even*0.15 ? '' : (diff > 0 ? 'c-warn' : 'c-bad');
-    const on = S.tierView === 0 && S.active === gi;
+    const on = S.tierView === 0 ? S.active === gi : activeGroup() === gi;
     const col = groupColor(gi);
     const cells = OV_COLS.map(c => { const x = val(c, r, gi); return `<span class="${c.k===balK?'on':''}">${x==null?'—':fmt(x)}</span>`; }).join('');
     const br = meetBaseRow(B, t, gi);
     const chg = !showChg ? '' : `<span class="atl-ov-cells atl-ov-chg mono" title="Change since the starting point">${br
       ? OV_COLS.map(c => { const x = val(c, r, gi); return `<span class="${c.k===balK?'on':''}">${x==null || br[c.k]==null ? '' : meetSigned(x - br[c.k])}</span>`; }).join('')
       : '<span class="new">new area</span>'}</span>`;
-    return `<button class="atl-row atl-row-ov ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Double-click for its zip codes'}">
+    return `<button class="atl-row atl-row-ov ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Click, then click areas on the map to put them in this one · double-click for its zip codes'}">
       <span class="atl-sw" style="background:${col}"></span>
       <span class="atl-row-name">${esc(nameOf(gi))}</span>
       <span class="atl-ov-ou mono ${dc}">${sum > 0 ? ou(diff) : ''}</span>
@@ -9740,7 +9746,7 @@ function atlasRailOverview(t){
   box.innerHTML = head + rows;
   box.querySelectorAll('.atl-ov-col').forEach(b => b.addEventListener('click', () => { S.atlBal = b.dataset.ovcol; atlasRailOverview(t); }));
   box.querySelectorAll('.atl-row').forEach(b => {
-    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); else if (S.tierView > 0 && b.dataset.hl != null) atlasSetActiveGroup(+b.dataset.hl); });
     b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
   });
   const un = $id('atlUnassigned');
@@ -9810,7 +9816,7 @@ function atlasRailRows(t){
     const unC = S.geo.counties.length - t.rows.reduce((a,r)=>a+r.countiesAssigned, 0);
     if (un) un.textContent = unC > 0 ? `${fmt(unC)} counties · ${fmt(t.un.m)} members unassigned` : 'every county assigned';
     box.querySelectorAll('.atl-row').forEach(b => {
-      b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+      b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); else if (S.tierView > 0 && b.dataset.hl != null) atlasSetActiveGroup(+b.dataset.hl); });
       b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
     });
     return;
@@ -9841,9 +9847,9 @@ function atlasRailRows(t){
   box.innerHTML = t.rows.map((r,gi) => {
     const share = shares[gi], diff = share - equal;
     const dc = (!known || sum <= 0) ? '' : Math.abs(diff) < equal*0.15 ? '' : (diff > 0 ? 'c-warn' : 'c-bad');
-    const on = S.tierView === 0 && S.active === gi;
+    const on = S.tierView === 0 ? S.active === gi : activeGroup() === gi;
     const col = groupColor(gi);
-    return `<button class="atl-row ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Double-click for its zip codes'}">
+    return `<button class="atl-row ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Click, then click areas on the map to put them in this one · double-click for its zip codes'}">
       <span class="atl-sw" style="background:${col}"></span>
       <span class="atl-row-name">${esc(t.TG.groups[gi].name)}</span>
       <span class="atl-row-val mono">${known ? fmt(Math.round(vals[gi])) : '…'}</span>
@@ -9870,14 +9876,64 @@ function atlasRailRows(t){
       + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
   }
   box.querySelectorAll('.atl-row').forEach(b => {
-    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); });
+    b.addEventListener('click', () => { if (b.dataset.ri !== '') atlasSetActive(+b.dataset.ri); else if (S.tierView > 0 && b.dataset.hl != null) atlasSetActiveGroup(+b.dataset.hl); });
     b.addEventListener('dblclick', () => atlasZipDialog(+b.dataset.hl));
   });
 }
 
+/* ---------- grouping on the map (Zones and higher levels) ----------
+   Above the first level nothing is painted county by county. Instead: pick a
+   group on the left (a zone), then click an area on the map (a region) to put
+   that whole area in it. One click, one Undo step. */
+function activeGroup(){
+  if (S.tierView < 1 || S.activeGTier !== S.tierView) return -1;
+  const n = (S.levels[S.tierView].groups || []).length;
+  return S.activeG >= 0 && S.activeG < n ? S.activeG : -1;
+}
+function atlasSetActiveGroup(gi){
+  S.activeG = gi; S.activeGTier = S.tierView;
+  const pc = $id('atlPainting'); if (pc) pc.innerHTML = atlasPaintingChip();
+  document.querySelectorAll('.atl-row[data-hl]').forEach(x => x.classList.toggle('on', +x.dataset.hl === gi));
+}
+/* The area one level down that a county belongs to (-1 if it is in none). */
+function childOfCounty(fips){
+  const ri = S.assign[fips];
+  if (ri == null || ri < 0 || ri >= S.regions.length) return -1;
+  return S.tierView <= 1 ? ri : tierGroupsAt(S.tierView - 1).of[ri];
+}
+function childName(ci){
+  if (S.tierView <= 1) return (S.regions[ci] && S.regions[ci].name) || '';
+  const g = S.levels[S.tierView - 1].groups[ci]; return (g && g.name) || '';
+}
+function groupHover(fips){
+  const svg = document.getElementById('bsSvg'); if (!svg) return;
+  const ci = fips == null ? -1 : childOfCounty(fips);
+  if (ci === S._gHov) return;
+  S._gHov = ci;
+  svg.classList.toggle('bs-gsel', ci >= 0);
+  svg.querySelectorAll('path.bcty').forEach(el => el.classList.toggle('gon', ci >= 0 && childOfCounty(el.dataset.f) === ci));
+}
+function groupAssignClick(fips){
+  const tv = S.tierView, ci = childOfCounty(fips), g = activeGroup();
+  const one = singulariseLevel(tierName(tv)) || 'group', below = singulariseLevel(tierName(tv - 1)) || 'area';
+  if (ci < 0){ atlasToast(`That county is not in a ${below.toLowerCase()} yet. Paint it on the ${tierName(0)} tab first.`); return; }
+  if (g < 0){ atlasToast(`Pick a ${one.toLowerCase()} on the left first, then click the map.`); return; }
+  const L = S.levels[tv];
+  if (L.of[ci] === g){ atlasToast(`${childName(ci)} is already in ${L.groups[g].name}.`); return; }
+  pushUndo();
+  L.of[ci] = g; S.dirty = true; S._uKey = null; S._gHov = null;
+  tallyInvalidate();
+  repaintAll(); refreshHistoryButtons(); atlasStatus(); renderNumbers();
+  atlasToast(`${childName(ci)} is now in ${L.groups[g].name}.`, true);
+}
+
 /* "Painting: ■ Region 5" -- what a click on the map will do right now. */
 function atlasPaintingChip(){
-  if (S.tierView !== 0) return `<span class="atl-pc-note">Pick the ${esc(tierName(0).replace(/s$/i,''))} tab to paint</span>`;
+  if (S.tierView !== 0){
+    const g = activeGroup(), one = (singulariseLevel(tierName(S.tierView)) || 'group').toLowerCase(), below = (singulariseLevel(tierName(S.tierView - 1)) || 'area').toLowerCase();
+    if (g < 0) return `<span class="atl-pc-note">Pick a ${esc(one)} on the left, then click a ${esc(below)} on the map to put it in</span>`;
+    return `<span class="atl-pc-lbl">Adding to</span><span class="atl-pc-sw" style="background:${groupColor(g)}"></span><b>${esc(S.levels[S.tierView].groups[g].name)}</b><span class="atl-pc-note" style="margin-left:8px">click a ${esc(below)} on the map</span>`;
+  }
   if (S.active === -1) return `<span class="atl-pc-lbl">Removing counties</span><span class="atl-pc-sw erase"></span>`;
   const rg = S.regions[S.active];
   if (!rg) return `<span class="atl-pc-note">Pick an area on the left to paint</span>`;
