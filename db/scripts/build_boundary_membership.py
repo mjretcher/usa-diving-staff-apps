@@ -123,6 +123,15 @@ def main():
         for z in r["z"]:
             r["z"][z][ZI["y26"]] = C["z"].get(z, 0)
     after = {k: sum(r["y26"][k] for r in st.values()) for k in ("m", "a", "c")}
+    # Home county of each club: where the most of its 2026 members live (ties to
+    # the lower county code). The map uses it to place a club that is not on the
+    # Webpoint club roster. Counts only; no member rows.
+    per = collections.defaultdict(lambda: collections.defaultdict(set))
+    for mid, _, z, club in R:
+        f = z2c.get(z)
+        if club and f: per[club][f].add(mid)
+    B["clubHome"] = {str(club_ix[nm]): sorted(d.items(), key=lambda kv: (-len(kv[1]), kv[0]))[0][0]
+                     for nm, d in per.items() if nm in club_ix}
     meta["y26"] = {"built": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                    "source": "membership.members, membership_year=2026 (db/scripts/build_boundary_membership.py)",
                    "loaded_at": loaded_iso, "rows": n_rows, "members_total": n_members,
@@ -132,6 +141,7 @@ def main():
     print(f"\n2026 rebuilt. Members on the map {before['m']} -> {after['m']}; athletes {before['a']} -> {after['a']}; coaches {before['c']} -> {after['c']}.")
     print(f"Members in the database {n_members}; placed in a county {C['mapped']}; not mappable {C['unmapped_members']} (foreign address or a zip with no known county).")
     print(f"Zip codes added to the map this build: {added_zips}. New clubs: {len(new_clubs)}{(' (' + ', '.join(new_clubs[:12]) + (' …' if len(new_clubs) > 12 else '') + ')') if new_clubs else ''}.")
+    print(f"Club home counties written: {len(B['clubHome'])}.")
     print(f"Counties with members in 2026: {sum(1 for r in st.values() if r['y26']['m'] > 0)}.")
     return 0
 

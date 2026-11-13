@@ -667,7 +667,7 @@ function countyClass(fips){
   const ri = S.assign[fips];
   if (ri==null || ri<0 || ri>=S.regions.length) return 'a-u';
   const of = S._of || (S._of = tierGroups().of);
-  return 'a-' + of[ri] + (countyEmpty(fips) ? ' e' : '');
+  return 'a-' + of[ri] + (countyFaded(fips) ? ' e' : '');
 }
 
 /* Cached element lookup -- querySelector per county was a measurable share of
@@ -767,6 +767,7 @@ function syncPalette(){
     svg.style.setProperty('--a'+gi+'e', atlasOn() ? c : emptyTint(c));
   }
   svg.style.setProperty('--a-u', unassignedBase());
+  svg.classList.toggle('fade-clubs', meetStore().fade === 'clubs' && !!clubGeo());
   // Retire variables from a structure with more areas than this one.
   for (let gi=n; gi<n+24; gi++){
     svg.style.removeProperty('--a'+gi);
@@ -836,7 +837,7 @@ function ensureLiftDefs(){
 let _liftRaf = 0;
 function applySelectedLift(){
   if (_liftRaf) return;
-  _liftRaf = requestAnimationFrame(() => { _liftRaf = 0; drawSelectedLift(); });
+  _liftRaf = requestAnimationFrame(() => { _liftRaf = 0; drawSelectedLift(); meetPins(); });
 }
 function drawSelectedLift(){
   const g = document.getElementById('bsSvgG');
@@ -869,7 +870,7 @@ function drawSelectedLift(){
   const parts = [];
   for (const c of S.geo.counties){
     if (S.assign[c.f] !== S.active) continue;
-    parts.push(`<path d="${c.d}" fill="${countyEmpty(c.f) ? pale : col}" stroke="#fff" stroke-width="${(0.35 / Math.sqrt(k)).toFixed(3)}"/>`);
+    parts.push(`<path d="${c.d}" fill="${countyFaded(c.f) ? pale : col}" stroke="#fff" stroke-width="${(0.35 / Math.sqrt(k)).toFixed(3)}"/>`);
   }
   lift.innerHTML = parts.join('');
 }
@@ -6120,6 +6121,7 @@ function wireMap(){
           (v && (v.m || v.a || v.c)
             ? `<div class="atl-tip-s">${fmt(v.a)} athletes · ${fmt(v.c)} coaches · ${fmt(v.cl.length)} clubs · ${Object.keys(st.z).length} zips</div>`
             : '<div class="atl-tip-s">Nobody registered here this season</div>') +
+          ((cg => cg && cg.byCounty[c.f] ? `<div class="atl-tip-s">Club${cg.byCounty[c.f].length > 1 ? 's' : ''} here: ${esc(cg.byCounty[c.f].slice(0, 4).join(', '))}${cg.byCounty[c.f].length > 4 ? ' and ' + (cg.byCounty[c.f].length - 4) + ' more' : ''}</div>` : '')((meetStore().fade === 'clubs' || meetStore().pins) ? clubGeo() : null)) +
           (S.tool !== 'pan' && S.tierView === 0 && target !== regionNow ? `<div class="atl-tip-p">Paint → <b>${esc(target)}</b></div>` : '');
         return;
       }
@@ -8447,7 +8449,7 @@ function atlasStaticSvg(assignOf, colorOf, opts){
     // A county with divers is drawn solid in its area colour; a county with none
     // is a pale wash of the same colour. This makes where the members actually
     // live read at a glance, rather than dimming the empty ones after the fact.
-    const hasDivers = on && !countyEmpty(c.f);
+    const hasDivers = on && !(opts.faded || countyEmpty)(c.f);
     parts.push(`<path d="${c.d}" fill="${fill}"${on && !hasDivers?' fill-opacity=".28"':''} stroke="#fff" stroke-width=".35"${opts.dataF?` data-f="${c.f}"`:''}/>`);
   }
   parts.push(`<path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width=".45" stroke-opacity=".7" pointer-events="none"/>`);
@@ -8796,6 +8798,333 @@ function membershipAsOfHtml(){
   const when = isNaN(d) ? '' : d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
   return `<span class="atl-asof" title="Rebuilt from the membership database after each import in Membership Analytics">2026 membership as of the ${esc(when)} import</span>`;
 }
+/* ============================================================================
+   MEETING TOOLS
+   For showing a map to a committee, changing it, and showing it again.
+   - Starting point: a copy of the map as it stood; every row then shows what
+     has changed since.
+   - Options A, B, C: three kept copies of the map to flip between.
+   - Fade: which counties are drawn pale -- no members, no club, or none.
+   - Club pins: one dot per club.
+   - Meeting view: hides everything except the map, the tools and the table.
+   - One-page summary: the map and the table on a single page.
+   Starting point, options and the fade choice are kept in this browser
+   (localStorage), not in the database: they are working copies for a session,
+   and saving a proposal or a map is still the way to keep one for good.
+   ========================================================================= */
+const MEET_KEY = 'usad.bs.meet';
+function meetStore(){
+  if (S._meet) return S._meet;
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(MEET_KEY) || '{}') || {}; } catch(e){ o = {}; }
+  S._meet = {base: o.base || null, opts: o.opts || {}, cur: o.cur || null,
+             fade: ['members','clubs','none'].includes(o.fade) ? o.fade : 'members', pins: !!o.pins};
+  return S._meet;
+}
+function meetSave(){
+  try { localStorage.setItem(MEET_KEY, JSON.stringify(meetStore())); return true; }
+  catch(e){ msg('Could not keep that in this browser. It will last until the page is closed.'); return false; }
+}
+function meetSnap(){
+  return {assign: Object.assign({}, S.assign), regions: JSON.parse(JSON.stringify(S.regions)),
+          levels: JSON.parse(JSON.stringify(S.levels)), finalName: S.finalName,
+          at: Date.now(), name: S.mapName || S.scenarioName || ''};
+}
+function meetClock(at){
+  const d = new Date(at), now = new Date();
+  const t = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  return d.toDateString() === now.toDateString() ? t : d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ', ' + t;
+}
+function meetOn(fips, a){ const r = a[fips]; return (r == null || r < 0) ? -1 : r; }
+function meetMoved(sn){
+  if (!sn || !S.geo) return 0;
+  let n = 0;
+  for (const c of S.geo.counties) if (meetOn(c.f, sn.assign) !== meetOn(c.f, S.assign)) n++;
+  return n;
+}
+function meetSame(sn){
+  return !!sn && meetMoved(sn) === 0 && sn.regions.length === S.regions.length
+    && sn.regions.every((r,i) => r.name === S.regions[i].name);
+}
+function meetShow(sn, what){
+  if (!sn) return;
+  pushUndo();
+  applySnap({assign: Object.assign({}, sn.assign), regions: JSON.parse(JSON.stringify(sn.regions)),
+             levels: JSON.parse(JSON.stringify(sn.levels)), finalName: sn.finalName});
+  S._uKey = null; S.dirty = true; S._tally = null;
+  repaintAll(); renderPanel();
+  if (typeof refreshFlow === 'function') refreshFlow();
+  atlasToast(`Showing ${what}. Undo goes back to the map you were on.`, true);
+}
+
+/* What each area held at the starting point, for the season and level on
+   screen. Counted with the same code as the live rows by putting the starting
+   map in place for the length of the count. */
+function meetBaseTallies(){
+  const b = meetStore().base; if (!b) return null;
+  const key = b.at + '|' + S.year + '|' + S.tierView;
+  if (S._baseT && S._baseT.key === key) return S._baseT.val;
+  const keep = {assign: S.assign, regions: S.regions, levels: S.levels, finalName: S.finalName, tally: S._tally, of: S._of};
+  let val = null;
+  try {
+    S.assign = b.assign; S.regions = JSON.parse(JSON.stringify(b.regions)); S.levels = JSON.parse(JSON.stringify(b.levels));
+    const t = tallyBatch(), typed = memberTypeTallies(t.TG);
+    val = {names: t.TG.groups.map(g => g.name),
+           rows: t.rows.map((r,gi) => ({t_comp: typed ? typed[gi].t_comp : null, athletes: r.a, coaches: r.c, clubs: r.cl.size, members: r.m}))};
+  } catch(e){ console.error('starting point tallies', e); val = null; }
+  finally { S.assign = keep.assign; S.regions = keep.regions; S.levels = keep.levels; S.finalName = keep.finalName; S._tally = keep.tally; S._of = keep.of; }
+  S._baseT = {key, val};
+  return val;
+}
+/* The starting-point row for a live row: same position when the list of areas
+   has not changed, otherwise the area with the same name. */
+function meetBaseRow(B, t, gi){
+  if (!B) return null;
+  const nm = t.TG.groups[gi].name;
+  if (B.rows.length === t.rows.length && B.names[gi] === nm) return B.rows[gi];
+  const i = B.names.indexOf(nm);
+  return i >= 0 && B.names.indexOf(nm, i + 1) < 0 ? B.rows[i] : null;
+}
+const meetSigned = d => d == null ? '' : d === 0 ? '' : (d > 0 ? '+' : '−') + fmt(Math.abs(d));
+
+/* ---------- clubs: which county each one is in, and where to draw it ---------- */
+const clubKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+function pathCentre(d){
+  const n = (d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = 0; i + 1 < n.length; i += 2){ if (n[i] < x0) x0 = n[i]; if (n[i] > x1) x1 = n[i]; if (n[i+1] < y0) y0 = n[i+1]; if (n[i+1] > y1) y1 = n[i+1]; }
+  return [(x0 + x1) / 2, (y0 + y1) / 2];
+}
+function clubGeoLoad(){
+  if (S._clubRaw || S._clubBusy || S._clubErr) return;
+  S._clubBusy = true;
+  Promise.all([fetch('clubs-roster.json', {cache:'no-cache'}).then(r => r.json()), fetch('clubs-zip.json').then(r => r.json())])
+    .then(([ro, zz]) => { S._clubRaw = {roster: (ro && ro.clubs) || [], exported: (ro && ro.exported) || '', zips: (zz && zz.zips) || {}}; })
+    .catch(e => { console.error('club list', e); S._clubErr = true; msg('Could not load the club list, so counties are faded by members instead.'); })
+    .then(() => { S._clubBusy = false; S._clubGeo = null; if (S.geo){ repaintAll(); meetPins(); meetBarRefresh(); } });
+}
+/* Clubs on the Webpoint club roster sit at their address ZIP. A club with
+   members this season that is not on the roster sits in the county where the
+   most of its members live (boundary-data.json clubHome, written by the
+   membership build), drawn hollow because that is an estimate. */
+function clubGeo(){
+  if (!S._clubRaw || !S.geo) return null;
+  if (S._clubGeo && S._clubGeo.year === S.year) return S._clubGeo;
+  const R = S._clubRaw, known = new Set(S.geo.counties.map(c => c.f));
+  const pins = [], counties = new Set(), byCounty = {}, seen = new Set();
+  const put = (name, x, y, f, exact) => { pins.push({name, x, y, f, exact}); counties.add(f); (byCounty[f] = byCounty[f] || []).push(name); };
+  let noZip = 0;
+  for (const c of R.roster){
+    seen.add(clubKey(c.name));
+    const z = R.zips[c.zip];
+    if (!z || !known.has(z[3])){ noZip++; continue; }
+    put(c.name, z[0], z[1], z[3], true);
+  }
+  const where = {};                                   // club index -> counties it has members in this season
+  for (const [f, st] of Object.entries(S.geo.stats)){
+    const y = st[S.year]; if (!y || !y.cl) continue;
+    for (const i of y.cl) (where[i] = where[i] || []).push(f);
+  }
+  const home = S.year === 'y26' ? (S.geo.clubHome || {}) : {};
+  const centre = {}; let est = 0, skipped = 0;
+  for (const [i, fs] of Object.entries(where)){
+    const name = S.geo.clubs[i];
+    if (!name || seen.has(clubKey(name))) continue;
+    const f = home[i] || (fs.length === 1 ? fs[0] : null);
+    if (!f || !known.has(f)){ skipped++; continue; }
+    if (!centre[f]){ const c = S.geo.counties.find(x => x.f === f); centre[f] = pathCentre(c.d); }
+    put(name, centre[f][0], centre[f][1], f, false); est++;
+  }
+  return (S._clubGeo = {year: S.year, pins, counties, byCounty, exact: pins.length - est, est, skipped, noZip});
+}
+/* Should this county be drawn pale? */
+function countyFaded(fips){
+  const mode = meetStore().fade;
+  if (mode === 'none') return false;
+  if (mode === 'clubs'){ const g = clubGeo(); if (g) return !g.counties.has(fips); }
+  return countyEmpty(fips);
+}
+function meetPinsSvg(k){
+  const g = clubGeo(); if (!g) return '';
+  const r = (3.1 / Math.sqrt(k || 1)).toFixed(2), sw = (1.1 / Math.sqrt(k || 1)).toFixed(2);
+  return g.pins.map(p => p.exact
+    ? `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="#111827" stroke="#fff" stroke-width="${sw}"/>`
+    : `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="#fff" stroke="#111827" stroke-width="${sw}"/>`).join('');
+}
+function meetPins(){
+  const g = document.getElementById('bsSvgG'); if (!g) return;
+  let el = document.getElementById('bsPins');
+  const want = meetStore().pins && atlasOn() && S.panelMode === 'map';
+  if (!want){ if (el) el.remove(); return; }
+  if (!S._clubRaw){ clubGeoLoad(); return; }
+  if (!el){ el = document.createElementNS('http://www.w3.org/2000/svg', 'g'); el.id = 'bsPins'; el.setAttribute('pointer-events', 'none'); }
+  const sig = S.year + '|' + (S.zoom.k || 1);
+  if (el._sig !== sig){ el.innerHTML = meetPinsSvg(S.zoom.k || 1); el._sig = sig; }
+  if (el !== g.lastElementChild) g.appendChild(el);
+}
+
+/* ---------- the strip of controls above the table ---------- */
+function meetFadeText(){
+  const m = meetStore();
+  if (m.fade === 'none') return '';
+  if (m.fade === 'clubs' && clubGeo()) return 'Pale counties have no diving club located in them.';
+  return 'Pale counties have no members living in them.';
+}
+function meetBarHtml(){
+  const m = meetStore(), b = m.base;
+  const moved = b ? meetMoved(b) : 0;
+  const baseRow = b
+    ? `<span class="mt-txt">Marked ${esc(meetClock(b.at))}. <b>${moved === 0 ? 'No counties moved' : fmt(moved) + (moved === 1 ? ' county moved' : ' counties moved')}</b> since.</span>
+       <span class="mt-btns"><button class="mt-b" id="mtBaseGo" ${moved === 0 && meetSame(b) ? 'disabled' : ''} title="Put the map back the way it was when you marked it. Undo returns to where you are now.">Go back to it</button>
+       <button class="mt-b" id="mtBaseSet" title="Make the map on screen the new starting point">Mark again</button>
+       <button class="mt-b" id="mtBaseClr" title="Stop showing changes">Clear</button></span>`
+    : `<span class="mt-btns"><button class="mt-b prim" id="mtBaseSet" title="Remember the map as it is now. Each area then shows what has changed since.">Mark starting point</button></span>`;
+  const chips = ['A','B','C'].map(L => {
+    const o = m.opts[L];
+    if (!o) return `<button class="mt-chip empty" data-optsave="${L}" title="Keep the map on screen as Option ${L}">+ ${L}</button>`;
+    const same = meetSame(o);
+    return `<span class="mt-chipw"><button class="mt-chip ${same ? 'on' : ''}" data-optshow="${L}" title="Show Option ${L}, kept ${esc(meetClock(o.at))}${o.name ? ' from ' + esc(o.name) : ''}">${L}</button><button class="mt-x" data-optclr="${L}" title="Clear Option ${L}" aria-label="Clear Option ${L}">×</button></span>`;
+  }).join('');
+  const upd = m.cur && m.opts[m.cur] && !meetSame(m.opts[m.cur])
+    ? `<button class="mt-b" data-optsave="${m.cur}" title="Replace Option ${m.cur} with the map on screen">Update ${m.cur}</button>` : '';
+  const g = clubGeo();
+  const pinNote = m.pins && g ? `<span class="mt-key"><svg width="12" height="12"><circle cx="6" cy="6" r="4" fill="#111827"/></svg>club address <svg width="12" height="12"><circle cx="6" cy="6" r="3.6" fill="#fff" stroke="#111827" stroke-width="1.2"/></svg>estimated</span>` : '';
+  return `${S.meetView ? `<div class="mt-title"><div><b>${esc(S.mapName || S.scenarioName || 'Boundary map')}</b>${membershipAsOfHtml()}</div><button class="mt-b" id="mtExit" title="Leave meeting view (Esc)">Exit meeting view</button></div>` : ''}
+    <div class="mt-r"><span class="mt-l">Starting point</span>${baseRow}</div>
+    <div class="mt-r"><span class="mt-l">Options</span><span class="mt-btns">${chips}${upd}</span></div>
+    <div class="mt-r"><span class="mt-l">Counties</span><span class="mt-btns">
+      <select class="atl-sel" id="mtFade" title="Which counties are drawn pale">
+        <option value="members" ${m.fade==='members'?'selected':''}>Fade counties with no members</option>
+        <option value="clubs" ${m.fade==='clubs'?'selected':''}>Fade counties with no club</option>
+        <option value="none" ${m.fade==='none'?'selected':''}>Do not fade any</option>
+      </select>
+      <label class="mt-chk" title="A dot for every club"><input type="checkbox" id="mtPins" ${m.pins?'checked':''}> Club pins</label>${pinNote}</span></div>
+    ${S.meetView ? '' : `<div class="mt-r"><span class="mt-btns"><button class="mt-b prim" id="mtMeet" title="Hide everything except the map, the tools and this table. Painting still works.">Meeting view</button>
+      <button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">One-page summary</button></span></div>`}
+    ${S.meetView ? `<div class="mt-r"><span class="mt-btns"><button class="mt-b" id="mtPdf" title="The map and this table on one page, to print or save as a PDF">One-page summary</button></span></div>` : ''}`;
+}
+function meetBarRefresh(){
+  const box = $id('atlMeet'); if (!box) return;
+  if (box.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+  box.innerHTML = meetBarHtml();
+  const m = meetStore();
+  const on = (id, f) => { const e = $id(id); if (e) e.addEventListener('click', f); };
+  const again = () => { S._baseT = null; atlasRailRows(computeTallies()); };
+  on('mtBaseSet', () => { m.base = meetSnap(); meetSave(); again(); atlasToast('Starting point marked. Each area now shows what changes from here.', true); });
+  on('mtBaseClr', () => { m.base = null; meetSave(); again(); });
+  on('mtBaseGo', () => meetShow(m.base, 'the starting point'));
+  box.querySelectorAll('[data-optsave]').forEach(b => b.addEventListener('click', () => {
+    const L = b.dataset.optsave; m.opts[L] = meetSnap(); m.cur = L; meetSave(); meetBarRefresh();
+    atlasToast(`Kept as Option ${L} in this browser.`, true);
+  }));
+  box.querySelectorAll('[data-optshow]').forEach(b => b.addEventListener('click', () => {
+    const L = b.dataset.optshow; m.cur = L; meetSave(); meetShow(m.opts[L], 'Option ' + L);
+  }));
+  box.querySelectorAll('[data-optclr]').forEach(b => b.addEventListener('click', () => {
+    const L = b.dataset.optclr;
+    if (!window.confirm(`Clear Option ${L}? The map on screen is not changed.`)) return;
+    delete m.opts[L]; if (m.cur === L) m.cur = null; meetSave(); meetBarRefresh();
+  }));
+  const fd = $id('mtFade');
+  if (fd) fd.addEventListener('change', () => {
+    m.fade = fd.value; meetSave();
+    if (m.fade === 'clubs' && !S._clubRaw) clubGeoLoad();
+    repaintAll(); fd.blur(); meetBarRefresh(); again();
+  });
+  const pn = $id('mtPins');
+  if (pn) pn.addEventListener('change', () => { m.pins = pn.checked; meetSave(); meetPins(); meetBarRefresh(); });
+  on('mtMeet', () => meetView(true));
+  on('mtExit', () => meetView(false));
+  on('mtPdf', printMapSummary);
+}
+function meetView(on){
+  S.meetView = !!on;
+  document.body.classList.toggle('bs-meet', S.meetView);
+  if (S.meetView && S.panelMode !== 'map') S.panelMode = 'map';
+  renderPanel();
+  const rail = document.querySelector('.atl-main.atl-map .atl-rail'); if (rail) rail.scrollTop = 0;
+  window.scrollTo(0, 0);
+  fitAtlasMap();
+  if (S.meetView) atlasToast('Meeting view. Press Esc to leave it.', true);
+}
+
+/* ---------- one-page summary ---------- */
+function mapSummaryHtml(){
+  const t = computeTallies(), typed = memberTypeTallies(t.TG), m = meetStore();
+  const val = (c, r, gi) => c.k === 't_comp' ? (typed ? typed[gi].t_comp : null)
+    : c.k === 'athletes' ? r.a : c.k === 'coaches' ? r.c : c.k === 'clubs' ? r.cl.size : r.m;
+  let balK = S.atlBal || 't_comp';
+  if (!OV_COLS.some(c => c.k === balK) || (balK === 't_comp' && !typed)) balK = typed ? 't_comp' : 'athletes';
+  const bc = OV_COLS.find(c => c.k === balK);
+  const cols = OV_COLS.filter(c => !(c.k === 't_comp' && !typed));
+  const vals = t.rows.map((r,gi) => val(bc, r, gi)), sum = vals.reduce((a,b) => a + b, 0), even = t.rows.length ? sum / t.rows.length : 0;
+  const B = meetBaseTallies(), showChg = !!B && meetMoved(m.base) > 0;
+  const ou = d => { const x = Math.round(d); return x === 0 ? 'even' : `${fmt(Math.abs(x))} ${x > 0 ? 'over' : 'under'}`; };
+  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th>${cols.map(c => `<th class="${c.k===balK?'b':''}">${esc(c.short)}</th>`).join('')}<th>Over or under</th>${showChg ? '<th>Change</th>' : ''}</tr>`;
+  const body = t.rows.map((r,gi) => {
+    const br = meetBaseRow(B, t, gi);
+    const chg = !showChg ? '' : `<td>${br && br[balK] != null ? (meetSigned(vals[gi] - br[balK]) || '0') : 'new'}</td>`;
+    return `<tr><td class="l"><i style="background:${groupColor(gi)}"></i>${esc(t.TG.groups[gi].name)}</td>${cols.map(c => `<td class="${c.k===balK?'b':''}">${fmt(val(c, r, gi))}</td>`).join('')}<td>${sum > 0 ? ou(vals[gi] - even) : ''}</td>${chg}</tr>`;
+  }).join('');
+  const clubAll = new Set(); t.rows.forEach(r => r.cl.forEach(x => clubAll.add(x)));
+  const foot = `<tr class="tot"><td class="l">Total</td>${cols.map(c => `<td class="${c.k===balK?'b':''}">${fmt(c.k === 'clubs' ? clubAll.size : t.rows.reduce((a,r,gi) => a + val(c, r, gi), 0))}</td>`).join('')}<td>${sum > 0 ? fmt(Math.round(even)) + ' each' : ''}</td>${showChg ? '<td></td>' : ''}</tr>`;
+  const of = tierGroups().of;
+  const asg = f => { const ri = S.assign[f]; return (ri == null || ri < 0 || ri >= S.regions.length) ? -1 : of[ri]; };
+  const svg = atlasStaticSvg(asg, gi => groupColor(gi), {faded: countyFaded}) + (m.pins ? meetPinsSvg(1) : '');
+  const d = S.asOf ? new Date(S.asOf) : null;
+  const asOf = S.year === 'y26'
+    ? (d && !isNaN(d) ? `2026 membership as of the ${d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})} import` : '2026 membership')
+    : `${yearNumBoundary(S.year)} membership, complete season`;
+  const now = new Date();
+  const printed = now.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) + ', ' + now.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  const unC = S.geo.counties.length - t.rows.reduce((a,r) => a + r.countiesAssigned, 0);
+  const g = clubGeo();
+  const notes = [
+    `Balancing on ${bc.label}. "Over or under" compares each area with the total divided equally.`,
+    typed ? 'Comp is Competition Athlete members (17U and AQUA Age 18+).' : '',
+    'Members are counted in the county where they live. A club with members in two areas is counted in both rows and once in the total.',
+    showChg ? `Change is in ${bc.label} since the starting point marked ${meetClock(m.base.at)}.` : '',
+    unC > 0 ? `${fmt(unC)} counties with ${fmt(t.un.m)} members are not in any area.` : '',
+    meetFadeText(),
+    m.pins && g ? `Dots are clubs: solid at the club address (${fmt(g.exact)}), hollow where the location is estimated from where members live (${fmt(g.est)}).` : '',
+  ].filter(Boolean).join(' ');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(S.mapName || S.scenarioName || 'Boundary map')}</title><style>
+    @page{size:letter portrait;margin:.45in}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;overflow:hidden;background:#fff;color:#000;font:10pt Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    h1{font-size:17pt;margin:0 0 2pt}
+    .sub{font-size:9.5pt;margin:0 0 10pt}
+    .map{margin:0 0 8pt}.map svg{width:100%;height:auto;display:block}
+    table{border-collapse:collapse;width:100%;font-size:${t.rows.length > 18 ? 8.5 : 10}pt}
+    th,td{padding:${t.rows.length > 18 ? 2.5 : 4}pt 4pt;text-align:right;border-bottom:.5pt solid #999;white-space:nowrap}
+    th{font-weight:700;border-bottom:1pt solid #000;vertical-align:bottom;white-space:normal;font-size:8.5pt}
+    .l{text-align:left;white-space:nowrap}
+    td.b,th.b{font-weight:700}
+    td i{display:inline-block;width:9pt;height:9pt;margin-right:5pt;vertical-align:-1pt;border:.5pt solid #000}
+    tr.tot td{font-weight:700;border-top:1pt solid #000;border-bottom:0}
+    .notes{font-size:8pt;margin-top:10pt;line-height:1.35}
+  </style></head><body>
+    <h1>${esc(S.mapName || S.scenarioName || 'Boundary map')}</h1>
+    <p class="sub">${esc(tierName(S.tierView))}. ${esc(asOf)}. Printed ${esc(printed)}.</p>
+    <div class="map"><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${svg}</svg></div>
+    <table><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
+    <p class="notes">${esc(notes)}</p>
+  </body></html>`;
+}
+function printMapSummary(){
+  let html;
+  try { html = mapSummaryHtml(); } catch(e){ console.error('map summary', e); msg('Could not build the summary: ' + (e.message || e)); return; }
+  const old = document.getElementById('bsSumFrame'); if (old) old.remove();
+  const fr = document.createElement('iframe');
+  fr.id = 'bsSumFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  document.body.appendChild(fr);
+  const doc = fr.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } }, 150);
+  atlasToast('Summary ready. Choose Save as PDF in the print window to keep a copy.', true);
+}
+
 function atlasMapHtml(){
   const tv = S.tierView;
   const tierLabel = tierName(tv).replace(/s$/i,'').toLowerCase() || 'area';
@@ -8867,6 +9196,7 @@ function atlasMapHtml(){
         <select class="atl-sel" id="atlMetric" title="What the rows count">${metricOpts}</select>
         ${membershipAsOfHtml()}
       </div>
+      <div class="atl-meet" id="atlMeet"></div>
       <div class="atl-rail-list">
         <div id="atlRows"></div>
         <button class="atl-row atl-row-erase ${S.active===-1?'on':''}" data-ri="-1" title="Paint counties out of every area (E)">
@@ -9032,17 +9362,22 @@ function atlasRailOverview(t){
       const off = c.k === 't_comp' && !typed;
       return `<button class="atl-ov-col ${c.k===balK?'on':''}" data-ovcol="${c.k}" ${off?'disabled':''} title="${off ? 'Competition Athletes can only be counted for 2026' : 'Balance on ' + esc(c.label)}"><span>${esc(c.short)}</span><b class="mono">${totals[i]==null?'—':fmt(totals[i])}</b></button>`;
     }).join('')}</div>`;
+  const B = meetBaseTallies(), showChg = !!B && meetMoved(meetStore().base) > 0;
   const rows = t.rows.map((r,gi) => {
     const v = vals[gi], diff = v - even;
     const dc = sum <= 0 ? '' : Math.abs(diff) < even*0.15 ? '' : (diff > 0 ? 'c-warn' : 'c-bad');
     const on = S.tierView === 0 && S.active === gi;
     const col = groupColor(gi);
     const cells = OV_COLS.map(c => { const x = val(c, r, gi); return `<span class="${c.k===balK?'on':''}">${x==null?'—':fmt(x)}</span>`; }).join('');
+    const br = meetBaseRow(B, t, gi);
+    const chg = !showChg ? '' : `<span class="atl-ov-cells atl-ov-chg mono" title="Change since the starting point">${br
+      ? OV_COLS.map(c => { const x = val(c, r, gi); return `<span class="${c.k===balK?'on':''}">${x==null || br[c.k]==null ? '' : meetSigned(x - br[c.k])}</span>`; }).join('')
+      : '<span class="new">new area</span>'}</span>`;
     return `<button class="atl-row atl-row-ov ${on?'on':''}" data-ri="${S.tierView===0?gi:''}" data-hl="${gi}" title="${S.tierView===0?'Paint with this area · double-click for its zip codes':'Double-click for its zip codes'}">
       <span class="atl-sw" style="background:${col}"></span>
       <span class="atl-row-name">${esc(nameOf(gi))}</span>
       <span class="atl-ov-ou mono ${dc}">${sum > 0 ? ou(diff) : ''}</span>
-      <span class="atl-ov-cells mono">${cells}</span>
+      <span class="atl-ov-cells mono">${cells}</span>${chg}
       <span class="atl-row-bar"><span class="atl-bar"><i style="width:${(100*v/maxV).toFixed(1)}%;background:${col}"></i><b style="left:${(100*even/maxV).toFixed(1)}%"></b></span></span>
     </button>`;
   }).join('');
@@ -9060,6 +9395,8 @@ function atlasRailOverview(t){
     const unmappable = S.totals[S.year] - (t.rows.reduce((a,r)=>a+r.m,0) + t.un.m);
     note.innerHTML = `Each row shows Competition Athletes, all athletes, all coaches, clubs and all members living in the area. Click a column heading to balance on it: the bar, its tick and the over or under figure are for that column, against an even split. `
       + `Competition Athletes are the 17U and AQUA Age 18+ Competition Athlete memberships. A club with members in two areas is counted in both rows and once in the heading. Tallies: ${esc(yearLabelBoundary(S.year))}.`
+      + (showChg ? ` The second line in each row, with a plus or minus sign, is the change since the starting point.` : '')
+      + (meetFadeText() ? ' ' + meetFadeText() : '')
       + (fellBack ? ` Competition Athletes can only be counted for 2026, so this year balances on all athletes.` : '')
       + (unmappable > 0 ? ` <b>${fmt(unmappable)}</b> members not mappable (foreign address or invalid zip) are excluded.` : '');
   }
@@ -9068,6 +9405,9 @@ function atlasRailOverview(t){
 function atlasRailRows(t){
   const box = $id('atlRows'); if (!box || !t) return;
   const metric = S.atlMetric || 'overview';
+  const mm = meetStore();
+  if ((mm.fade === 'clubs' || mm.pins) && !S._clubRaw) clubGeoLoad();
+  meetBarRefresh();
   if (metric === 'overview'){ atlasRailOverview(t); return; }
   if (BREAKDOWN_METRICS.includes(metric)){
     atlasRailBreakdown(t, metric);
@@ -11098,6 +11438,7 @@ function atlasKeys(e){
   const mod = e.ctrlKey || e.metaKey;
   if (mod && (e.key||'').toLowerCase() === 's'){ e.preventDefault(); saveScenario(false); return true; }
   if (typing || mod || e.altKey) return false;
+  if (e.key === 'Escape' && S.meetView && !document.querySelector('.bs-dlg-back')){ meetView(false); return true; }
   if (e.key === 'Escape' && S.atlMenu){ S.atlMenu = false; const m = $id('atlMenu'); if (m) m.hidden = true; return true; }
   if (S.panelMode !== 'map') return false;
   if (e.key === ' ' || e.code === 'Space'){
