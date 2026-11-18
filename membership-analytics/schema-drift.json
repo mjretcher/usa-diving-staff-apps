@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-08T23:02:58Z",
-  "declared_tables": 58,
-  "live_tables": 87,
+  "generated": "2026-11-18T23:19:42Z",
+  "declared_tables": 59,
+  "live_tables": 104,
   "type_mismatches": [],
   "columns_missing_in_db": [],
   "tables_missing_in_db": [],
