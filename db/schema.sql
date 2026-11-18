@@ -1615,3 +1615,32 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON membership.boundary_scenarios, membershi
   membership.pathways, membership.scenario_schedules, membership.report_definitions TO usad_readonly_share;
 GRANT SELECT ON membership.schedule_templates TO usad_readonly_share;
 GRANT SELECT, UPDATE ON share_access.tokens TO usad_readonly_share;
+
+-- ============================================================================
+-- NCAA Diving Region Studio (ncaa-region-studio/). Saved region maps for the
+-- NCAA Division I zone realignment tool. Its own schema, so nothing NCAA sits
+-- beside USA Diving membership data. One row per saved map: `data` holds the
+-- five region names, the state-to-region assignment and any single-school
+-- overrides. The page is opened by link by people outside USA Diving staff
+-- and reads and writes this table as usad_app, the same way Boundary Studio
+-- saves to membership.boundary_maps. That role gets this one table and
+-- nothing else in the schema.
+-- ============================================================================
+CREATE SCHEMA IF NOT EXISTS ncaa;
+
+CREATE TABLE IF NOT EXISTS ncaa.region_maps (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    data        JSONB NOT NULL,
+    saved_by    TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA ncaa TO usad_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ncaa.region_maps TO usad_app;
+  END IF;
+END $$;

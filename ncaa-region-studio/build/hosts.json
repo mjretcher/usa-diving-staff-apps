@@ -1,0 +1,292 @@
+[
+ {
+  "k": "buffalo",
+  "n": "Buffalo",
+  "c": "Buffalo",
+  "s": "NY",
+  "la": 43.0,
+  "lo": -78.79,
+  "y": "Zone A 2015",
+  "sid": 2150
+ },
+ {
+  "k": "navy",
+  "n": "Navy",
+  "c": "Annapolis",
+  "s": "MD",
+  "la": 38.98,
+  "lo": -76.48,
+  "y": "Zone A 2016, 2019, 2022, 2026",
+  "sid": 2595
+ },
+ {
+  "k": "christiansburg",
+  "n": "Christiansburg Aquatic Center (Virginia Tech)",
+  "c": "Christiansburg",
+  "s": "VA",
+  "la": 37.14,
+  "lo": -80.4,
+  "y": "Zone A 2017",
+  "sid": null
+ },
+ {
+  "k": "rutgers",
+  "n": "Rutgers",
+  "c": "Piscataway",
+  "s": "NJ",
+  "la": 40.52,
+  "lo": -74.46,
+  "y": "Zone A 2018, 2025",
+  "sid": 2757
+ },
+ {
+  "k": "wvu",
+  "n": "West Virginia (Mylan Park)",
+  "c": "Morgantown",
+  "s": "WV",
+  "la": 39.65,
+  "lo": -79.95,
+  "y": "Zone A 2020, 2023, 2027",
+  "sid": 2750
+ },
+ {
+  "k": "greensboro",
+  "n": "Greensboro Aquatic Center",
+  "c": "Greensboro",
+  "s": "NC",
+  "la": 36.06,
+  "lo": -79.83,
+  "y": "Zones A and B 2021",
+  "sid": null
+ },
+ {
+  "k": "princeton",
+  "n": "Princeton",
+  "c": "Princeton",
+  "s": "NJ",
+  "la": 40.35,
+  "lo": -74.66,
+  "y": "Zone A 2024",
+  "sid": 2491
+ },
+ {
+  "k": "georgia",
+  "n": "Georgia",
+  "c": "Athens",
+  "s": "GA",
+  "la": 33.95,
+  "lo": -83.37,
+  "y": "Zone B 2015, 2020, 2024, 2026",
+  "sid": 2168
+ },
+ {
+  "k": "gatech",
+  "n": "Georgia Tech",
+  "c": "Atlanta",
+  "s": "GA",
+  "la": 33.78,
+  "lo": -84.4,
+  "y": "Zone B 2016, 2022",
+  "sid": 2861
+ },
+ {
+  "k": "auburn",
+  "n": "Auburn",
+  "c": "Auburn",
+  "s": "AL",
+  "la": 32.6,
+  "lo": -85.49,
+  "y": "Zone B 2017, 2019, 2025",
+  "sid": 2300
+ },
+ {
+  "k": "tennessee",
+  "n": "Tennessee",
+  "c": "Knoxville",
+  "s": "TN",
+  "la": 35.95,
+  "lo": -83.93,
+  "y": "Zone B 2018, 2023, 2027",
+  "sid": 2598
+ },
+ {
+  "k": "ohiostate",
+  "n": "Ohio State",
+  "c": "Columbus",
+  "s": "OH",
+  "la": 40.0,
+  "lo": -83.02,
+  "y": "Zone C 2015, 2018, 2025",
+  "sid": 2275
+ },
+ {
+  "k": "purdue",
+  "n": "Purdue",
+  "c": "West Lafayette",
+  "s": "IN",
+  "la": 40.43,
+  "lo": -86.92,
+  "y": "Zone C 2016, 2019, 2027",
+  "sid": 2142
+ },
+ {
+  "k": "indiana",
+  "n": "Indiana",
+  "c": "Bloomington",
+  "s": "IN",
+  "la": 39.17,
+  "lo": -86.52,
+  "y": "Zone C 2017, 2023",
+  "sid": 1136
+ },
+ {
+  "k": "kentucky",
+  "n": "Kentucky",
+  "c": "Lexington",
+  "s": "KY",
+  "la": 38.03,
+  "lo": -84.5,
+  "y": "Zone C 2020, 2021; Zone D 2021",
+  "sid": 2306
+ },
+ {
+  "k": "michigan",
+  "n": "Michigan",
+  "c": "Ann Arbor",
+  "s": "MI",
+  "la": 42.28,
+  "lo": -83.74,
+  "y": "Zone C 2022",
+  "sid": 2358
+ },
+ {
+  "k": "louisville",
+  "n": "Louisville",
+  "c": "Louisville",
+  "s": "KY",
+  "la": 38.21,
+  "lo": -85.76,
+  "y": "Zone C 2024",
+  "sid": 2304
+ },
+ {
+  "k": "emu",
+  "n": "Eastern Michigan",
+  "c": "Ypsilanti",
+  "s": "MI",
+  "la": 42.25,
+  "lo": -83.62,
+  "y": "Zone C 2026",
+  "sid": 2365
+ },
+ {
+  "k": "iowa",
+  "n": "Iowa",
+  "c": "Iowa City",
+  "s": "IA",
+  "la": 41.66,
+  "lo": -91.55,
+  "y": "Zone D 2015, 2025",
+  "sid": 2276
+ },
+ {
+  "k": "tamu",
+  "n": "Texas A&M",
+  "c": "College Station",
+  "s": "TX",
+  "la": 30.62,
+  "lo": -96.34,
+  "y": "Zone D 2016, 2026",
+  "sid": 2693
+ },
+ {
+  "k": "missouri",
+  "n": "Missouri",
+  "c": "Columbia",
+  "s": "MO",
+  "la": 38.94,
+  "lo": -92.33,
+  "y": "Zone D 2017",
+  "sid": 2572
+ },
+ {
+  "k": "minnesota",
+  "n": "Minnesota",
+  "c": "Minneapolis",
+  "s": "MN",
+  "la": 44.97,
+  "lo": -93.23,
+  "y": "Zone D 2018, 2023",
+  "sid": 2151
+ },
+ {
+  "k": "texas",
+  "n": "Texas",
+  "c": "Austin",
+  "s": "TX",
+  "la": 30.28,
+  "lo": -97.73,
+  "y": "Zone D 2019, 2027",
+  "sid": 4141
+ },
+ {
+  "k": "smu",
+  "n": "SMU",
+  "c": "Dallas",
+  "s": "TX",
+  "la": 32.84,
+  "lo": -96.78,
+  "y": "Zone D 2020",
+  "sid": 2701
+ },
+ {
+  "k": "wisconsin",
+  "n": "Wisconsin",
+  "c": "Madison",
+  "s": "WI",
+  "la": 43.08,
+  "lo": -89.41,
+  "y": "Zone D 2022",
+  "sid": 2360
+ },
+ {
+  "k": "houston",
+  "n": "Houston",
+  "c": "Houston",
+  "s": "TX",
+  "la": 29.72,
+  "lo": -95.34,
+  "y": "Zone D 2024",
+  "sid": 2416
+ },
+ {
+  "k": "airforce",
+  "n": "Air Force",
+  "c": "Colorado Springs",
+  "s": "CO",
+  "la": 39.01,
+  "lo": -104.89,
+  "y": "Zone E 2015",
+  "sid": 2569
+ },
+ {
+  "k": "nau",
+  "n": "Northern Arizona",
+  "c": "Flagstaff",
+  "s": "AZ",
+  "la": 35.19,
+  "lo": -111.65,
+  "y": "Zone E 2016 to 2019, 2021, 2022, 2024, 2026, 2027",
+  "sid": 2949
+ },
+ {
+  "k": "federalway",
+  "n": "King County Aquatic Center, Federal Way",
+  "c": "Federal Way",
+  "s": "WA",
+  "la": 47.31,
+  "lo": -122.31,
+  "y": "Zone E 2020, 2023, 2025",
+  "sid": null
+ }
+]

@@ -1,0 +1,1172 @@
+[
+{
+"inst": "Duquesne University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "Fordham University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "George Mason University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "George Washington University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "La Salle University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "Massachusetts, Amherst",
+"zone": "A",
+"conf": "MAC/MVC",
+"nodive": false
+},
+{
+"inst": "Rhode Island",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "Richmond",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "St. Bonaventure University",
+"zone": "A",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "Boston College",
+"zone": "A",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Pittsburgh",
+"zone": "A",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Virginia",
+"zone": "A",
+"conf": "ACC",
+"nodive": true
+},
+{
+"inst": "Virginia Polytechnic Institute & State University",
+"zone": "A",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Binghamton University",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Maine, Orono",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Maryland, Baltimore County",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "New Hampshire",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "New Jersey Institute of Technology",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Vermont",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Virginia Military Institute",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Bryant University",
+"zone": "A",
+"conf": "America East",
+"nodive": false
+},
+{
+"inst": "Liberty University",
+"zone": "A",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Connecticut",
+"zone": "A",
+"conf": "Big East",
+"nodive": false
+},
+{
+"inst": "Georgetown University",
+"zone": "A",
+"conf": "Big East",
+"nodive": false
+},
+{
+"inst": "Providence College",
+"zone": "A",
+"conf": "Big East",
+"nodive": false
+},
+{
+"inst": "Seton Hall University",
+"zone": "A",
+"conf": "Big East",
+"nodive": false
+},
+{
+"inst": "Villanova University",
+"zone": "A",
+"conf": "Big East",
+"nodive": false
+},
+{
+"inst": "Pennsylvania State University",
+"zone": "A",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Rutgers, State University of New Jersey, New Brunswick",
+"zone": "A",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "West Virginia University",
+"zone": "A",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "Delaware",
+"zone": "A",
+"conf": "ASUN",
+"nodive": false
+},
+{
+"inst": "Drexel University",
+"zone": "A",
+"conf": "CAA",
+"nodive": false
+},
+{
+"inst": "Northeastern University",
+"zone": "A",
+"conf": "CAA",
+"nodive": false
+},
+{
+"inst": "Towson University",
+"zone": "A",
+"conf": "CAA",
+"nodive": false
+},
+{
+"inst": "Stony Brook",
+"zone": "A",
+"conf": "CAA",
+"nodive": false
+},
+{
+"inst": "Monmouth University",
+"zone": "A",
+"conf": "CAA",
+"nodive": true
+},
+{
+"inst": "College of William and Mary",
+"zone": "A",
+"conf": "CAA",
+"nodive": true
+},
+{
+"inst": "Brown University",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Columbia University-Barnard College",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Cornell University",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Dartmouth College",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Harvard University",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Pennsylvania",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Princeton University",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Yale University",
+"zone": "A",
+"conf": "Ivy",
+"nodive": false
+},
+{
+"inst": "Canisius College",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "Fairfield University",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "Iona College",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "Manhattan College",
+"zone": "A",
+"conf": "MAAC",
+"nodive": true
+},
+{
+"inst": "Marist College",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "Niagara University",
+"zone": "A",
+"conf": "MAAC",
+"nodive": true
+},
+{
+"inst": "Rider University",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "Saint Peter's University",
+"zone": "A",
+"conf": "MAAC",
+"nodive": true
+},
+{
+"inst": "Siena College",
+"zone": "A",
+"conf": "MAAC",
+"nodive": false
+},
+{
+"inst": "University at Buffalo, the State University of New York",
+"zone": "A",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Central Connecticut State University",
+"zone": "A",
+"conf": "NEC",
+"nodive": false
+},
+{
+"inst": "Long Island University-Brooklyn Campus",
+"zone": "A",
+"conf": "NEC",
+"nodive": true
+},
+{
+"inst": "Mount St. Mary's University",
+"zone": "A",
+"conf": "NEC",
+"nodive": false
+},
+{
+"inst": "Sacred Heart University",
+"zone": "A",
+"conf": "NEC",
+"nodive": false
+},
+{
+"inst": "Saint Francis University (Pennsylvania)",
+"zone": "A",
+"conf": "NEC",
+"nodive": true
+},
+{
+"inst": "Wagner College",
+"zone": "A",
+"conf": "NEC",
+"nodive": true
+},
+{
+"inst": "Howard University",
+"zone": "A",
+"conf": "NEC",
+"nodive": false
+},
+{
+"inst": "American University",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Boston University",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Bucknell University",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Colgate University",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "College of the Holy Cross",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Lafayette College",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Lehigh University",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "Loyola University Maryland",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "U.S. Military Academy",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "U.S. Naval Academy",
+"zone": "A",
+"conf": "Patriot",
+"nodive": false
+},
+{
+"inst": "James Madison University",
+"zone": "A",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Old Dominion University",
+"zone": "A",
+"conf": "Sun Belt",
+"nodive": true
+},
+{
+"inst": "Marshall University",
+"zone": "A",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Davidson College",
+"zone": "B",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "East Carolina University",
+"zone": "B",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Florida Atlantic University",
+"zone": "B",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Florida International University",
+"zone": "B",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Duke University",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Florida State University",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Georgia Institute of Technology",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Miami (Florida)",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "North Carolina State University",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "North Carolina, Chapel Hill",
+"zone": "B",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Florida Gulf Coast University",
+"zone": "B",
+"conf": "ASUN",
+"nodive": false
+},
+{
+"inst": "North Carolina, Asheville",
+"zone": "B",
+"conf": "ASUN",
+"nodive": false
+},
+{
+"inst": "North Florida",
+"zone": "B",
+"conf": "ASUN",
+"nodive": true
+},
+{
+"inst": "Gardner-Webb University",
+"zone": "B",
+"conf": "ASUN",
+"nodive": true
+},
+{
+"inst": "North Carolina, Wilmington",
+"zone": "B",
+"conf": "CAA",
+"nodive": false
+},
+{
+"inst": "Campbell University",
+"zone": "B",
+"conf": "CAA",
+"nodive": true
+},
+{
+"inst": "Alabama",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Auburn University",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Florida",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Georgia",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "South Carolina, Columbia",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Tennessee, Knoxville",
+"zone": "B",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Vanderbilt University",
+"zone": "B",
+"conf": "SEC",
+"nodive": true
+},
+{
+"inst": "Georgia Southern University",
+"zone": "B",
+"conf": "Sun Belt",
+"nodive": false
+},
+{
+"inst": "Louisville",
+"zone": "C",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Notre Dame",
+"zone": "C",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Bellarmine",
+"zone": "C",
+"conf": "ASUN",
+"nodive": true
+},
+{
+"inst": "Butler University",
+"zone": "C",
+"conf": "Big East",
+"nodive": true
+},
+{
+"inst": "Xavier University",
+"zone": "C",
+"conf": "Big East",
+"nodive": true
+},
+{
+"inst": "Illinois, Champaign",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Indiana University, Bloomington",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Michigan",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Northwestern University",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Purdue University",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "The Ohio State University",
+"zone": "C",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Cincinnati",
+"zone": "C",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "Cleveland State University",
+"zone": "C",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "Indiana University - Indianapolis",
+"zone": "C",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "Oakland University",
+"zone": "C",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "Youngstown State University",
+"zone": "C",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "Akron",
+"zone": "C",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Ball State University",
+"zone": "C",
+"conf": "MAC/MVC",
+"nodive": false
+},
+{
+"inst": "Bowling Green State University",
+"zone": "C",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Eastern Michigan University",
+"zone": "C",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Miami University (Ohio)",
+"zone": "C",
+"conf": "MAC/MVC",
+"nodive": false
+},
+{
+"inst": "Ohio University",
+"zone": "C",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Toledo",
+"zone": "C",
+"conf": "MAC",
+"nodive": false
+},
+{
+"inst": "Illinois State University",
+"zone": "C",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Indiana State University",
+"zone": "C",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Evansville",
+"zone": "C",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Illinois at Chicago",
+"zone": "C",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Southern Illinois University at Carbondale",
+"zone": "C",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Valparaiso University",
+"zone": "C",
+"conf": "MVC",
+"nodive": true
+},
+{
+"inst": "Kentucky",
+"zone": "C",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Eastern Illinois University",
+"zone": "C",
+"conf": "Summit",
+"nodive": true
+},
+{
+"inst": "Southern Indiana University",
+"zone": "C",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "Saint Louis University",
+"zone": "D",
+"conf": "A10",
+"nodive": false
+},
+{
+"inst": "North Texas",
+"zone": "D",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "UTRGV",
+"zone": "D",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Rice University",
+"zone": "D",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Southern Methodist University",
+"zone": "D",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Tulane University",
+"zone": "D",
+"conf": "AAC",
+"nodive": false
+},
+{
+"inst": "Houston",
+"zone": "D",
+"conf": "Big 12",
+"nodive": false
+},
+{
+"inst": "Iowa State University",
+"zone": "D",
+"conf": "Big 12",
+"nodive": false
+},
+{
+"inst": "Iowa",
+"zone": "D",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Minnesota, Twin Cities",
+"zone": "D",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Nebraska, Lincoln",
+"zone": "D",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Wisconsin, Madison",
+"zone": "D",
+"conf": "Big10",
+"nodive": false
+},
+{
+"inst": "Kansas",
+"zone": "D",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "Texas at Austin",
+"zone": "D",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "Texas Christian University",
+"zone": "D",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "Wisconsin-Green Bay",
+"zone": "D",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "Wisconsin, Milwaukee",
+"zone": "D",
+"conf": "Horizon",
+"nodive": false
+},
+{
+"inst": "University of the Incarnate Word",
+"zone": "D",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Arkansas at Little Rock",
+"zone": "D",
+"conf": "MVC",
+"nodive": true
+},
+{
+"inst": "Northern Iowa",
+"zone": "D",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Missouri State University",
+"zone": "D",
+"conf": "MVC",
+"nodive": false
+},
+{
+"inst": "Arkansas, Fayetteville",
+"zone": "D",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Louisiana State University",
+"zone": "D",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Missouri, Columbia",
+"zone": "D",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Texas A&M University, College Station",
+"zone": "D",
+"conf": "SEC",
+"nodive": false
+},
+{
+"inst": "Nebraska Omaha",
+"zone": "D",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "Saint Thomas",
+"zone": "D",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "South Dakota",
+"zone": "D",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "South Dakota State University",
+"zone": "D",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "Brigham Young University",
+"zone": "E",
+"conf": "Big12",
+"nodive": false
+},
+{
+"inst": "California State University, Bakersfield",
+"zone": "E",
+"conf": "Big West",
+"nodive": false
+},
+{
+"inst": "California, Davis",
+"zone": "E",
+"conf": "Big West",
+"nodive": false
+},
+{
+"inst": "California, San Diego",
+"zone": "E",
+"conf": null,
+"nodive": true
+},
+{
+"inst": "California, Santa Barbara",
+"zone": "E",
+"conf": null,
+"nodive": true
+},
+{
+"inst": "Hawaii, Manoa",
+"zone": "E",
+"conf": "Big West",
+"nodive": false
+},
+{
+"inst": "Pacific",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Pepperdine University",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "San Diego",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Loyola Marymount University",
+"zone": "E",
+"conf": null,
+"nodive": true
+},
+{
+"inst": "Colorado State University",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "Nevada",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "New Mexico",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "San Diego State University",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "San Jose State University",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "Nevada, Las Vegas",
+"zone": "E",
+"conf": "MW/WAC",
+"nodive": false
+},
+{
+"inst": "U.S. Air Force Academy",
+"zone": "E",
+"conf": "MW/WAC",
+"nodive": false
+},
+{
+"inst": "Wyoming",
+"zone": "E",
+"conf": "MW/WAC",
+"nodive": false
+},
+{
+"inst": "California State University, Fresno",
+"zone": "E",
+"conf": "MW",
+"nodive": false
+},
+{
+"inst": "Arizona",
+"zone": "E",
+"conf": "Big 12",
+"nodive": false
+},
+{
+"inst": "Arizona State University",
+"zone": "E",
+"conf": "Big 12",
+"nodive": false
+},
+{
+"inst": "California, Berkeley",
+"zone": "E",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "California, Los Angeles",
+"zone": "E",
+"conf": "Big 10",
+"nodive": false
+},
+{
+"inst": "Southern California",
+"zone": "E",
+"conf": "Big 10",
+"nodive": false
+},
+{
+"inst": "Stanford University",
+"zone": "E",
+"conf": "ACC",
+"nodive": false
+},
+{
+"inst": "Utah",
+"zone": "E",
+"conf": "Big 12",
+"nodive": false
+},
+{
+"inst": "Washington State University",
+"zone": "E",
+"conf": "Pac12",
+"nodive": true
+},
+{
+"inst": "Denver",
+"zone": "E",
+"conf": "Summit",
+"nodive": false
+},
+{
+"inst": "Cal Baptist University",
+"zone": "E",
+"conf": "MPSF",
+"nodive": true
+},
+{
+"inst": "Grand Canyon University",
+"zone": "E",
+"conf": "MW/Big West",
+"nodive": false
+},
+{
+"inst": "Idaho",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "New Mexico State University",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Northern Arizona University",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Northern Colorado",
+"zone": "E",
+"conf": "MPSF",
+"nodive": false
+},
+{
+"inst": "Seattle University",
+"zone": "E",
+"conf": "Big West",
+"nodive": true
+}
+]
