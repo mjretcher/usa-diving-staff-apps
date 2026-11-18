@@ -53,9 +53,11 @@ MODEL 4 -- domestic season -> World Aquatics
 MODEL 5 -- age progression
   Age window per athlete from junior group history: Group A = 16-18, B =
   14-15, C = 12-13, D = 8-11 (AQUA age: season year minus birth year). Each
-  (season, group) observation gives a birth-year interval; the intersection
-  across seasons is the window. Contradictory windows (age-ups, mis-entered
-  groups) are kept with consistent = false and excluded from bands. Age =
+  season's YOUNGEST group entered gives a birth-year interval (an athlete may
+  dive up into an older group, never down, so the youngest group is the one
+  that bounds age); the intersection across seasons is the window.
+  Contradictory windows (mis-entered groups, other age rules) are kept with
+  consistent = false and excluded from bands. Age =
   season - midpoint of the window; width is stored so the uncertainty shows.
   Metric: points per OPTIONAL dive = 3 x DD x exec, averaged over the
   athlete's optional dives in that season and board (voluntary dives carry an
@@ -80,13 +82,39 @@ MODEL 6 -- simulated totals (how often an athlete clears a standard)
   vs actual round mean r = 0.94, +3 pts bias, 85% of rounds inside the 10-90
   band. Published standards (Winter Nationals 2025-26) and the Model 4 World
   equivalents are evaluated and stored alongside.
+
+MODEL 7 -- synchro conversion (what two individual records project to as a pair)
+  A synchro award is the mean of five judges' marks after drops: one
+  execution mark per diver and three synchronisation marks, so
+  dive score = 3 x DD x (eA + eB + 3 x S) / 5.
+  Step A, shape (World Aquatics, every synchro dive with a full 11-judge
+  panel): the synchronisation mark is regressed on the two divers' execution
+  marks on that dive, S = a + b x mean(eA, eB) + c x |eA - eB|. The official
+  formula is recomputed from the panel and must reproduce the posted score.
+  Step B, carry-over (World Aquatics athletes with both an individual and a
+  synchro record on the board that season): execution in synchro optionals is
+  regressed on the athlete's individual execution, e_syn = c0 + c1 x e_ind.
+  Step C, domestic level (USA Diving pairs whose result names BOTH partners):
+  A and B are applied to each partner's season record on the board (Model 3
+  championship-adjusted execution; required dives use the athlete's voluntary
+  or DD <= 2.0 dives, optionals their optional dives) and compared with the
+  pair's actual synchro awards. The mean difference per level and dive type
+  is stored as an offset; the spread of pair-level differences is the stated
+  uncertainty. Pairs are the unit, never dives, when the spread is reported.
+  A projected list uses required dives at DD 2.0 and optionals at the mean of
+  the two partners' median individual optional DD, which is where real pairs
+  land (difference 0.02, sd 0.09 on the checked pairs).
+  Until the crawl captured partner names (2026 championships) no domestic
+  pair could be checked, so the domestic sample is small and is printed with
+  every projection. Advisory only: it ranks candidate pairs on what their
+  individual records support; it does not know how two athletes time together.
 ------------------------------------------------------------------------------
 """
 import os, sys, io, json, time, re
 import numpy as np, pandas as pd
 import scipy.sparse as sp, scipy.sparse.csgraph as cg
 
-METHOD_VERSION = "hp-models-2026-11-13.1"
+METHOD_VERSION = "hp-models-2026-11-18.1"
 CONN = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
 DEV_PARQUET = os.environ.get("HP_MODELS_DEV_PARQUET")  # local testing without a database
 K_P = 20.0
@@ -363,6 +391,147 @@ def model6(df, pan, cohort, conn, eq):
         log(f"model6: {g} {b}: {sum(1 for o in out if o['gender']==g and o['discipline']==b)} athletes simulated (day sd {day_sd:.3f})")
     return pd.DataFrame(out)
 
+# ── model 7 ───────────────────────────────────────────────────────────────
+SYN_KEYS = ("E1", "E2", "E3", "E4", "E5", "E6", "S1", "S2", "S3", "S4", "S5")
+SYN_MIN_DIVES = 3            # individual dives of a type needed before that type is used on its own
+SYN_SEASONS_BACK = 1         # athlete table: this season and the one before
+def _name_key(v): return " ".join(sorted(str(v).lower().replace("-", " ").split()))
+
+def load_synchro(conn):
+    wa = read_sql(conn, """SELECT diver_name, meet_id, meet_year, gender, discipline, dd, score, judges_scores
+                           FROM core.dive_sheets WHERE competition_family = 'World Aquatics' AND discipline ILIKE 'Synchro%%'
+                             AND judges_scores IS NOT NULL AND score IS NOT NULL AND dd > 0""".replace("%%", "%"))
+    wa_ind = read_sql(conn, """SELECT diver_name, meet_year, discipline, dd, score FROM core.dive_sheets
+                               WHERE competition_family = 'World Aquatics' AND discipline IN ('3m', 'Platform') AND score IS NOT NULL AND dd > 0""")
+    us_ph = read_sql(conn, """SELECT meet_id, meet_year, gender, discipline, event_level, diver_id::text AS diver_id, diver_name,
+                                     diver2_id::text AS diver2_id, diver2_name, sheet_key::text AS sheet_key
+                              FROM core.result_phases
+                              WHERE is_synchronized AND competition_family = 'USA Diving' AND diver2_id IS NOT NULL
+                                AND event_level IN ('Junior', 'Senior/Open')""")
+    us_dv = read_sql(conn, """SELECT meet_id, diver_id::text AS diver_id, discipline, sheet_key::text AS sheet_key, dd, score
+                              FROM core.dive_sheets
+                              WHERE competition_family = 'USA Diving' AND discipline ILIKE 'Synchro%%' AND score IS NOT NULL AND dd > 0
+                                AND meet_id IN (SELECT DISTINCT meet_id FROM core.result_phases WHERE is_synchronized AND diver2_id IS NOT NULL)""".replace("%%", "%"))
+    teams = read_sql(conn, """SELECT DISTINCT ON (diver_id) diver_id::text AS diver_id, team_name FROM core.dive_sheets
+                              WHERE team_name IS NOT NULL AND team_name <> '' ORDER BY diver_id, meet_year DESC, id DESC""")
+    return wa, wa_ind, us_ph, us_dv, teams
+
+def syn_pair_award(ia, ib, fit):
+    """Projected mean synchro award for one dive type from two individual execution means. Mirrored in matchup-lab/main.js."""
+    ea = fit["c0"] + fit["c1"] * ia; eb = fit["c0"] + fit["c1"] * ib
+    s = fit["a"] + fit["b"] * (ea + eb) / 2 + fit["c"] * abs(ea - eb)
+    return (ea + eb + 3 * s) / 5
+
+def model7(df, pan, cohort, syn):
+    wa, wa_ind, us_ph, us_dv, teams = syn
+    # ── A: shape, from World Aquatics panels ──
+    P = [dict((k, float(v)) for k, v in re.findall(r"([ES]\d+):\s*([\d.]+)", j)) if isinstance(j, str) else {} for j in wa["judges_scores"]]
+    full = np.array([all(k in p for k in SYN_KEYS) for p in P])
+    x = wa[full].copy(); P = [p for p, k in zip(P, full) if k]
+    x["dd"] = pd.to_numeric(x["dd"]); x["score"] = pd.to_numeric(x["score"])
+    x["eA"] = [np.mean([p["E1"], p["E2"], p["E3"]]) for p in P]; x["eB"] = [np.mean([p["E4"], p["E5"], p["E6"]]) for p in P]
+    x["S"] = [np.mean([p[k] for k in SYN_KEYS[6:]]) for p in P]
+    calc = np.array([(sorted([p["E1"], p["E2"], p["E3"]])[1] + sorted([p["E4"], p["E5"], p["E6"]])[1] + sum(sorted([p[k] for k in SYN_KEYS[6:]])[1:4])) * 0.6 for p in P]) * x["dd"].values
+    reproduces = float((np.abs(calc - x["score"].values) < 0.06).mean())
+    x["m"] = (x["eA"] + x["eB"]) / 2; x["gap"] = (x["eA"] - x["eB"]).abs()
+    X = np.column_stack([np.ones(len(x)), x["m"], x["gap"]]); y = x["S"].values
+    a, b, c = np.linalg.lstsq(X, y, rcond=None)[0]; pred = X @ np.array([a, b, c])
+    r2_a = float(1 - ((y - pred) ** 2).sum() / ((y - y.mean()) ** 2).sum())
+    log(f"model7 A: {len(x):,} World Aquatics synchro dives with full panels; formula reproduces {reproduces:.1%}; S = {a:.3f} + {b:.3f} mean {c:+.3f} gap (R2 {r2_a:.2f})")
+    # ── B: carry-over, individual -> synchro execution ──
+    wi = wa_ind.copy(); wi["exec"] = pd.to_numeric(wi["score"]) / (3 * pd.to_numeric(wi["dd"])); wi = wi[wi["exec"].between(0, 10)]
+    wi["k"] = wi["diver_name"].map(_name_key)
+    ie = wi.groupby(["k", "discipline", "meet_year"])["exec"].agg(["mean", "size"]).reset_index().rename(columns={"discipline": "board", "mean": "i", "size": "n_i"})
+    xo = x[x["dd"] > 2.05].copy(); xo["board"] = xo["discipline"].str.replace("Synchronized ", "", regex=False)
+    nm = xo["diver_name"].str.split(" / ", expand=True)
+    long = pd.concat([xo.assign(k=nm[0].map(_name_key), e=xo["eA"]), xo.assign(k=nm[1].map(_name_key), e=xo["eB"])])
+    se = long.groupby(["k", "board", "meet_year"])["e"].agg(["mean", "size"]).reset_index().rename(columns={"mean": "e_syn", "size": "n_s"})
+    cb = se.merge(ie, on=["k", "board", "meet_year"]); cb = cb[(cb["n_i"] >= 5) & (cb["n_s"] >= 3)]
+    c1, c0 = np.polyfit(cb["i"], cb["e_syn"], 1); r_b = float(np.corrcoef(cb["i"], cb["e_syn"])[0, 1])
+    log(f"model7 B: {len(cb)} athlete-seasons with both records; e_syn = {c0:.2f} + {c1:.2f} e_ind (r {r_b:.2f})")
+    fit = {"a": float(a), "b": float(b), "c": float(c), "c0": float(c0), "c1": float(c1)}
+    # ── individual season records by dive type, on the championship-panel basis ──
+    d = df.join(pan.set_index("panel_key")[["severity", "component_id"]], on="panel")
+    d["champ_ref"] = d["component_id"].map(cohort.set_index("component_id")["champ_severity"])
+    d["adj"] = (d["exec"] - (d["severity"] - d["champ_ref"]).fillna(0)).clip(0, 10)
+    d = d[d["discipline"].isin(["1m", "3m", "Platform"]) & (d["competition_family"] != "World Aquatics")].copy()
+    d["diver_id"] = d["diver_id"].astype(str)
+    en = d["event_name"].fillna("")
+    d["grp"] = np.select([en.str.contains(r"Group\s*A|\b16\s*-\s*18\b", regex=True), en.str.contains(r"Group\s*B|\b14\s*-\s*15\b", regex=True),
+                          en.str.contains(r"Group\s*C|\b12\s*-\s*13\b", regex=True),
+                          en.str.contains(r"Group\s*D|\b11\s*(?:&|and)\s*under\b|\b10\s*-\s*11\b|\b9\s*(?:&|and)\s*under\b", regex=True)], [3, 2, 1, 0], -1)
+    keys = ["diver_id", "meet_year", "gender", "discipline"]
+    def agg(mask, tag):
+        g = d[mask].groupby(keys)["adj"].agg(["mean", "size"]).rename(columns={"mean": f"m_{tag}", "size": f"n_{tag}"}); return g
+    ov = d["optional_voluntary"].fillna("")
+    base = d.groupby(keys).agg(diver_name=("diver_name", "first"), m_all=("adj", "mean"), n_all=("adj", "size"), sd_all=("adj", "std"),
+                               jr_share=("grp", lambda s: float((s >= 0).mean()))).join([agg(ov == "V", "v"), agg(ov == "O", "o"), agg(d["dd"] <= 2.05, "easy"), agg(d["dd"] > 2.05, "hard")])
+    grp_min = d[d["grp"] >= 0].groupby(keys)["grp"].min().rename("grp_min")
+    dd_opt = d[(ov == "O") | ((ov == "") & (d["dd"] > 2.05))].groupby(keys)["dd"].median().rename("dd_opt")
+    base = base.join([grp_min, dd_opt]).reset_index()
+    for cnt in ("n_v", "n_o", "n_easy", "n_hard"): base[cnt] = base[cnt].fillna(0).astype(int)
+    use_v = base["n_v"] >= SYN_MIN_DIVES; use_easy = ~use_v & (base["n_easy"] >= SYN_MIN_DIVES)
+    base["exec_req"] = np.where(use_v, base["m_v"], np.where(use_easy, base["m_easy"], base["m_all"]))
+    base["n_req"] = np.where(use_v, base["n_v"], np.where(use_easy, base["n_easy"], base["n_all"]))
+    base["req_basis"] = np.where(use_v, "voluntary dives", np.where(use_easy, "dives at DD 2.0 or under", "all dives"))
+    use_o = base["n_o"] >= SYN_MIN_DIVES; use_hard = ~use_o & (base["n_v"] + base["n_o"] == 0) & (base["n_hard"] >= SYN_MIN_DIVES)
+    base["exec_opt"] = np.where(use_o, base["m_o"], np.where(use_hard, base["m_hard"], base["m_all"]))
+    base["n_opt"] = np.where(use_o, base["n_o"], np.where(use_hard, base["n_hard"], base["n_all"]))
+    base["level"] = np.where(base["jr_share"] >= 0.5, "Junior", "Senior")
+    base["junior_group"] = base["grp_min"].map({3: "A", 2: "B", 1: "C", 0: "D"})
+    rec = base.set_index(["diver_id", "meet_year", "discipline"])
+    rec = rec[~rec.index.duplicated(keep="first")]
+    # ── C: domestic level, from US pairs whose result names both partners ──
+    ph = us_ph.copy(); ph["board"] = ph["discipline"].str.replace("Synchronized ", "", regex=False)
+    ph = ph[ph["board"].isin(["1m", "3m", "Platform"])].drop_duplicates(["meet_id", "diver_id", "diver2_id", "discipline"])
+    dv = us_dv.copy(); dv["dd"] = pd.to_numeric(dv["dd"]); dv["award"] = pd.to_numeric(dv["score"]) / (3 * dv["dd"]); dv = dv[dv["award"].between(0, 10)]
+    n_partners = ph.groupby(["meet_id", "diver_id", "discipline"])["diver2_id"].nunique()
+    rows = []
+    for p in ph.itertuples():
+        sd_ = dv[(dv["meet_id"] == p.meet_id) & (dv["diver_id"] == p.diver_id) & (dv["discipline"] == p.discipline)]
+        if p.sheet_key and (sd_["sheet_key"] == p.sheet_key).any(): sd_ = sd_[sd_["sheet_key"] == p.sheet_key]
+        elif n_partners.get((p.meet_id, p.diver_id, p.discipline), 1) > 1: continue      # cannot tell which partner these dives belong to
+        if len(sd_) < 3: continue
+        try: ra = rec.loc[(p.diver_id, int(p.meet_year), p.board)]; rb = rec.loc[(p.diver2_id, int(p.meet_year), p.board)]
+        except KeyError: continue
+        level = "Junior" if p.event_level == "Junior" else "Senior"
+        for typ, sub in (("required", sd_[sd_["dd"] <= 2.05]), ("optional", sd_[sd_["dd"] > 2.05])):
+            if sub.empty: continue
+            col = "exec_req" if typ == "required" else "exec_opt"
+            rows.append({"meet_id": p.meet_id, "meet_year": int(p.meet_year), "level": level, "gender": p.gender, "discipline": p.board, "dive_type": typ,
+                         "diver_id": p.diver_id, "diver_name": p.diver_name, "partner_id": p.diver2_id, "partner_name": p.diver2_name,
+                         "exec_a": float(ra[col]), "exec_b": float(rb[col]), "n_syn_dives": int(len(sub)), "dd_sum": float(sub["dd"].sum()),
+                         "award_actual": float(sub["award"].mean()), "award_unadjusted": float(syn_pair_award(ra[col], rb[col], fit))})
+    val = pd.DataFrame(rows)
+    offs = []
+    if len(val):
+        val["diff"] = val["award_actual"] - val["award_unadjusted"]
+        for (lv, typ), g in val.groupby(["level", "dive_type"]):
+            offs.append({"level": lv, "dive_type": typ, "award_offset": float(g["diff"].mean()), "n_pairs": int(len(g)), "n_dives": int(g["n_syn_dives"].sum())})
+        off = pd.DataFrame(offs); val = val.merge(off[["level", "dive_type", "award_offset"]], on=["level", "dive_type"])
+        val["award_projected"] = val["award_unadjusted"] + val["award_offset"]
+        # pair-level check on the whole list: actual vs projected points
+        val["pts_actual"] = 3 * val["dd_sum"] * val["award_actual"]; val["pts_projected"] = 3 * val["dd_sum"] * val["award_projected"]
+        pair = val.groupby(["meet_id", "level", "diver_id", "partner_id"]).agg(pts_actual=("pts_actual", "sum"), pts_projected=("pts_projected", "sum"), dd=("dd_sum", "sum")).reset_index()
+        pair["award_diff"] = (pair["pts_actual"] - pair["pts_projected"]) / (3 * pair["dd"])
+        for lv, g in pair.groupby("level"):
+            log(f"model7 C: {lv}: {len(g)} pairs; award spread after offset sd {g['award_diff'].std():.2f}; total r {np.corrcoef(g['pts_actual'], g['pts_projected'])[0,1]:.2f}; mean abs error {(g['pts_actual']-g['pts_projected']).abs().mean():.1f} pts")
+        pair["abs_pts"] = (pair["pts_actual"] - pair["pts_projected"]).abs()
+        spread = pair.groupby("level").agg(pair_award_sd=("award_diff", "std"), n_pairs_total=("award_diff", "size"), mean_abs_error_pts=("abs_pts", "mean")).reset_index()
+        off = off.merge(spread, on="level")
+    else:
+        off = pd.DataFrame(columns=["level", "dive_type", "award_offset", "n_pairs", "n_dives", "pair_award_sd", "n_pairs_total", "mean_abs_error_pts"])
+        log("model7 C: no US pair names both partners; offsets empty")
+    fit_row = dict(fit, n_wa_dives=int(len(x)), formula_reproduces=reproduces, r2_sync=r2_a, resid_sd_sync=float((y - pred).std()),
+                   n_carry=int(len(cb)), r_carry=r_b, wa_exec_p05=float(x["m"].quantile(.05)), wa_exec_p95=float(x["m"].quantile(.95)))
+    # ── athlete table: latest season on each board, this season or last ──
+    maxyear = int(d["meet_year"].max())
+    ath = base[(base["meet_year"] >= maxyear - SYN_SEASONS_BACK) & (base["n_all"] >= 5)].sort_values("meet_year").drop_duplicates(["diver_id", "gender", "discipline"], keep="last")
+    ath = ath.merge(teams, on="diver_id", how="left")
+    ath = ath[["diver_id", "diver_name", "team_name", "gender", "discipline", "meet_year", "level", "junior_group", "exec_req", "n_req", "req_basis", "exec_opt", "n_opt", "sd_all", "n_all", "dd_opt"]].rename(columns={"meet_year": "season", "sd_all": "exec_sd"})
+    log(f"model7: {len(ath):,} athlete-board records for pairing ({(ath['level']=='Junior').sum():,} junior)")
+    return pd.DataFrame([fit_row]), off, val, ath, fit_row
+
 # ── write ─────────────────────────────────────────────────────────────────
 def write_tables(conn, tables):
     cur = conn.cursor()
@@ -392,13 +561,14 @@ def write_tables(conn, tables):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_asp_diver ON hp_models.athlete_season_ppd(diver_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_bands ON hp_models.age_bands(gender, discipline, age)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_sim ON hp_models.sim_athlete(gender, discipline)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_syn_ath ON hp_models.synchro_athlete(gender, discipline)")
     cur.execute("""DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
                      GRANT USAGE ON SCHEMA hp_models TO usad_app; GRANT SELECT ON ALL TABLES IN SCHEMA hp_models TO usad_app; END IF; END $$;""")
     cur.execute("""INSERT INTO app_meta.config (key, value) VALUES ('hp_models_last_run', %s)
                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""", (json.dumps({"at": pd.Timestamp.utcnow().isoformat(), "ok": True, "method_version": METHOD_VERSION}),))
     conn.commit(); log("committed; usad_app SELECT granted on hp_models")
 
-def method_rows(stats3, fit4):
+def method_rows(stats3, fit4, stats7=None):
     doc = __doc__
     def section(tag):
         m = re.search(rf"MODEL {tag} --(.*?)(?=\nMODEL|\n-{{10,}}\s*$|\Z)", doc, re.S); return m.group(0).strip() if m else ""
@@ -407,6 +577,7 @@ def method_rows(stats3, fit4):
         {"model": "world_conversion", "title": "Domestic season to World Aquatics (Model 4)", "method": section("4"), "stats": json.dumps(fit4)},
         {"model": "age_progression", "title": "Age progression (Model 5)", "method": section("5"), "stats": "{}"},
         {"model": "simulated_totals", "title": "Simulated totals (Model 6)", "method": section("6"), "stats": "{}"},
+        {"model": "synchro_conversion", "title": "Synchro conversion (Model 7)", "method": section("7"), "stats": json.dumps(stats7 or {})},
     ])
 
 def main():
@@ -417,10 +588,12 @@ def main():
     pairs, fit4, cuts, eq = model4(conn, pan)
     win, seasons, bands = model5(df)
     sim = model6(df, pan, cohort, conn, eq)
-    tables = {"sim_athlete": sim,"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
+    syn_fit, syn_off, syn_val, syn_ath, stats7 = model7(df, pan, cohort, load_synchro(conn))
+    tables = {"synchro_fit": syn_fit, "synchro_offsets": syn_off, "synchro_validation": syn_val, "synchro_athlete": syn_ath,
+              "sim_athlete": sim,"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
               "world_conversion_pairs": pairs, "world_conversion_fit": pd.DataFrame([fit4]) if fit4 else pd.DataFrame(columns=["n"]),
               "world_cuts": cuts, "world_standard_equiv": eq, "age_window": win, "athlete_season_ppd": seasons, "age_bands": bands,
-              "method": method_rows(stats3, fit4)}
+              "method": method_rows(stats3, fit4, stats7)}
     if DEV_PARQUET:
         out = os.environ.get("HP_MODELS_DEV_OUT", "/tmp/hp_models_out"); os.makedirs(out, exist_ok=True)
         for k, v in tables.items(): v.to_csv(os.path.join(out, k + ".csv"), index=False)
