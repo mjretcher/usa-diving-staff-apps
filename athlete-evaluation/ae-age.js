@@ -16,7 +16,7 @@
 (function () {
   'use strict';
   const { esc, escJsAttr } = window.AE;
-  const st = { board: null, season: null, gender: 'Female', minAge: 11, maxAge: 17, cache: {} };
+  const st = { board: null, season: null, gender: 'Female', minAge: 11, maxAge: 17, cache: {}, mode: 'ahead', pboard: '3m' };
   const f1 = (v) => (v == null || isNaN(v)) ? '—' : Number(v).toFixed(1);
   const f2 = (v) => (v == null || isNaN(v)) ? '—' : Number(v).toFixed(2);
   const q = (sql, params) => window.NEON.query(sql, (params || []).map((p) => p == null ? null : String(p)));
@@ -27,6 +27,40 @@
     catch (e) { st.cache.method = null; }
     return st.cache.method;
   }
+  async function methodFor(model) {
+    const k = 'method:' + model;
+    if (st.cache[k] !== undefined) return st.cache[k];
+    try { const r = await q(`SELECT method, stats, built_at FROM hp_models.method WHERE model = $1`, [model]); st.cache[k] = r.rows[0] || null; }
+    catch (e) { st.cache[k] = null; }
+    return st.cache[k];
+  }
+  const pct0 = (v) => (v == null || isNaN(v)) ? '—' : (+v > 0 && +v < 0.005 ? '<1%' : Math.round(+v * 100) + '%');
+  const STD_NOTE = 'at least one round at a national-level meet averaging the Winter Nationals standard per optional dive';
+
+  /* What comparable athletes went on to do (Model 8). One row per board. */
+  function comparablesCard(f, gender) {
+    if (!f) return '';
+    const who = gender === 'Female' ? 'girls' : 'boys';
+    const lo = Math.min(+f.best_p10, +f.ppd, +f.standard_per_dive) - 3, hi = Math.max(+f.best_p90, +f.standard_per_dive, +f.ppd) + 3, x = (v) => ((+v - lo) / (hi - lo) * 100).toFixed(1);
+    const floor = +f.comparables_gap > 0.3;
+    return `<div class="ae-card">
+      <div class="ae-card-h"><div><h3>What comparable athletes went on to do</h3>
+        <p class="ae-soft"><b>${esc(f.n_comparables)}</b> earlier ${who} were at this level on ${esc(f.discipline)} at age ${Math.round(+f.age)}. This is what they did at ages 18 to 20, which for this athlete is ${esc(f.reach_year_from)} to ${esc(f.reach_year_to)}.</p></div></div>
+      <div class="ae-pipe-tiles">
+        <div class="ae-pipe-tile"><b>${pct0(f.share_competing)}</b><span>still competing</span><small>a season of 6+ optional dives on this board</small></div>
+        <div class="ae-pipe-tile"><b>${pct0(f.share_scored_standard)}</b><span>scored the Winter Nationals standard</span><small>${STD_NOTE} (${esc(f.standard_per_dive)} on this board)</small></div>
+        <div class="ae-pipe-tile"><b>${f1(f.best_p50)}</b><span>typical best season, points per dive</span><small>8 in 10 landed between ${f1(f.best_p10)} and ${f1(f.best_p90)}</small></div>
+      </div>
+      <div class="ae-pipe-scale" aria-hidden="true">
+        <i style="left:${x(f.best_p10)}%;width:${(x(f.best_p90) - x(f.best_p10)).toFixed(1)}%"></i>
+        <s style="left:${x(f.best_p50)}%"></s>
+        <u style="left:${x(f.standard_per_dive)}%"><em>standard ${esc(f.standard_per_dive)}</em></u>
+        <b style="left:${x(f.ppd)}%"><em>now ${f1(f.ppd)}</em></b>
+      </div>
+      <p class="ae-soft" style="margin-top:10px">Shares are of all ${esc(f.n_comparables)}: an athlete who stopped diving counts as not reaching the standard. ${floor ? '<b>Few athletes have been this far ahead at this age, so the nearest comparables are weaker than this athlete. Read these as a floor.</b>' : ''} Counted from what those athletes did, not modelled. Advisory only.</p>
+    </div>`;
+  }
+
   async function bands(gender, discipline) {
     const k = gender + '|' + discipline;
     if (!st.cache[k]) {
@@ -52,6 +86,8 @@
       ]);
       seasons = s.rows; win = w.rows[0] || null;
     } catch (e) { notBuilt(root, e.message); return; }
+    let forecasts = [];
+    try { forecasts = (await q(`SELECT * FROM hp_models.pipeline_forecast WHERE diver_id = $1`, [id])).rows; } catch (e) { forecasts = []; }
     const m = await method();
     if (!win) {
       root.innerHTML = `<div class="ae-card"><div class="ae-card-h"><div><h3>Age progression — ${esc(b.ident.display_name)}</h3>
@@ -85,6 +121,7 @@
         <div id="aeAgeChart" class="usad-chart" style="height:380px"></div>
         <div class="ae-soft" style="margin-top:8px">Light band 10th–90th percentile, darker band 25th–75th, line = median. ${B.length ? `Bands published where 40+ athlete-seasons exist for an age.` : 'No bands yet for this board.'}</div>
       </div>
+      ${comparablesCard(forecasts.find((f) => f.discipline === st.board), gender)}
       <div class="ae-card">
         <div class="ae-card-h"><div><h3>Season by season</h3><p class="ae-soft">Optional dives only. Points per dive = 3 × DD × execution.</p></div></div>
         <div class="table-wrap"><table class="data-table ae-tbl">
@@ -136,7 +173,93 @@
   }
 
   /* ---------- talent board (no athlete) ---------- */
+  const modeTabs = () => `<div class="ae-controls ae-mode-tabs">
+      <button class="ae-pill ${st.mode === 'ahead' ? 'active' : ''}" onclick="AEAge.set('mode','ahead')">Ahead of their age</button>
+      <button class="ae-pill ${st.mode === 'pipeline' ? 'active' : ''}" onclick="AEAge.set('mode','pipeline')">Pipeline to senior level</button>
+    </div>`;
+
+  /* ---------- pipeline view ---------- */
+  async function renderPipeline(root) {
+    let fc, cohort, back;
+    try {
+      [fc, cohort, back] = await Promise.all([
+        q(`SELECT diver_id, diver_name, age, age_width, ppd, pct_in_age, n_comparables, comparables_gap, share_competing, share_scored_standard, best_p10, best_p50, best_p90, standard_per_dive, reach_year_from, reach_year_to, season
+           FROM hp_models.pipeline_forecast WHERE gender = $1 AND discipline = $2 ORDER BY share_scored_standard DESC, ppd DESC`, [st.gender, st.pboard]),
+        q(`SELECT birth_year, age, reach_year_from, reach_year_to, n_juniors, expected_competing, expected_scored_standard, sd_scored_standard
+           FROM hp_models.pipeline_cohort WHERE gender = $1 AND discipline = $2 ORDER BY age DESC`, [st.gender, st.pboard]),
+        q(`SELECT sum(n) AS n, sum(expected_competing) AS ec, sum(actual_competing) AS ac, sum(expected_scored_standard) AS es, sum(actual_scored_standard) AS acs
+           FROM hp_models.pipeline_backtest WHERE kind = 'event'`),
+      ]);
+    } catch (e) {
+      root.innerHTML = `<div class="ae-card"><div class="ae-card-h"><div><h3>Pipeline to senior level</h3>
+        <p class="ae-soft">This view reads the nightly pipeline model, which has not been built yet (${esc(e.message)}). It fills itself in after the next nightly run.</p></div>${modeTabs()}</div></div>`;
+      return;
+    }
+    const F = fc.rows, C = cohort.rows, bt = back.rows[0] || {};
+    const m = await methodFor('junior_pipeline');
+    const who = st.gender === 'Female' ? 'girls' : 'boys';
+    const sum = (rows, k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
+    const exp = sum(C, 'expected_scored_standard'), sd = Math.sqrt(C.reduce((a, r) => a + (+r.sd_scored_standard || 0) ** 2, 0));
+    const rng = (e, s_) => `${Math.max(0, Math.round(e - 1.2816 * s_))} to ${Math.round(e + 1.2816 * s_)}`;
+    const std = F[0] ? F[0].standard_per_dive : null, season = F[0] ? F[0].season : '';
+    const maxExp = Math.max(1, ...C.map((r) => +r.expected_scored_standard + 1.2816 * (+r.sd_scored_standard || 0)));
+    const top = F.slice(0, 30);
+    root.innerHTML = `
+      <div class="ae-card">
+        <div class="ae-card-h">
+          <div><h3>Pipeline to senior level — ${esc(st.pboard)} ${who}</h3>
+            <p class="ae-soft">Every junior aged 12 to 17 in ${esc(season)} with a known age, set beside earlier athletes who were at the same level at the same age, and what those athletes did at 18 to 20. Counts are athletes on this board, projected.</p></div>
+          <div class="ae-controls">
+            <button class="ae-pill ${st.gender === 'Female' ? 'active' : ''}" onclick="AEAge.set('gender','Female')">Girls</button>
+            <button class="ae-pill ${st.gender === 'Male' ? 'active' : ''}" onclick="AEAge.set('gender','Male')">Boys</button>
+            <span class="ae-soft" style="margin:0 4px">board</span>
+            ${['1m', '3m', 'Platform'].map((d) => `<button class="ae-pill ${st.pboard === d ? 'active' : ''}" onclick="AEAge.set('pboard','${d}')">${d}</button>`).join('')}
+          </div>
+        </div>
+        ${modeTabs()}
+        ${F.length ? `
+        <div class="ae-pipe-tiles">
+          <div class="ae-pipe-tile"><b>${F.length.toLocaleString()}</b><span>juniors with a forecast</span><small>actual · unique athletes on this board</small></div>
+          <div class="ae-pipe-tile"><b>${Math.round(sum(C, 'expected_competing')).toLocaleString()}</b><span>expected still competing at 18 to 20</span><small>projected · sum of each athlete's share</small></div>
+          <div class="ae-pipe-tile"><b>${Math.round(exp)}</b><span>expected to score the Winter Nationals standard</span><small>projected · likely ${rng(exp, sd)} · ${STD_NOTE} (${esc(std)})</small></div>
+        </div>
+        <div class="table-wrap"><table class="data-table ae-tbl ae-pipe-cohorts">
+          <thead><tr><th>Age now</th><th class="ph-hide">Born</th><th class="ph-hide">Senior window</th><th class="num">Juniors</th><th class="num ph-hide">Still competing</th><th class="num">Score the standard</th><th>Likely range</th></tr></thead>
+          <tbody>${C.map((r) => { const e = +r.expected_scored_standard, s_ = +r.sd_scored_standard || 0; return `<tr>
+            <td>${Math.round(+r.age)}</td><td class="ph-hide">${esc(r.birth_year)}</td><td class="ph-hide">${esc(r.reach_year_from)}–${esc(r.reach_year_to)}</td>
+            <td class="num">${esc(r.n_juniors)}</td><td class="num ph-hide">${Math.round(+r.expected_competing)}</td><td class="num"><b>${f1(e)}</b></td>
+            <td><span class="ae-pipe-bar"><i style="left:${(Math.max(0, e - 1.2816 * s_) / maxExp * 100).toFixed(1)}%;width:${((Math.min(maxExp, e + 1.2816 * s_) - Math.max(0, e - 1.2816 * s_)) / maxExp * 100).toFixed(1)}%"></i><s style="left:${(e / maxExp * 100).toFixed(1)}%"></s></span><span class="ae-soft ae-pipe-rng">${rng(e, s_)}</span></td></tr>`; }).join('')}</tbody>
+        </table></div>
+        <p class="ae-soft" style="margin-top:8px">Juniors is actual. Still competing and Score the standard are projected counts: the sum of each athlete's share. The range is where the count should land 8 times in 10.</p>` : '<div class="ae-empty">No junior on this board has enough comparable athletes for a forecast.</div>'}
+      </div>
+      ${F.length ? `<div class="ae-card">
+        <div class="ae-card-h"><div><h3>Most likely to arrive</h3><p class="ae-soft">The 30 juniors whose comparables most often went on to score the standard. Tap a name to open the athlete.</p></div></div>
+        <div class="table-wrap"><table class="data-table ae-tbl">
+          <thead><tr><th>Athlete</th><th class="num">Age</th><th class="num ph-hide">Pts / dive</th><th class="num ph-hide">Pctl for age</th><th class="num ph-hide">Comparables</th><th class="num ph-hide">Still competing</th><th class="num">Scored the standard</th><th class="num ph-hide">Best season at 18–20</th></tr></thead>
+          <tbody>${top.map((r) => `<tr>
+            <td><a href="#" onclick="AEApp.pick('${escJsAttr(r.diver_id)}');AEApp.go('age');return false;" class="ae-link">${esc(r.diver_name)}</a>${+r.comparables_gap > 0.3 ? ' <span class="hp-badge info" title="Few athletes have been this far ahead at this age; the comparables are weaker, so the shares are a floor">floor</span>' : ''}</td>
+            <td class="num">${Math.round(+r.age)}${+r.age_width > 1 ? '<span class="ae-soft">±½</span>' : ''}</td><td class="num ph-hide">${f1(r.ppd)}</td>
+            <td class="num ph-hide">${r.pct_in_age == null ? '—' : Math.round(+r.pct_in_age)}</td><td class="num ph-hide">${esc(r.n_comparables)}</td>
+            <td class="num ph-hide">${pct0(r.share_competing)}</td><td class="num"><b>${pct0(r.share_scored_standard)}</b></td>
+            <td class="num ph-hide">${f1(r.best_p50)} <span class="ae-soft">(${f1(r.best_p10)}–${f1(r.best_p90)})</span></td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="ae-card">
+        <div class="ae-card-h"><div><h3>How it has held up</h3>
+          <p class="ae-soft">The same method was run as it would have looked in 2019, 2020 and 2021, using only what was known then, and scored against what those juniors went on to do (all boards, ${(+bt.n || 0).toLocaleString()} forecasts).</p></div></div>
+        <div class="table-wrap"><table class="data-table ae-tbl">
+          <thead><tr><th>Outcome at 18 to 20</th><th class="num">Forecast</th><th class="num">Actual</th><th>Reading</th></tr></thead>
+          <tbody>
+            <tr><td>Still competing</td><td class="num">${Math.round(+bt.ec || 0).toLocaleString()}</td><td class="num">${(+bt.ac || 0).toLocaleString()}</td><td>${Math.abs((+bt.ec || 0) - (+bt.ac || 0)) / Math.max(1, +bt.ac || 1) <= 0.05 ? 'Within 5%.' : 'Outside 5%.'}</td></tr>
+            <tr><td>Scored the standard</td><td class="num">${Math.round(+bt.es || 0).toLocaleString()}</td><td class="num">${(+bt.acs || 0).toLocaleString()}</td><td>${(+bt.es || 0) < (+bt.acs || 0) ? 'The forecast ran low. Junior Nationals results for 2015 to 2017 are not on file, so the comparables available then had fewer meets to score at, and the best juniors have weaker comparables. Today\'s forecast uses only years with every national meet on file.' : 'The forecast did not run low.'}</td></tr>
+          </tbody>
+        </table></div>
+      </div>` : ''}
+      ${methodCard(m)}`;
+  }
+
   async function renderBoard(root) {
+    if (st.mode === 'pipeline') return renderPipeline(root);
     let seasons = [];
     try {
       const r = await q(`SELECT max(meet_year) AS y FROM hp_models.athlete_season_ppd`);
@@ -166,6 +289,7 @@
             <button class="ae-pill" onclick="AEAge.set('season',${st.season - 1})">◀ ${st.season - 1}</button>
           </div>
         </div>
+        ${modeTabs()}
         <div class="ae-age-boards">
           ${boards.map((d) => `<div class="ae-age-board"><h4>${esc(d)}</h4>
             ${byBoard[d].length ? `<table class="data-table ae-tbl"><thead><tr><th>Athlete</th><th class="num">Age</th><th class="num">Pts/dive</th><th class="num">Age median</th><th class="num">Pctl</th></tr></thead><tbody>

@@ -24,6 +24,10 @@
   }
 
   /* ── Career trajectory: scatter + yearly-best line + reference lines ── */
+  // Draw at the screen's own width on a phone so type stays full size; on a
+  // desktop keep the design width.
+  function fitW(design) { return window.innerWidth < 720 ? Math.max(300, Math.min(window.innerWidth - 68, design)) : design; }
+
   function trajectory(opts) {
     // opts: { points:[{x(yearFloat), y, label, color, big}], line:[{x,y}],
     //         refs:[{y,label,color,dash}], w,h, yLabel }
@@ -92,7 +96,7 @@
   /* ── Density curve(s) for List Lab Monte Carlo output ── */
   function density(seriesList, opts) {
     // seriesList: [{samples:[...totals], color, label}]; opts:{refs:[{x,label,color}], w,h}
-    const w = (opts && opts.w) || 720, h = (opts && opts.h) || 240;
+    const w = fitW((opts && opts.w) || 720), h = (opts && opts.h) || 240;
     const padL = 12, padR = 12, padT = 20, padB = 28;
     const all = seriesList.flatMap((s) => s.samples);
     if (!all.length) return '';
@@ -132,7 +136,7 @@
   /* ── Waterfall for Podium Gap ── */
   function waterfall(steps, opts) {
     // steps: [{label, value(absolute cumulative), delta, color}] first = base, last = target
-    const w = (opts && opts.w) || 680, h = (opts && opts.h) || 260;
+    const w = fitW((opts && opts.w) || 680), h = (opts && opts.h) || 260;
     const padL = 52, padR = 14, padT = 16, padB = 46;
     const vals = steps.map((s) => s.value);
     let mn = Math.min(...vals), mx = Math.max(...vals);
@@ -199,7 +203,7 @@
   /* ── Race bump chart: place by round ── */
   function bump(divers, nRounds, opts) {
     // divers: [{name, places:[perRound placeOrNull], totals:[...], color, hi}]
-    const w = (opts && opts.w) || 860;
+    const w = fitW((opts && opts.w) || 860);
     const nD = divers.length;
     const rowH = 22, padT = 30, padB = 12, padL = 12, padR = 190;
     const h = padT + padB + rowH * Math.min(nD, (opts && opts.maxPlaces) || nD);
@@ -233,7 +237,7 @@
   /* ── Slot residual bars (Pressure) ── */
   function slotBars(slots, opts) {
     // slots: [{slot, mean, n}] residuals around 0
-    const w = (opts && opts.w) || 520, h = (opts && opts.h) || 190;
+    const w = fitW((opts && opts.w) || 520), h = (opts && opts.h) || 190;
     const padL = 46, padR = 10, padT = 14, padB = 30;
     const vals = slots.map((s) => s.mean).filter((v) => v != null);
     if (!vals.length) return `<div class="ae-empty">Not enough paired data.</div>`;
@@ -262,7 +266,7 @@
   function corridorBands(groups, opts) {
     // groups: [{label, senior:{n,p10,p25,p50,p75,p90}|null, intl:{...}|null,
     //           dots:[{y,name,year,tier}], athlete:{y,hollow,label}|null }]
-    const w = (opts && opts.w) || 880, h = (opts && opts.h) || 340;
+    const w = fitW((opts && opts.w) || 880), h = (opts && opts.h) || 340;
     const padL = 56, padR = 16, padT = 18, padB = 34;
     const ys = [];
     groups.forEach((g) => {

@@ -16,6 +16,8 @@ const WINTER_DD_MINIMUMS = {
   Female: { '1m': 11.9, '3m': 13.7, Platform: 13.3 },
   Male:   { '1m': 15.9, '3m': 17.2, Platform: 17.1 },
 };
+// Verified 2026-11-18 against the published 2026 National Championship Qualifier Criteria.
+const NATIONAL_CRITERIA_URL = 'https://assets.contentstack.io/v3/assets/blteb7d012fc7ebef7f/bltce04c5ae20ca7dac/6a2ac69adb237ef70ac59b40/USAD_National_Qualifier_Criteria_2026.pdf';
 const NATIONAL_DD_MINIMUMS = {
   Female: { '1m': 11.4, '3m': 13.2, Platform: 13.2 },
   Male:   { '1m': 15.4, '3m': 16.8, Platform: 16.3 },
@@ -2343,7 +2345,8 @@ function renderStandardsPanel() {
       P.synchroDd.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td></tr>`).join('')}</tbody></table>
     <div class="cs2-std-sources"><b>Where a qualifying score may be achieved (Table 2)</b><ul>${P.sources.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
       <span>DD is not needed to earn the score, only to enter. National Team members may enter any event.</span></div>
-    ${standardsTableHtml('Summer Nationals DD minimum, as loaded (not yet checked against the 2026 Nationals criteria)', NATIONAL_DD_MINIMUMS, f)}`;
+    ${standardsTableHtml('Summer Nationals DD minimum to compete', NATIONAL_DD_MINIMUMS, f)}
+    <p class="cs2-std-note">As printed in the <a href="${NATIONAL_CRITERIA_URL}" target="_blank" rel="noopener">2026 National Championship Qualifier Criteria</a>, checked 11/18/2026. Top 12 in each qualifier event advance. No DD minimum applies at the qualifier itself. Juniors (AQUA 18 and under) on platform dive from 10m without the DD minimum and may list no more than two voluntaries.</p>`;
   body.innerHTML = (pool.id === 'juniorAB' ? body.innerHTML : '') + html;
 }
 

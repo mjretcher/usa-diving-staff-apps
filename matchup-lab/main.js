@@ -8,13 +8,15 @@
    exist for 2025 Junior Nationals (11609) and 2026 World Junior
    Trials (12838); 2026 Junior Nationals (12923) joins when it posts.
 
-   Pair score (explained in the UI, advisory only):
-     combined = athlete A avg/dive + athlete B avg/dive
-     bonus    = +1.0 per distinct voluntary dive number both have
-                performed (capped at +5) — a shared list is easier
-                to build than a new one
-     balance  = -0.5 × |A avg − B avg| — a pair is only as clean as
-                its rougher half, so lopsided pairs rank down
+   Pairings (advisory only) are ranked by a projected synchro total from
+   hp_models Model 7 (db/scripts/build_hp_models.py):
+     - shape: how the synchronisation mark follows the two divers' execution
+       marks, measured on World Aquatics synchro dives with full panels
+     - carry-over: synchro execution from individual execution
+     - level: an offset from US pairs whose result names both partners
+   The list is 2 required dives at DD 2.0 and 3 optionals at the mean of the
+   partners' typical optional DD. If the model tables are not available the
+   panel says so rather than falling back to a made-up score.
    ============================================================ */
 (function () {
 'use strict';
@@ -29,7 +31,7 @@ const f2 = (n) => isNum(n) ? n.toFixed(2) : '—';
 const MEET_NAMES = { '11609': '2025 Jr Nationals', '12838': '2026 Trials', '12923': '2026 Jr Nationals' };
 const ALL_MEETS = ['11609', '12838', '12923'];
 
-const state = { profiles: [], selected: new Set(), sortKey: 'avg', sortDesc: true, filter: '', rowsRead: 0 };
+const state = { profiles: [], selected: new Set(), sortKey: 'avg', sortDesc: true, filter: '', rowsRead: 0, pairView: 'distinct' };
 
 /* ── Data ──────────────────────────────────────────────────── */
 // Era note: both covered meets are 2025+, where junior brackets are ALSO
@@ -145,26 +147,89 @@ function sharedDives(a, b) {
   return s;
 }
 
-function pairScore(a, b) {
-  const combined = a.avg + b.avg;
-  const shared = Math.min(sharedDives(a, b), 5);
-  const balancePenalty = 0.5 * Math.abs(a.avg - b.avg);
-  return { total: combined + shared * 1.0 - balancePenalty, combined, shared: sharedDives(a, b), balancePenalty };
+// Model 7 tables, read once per board. `syn.ath` is keyed by diver id.
+const syn = { fit: null, off: null, ath: new Map(), board: null, error: null };
+const REQ_DD = 2.0, N_REQ = 2, N_OPT = 3;
+async function loadSynchroModel(discipline) {
+  if (syn.board === discipline && (syn.fit || syn.error)) return;
+  syn.board = discipline; syn.error = null; syn.ath = new Map();
+  try {
+    if (!syn.fit) {
+      const [f, o] = await Promise.all([
+        nq(`SELECT a, b, c, c0, c1, n_wa_dives, n_carry FROM hp_models.synchro_fit LIMIT 1`),
+        nq(`SELECT dive_type, award_offset, n_pairs_total, pair_award_sd, mean_abs_error_pts FROM hp_models.synchro_offsets WHERE level = 'Junior'`),
+      ]);
+      if (!f.rows.length || o.rows.length < 2) throw new Error('synchro model tables are empty');
+      const fit = {}; for (const k of Object.keys(f.rows[0])) fit[k] = Number(f.rows[0][k]);
+      const off = { nPairs: Number(o.rows[0].n_pairs_total), sd: Number(o.rows[0].pair_award_sd), mae: Number(o.rows[0].mean_abs_error_pts) };
+      for (const r of o.rows) off[r.dive_type] = Number(r.award_offset);
+      if (![fit.a, fit.b, fit.c, fit.c0, fit.c1, off.required, off.optional, off.sd].every(isNum)) throw new Error('synchro model values are incomplete');
+      syn.fit = fit; syn.off = off;
+    }
+    const a = await nq(
+      `SELECT diver_id, season, exec_req, n_req, exec_opt, n_opt, dd_opt FROM hp_models.synchro_athlete WHERE discipline = $1`, [discipline]);
+    for (const r of a.rows) {
+      const rec = { season: Number(r.season), execReq: Number(r.exec_req), nReq: Number(r.n_req), execOpt: Number(r.exec_opt), nOpt: Number(r.n_opt), ddOpt: r.dd_opt == null ? null : Number(r.dd_opt) };
+      if (isNum(rec.execReq) && isNum(rec.execOpt) && isNum(rec.ddOpt)) syn.ath.set(String(r.diver_id), rec);
+    }
+  } catch (err) {
+    syn.error = err.message || String(err); syn.fit = null; syn.off = null;
+  }
+}
+
+// Mirrors syn_pair_award() in db/scripts/build_hp_models.py. Keep the two identical.
+function synAward(ia, ib, fit) {
+  const ea = fit.c0 + fit.c1 * ia, eb = fit.c0 + fit.c1 * ib;
+  const s = fit.a + fit.b * (ea + eb) / 2 + fit.c * Math.abs(ea - eb);
+  return (ea + eb + 3 * s) / 5;
+}
+const clampAward = (v) => Math.max(0, Math.min(10, v));
+
+function projectPair(a, b) {
+  if (!syn.fit) return null;
+  const ra = syn.ath.get(String(a.id)), rb = syn.ath.get(String(b.id));
+  if (!ra || !rb) return null;
+  const req = clampAward(synAward(ra.execReq, rb.execReq, syn.fit) + syn.off.required);
+  const opt = clampAward(synAward(ra.execOpt, rb.execOpt, syn.fit) + syn.off.optional);
+  const ddOpt = (ra.ddOpt + rb.ddOpt) / 2;
+  const ddSum = N_REQ * REQ_DD + N_OPT * ddOpt;
+  const total = 3 * (N_REQ * REQ_DD * req + N_OPT * ddOpt * opt);
+  const half = 1.2816 * 3 * ddSum * syn.off.sd;   // middle 80% of checked pairs
+  return { total, lo: total - half, hi: total + half, req, opt, ddOpt, ddSum, shared: sharedDives(a, b) };
 }
 
 function buildPairs(profiles, mode) {
   const pairs = [];
-  for (let i = 0; i < profiles.length; i++) {
-    for (let j = i + 1; j < profiles.length; j++) {
-      const a = profiles[i], b = profiles[j];
+  let noRecord = 0;
+  const usable = profiles.filter(p => { const ok = syn.ath.has(String(p.id)); if (!ok) noRecord++; return ok; });
+  for (let i = 0; i < usable.length; i++) {
+    for (let j = i + 1; j < usable.length; j++) {
+      const a = usable[i], b = usable[j];
       if (mode === 'Mixed') { if (a.gender === b.gender) continue; }
       else { if (a.gender !== b.gender) continue; }
-      pairs.push({ a, b, ...pairScore(a, b) });
+      const pr = projectPair(a, b);
+      if (pr) pairs.push({ a, b, ...pr });
     }
   }
   pairs.sort((x, y) => y.total - x.total);
-  return pairs.slice(0, 15);
+  return { pairs, noRecord };
 }
+
+// Three ways to read the same ranking. "Each athlete once" walks down the
+// ranking and keeps a pair only if neither athlete is already placed, which
+// gives a squad of distinct pairs instead of the same few names repeated.
+function pairView(all, view) {
+  if (view === 'club') return all.filter(p => p.a.team && p.a.team === p.b.team);
+  if (view !== 'distinct') return all;
+  const used = new Set(), out = [];
+  for (const p of all) {
+    if (used.has(p.a.id) || used.has(p.b.id)) continue;
+    used.add(p.a.id); used.add(p.b.id); out.push(p);
+    if (out.length >= PAIRS_SHOWN) break;
+  }
+  return out;
+}
+const PAIRS_SHOWN = 15;
 
 /* ── Rendering ────────────────────────────────────────────── */
 function sortProfiles() {
@@ -237,7 +302,16 @@ function renderCompare() {
     (acc, p) => new Set([...acc].filter(n => p.diveNums.has(n))),
     new Set(picks[0].diveNums)
   );
-  $('mlCompareBody').innerHTML = `<div class="ml-compare-grid" style="--cols:${picks.length}">` + picks.map(p => `
+  let pairLine = '';
+  if (picks.length === 2) {
+    const mode = $('mlMode').value;
+    const okMix = mode === 'Mixed' ? picks[0].gender !== picks[1].gender : picks[0].gender === picks[1].gender;
+    const pr = okMix ? projectPair(picks[0], picks[1]) : null;
+    if (pr) pairLine = `<div class="ml-cc-proj"><span>As a pair</span><b>${Math.round(pr.total)}</b>
+        <span>projected synchro total · likely ${Math.round(pr.lo)} to ${Math.round(pr.hi)} · list DD ${pr.ddSum.toFixed(1)} · ${pr.shared} voluntary dive${pr.shared === 1 ? '' : 's'} in common</span></div>`;
+    else if (okMix && syn.fit) pairLine = `<div class="ml-cc-proj is-none"><span>No pair projection: one of these athletes has fewer than five scored dives on this board in the last two seasons.</span></div>`;
+  }
+  $('mlCompareBody').innerHTML = pairLine + `<div class="ml-compare-grid" style="--cols:${picks.length}">` + picks.map(p => `
     <div class="ml-compare-card">
       <div class="ml-cc-head"><b>${esc(p.name)}</b><span>${esc(p.team)} · ${esc(p.group)}</span>
         <span class="ml-cc-kpis">${p.dives} vol dives · avg <b>${f1(p.avg)}</b> · σ ${f1(p.consistency)}</span></div>
@@ -251,24 +325,49 @@ function renderCompare() {
 
 function renderPairs() {
   const mode = $('mlMode').value;
-  const pairs = buildPairs(state.profiles, mode);
-  $('mlPairsSub').textContent = mode === 'Mixed'
-    ? 'One boy + one girl per pair, ranked by combined voluntary execution, shared-dive bonus, and balance. Advisory only.'
-    : 'Ranked by combined voluntary execution, shared-dive bonus, and balance. Advisory only.';
-  if (!pairs.length) { $('mlPairsBody').innerHTML = '<div class="ml-empty-inline">Not enough athletes in scope to form pairs.</div>'; return; }
-  $('mlPairsBody').innerHTML = `<div class="ml-pairs">` + pairs.map((p, i) => `
+  if (!syn.fit) {
+    $('mlPairsSub').textContent = 'Projected synchro totals for every possible pair in scope.';
+    $('mlPairsBody').innerHTML = `<div class="ml-empty-inline">The synchro projection could not be read${syn.error ? ' (' + esc(syn.error) + ')' : ''}, so no pairs are ranked. The athlete table and side-by-side above are unaffected.</div>`;
+    return;
+  }
+  const { pairs: all, noRecord } = buildPairs(state.profiles, mode);
+  const o = syn.off;
+  $('mlPairsSub').textContent =
+    `${mode === 'Mixed' ? 'One boy and one girl per pair. ' : ''}Projected synchro total on a ${N_REQ} required + ${N_OPT} optional list, from each athlete's own season record. ` +
+    `Checked against ${o.nPairs} US junior pairs: typical miss ${Math.round(o.mae)} points. Advisory only.`;
+  if (!all.length) { $('mlPairsBody').innerHTML = '<div class="ml-empty-inline">Not enough athletes in scope with a season record to form pairs.</div>'; return; }
+  const view = state.pairView;
+  const shown = pairView(all, view).slice(0, PAIRS_SHOWN);
+  const top = all[0].total, half = all[0].hi - all[0].total;
+  const inReach = all.filter(p => p.total >= top - half).length;
+  const mid = all[Math.floor(all.length / 2)].total;
+  // Axis runs from the middle possible pair to the best case, so a bar shows
+  // how far a pair sits above an ordinary pairing, not just above its neighbours.
+  const lo = Math.min(mid - half * 0.25, ...shown.map(p => p.lo)), hi = Math.max(...all.slice(0, 1).map(p => p.hi), ...shown.map(p => p.hi)), span = Math.max(hi - lo, 1);
+  const x = (v) => Math.max(0, Math.min(100, (v - lo) / span * 100));
+  const tabs = [['distinct', 'Each athlete once'], ['all', 'Top pairs'], ['club', 'Same club']];
+  $('mlPairsBody').innerHTML = `
+    <div class="ml-pairs-head">
+      <p class="ml-pairs-lead"><b>${inReach.toLocaleString()}</b> of ${all.length.toLocaleString()} possible pairs are within reach of the top projection (${Math.round(top)}). Individual records cannot separate them; timing, body type and who can train together decide it.</p>
+      <div class="ml-seg" role="tablist" aria-label="Which pairs to list">${tabs.map(([k, label]) => `<button type="button" role="tab" data-view="${k}" class="${k === view ? 'is-on' : ''}" aria-selected="${k === view}">${label}</button>`).join('')}</div>
+    </div>` + (shown.length ? `<div class="ml-pairs">` + shown.map((p, i) => `
     <div class="ml-pair">
-      <span class="ml-pair-rank">#${i + 1}</span>
+      <span class="ml-pair-rank">#${view === 'all' ? i + 1 : all.indexOf(p) + 1}</span>
       <span class="ml-pair-names"><span class="ml-pair-line"><b>${esc(p.a.name)}</b><span>+</span><b>${esc(p.b.name)}</b></span>
         <em>${esc(p.a.team)}${p.a.team === p.b.team ? ' (same club)' : ' / ' + esc(p.b.team)}</em></span>
-      <span class="ml-pair-math" title="combined avg + shared-dive bonus − balance penalty">
-        ${f1(p.combined)} combined
-        <em class="up">+${Math.min(p.shared,5)}.0 (${p.shared} shared dives)</em>
-        <em class="down">−${f1(p.balancePenalty)} balance</em>
-        = <b>${f1(p.total)}</b></span>
-    </div>`).join('') + `</div>
-    <div class="ml-pairs-foot">Pair score = A avg/dive + B avg/dive, +1.0 per shared voluntary dive (max +5),
-    −0.5 × the gap between their averages (a pair is only as clean as its rougher half).</div>`;
+      <span class="ml-pair-proj" title="Required dives: award ${p.req.toFixed(2)} at DD ${REQ_DD.toFixed(1)}. Optionals: award ${p.opt.toFixed(2)} at DD ${p.ddOpt.toFixed(2)}.">
+        <b>${Math.round(p.total)}</b>
+        <span class="ml-pair-range"><u style="left:${x(mid).toFixed(1)}%"></u><i style="left:${x(p.lo).toFixed(1)}%;width:${(x(p.hi) - x(p.lo)).toFixed(1)}%"></i><s style="left:${x(p.total).toFixed(1)}%"></s></span>
+        <em>${Math.round(p.lo)} to ${Math.round(p.hi)} · list DD ${p.ddSum.toFixed(1)} · ${p.shared} shared vol.</em></span>
+    </div>`).join('') + `</div>` : `<div class="ml-empty-inline">No two athletes in this scope are at the same club.</div>`) + `
+    <div class="ml-pairs-foot">
+      <p><b>How to read it.</b> The number is the projected total and # is the pair's place among all possible pairs. The bar is where 8 in 10 checked pairs landed around their projection (about ±${Math.round(half)} points); pairs whose bars overlap are not separated by this evidence. The grey tick is the middle possible pair in this scope (${Math.round(mid)}).</p>
+      <p><b>What it is built from.</b> ${Math.round(syn.fit.n_wa_dives).toLocaleString()} World Aquatics synchro dives with full judging panels set how the synchronisation mark follows the two divers' execution, and the level is set from the ${o.nPairs} US junior pairs whose results name both partners (2026 Junior Nationals). It reads each athlete's individual record on this board; it does not know how two athletes time together.</p>
+      <p>${noRecord ? `${noRecord} athlete${noRecord === 1 ? '' : 's'} in scope left out (fewer than five scored dives on this board in the last two seasons) · ` : ''}shared vol. = voluntary dives both have performed.</p>
+    </div>`;
+  $('mlPairsBody').querySelectorAll('.ml-seg button').forEach(btn => btn.addEventListener('click', () => {
+    const y = window.scrollY; state.pairView = btn.dataset.view; renderPairs(); window.scrollTo(0, y);
+  }));
 }
 
 /* ── Flow ─────────────────────────────────────────────────── */
@@ -277,7 +376,10 @@ async function loadField() {
   $('mlEmpty').classList.remove('error');
   $('mlEmpty').hidden = true; $('mlResults').hidden = true; $('mlLoading').hidden = false;
   try {
-    const rows = await loadVoluntaryRows($('mlDiscipline').value, $('mlMeets').value);
+    const [rows] = await Promise.all([
+      loadVoluntaryRows($('mlDiscipline').value, $('mlMeets').value),
+      loadSynchroModel($('mlDiscipline').value),
+    ]);
     if (seq !== loadSeq) return; // a newer selection superseded this one
     state.profiles = buildProfiles(rows, $('mlMode').value, $('mlGroup').value);
     state.selected.clear();
@@ -314,7 +416,7 @@ function wire() {
 }
 
 if (typeof window !== 'undefined') {
-  window.__ML_TEST__ = { buildProfiles, buildPairs, pairScore, groupOf, state };
+  window.__ML_TEST__ = { buildProfiles, buildPairs, projectPair, synAward, syn, groupOf, state };
 }
 function start() { wire(); loadField(); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
