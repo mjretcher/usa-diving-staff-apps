@@ -108,13 +108,56 @@ MODEL 7 -- synchro conversion (what two individual records project to as a pair)
   pair could be checked, so the domestic sample is small and is printed with
   every projection. Advisory only: it ranks candidate pairs on what their
   individual records support; it does not know how two athletes time together.
+
+MODEL 8 -- junior pipeline (what athletes like this one went on to do)
+  For a junior aged 12-17 this season, the comparables are every earlier
+  athlete-season of the same sex, board and age whose points per optional dive
+  sat within 0.4 band-widths of theirs (band-width = the age's 10th-90th
+  percentile spread scaled to one sd), and whose age-20 season is already in
+  the past, so the outcome is known. Where fewer than 25 sit that close (the
+  very best juniors have few peers) the nearest 25 are used, up to 1.0
+  band-widths away; beyond that there is no forecast. comparables_gap records
+  how far the athlete sits above the average comparable: when it is large the
+  comparables are weaker than the athlete and the shares are a floor.
+  Outcome window: the seasons at ages 18, 19 and 20. Facts counted on the
+  comparables, never modelled:
+    still competing   any season of 6+ optional dives on the board in the window
+    scored the standard   at least one round in the window, at a national-level
+                      meet, whose optional dives average the published Winter
+                      Nationals standard per optional dive (women 47/52/50,
+                      men 53/60/55 on 1m/3m/platform; the same per-dive value
+                      the criteria use for every list length). National-level
+                      = USA Diving senior championships and their qualifiers,
+                      Junior Nationals, and NCAA conference, zone and national
+                      championships. A full optional list is required (women
+                      5, men 6; one fewer at Junior Nationals).
+    season level      best season average in the window (10th/50th/90th
+                      percentile among those still competing), and the share
+                      whose season average itself reached the standard
+  Shares are of ALL comparables: an athlete who stopped counts as not
+  reaching it. "Scored the standard" follows the shape of the eligibility
+  rule but not its exact meet list, which changes each year, so it is not a
+  statement that the athlete would be eligible.
+  Cohort totals are the sum of the individual shares (expected count), with
+  sd = sqrt(sum p(1-p)).
+  Which comparables: Junior Nationals results are not on file for 2015-2017
+  and the 2020 championship season was cancelled, so an outcome window is
+  only used when it starts in 2021 or later and every national meet in it is
+  on file. A window that includes 2020 is never used.
+  Backtest: the same method run as of 2019, 2020 and 2021 using only
+  comparables whose outcome was known by then, scored against what those
+  juniors actually did by age 20. It has to use the earlier, thinner windows
+  (from 2015), so "scored the standard" is under-counted there by the
+  missing meets; "still competing" and the season level do not depend on
+  which meets are on file and are the fair test of the method. Stored in
+  pipeline_backtest and printed beside the forecast.
 ------------------------------------------------------------------------------
 """
 import os, sys, io, json, time, re
 import numpy as np, pandas as pd
 import scipy.sparse as sp, scipy.sparse.csgraph as cg
 
-METHOD_VERSION = "hp-models-2026-11-18.1"
+METHOD_VERSION = "hp-models-2026-11-18.2"
 CONN = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
 DEV_PARQUET = os.environ.get("HP_MODELS_DEV_PARQUET")  # local testing without a database
 K_P = 20.0
@@ -532,6 +575,112 @@ def model7(df, pan, cohort, syn):
     log(f"model7: {len(ath):,} athlete-board records for pairing ({(ath['level']=='Junior').sum():,} junior)")
     return pd.DataFrame([fit_row]), off, val, ath, fit_row
 
+# ── model 8 ───────────────────────────────────────────────────────────────
+PIPE_AGES = (12, 17); PIPE_WINDOW = (18, 20); PIPE_Z = 0.4; PIPE_Z_MAX = 1.0; PIPE_MIN_COMPARABLES = 25
+# Junior Nationals results are missing for 2015-2017 and 2020 was cancelled, so the first outcome window with every
+# national meet on file starts in 2021. The forecast draws comparables only from those windows. The backtest has to
+# reach further back to have anything to score, and says so.
+PIPE_FIRST_WINDOW_YEAR = int(os.environ.get("PIPE_FIRST_WINDOW_YEAR", "2021"))
+PIPE_BACKTEST_FIRST_YEAR = 2015
+PIPE_VOID_YEARS = tuple(int(v) for v in os.environ.get("PIPE_VOID_YEARS", "2020").split(",") if v)
+PER_OPT_STD = {("Female", "1m"): 47, ("Female", "3m"): 52, ("Female", "Platform"): 50, ("Male", "1m"): 53, ("Male", "3m"): 60, ("Male", "Platform"): 55}
+N_OPT = {"Female": 5, "Male": 6}
+def national_hits(df):
+    """Athlete-board-seasons with at least one national-level round whose optional dives average the standard per dive."""
+    # College data from 2026 on also holds dual meets and invitationals; only championship-season meets count, as in every earlier year.
+    ncaa = (df["competition_family"] == "NCAA") & df["competition_group"].fillna("").str.contains(r"championship|zone", case=False, regex=True)
+    nat = ncaa | ((df["competition_family"] == "USA Diving") & df["competition_group"].isin(SENIOR_GROUPS + ("USA Diving Junior Nationals",)))
+    o = df[nat & df["optional_voluntary"].eq("O") & df["discipline"].isin(["1m", "3m", "Platform"]) & df["gender"].isin(["Female", "Male"])]
+    r = o.groupby(["diver_id", "gender", "discipline", "meet_year", "meet_id", "event_name", "round_stage", "competition_group"], dropna=False)["score"].agg(["mean", "size"]).reset_index()
+    need = r["gender"].map(N_OPT) - (r["competition_group"] == "USA Diving Junior Nationals").astype(int)
+    std = pd.Series([PER_OPT_STD.get(k) for k in zip(r["gender"], r["discipline"])], index=r.index, dtype=float)
+    h = r[(r["size"] >= need) & (r["mean"] >= std)]
+    h = h.assign(diver_id=h["diver_id"].astype(str))[["diver_id", "gender", "discipline", "meet_year"]].drop_duplicates()
+    log(f"model8: {len(r):,} national-level rounds with a full optional list; {len(h):,} athlete-board-seasons scored the standard")
+    return h
+
+def model8(seasons, bands, eq, hits):
+    s = seasons[(seasons["width"] <= 2)].merge(bands[["gender", "discipline", "age", "p10", "p50", "p90"]], on=["gender", "discipline", "age"], how="inner")
+    s = s[(s["p90"] - s["p10"]) > 0].copy()
+    s["z"] = (s["ppd"] - s["p50"]) / ((s["p90"] - s["p10"]) / 2.563)
+    s["diver_id"] = s["diver_id"].astype(str)
+    maxyear = int(s["meet_year"].max()); gk = ["gender", "discipline"]
+    win = s[s["age"].between(*PIPE_WINDOW)].groupby(["diver_id"] + gk)["ppd"].max().rename("best")
+    # birth year per athlete-board from any season row, then hits that fall at ages 18-20
+    birth = s.assign(birth=s["meet_year"] - s["age"]).groupby(["diver_id"] + gk)["birth"].first()
+    hh = hits.join(birth, on=["diver_id"] + gk, how="inner"); hh = hh[(hh["meet_year"] - hh["birth"]).between(*PIPE_WINDOW)]
+    hit = hh.groupby(["diver_id"] + gk).size().gt(0).rename("hit")
+    jr = s[s["age"].between(*PIPE_AGES)].join(win, on=["diver_id"] + gk).join(hit, on=["diver_id"] + gk)
+    jr["hit"] = jr["hit"].fillna(False).astype(bool)
+    jr["known_year"] = jr["meet_year"] + (PIPE_WINDOW[1] - jr["age"])          # season in which this athlete turns 20
+    weq = {(r["gender"], r["discipline"]): float(r["domestic_equiv_final"]) / N_OPT[r["gender"]] for _, r in eq.iterrows()} if len(eq) else {}
+    span = PIPE_WINDOW[1] - PIPE_WINDOW[0]
+    # 2020: no USA Diving national meets and the NCAA zone and national championships were cancelled, so an
+    # outcome window that includes it under-counts what those athletes could do. Such windows are not used.
+    jr["void"] = False
+    for vy in PIPE_VOID_YEARS: jr["void"] |= (jr["known_year"] - span <= vy) & (vy <= jr["known_year"])
+    def run(asof, targets, first_window_year):
+        pool = jr[(jr["known_year"] <= asof) & (jr["known_year"] - span >= first_window_year) & ~jr["void"]]
+        out = []
+        for (g, b, a), tg in targets.groupby(gk + ["age"]):
+            pg = pool[(pool["gender"] == g) & (pool["discipline"] == b) & (pool["age"] == a)]
+            if len(pg) < PIPE_MIN_COMPARABLES: continue
+            pz = pg["z"].values; pb = pg["best"].values; ph = pg["hit"].values; std = PER_OPT_STD.get((g, b)); w = weq.get((g, b))
+            for t in tg.itertuples():
+                dz = np.abs(pz - t.z); width = PIPE_Z; m = dz <= width; n = int(m.sum())
+                if n < PIPE_MIN_COMPARABLES:
+                    # the best juniors have few peers this close: take the nearest 25, as long as they are not too far off
+                    width = float(np.sort(dz)[PIPE_MIN_COMPARABLES - 1])
+                    if width > PIPE_Z_MAX: continue
+                    m = dz <= width; n = int(m.sum())
+                best = pb[m]; kept = best[~np.isnan(best)]
+                q = np.percentile(kept, [10, 50, 90]) if len(kept) >= 5 else [np.nan] * 3
+                out.append({"diver_id": t.diver_id, "diver_name": t.diver_name, "gender": g, "discipline": b, "season": int(t.meet_year), "age": float(a), "age_width": float(t.width),
+                            "ppd": float(t.ppd), "pct_in_age": (float(t.pct_in_age) if pd.notna(t.pct_in_age) else None), "n_opt_dives": int(t.n_opt_dives),
+                            "n_comparables": n, "match_width": round(width, 2), "comparables_gap": round(float(t.z - pz[m].mean()), 2), "share_competing": float(len(kept) / n), "best_p10": float(q[0]), "best_p50": float(q[1]), "best_p90": float(q[2]),
+                            "standard_per_dive": std, "share_scored_standard": float(ph[m].sum() / n),
+                            "share_at_standard": float((kept >= std).sum() / n) if std else None,
+                            "world_per_dive": w, "share_at_world": (float((kept >= w).sum() / n) if w else None),
+                            "reach_year_from": int(t.meet_year + PIPE_WINDOW[0] - a), "reach_year_to": int(t.meet_year + PIPE_WINDOW[1] - a)})
+        return pd.DataFrame(out)
+    cur = jr[jr["meet_year"] == maxyear]
+    fc = run(maxyear, cur, PIPE_FIRST_WINDOW_YEAR)
+    log(f"model8: {len(fc):,} junior forecasts for {maxyear} ({len(cur):,} juniors aged {PIPE_AGES[0]}-{PIPE_AGES[1]} with a known age window)")
+    cohort = (fc.assign(birth_year=(fc["season"] - fc["age"]).astype(int), var=fc["share_scored_standard"] * (1 - fc["share_scored_standard"]))
+                .groupby(gk + ["birth_year", "age", "reach_year_from", "reach_year_to"]).agg(n_juniors=("diver_id", "size"), expected_scored_standard=("share_scored_standard", "sum"),
+                     var=("var", "sum"), expected_competing=("share_competing", "sum"), expected_at_standard=("share_at_standard", "sum")).reset_index()) if len(fc) else pd.DataFrame()
+    if len(cohort): cohort["sd_scored_standard"] = np.sqrt(cohort["var"]); cohort = cohort.drop(columns=["var"])
+    # backtest: forecast as of earlier seasons from what was known then, score against what happened
+    bt = []
+    for y0 in (2019, 2020, 2021):
+        tg = jr[(jr["meet_year"] == y0) & (jr["known_year"] <= maxyear) & ~jr["void"]]
+        f = run(y0, tg, PIPE_BACKTEST_FIRST_YEAR)
+        if f.empty: continue
+        act = tg.set_index(["diver_id"] + gk + ["age"])
+        act = act[~act.index.duplicated(keep="first")]
+        idx = list(zip(f["diver_id"], f["gender"], f["discipline"], f["age"]))
+        f["best_actual"] = act["best"].reindex(idx).values; f["scored_actual"] = act["hit"].reindex(idx).fillna(False).astype(int).values
+        f["competing_actual"] = f["best_actual"].notna().astype(int); f["level_actual"] = (f["best_actual"] >= f["standard_per_dive"]).astype(int); f["asof"] = y0
+        bt.append(f)
+    agg = dict(n=("diver_id", "size"), expected_scored_standard=("share_scored_standard", "sum"), actual_scored_standard=("scored_actual", "sum"),
+               expected_competing=("share_competing", "sum"), actual_competing=("competing_actual", "sum"),
+               expected_at_standard=("share_at_standard", "sum"), actual_at_standard=("level_actual", "sum"))
+    if bt:
+        B = pd.concat(bt)
+        back = B.groupby(["asof"] + gk).agg(**agg).reset_index(); back["kind"] = "event"
+        B["bin"] = pd.cut(B["share_scored_standard"], [-0.001, 0.05, 0.10, 0.20, 0.35, 0.50, 0.70, 1.0], labels=["0-5%", "5-10%", "10-20%", "20-35%", "35-50%", "50-70%", "70%+"])
+        cal = B.groupby("bin", observed=True).agg(**agg).reset_index(); cal["kind"] = "calibration"; cal["bin"] = cal["bin"].astype(str)
+        back = pd.concat([back, cal], ignore_index=True)
+        tot_e, tot_a = float(B["share_scored_standard"].sum()), int(B["scored_actual"].sum())
+        stats = {"backtest_n": int(len(B)), "expected_scored_standard": round(tot_e, 1), "actual_scored_standard": tot_a,
+                 "expected_competing": round(float(B["share_competing"].sum()), 1), "actual_competing": int(B["competing_actual"].sum()),
+                 "expected_at_standard": round(float(B["share_at_standard"].sum()), 1), "actual_at_standard": int(B["level_actual"].sum()),
+                 "asof_seasons": sorted(int(v) for v in B["asof"].unique()), "forecast_first_window_year": PIPE_FIRST_WINDOW_YEAR, "backtest_first_window_year": PIPE_BACKTEST_FIRST_YEAR}
+        log(f"model8 backtest: {len(B):,} junior forecasts as of 2019-2021; scored the standard expected {tot_e:.1f} vs actual {tot_a}; still competing expected {stats['expected_competing']} vs actual {stats['actual_competing']}")
+    else:
+        back = pd.DataFrame(columns=["asof", "gender", "discipline", "n", "expected_scored_standard", "actual_scored_standard", "expected_competing", "actual_competing", "expected_at_standard", "actual_at_standard", "kind", "bin"]); stats = {}
+    return fc, cohort, back, stats
+
 # ── write ─────────────────────────────────────────────────────────────────
 def write_tables(conn, tables):
     cur = conn.cursor()
@@ -562,13 +711,15 @@ def write_tables(conn, tables):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_bands ON hp_models.age_bands(gender, discipline, age)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_sim ON hp_models.sim_athlete(gender, discipline)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_syn_ath ON hp_models.synchro_athlete(gender, discipline)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_pipe ON hp_models.pipeline_forecast(gender, discipline)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_hpm_pipe_diver ON hp_models.pipeline_forecast(diver_id)")
     cur.execute("""DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
                      GRANT USAGE ON SCHEMA hp_models TO usad_app; GRANT SELECT ON ALL TABLES IN SCHEMA hp_models TO usad_app; END IF; END $$;""")
     cur.execute("""INSERT INTO app_meta.config (key, value) VALUES ('hp_models_last_run', %s)
                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""", (json.dumps({"at": pd.Timestamp.utcnow().isoformat(), "ok": True, "method_version": METHOD_VERSION}),))
     conn.commit(); log("committed; usad_app SELECT granted on hp_models")
 
-def method_rows(stats3, fit4, stats7=None):
+def method_rows(stats3, fit4, stats7=None, stats8=None):
     doc = __doc__
     def section(tag):
         m = re.search(rf"MODEL {tag} --(.*?)(?=\nMODEL|\n-{{10,}}\s*$|\Z)", doc, re.S); return m.group(0).strip() if m else ""
@@ -578,6 +729,7 @@ def method_rows(stats3, fit4, stats7=None):
         {"model": "age_progression", "title": "Age progression (Model 5)", "method": section("5"), "stats": "{}"},
         {"model": "simulated_totals", "title": "Simulated totals (Model 6)", "method": section("6"), "stats": "{}"},
         {"model": "synchro_conversion", "title": "Synchro conversion (Model 7)", "method": section("7"), "stats": json.dumps(stats7 or {})},
+        {"model": "junior_pipeline", "title": "Junior pipeline (Model 8)", "method": section("8"), "stats": json.dumps(stats8 or {})},
     ])
 
 def main():
@@ -589,11 +741,13 @@ def main():
     win, seasons, bands = model5(df)
     sim = model6(df, pan, cohort, conn, eq)
     syn_fit, syn_off, syn_val, syn_ath, stats7 = model7(df, pan, cohort, load_synchro(conn))
-    tables = {"synchro_fit": syn_fit, "synchro_offsets": syn_off, "synchro_validation": syn_val, "synchro_athlete": syn_ath,
+    pipe_fc, pipe_cohort, pipe_back, stats8 = model8(seasons, bands, eq, national_hits(df))
+    tables = {"pipeline_forecast": pipe_fc, "pipeline_cohort": pipe_cohort, "pipeline_backtest": pipe_back,
+              "synchro_fit": syn_fit, "synchro_offsets": syn_off, "synchro_validation": syn_val, "synchro_athlete": syn_ath,
               "sim_athlete": sim,"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
               "world_conversion_pairs": pairs, "world_conversion_fit": pd.DataFrame([fit4]) if fit4 else pd.DataFrame(columns=["n"]),
               "world_cuts": cuts, "world_standard_equiv": eq, "age_window": win, "athlete_season_ppd": seasons, "age_bands": bands,
-              "method": method_rows(stats3, fit4, stats7)}
+              "method": method_rows(stats3, fit4, stats7, stats8)}
     if DEV_PARQUET:
         out = os.environ.get("HP_MODELS_DEV_OUT", "/tmp/hp_models_out"); os.makedirs(out, exist_ok=True)
         for k, v in tables.items(): v.to_csv(os.path.join(out, k + ".csv"), index=False)
