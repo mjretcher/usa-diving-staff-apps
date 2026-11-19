@@ -83,6 +83,24 @@ MODEL 6 -- simulated totals (how often an athlete clears a standard)
   band. Published standards (Winter Nationals 2025-26) and the Model 4 World
   equivalents are evaluated and stored alongside.
 
+MODEL 6b -- Trials format (what the same simulated lists do in the Trials format)
+  The 2024 Olympic Trials format (Athlete Selection Procedures, 2024 Paris
+  Olympic Games, section 1.3.4) is run on the Model 6 lists for the two
+  individual Olympic events: preliminaries, top 18 to semifinals, scores
+  reset, top 12 to finals, and the top two by cumulative semifinal plus final
+  score. Each round is an independent draw of the athlete's simulated list,
+  which is how Model 6 is built (the day effect is per round). The field is
+  every athlete in the senior pool whose simulated list reaches the 2024
+  Trials qualifying score in at least one round in ten, less athletes known
+  to compete for another nation (World Aquatics nation code) or left
+  unplaced in a U.S. national final. Reported per athlete: chance of making
+  the final, of finishing in the top two, and of winning; whether the list
+  meets the 2024 Trials DD minimum; and the hit rate the published tie-break
+  uses (share of optional dives with an average award of 7.5 or better for
+  women, 8.0 for men, from actual awards, not adjusted). The format and
+  scores are the 2024 ones. LA28 procedures are not published; this is a
+  planning view, never a selection input.
+
 MODEL 7 -- synchro conversion (what two individual records project to as a pair)
   A synchro award is the mean of five judges' marks after drops: one
   execution mark per diver and three synchronisation marks, so
@@ -157,7 +175,7 @@ import os, sys, io, json, time, re
 import numpy as np, pandas as pd
 import scipy.sparse as sp, scipy.sparse.csgraph as cg
 
-METHOD_VERSION = "hp-models-2026-11-18.2"
+METHOD_VERSION = "hp-models-2026-11-19.1"
 CONN = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
 DEV_PARQUET = os.environ.get("HP_MODELS_DEV_PARQUET")  # local testing without a database
 K_P = 20.0
@@ -388,7 +406,7 @@ def model6(df, pan, cohort, conn, eq):
                                   WHERE competition_family = 'USA Diving' AND competition_group IN {SENIOR_GROUPS}
                                     AND NOT COALESCE(is_synchronized, false) AND meet_year >= {maxyear - SEASONS_BACK}""")
     eqmap = {(r["gender"], r["discipline"]): float(r["domestic_equiv_final"]) for _, r in eq.iterrows()} if len(eq) else {}
-    out = []
+    out = []; keep = {}
     for (g, b), sub in d.groupby(["gender", "discipline"]):
         if (g, b) not in WINTER_STD: continue
         n_target = TARGET_N[g]
@@ -425,6 +443,10 @@ def model6(df, pan, cohort, conn, eq):
                 e = np.clip(e + day, 0, 10); draws += 3 * dd * e
                 detail.append({"dive": dv, "dd": round(float(dd), 1), "n": int(n), "own_mean": (round(float(o.mean()), 2) if n else None), "prior_mean": round(float(prior.mean()), 2), "under4": (round(float((o < 4).mean()), 2) if n else None)})
             qs = np.percentile(draws, np.arange(1, 100))
+            if (g, b) in TRIALS_2024:
+                oe = ga.loc[ga["optional_voluntary"] == "O", "exec"]
+                keep.setdefault((g, b), {})[aid] = {"draws": draws.astype(np.float32), "name": ga["diver_name"].iloc[0], "list_dd": float(lst["dd"].astype(float).sum()),
+                                                    "list_source": src, "n_obs": int(len(ga)), "last_season": int(ga["meet_year"].max()), "hit_rate": (float((oe >= TRIALS_HIT[g]).mean()) if len(oe) else None), "n_opt": int(len(oe))}
             std = WINTER_STD[(g, b)]; weq = eqmap.get((g, b))
             out.append({"diver_id": aid, "diver_name": ga["diver_name"].iloc[0], "gender": g, "discipline": b, "season_max": maxyear, "n_obs": int(len(ga)),
                         "list_source": src, "list_meet_id": lst_meet, "list_year": lst_year, "list_dd": round(float(lst["dd"].astype(float).sum()), 1), "list_json": json.dumps(detail),
@@ -432,7 +454,43 @@ def model6(df, pan, cohort, conn, eq):
                         "published_standard": std, "p_clear_standard": float((draws >= std).mean()),
                         "world_equiv": weq, "p_clear_world_equiv": (float((draws >= weq).mean()) if weq else None), "day_sd": round(day_sd, 3)})
         log(f"model6: {g} {b}: {sum(1 for o in out if o['gender']==g and o['discipline']==b)} athletes simulated (day sd {day_sd:.3f})")
-    return pd.DataFrame(out)
+    return pd.DataFrame(out), keep
+
+# ── model 6b: the 2024 Trials format on the Model 6 lists ─────────────────
+TRIALS_2024 = {("Female", "3m"): (290, 13.9), ("Female", "Platform"): (275, 14.0), ("Male", "3m"): (380, 18.1), ("Male", "Platform"): (385, 18.5)}   # (qualifying score, DD minimum)
+TRIALS_HIT = {"Female": 7.5, "Male": 8.0}
+TRIALS_SEMI, TRIALS_FINAL, TRIALS_SPOTS = 18, 12, 2
+def trials_format(keep, not_eligible):
+    rng = np.random.default_rng(11); rows = []; events = []
+    for (g, b), ath in keep.items():
+        score, ddmin = TRIALS_2024[(g, b)]
+        left_out = sorted(v["name"] for k, v in ath.items() if k in not_eligible)
+        field = {k: v for k, v in ath.items() if k not in not_eligible and float(np.percentile(v["draws"], 90)) >= score}
+        ids = list(field); n = len(ids)
+        if n < TRIALS_SPOTS + 1: continue
+        D = np.stack([field[k]["draws"] for k in ids])                                   # athletes x NSIM, one round each
+        pick = lambda: np.take_along_axis(D, rng.integers(0, D.shape[1], size=D.shape), axis=1)
+        pre, semi, fin = pick(), pick(), pick()
+        NEG = -1e9
+        in_semi = np.argsort(-pre, axis=0).argsort(axis=0) < min(TRIALS_SEMI, n)          # rank within each simulated meet
+        s2 = np.where(in_semi, semi, NEG)
+        in_fin = np.argsort(-s2, axis=0).argsort(axis=0) < min(TRIALS_FINAL, n)
+        cum = np.where(in_fin, semi + fin, NEG)
+        rank = np.argsort(-cum, axis=0).argsort(axis=0)
+        second = np.sort(cum, axis=0)[-TRIALS_SPOTS]; third = np.sort(cum, axis=0)[-(TRIALS_SPOTS + 1)]
+        events.append({"gender": g, "discipline": b, "field_size": n, "qualifying_score": score, "dd_minimum": ddmin,
+                       "second_place_p50": float(np.median(second)), "second_place_p10": float(np.percentile(second, 10)), "second_place_p90": float(np.percentile(second, 90)),
+                       "margin_2nd_3rd_p50": float(np.median(second - third)), "share_within_5_points": float(((second - third) < 5).mean()),
+                       "left_out_not_eligible": "; ".join(left_out)})
+        for i, k in enumerate(ids):
+            v = field[k]
+            rows.append({"diver_id": k, "diver_name": v["name"], "gender": g, "discipline": b, "list_dd": round(v["list_dd"], 1), "meets_dd_minimum": bool(v["list_dd"] + 1e-9 >= ddmin),
+                         "list_source": v["list_source"], "n_obs": v["n_obs"], "last_season": v["last_season"], "round_p50": float(np.median(v["draws"])),
+                         "p_final": float(in_fin[i].mean()), "p_top2": float((rank[i] < TRIALS_SPOTS).mean()), "p_win": float((rank[i] == 0).mean()),
+                         "cumulative_p50_when_in_final": (float(np.median((semi[i] + fin[i])[in_fin[i]])) if in_fin[i].any() else None),
+                         "hit_rate": v["hit_rate"], "n_optional_dives": v["n_opt"]})
+        log(f"model6b: {g} {b}: field {n}; second place needs about {np.median(second):.0f} over two lists; {len(left_out)} left out as not eligible")
+    return pd.DataFrame(rows), pd.DataFrame(events)
 
 # ── model 7 ───────────────────────────────────────────────────────────────
 SYN_KEYS = ("E1", "E2", "E3", "E4", "E5", "E6", "S1", "S2", "S3", "S4", "S5")
@@ -728,6 +786,7 @@ def method_rows(stats3, fit4, stats7=None, stats8=None):
         {"model": "world_conversion", "title": "Domestic season to World Aquatics (Model 4)", "method": section("4"), "stats": json.dumps(fit4)},
         {"model": "age_progression", "title": "Age progression (Model 5)", "method": section("5"), "stats": "{}"},
         {"model": "simulated_totals", "title": "Simulated totals (Model 6)", "method": section("6"), "stats": "{}"},
+        {"model": "trials_format", "title": "Trials format (Model 6b)", "method": section("6b"), "stats": "{}"},
         {"model": "synchro_conversion", "title": "Synchro conversion (Model 7)", "method": section("7"), "stats": json.dumps(stats7 or {})},
         {"model": "junior_pipeline", "title": "Junior pipeline (Model 8)", "method": section("8"), "stats": json.dumps(stats8 or {})},
     ])
@@ -739,10 +798,18 @@ def main():
     pan, meet, cohort, stats3 = model3(df, links)
     pairs, fit4, cuts, eq = model4(conn, pan)
     win, seasons, bands = model5(df)
-    sim = model6(df, pan, cohort, conn, eq)
+    sim, sim_keep = model6(df, pan, cohort, conn, eq)
+    if DEV_PARQUET: not_eligible = set()
+    else:
+        ne = read_sql(conn, f"""SELECT dm_id::text AS diver_id FROM analytics.athlete_identity WHERE dm_id IS NOT NULL AND nat IS NOT NULL AND nat <> 'USA'
+                                 UNION SELECT DISTINCT diver_id::text FROM core.result_phases
+                                  WHERE competition_family = 'USA Diving' AND competition_group IN {SENIOR_GROUPS} AND round_stage = 'Final'
+                                    AND place IS NULL AND NOT COALESCE(is_synchronized, false) AND meet_year >= 2025""")
+        not_eligible = set(ne["diver_id"].astype(str))
+    trials_ath, trials_ev = trials_format(sim_keep, not_eligible)
     syn_fit, syn_off, syn_val, syn_ath, stats7 = model7(df, pan, cohort, load_synchro(conn))
     pipe_fc, pipe_cohort, pipe_back, stats8 = model8(seasons, bands, eq, national_hits(df))
-    tables = {"pipeline_forecast": pipe_fc, "pipeline_cohort": pipe_cohort, "pipeline_backtest": pipe_back,
+    tables = {"trials_sim": trials_ath, "trials_sim_event": trials_ev, "pipeline_forecast": pipe_fc, "pipeline_cohort": pipe_cohort, "pipeline_backtest": pipe_back,
               "synchro_fit": syn_fit, "synchro_offsets": syn_off, "synchro_validation": syn_val, "synchro_athlete": syn_ath,
               "sim_athlete": sim,"panel_environment": pan, "meet_environment": meet, "cohort_reference": cohort,
               "world_conversion_pairs": pairs, "world_conversion_fit": pd.DataFrame([fit4]) if fit4 else pd.DataFrame(columns=["n"]),
