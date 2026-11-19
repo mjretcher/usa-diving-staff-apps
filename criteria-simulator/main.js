@@ -1839,6 +1839,7 @@ async function loadSimTable() {
   } catch (e) { state.sim.rows = []; state.sim.error = e.message; }
   state.sim.loading = false;
   renderSimPanel();
+  renderTrialsPanel();
 }
 // P(total >= x) from 99 stored quantiles (q[i] = (i+1)th percentile).
 function pAtLeast(q, x) {
@@ -1850,6 +1851,55 @@ function pAtLeast(q, x) {
   const pct = (i + frac) / 100; return Math.max(0, Math.min(1, 1 - pct));
 }
 const SIM_LIMIT = 25;
+// ── Trials format (hp_models Model 6b). Shown only under the 2024 Trials model. ──
+const trialsCache = {};
+async function loadTrialsSim(gender, discipline) {
+  const key = gender + '|' + discipline;
+  if (trialsCache[key]) return trialsCache[key];
+  const [a, e] = await Promise.all([
+    NEON.query(`SELECT diver_id, diver_name, list_dd, meets_dd_minimum, round_p50, p_final, p_top2, p_win, hit_rate, n_optional_dives, last_season, list_source
+                  FROM hp_models.trials_sim WHERE gender = $1 AND discipline = $2 ORDER BY p_top2 DESC, p_final DESC`, [gender, discipline]),
+    NEON.query(`SELECT field_size, qualifying_score, dd_minimum, second_place_p50, second_place_p10, second_place_p90, margin_2nd_3rd_p50, share_within_5_points, left_out_not_eligible
+                  FROM hp_models.trials_sim_event WHERE gender = $1 AND discipline = $2`, [gender, discipline]),
+  ]);
+  trialsCache[key] = { rows: a.rows, ev: e.rows[0] || null };
+  return trialsCache[key];
+}
+async function renderTrialsPanel() {
+  const panel = $('trialsPanel'); if (!panel) return;
+  if (!isTrialsPreset()) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const body = $('trialsBody'), gender = normaliseGender(els.genderFilter.value), discipline = normaliseDiscipline(els.disciplineFilter.value);
+  const key = gender + '|' + discipline; body.dataset.key = key;
+  let T;
+  try { T = await loadTrialsSim(gender, discipline); }
+  catch (e) { if (body.dataset.key === key) body.innerHTML = `<div class="cs2-ex-foot">The Trials format run has not been built yet (${esc(e.message || e)}). It fills itself in after the next nightly model run.</div>`; return; }
+  if (body.dataset.key !== key) return;                       // a newer selection superseded this one
+  if (!T.ev || !T.rows.length) { body.innerHTML = '<div class="cs2-ex-foot">No Trials format run for this event.</div>'; return; }
+  const ev = T.ev, n = (v) => Number(v), pc = (v) => { const x = n(v); return x > 0 && x < 0.005 ? '<1%' : Math.round(x * 100) + '%'; };
+  const shown = state.trialsShowAll ? T.rows : T.rows.slice(0, 15);
+  const maxSeason = Math.max(...T.rows.map(r => Number(r.last_season) || 0));
+  const hitThr = gender === 'Female' ? '7.5' : '8.0';
+  body.innerHTML = `
+    <div class="we-grid">
+      <div class="we-tile"><span>Field</span><b>${esc(ev.field_size)}</b><small>projected · unique athletes whose list reaches ${esc(ev.qualifying_score)} in one round in ten</small></div>
+      <div class="we-tile"><span>Second place needs about</span><b>${Math.round(n(ev.second_place_p50))}</b><small>projected · semifinal plus final · 8 in 10 runs between ${Math.round(n(ev.second_place_p10))} and ${Math.round(n(ev.second_place_p90))}</small></div>
+      <div class="we-tile"><span>Second to third</span><b>${Math.round(n(ev.margin_2nd_3rd_p50))}</b><small>projected · typical margin in points · within 5 points in ${pc(ev.share_within_5_points)} of runs</small></div>
+    </div>
+    <div class="table-wrap"><table class="data-table"><thead><tr>
+      <th>Athlete</th><th class="num">Top two</th><th class="num c-team">Makes final</th><th class="num c-team">Wins</th><th class="num c-std">One list, typical</th><th class="num c-dd">List DD</th><th class="num c-basis" title="Share of optional dives with an average award of ${hitThr} or better, from actual awards. This is the first hit threshold in the published tie-break.">Hit rate</th><th class="c-basis">Last season</th></tr></thead>
+      <tbody>${shown.map(r => `<tr>
+        <td class="c-name"><b>${esc(r.diver_name)}</b>${n(r.last_season) < maxSeason ? ` <span class="hp-badge flag" title="No result on file since ${esc(r.last_season)}. Confirm this athlete is still competing.">last result ${esc(r.last_season)}</span>` : ''}${r.meets_dd_minimum === false || r.meets_dd_minimum === 'f' ? ` <span class="hp-badge warn" title="This list is below the 2024 Trials minimum of ${esc(ev.dd_minimum)}">below DD minimum</span>` : ''}</td>
+        <td class="num"><span class="hp-badge ${n(r.p_top2) >= 0.5 ? 'good' : n(r.p_top2) >= 0.15 ? 'info' : 'out'}">${pc(r.p_top2)}</span></td>
+        <td class="num c-team">${pc(r.p_final)}</td><td class="num c-team">${pc(r.p_win)}</td>
+        <td class="num c-std">${Math.round(n(r.round_p50))}</td><td class="num c-dd">${n(r.list_dd).toFixed(1)}</td>
+        <td class="num c-basis">${r.hit_rate == null ? '—' : pc(r.hit_rate)} <span class="small">of ${esc(r.n_optional_dives)}</span></td><td class="c-basis">${esc(r.last_season)}</td></tr>`).join('')}
+      ${(!state.trialsShowAll && T.rows.length > 15) ? `<tr class="row-more"><td colspan="8"><button type="button" class="btn btn-sm" id="trialsShowAll">Show the other ${T.rows.length - 15} · all below ${pc(T.rows[15].p_top2)}</button></td></tr>` : ''}</tbody></table></div>
+    <div class="cs2-ex-foot">Format and scores are from the 2024 Olympic Trials procedures: top 18 to semifinals, top 12 to finals, top two on cumulative semifinal plus final. LA28 procedures have not been published, so this is a planning view and not a selection input. Lists and execution come from each athlete's last three seasons, so an athlete who has since retired still appears; check the last-season column.${ev.left_out_not_eligible ? ` Left out as not eligible to represent the United States on the evidence held: ${esc(ev.left_out_not_eligible)}. Nationality is only partly on file, so confirm the field before relying on it.` : ' Nationality is only partly on file, so confirm the field before relying on it.'}</div>`;
+  const more = $('trialsShowAll');
+  if (more) more.addEventListener('click', () => { const y = window.scrollY; state.trialsShowAll = true; renderTrialsPanel(); window.scrollTo(0, y); });
+}
+
 function renderSimPanel() {
   const host = $('simBody'); if (!host) return;
   if (poolFamily() !== 'usa') { host.innerHTML = '<div class="source-impact-empty">Simulated totals are built for the Senior USA pool. Switch pools to use this.</div>'; return; }
@@ -3207,7 +3257,7 @@ function renderEnhancements() {
   try { renderBacktest(); } catch (e) {}
   try { renderStandardAchievement(); } catch (e) {}
   try { renderWorldEquivalent(); } catch (e) {}
-  try { if (poolFamily() === 'usa') loadSimTable().then(() => {}); renderSimPanel(); } catch (e) {}
+  try { if (poolFamily() === 'usa') loadSimTable().then(() => {}); renderSimPanel(); renderTrialsPanel(); } catch (e) {}
   try { renderBubbleWatch(); } catch (e) {}
   try { renderStandardsPanel(); } catch (e) {}
 }
