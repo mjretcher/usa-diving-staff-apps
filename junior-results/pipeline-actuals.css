@@ -1,0 +1,29 @@
+/* pipeline-actuals.css — stop-to-stop tables on the Pipeline tab. */
+.pa-section .pa-filters { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 6px; }
+.pa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pa-chip {
+  font: 600 13px/1 var(--font-ui, Inter, sans-serif);
+  padding: 8px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line, #e2e5ef); background: #fff; color: #171f69;
+}
+.pa-chip.is-on { background: #171f69; border-color: #171f69; color: #fff; }
+.pa-chip:focus-visible, .pa-open:focus-visible { outline: 2px solid #009ac7; outline-offset: 2px; }
+.pa-h4 {
+  font: 700 15px/1.2 var(--font-display, 'Barlow Condensed', sans-serif);
+  text-transform: uppercase; letter-spacing: .04em; color: #171f69; margin: 22px 0 8px;
+}
+.pa-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line, #e2e5ef); border-radius: 8px; }
+.pa-table { min-width: 560px; }
+.pa-table td:nth-child(2) { font-family: var(--font-mono, 'JetBrains Mono', monospace); }
+.pa-table td.pa-na { color: #8a94a6; }
+.pa-table td.pa-flag { color: #e31937; font-weight: 800; }
+.pa-table tr.pa-total td { background: #f4f6fb; font-weight: 800; }
+.pa-table tr.pa-detail > td { padding: 10px; background: #f8f9fc; }
+.pa-table tr.pa-detail .pa-table { min-width: 520px; }
+.pa-table tr.pa-detail .pa-table td { font-family: var(--font-ui, Inter, sans-serif); font-weight: 500; }
+.pa-open {
+  font: 600 12.5px/1 var(--font-ui, Inter, sans-serif);
+  padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid #009ac7; background: #fff; color: #00627f;
+}
+.pa-note { font: 500 13px/1.45 var(--font-ui, Inter, sans-serif); color: var(--ink-2, #2d3a4a); margin: 8px 2px 0; }

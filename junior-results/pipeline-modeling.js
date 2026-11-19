@@ -3445,6 +3445,7 @@
           renderHero() +
           renderControls() +
           renderFunnelSection(pmState.selectedYear, funnel) +
+          '<div id="pmActualsSlot"></div>' +
           renderDemographicsSection(pmState.selectedYear, demo) +
           renderCohortSection(pmState.selectedYear, cohort) +
           renderRetentionSection(retention) +
@@ -3476,6 +3477,11 @@
           const slot = document.getElementById('pmCohortCmpSlot');
           if (slot) slot.innerHTML = '<div class="pm-error"><strong>Could not load comparison:</strong> ' + escapeHtml(e.message) + '</div>';
         }
+      }
+
+      // Stop-to-stop actuals (async, own module, own click handling)
+      if (window.PipelineActuals) {
+        window.PipelineActuals.mount(document.getElementById('pmActualsSlot'), pmState.selectedYear);
       }
 
       bindHandlers();
