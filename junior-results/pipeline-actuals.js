@@ -252,7 +252,12 @@
 
   /* ── Render ────────────────────────────────────────────────────────────── */
   function cell(v) { return v == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + num(v) + '</td>'; }
+  var STATIC = false;                   // true while building the report-builder version
   function table(head, body) {
+    if (STATIC) {
+      return '<table class="rb-table"><thead><tr>' + head.filter(function (h) { return h !== ''; })
+        .map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table>';
+    }
     return '<div class="pa-scroll"><table class="pm-status-table pa-table"><thead><tr>' +
       head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
@@ -263,7 +268,7 @@
     }).join('') + '</div>';
   }
   function openBtn(id, n) {
-    if (!n) return '';
+    if (STATIC || !n) return '';
     return '<button type="button" class="pa-open" data-pa-open="' + id + '" aria-expanded="' + (view.open[id] ? 'true' : 'false') + '">' +
       (view.open[id] ? 'Hide' : 'Show') + '</button>';
   }
@@ -287,10 +292,10 @@
             }).join('')) + '</td></tr>';
       }
       return '<tr><td>' + esc(r.label) + '</td>' + cell(r.entries) + cell(r.athletes) + cell(r.finals) + cell(r.top3) +
-        '<td>' + openBtn(id, r.entries) + '</td></tr>' + rowsHtml;
+        (STATIC ? '' : '<td>' + openBtn(id, r.entries) + '</td>') + '</tr>' + rowsHtml;
     }).join('') +
       '<tr class="pa-total"><td>All Junior Nationals event entries</td>' + cell(c.entriesTotal) + cell(c.field.total) +
-      cell(c.finals.entries) + cell(c.routes.reduce(function (a, r) { return a + r.top3; }, 0)) + '<td></td></tr>';
+      cell(c.finals.entries) + cell(c.routes.reduce(function (a, r) { return a + r.top3; }, 0)) + (STATIC ? '' : '<td></td>') + '</tr>';
 
     function bandBody(list, showEwc) {
       return list.map(function (b) {
@@ -314,38 +319,45 @@
         '<td' + (f.numbered ? ' class="pa-flag"' : '') + '>' + num(f.numbered) + '</td>' +
         '<td>' + num(f.inside) + ' inside the ' + esc(f.cutLabel) +
         (f.insideNumbered ? ', ' + num(f.insideNumbered) + ' with a numbered place' : '') + '</td>' +
-        '<td>' + openBtn(id, f.entries) + '</td></tr>' + rowsHtml;
+        (STATIC ? '' : '<td>' + openBtn(id, f.entries) + '</td>') + '</tr>' + rowsHtml;
     }).join('');
 
-    var un = c.unexplained.length ? '<p class="pa-note">' + num(c.unexplained.length) +
-      ' more event entries were scored non-displacing with no status on file for the athlete.</p>' : '';
+
+    var showing = (view.group === 'All' && view.gender === 'All') ? '' :
+      '<p class="pa-showing">Showing ' + esc(view.group === 'All' ? 'all groups' : view.group) + ', ' +
+      esc(view.gender === 'All' ? 'boys and girls' : view.gender.toLowerCase() + ' only') + '.</p>';
+    var lead = 'Counted from results. Individual events, Groups A to D. ' +
+      'Of the ' + num(c.field.total) + ' athletes at Junior Nationals, ' + num(c.field.regionals) + ' started at a Regional, ' +
+      num(c.field.zones) + ' started at a Zone and ' + num(c.field.neither) + ' had no Regional or Zone result.';
+    function h(t) { return STATIC ? '<h3 class="rb-h3">' + t + '</h3>' : '<h4 class="pa-h4">' + t + '</h4>'; }
+    function note(t) { return '<p class="' + (STATIC ? 'rb-soft' : 'pa-note') + '">' + t + '</p>'; }
+    var tables =
+        h('Unique athletes reaching each later stop') +
+        table(['Started', 'Athletes', 'Zones', 'E/W/C', 'Junior Nationals', 'A Nationals final', 'Top 3'], stopBody) +
+        h('How each Junior Nationals event entry got there') +
+        table(['Route into that event', 'Event entries', 'Unique athletes', 'Reached the final', 'Top 3', ''], routeBody) +
+        note(num(c.finals.entries) + ' final entries: ' + num(c.finals.numbered) + ' with a numbered place and ' +
+          num(c.finals.entries - c.finals.numbered) + ' non-displacing.') +
+        h('Zone placing against Junior Nationals (event entries)') +
+        table(['Zone place', 'Zone entries', 'Competed at E/W/C', 'Competed at Nationals', 'Reached the final', 'Top 3'], bandBody(c.zoneBands, true)) +
+        h('E/W/C finish against Junior Nationals (event entries)') +
+        table(['E/W/C finish', 'E/W/C entries', 'Competed at Nationals', 'Reached the final', 'Top 3'], bandBody(c.ewcBands, false)) +
+        h('Foreign athletes and dual citizens declared for another federation') +
+        table(['Stop', 'Athletes', 'Event entries', 'Scored non-displacing', 'Numbered place', 'Finish on score', ''], forBody) +
+        (c.unexplained.length ? note(num(c.unexplained.length) +
+          ' more event entries were scored non-displacing with no status on file for the athlete.') : '');
+    if (STATIC) {
+      return '<section class="rb-section"><h2 class="rb-h2">Stop to Stop, ' + esc(year) + ' Actual</h2>' +
+        '<p class="rb-p">' + lead + '</p>' + tables + '</section>';
+    }
 
     return '<section class="pm-section pa-section">' +
       '<div class="pm-section-head"><div class="pm-section-title"><span class="pm-section-num">A</span>' +
         'Stop to stop, ' + esc(year) + ' actual</div>' +
-        '<div class="pm-section-explainer">Counted from results. Individual events, Groups A to D. ' +
-        'Of the ' + num(c.field.total) + ' athletes at Junior Nationals, ' + num(c.field.regionals) + ' started at a Regional, ' +
-        num(c.field.zones) + ' started at a Zone and ' + num(c.field.neither) + ' had no Regional or Zone result.</div></div>' +
+        '<div class="pm-section-explainer">' + lead + '</div></div>' +
       '<div class="pm-section-body">' +
         '<div class="pa-filters">' + chips('group', ['All', 'Group A', 'Group B', 'Group C', 'Group D'], view.group) +
-          chips('gender', ['All', 'Boys', 'Girls'], view.gender) + '</div>' +
-
-        '<h4 class="pa-h4">Unique athletes reaching each later stop</h4>' +
-        table(['Started', 'Athletes', 'Zones', 'E/W/C', 'Junior Nationals', 'A Nationals final', 'Top 3'], stopBody) +
-
-        '<h4 class="pa-h4">How each Junior Nationals event entry got there</h4>' +
-        table(['Route into that event', 'Event entries', 'Unique athletes', 'Reached the final', 'Top 3', ''], routeBody) +
-        '<p class="pa-note">' + num(c.finals.entries) + ' final entries: ' + num(c.finals.numbered) + ' with a numbered place and ' +
-          num(c.finals.entries - c.finals.numbered) + ' non-displacing.</p>' +
-
-        '<h4 class="pa-h4">Zone placing against Junior Nationals (event entries)</h4>' +
-        table(['Zone place', 'Zone entries', 'Competed at E/W/C', 'Competed at Nationals', 'Reached the final', 'Top 3'], bandBody(c.zoneBands, true)) +
-
-        '<h4 class="pa-h4">E/W/C finish against Junior Nationals (event entries)</h4>' +
-        table(['E/W/C finish', 'E/W/C entries', 'Competed at Nationals', 'Reached the final', 'Top 3'], bandBody(c.ewcBands, false)) +
-
-        '<h4 class="pa-h4">Foreign athletes and dual citizens declared for another federation</h4>' +
-        table(['Stop', 'Athletes', 'Event entries', 'Scored non-displacing', 'Numbered place', 'Finish on score', ''], forBody) + un +
+          chips('gender', ['All', 'Boys', 'Girls'], view.gender) + '</div>' + showing + tables +
       '</div></section>';
   }
 
@@ -380,5 +392,15 @@
     }
   }
 
-  window.PipelineActuals = { mount: mount, load: load, compute: compute };
+  /* Static version for the report builder: all groups, no controls. */
+  async function report(year) {
+    year = Number(year);
+    if (!RULE_YEARS[year]) return '';
+    var d = await load(year), keep = view;
+    view = { group: 'All', gender: 'All', open: {} }; STATIC = true;
+    try { return render(compute(d, view), year); }
+    finally { STATIC = false; view = keep; }
+  }
+
+  window.PipelineActuals = { mount: mount, load: load, compute: compute, report: report };
 })();

@@ -5207,7 +5207,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
   function rbDiveCountNote(yrs){
     if (!(yrs.some(y => y < 2024) && yrs.some(y => y >= 2024))) return '';
     return `<p class="rb-p" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px">
-      <strong>⚠ Dive-count rule change, Jan 1 2024:</strong> Required dive counts per age group shifted to align with World Aquatics/Pan American Aquatics standards. Group A dropped one dive across the board (both genders, both boards — e.g. Girls 1M/3M 10→9, Boys 1M/3M 11→10). Group C girls' springboard dropped one optional dive (8→7); the rest of Group C and all of Group B were unchanged. The youngest bracket (Group D, 11-and-under) was consolidated from the old separate "9-and-under" (5 dives) and "10-11" (6 dives) lists into one Group D list requiring 6 dives — effectively one more dive for 9-and-under athletes than before. Because dive count changes the total possible score, raw score comparisons spanning the 2023→2024 boundary for the affected groups reflect this rule change as well as any shift in competitiveness.
+      <strong>Dive-count rule change, Jan 1 2024:</strong> Required dive counts per age group shifted to align with World Aquatics/Pan American Aquatics standards. Group A dropped one dive across the board (both genders, both boards — e.g. Girls 1M/3M 10→9, Boys 1M/3M 11→10). Group C girls' springboard dropped one optional dive (8→7); the rest of Group C and all of Group B were unchanged. The youngest bracket (Group D, 11-and-under) was consolidated from the old separate "9-and-under" (5 dives) and "10-11" (6 dives) lists into one Group D list requiring 6 dives — effectively one more dive for 9-and-under athletes than before. Because dive count changes the total possible score, raw score comparisons spanning the 2023→2024 boundary for the affected groups reflect this rule change as well as any shift in competitiveness.
     </p>`;
   }
 
@@ -5338,7 +5338,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           ${rbDiveCountNote(yrs)}
 
           <h3 class="rb-h3">Direct-to-Nationals cutoff</h3>
-          <p class="rb-p">Average score of the athletes who advanced directly out of Zones. <strong>Pre-2026:</strong> top 10 per springboard event, top 7 for platform (no E/W/C tier existed). <strong>2026:</strong> top 3 per event (Art.303(b)(2)(i)) — the rest of the qualifying field moved to E/W/C instead, so the 2026 number reflects a much smaller, tougher direct cutoff and isn't directly comparable in scale to the pre-2026 top-10/top-7 numbers.</p>
+          <p class="rb-p">Average score of the athletes who advanced directly out of Zones. <strong>Pre-2026:</strong> top 10 per springboard event, top 7 for platform (no E/W/C tier existed). <strong>2026:</strong> top 3 per event (Art.303(b)(2)(i)) — the rest of the qualifying field moved to E/W/C instead, so the 2026 figure covers the top 3 only and is not comparable with the pre-2026 top 10 and top 7 figures.</p>
           <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:10px 0 4px">All zones pooled</h4>
           ${rbEventYearTable(directRows, yrs, null, 'No direct-to-Nationals qualifiers found for the selected year(s)/filters.')}
           <h4 style="font-family:var(--f-display,'Barlow Condensed',sans-serif);font-size:12px;color:#171F69;text-transform:uppercase;letter-spacing:.03em;margin:14px 0 4px">By zone</h4>
@@ -5409,6 +5409,24 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <h3 class="rb-h3">By E/W/C site</h3>
           ${rbDimBreakdownTables(r.rows, yrs, 'ewc_meet', 'Site')}
         </section>`;
+      },
+    },
+
+    stop_to_stop: {
+      label: 'Stop to Stop, Actual',
+      desc: 'Athletes reaching each later stop, how every Junior Nationals entry got there, Zone and E/W/C placing against Nationals, foreign and dual athletes at each stop (2026)',
+      async build(opts){
+        const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
+        if (!window.PipelineActuals || typeof window.PipelineActuals.report !== 'function') {
+          return '<section class="rb-section"><h2 class="rb-h2">Stop to Stop, Actual</h2><p class="rb-p">The pipeline module is not loaded on this page.</p></section>';
+        }
+        const parts = [];
+        for (const y of yrs) {
+          try { parts.push(await window.PipelineActuals.report(y)); }
+          catch(e){ parts.push('<section class="rb-section"><h2 class="rb-h2">Stop to Stop, '+esc(String(y))+' Actual</h2><p class="rb-p" style="color:#E31937">Could not build this section: '+esc(String((e&&e.message)||e))+'</p></section>'); }
+        }
+        const html = parts.join('');
+        return html || '<section class="rb-section"><h2 class="rb-h2">Stop to Stop, Actual</h2><p class="rb-p">Available for the 2026 season only.</p></section>';
       },
     },
 
@@ -5628,7 +5646,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         `, ['{'+yrs.join(',')+'}']);
         return `<section class="rb-section">
           <h2 class="rb-h2">Top-3 Zone Qualifiers Absent From Next Stage</h2>
-          <p class="rb-p">Direct answer to the CCE headline question: "of the athletes who placed top 3 at Zones, how many chose not to attend the next stage?"</p>
+          <p class="rb-p">Athletes who placed top 3 at Zones and did not compete at the next stage.</p>
           <table class="rb-table">
             <thead><tr><th>Year</th><th>Total Top-3</th><th>Decliners</th><th>Decline Rate</th></tr></thead>
             <tbody>
@@ -5841,10 +5859,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">Data Quality / Rule Anomalies</h2>
           <table class="rb-table">
-            <thead><tr><th>Anomaly</th><th>Count</th><th>Interpretation</th></tr></thead>
+            <thead><tr><th>Anomaly</th><th>Count</th><th>Rule</th></tr></thead>
             <tbody>
-              <tr><td>At Nationals with no Zone record</td><td><strong>${fmt(r1.rows[0].n)}</strong></td><td class="rb-soft">Likely HPS/prequal route; small share may be data gaps</td></tr>
-              <tr><td>At Nationals with Zone placement > 16 (above alternate cap)</td><td><strong>${fmt(r2.rows[0].n)}</strong></td><td class="rb-soft">Old rule cuts alternates at 16; these may be rule exceptions or data noise</td></tr>
+              <tr><td>At Nationals with no Zone record</td><td><strong>${fmt(r1.rows[0].n)}</strong></td><td class="rb-soft">Routes that do not need a Zone result: pre-qualification, skip-stage qualifiers, medical petition</td></tr>
+              <tr><td>At Nationals with Zone placement > 16 (above alternate cap)</td><td><strong>${fmt(r2.rows[0].n)}</strong></td><td class="rb-soft">Alternates were capped at 16th in these seasons</td></tr>
             </tbody>
           </table>
         </section>`;
@@ -5900,7 +5918,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">Zone Placement Band → ${nextStageLabel} Attendance</h2>
           <p class="rb-p"><strong>Filter:</strong> ${esc(fb.summary)}${yrs.length>1?` · <strong>Years:</strong> ${yrs.join(', ')}`:''}</p>
-          <p class="rb-p">For each Zone placement band, this shows how many divers fell in that band at their best Zone event, and how many of them actually appeared at the next stage of the pipeline.</p>
+          <p class="rb-p">Divers in each Zone placement band at their best Zone event, and how many competed at the next stage.</p>
           <table class="rb-table">
             <thead><tr><th>Band (best Zone placement)</th><th>Qualified</th><th>Attended next stage</th><th>Attendance rate</th></tr></thead>
             <tbody>
@@ -6171,6 +6189,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       desc: 'Average score needed at every cutoff — Region→Zone, Zone→Nationals/E-W-C, and E/W/C→Nationals — per event and age group, broken down by region/zone/site, side by side across 2024–2026.',
       sections: ['zone_qualifying_scores','zone_to_next_scores','ewc_nationals_scores'],
       defaultYears: [2024, 2025, 2026] },
+    { id: 'stop_to_stop', label: 'Stop to Stop, 2026 Actual',
+      desc: 'Who moved on from each stop, how every Junior Nationals entry got there, and foreign and dual athletes at each stop.',
+      sections: ['stop_to_stop'],
+      defaultYears: [2026] },
     { id: 'cce_band_question', label: 'CCE Band Question',
       desc: 'Directly answers "how many 1–3 / 4–10 / 11–18 Zone divers attended E/W/C vs qualified?" — Mike\'s specific CCE/Board ask.',
       sections: ['qualifier_rates','band_conversion','band_demographic','band_athlete_list'],
