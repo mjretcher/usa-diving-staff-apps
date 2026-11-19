@@ -1,0 +1,41 @@
+/* National Team — page-specific styles. Shell, panels, tables and badges come from shared/hp-shell.css. */
+.nt-loading { padding: 48px 20px; text-align: center; color: var(--ink-3); }
+.nt-lead { margin: 4px 2px 16px; max-width: 90ch; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.nt-soft { color: var(--ink-3); font-weight: 400; }
+.nt-empty { padding: 14px 16px; color: var(--ink-3); font-size: 13px; }
+.nt-link { color: var(--brand-blue); font-weight: 600; text-decoration: none; }
+.nt-link:hover { text-decoration: underline; }
+.nt-table td { vertical-align: top; }
+.nt-table .c-sub { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 400; margin-top: 2px; }
+.nt-table .c-how div + div { margin-top: 3px; }
+.nt-table .hp-badge + .hp-badge { margin-left: 4px; }
+.nt-h3 { margin: 18px 18px 8px; font: 700 13px/1.2 var(--font-ui, Inter, sans-serif); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); }
+.nt-count { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2, #F5F7FC); border: 1px solid var(--line, #DDE2EE); font: 600 12px/1.2 var(--font-mono); color: var(--brand-blue); letter-spacing: 0; }
+.nt-notes { margin: 6px 0 0; padding: 14px 18px 16px 36px; border-top: 1px solid var(--line-2, #EEF1F7); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.nt-notes li { margin-bottom: 8px; max-width: 100ch; }
+.nt-notes b { color: var(--ink); }
+.nt-source { margin: 14px 4px 0; font-size: 12px; color: var(--ink-3); }
+
+.nt-ev { padding: 0 18px 14px; }
+.nt-ev .nt-h3 { margin-left: 0; }
+.nt-ev-cols { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 14px; }
+.nt-ev-meet { font: 600 12px/1.2 var(--font-ui, Inter, sans-serif); color: var(--ink-3); margin-bottom: 6px; }
+.nt-place { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; margin-bottom: 4px; font-size: 13px; }
+.nt-place b { width: 20px; text-align: center; font: 700 13px/1 var(--font-mono); }
+.nt-place.is-auto { background: var(--brand-blue); color: #fff; }
+.nt-place.is-cons { background: var(--surface-2, #F5F7FC); border: 1px solid var(--line, #DDE2EE); color: var(--ink); }
+.nt-sync { margin-bottom: 6px; }
+
+@media (max-width: 720px) {
+  .nt-ctx { flex-wrap: wrap; }
+  #ntKpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #ntKpis .kpi-card { padding: 12px 14px; min-width: 0; }
+  #ntKpis .kpi-value { font-size: 24px; }
+  #ntKpis .kpi-foot { font-size: 11px; }
+  .nt-table th.c-how, .nt-table td.c-how { display: none; }
+  .nt-ev-cols { grid-template-columns: 1fr; }
+  .nt-h3 { margin-left: 12px; margin-right: 12px; }
+  .nt-ev { padding: 0 12px 12px; }
+  .nt-notes { padding-left: 30px; padding-right: 12px; }
+  #ntCsv { width: 100%; }
+}

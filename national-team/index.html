@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>National Team — USA Diving Staff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="../shared/design.css?v=202611082200" />
+  <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611082200" />
+  <link rel="stylesheet" href="styles.css?v=202611191200" />
+  <link rel="stylesheet" href="../shared/hp-shell.css?v=202611082200" />
+</head>
+<body class="hp-app">
+
+<header class="app-topbar">
+  <a class="topbar-brand" href="../" aria-label="USA Diving Staff Apps home">
+    <img src="../shared/images/logo-white-horizontal.png" alt="USA Diving" class="topbar-logo" />
+  </a>
+  <div class="topbar-divider"></div>
+  <div class="topbar-identity">
+    <div class="topbar-eyebrow">High Performance</div>
+    <div class="topbar-title">National Team</div>
+  </div>
+  <nav class="hp-view-switch" aria-label="High Performance views">
+    <a class="hp-view-tab" href="../criteria-simulator/">Standards Studio</a>
+    <a class="hp-view-tab" href="../athlete-evaluation/">Athlete Evaluation</a>
+    <a class="hp-view-tab" href="../matchup-lab/">Matchup Lab</a>
+    <a class="hp-view-tab active" href="./" aria-current="page">National Team</a>
+  </nav>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-metrics">
+    <span class="topbar-pill"><b id="ntTopMembers">—</b> qualified</span>
+    <span class="topbar-pill"><b id="ntTopMeets">—</b> window meets held</span>
+    <span class="topbar-pill topbar-source" data-source="neon">Live</span>
+  </div>
+</header>
+
+<div class="hp-below">
+<nav class="hp-mobile-switch" aria-label="High Performance apps">
+  <a href="../criteria-simulator/">Standards</a>
+  <a href="../athlete-evaluation/">Athletes</a>
+  <a href="../matchup-lab/">Matchup</a>
+  <a class="active" href="./" aria-current="page">Nat. Team</a>
+</nav>
+
+<div class="hp-ctxbar nt-ctx">
+  <nav class="hp-tabs" id="ntViews" role="tablist" aria-label="National Team views">
+    <button class="hp-tab active" data-view="roster" type="button">Who has qualified</button>
+    <button class="hp-tab" data-view="watch" type="button">Next meet</button>
+    <button class="hp-tab" data-view="results" type="button">Results behind it</button>
+    <button class="hp-tab" data-view="synchro" type="button">Synchro 3% rule</button>
+  </nav>
+  <span class="hp-ctx-grow"></span>
+  <button type="button" class="btn btn-sm" id="ntCsv">Download list (CSV)</button>
+</div>
+
+<main class="hp-main">
+  <div id="ntLoading" class="nt-loading">Reading official results…</div>
+  <div id="ntMain" hidden>
+
+    <p class="nt-lead">The published National Team criteria applied to official results. This is a check against the High Performance department's roster, not the roster itself.</p>
+
+    <section class="kpi-row" id="ntKpis" aria-label="Summary">
+      <div class="kpi-card kpi-accent-navy">
+        <div class="kpi-label">Qualified by results</div>
+        <div class="kpi-value" id="ntKpiMembers">—</div>
+        <div class="kpi-foot">actual · unique athletes, term still running</div>
+      </div>
+      <div class="kpi-card kpi-accent-green">
+        <div class="kpi-label">Automatic, individual</div>
+        <div class="kpi-value" id="ntKpiAuto">—</div>
+        <div class="kpi-foot">actual · unique athletes, 1st to 4th on 3m or 10m</div>
+      </div>
+      <div class="kpi-card kpi-accent-amber">
+        <div class="kpi-label">Term ends next meet</div>
+        <div class="kpi-value" id="ntKpiExpiring">—</div>
+        <div class="kpi-foot" id="ntKpiExpiringFoot">—</div>
+      </div>
+      <div class="kpi-card kpi-accent-blue">
+        <div class="kpi-label">One result away</div>
+        <div class="kpi-value" id="ntKpiOneAway">—</div>
+        <div class="kpi-foot">actual · event entries with one 5th to 7th banked</div>
+      </div>
+    </section>
+
+    <section class="panel nt-view" data-view="roster">
+      <header class="panel-head panel-head-row">
+        <div><h2>Who has qualified</h2><p>Every athlete with a qualifying result since the 2025 Winter Nationals, how they earned it, and when the term ends.</p></div>
+        <div class="panel-tools">
+          <span class="nt-soft" id="ntRosterCount"></span>
+          <input type="search" id="ntFilter" class="hp-input" placeholder="Filter by name or club" aria-label="Filter athletes" />
+        </div>
+      </header>
+      <div class="table-wrap"><table class="data-table nt-table">
+        <thead><tr><th>Athlete</th><th>Pathway</th><th class="c-how">Qualified by</th><th>Valid through</th></tr></thead>
+        <tbody id="ntRosterBody"></tbody>
+      </table></div>
+      <div id="ntNotesBody"></div>
+    </section>
+
+    <section class="panel nt-view" data-view="watch" hidden>
+      <header class="panel-head"><h2>Next meet</h2><p id="ntWatchSub"></p></header>
+      <div id="ntWatchBody"></div>
+    </section>
+
+    <section class="panel nt-view" data-view="results" hidden>
+      <header class="panel-head"><h2>Results behind it</h2><p>Official final placements, 1st to 7th, in the four individual Olympic events. Dark tiles are automatic places (1st to 4th); light tiles count toward the consistent-performance pathway (5th to 7th).</p></header>
+      <div id="ntGridBody"></div>
+    </section>
+
+    <section class="panel nt-view" data-view="synchro" hidden>
+      <header class="panel-head"><h2>Synchro 3% rule</h2><p>The winning team qualifies. Any other team whose finals score is within 3% of the winner's also qualifies. Both readings of "finals score" are shown: the meet total and the final-round list.</p></header>
+      <div id="ntSyncBody"></div>
+    </section>
+
+    <p class="nt-source">Source: USA Diving National Team Selection Criteria (FINAL 2025). Results: 2025 USA Diving Winter Nationals and 2026 USA Diving Nationals, final round, official place.</p>
+  </div>
+</main>
+</div>
+
+<script src="../data/config.js?v=202607262115"></script>
+<script src="../shared/usad-error-log.js?v=202609012030"></script>
+<script src="../shared/neon-client.js?v=20260715"></script>
+<script src="../shared/usad-toast.js?v=20260715"></script>
+<script src="main.js?v=202611191200"></script>
+
+</body>
+</html>
