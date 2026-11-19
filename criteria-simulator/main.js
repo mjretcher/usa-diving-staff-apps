@@ -16,6 +16,14 @@ const WINTER_DD_MINIMUMS = {
   Female: { '1m': 11.9, '3m': 13.7, Platform: 13.3 },
   Male:   { '1m': 15.9, '3m': 17.2, Platform: 17.1 },
 };
+// 2024 U.S. Olympic Team Trials qualifying standards (Athlete Selection Procedures, 2024 Paris Olympic Games,
+// 12 Dec 2022, amended 30 Aug 2023, section 1.2.2). Olympic events only, so there is no 1m row. Like the Winter
+// Nationals table these are a per-optional value times the list length: women 3m 290 = 58 x 5 (NCAA 348 = 58 x 6,
+// junior international 232 = 58 x 4). Loaded as a lens for testing a Trials standard. They are not the LA28 standards.
+const TRIALS_2024_URL = 'https://assets.contentstack.io/v3/assets/blteb7d012fc7ebef7f/blt66567d50e7c6ac49/65f1a24a5caa4b0a6d60a28c/DIV_2024_OLY_Athlete_Selection_Procedures-_FINAL_w-signatures_Exhibits.pdf';
+const TRIALS_2024_STANDARDS = { Female: { '3m': 290, Platform: 275 }, Male: { '3m': 380, Platform: 385 } };
+const TRIALS_2024_DD = { Female: { '3m': 13.9, Platform: 14.0 }, Male: { '3m': 18.1, Platform: 18.5 } };
+const isTrialsPreset = () => !!(els.criteriaPreset && els.criteriaPreset.value === 'trials2024');
 // Verified 2026-11-18 against the published 2026 National Championship Qualifier Criteria.
 const NATIONAL_CRITERIA_URL = 'https://assets.contentstack.io/v3/assets/blteb7d012fc7ebef7f/bltce04c5ae20ca7dac/6a2ac69adb237ef70ac59b40/USAD_National_Qualifier_Criteria_2026.pdf';
 const NATIONAL_DD_MINIMUMS = {
@@ -25,6 +33,8 @@ const NATIONAL_DD_MINIMUMS = {
 const PRESET_NOTES = {
   winterEligibility:
     'Athletes qualify by meeting the Table 1 score standard at any Table 2 meet in the two-year window. Every source is read on its own optional count (USA 5 or 6, NCAA 6, Junior A/B optionals) and restated to the USA basis, so one bar moves every source together. DD is required to compete at Winter Nationals but may be earned separately.',
+  trials2024:
+    'The 2024 Olympic Trials qualifying scores (women 290 on 3m and 275 on 10m, men 380 and 385) applied to today\'s field, each source read on its own list length. Sources are the Winter Nationals list without Junior Group B and Division II/III, which the Trials procedures did not accept. The 2024 Trials window ran about three years; this reads two. These are not the LA28 standards, which have not been published.',
   winterQualifier:
     'Winter Qualifier advancement (2026 criteria): top 6 OR the Table 1 score standard, in each of 1m, 3m and 10m.',
   nationalQualifier:
@@ -199,7 +209,7 @@ POOLS.winterEligibility = {
   family: 'usa',        // standards and DD tables are stated on the USA basis
   crossSource: true,    // scores restated to the USA basis via optional counts
   yearWindow: 2,        // Table 2 lists two competition years
-  presets: ['winterEligibility', 'custom'],
+  presets: ['winterEligibility', 'trials2024', 'custom'],
   match: (r) => eligibilitySource(r) != null,
 };
 const POOL_ORDER = ['seniorUsa', 'winterEligibility', 'ncaa', 'juniorAB'];
@@ -407,11 +417,13 @@ function ddMinimumForSelection(gender, discipline, preset) {
   const g = normaliseGender(gender);
   const d = normaliseDiscipline(discipline);
   if (preset === 'nationalQualifier') return NATIONAL_DD_MINIMUMS[g]?.[d] ?? null;
+  if (preset === 'trials2024' || (preset !== 'winterQualifier' && isTrialsPreset())) return TRIALS_2024_DD[g]?.[d] ?? null;
   return WINTER_DD_MINIMUMS[g]?.[d] ?? null;
 }
 function scoreThresholdForSelection(gender, discipline, family) {
   const g = normaliseGender(gender);
   const d = normaliseDiscipline(discipline);
+  if (isTrialsPreset()) return TRIALS_2024_STANDARDS[g]?.[d] ?? null;
   return WINTER_SCORE_STANDARDS[g]?.[family]?.[d] ?? null;
 }
 
@@ -540,8 +552,10 @@ function rowsForCurrentFilters() {
   const meets      = state.selectedMeetIds;
   const meetsActive = meets.size > 0;
 
+  const trials = isTrialsPreset();
   return state.data.results.filter(r => {
     if (!pool.match(r)) return false;
+    if (trials) { const src = eligibilitySource(r); if (src && (src.cls === 'jrNatB' || src.cls === 'ncaaD2D3')) return false; if (r.discipline === '1m') return false; }
     if (years.length && !years.includes(r.meet_year)) return false;
     if (gender     && normaliseGender(r.gender) !== gender) return false;
     if (discipline && r.discipline !== discipline) return false;
@@ -745,6 +759,7 @@ function renderBreakdown() {
 function renderFilterStrip() {
   const presetLabels = {
     winterEligibility: 'Winter Eligibility',
+    trials2024:        '2024 Trials scores',
     winterQualifier:   'Winter Qualifier',
     nationalQualifier: 'Nationals Qualifier',
     custom:            'Custom',
@@ -924,6 +939,7 @@ function renderScenarioStrip() {
   $('scenarioStripName').textContent = active ? active.name : 'Unsaved scenario';
   const presetLabel = ({
     winterEligibility: 'Winter Eligibility',
+    trials2024:        '2024 Trials scores',
     winterQualifier:   'Winter Qualifier',
     nationalQualifier: 'Nationals Qualifier',
     custom:            'Custom',
@@ -1053,6 +1069,7 @@ function refreshPoolScope() {
     const allowed = pool.presets;
     const labels = {
       winterEligibility: 'Winter Nationals eligibility',
+      trials2024:        'Olympic Trials field (2024 scores)',
       winterQualifier:   'Winter Qualifier advancement',
       nationalQualifier: 'USA Nationals qualifier top 12',
       custom:            'Custom model',
@@ -1123,7 +1140,12 @@ function applyPresetDefaults(initialRun) {
   const preset = els.criteriaPreset.value;
   $('presetNote').textContent = PRESET_NOTES[preset] || '';
 
-  if (preset === 'winterEligibility') {
+  if (preset === 'winterEligibility' || preset === 'trials2024') {
+    // 1m is not an Olympic event, so the Trials lens has no standard for it.
+    if (preset === 'trials2024' && normaliseDiscipline(els.disciplineFilter.value) === '1m') {
+      const opt = [...els.disciplineFilter.options].find(o => normaliseDiscipline(o.value) === '3m');
+      if (opt) { els.disciplineFilter.value = opt.value; if (window.USAD && USAD.toast) USAD.toast('1m is not an Olympic event. Showing 3m.'); }
+    }
     els.ruleMode.value   = 'scoreOnly';
     els.roundFilter.value = 'any';
     els.scoreMode.value  = 'phaseOrStandalone';
@@ -1166,7 +1188,7 @@ function applyEventDefaults() {
     els.topN.value = 6;
     els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, poolFamily()) || '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
-  } else if (preset === 'winterEligibility') {
+  } else if (preset === 'winterEligibility' || preset === 'trials2024') {
     els.topN.value = 0;
     els.scoreThreshold.value = scoreThresholdForSelection(gender, discipline, poolFamily()) || '';
     els.ddThreshold.value = ddMinimumForSelection(gender, discipline, preset) || '';
@@ -2138,14 +2160,16 @@ function renderTrustStrip() {
   if (foot) {
     const pub = scoreThresholdForSelection(els.genderFilter.value, els.disciplineFilter.value, poolFamily());
     const cur = num(els.scoreThreshold.value);
-    const pubDd = ddMinimumForSelection(els.genderFilter.value, els.disciplineFilter.value, 'winterEligibility');
+    const pubDd = ddMinimumForSelection(els.genderFilter.value, els.disciplineFilter.value, isTrialsPreset() ? 'trials2024' : 'winterEligibility');
+    const pubName = isTrialsPreset() ? '2024 Olympic Trials qualifying score' : 'published 2026 Winter Nationals criteria';
+    const pubUrl = isTrialsPreset() ? TRIALS_2024_URL : 'https://www.usadiving.org/2026-winter-national-championships';
     const curDd = num(els.ddThreshold.value);
     if (!isNum(pub)) { foot.textContent = 'no published standard for this pool'; foot.className = 'cs2-trust-foot'; }
     else if (isNum(cur) && Math.abs(cur - pub) < 0.01 && (!isNum(curDd) || !isNum(pubDd) || Math.abs(curDd - pubDd) < 0.01)) {
-      foot.innerHTML = `matches published 2026 Winter Nationals criteria (${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}) · <a href="https://www.usadiving.org/2026-winter-national-championships" target="_blank" rel="noopener">source, amended 10/26/2026</a>`;
+      foot.innerHTML = `matches ${pubName} (${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}) · <a href="${pubUrl}" target="_blank" rel="noopener">${isTrialsPreset() ? 'source' : 'source, amended 10/26/2026'}</a>${isTrialsPreset() ? ' · not the LA28 standard' : ''}`;
       foot.className = 'cs2-trust-foot is-ok';
     } else {
-      foot.innerHTML = `edited: published is ${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}, you are testing ${isNum(cur) ? Math.round(cur) : '—'}${isNum(curDd) ? ' · DD ' + curDd : ''}`;
+      foot.innerHTML = `edited: ${isTrialsPreset() ? 'the 2024 Trials score' : 'published'} is ${pub}${isNum(pubDd) ? ' · DD ' + pubDd : ''}, you are testing ${isNum(cur) ? Math.round(cur) : '—'}${isNum(curDd) ? ' · DD ' + curDd : ''}`;
       foot.className = 'cs2-trust-foot is-edited';
     }
   }
@@ -3092,8 +3116,10 @@ function rowsForYear(year) {
   const discipline = els.disciplineFilter.value;
   const round      = els.roundFilter.value;
   const scope      = els.athleteScope.value;
+  const trials = isTrialsPreset();
   return state.data.results.filter(r => {
     if (!pool.match(r)) return false;
+    if (trials) { const src = eligibilitySource(r); if (src && (src.cls === 'jrNatB' || src.cls === 'ncaaD2D3')) return false; if (r.discipline === '1m') return false; }
     if (r.meet_year !== year) return false;
     if (gender     && normaliseGender(r.gender) !== gender) return false;
     if (discipline && r.discipline !== discipline) return false;
