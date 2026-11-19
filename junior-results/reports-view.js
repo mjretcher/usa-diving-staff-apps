@@ -4422,7 +4422,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         byDisc[x.discipline||'?'] = (byDisc[x.discipline||'?']||0)+1;
       });
       sumEl.innerHTML = `
-        <h3 class="rpt-card-h">Headline</h3>
+        <h3 class="rpt-card-h">Summary</h3>
         <div class="rpt-stats-row">
           <div class="rpt-stat"><div class="rpt-stat-num">${fmt(tot)}</div><div class="rpt-stat-lbl">Top-3 Zone qualifiers absent from next stage<br><span class="rpt-soft">across ${yrs.length} selected year${yrs.length===1?'':'s'}</span></div></div>
           <div class="rpt-stat"><div class="rpt-stat-num">${tot? (tot/yrs.length).toFixed(1) : '0'}</div><div class="rpt-stat-lbl">Average per year</div></div>
@@ -4567,7 +4567,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
       const byYear = {};
       rows.forEach(x => byYear[x.year] = (byYear[x.year]||0)+1);
       document.getElementById('anom-skipped').innerHTML = `
-        <h3 class="rpt-card-h">Athletes at Jr Nationals with no Zones record (likely HPS/prequal or data gap)</h3>
+        <h3 class="rpt-card-h">Athletes at Jr Nationals with no Zones record</h3>
         <div class="rpt-stats-row">
           <div class="rpt-stat"><div class="rpt-stat-num">${fmt(rows.length)}</div><div class="rpt-stat-lbl">Total records (2021–2025, capped at 1000)</div></div>
         </div>
@@ -4626,7 +4626,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <div class="rpt-stats-row">
           <div class="rpt-stat"><div class="rpt-stat-num">${fmt(rows.length)}</div><div class="rpt-stat-lbl">Records (2021–2025)</div></div>
         </div>
-        <div class="rpt-soft" style="margin:8px 0">Per the old system, alternates from positions 11–16 could be called up; 17th+ should not have been at Nationals. These rows are either rule exceptions, replacements from elsewhere, or data noise.</div>
+        <div class="rpt-soft" style="margin:8px 0">Per the old system, alternates from positions 11–16 could be called up; 17th and lower did not advance under the rule. The rows below are athletes at Nationals who placed 17th or lower at Zones.</div>
         <div class="rpt-table-scroll" style="max-height:340px;overflow:auto">
           <table class="rpt-table">
             <thead><tr><th>Yr</th><th>Athlete</th><th>Event</th><th>Group</th><th>Zone place</th></tr></thead>
@@ -6081,8 +6081,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
     },
 
     qualifier_rates: {
-      label: 'Qualifier-Attendance Rates (CCE Headline)',
-      desc: 'The headline answer: for each Zone band, what percentage attended the next stage? Shown as a single comparison table — ideal for a CCE talking-point slide.',
+      label: 'Qualifier-Attendance Rates',
+      desc: 'For each Zone band, the percentage that attended the next stage, in one comparison table.',
       async build(opts){
         const yrs = opts.years && opts.years.length ? opts.years : [_currentSeason];
         const bands = opts.bands || DEFAULT_BANDS;
@@ -6726,7 +6726,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           }).join('')}
           </tbody>
         </table>
-        <div class="rpt-soft" style="margin-top:8px">Decline rate = (top-3 athletes from Zones who didn't appear at Nationals or E/W/C the same year) ÷ (total top-3 Zone qualifiers). The CCE's headline question.</div>
+        <div class="rpt-soft" style="margin-top:8px">Decline rate = (top-3 athletes from Zones who didn't appear at Nationals or E/W/C the same year) ÷ (total top-3 Zone qualifiers).</div>
       `;
       document.getElementById('era-decliners').innerHTML = declHtml;
 
