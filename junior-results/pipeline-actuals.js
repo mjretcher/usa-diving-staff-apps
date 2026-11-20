@@ -29,7 +29,7 @@
 
   var RULE_YEARS = { 2026: true };
   var cache = {};                       // year -> { rows, status, thresholds }
-  var view = { group: 'All', gender: 'All', open: {} };
+  var view = { group: 'All', gender: 'All', disc: 'All', open: {} };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -104,7 +104,8 @@
     var th = data.thresholds;
     var rows = data.rows.filter(function (r) {
       return (!filt || filt.group === 'All' || r.group === filt.group) &&
-             (!filt || filt.gender === 'All' || r.gender === filt.gender);
+             (!filt || filt.gender === 'All' || r.gender === filt.gender) &&
+             (!filt || !filt.disc || filt.disc === 'All' || r.disc === filt.disc);
     });
 
     var reg = {}, zon = {}, ewcP = {}, ewcF = {}, natP = {}, natF = {};
@@ -299,10 +300,12 @@
     return '<div class="pa-scroll"><table class="pm-status-table pa-table"><thead><tr>' +
       head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
+  var ALL_LABEL = { group: 'All groups', gender: 'Boys and girls', disc: 'All boards' };
+  var BOARD = { '1M': '1-meter', '3M': '3-meter', 'Platform': 'Platform' };
   function chips(name, options, current) {
     return '<div class="pa-chips" role="group" aria-label="' + name + '">' + options.map(function (o) {
       return '<button type="button" class="pa-chip' + (o === current ? ' is-on' : '') + '" data-pa-' + name + '="' + esc(o) + '">' +
-        esc(o === 'All' ? 'All ' + (name === 'group' ? 'groups' : 'athletes') : o) + '</button>';
+        esc(o === 'All' ? ALL_LABEL[name] : (BOARD[o] || o)) + '</button>';
     }).join('') + '</div>';
   }
   function openBtn(id, n) {
@@ -362,9 +365,10 @@
     }).join('');
 
 
-    var showing = (view.group === 'All' && view.gender === 'All') ? '' :
+    var showing = (view.group === 'All' && view.gender === 'All' && view.disc === 'All') ? '' :
       '<p class="pa-showing">Showing ' + esc(view.group === 'All' ? 'all groups' : view.group) + ', ' +
-      esc(view.gender === 'All' ? 'boys and girls' : view.gender.toLowerCase() + ' only') + '.</p>';
+      esc(view.gender === 'All' ? 'boys and girls' : view.gender.toLowerCase() + ' only') + ', ' +
+      esc(view.disc === 'All' ? 'all boards' : BOARD[view.disc].toLowerCase() + ' only') + '.</p>';
     var lead = 'Counted from results. Individual events, Groups A to D. ' +
       'Of the ' + num(c.field.total) + ' athletes at Junior Nationals, ' + num(c.field.regionals) + ' started at a Regional, ' +
       num(c.field.zones) + ' started at a Zone and ' + num(c.field.neither) + ' had no Regional or Zone result.';
@@ -398,7 +402,8 @@
         '<div class="pm-section-explainer">' + lead + '</div></div>' +
       '<div class="pm-section-body">' +
         '<div class="pa-filters">' + chips('group', ['All', 'Group A', 'Group B', 'Group C', 'Group D'], view.group) +
-          chips('gender', ['All', 'Boys', 'Girls'], view.gender) + '</div>' + showing + tables +
+          chips('gender', ['All', 'Boys', 'Girls'], view.gender) +
+          chips('disc', ['All', '1M', '3M', 'Platform'], view.disc) + '</div>' + showing + tables +
       '</div></section>';
   }
 
@@ -410,10 +415,11 @@
     slot.innerHTML = render(compute(d, view), mounted.year);
   }
   function onClick(e) {
-    var t = e.target.closest ? e.target.closest('[data-pa-group],[data-pa-gender],[data-pa-open]') : null;
+    var t = e.target.closest ? e.target.closest('[data-pa-group],[data-pa-gender],[data-pa-disc],[data-pa-open]') : null;
     if (!t) return;
     if (t.hasAttribute('data-pa-group')) view.group = t.getAttribute('data-pa-group');
     else if (t.hasAttribute('data-pa-gender')) view.gender = t.getAttribute('data-pa-gender');
+    else if (t.hasAttribute('data-pa-disc')) view.disc = t.getAttribute('data-pa-disc');
     else { var id = t.getAttribute('data-pa-open'); view.open[id] = !view.open[id]; }
     paint();
   }
@@ -438,7 +444,7 @@
     year = Number(year);
     if (!RULE_YEARS[year]) return '';
     var d = await load(year), keep = view;
-    view = { group: 'All', gender: 'All', open: {} }; STATIC = true;
+    view = { group: 'All', gender: 'All', disc: 'All', open: {} }; STATIC = true;
     try { return render(compute(d, view), year); }
     finally { STATIC = false; view = keep; }
   }
