@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light">
 <title>NCAA Diving Region Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,18 +17,6 @@
   --over:#b3261e; --under:#2f66b3;
   --display:"Archivo","Helvetica Neue",Arial,sans-serif; --body:"IBM Plex Sans","Segoe UI",Arial,sans-serif;
   color-scheme:light;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --paper:#14181b; --panel:#1d2327; --ink:#e9edea; --muted:#a2adb3; --line:#353e44; --accent:#63c3cc;
-    --r0:#e0604f; --r1:#5b90dc; --r2:#e0b23c; --r3:#74b862; --r4:#a184cf; --over:#f08a80; --under:#8fb4ea;
-    color-scheme:dark;
-  }
-}
-:root[data-theme="dark"]{
-  --paper:#14181b; --panel:#1d2327; --ink:#e9edea; --muted:#a2adb3; --line:#353e44; --accent:#63c3cc;
-  --r0:#e0604f; --r1:#5b90dc; --r2:#e0b23c; --r3:#74b862; --r4:#a184cf; --over:#f08a80; --under:#8fb4ea;
-  color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -55,7 +44,7 @@ nav.tabs button{border-radius:999px;padding:6px 14px;font-weight:500}
 nav.tabs button[aria-current="page"]{background:var(--ink);color:var(--panel);border-color:var(--ink);font-weight:600}
 .view{display:none;flex-direction:column;gap:16px}
 .view.on{display:flex}
-.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(360px,1fr);gap:16px;align-items:start}
+.main{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(310px,1fr);gap:16px;align-items:start}
 @media (max-width:1050px){.main{grid-template-columns:1fr}}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media (max-width:900px){.two{grid-template-columns:1fr}}
@@ -127,6 +116,29 @@ textarea#code{width:100%;min-height:58px;font-family:ui-monospace,Menlo,Consolas
 .sheet svg{width:100%;max-width:620px;height:auto;display:block;margin:8px 0}
 .sheet .key span{display:inline-block;margin-right:14px} .sheet .key i{display:inline-block;width:14px;height:14px;border:1px solid #000;vertical-align:-2px;margin-right:5px}
 input[type=range]{width:240px}
+[hidden]{display:none !important}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.pbar{padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+.pbar .grow{flex:1 1 230px} .pbar .grow select,.pbar .grow input{width:100%}
+.lead{margin:0;font-size:16px;max-width:none} .lead b{font-family:var(--display);font-size:19px}
+.answer{display:flex;flex-direction:column;gap:10px}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@media (max-width:1000px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{text-align:left;padding:10px 12px 11px;border-radius:10px;border:1px solid var(--line);border-top-width:7px;display:flex;flex-direction:column;gap:3px;background:var(--panel)}
+.tile.sel{box-shadow:0 0 0 2px var(--ink)}
+.tile .tname{font-family:var(--display);font-weight:700;font-size:16px}
+.tile .trow{display:grid;grid-template-columns:58px 1fr auto;align-items:baseline;gap:6px}
+.tile .trow b{font-family:var(--display);font-size:24px;font-weight:700}
+.tile .trow em{font-style:normal;font-size:13px;font-weight:600}
+.tile .tsub{color:var(--muted);font-size:13px}
+.flag{color:var(--over)} .low{color:var(--under)} .even{color:var(--muted)}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:14.5px}
+.steps b{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--panel);text-align:center;line-height:22px;font-size:13px;margin-right:6px}
+.region{padding:10px 14px}
+.region .rename{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px;color:var(--muted)}
+.region .rename input{flex:1;padding:5px 8px}
+.jump{display:flex;flex-wrap:wrap;gap:8px}
+tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
 @media (prefers-reduced-motion:no-preference){.bar span{transition:width .25s}}
 </style>
 </head>
@@ -135,40 +147,43 @@ input[type=range]{width:240px}
   <header class="top">
     <div>
       <h1>NCAA Diving Region Studio</h1>
-      <p>Division I zone meet fields, counted from meet results 2015 to 2026. Paint states into regions and see how many divers each meet would have had.</p>
-    </div>
-    <div class="controls">
-      <div class="field"><label for="preset">Map</label><select id="preset"></select></div>
-      <div class="field"><label for="window">Seasons counted</label>
-        <select id="window">
-          <option value="3">2024 to 2026, average per year</option>
-          <option value="1">2026 only</option>
-          <option value="5">2022 to 2026, average per year</option>
-        </select></div>
-      <div class="field"><label for="progSel">Programs counted</label>
-        <select id="progSel">
-          <option value="all">Every program that competed</option>
-          <option value="list">Only programs diving in 2026-27</option>
-          <option value="custom">Your own choice (see Programs)</option>
-        </select></div>
-      <button id="undo" type="button">Undo</button>
-      <button id="reset" type="button">Reset this map</button>
+      <p>How many divers each zone meet would have on any map, counted from zone meet results.</p>
     </div>
   </header>
 
-  <section class="verdict" id="verdict" aria-live="polite"></section>
+  <section class="card pbar">
+    <div class="field grow"><label for="preset">Map</label><select id="preset"></select></div>
+    <div class="field grow"><label for="mapName">Name of this map</label><input type="text" id="mapName" placeholder="Type a name to save it"></div>
+    <button type="button" id="saveShared" class="primary">Save</button>
+    <button type="button" id="saveCopy">Save as a copy</button>
+    <button type="button" id="newBtn">New map</button>
+    <button type="button" id="undo">Undo</button>
+    <span id="shareMsg" class="note" aria-live="polite" style="flex-basis:100%"></span>
+  </section>
+  <section class="card pad" id="newPanel" hidden>
+    <h2>New map</h2>
+    <div class="rowf">
+      <div class="field"><label for="newFrom">Start from</label><select id="newFrom"></select></div>
+      <div class="field"><label for="newName">Name</label><input type="text" id="newName" placeholder="Name the new map"></div>
+      <button type="button" id="newGo" class="primary">Create</button><button type="button" id="newCancel">Cancel</button>
+    </div>
+    <p class="note">A blank map starts with no state assigned. Pick a region, then click or drag across states to fill it in.</p>
+  </section>
+
+  <section class="answer" id="verdict" aria-live="polite"></section>
   <nav class="tabs" id="tabs" aria-label="Views"></nav>
 
   <!-- MAP -->
   <div class="view" id="v-map">
     <div class="main">
       <section class="card mapcard">
+        <ol class="steps"><li><b>1</b>Choose a map at the top, or press New map.</li><li><b>2</b>Pick a region below, then click a state or drag across several.</li><li><b>3</b>Name it and press Save.</li></ol>
         <div class="toolbar">
-          <span class="lab">Painting</span>
+          <span class="lab">Paint with</span>
           <div class="chips" id="chips"></div>
           <div class="seg" role="group" aria-label="What a click changes">
-            <button type="button" id="modeState" aria-pressed="true">Click a state</button>
-            <button type="button" id="modeSchool" aria-pressed="false">Click one school</button>
+            <button type="button" id="modeState" aria-pressed="true">Whole states</button>
+            <button type="button" id="modeSchool" aria-pressed="false">One school at a time</button>
           </div>
         </div>
         <svg id="map" class="usmap" viewBox="0 0 975 610" role="img" aria-label="Map of the United States coloured by region"></svg>
@@ -194,17 +209,14 @@ input[type=range]{width:240px}
       <div class="scroll"><table id="detail"></table></div>
     </section>
     <section class="card pad">
-      <h2>Keep or send a map</h2>
+      <h2>Saved maps and map codes</h2>
+      <div id="sharedList"></div>
       <div class="rowf">
-        <input type="text" id="saveName" placeholder="Name this map" aria-label="Name this map">
         <input type="text" id="saveWho" placeholder="Your name (optional)" aria-label="Your name">
-        <button type="button" id="saveShared">Save</button>
         <button type="button" id="copy">Copy map code</button>
         <button type="button" id="load">Load the code below</button>
-        <span id="shareMsg" class="note" aria-live="polite"></span>
       </div>
       <textarea id="code" aria-label="Map code" placeholder="Paste a map code here, then press Load the code below"></textarea>
-      <div id="sharedList"></div>
       <p class="note">Saved maps appear here and in the Map list at the top for everyone who has this page. Saving under a name already in use replaces that map. A map code is a backup you can keep in an email: paste it back here any time.</p>
     </section>
   </div>
@@ -212,7 +224,7 @@ input[type=range]{width:240px}
   <!-- COMPARE -->
   <div class="view" id="v-compare">
     <section class="card pad">
-      <div class="rowf"><div class="field"><label for="baseSel">Compare the map on screen with</label><select id="baseSel"></select></div></div>
+      <div class="rowf"><div class="field"><label for="baseSel">Compare the map on screen with</label><select id="baseSel"></select></div><p class="note">Today's zones are chosen to start. Pick any other map to compare two proposals.</p></div>
       <div class="two" id="cmpMaps"></div>
     </section>
     <section class="card pad"><h2>Where the schools go</h2><p class="note" id="cmpLine"></p><div class="scroll"><table id="cmpFlow"></table></div></section>
@@ -224,8 +236,41 @@ input[type=range]{width:240px}
     </section>
   </div>
 
+  <!-- NCAA SPOTS -->
+  <div class="view" id="v-spots">
+    <section class="card pad">
+      <div class="rowf"><h2>Qualifying spots for the NCAA Championships</h2><div class="field"><label for="spotYear">Championships</label><select id="spotYear"></select></div></div>
+      <p class="note">Each region gets 5 women's and 4 men's spots in every event, plus one for each diver from that region who finished in the top 16 of that event at the previous NCAA Championships. For the current zones this reproduces the NCAA's published 2026 and 2027 tables exactly.</p>
+      <div class="scroll"><table id="spotTable"></table></div>
+      <p class="note" id="spotNote"></p>
+    </section>
+    <section class="card pad"><h2>Today's zones, same season</h2><div class="scroll"><table id="spotCur"></table></div></section>
+  </div>
+
+  <!-- MORE DETAIL -->
+  <div class="view morepart" id="v-settings">
+    <section class="card pad">
+      <h2>What is counted</h2>
+      <div class="rowf">
+        <div class="field"><label for="window">Seasons counted</label>
+          <select id="window">
+            <option value="3">2024 to 2026, average per year</option>
+            <option value="1">2026 only</option>
+            <option value="5">2022 to 2026, average per year</option>
+          </select></div>
+        <div class="field"><label for="progSel">Programs counted</label>
+          <select id="progSel">
+            <option value="all">Every program that competed</option>
+            <option value="list">Only programs diving in 2026-27</option>
+            <option value="custom">Your own choice (see Programs below)</option>
+          </select></div>
+      </div>
+      <p class="note">These two choices change every number on the page.</p>
+    </section>
+  </div>
+
   <!-- MEET DAYS -->
-  <div class="view" id="v-meet-days">
+  <div class="view morepart" id="v-meet-days">
     <section class="card pad">
       <h2>How long each day would run</h2>
       <p class="note">Events are paired the way Zones A, C and D ran them in 2026: women's 1m with men's 3m, women's 3m with men's 1m, then both platforms. Prelims are timed at 32 seconds a dive. Two panels means the two events run at the same time on separate boards; one panel means one after the other. Finals are 18 divers an event. Warm-ups are not included.</p>
@@ -250,7 +295,7 @@ input[type=range]{width:240px}
   </div>
 
   <!-- GROWTH -->
-  <div class="view" id="v-growth">
+  <div class="view morepart" id="v-growth">
     <section class="card pad">
       <h2>How the fields have grown</h2>
       <p class="note">Divers at the meet each season for the states in each region on this map. Solid line is women, broken line is men. 2021 is left out because the meets ran at combined sites with small fields. The faint extension carries the 2022 to 2026 trend forward to 2030. It is a straight-line projection, not a forecast.</p>
@@ -259,7 +304,7 @@ input[type=range]{width:240px}
   </div>
 
   <!-- CONFERENCES -->
-  <div class="view" id="v-conferences">
+  <div class="view morepart" id="v-conferences">
     <section class="card pad">
       <h2>How conferences split across the regions</h2>
       <p class="note">Schools with divers in the seasons counted. Conference is the one on the 2026-27 coaches list.</p>
@@ -268,7 +313,7 @@ input[type=range]{width:240px}
   </div>
 
   <!-- PROGRAMS -->
-  <div class="view" id="v-programs">
+  <div class="view morepart" id="v-programs">
     <section class="card pad">
       <h2>Programs that may not be there</h2>
       <p class="note">Checked against the 2026-27 Division I diving coaches list. Untick a program to take its divers out of every number on the page.</p>
@@ -281,7 +326,7 @@ input[type=range]{width:240px}
   </div>
 
   <!-- QUALIFYING SCORE -->
-  <div class="view" id="v-qualifying-score">
+  <div class="view morepart" id="v-qualifying-score">
     <section class="card pad">
       <h2>How the zone fields scored against the standard</h2>
       <p class="note">Counts the divers whose preliminary score at the zone meet reached a line you set, measured from the zone standard. Prelims use the same number of dives as the standard: women 265 (1m), 280 (3m), 225 (platform); men 300, 320, 300.</p>
@@ -294,8 +339,8 @@ input[type=range]{width:240px}
   <!-- SUMMARY -->
   <div class="view" id="v-summary">
     <section class="card pad">
-      <div class="rowf"><h2>One-page summary of the map on screen</h2><button type="button" id="printBtn">Print</button><button type="button" id="dlBtn">Download file</button><span class="note" id="dlMsg"></span></div>
-      <p class="note">Print opens your print window. Choose Save as PDF there to make a PDF.</p>
+      <div class="rowf"><h2>One-page summary of the map on screen</h2><button type="button" id="printBtn" class="primary">Print</button><button type="button" id="dlBtn">Download file</button><span class="note" id="dlMsg"></span></div>
+      <p class="note">Print opens your print window. Choose Save as PDF there to make a PDF. <label><input type="checkbox" id="bw"> Black and white</label></p>
       <div class="scroll"><div class="sheet" id="sheet"></div></div>
     </section>
   </div>
@@ -373,7 +418,7 @@ function suggest(map, n, off){
   DATA.schools.forEach(s => { if (!off[s.id]) tot[s.s] = (tot[s.s] || 0) + avg(s.w, n) + avg(s.m, n); });
   for (const a of Object.keys(DATA.adj)){
     if (!tot[a]) continue;
-    const from = map.states[a], tos = new Set(DATA.adj[a].map(b => map.states[b])); tos.delete(from);
+    const from = map.states[a]; if (!(from >= 0)) continue; const tos = new Set(DATA.adj[a].map(b => map.states[b])); tos.delete(from); tos.delete(-1); tos.delete(undefined);
     for (const to of tos){
       const st = Object.assign({}, map.states); st[a] = to;
       if (!contiguous(st, from) || !contiguous(st, to)) continue;
@@ -383,6 +428,13 @@ function suggest(map, n, off){
     }
   }
   return {base, moves: out.sort((x, y) => (x.gw + x.gm) - (y.gw + y.gm)).slice(0, 6)};
+}
+function spots(m, year){
+  const T = DATA.top16[String(year - 1)] || {}, by = m.names.map(() => ({})); let un = 0;
+  by.forEach(o => EV.forEach(e => o[e[0]] = e[0][0] === "W" ? 5 : 4));
+  EV.forEach(e => (T[e[0]] || []).forEach(id => { const sc = SCHOOL[id], r = sc ? regionOf(m, sc) : -1; if (r >= 0 && by[r]) by[r][e[0]]++; else un++; }));
+  by.forEach(o => { o.W = o.W1m + o.W3m + o.WPL; o.M = o.M1m + o.M3m + o.MPL; });
+  return {by, un};
 }
 function fit(pts){ const n = pts.length; let sx = 0, sy = 0, sxx = 0, sxy = 0; pts.forEach(p => { sx += p[0]; sy += p[1]; sxx += p[0] * p[0]; sxy += p[0] * p[1]; });
   const b = (n * sxy - sx * sy) / (n * sxx - sx * sx); return {b, a:(sy - b * sx) / n}; }
@@ -394,17 +446,19 @@ function f1(x){ return (Math.round(x * 10) / 10).toFixed(1); }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
 function esc(t){ return String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function fromPreset(key){ const p = PRESETS[key]; return {key, base:key, label:p.label, names:p.names.slice(), states:clone(p.states), over:clone(p.over)}; }
-function validMap(o){ return o && Array.isArray(o.n) && o.n.length === 5 && o.n.every(x => typeof x === "string") && o.s && Object.keys(STATE_NAME).every(a => [0,1,2,3,4].includes(o.s[a])); }
+function validMap(o){ return o && Array.isArray(o.n) && o.n.length === 5 && o.n.every(x => typeof x === "string") && o.s && Object.keys(STATE_NAME).every(a => [-1,0,1,2,3,4].includes(o.s[a])); }
 function cleanOver(o){ const out = {}; if (o) for (const k in o) if (SCHOOL[k] && [0,1,2,3,4].includes(o[k])) out[k] = o[k]; return out; }
-const VIEWS = [["map","Map"],["compare","Compare maps"],["meet-days","Meet days"],["travel","Travel"],["growth","Growth"],["conferences","Conferences"],["programs","Programs"],["qualifying-score","Scores and the standard"],["summary","Printable summary"]];
+const VIEWS = [["map","Map"],["compare","Compare with today"],["spots","NCAA spots"],["travel","Travel"],["summary","Print"],["more","More detail"]];
+const SPOT_YEARS = Object.keys(DATA.top16).map(y => +y + 1).sort((a, b) => b - a);
 let map = fromPreset("july"), active = 0, mode = "state", years = 3, selected = 0, undo = [], view = "map";
 let off = {}, progMode = "all", hostSel = {}, extra = {}, baseKey = "current", stdPts = 0, cmpSort = "up", sugg = null, LAST = null;
-let saved = {}, shared = {}, sharedReady = false, sharedErr = "", lastLoad = 0;
+let saved = {}, shared = {}, sharedReady = false, sharedErr = "", lastLoad = 0, spotYear = SPOT_YEARS[0], bw = false, dragging = false, dragPushed = false;
 try { saved = JSON.parse(localStorage.getItem("ncaaRegionMaps") || "{}"); } catch (e) { saved = {}; }
 function fmt(x){ return years === 1 ? f0(x) : f1(x); }
 function miNum(x){ return Math.round(x).toLocaleString("en-US"); }
 function signed(x, f){ return (x >= 0 ? "+" : "−") + f(Math.abs(x)); }
-const color = i => getComputedStyle(document.documentElement).getPropertyValue("--r" + i).trim();
+const color = i => i >= 0 && i < 5 ? getComputedStyle(document.documentElement).getPropertyValue("--r" + i).trim() : "#c3c8cb";
+function rname(m, i){ return i >= 0 && m.names[i] !== undefined ? m.names[i] : "Not assigned"; }
 const $ = id => document.getElementById(id);
 function flagged(s){ return s.st === "nodive" || s.st === "unlisted"; }
 function setProgMode(m){ progMode = m; if (m === "all") off = {}; else if (m === "list"){ off = {}; DATA.schools.forEach(s => { if (flagged(s)) off[s.id] = true; }); } }
@@ -436,18 +490,19 @@ function showTip(ev, html){ tip.innerHTML = html; tip.style.display = "block"; t
 function hideTip(){ tip.style.display = "none"; }
 function push(){ undo.push(clone({states:map.states, over:map.over})); if (undo.length > 60) undo.shift(); }
 function edited(){ map.key = "custom"; sugg = null; render(); }
-function paintState(st){
+function paintState(st, drag){
   if (map.states[st] === active && !DATA.schools.some(s => s.s === st && map.over[s.id] !== undefined)) return;
-  push(); map.states[st] = active; DATA.schools.forEach(s => { if (s.s === st) delete map.over[s.id]; }); edited();
+  if (!drag || !dragPushed){ push(); dragPushed = true; }
+  map.states[st] = active; DATA.schools.forEach(s => { if (s.s === st) delete map.over[s.id]; }); edited();
 }
 function moveSchool(s){ push(); if (map.states[s.s] === active) delete map.over[s.id]; else map.over[s.id] = active; edited(); }
 function stateTotals(n){ const t = {}; DATA.schools.forEach(s => { if (off[s.id]) return; const o = t[s.s] || (t[s.s] = {w:0, m:0, k:0}); const w = avg(s.w, n), m = avg(s.m, n); o.w += w; o.m += m; if (w + m > 0) o.k++; }); return t; }
 const GRAYS = ["#333333","#666666","#929292","#bdbdbd","#e6e6e6"];
 function mapSVG(m, gray){
   let s = '<svg viewBox="0 0 975 610" class="usmap" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map">';
-  feats.forEach(f => { s += '<path d="' + path(f) + '" fill="' + (gray ? GRAYS[m.states[FIPS[f.id]]] : color(m.states[FIPS[f.id]])) + '" stroke="#ffffff" stroke-width="1"/>'; });
+  feats.forEach(f => { s += '<path d="' + path(f) + '" fill="' + (m.states[FIPS[f.id]] < 0 ? "#ffffff" : gray ? GRAYS[m.states[FIPS[f.id]]] : color(m.states[FIPS[f.id]])) + '" stroke="' + (m.states[FIPS[f.id]] < 0 ? "#9aa0a4" : "#ffffff") + '" stroke-width="1"/>'; });
   feats.forEach(f => { const a = FIPS[f.id]; if (SMALL.includes(a) || path.area(f) < 900) return; const c = path.centroid(f), r = m.states[a];
-    s += '<text x="' + c[0].toFixed(1) + '" y="' + (c[1] + 4).toFixed(1) + '" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="bold" fill="' + (gray ? (r < 3 ? "#ffffff" : "#000000") : "#ffffff") + '">' + a + "</text>"; });
+    s += '<text x="' + c[0].toFixed(1) + '" y="' + (c[1] + 4).toFixed(1) + '" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="bold" fill="' + (r < 0 ? "#555555" : gray ? (r < 3 ? "#ffffff" : "#000000") : "#ffffff") + '">' + a + "</text>"; });
   return s + "</svg>";
 }
 function drawMap(C){
@@ -455,9 +510,10 @@ function drawMap(C){
   gStates.selectAll("path").data(feats, d => d.id).join("path")
     .attr("class", d => "state" + (tot[FIPS[d.id]] && tot[FIPS[d.id]].k ? "" : " empty"))
     .attr("d", path).attr("fill", d => color(map.states[FIPS[d.id]]))
-    .on("click", (ev, d) => { if (mode === "state") paintState(FIPS[d.id]); })
+    .on("pointerdown", (ev, d) => { if (mode !== "state" || ev.button > 0) return; ev.preventDefault(); dragging = true; dragPushed = false; paintState(FIPS[d.id], true); })
+    .on("pointerenter", (ev, d) => { if (dragging && ev.buttons === 1 && mode === "state") paintState(FIPS[d.id], true); })
     .on("mousemove", (ev, d) => { const a = FIPS[d.id], t = tot[a] || {w:0, m:0, k:0};
-      showTip(ev, "<b>" + STATE_NAME[a] + "</b><br>" + esc(map.names[map.states[a]]) + "<br>" + fmt(t.w) + " women, " + fmt(t.m) + " men, " + t.k + " schools"); })
+      showTip(ev, "<b>" + STATE_NAME[a] + "</b><br>" + esc(rname(map, map.states[a])) + "<br>" + fmt(t.w) + " women, " + fmt(t.m) + " men, " + t.k + " schools"); })
     .on("mouseleave", hideTip);
   gLabels.selectAll("text").data(feats.filter(f => !SMALL.includes(FIPS[f.id]) && path.area(f) > 900), d => d.id).join("text")
     .attr("class", "slabel").attr("transform", d => "translate(" + path.centroid(d) + ")").attr("dy", "0.35em").text(d => FIPS[d.id]);
@@ -497,22 +553,33 @@ function drawMap(C){
 function regionChips(id, cur){ $(id).innerHTML = map.names.map((n, i) => '<button type="button" class="chip" data-i="' + i + '" aria-pressed="' + (i === cur) + '"><i style="background:' + color(i) + '"></i>' + esc(n) + "</button>").join(""); }
 function sw(i){ return '<span class="sw" style="background:' + color(i) + '"></span>'; }
 function renderHead(C){
-  const R = C.R, bw = R.slice().sort((a, b) => b.w - a.w), bm = R.slice().sort((a, b) => b.m - a.m), moved = Object.keys(map.over).length, unit = years === 1 ? "in 2026" : "a year";
-  let top = null; R.forEach(r => r.days.forEach(d => { if (!top || d.dayTwo > top.d.dayTwo) top = {r, d}; }));
-  const nOff = Object.keys(off).length;
+  const R = C.R, cur = C.cur, unit = years === 1 ? "in 2026" : "a year", moved = Object.keys(map.over).length, nOff = Object.keys(off).length;
+  const mx = k => Math.max(...R.map(r => r[k])), cmx = k => Math.max(...cur.R.map(r => r[k]));
+  const tot = stateTotals(years), un = Object.keys(STATE_NAME).filter(a => !(map.states[a] >= 0) && tot[a] && tot[a].k).length;
+  const cls = (v, share) => Math.abs(v - share) < share * .05 ? "even" : v > share ? "flag" : "low";
   $("verdict").innerHTML =
-    '<div class="v"><b class="num">' + fmt(bw[0].w) + " to " + fmt(bw[4].w) + "</b><span>Women per meet, largest (" + esc(bw[0].name) + ") to smallest (" + esc(bw[4].name) + "). Equal share is " + fmt(C.shareW) + " " + unit + ".</span></div>" +
-    '<div class="v"><b class="num">' + fmt(bm[0].m) + " to " + fmt(bm[4].m) + "</b><span>Men per meet, largest (" + esc(bm[0].name) + ") to smallest (" + esc(bm[4].name) + "). Equal share is " + fmt(C.shareM) + " " + unit + ".</span></div>" +
-    '<div class="v"><b class="num">' + hm(top.d.dayTwo) + "</b><span>Longest competition day: " + EVN[top.d.a].toLowerCase() + " and " + EVN[top.d.b].toLowerCase() + " in " + esc(top.r.name) + ", prelims and finals on two panels.</span></div>" +
-    '<div class="v"><b>' + (moved ? moved + (moved === 1 ? " school" : " schools") + " split" : "Whole states") + "</b><span>" + (moved ? '<span class="warn">This map moves schools apart from their state.</span> The manual assigns zones by state.' : "Every school follows its state.") + (nOff ? " " + nOff + " programs left out." : "") + "</span></div>";
+    '<p class="lead">Largest women\'s meet <b class="num">' + fmt(mx("w")) + "</b> (today " + fmt(cmx("w")) + '). Largest men\'s meet <b class="num">' + fmt(mx("m")) + "</b> (today " + fmt(cmx("m")) + "). Gap between largest and smallest: women <b class=\"num\">" + fmt(C.gw) + "</b> (today " + fmt(cur.gw) + "), men <b class=\"num\">" + fmt(C.gm) + "</b> (today " + fmt(cur.gm) + "). Divers " + unit + ".</p>" +
+    '<div class="tiles">' + R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0], sp = C.spots.by[r.i];
+      return '<button type="button" class="tile' + (r.i === selected ? " sel" : "") + '" data-i="' + r.i + '" style="border-top-color:' + color(r.i) + '"><span class="tname">' + esc(r.name) + "</span>" +
+        '<span class="trow"><span>Women</span><b class="num">' + fmt(r.w) + '</b><em class="num ' + cls(r.w, C.shareW) + '">' + signed(r.w - C.shareW, fmt) + "</em></span>" +
+        '<span class="trow"><span>Men</span><b class="num">' + fmt(r.m) + '</b><em class="num ' + cls(r.m, C.shareM) + '">' + signed(r.m - C.shareM, fmt) + "</em></span>" +
+        '<span class="tsub">Longest day about ' + hm(long.dayTwo) + "</span>" +
+        '<span class="tsub">NCAA spots ' + spotYear + ": " + sp.W + " women's, " + sp.M + " men's</span></button>"; }).join("") + "</div>" +
+    '<p class="note">The small number beside each count is the difference from an equal share (' + fmt(C.shareW) + " women, " + fmt(C.shareM) + " men)." +
+      (un ? ' <span class="warn">' + un + (un === 1 ? " state" : " states") + " with divers not assigned to a region yet.</span>" : "") +
+      (moved ? ' <span class="warn">' + moved + (moved === 1 ? " school is" : " schools are") + " placed apart from their state.</span>" : "") + (nOff ? " " + nOff + " programs left out." : "") + "</p>";
   $("tabs").innerHTML = VIEWS.map(v => '<button type="button" data-v="' + v[0] + '"' + (v[0] === view ? ' aria-current="page"' : "") + ">" + v[1] + "</button>").join("");
-  VIEWS.forEach(v => $("v-" + v[0]).classList.toggle("on", v[0] === view));
+  document.querySelectorAll(".view").forEach(el => el.classList.toggle("on", el.id === "v-" + view || (view === "more" && el.classList.contains("morepart"))));
   const opt = (k, label) => '<option value="' + esc(k) + '">' + esc(label) + "</option>";
-  const all = Object.keys(PRESETS).map(k => opt(k, PRESETS[k].label)).join("") + Object.keys(shared).map(k => opt("shared:" + k, "Saved: " + shared[k].name)).join("") + Object.keys(saved).map(k => opt("saved:" + k, "Saved here: " + k)).join("");
-  $("preset").innerHTML = all + (map.key === "custom" ? opt("custom", "Your edited map") : ""); $("preset").value = map.key;
+  const all = '<optgroup label="Built in">' + Object.keys(PRESETS).map(k => opt(k, PRESETS[k].label)).join("") + '</optgroup><optgroup label="Saved">' + Object.keys(shared).map(k => opt("shared:" + k, shared[k].name)).join("") + Object.keys(saved).map(k => opt("saved:" + k, k + " (this browser)")).join("") + "</optgroup>";
+  ALLOPTS = all;
+  $("preset").innerHTML = all + (map.key === "custom" ? opt("custom", (map.label || "New map") + " (edited, not saved)") : ""); $("preset").value = map.key;
   $("baseSel").innerHTML = all; if (!mapByKey(baseKey)) baseKey = "current"; $("baseSel").value = baseKey;
-  $("progSel").value = progMode;
+  $("progSel").value = progMode; $("window").value = String(years);
+  if (document.activeElement !== $("mapName")) $("mapName").value = map.label || "";
+  $("spotYear").innerHTML = SPOT_YEARS.map(y => '<option value="' + y + '">' + y + " (from the " + (y - 1) + " results)</option>").join(""); $("spotYear").value = String(spotYear);
 }
+let ALLOPTS = "";
 function renderMapView(C){
   const R = C.R;
   regionChips("chips", active);
@@ -520,15 +587,17 @@ function renderMapView(C){
   const maxW = Math.max(...R.map(r => r.w), C.shareW) * 1.08, maxM = Math.max(...R.map(r => r.m), C.shareM) * 1.08;
   const row = (who, v, share, max, col) => { const d = v - share, cls = Math.abs(d) < share * .05 ? "ok" : d > 0 ? "over" : "under";
     return '<div class="who">' + who + '</div><div class="big num">' + fmt(v) + '</div><div class="bar" title="The mark is an equal share"><span style="width:' + (v / max * 100) + "%;background:" + col + '"></span><em style="left:' + (share / max * 100) + '%"></em></div><div class="delta num ' + cls + '">' + signed(d, fmt) + "</div>"; };
-  $("regions").innerHTML = R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0];
-    return '<article class="card region' + (r.i === selected ? " sel" : "") + '" data-i="' + r.i + '" tabindex="0" style="border-left-color:' + color(r.i) + '">' +
-      "<h3>" + esc(r.name) + "<small>" + r.schools + " schools with divers</small></h3>" +
+  $("regions").innerHTML = R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0], sp = C.spots.by[r.i], open = r.i === selected;
+    return '<article class="card region' + (open ? " sel" : "") + '" data-i="' + r.i + '" tabindex="0" style="border-left-color:' + color(r.i) + '">' +
+      "<h3>" + esc(r.name) + "<small>" + r.schools + " schools" + (open ? "" : ", click for detail") + "</small></h3>" +
       '<div class="rows">' + row("Women", r.w, C.shareW, maxW, color(r.i)) + row("Men", r.m, C.shareM, maxM, color(r.i)) + "</div>" +
+      (!open ? "" : '<label class="rename">Region name <input type="text" data-rename="' + r.i + '" value="' + esc(r.name) + '" maxlength="40"></label>' +
       '<div class="sub"><span>Divers per prelim: ' + EV.map(e => e[1] + ' <b class="num">' + fmt(r.ev[e[0]]) + "</b>").join(", ") + "</span>" +
       "<span>Longest day: " + EVN[long.a].toLowerCase() + " with " + EVN[long.b].toLowerCase() + ", about <b>" + hm(long.dayTwo) + "</b> on two panels</span>" +
+      "<span>NCAA spots " + spotYear + ": <b class=\"num\">" + sp.W + "</b> women's, <b class=\"num\">" + sp.M + "</b> men's</span>" +
       "<span>By season (women / men): " + r.series.slice(-5).map(y => y.y + ' <b class="num">' + y.w + " / " + y.m + "</b>").join(", ") + "</span>" +
       (r.host.t.far ? "<span>Travel to " + esc(r.host.site.n) + ': <b class="num">' + miNum(r.host.t.avg) + " miles</b> per diver on average, against " + miNum(r.today) + " today. Longest trip <b class=\"num\">" + miNum(r.host.t.far.d) + "</b> (" + esc(r.host.t.far.s.n) + ")</span>" : "") +
-      "</div></article>"; }).join("");
+      "</div>") + "</article>"; }).join("");
   const r = R[selected], sts = Object.keys(r.states).sort((a, b) => (r.states[b].w + r.states[b].m) - (r.states[a].w + r.states[a].m));
   $("detailTitle").textContent = r.name + ": states and schools" + (years === 1 ? ", 2026" : ", average per year");
   $("detail").innerHTML = "<thead><tr><th>State and school</th><th>Women</th><th>Men</th><th>Miles to " + esc(r.host.site.n) + "</th><th>" + DATA.years.slice(-5).map(y => y + " W / M").join("</th><th>") + "</th></tr></thead><tbody>" +
@@ -553,10 +622,10 @@ function renderCompare(C){
   const flow = B.R.map(() => C.R.map(() => ({k:0, d:0}))), rows = [];
   let up = 0, down = 0, dv = 0, before = 0, after = 0;
   DATA.schools.forEach(s => { if (off[s.id]) return; const w = avg(s.w, years), m = avg(s.m, years); if (w + m <= 0) return;
-    const a = regionOf(base, s), b = regionOf(map, s), f = flow[a][b]; f.k++; f.d += w + m;
+    const a = regionOf(base, s), b = regionOf(map, s); if (!(a >= 0) || !(b >= 0)) return; const f = flow[a][b]; f.k++; f.d += w + m;
     const t0 = todayTrip(s), t1 = miles(s, C.R[b].host.site), ch = t1 - t0; if (ch > 25) up++; else if (ch < -25) down++; dv += w + m; before += (w + m) * t0; after += (w + m) * t1;
     rows.push({s, a, b, t0, t1, ch}); });
-  $("cmpLine").textContent = up + " schools would travel more than 25 miles farther than they have been, " + down + " more than 25 miles less. Average trip per diver: " + miNum(before / dv) + " miles over 2022 to 2026, " + miNum(after / dv) + " miles on this map with the hosts chosen.";
+  $("cmpLine").textContent = !dv ? "" : up + " schools would travel more than 25 miles farther than they have been, " + down + " more than 25 miles less. Average trip per diver: " + miNum(before / dv) + " miles over 2022 to 2026, " + miNum(after / dv) + " miles on this map with the hosts chosen.";
   $("cmpFlow").innerHTML = "<thead><tr><th>From</th>" + C.R.map(r => "<th>To " + esc(r.name) + "</th>").join("") + "</tr></thead><tbody>" +
     B.R.map(r => "<tr><td>" + sw(r.i) + esc(r.name) + "</td>" + C.R.map(c => { const f = flow[r.i][c.i]; return '<td class="num">' + (f.k ? f.k + " schools, " + fmt(f.d) + " divers" : "") + "</td>"; }).join("") + "</tr>").join("") + "</tbody>";
   rows.sort(cmpSort === "up" ? (x, y) => y.ch - x.ch : cmpSort === "down" ? (x, y) => x.ch - y.ch : cmpSort === "region" ? (x, y) => x.b - y.b || x.s.n.localeCompare(y.s.n) : (x, y) => x.s.n.localeCompare(y.s.n));
@@ -607,7 +676,7 @@ function renderPrograms(C){
   const why = {nodive:"Listed as no diving for 2026-27", unlisted:"Not on the 2026-27 coaches list"}, last = s => { let y = 0; s.w.forEach((v, k) => { if (v + s.m[k] > 0) y = DATA.years[k]; }); return y; };
   const rows = DATA.schools.filter(s => flagged(s) && last(s) >= 2022).sort((a, b) => (avg(b.w, 3) + avg(b.m, 3)) - (avg(a.w, 3) + avg(a.m, 3)));
   $("progTable").innerHTML = "<thead><tr><th>Counted</th><th class=\"l\">Program</th><th class=\"l\">Why it is flagged</th><th class=\"l\">Region on this map</th><th>Last at a zone meet</th><th>Women a year, 2024 to 2026</th><th>Men a year, 2024 to 2026</th></tr></thead><tbody>" +
-    rows.map(s => '<tr><td><input type="checkbox" id="pg' + s.id + '" data-id="' + s.id + '"' + (off[s.id] ? "" : " checked") + ' aria-label="Count ' + esc(s.n) + '"></td><td class="l"><label for="pg' + s.id + '">' + esc(s.n) + ' <span class="where">' + s.s + '</span></label></td><td class="l">' + why[s.st] + '</td><td class="l">' + sw(regionOf(map, s)) + esc(map.names[regionOf(map, s)]) + '</td><td class="num">' + last(s) + '</td><td class="num">' + f1(avg(s.w, 3)) + '</td><td class="num">' + f1(avg(s.m, 3)) + "</td></tr>").join("") + "</tbody>";
+    rows.map(s => '<tr><td><input type="checkbox" id="pg' + s.id + '" data-id="' + s.id + '"' + (off[s.id] ? "" : " checked") + ' aria-label="Count ' + esc(s.n) + '"></td><td class="l"><label for="pg' + s.id + '">' + esc(s.n) + ' <span class="where">' + s.s + '</span></label></td><td class="l">' + why[s.st] + '</td><td class="l">' + sw(regionOf(map, s)) + esc(rname(map, regionOf(map, s))) + '</td><td class="num">' + last(s) + '</td><td class="num">' + f1(avg(s.w, 3)) + '</td><td class="num">' + f1(avg(s.m, 3)) + "</td></tr>").join("") + "</tbody>";
   const never = DATA.schools.filter(s => s.st === "new").map(s => s.n), quiet = DATA.schools.filter(s => s.st === "on" && avg(s.w, 3) + avg(s.m, 3) === 0).map(s => s.n + " (last " + last(s) + ")");
   const gone = DATA.schools.filter(s => flagged(s) && last(s) > 0 && last(s) < 2022).map(s => s.n + " (" + last(s) + ")");
   $("progQuiet").innerHTML = "<b>Never at a zone meet since 2015:</b> " + esc(never.join(", ")) + ".<br><b>None in 2024 to 2026:</b> " + esc(quiet.join(", ")) + ".<br><b>Flagged programs whose last zone diver was before 2022:</b> " + esc(gone.join(", ")) + ".";
@@ -619,26 +688,41 @@ function renderScore(C){
   $("stdTable").innerHTML = "<thead><tr><th>Region</th>" + EV.map(e => "<th>" + e[1] + "<br>" + (STD[e[0]] + stdPts) + "</th>").join("") + "</tr></thead><tbody>" +
     C.R.map(r => "<tr><td>" + sw(r.i) + "<b>" + esc(r.name) + "</b></td>" + EV.map(e => { const c = stdCounts(r, e[0], stdPts, years); return '<td class="num">' + fmt(c.all) + " in the prelim<br><b>" + fmt(c.keep) + "</b> reached the line" + (c.all ? " (" + f0(c.keep / c.all * 100) + "%)" : "") + "</td>"; }).join("") + "</tr>").join("") + "</tbody>";
 }
-function summaryBody(C){
-  const cur = attachHosts(compute(fromPreset("current"), years, off), fromPreset("current"), false), unit = years === 1 ? "2026 season" : (years === 3 ? "2024 to 2026" : "2022 to 2026") + " average per year";
-  const name = map.key === "custom" ? "Edited map" : map.label, moved = Object.keys(map.over).length;
+function spotTable(X, m){
+  const head = "<thead><tr><th>Region</th><th>Women 1m</th><th>Women 3m</th><th>Women platform</th><th>Women\'s spots</th><th>Women at the meet per spot</th><th>Men 1m</th><th>Men 3m</th><th>Men platform</th><th>Men\'s spots</th><th>Men at the meet per spot</th></tr></thead>";
+  const S = spots(m, spotYear), t = {W1m:0, W3m:0, WPL:0, W:0, M1m:0, M3m:0, MPL:0, M:0};
+  const rows = X.R.map(r => { const o = S.by[r.i]; Object.keys(t).forEach(k => t[k] += o[k]);
+    return "<tr><td>" + sw(r.i) + "<b>" + esc(r.name) + '</b></td><td class="num">' + o.W1m + '</td><td class="num">' + o.W3m + '</td><td class="num">' + o.WPL + '</td><td class="num"><b>' + o.W + '</b></td><td class="num">' + f1(r.w / o.W) +
+      '</td><td class="num">' + o.M1m + '</td><td class="num">' + o.M3m + '</td><td class="num">' + o.MPL + '</td><td class="num"><b>' + o.M + '</b></td><td class="num">' + f1(r.m / o.M) + "</td></tr>"; }).join("");
+  return {html: head + "<tbody>" + rows + '<tr class="tot"><td>All regions</td><td class="num">' + t.W1m + '</td><td class="num">' + t.W3m + '</td><td class="num">' + t.WPL + '</td><td class="num">' + t.W + '</td><td></td><td class="num">' + t.M1m + '</td><td class="num">' + t.M3m + '</td><td class="num">' + t.MPL + '</td><td class="num">' + t.M + "</td><td></td></tr></tbody>", un: S.un};
+}
+function renderSpots(C){
+  const a = spotTable(C, map), b = spotTable(C.cur, fromPreset("current"));
+  $("spotTable").innerHTML = a.html; $("spotCur").innerHTML = b.html;
+  $("spotNote").innerHTML = "Every event should total 41 women's and 36 men's spots across the five regions. \u201cAt the meet per spot\u201d divides the divers at the region's meet by its spots, so a higher number means a harder road to the championships." + (a.un ? ' <span class="warn">' + a.un + " top-16 finishes belong to states not assigned to a region yet, so the totals are short.</span>" : "");
+}
+function summaryBody(C, gray){
+  const cur = C.cur, unit = years === 1 ? "2026 season" : (years === 3 ? "2024 to 2026" : "2022 to 2026") + " average per year";
+  const name = map.label || "Untitled map", moved = Object.keys(map.over).length;
   const statesOf = r => Object.keys(STATE_NAME).filter(a => map.states[a] === r.i && r.states[a] && r.states[a].w + r.states[a].m > 0).join(", ");
   return "<h1>NCAA Division I diving regions: " + esc(name) + "</h1>" +
     "<p>Divers at each meet, " + unit + ", from zone meet results. Prepared " + new Date().toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"}) + ".</p>" +
-    mapSVG(map, true) + '<p class="key">' + C.R.map(r => '<span><i style="background:' + GRAYS[r.i] + '"></i>' + esc(r.name) + "</span>").join("") + "</p>" +
-    "<table><thead><tr><th>Region</th><th style=\"text-align:left\">States with divers</th><th>Schools</th><th>Women</th><th>Men</th><th>Largest prelim</th><th>Longest day, two panels</th><th style=\"text-align:left\">Host used</th><th>Avg miles per diver</th><th>Same divers, 2022 to 2026</th><th>Longest trip</th></tr></thead><tbody>" +
-    C.R.map(r => { const big = EV.map(e => [e, r.ev[e[0]]]).sort((a, b) => b[1] - a[1])[0], long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0];
-      return "<tr><td><b>" + esc(r.name) + '</b></td><td style="text-align:left">' + statesOf(r) + "</td><td>" + r.schools + "</td><td><b>" + fmt(r.w) + "</b></td><td><b>" + fmt(r.m) + "</b></td><td>" + fmt(big[1]) + " (" + big[0][1].toLowerCase() + ")</td><td>" + hm(long.dayTwo) + '</td><td style="text-align:left">' + esc(r.host.site.n) + "</td><td>" + miNum(r.host.t.avg) + "</td><td>" + miNum(r.today) + "</td><td>" + (r.host.t.far ? miNum(r.host.t.far.d) + " (" + esc(r.host.t.far.s.n) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table>" +
+    mapSVG(map, gray) + '<p class="key">' + C.R.map(r => '<span><i style="background:' + (gray ? GRAYS[r.i] : color(r.i)) + '"></i>' + esc(r.name) + "</span>").join("") + "</p>" +
+    "<table><thead><tr><th>Region</th><th style=\"text-align:left\">States with divers</th><th>Schools</th><th>Women</th><th>Men</th><th>Longest day, two panels</th><th>NCAA spots " + spotYear + ", women / men</th><th style=\"text-align:left\">Host used</th><th>Avg miles per diver</th><th>Same divers, 2022 to 2026</th><th>Longest trip</th></tr></thead><tbody>" +
+    C.R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0], sp = C.spots.by[r.i];
+      return "<tr><td><b>" + esc(r.name) + '</b></td><td style="text-align:left">' + statesOf(r) + "</td><td>" + r.schools + "</td><td><b>" + fmt(r.w) + "</b></td><td><b>" + fmt(r.m) + "</b></td><td>" + hm(long.dayTwo) + "</td><td>" + sp.W + " / " + sp.M + '</td><td style="text-align:left">' + esc(r.host.site.n) + "</td><td>" + miNum(r.host.t.avg) + "</td><td>" + miNum(r.today) + "</td><td>" + (r.host.t.far ? miNum(r.host.t.far.d) + " (" + esc(r.host.t.far.s.n) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table>" +
     "<p>Women per meet run from " + fmt(Math.min(...C.R.map(r => r.w))) + " to " + fmt(Math.max(...C.R.map(r => r.w))) + " against an equal share of " + fmt(C.shareW) + ". Men run from " + fmt(Math.min(...C.R.map(r => r.m))) + " to " + fmt(Math.max(...C.R.map(r => r.m))) + " against " + fmt(C.shareM) + "." + (moved ? " This map places " + moved + " schools apart from their state." : "") + "</p>" +
     "<p><b>Current zones for reference (women / men):</b> " + cur.R.map(r => esc(r.name) + " " + fmt(r.w) + " / " + fmt(r.m)).join(", ") + ".</p>" +
-    '<p style="font-size:11px">A diver counts once per meet if they competed in at least one preliminary. Day length times prelims at 32 seconds a dive with the two paired events on separate boards, plus finals. Miles are straight lines from each school\'s city to the host, weighted by divers.' + (Object.keys(off).length ? " " + Object.keys(off).length + " programs without diving in 2026-27 are left out." : "") + " Source: DiveMeets results, zone meets 2015 to 2026.</p>";
+    '<p style="font-size:11px">A diver counts once per meet if they competed in at least one preliminary. Day length times prelims at 32 seconds a dive with the two paired events on separate boards, plus finals. NCAA spots are 5 women\'s and 4 men\'s per event plus one for each top-16 finisher at the previous championships. Miles are straight lines from each school\'s city to the host, weighted by divers.' + (Object.keys(off).length ? " " + Object.keys(off).length + " programs without diving in 2026-27 are left out." : "") + " Source: DiveMeets results, zone meets 2015 to 2026.</p>";
 }
-function summaryDoc(C){ return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>NCAA diving regions</title><style>body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#000;margin:28px}h1{font-size:19px;margin:0 0 4px}p{margin:5px 0}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border-bottom:1px solid #777;padding:5px 6px;text-align:right;font-size:11px;vertical-align:top}th:first-child,td:first-child{text-align:left}svg{width:100%;max-width:560px;height:auto;display:block;margin:6px 0}.key span{display:inline-block;margin-right:14px}.key i{display:inline-block;width:13px;height:13px;border:1px solid #000;vertical-align:-2px;margin-right:5px}button{margin-bottom:12px;padding:6px 14px}@page{size:letter landscape;margin:.5in}@media print{button{display:none}body{margin:0}}</style></head><body><button onclick="window.print()">Print</button>' + summaryBody(C) + "</body></html>"; }
+function summaryDoc(C){ return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>NCAA diving regions</title><style>body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#000;margin:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}h1{font-size:19px;margin:0 0 4px}p{margin:5px 0}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border-bottom:1px solid #777;padding:5px 6px;text-align:right;font-size:11px;vertical-align:top}th:first-child,td:first-child{text-align:left}svg{width:100%;max-width:560px;height:auto;display:block;margin:6px 0}.key span{display:inline-block;margin-right:14px}.key i{display:inline-block;width:13px;height:13px;border:1px solid #000;vertical-align:-2px;margin-right:5px}button{margin-bottom:12px;padding:6px 14px}@page{size:letter landscape;margin:.5in}@media print{button{display:none}body{margin:0}}</style></head><body><button onclick="window.print()">Print</button>' + summaryBody(C, bw) + "</body></html>"; }
 function render(){
   const C = attachHosts(compute(map, years, off), map, true); LAST = C;
+  const cm = fromPreset("current"); C.cur = attachHosts(compute(cm, years, off), cm, false);
+  C.spots = spots(map, spotYear);
   renderHead(C); renderMapView(C);
-  if (view === "compare") renderCompare(C); else if (view === "meet-days") renderDays(C); else if (view === "travel") renderTravel(C); else if (view === "growth") renderGrowth(C);
-  else if (view === "conferences") renderConf(C); else if (view === "programs") renderPrograms(C); else if (view === "qualifying-score") renderScore(C); else if (view === "summary") $("sheet").innerHTML = summaryBody(C);
+  if (view === "compare") renderCompare(C); else if (view === "spots") renderSpots(C); else if (view === "travel") renderTravel(C); else if (view === "summary") $("sheet").innerHTML = summaryBody(C, bw);
+  else if (view === "more"){ renderDays(C); renderGrowth(C); renderConf(C); renderPrograms(C); renderScore(C); }
   try { localStorage.setItem("ncaaRegionWorking", JSON.stringify({map, off, progMode})); } catch (e) {}
 }
 
@@ -647,8 +731,20 @@ function pickRegion(e){ const b = e.target.closest(".chip"); if (b){ selected = 
 $("chips").addEventListener("click", e => { const b = e.target.closest(".chip"); if (b){ active = +b.dataset.i; render(); } });
 $("travelChips").addEventListener("click", pickRegion);
 $("smallStates").addEventListener("click", e => { const b = e.target.closest("button"); if (b) paintState(b.dataset.st); });
-$("regions").addEventListener("click", e => { const a = e.target.closest(".region"); if (a){ selected = +a.dataset.i; render(); } });
-$("regions").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ const a = e.target.closest(".region"); if (a){ e.preventDefault(); selected = +a.dataset.i; render(); } } });
+$("regions").addEventListener("click", e => { if (e.target.closest("input")) return; const a = e.target.closest(".region"); if (a && +a.dataset.i !== selected){ selected = +a.dataset.i; render(); } });
+$("regions").addEventListener("change", e => { const i = e.target.dataset.rename; if (i === undefined) return; const v = e.target.value.trim(); if (v){ map.names[+i] = v; edited(); } });
+$("verdict").addEventListener("click", e => { const b = e.target.closest(".tile"); if (b){ selected = +b.dataset.i; active = selected; render(); } });
+window.addEventListener("pointerup", () => { dragging = false; dragPushed = false; });
+$("spotYear").addEventListener("change", e => { spotYear = +e.target.value; render(); });
+$("bw").addEventListener("change", e => { bw = e.target.checked; render(); });
+$("mapName").addEventListener("input", e => { map.label = e.target.value; });
+$("newBtn").addEventListener("click", () => { $("newFrom").innerHTML = '<option value="blank">A blank map</option>' + ALLOPTS; $("newFrom").value = "blank"; $("newName").value = ""; $("newPanel").hidden = false; $("newName").focus(); });
+$("newCancel").addEventListener("click", () => { $("newPanel").hidden = true; });
+$("newGo").addEventListener("click", () => { const name = $("newName").value.trim(); if (!name){ $("newName").focus(); return; } const v = $("newFrom").value; let m;
+  if (v === "blank"){ const st = {}; Object.keys(STATE_NAME).forEach(a => st[a] = -1); m = {key:"custom", base:"july", label:name, names:["Region 1","Region 2","Region 3","Region 4","Region 5"], states:st, over:{}}; }
+  else { m = mapByKey(v); if (!m) return; m.key = "custom"; m.label = name; }
+  map = m; undo = []; active = 0; selected = 0; hostSel = {}; extra = {}; sugg = null; $("newPanel").hidden = true; view = "map"; render(); msg("New map started. Press Save when you want to keep it."); });
+$("regions").addEventListener("keydown", e => { if (e.target.closest("input")) return; if (e.key === "Enter" || e.key === " "){ const a = e.target.closest(".region"); if (a){ e.preventDefault(); selected = +a.dataset.i; render(); } } });
 $("tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ view = b.dataset.v; try { location.hash = view; } catch (x) {} render(); } });
 function setMode(m){ mode = m; $("modeState").setAttribute("aria-pressed", m === "state"); $("modeSchool").setAttribute("aria-pressed", m === "school"); }
 $("modeState").addEventListener("click", () => setMode("state"));
@@ -661,7 +757,6 @@ $("baseSel").addEventListener("change", e => { baseKey = e.target.value; render(
 $("cmpSort").addEventListener("change", e => { cmpSort = e.target.value; render(); });
 $("stdPts").addEventListener("input", e => { stdPts = +e.target.value; render(); });
 $("undo").addEventListener("click", () => { const u = undo.pop(); if (u){ map.states = u.states; map.over = u.over; edited(); } });
-$("reset").addEventListener("click", () => { const k = PRESETS[map.base] ? map.base : "july"; push(); map = fromPreset(k); sugg = null; render(); });
 $("suggestBtn").addEventListener("click", () => { sugg = suggest(map, years, off); render(); });
 $("moves").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || !sugg) return; const x = sugg.moves[+b.dataset.k]; const keep = active; active = x.to; paintState(x.a); active = keep; sugg = suggest(map, years, off); render(); });
 $("travel").addEventListener("click", e => { const b = e.target.closest(".pick"); if (b){ hostSel[selected] = b.dataset.key; render(); } });
@@ -678,12 +773,17 @@ async function loadShared(){
   catch (e) { sharedErr = "Saved maps can't be reached right now. Copy the map code to keep your work."; }
   sharedReady = true; render();
 }
-$("saveShared").addEventListener("click", async () => { const name = $("saveName").value.trim(); if (!name){ msg("Type a name first."); return; }
-  const id = slug(name); if (shared[id] && !confirm('Replace the saved map named "' + shared[id].name + '"?')) return;
+async function saveAs(name){
+  name = (name || "").trim(); if (!name){ msg("Type a name for this map first."); $("mapName").focus(); return; }
+  if (Object.keys(PRESETS).some(k => PRESETS[k].label.toLowerCase() === name.toLowerCase())){ msg("That is the name of a built-in map. Give your map its own name, then press Save."); $("mapName").focus(); return; }
+  const id = slug(name); if (shared[id] && map.key !== "shared:" + id && !confirm('Replace the saved map named "' + shared[id].name + '"?')) return;
   const who = $("saveWho").value.trim(); try { localStorage.setItem("ncaaRegionWho", who); } catch (e) {}
   try { await window.NEON.query("INSERT INTO ncaa.region_maps (id, name, data, saved_by) VALUES ($1,$2,$3::jsonb,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, data = EXCLUDED.data, saved_by = EXCLUDED.saved_by, updated_at = now()", [id, name, JSON.stringify({n:map.names, s:map.states, o:map.over}), who]);
     map.key = "shared:" + id; map.label = name; msg("Saved as " + name + "."); await loadShared(); }
-  catch (e) { msg("Could not save. Copy the map code so nothing is lost, then try again."); } });
+  catch (e) { msg("Could not save. Copy the map code so nothing is lost, then try again."); }
+}
+$("saveShared").addEventListener("click", () => saveAs($("mapName").value));
+$("saveCopy").addEventListener("click", () => { const n = prompt("Name for the copy", (map.label || "Map") + " copy"); if (n !== null) saveAs(n); });
 $("sharedList").addEventListener("click", async e => { const o = e.target.closest("[data-open]"), d = e.target.closest("[data-del]");
   if (o){ const m = mapByKey("shared:" + o.dataset.open); if (m){ push(); map = m; active = 0; selected = 0; hostSel = {}; extra = {}; sugg = null; render(); msg("Opened " + m.label + "."); } }
   else if (d){ const k = d.dataset.del; if (!shared[k] || !confirm('Remove the saved map named "' + shared[k].name + '"? It is removed for everyone.')) return;
@@ -700,7 +800,7 @@ $("dlBtn").addEventListener("click", () => { const u = URL.createObjectURL(new B
 function readHash(){ const h = (location.hash || "").replace("#", ""); if (VIEWS.some(v => v[0] === h)) view = h; }
 window.addEventListener("hashchange", () => { readHash(); render(); });
 try { const w = JSON.parse(localStorage.getItem("ncaaRegionWorking") || "null");
-  if (w && w.map && validMap({n:w.map.names, s:w.map.states})){ map = w.map; map.over = cleanOver(map.over); off = w.off || {}; progMode = w.progMode || "all"; for (const k in off) if (!SCHOOL[k] || !flagged(SCHOOL[k])) delete off[k]; if (progMode === "list") setProgMode("list"); } } catch (e) {}
+  if (w && w.map && validMap({n:w.map.names, s:w.map.states})){ map = w.map; if (typeof map.label !== "string") map.label = ""; map.over = cleanOver(map.over); off = w.off || {}; progMode = w.progMode || "all"; for (const k in off) if (!SCHOOL[k] || !flagged(SCHOOL[k])) delete off[k]; if (progMode === "list") setProgMode("list"); } } catch (e) {}
 new MutationObserver(render).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
 readHash(); render();
 try { $("saveWho").value = localStorage.getItem("ncaaRegionWho") || ""; } catch (e) {}

@@ -22,6 +22,11 @@ never `index.html`.
   (women, men, and each of the six events), zone prelim scores 2022 to 2026,
   state, city-level coordinates, conference and 2026-27 program status. It
   holds no athlete names.
+  `top16` lists, for the 2025 and 2026 NCAA Championships, the school of each
+  top-16 prelim finisher per event. Qualifying spots are 5 women's or 4 men's
+  per region per event plus one per top-16 finisher. For the current zones the
+  result matches the NCAA's published 2026 and 2027 tables in every cell; keep
+  that check when adding a season.
 - `presets.json`: the built-in maps (current zones, the July 2026 proposal as
   written, and two whole-state versions).
 - `hosts.json`: the 29 sites that hosted a zone meet, 2015 to 2027.
