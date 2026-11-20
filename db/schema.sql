@@ -1637,6 +1637,14 @@ CREATE TABLE IF NOT EXISTS ncaa.region_maps (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- Keep the version a save replaces, and mark removed maps instead of
+-- deleting them, so either can be brought back from the page.
+ALTER TABLE ncaa.region_maps ADD COLUMN IF NOT EXISTS prev            JSONB;
+ALTER TABLE ncaa.region_maps ADD COLUMN IF NOT EXISTS prev_name       TEXT;
+ALTER TABLE ncaa.region_maps ADD COLUMN IF NOT EXISTS prev_saved_by   TEXT;
+ALTER TABLE ncaa.region_maps ADD COLUMN IF NOT EXISTS prev_updated_at TIMESTAMPTZ;
+ALTER TABLE ncaa.region_maps ADD COLUMN IF NOT EXISTS deleted_at      TIMESTAMPTZ;
+
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN

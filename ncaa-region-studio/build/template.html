@@ -117,6 +117,8 @@ textarea#code{width:100%;min-height:58px;font-family:ui-monospace,Menlo,Consolas
 .sheet .key span{display:inline-block;margin-right:14px} .sheet .key i{display:inline-block;width:14px;height:14px;border:1px solid #000;vertical-align:-2px;margin-right:5px}
 input[type=range]{width:240px}
 [hidden]{display:none !important}
+.usmap{touch-action:manipulation}
+@media (pointer:coarse){button,select,input[type="text"]{min-height:42px} .chip{padding:9px 14px 9px 10px} .stab select{min-height:40px} .small button{min-width:44px}}
 .side{display:flex;flex-direction:column;gap:12px;min-width:0}
 .schoolcard{padding:12px 14px} .schoolcard h2{margin:0 0 8px} .schoolcard h3{font-size:14px;margin:12px 0 4px}
 .schoolcard .rowf{align-items:flex-end} .schoolcard .grow{flex:1 1 130px;min-width:0} .schoolcard .grow input,.schoolcard .grow select{width:100%}
@@ -125,6 +127,8 @@ input[type=range]{width:240px}
 .stab th:first-child{text-align:left} .stab td{padding:5px 4px;border-top:1px solid var(--line);vertical-align:middle}
 .stab td small{display:block;color:var(--muted);font-size:12px} .stab select{max-width:150px;padding:4px 6px;font-size:13px}
 .stab tr.hit td{background:#fff6d6} .stab tr.apart td:first-child{font-weight:600}
+.schoolcols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:4px 22px;align-items:start} .schoolcols h3:first-child{margin-top:10px}
+@media (max-width:760px){.schoolcols{grid-template-columns:1fr}}
 .schoolmax{max-height:330px;overflow:auto;border-bottom:1px solid var(--line)} .schoolcard .note{margin:8px 0 0}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .pbar{padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
@@ -185,8 +189,9 @@ tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
   <!-- MAP -->
   <div class="view" id="v-map">
     <div class="main">
+      <div class="side">
       <section class="card mapcard">
-        <ol class="steps"><li><b>1</b>Choose a map at the top, or press New map.</li><li><b>2</b>Pick a region below, then click a state or drag across several.</li><li><b>3</b>To place one school apart from its state, use the Schools box on the right.</li><li><b>4</b>Name it and press Save.</li></ol>
+        <ol class="steps"><li><b>1</b>Choose a map at the top, or press New map.</li><li><b>2</b>Pick a region below, then click or tap a state. With a mouse you can drag across several.</li><li><b>3</b>To place one school apart from its state, use the Schools box under the map.</li><li><b>4</b>Name it and press Save.</li></ol>
         <div class="toolbar">
           <span class="lab">Paint with</span>
           <div class="chips" id="chips"></div>
@@ -201,18 +206,16 @@ tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
           <span>Dot size follows divers per year. Pale states had no divers in the seasons counted. Lines run to the host chosen for the selected region.</span>
         </div>
       </section>
-      <div class="side">
         <section class="card schoolcard">
           <h2>Schools</h2>
           <div class="rowf">
             <div class="field grow"><label for="schoolQ">Find a school</label><input type="text" id="schoolQ" placeholder="Type part of a name" autocomplete="off"></div>
             <div class="field grow"><label for="schoolSt">Or list a state</label><select id="schoolSt"></select></div>
           </div>
-          <div id="schoolList"></div>
-          <div id="schoolApart"></div>
+          <div class="schoolcols"><div id="schoolList"></div><div id="schoolApart"></div></div>
         </section>
-        <section class="regions" id="regions"></section>
       </div>
+      <section class="regions" id="regions"></section>
     </div>
     <section class="card pad">
       <h2>Moves that help most</h2>
@@ -452,6 +455,8 @@ function spots(m, year){
   by.forEach(o => { o.W = o.W1m + o.W3m + o.WPL; o.M = o.M1m + o.M3m + o.MPL; });
   return {by, un};
 }
+function seasonSpan(r, k){ const a = r.series.slice(-5).map(p => p[k]); return [Math.min(...a), Math.max(...a)]; }
+function seasonPeak(R, k){ let best = null; R.forEach(r => r.series.slice(-5).forEach(p => { if (!best || p[k] > best.v) best = {v:p[k], y:p.y, name:r.name}; })); return best; }
 function fit(pts){ const n = pts.length; let sx = 0, sy = 0, sxx = 0, sxy = 0; pts.forEach(p => { sx += p[0]; sy += p[1]; sxx += p[0] * p[0]; sxy += p[0] * p[1]; });
   const b = (n * sxy - sx * sy) / (n * sxx - sx * sx); return {b, a:(sy - b * sx) / n}; }
 function hm(min){ const h = Math.floor(min / 60), mm = Math.round((min - h * 60) / 5) * 5; return (mm === 60 ? (h + 1) + " h 00" : h + " h " + String(mm).padStart(2, "0")) + " min"; }
@@ -465,10 +470,12 @@ function fromPreset(key){ const p = PRESETS[key]; return {key, base:key, label:p
 function validMap(o){ return o && Array.isArray(o.n) && o.n.length === 5 && o.n.every(x => typeof x === "string") && o.s && Object.keys(STATE_NAME).every(a => [-1,0,1,2,3,4].includes(o.s[a])); }
 function cleanOver(o){ const out = {}; if (o) for (const k in o) if (SCHOOL[k] && [0,1,2,3,4].includes(o[k])) out[k] = o[k]; return out; }
 const VIEWS = [["map","Map"],["compare","Compare with today"],["spots","NCAA spots"],["travel","Travel"],["summary","Print"],["more","More detail"]];
+const SPAN = DATA.years.slice(-5)[0] + " to " + DATA.years[DATA.years.length - 1];
 const SPOT_YEARS = Object.keys(DATA.top16).map(y => +y + 1).sort((a, b) => b - a);
 let map = fromPreset("july"), active = 0, focusSt = "", focusSchool = "", schoolQ = "", years = 3, selected = 0, undo = [], view = "map";
 let off = {}, progMode = "all", hostSel = {}, extra = {}, baseKey = "current", stdPts = 0, cmpSort = "up", sugg = null, LAST = null;
-let saved = {}, shared = {}, sharedReady = false, sharedErr = "", lastLoad = 0, spotYear = SPOT_YEARS[0], bw = false, dragging = false, dragPushed = false;
+let saved = {}, shared = {}, sharedReady = false, sharedErr = "", lastLoad = 0, spotYear = SPOT_YEARS[0], bw = false, dragging = false, dragPushed = false, lastPT = "mouse", hasVersions = true, removed = {};
+const COARSE = !!(window.matchMedia && window.matchMedia("(pointer:coarse)").matches);
 try { saved = JSON.parse(localStorage.getItem("ncaaRegionMaps") || "{}"); } catch (e) { saved = {}; }
 function fmt(x){ return years === 1 ? f0(x) : f1(x); }
 function miNum(x){ return Math.round(x).toLocaleString("en-US"); }
@@ -550,7 +557,8 @@ function drawMap(C){
   gStates.selectAll("path").data(feats, d => d.id).join("path")
     .attr("class", d => "state" + (tot[FIPS[d.id]] && tot[FIPS[d.id]].k ? "" : " empty"))
     .attr("d", path).attr("fill", d => color(map.states[FIPS[d.id]]))
-    .on("pointerdown", (ev, d) => { if (ev.button > 0) return; ev.preventDefault(); dragging = true; dragPushed = false; paintState(FIPS[d.id], true); })
+    .on("click", (ev, d) => { if (lastPT === "touch") paintState(FIPS[d.id]); })
+    .on("pointerdown", (ev, d) => { lastPT = ev.pointerType || "mouse"; if (lastPT === "touch" || ev.button > 0) return; ev.preventDefault(); dragging = true; dragPushed = false; paintState(FIPS[d.id], true); })
     .on("pointerenter", (ev, d) => { if (dragging && ev.buttons === 1) paintState(FIPS[d.id], true); })
     .on("mousemove", (ev, d) => { const a = FIPS[d.id], t = tot[a] || {w:0, m:0, k:0};
       showTip(ev, "<b>" + STATE_NAME[a] + "</b><br>" + esc(rname(map, map.states[a])) + "<br>" + fmt(t.w) + " women, " + fmt(t.m) + " men, " + t.k + " schools"); })
@@ -570,6 +578,7 @@ function drawMap(C){
       el.append("circle").attr("r", Math.max(r - .6, 1.4)).attr("fill", "none").attr("stroke", fill).attr("stroke-width", 2.6);
     }
     else el.append("rect").attr("x", -r * .8).attr("y", -r * .8).attr("width", r * 1.6).attr("height", r * 1.6).attr("transform", "rotate(45)").attr("fill", fill).attr("stroke", "#11181c").attr("stroke-width", sw);
+    if (COARSE) el.append("circle").attr("r", 13).attr("fill", "rgba(255,255,255,0.01)");
     el.style("cursor", "pointer");
   });
   g.on("pointerdown", ev => ev.stopPropagation()).on("click", (ev, d) => { ev.stopPropagation(); focusSt = d.s.s; focusSchool = String(d.s.id); schoolQ = ""; $("schoolQ").value = ""; render(); })
@@ -599,10 +608,13 @@ function renderHead(C){
   const cls = (v, share) => Math.abs(v - share) < share * .05 ? "even" : v > share ? "flag" : "low";
   $("verdict").innerHTML =
     '<p class="lead">Largest women\'s meet <b class="num">' + fmt(mx("w")) + "</b> (today " + fmt(cmx("w")) + '). Largest men\'s meet <b class="num">' + fmt(mx("m")) + "</b> (today " + fmt(cmx("m")) + "). Gap between largest and smallest: women <b class=\"num\">" + fmt(C.gw) + "</b> (today " + fmt(cur.gw) + "), men <b class=\"num\">" + fmt(C.gm) + "</b> (today " + fmt(cur.gm) + "). Divers " + unit + ".</p>" +
+    (() => { const pw = seasonPeak(R, "w"), pm = seasonPeak(R, "m"), cw = seasonPeak(cur.R, "w"), cm = seasonPeak(cur.R, "m");
+      return '<p class="note" style="margin:0">Biggest single meet, ' + SPAN + ': women <b class="num">' + pw.v + "</b> (" + esc(pw.name) + ", " + pw.y + "; today's zones " + cw.v + '), men <b class="num">' + pm.v + "</b> (" + esc(pm.name) + ", " + pm.y + "; today's zones " + cm.v + "). A host has to fit the big year, not the average.</p>"; })() +
     '<div class="tiles">' + R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0], sp = C.spots.by[r.i];
       return '<button type="button" class="tile' + (r.i === selected ? " sel" : "") + '" data-i="' + r.i + '" style="border-top-color:' + color(r.i) + '"><span class="tname">' + esc(r.name) + "</span>" +
         '<span class="trow"><span>Women</span><b class="num">' + fmt(r.w) + '</b><em class="num ' + cls(r.w, C.shareW) + '">' + signed(r.w - C.shareW, fmt) + "</em></span>" +
         '<span class="trow"><span>Men</span><b class="num">' + fmt(r.m) + '</b><em class="num ' + cls(r.m, C.shareM) + '">' + signed(r.m - C.shareM, fmt) + "</em></span>" +
+        '<span class="tsub">' + SPAN + ": women " + seasonSpan(r, "w").join(" to ") + ", men " + seasonSpan(r, "m").join(" to ") + "</span>" +
         '<span class="tsub">Longest day about ' + hm(long.dayTwo) + "</span>" +
         '<span class="tsub">NCAA spots ' + spotYear + ": " + sp.W + " women's, " + sp.M + " men's</span></button>"; }).join("") + "</div>" +
     '<p class="note">The small number beside each count is the difference from an equal share (' + fmt(C.shareW) + " women, " + fmt(C.shareM) + " men)." +
@@ -650,8 +662,9 @@ function renderMapView(C){
     sugg.moves.map((x, k) => "<div><span><b>" + STATE_NAME[x.a] + "</b>: " + sw(x.from) + esc(map.names[x.from]) + " to " + sw(x.to) + esc(map.names[x.to]) + '. Women\'s gap <b class="num">' + f1(sugg.base.gw) + " to " + f1(x.gw) + '</b>, men\'s <b class="num">' + f1(sugg.base.gm) + " to " + f1(x.gm) + '</b></span><button type="button" data-k="' + k + '">Apply</button></div>').join("");
   $("suggestMsg").textContent = sugg ? "Gap now: women " + f1(sugg.base.gw) + ", men " + f1(sugg.base.gm) + "." : "";
   const ks = Object.keys(shared);
-  $("sharedList").innerHTML = sharedErr ? '<p class="note warn">' + esc(sharedErr) + "</p>" : !sharedReady ? '<p class="note">Loading saved maps.</p>' : !ks.length ? '<p class="note">No saved maps yet.</p>' :
-    '<div class="scroll"><table><thead><tr><th>Saved map</th><th class="l">Saved by</th><th class="l">Last saved</th><th></th></tr></thead><tbody>' + ks.map(k => '<tr><td><button type="button" class="pick" data-open="' + esc(k) + '">' + esc(shared[k].name) + '</button></td><td class="l">' + esc(shared[k].by) + '</td><td class="l">' + esc(shared[k].at) + '</td><td><button type="button" data-del="' + esc(k) + '">Remove</button></td></tr>').join("") + "</tbody></table></div>";
+  $("sharedList").innerHTML = sharedErr ? '<p class="note warn">' + esc(sharedErr) + "</p>" : !sharedReady ? '<p class="note">Loading saved maps.</p>' : (!ks.length ? '<p class="note">No saved maps yet.</p>' :
+    '<div class="scroll"><table><thead><tr><th>Saved map</th><th class="l">Saved by</th><th class="l">Last saved</th><th class="l">Version before that</th><th></th></tr></thead><tbody>' + ks.map(k => '<tr><td><button type="button" class="pick" data-open="' + esc(k) + '">' + esc(shared[k].name) + '</button></td><td class="l">' + esc(shared[k].by) + '</td><td class="l">' + esc(shared[k].at) + '</td><td class="l">' + (shared[k].prev ? esc(shared[k].pat + (shared[k].pby ? ", " + shared[k].pby : "")) + ' <button type="button" data-prev="' + esc(k) + '">Bring it back</button>' : "") + '</td><td><button type="button" data-del="' + esc(k) + '">Remove</button></td></tr>').join("") + "</tbody></table></div>") +
+    (!Object.keys(removed).length ? "" : '<h3 style="font-size:14px;margin:14px 0 4px">Removed maps</h3><div class="scroll"><table><tbody>' + Object.keys(removed).map(k => "<tr><td>" + esc(removed[k].name) + '</td><td class="l">Removed ' + esc(removed[k].at) + '</td><td><button type="button" data-undel="' + esc(k) + '">Put it back</button></td></tr>').join("") + "</tbody></table></div>");
   drawMap(C);
 }
 function renderCompare(C){
@@ -748,9 +761,9 @@ function summaryBody(C, gray){
   return "<h1>NCAA Division I diving regions: " + esc(name) + "</h1>" +
     "<p>Divers at each meet, " + unit + ", from zone meet results. Prepared " + new Date().toLocaleDateString("en-US", {year:"numeric", month:"long", day:"numeric"}) + ".</p>" +
     mapSVG(map, gray) + '<p class="key">' + C.R.map(r => '<span><i style="background:' + (gray ? GRAYS[r.i] : color(r.i)) + '"></i>' + esc(r.name) + "</span>").join("") + "</p>" +
-    "<table><thead><tr><th>Region</th><th style=\"text-align:left\">States with divers</th><th>Schools</th><th>Women</th><th>Men</th><th>Longest day, two panels</th><th>NCAA spots " + spotYear + ", women / men</th><th style=\"text-align:left\">Host used</th><th>Avg miles per diver</th><th>Same divers, 2022 to 2026</th><th>Longest trip</th></tr></thead><tbody>" +
+    "<table><thead><tr><th>Region</th><th style=\"text-align:left\">States with divers</th><th>Schools</th><th>Women</th><th>Low to high, " + SPAN + "</th><th>Men</th><th>Low to high, " + SPAN + "</th><th>Longest day, two panels</th><th>NCAA spots " + spotYear + ", women / men</th><th style=\"text-align:left\">Host used</th><th>Avg miles per diver</th><th>Same divers, 2022 to 2026</th><th>Longest trip</th></tr></thead><tbody>" +
     C.R.map(r => { const long = r.days.slice().sort((a, b) => b.dayTwo - a.dayTwo)[0], sp = C.spots.by[r.i];
-      return "<tr><td><b>" + esc(r.name) + '</b></td><td style="text-align:left">' + statesOf(r) + "</td><td>" + r.schools + "</td><td><b>" + fmt(r.w) + "</b></td><td><b>" + fmt(r.m) + "</b></td><td>" + hm(long.dayTwo) + "</td><td>" + sp.W + " / " + sp.M + '</td><td style="text-align:left">' + esc(r.host.site.n) + "</td><td>" + miNum(r.host.t.avg) + "</td><td>" + miNum(r.today) + "</td><td>" + (r.host.t.far ? miNum(r.host.t.far.d) + " (" + esc(r.host.t.far.s.n) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table>" +
+      return "<tr><td><b>" + esc(r.name) + '</b></td><td style="text-align:left">' + statesOf(r) + "</td><td>" + r.schools + "</td><td><b>" + fmt(r.w) + "</b></td><td>" + seasonSpan(r, "w").join(" to ") + "</td><td><b>" + fmt(r.m) + "</b></td><td>" + seasonSpan(r, "m").join(" to ") + "</td><td>" + hm(long.dayTwo) + "</td><td>" + sp.W + " / " + sp.M + '</td><td style="text-align:left">' + esc(r.host.site.n) + "</td><td>" + miNum(r.host.t.avg) + "</td><td>" + miNum(r.today) + "</td><td>" + (r.host.t.far ? miNum(r.host.t.far.d) + " (" + esc(r.host.t.far.s.n) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table>" +
     "<p>Women per meet run from " + fmt(Math.min(...C.R.map(r => r.w))) + " to " + fmt(Math.max(...C.R.map(r => r.w))) + " against an equal share of " + fmt(C.shareW) + ". Men run from " + fmt(Math.min(...C.R.map(r => r.m))) + " to " + fmt(Math.max(...C.R.map(r => r.m))) + " against " + fmt(C.shareM) + "." + "</p>" + (moved ? "<p><b>Schools placed apart from their state:</b> " + Object.keys(map.over).map(id => SCHOOL[id]).filter(Boolean).map(x => esc(x.n) + " (" + x.s + ") in " + esc(rname(map, map.over[x.id]))).join("; ") + ".</p>" : "") +
     "<p><b>Current zones for reference (women / men):</b> " + cur.R.map(r => esc(r.name) + " " + fmt(r.w) + " / " + fmt(r.m)).join(", ") + ".</p>" +
     '<p style="font-size:11px">A diver counts once per meet if they competed in at least one preliminary. Day length times prelims at 32 seconds a dive with the two paired events on separate boards, plus finals. NCAA spots are 5 women\'s and 4 men\'s per event plus one for each top-16 finisher at the previous championships. Miles are straight lines from each school\'s city to the host, weighted by divers.' + (Object.keys(off).length ? " " + Object.keys(off).length + " programs without diving in 2026-27 are left out." : "") + " Source: DiveMeets results, zone meets 2015 to 2026.</p>";
@@ -775,6 +788,9 @@ $("regions").addEventListener("click", e => { if (e.target.closest("input")) ret
 $("regions").addEventListener("change", e => { const i = e.target.dataset.rename; if (i === undefined) return; const v = e.target.value.trim(); if (v){ map.names[+i] = v; edited(); } });
 $("verdict").addEventListener("click", e => { const b = e.target.closest(".tile"); if (b){ selected = +b.dataset.i; active = selected; render(); } });
 window.addEventListener("pointerup", () => { dragging = false; dragPushed = false; });
+window.addEventListener("pointercancel", () => { dragging = false; dragPushed = false; });
+window.addEventListener("scroll", () => hideTip(), {passive:true});
+window.addEventListener("touchstart", () => hideTip(), {passive:true, capture:true});
 $("spotYear").addEventListener("change", e => { spotYear = +e.target.value; render(); });
 $("bw").addEventListener("change", e => { bw = e.target.checked; render(); });
 $("mapName").addEventListener("input", e => { map.label = e.target.value; });
@@ -808,27 +824,34 @@ function slug(t){ return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-
 function when(t){ const d = new Date(t); return isNaN(d) ? "" : d.toLocaleString("en-US", {month:"short", day:"numeric", year:"numeric", hour:"numeric", minute:"2-digit"}); }
 async function loadShared(){
   lastLoad = Date.now();
-  try { const r = await window.NEON.query("SELECT id, name, data, saved_by, updated_at FROM ncaa.region_maps ORDER BY updated_at DESC LIMIT 200", []);
-    const next = {}; r.rows.forEach(x => { let d = x.data; try { if (typeof d === "string") d = JSON.parse(d); } catch (e) { d = null; } if (validMap(d)) next[x.id] = {name:String(x.name), n:d.n, s:d.s, o:d.o || {}, by:x.saved_by || "", at:when(x.updated_at)}; });
-    shared = next; sharedErr = ""; }
-  catch (e) { sharedErr = "Saved maps can't be reached right now. Copy the map code to keep your work."; }
+  const read = async sql => { const r = await window.NEON.query(sql, []); const next = {}, gone = {};
+    r.rows.forEach(x => { let d = x.data; try { if (typeof d === "string") d = JSON.parse(d); } catch (e) { d = null; } if (!validMap(d)) return;
+      if (x.deleted_at) gone[x.id] = {name:String(x.name), at:when(x.deleted_at)};
+      else next[x.id] = {name:String(x.name), n:d.n, s:d.s, o:d.o || {}, by:x.saved_by || "", at:when(x.updated_at), prev:!!x.has_prev, pby:x.prev_saved_by || "", pat:x.prev_updated_at ? when(x.prev_updated_at) : ""}; });
+    shared = next; removed = gone; sharedErr = ""; };
+  try { await read("SELECT id, name, data, saved_by, updated_at, (prev IS NOT NULL) AS has_prev, prev_saved_by, prev_updated_at, deleted_at FROM ncaa.region_maps ORDER BY updated_at DESC LIMIT 200"); hasVersions = true; }
+  catch (e) { try { await read("SELECT id, name, data, saved_by, updated_at FROM ncaa.region_maps ORDER BY updated_at DESC LIMIT 200"); hasVersions = false; }
+    catch (e2) { sharedErr = "Saved maps can't be reached right now. Copy the map code to keep your work."; } }
   sharedReady = true; render();
 }
 async function saveAs(name){
   name = (name || "").trim(); if (!name){ msg("Type a name for this map first."); $("mapName").focus(); return; }
   if (Object.keys(PRESETS).some(k => PRESETS[k].label.toLowerCase() === name.toLowerCase())){ msg("That is the name of a built-in map. Give your map its own name, then press Save."); $("mapName").focus(); return; }
-  const id = slug(name); if (shared[id] && map.key !== "shared:" + id && !confirm('Replace the saved map named "' + shared[id].name + '"?')) return;
+  const id = slug(name); if (shared[id] && map.key !== "shared:" + id && !confirm('There is already a saved map named "' + shared[id].name + '"' + (shared[id].by ? ", last saved by " + shared[id].by : "") + ". Replace it? The version it replaces can be brought back from the saved maps list.")) return;
   const who = $("saveWho").value.trim(); try { localStorage.setItem("ncaaRegionWho", who); } catch (e) {}
-  try { await window.NEON.query("INSERT INTO ncaa.region_maps (id, name, data, saved_by) VALUES ($1,$2,$3::jsonb,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, data = EXCLUDED.data, saved_by = EXCLUDED.saved_by, updated_at = now()", [id, name, JSON.stringify({n:map.names, s:map.states, o:map.over}), who]);
+  try { await window.NEON.query(hasVersions ? "INSERT INTO ncaa.region_maps (id, name, data, saved_by) VALUES ($1,$2,$3::jsonb,$4) ON CONFLICT (id) DO UPDATE SET prev = ncaa.region_maps.data, prev_name = ncaa.region_maps.name, prev_saved_by = ncaa.region_maps.saved_by, prev_updated_at = ncaa.region_maps.updated_at, name = EXCLUDED.name, data = EXCLUDED.data, saved_by = EXCLUDED.saved_by, updated_at = now(), deleted_at = NULL" : "INSERT INTO ncaa.region_maps (id, name, data, saved_by) VALUES ($1,$2,$3::jsonb,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, data = EXCLUDED.data, saved_by = EXCLUDED.saved_by, updated_at = now()", [id, name, JSON.stringify({n:map.names, s:map.states, o:map.over}), who]);
     map.key = "shared:" + id; map.label = name; msg("Saved as " + name + "."); await loadShared(); }
   catch (e) { msg("Could not save. Copy the map code so nothing is lost, then try again."); }
 }
 $("saveShared").addEventListener("click", () => saveAs($("mapName").value));
 $("saveCopy").addEventListener("click", () => { const n = prompt("Name for the copy", (map.label || "Map") + " copy"); if (n !== null) saveAs(n); });
-$("sharedList").addEventListener("click", async e => { const o = e.target.closest("[data-open]"), d = e.target.closest("[data-del]");
+$("sharedList").addEventListener("click", async e => { const o = e.target.closest("[data-open]"), d = e.target.closest("[data-del]"), pv = e.target.closest("[data-prev]"), ud = e.target.closest("[data-undel]");
+  if (pv){ const k = pv.dataset.prev; if (!shared[k] || !confirm('Bring back the version of "' + shared[k].name + '" from ' + shared[k].pat + "? The current version is kept as the one before, so you can switch back.")) return;
+    try { await window.NEON.query("UPDATE ncaa.region_maps SET data = prev, prev = data, name = COALESCE(prev_name, name), prev_name = name, saved_by = prev_saved_by, prev_saved_by = saved_by, updated_at = now(), prev_updated_at = updated_at WHERE id = $1 AND prev IS NOT NULL", [k]); await loadShared(); if (map.key === "shared:" + k){ const m = mapByKey("shared:" + k); if (m){ push(); map = m; sugg = null; render(); } } msg("Earlier version brought back."); } catch (x) { msg("Could not bring it back."); } return; }
+  if (ud){ try { await window.NEON.query("UPDATE ncaa.region_maps SET deleted_at = NULL WHERE id = $1", [ud.dataset.undel]); msg("Map put back."); await loadShared(); } catch (x) { msg("Could not put it back."); } return; }
   if (o){ const m = mapByKey("shared:" + o.dataset.open); if (m){ push(); map = m; active = 0; selected = 0; hostSel = {}; extra = {}; sugg = null; render(); msg("Opened " + m.label + "."); } }
-  else if (d){ const k = d.dataset.del; if (!shared[k] || !confirm('Remove the saved map named "' + shared[k].name + '"? It is removed for everyone.')) return;
-    try { await window.NEON.query("DELETE FROM ncaa.region_maps WHERE id = $1", [k]); msg("Removed."); await loadShared(); } catch (x) { msg("Could not remove it."); } } });
+  else if (d){ const k = d.dataset.del; if (!shared[k] || !confirm('Remove the saved map named "' + shared[k].name + '"? It is removed for everyone' + (hasVersions ? ", and can be put back from the Removed maps list." : "."))) return;
+    try { await window.NEON.query(hasVersions ? "UPDATE ncaa.region_maps SET deleted_at = now() WHERE id = $1" : "DELETE FROM ncaa.region_maps WHERE id = $1", [k]); msg(hasVersions ? "Removed. You can put it back from the Removed maps list." : "Removed."); await loadShared(); } catch (x) { msg("Could not remove it."); } } });
 $("copy").addEventListener("click", () => { const c = encode(); $("code").value = c;
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(c).then(() => msg("Map code copied."), () => msg("Code is in the box below. Select it and copy.")); else msg("Code is in the box below. Select it and copy."); });
 $("load").addEventListener("click", () => { try { const o = JSON.parse(decodeURIComponent(escape(atob($("code").value.trim())))); if (!validMap(o)) throw 0;
