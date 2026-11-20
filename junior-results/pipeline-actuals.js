@@ -702,6 +702,21 @@
       ['athletes', 'Athletes'], ['nationals', 'Competed at Nationals'], ['finals', 'In a Nationals final'],
       ['rate', 'Share reaching a final'], ['choice', view.mapBase === 'home' ? 'Share who competed elsewhere' : 'Share who came from elsewhere']
     ];
+    var isReg = view.mapView === 'region', stopWord = isReg ? 'Regional' : 'Zone', areaWord = isReg ? 'region' : 'zone';
+    var UNIT = { athletes: 'athletes', nationals: 'at Nationals', finals: 'in a final', rate: 'reached a final',
+      choice: view.mapBase === 'home' ? 'competed elsewhere' : 'from elsewhere' };
+    var MEANS = {
+      athletes: 'Athletes who competed at a ' + stopWord + '.',
+      nationals: stopWord + ' athletes who went on to compete at Junior Nationals.',
+      finals: stopWord + ' athletes who reached a Junior Nationals final.',
+      rate: 'Share of ' + stopWord + ' athletes who reached a Junior Nationals final.',
+      choice: view.mapBase === 'home'
+        ? 'Share of each ' + areaWord + '\'s club athletes who competed in another ' + areaWord + '.'
+        : 'Share of the athletes competing in each ' + areaWord + ' whose club is based in another ' + areaWord + '.'
+    };
+    var COUNTED = view.mapBase === 'home' ? 'Counted in the ' + areaWord + ' their club is based in.' : 'Counted in the ' + areaWord + ' where they competed.';
+    var SHOWN = (view.group === 'All' ? 'All groups' : view.group) + ', ' + (view.gender === 'All' ? 'boys and girls' : view.gender.toLowerCase()) +
+      ', ' + (view.disc === 'All' ? 'all boards' : BOARD[view.disc].toLowerCase()) + '.';
     function fmtM(v, key) { return v == null ? 'none' : (key === 'rate' || key === 'choice') ? v.toFixed(1) + '%' : num(v); }
     function mapBlock() {
       var word = view.mapView === 'region' ? 'Region' : 'Zone';
@@ -714,10 +729,9 @@
           '<div class="pa-chips" role="group" aria-label="Measure">' + MEASURES.map(function (m) {
             return '<button type="button" class="pa-chip' + (view.mapMeasure === m[0] ? ' is-on' : '') + '" data-pa-mapmeasure="' + m[0] + '">' + esc(m[1]) + '</button>'; }).join('') + '</div>' +
         '</div>';
-      var title = h('Map: ' + esc(MEASURES.filter(function (m) { return m[0] === view.mapMeasure; })[0][1]) + ' by ' + word.toLowerCase() +
-        ', ' + (view.mapBase === 'home' ? 'counted at the club\'s home' : 'counted where athletes competed'));
-      if (geoError) return title + ctl + note('The map could not be loaded: ' + esc(geoError));
-      if (!geo) return title + ctl + note('Loading the map.');
+      var title = h('Map') + '<p class="pa-means"><strong>' + esc(MEANS[view.mapMeasure]) + '</strong> ' + esc(COUNTED) + ' ' + esc(SHOWN) + '</p>';
+      if (geoError) return h('Map') + ctl + note('The map could not be loaded: ' + esc(geoError));
+      if (!geo) return h('Map') + ctl + note('Loading the map.');
       var g = buildGeo(view.mapView), fig = c.mapFig[view.mapView], data = fig[view.mapBase], key = view.mapMeasure;
       var names = Object.keys(g.paths).sort(function (a, b) { return view.mapView === 'region' ? a - b : a.localeCompare(b); });
       var vals = names.map(function (n) { return data[n] ? data[n][key] : null; }).filter(function (v) { return v != null; });
@@ -732,15 +746,36 @@
       var labels = names.map(function (n) {
         var v = data[n] ? data[n][key] : null, st = step(v), p = g.label[n], dark = st >= 3;
         return '<g class="pa-map-label" transform="translate(' + p[0].toFixed(1) + ',' + p[1].toFixed(1) + ')" fill="' + (dark ? '#fff' : '#171f69') + '">' +
-          '<text class="pa-map-name" text-anchor="middle" y="-3">' + (view.mapView === 'region' ? 'R' : 'Zone ') + esc(n) + '</text>' +
-          '<text class="pa-map-val" text-anchor="middle" y="11">' + fmtM(v, key) + '</text></g>';
+          '<text class="pa-map-name" text-anchor="middle" y="-11">' + word.toUpperCase() + ' ' + esc(n) + '</text>' +
+          '<text class="pa-map-val" text-anchor="middle" y="7">' + fmtM(v, key) + '</text>' +
+          '<text class="pa-map-unit" text-anchor="middle" y="18">' + esc(UNIT[key]) + '</text></g>';
       }).join('');
       var svg = '<div class="pa-map"><svg viewBox="' + esc(geo.viewBox) + '" role="img" aria-label="' + esc(word + ' map') + '">' +
         '<g class="pa-map-areas">' + shapes + '</g>' +
         '<path class="pa-map-states" d="' + geo.stateMesh + '"/>' +
         '<path class="pa-map-border" d="' + g.border + '"/>' + labels + '</svg></div>';
-      var legend = '<div class="pa-legend"><span>' + fmtM(vals.length ? lo : null, key) + '</span>' +
-        RAMP.map(function (col) { return '<i style="background:' + col + '"></i>'; }).join('') + '<span>' + fmtM(vals.length ? hi : null, key) + '</span></div>';
+      var legend = '<div class="pa-legend"><span>Lowest ' + fmtM(vals.length ? lo : null, key) + '</span>' +
+        RAMP.map(function (col) { return '<i style="background:' + col + '"></i>'; }).join('') + '<span>Highest ' + fmtM(vals.length ? hi : null, key) + '</span></div>';
+      /* The same measure for each age group and gender, one column each, shaded within its own column */
+      var bk = c.breakout || [], bkTable = '';
+      if (bk.length) {
+        var colStats = bk.map(function (col) {
+          var d2 = col.fig[view.mapView][view.mapBase];
+          var vv = names.map(function (n) { return d2[n] ? d2[n][key] : null; }).filter(function (v) { return v != null; });
+          return { d: d2, lo: vv.length ? Math.min.apply(null, vv) : 0, hi: vv.length ? Math.max.apply(null, vv) : 0 };
+        });
+        var bkBody = names.map(function (n) {
+          return '<tr><td>' + word + ' ' + esc(n) + '</td>' + colStats.map(function (cs) {
+            var v = cs.d[n] ? cs.d[n][key] : null;
+            if (v == null) return '<td class="pa-na">&ndash;</td>';
+            var st = cs.hi === cs.lo ? 2 : Math.min(RAMP.length - 1, Math.floor((v - cs.lo) / (cs.hi - cs.lo) * RAMP.length));
+            return '<td class="pa-heat" style="background:' + RAMP[st] + ';color:' + (st >= 3 ? '#fff' : '#171f69') + '">' + fmtM(v, key) + '</td>';
+          }).join('') + (function () { var o = data[n]; return o && o[key] != null ? '<td><strong>' + fmtM(o[key], key) + '</strong></td>' : '<td class="pa-na">&ndash;</td>'; })() + '</tr>';
+        }).join('');
+        bkTable = h('The same figure by age group and gender') +
+          table([word].concat(bk.map(function (col) { return esc(col.label); })).concat(['Shown on the map']), bkBody) +
+          note('Each column is shaded from its own lowest to its own highest.');
+      }
       var body = names.map(function (n) {
         var o = data[n]; if (!o) return '';
         return '<tr' + (view.mapSel === n ? ' class="pa-total"' : '') + '><td>' + word + ' ' + esc(n) + '</td>' + cell(o.athletes) + cell(o.nationals) + cell(o.finals) + cell(o.top3) +
@@ -748,7 +783,8 @@
           cell(o.moved) + (o.choice == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + o.choice.toFixed(1) + '%</td>') + '</tr>';
       }).join('');
       var who = view.mapView === 'region' ? 'athletes who competed at a Regional' : 'athletes who competed at a Zone';
-      return title + ctl + svg + legend +
+      return title + ctl + svg + legend + bkTable +
+        h('Every measure by ' + areaWord) +
         table([word, 'Athletes', 'Competed at Nationals', 'In a Nationals final', 'Top 3', 'Share reaching a final',
           view.mapBase === 'home' ? 'Competed elsewhere' : 'Came from elsewhere', 'Share'], body) +
         note('Counts ' + who + '. ' + (view.mapBase === 'home'
@@ -826,12 +862,28 @@
       '</div></section>';
   }
 
+  /* Map figures for each age group and gender, for the board in view. */
+  var bkMemo = {};
+  function breakout(d, year) {
+    var k = year + '|' + view.disc;
+    if (bkMemo[k]) return bkMemo[k];
+    var out = [];
+    ['Group A', 'Group B', 'Group C', 'Group D'].forEach(function (g) {
+      ['Boys', 'Girls'].forEach(function (x) {
+        out.push({ label: g.replace('Group ', '') + ' ' + x, fig: compute(d, { group: g, gender: x, disc: view.disc }).mapFig });
+      });
+    });
+    bkMemo[k] = out;
+    return out;
+  }
+
   /* ── Mount ─────────────────────────────────────────────────────────────── */
   var mounted = { slot: null, year: null };
   function paint() {
     var slot = mounted.slot, d = cache[mounted.year];
     if (!slot || !d) return;
-    slot.innerHTML = render(compute(d, view), mounted.year);
+    var c = compute(d, view); c.breakout = breakout(d, mounted.year);
+    slot.innerHTML = render(c, mounted.year);
   }
   function onClick(e) {
     var t = e.target.closest ? e.target.closest('[data-pa-group],[data-pa-gender],[data-pa-disc],[data-pa-open],[data-pa-mapview],[data-pa-mapbase],[data-pa-mapmeasure],[data-pa-area]') : null;
@@ -869,7 +921,7 @@
     var d = await load(year), keep = view;
     await loadGeo(year);
     view = { group: 'All', gender: 'All', disc: 'All', open: {}, mapView: keep.mapView, mapBase: keep.mapBase, mapMeasure: keep.mapMeasure, mapSel: null }; STATIC = true;
-    try { return render(compute(d, view), year); }
+    try { var c = compute(d, view); c.breakout = breakout(d, year); return render(c, year); }
     finally { STATIC = false; view = keep; }
   }
 
