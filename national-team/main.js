@@ -61,6 +61,38 @@ const SYNC_PCT = 0.97;   // "within 3% of the winning team's finals score"
 const state = { rows: [], model: null, filter: '', view: 'roster' };
 
 /* ── Data ─────────────────────────────────────────────────── */
+// The 2025 Winter Nationals results on file name one diver per synchro team. Partners below are read from the
+// official DiveMeets results for meet 12068 (checked 19 Nov 2026). Key: gender|discipline|diver on file.
+const PARTNERS_12068 = {
+  'Female|Synchronized Platform|Ella Roselli': ['67814', 'Bayleigh Cranford'],
+  'Female|Synchronized Platform|Katerina Hoffman': ['48801', 'Bailee Sturgill'],
+  'Female|Synchronized Platform|Sophia McAfee': [null, 'Katrina Young'],
+  'Female|Synchronized Platform|Hadley Mulbury': ['66737', 'Teagan Mulbury'],
+  'Male|Synchronized 3m|Jack Ryan': ['44506', 'Quentin Henninger'],
+  'Male|Synchronized 3m|Luke Sitz': ['45619', 'Joshua Sollenberger'],
+  'Male|Synchronized 3m|Collier Dyer': ['23733', 'Maxwell Flory'],
+  'Male|Synchronized 3m|Ethan Swart': ['46196', 'Talan Blackmon'],
+  'Male|Synchronized 3m|Jack Bessire': ['76230', 'Jack Sparks'],
+  'Male|Synchronized 3m|Hayden Schroeder': ['61205', 'Noah Turner'],
+  'Male|Synchronized 3m|Misha Andriyuk': ['46629', 'Zachary Welsh'],
+  'Female|Synchronized 3m|Sophie Verzyl': ['65393', 'Anna Kwong'],
+  'Female|Synchronized 3m|Lily Witte': ['48801', 'Bailee Sturgill'],
+  'Female|Synchronized 3m|Emilie Moore': ['48449', 'Molly Gray'],
+  'Female|Synchronized 3m|Kyndal Knight': ['60907', 'Kristy Pfaff'],
+  'Female|Synchronized 3m|Ava Jolley': ['52300', 'Kayleigh Clark'],
+  'Male|Synchronized Platform|Joshua Hedberg': ['38973', 'Carson Tyler'],
+  'Male|Synchronized Platform|Tyler Wills': ['40283', 'Jordan Rzepka'],
+  'Male|Synchronized Platform|Dash Glasberg': ['40067', 'Maxwell Weinrich'],
+  'Male|Synchronized Platform|Noah Horwitz': ['69435', 'Leyton Dean'],
+  'Male|Synchronized Platform|Grant Cates': ['73652', 'Evan Stingley'],
+};
+function fillPartner(r) {
+  if (r.meet !== '12068' || !r.sync || r.name2) return r;
+  const p = PARTNERS_12068[`${r.gender}|${r.discipline}|${r.name}`];
+  if (p) { r.id2 = p[0] || 'name:' + p[1].toLowerCase(); r.name2 = p[1]; r.partnerFromDiveMeets = true; }
+  return r;
+}
+
 async function loadRows() {
   const ids = SEQUENCE.filter(m => m.id).map(m => `'${m.id}'`).join(',');
   const r = await nq(
@@ -78,7 +110,7 @@ async function loadRows() {
     posted: num(x.posted_score), list: num(x.phase_score_from_dives), nd: num(x.phase_dive_count),
     sync: x.is_synchronized === true || x.is_synchronized === 't' || /^Synchro/.test(x.discipline),
     id2: x.diver2_id ? String(x.diver2_id) : null, name2: x.diver2_name || null, team2: x.team2_name || '',
-  }));
+  })).map(fillPartner);
 }
 
 /* ── Rules ────────────────────────────────────────────────── */
@@ -193,6 +225,13 @@ function buildModel(rows) {
     members.push(a);
   }
   members.sort((x, y) => x.name.localeCompare(y.name));
+  const memberIds = new Set(members.map(a => a.id));
+  notes.reading = [];
+  for (const s of synchro) for (const t of s.teams) if (t.status === 'reading') {
+    const people = [[t.id, t.name], [t.id2, t.name2]].filter(x => x[1]);
+    notes.reading.push({ meet: s.meet.name, event: s.ev.label, team: people.map(x => x[1]).join(' / '), pctTotal: t.pctTotal, pctList: t.pctList,
+      onlyThisWay: people.filter(x => !memberIds.has(x[0])).map(x => x[1]) });
+  }
   const nextMeet = SEQUENCE.find(s => !s.held);
   const expiring = nextMeet ? members.filter(a => a.expiry.name === nextMeet.name) : [];
   const oneAway = watch.filter(w => w.open.length).sort((x, y) => x.a.name.localeCompare(y.a.name));
@@ -265,7 +304,7 @@ function renderSynchro(M) {
   const pct = (v) => isNum(v) ? (v * 100).toFixed(1) + '%' : '—';
   $('ntSyncBody').innerHTML = M.synchro.map(s => `
     <div class="nt-sync"><h3 class="nt-h3">${esc(s.ev.label)} <span class="nt-soft">· ${esc(s.meet.name)}</span></h3>
-    <div class="table-wrap"><table class="data-table nt-table"><thead><tr><th class="num">Place</th><th>Team</th><th class="num">Meet total</th><th class="num">% of winner</th><th class="num">Final list</th><th class="num">% of winner</th><th>Result</th></tr></thead>
+    <div class="table-wrap"><table class="data-table nt-table"><thead><tr><th class="num">Place</th><th>Team</th><th class="num">Official final score</th><th class="num">% of winner</th><th class="num">Final-round list</th><th class="num">% of winner</th><th>Result</th></tr></thead>
     <tbody>${s.teams.map(t => `<tr>
       <td class="num">${t.place}</td><td>${esc(t.name)}${t.name2 ? ' / ' + esc(t.name2) : ' <span class="hp-badge flag">partner not on file</span>'}</td>
       <td class="num">${isNum(t.posted) ? t.posted.toFixed(2) : '—'}</td><td class="num">${t.place === 1 ? '' : pct(t.pctTotal)}</td>
@@ -276,8 +315,9 @@ function renderSynchro(M) {
 function renderNotes(M) {
   const items = [];
   if (M.notes.partnersMissing.length) items.push(`<li><b>${M.notes.partnersMissing.length} synchro partner${M.notes.partnersMissing.length === 1 ? ' is' : 's are'} missing from this list.</b> The 2025 Winter Nationals results on file name only one diver per team, so the partner of ${M.notes.partnersMissing.map(p => `${esc(p.named)} (${esc(p.event)})`).join(', ')} qualified but cannot be shown unless they also qualified another way.</li>`);
-  if (M.unplaced.length) items.push(`<li><b>${M.unplaced.length} finalist${M.unplaced.length === 1 ? ' was' : 's were'} not given a place</b> in the official results and ${M.unplaced.length === 1 ? 'is' : 'are'} not counted: ${M.unplaced.map(u => `${esc(u.name)} (${esc(u.event)}, ${esc(u.meetName)})`).join('; ')}. This is how the meet handled athletes not eligible to place, which is the citizenship bypass in the criteria. Confirm that reading.</li>`);
-  if (M.synchro.some(s => s.teams.some(t => t.status === 'reading'))) items.push(`<li><b>The 3% synchro rule gives two answers for at least one team</b> depending on whether "finals score" means the final-round list or the meet total. Those teams are marked and not counted until the reading is confirmed.</li>`);
+  if (M.unplaced.length) items.push(`<li><b>${M.unplaced.length} finalist${M.unplaced.length === 1 ? ' was' : 's were'} not given a place</b> in the official results and ${M.unplaced.length === 1 ? 'is' : 'are'} not counted: ${M.unplaced.map(u => `${esc(u.name)} (${esc(u.event)}, ${esc(u.meetName)})`).join('; ')}. DiveMeets lists each as an exhibition entry (EXHB), so the official places already skip them and the next diver moves up. DiveMeets does not give the reason.</li>`);
+  const pc = (v) => isNum(v) ? (v * 100).toFixed(1) + '%' : 'n/a';
+  if (M.notes.reading.length) items.push(`<li><b>The 3% synchro rule gives two answers for ${M.notes.reading.length === 1 ? 'one team' : M.notes.reading.length + ' teams'}</b>, depending on whether "finals score" means the score in the official final results (preliminary plus final) or the final-round list alone. ${M.notes.reading.map(r => `${esc(r.team)} (${esc(r.event)}, ${esc(r.meet)}): ${pc(r.pctTotal)} of the winner on the official final score, ${pc(r.pctList)} on the final-round list. ${r.onlyThisWay.length ? esc(r.onlyThisWay.join(' and ')) + (r.onlyThisWay.length === 1 ? ' is' : ' are') + ' on the team only if the official final score is the reading.' : 'Both divers are on the team another way.'}`).join(' ')} Not counted until the reading is confirmed.</li>`);
   items.push(`<li><b>Not checked here:</b> membership, SafeSport, Code of Conduct and National Team Agreement standing; eligibility to represent the United States; and the three HPS transition groups, whose lists are not on file. 1-meter is not an Olympic event and earns no status.</li>`);
   items.push(`<li><b>Pre-qualified entry:</b> everyone on this list is pre-qualified to enter Nationals and Winter Nationals in the events of their choice while their term runs. Use the download to check DiveMeets' pre-qualified list.</li>`);
   $('ntNotesBody').innerHTML = `<ul class="nt-notes">${items.join('')}</ul>`;
