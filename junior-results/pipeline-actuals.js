@@ -29,7 +29,7 @@
 
   var RULE_YEARS = { 2026: true };
   var cache = {};                       // year -> { rows, status, thresholds }
-  var view = { group: 'All', gender: 'All', disc: 'All', open: {} };
+  var view = { group: 'All', gender: 'All', disc: 'All', open: {}, mapView: 'region', mapBase: 'competed', mapMeasure: 'athletes', mapSel: null };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -95,6 +95,73 @@
     res[4].rows.forEach(function (x) { clubHome[x.team] = x.home; });
     cache[year] = { rows: rows, status: res[1].rows, thresholds: th, dd: dd, clubHome: clubHome };
     return cache[year];
+  }
+
+  /* ── Map geometry ───────────────────────────────────────────────────────────
+     The same county shapes and the same official 2026 alignment Boundary
+     Studio draws: boundary-data.json for the shapes, the saved scenario
+     'seed-2026-official' for which county is in which region and which
+     regions make up each zone. Loaded once, after the tables. */
+  var geo = null, geoLoading = null, geoError = null;
+  var MAP_SCENARIO = { 2026: 'seed-2026-official' };
+  function loadGeo(year) {
+    if (geo || geoError) return Promise.resolve(geo);
+    if (geoLoading) return geoLoading;
+    geoLoading = Promise.all([
+      fetch('../membership-analytics/boundary-data.json').then(function (r) {
+        if (!r.ok) throw new Error('map shapes ' + r.status); return r.json(); }),
+      window.NEON.query('SELECT data FROM membership.boundary_scenarios WHERE id = $1', [MAP_SCENARIO[year]])
+    ]).then(function (res) {
+      var b = res[0], row = res[1].rows[0];
+      if (!row) throw new Error('official alignment not found');
+      var d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+      geo = { viewBox: b.viewBox, counties: b.counties, stateMesh: b.stateMesh,
+        assign: d.assign || {}, zoneOf: (d.tiers && d.tiers.zoneOf) || [], built: {} };
+      return geo;
+    }).catch(function (e) { geoError = e.message || String(e); return null; });
+    return geoLoading;
+  }
+  function areaOfCounty(fips, mapView) {
+    var ri = geo.assign[fips];
+    if (ri == null || ri < 0) return null;
+    if (mapView === 'region') return String(ri + 1);
+    var zi = geo.zoneOf[ri];
+    return zi == null ? null : 'ABCDEFGHIJ'.charAt(zi);
+  }
+  /* One path per area, the lines between areas, and a label point for each. */
+  function buildGeo(mapView) {
+    if (geo.built[mapView]) return geo.built[mapView];
+    var paths = {}, box = {}, seg = {}, border = [];
+    geo.counties.forEach(function (c) {
+      var a = areaOfCounty(c.f, mapView);
+      if (a == null) return;
+      (paths[a] = paths[a] || []).push(c.d);
+      var bx = box[a] || (box[a] = { sx: 0, sy: 0, n: 0 });
+      c.d.split('M').forEach(function (sub) {
+        if (!sub) return;
+        var pts = sub.replace(/Z/g, '').split('L');
+        var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (var i = 0; i < pts.length; i++) {
+          var xy = pts[i].split(','), x = +xy[0], y = +xy[1];
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          var q = pts[(i + 1) % pts.length];
+          if (q === pts[i]) continue;
+          var k = pts[i] < q ? pts[i] + '|' + q : q + '|' + pts[i];
+          var prev = seg[k];
+          if (prev === undefined) seg[k] = a;
+          else if (prev !== a && prev !== true) { border.push('M' + pts[i] + 'L' + q); seg[k] = true; }
+        }
+        var w = (x1 - x0) * (y1 - y0) + 0.01;
+        bx.sx += w * (x0 + x1) / 2; bx.sy += w * (y0 + y1) / 2; bx.n += w;
+      });
+    });
+    var out = { paths: {}, border: border.join(''), label: {} };
+    Object.keys(paths).forEach(function (a) {
+      out.paths[a] = paths[a].join('');
+      out.label[a] = [box[a].sx / box[a].n, box[a].sy / box[a].n];
+    });
+    geo.built[mapView] = out;
+    return out;
   }
 
   /* ── Status lists resolved to diver ids ────────────────────────────────────
@@ -466,12 +533,39 @@
         effect.list.push({ name: r.name, ev: r.ev, region: r.region, place: r.place, advanced: adv }); });
     });
 
+    /* 10. Map figures: each area by where athletes competed and by club home */
+    function mapStats(map, homeKeyOf) {
+      var comp = {}, home = {}, unknown = 0;
+      function slot(o, k) { return o[k] || (o[k] = { set: {}, moved: 0, known: 0 }); }
+      Object.keys(map).forEach(function (id) {
+        var a = map[id], hk = homeKeyOf(a);
+        var c1 = slot(comp, a.at); c1.set[id] = true;
+        if (hk == null) { unknown++; return; }
+        c1.known++; if (hk !== a.at) c1.moved++;
+        var h1 = slot(home, hk); h1.set[id] = true; h1.known++; if (hk !== a.at) h1.moved++;
+      });
+      function finish(o) {
+        var out = {};
+        Object.keys(o).forEach(function (k) {
+          var set = o[k].set, n = size(set), f = both(set, A.Final);
+          out[k] = { athletes: n, nationals: both(set, A.Nationals), finals: f, top3: both(set, A.Top3),
+            rate: n ? 100 * f / n : null, moved: o[k].moved, choice: o[k].known ? 100 * o[k].moved / o[k].known : null };
+        });
+        return out;
+      }
+      return { competed: finish(comp), home: finish(home), unknown: unknown };
+    }
+    var mapFig = {
+      region: mapStats(regAth, function (a) { return a.home; }),
+      zone: mapStats(zonAth, function (a) { return a.home; })
+    };
+
     var zoneStrength = strength('Zones', 'zone');
     var regionStrength = strength('Regionals', 'region');
 
     return { stops: stops, field: field, routes: routes, entriesTotal: entries.length,
       cuts: cuts, ddRows: ddRows, zoneStrength: zoneStrength, regionStrength: regionStrength,
-      zonePair: zonePair, choiceReg: choiceReg, choiceZone: choiceZone, flows: flows, outcome: outcome, effect: effect,
+      mapFig: mapFig, zonePair: zonePair, choiceReg: choiceReg, choiceZone: choiceZone, flows: flows, outcome: outcome, effect: effect,
       zoneBands: zoneBands, ewcBands: ewcBands, foreign: foreign,
       finals: { entries: size(natF), numbered: Object.keys(natF).filter(function (k) { return !natF[k].nd; }).length },
       unexplained: Object.keys(unexplained).map(function (k) { return unexplained[k]; }) };
@@ -604,6 +698,63 @@
         c.effect.list.slice().sort(function (a, b) { return Number(a.region) - Number(b.region) || a.ev.localeCompare(b.ev) || a.place - b.place; })
           .map(function (t) { return '<tr><td>' + esc(t.name) + '</td><td>' + evName(t.ev) + '</td><td>' + esc(t.region) + '</td><td>' + t.place + '</td><td>' + (t.advanced ? 'Yes' : 'No') + '</td></tr>'; }).join(''));
     }
+    var MEASURES = [
+      ['athletes', 'Athletes'], ['nationals', 'Competed at Nationals'], ['finals', 'In a Nationals final'],
+      ['rate', 'Share reaching a final'], ['choice', view.mapBase === 'home' ? 'Share who competed elsewhere' : 'Share who came from elsewhere']
+    ];
+    function fmtM(v, key) { return v == null ? 'none' : (key === 'rate' || key === 'choice') ? v.toFixed(1) + '%' : num(v); }
+    function mapBlock() {
+      var word = view.mapView === 'region' ? 'Region' : 'Zone';
+      var ctl = STATIC ? '' :
+        '<div class="pa-filters">' +
+          '<div class="pa-chips" role="group" aria-label="Map areas">' + [['region', 'Regions'], ['zone', 'Zones']].map(function (o) {
+            return '<button type="button" class="pa-chip' + (view.mapView === o[0] ? ' is-on' : '') + '" data-pa-mapview="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+          '<div class="pa-chips" role="group" aria-label="Count athletes by">' + [['competed', 'Where they competed'], ['home', 'Club home']].map(function (o) {
+            return '<button type="button" class="pa-chip' + (view.mapBase === o[0] ? ' is-on' : '') + '" data-pa-mapbase="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+          '<div class="pa-chips" role="group" aria-label="Measure">' + MEASURES.map(function (m) {
+            return '<button type="button" class="pa-chip' + (view.mapMeasure === m[0] ? ' is-on' : '') + '" data-pa-mapmeasure="' + m[0] + '">' + esc(m[1]) + '</button>'; }).join('') + '</div>' +
+        '</div>';
+      var title = h('Map: ' + esc(MEASURES.filter(function (m) { return m[0] === view.mapMeasure; })[0][1]) + ' by ' + word.toLowerCase() +
+        ', ' + (view.mapBase === 'home' ? 'counted at the club\'s home' : 'counted where athletes competed'));
+      if (geoError) return title + ctl + note('The map could not be loaded: ' + esc(geoError));
+      if (!geo) return title + ctl + note('Loading the map.');
+      var g = buildGeo(view.mapView), fig = c.mapFig[view.mapView], data = fig[view.mapBase], key = view.mapMeasure;
+      var names = Object.keys(g.paths).sort(function (a, b) { return view.mapView === 'region' ? a - b : a.localeCompare(b); });
+      var vals = names.map(function (n) { return data[n] ? data[n][key] : null; }).filter(function (v) { return v != null; });
+      var lo = vals.length ? Math.min.apply(null, vals) : 0, hi = vals.length ? Math.max.apply(null, vals) : 0;
+      var RAMP = ['#e3eef9', '#b9d8f0', '#8fc3ea', '#3ea9d1', '#0e6f9c', '#171f69'];
+      function step(v) { return v == null ? -1 : (hi === lo ? 3 : Math.min(RAMP.length - 1, Math.floor((v - lo) / (hi - lo) * RAMP.length))); }
+      var shapes = names.map(function (n) {
+        var v = data[n] ? data[n][key] : null, st = step(v);
+        return '<path d="' + g.paths[n] + '" fill="' + (st < 0 ? '#f1f2f5' : RAMP[st]) + '" data-pa-area="' + esc(n) + '"' +
+          (view.mapSel === n ? ' class="is-sel"' : (view.mapSel ? ' class="is-dim"' : '')) + '><title>' + word + ' ' + esc(n) + ': ' + fmtM(v, key) + '</title></path>';
+      }).join('');
+      var labels = names.map(function (n) {
+        var v = data[n] ? data[n][key] : null, st = step(v), p = g.label[n], dark = st >= 3;
+        return '<g class="pa-map-label" transform="translate(' + p[0].toFixed(1) + ',' + p[1].toFixed(1) + ')" fill="' + (dark ? '#fff' : '#171f69') + '">' +
+          '<text class="pa-map-name" text-anchor="middle" y="-3">' + (view.mapView === 'region' ? 'R' : 'Zone ') + esc(n) + '</text>' +
+          '<text class="pa-map-val" text-anchor="middle" y="11">' + fmtM(v, key) + '</text></g>';
+      }).join('');
+      var svg = '<div class="pa-map"><svg viewBox="' + esc(geo.viewBox) + '" role="img" aria-label="' + esc(word + ' map') + '">' +
+        '<g class="pa-map-areas">' + shapes + '</g>' +
+        '<path class="pa-map-states" d="' + geo.stateMesh + '"/>' +
+        '<path class="pa-map-border" d="' + g.border + '"/>' + labels + '</svg></div>';
+      var legend = '<div class="pa-legend"><span>' + fmtM(vals.length ? lo : null, key) + '</span>' +
+        RAMP.map(function (col) { return '<i style="background:' + col + '"></i>'; }).join('') + '<span>' + fmtM(vals.length ? hi : null, key) + '</span></div>';
+      var body = names.map(function (n) {
+        var o = data[n]; if (!o) return '';
+        return '<tr' + (view.mapSel === n ? ' class="pa-total"' : '') + '><td>' + word + ' ' + esc(n) + '</td>' + cell(o.athletes) + cell(o.nationals) + cell(o.finals) + cell(o.top3) +
+          (o.rate == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + o.rate.toFixed(1) + '%</td>') +
+          cell(o.moved) + (o.choice == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + o.choice.toFixed(1) + '%</td>') + '</tr>';
+      }).join('');
+      var who = view.mapView === 'region' ? 'athletes who competed at a Regional' : 'athletes who competed at a Zone';
+      return title + ctl + svg + legend +
+        table([word, 'Athletes', 'Competed at Nationals', 'In a Nationals final', 'Top 3', 'Share reaching a final',
+          view.mapBase === 'home' ? 'Competed elsewhere' : 'Came from elsewhere', 'Share'], body) +
+        note('Counts ' + who + '. ' + (view.mapBase === 'home'
+          ? num(fig.unknown) + ' athletes at clubs with no home on record are left off this view.'
+          : 'The last two columns leave out ' + num(fig.unknown) + ' athletes at clubs with no home on record.'));
+    }
     var STRENGTH_HEAD = ['Athletes', 'Competed at Nationals', 'In a Nationals final', 'Top 3', 'Finalists per 100 athletes'];
 
     var showing = (view.group === 'All' && view.gender === 'All' && view.disc === 'All') ? '' :
@@ -616,6 +767,7 @@
     function h(t) { return STATIC ? '<h3 class="rb-h3">' + t + '</h3>' : '<h4 class="pa-h4">' + t + '</h4>'; }
     function note(t) { return '<p class="' + (STATIC ? 'rb-soft' : 'pa-note') + '">' + t + '</p>'; }
     var tables =
+        mapBlock() +
         h('Unique athletes reaching each later stop') +
         table(['Started', 'Athletes', 'Zones', 'E/W/C', 'Junior Nationals', 'A Nationals final', 'Top 3'], stopBody) +
         h('How each Junior Nationals event entry got there') +
@@ -682,11 +834,15 @@
     slot.innerHTML = render(compute(d, view), mounted.year);
   }
   function onClick(e) {
-    var t = e.target.closest ? e.target.closest('[data-pa-group],[data-pa-gender],[data-pa-disc],[data-pa-open]') : null;
+    var t = e.target.closest ? e.target.closest('[data-pa-group],[data-pa-gender],[data-pa-disc],[data-pa-open],[data-pa-mapview],[data-pa-mapbase],[data-pa-mapmeasure],[data-pa-area]') : null;
     if (!t) return;
     if (t.hasAttribute('data-pa-group')) view.group = t.getAttribute('data-pa-group');
     else if (t.hasAttribute('data-pa-gender')) view.gender = t.getAttribute('data-pa-gender');
     else if (t.hasAttribute('data-pa-disc')) view.disc = t.getAttribute('data-pa-disc');
+    else if (t.hasAttribute('data-pa-mapview')) { view.mapView = t.getAttribute('data-pa-mapview'); view.mapSel = null; }
+    else if (t.hasAttribute('data-pa-mapbase')) view.mapBase = t.getAttribute('data-pa-mapbase');
+    else if (t.hasAttribute('data-pa-mapmeasure')) view.mapMeasure = t.getAttribute('data-pa-mapmeasure');
+    else if (t.hasAttribute('data-pa-area')) { var ar = t.getAttribute('data-pa-area'); view.mapSel = view.mapSel === ar ? null : ar; }
     else { var id = t.getAttribute('data-pa-open'); view.open[id] = !view.open[id]; }
     paint();
   }
@@ -700,7 +856,7 @@
       slot.innerHTML = '<section class="pm-section"><div class="pm-loading"><div class="pm-loading-spinner"></div>' +
         '<div class="pm-loading-text">Counting ' + year + ' results&hellip;</div></div></section>';
     }
-    try { await load(year); paint(); }
+    try { await load(year); paint(); loadGeo(year).then(function () { if (mounted.slot === slot) paint(); }); }
     catch (err) {
       slot.innerHTML = '<div class="pm-error"><strong>Could not load the stop-to-stop tables.</strong> ' + esc(err.message || String(err)) + '</div>';
     }
@@ -711,7 +867,8 @@
     year = Number(year);
     if (!RULE_YEARS[year]) return '';
     var d = await load(year), keep = view;
-    view = { group: 'All', gender: 'All', disc: 'All', open: {} }; STATIC = true;
+    await loadGeo(year);
+    view = { group: 'All', gender: 'All', disc: 'All', open: {}, mapView: keep.mapView, mapBase: keep.mapBase, mapMeasure: keep.mapMeasure, mapSel: null }; STATIC = true;
     try { return render(compute(d, view), year); }
     finally { STATIC = false; view = keep; }
   }
