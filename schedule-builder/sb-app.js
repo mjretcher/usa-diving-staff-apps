@@ -67,14 +67,14 @@ const EV_TIMING=new Proxy({},{get(_,name){
   return{dives:rec?rec.full:6,spd:rulebookSpd(level,app)};
 }});
 const LIB_FOLDERS={
-  'Zone Championships':{icon:'🌊',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
-  'East / West / Central':{icon:'🗺️',ids:['saved-2026-east-championship','saved-2026-west-championship','saved-2026-central-championship']},
-  'Junior Nationals':{icon:'🥇',ids:['saved-2026-jr-nationals','saved-2026-combined','seed-2027-jn-cce-draft','seed-2027-jn-sean']},
-  'Senior / USA Nationals':{icon:'🇺🇸',ids:['saved-2026-nationals','saved-2026-combined']},
+  'Zone Championships':{icon:'',ids:['seed-zone-b','seed-zone-e','seed-zone-f']},
+  'East / West / Central':{icon:'',ids:['saved-2026-east-championship','saved-2026-west-championship','saved-2026-central-championship']},
+  'Junior Nationals':{icon:'',ids:['saved-2026-jr-nationals','saved-2026-combined','seed-2027-jn-cce-draft','seed-2027-jn-sean']},
+  'Senior / USA Nationals':{icon:'',ids:['saved-2026-nationals','saved-2026-combined']},
 };
 // Folders available for user saves (includes catch-all "Other")
 const SAVE_FOLDERS=['Zone Championships','East / West / Central','Junior Nationals','Senior / USA Nationals','Other'];
-const SAVE_FOLDER_ICONS={'Zone Championships':'🌊','East / West / Central':'🗺️','Junior Nationals':'🥇','Senior / USA Nationals':'🇺🇸','Other':'📌'};
+const SAVE_FOLDER_ICONS={};
 // Infer a folder from a saved schedule when none is stored (legacy saves)
 function inferFolder(item){
   if(item.folder)return item.folder;
@@ -2935,8 +2935,8 @@ function renderEntrySyncModal(){
     const open=!!(UI.entrySyncExpand&&UI.entrySyncExpand[di]);
     const whoRows=open&&who.length?`<tr><td colspan="${hasBaseline?6:5}" style="padding:2px 8px 10px"><div class="es-who">${who.map(en=>{
       const known=projKeys.size?projKeys.has(en.diverKey):true;
-      return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' ✳'}</span>`;
-    }).join('')}${projKeys.size?`<div class="es-legend">✳ = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
+      return`<span class="es-name ${known?'':'new'}" title="${esc(en.team||'')}${known?'':' — registered but not in the projected field'}">${esc(en.name)}${known?'':' *'}</span>`;
+    }).join('')}${projKeys.size?`<div class="es-legend">* = registered on DiveMeets but not in the projected field — worth a look</div>`:''}</div></td></tr>`:'';
     const advTag=d.advanceIn>0?` <span class="es-adv" title="${d.advanceIn} advancing in from an earlier event — kept on top of the registered count">+${d.advanceIn} adv</span>`:'';
     const picked=esPicked(d.evId);
     const willChange=(diff!=null&&diff!==0);
@@ -3400,7 +3400,7 @@ function renderPoolCloseCard(pc){
 // ── TIMELINE BODY ─────────────────────────────────────────────────────
 function renderTimeline(timed){
   const day=S.meet.days.find(d=>d.id===UI.dayId);
-  if(!day)return`<div class="tl-body"><div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No days yet</div><div class="empty-sub">Click + in the day bar to add a competition day</div></div></div>`;
+  if(!day)return`<div class="tl-body"><div class="empty"><div class="empty-title">No days yet</div><div class="empty-sub">Click + in the day bar to add a competition day</div></div></div>`;
   let sessions=timedForDay(UI.dayId);
   const warns=buildWarnings(UI.dayId);
   if(!sessions.length)return`<div class="tl-body"><div class="empty"><div class="empty-icon"><img src="../shared/images/diver-mark.svg?v=202607082245" alt="" style="width:36px;height:36px;object-fit:contain;opacity:.5"/></div><div class="empty-title">No sessions yet</div><div class="empty-sub">Place events on days from one grid, or click "Add block" to build this day by hand</div><div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn btn-p btn-sm" onclick="openPlanner()">Plan events across days</button><button class="btn btn-sm" onclick="showAddMenu()">Add block</button></div></div></div>`;
@@ -3974,7 +3974,7 @@ function renderCard(sess,timed,warns){
           <div class="pcard-meta">${sess.fitToClose?`Until facility close · ${fdur(dur)}`:flights.length?`${flights.length} flight${flights.length>1?'s':''} · ${fdur(dur)}`:/meeting/i.test(sess.title||'')?fdur(dur):`Open pool · ${fdur(dur)}`}</div>
         </div>
         <div class="pcard-time">
-          <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${sess.fitToClose?' 🔒':''}</div>
+          <div class="pcard-time-range" style="color:${typeColor}">${f12(t.warmupStartMinutes)} – ${f12(t.sessionEndMinutes)}${sess.fitToClose?' (locked)':''}</div>
           <div class="pcard-time-dur">${sess.fitToClose?'fits to close':fdur(dur)}</div>
         </div>
         <div class="sc-actions">
@@ -4067,7 +4067,7 @@ function renderCardEvents(sess,t){
       </div>
       ${evRound(ev)&&ev.round!=='Custom Block'&&!ev._combined?`<span class="ev-badge ${roundCls}">${esc(evRound(ev))}</span>`:''}
       ${typeof liveEvCtl==='function'?liveEvCtl(sess,ev):''}
-      ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'⚠ Split?':'Split'}</button>`:''}
+      ${(!isPlatform(ev.apparatus)&&ev.round!=='Final'&&!ev._combined)?`<button class="ev-splitbtn ${split?'on':needsSplit?'rec':''}" onclick="event.stopPropagation();toggleSplit('${sess.id}','${ev.id}')" title="${split?'Remove split':needsSplit?'Split recommended':'Toggle split'}">${split?'÷ Split':needsSplit?'Split?':'Split'}</button>`:''}
       ${split&&(isPlatform(ev.apparatus)||ev.round==='Final'||ev._combined)?`<span class="ev-badge split">Split</span>`:''}
       <span class="ev-time">${f12r(ev.eventStartMinutes,ev.eventEndMinutes)}</span>
       <button class="ev-rm" aria-label="Remove this event" onclick="event.stopPropagation();removeEv('${sess.id}','${ev.id}')" title="Remove">×</button>
@@ -4127,7 +4127,7 @@ function renderParallelBox(sess){
     detail=`<div class="along-note">
       Runs <strong>${f12(me.timing.warmupStartMinutes)} – ${f12(me.timing.sessionEndMinutes)}</strong>${partner?` alongside <strong>${esc(sessLabelOf(partner,timed))}</strong> (${f12(partner.timing.warmupStartMinutes)} – ${f12(partner.timing.sessionEndMinutes)})`:''}.
       It does not push anything later, so the buffer setting has no effect while this is on.
-      ${spills?`<div class="along-warn">⚠ This block ends after ${esc(sessLabelOf(partner,timed))} does — it will overlap whatever comes next.</div>`:''}
+      ${spills?`<div class="along-warn">This block ends after ${esc(sessLabelOf(partner,timed))} does — it will overlap whatever comes next.</div>`:''}
     </div>`;
   }
   return`<div class="along-box ${on?'on':''}">
@@ -4156,8 +4156,8 @@ function renderEditPrac(sess,t,flights,buf){
     ${noteField(sess)}
     <div class="fg2" style="grid-template-columns:1.1fr .8fr 1.1fr">
       <div class="fg"><label class="fl">Start time</label><input id="ep-start-${sess.id}" class="fi" type="time" value="${f24(sess.warmupStartMinutes)}" onchange="updSess('${sess.id}','warmupStartMinutes',pt(this.value))"/></div>
-      <div class="fg"><label class="fl">Duration ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input id="ep-dur-${sess.id}" class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
-      <div class="fg"><label class="fl">End time ${sess.fitToClose?'🔒':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Fixed at facility close">${f12(dayCloseFor(sess.dayId))}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${f12(t.sessionEndMinutes)}</div>`:`<input id="ep-end-${sess.id}" class="fi" type="time" value="${f24(t.sessionEndMinutes)}" onchange="setPracEndTime('${sess.id}',pt(this.value))" title="Type when it should end — duration adjusts automatically"/>`}</div>
+      <div class="fg"><label class="fl">Duration ${sess.fitToClose?'(locked)':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Auto-fit to facility close">${fdur(t.fitDur||0)}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${fdur(flights.reduce((s,f)=>s+Number(f.durationMinutes||0),0))}</div>`:`<input id="ep-dur-${sess.id}" class="fi" type="number" min="15" step="15" value="${sess.events[0]?.customDurationMinutes||90}" onchange="updEv('${sess.id}','${sess.events[0]?.id||''}','customDurationMinutes',this.value)"/>`}</div>
+      <div class="fg"><label class="fl">End time ${sess.fitToClose?'(locked)':''}</label>${sess.fitToClose?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Fixed at facility close">${f12(dayCloseFor(sess.dayId))}</div>`:flights.length?`<div class="fi" style="background:var(--surf3);color:var(--tx2);display:flex;align-items:center;font-weight:600" title="Set by the flights below">${f12(t.sessionEndMinutes)}</div>`:`<input id="ep-end-${sess.id}" class="fi" type="time" value="${f24(t.sessionEndMinutes)}" onchange="setPracEndTime('${sess.id}',pt(this.value))" title="Type when it should end — duration adjusts automatically"/>`}</div>
     </div>
     <div class="fitclose-box">
       <div class="fitclose-toggle-row">
@@ -4217,7 +4217,7 @@ function renderCombinePanel(sess,t){
       <span class="combine-sub">Merge small events, or run boards at the same time</span>
     </div>
     <div class="combine-actions">
-      <button class="combine-btn" onclick="openCombinePicker('${sess.id}','combine')"><span class="cb-ic">⛓</span> Combine events…</button>
+      <button class="combine-btn" onclick="openCombinePicker('${sess.id}','combine')">Combine events…</button>
       <button class="combine-btn" onclick="openCombinePicker('${sess.id}','simul')"><span class="cb-ic">⇉</span> Run simultaneously…</button>
     </div>
     ${hasCombos?`<div class="combine-list">${Object.entries(clusters).map(([leadId,members])=>{
@@ -4328,7 +4328,7 @@ function renderEditComp(sess,t,timed,intro,buf,cat,sessUsed){
         </div>
         <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap">
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Divers</div><input class="ep-inp" type="number" min="0" value="${ev.numberOfDivers||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDivers',this.value)"/></div>
-          <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Dives ${ev.rulebookLocked?'🔒':''}</div>${ev.rulebookLocked?`<div class="ep-inp" style="background:var(--surf3);color:var(--tx2);cursor:default;display:flex;align-items:center;justify-content:center;font-weight:700" title="Locked to USA Diving rulebook (${ev.round})">${ev.numberOfDives||ev.defaultDives||0}</div>`:`<input class="ep-inp" type="number" min="1" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</div>
+          <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Dives ${ev.rulebookLocked?'(locked)':''}</div>${ev.rulebookLocked?`<div class="ep-inp" style="background:var(--surf3);color:var(--tx2);cursor:default;display:flex;align-items:center;justify-content:center;font-weight:700" title="Locked to USA Diving rulebook (${ev.round})">${ev.numberOfDives||ev.defaultDives||0}</div>`:`<input class="ep-inp" type="number" min="1" value="${ev.numberOfDives||ev.defaultDives||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfDives',this.value)"/>`}</div>
           <div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Sec/dive</div><input class="ep-inp" type="number" min="5" step="1" value="${ev.secondsPerDive||ev.defaultSpd||35}" onchange="updEv('${sess.id}','${ev.id}','secondsPerDive',this.value)"/></div>
           ${canSplit?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split boards</div><button class="split-toggle ${split?'on':'off'}" onclick="toggleSplit('${sess.id}','${ev.id}')"><span class="split-toggle-dot"></span>${split?'ON':'OFF'}</button></div>`:'<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px">Split</div><div style="font-size:11px;color:var(--tx3);padding:6px 0">Platform — N/A</div></div>'}
           ${split?`<div><div style="font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:3px" title="Times the judging panel hands off between Panel A and Panel B during the split">Panel changes</div><input class="ep-inp" type="number" min="0" step="1" value="${Number(ev.numberOfPanelChanges)||0}" onchange="updEv('${sess.id}','${ev.id}','numberOfPanelChanges',this.value)"/></div>
@@ -4420,7 +4420,7 @@ function renderEntriesPanel(timed){
       <div class="enp-legitem"><span class="enp-legpill final">Final</span> confirmed — overrides projected</div>
       <button class="enp-matchall" onclick="copyAllProjectedToFinal()">Copy all Proj → Final</button>
     </div>
-    <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th title="Divers moving up from an earlier event at this meet — never overwritten by a DiveMeets pull">Advancing in</th><th>Final</th><th>Total</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">No competition sessions</div></div>`}</div>
+    <div class="enp-body">${rowsHtml?`<table class="feg-table"><thead><tr><th style="text-align:left">Event</th><th>Projected</th><th title="Divers moving up from an earlier event at this meet — never overwritten by a DiveMeets pull">Advancing in</th><th>Final</th><th>Total</th><th>Using</th><th>Dives</th><th>Split</th><th>Runs</th></tr></thead><tbody>${rowsHtml}</tbody></table>`:`<div class="empty"><div class="empty-title">No competition sessions</div></div>`}</div>
     <div class="enp-foot">
       <span class="enp-footinfo">Total = entries + advancing in · A DiveMeets pull sets the entries; advancing in is yours and survives every pull</span>
       <button class="enp-finalsbtn" onclick="applyFinalsAll()">Set finals from prelims</button>
@@ -6159,7 +6159,7 @@ function renderMeetModal(){
             </div>
             <div style="font-size:11px;color:var(--tx3)">Applies to these event levels — click to toggle:</div>
             <div class="chiprow">${scheduleLevels.length?scheduleLevels.map(lvl=>`<button class="chip ${active.has(lvl)?'on':''}" onclick="toggleDivemeetsSourceLevel(${i},'${esc(lvl).replace(/'/g,"\\'")}')" type="button">${esc(lvl)}</button>`).join(''):'<span style="font-size:12px;color:var(--tx3)">No event levels in this schedule yet — add sessions first.</span>'}</div>
-            ${unknown.length?`<div style="font-size:11px;color:var(--red)">⚠ Doesn't match any current level, so it matches nothing: ${unknown.map(esc).join(', ')} — click a chip above to fix.</div>`:''}
+            ${unknown.length?`<div style="font-size:11px;color:var(--red)">Doesn't match any current level, so it matches nothing: ${unknown.map(esc).join(', ')} — click a chip above to fix.</div>`:''}
           </div>`;
         }).join('')||'<div style="font-size:12px;color:var(--tx3)">No additional sources — this schedule uses only the DiveMeets meet ID above.</div>'}
         </div>
@@ -6215,7 +6215,7 @@ function renderLibraryModal(){
   const topTabs=`
     <div class="lib-toptabs">
       <button class="lib-toptab ${tab==='templates'?'active':''}" onclick="UI.libTab='templates';render()">Templates</button>
-      <button class="lib-toptab ${tab==='saves'?'active':''}" onclick="UI.libTab='saves';render()">📁 My Saved Meets${UI.neonLib.length?` <span class="lib-count">${UI.neonLib.length+local.length}</span>`:local.length?` <span class="lib-count">${local.length}</span>`:''}</button>
+      <button class="lib-toptab ${tab==='saves'?'active':''}" onclick="UI.libTab='saves';render()">My Saved Meets${UI.neonLib.length?` <span class="lib-count">${UI.neonLib.length+local.length}</span>`:local.length?` <span class="lib-count">${local.length}</span>`:''}</button>
     </div>`;
   let body='';
   if(tab==='templates'){
@@ -6266,7 +6266,7 @@ function renderLibrarySaves(local){
   const folderCounts={all:all.length};
   SAVE_FOLDERS.forEach(f=>folderCounts[f]=all.filter(x=>x.folder===f).length);
   const folderPills=`<button class="lib-ftab ${UI.savesFolder==='all'?'active':''}" onclick="UI.savesFolder='all';render()">All${folderCounts.all?` <span class="lib-pill-ct">${folderCounts.all}</span>`:''}</button>`+
-    SAVE_FOLDERS.map(f=>`<button class="lib-ftab ${UI.savesFolder===f?'active':''}" onclick="UI.savesFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}${folderCounts[f]?` <span class="lib-pill-ct">${folderCounts[f]}</span>`:''}</button>`).join('');
+    SAVE_FOLDERS.map(f=>`<button class="lib-ftab ${UI.savesFolder===f?'active':''}" onclick="UI.savesFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||''} ${esc(f)}${folderCounts[f]?` <span class="lib-pill-ct">${folderCounts[f]}</span>`:''}</button>`).join('');
   const filtered=UI.savesFolder==='all'?all:all.filter(x=>x.folder===UI.savesFolder);
   // Sort: pending-sync first (most urgent), then cloud, then orphan-local; all by date desc within group
   filtered.sort((a,b)=>{
@@ -6277,7 +6277,7 @@ function renderLibrarySaves(local){
   });
   // Count pending for header note
   const pendingCount=pendingLocal.length;
-  const pendingBanner=pendingCount>0?`<div class="lib-pending-banner" onclick="retryCloudSync()" style="cursor:pointer">⚠️ ${pendingCount} save${pendingCount>1?'s':''} not yet on cloud — tap to retry now (otherwise auto-pushes within ~60s when online)</div>`:'';
+  const pendingBanner=pendingCount>0?`<div class="lib-pending-banner" onclick="retryCloudSync()" style="cursor:pointer">${pendingCount} save${pendingCount>1?'s':''} not yet on cloud — tap to retry now (otherwise auto-pushes within ~60s when online)</div>`:'';
   let listHtml='';
   if(UI.neonLibLoading){
     listHtml+=`<div style="font-size:12px;color:var(--tx3);padding:10px 0">Loading cloud schedules…</div>`;
@@ -6285,13 +6285,13 @@ function renderLibrarySaves(local){
   if(filtered.length){
     listHtml+=`<div class="lib-list">${filtered.map(item=>{
       const isPending=!!item.pendingSync;
-      const icon=isPending?'⏳':item.source==='cloud'?'☁':'💾';
-      const fIcon=SAVE_FOLDER_ICONS[item.folder]||'📌';
+      const icon='';
+      const fIcon=SAVE_FOLDER_ICONS[item.folder]||'';
       const dt=item.savedAt?fmtRelativeTime(item.savedAt):'';
       const statusLine=isPending?`<span class="lib-pending-badge">Not on cloud yet</span>`:item.source==='cloud'?'Cloud':'Local only';
       const loadCall=isPending||item.source==='local'?`loadLocalSaveById('${esc(item.id)}')`:`loadFromNeon('${esc(item.id)}')`;
       const delCall=isPending||item.source==='local'?`deleteLocalSaveById('${esc(item.id)}')`:`deleteCloudSave('${esc(item.id)}','${esc(item.name).replace(/'/g,"\\'")}')`;
-      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-icon">${icon}</div><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" aria-label="Push to cloud now" onclick="event.stopPropagation();busy(this,pushOnePendingNow,'${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" aria-label="Delete this schedule" onclick="${delCall}" title="Delete">✕</button></div></div>`;
+      return`<div class="lib-card ${isPending?'pending':''}"><div class="lib-card-info"><div class="lib-card-name">${esc(item.name)}</div><div class="lib-card-meta">${fIcon} ${esc(item.folder)} · ${statusLine} · ${dt}${item.publishStatus?' · '+item.publishStatus:''}</div></div><div class="lib-card-acts">${isPending?`<button class="lib-act" aria-label="Push to cloud now" onclick="event.stopPropagation();busy(this,pushOnePendingNow,'${esc(item.id)}')" title="Push to cloud now">↑</button>`:''}<button class="lib-act p" onclick="${loadCall}">Load</button><button class="lib-act danger" aria-label="Delete this schedule" onclick="${delCall}" title="Delete">✕</button></div></div>`;
     }).join('')}</div>`;
   }else if(!UI.neonLibLoading){
     listHtml+=`<div class="empty"><div class="empty-title">No saved meets ${UI.savesFolder==='all'?'yet':'in this folder'}</div><div class="empty-sub">${UI.savesFolder==='all'?'Click "Save current to cloud" below after editing a schedule.':'Try "All" to see saves in other folders.'}</div></div>`;
@@ -6366,7 +6366,7 @@ function deleteCloudSave(id,name){
 function renderSaveDialogModal(){
   const folder=UI.saveDialogFolder||'Other';
   const name=UI.saveDialogName||'';
-  const folderOpts=SAVE_FOLDERS.map(f=>`<button class="folder-pick ${folder===f?'active':''}" onclick="UI.saveDialogFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||'📌'} ${esc(f)}</button>`).join('');
+  const folderOpts=SAVE_FOLDERS.map(f=>`<button class="folder-pick ${folder===f?'active':''}" onclick="UI.saveDialogFolder='${esc(f)}';render()">${SAVE_FOLDER_ICONS[f]||''} ${esc(f)}</button>`).join('');
   return`<div class="modal modal-sm" onclick="event.stopPropagation()">
     <div class="modal-hd"><span class="modal-title">Save schedule to cloud</span><button class="modal-close" aria-label="Close" onclick="closeModal()">×</button></div>
     <div class="modal-body">

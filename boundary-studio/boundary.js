@@ -3227,7 +3227,7 @@ async function newProposalPicker(){
     title: 'New proposal',
     intro: 'How should the new proposal start? You can change the map later.',
     items: [
-      {id: 'auto', big: true, label: '⚡ Auto-draw a map', sub: 'Pick the stops and how many areas each has; the country is divided for you.'},
+      {id: 'auto', big: true, label: 'Auto-draw a map', sub: 'Pick the stops and how many areas each has; the country is divided for you.'},
       {id: 'official', big: true, label: 'Official 2026 alignment', sub: 'The published 12 regions / 6 zones / E, W, C map, with the 2026 rules.'},
       {id: 'copy', big: true, label: 'Copy an existing proposal', sub: 'Keep its pathway and fees; choose the map for the copy.'},
       {id: 'blank', big: true, label: 'Blank map', sub: 'Paint counties yourself.'},
@@ -3244,7 +3244,7 @@ async function changeMapPicker(){
   await listMaps();
   const L = S.mapLib || [];
   const items = [
-    {id: 'auto', group: 'Make a new map', label: '⚡ Auto-draw a map', sub: 'Divide the country into the stops and areas you choose.'},
+    {id: 'auto', group: 'Make a new map', label: 'Auto-draw a map', sub: 'Divide the country into the stops and areas you choose.'},
     {id: 'blank', group: 'Make a new map', label: 'Blank map', sub: 'Clear every county and paint it yourself.'},
     ...L.filter(m => m.src === 'library').map(m => ({id: m.id, group: 'Saved maps', label: m.name, current: m.libId && m.libId === S.mapId, sub: `${m.n} areas · saved ${m.u}`, del: m.libId})),
     ...L.filter(m => m.src === 'scenario' && m.scId !== S.scenarioId).map(m => ({id: m.id, group: 'Map from another proposal', label: m.name, sub: `${m.n} areas${m.scenario !== m.name ? ' · in “' + m.scenario + '”' : ''}`})),
@@ -5437,7 +5437,7 @@ function renderFreezePanel(){
         </tr>`).join('')}</tbody></table>
         <p class="note" style="margin-top:6px">The frozen column is what the committee saw. Do not quietly
           republish the new figures under the old date &mdash; either explain the change or freeze again.</p>`
-        :'<div class="note" style="margin-top:6px">The headline figures still match; only the inputs moved.</div>'}
+        :'<div class="note" style="margin-top:6px">The totals still match; only the inputs changed.</div>'}
       </div>`
     : `<div class="note" style="margin-top:8px">Everything still computes exactly what it said when it was frozen.</div>`}
     <div class="bs-pwbar-r" style="margin-top:10px">
@@ -9572,9 +9572,9 @@ function atlasMapHtml(){
         <div class="atl-seg">
           ${S.tierView > 0
             ? `<button data-atltool="county" class="${S.tool!=='pan'?'on':''}" title="Click an area on the map to put it in the group picked on the left">Assign by clicking</button>`
-            : `<button data-atltool="county" class="${S.tool==='county'?'on':''}" title="Click or drag across counties to add them to the selected ${esc(tierLabel)}">🖌 Paint counties</button>
+            : `<button data-atltool="county" class="${S.tool==='county'?'on':''}" title="Click or drag across counties to add them to the selected ${esc(tierLabel)}">Paint counties</button>
           <button data-atltool="state" class="${S.tool==='state'?'on':''}" title="Click a state to add every county in it">Whole state</button>`}
-          <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to move the map. You can also hold Space and drag, or drag from empty space, in any tool.">✋ Move map</button>
+          <button data-atltool="pan" class="${S.tool==='pan'?'on':''}" title="Drag to move the map. You can also hold Space and drag, or drag from empty space, in any tool.">Move map</button>
         </div>
         <span class="atl-vr"></span>
         <button id="bsUndo" ${S.undo.length?'':'disabled'} title="Undo (Ctrl/⌘ Z)">↶ Undo</button>
@@ -11650,7 +11650,7 @@ function atlasReportHtml(res){
     ${drift ? `<div class="atl-rbox"><b style="color:#b3122b">This no longer computes what it said when it was frozen.</b>
       ${drift.inputs.length ? `<div>Inputs that changed: ${drift.inputs.map(x=>`<b>${esc(x.label)}</b> ${esc(String(x.then).slice(0,10))} → ${esc(String(x.now).slice(0,10))}`).join('; ')}.</div>` : ''}
       ${drift.figures.length ? `<table><thead><tr><th>Figure</th><th style="text-align:right">As presented</th><th style="text-align:right">Now</th><th style="text-align:right">Change</th></tr></thead><tbody>${drift.figures.map(r=>`<tr><td>${esc(r.label)}</td><td class="num">${fmt(Math.round(r.then))}</td><td class="num">${fmt(Math.round(r.now))}</td><td class="num ${r.now>r.then?'c-warn':'c-bad'}">${r.now>r.then?'+':''}${fmt(Math.round(r.now-r.then))}</td></tr>`).join('')}</tbody></table>
-      <div style="margin-top:6px">The frozen column is what the committee saw. Do not quietly republish the new figures under the old date — either explain the change or freeze again.</div>` : '<div>The headline figures still match; only the inputs moved.</div>'}</div>` : ''}
+      <div style="margin-top:6px">The frozen column is what the committee saw. Do not quietly republish the new figures under the old date — either explain the change or freeze again.</div>` : '<div>The totals still match; only the inputs changed.</div>'}</div>` : ''}
     <div class="atl-rbox" id="bsLedgerHistBox" hidden></div>`;
   // Exhibit: how an athlete reaches the final stop -- the shared visuals
   // (pq-visuals.js), replacing the route-flow diagram. Every scenario gets the

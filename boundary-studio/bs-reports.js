@@ -519,7 +519,7 @@ const BOUNDARY_SECTIONS = {
              ${esc(String(frozen.at||'').slice(0,10))}${frozen.note?` (${esc(frozen.note)})`:''} and no longer
              computes what it said then.</strong> ${drift.figures.length
              ? drift.figures.map(r=>`${esc(r.label)} was ${fmt(Math.round(r.then))}, now ${fmt(Math.round(r.now))}`).join('; ')+'.'
-             : 'The headline figures still match; the inputs behind them have moved.'}
+             : 'The totals still match; the inputs behind them have changed.'}
              Do not circulate these numbers under the earlier date without saying so.</p>`
         : `<p class="mr-p"><strong>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
              frozen.note?` — ${esc(frozen.note)}`:''}.</strong> Everything below still computes exactly what it
@@ -590,8 +590,7 @@ const BOUNDARY_SECTIONS = {
           <tbody>${levelRows}</tbody></table>`:''}
         ${schedLine}${probLine}
         <h3 class="mr-h3">What this was computed from</h3>
-        <p class="mr-p">Every figure above should be reproducible from this alone. If one is not, it does not
-          belong in a decision.</p>
+        <p class="mr-p">The inputs behind every figure above.</p>
         <table class="mr-table mr-table-sm"><tbody>
           <tr><td>Season</td><td>${esc(api.yearLabel())}</td></tr>
           ${frozen?`<tr><td>Frozen</td><td>${esc(String(frozen.at||'').slice(0,10))}${
@@ -601,8 +600,7 @@ const BOUNDARY_SECTIONS = {
           <tr><td>Take-up measured on</td><td>${esc(stamps.calibration_basis||'—')}</td></tr>
           <tr><td>First stop fed by</td><td>${esc(stamps.seed_pool||'—')}</td></tr>`:''}
         </tbody></table>
-        <p class="mr-note">Entries are not people: athletes commonly contest two or three events, so an entry count
-          tells you what a session costs and how long it runs, not how many bodies need a bed. Projected figures are
+        <p class="mr-note">An entry is one athlete in one event. Athletes commonly enter two or three events, so entry counts set session length and fee income, and unique athletes set housing and awards. Projected figures are
           qualified places carried up by the published rules and the take-up measured on the alignment that season
           was actually run under.</p>
       </section>`;
@@ -835,7 +833,7 @@ const BOUNDARY_SECTIONS = {
           run one age group earlier or later than another.</p>
 
         <h3 class="mr-h3">Proposed schedule, stop by stop</h3>
-        <p class="mr-p">Every day, every session, every event — for every stop this pathway creates.</p>
+        <p class="mr-p">Each stop, day by day and session by session.</p>
         ${sched.stops.map(x => schedStopCard(x, windowMin)).join('')}
       </section>`;
     }
@@ -974,13 +972,11 @@ const BOUNDARY_SECTIONS = {
         <table class="mr-table"><thead><tr><th scope="col">Stage</th><th scope="col">Round</th><th scope="col" class="mr-num">Stops</th>
           <th scope="col" class="mr-num">Event entries (projected)</th><th scope="col" class="mr-num">Per stop</th><th scope="col" class="mr-num">Unique athletes (projected)</th></tr></thead>
           <tbody>${rows}</tbody></table>
-        <p class="mr-note">Entries are athlete-and-event; divers are people. Athletes commonly contest two or
-          three events, so the two answer different questions — entries decide session length and fee income,
-          divers decide beds and awards. Anything marked <i>est.</i> means this pathway has moved the mix
+        <p class="mr-note">An entry is one athlete in one event, and athletes commonly enter two or three events. Entries set session length and fee income; unique athletes set housing and awards. Anything marked <i>est.</i> means this pathway has moved the mix
           of events away from what was measured, so that count is an estimate.</p>
 
         <h3 class="mr-h3">The same field, four ways</h3>
-        <p class="mr-p">These are four different kinds of number, not four estimates of the same one.
+        <p class="mr-p">The four columns measure different things.
           <b>Max available</b> is a structural ceiling — every band saturated as if the real field were
           infinite, useful for sizing a venue's worst case, not for predicting turnout. It only means
           something for a stage a <em>rule</em> caps; the entry level itself has no such rule, so it shows
@@ -1036,8 +1032,7 @@ const BOUNDARY_SECTIONS = {
           return `<table class="mr-table"><thead><tr><th scope="col">Age group / event</th>${head}</tr></thead>
             <tbody>${body}<tr class="mr-tot"><td><b>All events</b></td>${tot}</tr></tbody></table>`;
         })()}
-        <p class="mr-note">A stage total says how big a meet is. This says how many 14-15 girls will be on the
-          3-meter board in the semi-final — the number a timetable and an awards order are actually built from.</p>
+        <p class="mr-note">Entries by age group, gender and event at each stage, which is what a timetable and an awards order are built from.</p>
 
         <p class="mr-note"><b>Money is not on this page.</b> This report answers who advances. What that
           costs, who pays it, and why a prelim and a final at the same stop are one fee and not two are all
@@ -1050,7 +1045,7 @@ const BOUNDARY_SECTIONS = {
 
   boundary_overview: {
     label: NAMES.boundary_overview, group: 'Boundary Studio',
-    desc: 'What the scenario is, how the tiers are structured, and the headline size of every area.',
+    desc: 'What the scenario is, how the tiers are structured, and the size of every area.',
     build: async function(o){
       if (!boundaryReady()) return notReady(NAMES.boundary_overview);
       const api = B(), {P, un} = groupProfiles();
@@ -1362,7 +1357,7 @@ const BOUNDARY_SECTIONS = {
         <h2 class="mr-h2">${NAMES.boundary_compare}</h2>
         <p class="mr-note"><b>Geography only.</b> This page answers which counties and members sit in a
           different area than they do now. It says nothing about whether the <em>rules</em> changed &mdash;
-          two scenarios can move nobody at all and still send wildly different numbers of athletes forward.
+          two scenarios can leave every county where it is and still advance different numbers of athletes.
           For rule differences use <b>${NAMES.boundary_pathways_compared}</b>, and for the effect on the
           championship field use <b>${NAMES.boundary_circuit_delta}</b>.</p>
         ${scenarioCompareLine(workingName, 'Working scenario', cmp.name || cmp.id || 'Comparison scenario', 'Compared against')}
@@ -1386,7 +1381,7 @@ const BOUNDARY_SECTIONS = {
           <th scope="col">To</th><th scope="col" class="mr-num">Members</th></tr></thead>
           <tbody>${moveRows || '<tr><td colspan="5">No member-carrying county changes area.</td></tr>'}</tbody></table>
         <p class="mr-note">Counties with no recorded members can still change area; they are counted in
-        the headline figure above but omitted from the detail table to keep it readable.</p>
+        the total above but left out of the detail table.</p>
       </section>`;
     }
   },
@@ -1873,9 +1868,7 @@ const EQUITY_SECTIONS = {
       return `<section class="mr-section">
         <h2 class="mr-h2">${NAMES.boundary_equity}</h2>
         ${scenarioLine()}
-        <p class="mr-p">Headcount does not tell you whether a structure is fair. What an athlete
-        experiences is the score they must post to get out of ${esc((api.levels()[api.tierView()] && api.levels()[api.tierView()].name) || 'this stage')}, and the top
-        ${rank} advance. That bar is directly measurable.</p>
+        <p class="mr-p">This page measures the score an athlete must post to advance from ${esc((api.levels()[api.tierView()] && api.levels()[api.tierView()].name) || 'this stage')}. The top ${rank} advance.</p>
         ${rankNote}
         <div class="mr-note"><b>Scope of this section — read before using any number below.</b>
           <ul style="margin:6px 0 0 16px;padding:0">
@@ -2546,7 +2539,7 @@ const FOCUSED_SECTIONS = {
           ? `<tr><td>Frozen record</td><td class="mr-warn"><b>Frozen ${esc(String(frozen.at||'').slice(0,10))}
                and no longer computing what it said then.</b> ${drift.figures && drift.figures.length
                ? esc(drift.figures.map(r=>`${r.label} was ${Math.round(r.then)}, now ${Math.round(r.now)}`).join('; '))
-               : 'Headline figures match; the inputs behind them have moved.'}</td></tr>`
+               : 'The totals match; the inputs behind them have changed.'}</td></tr>`
           : `<tr><td>Frozen record</td><td>Frozen ${esc(String(frozen.at||'').slice(0,10))}${
                frozen.note?` — ${esc(frozen.note)}`:''}, and still computing exactly what it said then.</td></tr>`);
 

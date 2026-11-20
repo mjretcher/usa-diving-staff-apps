@@ -49,8 +49,8 @@ const STAGES = [
   { id:'Zones',     label:'Zones',      icon:'Z', desc:'Zone Championships → E/W/C + Nationals' },
   { id:'EWC',       label:'E/W/C',      icon:'E', desc:'East/West/Central → Nationals' },
   { id:'Nationals', label:'Nationals',  icon:'N', desc:'Junior National Championship' },
-  { id:'Reports',   label:'Junior Circuit Analytics',    icon:'📊', desc:'Analytics — participation, displacements, special status' },
-  { id:'Pipeline',  label:'Pipeline & Modeling', icon:'📈', desc:'Multi-year funnels, year-over-year, financial overlay' },
+  { id:'Reports',   label:'Junior Circuit Analytics',    icon:'A', desc:'Analytics — participation, displacements, special status' },
+  { id:'Pipeline',  label:'Pipeline & Modeling', icon:'P', desc:'Multi-year funnels, year-over-year, financial overlay' },
 ];
 
 const OVERRIDE_KEY = 'usad.juniorResults.overrides.v2';

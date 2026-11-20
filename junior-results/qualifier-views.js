@@ -544,9 +544,9 @@
         <div class="trail-card trail-dest ${r.advancesToNationals?'dest-nat':r.advancesToEWC?'dest-ewc':'dest-none'}">
           <div class="trail-stage-label">Destination</div>
           <div class="trail-dest-label">${
-            r.advancesToNationals ? '🏆 Junior National Championship'
-            : r.advancesToEWC ? `⚡ ${r.ewc||''} Championships (E/W/C)`
-            : isNonDisp ? '👻 Competes non-displacing'
+            r.advancesToNationals ? 'Junior National Championship'
+            : r.advancesToEWC ? `${r.ewc||''} Championships (E/W/C)`
+            : isNonDisp ? 'Competes non-displacing'
             : '✗ Does not advance'
           }</div>
           ${r.advancesToEWC && !r.advancesToNationals ? `<div style="font-size:11px;margin-top:6px;opacity:0.8">E/W/C prelims → finals → Junior Nationals qualifiers</div>` : ''}

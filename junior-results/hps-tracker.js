@@ -403,7 +403,7 @@
           '<div class="hps-kpi"><b>' + totalVol + '</b><span>met the voluntary benchmark</span></div>' +
           '<div class="hps-kpi hps-kpi-warn"><b>' + totalAge + '</b><span>need AQUA age to decide</span></div>' +
         '</div>' +
-        '<p class="hps-caveat"><b>⚠ Not included.</b> World Junior Championship team members (criterion E), ' +
+        '<p class="hps-caveat"><b>Not included.</b> World Junior Championship team members (criterion E), ' +
         '2024 World Juniors finalists under the injury provision (criterion G), and Group A AQUA age. ' +
         'Nationals and Winter Nationals target hits are also not shown here — this covers the Junior ' +
         'National Championships only.' +

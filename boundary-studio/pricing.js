@@ -1910,7 +1910,7 @@ function buildReport(){
      &middot; season ${yearNum()}${PS.year==='y26'?' (year to date)':''} &middot; prepared ${when}</p></div>
 <div class="wrap">
 
-<h2>Headline</h2>
+<h2>Summary</h2>
 <div class="kpis">
   <div class="k"><b>Net retained</b><span>${usd(sim.net)}</span></div>
   <div class="k"><b>Membership dues</b><span>${usd(sim.memberRev)}</span></div>

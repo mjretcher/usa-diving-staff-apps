@@ -339,7 +339,7 @@
       const dw = Math.abs(c.ddPart) / tot * w, ew = Math.abs(c.exPart) / tot * w;
       return `<tr>
         <td class="ae-dx-ev"><b>${esc(G_LABEL[c.g] || c.g)} ${esc(EV_LABEL[c.d] || c.d)}</b>
-          <span>${c.dc}-dive · vs ${c.pod.n} podium finishes${window.AE.ok(c.pod.n, 'cell') ? '' : ' ⚠'}</span></td>
+          <span>${c.dc}-dive · vs ${c.pod.n} podium finishes${window.AE.ok(c.pod.n, 'cell') ? '' : ' (small sample)'}</span></td>
         <td class="num">${c.me.dd.toFixed(1)}<span class="ae-dx-vs">vs ${c.pod.dd.toFixed(1)}</span></td>
         <td class="num">${c.me.exec.toFixed(2)}<span class="ae-dx-vs">vs ${c.pod.exec.toFixed(2)}</span></td>
         <td class="num ${c.total > 0 ? 'ae-dn' : 'ae-up'}">${c.total > 0 ? '−' : '+'}${Math.abs(c.total).toFixed(1)}</td>

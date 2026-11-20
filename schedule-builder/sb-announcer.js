@@ -1431,7 +1431,7 @@ function renderFlowTab(sess, kind) {
       ${bc ? `<br/><br/><strong>These make the show longer.</strong> The broadcast clock is the schedule for this block, so anything
         with a length on it pushes the run-of-show out by exactly that much and the rest of the day reflows around it.
         Put a sponsor read inside an existing break instead if you do not want the show to grow — breaks are named and timed
-        on the broadcast panel.` : `Items that take time are counted in the timing check, so the script still tells you honestly whether it all fits.`}
+        on the broadcast panel.` : `Items that take time are counted in the timing check, so the timing check still shows whether it all fits.`}
     </div>
     ${bc && added ? `<div style="font-size:12px;font-weight:700;color:var(--navy);background:var(--surf2);border:1px solid var(--bd);border-left:3px solid var(--pool);border-radius:0 var(--r) var(--r) 0;padding:9px 12px;margin-bottom:16px">
       These add <span style="font-family:'JetBrains Mono',monospace">${bmmss(added)}</span> to this block's show.

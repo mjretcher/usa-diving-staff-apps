@@ -2927,7 +2927,7 @@
       const careerSpansDiveChange = years.some(y => y < 2024) && years.some(y => y >= 2024);
       const diveChangeNote = careerSpansDiveChange
         ? '<div class="pm-note" style="background:#fef3c7;border-left:3px solid #d97706;padding:8px 10px;border-radius:4px;margin:10px 0;font-size:12px">' +
-          '<strong>⚠ Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (\u22121 dive, all events), Group C girls\u2019 springboard (\u22121 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023\u21922024 may partly reflect that rule change rather than pure performance change \u2014 check which group applied each year in the detail table below.' +
+          '<strong>Dive-count rule change, Jan 1 2024:</strong> This career spans that boundary. Required dive counts changed for Group A (\u22121 dive, all events), Group C girls\u2019 springboard (\u22121 optional dive), and Group D (consolidated, +1 dive for former 9-and-under). A score jump or drop across 2023\u21922024 may partly reflect that rule change rather than pure performance change \u2014 check which group applied each year in the detail table below.' +
           '</div>'
         : '';
 

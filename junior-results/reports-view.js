@@ -1711,7 +1711,7 @@
       return `<div class="bd-card bd-card-${n}">
         <div class="bd-card-n">${arr.length}</div>
         <div class="bd-card-l">${n} discipline${n>1?'s':''}</div>
-        <div class="bd-card-sub">${pct(arr.length, total)} of athletes · ♂ ${boys} · ♀ ${girls}</div>
+        <div class="bd-card-sub">${pct(arr.length, total)} of athletes · Boys ${boys} · Girls ${girls}</div>
         <div class="bd-card-sub">→ Nat direct: ${natQ}</div>
       </div>`;
     };
@@ -1793,7 +1793,7 @@
         <td class="mono">${z.toNat.size}</td>
         <td class="mono">${z.toEWC.size}</td>
         <td class="mono small">A:${z.groups['Group A']} B:${z.groups['Group B']} C:${z.groups['Group C']} D:${z.groups['Group D']}</td>
-        <td class="mono small">♂${z.gender.Boys} ♀${z.gender.Girls}</td>
+        <td class="mono small">Boys ${z.gender.Boys} · Girls ${z.gender.Girls}</td>
       </tr>`;
     }).join('');
 
@@ -2328,22 +2328,22 @@
 
   /* ── Top header (panel tabs + filter chips) ─────────────────── */
   const PANELS = [
-    ['flow',         'Pipeline',          '📊'],
-    ['cohort',       'Cohort tracker',    '🎯'],
-    ['reconcile',    'Qual / Reg / Att',  '🎯'],
-    ['scoring',      'Scoring',           '📈'],
-    ['breakdowns',   'Breakdowns',        '🗂️'],
-    ['displacement', 'Displacements',     '↔️'],
-    ['status',       'Special status',    '🛡️'],
-    ['historical',   'Historical (multi-year)', '📅'],
-    ['declined',     'Declined Nationals', '🚫'],
-    ['anomaly',      'Anomalies',          '⚠️'],
-    ['career',       'Athlete career',     '🧬'],
-    ['tier_entry',   'Tier entry (old sys)', '🪜'],
-    ['rule_era',     'Rule era comparison', '⚖️'],
-    ['trials_split', 'Trials Voluntary/Optional', '🤿'],
-    ['hps',          'Jr HP Squad tracker', '🏅'],
-    ['saved',        'Saved views',        '⭐'],
+    ['flow',         'Pipeline',          ''],
+    ['cohort',       'Cohort tracker',    ''],
+    ['reconcile',    'Qual / Reg / Att',  ''],
+    ['scoring',      'Scoring',           ''],
+    ['breakdowns',   'Breakdowns',        ''],
+    ['displacement', 'Displacements',     ''],
+    ['status',       'Special status',    ''],
+    ['historical',   'Historical (multi-year)', ''],
+    ['declined',     'Declined Nationals', ''],
+    ['anomaly',      'Anomalies',          ''],
+    ['career',       'Athlete career',     ''],
+    ['tier_entry',   'Tier entry (old sys)', ''],
+    ['rule_era',     'Rule era comparison', ''],
+    ['trials_split', 'Trials Voluntary/Optional', ''],
+    ['hps',          'Jr HP Squad tracker', ''],
+    ['saved',        'Saved views',        ''],
   ];
 
   /* Season context banner. Older seasons ran a different competition and in
@@ -2377,16 +2377,16 @@
         ': the Region advancement cutoff for this season is not confirmed. Placements and scores below are accurate.' });
     }
     if (!out.length) return '';
-    const ic = { warn:'⚠', caveat:'⚠', info:'ℹ', rule:'§' };
+    const ic = { warn:'Note', caveat:'Note', info:'Note', rule:'Rule' };
     return `<div class="rpt-season-notes">` + out.map(n =>
-      `<span class="rpt-season-note rpt-note-${n.kind}"><b>${ic[n.kind]||'ℹ'}</b> ${esc(n.text)}</span>`
+      `<span class="rpt-season-note rpt-note-${n.kind}"><b>${ic[n.kind]||'Note'}:</b> ${esc(n.text)}</span>`
     ).join('') + `</div>`;
   }
 
   function buildTopHeader(){
     const mkTab = ([k,l,ic]) =>
       `<button class="rpt-toptab ${rptState.panel===k?'is-active':''}" onclick="window._rptPanel('${k}')">
-         <span class="rpt-toptab-ic">${ic}</span><span>${esc(l)}</span>
+         <span>${esc(l)}</span>
        </button>`;
     // Fixed split (not Math.ceil(PANELS.length/2)) so growing the "reports" group
     // (row B) never bleeds an item into the "view mode" group (row A) — the first
@@ -2401,8 +2401,8 @@
         <span class="rpt-year-selector" id="rpt-year-selector">${buildYearSelector()}</span>
         <span class="rpt-top-meta">${esc(activeFilterDescription())}</span>
         <span style="margin-left:auto;display:inline-flex;gap:6px">
-          <button class="rpt-export-btn" onclick="window._rptShareUrl()" title="Copy a shareable URL of this view to clipboard">🔗 Share view</button>
-          <button class="rpt-export-btn" onclick="window._rptGenerateReport()" title="Open a print-friendly version of this panel">📄 Generate report</button>
+          <button class="rpt-export-btn" onclick="window._rptShareUrl()" title="Copy a shareable URL of this view to clipboard">Share view</button>
+          <button class="rpt-export-btn" onclick="window._rptGenerateReport()" title="Open a print-friendly version of this panel">Generate report</button>
         </span>
       </div>
       <div class="rpt-top-row2"><div class="rpt-toptab-row">${tabsRowB}</div><div class="rpt-toptab-row">${tabsRowA}</div></div>
@@ -2452,7 +2452,7 @@
   function buildYearSelector(){
     const cur = (_yearOverrideRows ? rptState.selectedYear : _currentSeason);
     if (_yearLoading) {
-      return `<span class="rpt-year-badge rpt-year-loading">⏳ Loading ${esc(rptState.selectedYear)}…</span>`;
+      return `<span class="rpt-year-badge rpt-year-loading">Loading ${esc(rptState.selectedYear)}…</span>`;
     }
     if (!_availableYears) {
       // Trigger background load of available years
@@ -2898,22 +2898,22 @@
     }
 
     const panels = [
-      ['flow',         'Pipeline flow',         '📊'],
-      ['cohort',       'Cohort tracker',        '🎯'],
-      ['reconcile',    'Qual / Reg / Att',      '🎯'],
-      ['scoring',      'Scoring analysis',      '📈'],
-      ['breakdowns',   'Participation breakdowns','🗂️'],
-      ['displacement', 'Displacements',         '↔️'],
-      ['status',       'Special status',        '🛡️'],
-      ['historical',   'Historical (multi-year)', '📅'],
-      ['declined',     'Declined Nationals',    '🚫'],
-      ['anomaly',      'Anomalies',             '⚠️'],
-      ['career',       'Athlete career',        '🧬'],
-      ['tier_entry',   'Tier entry (old sys)',  '🪜'],
-      ['rule_era',     'Rule era comparison',   '⚖️'],
-      ['trials_split', 'Trials Voluntary/Optional', '🤿'],
-      ['hps',          'Jr HP Squad tracker', '🏅'],
-      ['saved',        'Saved views',           '⭐'],
+      ['flow',         'Pipeline flow',         ''],
+      ['cohort',       'Cohort tracker',        ''],
+      ['reconcile',    'Qual / Reg / Att',      ''],
+      ['scoring',      'Scoring analysis',      ''],
+      ['breakdowns',   'Participation breakdowns',''],
+      ['displacement', 'Displacements',         ''],
+      ['status',       'Special status',        ''],
+      ['historical',   'Historical (multi-year)', ''],
+      ['declined',     'Declined Nationals',    ''],
+      ['anomaly',      'Anomalies',             ''],
+      ['career',       'Athlete career',        ''],
+      ['tier_entry',   'Tier entry (old sys)',  ''],
+      ['rule_era',     'Rule era comparison',   ''],
+      ['trials_split', 'Trials Voluntary/Optional', ''],
+      ['hps',          'Jr HP Squad tracker', ''],
+      ['saved',        'Saved views',           ''],
     ];
 
     el.innerHTML = `
@@ -2921,7 +2921,7 @@
         <div class="rpt-sidebar-title">Report</div>
         ${panels.map(([k,l,ic]) => `
           <button class="rpt-panel-btn ${rptState.panel===k?'active':''}" onclick="window._rptPanel('${k}')">
-            <span class="rpt-panel-icon">${ic}</span>${esc(l)}
+            ${esc(l)}
           </button>`).join('')}
 
         <div class="rpt-sidebar-title" style="margin-top:14px">Filters
@@ -3622,7 +3622,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-soft">Side-by-side counts of distinct concepts at every pipeline stage</div>
         </div>
         ${filterSummary
-          ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px"><strong>📌 ACTIVE FILTER:</strong> ${esc(filterSummary)} <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear</button></div>`
+          ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px"><strong>ACTIVE FILTER:</strong> ${esc(filterSummary)} <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear</button></div>`
           : ''}
         <div class="recon-legend">
           <div class="recon-legend-h">Why this panel exists</div>
@@ -3631,10 +3631,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             This panel keeps them in named columns so you (and the CCE/Board) can see them side by side.
           </p>
           <div class="recon-legend-grid">
-            <div class="recon-legend-col col-a"><div class="recon-legend-col-h">🅰 Qualification spots</div>Slots authorized by rulebook for that meet/stage (capacity, not athletes). May be unfilled.</div>
-            <div class="recon-legend-col col-b"><div class="recon-legend-col-h">🅱 Athletes who qualified</div>Athletes who EARNED a slot by placement at the prior stage (e.g. top-3 at Zones, place 4–18, HPS pre-qualification).</div>
-            <div class="recon-legend-col col-c"><div class="recon-legend-col-h">🅲 Athletes who registered</div>Athletes who actually <em>signed up</em> on the registration / qualifier list for the next stage.</div>
-            <div class="recon-legend-col col-d"><div class="recon-legend-col-h">🅳 Athletes who attended</div>Athletes with a <em>result row</em> at that stage — they actually competed.</div>
+            <div class="recon-legend-col col-a"><div class="recon-legend-col-h">(A) Qualification spots</div>Slots authorized by rulebook for that meet/stage (capacity, not athletes). May be unfilled.</div>
+            <div class="recon-legend-col col-b"><div class="recon-legend-col-h">(B) Athletes who qualified</div>Athletes who EARNED a slot by placement at the prior stage (e.g. top-3 at Zones, place 4–18, HPS pre-qualification).</div>
+            <div class="recon-legend-col col-c"><div class="recon-legend-col-h">(C) Athletes who registered</div>Athletes who actually <em>signed up</em> on the registration / qualifier list for the next stage.</div>
+            <div class="recon-legend-col col-d"><div class="recon-legend-col-h">(D) Athletes who attended</div>Athletes with a <em>result row</em> at that stage — they actually competed.</div>
           </div>
         </div>
         <div id="recon-controls" class="rpt-slicer-bar" style="margin:14px 0"><span class="rpt-slicer-lbl">Season:</span> <span id="recon-yr-chips"></span></div>
@@ -3851,10 +3851,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <table class="rpt-table recon-table">
           <thead><tr>
             <th>Stage</th>
-            <th class="recon-col-a">🅰 Qualification spots</th>
-            <th class="recon-col-b">🅱 Athletes who qualified</th>
-            <th class="recon-col-c">🅲 Athletes who registered</th>
-            <th class="recon-col-d">🅳 Athletes who attended</th>
+            <th class="recon-col-a">(A) Qualification spots</th>
+            <th class="recon-col-b">(B) Athletes who qualified</th>
+            <th class="recon-col-c">(C) Athletes who registered</th>
+            <th class="recon-col-d">(D) Athletes who attended</th>
           </tr></thead>
           <tbody>
             ${stages.map(s => `<tr>
@@ -3868,10 +3868,10 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         </table>
         <div class="rpt-soft" style="margin-top:10px;font-size:11px;line-height:1.6">
           <strong>Column data sources:</strong><br>
-          🅰 <em>Spots</em> — Per-event quotas per the Technical Rulebook (not yet wired into the data; descriptive text only).<br>
-          🅱 <em>Qualified</em> — Computed from Neon <code>core.event_results</code> placements at the prior stage.<br>
-          🅲 <em>Registered</em> — From <code>USAD_EWC_DATA.entries</code> (E/W/C) and <code>USAD_JO_NAT_QUALIFIERS.qualifiers</code> (Nationals list). Current season only.<br>
-          🅳 <em>Attended</em> — <code>COUNT(DISTINCT diver_id_dm) FROM core.event_results WHERE stage = X</code>.
+          (A) <em>Spots</em> — Per-event quotas per the Technical Rulebook (not yet wired into the data; descriptive text only).<br>
+          (B) <em>Qualified</em> — Computed from Neon <code>core.event_results</code> placements at the prior stage.<br>
+          (C) <em>Registered</em> — From <code>USAD_EWC_DATA.entries</code> (E/W/C) and <code>USAD_JO_NAT_QUALIFIERS.qualifiers</code> (Nationals list). Current season only.<br>
+          (D) <em>Attended</em> — <code>COUNT(DISTINCT diver_id_dm) FROM core.event_results WHERE stage = X</code>.
         </div>
       `;
     } catch (e) {
@@ -3923,8 +3923,8 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         <table class="rpt-table recon-table">
           <thead><tr>
             <th>Zone placement band</th>
-            <th class="recon-col-b">🅱 Qualified count</th>
-            <th class="recon-col-d">🅳 Attended count</th>
+            <th class="recon-col-b">(B) Qualified count</th>
+            <th class="recon-col-d">(D) Attended count</th>
             <th>Attendance rate</th>
             <th>Gap (qualified − attended)</th>
           </tr></thead>
@@ -3971,7 +3971,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-soft" style="margin-bottom:8px">Attended counts at each stage, by event_key. Use this to spot events where attendance falls off unexpectedly.</div>
           <div class="rpt-table-scroll" style="max-height:480px;overflow:auto">
             <table class="rpt-table recon-table">
-              <thead><tr><th>Event</th><th class="recon-col-d">🅳 at Zones</th><th class="recon-col-d">🅳 at E/W/C</th><th class="recon-col-d">🅳 at Nationals</th><th>Z→EWC retention</th></tr></thead>
+              <thead><tr><th>Event</th><th class="recon-col-d">(D) at Zones</th><th class="recon-col-d">(D) at E/W/C</th><th class="recon-col-d">(D) at Nationals</th><th>Z→EWC retention</th></tr></thead>
               <tbody>
                 ${r.rows.map(x => {
                   const z2e = (x.zones_n && x.ewc_n) ? Math.round(100*x.ewc_n/x.zones_n)+'%' : '—';
@@ -4022,7 +4022,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         </div>
         ${filterSummary
           ? `<div class="rpt-active-filter" style="background:linear-gradient(90deg,#fef3c7,#fde68a);border-left-color:#d97706;color:#78350f;font-size:13px">
-              <strong>📌 ACTIVE FILTER:</strong> ${esc(filterSummary)} · all 5 queries below are scoped to this subset.
+              <strong>ACTIVE FILTER:</strong> ${esc(filterSummary)} · all 5 queries below are scoped to this subset.
               <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear all filters</button>
             </div>`
           : `<div class="rpt-active-filter" style="background:#f6f7fa;border-left-color:#9aa3b1;color:var(--ink-3);font-size:11px;font-style:italic">
@@ -4329,7 +4329,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-flow-title">Declined Nationals <span class="rpt-soft">(top-3 Zone qualifiers absent from next stage)</span></div>
           <div class="rpt-soft">Live from Neon. Old system (2021&ndash;2025): next stage = Junior Nationals. 2026+: next = E/W/C.</div>
         </div>
-        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
+        ${filterSummary ? `<div class="rpt-active-filter">Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="decl-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="decl-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
         <div id="decl-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year breakdown…</div></div>
@@ -4532,7 +4532,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-flow-title">Anomaly surveillance <span class="rpt-soft">(rulebook violations + data gaps)</span></div>
           <div class="rpt-soft">Each card runs an independent Neon query. False positives are normal — these are starting points for review.</div>
         </div>
-        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
+        ${filterSummary ? `<div class="rpt-active-filter">Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="anom-skipped" class="rpt-card"><div class="rpt-loading">Loading "skipped Zones" check…</div></div>
         <div id="anom-altexc" class="rpt-card"><div class="rpt-loading">Loading "alternate above cutoff" check…</div></div>
         <div id="anom-outlier" class="rpt-card"><div class="rpt-loading">Loading score outlier check…</div></div>
@@ -4825,7 +4825,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             <strong>Stages competed:</strong> ${Object.keys(stages).map(s => esc(stageLabelFor(s))+' ('+stages[s]+')').join(', ')}
           </div>
           ${careerCaveat2 ? `<div class="rpt-note rpt-note-divecount" style="margin-top:10px">
-            <strong>⚠ ${esc(careerCaveat2)}</strong> A jump or drop across one of those seasons for this athlete may partly reflect the rule change rather than a change in performance — check the age group they competed in each year below.
+            <strong>${esc(careerCaveat2)}</strong> A jump or drop across one of those seasons for this athlete may partly reflect the rule change rather than a change in performance — check the age group they competed in each year below.
           </div>` : ''}
         </div>
         ${years.map(y => {
@@ -4871,7 +4871,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
           <div class="rpt-flow-title">Junior Nationals tier entry <span class="rpt-soft">(2021–2025, old system back-trace)</span></div>
           <div class="rpt-soft">Directly observed from which rounds each athlete appeared in. Cross-validated against Zone placement.</div>
         </div>
-        ${filterSummary ? `<div class="rpt-active-filter">📌 Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
+        ${filterSummary ? `<div class="rpt-active-filter">Filtering: <strong>${esc(filterSummary)}</strong> <button class="rpt-export-btn" onclick="window._rptClear()" style="margin-left:8px">Clear filters</button></div>` : ''}
         <div id="tier-controls" class="rpt-slicer-bar" style="margin-bottom:14px"></div>
         <div id="tier-summary" class="rpt-card"><div class="rpt-loading">Loading…</div></div>
         <div id="tier-by-year" class="rpt-card"><div class="rpt-loading">Loading by-year…</div></div>
@@ -5546,7 +5546,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             <thead><tr><th>Season</th><th>Stages</th><th>Advancement</th><th>Rules</th><th>Notes</th></tr></thead>
             <tbody>${yrs.map(row).join('')}</tbody>
           </table>
-          ${caveat ? `<p class="rb-p rb-callout-warn"><strong>⚠ ${esc(caveat)}</strong></p>` : ''}
+          ${caveat ? `<p class="rb-p rb-callout-warn"><strong>${esc(caveat)}</strong></p>` : ''}
           ${(function(){
             // A printed report can outlive the app, so the status gap has to
             // travel with it rather than living only in the on-screen banner.
@@ -5554,7 +5554,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             if (!lims.length) return '';
             const past = yrs.filter(y => Number(y) !== Number(_currentSeason));
             return `<h3 class="rb-h3">Not included for past seasons</h3>
-              <p class="rb-p rb-callout-warn"><strong>⚠ Athlete status is not held for
+              <p class="rb-p rb-callout-warn"><strong>Athlete status is not held for
               ${esc(past.join(', '))}.</strong> Placements and scores are exact, but
               ${esc(E.MISSING_FIELDS.slice(0,-1).join(', '))} and
               ${esc(E.MISSING_FIELDS[E.MISSING_FIELDS.length-1])} are not reflected.
@@ -6166,7 +6166,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         return `<section class="rb-section">
           <h2 class="rb-h2">${esc(name)} — Career Trace</h2>
           <p class="rb-soft">DM ${esc(opts.dmId)} · ${fmt(r.rows.length)} result rows · ${Object.keys(byYear).length} year${Object.keys(byYear).length===1?'':'s'}</p>
-          ${careerCaveat ? `<p class="rb-p rb-callout-warn"><strong>⚠ ${esc(careerCaveat)}</strong> A score jump or drop across one of those seasons may partly reflect the rule change rather than a change in performance — check the age group that applied each year in the Event column below.</p>` : ''}
+          ${careerCaveat ? `<p class="rb-p rb-callout-warn"><strong>${esc(careerCaveat)}</strong> A score jump or drop across one of those seasons may partly reflect the rule change rather than a change in performance — check the age group that applied each year in the Event column below.</p>` : ''}
           ${Object.keys(byYear).sort().map(y => `
             <h3 class="rb-h3">${y}</h3>
             <table class="rb-table rb-table-sm">
@@ -6422,7 +6422,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
             <span class="rb-soft">Output: a print-ready, USA Diving-branded document opens in a new view. From there you can print to PDF.</span>
             <span style="margin-left:auto;display:inline-flex;gap:8px">
               <button class="rb-btn-sec" onclick="window._rbClose()">Cancel</button>
-              <button class="rb-btn-prim ${!canGenerate?'is-disabled':''}" onclick="window._rbGenerate()" ${!canGenerate?'disabled':''}>📄 Generate report</button>
+              <button class="rb-btn-prim ${!canGenerate?'is-disabled':''}" onclick="window._rbGenerate()" ${!canGenerate?'disabled':''}>Generate report</button>
             </span>
           </div>
         </div>
@@ -6545,7 +6545,7 @@ body.rpt-stage-active .rpt-section { padding: 14px 22px 28px; }
         #rb-output .rb-toolbar .rb-print-btn { background: #171F69; color: white; border-color: #171F69; font-weight: 600; }
       </style>
       <div class="rb-toolbar">
-        <button class="rb-print-btn" onclick="window.print()">🖨️ Print / save as PDF</button>
+        <button class="rb-print-btn" onclick="window.print()">Print / save as PDF</button>
         <button onclick="document.getElementById('rb-output').remove()">✕ Close</button>
         <span class="rb-soft" style="margin-left:auto">Print to PDF for the cleanest result. The report is sized to print on US Letter paper.</span>
       </div>
