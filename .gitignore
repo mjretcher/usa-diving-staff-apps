@@ -10,3 +10,4 @@ db/scripts/__pycache__/
 
 # test dependency (npm install) -- never part of the site
 node_modules/
+__pycache__/
