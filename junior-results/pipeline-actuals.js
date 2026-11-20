@@ -9,8 +9,9 @@
      2. Route to Nationals  every Junior Nationals event entry placed in exactly
                             one route, in this order: Zone top 3, E/W/C top 3,
                             E/W/C 4th-6th at or above the 3rd-place average,
-                            HPS, non-displacing, then the entries with no
-                            qualifying finish on record.
+                            HPS, non-displacing, moved up at Zones, moved up
+                            at E/W/C, then the entries with no qualifying
+                            finish on record.
      3. Zone and E/W/C placing against what happened at Nationals.
      4. Foreign athletes and dual citizens at every stop: how many, how they
         were scored, and where they finished on score against each cut.
@@ -141,6 +142,36 @@
     field.zones = both(minus(A.Nationals, A.Regionals), A.Zones);
     field.neither = field.total - field.regionals - field.zones;
 
+    /* Moving up. An athlete outside the places at Zones or E/W/C can still hold
+       a qualifying place once the athletes ahead who do not use one are passed
+       over: those already qualified another way (HPS, YMCA, already qualified,
+       or Zone top 3 when the meet is E/W/C), foreign athletes and dual citizens
+       declared for another federation, and athletes who did not go on. */
+    var later = {};
+    rows.forEach(function (r) { if (r.stage === 'EWC' || r.stage === 'Nationals') later[r.key] = true; });
+    function preQual(id) { return S.hps[id] || S.other[id] || S.foreign[id] || S.dual[id]; }
+    var zField = {}, eField = {};
+    rows.forEach(function (r) {
+      if (r.nd) return;
+      if (r.stage === 'Zones') (zField[r.zone + '|' + r.ev] = zField[r.zone + '|' + r.ev] || []).push(r);
+      else if (r.stage === 'EWC' && r.round === 'Final') (eField[r.ewc + '|' + r.ev] = eField[r.ewc + '|' + r.ev] || []).push(r);
+    });
+    function zoneEff(z) {
+      var n = 0;
+      (zField[z.zone + '|' + z.ev] || []).forEach(function (o) {
+        if (o.place < z.place && (preQual(o.id) || !later[o.key])) n++;
+      });
+      return z.place - n;
+    }
+    function ewcEff(e) {
+      var n = 0;
+      (eField[e.ewc + '|' + e.ev] || []).forEach(function (o) {
+        var zo = zon[o.key];
+        if (o.place < e.place && (preQual(o.id) || (zo && !zo.nd && zo.place <= 3) || !natP[o.key])) n++;
+      });
+      return e.place - n;
+    }
+
     /* Junior Nationals entries, one per athlete per event */
     var entries = Object.keys(natP).map(function (k) {
       var p = natP[k], f = natF[k], z = zon[k], e = ewcF[k], ep = ewcP[k];
@@ -155,9 +186,14 @@
       else if (epl != null && epl >= 4 && epl <= 6 && th[p.ev] != null && e.score >= th[p.ev]) t.route = 2;
       else if (t.hps) t.route = 3;
       else if (p.nd) t.route = 4;
-      else if (e || ep) t.route = 5;
-      else if (z && !z.nd) t.route = 6;
-      else t.route = 7;
+      else if (zp != null && zoneEff(z) <= 3) t.route = 5;
+      else if (epl != null && (function () {
+        var eff = ewcEff(e);
+        return eff <= 3 || (eff <= 6 && th[p.ev] != null && e.score >= th[p.ev]);
+      })()) t.route = 6;
+      else if (e || ep) t.route = 7;
+      else if (z && !z.nd) t.route = 8;
+      else t.route = 9;
       return t;
     });
     var ROUTES = [
@@ -166,6 +202,8 @@
       'E/W/C 4th to 6th, at or above the 3rd-place average',
       'HPS, no qualifying finish in this event',
       'Non-displacing',
+      'Moved up at Zones: inside the top 3 once athletes ahead are passed over',
+      'Moved up at E/W/C: inside the qualifying line once athletes ahead are passed over',
       'Competed at E/W/C, finished below the qualifying line',
       'Zone 4th or lower, no E/W/C result',
       'No Zone or E/W/C result in this event'
@@ -281,6 +319,7 @@
     }).join('');
 
     var routeBody = c.routes.map(function (r, i) {
+      if (!r.entries) return '';
       var id = 'r' + i, rowsHtml = '';
       if (view.open[id]) {
         rowsHtml = '<tr class="pa-detail"><td colspan="6">' + table(
@@ -336,6 +375,8 @@
         table(['Started', 'Athletes', 'Zones', 'E/W/C', 'Junior Nationals', 'A Nationals final', 'Top 3'], stopBody) +
         h('How each Junior Nationals event entry got there') +
         table(['Route into that event', 'Event entries', 'Unique athletes', 'Reached the final', 'Top 3', ''], routeBody) +
+        note('Passed over: athletes ahead in that event who were already qualified another way (HPS, YMCA, Zone top 3), ' +
+          'foreign athletes and dual citizens declared for another federation, and athletes who did not go on in that event.') +
         note(num(c.finals.entries) + ' final entries: ' + num(c.finals.numbered) + ' with a numbered place and ' +
           num(c.finals.entries - c.finals.numbered) + ' non-displacing.') +
         h('Zone placing against Junior Nationals (event entries)') +
