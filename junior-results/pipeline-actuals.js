@@ -48,13 +48,23 @@
     var Q = window.NEON.query;
     var res = await Promise.all([
       Q("SELECT meet_id_dm::text AS meet, diver_id_dm::text AS id, diver_first, diver_last, " +
-        "round, place, score, stage, age_group, gender, discipline, event_key, zone, ewc_meet " +
+        "round, place, score, stage, age_group, gender, discipline, event_key, zone, ewc_meet, region::text AS region " +
         "FROM core.event_results WHERE year = $1 AND is_junior_circuit AND NOT is_synchro " +
         "AND age_group IN ('Group A','Group B','Group C','Group D') " +
         "AND discipline IN ('1M','3M','Platform') AND event_name LIKE 'Group%'", [year]),
       Q("SELECT dive_meets_id::text AS id, name, category, hps, ymca, already_nat_qual FROM junior_results.athlete_status", []),
       Q("SELECT event_key, threshold_score FROM junior_results.zone_thresholds " +
-        "WHERE year = $1 AND zone = 'EWC'", [year])
+        "WHERE year = $1 AND zone = 'EWC'", [year]),
+      Q("WITH m AS (SELECT DISTINCT stage, meet_id_dm::text AS mid FROM core.event_results " +
+        "WHERE year = $1 AND is_junior_circuit) " +
+        "SELECT m.stage, d.round_stage AS round, " +
+        "substring(d.event_name from '^Group ([A-D]) ') AS grp, " +
+        "substring(d.event_name from '^Group [A-D] (Boys|Girls) ') AS gender, " +
+        "substring(d.event_name from '^Group [A-D] (?:Boys|Girls) (1m|3m|Platform)') AS board, " +
+        "count(*)::int AS dives, sum(d.dd)::float8 AS dd_sum, count(DISTINCT d.diver_id)::int AS divers " +
+        "FROM m JOIN core.dive_sheets d ON d.meet_id = m.mid " +
+        "WHERE d.event_name ~ '^Group [A-D] (Boys|Girls) (1m|3m|Platform)' AND d.event_name !~* 'non' " +
+        "AND d.dd IS NOT NULL AND d.optional_voluntary = 'O' GROUP BY 1,2,3,4,5", [year])
     ]);
     var rows = res[0].rows.map(function (r) {
       var p = r.place == null ? null : Number(r.place);
@@ -63,12 +73,17 @@
         nm: norm(String(r.diver_first || '') + String(r.diver_last || '')),
         round: r.round, place: p, nd: (p == null || p === 127), score: r.score == null ? null : Number(r.score),
         stage: r.stage, group: r.age_group, gender: r.gender, disc: r.discipline, ev: r.event_key,
-        zone: r.zone, ewc: r.ewc_meet, key: r.event_key + '|' + r.id
+        zone: r.zone, ewc: r.ewc_meet, region: r.region, key: r.event_key + '|' + r.id
       };
     });
     var th = {};
     res[2].rows.forEach(function (t) { th[t.event_key] = Number(t.threshold_score); });
-    cache[year] = { rows: rows, status: res[1].rows, thresholds: th };
+    var BRD = { '1m': '1M', '3m': '3M', 'Platform': 'Platform' };
+    var dd = res[3].rows.map(function (x) {
+      return { stage: x.stage, round: x.round, group: 'Group ' + x.grp, gender: x.gender, disc: BRD[x.board],
+        dives: Number(x.dives), sum: Number(x.dd_sum), divers: Number(x.divers) };
+    });
+    cache[year] = { rows: rows, status: res[1].rows, thresholds: th, dd: dd };
     return cache[year];
   }
 
@@ -283,7 +298,76 @@
       if (r.nd && !S.foreign[r.id] && !S.dual[r.id] && !S.hps[r.id] && !S.other[r.id]) unexplained[r.stage + '|' + r.key] = r;
     });
 
+    /* 5. Score at the last qualifying place, per event */
+    var EVORDER = [];
+    ['Group A', 'Group B', 'Group C', 'Group D'].forEach(function (g) {
+      ['Boys', 'Girls'].forEach(function (x) { ['1M', '3M', 'Platform'].forEach(function (b) { EVORDER.push(g + ' ' + x + ' ' + b); }); });
+    });
+    function cutAt(test, placeN, meetOf) {
+      var by = {}, meets = {};
+      rows.forEach(function (r) {
+        if (!test(r)) return;
+        var m = meetOf(r); (meets[r.ev] = meets[r.ev] || {})[m] = true;
+        if (!r.nd && r.place === placeN) { (by[r.ev] = by[r.ev] || {})[m] = r.score; }
+      });
+      var out = {};
+      Object.keys(meets).forEach(function (ev) {
+        var v = Object.keys(by[ev] || {}).map(function (m) { return by[ev][m]; });
+        out[ev] = v.length ? { avg: v.reduce(function (a, b) { return a + b; }, 0) / v.length,
+          low: Math.min.apply(null, v), high: Math.max.apply(null, v), n: v.length, of: size(meets[ev]) }
+          : { n: 0, of: size(meets[ev]) };
+      });
+      return out;
+    }
+    var isRegQ = function (r) { return r.stage === 'Regionals' && (r.group === 'Group A' || r.group === 'Group B') && r.disc !== 'Platform'; };
+    var cutCols = {
+      reg15: cutAt(isRegQ, 15, function (r) { return r.region; }),
+      z3: cutAt(function (r) { return r.stage === 'Zones'; }, 3, function (r) { return r.zone; }),
+      z18: cutAt(function (r) { return r.stage === 'Zones'; }, 18, function (r) { return r.zone; }),
+      e3: cutAt(function (r) { return r.stage === 'EWC' && r.round === 'Final'; }, 3, function (r) { return r.ewc; }),
+      n12: cutAt(function (r) { return r.stage === 'Nationals' && r.round === 'Prelim'; }, 12, function () { return 'JN'; }),
+      n3: cutAt(function (r) { return r.stage === 'Nationals' && r.round === 'Final'; }, 3, function () { return 'JN'; })
+    };
+    var evShown = {}; rows.forEach(function (r) { evShown[r.ev] = true; });
+    var cuts = EVORDER.filter(function (ev) { return evShown[ev]; }).map(function (ev) {
+      return { ev: ev, reg15: cutCols.reg15[ev], z3: cutCols.z3[ev], z18: cutCols.z18[ev],
+        e3: cutCols.e3[ev], avgBar: th[ev], n12: cutCols.n12[ev], n3: cutCols.n3[ev] };
+    });
+
+    /* 6. Average degree of difficulty of optional dives, per event and stop */
+    var ddBy = {};
+    (data.dd || []).forEach(function (x) {
+      if (filt && filt.group !== 'All' && x.group !== filt.group) return;
+      if (filt && filt.gender !== 'All' && x.gender !== filt.gender) return;
+      if (filt && filt.disc && filt.disc !== 'All' && x.disc !== filt.disc) return;
+      var col = x.stage === 'Regionals' ? 'reg' : x.stage === 'Zones' ? 'zone'
+        : x.stage === 'EWC' ? (x.round === 'Prelim' ? 'ewc' : null)
+        : x.stage === 'Nationals' ? (x.round === 'Prelim' ? 'nat' : 'fin') : null;
+      if (!col) return;
+      var ev = x.group + ' ' + x.gender + ' ' + x.disc;
+      var o = (ddBy[ev] = ddBy[ev] || {}); var c2 = (o[col] = o[col] || { dives: 0, sum: 0 });
+      c2.dives += x.dives; c2.sum += x.sum;
+    });
+    var ddRows = EVORDER.filter(function (ev) { return ddBy[ev]; }).map(function (ev) {
+      var o = { ev: ev };
+      ['reg', 'zone', 'ewc', 'nat', 'fin'].forEach(function (k) { o[k] = ddBy[ev][k] ? { avg: ddBy[ev][k].sum / ddBy[ev][k].dives, dives: ddBy[ev][k].dives } : null; });
+      return o;
+    });
+
+    /* 7. Where the Nationals field and finalists competed on the way up */
+    function strength(stage, field) {
+      var by = {};
+      rows.forEach(function (r) { if (r.stage === stage && r[field] != null && r[field] !== '') (by[r[field]] = by[r[field]] || {})[r.id] = true; });
+      return Object.keys(by).map(function (k) {
+        var set = by[k], a = size(set), f = both(set, A.Final);
+        return { name: k, athletes: a, nationals: both(set, A.Nationals), finals: f, top3: both(set, A.Top3), rate: a ? 100 * f / a : 0 };
+      }).sort(function (x, y) { return y.rate - x.rate || y.finals - x.finals; });
+    }
+    var zoneStrength = strength('Zones', 'zone');
+    var regionStrength = strength('Regionals', 'region');
+
     return { stops: stops, field: field, routes: routes, entriesTotal: entries.length,
+      cuts: cuts, ddRows: ddRows, zoneStrength: zoneStrength, regionStrength: regionStrength,
       zoneBands: zoneBands, ewcBands: ewcBands, foreign: foreign,
       finals: { entries: size(natF), numbered: Object.keys(natF).filter(function (k) { return !natF[k].nd; }).length },
       unexplained: Object.keys(unexplained).map(function (k) { return unexplained[k]; }) };
@@ -365,6 +449,31 @@
     }).join('');
 
 
+    function cutCell(c, unit) {
+      if (!c) return '<td class="pa-na">&ndash;</td>';
+      if (!c.n) return '<td class="pa-na">no ' + unit + ' reached it</td>';
+      if (c.of === 1) return '<td>' + c.avg.toFixed(2) + '</td>';
+      return '<td>' + c.avg.toFixed(2) + ' <span class="pa-sub">' + c.low.toFixed(2) + ' to ' + c.high.toFixed(2) +
+        (c.n < c.of ? ', ' + c.n + ' of ' + c.of + ' ' + unit + 's' : '') + '</span></td>';
+    }
+    function evName(ev) { return esc(ev.replace('Group ', '').replace(' 1M', ' 1-meter').replace(' 3M', ' 3-meter')); }
+    var cutBody = c.cuts.map(function (r) {
+      return '<tr><td>' + evName(r.ev) + '</td>' + cutCell(r.reg15, 'region') + cutCell(r.z3, 'zone') + cutCell(r.z18, 'zone') +
+        cutCell(r.e3, 'meet') + (r.avgBar != null ? '<td>' + Number(r.avgBar).toFixed(2) + '</td>' : '<td class="pa-na">&ndash;</td>') +
+        cutCell(r.n12, 'meet') + cutCell(r.n3, 'meet') + '</tr>';
+    }).join('');
+    function ddCell(x) { return x ? '<td>' + x.avg.toFixed(2) + '</td>' : '<td class="pa-na">&ndash;</td>'; }
+    var ddBody = c.ddRows.map(function (r) {
+      return '<tr><td>' + evName(r.ev) + '</td>' + ddCell(r.reg) + ddCell(r.zone) + ddCell(r.ewc) + ddCell(r.nat) + ddCell(r.fin) + '</tr>';
+    }).join('');
+    function strengthBody(list, prefix) {
+      return list.map(function (z) {
+        return '<tr><td>' + esc(prefix + ' ' + z.name) + '</td>' + cell(z.athletes) + cell(z.nationals) + cell(z.finals) + cell(z.top3) +
+          '<td>' + z.rate.toFixed(1) + '</td></tr>';
+      }).join('');
+    }
+    var STRENGTH_HEAD = ['Athletes', 'Competed at Nationals', 'In a Nationals final', 'Top 3', 'Finalists per 100 athletes'];
+
     var showing = (view.group === 'All' && view.gender === 'All' && view.disc === 'All') ? '' :
       '<p class="pa-showing">Showing ' + esc(view.group === 'All' ? 'all groups' : view.group) + ', ' +
       esc(view.gender === 'All' ? 'boys and girls' : view.gender.toLowerCase() + ' only') + ', ' +
@@ -390,7 +499,19 @@
         h('Foreign athletes and dual citizens declared for another federation') +
         table(['Stop', 'Athletes', 'Event entries', 'Scored non-displacing', 'Numbered place', 'Finish on score', ''], forBody) +
         (c.unexplained.length ? note(num(c.unexplained.length) +
-          ' more event entries were scored non-displacing with no status on file for the athlete.') : '');
+          ' more event entries were scored non-displacing with no status on file for the athlete.') : '') +
+        h('Score at the last qualifying place') +
+        table(['Event', 'Regional 15th', 'Zone 3rd', 'Zone 18th', 'E/W/C 3rd', 'E/W/C 3rd-place average on file', 'Nationals prelim 12th', 'Nationals final 3rd'], cutBody) +
+        note('Where there is more than one meet the figure is the average across meets, with the lowest and highest. ' +
+          'A count such as 6 of 12 regions means the other regions had fewer finishers than places, so everyone advanced.') +
+        h('Average degree of difficulty, optional dives') +
+        table(['Event', 'Regionals', 'Zones', 'E/W/C prelim', 'Nationals prelim', 'Nationals final'], ddBody) +
+        h('Zones ranked by Nationals finalists per 100 athletes') +
+        table(['Zone'].concat(STRENGTH_HEAD), strengthBody(c.zoneStrength, 'Zone')) +
+        h('Regions ranked by Nationals finalists per 100 athletes') +
+        table(['Region'].concat(STRENGTH_HEAD), strengthBody(c.regionStrength, 'Region')) +
+        note('An athlete counts for the zone or region where they competed, which is not always where they live. ' +
+          'Groups C and D were not required to compete at a Regional in 2026.');
     if (STATIC) {
       return '<section class="rb-section"><h2 class="rb-h2">Stop to Stop, ' + esc(year) + ' Actual</h2>' +
         '<p class="rb-p">' + lead + '</p>' + tables + '</section>';
