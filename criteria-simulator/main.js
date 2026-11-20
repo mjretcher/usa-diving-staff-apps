@@ -1865,7 +1865,81 @@ async function loadTrialsSim(gender, discipline) {
   trialsCache[key] = { rows: a.rows, ev: e.rows[0] || null };
   return trialsCache[key];
 }
+// ── Meets the LA28 Preliminary Notice (12 June 2026) names as Trials qualifying opportunities. Actual results only. ──
+// Found by competition group and year, so a meet appears here once its results are loaded. More meets are expected
+// to be added by USA Diving; add them to this list when a new notice or the procedures name them.
+const LA28_NOTICE_URL = 'https://assets.contentstack.io/v3/assets/blteb7d012fc7ebef7f/blt7d28c0c18ed16dcc/6a44094c852f856af5af8b21/LA28_Preliminary_Notice_FINAL_-_Diving_(1).pdf';
+const TRIALS_NAMED_MEETS = [
+  { label: '2026 Nationals', group: 'USA Diving Nationals', year: 2026 },
+  { label: '2026 Winter Nationals', group: 'USA Diving Winter Nationals', year: 2026 },
+  { label: '2027 Nationals', group: 'USA Diving Nationals', year: 2027 },
+  { label: '2027 Winter Nationals', group: 'USA Diving Winter Nationals', year: 2027 },
+];
+const TRIALS_NEAR = 15;   // points below the score still listed as close
+const trialsNamedCache = {};
+async function loadTrialsNamed(gender, discipline) {
+  const key = gender + '|' + discipline;
+  if (trialsNamedCache[key]) return trialsNamedCache[key];
+  const years = [...new Set(TRIALS_NAMED_MEETS.map(m => m.year))], groups = [...new Set(TRIALS_NAMED_MEETS.map(m => m.group))];
+  const r = await NEON.query(
+    `SELECT meet_id, meet_year, competition_group, diver_id::text AS diver_id, diver_name, round_stage, place,
+            phase_score_from_dives AS list_score, phase_dd_sum AS list_dd, phase_dive_count AS n_dives
+       FROM core.result_phases
+      WHERE competition_group IN (${groups.map(g => `'${g}'`).join(',')}) AND meet_year IN (${years.join(',')}) AND gender = $1 AND discipline = $2
+        AND event_level IN ('Senior','Senior/Open')`, [gender, discipline]);
+  trialsNamedCache[key] = r.rows;
+  return r.rows;
+}
+async function renderTrialsNamed() {
+  const panel = $('trialsNamedPanel'); if (!panel) return;
+  if (!isTrialsPreset()) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const body = $('trialsNamedBody'), gender = normaliseGender(els.genderFilter.value), discipline = normaliseDiscipline(els.disciplineFilter.value);
+  const key = gender + '|' + discipline; body.dataset.key = key;
+  const std = TRIALS_2024_STANDARDS[gender]?.[discipline], ddMin = TRIALS_2024_DD[gender]?.[discipline];
+  if (!isNum(std)) { body.innerHTML = '<div class="cs2-ex-foot">The Trials are held in Olympic events only: 3m and 10m.</div>'; return; }
+  let rows;
+  try { rows = await loadTrialsNamed(gender, discipline); }
+  catch (e) { if (body.dataset.key === key) body.innerHTML = `<div class="cs2-ex-foot">Could not read the results (${esc(e.message || e)}).</div>`; return; }
+  if (body.dataset.key !== key) return;
+  const n = (v) => Number(v), nDives = gender === 'Female' ? 5 : 6;
+  const meetOf = (r) => TRIALS_NAMED_MEETS.find(m => m.group === r.competition_group && m.year === n(r.meet_year));
+  const held = TRIALS_NAMED_MEETS.filter(m => rows.some(r => meetOf(r) === m));
+  const exhibition = new Set(), unread = new Set(), by = new Map();
+  for (const r of rows) {
+    const m = meetOf(r); if (!m) continue;
+    if (r.place == null || r.place === '') { exhibition.add(r.diver_name); continue; }          // exhibition entry: no official place
+    if (r.list_score == null || n(r.n_dives) !== nDives) { unread.add(r.diver_name); continue; } // list cannot be read on its own
+    const sc = n(r.list_score);
+    if (!by.has(r.diver_id)) by.set(r.diver_id, { name: r.diver_name, best: null, reached: 0 });
+    const a = by.get(r.diver_id);
+    if (sc >= std) a.reached += 1;
+    if (!a.best || sc > a.best.score) a.best = { score: sc, dd: n(r.list_dd), round: r.round_stage, meet: m.label };
+  }
+  const all = [...by.values()].filter(a => a.best).sort((x, y) => y.best.score - x.best.score);
+  const reached = all.filter(a => a.best.score >= std), near = all.filter(a => a.best.score < std && a.best.score >= std - TRIALS_NEAR);
+  const row = (a, ok) => `<tr>
+    <td class="c-name"><b>${esc(a.name)}</b>${ok && isNum(ddMin) && a.best.dd < ddMin ? ` <span class="hp-badge warn" title="The 2024 procedures asked for the DD minimum at the Trials, not when the score was reached.">list below ${ddMin.toFixed(1)} DD</span>` : ''}</td>
+    <td class="num"><span class="hp-badge ${ok ? 'good' : 'out'}">${a.best.score.toFixed(2)}</span></td>
+    <td class="num c-std">${ok ? '+' + (a.best.score - std).toFixed(2) : (a.best.score - std).toFixed(2)}</td>
+    <td class="c-team">${esc(a.best.round)}</td><td class="c-team">${esc(a.best.meet)}</td>
+    <td class="num c-dd">${isNum(a.best.dd) ? a.best.dd.toFixed(1) : '—'}</td>
+    <td class="num c-basis">${ok ? a.reached : ''}</td></tr>`;
+  const notHeld = TRIALS_NAMED_MEETS.filter(m => !held.includes(m)).map(m => m.label);
+  body.innerHTML = `
+    <div class="we-grid">
+      <div class="we-tile"><span>Reached ${std}</span><b>${reached.length}</b><small>actual · unique athletes · one list of ${nDives} dives</small></div>
+      <div class="we-tile"><span>Named meets with results</span><b>${held.length} of ${TRIALS_NAMED_MEETS.length}</b><small>${held.length ? esc(held.map(m => m.label).join(', ')) : 'none yet'}${notHeld.length ? ' · still to come: ' + esc(notHeld.join(', ')) : ''}</small></div>
+      <div class="we-tile"><span>Within ${TRIALS_NEAR} points</span><b>${near.length}</b><small>actual · unique athletes · best list short of ${std}</small></div>
+    </div>
+    ${all.length ? `<div class="table-wrap"><table class="data-table"><thead><tr>
+      <th>Athlete</th><th class="num">Best list</th><th class="num c-std">Against ${std}</th><th class="c-team">Round</th><th class="c-team">Meet</th><th class="num c-dd">List DD</th><th class="num c-basis" title="Number of separate lists at the named meets that reached the score">Lists at ${std}+</th></tr></thead>
+      <tbody>${reached.map(a => row(a, true)).join('')}${near.length ? `<tr class="row-more"><td colspan="7">Within ${TRIALS_NEAR} points</td></tr>` + near.map(a => row(a, false)).join('') : ''}</tbody></table></div>` : '<div class="cs2-ex-foot">No results on file yet for a named meet in this event.</div>'}
+    <div class="cs2-ex-foot">The <a href="${LA28_NOTICE_URL}" target="_blank" rel="noopener">LA28 Preliminary Notice</a> of 12 June 2026 names these four meets and says more will be added. It sets no score, so this uses the 2024 Trials score of ${std}${isNum(ddMin) ? ` and shows each list against the 2024 DD minimum of ${ddMin.toFixed(1)}` : ''}. The best single list from a preliminary, semifinal or final counts. A meet appears here once its results are loaded. Eligibility to represent the United States is not checked.${exhibition.size ? ` Exhibition entries with no official place are left out: ${esc([...exhibition].join(', '))}.` : ''}${unread.size ? ` ${unread.size} result${unread.size === 1 ? '' : 's'} could not be read as a single list and ${unread.size === 1 ? 'is' : 'are'} not counted.` : ''}</div>`;
+}
+
 async function renderTrialsPanel() {
+  renderTrialsNamed();
   const panel = $('trialsPanel'); if (!panel) return;
   if (!isTrialsPreset()) { panel.hidden = true; return; }
   panel.hidden = false;
