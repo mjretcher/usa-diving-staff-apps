@@ -47,7 +47,7 @@
     if (cache[year]) return cache[year];
     var Q = window.NEON.query;
     var res = await Promise.all([
-      Q("SELECT meet_id_dm::text AS meet, diver_id_dm::text AS id, diver_first, diver_last, " +
+      Q("SELECT meet_id_dm::text AS meet, diver_id_dm::text AS id, team_id_dm::text AS team, diver_first, diver_last, " +
         "round, place, score, stage, age_group, gender, discipline, event_key, zone, ewc_meet, region::text AS region " +
         "FROM core.event_results WHERE year = $1 AND is_junior_circuit AND NOT is_synchro " +
         "AND age_group IN ('Group A','Group B','Group C','Group D') " +
@@ -64,12 +64,20 @@
         "count(*)::int AS dives, sum(d.dd)::float8 AS dd_sum, count(DISTINCT d.diver_id)::int AS divers " +
         "FROM m JOIN core.dive_sheets d ON d.meet_id = m.mid " +
         "WHERE d.event_name ~ '^Group [A-D] (Boys|Girls) (1m|3m|Platform)' AND d.event_name !~* 'non' " +
-        "AND d.dd IS NOT NULL AND d.optional_voluntary = 'O' GROUP BY 1,2,3,4,5", [year])
+        "AND d.dd IS NOT NULL AND d.optional_voluntary = 'O' GROUP BY 1,2,3,4,5", [year]),
+      /* Club home region: the region a club's athletes have competed in most,
+         2021 to this season. Same definition the circuit models use. No
+         athlete address is read anywhere. */
+      Q("WITH reg AS (SELECT DISTINCT year, diver_id_dm, team_id_dm, region FROM core.event_results " +
+        "WHERE is_junior_circuit AND stage = 'Regionals' AND region IS NOT NULL AND diver_id_dm IS NOT NULL " +
+        "AND team_id_dm IS NOT NULL AND year BETWEEN 2021 AND $1) " +
+        "SELECT team_id_dm::text AS team, region::text AS home FROM (SELECT team_id_dm, region, " +
+        "row_number() OVER (PARTITION BY team_id_dm ORDER BY count(*) DESC, region) rn FROM reg GROUP BY 1,2) t WHERE rn = 1", [year])
     ]);
     var rows = res[0].rows.map(function (r) {
       var p = r.place == null ? null : Number(r.place);
       return {
-        meet: r.meet, id: r.id, name: (String(r.diver_first || '').trim() + ' ' + String(r.diver_last || '').trim()).trim(),
+        meet: r.meet, id: r.id, team: r.team, name: (String(r.diver_first || '').trim() + ' ' + String(r.diver_last || '').trim()).trim(),
         nm: norm(String(r.diver_first || '') + String(r.diver_last || '')),
         round: r.round, place: p, nd: (p == null || p === 127), score: r.score == null ? null : Number(r.score),
         stage: r.stage, group: r.age_group, gender: r.gender, disc: r.discipline, ev: r.event_key,
@@ -83,7 +91,9 @@
       return { stage: x.stage, round: x.round, group: 'Group ' + x.grp, gender: x.gender, disc: BRD[x.board],
         dives: Number(x.dives), sum: Number(x.dd_sum), divers: Number(x.divers) };
     });
-    cache[year] = { rows: rows, status: res[1].rows, thresholds: th, dd: dd };
+    var clubHome = {};
+    res[4].rows.forEach(function (x) { clubHome[x.team] = x.home; });
+    cache[year] = { rows: rows, status: res[1].rows, thresholds: th, dd: dd, clubHome: clubHome };
     return cache[year];
   }
 
@@ -363,11 +373,105 @@
         return { name: k, athletes: a, nationals: both(set, A.Nationals), finals: f, top3: both(set, A.Top3), rate: a ? 100 * f / a : 0 };
       }).sort(function (x, y) { return y.rate - x.rate || y.finals - x.finals; });
     }
+    /* 8. Zone scores against how the zone's top three then placed at Nationals */
+    var zoneNames = Object.keys(zField).map(function (k) { return k.split('|')[0]; })
+      .filter(function (z, i, a) { return a.indexOf(z) === i; }).sort();
+    var third = {}, evsZ = {};
+    Object.keys(zField).forEach(function (k) {
+      var z = k.split('|')[0], ev = k.slice(z.length + 1);
+      zField[k].forEach(function (r) { if (r.place === 3) { third[ev + '|' + z] = r.score; } });
+      evsZ[ev] = true;
+    });
+    var zonePair = zoneNames.map(function (z) {
+      var diffs = [];
+      Object.keys(evsZ).forEach(function (ev) {
+        var v = zoneNames.map(function (y) { return third[ev + '|' + y]; });
+        if (v.some(function (x) { return x == null; })) return;
+        diffs.push(third[ev + '|' + z] - v.reduce(function (a, b) { return a + b; }, 0) / v.length);
+      });
+      var places = [], awarded = 0, fin = 0, pod = 0;
+      Object.keys(zField).forEach(function (k) {
+        if (k.split('|')[0] !== z) return;
+        zField[k].forEach(function (r) {
+          if (r.place > 3) return;
+          awarded++;
+          var p = natP[r.key], f = natF[r.key];
+          if (p && !p.nd) places.push(p.place);
+          if (f) { fin++; if (!f.nd && f.place <= 3) pod++; }
+        });
+      });
+      return { name: z, events: diffs.length,
+        diff: diffs.length ? diffs.reduce(function (a, b) { return a + b; }, 0) / diffs.length : null,
+        awarded: awarded, atNat: places.length,
+        avgPlace: places.length ? places.reduce(function (a, b) { return a + b; }, 0) / places.length : null,
+        finals: fin, top3: pod };
+    }).sort(function (a, b) { return (a.avgPlace == null ? 999 : a.avgPlace) - (b.avgPlace == null ? 999 : b.avgPlace); });
+
+    /* 9. Region choice. Home = the club's home region. */
+    var CH = data.clubHome || {};
+    var r2z = {}, r2zN = {};
+    data.rows.forEach(function (r) { if (r.stage === 'Regionals' && r.region) r2zN[r.id] = r.region; });
+    var tally = {};
+    data.rows.forEach(function (r) {
+      if (r.stage !== 'Zones' || !r.zone || !r2zN[r.id]) return;
+      var k = r2zN[r.id]; (tally[k] = tally[k] || {}); tally[k][r.zone] = (tally[k][r.zone] || 0) + 1;
+    });
+    Object.keys(tally).forEach(function (reg) {
+      r2z[reg] = Object.keys(tally[reg]).sort(function (a, b) { return tally[reg][b] - tally[reg][a]; })[0];
+    });
+    var regAth = {}, zonAth = {};
+    rows.forEach(function (r) {
+      if (r.stage === 'Regionals' && r.region && !regAth[r.id]) regAth[r.id] = { id: r.id, group: r.group, at: r.region, home: CH[r.team] || null };
+      if (r.stage === 'Zones' && r.zone && !zonAth[r.id]) zonAth[r.id] = { id: r.id, group: r.group, at: r.zone, home: CH[r.team] ? (r2z[CH[r.team]] || null) : null };
+    });
+    function statusOf(a) { return a.home == null ? 'unknown' : (a.home === a.at ? 'home' : 'away'); }
+    function choiceRows(map, extra) {
+      var groups = ['Group A', 'Group B', 'Group C', 'Group D'], out = [];
+      groups.concat(['All']).forEach(function (g) {
+        var list = Object.keys(map).map(function (k) { return map[k]; }).filter(function (a) { return g === 'All' || a.group === g; });
+        if (!list.length) return;
+        var o = { label: g === 'All' ? 'All shown' : g, athletes: list.length, home: 0, away: 0, unknown: 0, first: 0 };
+        list.forEach(function (a) { o[statusOf(a)]++; if (extra && !A.Regionals[a.id]) o.first++; });
+        o.share = (o.home + o.away) ? 100 * o.away / (o.home + o.away) : null;
+        out.push(o);
+      });
+      return out;
+    }
+    var choiceReg = choiceRows(regAth, false), choiceZone = choiceRows(zonAth, true);
+    var regFlow = {};
+    Object.keys(regAth).forEach(function (k) {
+      var a = regAth[k], st = statusOf(a);
+      function slot(n) { return (regFlow[n] = regFlow[n] || { name: n, stayed: 0, left: 0, came: 0 }); }
+      if (st === 'home') slot(a.at).stayed++;
+      else if (st === 'away') { slot(a.home).left++; slot(a.at).came++; }
+    });
+    var flows = Object.keys(regFlow).map(function (k) { return regFlow[k]; })
+      .sort(function (a, b) { return Number(a.name) - Number(b.name); });
+    var outcome = ['home', 'away', 'unknown'].map(function (st) {
+      var set = {}; Object.keys(regAth).forEach(function (k) { if (statusOf(regAth[k]) === st) set[k] = true; });
+      return { label: st === 'home' ? 'Competed in the club\'s home region' : st === 'away' ? 'Competed in another region' : 'Club home region unknown',
+        athletes: size(set), zones: both(set, A.Zones), nationals: both(set, A.Nationals), finals: both(set, A.Final), top3: both(set, A.Top3) };
+    }).filter(function (o) { return o.athletes; });
+    /* Home entries just outside the Regional top 15 in events where away entries finished inside it */
+    var regEv = {};
+    rows.forEach(function (r) { if (isRegQ(r) && !r.nd) (regEv[r.region + '|' + r.ev] = regEv[r.region + '|' + r.ev] || []).push(r); });
+    var effect = { awayInside: 0, events: 0, pushed: 0, pushedAdvanced: 0, list: [] };
+    Object.keys(regEv).forEach(function (k) {
+      var f = regEv[k], away = f.filter(function (r) { return r.place <= 15 && CH[r.team] && CH[r.team] !== r.region; }).length;
+      if (!away) return;
+      effect.awayInside += away;
+      var hit = f.filter(function (r) { return r.place > 15 && r.place <= 15 + away && !(CH[r.team] && CH[r.team] !== r.region); });
+      if (hit.length) effect.events++;
+      hit.forEach(function (r) { effect.pushed++; var adv = !!zon[r.key]; if (adv) effect.pushedAdvanced++;
+        effect.list.push({ name: r.name, ev: r.ev, region: r.region, place: r.place, advanced: adv }); });
+    });
+
     var zoneStrength = strength('Zones', 'zone');
     var regionStrength = strength('Regionals', 'region');
 
     return { stops: stops, field: field, routes: routes, entriesTotal: entries.length,
       cuts: cuts, ddRows: ddRows, zoneStrength: zoneStrength, regionStrength: regionStrength,
+      zonePair: zonePair, choiceReg: choiceReg, choiceZone: choiceZone, flows: flows, outcome: outcome, effect: effect,
       zoneBands: zoneBands, ewcBands: ewcBands, foreign: foreign,
       finals: { entries: size(natF), numbered: Object.keys(natF).filter(function (k) { return !natF[k].nd; }).length },
       unexplained: Object.keys(unexplained).map(function (k) { return unexplained[k]; }) };
@@ -472,6 +576,34 @@
           '<td>' + z.rate.toFixed(1) + '</td></tr>';
       }).join('');
     }
+    function fx(v, d) { return v == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + v.toFixed(d) + '</td>'; }
+    var pairBody = c.zonePair.map(function (z) {
+      return '<tr><td>Zone ' + esc(z.name) + '</td>' +
+        (z.diff == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + (z.diff > 0 ? '+' : '') + z.diff.toFixed(1) + ' <span class="pa-sub">' + z.events + ' events</span></td>') +
+        cell(z.awarded) + cell(z.atNat) + fx(z.avgPlace, 1) + cell(z.finals) + cell(z.top3) + '</tr>';
+    }).join('');
+    function choiceBody(list, zone) {
+      return list.map(function (o) {
+        return '<tr' + (o.label === 'All shown' ? ' class="pa-total"' : '') + '><td>' + esc(o.label) + '</td>' + cell(o.athletes) +
+          (zone ? cell(o.first) : '') + cell(o.home) + cell(o.away) + cell(o.unknown) +
+          (o.share == null ? '<td class="pa-na">&ndash;</td>' : '<td>' + o.share.toFixed(1) + '%</td>') + '</tr>';
+      }).join('');
+    }
+    var flowBody = c.flows.map(function (f) {
+      var net = f.came - f.left;
+      return '<tr><td>Region ' + esc(f.name) + '</td>' + cell(f.stayed) + cell(f.left) + cell(f.came) +
+        '<td>' + (net > 0 ? '+' : '') + net + '</td></tr>';
+    }).join('');
+    var outBody = c.outcome.map(function (o) {
+      function pc(n) { return '<td>' + num(n) + ' <span class="pa-sub">' + (o.athletes ? (100 * n / o.athletes).toFixed(1) : '0.0') + '%</span></td>'; }
+      return '<tr><td>' + esc(o.label) + '</td>' + cell(o.athletes) + pc(o.zones) + pc(o.nationals) + pc(o.finals) + pc(o.top3) + '</tr>';
+    }).join('');
+    var effId = 'e0', effDetail = '';
+    if (view.open[effId] && !STATIC) {
+      effDetail = table(['Athlete', 'Event', 'Region', 'Regional place', 'Competed at Zones'],
+        c.effect.list.slice().sort(function (a, b) { return Number(a.region) - Number(b.region) || a.ev.localeCompare(b.ev) || a.place - b.place; })
+          .map(function (t) { return '<tr><td>' + esc(t.name) + '</td><td>' + evName(t.ev) + '</td><td>' + esc(t.region) + '</td><td>' + t.place + '</td><td>' + (t.advanced ? 'Yes' : 'No') + '</td></tr>'; }).join(''));
+    }
     var STRENGTH_HEAD = ['Athletes', 'Competed at Nationals', 'In a Nationals final', 'Top 3', 'Finalists per 100 athletes'];
 
     var showing = (view.group === 'All' && view.gender === 'All' && view.disc === 'All') ? '' :
@@ -506,8 +638,22 @@
           'A count such as 6 of 12 regions means the other regions had fewer finishers than places, so everyone advanced.') +
         h('Average degree of difficulty, optional dives') +
         table(['Event', 'Regionals', 'Zones', 'E/W/C prelim', 'Nationals prelim', 'Nationals final'], ddBody) +
-        h('Zones ranked by Nationals finalists per 100 athletes') +
-        table(['Zone'].concat(STRENGTH_HEAD), strengthBody(c.zoneStrength, 'Zone')) +
+        h('Zone scores against Nationals results') +
+        table(['Zone', 'Zone 3rd-place score against the all-zone average', 'Top 3 places awarded', 'Competed at Nationals',
+          'Average Nationals prelim place', 'Reached a final', 'Top 3'], pairBody) +
+        note('Each zone is scored by its own panel. Nationals is the one meet where every zone is scored by the same panel.') +
+        h('Region choice at Regionals') +
+        table(['Group', 'Athletes', 'Club\'s home region', 'Another region', 'Club home unknown', 'Share in another region'], choiceBody(c.choiceReg, false)) +
+        h('Region choice at Zones') +
+        table(['Group', 'Athletes', 'No Regional first', 'Club\'s home zone', 'Another zone', 'Club home unknown', 'Share in another zone'], choiceBody(c.choiceZone, true)) +
+        h('Athletes leaving and arriving, by region') +
+        table(['Region', 'Stayed home', 'Went to another region', 'Came from another region', 'Net'], flowBody) +
+        h('How far Regional athletes went') +
+        table(['At Regionals', 'Athletes', 'Reached Zones', 'Competed at Nationals', 'In a Nationals final', 'Top 3'], outBody) +
+        note(num(c.effect.awayInside) + ' entries from another region finished inside a Regional top 15. ' +
+          num(c.effect.pushed) + ' home entries finished in the places just behind them, in ' + num(c.effect.events) + ' events; ' +
+          num(c.effect.pushedAdvanced) + ' of those still competed at Zones. ' + (STATIC ? '' : openBtn(effId, c.effect.pushed))) + effDetail +
+        note('Home is the club\'s home region: the region its athletes have competed in most since 2021. The home zone is the zone that region feeds.') +
         h('Regions ranked by Nationals finalists per 100 athletes') +
         table(['Region'].concat(STRENGTH_HEAD), strengthBody(c.regionStrength, 'Region')) +
         note('An athlete counts for the zone or region where they competed, which is not always where they live. ' +
