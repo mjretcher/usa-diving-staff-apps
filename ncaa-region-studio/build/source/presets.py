@@ -7,12 +7,10 @@ def by_state(spec):
     return m
 JULY=by_state({'East':'CT DC DE MD MA NJ NC SC VA RI','Great Lakes':'KY ME MI NH OH PA TN VT NY WV',
   'Midwest':'AR IL IN IA KS MN MO NE SD ND WI','South':'AL FL GA LA MS OK TX','West':'AK AZ CA CO HI ID MT NV NM OR UT WA WY'})
-E_NY=[2724,2353,2730,2749,2746,2762]   # Fordham, Columbia, Iona, Army, Stony Brook, Wagner (the proposal's E New York list; Manhattan has no zone results)
+E_NY=[2724,2353,2730,2749,2746,2762]   # Final proposal received 2026-11-21 (same boundaries as the July 2026 draft). Fordham, Columbia, Iona, Army, Stony Brook, Wagner (the proposal's E New York list; Manhattan has no zone results)
 PRESETS={
  'current':dict(label='Current zones A to E',names=['Zone A','Zone B','Zone C','Zone D','Zone E'],states=None,over={}),
- 'july':dict(label='July 2026 proposal as written',names=REG,states=JULY,over={**{str(i):'East' for i in E_NY},'2304':'Midwest'}),
- 'july_ny_gl':dict(label='July proposal, whole states, New York in Great Lakes',names=REG,states=JULY,over={}),
- 'july_ny_east':dict(label='July proposal, whole states, New York in East',names=REG,states={**JULY,'NY':'East'},over={}),
+ 'july':dict(label='NCAA region proposal, final version',names=REG,states=JULY,over={**{str(i):'East' for i in E_NY},'2304':'Midwest'}),
 }
 if __name__=='__main__':
     d=json.load(open('data.json')); Z=d['zoneByState']

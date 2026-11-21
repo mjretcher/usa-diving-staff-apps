@@ -27,8 +27,11 @@ never `index.html`.
   per region per event plus one per top-16 finisher. For the current zones the
   result matches the NCAA's published 2026 and 2027 tables in every cell; keep
   that check when adding a season.
-- `presets.json`: the built-in maps (current zones, the July 2026 proposal as
-  written, and two whole-state versions).
+- `presets.json`: the built-in maps. Two only: the current zones, and the final
+  NCAA region proposal received 2026-11-21 (key `july`; same boundaries as the
+  July 2026 draft). Eastern Michigan carries status `leaving` in `data.json`
+  (diving in 2026-27, none after); Virginia is `nodive`. Both are named in the
+  note at the top of the page with a button to leave them out.
 - `hosts.json`: the 29 sites that hosted a zone meet, 2015 to 2027.
 - `states-albers-10m.json`: US state shapes from us-atlas 3.0.1.
 

@@ -145,6 +145,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff;fo
 .tile .trow em{font-style:normal;font-size:13px;font-weight:600}
 .tile .tsub{color:var(--muted);font-size:13px}
 .flag{color:var(--over)} .low{color:var(--under)} .even{color:var(--muted)}
+.leaving{margin:0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);max-width:none} .leaving button{margin-left:8px;padding:4px 10px}
 .steps{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:14.5px}
 .steps b{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--panel);text-align:center;line-height:22px;font-size:13px;margin-right:6px}
 .region{padding:10px 14px}
@@ -483,8 +484,9 @@ function signed(x, f){ return (x >= 0 ? "+" : "−") + f(Math.abs(x)); }
 const color = i => i >= 0 && i < 5 ? getComputedStyle(document.documentElement).getPropertyValue("--r" + i).trim() : "#c3c8cb";
 function rname(m, i){ return i >= 0 && m.names[i] !== undefined ? m.names[i] : "Not assigned"; }
 const $ = id => document.getElementById(id);
-function flagged(s){ return s.st === "nodive" || s.st === "unlisted"; }
-function setProgMode(m){ progMode = m; if (m === "all") off = {}; else if (m === "list"){ off = {}; DATA.schools.forEach(s => { if (flagged(s)) off[s.id] = true; }); } }
+function flagged(s){ return s.st === "nodive" || s.st === "unlisted" || s.st === "leaving"; }
+const LEAVING = [2868, 2365];   // Virginia and Eastern Michigan: the proposal's authors say neither will have divers going forward
+function setProgMode(m){ progMode = m; if (m === "all") off = {}; else if (m === "list"){ off = {}; DATA.schools.forEach(s => { if (flagged(s) && s.st !== "leaving") off[s.id] = true; }); } }
 function siteOf(key){ if (key.startsWith("h:")) return HOSTBY[key.slice(2)]; const s = SCHOOL[key.slice(2)]; return {k:key, n:s.n, c:s.c, s:s.s, la:s.la, lo:s.lo, y:"", sid:s.id}; }
 function siteRegion(m, site){ return site.sid && SCHOOL[site.sid] ? regionOf(m, SCHOOL[site.sid]) : m.states[site.s]; }
 function mapByKey(k){ if (PRESETS[k]) return fromPreset(k); if (k.startsWith("saved:") && saved[k.slice(6)]) { const m = clone(saved[k.slice(6)]); m.key = k; return m; }
@@ -619,7 +621,10 @@ function renderHead(C){
         '<span class="tsub">NCAA spots ' + spotYear + ": " + sp.W + " women's, " + sp.M + " men's</span></button>"; }).join("") + "</div>" +
     '<p class="note">The small number beside each count is the difference from an equal share (' + fmt(C.shareW) + " women, " + fmt(C.shareM) + " men)." +
       (un ? ' <span class="warn">' + un + (un === 1 ? " state" : " states") + " with divers not assigned to a region yet.</span>" : "") +
-      (moved ? ' <span class="warn">' + moved + (moved === 1 ? " school is" : " schools are") + " placed apart from their state.</span>" : "") + (nOff ? " " + nOff + " programs left out." : "") + "</p>";
+      (moved ? ' <span class="warn">' + moved + (moved === 1 ? " school is" : " schools are") + " placed apart from their state.</span>" : "") + (nOff ? " " + nOff + (nOff === 1 ? " program" : " programs") + " left out." : "") + "</p>";
+  const lv = LEAVING.map(id => SCHOOL[id]).filter(Boolean), lvIn = lv.filter(s => !off[s.id]), dv = s => { const w = avg(s.w, years), m = avg(s.m, years); return [w ? fmt(w) + " women" : "", m ? fmt(m) + " men" : ""].filter(Boolean).join(", ") || "none in these seasons"; };
+  $("verdict").innerHTML += !lv.length ? "" : '<p class="note leaving">' + (lvIn.length ? "These counts include " + lvIn.map(s => "<b>" + esc(s.n) + "</b> (" + dv(s) + ", " + esc(rname(map, regionOf(map, s))) + ")").join(" and ") + ". " + (lvIn.length === 2 ? "Neither will have" : "It will not have") + ' divers going forward. <button type="button" id="leaveBtn" data-on="1">Leave ' + (lvIn.length === 1 ? "it" : "them") + " out</button>"
+    : lv.map(s => "<b>" + esc(s.n) + "</b>").join(" and ") + ' are left out of every count because they will not have divers going forward. <button type="button" id="leaveBtn" data-on="0">Count them</button>') + "</p>";
   $("tabs").innerHTML = VIEWS.map(v => '<button type="button" data-v="' + v[0] + '"' + (v[0] === view ? ' aria-current="page"' : "") + ">" + v[1] + "</button>").join("");
   document.querySelectorAll(".view").forEach(el => el.classList.toggle("on", el.id === "v-" + view || (view === "more" && el.classList.contains("morepart"))));
   const opt = (k, label) => '<option value="' + esc(k) + '">' + esc(label) + "</option>";
@@ -726,7 +731,7 @@ function renderConf(C){
     rows.map(g => "<tr><td>" + esc(g.k) + '</td><td class="num">' + g.n + '</td><td class="num">' + fmt(g.d) + "</td>" + g.by.map((v, i) => '<td class="num">' + (v ? sw(i) + v : "") + "</td>").join("") + '<td class="num">' + g.by.filter(v => v).length + "</td></tr>").join("") + "</tbody>";
 }
 function renderPrograms(C){
-  const why = {nodive:"Listed as no diving for 2026-27", unlisted:"Not on the 2026-27 coaches list"}, last = s => { let y = 0; s.w.forEach((v, k) => { if (v + s.m[k] > 0) y = DATA.years[k]; }); return y; };
+  const why = {nodive:"Listed as no diving for 2026-27", unlisted:"Not on the 2026-27 coaches list", leaving:"Diving in 2026-27, no divers after this season"}, last = s => { let y = 0; s.w.forEach((v, k) => { if (v + s.m[k] > 0) y = DATA.years[k]; }); return y; };
   const rows = DATA.schools.filter(s => flagged(s) && last(s) >= 2022).sort((a, b) => (avg(b.w, 3) + avg(b.m, 3)) - (avg(a.w, 3) + avg(a.m, 3)));
   $("progTable").innerHTML = "<thead><tr><th>Counted</th><th class=\"l\">Program</th><th class=\"l\">Why it is flagged</th><th class=\"l\">Region on this map</th><th>Last at a zone meet</th><th>Women a year, 2024 to 2026</th><th>Men a year, 2024 to 2026</th></tr></thead><tbody>" +
     rows.map(s => '<tr><td><input type="checkbox" id="pg' + s.id + '" data-id="' + s.id + '"' + (off[s.id] ? "" : " checked") + ' aria-label="Count ' + esc(s.n) + '"></td><td class="l"><label for="pg' + s.id + '">' + esc(s.n) + ' <span class="where">' + s.s + '</span></label></td><td class="l">' + why[s.st] + '</td><td class="l">' + sw(regionOf(map, s)) + esc(rname(map, regionOf(map, s))) + '</td><td class="num">' + last(s) + '</td><td class="num">' + f1(avg(s.w, 3)) + '</td><td class="num">' + f1(avg(s.m, 3)) + "</td></tr>").join("") + "</tbody>";
@@ -766,7 +771,7 @@ function summaryBody(C, gray){
       return "<tr><td><b>" + esc(r.name) + '</b></td><td style="text-align:left">' + statesOf(r) + "</td><td>" + r.schools + "</td><td><b>" + fmt(r.w) + "</b></td><td>" + seasonSpan(r, "w").join(" to ") + "</td><td><b>" + fmt(r.m) + "</b></td><td>" + seasonSpan(r, "m").join(" to ") + "</td><td>" + hm(long.dayTwo) + "</td><td>" + sp.W + " / " + sp.M + '</td><td style="text-align:left">' + esc(r.host.site.n) + "</td><td>" + miNum(r.host.t.avg) + "</td><td>" + miNum(r.today) + "</td><td>" + (r.host.t.far ? miNum(r.host.t.far.d) + " (" + esc(r.host.t.far.s.n) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table>" +
     "<p>Women per meet run from " + fmt(Math.min(...C.R.map(r => r.w))) + " to " + fmt(Math.max(...C.R.map(r => r.w))) + " against an equal share of " + fmt(C.shareW) + ". Men run from " + fmt(Math.min(...C.R.map(r => r.m))) + " to " + fmt(Math.max(...C.R.map(r => r.m))) + " against " + fmt(C.shareM) + "." + "</p>" + (moved ? "<p><b>Schools placed apart from their state:</b> " + Object.keys(map.over).map(id => SCHOOL[id]).filter(Boolean).map(x => esc(x.n) + " (" + x.s + ") in " + esc(rname(map, map.over[x.id]))).join("; ") + ".</p>" : "") +
     "<p><b>Current zones for reference (women / men):</b> " + cur.R.map(r => esc(r.name) + " " + fmt(r.w) + " / " + fmt(r.m)).join(", ") + ".</p>" +
-    '<p style="font-size:11px">A diver counts once per meet if they competed in at least one preliminary. Day length times prelims at 32 seconds a dive with the two paired events on separate boards, plus finals. NCAA spots are 5 women\'s and 4 men\'s per event plus one for each top-16 finisher at the previous championships. Miles are straight lines from each school\'s city to the host, weighted by divers.' + (Object.keys(off).length ? " " + Object.keys(off).length + " programs without diving in 2026-27 are left out." : "") + " Source: DiveMeets results, zone meets 2015 to 2026.</p>";
+    '<p style="font-size:11px">A diver counts once per meet if they competed in at least one preliminary. Day length times prelims at 32 seconds a dive with the two paired events on separate boards, plus finals. NCAA spots are 5 women\'s and 4 men\'s per event plus one for each top-16 finisher at the previous championships. Miles are straight lines from each school\'s city to the host, weighted by divers.' + (Object.keys(off).length ? " Left out of the counts: " + (Object.keys(off).length <= 8 ? Object.keys(off).map(id => SCHOOL[id] ? esc(SCHOOL[id].n) : "").filter(Boolean).join(", ") : Object.keys(off).length + " programs flagged as not diving") + "." : "") + " Source: DiveMeets results, zone meets 2015 to 2026.</p>";
 }
 function summaryDoc(C){ return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>NCAA diving regions</title><style>body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#000;margin:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}h1{font-size:19px;margin:0 0 4px}p{margin:5px 0}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border-bottom:1px solid #777;padding:5px 6px;text-align:right;font-size:11px;vertical-align:top}th:first-child,td:first-child{text-align:left}svg{width:100%;max-width:560px;height:auto;display:block;margin:6px 0}.key span{display:inline-block;margin-right:14px}.key i{display:inline-block;width:13px;height:13px;border:1px solid #000;vertical-align:-2px;margin-right:5px}button{margin-bottom:12px;padding:6px 14px}@page{size:letter landscape;margin:.5in}@media print{button{display:none}body{margin:0}}</style></head><body><button onclick="window.print()">Print</button>' + summaryBody(C, bw) + "</body></html>"; }
 function render(){
@@ -786,7 +791,8 @@ $("travelChips").addEventListener("click", pickRegion);
 $("smallStates").addEventListener("click", e => { const b = e.target.closest("button"); if (b) paintState(b.dataset.st); });
 $("regions").addEventListener("click", e => { if (e.target.closest("input")) return; const a = e.target.closest(".region"); if (a && +a.dataset.i !== selected){ selected = +a.dataset.i; render(); } });
 $("regions").addEventListener("change", e => { const i = e.target.dataset.rename; if (i === undefined) return; const v = e.target.value.trim(); if (v){ map.names[+i] = v; edited(); } });
-$("verdict").addEventListener("click", e => { const b = e.target.closest(".tile"); if (b){ selected = +b.dataset.i; active = selected; render(); } });
+$("verdict").addEventListener("click", e => { const lb = e.target.closest("#leaveBtn"); if (lb){ LEAVING.forEach(id => { if (lb.dataset.on === "1") off[id] = true; else delete off[id]; }); progMode = Object.keys(off).length ? "custom" : "all"; sugg = null; render(); return; }
+  const b = e.target.closest(".tile"); if (b){ selected = +b.dataset.i; active = selected; render(); } });
 window.addEventListener("pointerup", () => { dragging = false; dragPushed = false; });
 window.addEventListener("pointercancel", () => { dragging = false; dragPushed = false; });
 window.addEventListener("scroll", () => hideTip(), {passive:true});
@@ -864,7 +870,7 @@ $("dlBtn").addEventListener("click", () => { const u = URL.createObjectURL(new B
 function readHash(){ const h = (location.hash || "").replace("#", ""); if (VIEWS.some(v => v[0] === h)) view = h; }
 window.addEventListener("hashchange", () => { readHash(); render(); });
 try { const w = JSON.parse(localStorage.getItem("ncaaRegionWorking") || "null");
-  if (w && w.map && validMap({n:w.map.names, s:w.map.states})){ map = w.map; if (typeof map.label !== "string") map.label = ""; map.over = cleanOver(map.over); off = w.off || {}; progMode = w.progMode || "all"; for (const k in off) if (!SCHOOL[k] || !flagged(SCHOOL[k])) delete off[k]; if (progMode === "list") setProgMode("list"); } } catch (e) {}
+  if (w && w.map && validMap({n:w.map.names, s:w.map.states})){ map = w.map; if (typeof map.label !== "string") map.label = ""; if (!String(map.key).startsWith("shared:") && !String(map.key).startsWith("saved:") && !PRESETS[map.key]) map.key = "custom"; map.over = cleanOver(map.over); off = w.off || {}; progMode = w.progMode || "all"; for (const k in off) if (!SCHOOL[k] || !flagged(SCHOOL[k])) delete off[k]; if (progMode === "list") setProgMode("list"); } } catch (e) {}
 new MutationObserver(render).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
 readHash(); render();
 try { $("saveWho").value = localStorage.getItem("ncaaRegionWho") || ""; } catch (e) {}

@@ -19,11 +19,13 @@ for x in R:
     if y>=2022: sc[(k,y,g+b)].append(round(float(x['score']),1))
 by_id,new,_=result()
 CONFIRMED={9877:'ASUN'}   # Queens University of Charlotte: not on the coaches list, confirmed by Mike
+LEAVING={2365}   # Eastern Michigan: diving in 2026-27, no divers after (Susan Bromberg via Mike, 2026-11-21)
 schools=[]
 for k,(name,city,st,la,lo) in S.items():
     info=by_id.get(k)
     if k in CONFIRMED: info=dict(nodive=False,conf=CONFIRMED[k])   # Mike, 2026-11-18: treat as having diving
     status='on' if info and not info['nodive'] else 'nodive' if info else 'unlisted'
+    if k in LEAVING and status=='on': status='leaving'
     schools.append(dict(id=k,n=name,c=city,s=st,la=la,lo=lo,cf=(info['conf'] if info else ''),st=status,
         w=[len(div.get((k,y,'W'),())) for y in YEARS], m=[len(div.get((k,y,'M'),())) for y in YEARS],
         e={c:[evc.get((k,y,c),0) for y in YEARS] for c in EVS},
