@@ -538,7 +538,7 @@ function choicePage(S, levels){
   }
   const notes = [`A club's home ${C.word.toLowerCase()} is the one where most of its athletes competed that season. An athlete competed away when they entered a different one.`,
                  `The ${C.word.toLowerCase()}s are the ones the ${C.year} season was run on, not the map on screen.`,
-                 'Athletes from clubs based there counts each athlete under their club’s home.'];
+                 `Each athlete is counted under their club\u2019s home ${C.word.toLowerCase()}.`];
   return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title, esc(S.choiceStage))}
     <div class="bsr-totals row">${totals}</div>
     <div class="bsr-grid steps">${cards.join('')}</div>${areas}
