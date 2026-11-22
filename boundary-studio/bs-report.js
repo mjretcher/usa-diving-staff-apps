@@ -313,7 +313,7 @@ function stripHtml(S, levels, typed, hasBase){
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
   else if (S.page === 'choice') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Meets</span>${seg('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], S.choiceStage)}
-      <span class="bsr-lbl gap">Show</span>${flag('cAge', 'Age group')}${flag('cGender', 'Gender')}${flag('cAreas', 'Each region')}${flag('cFlows', 'Where they went')}</div>`;
+      <span class="bsr-lbl gap">Show</span>${flag('cAge', 'Age group')}${flag('cGender', 'Gender')}${flag('cAreas', 'Each region')}${flag('cFlows', 'Where they went and came from')}</div>`;
   else rows = `
     <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
@@ -511,9 +511,20 @@ function choiceData(S){
   if (!p || p.error) return {year, missing: true};
   const word = S.choiceStage === 'Zones' ? 'Zone' : 'Region';
   const areas = Object.entries(p.by_area || {}).map(([k, v]) => ({k, name: `${word} ${k}`, athletes: v.athletes, left: v.left, arrived: v.arrived,
-    to: (p.flows || []).filter(f => f.home === k).map(f => ({name: `${word} ${f.went}`, n: f.athletes}))}));
+    to: (p.flows || []).filter(f => f.home === k).map(f => ({name: `${word} ${f.went}`, n: f.athletes})),
+    from: (p.flows || []).filter(f => f.went === k).map(f => ({name: `${word} ${f.home}`, n: f.athletes}))}));
   const seasons = Object.keys(st).sort().map(y => ({y, athletes: st[y].athletes, away: st[y].competing_away, clubs: st[y].clubs, split: st[y].clubs_split}));
   return {year, p, areas, seasons, word};
+}
+/* Every movement as a grid: one row per home region, one column per region
+   competed at. Read across for where a region's athletes went, down for where
+   a region's arrivals came from. */
+function choiceMatrix(C){
+  const ks = C.areas.map(a => a.k), n = {};
+  (C.p.flows || []).forEach(f => { n[f.home + '>' + f.went] = f.athletes; });
+  return {head: [`Home ${C.word.toLowerCase()}`].concat(ks.map(k => `At ${k}`), ['Competed elsewhere']),
+          rows: C.areas.map(a => [a.name].concat(ks.map(k => k === a.k ? null : (n[a.k + '>' + k] || 0)), [a.left])),
+          totals: ['Came in from elsewhere'].concat(C.areas.map(a => a.arrived), [C.p.competing_away])};
 }
 function choiceTable(C){
   return {head: [C.word, 'Athletes from clubs based there', 'Competed elsewhere', 'Share', 'Came in from elsewhere'],
@@ -532,9 +543,9 @@ function choicePage(S, levels){
     <div class="bsr-total"><b>${pct1(p.competing_away, p.athletes)}</b><span>Of ${fmt(p.athletes)} athletes at ${esc(S.choiceStage)}</span></div>
     <div class="bsr-total"><b>${fmt(p.clubs_split)}</b><span>Of ${fmt(p.clubs)} clubs had athletes at more than one ${C.word.toLowerCase()}</span></div>`;
   const rateRows = (rows, max) => rows.map(([l, away, n]) =>
-    `<div class="bsr-cmp"><div class="bsr-r wide"><span>${esc(l)}</span>${bar(n > 0 ? away / n : 0, max, ink)}<b>${pct1(away, n)}</b></div><small>${fmt(away)} of ${fmt(n)} athletes</small></div>`).join('');
+    `<div class="bsr-r rate"><span>${esc(l)}</span>${bar(n > 0 ? away / n : 0, max, ink)}<b>${pct1(away, n)}</b><small>${fmt(away)} of ${fmt(n)}</small></div>`).join('');
   const card = (h, rows) => { const max = Math.max(0.0001, ...rows.map(x => x[2] > 0 ? x[1] / x[2] : 0));
-    return `<article class="bsr-card bsr-step" style="--c:${ink}"><header><h3>${h}</h3><span class="bsr-meets">Competed away</span></header>${rateRows(rows, max)}</article>`; };
+    return `<article class="bsr-card bsr-step tight" style="--c:${ink}"><header><h3>${h}</h3><span class="bsr-meets">Competed away</span></header>${rateRows(rows, max)}</article>`; };
   const AGEL = {A: 'Group A, 16 to 18', B: 'Group B, 14 to 15', C: 'Group C, 12 to 13', D: 'Group D, 11 & under'};
   const cards = [card('Season by season', C.seasons.map(s => [s.y, s.away, s.athletes]))]
     .concat(S.cAge && p.by_age ? [card('By age group', Object.keys(p.by_age).map(k => [AGEL[k] || k, p.by_age[k].away, p.by_age[k].athletes]))] : [])
@@ -546,13 +557,19 @@ function choicePage(S, levels){
       areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}</h2><div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
         <tbody>${T.rows.map(r => `<tr>${r.map((v, i) => i ? `<td class="n">${typeof v === 'number' ? fmt(v) : esc(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}
         <tr class="tot">${T.totals.map((v, i) => i ? `<td class="n">${typeof v === 'number' ? fmt(v) : esc(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
+      if (S.cFlows){
+        const M = choiceMatrix(C), cell = v => v == null ? '<td class="n off"></td>' : `<td class="n${v ? '' : ' zero'}">${v ? fmt(v) : '0'}</td>`;
+        areas += `<h2 class="bsr-h2">Where they went and where they came from</h2><div class="bsr-tablewrap"><table class="bsr-table bsr-od"><thead><tr>${M.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
+          <tbody>${M.rows.map(r => `<tr><td>${esc(r[0])}</td>${r.slice(1, -1).map(cell).join('')}<td class="n sum">${fmt(r[r.length - 1])}</td></tr>`).join('')}
+          <tr class="tot"><td>${esc(M.totals[0])}</td>${M.totals.slice(1).map(v => `<td class="n">${fmt(v)}</td>`).join('')}</tr></tbody></table></div>
+          <p class="bsr-na" style="margin-top:8px">Read across for where a ${C.word.toLowerCase()}'s athletes competed, and down for where its arrivals came from.</p>`;
+      }
     } else {
-      const max = Math.max(1, ...C.areas.map(a => Math.max(a.left, a.arrived)));
-      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}</h2><div class="bsr-grid">${C.areas.map(a => `<article class="bsr-card" style="--c:${ink}">
+      const list = (rows, word) => rows.map(t => `<div class="bsr-route"><span>${word} ${esc(t.name)}</span><b>${fmt(t.n)}</b></div>`).join('');
+      const side = (cls, n, label, rows, word) => `<div class="bsr-move ${cls}"><div class="bsr-moven"><b>${fmt(n)}</b><span>${label}</span></div>${S.cFlows ? list(rows, word) : ''}</div>`;
+      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}</h2><div class="bsr-grid moves">${C.areas.map(a => `<article class="bsr-card tight" style="--c:${ink}">
         <header><h3>${esc(a.name)}</h3><span class="bsr-meets">${fmt(a.athletes)} athletes</span></header>
-        <div class="bsr-r wide"><span>Competed elsewhere</span>${bar(a.left, max, '#E31937')}<b>${fmt(a.left)}</b></div>
-        <div class="bsr-r wide"><span>Came in from elsewhere</span>${bar(a.arrived, max, '#009AC7')}<b>${fmt(a.arrived)}</b></div>
-        ${S.cFlows && a.to.length ? `<div class="bsr-blk"><h4>Where they went</h4>${a.to.map(t => `<div class="bsr-route"><span>${esc(t.name)}</span><b>${fmt(t.n)}</b></div>`).join('')}</div>` : ''}
+        <div class="bsr-moves">${side('out', a.left, 'Went out', a.to, 'to')}${side('in', a.arrived, 'Came in', a.from, 'from')}</div>
       </article>`).join('')}</div>`;
     }
   }
@@ -744,7 +761,8 @@ function wire(root){
   const cs = root.querySelector('#bsrCsv'); if (cs) cs.addEventListener('click', () => {
     if (S.page === 'areas'){ downloadCsv(build(S.level), S); return; }
     if (S.page === 'choice'){ const C = choiceData(S); if (!C || C.missing) return; const T = choiceTable(C);
-      saveCsv([T.head].concat(T.rows, [T.totals]), `region-choice-${S.choiceStage}-${C.year}.csv`); return; }
+      const moves = (C.p.flows || []).map(f => [`${C.word} ${f.home}`, `${C.word} ${f.went}`, f.athletes]);
+      saveCsv([T.head].concat(T.rows, [T.totals], moves.length ? [[], [`Home ${C.word.toLowerCase()}`, 'Competed at', 'Athletes']].concat(moves) : []), `region-choice-${S.choiceStage}-${C.year}.csv`); return; }
     const P = pathwayData(); if (!P) return;
     const T = pathwayTable(P, S);
     saveCsv([T.head].concat(T.rows, T.totals ? [T.totals] : []), `${S.page}-${String(B().yearLabel()).slice(0, 4)}.csv`);
@@ -852,6 +870,19 @@ const CSS = `
 .bsr-route:first-of-type{border-top:0}
 .bsr-route span{color:#1c2540}.bsr-route b{color:var(--ink);font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 .bsr-r.wide{grid-template-columns:minmax(90px,38%) 1fr auto}
+.bsr-card.tight{padding:10px 14px 12px}.bsr-card.tight header{min-height:0;margin-bottom:6px}
+.bsr-r.rate{grid-template-columns:minmax(96px,36%) 1fr 46px 92px;margin:5px 0;font-size:13px}
+.bsr-r.rate small{font-size:12px;color:var(--soft);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bsr-grid.moves{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
+.bsr-moves{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.bsr-move{border-top:3px solid var(--m);padding-top:6px;min-width:0}
+.bsr-move.out{--m:#E31937}.bsr-move.in{--m:#009AC7}
+.bsr-moven{display:flex;align-items:baseline;gap:7px;margin-bottom:3px}
+.bsr-moven b{font-family:'Barlow Condensed',Inter,sans-serif;font-size:28px;line-height:1;font-weight:700;color:var(--ink)}
+.bsr-moven span{font-size:12px;font-weight:600;color:var(--soft);line-height:1.15}
+.bsr-move .bsr-route{padding:3px 0;font-size:12.5px;gap:8px}
+.bsr-od th,.bsr-od td{padding:6px 8px}.bsr-od td.off{background:#f4f6fa}.bsr-od td.zero{color:#c3cad8;font-weight:500}
+.bsr-od td.sum,.bsr-od th:last-child{border-left:2px solid var(--ink)}
 .bsr-bar.tall{height:12px;border-radius:4px;margin-top:12px}.bsr-bar.tall>i{border-radius:0}
 .bsr-split{margin:0 0 18px}.bsr-split .bsr-key{margin:8px 0 0}
 .bsr-table tr.meet td{color:var(--soft);font-weight:500;padding-top:6px;padding-bottom:6px}.bsr-table tr.meet td:first-child{padding-left:26px}
