@@ -370,11 +370,15 @@ function html(){
   const dense = S.layout !== 'table' && (S.age || S.gender || S.boards);
   return `<div class="bsr">${stripHtml(S, levels, D.typed, !!D.base)}
     <div class="bsr-page${dense ? ' dense' : ''}"><div class="bsr-main">
+      <div class="bsr-lead">
       ${headHtml(`${fmt(D.n)} ${esc(api.tierName(S.level))}`, 'Membership')}
       <div class="bsr-top${shown.length > 4 ? ' many' : ''}"><div class="bsr-mapbox">${mapSvg(D)}</div><div class="bsr-totals">${totals}</div></div>
+      </div>
+      <div class="bsr-cards">
       ${genderKey}
       ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid" style="--pc:${D.n <= 6 ? 3 : 4}">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
       <p class="bsr-foot">${notes.join(' ')}</p>
+      </div>
       </div>${clubSec}
     </div></div>`;
 }
@@ -896,8 +900,9 @@ P .bsr-when{font-size:11px}
 P .bsr-top{grid-template-columns:minmax(0,1fr) 170px;gap:16px;margin-bottom:10px}
 P .bsr-top.many{grid-template-columns:minmax(0,1fr) 270px}
 P .bsr-top.many .bsr-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
-P .bsr-map{max-height:3.3in}
-P .bsr-page.dense .bsr-map{max-height:1.9in}
+P .bsr-page.maponly .bsr-cards{break-before:page}
+P .bsr-page.maponly .bsr-top{grid-template-columns:1fr;gap:14px;margin-bottom:0}
+P .bsr-page.maponly .bsr-top .bsr-totals{display:flex;flex-direction:row;flex-wrap:wrap;gap:12px 34px}
 P .bsr-totals{gap:10px}
 P .bsr-total{padding-left:10px}
 P .bsr-total b{font-size:30px}
@@ -988,14 +993,21 @@ function fitOne(el){
 function fitPages(){
   document.querySelectorAll('.bsr .bsr-page').forEach(pg => {
     const main = pg.querySelector(':scope > .bsr-main'), clubs = pg.querySelector(':scope > .bsr-clubsec');
-    pg.classList.remove('split');
-    if (fitOne(pg) || !main || !clubs) return;
-    pg.classList.add('split');          // the numbers on one sheet, the club lists on the next
-    fitOne(main); fitOne(clubs);
+    const lead = main && main.querySelector(':scope > .bsr-lead'), cards = main && main.querySelector(':scope > .bsr-cards');
+    pg.classList.remove('split', 'maponly');
+    if (fitOne(pg) || !main) return;
+    if (clubs){                          // the club lists take a sheet of their own
+      pg.classList.add('split'); fitOne(clubs);
+      if (fitOne(main) || !lead || !cards) return;
+    } else if (!lead || !cards) return;
+    // Still too much for one sheet: the map gets the first sheet to itself at
+    // full width, and the regions or zones take the next.
+    pg.classList.add('maponly');
+    fitOne(lead); fitOne(cards);
   });
 }
 function unfitPages(){
-  document.querySelectorAll('.bsr .bsr-page, .bsr .bsr-main, .bsr .bsr-clubsec').forEach(el => { el.style.zoom = ''; el.style.width = ''; el.classList.remove('split'); });
+  document.querySelectorAll('.bsr .bsr-page, .bsr .bsr-main, .bsr .bsr-lead, .bsr .bsr-cards, .bsr .bsr-clubsec').forEach(el => { el.style.zoom = ''; el.style.width = ''; el.classList.remove('split', 'maponly'); });
 }
 function printOn(){
   const r = document.querySelector('.bsr');
