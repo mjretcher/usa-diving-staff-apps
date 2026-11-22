@@ -389,7 +389,7 @@ function html(){
       </div>
       <div class="bsr-cards">
       ${genderKey}
-      ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid" style="--pc:${D.n <= 6 ? 3 : 4}">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
+      ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid" style="--pc:${D.n <= 6 ? 3 : 4};--lc:${D.n <= 6 ? 3 : (D.n <= 8 ? 4 : 6)}">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
       <p class="bsr-foot">${notes.join(' ')}</p>
       </div>
       </div>${clubSec}
@@ -963,7 +963,9 @@ P .bsr-top{grid-template-columns:minmax(0,1fr) 170px;gap:16px;margin-bottom:10px
 P .bsr-top.many{grid-template-columns:minmax(0,1fr) 270px}
 P .bsr-top.many .bsr-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 P .bsr-page.maponly .bsr-cards{break-before:page}
-P .bsr-page.maponly .bsr-lead{page:bsrmap;width:10.1in}
+P .bsr.land{width:10.1in}
+P .bsr.land .bsr-page.maponly .bsr-cards .bsr-grid{grid-template-columns:repeat(var(--lc,4),minmax(0,1fr))}
+P .bsr.land .bsr-clubsec{break-before:page}
 P .bsr-page.maponly .bsr-top .bsr-totals{margin-top:2px}
 P .bsr-stats.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
 P .bsr-stats.c4 .bsr-stat span{min-height:0}
@@ -1044,10 +1046,13 @@ css();
    footer, so it leaves out the date and time, page title, web address and
    page number it would otherwise print in the margins (Chrome and Edge). */
 const NO_BROWSER_MARKS = '@top-left{content:""}@top-right{content:""}@bottom-left{content:""}@bottom-right{content:""}';
-/* When the map has a sheet to itself that sheet is turned sideways, so the map
-   prints at the full length of the paper instead of leaving half the sheet
-   empty. The sheets after it stay upright. */
-const PAGE_CSS = '@page{size:letter;margin:.45in;' + NO_BROWSER_MARKS + '}@page bsrmap{size:11in 8.5in;margin:.45in;' + NO_BROWSER_MARKS + '}';
+/* When the map has a sheet to itself the whole print is turned sideways, so
+   the map fills its sheet instead of leaving the lower half empty. Every sheet
+   turns, not just the map's: the print preview draws all sheets at the first
+   one's shape, so a sideways map followed by upright sheets came out
+   stretched. */
+const PAGE_CSS = '@page{size:letter;margin:.45in;' + NO_BROWSER_MARKS + '}';
+const PAGE_CSS_WIDE = '@page{size:11in 8.5in;margin:.45in;' + NO_BROWSER_MARKS + '}';
 const PAPER_W = 7.6 * 96, PAPER_H = 10.1 * 96 - 12, SMALLEST = 0.7;
 const WIDE_W = 10.1 * 96, WIDE_H = 7.6 * 96 - 12;          // the sideways sheet
 /* Shrink one block until it is a single sheet tall. It is made wider by the
@@ -1076,24 +1081,27 @@ function fitPages(){
       pg.classList.add('split'); fitOne(clubs);
       if (fitOne(main) || !lead || !cards) return;
     } else if (!lead || !cards) return;
-    // Still too much for one sheet: the map gets the first sheet to itself at
-    // full width, and the regions or zones take the next.
+    // Still too much for one sheet: the paper turns sideways, the map gets the
+    // first sheet to itself at full size, and the regions or zones take the next.
     pg.classList.add('maponly');
-    fitOne(lead, WIDE_W, WIDE_H); fitOne(cards);
+    const root = pg.closest('.bsr'); if (root) root.classList.add('land');
+    fitOne(lead, WIDE_W, WIDE_H); fitOne(cards, WIDE_W, WIDE_H);
+    if (clubs) fitOne(clubs, WIDE_W, WIDE_H);
   });
 }
 function unfitPages(){
   document.querySelectorAll('.bsr .bsr-page, .bsr .bsr-main, .bsr .bsr-lead, .bsr .bsr-cards, .bsr .bsr-clubsec').forEach(el => { el.style.zoom = ''; el.style.width = ''; el.classList.remove('split', 'maponly'); });
+  document.querySelectorAll('.bsr.land').forEach(el => el.classList.remove('land'));
 }
 function printOn(){
   const r = document.querySelector('.bsr');
   if (!r || !r.offsetParent || document.getElementById('mr-output')) return;
   document.documentElement.classList.add('bsr-print');
-  if (!document.getElementById('bsr-pagecss')){
-    const s = document.createElement('style'); s.id = 'bsr-pagecss'; s.textContent = PAGE_CSS;
-    document.head.appendChild(s);
-  }
+  let s = document.getElementById('bsr-pagecss');
+  if (!s){ s = document.createElement('style'); s.id = 'bsr-pagecss'; document.head.appendChild(s); }
+  s.textContent = PAGE_CSS;
   try { fitPages(); } catch(e){ console.error('fit to page', e); }
+  s.textContent = document.querySelector('.bsr.land') ? PAGE_CSS_WIDE : PAGE_CSS;
 }
 function printOff(){
   document.documentElement.classList.remove('bsr-print');
