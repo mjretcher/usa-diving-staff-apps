@@ -20,7 +20,7 @@ const sum = a => a.reduce((s, x) => s + (x || 0), 0);
 const KEY = 'usad.bs.report';
 const DEFAULTS = {page: 'areas', level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
                   age: false, gender: false, boards: false, maps: true, clubNames: false, share: false,
-                  routes: true, athletes: true, eachMeet: false, even: false, cmp26: false, cmp25: false,
+                  routes: true, athletes: true, eachMeet: false, even: false, change: false, cmp26: false, cmp25: false,
                   area: null};
 let ST = null;
 function state(){
@@ -99,6 +99,13 @@ function build(L){
   let cells = null;
   try { cells = api.entryCellsAt ? api.entryCellsAt(L) : null; } catch(e){ cells = null; }
   if (cells && !cells.some(r => r && Object.keys(r).length)) cells = null;
+  let base = null;
+  try { base = api.baseAt ? api.baseAt(L) : null; } catch(e){ base = null; }
+  const baseRow = A => { if (!base) return null;
+    if (base.rows.length === n) return base.rows[A.gi];
+    const i = base.names.indexOf(A.name); return i >= 0 ? base.rows[i] : null; };
+  const was = (A, k) => { const b = baseRow(A); if (!b) return null;
+    return k === 'comp' ? (typed ? b.t_comp : b.athletes) : k === 'coaches' ? b.coaches : k === 'clubs' ? b.clubs : k === 'members' ? b.members : null; };
   const clubNames = geo.clubs || [];
   const allClubs = new Set(); areas.forEach(A => A.cl.forEach(i => allClubs.add(i)));
   const value = (A, k) => {
@@ -111,7 +118,7 @@ function build(L){
   };
   const total = k => k === 'clubs' ? allClubs.size : sum(areas.map(A => value(A, k)));
   const label = k => { const C = COUNTS.find(x => x.k === k); return (!typed && C.other) ? C.other : C.label; };
-  return {L, TG, n, areas, un, typed, cath, cells, value, total, label,
+  return {L, TG, n, areas, un, typed, cath, cells, value, total, label, base, was,
           clubName: i => { const c = clubNames[i]; return typeof c === 'string' ? c : (c && (c.n || c.name)) || ''; }};
 }
 
@@ -208,7 +215,9 @@ function cardHtml(D, A, S, maxOf){
     const pct = (S.share && C.k !== 'clubs' && tot > 0) ? `<em>${(100 * v / tot).toFixed(1)}% of all</em>` : '';
     const d = Math.round(v - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n));
     const even = S.even ? `<em>${d === 0 ? 'Even' : fmt(Math.abs(d)) + (d > 0 ? ' over' : ' under') + ' an even split'}</em>` : '';
-    return `<div class="bsr-stat"><b>${fmt(v)}</b><span>${esc(D.label(C.k))}</span>${bar(v, maxOf[C.k], A.color)}${pct}${even}</div>`;
+    const w = (S.change && D.base) ? D.was(A, C.k) : null;
+    const chg = w == null ? '' : `<em>${v === w ? 'No change' : (v > w ? '+' : '&minus;') + fmt(Math.abs(v - w)) + ' since the start'}</em>`;
+    return `<div class="bsr-stat"><b>${fmt(v)}</b><span>${esc(D.label(C.k))}</span>${bar(v, maxOf[C.k], A.color)}${pct}${even}${chg}</div>`;
   }).join('');
   return `<article class="bsr-card go" style="--c:${A.color}" data-bsr-area="${A.gi}" tabindex="0" role="button" aria-label="Open ${esc(A.name)}">
     <header><span class="bsr-badge">${esc(A.badge)}</span><h3>${esc(A.name)}</h3>${S.maps ? miniSvg(A) : ''}</header>
@@ -221,7 +230,14 @@ function cardHtml(D, A, S, maxOf){
 
 /* ---------- table layout (also the spreadsheet) ---------- */
 function tableData(D, S){
-  const cols = shownCounts(D, S).map(C => ({h: D.label(C.k), v: A => D.value(A, C.k), tot: () => D.total(C.k)}));
+  const cols = [];
+  shownCounts(D, S).forEach(C => {
+    cols.push({h: D.label(C.k), v: A => D.value(A, C.k), tot: () => D.total(C.k)});
+    if (S.even) cols.push({h: 'Over or under even', signed: true, tot: () => '',
+      v: A => Math.round(D.value(A, C.k) - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n))});
+    if (S.change && D.base && D.was(D.areas[0], C.k) != null) cols.push({h: 'Change since the start', signed: true, tot: () => '',
+      v: A => { const w = D.was(A, C.k); return w == null ? '' : D.value(A, C.k) - w; }});
+  });
   if (S.age){
     if (D.cath) AGE.forEach((g, j) => {
       if (S.gender){
@@ -238,14 +254,14 @@ function tableData(D, S){
     cols.push({h: `${r.label === 'All' ? '' : r.label + ' '}${b.label} entries`.trim(), v: A => cellSum(D.cells[A.gi] || {}, r.a, r.g, b.k)})));
   const rows = D.areas.map(A => [A.name].concat(cols.map(c => c.v(A))));
   const totals = ['Total'].concat(cols.map(c => c.tot ? c.tot() : sum(D.areas.map(A => c.v(A)))));
-  return {head: [B().tierName(D.L)].concat(cols.map(c => c.h)), rows, totals};
+  return {head: [B().tierName(D.L)].concat(cols.map(c => c.h)), rows, totals, signed: [false].concat(cols.map(c => !!c.signed))};
 }
 function tableHtml(D, S){
   const T = tableData(D, S);
   return `<div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${T.rows.map((r, ri) => `<tr>${r.map((v, i) => i ? `<td class="n">${fmt(v)}</td>`
+    <tbody>${T.rows.map((r, ri) => `<tr>${r.map((v, i) => i ? `<td class="n">${v === '' ? '' : (T.signed[i] ? (v > 0 ? '+' : v < 0 ? '&minus;' : '') + fmt(Math.abs(v)) : fmt(v))}</td>`
       : `<td><span class="bsr-badge sm" style="--c:${D.areas[ri].color}">${esc(D.areas[ri].badge)}</span>${esc(v)}</td>`).join('')}</tr>`).join('')}
-    <tr class="tot">${T.totals.map((v, i) => i ? `<td class="n">${fmt(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
+    <tr class="tot">${T.totals.map((v, i) => i ? `<td class="n">${v === '' ? '' : fmt(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
 }
 function downloadCsv(D, S){
   const T = tableData(D, S);
@@ -272,7 +288,7 @@ const chip = (attr, key, on, label, dis) => `<button class="bsr-chip${on ? ' on'
 const seg = (attr, opts, cur) => `<div class="bsr-seg">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
 
 /* The switches. The first row is the same on every page; the rest follow the page. */
-function stripHtml(S, levels, typed){
+function stripHtml(S, levels, typed, hasBase){
   const api = B();
   const years = (api.availableYears ? api.availableYears() : [api.year()]);
   const cur = S.page === 'areas' ? 'L' + S.level : S.page;
@@ -282,7 +298,7 @@ function stripHtml(S, levels, typed){
   if (S.page === 'areas') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Count</span>${COUNTS.map(C => chip('data-bsr-count', C.k, S.counts.includes(C.k) && !(C.only && !typed), (!typed && C.other) ? C.other : C.label, C.only && !typed)).join('')}</div>
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
-      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}${flag('even', 'Even split')}</div>`;
+      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}${flag('even', 'Even split')}${hasBase ? flag('change', 'Change since the start') : ''}</div>`;
   else if (S.page === 'structure') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
       <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}
@@ -335,7 +351,7 @@ function html(){
                  'A club is counted in every area where it has members.',
                  'Lighter counties on the map have no ' + ((api.countyLightBasis && api.countyLightBasis() === 'clubs') ? 'club' : 'members') + '.']
     .concat(D.typed ? [] : ['Counts by exact membership type are kept for 2026 only.']);
-  return `<div class="bsr">${stripHtml(S, levels, D.typed)}
+  return `<div class="bsr">${stripHtml(S, levels, D.typed, !!D.base)}
     <div class="bsr-page">
       ${headHtml(`${fmt(D.n)} ${esc(api.tierName(S.level))}`, 'Membership')}
       <div class="bsr-top"><div class="bsr-mapbox">${mapSvg(D)}</div><div class="bsr-totals">${totals}</div></div>
@@ -771,5 +787,5 @@ function css(){
 }
 css();
 
-window.BSReport = {html, wire, build, tableData};
+window.BSReport = {html, wire, build, tableData, reset: () => { ST = null; }};
 })();

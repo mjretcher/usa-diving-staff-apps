@@ -8424,6 +8424,17 @@ window.BoundaryAPI = {
      19+; each boys, girls, gender not known). 2026 only; null otherwise. */
   compAthAt: L => compAthTallies(tierGroupsAt(L)),
   /* The colour the Map tab gives area gi when it is showing level L. */
+  /* What each area held at the starting point marked on the Map tab, for
+     level L: {names, rows:[{t_comp, athletes, coaches, clubs, members}]}, or
+     null when none is marked or no county has moved since. */
+  baseAt: L => {
+    const b = meetStore().base;
+    if (!b || !(meetMoved(b) > 0)) return null;
+    const keep = {tv: S.tierView, tally: S._tally, of: S._of, bt: S._baseT};
+    try { S.tierView = L; S._tally = null; S._of = null; S._baseT = null; return meetBaseTallies(); }
+    catch(e){ console.error('starting point', e); return null; }
+    finally { S.tierView = keep.tv; S._tally = keep.tally; S._of = keep.of; S._baseT = keep.bt; }
+  },
   colorAt: (L, gi) => L === 0 ? ((S.regions[gi] && S.regions[gi].color) || unassignedBase()) : atlasLevelColor(L, gi),
   /* Event entries per area by age group, gender and board ("AB1"), from the
      real field that seeds the first meet. */
@@ -8722,19 +8733,6 @@ function atlasStaticSvg(assignOf, colorOf, opts){
   return parts.join('');
 }
 
-/* Zone (second-level) boundaries over a static map, for the committee paper.
-   Each Zone's counties are drawn as one silhouette through a filter that keeps
-   only a thin ring around the outside: close the hairline gaps between
-   counties, grow the shape by a pixel, subtract the shape. Adjacent Zones' rings
-   meet in a single navy line; nothing inside a Zone is outlined. Labels sit at
-   the mean position of each Zone's lower-48 counties. The paper map used to
-   carry red outlines on changed counties instead; changes are listed in
-   Section 4. */
-function paperZones(){
-  if (!S.levels || S.levels.length < 3) return null;      // a Zone level exists only between Regions and the final stop
-  const lv = S.levels[1]; if (!lv || !Array.isArray(lv.of) || !lv.groups || lv.groups.length < 2) return null;
-  return {of: lv.of, names: lv.groups.map(g => g.name)};
-}
 function zoneOutlineSvg(assignOf, Z){
   const geo = S.geo, groups = Z.names.map(() => []), pts = Z.names.map(() => [0, 0, 0]);
   for (const c of geo.counties){
@@ -8775,60 +8773,6 @@ function hungarianAssign(cost){
   return col;
 }
 
-/* ---------- churn between any two maps ----------
-   A county "changes" when its area under map A is not the area it was in under
-   map B. Areas are matched by name when both maps use the same set of names.
-   When the names differ (e.g. "Region 1" vs "Region Championship 1"), matching
-   by name would count every county as changed, so each area is instead paired
-   one-to-one with the area of the other map it shares the most counties with
-   (ties broken by members), and a county changes only when it leaves its pair. */
-function capFirst(t){ t = String(t == null ? '' : t); return t.charAt(0).toUpperCase() + t.slice(1); }
-function churnBetween(A, B){
-  const y = S.year;
-  const UN = '— unassigned —';
-  const nameOf = (map, ri) => (ri==null || ri<0 || !map.regions[ri]) ? UN : map.regions[ri].name;
-  const an0 = A.regions.map(r => r.name), bn0 = B.regions.map(r => r.name);
-  const sameNames = an0.length === bn0.length && new Set(an0).size === an0.length
-    && an0.every(x => bn0.includes(x));
-  // pairOf: A area name -> paired B area name (identity when names match).
-  const pairOf = new Map();
-  if (sameNames) an0.forEach(x => pairOf.set(x, x));
-  else {
-    const ov = an0.map(() => bn0.map(() => 0));
-    for (const c of S.geo.counties){
-      const a = A.assign[c.f], b = B.assign[c.f];
-      if (a==null || a<0 || !A.regions[a] || b==null || b<0 || !B.regions[b]) continue;
-      const st = S.geo.stats[c.f], m = (st && st[y]) ? st[y].m : 0;
-      ov[a][b] += 1e6 + m;              // counties first, members break ties
-    }
-    const N = Math.max(an0.length, bn0.length);
-    const cost = Array.from({length:N}, (_, i) => Array.from({length:N}, (_, j) => (i < an0.length && j < bn0.length) ? -ov[i][j] : 0));
-    const col = hungarianAssign(cost);
-    an0.forEach((x, i) => { const j = col[i]; if (j != null && j >= 0 && j < bn0.length && ov[i][j] > 0) pairOf.set(x, bn0[j]); });
-  }
-  const rows = new Map();
-  const changes = [];
-  let moved = 0, movedM = 0, totM = 0;
-  for (const c of S.geo.counties){
-    const f = c.f;
-    const an = nameOf(A, A.assign[f]), bn = nameOf(B, B.assign[f]);
-    const st = S.geo.stats[f];
-    const m = (st && st[y]) ? st[y].m : 0;
-    totM += m;
-    const same = an === UN ? bn === UN : pairOf.get(an) === bn;
-    if (!same){
-      moved++; movedM += m;
-      changes.push({f, county:c.n, st:c.st, from:bn, to:an, m});
-    }
-    if (!rows.has(an)) rows.set(an, new Map());
-    const inner = rows.get(an);
-    const rec = inner.get(bn) || {c:0, m:0};
-    rec.c++; rec.m += m; inner.set(bn, rec);
-  }
-  changes.sort((a,b) => b.m - a.m || a.county.localeCompare(b.county));
-  return {rows, moved, movedM, totM, changes, pairOf, pairedByName: sameNames,
-          sameStructure: A.regions.length === B.regions.length};
-}
 
 /* What a column of the Compare workspace and the board paper need from a map
    that is not on screen: its widest gap, its per-region tallies, and how many
@@ -9305,7 +9249,7 @@ function meetBarRefresh(){
   if (S.sugOpen) sugRefresh();
   on('mtMeet', () => meetView(true));
   on('mtExit', () => meetView(false));
-  on('mtPdf', printMapSummary);
+  on('mtPdf', openMeetingSummary);
 }
 function meetView(on){
   S.meetView = !!on;
@@ -9318,98 +9262,15 @@ function meetView(on){
   if (S.meetView) atlasToast('Meeting view. Press Esc to leave it.', true);
 }
 
-/* ---------- one-page summary ---------- */
-/* One page of the summary, for the level on screen (S.tierView). */
-function mapSummaryPage(){
-  const t = computeTallies(), typed = memberTypeTallies(t.TG), m = meetStore();
-  const val = (c, r, gi) => c.k === 't_comp' ? (typed ? typed[gi].t_comp : null)
-    : c.k === 'athletes' ? r.a : c.k === 'coaches' ? r.c : c.k === 'clubs' ? r.cl.size : r.m;
-  let balK = S.atlBal || 't_comp';
-  if (!OV_COLS.some(c => c.k === balK) || (balK === 't_comp' && !typed)) balK = typed ? 't_comp' : 'athletes';
-  const bc = OV_COLS.find(c => c.k === balK);
-  const cols = OV_COLS.filter(c => !(c.k === 't_comp' && !typed));
-  const vals = t.rows.map((r,gi) => val(bc, r, gi)), sum = vals.reduce((a,b) => a + b, 0), even = t.rows.length ? sum / t.rows.length : 0;
-  const B = meetBaseTallies(), showChg = !!B && meetMoved(m.base) > 0;
-  const ou = d => { const x = Math.round(d); return x === 0 ? 'even' : `${fmt(Math.abs(x))} ${x > 0 ? 'over' : 'under'}`; };
-  const head = `<tr><th class="l">${esc(tierName(S.tierView))}</th>${cols.map(c => `<th class="${c.k===balK?'b':''}">${esc(c.k === 't_comp' ? 'Competition Athletes' : c.short)}</th>`).join('')}<th>Over or under</th>${showChg ? '<th>Change</th>' : ''}</tr>`;
-  const body = t.rows.map((r,gi) => {
-    const br = meetBaseRow(B, t, gi);
-    const chg = !showChg ? '' : `<td>${br && br[balK] != null ? (meetSigned(vals[gi] - br[balK]) || '0') : 'new'}</td>`;
-    return `<tr><td class="l"><i style="background:${groupColor(gi)}"></i>${esc(t.TG.groups[gi].name)}</td>${cols.map(c => `<td class="${c.k===balK?'b':''}">${fmt(val(c, r, gi))}</td>`).join('')}<td>${sum > 0 ? ou(vals[gi] - even) : ''}</td>${chg}</tr>`;
-  }).join('');
-  const clubAll = new Set(); t.rows.forEach(r => r.cl.forEach(x => clubAll.add(x)));
-  const foot = `<tr class="tot"><td class="l">Total</td>${cols.map(c => `<td class="${c.k===balK?'b':''}">${fmt(c.k === 'clubs' ? clubAll.size : t.rows.reduce((a,r,gi) => a + val(c, r, gi), 0))}</td>`).join('')}<td>${sum > 0 ? fmt(Math.round(even)) + ' each' : ''}</td>${showChg ? '<td></td>' : ''}</tr>`;
-  const of = tierGroups().of;
-  const asg = f => { const ri = S.assign[f]; return (ri == null || ri < 0 || ri >= S.regions.length) ? -1 : of[ri]; };
-  const svg = atlasStaticSvg(asg, gi => groupColor(gi), {faded: countyFaded}) + (m.pins ? meetPinsSvg(1) : '');
-  const d = S.asOf ? new Date(S.asOf) : null;
-  const asOf = S.year === 'y26'
-    ? (d && !isNaN(d) ? `2026 membership as of the ${d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})} import` : '2026 membership')
-    : `${yearNumBoundary(S.year)} membership, complete season`;
-  const now = new Date();
-  const printed = now.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'}) + ', ' + now.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
-  const unC = S.geo.counties.length - t.rows.reduce((a,r) => a + r.countiesAssigned, 0);
-  const g = clubGeo();
-  const notes = [
-    `Balancing on ${bc.label}. "Over or under" compares each area with the total divided equally.`,
-    typed ? 'Competition Athletes are the 17U and AQUA Age 18+ Competition Athlete memberships.' : '',
-    'Members are counted in the county where they live. A club with members in two areas is counted in both rows and once in the total.',
-    showChg ? `Change is in ${bc.label} since the starting point marked ${meetClock(m.base.at)}.` : '',
-    unC > 0 ? `${fmt(unC)} counties with ${fmt(t.un.m)} members are not in any area.` : '',
-    meetFadeText(),
-    m.pins && g ? `Dots are clubs: solid at the club address (${fmt(g.exact)}), hollow where the location is estimated from where members live (${fmt(g.est)}).` : '',
-  ].filter(Boolean).join(' ');
-  return `<section class="pg">
-    <h1>${esc(S.mapName || S.scenarioName || 'Boundary map')}</h1>
-    <p class="sub">${esc(tierName(S.tierView))}. ${esc(asOf)}. Printed ${esc(printed)}.</p>
-    <div class="map"><svg viewBox="0 0 975 610" xmlns="http://www.w3.org/2000/svg">${svg}</svg></div>
-    <table class="${t.rows.length > 18 ? 'tight' : ''}"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
-    <p class="notes">${esc(notes)}</p>
-  </section>`;
-}
-/* The whole summary: a page for the first level, then a page for the second
-   (Zones) when the map has one with at least two groups. Each page is counted
-   by putting that level on screen for the length of the count. */
-function mapSummaryHtml(){
-  const keep = {tv: S.tierView, tally: S._tally, of: S._of};
-  const levels = [0];
-  if (S.levels && S.levels.length > 1 && S.levels[1].groups && S.levels[1].groups.length >= 2) levels.push(1);
-  const pages = [];
-  try {
-    for (const L of levels){ S.tierView = L; S._tally = null; S._of = null; pages.push(mapSummaryPage()); }
-  } finally { S.tierView = keep.tv; S._tally = keep.tally; S._of = keep.of; }
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(S.mapName || S.scenarioName || 'Boundary map')}</title><style>
-    @page{size:letter portrait;margin:.45in}
-    *{box-sizing:border-box}
-    html,body{margin:0;padding:0;background:#fff;color:#000;font:10pt Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .pg{break-after:page;page-break-after:always}
-    .pg:last-child{break-after:auto;page-break-after:auto}
-    h1{font-size:17pt;margin:0 0 2pt}
-    .sub{font-size:9.5pt;margin:0 0 10pt}
-    .map{margin:0 0 8pt}.map svg{width:100%;height:auto;display:block}
-    table{border-collapse:collapse;width:100%;font-size:10pt}
-    th,td{padding:4pt 4pt;text-align:right;border-bottom:.5pt solid #999;white-space:nowrap}
-    table.tight{font-size:8.5pt}table.tight th,table.tight td{padding:2.5pt 4pt}
-    th{font-weight:700;border-bottom:1pt solid #000;vertical-align:bottom;white-space:normal;font-size:8.5pt}
-    .l{text-align:left;white-space:nowrap}
-    td.b,th.b{font-weight:700}
-    td i{display:inline-block;width:9pt;height:9pt;margin-right:5pt;vertical-align:-1pt;border:.5pt solid #000}
-    tr.tot td{font-weight:700;border-top:1pt solid #000;border-bottom:0}
-    .notes{font-size:8pt;margin-top:10pt;line-height:1.35}
-  </style></head><body>${pages.join('')}</body></html>`;
-}
-function printMapSummary(){
-  let html;
-  try { html = mapSummaryHtml(); } catch(e){ console.error('map summary', e); msg('Could not build the summary: ' + (e.message || e)); return; }
-  const old = document.getElementById('bsSumFrame'); if (old) old.remove();
-  const fr = document.createElement('iframe');
-  fr.id = 'bsSumFrame'; fr.setAttribute('aria-hidden', 'true');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-  document.body.appendChild(fr);
-  const doc = fr.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
-  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ console.error(e); msg('Could not open the print window.'); } try { window.focus(); } catch(e){} }, 150);
-  atlasToast('Summary ready. Choose Save as PDF in the print window to keep a copy.', true);
+/* The one-page summary lives in the Reports tab now: the same map and table,
+   with the change since the starting point as a switch on the page. */
+function openMeetingSummary(){
+  try { const k = 'usad.bs.report', o = JSON.parse(localStorage.getItem(k) || '{}') || {};
+    Object.assign(o, {page: 'areas', level: (groupCountAt(S.tierView) > 1 ? S.tierView : 0), area: null, layout: 'table', even: true, change: true});
+    localStorage.setItem(k, JSON.stringify(o)); } catch(e){}
+  if (window.BSReport && window.BSReport.reset) window.BSReport.reset();
+  if (S.meetView) meetView(false);
+  S.panelMode = 'report'; renderPanel();
 }
 
 /* ---------- suggested moves ----------
@@ -11124,407 +10985,8 @@ function notesCardHtml(){
     <ol style="margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.45">${S.notes.map(n => `<li style="margin:0 0 5px">${esc(n)}</li>`).join('')}</ol>
   </details>`;
 }
-function reportTextStore(){
-  if (S.frozen){ if (!S.frozen.text) S.frozen.text = {}; return S.frozen.text; }
-  return S.reportText || (S.reportText = {});
-}
-/* ---------- board paper: never clip ----------
-   Each paper page is a fixed letter-size sheet (overflow hidden, so print and
-   screen match). Text can grow -- a longer proposal name, an edited paragraph,
-   more areas -- and anything past the bottom edge used to be cut off. This pass
-   measures every page and moves whatever does not fit onto a continuation page
-   (a table is split between rows, its header repeated), then renumbers pages. */
 
-function rt(key, dflt, tag, cls){
-  const store = reportTextStore();
-  const html = store[key] != null ? store[key] : dflt;
-  return `<${tag||'div'} class="${cls||''}" contenteditable="true" spellcheck="false" data-rt="${key}">${html}</${tag||'div'}>`;
-}
-const mono = v => `<span class="mono">${v}</span>`;
-const longDate = d => (d ? new Date(d) : new Date()).toLocaleDateString('en-US', {day:'numeric', month:'long', year:'numeric'});
 
-/* =========================================================================
-   Pathway route map for the committee paper (Exhibit C / Exhibit B, cont.).
-   Every round is a stop; every route out of it is a line as thick as the
-   event entries it carries. Two sources feed the same drawing:
-     - a submission's projection: summariseRouting() levels, rounds, route
-       bands and flowPairs -- the same numbers the Exhibit C text uses;
-     - the 2026 season as run: every real 2026 Junior Circuit event entry,
-       read from results (core.event_results), never projected.
-   The small numbers under a route are its places won, split 1-meter ·
-   3-meter · platform. Anything that does not add up is withheld with the
-   reason rather than drawn.
-   ========================================================================= */
-const RM_OFFICIAL_2026 = 'seed-2026-official';
-const RM_REAL_YEARS = {y24: 2024, y25: 2025, y26: 2026};   // seasons whose real routes are drawn from results
-const rmOrd = n => { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
-
-/* The 2026 season, route by route, from results. Each individual event entry
-   (DiveMeets diver id x board) is followed across Regionals, Zones, E/W/C and
-   Junior Nationals. Junior Nationals entries are attributed in the same order
-   of precedence as the Junior Circuit report (shared/jc/report.js), so the
-   totals agree: Zones top 3, E/W/C top 3, E/W/C 4th-6th, High Performance
-   Squad, competed without a qualifying finish, no Zones/E/W/C result. The
-   E/W/C 4th-6th group is split by whether the final score cleared the
-   published 2026 average bar (Art. 303(b)(3)(ii)). */
-/* E/W/C -> Junior Nationals average bars come from junior_results.zone_thresholds
-   (zone = 'EWC'), the one place they are stored; loaded with the results below. */
-async function loadActual2026Routes(){
-  const rows = (await NEON.query(`with r0 as (
-      select stage, round, diver_id_dm::text did, discipline disc, right(age_group,1) grp, left(gender,1) g,
-             nullif(place,127) place, score, zone, lower(regexp_replace(diver_first||' '||diver_last,'\\s+',' ','g')) nm
-      from core.event_results where year=2026 and is_junior_circuit and not coalesce(is_synchro,false)
-        and diver_id_dm is not null and age_group is not null),
-    k as (select did, disc, min(grp) grp, min(g) g from r0 group by 1,2),
-    reg as (select did, disc, min(place) place, max(score) sc, bool_or(grp in ('A','B') and disc in ('1M','3M')) q from r0 where stage='Regionals' group by 1,2),
-    zon as (select did, disc, min(place) place, min(zone) zn, max(score) zsc from r0 where stage='Zones' group by 1,2),
-    ewp as (select did, disc from r0 where stage='EWC' and round='Prelim' group by 1,2),
-    ewf as (select did, disc, min(place) place, max(score) score from r0 where stage='EWC' and round='Final' group by 1,2),
-    jnp as (select did, disc, max(nm) nm from r0 where stage='Nationals' and round='Prelim' group by 1,2),
-    jnf as (select did, disc from r0 where stage='Nationals' and round='Final' group by 1,2)
-    select k.did, k.disc, k.grp, k.g, reg.did is not null in_r, coalesce(reg.q,false) r_q, reg.place r_pl,
-      zon.did is not null in_z, zon.place z_pl, ewp.did is not null in_e, ewf.did is not null in_ef, ewf.place ef_pl, ewf.score ef_sc,
-      jnp.did is not null in_n, jnf.did is not null in_nf, jnp.nm, reg.sc r_sc, zon.zn z_zn, zon.zsc z_sc
-    from k left join reg using (did,disc) left join zon using (did,disc) left join ewp using (did,disc)
-      left join ewf using (did,disc) left join jnp using (did,disc) left join jnf using (did,disc)`)).rows || [];
-  const val = (r, k, i) => Array.isArray(r) ? r[i] : r[k];
-  const hps = (await NEON.query(`select distinct diver_key kk, lower(regexp_replace(athlete_name,'\\s+',' ','g')) nm
-      from junior_results.projected_nationals_field where season=2026 and qualification_path like 'HPS%'`)).rows || [];
-  // Published 2026 Regionals -> Zones average bars, one per zone and event
-  // (DiveMeets zone qualifier lists; junior_results.zone_thresholds).
-  const zb = (await NEON.query(`select zone, event_key, threshold_score from junior_results.zone_thresholds where year=2026`)).rows || [];
-  const ZBAR = {}, EBAR = {}, Z18 = {};
-  zb.forEach(r => { const z = val(r, 'zone', 0), k = val(r, 'event_key', 1), v = +val(r, 'threshold_score', 2);
-    if (z === 'EWC') EBAR[k] = v; else if (z === 'Z18') Z18[k] = v; else if (/^[A-F]$/.test(z)) ZBAR[z + '|' + k] = v; });
-  if (Object.keys(EBAR).length !== 24) throw new Error(`E/W/C average bars: ${Object.keys(EBAR).length} of 24 on file`);
-  const hk = new Set(hps.map(h => val(h, 'kk', 0))), hn = new Set(hps.map(h => val(h, 'nm', 1)));
-  const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
-  const inc = (k, d) => { const c = C[k] || (C[k] = [0, 0, 0]); c[B[d]]++; };
-  const bool = v => v === true || v === 't' || v === 'true';
-  const num = v => v == null || v === '' ? null : +v;
-  rows.forEach(r => {
-    const g = n => val(r, n, ['did','disc','grp','g','in_r','r_q','r_pl','in_z','z_pl','in_e','in_ef','ef_pl','ef_sc','in_n','in_nf','nm','r_sc','z_zn','z_sc'].indexOf(n));
-    const d = g('disc'); if (!(d in B)) return;
-    const inR = bool(g('in_r')), inZ = bool(g('in_z')), inE = bool(g('in_e')), inEF = bool(g('in_ef')), inN = bool(g('in_n'));
-    const rp = num(g('r_pl')), zp = num(g('z_pl')), ef = num(g('ef_pl'));
-    if (inR){ inc('R', d);
-      const won = bool(g('r_q')) && rp != null && rp <= 15;
-      if (bool(g('r_q'))){ if (won) inc('R.won', d); if (won && inZ) inc('R.won.went', d);
-        if (!won && inZ){ inc('R.low.went', d);
-          const bar = ZBAR[g('z_zn') + '|' + `Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`];
-          inc(bar != null && num(g('r_sc')) >= bar ? 'R.low.bar' : 'R.low.other', d); } }
-      if (!inZ) inc(!bool(g('r_q')) ? 'R.stop.nq' : won ? 'R.stop.won' : 'R.stop.low', d); }
-    if (inZ){ inc('Z', d);
-      if (!(inR && bool(g('r_q')))) inc(g('grp') === 'C' || g('grp') === 'D' ? 'Z.dir.cd' : d === 'Platform' ? 'Z.dir.p' : 'Z.dir.o', d);
-      const band = zp != null && zp <= 3 ? 'top3' : zp != null && zp <= 18 ? 'mid' : 'low';
-      inc('Z.' + band, d);
-      if (band === 'mid' && inE) inc('Z.mid.went', d);
-      if (band === 'low' && inE){ inc('Z.low.toE', d);
-        const b18 = Z18[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`];
-        inc(zp != null && b18 != null && num(g('z_sc')) >= b18 ? 'Z.low.bar' : 'Z.low.other', d); }
-      if (band === 'top3' && inE) inc('Z.top3.alsoE', d);
-      if (!inE && !inN) inc('Z.stop.' + band, d); }
-    if (inE){ inc('E', d);
-      if (!inZ) inc('E.dir', d);
-      if (inEF) inc('E.final', d);
-      if (inEF && ef != null && ef <= 3) inc('E.top3', d);
-      if (!inN) inc(!inEF ? 'E.stop.prelim' : (ef != null && ef <= 3) ? 'E.stop.top3' : 'E.stop.final', d); }
-    if (inN){ inc('N', d); if (bool(g('in_nf'))) inc('N.final', d);
-      let cat;
-      if (inZ && zp != null && zp <= 3) cat = 'zoneTop3';
-      else if (inEF && ef != null && ef <= 3) cat = 'ewcTop3';
-      else if (inEF && ef != null && ef <= 6){ const bar = EBAR[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`]; cat = bar != null && num(g('ef_sc')) >= bar ? 'ewcBar' : 'ewcBelow'; }
-      else if (hk.has('dm:' + g('did')) || hn.has(g('nm'))) cat = 'hps';
-      else if (inZ || inE) cat = 'otherCompeted';
-      else cat = 'otherNoResult';
-      inc('N.' + cat, d); }
-  });
-  const n = k => (C[k] || [0, 0, 0]).reduce((a, b) => a + b, 0);
-  // Self-checks: every level's parts must add back to its real field.
-  const checks = [
-    ['Zones sources', n('R.won.went') + n('R.low.went') + n('Z.dir.cd') + n('Z.dir.p') + n('Z.dir.o'), n('Z')],
-    ['E/W/C sources', n('Z.mid.went') + n('Z.low.toE') + n('Z.top3.alsoE') + n('E.dir'), n('E')],
-    ['Junior Nationals routes', ['zoneTop3','ewcTop3','ewcBar','ewcBelow','hps','otherCompeted','otherNoResult'].reduce((a, k) => a + n('N.' + k), 0), n('N')],
-  ].filter(c => c[1] !== c[2]);
-  if (!rows.length || checks.length) throw new Error(!rows.length ? 'no 2026 results returned' : 'real 2026 routes do not add up: ' + checks.map(c => `${c[0]} ${c[1]} vs ${c[2]}`).join('; '));
-  const zv = Object.values(ZBAR);
-  return {C, n, at: new Date().toISOString(), year: 2026,
-    bars: {zones: zv.length ? {count: zv.length, lo: Math.min(...zv), hi: Math.max(...zv)} : null,
-           ewc: {count: Object.keys(EBAR).length, lo: Math.min(...Object.values(EBAR)), hi: Math.max(...Object.values(EBAR))},
-           z18: Object.keys(Z18).length}};
-}
-
-/* A 2021-2025-rules season (2024 and 2025 are loaded) as it ran: Regions ->
-   Zones -> Junior Nationals, no E/W/C. Every real entry, followed by DiveMeets
-   diver id and board, attributed by the published rules (junior-eras.js):
-     Regionals: springboard top 15 advance; platform is exhibition, so
-       platform divers start at Zones.
-     Zones: top 3 (every board) go to the Junior Nationals semifinal;
-       4th-10th springboard / 4th-7th platform to the preliminaries;
-       11th-16th are alternates who can fill a withdrawal.
-     Junior Nationals: preliminaries top 6 join the semifinal; semifinal
-       top 12 contest the final.
-   The 15th-place average bar that also admitted divers to Zones is not on file
-   for these seasons, so anyone who reached Zones from 16th or lower is shown as
-   exactly that -- a count, not a claimed rule. */
-async function loadActualRoutesPre26(year){
-  const rows = (await NEON.query(`with r0 as (
-      select stage, round, diver_id_dm::text did, discipline disc, right(age_group,1) grp, left(gender,1) g, nullif(place,127) place, score
-      from core.event_results where year=$1 and is_junior_circuit and not coalesce(is_synchro,false)
-        and diver_id_dm is not null and age_group is not null),
-    k as (select did, disc, min(grp) grp, min(g) g from r0 group by 1,2),
-    reg as (select did, disc, min(place) place, max(score) sc from r0 where stage='Regionals' group by 1,2),
-    zon as (select did, disc, min(place) place from r0 where stage='Zones' group by 1,2),
-    np as (select did, disc from r0 where stage='Nationals' and round='Prelim' group by 1,2),
-    ns as (select did, disc from r0 where stage='Nationals' and round='Semifinal' group by 1,2),
-    nf as (select did, disc from r0 where stage='Nationals' and round='Final' group by 1,2)
-    select k.did, k.disc, reg.did is not null in_r, reg.place r_pl, zon.did is not null in_z, zon.place z_pl,
-      np.did is not null in_np, ns.did is not null in_ns, nf.did is not null in_nf, k.grp, k.g, reg.sc r_sc
-    from k left join reg using (did,disc) left join zon using (did,disc) left join np using (did,disc)
-      left join ns using (did,disc) left join nf using (did,disc)`, [year])).rows || [];
-  const val = (r, k, i) => Array.isArray(r) ? r[i] : r[k];
-  const cols = ['did','disc','in_r','r_pl','in_z','z_pl','in_np','in_ns','in_nf','grp','g','r_sc'];
-  // The published national 15th-place average bar per event, where it is on file
-  // (junior_results.zone_thresholds, zone = 'ALL'; 2024 from the USA Diving
-  // 2024 Zone Qualifiers workbook). No rows for a season = bar not on file.
-  const bt = (await NEON.query(`select event_key, threshold_score from junior_results.zone_thresholds where year=$1 and zone='ALL'`, [year])).rows || [];
-  const BAR = {}; bt.forEach(r => { BAR[val(r, 'event_key', 0)] = +val(r, 'threshold_score', 1); });
-  const haveBars = Object.keys(BAR).length > 0;
-  const C = {}, B = {'1M': 0, '3M': 1, 'Platform': 2};
-  const inc = (k, d) => { const c = C[k] || (C[k] = [0, 0, 0]); c[B[d]]++; };
-  const bool = v => v === true || v === 't' || v === 'true';
-  const num = v => v == null || v === '' ? null : +v;
-  rows.forEach(r => {
-    const g = n => val(r, n, cols.indexOf(n));
-    const d = g('disc'); if (!(d in B)) return;
-    const inR = bool(g('in_r')), inZ = bool(g('in_z')), inNP = bool(g('in_np')), inNS = bool(g('in_ns')), inNF = bool(g('in_nf'));
-    const inN = inNP || inNS || inNF, rp = num(g('r_pl')), zp = num(g('z_pl')), plat = d === 'Platform';
-    const midHi = plat ? 7 : 10;
-    if (inR){ inc('R', d);
-      if (plat){ if (!inZ) inc('R.stop.nq', d); }
-      else { const won = rp != null && rp <= 15;
-        if (won) inc('R.won', d);
-        if (won && inZ) inc('R.won.went', d);
-        if (!won && inZ){ inc('R.low.went', d);
-          if (haveBars){ const bar = BAR[`Group ${g('grp')} ${g('g') === 'B' ? 'Boys' : 'Girls'} ${d}`];
-            inc(bar != null && num(g('r_sc')) >= bar ? 'R.low.bar' : 'R.low.other', d); } }
-        if (!inZ) inc(won ? 'R.stop.won' : 'R.stop.low', d); } }
-    if (inZ){ inc('Z', d);
-      if (!inR || plat) inc(plat ? 'Z.dir.p' : 'Z.dir.o', d);
-      const band = zp != null && zp <= 3 ? 'top3' : zp != null && zp <= midHi ? 'mid' : zp != null && zp <= 16 ? 'alt' : 'low';
-      inc('Z.' + band, d);
-      if (!inN) inc('Z.stop.' + band, d); }
-    if (inN){ inc('N', d);
-      if (inNP) inc('N.p', d); if (inNS) inc('N.s', d); if (inNF) inc('N.f', d);
-      if (inNP && inNS) inc('N.p2s', d);
-      let cat;
-      if (inZ && zp != null && zp <= 3) cat = 'zoneTop3';
-      else if (inZ && zp != null && zp <= midHi) cat = 'zoneMid';
-      else if (inZ && zp != null && zp <= 16) cat = 'zoneAlt';
-      else if (inZ) cat = 'otherCompeted';
-      else cat = 'otherNoResult';
-      inc('N.' + cat, d);
-      if (cat === 'zoneTop3' && inNS) inc('N.top3.semi', d);
-      if ((cat === 'zoneMid' || cat === 'zoneAlt') && inNP) inc('N.' + cat + '.prelim', d); }
-  });
-  const n = k => (C[k] || [0, 0, 0]).reduce((a, b) => a + b, 0);
-  const checks = [
-    ['Zones sources', n('R.won.went') + n('R.low.went') + n('Z.dir.p') + n('Z.dir.o'), n('Z')],
-    ['Junior Nationals routes', ['zoneTop3','zoneMid','zoneAlt','otherCompeted','otherNoResult'].reduce((a, k) => a + n('N.' + k), 0), n('N')],
-  ].filter(c => c[1] !== c[2]);
-  if (!rows.length || checks.length) throw new Error(!rows.length ? `no ${year} results returned` : `real ${year} routes do not add up: ` + checks.map(c => `${c[0]} ${c[1]} vs ${c[2]}`).join('; '));
-  const bv = Object.values(BAR);
-  return {C, n, year, at: new Date().toISOString(), bars: haveBars ? {count: bv.length, lo: Math.min(...bv), hi: Math.max(...bv)} : null};
-}
-
-function rmSpecActualPre26(A){
-  const n = A.n, s = k => (A.C[k] || [0, 0, 0]).slice(), f0 = v => fmt(v), Y = A.year;
-  const nOther = n('N.otherCompeted') + n('N.otherNoResult');
-  const rDirPlat = n('R') - n('R.stop.nq') - n('R.won.went') - n('R.low.went') - n('R.stop.won') - n('R.stop.low');   // platform Regionals entries that dove Zones
-  return {actual: true,
-    levels: [
-      {name: 'Regions', entries: n('R'), meets: 12, rounds: 1, note: `real ${Y} field`},
-      {name: 'Zones', entries: n('Z'), meets: 6, rounds: 1, note: `real ${Y} field`},
-      {name: 'Junior Nationals', entries: n('N'), meets: 1, rounds: 3, note: `real ${Y} field`, goal: true}],
-    stations: [
-      {id: 'R', level: 0, round: 'Regions', n: n('R'), stop: [`${f0(n('R.stop.low') + n('R.stop.won') + n('R.stop.nq'))} stop`, `${f0(n('R.stop.low'))} placed 16th+`, `${f0(n('R.stop.won'))} did not go`, `${f0(n('R.stop.nq'))} platform (exhibition)`]},
-      {id: 'Z', level: 1, round: 'Zones', n: n('Z'), direct: {n: n('Z.dir.p') + n('Z.dir.o'), lines: [`${f0(n('Z.dir.p'))} platform` + (n('Z.dir.o') ? ` · ${f0(n('Z.dir.o'))} other` : '')]},
-        stop: [`${f0(n('Z.stop.top3') + n('Z.stop.mid') + n('Z.stop.alt') + n('Z.stop.low'))} stop`, `${f0(n('Z.stop.alt') + n('Z.stop.low'))} placed 11th+ (8th+ platform)`, `${f0(n('Z.stop.top3') + n('Z.stop.mid'))} did not go`]},
-      {id: 'NP', level: 2, round: 'Prelims', n: n('N.p'), goal: true, direct: nOther ? {n: nOther, lines: [`${f0(n('N.otherNoResult'))} no Zones result`, `${f0(n('N.otherCompeted'))} placed 17th+`], small: true} : null,
-        stop: [`${f0(n('N.p') - n('N.p2s'))} finish here`]},
-      {id: 'NS', level: 2, round: 'Semis', n: n('N.s'), goal: true, stop: [`${f0(n('N.s') - n('N.f'))} finish here`]},
-      {id: 'NF', level: 2, round: 'Final', n: n('N.f'), goal: true}],
-    routes: [
-      {from: 'R', to: 'Z', kind: 'next', band: 'Places 1–15', places: n('R.won'), take: n('R.won.went'), pct: `${Math.round(n('R.won.went') / Math.max(1, n('R.won')) * 100)}% went`, split: s('R.won')},
-      {from: 'R', to: 'Z', kind: A.bars ? 'avg' : 'alt', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went'), sub: A.bars ? `${f0(n('R.low.bar'))} over the average bar` : null},
-      {from: 'Z', to: 'NS', kind: 'nat', band: 'Zones places 1–3 go straight to the semifinal', places: n('Z.top3'), take: n('N.zoneTop3'), split: s('Z.top3')},
-      {from: 'Z', to: 'NP', kind: 'nat', band: 'Places 4–10 (4–7 platform)', places: n('Z.mid'), take: n('N.zoneMid'), pct: `${Math.round(n('N.zoneMid') / Math.max(1, n('Z.mid')) * 100)}% went`, split: s('Z.mid')},
-      {from: 'Z', to: 'NP', kind: 'alt', band: 'Alternates 11–16', places: n('N.zoneAlt'), split: s('N.zoneAlt')},
-      {from: 'NP', to: 'NS', kind: 'round', band: 'Top 6', places: n('N.p2s'), split: s('N.p2s')},
-      {from: 'NS', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.f'), split: s('N.f')}],
-    strip: [`WAYS INTO JUNIOR NATIONALS — ${Y} ACTUAL`,
-      `Zones top 3: ${f0(n('N.zoneTop3'))} · Zones 4–10 / 4–7: ${f0(n('N.zoneMid'))} · alternates: ${f0(n('N.zoneAlt'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: A.bars ? `Average bars (published, ${Y}): Regionals → Zones, ${A.bars.count} national event bars from ${A.bars.lo.toFixed(3)} to ${A.bars.hi.toFixed(3)} (${Y === 2024 ? 'USA Diving 2024 Zone Qualifiers workbook' : 'DiveMeets zone qualifier pages; events not shown there recomputed by DiveMeets\u2019 published method'}); ${f0(n('R.low.bar'))} of the ${f0(n('R.low.went'))} who reached Zones from 16th or lower cleared the bar, ${f0(n('R.low.other'))} came in another way.`
-      : `Average bar: the ${Y} Regionals → Zones 15th-place average bar is not on file, so the ${f0(n('R.low.went'))} who reached Zones from 16th or lower are shown as a count, not attributed to it.`,
-    foot: `It is every real ${Y} Junior Circuit entry, followed from results by diver and board, under the ${Y} rules (no E/W/C). ${f0(rDirPlat)} platform entries also dove Regionals as exhibition.`};
-}
-
-/* The 2026 season as a route-map spec -- real event entries throughout. */
-function rmSpecActual2026(A){
-  const n = A.n, s = k => (A.C[k] || [0, 0, 0]).slice(), f0 = v => fmt(v);
-  const rDir = n('R') - n('R.stop.nq') - n('R.stop.won') - n('R.stop.low') - n('R.won.went') - n('R.low.went');   // non-qualifying Regionals entries that went on to Zones
-  const zDir = n('Z.dir.cd') + n('Z.dir.p') + n('Z.dir.o');
-  const nOther = n('N.ewcBelow') + n('N.otherCompeted') + n('N.otherNoResult');
-  return {actual: true,
-    levels: [
-      {name: 'Regions', entries: n('R'), meets: 12, rounds: 1, note: 'real 2026 field'},
-      {name: 'Zones', entries: n('Z'), meets: 6, rounds: 1, note: 'real 2026 field'},
-      {name: 'East / West / Central', entries: n('E'), meets: 3, rounds: 2, note: 'real 2026 field'},
-      {name: 'Junior Nationals', entries: n('N'), meets: 1, rounds: 2, note: 'real 2026 field', goal: true}],
-    stations: [
-      {id: 'R', level: 0, round: 'Regions', n: n('R'), stop: [`${f0(n('R.stop.low') + n('R.stop.won') + n('R.stop.nq'))} stop`, `${f0(n('R.stop.low'))} placed 16th+`, `${f0(n('R.stop.won'))} did not go`, `${f0(n('R.stop.nq'))} non-qualifying event`]},
-      {id: 'Z', level: 1, round: 'Zones', n: n('Z'), direct: {n: zDir, lines: [`${f0(n('Z.dir.cd'))} Groups C and D`, `${f0(n('Z.dir.p'))} platform` + (n('Z.dir.o') ? ` · ${f0(n('Z.dir.o'))} other` : '')]},
-        stop: [`${f0(n('Z.stop.top3') + n('Z.stop.mid') + n('Z.stop.low'))} stop`, `${f0(n('Z.stop.low'))} placed 19th+`, `${f0(n('Z.stop.mid') + n('Z.stop.top3'))} did not go`]},
-      {id: 'EP', level: 2, round: 'Prelims', n: n('E'), direct: n('E.dir') ? {n: n('E.dir'), lines: ['no Zones result'], small: true} : null,
-        stop: [`${f0(n('E.stop.prelim'))} stop`, 'placed 13th+']},
-      {id: 'EF', level: 2, round: 'Final', n: n('E.final'), stop: [`${f0(n('E.stop.final') + n('E.stop.top3'))} stop`, `${f0(n('E.stop.final'))} placed 4th+`, `${f0(n('E.stop.top3'))} did not go`]},
-      {id: 'NP', level: 3, round: 'Prelims', n: n('N'), goal: true, direct: {n: n('N.hps') + nOther, lines: [`${f0(n('N.hps'))} HP Squad`, `${f0(nOther)} other`], small: true},
-        stop: [`${f0(n('N') - n('N.final'))} finish here`]},
-      {id: 'NF', level: 3, round: 'Final', n: n('N.final'), goal: true}],
-    routes: [
-      {from: 'R', to: 'Z', kind: 'next', band: 'Places 1–15', places: n('R.won'), take: n('R.won.went'), pct: `${Math.round(n('R.won.went') / n('R.won') * 100)}% went`, split: s('R.won')},
-      {from: 'R', to: 'Z', kind: 'avg', band: '16th or lower', places: n('R.low.went'), split: s('R.low.went'), sub: `${f0(n('R.low.bar'))} over the zone bar`},
-      {from: 'Z', to: 'EP', kind: 'next', band: 'Places 4–18', places: n('Z.mid'), take: n('Z.mid.went'), pct: `${Math.round(n('Z.mid.went') / n('Z.mid') * 100)}% went`, split: s('Z.mid')},
-      {from: 'Z', to: 'EP', kind: A.bars && A.bars.z18 ? 'avg' : 'alt', band: '19th or lower', places: n('Z.low.toE'), split: s('Z.low.toE'), sub: A.bars && A.bars.z18 ? `${f0(n('Z.low.bar'))} over the 18th-place bar` : null},
-      {from: 'Z', to: 'NP', kind: 'nat', band: 'Zones places 1–3 go straight to Junior Nationals', places: n('Z.top3'), take: n('N.zoneTop3'), split: s('Z.top3')},
-      {from: 'EP', to: 'EF', kind: 'round', band: 'Top 12', places: n('E.final'), split: s('E.final')},
-      {from: 'EF', to: 'NP', kind: 'nat', band: 'Places 1–3', places: n('E.top3'), take: n('N.ewcTop3'), split: s('E.top3')},
-      {from: 'EF', to: 'NP', kind: 'avg', band: 'Average bar', places: n('N.ewcBar'), split: s('N.ewcBar')},
-      {from: 'NP', to: 'NF', kind: 'round', band: 'Top 12', places: n('N.final'), split: s('N.final')}],
-    strip: ['WAYS INTO JUNIOR NATIONALS — 2026 ACTUAL',
-      `Zones top 3: ${f0(n('N.zoneTop3'))} · E/W/C top 3: ${f0(n('N.ewcTop3'))} · average bar: ${f0(n('N.ewcBar'))} · HP Squad: ${f0(n('N.hps'))} · other: ${f0(nOther)} = ${f0(n('N'))}`],
-    bars: A.bars ? `Bars used: ${A.bars.zones ? A.bars.zones.count + ' published zone bars' : 'no zone bars'} (Regionals → Zones), ${A.bars.z18 ? A.bars.z18 + ' 18th-place bars (Zones → E/W/C)' : 'Zones → E/W/C 18th-place bar not on file'}, ${A.bars.ewc.count} event bars (E/W/C → Junior Nationals).` : '',
-    foot: `It is every real 2026 entry by diver and board; \u201cother\u201d at Junior Nationals is ${f0(n('N.otherCompeted'))} without a qualifying finish, ${f0(n('N.ewcBelow'))} E/W/C 4th\u20136th below the bar, ${f0(n('N.otherNoResult'))} with no Zones or E/W/C result.`};
-}
-
-/* A submission's projection as a route-map spec. */
-function rmSpecProjected(col){
-  if (!col || col.error) return {withheld: col && col.error ? col.error : 'this submission could not be projected'};
-  if ((col.dropped || 0) > 0.5) return {withheld: `${fmt(Math.round(col.dropped))} places are routed to a level or round that does not exist; fix the routes first`};
-  const lv = col.levels || [], last = lv.length - 1, f0 = v => fmt(Math.round(v));
-  const pair = {}; (col.flowPairs || []).forEach(p => { pair[p.from + '>' + p.to] = p.places > 0 ? p.arrived / p.places : 1; });
-  const sid = (L, k) => L + ':' + k;
-  const stations = [], routes = [];
-  for (let L = 0; L <= last; L++){
-    const l = lv[L];
-    (l.detail || []).forEach((r, ri) => {
-      const outs = r.routes.filter(rt => rt.toIdx != null);
-      let sent = 0, declined = 0, hi = 0, contiguous = true;
-      outs.slice().sort((a, b) => a.lo - b.lo).forEach(rt => { if (rt.lo !== hi + 1) contiguous = false; hi = rt.hi == null ? Infinity : Math.max(hi, rt.hi); });
-      outs.forEach(rt => {
-        const kind = rt.toIdx === L ? 'round' : rt.toIdx === last ? 'nat' : 'next';
-        const ratio = rt.toIdx === L ? 1 : (pair[L + '>' + rt.toIdx] != null ? pair[L + '>' + rt.toIdx] : 1);
-        const take = rt.sends * ratio;
-        sent += rt.sends; declined += rt.sends - take;
-        const toKey = (lv[rt.toIdx].detail || []).find(d => d.name === rt.toRound);
-        routes.push({from: sid(L, r.key), to: sid(rt.toIdx, toKey ? toKey.key : ''), kind,
-          band: (rt.share != null ? `${Math.round(rt.share * 100)}% of the field` + (rt.hi != null ? `, places ${rt.lo}–${rt.hi}` : rt.lo > 1 ? `, from ${rmOrd(rt.lo)}` : '')
-                 : rt.hi == null ? `${rmOrd(rt.lo)} and lower` : `Places ${rt.lo}–${rt.hi}`) + (kind === 'nat' && rt.toIdx - L > 1 ? ` go straight to ${lv[rt.toIdx].name}` : ''),
-          places: rt.sends, take: kind === 'round' ? null : take,
-          pct: kind === 'round' ? null : `${Math.round(ratio * 100)}% take up, ${lv[rt.toIdx].measured != null ? 'measured' : 'assumed'}`, assumed: kind !== 'round' && lv[rt.toIdx].measured == null,
-          split: BOARDS.map(b => (rt.byBoard || {})[b.k] || 0)});
-      });
-      const noPlace = r.size - sent;
-      if (noPlace < -0.5) { stations.bad = `${l.name} ${r.name.toLowerCase()} sends on more places (${f0(sent)}) than it has event entries (${f0(r.size)})`; }
-      const stop = noPlace + declined, isLast = L === last && ri === (l.detail.length - 1);
-      stations.push({id: sid(L, r.key), level: L, round: (l.detail.length === 1 ? l.name : r.name.replace(/^Preliminaries$/, 'Prelims').replace(/^Finals$/, 'Final')), n: r.size, goal: L === last,
-        direct: ri === 0 && L > 0 && l.direct >= 0.5 ? {n: l.direct, lines: [`no place from ${lv[L - 1].name}`]} : null,
-        stop: isLast || stop < 0.5 ? null : (L === last ? [`${f0(stop)} finish here`] : [`${f0(stop)} stop`,
-          noPlace >= 0.5 ? `${f0(noPlace)} ${contiguous && isFinite(hi) ? 'placed ' + rmOrd(hi + 1) + '+' : 'no qualifying place'}` : null,
-          declined >= 0.5 ? `${f0(declined)} did not go` : null].filter(Boolean))});
-    });
-  }
-  if (stations.bad) return {withheld: stations.bad};
-  const into = routes.filter(r => r.kind === 'nat');
-  const tot = into.reduce((a, r) => a + r.take, 0), anyAssumed = into.some(r => r.assumed);
-  return {levels: lv.map((l, L) => ({name: l.name, entries: l.entries, meets: l.stops, rounds: (l.detail || []).length, actual: l.actual, stage: l.stage, goal: L === last})),
-    stations, routes,
-    strip: [`WAYS INTO ${String(lv[last].name).toUpperCase()} — PROJECTED`,
-      into.map(r => { const st = stations.find(z => z.id === r.from); const L = +r.from.split(':')[0]; return `${lv[L].name}${(lv[L].detail || []).length > 1 ? ' ' + st.round.toLowerCase() : ''} ${r.band.replace(/ go straight.*/, '').replace(/^Places /, 'places ')} (${f0(r.take)})`; }).join(' + ') + ` = ${f0(tot)}` + (anyAssumed ? ' · take-up assumed 100%, not measured' : ' · take-up measured')]};
-}
-
-function pathwayRouteMap(spec, o){
-  o = o || {};
-  const W = 672;
-  if (!spec) return '';
-  if (spec.withheld) return `<div style="border:1px solid #c9d0dc;border-left:3px solid #b3122b;padding:10px 12px;font-size:9.5pt;color:#4b5568">Route map withheld: ${esc(spec.withheld)}</div>`;
-  const NV = '#171f69', PL = '#009ac7', SKY = '#8fc3ea', RD = '#b3122b', AM = '#b45309';
-  const f0 = v => fmt(Math.round(v));
-  const bc = "font-family:'Barlow Condensed',sans-serif;font-weight:700;", it = s => `font-family:Inter,sans-serif;font-size:${s}px;`, mo = s => `font-family:'JetBrains Mono',monospace;font-weight:600;font-size:${s}px;`;
-  let out = '';
-  const T = (x, y, s, st, a) => { out += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${a || 'middle'}" style="${st}">${s}</text>`; };
-  const k = o.scale || 0.0105, rw = v => Math.max(2.5, v * k), rr = v => 7 + Math.sqrt(Math.max(0, v)) * 0.33;
-  // Panels: width shared by rounds, never narrower than 122px.
-  const lv = spec.levels, nR = spec.stations.length, gap = 8;
-  const unit = (W - gap * (lv.length - 1)) / nR;
-  let x = 0; const panels = lv.map((l, L) => { const cnt = spec.stations.filter(s => s.level === L).length; const w = Math.max(122, unit * cnt); const p = {x0: x, x1: x + w}; x += w + gap; return p; });
-  const over = x - gap - W; if (over > 0){ const shrink = over / lv.length; let xx = 0; panels.forEach(p => { const w = p.x1 - p.x0 - shrink; p.x0 = xx; p.x1 = xx + w; xx += w + gap; }); }
-  const S0 = {}; spec.stations.forEach(s => { const p = panels[s.level], list = spec.stations.filter(z => z.level === s.level), i = list.indexOf(s);
-    s.x = p.x0 + (p.x1 - p.x0) * (i + 0.5) / list.length; if (s.level === 0 && list.length === 1) s.x = p.x0 + 52; if (s.goal && i === list.length - 1 && list.length > 1) s.x = Math.min(s.x, W - 22); S0[s.id] = s; });
-  const hasArc = spec.routes.some(r => { const a = S0[r.from], b = S0[r.to]; return a && b && spec.stations.some(s => s.x > a.x + 1 && s.x < b.x - 1); });
-  const Y = hasArc ? 150 : 116;
-  // Station label blocks decide the height.
-  const lines = s => 1 + (s.direct && s.direct.n >= 0.5 ? 1 + (s.direct.lines || []).length : 0) + (s.stop ? s.stop.length : 0);
-  const LH = 9, H = Math.ceil(Y + 68 + (Math.max(...spec.stations.map(lines)) - 1) * LH + 12 + 40);
-  lv.forEach((l, L) => { const p = panels[L], w = p.x1 - p.x0;
-    out += `<rect x="${p.x0.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 39}" rx="8" fill="${l.goal ? '#eaf2fb' : '#f4f6fa'}"/>`;
-    T(p.x0 + 10, 20, esc(String(l.name).toUpperCase()), bc + 'font-size:12px;fill:#171f69;letter-spacing:.03em', 'start');
-    T(p.x0 + 10, 46, f0(l.entries), bc + 'font-size:26px;fill:#171f69', 'start');
-    const m1 = `${fmt(l.meets)} ${l.meets === 1 ? 'meet' : 'meets'} · ${l.rounds} ${l.rounds === 1 ? 'round' : 'rounds'}`;
-    const m2 = l.note ? esc(l.note) : l.actual != null ? `actual ${esc(yearNumBoundary(S.year))}${l.stage ? ' ' + esc(l.stage) : ''}: ${fmt(l.actual)}` : '';
-    if (w < 170 && m2){ T(p.x0 + 10, 60, m1, it(8.5) + 'fill:#4b5568', 'start'); T(p.x0 + 10, 71, m2, it(8.5) + 'fill:#6b7385', 'start'); }
-    else T(p.x0 + 10, 60, m1 + (m2 ? ` · <tspan style="fill:#6b7385">${m2}</tspan>` : ''), it(8.5) + 'fill:#4b5568', 'start'); });
-  // Routes. A second route between the same two stops bows above the first.
-  const seen = {};
-  spec.routes.forEach(rt => {
-    const a = S0[rt.from], b = S0[rt.to]; if (!a || !b) return;
-    const arc = spec.stations.some(s => s.x > a.x + 1 && s.x < b.x - 1);
-    const key = rt.from + '>' + rt.to, nth = seen[key] = (seen[key] || 0) + 1;
-    const col = rt.kind === 'nat' ? NV : rt.kind === 'next' ? PL : rt.kind === 'round' ? SKY : AM;
-    const thick = rw(rt.take != null ? rt.take : rt.places);
-    let d, mx = (a.x + b.x) / 2;
-    if (arc){ const ly = Y - 52; d = `M${a.x.toFixed(1)} ${Y} C ${a.x.toFixed(1)} ${ly + 20}, ${(a.x + 14).toFixed(1)} ${ly}, ${(a.x + 40).toFixed(1)} ${ly} L ${(b.x - 40).toFixed(1)} ${ly} C ${(b.x - 14).toFixed(1)} ${ly}, ${b.x.toFixed(1)} ${ly + 20}, ${b.x.toFixed(1)} ${Y}`; }
-    else if (nth > 1){ const h = 30 + (nth - 2) * 16; d = `M${a.x.toFixed(1)} ${Y} C ${a.x.toFixed(1)} ${Y - h}, ${b.x.toFixed(1)} ${Y - h}, ${b.x.toFixed(1)} ${Y}`; }
-    else d = `M${a.x.toFixed(1)} ${Y} L${b.x.toFixed(1)} ${Y}`;
-    if (rt.take != null && rt.take < rt.places - 0.5) out += `<path d="${d}" fill="none" stroke="${SKY}" stroke-width="${rw(rt.places).toFixed(2)}" opacity=".7"/>`;
-    out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${(nth > 1 && !arc ? Math.max(2, thick) : thick).toFixed(2)}"${rt.kind === 'round' ? ' stroke-dasharray="7 4"' : ''}/>`;
-    const split = rt.split ? rt.split.map(f0).join(' · ') : '';
-    const counts = rt.take != null && rt.take < rt.places - 0.5 ? `${f0(rt.places)} → ${f0(rt.take)}` : f0(rt.take != null ? rt.take : rt.places);
-    if (arc){ const ly = Y - 52; T(mx, ly - 20, esc(rt.band), bc + 'font-size:11.5px;fill:#171f69'); T(mx, ly - 8, `${counts}<tspan dx="10" style="fill:#8a93a6">${split}</tspan>`, mo(8.5) + 'fill:#171f69'); }
-    else if (nth > 1){ const yb = Y - 27 - (nth - 2) * 12 - (rt.sub ? 10 : 0);
-      T(a.x + rr(a.n) + 4, yb, `${esc(rt.band)} · ${f0(rt.places)}`, bc + 'font-size:10.5px;fill:' + (rt.kind === 'avg' || rt.kind === 'alt' ? '#9a4a06' : '#171f69'), 'start');
-      if (rt.sub) T(a.x + rr(a.n) + 4, yb + 10, esc(rt.sub), it(8) + 'fill:#9a4a06', 'start'); }
-    else { T(mx, Y + 24, esc(rt.band), bc + 'font-size:11.5px;fill:#171f69'); T(mx, Y + 36, counts, mo(9) + 'fill:#0c3d66');
-      let yy = Y + 36; if (rt.pct){ yy += 11; T(mx, yy, esc(rt.pct), it(8) + (rt.assumed ? 'fill:#9a4a06' : 'fill:#4b5568')); }
-      yy += 11; T(mx, yy, split, mo(7.8) + 'fill:#8a93a6'); }
-  });
-  // Direct entrants: a feeder from below into the stop they join.
-  spec.stations.forEach(s => { if (s.direct && s.direct.n >= 0.5) out += `<line x1="${s.x.toFixed(1)}" y1="${Y}" x2="${s.x.toFixed(1)}" y2="${Y + 58}" stroke="${SKY}" stroke-width="${rw(s.direct.n).toFixed(2)}"/>`; });
-  spec.stations.forEach(s => {
-    const R0 = rr(s.n);
-    out += `<circle cx="${s.x.toFixed(1)}" cy="${Y}" r="${R0.toFixed(1)}" fill="${s.goal ? NV : '#fff'}" stroke="${NV}" stroke-width="3"/>`;
-    if (s.goal) T(s.x, Y + 4, f0(s.n), bc + `font-size:${R0 > 18 ? 14 : 11}px;fill:#fff`);
-    let ly = Y + 68;
-    T(s.x, ly, s.goal ? esc(s.round) : `${esc(s.round)} · <tspan style="${mo(8.5)}fill:#4b5568">${f0(s.n)}</tspan>`, bc + 'font-size:11.5px;fill:#171f69');
-    if (s.direct && s.direct.n >= 0.5){ ly += 12; T(s.x, ly, `+${f0(s.direct.n)} start here`, bc + 'font-size:11px;fill:#005f86');
-      (s.direct.lines || []).forEach(z => { ly += LH; T(s.x, ly, esc(z), it(8) + 'fill:#005f86'); }); }
-    if (s.stop){ ly += 13; T(s.x, ly, '↓ ' + esc(s.stop[0]), bc + 'font-size:11.5px;fill:' + RD); s.stop.slice(1).forEach(z => { ly += LH; T(s.x, ly, esc(z), it(8) + 'fill:#4b5568'); }); }
-  });
-  out += `<rect x="0" y="${H - 34}" width="${W}" height="33" rx="7" fill="${NV}"/>`;
-  T(12, H - 21, esc(spec.strip[0]), bc + 'font-size:10.5px;fill:#8fc3ea;letter-spacing:.04em', 'start');
-  T(12, H - 8, esc(spec.strip[1]), it(9.5) + 'fill:#fff;font-weight:500', 'start');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="Qualification route map">${out}</svg>`;
-}
 
 
 function exportChangesCsv(){
