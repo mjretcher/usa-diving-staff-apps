@@ -1012,7 +1012,8 @@ P .bsr-cmp{margin:6px 0;break-inside:avoid}
 P .bsr-cmp small{font-size:9.5px}
 P .bsr-h2{font-size:19px;margin:14px 0 8px;padding-top:9px;border-top-width:2px;break-after:avoid}
 P .bsr-incard{display:none}
-P .bsr-clubsec{display:block}
+P .bsr-clubsec{display:flow-root}
+P .bsr-page.split .bsr-clubsec .bsr-h2,P .bsr.land .bsr-clubsec .bsr-h2{margin-top:0}
 P .bsr-clubrow{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:start;padding:4px 0;border-top:1px solid #e2e8f2;break-inside:avoid}
 P .bsr-clubrow b{font-size:11px;color:#171f69;white-space:nowrap}
 P .bsr-clubrow p{margin:0;font-size:9.5px;line-height:1.4;color:#1c2540}
@@ -1055,6 +1056,10 @@ const PAGE_CSS = '@page{size:letter;margin:.45in;' + NO_BROWSER_MARKS + '}';
 const PAGE_CSS_WIDE = '@page{size:11in 8.5in;margin:.45in;' + NO_BROWSER_MARKS + '}';
 const PAPER_W = 7.6 * 96, PAPER_H = 10.1 * 96 - 12, SMALLEST = 0.7;
 const WIDE_W = 10.1 * 96, WIDE_H = 7.6 * 96 - 12;          // the sideways sheet
+/* The club lists are long runs of wrapped text, and the printer wraps a line
+   or two differently from the screen it was measured on. Without some room to
+   spare the last region's row tipped onto a sheet of its own. */
+const CLUB_SLACK = 40;
 /* Shrink one block until it is a single sheet tall. It is made wider by the
    same factor it is shrunk, so it still fills the sheet side to side. False
    when it would have to go below SMALLEST to fit; it is then left full size. */
@@ -1078,7 +1083,7 @@ function fitPages(){
     pg.classList.remove('split', 'maponly');
     if (fitOne(pg) || !main) return;
     if (clubs){                          // the club lists take a sheet of their own
-      pg.classList.add('split'); fitOne(clubs);
+      pg.classList.add('split'); fitOne(clubs, PAPER_W, PAPER_H - CLUB_SLACK);
       if (fitOne(main) || !lead || !cards) return;
     } else if (!lead || !cards) return;
     // Still too much for one sheet: the paper turns sideways, the map gets the
@@ -1086,7 +1091,7 @@ function fitPages(){
     pg.classList.add('maponly');
     const root = pg.closest('.bsr'); if (root) root.classList.add('land');
     fitOne(lead, WIDE_W, WIDE_H); fitOne(cards, WIDE_W, WIDE_H);
-    if (clubs) fitOne(clubs, WIDE_W, WIDE_H);
+    if (clubs) fitOne(clubs, WIDE_W, WIDE_H - CLUB_SLACK);
   });
 }
 function unfitPages(){
