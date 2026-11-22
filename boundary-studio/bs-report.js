@@ -18,8 +18,9 @@ const fmt = n => Number(n || 0).toLocaleString('en-US');
 const sum = a => a.reduce((s, x) => s + (x || 0), 0);
 
 const KEY = 'usad.bs.report';
-const DEFAULTS = {level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
-                  age: false, gender: false, boards: false, maps: true, clubNames: false, share: false};
+const DEFAULTS = {page: 'areas', level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
+                  age: false, gender: false, boards: false, maps: true, clubNames: false, share: false,
+                  routes: true, athletes: true, eachMeet: false};
 let ST = null;
 function state(){
   if (ST) return ST;
@@ -243,9 +244,12 @@ function tableHtml(D, S){
 }
 function downloadCsv(D, S){
   const T = tableData(D, S);
+  saveCsv([T.head].concat(T.rows, [T.totals]), `${B().tierName(D.L)}-${String(B().yearLabel()).slice(0, 4)}.csv`);
+}
+function saveCsv(table, file){
   const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [T.head].concat(T.rows, [T.totals]).map(r => r.map(q).join(','));
-  const name = `${B().tierName(D.L)}-${String(B().yearLabel()).slice(0, 4)}.csv`.replace(/[^\w.\-]+/g, '-');
+  const lines = table.map(r => r.map(q).join(','));
+  const name = String(file).replace(/[^\w.\-]+/g, '-');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv'}));
   a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -258,44 +262,66 @@ function levelsWithAreas(){
   for (let L = 0; L < api.levelCount(); L++) if (api.groupCountAt(L) > 1) out.push(L);
   return out.length ? out : [0];
 }
-function html(){
+const usd = n => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
+const chip = (attr, key, on, label, dis) => `<button class="bsr-chip${on ? ' on' : ''}" ${attr}="${key}" aria-pressed="${on}"${dis ? ' disabled title="Counted for 2026 only"' : ''}>${esc(label)}</button>`;
+const seg = (attr, opts, cur) => `<div class="bsr-seg">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+
+/* The switches. The first row is the same on every page; the rest follow the page. */
+function stripHtml(S, levels, typed){
   const api = B();
-  if (!api || !api.ready()) return '<div class="bsr"><p class="bsr-na">The map has not finished loading.</p></div>';
-  const S = state(), levels = levelsWithAreas();
-  if (!levels.includes(S.level)) S.level = levels[0];
-  const D = build(S.level);
-  const chip = (attr, key, on, label, dis) => `<button class="bsr-chip${on ? ' on' : ''}" ${attr}="${key}" aria-pressed="${on}"${dis ? ' disabled title="Counted for 2026 only"' : ''}>${esc(label)}</button>`;
-  const seg = (attr, opts, cur) => `<div class="bsr-seg">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
   const years = (api.availableYears ? api.availableYears() : [api.year()]);
-  const strip = `<div class="bsr-strip">
+  const cur = S.page === 'areas' ? 'L' + S.level : S.page;
+  const pages = levels.map(L => ['L' + L, api.tierName(L)]).concat([['structure', 'Structure'], ['money', 'Money']]);
+  const flag = (k, label) => chip('data-bsr-flag', k, !!S[k], label);
+  let rows = '';
+  if (S.page === 'areas') rows = `
+    <div class="bsr-row"><span class="bsr-lbl">Count</span>${COUNTS.map(C => chip('data-bsr-count', C.k, S.counts.includes(C.k) && !(C.only && !typed), (!typed && C.other) ? C.other : C.label, C.only && !typed)).join('')}</div>
+    <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
+      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}</div>`;
+  else if (S.page === 'structure') rows = `
+    <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
+      <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}</div>`;
+  else rows = `
+    <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}</div>`;
+  return `<div class="bsr-strip">
     <div class="bsr-row">
-      <span class="bsr-lbl">Show</span>${seg('data-bsr-level', levels.map(L => [L, api.tierName(L)]), S.level)}
+      <span class="bsr-lbl">Show</span>${seg('data-bsr-page', pages, cur)}
       <span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>
       <span class="bsr-lbl">Layout</span>${seg('data-bsr-layout', [['grid', 'Grid'], ['table', 'Table']], S.layout)}
       <span class="bsr-grow"></span>
       <button class="bsr-btn" id="bsrCsv">Spreadsheet</button>
       <button class="bsr-btn prim" id="bsrPrint">Print or save as PDF</button>
-    </div>
-    <div class="bsr-row"><span class="bsr-lbl">Count</span>${COUNTS.map(C => chip('data-bsr-count', C.k, S.counts.includes(C.k) && !(C.only && !D.typed), (!D.typed && C.other) ? C.other : C.label, C.only && !D.typed)).join('')}</div>
-    <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${chip('data-bsr-flag', 'age', S.age, 'Age group')}${chip('data-bsr-flag', 'gender', S.gender, 'Gender')}${chip('data-bsr-flag', 'boards', S.boards, 'Board')}
-      <span class="bsr-lbl gap">Also show</span>${chip('data-bsr-flag', 'maps', S.maps, 'Area maps')}${chip('data-bsr-flag', 'clubNames', S.clubNames, 'Club names')}${chip('data-bsr-flag', 'share', S.share, 'Share of total')}</div>
+    </div>${rows}
   </div>`;
+}
+function headHtml(title, extra){
+  const api = B();
+  const when = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+  return `<header class="bsr-head"><div><h1>${title}</h1>
+    <p>${extra ? extra + ' &middot; ' : ''}${esc(api.scenarioLabel ? api.scenarioLabel() : '')}${api.mapName && api.mapName() ? ' &middot; ' + esc(api.mapName()) : ''} &middot; ${esc(api.yearLabel())}</p></div>
+    <div class="bsr-when">USA Diving<br>${esc(when)}</div></header>`;
+}
 
+function html(){
+  const api = B();
+  if (!api || !api.ready()) return '<div class="bsr"><p class="bsr-na">The map has not finished loading.</p></div>';
+  const S = state(), levels = levelsWithAreas();
+  if (!['areas', 'structure', 'money'].includes(S.page)) S.page = 'areas';
+  if (!levels.includes(S.level)) S.level = levels[0];
+  if (S.page !== 'areas') return pathwayPage(S, levels);
+  const D = build(S.level);
   const shown = shownCounts(D, S), maxOf = {};
   shown.forEach(C => { maxOf[C.k] = Math.max(1, ...D.areas.map(A => D.value(A, C.k))); });
   const totals = shown.map(C => `<div class="bsr-total"><b>${fmt(D.total(C.k))}</b><span>${esc(D.label(C.k))}</span></div>`).join('');
   const genderKey = (S.gender && D.cath && (S.age || S.layout === 'grid'))
     ? `<span class="bsr-key"><i style="background:${GCOL.b}"></i>Boys<i style="background:${GCOL.g}"></i>Girls<i style="background:${GCOL.u}"></i>Not known</span>` : '';
-  const when = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
   const notes = ['Members are counted in the county of their home ZIP code.',
                  'A club is counted in every area where it has members.',
                  'Lighter counties on the map have no ' + ((api.countyLightBasis && api.countyLightBasis() === 'clubs') ? 'club' : 'members') + '.']
     .concat(D.typed ? [] : ['Counts by exact membership type are kept for 2026 only.']);
-  return `<div class="bsr">${strip}
+  return `<div class="bsr">${stripHtml(S, levels, D.typed)}
     <div class="bsr-page">
-      <header class="bsr-head"><div><h1>${fmt(D.n)} ${esc(api.tierName(S.level))}</h1>
-        <p>${esc(api.scenarioLabel ? api.scenarioLabel() : '')}${api.mapName && api.mapName() ? ' &middot; ' + esc(api.mapName()) : ''} &middot; ${esc(api.yearLabel())} membership</p></div>
-        <div class="bsr-when">USA Diving<br>${esc(when)}</div></header>
+      ${headHtml(`${fmt(D.n)} ${esc(api.tierName(S.level))}`, 'Membership')}
       <div class="bsr-top"><div class="bsr-mapbox">${mapSvg(D)}</div><div class="bsr-totals">${totals}</div></div>
       ${genderKey}
       ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
@@ -303,11 +329,155 @@ function html(){
     </div></div>`;
 }
 
+/* ---------- Structure and Money ---------- */
+function pathwayData(){
+  const api = B();
+  if (!api.reportPathway) return null;
+  const P = api.reportPathway();
+  if (!P) return null;
+  P.levels.forEach(l => {
+    l.meets = P.meets.filter(m => m.level === l.L);
+    l.entries = sum(l.meets.map(m => m.entries));
+    l.cells = {};
+    l.meets.forEach(m => m.events.forEach(e => { l.cells[e.cell] = (l.cells[e.cell] || 0) + e.n; }));
+    ['gross', 'levy', 'host', 'usad'].forEach(k => { l[k] = sum(l.meets.map(m => m[k])); });
+    l.color = gi => (api.colorAt && api.colorAt(l.L, gi)) || '#171f69';
+  });
+  P.total = {};
+  ['entries', 'gross', 'levy', 'host', 'usad'].forEach(k => { P.total[k] = sum(P.levels.map(l => l[k])); });
+  P.total.meets = P.meets.length;
+  return P;
+}
+/* Entries at a level by the age, gender and board switches. Null when none is on. */
+function entryBreakdown(l, S){
+  if (!S.age && !S.gender && !S.boards) return null;
+  const rows = boardRows(S), cols = S.boards ? BOARDS : [{k: null, label: 'Entries'}];
+  return {cols, rows: rows.map(r => ({label: r.label, v: cols.map(b => cellSum(l.cells, r.a, r.g, b.k))}))};
+}
+function breakdownHtml(l, S){
+  const bd = entryBreakdown(l, S);
+  if (!bd) return '';
+  if (bd.cols.length === 1){
+    const max = Math.max(1, ...bd.rows.map(r => r.v[0]));
+    return `<div class="bsr-blk"><h4>Event entries</h4>${bd.rows.map(r =>
+      `<div class="bsr-r"><span>${r.label}</span>${bar(r.v[0], max, '#171f69')}<b>${fmt(r.v[0])}</b></div>`).join('')}</div>`;
+  }
+  return `<div class="bsr-blk"><h4>Event entries by board</h4><table class="bsr-t"><thead><tr><th></th>${bd.cols.map(b => `<th>${b.label}</th>`).join('')}</tr></thead>
+    <tbody>${bd.rows.map(r => `<tr><td>${r.label}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function meetsHtml(l, val, show, title){
+  const max = Math.max(1, ...l.meets.map(val));
+  return `<div class="bsr-blk"><h4>${title}</h4>${l.meets.map(m =>
+    `<div class="bsr-r wide"><span>${esc(m.name)}</span>${bar(val(m), max, l.color(m.gi))}<b>${show(val(m))}</b></div>`).join('')}</div>`;
+}
+function structureCard(P, l, S){
+  const out = l.routes.filter(rt => rt.toLevel != null && rt.toLevel !== l.L);
+  const within = l.routes.filter(rt => rt.toLevel === l.L);
+  const line = rt => `<div class="bsr-route"><span>${l.rounds.length > 1 ? esc(rt.from) + ': ' : ''}${esc(rt.band)}</span><b>${rt.toLevel === l.L ? esc(rt.toRound) : esc(rt.toName) + ' ' + esc(rt.toRound)}</b></div>`;
+  const routes = !S.routes ? '' : `<div class="bsr-blk"><h4>Who advances</h4>${
+    (within.concat(out)).map(line).join('') || '<p class="bsr-na">Last meet of the season.</p>'}</div>`;
+  return `<article class="bsr-card bsr-step" style="--c:#171f69">
+    <header><span class="bsr-badge">${l.L + 1}</span><h3>${esc(l.name)}</h3><span class="bsr-meets">${fmt(l.stops)} ${l.stops === 1 ? 'meet' : 'meets'}</span></header>
+    <div class="bsr-stats two">
+      <div class="bsr-stat"><b>${fmt(l.entries)}</b><span>Event entries</span></div>
+      ${S.athletes && l.divers ? `<div class="bsr-stat"><b>${fmt(Math.round(l.divers.n))}</b><span>Athletes, estimated</span></div>` : ''}
+      ${l.stops > 1 ? `<div class="bsr-stat"><b>${fmt(Math.round(l.entries / l.stops))}</b><span>Average per meet</span></div>` : ''}
+    </div>
+    <p class="bsr-rounds">${l.rounds.map(r => esc(r.name)).join(' &middot; ')}</p>
+    ${routes}${breakdownHtml(l, S)}${S.eachMeet && l.stops > 1 ? meetsHtml(l, m => m.entries, fmt, 'Event entries at each meet') : ''}
+  </article>`;
+}
+function moneyBar(x){
+  const t = Math.max(1, x.gross);
+  return `<i class="bsr-bar tall"><i class="bsr-stack" style="width:100%">
+    <i style="flex:${Math.max(0, x.usad)};background:#171f69"></i><i style="flex:${Math.max(0, x.host)};background:#009AC7"></i><i style="flex:${Math.max(0, x.levy)};background:#b8c0cc"></i></i></i>`
+    + (t ? '' : '');
+}
+function moneyCard(P, l, S){
+  const share = v => (S.share && P.total.usad > 0) ? `<em>${(100 * v / P.total.usad).toFixed(1)}% of all</em>` : '';
+  const flat = l.entries > 0 && Math.abs(l.gross - l.entries * l.fee) < 1;
+  return `<article class="bsr-card bsr-step" style="--c:#171f69">
+    <header><span class="bsr-badge">${l.L + 1}</span><h3>${esc(l.name)}</h3><span class="bsr-meets">${fmt(l.stops)} ${l.stops === 1 ? 'meet' : 'meets'}</span></header>
+    <div class="bsr-stats money">
+      <div class="bsr-stat"><b>${usd(l.usad)}</b><span>USA Diving keeps</span>${share(l.usad)}</div>
+      <div class="bsr-stat"><b>${usd(l.gross)}</b><span>Entry income</span></div>
+    </div>
+    ${moneyBar(l)}
+    <div class="bsr-blk">
+      <div class="bsr-route"><span>Event entries</span><b>${fmt(l.entries)}</b></div>
+      ${flat ? `<div class="bsr-route"><span>Entry fee</span><b>${usd(l.fee)}</b></div>` : ''}
+      <div class="bsr-route"><span>To hosts</span><b>${usd(l.host)}</b></div>
+      <div class="bsr-route"><span>DiveMeets fee</span><b>${usd(l.levy)}</b></div>
+    </div>
+    ${S.eachMeet && l.stops > 1 ? meetsHtml(l, m => m.usad, usd, 'USA Diving keeps from each meet') : ''}
+  </article>`;
+}
+function pathwayTable(P, S){
+  const money = S.page === 'money';
+  let head, rowOf;
+  if (money){
+    head = ['Meet', 'Meets', 'Event entries', 'Entry income', 'To hosts', 'DiveMeets fee', 'USA Diving keeps'];
+    rowOf = (name, x, n) => [name, n, x.entries, Math.round(x.gross), Math.round(x.host), Math.round(x.levy), Math.round(x.usad)];
+  } else {
+    const bdCols = l => { const bd = entryBreakdown(l, S); return bd ? bd.rows.flatMap(r => bd.cols.map((c, i) => [`${r.label === 'All' ? '' : r.label + ' '}${c.label}`.trim(), r.v[i]])) : []; };
+    head = ['Meet', 'Meets', 'Event entries'].concat(S.athletes ? ['Athletes, estimated'] : [], P.levels.length ? bdCols(P.levels[0]).map(x => x[0]) : []);
+    rowOf = (name, x, n, l) => [name, n, x.entries].concat(S.athletes ? [l && l.divers ? Math.round(l.divers.n) : ''] : [],
+      l ? bdCols(l).map(x => x[1]) : (P.levels.length ? bdCols(P.levels[0]).map(() => '') : []));
+  }
+  const rows = [], kinds = [];
+  P.levels.forEach(l => {
+    rows.push(rowOf(l.name, l, l.stops, l)); kinds.push('lvl');
+    if (S.eachMeet && l.stops > 1) l.meets.forEach(m => { rows.push(rowOf(m.name, m, '', null)); kinds.push('meet'); });
+  });
+  const totals = money ? rowOf('Total', P.total, P.total.meets) : null;
+  return {head, rows, kinds, totals, money};
+}
+function pathwayTableHtml(T){
+  const cell = (v, i) => i === 0 ? `<td>${esc(v)}</td>` : `<td class="n">${v === '' ? '' : ((T.money && i >= 3) ? usd(v) : fmt(v))}</td>`;
+  return `<div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${T.rows.map((r, ri) => `<tr class="${T.kinds[ri]}">${r.map(cell).join('')}</tr>`).join('')}
+    ${T.totals ? `<tr class="tot">${T.totals.map(cell).join('')}</tr>` : ''}</tbody></table></div>`;
+}
+function pathwayPage(S, levels){
+  const api = B(), P = pathwayData();
+  const strip = stripHtml(S, levels, true);
+  const title = S.page === 'money' ? 'Money' : 'Structure';
+  if (!P){
+    if (api.ensurePathway && !pathwayPage._asked){ pathwayPage._asked = true; try { api.ensurePathway(); } catch(e){} }
+    return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title)}<p class="bsr-na">Working out the pathway.</p></div></div>`;
+  }
+  pathwayPage._asked = false;
+  const chain = P.levels.map(l => `${fmt(l.stops)} ${esc(l.name)}`).join(' &rarr; ');
+  let body, totals, notes;
+  if (S.page === 'money'){
+    totals = [['USA Diving keeps', P.total.usad], ['Entry income', P.total.gross], ['To hosts', P.total.host], ['DiveMeets fee', P.total.levy]]
+      .map(([l, v]) => `<div class="bsr-total"><b>${usd(v)}</b><span>${l}</span></div>`).join('');
+    body = `<div class="bsr-totals row">${totals}</div>
+      <div class="bsr-split">${moneyBar(P.total)}<span class="bsr-key"><i style="background:#171f69"></i>USA Diving keeps<i style="background:#009AC7"></i>To hosts<i style="background:#b8c0cc"></i>DiveMeets fee</span></div>
+      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => moneyCard(P, l, S)).join('')}</div>`}`;
+    notes = ['Entry fees only. Membership dues are not included.', 'Event entries are projected for this structure. An entry is one athlete in one event.'];
+  } else {
+    const last = P.levels[P.levels.length - 1];
+    totals = `<div class="bsr-total"><b>${fmt(last.entries)}</b><span>Event entries at ${esc(last.name)}</span></div>`
+      + (S.athletes && last.divers ? `<div class="bsr-total"><b>${fmt(Math.round(last.divers.n))}</b><span>Athletes at ${esc(last.name)}, estimated</span></div>` : '')
+      + `<div class="bsr-total"><b>${fmt(P.total.meets)}</b><span>Meets in the season</span></div>`;
+    body = `<div class="bsr-totals row">${totals}</div>
+      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => structureCard(P, l, S)).join('')}</div>`}`;
+    notes = ['Event entries are projected for this structure. An entry is one athlete in one event.']
+      .concat(S.athletes ? ['Athletes are estimated from the number of events each athlete entered.'] : []);
+  }
+  return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title, chain)}${body}<p class="bsr-foot">${notes.join(' ')}</p></div></div>`;
+}
+
 function wire(root){
   css();
   const S = state();
   const again = () => { save(); root.innerHTML = html(); wire(root); };
-  root.querySelectorAll('[data-bsr-level]').forEach(b => b.addEventListener('click', () => { S.level = +b.dataset.bsrLevel; again(); }));
+  root.querySelectorAll('[data-bsr-page]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.bsrPage;
+    if (/^L\d+$/.test(v)){ S.page = 'areas'; S.level = +v.slice(1); } else S.page = v;
+    again();
+  }));
   root.querySelectorAll('[data-bsr-layout]').forEach(b => b.addEventListener('click', () => { S.layout = b.dataset.bsrLayout; again(); }));
   root.querySelectorAll('[data-bsr-count]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.bsrCount, i = S.counts.indexOf(k);
@@ -318,7 +488,12 @@ function wire(root){
   const yr = root.querySelector('#bsrYear');
   if (yr) yr.addEventListener('change', () => { if (B().setYear) B().setYear(yr.value); });
   const pr = root.querySelector('#bsrPrint'); if (pr) pr.addEventListener('click', () => window.print());
-  const cs = root.querySelector('#bsrCsv'); if (cs) cs.addEventListener('click', () => downloadCsv(build(S.level), S));
+  const cs = root.querySelector('#bsrCsv'); if (cs) cs.addEventListener('click', () => {
+    if (S.page === 'areas'){ downloadCsv(build(S.level), S); return; }
+    const P = pathwayData(); if (!P) return;
+    const T = pathwayTable(P, S);
+    saveCsv([T.head].concat(T.rows, T.totals ? [T.totals] : []), `${S.page}-${String(B().yearLabel()).slice(0, 4)}.csv`);
+  });
   // Fit each small map to its own area.
   root.querySelectorAll('svg[data-fit]').forEach(svg => {
     try {
@@ -394,6 +569,20 @@ const CSS = `
 .bsr-table .n{text-align:right;font-variant-numeric:tabular-nums}
 .bsr-table td.n{font-weight:600;color:var(--ink)}
 .bsr-table tr.tot td{font-weight:800;border-top:2px solid var(--ink);border-bottom:0;color:var(--ink)}
+.bsr-totals.row{flex-direction:row;flex-wrap:wrap;gap:14px 44px;margin:4px 0 18px}
+.bsr-grid.steps{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.bsr-meets{font-size:12.5px;font-weight:600;color:var(--soft);white-space:nowrap}
+.bsr-stats.two{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.bsr-stats.two .bsr-stat span,.bsr-stats.money .bsr-stat span{min-height:0}
+.bsr-stats.money{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.bsr-rounds{font-size:12.5px;color:var(--soft);font-weight:600;margin:10px 0 0}
+.bsr-route{display:flex;justify-content:space-between;gap:14px;font-size:13px;padding:5px 0;border-top:1px solid #f0f2f6}
+.bsr-route:first-of-type{border-top:0}
+.bsr-route span{color:#1c2540}.bsr-route b{color:var(--ink);font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.bsr-r.wide{grid-template-columns:minmax(90px,38%) 1fr auto}
+.bsr-bar.tall{height:12px;border-radius:4px;margin-top:12px}.bsr-bar.tall>i{border-radius:0}
+.bsr-split{margin:0 0 18px}.bsr-split .bsr-key{margin:8px 0 0}
+.bsr-table tr.meet td{color:var(--soft);font-weight:500;padding-top:6px;padding-bottom:6px}.bsr-table tr.meet td:first-child{padding-left:26px}
 .bsr-foot{font-size:11.5px;color:var(--soft);margin:18px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 @media (max-width:900px){.bsr-top{grid-template-columns:1fr}.bsr-totals{flex-direction:row;flex-wrap:wrap}}
 @media print{

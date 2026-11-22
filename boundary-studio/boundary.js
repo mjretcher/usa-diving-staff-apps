@@ -8432,6 +8432,45 @@ window.BoundaryAPI = {
   mapName: () => S.mapName || '',
   setYear: y => { S.year = y; seasonPicked(); applyOfficialSeason(); repaintAll(); renderPanel(); },
   openReports: () => { S.panelMode = 'report'; renderPanel(); },
+  /* What the Structure and Money report pages draw: every level with its
+     rounds, routes, fee and athlete estimate, and every meet with its entries
+     and money. Read from the same functions the Structure and Money tabs use
+     (projectPathway, meetManifest, meetMoney), so the pages cannot disagree
+     with the tabs. Null until the pathway has been worked out. */
+  pathwayReady: () => !!(QR() && S.flow),
+  ensurePathway: () => refreshFlow(),
+  reportPathway: () => {
+    if (!QR() || !S.flow) return null;
+    syncRouting();
+    const res = projectPathway();
+    if (!res) return null;
+    const RN = QR().ROUND_NAME;
+    const meets = meetManifest(res).map(m => { const $ = meetMoney(m);
+      return {level: m.level, gi: m.gi, name: m.name, entries: m.entries,
+              events: (m.events || []).map(e => ({cell: e.cell, n: e.n})),
+              gross: $.gross, levy: $.levy, host: $.host, usad: $.usad}; });
+    const levels = S.routing.map((lvl, L) => {
+      const rounds = QR().roundsOf(lvl);
+      let divers = null;
+      try { if (S.mult){ const d = QR().diversAt(res, L, rounds[0] && rounds[0].key, CELLS, S.mult, multBasisFor(L));
+        if (d && d.ok) divers = {n: d.divers, reliable: !!d.reliable}; } } catch(e){}
+      const routes = (lvl.routes || []).map(rt => {
+        const bb = BOARDS.map(b => boardBand(rt, b.k));
+        const txt = b => b.hi == null ? `${b.lo} and below` : b.lo === b.hi ? String(b.lo) : `${b.lo} to ${b.hi}`;
+        const same = bb.every(b => b.lo === bb[0].lo && b.hi === bb[0].hi);
+        let band = same ? `Places ${txt(bb[0])}`
+          : (bb[0].lo === bb[1].lo && bb[0].hi === bb[1].hi) ? `Springboard places ${txt(bb[0])}, platform places ${txt(bb[2])}`
+          : BOARDS.map((b, i) => `${b.label} places ${txt(bb[i])}`).join(', ');
+        if (rt.share != null) band = `${Math.round(rt.share * 100)}% of each event's field`;
+        return {from: RN[rt.from] || rt.from, fromKey: rt.from, band,
+                toLevel: rt.to ? rt.to.level : null, toName: rt.to ? tierName(rt.to.level) : null,
+                toRound: rt.to ? (RN[rt.to.round] || rt.to.round) : null};
+      });
+      return {L, name: tierName(L), stops: groupCountAt(L), rounds: rounds.map(r => ({key: r.key, name: RN[r.key] || r.key})),
+              routes, divers, fee: feeFor(L)};
+    });
+    return {levels, meets, finalName: S.finalName};
+  },
   onReports: () => atlasOn() && S.panelMode === 'report',
   regionZips, groupColor,
   ageGroups:  () => AGE_GROUPS,
