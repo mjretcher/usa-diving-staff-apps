@@ -21,7 +21,7 @@ const KEY = 'usad.bs.report';
 const DEFAULTS = {page: 'areas', level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
                   age: false, gender: false, boards: false, maps: true, clubNames: false, share: false,
                   routes: true, athletes: true, eachMeet: false, even: false, change: false, cmp26: false, cmp25: false,
-                  area: null, choiceStage: 'Regionals', choiceYear: null, cAge: true, cGender: true, cAreas: true, cFlows: true};
+                  area: null, choiceStage: 'Regionals', choiceYear: null, choiceStages: null, choiceSeasons: null, cAge: true, cGender: true, cAreas: true, cFlows: true};
 let ST = null;
 function state(){
   if (ST) return ST;
@@ -326,6 +326,9 @@ const usd = n => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
 const chip = (attr, key, on, label, dis) => `<button class="bsr-chip${on ? ' on' : ''}" ${attr}="${key}" aria-pressed="${on}"${dis ? ' disabled title="Counted for 2026 only"' : ''}>${esc(label)}</button>`;
 const seg = (attr, opts, cur) => `<div class="bsr-seg">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
 
+/* The same control with more than one choice on at a time. */
+const segMany = (attr, opts, on) => `<div class="bsr-seg many">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${on.map(String).includes(String(v)) ? 'on' : ''}" aria-pressed="${on.map(String).includes(String(v))}">${esc(l)}</button>`).join('')}</div>`;
+
 /* The switches. The first row is the same on every page; the rest follow the page. */
 function stripHtml(S, levels, typed, hasBase){
   const api = B();
@@ -343,8 +346,9 @@ function stripHtml(S, levels, typed, hasBase){
       <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
   else if (S.page === 'choice') rows = `
-    <div class="bsr-row"><span class="bsr-lbl">Meets</span>${seg('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], S.choiceStage)}
-      ${choiceYears(S).length ? `<span class="bsr-lbl gap">Season</span>${seg('data-bsr-cyear', choiceYears(S).map(y => [y, y]), choiceYear(S))}` : ''}
+    <div class="bsr-row"><span class="bsr-lbl">Meets</span>${segMany('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], choicePicked(S).stages)}
+      ${choicePicked(S).all.length ? `<span class="bsr-lbl gap">Season</span>${segMany('data-bsr-cyear', choicePicked(S).all.map(y => [y, y]), choicePicked(S).years)}` : ''}
+      <span class="bsr-hint">Pick more than one to put them on the same report.</span>
       <span class="bsr-lbl gap">Show</span>${flag('cAge', 'Age group')}${flag('cGender', 'Gender')}${flag('cAreas', 'Each region')}${flag('cFlows', 'Where they went and came from')}</div>`;
   else rows = `
     <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}
@@ -543,6 +547,19 @@ function choiceYears(S){
   const st = RC && RC.stages && RC.stages[S.choiceStage] || {};
   return Object.keys(st).filter(y => st[y] && !st[y].error).sort();
 }
+/* Which meets and seasons are on the page. More than one of each can be on;
+   the page then carries one report per meet and season, oldest season first. */
+function choicePicked(S){
+  const STAGES = ['Regionals', 'Zones'];
+  const all = [...new Set(STAGES.flatMap(st => choiceYears({choiceStage: st})))].sort();
+  let stages = (Array.isArray(S.choiceStages) ? S.choiceStages : [S.choiceStage]).filter(x => STAGES.includes(x));
+  if (!stages.length) stages = ['Regionals'];
+  stages = STAGES.filter(x => stages.includes(x));
+  let years = (Array.isArray(S.choiceSeasons) ? S.choiceSeasons : (S.choiceYear ? [S.choiceYear] : [])).map(String).filter(y => all.includes(y));
+  if (!years.length && all.length) years = [all[all.length - 1]];
+  years = all.filter(y => years.includes(y));
+  return {stages, years, all};
+}
 function choiceYear(S){
   const ys = choiceYears(S);
   return ys.includes(String(S.choiceYear)) ? String(S.choiceYear) : (ys[ys.length - 1] || '');
@@ -582,11 +599,15 @@ function choiceTable(C){
 }
 function choicePage(S, levels){
   const strip = stripHtml(S, levels, true);
-  const title = 'Region choice';
   if (RC_ERR) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">The region choice figures could not be loaded.</p></div></div>`;
+  if (!RC || !RC.stages) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">Loading.</p></div></div>`;
+  const P = choicePicked(S);
+  const pages = P.years.flatMap(y => P.stages.map(st => choiceOne(Object.assign({}, S, {choiceStage: st, choiceYear: y}))));
+  return `<div class="bsr">${strip}${pages.join('')}</div>`;
+}
+function choiceOne(S){
   const C = choiceData(S);
-  if (!C) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">Loading.</p></div></div>`;
-  if (C.missing) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">No ${esc(S.choiceStage)} results to measure.</p></div></div>`;
+  if (!C || C.missing) return `<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">No ${esc(S.choiceStage)} results to measure${C && C.year ? ' for ' + esc(C.year) : ''}.</p></div>`;
   const p = C.p, ink = '#171f69';
   const totals = `<div class="bsr-total"><b>${fmt(p.competing_away)}</b><span>Athletes who competed away from their club's home ${C.word.toLowerCase()}</span></div>
     <div class="bsr-total"><b>${pct1(p.competing_away, p.athletes)}</b><span>Of ${fmt(p.athletes)} athletes at ${esc(S.choiceStage)}</span></div>
@@ -625,10 +646,10 @@ function choicePage(S, levels){
   const notes = [`A club's home ${C.word.toLowerCase()} is the one where most of its athletes competed that season. An athlete competed away when they entered a different one.`,
                  `These are the ${C.word.toLowerCase()}s the ${C.year} season was run on, not the proposal on the map.`,
                  `Each athlete is counted under their club\u2019s home ${C.word.toLowerCase()}.`];
-  return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S, C.year)}
+  return `<div class="bsr-page">${choiceHead(S, C.year)}
     <div class="bsr-totals row">${totals}</div>
     <div class="bsr-grid steps">${cards.join('')}</div>${areas}
-    <p class="bsr-foot">${notes.join(' ')}</p></div></div>`;
+    <p class="bsr-foot">${notes.join(' ')}</p></div>`;
 }
 
 /* ---------- Structure and Money ---------- */
@@ -800,8 +821,10 @@ function wire(root){
     PACKET = true; root.innerHTML = html(); wire(root);
     setTimeout(() => { window.print(); PACKET = false; root.innerHTML = html(); wire(root); }, 150);
   });
-  root.querySelectorAll('[data-bsr-cstage]').forEach(b => b.addEventListener('click', () => { S.choiceStage = b.dataset.bsrCstage; again(); }));
-  root.querySelectorAll('[data-bsr-cyear]').forEach(b => b.addEventListener('click', () => { S.choiceYear = b.dataset.bsrCyear; again(); }));
+  // Meets and seasons switch on and off one at a time; the last one on stays on.
+  const flip = (list, v) => { const on = list.map(String); const out = on.includes(v) ? on.filter(x => x !== v) : on.concat(v); return out.length ? out : on; };
+  root.querySelectorAll('[data-bsr-cstage]').forEach(b => b.addEventListener('click', () => { S.choiceStages = flip(choicePicked(S).stages, b.dataset.bsrCstage); again(); }));
+  root.querySelectorAll('[data-bsr-cyear]').forEach(b => b.addEventListener('click', () => { S.choiceSeasons = flip(choicePicked(S).years, b.dataset.bsrCyear); again(); }));
   if (S.page === 'choice') needChoice(() => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
   const fl = root.querySelector('#bsrFile'); if (fl) fl.addEventListener('click', () => saveFile(root));
   if (S.page === 'structure' || S.page === 'money') needActuals(S, () => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
@@ -810,9 +833,17 @@ function wire(root){
   const pr = root.querySelector('#bsrPrint'); if (pr) pr.addEventListener('click', () => window.print());
   const cs = root.querySelector('#bsrCsv'); if (cs) cs.addEventListener('click', () => {
     if (S.page === 'areas'){ downloadCsv(build(S.level), S); return; }
-    if (S.page === 'choice'){ const C = choiceData(S); if (!C || C.missing) return; const T = choiceTable(C);
-      const moves = (C.p.flows || []).map(f => [`${C.word} ${f.home}`, `${C.word} ${f.went}`, f.athletes]);
-      saveCsv([T.head].concat(T.rows, [T.totals], moves.length ? [[], [`Home ${C.word.toLowerCase()}`, 'Competed at', 'Athletes']].concat(moves) : []), `region-choice-${S.choiceStage}-${C.year}.csv`); return; }
+    if (S.page === 'choice'){
+      const P = choicePicked(S), out = [];
+      P.years.forEach(y => P.stages.forEach(st => {
+        const C = choiceData(Object.assign({}, S, {choiceStage: st, choiceYear: y})); if (!C || C.missing) return;
+        const T = choiceTable(C), moves = (C.p.flows || []).map(f => [`${C.word} ${f.home}`, `${C.word} ${f.went}`, f.athletes]);
+        if (out.length) out.push([]);
+        out.push([`${y} ${st}`], T.head, ...T.rows, T.totals);
+        if (moves.length) out.push([], [`Home ${C.word.toLowerCase()}`, 'Competed at', 'Athletes'], ...moves);
+      }));
+      if (out.length) saveCsv(out, `region-choice-${P.stages.join('-')}-${P.years.join('-')}.csv`);
+      return; }
     const P = pathwayData(); if (!P) return;
     const T = pathwayTable(P, S);
     saveCsv([T.head].concat(T.rows, T.totals ? [T.totals] : []), `${S.page}-${String(B().yearLabel()).slice(0, 4)}.csv`);
@@ -856,6 +887,8 @@ const CSS = `
 .bsr-seg{display:inline-flex;background:#eef1f6;border-radius:7px;padding:3px;margin-right:10px}
 .bsr-seg button{border:0;background:none;padding:6px 14px;border-radius:5px;font:inherit;font-size:13px;font-weight:600;color:#4b5568;cursor:pointer}
 .bsr-seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(16,24,40,.12)}
+.bsr-seg.many{gap:3px}
+.bsr-hint{font-size:12px;color:var(--soft)}
 .bsr-sel{font:inherit;font-size:13px;padding:6px 8px;border:1px solid #cdd6e4;border-radius:6px;margin-right:10px;background:#fff;color:var(--ink)}
 .bsr-chip{border:1px solid #cdd6e4;background:#fff;border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:600;color:#4b5568;cursor:pointer}
 .bsr-chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
@@ -1151,7 +1184,7 @@ let TITLE_WAS = null;
 function printName(){
   const api = B(), S = state();
   let what;
-  if (S.page === 'choice') what = `Region choice ${S.choiceStage} ${choiceYear(S)}`;
+  if (S.page === 'choice'){ const P = choicePicked(S); what = `Region choice ${P.stages.join(' and ')} ${P.years.join(' ')}`; }
   else if (S.page === 'structure') what = 'Structure';
   else if (S.page === 'money') what = 'Money';
   else {
