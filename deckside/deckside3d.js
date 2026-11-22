@@ -37,13 +37,38 @@ function defaultSigns() {
   [[14.3, 7.0], [14.3, 9.0], [14.3, 26.0], [14.3, 28.0]].forEach((p, i) => s.push(f('m_f' + (i + 5), 'Deck frame sign ' + (i + 5), 1.9, 0.8, p[0], 0.4, p[1], -P / 2, 'aframe')));
   return s;
 }
+/* ── displays USA Diving owns (Backdrop Source orders, Nov 2025 to Nov 2026) ── */
+const FT = 0.3048, r2 = (n) => Math.round(n * 100) / 100;
+const DISPLAYS = [
+  { key: 'glide', name: 'Glide Wave Exhibition Display', size: '16 x 8 ft', own: 1, kind: 'wall', w: r2(16 * FT), h: r2(8 * FT), plan: 'swave', d: 0.45 },
+  { key: 'cwave', name: 'Curved Wave Trade Show Display', size: '15 ft wide, 6 to 7.4 ft tall', own: 1, kind: 'wall', w: r2(15 * FT), h: r2(7.4 * FT), plan: 'arc', d: 0.5, low: 6 / 7.4 },
+  { key: 'ctmw', name: 'Curved Tension Portable Media Wall', size: '19.5 x 7.5 ft', own: 1, kind: 'wall', w: r2(19.5 * FT), h: r2(7.5 * FT), plan: 'arc', d: 0.9 },
+  { key: 's164', name: 'Straight Tension Backdrop, 16.4 ft', size: '16.4 x 7.5 ft', own: 1, kind: 'flat', w: r2(16.4 * FT), h: r2(7.5 * FT) },
+  { key: 's195', name: 'Straight Tension Backdrop, 19.5 ft', size: '19.5 x 7.5 ft', own: 1, kind: 'flat', w: r2(19.5 * FT), h: r2(7.5 * FT) },
+  { key: 'sqarch', name: 'Square Fabric Arch Entrance', size: '7.87 ft wide, 7.54 ft tall, 3 ft deep', own: 3, kind: 'arch', w: r2(7.87 * FT), h: r2(7.54 * FT), depth: 0.95, leg: 0.5, head: 0.45 },
+  { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6 },
+  { key: 'popup', name: 'Horizontal Pop-Up Banner', size: '4 x 2.3 ft', own: 5, kind: 'aframe', w: r2(4 * FT), h: r2(2.3 * FT) },
+  { key: 'fabric', name: 'Fabric banner print', size: '45 x 7 ft', own: 3, kind: 'flat', w: r2(45 * FT), h: r2(7 * FT) },
+  { key: 'aframe', name: 'Deck A-frame sign', size: 'about 6 x 2.6 ft', own: null, kind: 'aframe', w: 1.9, h: 0.8 },
+  { key: 'flat', name: 'Flat sign, any size', size: 'set your own', own: null, kind: 'flat', w: 2, h: 1 }
+];
+const displayOf = (s) => DISPLAYS.filter((d) => d.key === s.preset)[0] || null;
+function applyDisplay(s, key) { const d = DISPLAYS.filter((x) => x.key === key)[0]; if (!d) return s; s.preset = d.key; s.kind = d.kind; s.w = d.w; s.h = d.h; ['plan', 'd', 'low', 'depth', 'leg', 'head'].forEach((k) => { if (d[k] != null) s[k] = d[k]; else delete s[k]; }); return s; }
+// First placement of the owned displays, read from the 2025 Winter Nationals photos. Only untouched default signs are converted.
+function migrate(m) {
+  if ((m.v || 1) >= 2) return false;
+  const was = { m_bd1: [8.2, 3.0, 'glide', 1.22], m_bd3: [7.6, 2.5, 'cwave', 4.02], m_arch: [3.2, 2.6, 'sqarch', 1.15], m_curve: [3.0, 2.4, 'ctmw', 1.14] };
+  m.signs.forEach((s) => { const w = was[s.id]; if (w && s.kind === 'flat' && s.w === w[0] && s.h === w[1]) { applyDisplay(s, w[2]); s.y = w[3]; } });
+  m.v = 2; return true;
+}
 function model() {
   const v = D.venue();
   if (!v.model || !v.model.signs) {
     const e = D.ev();
     v.model = { v: 1, signs: defaultSigns().map((s) => { const a = e.assets.filter((x) => x.name === s.name)[0]; s.assetId = a ? a.id : ''; return s; }) };
+    migrate(v.model);
     D.changed();
-  }
+  } else if (migrate(v.model)) D.changed();
   return v.model;
 }
 const signById = (id) => model().signs.filter((s) => s.id === id)[0] || null;
@@ -99,7 +124,7 @@ function buildRoom() {
   // deck, pool, water
   box(46, 0.4, 49, 0, -0.2, 18, M(0xffffff, { map: deckTex() }), false);
   box(25.7, 0.42, 30.7, 0, -0.2, 18, M(0xf5f7fa), false);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(25, 30), new THREE.MeshPhysicalMaterial({ map: waterTex(), color: 0xffffff, roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.1, envMapIntensity: 0.7 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(25, 30), new THREE.MeshPhysicalMaterial({ map: waterTex(), color: 0xffffff, roughness: 0.12, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.25, envMapIntensity: 0.5 }));
   water.rotation.x = -Math.PI / 2; water.position.set(0, 0.03, 18); water.receiveShadow = true; g.add(water);
   [23.5, 26, 28.5].forEach((z) => { box(17, 0.13, 0.13, -4, 0.07, z, M(0xf0c020, { roughness: 0.6 }), false); box(8, 0.13, 0.13, 8.5, 0.07, z, M(0x111318, { roughness: 0.6 }), false); });
   // walls and roof face inward only, so the room opens up when you look in from outside
@@ -136,7 +161,7 @@ function buildRoom() {
   const board = (x, y, z0) => { box(0.5, 0.06, 4.9, x, y, z0 + 2.45, M(0x3fc9b4, { roughness: 0.45 })); box(0.7, 0.35, 0.5, x, y - 0.2, z0 + 1.5, M(0x9aa3b2)); };
   board(-12.6, 3.02, -0.9); board(-8.4, 3.02, -0.9);
   // 1m springboards at the tower end and along both sides
-  [8.6, 12.2].forEach((x) => { box(0.95, 0.8, 2.3, x, 0.4, 0.3, dark); board(x, 1.02, -0.8); });
+  [9.3, 11.5].forEach((x) => { box(0.95, 0.8, 2.3, x, 0.4, 0.3, dark); board(x, 1.02, -0.8); });
   const sideBoard = (sd, z) => { box(2.3, 0.8, 0.95, sd * 14.6, 0.4, z, M(0xd9c7a3)); const b = box(4.9, 0.06, 0.5, sd * 12.4, 1.02, z, M(0x3fc9b4, { roughness: 0.45 })); return b; };
   [18.5, 21].forEach((z) => { sideBoard(-1, z); sideBoard(1, z); });
   // mezzanine seating
@@ -149,27 +174,54 @@ function buildRoom() {
 }
 
 /* ── signs ────────────────────────────────────────────── */
+// A fabric wall that can curve in plan (arc or S-wave) and slope along its top edge.
+function wallShape(s) {
+  const N = 40, pos = [], uv = [], idx = [], edge = [], low = s.low || 1, d = s.d || 0;
+  const zAt = (u) => s.plan === 'arc' ? d * (2 * u - 1) * (2 * u - 1) - d / 2 : s.plan === 'swave' ? d / 2 * Math.sin(2 * Math.PI * u) : 0;
+  for (let k = 0; k <= N; k++) {
+    const u = k / N, x = (u - 0.5) * s.w, z = zAt(u), top = s.h * (low + (1 - low) * u) - s.h / 2;
+    pos.push(x, -s.h / 2, z, x, top, z); uv.push(u, 0, u, (top + s.h / 2) / s.h);
+    if (k < N) { const a = k * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  for (let k = 0; k <= N; k++) edge.push(new THREE.Vector3(pos[k * 6], pos[k * 6 + 1], pos[k * 6 + 2]));
+  for (let k = N; k >= 0; k--) edge.push(new THREE.Vector3(pos[k * 6 + 3], pos[k * 6 + 4], pos[k * 6 + 5]));
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  return { g, edge };
+}
 async function buildSigns() {
-  const old = signs; signs = new THREE.Group(); scene.add(signs);
-  if (old) { scene.remove(old); old.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.userData.ownTex && Array.isArray(o.material) && o.material[4].map) o.material[4].map.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); }
-  const showLabels = $('m3Labels').checked, mine = signs;
+  const old = signs; signs = new THREE.Group(); signs.userData.trash = []; scene.add(signs);
+  if (old) { scene.remove(old); (old.userData.trash || []).forEach((t) => t.dispose()); old.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); }
+  const showLabels = $('m3Labels').checked, mine = signs, trash = signs.userData.trash;
   for (const s of model().signs) {
     const a = D.assetById(s.assetId), fid = D.creativeOf(s), art = fid ? await artTex(fid) : null;
     if (mine !== signs) return;
     const st = a ? a.status : 'Open', col = new THREE.Color(D.STATUS_COLOR[st] || '#059669');
-    const tex = art || (showLabels ? labelTex(s, a) : null);
-    const face = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 1, envMapIntensity: 0.2, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: tex ? 0.42 : 0.25 });
-    const edge = new THREE.MeshStandardMaterial({ color: 0xe6e9ee, roughness: 0.8 });
+    const tex = art || (showLabels ? labelTex(s, a) : null); if (tex && !art) trash.push(tex);
+    const faceMat = (t, side) => new THREE.MeshStandardMaterial({ map: t, color: 0xffffff, roughness: 1, envMapIntensity: 0.2, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: t ? 0.42 : 0.25, side: side || THREE.FrontSide });
+    const part = (ox, oy, rx, ry) => { if (!tex) return null; const c = tex.clone(); c.offset.set(ox, oy); c.repeat.set(rx, ry); c.needsUpdate = true; trash.push(c); return c; };
+    const edge = new THREE.MeshStandardMaterial({ color: 0xf2f4f7, roughness: 0.9, emissive: 0xffffff, emissiveIntensity: 0.3 });
     const grp = new THREE.Group(); grp.position.set(s.x, s.y, s.z); grp.rotation.y = s.ry || 0; grp.userData.sid = s.id;
-    const mkBoard = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, 0.05), [edge, edge, edge, edge, face, edge]); m.castShadow = true; m.receiveShadow = true; m.userData.sid = s.id; m.userData.ownTex = !art && !!tex; return m; };
-    const outline = (m, color, grow) => { const l = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(s.w + grow, s.h + grow, 0.07)), new THREE.LineBasicMaterial({ color })); m.add(l); };
-    const boards = [];
+    const tag = (m) => { m.castShadow = true; m.receiveShadow = true; m.userData.sid = s.id; return m; };
+    const box = (w, h, dp, t) => tag(new THREE.Mesh(new THREE.BoxGeometry(w, h, dp), [edge, edge, edge, edge, faceMat(t), dp > 0.1 ? faceMat(t) : edge]));
+    const lines = (geo, color) => new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color }));
+    const marks = (m, w, h, dp) => { if (art && showLabels) m.add(lines(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.06, h + 0.06, dp + 0.02)), col)); if (s.id === selId) m.add(lines(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.16, h + 0.16, dp + 0.04)), 0x009ac7)); };
     if (s.kind === 'aframe') {
       const tilt = 0.26, off = Math.sin(tilt) * s.h / 2 + 0.03;
-      const b1 = mkBoard(); b1.rotation.x = -tilt; b1.position.z = off; boards.push(b1);
-      const b2 = mkBoard(); b2.rotation.y = Math.PI; b2.rotation.x = tilt; b2.position.z = -off; boards.push(b2);
-    } else boards.push(mkBoard());
-    boards.forEach((b) => { if (art && showLabels) outline(b, col, 0.06); if (s.id === selId) outline(b, 0x009ac7, 0.16); grp.add(b); });
+      const b1 = box(s.w, s.h, 0.05, tex); b1.rotation.x = -tilt; b1.position.z = off;
+      const b2 = box(s.w, s.h, 0.05, tex); b2.rotation.y = Math.PI; b2.rotation.x = tilt; b2.position.z = -off;
+      [b1, b2].forEach((b) => { marks(b, s.w, s.h, 0.05); grp.add(b); });
+    } else if (s.kind === 'wall') {
+      const sh = wallShape(s), m = tag(new THREE.Mesh(sh.g, faceMat(tex, THREE.DoubleSide)));
+      const loop = (color, lift) => { const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(sh.edge), new THREE.LineBasicMaterial({ color })); l.scale.setScalar(lift); m.add(l); };
+      if (art && showLabels) loop(col, 1.005); if (s.id === selId) loop(0x009ac7, 1.03);
+      grp.add(m);
+    } else if (s.kind === 'arch') {
+      const leg = Math.min(s.leg || 0.5, s.w / 3), head = Math.min(s.head || 0.45, s.h / 2), dp = s.depth || 0.3, lu = leg / s.w, hv = head / s.h;
+      const L = box(leg, s.h, dp, part(0, 0, lu, 1)); L.position.x = -(s.w / 2 - leg / 2);
+      const Rr = box(leg, s.h, dp, part(1 - lu, 0, lu, 1)); Rr.position.x = s.w / 2 - leg / 2;
+      const T = box(s.w - 2 * leg, head, dp, part(lu, 1 - hv, 1 - 2 * lu, hv)); T.position.y = s.h / 2 - head / 2;
+      [[L, leg, s.h], [Rr, leg, s.h], [T, s.w - 2 * leg, head]].forEach((b) => { marks(b[0], b[1], b[2], dp); grp.add(b[0]); });
+    } else { const b = box(s.w, s.h, 0.05, tex); marks(b, s.w, s.h, 0.05); grp.add(b); }
     signs.add(grp);
   }
   draw();
@@ -187,7 +239,7 @@ function pick(e) {
 }
 const VIEWS = [
   ['Overview', [-33, 24, 50], [0, 2, 13]], ['Broadcast side', [-19.5, 6.2, 24], [1, 4, -1]], ['Deck level', [0, 1.7, 34], [0, 4.2, 0]],
-  ['1m end', [15, 2.4, 15], [9.5, 1.6, -2]], ['Left deck', [-9, 1.8, 20], [-14.5, 0.6, 11]], ['From above', [0, 62, 18.1], [0, 0, 18]]
+  ['1m end', [14, 2.2, 11], [10, 1.5, -2]], ['Left deck', [-9, 1.8, 20], [-14.5, 0.6, 11]], ['Entrance', [9, 2.0, 27], [17.4, 1.3, 33.5]], ['From above', [0, 62, 18.1], [0, 0, 18]]
 ];
 function goView(i) { cam.position.set(...VIEWS[i][1]); controls.target.set(...VIEWS[i][2]); controls.update(); document.querySelectorAll('#m3Views .dk-btn').forEach((b, k) => b.classList.toggle('on', k === i)); draw(); }
 
@@ -195,25 +247,36 @@ function goView(i) { cam.position.set(...VIEWS[i][1]); controls.target.set(...VI
 function renderPanel() {
   const box = $('m3Panel'), e = D.ev(), s = signById(selId), esc = D.esc;
   if (!s) {
-    box.innerHTML = '<h3>Signs in this venue</h3><p>Click a sign in the model to edit it, or drop a picture onto a sign to see the artwork in place. Drag to turn the room, scroll to zoom.</p><div class="dk-zlist">' +
+    box.innerHTML = '<h3>Signs in this venue</h3><p>Click a sign to edit it. Once it is selected, drag it to move it. Drop a picture onto a sign to see the artwork in place. Drag empty space to turn the room, scroll to zoom.</p><div class="dk-zlist">' +
       model().signs.map((x) => { const a = D.assetById(x.assetId); return '<button data-sid="' + x.id + '"><span>' + esc(x.label || (a ? a.name : x.name)) + '</span><span class="dk-pill ' + (a ? a.status : 'Open') + '">' + (a ? a.status : 'Not linked') + '</span></button>'; }).join('') + '</div>';
     return;
   }
   const a = D.assetById(s.assetId), fid = D.creativeOf(s), deg = Math.round((s.ry || 0) * 180 / Math.PI);
-  box.innerHTML = '<h3>Sign</h3>' +
+  const disp = displayOf(s);
+  box.innerHTML = '<h3>Sign</h3>' + (disp && disp.own != null ? '<p><b>' + esc(disp.name) + '</b><br>' + esc(disp.size) + '. USA Diving owns ' + disp.own + '.</p>' : '') +
+    '<label>Display type<select id="m3Type"><option value="">Keep as it is</option>' + DISPLAYS.map((d) => '<option value="' + d.key + '"' + (d.key === s.preset ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') + '</select></label>' +
     '<label>Inventory asset<select id="m3Asset"><option value="">Not linked</option>' + e.assets.map((x) => '<option value="' + x.id + '"' + (x.id === s.assetId ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></label>' +
     (a ? '<label>Status<select id="m3Status" class="st-' + a.status + '">' + D.STATUSES.map((x) => '<option' + (x === a.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>' +
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
     D.artChoicesHtml(fid) +
     '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
-    (fid ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button><button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div>' +
+    (fid && !(disp && disp.own != null) ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button>' : '') + (fid ? '<button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div><p id="m3FitNote" hidden></p>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
     [['x', 'Left / right', s.x], ['z', 'Tower end / near end', s.z], ['y', 'Height off deck', s.y], ['deg', 'Turn, degrees', deg], ['w', 'Width', s.w], ['h', 'Height', s.h]].map((f) => '<label>' + f[1] + '<input data-adj="' + f[0] + '" type="number" step="' + (f[0] === 'deg' ? 5 : 0.1) + '" value="' + (Math.round(f[2] * 100) / 100) + '"></label>').join('') + '</div>' +
     '<div class="row" style="margin-top:auto"><button class="dk-btn" id="m3Done">Done</button><button class="dk-btn" id="m3Copy">Copy sign</button><button class="dk-btn danger" id="m3Del">Remove sign</button></div>';
   if (fid) D.fileUrl(fid).then((u) => { const im = $('m3Prev'); if (im && u) im.src = u; });
+  if (fid) D.getImg(fid).then((im) => {
+    const n = $('m3FitNote'); if (!n || !im || selId !== s.id) return;
+    const sa = s.w / s.h, ia = im.naturalWidth / im.naturalHeight; if (Math.abs(sa - ia) / sa < 0.04) return;
+    n.hidden = false; n.textContent = 'This sign is ' + sa.toFixed(2) + ' to 1 and the artwork is ' + ia.toFixed(2) + ' to 1, so it is ' + (ia > sa ? 'squeezed' : 'stretched') + ' sideways here. For print, design it at ' + (s.w / FT).toFixed(1) + ' x ' + (s.h / FT).toFixed(1) + ' ft.';
+  });
 }
-function select(id) { const x = window.scrollX, y = window.scrollY; selId = id; renderPanel(); $('m3Panel').scrollTop = 0; buildSigns(); window.scrollTo(x, y); }
+function renderAddSel() {
+  const placed = {}; model().signs.forEach((x) => { if (x.preset) placed[x.preset] = (placed[x.preset] || 0) + 1; });
+  $('m3AddSel').innerHTML = '<option value="">Add a sign or display</option>' + DISPLAYS.map((d) => '<option value="' + d.key + '">' + D.esc(d.name) + ' (' + D.esc(d.size) + ')' + (d.own != null ? ': own ' + d.own + ', ' + (placed[d.key] || 0) + ' placed' : '') + '</option>').join('');
+}
+function select(id) { const x = window.scrollX, y = window.scrollY; selId = id; renderPanel(); renderAddSel(); $('m3Panel').scrollTop = 0; buildSigns(); window.scrollTo(x, y); }
 async function setArt(id, file) {
   const s = signById(id); if (!s || !file) return;
   try { const f = await D.importImage(file, 1600); D.libAdd(f); D.setCreativeFor(s, f.id); D.changed(); selId = id; renderPanel(); buildSigns(); }
@@ -222,13 +285,32 @@ async function setArt(id, file) {
 
 function wire() {
   const el = R.domElement; let down = null;
-  el.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
-  el.addEventListener('pointerup', (e) => { if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return; const id = pick(e); if (id !== selId) select(id); });
-  el.addEventListener('pointermove', (e) => { if (e.buttons) return; const id = pick(e); if (id !== hoverId) { hoverId = id; el.style.cursor = id ? 'pointer' : 'grab'; } });
+  let dragS = null; const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3(), grab = new THREE.Vector3();
+  const floorPt = (e, y) => { const r = el.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); plane.constant = -y; return ray.ray.intersectPlane(plane, hit); };
+  el.addEventListener('pointerdown', (e) => {
+    down = [e.clientX, e.clientY];
+    if (selId && pick(e) === selId) { const s = signById(selId); if (floorPt(e, s.y)) { dragS = { s, moved: false }; grab.set(hit.x - s.x, 0, hit.z - s.z); controls.enabled = false; el.setPointerCapture(e.pointerId); } }
+  });
+  el.addEventListener('pointerup', (e) => {
+    if (dragS) { controls.enabled = true; const mv = dragS.moved; dragS = null; if (mv) { D.changed(); renderPanel(); return; } }
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return; const id = pick(e); if (id !== selId) select(id);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (dragS) {
+      if (!dragS.moved && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) return;
+      if (!floorPt(e, dragS.s.y)) return; dragS.moved = true;
+      dragS.s.x = r2(Math.max(-22, Math.min(22, hit.x - grab.x))); dragS.s.z = r2(Math.max(-6, Math.min(42, hit.z - grab.z)));
+      const g = signs.children.filter((c) => c.userData.sid === dragS.s.id)[0]; if (g) g.position.set(dragS.s.x, dragS.s.y, dragS.s.z); draw(); return;
+    }
+    if (e.buttons) return; const id = pick(e); if (id !== hoverId) { hoverId = id; el.style.cursor = id ? (id === selId ? 'move' : 'pointer') : 'grab'; } });
   $('m3Views').innerHTML = VIEWS.map((v, i) => '<button class="dk-btn small" data-view="' + i + '">' + v[0] + '</button>').join('');
   $('m3Views').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b) goView(+b.dataset.view); });
   $('m3Labels').addEventListener('change', buildSigns);
-  $('m3Add').addEventListener('click', () => { const s = { id: D.uid('m'), name: 'New sign', kind: 'aframe', w: 1.9, h: 0.8, x: 0, y: 0.4, z: 36.6, ry: Math.PI, assetId: '' }; model().signs.push(s); D.changed(); select(s.id); });
+  $('m3AddSel').addEventListener('change', (e) => {
+    const key = e.target.value; if (!key) return; const d = DISPLAYS.filter((x) => x.key === key)[0];
+    const s = applyDisplay({ id: D.uid('m'), name: d.name, x: 0, y: 0, z: 37, ry: Math.PI, assetId: '' }, key); s.y = r2(s.h / 2);
+    model().signs.push(s); D.changed(); select(s.id); D.toast('Added at the near end of the pool. Drag it to where it goes.');
+  });
   $('m3Export').addEventListener('click', async () => { const keep = selId; selId = null; await buildSigns(); room.userData.roof.visible = inside(); R.render(scene, cam); const a = document.createElement('a'); a.href = R.domElement.toDataURL('image/jpeg', 0.92); a.download = (D.venue().name || 'venue') + '-3d.jpg'; document.body.appendChild(a); a.click(); a.remove(); selId = keep; buildSigns(); });
   const P = $('m3Panel');
   P.addEventListener('click', (e) => {
@@ -246,6 +328,7 @@ function wire() {
   P.addEventListener('change', (e) => {
     const t = e.target, s = signById(selId); if (!s) return; const a = D.assetById(s.assetId);
     if (t.id === 'm3Asset') s.assetId = t.value;
+    else if (t.id === 'm3Type') { if (!t.value) return; const bottom = s.y - s.h / 2; applyDisplay(s, t.value); s.y = r2(bottom + s.h / 2); }
     else if (t.id === 'm3Status' && a) { a.status = t.value; if (a.status === 'Open') a.sponsor = ''; }
     else if (t.id === 'm3Sponsor' && a) a.sponsor = t.value;
     else if (t.id === 'm3Price' && a) a.price = String(t.value).trim() === '' ? '' : (parseFloat(t.value) || 0);
@@ -275,7 +358,7 @@ function build() {
 
 window.DECKSIDE3D = {
   selected() { return signById(selId); },
-  show() { visible = true; if (!built && !build()) return; resize(); if (!this._viewed) { goView(0); this._viewed = true; } if (selId && !signById(selId)) selId = null; renderPanel(); buildSigns(); },
+  show() { visible = true; if (!built && !build()) return; resize(); renderAddSel(); if (!this._viewed) { goView(0); this._viewed = true; } if (selId && !signById(selId)) selId = null; renderPanel(); buildSigns(); },
   hide() { visible = false; },
   drop(e, file) { const id = e.target === (R && R.domElement) ? pick(e) : (e.target.closest && e.target.closest('#m3Drop') ? selId : null); if (id) setArt(id, file); else D.toast('Drop the picture onto a sign in the model.'); },
   paste(file) { if (selId) setArt(selId, file); else D.toast('Click a sign first, then paste.'); },

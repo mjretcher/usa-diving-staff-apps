@@ -120,3 +120,6 @@ html:has(body.dk) { scrollbar-gutter: stable; }
 .dk-art input { width: 100%; height: 32px; border: 0; border-top: 1px solid var(--line-2); padding: 0 10px; font: 600 13px var(--font-ui); color: var(--ink); }
 .dk-art input:focus { outline: 2px solid var(--brand-pool); outline-offset: -2px; }
 .dk-art-foot { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 4px 10px; font-size: 11px; color: var(--ink-3); }
+.dk-addsel { height: 30px; max-width: 220px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; font: 600 12px var(--font-ui); color: var(--ink-2); padding: 0 8px; }
+.dk-side p b { color: var(--ink); }
+#m3FitNote { background: var(--status-flag-bg, #fff7ed); border-left: 3px solid #d97706; padding: 8px 10px; border-radius: 4px; color: var(--ink-2); }

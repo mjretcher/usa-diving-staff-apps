@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/design.css?v=202611220251">
 <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
-<link rel="stylesheet" href="deckside.css?v=202611221754">
+<link rel="stylesheet" href="deckside.css?v=202611221822">
 <script src="../shared/usad-update.js?v=202611221750" data-app="deckside" data-build="dev"></script>
 </head>
 <body class="dk">
@@ -79,7 +79,7 @@
           <span class="dk-views" id="m3Views"></span>
           <label class="dk-check"><input type="checkbox" id="m3Labels" checked> Show names and status</label>
           <span class="dk-spacer"></span>
-          <button class="dk-btn" id="m3Add">Add a sign</button>
+          <select id="m3AddSel" class="dk-addsel"></select>
           <button class="dk-btn" id="m3Export">Download picture</button>
         </div>
         <div class="dk-stage dk-stage3d" id="m3Stage"><div class="dk-empty" id="m3Msg">Loading the venue model</div></div>
@@ -117,7 +117,7 @@
 <script src="../shared/usad-toast.js?v=202611220251"></script>
 <script src="../shared/usad-modal.js?v=202611220251"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
-<script src="deckside.js?v=202611221756"></script>
-<script type="module" src="deckside3d.js?v=202611221754"></script>
+<script src="deckside.js?v=202611221822"></script>
+<script type="module" src="deckside3d.js?v=202611221822"></script>
 </body>
 </html>
