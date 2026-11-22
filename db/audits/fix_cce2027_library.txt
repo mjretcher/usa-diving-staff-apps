@@ -1,0 +1,13 @@
+1. Library map mp-mwec3kq8-8rkp
+   map: 'Mike v.2 11-12', saved 2026-11-13 17:10:18.628048+00:00
+   proposal: 'CCE 2027', saved 2026-11-22 14:57:31.208615+00:00
+   map levels (before):      Regions > Zones (6) > E / W / C (3)
+   proposal levels:          Regions > Zones (6) > Junior Nationals (1)
+   regions identical: True | county assignment identical: True (3140 counties)
+   map levels (after):       Regions > Zones (6) > Junior Nationals (1)
+   UPDATED. Regions, counties and the zone grouping are unchanged.
+2. Pathway library
+   pw-mws5mt4a-owb6: 'CCE 2027', 3 levels, saved 2026-11-22 18:12:40.055702+00:00
+   pw-mwrymdaz-q87n: 'CCE 2027', 3 levels, saved 2026-11-22 14:56:22.266852+00:00
+   identical contents. DELETED the older copy pw-mwrymdaz-q87n; kept pw-mws5mt4a-owb6.
+   pathway library now: [('pw-mws5mt4a-owb6', 'CCE 2027', 3, '2026-11-22 18:12')]
