@@ -334,7 +334,7 @@ function stripHtml(S, levels, typed, hasBase){
   const api = B();
   const years = (api.availableYears ? api.availableYears() : [api.year()]);
   const cur = S.page === 'areas' ? 'L' + S.level : S.page;
-  const pages = levels.map(L => ['L' + L, api.tierName(L)]).concat([['structure', 'Structure'], ['money', 'Money'], ['choice', 'Region choice']]);
+  const pages = levels.map(L => ['L' + L, api.tierName(L)]).concat([['structure', 'Structure'], ['money', 'Money'], ['choice', 'Region choice'], ['foreign', 'Foreign and dual'], ['hp', 'High Performance']]);
   const flag = (k, label) => chip('data-bsr-flag', k, !!S[k], label);
   let rows = '';
   if (S.page === 'areas') rows = `
@@ -345,6 +345,11 @@ function stripHtml(S, levels, typed, hasBase){
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
       <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
+  else if (S.page === 'foreign' || S.page === 'hp') rows = `
+    <div class="bsr-row"><span class="bsr-lbl">Meets</span>${segMany('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], statusPicked(S).stages)}
+      ${statusPicked(S).all.length ? `<span class="bsr-lbl gap">Season</span>${segMany('data-bsr-cyear', statusPicked(S).all.map(y => [y, y]), statusPicked(S).years)}` : ''}
+      <span class="bsr-hint">Pick more than one to put them on the same report.</span>
+      <span class="bsr-lbl gap">Show</span>${flag('cAge', 'Age group')}${flag('cGender', 'Gender')}${flag('cAreas', 'Each region')}${flag('cFlows', 'Where they went and came from')}</div>`;
   else if (S.page === 'choice') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Meets</span>${segMany('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], choicePicked(S).stages)}
       ${choicePicked(S).all.length ? `<span class="bsr-lbl gap">Season</span>${segMany('data-bsr-cyear', choicePicked(S).all.map(y => [y, y]), choicePicked(S).years)}` : ''}
@@ -359,7 +364,7 @@ function stripHtml(S, levels, typed, hasBase){
   return `<div class="bsr-strip">
     <div class="bsr-row">
       <span class="bsr-lbl">Show</span>${seg('data-bsr-page', pages, cur)}
-      ${S.page === 'choice' ? '' : `<span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>`}
+      ${['choice', 'foreign', 'hp'].includes(S.page) ? '' : `<span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>`}
       <span class="bsr-lbl">Layout</span>${seg('data-bsr-layout', [['grid', 'Grid'], ['table', 'Table']], S.layout)}
       <span class="bsr-grow"></span>
       <button class="bsr-btn" id="bsrFile" title="One file with this page only, to send or post. It opens in any browser and holds nothing else.">Save as a file</button>
@@ -380,9 +385,10 @@ function html(){
   const api = B();
   if (!api || !api.ready()) return '<div class="bsr"><p class="bsr-na">The map has not finished loading.</p></div>';
   const S = state(), levels = levelsWithAreas();
-  if (!['areas', 'structure', 'money', 'choice'].includes(S.page)) S.page = 'areas';
+  if (!['areas', 'structure', 'money', 'choice', 'foreign', 'hp'].includes(S.page)) S.page = 'areas';
   if (!levels.includes(S.level)) S.level = levels[0];
   if (S.page === 'choice') return choicePage(S, levels);
+  if (S.page === 'foreign' || S.page === 'hp') return statusPage(S, levels);
   if (S.page !== 'areas') return pathwayPage(S, levels);
   const D = build(S.level);
   if (S.area && (S.area.L !== S.level || !D.areas[S.area.gi])) S.area = null;
@@ -524,6 +530,115 @@ function compareHtml(P, S){
     ? 'The 2026 and 2025 figures are the totals finance reconciled for every entry billed at those meets; 2026 includes late fees. This structure is projected individual event entries at the entry fee.'
     : 'The 2026 and 2025 figures are counted from results, individual events only.' + (ACT.counted ? '' : ' Entry and athlete counts for the earlier seasons could not be loaded.');
   return `${title}<div class="bsr-grid steps">${cards}</div><p class="bsr-na" style="margin-top:10px">${note}</p>`;
+}
+
+/* ---------- Foreign and dual athletes; High Performance athletes ----------
+   Where these athletes competed and where they came from, by meet and season,
+   from membership-analytics/status-athletes.json
+   (db/scripts/measure_status_athletes.py). Counts only: no athlete is named.
+   The list of who is foreign, dual or High Performance Squad is on file for
+   2026 only. Other seasons show what the results alone can say (athletes
+   scored non-displacing), and High Performance cannot be shown for them. */
+let SA = null, SA_BUSY = false, SA_ERR = null;
+function needStatus(redraw){
+  if (SA || SA_BUSY || SA_ERR) return;
+  SA_BUSY = true;
+  fetch('../membership-analytics/status-athletes.json', {cache: 'no-cache'}).then(x => { if (!x.ok) throw new Error('not found'); return x.json(); })
+    .then(j => { SA = j; }).catch(e => { SA_ERR = String(e && e.message || e); })
+    .then(() => { SA_BUSY = false; if (redraw) redraw(); });
+}
+function statusPicked(S){
+  const STAGES = ['Regionals', 'Zones'];
+  const all = [...new Set(STAGES.flatMap(st => Object.keys(SA && SA.stages && SA.stages[st] || {})))].sort();
+  let stages = (Array.isArray(S.choiceStages) ? S.choiceStages : [S.choiceStage]).filter(x => STAGES.includes(x));
+  if (!stages.length) stages = ['Regionals'];
+  stages = STAGES.filter(x => stages.includes(x));
+  let years = (Array.isArray(S.choiceSeasons) ? S.choiceSeasons : []).map(String).filter(y => all.includes(y));
+  if (!years.length && all.length) years = [all[all.length - 1]];
+  return {stages, years: all.filter(y => years.includes(y)), all};
+}
+const STATUS_TITLE = {foreign: 'Foreign and dual athletes', hp: 'High Performance athletes'};
+function statusData(kind, stage, year){
+  const R = SA && SA.stages && SA.stages[stage] && SA.stages[stage][year];
+  const title = STATUS_TITLE[kind], word = stage === 'Zones' ? 'Zone' : 'Region';
+  if (!R) return {title, word, missing: true};
+  const onFile = !!R.status_list_on_file;
+  const keys = kind === 'hp' ? (onFile ? ['hps'] : []) : (onFile ? ['foreign', 'dual'] : ['nd']);
+  const LAB = {foreign: 'Foreign athletes', dual: 'Dual citizens declared for another federation', hps: 'High Performance Squad athletes',
+               nd: 'Athletes scored non-displacing in the results'};
+  const parts = keys.map(k => ({k, label: LAB[k], g: R.groups[k]})).filter(x => x.g);
+  if (!parts.length) return {title, word, onFile, noList: true, all: R.all_athletes};
+  const G = {athletes: 0, entries: 0, nd_entries: 0, competing_away: 0, by_age: {}, by_gender: {}, by_area: {}, flows: {}};
+  const add = (into, from, fields) => Object.keys(from).forEach(k => { into[k] = into[k] || {}; fields.forEach(f => { into[k][f] = (into[k][f] || 0) + (from[k][f] || 0); }); });
+  parts.forEach(({g}) => {
+    ['athletes', 'entries', 'nd_entries', 'competing_away'].forEach(f => { G[f] += g[f] || 0; });
+    add(G.by_age, g.by_age || {}, ['athletes', 'away']); add(G.by_gender, g.by_gender || {}, ['athletes', 'away']);
+    add(G.by_area, g.by_area || {}, ['athletes', 'competed', 'left', 'arrived']);
+    (g.flows || []).forEach(f => { const key = f.home + '>' + f.went; G.flows[key] = (G.flows[key] || 0) + f.athletes; });
+  });
+  const flows = Object.keys(G.flows).map(k => ({home: k.split('>')[0], went: k.split('>')[1], n: G.flows[k]})).sort((a, b) => b.n - a.n);
+  const areas = Object.keys(G.by_area).sort((a, b) => a.length - b.length || a.localeCompare(b, undefined, {numeric: true})).map(k => ({k, name: `${word} ${k}`,
+    based: G.by_area[k].athletes || 0, competed: G.by_area[k].competed || 0, left: G.by_area[k].left || 0, arrived: G.by_area[k].arrived || 0,
+    to: flows.filter(f => f.home === k).map(f => ({name: `${word} ${f.went}`, n: f.n})),
+    from: flows.filter(f => f.went === k).map(f => ({name: `${word} ${f.home}`, n: f.n}))}));
+  const table = [[word, 'Competed there', 'From clubs based there', 'Came in from elsewhere', 'Went elsewhere']]
+    .concat(areas.map(a => [a.name, a.competed, a.based, a.arrived, a.left]), [['Total', G.athletes, G.athletes, G.competing_away, G.competing_away]]);
+  return {title, word, onFile, parts, G, areas, table, all: R.all_athletes};
+}
+function statusHead(kind, stage, year){
+  const when = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+  return `<header class="bsr-head"><div><h1>${STATUS_TITLE[kind]}</h1>
+    <p>${year ? esc(year) + ' ' + esc(stage) + ` &middot; what happened, on the ${esc(year)} circuit` : ''}</p></div>
+    <div class="bsr-when">USA Diving<br>${esc(when)}</div></header>`;
+}
+function statusPage(S, levels){
+  const strip = stripHtml(S, levels, true), kind = S.page;
+  if (SA_ERR) return `<div class="bsr">${strip}<div class="bsr-page">${statusHead(kind)}<p class="bsr-na">The figures could not be loaded.</p></div></div>`;
+  if (!SA) return `<div class="bsr">${strip}<div class="bsr-page">${statusHead(kind)}<p class="bsr-na">Loading.</p></div></div>`;
+  const P = statusPicked(S);
+  return `<div class="bsr">${strip}${P.years.flatMap(y => P.stages.map(st => statusOne(S, kind, st, y))).join('')}</div>`;
+}
+function statusOne(S, kind, stage, year){
+  const D = statusData(kind, stage, year), head = statusHead(kind, stage, year), ink = '#171f69', tag = `<small>${esc(year)} ${esc(stage)}</small>`;
+  if (D.missing) return `<div class="bsr-page">${head}<p class="bsr-na">No ${esc(stage)} results for ${esc(year)}.</p></div>`;
+  if (D.noList) return `<div class="bsr-page">${head}<p class="bsr-na">No High Performance Squad list is on file for ${esc(year)}, so this season cannot be shown yet.</p></div>`;
+  const G = D.G, w = D.word.toLowerCase();
+  const totals = D.parts.map(x => `<div class="bsr-total"><b>${fmt(x.g.athletes)}</b><span>${esc(x.label)}</span></div>`).join('')
+    + `<div class="bsr-total"><b>${fmt(G.entries)}</b><span>Event entries; ${fmt(G.nd_entries)} of them scored non-displacing</span></div>`
+    + `<div class="bsr-total"><b>${fmt(G.competing_away)}</b><span>Competed away from their club's home ${w}</span></div>`;
+  const countRows = rows => { const max = Math.max(1, ...rows.map(r => r[1]));
+    return rows.map(([l, n]) => `<div class="bsr-r rate cnt"><span>${esc(l)}</span>${bar(n, max, ink)}<b>${fmt(n)}</b></div>`).join(''); };
+  const card = (h, rows) => `<article class="bsr-card bsr-step tight" style="--c:${ink}"><header><h3>${h}</h3><span class="bsr-meets">Athletes</span></header>${countRows(rows)}</article>`;
+  const AGEL = {A: 'Group A, 16 to 18', B: 'Group B, 14 to 15', C: 'Group C, 12 to 13', D: 'Group D, 11 & under'};
+  const seasons = Object.keys(SA.stages[stage] || {}).sort().map(y => { const d = statusData(kind, stage, y); return [y + (d.G && !d.onFile ? ', non-displacing only' : ''), d.G ? d.G.athletes : null]; }).filter(r => r[1] != null);
+  const cards = [card('Season by season', seasons)]
+    .concat(S.cAge ? [card('By age group', Object.keys(G.by_age).map(k => [AGEL[k] || k, G.by_age[k].athletes || 0]))] : [])
+    .concat(S.cGender ? [card('By gender', Object.keys(G.by_gender).map(k => [k, G.by_gender[k].athletes || 0]))] : []);
+  let areas = '';
+  if (S.cAreas && D.areas.length){
+    if (S.layout === 'table'){
+      const T = D.table;
+      areas = `<h2 class="bsr-h2">Each ${w}${tag}</h2><div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T[0].map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${T.slice(1, -1).map(r => `<tr>${r.map((v, i) => i ? `<td class="n">${fmt(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}
+        <tr class="tot">${T[T.length - 1].map((v, i) => i ? `<td class="n">${fmt(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
+    } else {
+      const list = (rows, word) => rows.map(t => `<div class="bsr-route"><span>${word} ${esc(t.name)}</span><b>${fmt(t.n)}</b></div>`).join('');
+      const side = (cls, n, label, rows, word) => `<div class="bsr-move ${cls}"><div class="bsr-moven"><b>${fmt(n)}</b><span>${label}</span></div>${S.cFlows ? list(rows, word) : ''}</div>`;
+      areas = `<h2 class="bsr-h2">Each ${w}${tag}</h2><div class="bsr-grid moves">${D.areas.map(a => `<article class="bsr-card tight" style="--c:${ink}">
+        <header><h3>${esc(a.name)}</h3></header>
+        <div class="bsr-moves">${side('in', a.competed, 'Competed here', a.from, 'from')}${side('out', a.based, 'From clubs based here', a.to, 'to')}</div>
+      </article>`).join('')}</div>`;
+    }
+  }
+  const notes = [D.onFile ? `Who is in each group comes from the ${esc(year)} list on file.`
+      : `No list of foreign athletes or dual citizens is on file for ${esc(year)}. This page shows the athletes the ${esc(year)} results scored non-displacing, whatever the reason.`,
+    `Individual events, Groups A to D. Of ${fmt(D.all)} athletes at ${esc(year)} ${esc(stage)}.`,
+    `A club's home ${w} is the one where most of its athletes competed that season.`,
+    'Counts only. No athlete is named.'];
+  return `<div class="bsr-page">${head}
+    <div class="bsr-totals row">${totals}</div>
+    <div class="bsr-grid steps">${cards.join('')}</div>${areas}
+    <p class="bsr-foot">${notes.join(' ')}</p></div>`;
 }
 
 /* ---------- Region choice ----------
@@ -823,8 +938,10 @@ function wire(root){
   });
   // Meets and seasons switch on and off one at a time; the last one on stays on.
   const flip = (list, v) => { const on = list.map(String); const out = on.includes(v) ? on.filter(x => x !== v) : on.concat(v); return out.length ? out : on; };
-  root.querySelectorAll('[data-bsr-cstage]').forEach(b => b.addEventListener('click', () => { S.choiceStages = flip(choicePicked(S).stages, b.dataset.bsrCstage); again(); }));
-  root.querySelectorAll('[data-bsr-cyear]').forEach(b => b.addEventListener('click', () => { S.choiceSeasons = flip(choicePicked(S).years, b.dataset.bsrCyear); again(); }));
+  const picked = () => S.page === 'choice' ? choicePicked(S) : statusPicked(S);
+  root.querySelectorAll('[data-bsr-cstage]').forEach(b => b.addEventListener('click', () => { S.choiceStages = flip(picked().stages, b.dataset.bsrCstage); again(); }));
+  root.querySelectorAll('[data-bsr-cyear]').forEach(b => b.addEventListener('click', () => { S.choiceSeasons = flip(picked().years, b.dataset.bsrCyear); again(); }));
+  if (S.page === 'foreign' || S.page === 'hp') needStatus(() => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
   if (S.page === 'choice') needChoice(() => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
   const fl = root.querySelector('#bsrFile'); if (fl) fl.addEventListener('click', () => saveFile(root));
   if (S.page === 'structure' || S.page === 'money') needActuals(S, () => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
@@ -833,6 +950,13 @@ function wire(root){
   const pr = root.querySelector('#bsrPrint'); if (pr) pr.addEventListener('click', () => window.print());
   const cs = root.querySelector('#bsrCsv'); if (cs) cs.addEventListener('click', () => {
     if (S.page === 'areas'){ downloadCsv(build(S.level), S); return; }
+    if (S.page === 'foreign' || S.page === 'hp'){
+      const P = statusPicked(S), out = [];
+      P.years.forEach(y => P.stages.forEach(st => { const D = statusData(S.page, st, y); if (!D || !D.G) return;
+        if (out.length) out.push([]);
+        out.push([`${y} ${st}`, D.title], ...D.table.map(r => r)); }));
+      if (out.length) saveCsv(out, `${S.page === 'hp' ? 'high-performance' : 'foreign-and-dual'}-${P.stages.join('-')}-${P.years.join('-')}.csv`);
+      return; }
     if (S.page === 'choice'){
       const P = choicePicked(S), out = [];
       P.years.forEach(y => P.stages.forEach(st => {
@@ -962,6 +1086,8 @@ const CSS = `
 .bsr-card.tight{padding:10px 14px 12px}.bsr-card.tight header{min-height:0;margin-bottom:6px}
 .bsr-r.rate{grid-template-columns:minmax(96px,36%) 1fr 46px 92px;margin:5px 0;font-size:13px}
 .bsr-r.rate small{font-size:12px;color:var(--soft);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.bsr-r.rate.cnt{grid-template-columns:minmax(96px,44%) 1fr 40px}
 .bsr-grid.moves{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
 .bsr-moves{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
 .bsr-move{border-top:3px solid var(--m);padding-top:6px;min-width:0}
@@ -1059,6 +1185,7 @@ P .bsr-r{font-size:10.5px;line-height:1.2;margin:1px 0;gap:6px;grid-template-col
 P .bsr-r.wide{grid-template-columns:minmax(70px,38%) 1fr auto}
 P .bsr-r.rate{grid-template-columns:minmax(74px,44%) 1fr 36px 62px;gap:5px;margin:2px 0}
 P .bsr-r.rate small{font-size:9.5px}
+P .bsr-r.rate.cnt{grid-template-columns:minmax(74px,50%) 1fr 30px}
 P .bsr-h2 small{font-size:10.5px;margin-left:8px}
 P .bsr-od th{white-space:normal;vertical-align:bottom}
 P .bsr-od th:first-child,P .bsr-od td:first-child{white-space:nowrap}
@@ -1191,6 +1318,7 @@ function printName(){
   const api = B(), S = state();
   let what;
   if (S.page === 'choice'){ const P = choicePicked(S); what = `Region choice ${P.stages.join(' and ')} ${P.years.join(' ')}`; }
+  else if (S.page === 'foreign' || S.page === 'hp'){ const P = statusPicked(S); what = `${S.page === 'hp' ? 'High Performance athletes' : 'Foreign and dual athletes'} ${P.stages.join(' and ')} ${P.years.join(' ')}`; }
   else if (S.page === 'structure') what = 'Structure';
   else if (S.page === 'money') what = 'Money';
   else {
@@ -1198,7 +1326,7 @@ function printName(){
     if (S.area && !PACKET){ const h = document.querySelector('.bsr .bsr-page h1'); what = (h && h.textContent.trim()) || one(tier); }
     else what = S.area ? `Every ${one(tier)}` : `${api.groupCountAt(S.level)} ${tier}`;
   }
-  const parts = S.page === 'choice' ? [what] : [what, api.scenarioLabel ? api.scenarioLabel() : '', String(api.yearLabel()).slice(0, 4)];
+  const parts = ['choice', 'foreign', 'hp'].includes(S.page) ? [what] : [what, api.scenarioLabel ? api.scenarioLabel() : '', String(api.yearLabel()).slice(0, 4)];
   return parts.map(x => String(x || '').replace(/[^A-Za-z0-9 \-]+/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' - ') || 'USA Diving report';
 }
 function printOn(){
