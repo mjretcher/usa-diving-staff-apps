@@ -55,7 +55,7 @@ const round = (v) => (v == null ? null : Math.round(v));
 const sumUnique = (cl) => (cl && cl.rows ? cl.rows.reduce((a, r) => a + (r.uniqueAthletes || 0), 0) : null);
 
 /* Actual counts from DiveMeets results for a season, by stage. */
-async function actualBySeason(year) {
+export async function actualBySeason(year) {
   const rows = await q(`select stage,
       count(distinct diver_id_dm||'|'||event_key) filter (where not coalesce(is_synchro,false))::int as individual,
       count(distinct diver_id_dm||'|'||event_key) filter (where not coalesce(is_synchro,false) and age_group is not null)::int as individual_aged,

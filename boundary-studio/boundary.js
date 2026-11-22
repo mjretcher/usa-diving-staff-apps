@@ -8467,7 +8467,7 @@ window.BoundaryAPI = {
                 toRound: rt.to ? (RN[rt.to.round] || rt.to.round) : null};
       });
       return {L, name: tierName(L), stops: groupCountAt(L), rounds: rounds.map(r => ({key: r.key, name: RN[r.key] || r.key})),
-              routes, divers, fee: feeFor(L)};
+              routes, divers, fee: feeFor(L), stage: levelStage(L).stage};
     });
     return {levels, meets, finalName: S.finalName};
   },

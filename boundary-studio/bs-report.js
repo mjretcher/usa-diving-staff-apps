@@ -20,7 +20,8 @@ const sum = a => a.reduce((s, x) => s + (x || 0), 0);
 const KEY = 'usad.bs.report';
 const DEFAULTS = {page: 'areas', level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
                   age: false, gender: false, boards: false, maps: true, clubNames: false, share: false,
-                  routes: true, athletes: true, eachMeet: false};
+                  routes: true, athletes: true, eachMeet: false, even: false, cmp26: false, cmp25: false,
+                  area: null};
 let ST = null;
 function state(){
   if (ST) return ST;
@@ -68,7 +69,7 @@ function build(L){
   const areas = TG.groups.map((g, gi) => ({
     gi, name: g.name || ('Area ' + (gi + 1)), badge: badge(g.name, gi),
     color: (api.colorAt && api.colorAt(L, gi)) || (g.colors && g.colors[0]) || FALLBACK[gi % FALLBACK.length],
-    m: 0, a: 0, c: 0, cl: new Set(), counties: 0, ages: [0, 0, 0, 0, 0],
+    m: 0, a: 0, c: 0, cl: new Set(), counties: 0, withMembers: 0, states: new Map(), ages: [0, 0, 0, 0, 0],
     solid: [], pale: [], cx: 0, cy: 0, pts: 0,
   }));
   const un = [];
@@ -83,10 +84,12 @@ function build(L){
     if (p){ A.cx += +p[1]; A.cy += +p[2]; A.pts++; }
   }
   const age = api.age() || {};
+  const stOf = {}; geo.counties.forEach(c => { stOf[c.f] = c.st; });
   for (const [fips, st] of Object.entries(geo.stats)){
     const v = st[y]; if (!v) continue;
     const A = areaOf(fips); if (!A) continue;
     A.m += v.m; A.a += v.a; A.c += v.c;
+    if (v.m > 0){ A.withMembers++; if (stOf[fips]) A.states.set(stOf[fips], (A.states.get(stOf[fips]) || 0) + v.m); }
     (v.cl || []).forEach(i => A.cl.add(i));
     const ag = age[fips] && age[fips][y];
     if (ag) for (let j = 0; j < 5; j++) A.ages[j] += (ag[j] || 0);
@@ -203,9 +206,11 @@ function cardHtml(D, A, S, maxOf){
   const stats = shownCounts(D, S).map(C => {
     const v = D.value(A, C.k), tot = D.total(C.k);
     const pct = (S.share && C.k !== 'clubs' && tot > 0) ? `<em>${(100 * v / tot).toFixed(1)}% of all</em>` : '';
-    return `<div class="bsr-stat"><b>${fmt(v)}</b><span>${esc(D.label(C.k))}</span>${bar(v, maxOf[C.k], A.color)}${pct}</div>`;
+    const d = Math.round(v - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n));
+    const even = S.even ? `<em>${d === 0 ? 'Even' : fmt(Math.abs(d)) + (d > 0 ? ' over' : ' under') + ' an even split'}</em>` : '';
+    return `<div class="bsr-stat"><b>${fmt(v)}</b><span>${esc(D.label(C.k))}</span>${bar(v, maxOf[C.k], A.color)}${pct}${even}</div>`;
   }).join('');
-  return `<article class="bsr-card" style="--c:${A.color}">
+  return `<article class="bsr-card go" style="--c:${A.color}" data-bsr-area="${A.gi}" tabindex="0" role="button" aria-label="Open ${esc(A.name)}">
     <header><span class="bsr-badge">${esc(A.badge)}</span><h3>${esc(A.name)}</h3>${S.maps ? miniSvg(A) : ''}</header>
     <div class="bsr-stats">${stats}</div>
     ${S.age ? ageBlock(D, A, S) : (S.gender ? genderBlock(D, A) : '')}
@@ -277,20 +282,26 @@ function stripHtml(S, levels, typed){
   if (S.page === 'areas') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Count</span>${COUNTS.map(C => chip('data-bsr-count', C.k, S.counts.includes(C.k) && !(C.only && !typed), (!typed && C.other) ? C.other : C.label, C.only && !typed)).join('')}</div>
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
-      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}</div>`;
+      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}${flag('even', 'Even split')}</div>`;
   else if (S.page === 'structure') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
-      <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}</div>`;
+      <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}
+      <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
   else rows = `
-    <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}</div>`;
+    <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}
+      <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
+  if (S.page === 'areas' && S.area) rows = `
+    <div class="bsr-row"><button class="bsr-btn" id="bsrBack">&larr; All ${esc(api.tierName(S.level).toLowerCase())}</button>
+      <button class="bsr-btn" id="bsrPacket">Print every ${esc(api.tierName(S.level).toLowerCase().replace(/s$/, ''))}</button></div>`;
   return `<div class="bsr-strip">
     <div class="bsr-row">
       <span class="bsr-lbl">Show</span>${seg('data-bsr-page', pages, cur)}
       <span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>
       <span class="bsr-lbl">Layout</span>${seg('data-bsr-layout', [['grid', 'Grid'], ['table', 'Table']], S.layout)}
       <span class="bsr-grow"></span>
+      <button class="bsr-btn" id="bsrFile" title="One file with this page only, to send or post. It opens in any browser and holds nothing else.">Save as a file</button>
       <button class="bsr-btn" id="bsrCsv">Spreadsheet</button>
-      <button class="bsr-btn prim" id="bsrPrint">Print or save as PDF</button>
+      <button class="bsr-btn prim" id="bsrPrint">Print or PDF</button>
     </div>${rows}
   </div>`;
 }
@@ -310,6 +321,11 @@ function html(){
   if (!levels.includes(S.level)) S.level = levels[0];
   if (S.page !== 'areas') return pathwayPage(S, levels);
   const D = build(S.level);
+  if (S.area && (S.area.L !== S.level || !D.areas[S.area.gi])) S.area = null;
+  if (S.area){
+    const list = PACKET ? D.areas : [D.areas[S.area.gi]];
+    return `<div class="bsr">${stripHtml(S, levels, D.typed)}${list.map(A => areaPage(D, A)).join('')}</div>`;
+  }
   const shown = shownCounts(D, S), maxOf = {};
   shown.forEach(C => { maxOf[C.k] = Math.max(1, ...D.areas.map(A => D.value(A, C.k))); });
   const totals = shown.map(C => `<div class="bsr-total"><b>${fmt(D.total(C.k))}</b><span>${esc(D.label(C.k))}</span></div>`).join('');
@@ -327,6 +343,111 @@ function html(){
       ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
       <p class="bsr-foot">${notes.join(' ')}</p>
     </div></div>`;
+}
+
+/* ---------- one region or zone ---------- */
+let PACKET = false;
+function areaPage(D, A){
+  const api = B(), S = Object.assign({}, state(), {gender: true, age: true, boards: true});
+  const counts = COUNTS.filter(C => !(C.only && !D.typed));
+  const totals = counts.map(C => `<div class="bsr-total"><b>${fmt(D.value(A, C.k))}</b><span>${esc(D.label(C.k))}</span></div>`).join('');
+  const states = [...A.states.entries()].sort((a, b) => b[1] - a[1]);
+  const smax = Math.max(1, ...states.map(s => s[1]));
+  const inside = D.L > 0 ? (() => { const below = api.tierGroupsAt(D.L - 1), up = api.tierGroupsAt(D.L);
+      // an area of the level below belongs here when its regions do
+      const names = below.groups.map((g, gi) => ({g, gi})).filter(x => { const ri = below.of.indexOf(x.gi); return ri >= 0 && up.of[ri] === A.gi; }).map(x => x.g.name);
+      return names.length ? `<div class="bsr-blk"><h4>${esc(api.tierName(D.L - 1))} in ${esc(A.name)}</h4><p class="bsr-clubs">${names.map(esc).join(' &middot; ')}</p></div>` : ''; })() : '';
+  let meet = '';
+  try { const P = pathwayData(); const m = P && P.meets.find(x => x.level === D.L && x.gi === A.gi);
+    if (m) meet = `<div class="bsr-blk"><h4>Its meet</h4><div class="bsr-route"><span>Event entries, projected</span><b>${fmt(m.entries)}</b></div></div>`; } catch(e){}
+  return `<div class="bsr-page area">
+    ${headHtml(`<span class="bsr-badge big" style="--c:${A.color}">${esc(A.badge)}</span>${esc(A.name)}`, 'Membership')}
+    <div class="bsr-top"><div class="bsr-mapbox">${miniSvg(A).replace('class="bsr-mini"', 'class="bsr-mini big"')}</div><div class="bsr-totals">${totals}</div></div>
+    <span class="bsr-key"><i style="background:${GCOL.b}"></i>Boys<i style="background:${GCOL.g}"></i>Girls<i style="background:${GCOL.u}"></i>Not known</span>
+    <div class="bsr-cols" style="--c:${A.color}">
+      <div>${ageBlock(D, A, S)}${meet}${inside}
+        <div class="bsr-blk"><h4>Members by state</h4>${states.map(([st, n]) => `<div class="bsr-r"><span>${esc(st)}</span>${bar(n, smax, A.color)}<b>${fmt(n)}</b></div>`).join('') || '<p class="bsr-na">None</p>'}
+          <p class="bsr-na" style="margin-top:8px">${fmt(A.counties)} counties, ${fmt(A.withMembers)} with members.</p></div></div>
+      <div>${boardBlock(D, A, S)}${clubBlock(D, A)}</div>
+    </div>
+    <p class="bsr-foot">Members are counted in the county of their home ZIP code. A club is listed in every area where it has members.${D.typed ? '' : ' Counts by exact membership type are kept for 2026 only.'}</p>
+  </div>`;
+}
+
+/* ---------- the 2026 and 2025 seasons as they were run ----------
+   Entries and athletes are counted from results (individual events), with the
+   same query the comparison reports use. Money is what finance reconciled:
+   the 22 DiveMeets recaps for 2026 and the 2025 entry-fee workbook. */
+const STAGES = [
+  {k: 'Regionals', label: 'Regionals', recap: 'Regionals', per: 'Regional'},
+  {k: 'Zones', label: 'Zones', recap: 'Zones', per: 'Zone'},
+  {k: 'EWC', label: 'East / West / Central', recap: 'E / W / C', per: 'E/W/C'},
+  {k: 'Nationals', label: 'Junior Nationals', recap: 'Nationals', per: 'National'}];
+let ACT = null, ACT_BUSY = false, ACT_ERR = null;
+async function loadActuals(){
+  const get = f => fetch('../membership-analytics/' + f, {cache: 'no-cache'}).then(x => x.ok ? x.json() : null).catch(() => null);
+  const J = window.__JCReport;
+  const count = y => (J && J.actualBySeason) ? J.actualBySeason(y).catch(e => { console.error('season counts', y, e); return null; }) : Promise.resolve(null);
+  const [r26, r25, a26, a25] = await Promise.all([get('recaps-2026.json'), get('recaps-2025.json'), count(2026), count(2025)]);
+  const season = (rec, act, y) => {
+    const out = {};
+    STAGES.forEach(s => {
+      const b = rec && rec.byStage && rec.byStage[s.recap], a = act && act[s.k];
+      const meets = rec && rec.perMeet ? rec.perMeet.filter(m => m.stage === s.per).length : 0;
+      if (!b && !a && !meets) return;
+      const gross = b ? (b.recapGross != null ? b.recapGross : b.gross) : null;
+      const net = b ? (b.recapNet != null ? b.recapNet : b.net) : null;
+      const host = b ? (y === 2026 ? b.recapHost : b.host) : null;
+      const usad = b ? (y === 2026 ? (host != null && net != null ? net - host : null) : b.usadShare) : null;
+      out[s.k] = {meets, entries: a ? a.individual : null, athletes: a ? a.athletes : null, gross, net, host, usad};
+    });
+    return out;
+  };
+  return {2026: season(r26, a26, 2026), 2025: season(r25, a25, 2025), counted: !!(a26 && a25)};
+}
+function needActuals(S, redraw){
+  if (!(S.cmp26 || S.cmp25) || ACT || ACT_BUSY || ACT_ERR) return;
+  ACT_BUSY = true;
+  loadActuals().then(a => { ACT = a; }).catch(e => { ACT_ERR = String(e && e.message || e); console.error('seasons', e); })
+    .then(() => { ACT_BUSY = false; if (redraw) redraw(); });
+}
+function compareHtml(P, S){
+  if (!(S.cmp26 || S.cmp25)) return '';
+  const money = S.page === 'money';
+  const title = `<h2 class="bsr-h2">Against the ${[S.cmp26 ? '2026' : '', S.cmp25 ? '2025' : ''].filter(Boolean).join(' and ')} season${S.cmp26 && S.cmp25 ? 's' : ''}</h2>`;
+  if (ACT_ERR) return `${title}<p class="bsr-na">The earlier seasons could not be loaded.</p>`;
+  if (!ACT) return `${title}<p class="bsr-na">Loading the earlier seasons.</p>`;
+  const mine = {};
+  P.levels.forEach(l => { const m = mine[l.stage] || (mine[l.stage] = {meets: 0, entries: 0, athletes: null, gross: 0, host: 0, usad: 0});
+    m.meets += l.stops; m.entries += l.entries; m.gross += l.gross; m.host += l.host; m.usad += l.usad;
+    if (l.divers) m.athletes = (m.athletes || 0) + Math.round(l.divers.n); });
+  const cols = [{k: 'now', label: 'This structure', color: '#171f69', d: mine, est: true}]
+    .concat(S.cmp26 ? [{k: '26', label: '2026 season', color: '#009AC7', d: ACT[2026]}] : [])
+    .concat(S.cmp25 ? [{k: '25', label: '2025 season', color: '#8FC3EA', d: ACT[2025]}] : []);
+  const val = x => x ? (money ? (x.usad != null ? x.usad : x.net) : x.entries) : null;
+  const totalOf = c => { const t = {meets: 0, entries: 0, athletes: null, gross: 0, host: 0, usad: 0, net: null, part: false};
+    STAGES.forEach(s => { const x = c.d[s.k]; if (!x) return;
+      t.meets += x.meets || 0; t.entries += x.entries || 0; t.gross += x.gross || 0; t.host += x.host || 0;
+      if (x.usad != null) t.usad += x.usad; else if (x.net != null){ t.usad += x.net; t.part = true; } });
+    return t; };
+  const rows = STAGES.filter(s => cols.some(c => c.d[s.k])).map(s => ({label: s.label, of: c => c.d[s.k] || null}))
+    .concat([{label: 'Whole season', of: c => totalOf(c), total: true}]);
+  const max = r => Math.max(1, ...cols.map(c => val(r.of(c)) || 0));
+  const sub = (x, c, r) => {
+    if (!x) return 'Not held';
+    if (money) return [x.gross != null ? `Entry income ${usd(x.gross)}` : '', x.host ? `to hosts ${usd(x.host)}` : '',
+                       ((x.usad == null && x.net != null) || x.part) ? 'before the Junior Nationals host payment' : ''].filter(Boolean).join(' &middot; ');
+    return [x.meets ? `${fmt(x.meets)} ${x.meets === 1 ? 'meet' : 'meets'}` : '',
+            (!r.total && x.athletes != null) ? `${fmt(x.athletes)} athletes${c.est ? ', estimated' : ''}` : ''].filter(Boolean).join(' &middot; ');
+  };
+  const cards = rows.map(r => `<article class="bsr-card bsr-step${r.total ? ' tot' : ''}" style="--c:#171f69"><header><h3>${r.label}</h3><span class="bsr-meets">${money ? 'USA Diving keeps' : 'Event entries'}</span></header>
+    ${cols.map(c => { const x = r.of(c), v = val(x);
+      return `<div class="bsr-cmp"><div class="bsr-r wide"><span>${c.label}</span>${bar(v || 0, max(r), c.color)}<b>${v == null ? '&ndash;' : (money ? usd(v) : fmt(v))}</b></div><small>${sub(x, c, r)}</small></div>`; }).join('')}
+  </article>`).join('');
+  const note = money
+    ? 'The 2026 and 2025 figures are the totals finance reconciled for every entry billed at those meets; 2026 includes late fees. This structure is projected individual event entries at the entry fee.'
+    : 'The 2026 and 2025 figures are counted from results, individual events only.' + (ACT.counted ? '' : ' Entry and athlete counts for the earlier seasons could not be loaded.');
+  return `${title}<div class="bsr-grid steps">${cards}</div><p class="bsr-na" style="margin-top:10px">${note}</p>`;
 }
 
 /* ---------- Structure and Money ---------- */
@@ -454,7 +575,8 @@ function pathwayPage(S, levels){
       .map(([l, v]) => `<div class="bsr-total"><b>${usd(v)}</b><span>${l}</span></div>`).join('');
     body = `<div class="bsr-totals row">${totals}</div>
       <div class="bsr-split">${moneyBar(P.total)}<span class="bsr-key"><i style="background:#171f69"></i>USA Diving keeps<i style="background:#009AC7"></i>To hosts<i style="background:#b8c0cc"></i>DiveMeets fee</span></div>
-      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => moneyCard(P, l, S)).join('')}</div>`}`;
+      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => moneyCard(P, l, S)).join('')}</div>`}
+      ${compareHtml(P, S)}`;
     notes = ['Entry fees only. Membership dues are not included.', 'Event entries are projected for this structure. An entry is one athlete in one event.'];
   } else {
     const last = P.levels[P.levels.length - 1];
@@ -462,7 +584,8 @@ function pathwayPage(S, levels){
       + (S.athletes && last.divers ? `<div class="bsr-total"><b>${fmt(Math.round(last.divers.n))}</b><span>Athletes at ${esc(last.name)}, estimated</span></div>` : '')
       + `<div class="bsr-total"><b>${fmt(P.total.meets)}</b><span>Meets in the season</span></div>`;
     body = `<div class="bsr-totals row">${totals}</div>
-      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => structureCard(P, l, S)).join('')}</div>`}`;
+      ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => structureCard(P, l, S)).join('')}</div>`}
+      ${compareHtml(P, S)}`;
     notes = ['Event entries are projected for this structure. An entry is one athlete in one event.']
       .concat(S.athletes ? ['Athletes are estimated from the number of events each athlete entered.'] : []);
   }
@@ -476,6 +599,7 @@ function wire(root){
   root.querySelectorAll('[data-bsr-page]').forEach(b => b.addEventListener('click', () => {
     const v = b.dataset.bsrPage;
     if (/^L\d+$/.test(v)){ S.page = 'areas'; S.level = +v.slice(1); } else S.page = v;
+    S.area = null;
     again();
   }));
   root.querySelectorAll('[data-bsr-layout]').forEach(b => b.addEventListener('click', () => { S.layout = b.dataset.bsrLayout; again(); }));
@@ -485,6 +609,18 @@ function wire(root){
     again();
   }));
   root.querySelectorAll('[data-bsr-flag]').forEach(b => b.addEventListener('click', () => { const k = b.dataset.bsrFlag; S[k] = !S[k]; again(); }));
+  root.querySelectorAll('[data-bsr-area]').forEach(c => {
+    const open = () => { S.area = {L: S.level, gi: +c.dataset.bsrArea}; again(); window.scrollTo(0, 0); };
+    c.addEventListener('click', open);
+    c.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
+  });
+  const bk = root.querySelector('#bsrBack'); if (bk) bk.addEventListener('click', () => { S.area = null; again(); });
+  const pk = root.querySelector('#bsrPacket'); if (pk) pk.addEventListener('click', () => {
+    PACKET = true; root.innerHTML = html(); wire(root);
+    setTimeout(() => { window.print(); PACKET = false; root.innerHTML = html(); wire(root); }, 150);
+  });
+  const fl = root.querySelector('#bsrFile'); if (fl) fl.addEventListener('click', () => saveFile(root));
+  if (S.page !== 'areas') needActuals(S, () => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
   const yr = root.querySelector('#bsrYear');
   if (yr) yr.addEventListener('change', () => { if (B().setYear) B().setYear(yr.value); });
   const pr = root.querySelector('#bsrPrint'); if (pr) pr.addEventListener('click', () => window.print());
@@ -502,6 +638,23 @@ function wire(root){
         svg.setAttribute('viewBox', `${(b.x - p).toFixed(1)} ${(b.y - p).toFixed(1)} ${(b.width + 2*p).toFixed(1)} ${(b.height + 2*p).toFixed(1)}`); }
     } catch(e){}
   });
+}
+
+/* One file holding this page and nothing else: no scripts, no data files, no
+   link back to the site. What is on screen is what is in the file. */
+function saveFile(root){
+  const pages = [...root.querySelectorAll('.bsr-page')].map(p => p.outerHTML).join('');
+  if (!pages) return;
+  const h1 = root.querySelector('.bsr-head h1'), hc = h1 ? h1.cloneNode(true) : null;
+  if (hc) hc.querySelectorAll('.bsr-badge').forEach(b => b.remove());
+  const title = (hc ? hc.textContent.trim() : 'Report') + ' - USA Diving';
+  const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>${esc(title)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#f4f6fa}.bsr-card.go{cursor:default}${CSS}</style></head><body><div class="bsr">${pages}</div></body></html>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([doc], {type: 'text/html'}));
+  a.download = title.replace(/[^\w.\-]+/g, '-') + '.html'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
 const CSS = `
@@ -583,6 +736,19 @@ const CSS = `
 .bsr-bar.tall{height:12px;border-radius:4px;margin-top:12px}.bsr-bar.tall>i{border-radius:0}
 .bsr-split{margin:0 0 18px}.bsr-split .bsr-key{margin:8px 0 0}
 .bsr-table tr.meet td{color:var(--soft);font-weight:500;padding-top:6px;padding-bottom:6px}.bsr-table tr.meet td:first-child{padding-left:26px}
+.bsr-card.go{cursor:pointer;transition:box-shadow .15s ease}
+.bsr-card.go:hover,.bsr-card.go:focus-visible{box-shadow:0 4px 14px rgba(16,24,40,.12);outline:none}
+.bsr-badge.big{min-width:40px;height:40px;border-radius:20px;font-size:19px;margin-right:12px;vertical-align:4px;font-family:Inter,sans-serif;border-width:3px}
+.bsr-mini.big{width:100%;height:340px}
+.bsr-page.area .bsr-top{grid-template-columns:minmax(0,1fr) 400px}
+.bsr-page.area .bsr-totals{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
+.bsr-page.area .bsr-total b{font-size:34px}
+.bsr-cols{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}
+.bsr-page + .bsr-page{margin-top:22px}
+.bsr-h2{font-family:'Barlow Condensed',Inter,sans-serif;font-size:26px;font-weight:700;color:var(--ink);margin:28px 0 12px;padding-top:16px;border-top:3px solid var(--ink)}
+.bsr-cmp{margin:10px 0}.bsr-cmp small{display:block;font-size:11.5px;color:var(--soft);margin-top:2px}
+.bsr-card.tot{background:#f7f8fb}
+@media (max-width:760px){.bsr-cols{grid-template-columns:1fr}}
 .bsr-foot{font-size:11.5px;color:var(--soft);margin:18px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 @media (max-width:900px){.bsr-top{grid-template-columns:1fr}.bsr-totals{flex-direction:row;flex-wrap:wrap}}
 @media print{
@@ -592,6 +758,8 @@ const CSS = `
   .atl-main.atl-report{background:#fff !important}
   .bsr{padding:0 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .bsr-page{border:0 !important;border-radius:0;padding:0 !important;max-width:none}
+  .bsr-page + .bsr-page{break-before:page;margin-top:0}
+  .bsr-mini.big{height:260px}
   .bsr-top{grid-template-columns:minmax(0,1fr) 180px}
   .bsr-grid{grid-template-columns:repeat(3,1fr);gap:10px}
   .bsr-card{padding:9px 10px 10px}
