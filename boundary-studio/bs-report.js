@@ -787,7 +787,7 @@ function saveFile(root){
   const title = (hc ? hc.textContent.trim() : 'Report') + ' - USA Diving';
   const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(title)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>body{margin:0;background:#f4f6fa}.bsr-card.go{cursor:default}${CSS}@page{size:letter;margin:.45in}@media print{body{background:#fff}${paperCss('')}}</style></head><body><div class="bsr">${pages}</div></body></html>`;
+<style>body{margin:0;background:#f4f6fa}.bsr-card.go{cursor:default}${CSS}${PAGE_CSS}@media print{body{background:#fff}${paperCss('')}}</style></head><body><div class="bsr">${pages}</div></body></html>`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([doc], {type: 'text/html'}));
   a.download = title.replace(/[^\w.\-]+/g, '-') + '.html'; document.body.appendChild(a); a.click(); a.remove();
@@ -1005,6 +1005,10 @@ css();
    in the page, so a blank sheet came out at the end. Now the margins are set
    only while this tab is being printed, the rest of the page is switched off
    for the print, and each report page is fitted to one sheet when it can be. */
+/* Empty margin boxes tell the browser the page supplies its own header and
+   footer, so it leaves out the date and time, page title, web address and
+   page number it would otherwise print in the margins (Chrome and Edge). */
+const PAGE_CSS = '@page{size:letter;margin:.45in;@top-left{content:""}@top-right{content:""}@bottom-left{content:""}@bottom-right{content:""}}';
 const PAPER_W = 7.6 * 96, PAPER_H = 10.1 * 96 - 12, SMALLEST = 0.7;
 /* Shrink one block until it is a single sheet tall. It is made wider by the
    same factor it is shrunk, so it still fills the sheet side to side. False
@@ -1045,7 +1049,7 @@ function printOn(){
   if (!r || !r.offsetParent || document.getElementById('mr-output')) return;
   document.documentElement.classList.add('bsr-print');
   if (!document.getElementById('bsr-pagecss')){
-    const s = document.createElement('style'); s.id = 'bsr-pagecss'; s.textContent = '@page{size:letter;margin:.45in}';
+    const s = document.createElement('style'); s.id = 'bsr-pagecss'; s.textContent = PAGE_CSS;
     document.head.appendChild(s);
   }
   try { fitPages(); } catch(e){ console.error('fit to page', e); }
