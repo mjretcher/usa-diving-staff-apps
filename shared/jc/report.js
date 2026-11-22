@@ -311,8 +311,10 @@ async function buildColumn(col, ctx) {
         reconciledKeeps: m.reconciled ? m.reconciled.usaDivingKeepsBeforeNationalsHost : null,
         reconciledNote: 'Actual 2026 USA Diving share per the 22 DiveMeets settlement recaps, BEFORE the Junior Nationals host payout (not yet reconciled).',
         actual: m.reconciled ? { entriesBilled: m.reconciled.paidEntries, gross: m.reconciled.gross, diveMeets: m.reconciled.diveMeetsFees,
-          cardFees: null, hosts: m.reconciled.hostSplitBooked, keeps: m.reconciled.usaDivingKeepsBeforeNationalsHost, complete: false,
-          note: 'Actual 2026 figures from the 22 DiveMeets settlement recaps finance reconciled: every entry billed, including late fees and sheet changes. The Junior Nationals host payment is not reconciled yet, so paid to hosts is understated and USA Diving keeps is overstated by that amount.' } : null },
+          cardFees: null, hosts: m.reconciled.hostSplitBooked, keeps: m.reconciled.usaDivingKeepsBeforeNationalsHost,
+          complete: !(m.reconciled.hostUnreconciled || []).length,
+          note: 'Actual 2026 figures from the 22 DiveMeets settlement recaps finance reconciled: every entry billed, including late fees and sheet changes.'
+            + ((m.reconciled.hostUnreconciled || []).length ? ' The Junior Nationals host payment is not reconciled yet, so paid to hosts is understated and USA Diving keeps is overstated by that amount.' : ' All host payments are included.') } : null },
       stops: m.perMeet.slice().sort((a, b) => (a.tier === b.tier ? String(a.stop).localeCompare(String(b.stop), 'en', { numeric: true }) : 0)).map((x) => ({ tier: x.tier, stop: x.stop, eventEntries: x.entries, fee: x.feePerEvent, gross: x.grossEntryIncome,
         diveMeets: x.diveMeetsPassThrough, hosts: x.toHosts, keeps: x.usaDivingKeeps,
         qualifyingEntries: x.qualifyingEntries, nonQualifyingEntries: x.nonQualifyingEntries,
