@@ -1742,8 +1742,12 @@ function loadOverrides() {
 
 function saveOverrides() {
   localStorage.setItem(OVERRIDE_KEY, JSON.stringify(state.overrides));
-  if (window.OverridesSync) window.OverridesSync.save(state.overrides);
+  if (window.OverridesSync) _overridesSaving = window.OverridesSync.save(state.overrides);
 }
+// "Update now" bar (shared/usad-update.js): the reload waits for an override
+// save that is still on its way to the shared file.
+var _overridesSaving = null;
+if (window.USADUpdate) window.USADUpdate.beforeReload(() => _overridesSaving);
 
 function addOverride(input) {
   if (!input.athleteId && !input.athleteName) return;

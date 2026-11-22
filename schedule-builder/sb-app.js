@@ -787,6 +787,9 @@ document.addEventListener('keydown',e=>{
 setInterval(()=>{if(S?.meet){saveS();if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(S.currentLibraryId)doSave();}}},30000);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&S?.meet)saveS()});
 window.addEventListener('beforeunload',()=>{if(S?.meet){saveS();if(S.currentLibraryId&&saveTimer){clearTimeout(saveTimer);saveTimer=null;doSave();}}});
+// "Update now" bar (shared/usad-update.js): the reload waits for this, so a
+// change still inside the 3-second cloud-save delay reaches the cloud first.
+if(window.USADUpdate)USADUpdate.beforeReload(()=>{if(S?.meet){saveS();if(S.currentLibraryId&&saveTimer){clearTimeout(saveTimer);saveTimer=null;return doSave();}}});
 
 // Logo → apps home. Forces same-tab navigation on a normal left-click (the bar
 // is JS-rendered and the logo img is otherwise draggable, which can swallow the

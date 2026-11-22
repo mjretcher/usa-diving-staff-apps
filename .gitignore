@@ -11,3 +11,6 @@ db/scripts/__pycache__/
 # test dependency (npm install) -- never part of the site
 node_modules/
 __pycache__/
+
+# written at publish time by tools/stamp-build.mjs
+/version.json

@@ -1,7 +1,20 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "buildCommand": "node tools/stamp-build.mjs",
+  "headers": [
+    {
+      "source": "/(version.json|api/version)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api/version",
+      "destination": "/version.json"
+    },
     {
       "source": "/",
       "destination": "/junior-results/index.html"

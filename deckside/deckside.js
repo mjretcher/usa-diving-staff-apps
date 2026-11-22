@@ -865,6 +865,13 @@
     });
     window.addEventListener('resize', function () { if (ui.tab === 'photos') draw(); });
     window.addEventListener('beforeunload', function () { if (cloud.timer && cloud.ready && !cloud.conflict) push(); });
+    // "Update now" bar (shared/usad-update.js): the reload waits for a save that is
+    // still inside its delay, and for one already on its way.
+    if (window.USADUpdate) window.USADUpdate.beforeReload(async function () {
+      saveLocal();
+      for (var i = 0; cloud.pushing && i < 60; i++) await new Promise(function (r) { setTimeout(r, 100); });
+      if (cloud.timer && cloud.ready && !cloud.conflict) { clearTimeout(cloud.timer); cloud.timer = null; await push(); }
+    });
   }
 
   // Pictures added while the database was unreachable are uploaded the next time it is reachable.

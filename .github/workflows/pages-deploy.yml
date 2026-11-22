@@ -32,6 +32,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Gives every page its build id and writes version.json, which is what
+      # the "Update now" bar compares against (shared/usad-update.js). The
+      # stamped files exist only in the published copy, never in the repo.
+      - name: Stamp build ids
+        run: node tools/stamp-build.mjs
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
