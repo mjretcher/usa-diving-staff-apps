@@ -818,7 +818,12 @@
    "athleteLateSharePct": 2.0,
    "avgAthleteLateFee": 100.0,
    "diveMeetsPerEntry": 4.95,
-   "creditCardPct": 0
+   "creditCardPct": 0,
+   "hostPaymentUnconfirmed": {
+    "amount": 30609.62,
+    "date": "2026-09-17",
+    "source": "QuickBooks bill HostPayments26, a payment to the host for Nationals. Found 2026-11-22. Not confirmed by finance as the Junior Nationals entry fee share and may net other items, so it is not used in any total."
+   }
   }
  },
  "source": "2026 DiveMeets recaps as reconciled by USA Diving finance (aggregates only; host = calculated split, not confirmed QBO posting; Nationals host not reconciled)"

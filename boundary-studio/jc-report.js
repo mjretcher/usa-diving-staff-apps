@@ -422,19 +422,18 @@ function secSummary(r) {
   add('Season — event entries, all stops', (c) => (c.kind === 'structure2026'
     ? `${n(c.money.individualOnly.eventEntries)} <span class="mr-soft">actual, individual</span><br><span class="mr-soft">${n(c.tiers.reduce((a, t) => a + t.eventEntries, 0))} billed</span>`
     : `${n(c.tiers.reduce((a, t) => a + t.eventEntries, 0))} <span class="mr-soft">${statusWord(c)}</span>`));
-  add('Gross entry income', (c) => usd(c.money.gross));
-  add('<strong>USA Diving keeps (entry fees)</strong>', (c) => `<strong>${usd(c.money.keeps)}</strong>`
-    + (c.money.atStandardFees ? `<br><span class="mr-soft">${usd(c.money.atStandardFees.usaDivingKeeps)} at 2026 published fees</span>` : '')
-    + (c.money.individualOnly ? `<br><span class="mr-soft">${usd(c.money.individualOnly.keeps)} individual events only§</span>` : '')
-    + (c.money.reconciledKeeps != null ? `<br><span class="mr-soft">${usd(c.money.reconciledKeeps)} reconciled‡</span>` : ''), 'mr-total');
+  add('Gross entry income', (c) => (c.money.actual ? `${usd(c.money.actual.gross)} <span class="mr-soft">actual</span>` : usd(c.money.gross)));
+  add('<strong>USA Diving keeps (entry fees)</strong>', (c) => (c.money.actual
+    ? `<strong>${usd(c.money.actual.keeps)}</strong> <span class="mr-soft">actual‡</span>`
+    : `<strong>${usd(c.money.keeps)}</strong>`
+      + (c.money.atStandardFees ? `<br><span class="mr-soft">${usd(c.money.atStandardFees.usaDivingKeeps)} at 2026 published fees</span>` : '')), 'mr-total');
   const scen = cols.find((c) => ok(c) && c.kind === 'scenario' && c.nationals);
   const notes = [];
   if (scen) notes.push(`† ${esc(scen.nationals.rangeReason)} ${esc(scen.nationals.excludes)}`);
   const c26 = cols.find((c) => ok(c) && c.kind === 'structure2026');
   if (c26) notes.push(`2026 individual = junior circuit individual events with an age group. Billed also includes synchro and FC Level entries. 2026 athletes who competed at Regionals, Zones or both: ${n(c26.firstStops.eventEntries)} event entries, ${n(c26.firstStops.uniqueAthletes)} unique athletes — the comparison for a proposal whose one first stop replaces both.`);
-  if (c26) notes.push('§ Same basis as the proposals: individual circuit events only (synchro and FC Level entries removed at the fee each paid).');
-  const rec = cols.filter((c) => ok(c) && c.money.reconciledKeeps != null);
-  if (rec.length) notes.push('‡ ' + rec.map((c) => `${esc(c.label)}: ${esc(c.money.reconciledNote)}`).join(' '));
+  const rec = cols.filter((c) => ok(c) && c.money.actual);
+  if (rec.length) notes.push('‡ ' + rec.map((c) => `${esc(c.label)}: ${esc(c.money.actual.note)}`).join(' '));
   notes.push('Event entry = one athlete in one event. Unique athlete = each person counted once, however many events they enter.');
   return section('Summary', `<table class="mr-table">${headRow(cols, 'Figure')}${rows.join('')}</table>${notes.map((t) => `<p class="mr-note">${t}</p>`).join('')}`);
 }
@@ -530,23 +529,25 @@ function fmtFees(c) {
 function secMoney(r) {
   const cols = r.columns;
   const rows = [];
+  const act = (c) => c.money.actual || null;
+  const soft = (t) => ` <span class="mr-soft">${t}</span>`;
   const add = (label, f, cls) => rows.push(`<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>${cols.map((c) => cellOf(ok(c) ? f(c) : '—')).join('')}</tr>`);
+  add('Basis', (c) => `<span class="mr-soft">${act(c) ? 'Actual, reconciled by finance' : c.kind === 'scenario' ? 'Projected' : 'Modeled'}</span>`);
   add('Fees used', (c) => `<span class="mr-soft">${fmtFees(c)}</span>`);
-  add('Event entries charged', (c) => `${n(c.stops.reduce((a, x) => a + x.eventEntries, 0))} <span class="mr-soft">${c.kind === 'structure2026' ? 'actual billed' : statusWord(c)}</span>`);
-  add('Gross entry income', (c) => usd(c.money.gross));
-  add('DiveMeets fees', (c) => usd(-c.money.diveMeets));
-  add('Paid to hosts', (c) => usd(-c.money.hosts));
-  add('USA Diving keeps', (c) => usd(c.money.keeps), 'mr-total');
-  if (cols.some((c) => ok(c) && c.money.individualOnly)) add('USA Diving keeps, individual circuit events only', (c) => (c.money.individualOnly
-    ? `${usd(c.money.individualOnly.keeps)}<br><span class="mr-soft">${n(c.money.individualOnly.eventEntries)} event entries</span>`
-    : c.kind === 'scenario' ? '<span class="mr-soft">same as above (individual only)</span>' : '<span class="mr-soft">not separated</span>'));
+  add('Event entries charged', (c) => (act(c) ? `${n(act(c).entriesBilled)}${soft('actual billed')}`
+    : `${n(c.stops.reduce((a, x) => a + x.eventEntries, 0))}${soft(c.kind === 'structure2026' ? 'actual billed' : statusWord(c))}`));
+  add('Gross entry income', (c) => usd(act(c) ? act(c).gross : c.money.gross));
+  add('DiveMeets fees', (c) => usd(-(act(c) ? act(c).diveMeets : c.money.diveMeets)));
+  if (cols.some((c) => ok(c) && act(c) && act(c).cardFees)) add('Card fees USA Diving absorbed', (c) => (act(c) && act(c).cardFees ? usd(-act(c).cardFees) : '<span class="mr-soft">none</span>'));
+  add('Paid to hosts', (c) => (act(c) ? `${usd(-act(c).hosts)}${act(c).complete ? '' : '<br>' + soft('before the Junior Nationals host payment')}` : usd(-c.money.hosts)));
+  add('USA Diving keeps', (c) => (act(c) ? `${usd(act(c).keeps)}${act(c).complete ? '' : '<br>' + soft('before the Junior Nationals host payment')}` : usd(c.money.keeps)), 'mr-total');
   if (cols.some((c) => ok(c) && c.money.atStandardFees)) add('USA Diving keeps at 2026 published fees', (c) => (c.money.atStandardFees ? usd(c.money.atStandardFees.usaDivingKeeps)
-    : c.kind === 'structure2025' ? '<span class="mr-soft">not calculated (2025 fees)</span>' : '<span class="mr-soft">same as above</span>'));
-  if (cols.some((c) => ok(c) && c.money.reconciledKeeps != null)) add('USA Diving share, reconciled to actual payments', (c) => (c.money.reconciledKeeps != null ? usd(c.money.reconciledKeeps) : '<span class="mr-soft">n/a — not held yet</span>'));
-  const notes = cols.filter(ok).map((c) => `<strong>${esc(c.label)}:</strong> ${esc(c.money.basis)}${c.money.reconciledNote && c.money.reconciledKeeps != null ? ' Reconciled: ' + esc(c.money.reconciledNote) : ''}${c.money.atStandardFees ? ' ' + esc(c.money.atStandardFees.note) : ''}`);
+    : c.kind === 'scenario' ? '<span class="mr-soft">same as above</span>' : '<span class="mr-soft">not applicable</span>'));
+  const notes = cols.filter(ok).map((c) => `<strong>${esc(c.label)}:</strong> ${esc(act(c) ? act(c).note : c.money.basis)}${c.money.atStandardFees ? ' ' + esc(c.money.atStandardFees.note) : ''}`);
+  const anyActual = cols.some((c) => ok(c) && act(c));
   return section('Entry income', `<table class="mr-table">${headRow(cols, 'Entry fees only')}${rows.join('')}</table>
     ${notes.map((t) => `<p class="mr-note">${t}</p>`).join('')}
-    <p class="mr-note">Entry fees only. Membership dues, late fees and senior-circuit income are not included. Host payments follow each column's stated terms (the two proposals and the 2025/2026 models use $25 per event entry); actual host payments differ, which is why the reconciled figures are lower.</p>`);
+    <p class="mr-note">Entry fees only. Membership dues and senior-circuit income are not included.${anyActual ? ' Completed seasons show what was actually billed and paid. Proposals are projections of individual event entries at the fees shown with no late fees, so part of any gap to a completed season is late fees, entries paid for but not competed and synchro, not the structure.' : ''}</p>`);
 }
 
 const COHORT_SHORT = { AB: 'A boys', AG: 'A girls', BB: 'B boys', BG: 'B girls', CB: 'C boys', CG: 'C girls', DB: 'D boys', DG: 'D girls' };
@@ -612,15 +613,24 @@ function secAccuracy(r) {
 
 function secStops(r) {
   const parts = r.columns.filter(ok).map((c) => {
-    const st = c.kind === 'structure2026' ? 'actual billed' : statusWord(c);
-    const q26 = c.kind === 'structure2026';
-    const tot = (k) => c.stops.reduce((a, x) => a + (x[k] || 0), 0);
-    const body = c.stops.map((x) => `<tr><td>${esc(x.stop)}</td><td>${esc(stage(x.tier))}</td><td class="mr-num">${n(x.eventEntries)}${q26 && x.qualifyingEntries != null ? `<br><span class="mr-soft">${n(x.qualifyingEntries)} qualifying / ${n(x.nonQualifyingEntries)} non-qualifying</span>` : ''}${x.feeSplit ? `<br><span class="mr-soft">${x.feeSplit.map((f) => `${n(f.entries)} at $${f.fee}`).join(' / ')}</span>` : ''}</td>
-      <td class="mr-num">${fee(x.fee)}</td><td class="mr-num">${usd(x.gross)}</td><td class="mr-num">${usd(x.keeps)}</td></tr>`).join('');
+    // A completed season lists what each meet actually billed and paid when
+    // finance's figures are there for every stop; otherwise the model's.
+    const useActual = !!c.money.actual && c.stops.every((x) => x.actual);
+    const st = useActual || c.kind === 'structure2026' ? 'actual billed' : statusWord(c);
+    const q26 = c.kind === 'structure2026' && !useActual;
+    const v = (x, k) => (useActual ? x.actual[k] : x[k]) || 0;
+    const tot = (k) => c.stops.reduce((a, x) => a + v(x, k), 0);
+    const ent = (x) => (useActual ? x.actual.entriesBilled : x.eventEntries);
+    const season = useActual ? c.money.actual : c.money;
+    const open = useActual && c.stops.some((x) => !x.actual.complete);
+    const body = c.stops.map((x) => `<tr><td>${esc(x.stop)}</td><td>${esc(stage(x.tier))}</td><td class="mr-num">${n(ent(x))}${q26 && x.qualifyingEntries != null ? `<br><span class="mr-soft">${n(x.qualifyingEntries)} qualifying / ${n(x.nonQualifyingEntries)} non-qualifying</span>` : ''}${!useActual && x.feeSplit ? `<br><span class="mr-soft">${x.feeSplit.map((f) => `${n(f.entries)} at $${f.fee}`).join(' / ')}</span>` : ''}</td>
+      <td class="mr-num">${fee(x.fee)}</td><td class="mr-num">${usd(v(x, 'gross'))}</td><td class="mr-num">${usd(v(x, 'keeps'))}${useActual && !x.actual.complete ? '<br><span class="mr-soft">before the host payment</span>' : ''}</td></tr>`).join('');
+    const off = Math.max(Math.abs(tot('keeps') - season.keeps), Math.abs(tot('gross') - season.gross));
     return `<h3 class="mr-h3">${esc(c.label)}</h3><table class="mr-table mr-table-sm">
       <tr><th>Stop</th><th>Stop type</th><th class="mr-num">Event entries (${st})</th><th class="mr-num">Fee per event entry</th><th class="mr-num">Gross</th><th class="mr-num">USA Diving keeps</th></tr>
-      ${body}<tr class="mr-total"><td colspan="2">Season</td><td class="mr-num">${n(tot('eventEntries'))}</td><td></td><td class="mr-num">${usd(c.money.gross)}</td><td class="mr-num">${usd(c.money.keeps)}</td></tr></table>
-      ${Math.abs(tot('keeps') - c.money.keeps) + Math.abs(tot('gross') - c.money.gross) > 0 ? `<p class="mr-note">Each stop is rounded to the dollar; the season line is the unrounded season total, so the stops add to within $${Math.max(Math.abs(tot('keeps') - c.money.keeps), Math.abs(tot('gross') - c.money.gross))} of it.</p>` : ''}`;
+      ${body}<tr class="mr-total"><td colspan="2">Season</td><td class="mr-num">${n(c.stops.reduce((a, x) => a + ent(x), 0))}</td><td></td><td class="mr-num">${usd(season.gross)}</td><td class="mr-num">${usd(season.keeps)}</td></tr></table>
+      ${useActual ? `<p class="mr-note">Actual figures reconciled by finance for every entry billed at each meet${c.kind === 'structure2026' ? ', including late fees and sheet changes' : ''}.${open ? ' The Junior Nationals host payment is not reconciled yet.' : ''}</p>` : ''}
+      ${off >= 1 ? `<p class="mr-note">Each stop is rounded to the dollar; the season line is the unrounded season total, so the stops add to within $${Math.ceil(off)} of it.</p>` : ''}`;
   });
   return section('Entry income by stop', parts.join(''));
 }

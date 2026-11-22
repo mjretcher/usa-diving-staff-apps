@@ -35,7 +35,7 @@ export async function hydrateScenario(I, id) {
   S.routing = (d.routing && d.routing.length) ? d.routing : null;
   S.fees = d.fees || null;
   S.feesByCell = d.feesByCell || null;
-  if (d.hostMode) S.hostMode = d.hostMode;
+  S.hostSet = !!d.hostSet; S.hostMode = I.hostModeOf(d);
   if (d.hostShare != null) S.hostShare = d.hostShare;
   if (d.hostFlat != null) S.hostFlat = d.hostFlat;
   if (d.hostPer != null) S.hostPer = d.hostPer;
@@ -216,13 +216,13 @@ export async function computeBoundaryMoneyReport(boundaryScenarioId, options = {
   }
   return {
     assumptions: { cdFirstStop: !!opts.cdFirstStop, ceilingYear: opts.ceilingYear, lateFeeShare: S.lateFeeShare || 0,
-      revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario\'s stored host terms; competed entries only; no late fees',
+      revenueBasis: opts.useRecapRates ? (opts.ceilingYear === 2025 ? 'reconciled 2025 rates (Entry Fees.xlsx, ties to GL): $85 Regionals/Zones, $115 Nationals, $3.80 DiveMeets, 4% card fee absorbed, host $32.50/$30.00/$23.44 per entry, paid-vs-competed uplift' : 'reconciled 2026 rates: host share of net by stage (Regionals 56.4%, Zones 36.5%, E/W/C 26.3%), paid-vs-competed uplift, coach and athlete late fees, sheet changes from the DiveMeets recaps') : 'scenario host terms (2025 host rates per entry until terms are chosen for the scenario); competed entries only; no late fees',
       seedPool: S.seedPool || 'inferred', seedBasis: opts.cdFirstStop ? firstStopSeedBasis(advRaw) : 'stored', firstStopPlatform: S.firstStopPlatform || 'held',
       note: opts.cdFirstStop ? (firstStopSeedBasis(advRaw) === 'combined'
         ? 'The first stop is mandatory for every age group: it is seeded with every athlete who competed in each event at 2026 Regionals or Zones, counted once.'
         : 'Groups C and D modelled at the first stop (mandatory): seeded from 2026 Regionals for Group A/B springboard and from 2026 Zones for platform and Groups C/D.') : 'Scenario evaluated with its stored seed (Groups C/D as they actually entered).' },
     scenarioFees: S.fees || null,
-    hostTerms: { mode: S.hostMode || 'pct', share: S.hostShare, perEntry: S.hostPer, flat: S.hostFlat, min: S.hostMin || 0 },
+    hostTerms: { mode: S.hostMode || 'rates2025', rates2025: Iboundary.HOST_2025, share: S.hostShare, perEntry: S.hostPer, flat: S.hostFlat, min: S.hostMin || 0 },
     diveMeetsPerEntry: Iboundary.levyPerEntry(),
     // The structure as run, so a report can state its rules and place counts
     // from the scenario itself rather than from hand-typed text.
