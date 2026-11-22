@@ -71,7 +71,7 @@ function build(L){
     gi, name: g.name || ('Area ' + (gi + 1)), badge: badge(g.name, gi),
     color: (api.colorAt && api.colorAt(L, gi)) || (g.colors && g.colors[0]) || FALLBACK[gi % FALLBACK.length],
     m: 0, a: 0, c: 0, cl: new Set(), counties: 0, withMembers: 0, states: new Map(), ages: [0, 0, 0, 0, 0],
-    solid: [], pale: [], cx: 0, cy: 0, pts: 0,
+    solid: [], pale: [], cx: 0, cy: 0, pts: 0, lp: [],
   }));
   const un = [];
   const areaOf = f => { const ri = assign[f]; const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
@@ -82,8 +82,20 @@ function build(L){
     A.counties++;
     (light(c.f) ? A.pale : A.solid).push(c.d);
     const p = /M\s*(-?[\d.]+)[ ,](-?[\d.]+)/.exec(c.d);     // a county's first point is close enough for a label
-    if (p){ A.cx += +p[1]; A.cy += +p[2]; A.pts++; }
+    if (p) A.lp.push([+p[1], +p[2], /^(02|15)/.test(String(c.f).padStart(5, '0'))]);
   }
+  // The number sits on the area's main body: Alaska and Hawaii are drawn in the
+  // corner of the map, so counting them dragged a western area's number out
+  // over a neighbour. The middle of the remaining counties is then moved onto
+  // the nearest of the area's own counties, so it cannot land outside the area.
+  areas.forEach(A => {
+    const main = A.lp.filter(q => !q[2]), P = main.length ? main : A.lp;
+    if (!P.length) return;
+    const mx = sum(P.map(q => q[0])) / P.length, my = sum(P.map(q => q[1])) / P.length;
+    let best = P[0], bd = Infinity;
+    P.forEach(q => { const d = (q[0] - mx) ** 2 + (q[1] - my) ** 2; if (d < bd){ bd = d; best = q; } });
+    A.cx = best[0]; A.cy = best[1]; A.pts = 1; A.lp = null;
+  });
   const age = api.age() || {};
   const stOf = {}; geo.counties.forEach(c => { stOf[c.f] = c.st; });
   for (const [fips, st] of Object.entries(geo.stats)){
@@ -127,9 +139,9 @@ function build(L){
 function mapSvg(D){
   const geo = B().geo();
   const one = (parts, color, op) => parts.length
-    ? `<path d="${parts.join('')}" fill="${color}"${op} stroke="#fff" stroke-width="0.3"/>` : '';
+    ? `<path d="${parts.join('')}" fill="${color}"${op} stroke="#fff" stroke-opacity="0.5" stroke-width="0.2"/>` : '';
   const body = D.areas.map(A => one(A.pale, A.color, ' fill-opacity="0.6"') + one(A.solid, A.color, '')).join('')
-    + (D.un.length ? `<path d="${D.un.join('')}" fill="#e2e8f2" stroke="#fff" stroke-width="0.3"/>` : '');
+    + (D.un.length ? `<path d="${D.un.join('')}" fill="#e2e8f2" stroke="#fff" stroke-opacity="0.5" stroke-width="0.2"/>` : '');
   const labels = D.areas.map(A => {
     if (!A.pts) return '';
     const x = (A.cx / A.pts).toFixed(1), y = (A.cy / A.pts).toFixed(1), w = 11 + A.badge.length * 6.2;
@@ -137,7 +149,7 @@ function mapSvg(D){
       <text x="${x}" y="${(+y + 4.3).toFixed(1)}" text-anchor="middle">${esc(A.badge)}</text></g>`;
   }).join('');
   return `<svg class="bsr-map" viewBox="${esc(geo.viewBox || '0 0 975 610')}" role="img" aria-label="Map of ${esc(B().tierName(D.L))}">
-    ${body}<path d="${geo.stateMesh}" fill="none" stroke="#fff" stroke-width="0.9"/>
+    ${body}<path d="${geo.stateMesh}" fill="none" stroke="#fff" stroke-opacity="0.85" stroke-width="0.6"/>
     <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/>${labels}</svg>`;
 }
 function miniSvg(A){
@@ -228,7 +240,7 @@ function cardHtml(D, A, S, maxOf){
   }).join('');
   return `<article class="bsr-card go" style="--c:${A.color}" data-bsr-area="${A.gi}" tabindex="0" role="button" aria-label="Open ${esc(A.name)}">
     <header><span class="bsr-badge">${esc(A.badge)}</span><h3>${esc(A.name)}</h3>${S.maps ? miniSvg(A) : ''}</header>
-    <div class="bsr-stats">${stats}</div>
+    <div class="bsr-stats${shownCounts(D, S).length > 3 ? ' c4' : ''}">${stats}</div>
     ${S.age ? ageBlock(D, A, S) : (S.gender ? genderBlock(D, A) : '')}
     ${S.boards ? boardBlock(D, A, S) : ''}
     ${S.clubNames ? `<div class="bsr-incard">${clubBlock(D, A)}</div>` : ''}
@@ -951,6 +963,10 @@ P .bsr-top{grid-template-columns:minmax(0,1fr) 170px;gap:16px;margin-bottom:10px
 P .bsr-top.many{grid-template-columns:minmax(0,1fr) 270px}
 P .bsr-top.many .bsr-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 P .bsr-page.maponly .bsr-cards{break-before:page}
+P .bsr-page.maponly .bsr-lead{page:bsrmap;width:10.1in}
+P .bsr-page.maponly .bsr-top .bsr-totals{margin-top:2px}
+P .bsr-stats.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
+P .bsr-stats.c4 .bsr-stat span{min-height:0}
 P .bsr-page.maponly .bsr-top{grid-template-columns:1fr;gap:14px;margin-bottom:0}
 P .bsr-page.maponly .bsr-top .bsr-totals{display:flex;flex-direction:row;flex-wrap:wrap;gap:12px 34px}
 P .bsr-totals{gap:10px}
@@ -1027,20 +1043,26 @@ css();
 /* Empty margin boxes tell the browser the page supplies its own header and
    footer, so it leaves out the date and time, page title, web address and
    page number it would otherwise print in the margins (Chrome and Edge). */
-const PAGE_CSS = '@page{size:letter;margin:.45in;@top-left{content:""}@top-right{content:""}@bottom-left{content:""}@bottom-right{content:""}}';
+const NO_BROWSER_MARKS = '@top-left{content:""}@top-right{content:""}@bottom-left{content:""}@bottom-right{content:""}';
+/* When the map has a sheet to itself that sheet is turned sideways, so the map
+   prints at the full length of the paper instead of leaving half the sheet
+   empty. The sheets after it stay upright. */
+const PAGE_CSS = '@page{size:letter;margin:.45in;' + NO_BROWSER_MARKS + '}@page bsrmap{size:11in 8.5in;margin:.45in;' + NO_BROWSER_MARKS + '}';
 const PAPER_W = 7.6 * 96, PAPER_H = 10.1 * 96 - 12, SMALLEST = 0.7;
+const WIDE_W = 10.1 * 96, WIDE_H = 7.6 * 96 - 12;          // the sideways sheet
 /* Shrink one block until it is a single sheet tall. It is made wider by the
    same factor it is shrunk, so it still fills the sheet side to side. False
    when it would have to go below SMALLEST to fit; it is then left full size. */
-function fitOne(el){
-  const set = z => { el.style.zoom = z === 1 ? '' : String(z); el.style.width = z === 1 ? '' : (PAPER_W / z) + 'px'; };
+function fitOne(el, W, H){
+  W = W || PAPER_W; H = H || PAPER_H;
+  const set = z => { el.style.zoom = z === 1 ? '' : String(z); el.style.width = z === 1 ? '' : (W / z) + 'px'; };
   const tall = () => el.getBoundingClientRect().height;
   set(1);
-  if (tall() <= PAPER_H) return true;
+  if (tall() <= H) return true;
   set(SMALLEST);
-  if (tall() > PAPER_H){ set(1); return false; }
+  if (tall() > H){ set(1); return false; }
   let lo = SMALLEST, hi = 1;
-  for (let i = 0; i < 7; i++){ const z = (lo + hi) / 2; set(z); if (tall() <= PAPER_H) lo = z; else hi = z; }
+  for (let i = 0; i < 7; i++){ const z = (lo + hi) / 2; set(z); if (tall() <= H) lo = z; else hi = z; }
   set(lo);
   return true;
 }
@@ -1057,7 +1079,7 @@ function fitPages(){
     // Still too much for one sheet: the map gets the first sheet to itself at
     // full width, and the regions or zones take the next.
     pg.classList.add('maponly');
-    fitOne(lead); fitOne(cards);
+    fitOne(lead, WIDE_W, WIDE_H); fitOne(cards);
   });
 }
 function unfitPages(){
