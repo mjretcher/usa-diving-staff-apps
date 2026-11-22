@@ -55,7 +55,11 @@ SELECT DISTINCT year, stage,
        -- error, which is how this failed the first time.
        COALESCE(NULLIF(btrim(region::text), ''),
                 NULLIF(btrim(zone::text), ''),
-                NULLIF(btrim(ewc_meet::text), '')) AS where_competed
+                NULLIF(btrim(ewc_meet::text), '')) AS where_competed,
+       -- For the split by age group and gender. An athlete has one of each in a
+       -- season; if results ever carry two, the first seen is kept below.
+       upper(right(btrim(COALESCE(age_group,'')), 1)) AS age_letter,
+       upper(left(btrim(COALESCE(gender,'')), 1)) AS gender_letter
 FROM core.event_results
 WHERE is_junior_circuit = TRUE
   AND year >= 2024
@@ -113,6 +117,7 @@ def main():
                                 .strftime("%Y-%m-%dT%H:%M:%SZ"),
            "method": "club modal location as the home reference, so the measure does not "
                      "depend on any drawn map",
+           "home_definition": "where most of the club's athletes competed that season",
            "field_population": probe, "stages": {}}
 
     for stage in ("Regionals", "Zones"):
@@ -126,8 +131,14 @@ def main():
             continue
         by_year = collections.defaultdict(lambda: collections.defaultdict(
             lambda: collections.defaultdict(set)))
-        for year, _st, athlete, club, where in rows:
+        age_of, gender_of = {}, {}
+        for year, _st, athlete, club, where, age_letter, gender_letter in rows:
             by_year[year][club][where].add(athlete)
+            if age_letter in ("A", "B", "C", "D"):
+                age_of.setdefault((year, athlete), age_letter)
+            g = {"B": "Boys", "M": "Boys", "G": "Girls", "F": "Girls", "W": "Girls"}.get(gender_letter)
+            if g:
+                gender_of.setdefault((year, athlete), g)
 
         per_year = {}
         for year in sorted(by_year):
@@ -135,6 +146,31 @@ def main():
             tot_ath = away = 0
             split_clubs = single_clubs = 0
             worst = []
+            # Added 2026-11: the same count cut three more ways, for the Reports
+            # tab's Region choice page. Same definition throughout: a club's home
+            # is where most of its athletes competed THIS season, and an athlete
+            # is away when they competed somewhere else.
+            by_age = collections.defaultdict(lambda: {"athletes": 0, "away": 0})
+            by_gender = collections.defaultdict(lambda: {"athletes": 0, "away": 0})
+            by_area = collections.defaultdict(lambda: {"athletes": 0, "left": 0, "arrived": 0})
+            flows = collections.Counter()
+            for club, places in clubs.items():
+                if not sum(len(a) for a in places.values()):
+                    continue
+                home_c = max(places, key=lambda p: len(places[p]))
+                for where_c, aths in places.items():
+                    for a in aths:
+                        ak = age_of.get((year, a), "Not known")
+                        gk = gender_of.get((year, a), "Not known")
+                        by_age[ak]["athletes"] += 1
+                        by_gender[gk]["athletes"] += 1
+                        by_area[home_c]["athletes"] += 1
+                        if where_c != home_c:
+                            by_age[ak]["away"] += 1
+                            by_gender[gk]["away"] += 1
+                            by_area[home_c]["left"] += 1
+                            by_area[where_c]["arrived"] += 1
+                            flows[(home_c, where_c)] += 1
             for club, places in clubs.items():
                 counts = {p: len(a) for p, a in places.items()}
                 n = sum(counts.values())
@@ -159,6 +195,11 @@ def main():
                 "clubs_split": split_clubs,
                 "clubs_split_pct": round(split_clubs / max(1, split_clubs + single_clubs) * 100, 1),
                 "biggest_splits": worst[:12],
+                "by_age": {k: by_age[k] for k in sorted(by_age)},
+                "by_gender": {k: by_gender[k] for k in sorted(by_gender)},
+                "by_area": {k: by_area[k] for k in sorted(by_area, key=lambda x: (len(x), x))},
+                "flows": [{"home": h, "went": w, "athletes": n}
+                          for (h, w), n in sorted(flows.items(), key=lambda kv: -kv[1])],
             }
             p = per_year[str(year)]
             print(f"\n{stage} {year}: {p['athletes']} athletes across {p['clubs']} clubs")
