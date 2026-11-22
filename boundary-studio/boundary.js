@@ -338,8 +338,21 @@ function pushUndo(key){
   S.redo.length = 0;
   S._uKey = key || null; S._uAt = now;
 }
+/* Settings keyed by level number that the ordinary snapshot leaves alone: fees,
+   host terms per stop, schedule plans, the advance steps. Removing a middle
+   level renumbers them, so that one step carries a copy and Undo / Redo put
+   them back. Not part of every snapshot, or undoing a map edit would also undo
+   a fee typed since. */
+function levelKeyedState(){
+  return JSON.parse(JSON.stringify({fees: S.fees || null, feesByCell: S.feesByCell || null,
+    hostPer_stop: S.hostPer_stop || null, schedPlans: S.schedPlans || {}, adv: S.adv || null}));
+}
 function applySnap(sn){
   S.assign = sn.assign; S.regions = sn.regions; S.levels = sn.levels; S.finalName = sn.finalName;
+  if (sn.lvl){
+    S.fees = sn.lvl.fees; S.feesByCell = sn.lvl.feesByCell; S.hostPer_stop = sn.lvl.hostPer_stop;
+    S.schedPlans = sn.lvl.schedPlans || {}; if (sn.lvl.adv) S.adv = sn.lvl.adv;
+  }
   if ('routing' in sn){
     if (sn.routing && S.routing && JSON.stringify(sn.routing) !== JSON.stringify(S.routing)) markPathwayEdited();
     S.routing = sn.routing; S.arrival = sn.arrival; S.seedPool = sn.seedPool; S.firstStopAll = !!sn.firstStopAll; S.platformReal = !!sn.platformReal;
@@ -357,12 +370,16 @@ function refreshHistoryButtons(){
 }
 function doUndo(){
   if (!S.undo.length) return;
-  S.redo.push(snapshot()); applySnap(S.undo.pop());
+  const sn = S.undo.pop(), cur = snapshot();
+  if (sn.lvl) cur.lvl = levelKeyedState();
+  S.redo.push(cur); applySnap(sn);
   S._uKey = null; S.dirty = true; repaintAll(); renderPanel();
 }
 function doRedo(){
   if (!S.redo.length) return;
-  S.undo.push(snapshot()); applySnap(S.redo.pop());
+  const sn = S.redo.pop(), cur = snapshot();
+  if (sn.lvl) cur.lvl = levelKeyedState();
+  S.undo.push(cur); applySnap(sn);
   S._uKey = null; S.dirty = true; repaintAll(); renderPanel();
 }
 
@@ -6256,6 +6273,63 @@ function topLevelLoss(){
   const rounds = (r[top] && QR() ? QR().roundsOf(r[top]) : []).map(x => RN[x.key] || x.key);
   return {routesIn, rounds};
 }
+/* What removing a level between two others changes, for the confirm dialog. */
+function middleLevelLoss(k){
+  const r = S.routing || [];
+  let routesIn = 0;
+  r.forEach((l, L) => { if (L !== k) (l.routes || []).forEach(rt => { if (rt.to && rt.to.level === k) routesIn++; }); });
+  const RN = QR() ? QR().ROUND_NAME : {};
+  const entry = (r[k+1] && QR() ? QR().roundsOf(r[k+1]) : [])[0];
+  const typed = [];
+  if (S.fees && S.fees[k] != null) typed.push('entry fee');
+  if (S.arrival && S.arrival[k] != null) typed.push('arrival rate');
+  if (Object.keys(S.schedPlans || {}).some(key => +key.split(':')[0] === k)) typed.push('schedule plans');
+  if (Object.keys(S.hostPer_stop || {}).some(key => +key.split('|')[0] === k)) typed.push('host terms');
+  return {routesIn, routesOut: ((r[k] && r[k].routes) || []).length,
+          entryKey: entry ? entry.key : 'final', entryName: entry ? (RN[entry.key] || entry.key) : 'Finals', typed};
+}
+/* Take out level k where 0 < k < last. The areas below roll straight into the
+   level above, routes that fed the removed level feed the first round of the
+   level above instead, and everything numbered by level moves down one. */
+function removeMiddleLevel(k){
+  const N = S.levels.length;
+  if (k < 1 || k >= N - 1) return null;
+  syncLevels();
+  const info = middleLevelLoss(k), name = tierName(k);
+  pushUndo();
+  S.undo[S.undo.length - 1].lvl = levelKeyedState();
+  const gone = S.levels[k], up = S.levels[k+1];
+  up.of = Array.from({length: groupCountAt(k-1)}, (_, g) => { const v = up.of[gone.of[g] == null ? 0 : gone.of[g]]; return v == null ? 0 : v; });
+  S.routing.forEach((lvl, L) => {
+    if (L === k) return;
+    (lvl.routes || []).forEach(rt => {
+      if (!rt.to) return;
+      if (rt.to.level === k) rt.to = {level: k, round: info.entryKey};      // the level above takes this number
+      else if (rt.to.level > k) rt.to.level -= 1;
+    });
+  });
+  S.routing.splice(k, 1);
+  S.levels.splice(k, 1);
+  const shift = (o, sep) => {
+    if (!o) return o;
+    const out = {};
+    Object.keys(o).forEach(key => {
+      const parts = sep ? key.split(sep) : [key], L = +parts[0];
+      if (L === k) return;
+      if (L > k) parts[0] = String(L - 1);
+      out[sep ? parts.join(sep) : parts[0]] = o[key];
+    });
+    return out;
+  };
+  S.fees = shift(S.fees); S.feesByCell = shift(S.feesByCell); S.arrival = shift(S.arrival);
+  S.hostPer_stop = shift(S.hostPer_stop, '|'); S.schedPlans = shift(S.schedPlans, ':') || {};
+  if (S.adv && S.adv.steps) S.adv.steps.splice(k, 1);
+  if (S.tierView > k) S.tierView--;
+  if ((S.adv.step || 0) > k) S.adv.step--;
+  syncLevels(); markPathwayEdited();
+  return Object.assign(info, {name});
+}
+
 /* A last level that counts as Junior Nationals but has more than one stop. */
 function splitChampionship(){
   const top = levelCount() - 1;
@@ -6320,6 +6394,27 @@ function wireStructureControls(P){
     msg(`Removed ${name}. ${below} is now the last meet${lost.routesIn ? `, and its ${lost.routesIn===1?'route':fmt(lost.routesIn)+' routes'} into ${name} went with it` : ''}. Undo brings it back.`);
   });
   bind('bsTopOneMeet', makeTopLevelOneMeet);
+  P.querySelectorAll('.bs-remlvl').forEach(b => b.addEventListener('click', async () => {
+    const k = +b.dataset.lvl, N = levelCount();
+    if (k < 1 || k >= N) return;
+    if (k === N - 1){ const t = P.querySelector('#bsRemLevel'); if (t) t.click(); return; }
+    const name = tierName(k), below = tierName(k-1), above = tierName(k+1), lost = middleLevelLoss(k);
+    const ok = await bsConfirm({title:`Remove ${esc(name)}?`, danger:true, okLabel:`Remove ${name}`,
+      body:`<p class="bs-dlg-p"><b>${esc(name)}</b> sits between ${esc(below)} and ${esc(above)}. Removing it sends
+        ${esc(below)} straight to ${esc(above)}.</p>
+        <div class="bs-dlg-facts">
+          <span>${fmt(groupCountAt(k-1))} ${esc(below.toLowerCase())} roll into ${esc(above)}</span>
+          ${lost.routesIn ? `<span>${fmt(lost.routesIn)} ${lost.routesIn===1?'route':'routes'} into ${esc(name)} now go to ${esc(above)} ${esc(lost.entryName)}</span>` : ''}
+          ${lost.routesOut ? `<span>${fmt(lost.routesOut)} ${lost.routesOut===1?'route':'routes'} out of ${esc(name)} deleted</span>` : ''}
+          ${lost.typed.length ? `<span>${esc(name)} ${esc(lost.typed.join(', '))} deleted</span>` : ''}
+        </div>
+        <p class="bs-dlg-p">The places on the moved routes are not changed. Check them afterwards.</p>`});
+    if (!ok) return;
+    const r = removeMiddleLevel(k);
+    if (!r) return;
+    S.dirty = true; repaintAll(); renderPanel();
+    msg(`Removed ${r.name}. ${below} now goes straight to ${above}${r.routesIn ? `; ${r.routesIn===1?'1 route was':fmt(r.routesIn)+' routes were'} moved to ${above} ${r.entryName}` : ''}. Undo brings it back.`);
+  }));
 
   // --- renaming: live, never re-renders the input you are typing in ---
   const nameBind = (sel, apply)=>{
@@ -6341,6 +6436,12 @@ function wireStructureControls(P){
     } else {
       S.levels[lvl].groups[gi].name = v;
       P.querySelectorAll(`.bs-psel[data-lvl="${lvl}"] option[value="${gi}"]`).forEach(o=>o.textContent = v);
+      // A level with one meet has one name: the meet's name is the level's.
+      if (S.levels[lvl].groups.length === 1){
+        S.levels[lvl].name = v;
+        P.querySelectorAll(`.bs-lvlname[data-lvl="${lvl}"]`).forEach(o => { o.value = v; });
+        document.querySelectorAll(`#bsTierSeg [data-tierv="${lvl}"], #atlTierSeg [data-tierv="${lvl}"]`).forEach(tb => { tb.textContent = v; });
+      }
     }
     // the same group can appear in two columns; keep them in step
     P.querySelectorAll(`.bs-gname[data-lvl="${lvl}"][data-gi="${gi}"]`).forEach(o=>{ if(o!==inp) o.value = v; });
@@ -6353,9 +6454,21 @@ function wireStructureControls(P){
     msg(`${tierName(lvl)} now counts as ${STAGE_LABEL[levelStage(lvl).stage]}${sel.value ? '' : ' (automatic)'} — its take-up, fees and comparisons follow that stage.`);
     setTimeout(() => { repaintAll(); renderPanel(); }, 0);
   }));
+  /* Cards, headings and route menus read the level name, so redraw once the
+     meet name of a one-meet level is committed. */
+  P.querySelectorAll('.bs-gname').forEach(inp => inp.addEventListener('change', () => {
+    const lvl = +inp.dataset.lvl;
+    if (lvl < 1 || !S.levels[lvl] || (S.levels[lvl].groups || []).length !== 1) return;
+    setTimeout(() => { syncLevels(); repaintAll(); renderPanel(); }, 0);
+    msg(`Level ${lvl + 1} and its one meet are both called "${tierName(lvl)}".`);
+  }));
   nameBind('.bs-lvlname', inp=>{
     const lvl = +inp.dataset.lvl;
     S.levels[lvl].name = inp.value;
+    if (lvl > 0 && (S.levels[lvl].groups || []).length === 1){
+      S.levels[lvl].groups[0].name = inp.value;
+      P.querySelectorAll(`.bs-gname[data-lvl="${lvl}"][data-gi="0"]`).forEach(o => { o.value = inp.value; });
+    }
     document.querySelectorAll(`#bsTierSeg [data-tierv="${lvl}"], #atlTierSeg [data-tierv="${lvl}"]`).forEach(tb => { tb.textContent = inp.value; });
   });
   /* Renaming the level renames the areas under it -- but on commit, not on
@@ -6363,7 +6476,8 @@ function wireStructureControls(P){
      "Z 1", "Zo 1", "Zon 1". Names you chose yourself are left alone. */
   P.querySelectorAll('.bs-lvlname').forEach(inp => inp.addEventListener('change', ()=>{
     const lvl = +inp.dataset.lvl;
-    const r = renumberAreas(lvl, false);
+    const oneMeet = lvl > 0 && (S.levels[lvl].groups || []).length === 1;
+    const r = oneMeet ? {renamed:0, kept:0, base:null} : renumberAreas(lvl, false);
     // Every heading, tab, legend, report page and toast reads tierName(), so a
     // full redraw puts the new wording everywhere at once.
     S.dirty = true;
@@ -10079,7 +10193,7 @@ function atlasStructureHtml(res){
     const opts = [['', auto]].concat(Object.entries(STAGE_LABEL)).map(([v, l]) => `<option value="${v}" ${(set || '') === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
     return `<div class="atl-lvl"><span class="mono">${i+1}</span>
       <input class="atl-in bs-lvlname" data-lvl="${i}" value="${esc(tierName(i))}">
-      <span class="mono">${fmt(n)} ${esc(what)}</span>
+      <span class="mono">${fmt(n)} ${esc(what)}${i > 0 ? ` <button class="atl-x bs-remlvl" data-lvl="${i}" title="Remove ${esc(tierName(i))}" aria-label="Remove ${esc(tierName(i))}">×</button>` : ''}</span>
       <label class="atl-lvlstage${st.how === 'structure' ? ' inferred' : ''}" title="Which real stage this level stands in for: its measured take-up, fees, real-field comparison and athlete counts come from that stage">Counts as
         <select class="atl-sel bs-lvlstage" data-lvl="${i}">${opts}</select></label></div>`;
   }).join('');
