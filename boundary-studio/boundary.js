@@ -2999,6 +2999,9 @@ function adaptPathway(p){
     out.push(lvl);
   }
   if (N !== M) notes.push(`Saved for ${N} tiers, loaded onto ${M}.`);
+  const savedTop = (p.levelNames || [])[N - 1];
+  if (savedTop && /national|championship/i.test(savedTop) && M > 1 && groupCountAt(M - 1) > 1)
+    notes.push(`The saved pathway ends at one meet ("${savedTop}"). Here that lands on ${tierName(M - 1)}, which has ${groupCountAt(M - 1)} stops. Make it one meet under Levels and names.`);
   return {routing: out, notes};
 }
 
@@ -6239,6 +6242,40 @@ function wirePanel(){
   wireScenarioControls(P);
 }
 
+/* The last level is the meet the pathway ends at. Removing it used to delete
+   every route into it and its rounds without a word (2026-11-21: a map whose
+   last level still carried the E / W / C name and three stops, with the CCE
+   2027 pathway on it -- "Remove top level" took the Zones routes and the
+   Junior Nationals prelim / semi / final with it). What would go: */
+function topLevelLoss(){
+  const top = levelCount() - 1;
+  const r = S.routing || [];
+  let routesIn = 0;
+  r.forEach((l, L) => { if (L !== top) (l.routes || []).forEach(rt => { if (rt.to && rt.to.level === top) routesIn++; }); });
+  const RN = QR() ? QR().ROUND_NAME : {};
+  const rounds = (r[top] && QR() ? QR().roundsOf(r[top]) : []).map(x => RN[x.key] || x.key);
+  return {routesIn, rounds};
+}
+/* A last level that counts as Junior Nationals but has more than one stop. */
+function splitChampionship(){
+  const top = levelCount() - 1;
+  return top > 0 && groupCountAt(top) > 1 && levelStage(top).stage === 'Nationals';
+}
+/* Collapse the last level to one meet and give it the top meet's name. The
+   pathway is untouched: routes into it and its rounds stay as they are. */
+function makeTopLevelOneMeet(){
+  const top = levelCount() - 1;
+  if (top < 1) return;
+  pushUndo();
+  const L = S.levels[top], was = L.name, n = (L.groups || []).length;
+  const nm = S.finalName || 'Junior Nationals';
+  L.name = nm;
+  L.groups = [{name: nm}];
+  L.of = Array.from({length: groupCountAt(top-1)}, () => 0);
+  syncLevels(); S.dirty = true; repaintAll(); renderPanel();
+  msg(`${was} is now ${nm}: one meet instead of ${fmt(n)} stops. The pathway was not changed.`);
+}
+
 /* Levels, names, roll-ups, colours, the top meet and the seed pool. Shared by
    the classic Names & structure panel and the Atlas Structure sidebar / Map
    rail, which carry the same classes and data-attributes. */
@@ -6256,14 +6293,33 @@ function wireStructureControls(P){
     S.adv.steps.push({a:{},d:{}});
     syncLevels(); S.dirty=true; repaintAll(); renderPanel();
   });
-  bind('bsRemLevel', ()=>{
+  bind('bsRemLevel', async ()=>{
     if (levelCount() <= 1) return;
+    const top = levelCount()-1, name = tierName(top), below = tierName(top-1);
+    const lost = topLevelLoss();
+    if (lost.routesIn || lost.rounds.length > 1){
+      const stops = groupCountAt(top);
+      const fin = S.finalName || 'Junior Nationals';
+      const pick = await bsDialog({title:`Remove ${name}?`, danger:true, okLabel:`Remove ${name}`,
+        body:`<p class="bs-dlg-p"><b>${esc(name)}</b> is the last level, so it is the meet this pathway ends at.
+          Removing it makes <b>${esc(below)}</b> the last meet.</p>
+          <div class="bs-dlg-facts">${lost.routesIn ? `<span>${fmt(lost.routesIn)} ${lost.routesIn===1?'route':'routes'} from ${esc(below)} deleted</span>` : ''}
+          <span>${esc(lost.rounds.join(', '))} deleted</span></div>
+          ${stops > 1 ? `<p class="bs-dlg-p">If ${esc(name)} should be ${esc(fin)} and only the ${fmt(stops)} stops are wrong, keep the level:</p>
+          <p class="bs-dlg-p"><button class="tab" data-dlg="ok" data-alt="one">Keep it as one meet named ${esc(fin)}</button></p>` : ''}`,
+        wire: w => { const a = w.querySelector('[data-alt]'); if (a) a.addEventListener('click', () => { w.dataset.alt = 'one'; }); },
+        collect: w => w.dataset.alt || 'remove'});
+      if (pick === null) return;
+      if (pick === 'one'){ makeTopLevelOneMeet(); return; }
+    }
     pushUndo();
     S.levels.pop();
     if (S.tierView >= levelCount()) S.tierView = levelCount()-1;
     if ((S.adv.step||0) >= levelCount()) S.adv.step = levelCount()-1;
-    syncLevels(); S.dirty=true; repaintAll(); renderPanel();
+    syncLevels(); if (lost.routesIn) markPathwayEdited(); S.dirty=true; repaintAll(); renderPanel();
+    msg(`Removed ${name}. ${below} is now the last meet${lost.routesIn ? `, and its ${lost.routesIn===1?'route':fmt(lost.routesIn)+' routes'} into ${name} went with it` : ''}. Undo brings it back.`);
   });
+  bind('bsTopOneMeet', makeTopLevelOneMeet);
 
   // --- renaming: live, never re-renders the input you are typing in ---
   const nameBind = (sel, apply)=>{
@@ -8243,6 +8299,14 @@ window.BoundaryAPI = {
   levelCount, tierName, tierGroups, tierGroupsAt,
   tierView:   () => S.tierView,
   tallies:    computeTallies,
+  /* Report maps shade counties the way the Map tab does: a county drawn in the
+     lighter shade there is lighter in a report. Follows the map's own choice of
+     members or clubs; a map set to no fading still fades by members in a report. */
+  countyLight: fips => { const g = meetStore().fade === 'clubs' ? clubGeo() : null; return g ? !g.counties.has(fips) : countyEmpty(fips); },
+  countyLightBasis: () => (meetStore().fade === 'clubs' && clubGeo()) ? 'clubs' : 'members',
+  /* Members by exact membership type for each area at a level. 2026 only, like
+     every count by exact type; null for another season. */
+  memberTypesAt: L => memberTypeTallies(tierGroupsAt(L)),
   regionZips, groupColor,
   ageGroups:  () => AGE_GROUPS,
   finalName:  () => S.finalName,
@@ -10066,6 +10130,8 @@ function atlasStructureHtml(res){
     <div class="atl-hh">Levels &amp; names</div>
     <div class="atl-sub">Level 1 is the map you paint. Everything above it is grouping.</div>
     ${lvlRows}
+    ${splitChampionship() ? `<div class="atl-warn amber" style="margin-top:10px">${esc(tierName(N-1))} counts as ${esc(STAGE_LABEL.Nationals)} but has ${fmt(groupCountAt(N-1))} stops, so its rounds run at every stop.
+      <button class="atl-link" id="bsTopOneMeet" style="white-space:normal;text-align:left">Make it one meet named ${esc(S.finalName || 'Junior Nationals')}</button></div>` : ''}
     <div class="atl-links"><button class="atl-link" id="bsAddLevel" ${N>=MAX_LEVELS?'disabled':''}>+ Add a level on top</button><button class="atl-link quiet" id="bsRemLevel" ${N<=1?'disabled':''}>Remove top level</button></div>
     ${rollBlocks.join('')}
     <div class="atl-topmeet"><span>Top meet</span><input class="atl-in" id="bsFinalName" value="${esc(S.finalName)}" placeholder="Junior Nationals"></div>

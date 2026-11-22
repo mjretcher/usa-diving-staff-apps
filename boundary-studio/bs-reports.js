@@ -426,6 +426,71 @@ function groupProfiles(){
   return {P, un, TG};
 }
 
+/* Counties for a report map, painted the way the Map tab paints them: each
+   area in its colour, and a county nobody lives in drawn in the same colour at
+   the lighter strength the Map tab uses (.bcty.e, 60%). One path per area and
+   strength, so a report stays a few dozen paths. */
+const LIGHT_OPACITY = 0.6;
+function areaPaths(of, nG, colorOf){
+  const api = B(), geo = api.geo(), assign = api.assign(), regions = api.regions(), y = api.year();
+  const light = api.countyLight || (f => { const v = (geo.stats[f] || {})[y]; return !v || (!v.m && !v.a && !v.c); });
+  const solid = Array.from({length:nG}, ()=>[]), pale = Array.from({length:nG}, ()=>[]), un = [];
+  for (const c of geo.counties){
+    const ri = assign[c.f];
+    const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+    if (gi == null || gi < 0 || gi >= nG) un.push(c.d);
+    else (light(c.f) ? pale : solid)[gi].push(c.d);
+  }
+  const one = (parts, gi, op) => parts.length
+    ? `<path d="${parts.join('')}" fill="${colorOf(gi)}"${op} stroke="#ffffff" stroke-width="0.3"/>` : '';
+  return {
+    html: pale.map((p, gi) => one(p, gi, ` fill-opacity="${LIGHT_OPACITY}"`)).join('')
+        + solid.map((p, gi) => one(p, gi, '')).join('')
+        + (un.length ? `<path d="${un.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : ''),
+    anyLight: pale.some(p => p.length),
+  };
+}
+function lightKey(any){
+  if (!any) return '';
+  const clubs = B().countyLightBasis && B().countyLightBasis() === 'clubs';
+  return `<span class="mr-mapkey mr-soft">Lighter shade: ${clubs ? 'no club in the county' : 'no members live in the county'}</span>`;
+}
+
+/* Competition Athletes, coaches, clubs and all members for each area at a
+   level. Competition Athlete is an exact membership type, counted for 2026
+   only; another season shows every athlete type and says so. */
+function membershipByAreaTable(L){
+  const api = B(), geo = api.geo(), y = api.year(), assign = api.assign(), regions = api.regions();
+  const TG = api.tierGroupsAt(L), of = TG.of, nG = TG.groups.length;
+  const colorOf = gi => { const g = TG.groups[gi]; return (g && g.colors && g.colors[0]) || BMAP_FALLBACK[gi % BMAP_FALLBACK.length]; };
+  const stat = Array.from({length:nG}, ()=>({m:0, a:0, c:0, cl:new Set()}));
+  for (const [fips, st] of Object.entries(geo.stats)){
+    const v = st[y]; if (!v) continue;
+    const ri = assign[fips];
+    const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
+    if (gi == null || gi < 0 || gi >= nG) continue;
+    stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c;
+    (v.cl || []).forEach(i => stat[gi].cl.add(i));
+  }
+  const typed = api.memberTypesAt ? api.memberTypesAt(L) : null;
+  const ath = gi => typed ? typed[gi].t_comp : stat[gi].a;
+  const allClubs = new Set(); stat.forEach(x => x.cl.forEach(i => allClubs.add(i)));
+  const sum = f => stat.reduce((s2, x, gi) => s2 + f(x, gi), 0);
+  const rows = stat.map((x, gi) => `<tr>
+      <td><span class="mr-sw" style="background:${colorOf(gi)}"></span>${esc(TG.groups[gi].name || ('Area ' + (gi+1)))}</td>
+      <td class="mr-num">${fmt(ath(gi))}</td><td class="mr-num">${fmt(x.c)}</td>
+      <td class="mr-num">${fmt(x.cl.size)}</td><td class="mr-num">${fmt(x.m)}</td></tr>`).join('');
+  return `<h3 class="mr-h3">Membership by ${esc(api.tierName(L).toLowerCase())}</h3>
+    <table class="mr-table mr-table-sm"><thead><tr><th scope="col">${esc(api.tierName(L))}</th>
+      <th scope="col" class="mr-num">${typed ? 'Competition Athletes' : 'Athletes, all types'}</th>
+      <th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
+      <th scope="col" class="mr-num">All members</th></tr></thead>
+      <tbody>${rows}<tr><td><b>Total</b></td><td class="mr-num"><b>${fmt(sum((x, gi) => ath(gi)))}</b></td>
+        <td class="mr-num"><b>${fmt(sum(x => x.c))}</b></td><td class="mr-num"><b>${fmt(allClubs.size)}</b></td>
+        <td class="mr-num"><b>${fmt(sum(x => x.m))}</b></td></tr></tbody></table>
+    ${typed ? '' : `<p class="mr-note">Competition Athlete is counted by exact membership type for 2026 only. This report is on ${esc(api.yearLabel())}, so the athlete column is every athlete type. Set the season to 2026 for Competition Athletes.</p>`}`;
+}
+
 /* One map renderer for every boundary section. Two copies would eventually
    disagree about a colour or an unassigned county, and the report is the
    artefact that leaves the building. */
@@ -441,20 +506,12 @@ function boundaryMapSvg(L){
     return BMAP_FALLBACK[gi % BMAP_FALLBACK.length];
   };
   const nameOf = gi => (TG.groups[gi] && TG.groups[gi].name) || ('Area ' + (gi+1));
-  const dParts = Array.from({length:nG}, ()=>[]), unParts = [];
-  for (const c of geo.counties){
-    const ri = assign[c.f];
-    const gi = (ri != null && ri >= 0 && ri < regions.length) ? of[ri] : null;
-    if (gi == null || gi < 0 || gi >= nG) unParts.push(c.d); else dParts[gi].push(c.d);
-  }
-  const paths = dParts.map((parts, gi) => parts.length
-      ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '').join('')
-    + (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+  const AP = areaPaths(of, nG, colorOf);
   return {
-    svg: `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">${paths}
+    svg: `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">${AP.html}
       <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
       <path d="${geo.nationMesh}" fill="none" stroke="#94a3b8" stroke-width="0.7"/></svg>`,
-    colorOf, nameOf, nG,
+    colorOf, nameOf, nG, lightKey: lightKey(AP.anyLight),
   };
 }
 
@@ -578,7 +635,8 @@ const BOUNDARY_SECTIONS = {
         <p class="mr-p"><strong>Structure.</strong> ${sentence}.</p>
         <p class="mr-p"><strong>Pathway.</strong> ${esc(api.pathwayLabel ? api.pathwayLabel() : 'as configured')}.</p>
         <div class="mr-map">${M.svg}</div>
-        <div class="mr-mapkeys">${key}</div>
+        <div class="mr-mapkeys">${key}${M.lightKey}</div>
+        ${Array.from({length:nLev}, (_, L) => api.groupCountAt(L) > 1 ? membershipByAreaTable(L) : '').join('')}
         <table class="mr-table"><tbody>
           <tr><td>Members in the mapped area</td><td class="mr-num">${fmt(assignedM)}</td></tr>
           ${field!=null?`<tr><td><strong>Reaching ${esc(finalNm)}</strong></td>
@@ -1981,10 +2039,7 @@ const EQUITY_SECTIONS = {
           (v.cl||[]).forEach(i => stat[gi].cl.add(i));
         }
 
-        const paths = dParts.map((parts, gi) => parts.length
-          ? `<path d="${parts.join('')}" fill="${colorOf(gi)}" stroke="#ffffff" stroke-width="0.3"/>` : '')
-          .join('') +
-          (unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#ffffff" stroke-width="0.3"/>` : '');
+        const AP = areaPaths(of, nG, colorOf), paths = AP.html;
         const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
             ${paths}
             <path d="${geo.stateMesh}" fill="none" stroke="#ffffff" stroke-width="0.9"/>
@@ -2015,7 +2070,7 @@ const EQUITY_SECTIONS = {
             largest &divide; smallest ${mins>0 ? (maxs/mins).toFixed(2)+'\u00d7' : '—'} ·
             spread ${mean>0 ? (100*sd/mean).toFixed(1) : '0.0'}%</p>
           <div class="mr-map">${svg}</div>
-          <div class="mr-mapkeys">${key}</div>
+          <div class="mr-mapkeys">${key}${lightKey(AP.anyLight)}</div>
           <table class="mr-table mr-table-sm"><thead><tr><th scope="col">Area</th>
             <th scope="col" class="mr-num">Members</th><th scope="col">&nbsp;</th><th scope="col" class="mr-num">Athletes</th>
             <th scope="col" class="mr-num">Coaches</th><th scope="col" class="mr-num">Clubs</th>
@@ -2030,8 +2085,8 @@ const EQUITY_SECTIONS = {
         <h2 class="mr-h2">${NAMES.boundary_map}</h2>
         ${scenarioLine()}
         <p class="mr-p">One map per stage of the structure, in the colours used on screen, each with
-        the breakdown for that stage. Counties are shaded by the area they belong to at that level;
-        pale grey means unassigned.</p>
+        the breakdown for that stage. Counties are shaded by the area they belong to at that level,
+        lighter where nobody lives; pale grey means unassigned.</p>
         ${blocks.join('')}
       </section>`;
     }
@@ -2076,11 +2131,8 @@ const EQUITY_SECTIONS = {
         if (gi==null){ unM += v.m; continue; }
         stat[gi].m += v.m; stat[gi].a += v.a; stat[gi].c += v.c; (v.cl||[]).forEach(i => stat[gi].cl.add(i));
       }
-      const solidPaths = solidByArea.map((arr,gi)=> arr.length ? `<path d="${arr.map(x=>x.d).join('')}" fill="${colorOf(gi)}" stroke="#fff" stroke-width="0.3"/>` : '').join('');
-      const emptyPaths = emptyD.map(x=>`<path d="${x.d}" fill="${colorOf(x.gi)}" fill-opacity="0.26" stroke="#fff" stroke-width="0.3"/>`).join('');
       const svg = `<svg viewBox="${esc(geo.viewBox || '0 0 975 610')}" class="mr-stagemap">
-        ${emptyPaths}${solidPaths}
-        ${unParts.length ? `<path d="${unParts.join('')}" fill="#e2e8f2" stroke="#fff" stroke-width="0.3"/>` : ''}
+        ${areaPaths(of, nG, colorOf).html}
         <path d="${geo.stateMesh}" fill="none" stroke="#8ea0bf" stroke-width="0.5" stroke-opacity="0.7"/>
       </svg>`;
 
