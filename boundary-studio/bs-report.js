@@ -48,7 +48,8 @@ const COUNTS = [
 const AGE = [                                   // order of the 15 Competition Athlete numbers
   {k:'D', label:'11 & under'}, {k:'C', label:'12 to 13'}, {k:'B', label:'14 to 15'},
   {k:'A', label:'16 to 18'}, {k:'19+', label:'19 & over'}];
-const BOARDS = [{k:'1', label:'1 meter'}, {k:'3', label:'3 meter'}, {k:'P', label:'Platform'}];
+const BOARDS = [{k:'1', label:'1 meter', s:'1m'}, {k:'3', label:'3 meter', s:'3m'}, {k:'P', label:'Platform', s:'Plat.'}];
+const bth = b => `<th><span class="l">${b.label}</span><span class="s">${b.s || b.label}</span></th>`;   // short heading on paper
 const GCOL = {b:'#2456B8', g:'#E31937', u:'#b8c0cc'};
 const FALLBACK = ['#171F69', '#E31937', '#009AC7', '#8FC3EA', '#6d28d9', '#047857', '#b45309', '#9d174d',
                   '#0e7490', '#4d7c0f', '#7c2d12', '#1e40af'];
@@ -198,7 +199,13 @@ function boardBlock(D, A, S){
     return `<div class="bsr-blk">${head}${BOARDS.map(b => { const n = cellSum(c, null, null, b.k);
       return `<div class="bsr-r"><span>${b.label}</span>${bar(n, max, A.color)}<b>${fmt(n)}</b></div>`; }).join('')}</div>`;
   }
-  return `<div class="bsr-blk">${head}<table class="bsr-t"><thead><tr><th></th>${BOARDS.map(b => `<th>${b.label}</th>`).join('')}</tr></thead><tbody>
+  if (S.age && S.gender){        // one row per age group, boys / girls in each cell, the way the age block reads
+    const pair = (a, b) => `${fmt(cellSum(c, a, 'B', b))} / ${fmt(cellSum(c, a, 'G', b))}`;
+    return `<div class="bsr-blk">${head.replace('</h4>', ' <small>boys / girls</small></h4>')}<table class="bsr-t"><thead><tr><th></th>${BOARDS.map(bth).join('')}</tr></thead><tbody>
+      ${['D', 'C', 'B', 'A'].map(a => `<tr><td>Group ${a}</td>${BOARDS.map(b => `<td>${pair(a, b.k)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>`;
+  }
+  return `<div class="bsr-blk">${head}<table class="bsr-t"><thead><tr><th></th>${BOARDS.map(bth).join('')}</tr></thead><tbody>
     ${rows.map(r => `<tr><td>${r.label}</td>${BOARDS.map(b => `<td>${fmt(cellSum(c, r.a, r.g, b.k))}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -224,7 +231,7 @@ function cardHtml(D, A, S, maxOf){
     <div class="bsr-stats">${stats}</div>
     ${S.age ? ageBlock(D, A, S) : (S.gender ? genderBlock(D, A) : '')}
     ${S.boards ? boardBlock(D, A, S) : ''}
-    ${S.clubNames ? clubBlock(D, A) : ''}
+    ${S.clubNames ? `<div class="bsr-incard">${clubBlock(D, A)}</div>` : ''}
   </article>`;
 }
 
@@ -283,6 +290,7 @@ function levelsWithAreas(){
   for (let L = 0; L < api.levelCount(); L++) if (api.groupCountAt(L) > 1) out.push(L);
   return out.length ? out : [0];
 }
+const one = name => String(name || '').toLowerCase().replace(/s$/, '');      // "Regions" -> "region"
 const usd = n => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
 const chip = (attr, key, on, label, dis) => `<button class="bsr-chip${on ? ' on' : ''}" ${attr}="${key}" aria-pressed="${on}"${dis ? ' disabled title="Counted for 2026 only"' : ''}>${esc(label)}</button>`;
 const seg = (attr, opts, cur) => `<div class="bsr-seg">${opts.map(([v, l]) => `<button ${attr}="${v}" class="${String(v) === String(cur) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
@@ -311,7 +319,7 @@ function stripHtml(S, levels, typed, hasBase){
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
   if (S.page === 'areas' && S.area) rows = `
     <div class="bsr-row"><button class="bsr-btn" id="bsrBack">&larr; All ${esc(api.tierName(S.level).toLowerCase())}</button>
-      <button class="bsr-btn" id="bsrPacket">Print every ${esc(api.tierName(S.level).toLowerCase().replace(/s$/, ''))}</button></div>`;
+      <button class="bsr-btn" id="bsrPacket">Print every ${esc(one(api.tierName(S.level)))}</button></div>`;
   return `<div class="bsr-strip">
     <div class="bsr-row">
       <span class="bsr-lbl">Show</span>${seg('data-bsr-page', pages, cur)}
@@ -343,8 +351,8 @@ function html(){
   const D = build(S.level);
   if (S.area && (S.area.L !== S.level || !D.areas[S.area.gi])) S.area = null;
   if (S.area){
-    const list = PACKET ? D.areas : [D.areas[S.area.gi]];
-    return `<div class="bsr">${stripHtml(S, levels, D.typed)}${list.map(A => areaPage(D, A)).join('')}</div>`;
+    const list = PACKET ? D.areas : [D.areas[S.area.gi]], meets = meetsNow();
+    return `<div class="bsr">${stripHtml(S, levels, D.typed)}${list.map(A => areaPage(D, A, meets)).join('')}</div>`;
   }
   const shown = shownCounts(D, S), maxOf = {};
   shown.forEach(C => { maxOf[C.k] = Math.max(1, ...D.areas.map(A => D.value(A, C.k))); });
@@ -355,19 +363,26 @@ function html(){
                  'A club is counted in every area where it has members.',
                  'Lighter counties on the map have no ' + ((api.countyLightBasis && api.countyLightBasis() === 'clubs') ? 'club' : 'members') + '.']
     .concat(D.typed ? [] : ['Counts by exact membership type are kept for 2026 only.']);
+  // On paper the club lists come out of the cards and run full width after them.
+  const clubSec = (S.clubNames && S.layout !== 'table') ? `<section class="bsr-clubsec"><h2 class="bsr-h2">Clubs with members in each ${esc(one(api.tierName(S.level)))}</h2>${D.areas.map(A => {
+      const names = [...A.cl].map(D.clubName).filter(Boolean).sort((a, b) => a.localeCompare(b));
+      return `<div class="bsr-clubrow"><b><span class="bsr-badge sm" style="--c:${A.color}">${esc(A.badge)}</span>${esc(A.name)}</b><p>${names.map(esc).join(' &middot; ') || 'None'}</p></div>`; }).join('')}</section>` : '';
+  const dense = S.layout !== 'table' && (S.age || S.gender || S.boards);
   return `<div class="bsr">${stripHtml(S, levels, D.typed, !!D.base)}
-    <div class="bsr-page">
+    <div class="bsr-page${dense ? ' dense' : ''}"><div class="bsr-main">
       ${headHtml(`${fmt(D.n)} ${esc(api.tierName(S.level))}`, 'Membership')}
-      <div class="bsr-top"><div class="bsr-mapbox">${mapSvg(D)}</div><div class="bsr-totals">${totals}</div></div>
+      <div class="bsr-top${shown.length > 4 ? ' many' : ''}"><div class="bsr-mapbox">${mapSvg(D)}</div><div class="bsr-totals">${totals}</div></div>
       ${genderKey}
-      ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
+      ${S.layout === 'table' ? tableHtml(D, S) : `<div class="bsr-grid" style="--pc:${D.n <= 6 ? 3 : 4}">${D.areas.map(A => cardHtml(D, A, S, maxOf)).join('')}</div>`}
       <p class="bsr-foot">${notes.join(' ')}</p>
+      </div>${clubSec}
     </div></div>`;
 }
 
 /* ---------- one region or zone ---------- */
 let PACKET = false;
-function areaPage(D, A){
+function meetsNow(){ try { const P = pathwayData(); return P ? P.meets : null; } catch(e){ return null; } }
+function areaPage(D, A, meets){
   const api = B(), S = Object.assign({}, state(), {gender: true, age: true, boards: true});
   const counts = COUNTS.filter(C => !(C.only && !D.typed));
   const totals = counts.map(C => `<div class="bsr-total"><b>${fmt(D.value(A, C.k))}</b><span>${esc(D.label(C.k))}</span></div>`).join('');
@@ -378,18 +393,19 @@ function areaPage(D, A){
       const names = below.groups.map((g, gi) => ({g, gi})).filter(x => { const ri = below.of.indexOf(x.gi); return ri >= 0 && up.of[ri] === A.gi; }).map(x => x.g.name);
       return names.length ? `<div class="bsr-blk"><h4>${esc(api.tierName(D.L - 1))} in ${esc(A.name)}</h4><p class="bsr-clubs">${names.map(esc).join(' &middot; ')}</p></div>` : ''; })() : '';
   let meet = '';
-  try { const P = pathwayData(); const m = P && P.meets.find(x => x.level === D.L && x.gi === A.gi);
+  try { const m = meets && meets.find(x => x.level === D.L && x.gi === A.gi);
     if (m) meet = `<div class="bsr-blk"><h4>Its meet</h4><div class="bsr-route"><span>Event entries, projected</span><b>${fmt(m.entries)}</b></div></div>`; } catch(e){}
   return `<div class="bsr-page area">
     ${headHtml(`<span class="bsr-badge big" style="--c:${A.color}">${esc(A.badge)}</span>${esc(A.name)}`, 'Membership')}
     <div class="bsr-top"><div class="bsr-mapbox">${miniSvg(A).replace('class="bsr-mini"', 'class="bsr-mini big"')}</div><div class="bsr-totals">${totals}</div></div>
     <span class="bsr-key"><i style="background:${GCOL.b}"></i>Boys<i style="background:${GCOL.g}"></i>Girls<i style="background:${GCOL.u}"></i>Not known</span>
     <div class="bsr-cols" style="--c:${A.color}">
-      <div>${ageBlock(D, A, S)}${meet}${inside}
+      <div>${ageBlock(D, A, S)}${meet}${inside}</div>
+      <div>${boardBlock(D, A, S)}
         <div class="bsr-blk"><h4>Members by state</h4>${states.map(([st, n]) => `<div class="bsr-r"><span>${esc(st)}</span>${bar(n, smax, A.color)}<b>${fmt(n)}</b></div>`).join('') || '<p class="bsr-na">None</p>'}
           <p class="bsr-na" style="margin-top:8px">${fmt(A.counties)} counties, ${fmt(A.withMembers)} with members.</p></div></div>
-      <div>${boardBlock(D, A, S)}${clubBlock(D, A)}</div>
     </div>
+    <div class="bsr-wide" style="--c:${A.color}">${clubBlock(D, A)}</div>
     <p class="bsr-foot">Members are counted in the county of their home ZIP code. A club is listed in every area where it has members.${D.typed ? '' : ' Counts by exact membership type are kept for 2026 only.'}</p>
   </div>`;
 }
@@ -578,7 +594,7 @@ function breakdownHtml(l, S){
     return `<div class="bsr-blk"><h4>Event entries</h4>${bd.rows.map(r =>
       `<div class="bsr-r"><span>${r.label}</span>${bar(r.v[0], max, '#171f69')}<b>${fmt(r.v[0])}</b></div>`).join('')}</div>`;
   }
-  return `<div class="bsr-blk"><h4>Event entries by board</h4><table class="bsr-t"><thead><tr><th></th>${bd.cols.map(b => `<th>${b.label}</th>`).join('')}</tr></thead>
+  return `<div class="bsr-blk"><h4>Event entries by board</h4><table class="bsr-t"><thead><tr><th></th>${bd.cols.map(bth).join('')}</tr></thead>
     <tbody>${bd.rows.map(r => `<tr><td>${r.label}</td>${r.v.map(v => `<td>${fmt(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 function meetsHtml(l, val, show, title){
@@ -749,7 +765,7 @@ function saveFile(root){
   const title = (hc ? hc.textContent.trim() : 'Report') + ' - USA Diving';
   const doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(title)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>body{margin:0;background:#f4f6fa}.bsr-card.go{cursor:default}${CSS}</style></head><body><div class="bsr">${pages}</div></body></html>`;
+<style>body{margin:0;background:#f4f6fa}.bsr-card.go{cursor:default}${CSS}@page{size:letter;margin:.45in}@media print{body{background:#fff}${paperCss('')}}</style></head><body><div class="bsr">${pages}</div></body></html>`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([doc], {type: 'text/html'}));
   a.download = title.replace(/[^\w.\-]+/g, '-') + '.html'; document.body.appendChild(a); a.click(); a.remove();
@@ -851,24 +867,153 @@ const CSS = `
 .bsr-foot{font-size:11.5px;color:var(--soft);margin:18px 0 0;padding-top:10px;border-top:1px solid var(--line)}
 @media (max-width:900px){.bsr-top{grid-template-columns:1fr}.bsr-totals{flex-direction:row;flex-wrap:wrap}}
 @media print{
-  @page bsr{size:letter;margin:.45in}
-  .bsr{page:bsr}
-  .bsr-strip{display:none !important}
-  .atl-main.atl-report{background:#fff !important}
-  .bsr{padding:0 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .bsr-page{border:0 !important;border-radius:0;padding:0 !important;max-width:none}
-  .bsr-page + .bsr-page{break-before:page;margin-top:0}
-  .bsr-mini.big{height:260px}
-  .bsr-top{grid-template-columns:minmax(0,1fr) 180px}
-  .bsr-grid{grid-template-columns:repeat(3,1fr);gap:10px}
-  .bsr-card{padding:9px 10px 10px}
-  .bsr-table{font-size:11px}.bsr-table td,.bsr-table th{padding:5px 6px}
-}`;
+  /* Only the report prints. Everything that is not the report, or a box the
+     report sits inside, is taken out, and the boxes it sits inside lose their
+     spacing, so nothing is left over to spill onto a page of its own. The
+     class is set while a print of this tab is running (printOn, below). */
+  html.bsr-print body :not(:has(.bsr)):not(.bsr):not(.bsr *){display:none !important}
+  html.bsr-print,html.bsr-print body,html.bsr-print body :has(.bsr){display:block !important;margin:0 !important;padding:0 !important;
+    border:0 !important;min-height:0 !important;height:auto !important;width:auto !important;max-width:none !important;
+    overflow:visible !important;position:static !important;transform:none !important;background:#fff !important;box-shadow:none !important}
+}
+.bsr-clubsec{display:none}
+.bsr-t .s{display:none}
+`;
+/* The page as it goes on paper: letter, .45in margins, 7.6in of width. Written
+   once and used twice: in the app under html.bsr-print, which is set while a
+   print is running so the page can be measured and fitted before it goes out,
+   and in a saved file under @media print. "P " stands for whichever applies. */
+const PAPER = `
+P .bsr{width:7.6in;box-sizing:border-box;padding:0 !important;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+P .bsr-strip{display:none !important}
+P .bsr-page{border:0 !important;border-radius:0;padding:0 !important;max-width:none;margin:0}
+P .bsr-page + .bsr-page{break-before:page;margin-top:0}
+P .bsr-page.split .bsr-clubsec{break-before:page}
+P .bsr-head{padding-bottom:7px;margin-bottom:10px}
+P .bsr-head h1{font-size:30px;margin-bottom:4px}
+P .bsr-head p{font-size:12px}
+P .bsr-when{font-size:11px}
+P .bsr-top{grid-template-columns:minmax(0,1fr) 170px;gap:16px;margin-bottom:10px}
+P .bsr-top.many{grid-template-columns:minmax(0,1fr) 270px}
+P .bsr-top.many .bsr-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+P .bsr-map{max-height:3.3in}
+P .bsr-page.dense .bsr-map{max-height:1.9in}
+P .bsr-totals{gap:10px}
+P .bsr-total{padding-left:10px}
+P .bsr-total b{font-size:30px}
+P .bsr-total span{font-size:11px}
+P .bsr-totals.row{gap:10px 30px;margin:2px 0 12px}
+P .bsr-key{font-size:10.5px;margin-bottom:6px}
+P .bsr-grid{grid-template-columns:repeat(var(--pc,3),minmax(0,1fr));gap:8px}
+P .bsr-grid.steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+P .bsr-card{padding:7px 9px 9px;border-top-width:4px}
+P .bsr-card header{min-height:0;margin-bottom:5px;gap:6px}
+P .bsr-card h3{font-size:17px}
+P .bsr-card .bsr-badge{min-width:22px;height:22px;font-size:11px;padding:0 5px}
+P .bsr-mini{width:46px;height:28px}
+P .bsr-stats{gap:6px 6px;grid-template-columns:repeat(auto-fill,minmax(46px,1fr))}
+P .bsr-stats.two{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))}
+P .bsr-stats.money{grid-template-columns:1fr 1fr}
+P .bsr-stat b{font-size:22px}
+P .bsr-stat span{font-size:9.5px;line-height:1.15;margin:1px 0 3px;min-height:22px}
+P .bsr-stats.two .bsr-stat span,P .bsr-stats.money .bsr-stat span{min-height:0}
+P .bsr-stat em{font-size:9.5px;margin-top:2px}
+P .bsr-bar{height:4px}
+P .bsr-bar.tall{height:9px;margin-top:8px}
+P .bsr-blk{margin-top:7px;padding-top:6px;break-inside:avoid}
+P .bsr-blk h4{font-size:9.5px;line-height:1.2;margin-bottom:3px}
+P .bsr-blk h4 small{white-space:nowrap}
+P .bsr-r{font-size:10.5px;line-height:1.2;margin:1px 0;gap:6px;grid-template-columns:62px 1fr auto;break-inside:avoid}
+P .bsr-r.wide{grid-template-columns:minmax(70px,38%) 1fr auto}
+P .bsr-r b{min-width:0}
+P .bsr-t{font-size:10.5px;line-height:1.2}
+P .bsr-t th{font-size:9.5px;padding:0 0 2px 5px;text-transform:none;letter-spacing:0;white-space:nowrap}
+P .bsr-t .l{display:none}
+P .bsr-t .s{display:inline}
+P .bsr-t td{padding:1.5px 0;font-size:10.5px}
+P .bsr-t td:first-child{white-space:nowrap}
+P .bsr-route{font-size:10.5px;padding:3px 0;gap:8px;break-inside:avoid}
+P .bsr-rounds,P .bsr-meets,P .bsr-na{font-size:10.5px}
+P .bsr-rounds{margin-top:6px}
+P .bsr-cmp{margin:6px 0;break-inside:avoid}
+P .bsr-cmp small{font-size:9.5px}
+P .bsr-h2{font-size:19px;margin:14px 0 8px;padding-top:9px;border-top-width:2px;break-after:avoid}
+P .bsr-incard{display:none}
+P .bsr-clubsec{display:block}
+P .bsr-clubrow{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:start;padding:4px 0;border-top:1px solid #e2e8f2;break-inside:avoid}
+P .bsr-clubrow b{font-size:11px;color:#171f69;white-space:nowrap}
+P .bsr-clubrow p{margin:0;font-size:9.5px;line-height:1.4;color:#1c2540}
+P .bsr-foot{font-size:9.5px;margin-top:10px;padding-top:6px;break-inside:avoid}
+P .bsr-table{font-size:11px}
+P .bsr-table td,P .bsr-table th{padding:5px 6px}
+P .bsr-table thead{display:table-header-group}
+P .bsr-table tr{break-inside:avoid}
+P .bsr-mini.big{width:100%;height:210px}
+P .bsr-page.area .bsr-top{grid-template-columns:minmax(0,1fr) 300px;margin-bottom:10px}
+P .bsr-page.area .bsr-totals{gap:10px 14px}
+P .bsr-page.area .bsr-total b{font-size:26px}
+P .bsr-page.area .bsr-clubs{font-size:10px;line-height:1.4}
+P .bsr-wide .bsr-blk{break-inside:auto}
+P .bsr-badge.big{min-width:32px;height:32px;font-size:15px;margin-right:9px;vertical-align:3px}
+`;
+const paperCss = prefix => PAPER.replace(/^P /gm, prefix).replace(/,P /g, ',' + prefix);
+
 function css(){
   if (document.getElementById('bsr-css')) return;
-  const s = document.createElement('style'); s.id = 'bsr-css'; s.textContent = CSS; document.head.appendChild(s);
+  const s = document.createElement('style'); s.id = 'bsr-css'; s.textContent = CSS + paperCss('html.bsr-print '); document.head.appendChild(s);
 }
 css();
+
+/* Printing. The page margins used to come from a named page on the report,
+   which made the browser start a new sheet for whatever followed the report
+   in the page, so a blank sheet came out at the end. Now the margins are set
+   only while this tab is being printed, the rest of the page is switched off
+   for the print, and each report page is fitted to one sheet when it can be. */
+const PAPER_W = 7.6 * 96, PAPER_H = 10.1 * 96 - 12, SMALLEST = 0.7;
+/* Shrink one block until it is a single sheet tall. It is made wider by the
+   same factor it is shrunk, so it still fills the sheet side to side. False
+   when it would have to go below SMALLEST to fit; it is then left full size. */
+function fitOne(el){
+  const set = z => { el.style.zoom = z === 1 ? '' : String(z); el.style.width = z === 1 ? '' : (PAPER_W / z) + 'px'; };
+  const tall = () => el.getBoundingClientRect().height;
+  set(1);
+  if (tall() <= PAPER_H) return true;
+  set(SMALLEST);
+  if (tall() > PAPER_H){ set(1); return false; }
+  let lo = SMALLEST, hi = 1;
+  for (let i = 0; i < 7; i++){ const z = (lo + hi) / 2; set(z); if (tall() <= PAPER_H) lo = z; else hi = z; }
+  set(lo);
+  return true;
+}
+function fitPages(){
+  document.querySelectorAll('.bsr .bsr-page').forEach(pg => {
+    const main = pg.querySelector(':scope > .bsr-main'), clubs = pg.querySelector(':scope > .bsr-clubsec');
+    pg.classList.remove('split');
+    if (fitOne(pg) || !main || !clubs) return;
+    pg.classList.add('split');          // the numbers on one sheet, the club lists on the next
+    fitOne(main); fitOne(clubs);
+  });
+}
+function unfitPages(){
+  document.querySelectorAll('.bsr .bsr-page, .bsr .bsr-main, .bsr .bsr-clubsec').forEach(el => { el.style.zoom = ''; el.style.width = ''; el.classList.remove('split'); });
+}
+function printOn(){
+  const r = document.querySelector('.bsr');
+  if (!r || !r.offsetParent || document.getElementById('mr-output')) return;
+  document.documentElement.classList.add('bsr-print');
+  if (!document.getElementById('bsr-pagecss')){
+    const s = document.createElement('style'); s.id = 'bsr-pagecss'; s.textContent = '@page{size:letter;margin:.45in}';
+    document.head.appendChild(s);
+  }
+  try { fitPages(); } catch(e){ console.error('fit to page', e); }
+}
+function printOff(){
+  document.documentElement.classList.remove('bsr-print');
+  const s = document.getElementById('bsr-pagecss'); if (s) s.remove();
+  unfitPages();
+}
+window.addEventListener('beforeprint', printOn);
+window.addEventListener('afterprint', printOff);
 
 window.BSReport = {html, wire, build, tableData, reset: () => { ST = null; }};
 })();
