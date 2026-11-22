@@ -243,6 +243,45 @@ function wallShape(s) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
   return { g, edge };
 }
+// Lays artwork out on an arch. A design drawn to the arch's own shape is used as one skin.
+// Anything else (a logo, a wide backdrop design) goes whole on the header and whole on each leg.
+const archPick = new Map();
+function archLayout(s, img) {
+  if (s.archFit === 'skin' || s.archFit === 'logo') return s.archFit;
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, sa = s.w / s.h, key = (img.src || '').slice(-80) + '|' + iw + 'x' + ih + '|' + sa.toFixed(2);
+  if (archPick.has(key)) return archPick.get(key);
+  // One skin only when the picture is the arch's shape, solid, and blank where the opening is.
+  let pick = 'logo';
+  if (Math.abs(iw / ih - sa) / sa < 0.12) try {
+    const c = document.createElement('canvas'); c.width = c.height = 24; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, 24, 24);
+    const d = g.getImageData(0, 0, 24, 24).data; let lo = [255, 255, 255], hi = [0, 0, 0], solid = true;
+    for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) { const i = (y * 24 + x) * 4; if (d[i + 3] < 250) solid = false; if (x > 7 && x < 16 && y > 9 && y < 22) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], d[i + k]); hi[k] = Math.max(hi[k], d[i + k]); } }
+    if (solid && Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) < 28) pick = 'skin';
+  } catch (e) { /* keep logo */ }
+  archPick.set(key, pick); return pick;
+}
+function archTex(s, img, leg, head, headOnly) {
+  const k = Math.min(420, 2048 / Math.max(s.w, s.h)), W = Math.round(s.w * k), H = Math.round(s.h * k), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height; let bg = '#ffffff';
+  if (headOnly) { g.fillStyle = '#fbfcfe'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, head * k); g.lineWidth = Math.max(6, leg * k * 0.12); g.strokeStyle = headOnly; g.strokeRect(g.lineWidth / 2, g.lineWidth / 2, W - g.lineWidth, H - g.lineWidth); bg = '#fbfcfe'; }
+  else if (archLayout(s, img) === 'skin') { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, H); }
+  else {
+    try { const t = document.createElement('canvas'); t.width = 4; t.height = 1; const tg = t.getContext('2d'), e = Math.max(1, Math.min(6, iw >> 4, ih >> 4));
+      [[0, 0], [iw - e, 0], [0, ih - e], [iw - e, ih - e]].forEach((q, i) => tg.drawImage(img, q[0], q[1], e, e, i, 0, 1, 1));
+      const d = tg.getImageData(0, 0, 4, 1).data, px = [0, 1, 2, 3].map((i) => [d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]]);
+      const same = px.every((q) => q[3] > 240 && Math.abs(q[0] - px[0][0]) + Math.abs(q[1] - px[0][1]) + Math.abs(q[2] - px[0][2]) < 36);
+      if (same) bg = 'rgb(' + [0, 1, 2].map((k) => Math.round(px.reduce((n, q) => n + q[k], 0) / 4)).join(',') + ')'; } catch (e) { /* keep white */ }
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    const fit = (x, y, w, h, pad) => { const aw = w * (1 - pad), ah = h * (1 - pad), sc = Math.min(aw / iw, ah / ih); g.drawImage(img, x + (w - iw * sc) / 2, y + (h - ih * sc) / 2, iw * sc, ih * sc); };
+    const hp = head * k, lp = leg * k; fit(lp * 0.3, 0, W - lp * 0.6, hp, 0.16);
+    [0, W - lp].forEach((x) => {
+      const lh = H - hp;
+      if (iw / ih > 1.5) { const zone = lh * 0.72; g.save(); g.translate(x + lp / 2, hp + lh * 0.46); g.rotate(-Math.PI / 2); const sc = Math.min(zone / iw, lp * 0.8 / ih); g.drawImage(img, -iw * sc / 2, -ih * sc / 2, iw * sc, ih * sc); g.restore(); }
+      else fit(x, hp + lh * 0.08, lp, lh * 0.5, 0.14);
+    });
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return { tex: t, bg: new THREE.Color(bg) };
+}
 async function buildSigns() {
   const old = signs; signs = new THREE.Group(); signs.userData.trash = []; scene.add(signs);
   if (old) { scene.remove(old); (old.userData.trash || []).forEach((t) => t.dispose()); old.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); }
@@ -272,11 +311,18 @@ async function buildSigns() {
       grp.add(m);
     } else if (s.kind === 'arch') {
       const leg = Math.min(s.leg || 0.5, s.w / 3), head = Math.min(s.head || 0.45, s.h / 2), dp = s.depth || 0.3, lu = leg / s.w, hv = head / s.h;
-      const L = box(leg, s.h, dp, part(0, 0, lu, 1)); L.position.x = -(s.w / 2 - leg / 2);
-      const Rr = box(leg, s.h, dp, part(1 - lu, 0, lu, 1)); Rr.position.x = s.w / 2 - leg / 2;
-      const T = box(s.w - 2 * leg, head, dp, part(lu, 1 - hv, 1 - 2 * lu, hv)); T.position.y = s.h / 2 - head / 2;
-      [[L, leg, s.h], [Rr, leg, s.h], [T, s.w - 2 * leg, head]].forEach((b) => { marks(b[0], b[1], b[2], dp); grp.add(b[0]); });
-      const hitBox = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, dp), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); hitBox.userData.sid = s.id; grp.add(hitBox);
+      // Artwork is laid out for the arch, not stretched over the opening.
+      let laid = art ? archTex(s, art.image, leg, head) : null;
+      if (!art && showLabels) { const lt = labelTex({ w: s.w, h: head, label: s.label, name: s.name }, a); laid = archTex(s, lt.image, leg, head, '#' + col.getHexString()); lt.dispose(); }
+      if (laid) trash.push(laid.tex);
+      const src = laid ? laid.tex : tex, sideMat = laid ? new THREE.MeshStandardMaterial({ color: laid.bg, roughness: 0.9, emissive: laid.bg, emissiveIntensity: 0.3 }) : edge;
+      const cut = (ox, oy, rx, ry) => { if (!src) return null; const c = src.clone(); c.offset.set(ox, oy); c.repeat.set(rx, ry); c.needsUpdate = true; trash.push(c); return c; };
+      const abox = (w, h, t) => tag(new THREE.Mesh(new THREE.BoxGeometry(w, h, dp), [sideMat, sideMat, sideMat, sideMat, faceMat(t), faceMat(t)]));
+      const L = abox(leg, s.h - head, cut(0, 0, lu, 1 - hv)); L.position.set(-(s.w / 2 - leg / 2), -head / 2, 0);
+      const Rr = abox(leg, s.h - head, cut(1 - lu, 0, lu, 1 - hv)); Rr.position.set(s.w / 2 - leg / 2, -head / 2, 0);
+      const T = abox(s.w, head, cut(0, 1 - hv, 1, hv)); T.position.y = s.h / 2 - head / 2;
+      [L, Rr, T].forEach((b) => grp.add(b));
+      const hitBox = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, dp), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); hitBox.userData.sid = s.id; marks(hitBox, s.w, s.h, dp); grp.add(hitBox);
     } else { const b = box(s.w, s.h, 0.05, tex); marks(b, s.w, s.h, 0.05); grp.add(b); }
     signs.add(grp);
   }
@@ -316,6 +362,7 @@ function renderPanel() {
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
     D.artChoicesHtml(fid) +
+    (s.kind === 'arch' && fid ? '<label>Artwork layout<select id="m3ArchFit">' + [['', 'Automatic'], ['logo', 'Logo on the header and each leg'], ['skin', 'One design across the whole arch']].map((o) => '<option value="' + o[0] + '"' + ((s.archFit || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' : '') +
     '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
     (fid && !(disp && disp.own != null) ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button>' : '') + (fid ? '<button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div><p id="m3FitNote" hidden></p>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
@@ -324,6 +371,7 @@ function renderPanel() {
   if (fid) D.fileUrl(fid).then((u) => { const im = $('m3Prev'); if (im && u) im.src = u; });
   if (fid) D.getImg(fid).then((im) => {
     const n = $('m3FitNote'); if (!n || !im || selId !== s.id) return;
+    if (s.kind === 'arch') { n.hidden = false; n.textContent = archLayout(s, im) === 'skin' ? 'Used as one design across the whole arch. The opening cuts out the middle.' : 'Shown whole on the header and on each leg, on its own background colour. Nothing is stretched or cut by the opening.'; return; }
     const sa = s.w / s.h, ia = im.naturalWidth / im.naturalHeight; if (Math.abs(sa - ia) / sa < 0.04) return;
     n.hidden = false; n.textContent = 'This sign is ' + sa.toFixed(2) + ' to 1 and the artwork is ' + ia.toFixed(2) + ' to 1, so it is ' + (ia > sa ? 'squeezed' : 'stretched') + ' sideways here. For print, design it at ' + (s.w / FT).toFixed(1) + ' x ' + (s.h / FT).toFixed(1) + ' ft.';
   });
@@ -410,6 +458,7 @@ function wire() {
     const t = e.target, s = signById(selId); if (!s) return; const a = D.assetById(s.assetId);
     if (t.id === 'm3Asset') s.assetId = t.value;
     else if (t.id === 'm3Type') { if (!t.value) return; const bottom = s.y - s.h / 2; applyDisplay(s, t.value); s.y = r2(bottom + s.h / 2); }
+    else if (t.id === 'm3ArchFit') { if (t.value) s.archFit = t.value; else delete s.archFit; }
     else if (t.id === 'm3Status' && a) { a.status = t.value; if (a.status === 'Open') a.sponsor = ''; }
     else if (t.id === 'm3Sponsor' && a) a.sponsor = t.value;
     else if (t.id === 'm3Price' && a) a.price = String(t.value).trim() === '' ? '' : (parseFloat(t.value) || 0);
