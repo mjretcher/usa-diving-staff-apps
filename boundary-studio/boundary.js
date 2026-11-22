@@ -1029,6 +1029,7 @@ function tzReport(){
 }
 
 function renderPanel(){
+  if (S.booted && S._openDone) rememberOpen();
   if (atlasOn()){ atlasRender(); return; }
   const _place = keepPlace('bsPanel');
   const y = S.year;
@@ -3089,8 +3090,26 @@ function applyMap(m, opts){
   const before = S.routing ? {routing: JSON.parse(JSON.stringify(S.routing))} : null;
   S.regions = JSON.parse(JSON.stringify(m.regions && m.regions.length ? m.regions : defaultRegions(12)));
   S.assign = JSON.parse(JSON.stringify(m.assign || {}));
-  if (m.levels && m.levels.length) S.levels = JSON.parse(JSON.stringify(m.levels));
-  if (m.finalName) S.finalName = m.finalName;
+  let kept = [];
+  if (m.levels && m.levels.length){
+    const mine = S.levels || [], theirs = JSON.parse(JSON.stringify(m.levels));
+    // A map is its regions and how they group upward. When it comes in under a
+    // proposal that already has a structure with the same number of levels, a
+    // level the map shapes differently (its E / W / C where the proposal has
+    // Junior Nationals) stays the proposal's, as long as it still sits
+    // correctly on the level below. The pathway was written for that structure;
+    // swapping the level under it left Structure and the pathway disagreeing.
+    if (!opts.wholeStructure && S.scenarioId && !isSeed(S.scenarioId) && mine.length === theirs.length && mine.length > 1){
+      const nG = (L, t) => t === 0 ? S.regions.length : ((L[t].groups || []).length);
+      for (let t = 1; t < theirs.length; t++){
+        const a = mine[t], b = theirs[t];
+        if (!a || !b || (a.groups || []).length === (b.groups || []).length) continue;
+        if ((a.of || []).length === nG(theirs, t - 1)){ kept.push(`${b.name} on the map, ${a.name} in this proposal`); theirs[t] = JSON.parse(JSON.stringify(a)); }
+      }
+    }
+    S.levels = theirs;
+  }
+  if (m.finalName && !kept.length) S.finalName = m.finalName;
   let notes = [];
   if (before && before.routing.length && before.routing.length !== S.levels.length){
     const fit = adaptPathway(before);
@@ -3098,6 +3117,7 @@ function applyMap(m, opts){
     S.pathNotes = fit.notes;
   }
   syncLevels(); syncRouting();
+  if (kept.length) notes = notes.concat(kept.map(k => `Kept this proposal's level (${k}).`));
   S.mapName = m.name || '';
   S.mapId = m.libId || null;
   S.active = 0; S.detailRegion = null; S.tierView = 0; S.dirty = true;
@@ -3160,7 +3180,7 @@ async function loadMapInto(id){
     const m = await fetchMap(id);
     if (!m){ msg('That map is gone.'); return; }
     const notes = applyMap(m);
-    msg(`Loaded the map "${m.name}" under this proposal` + (notes.length ? ` — pathway fitted: ${notes.join(' ')}` : '') + '. Save the proposal to keep it.');
+    msg(`Loaded the map "${m.name}" under this proposal` + (notes.length ? ` — ${notes.join(' ')}` : '') + '. Save the proposal to keep it.');
   } catch(e){ msg('Could not load the map: ' + neonMsg(e)); }
 }
 
@@ -6647,6 +6667,22 @@ function newScenarioId(){
   return 'bs-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,7);
 }
 
+/* Everything a proposal stores. Used by Save, and by the copy kept across an
+   "Update now" reload when there are unsaved changes. */
+function scenarioPayload(){
+  const saveLevels = S._off25 ? S._off25.levels : S.levels, saveRouting = S._off25 ? S._off25.routing : S.routing;
+  return {regions:S.regions, assign:S.assign, year:S.year, routing:saveRouting,
+    fees:S.fees, feesByCell:S.feesByCell, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
+    hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
+    tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
+    stamps:dataStamps(), frozen:S.frozen,
+    schedPlans:S.schedPlans, schedRules:S.schedRules,
+    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText, notes:S.notes || null,
+    levels:saveLevels, finalName:S.finalName, adv:S.adv,
+    mapName:S.mapName || null, mapId:S.mapId || null,
+    firstStopPlatform:S.firstStopPlatform || 'held', statePolicy:S.statePolicy, v:4};
+}
+
 async function saveScenario(asNew){
   if (!S.scenarioName.trim()){ msg('Give the proposal a name first.'); return; }
   // Reference maps are never overwritten — saving one forks it instead. A frozen
@@ -6675,17 +6711,7 @@ async function saveScenario(asNew){
     if (frozenChanged) S.frozen = null;
   }
   syncLevels();
-  const saveLevels = S._off25 ? S._off25.levels : S.levels, saveRouting = S._off25 ? S._off25.routing : S.routing;
-  const data = JSON.stringify({regions:S.regions, assign:S.assign, year:S.year, routing:saveRouting,
-    fees:S.fees, feesByCell:S.feesByCell, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
-    hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
-    tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
-    stamps:dataStamps(), frozen:S.frozen,
-    schedPlans:S.schedPlans, schedRules:S.schedRules,
-    arrival:S.arrival, seedPool:S.seedPool, firstStopAll:!!S.firstStopAll, platformReal:!!S.platformReal, reportText:S.reportText, notes:S.notes || null,
-    levels:saveLevels, finalName:S.finalName, adv:S.adv,
-    mapName:S.mapName || null, mapId:S.mapId || null,
-    firstStopPlatform:S.firstStopPlatform || 'held', statePolicy:S.statePolicy, v:4});
+  const data = JSON.stringify(scenarioPayload());
   try {
     await NEON.query(
       `INSERT INTO membership.boundary_scenarios (id, name, data) VALUES ($1,$2,$3::jsonb)
@@ -6693,6 +6719,7 @@ async function saveScenario(asNew){
       [S.scenarioId, S.scenarioName.trim(), data]);
     S.dirty = false;
     S.savedAt = nowStamp();
+    rememberOpen();
     scenarioListCache = null; S.mapLib = null; S.mapList = null; S.pathList = null;
     msg((forking ? 'Saved a new proposal "' : 'Saved "') + S.scenarioName.trim() + '" to cloud.');
     renderPanel();
@@ -6792,6 +6819,15 @@ async function loadScenario(id){
     if (!res.rows.length){ msg('Scenario not found.'); return; }
     const row = res.rows[0];
     const d = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    applyScenarioData(id, row, d);
+    rememberOpen();
+    msg('Loaded "' + row.name + '".');
+  } catch(e){ console.error(e); msg('Load failed: ' + (e.message||e)); }
+}
+
+/* Put one proposal's stored data on screen. */
+function applyScenarioData(id, row, d){
+  {
     S.savedAt = row.u || null;
     S.reportText = d.reportText || {};
     S.notes = Array.isArray(d.notes) && d.notes.length ? d.notes.map(String) : null;
@@ -6846,8 +6882,49 @@ async function loadScenario(id){
     if (S.compare && S.compare.id === id) S.compare = null;
     applyOfficialSeason();
     repaintAll(); renderPanel();
-    msg('Loaded "' + row.name + '".');
-  } catch(e){ console.error(e); msg('Load failed: ' + (e.message||e)); }
+  }
+}
+
+/* ---- Opening where you left off ------------------------------------------
+   The studio used to open on a blank map every time, so each visit (and each
+   "Update now") meant opening the proposal again, then a map, then a pathway.
+   A saved proposal already holds all three, so it now opens the proposal that
+   was last on screen, on the tab that was last open. With nothing remembered,
+   staff get the 2027 CCE proposal, which is where the work has landed
+   (Mike, 2026-11-22). Unsaved changes survive an "Update now" reload. */
+const OPEN_KEY = 'usad.bs.open', DRAFT_KEY = 'usad.bs.draft', DEFAULT_OPEN = 'bs-mvo2c1ou-uno3b';
+function rememberOpen(){
+  try { localStorage.setItem(OPEN_KEY, JSON.stringify({id: S.scenarioId || null, tab: S.panelMode || 'map'})); } catch(e){}
+}
+function stashDraft(){
+  if (!S.booted || !S.dirty) return;
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({id: S.scenarioId || null, name: S.scenarioName || '', owner: S.scenarioOwner == null ? null : S.scenarioOwner,
+    savedAt: S.savedAt || null, at: Date.now(), d: scenarioPayload()})); } catch(e){ console.warn('draft not kept', e); }
+}
+async function openWhereLeftOff(){
+  let last = null, draft = null;
+  try { last = JSON.parse(localStorage.getItem(OPEN_KEY) || 'null'); } catch(e){}
+  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); localStorage.removeItem(DRAFT_KEY); } catch(e){}
+  if (draft && !(draft.d && Date.now() - draft.at < 6 * 3600 * 1000)) draft = null;     // only a reload just made
+  const tab = last && INSPECTORS.some(t => t.k === last.tab) ? last.tab : null;
+  let id = draft ? draft.id : (last ? last.id : (shareMode() ? null : DEFAULT_OPEN));
+  try {
+    if (id){
+      const res = await NEON.query(`SELECT name, data, owner, to_char(updated_at,'Mon DD · HH24:MI') u FROM membership.boundary_scenarios WHERE id=$1`, [id]);
+      if (res.rows && res.rows.length){
+        const row = res.rows[0];
+        applyScenarioData(id, row, typeof row.data === 'string' ? JSON.parse(row.data) : row.data);
+      } else id = null;
+    }
+    if (draft){
+      applyScenarioData(draft.id && id ? draft.id : null, {name: draft.name, owner: draft.owner, u: draft.savedAt}, draft.d);
+      if (!(draft.id && id)){ S.scenarioId = null; S.scenarioName = draft.name || ''; }
+      S.dirty = true;
+      msg('Your unsaved changes are back on screen. Save the proposal to keep them.');
+    }
+  } catch(e){ console.error('open where left off', e); }
+  if (tab && tab !== S.panelMode){ S.panelMode = tab; renderPanel(); refreshFlow(); }
+  rememberOpen();
 }
 
 function exportCsv(){
@@ -11282,6 +11359,9 @@ window.renderBoundary = async function(){
     if (e.shiftKey) doRedo(); else doUndo();
   });
   S.booted = true;
+  if (window.USADUpdate) window.USADUpdate.beforeReload(stashDraft);
+  await openWhereLeftOff();
+  S._openDone = true;
 };
 
 /* Inspection hook, matching the pattern in routing.js (window.QualRouting) and
@@ -11291,6 +11371,7 @@ window.renderBoundary = async function(){
 window.__BOUNDARY = {
   S, syncRouting, projectPathway, pushUndo, groupCountAt, groupUp, seedRows,
   meetManifest, meetMoney, tierGroupsAt, tierName, openAutoDialog,
+  scenarioPayload, applyMap, stashDraft,
 };
 
 })();
