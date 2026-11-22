@@ -58,14 +58,30 @@ const displayOf = (s) => DISPLAYS.filter((d) => d.key === s.preset)[0] || null;
 function applyDisplay(s, key) { const d = DISPLAYS.filter((x) => x.key === key)[0]; if (!d) return s; s.preset = d.key; s.kind = d.kind; s.w = d.w; s.h = d.h; ['plan', 'd', 'low', 'depth', 'leg', 'head'].forEach((k) => { if (d[k] != null) s[k] = d[k]; else delete s[k]; }); return s; }
 // First placement of the owned displays, read from the 2025 Winter Nationals photos. Only untouched default signs are converted.
 function migrate(m) {
-  const from = m.v || 1; if (from >= 3) return false;
+  const from = m.v || 1; if (from >= 4) return false;
   if (from < 2) {
     const was = { m_bd1: [8.2, 3.0, 'glide', 1.22], m_bd3: [7.6, 2.5, 'cwave', 4.02], m_arch: [3.2, 2.6, 'sqarch', 1.15], m_curve: [3.0, 2.4, 'ctmw', 1.14] };
     m.signs.forEach((s) => { const w = was[s.id]; if (w && s.kind === 'flat' && s.w === w[0] && s.h === w[1]) { applyDisplay(s, w[2]); s.y = w[3]; } });
   }
   // The deck A-frames bought for the 2026 Winter Nationals are 6.56 x 3.28 ft. Untouched deck frames take that size.
   m.signs.forEach((s) => { if (s.kind === 'aframe' && !s.preset && s.w === 1.9 && s.h === 0.8) { const bottom = s.y - s.h / 2; applyDisplay(s, 'aframe26'); s.y = r2(Math.max(0, bottom) + s.h / 2); } });
-  m.v = 3; return true;
+  // Near end of the pool, corrected from the 2025 photo taken from the tower end: the scoreboard is on the end wall,
+  // the awards podium and its backdrop sit in the middle of that end with a row of deck frames either side, and the
+  // scoring tables are toward the entrance corner. Only signs still at their original spot are moved.
+  if (from < 4) {
+    const at = (s, x, z) => s && s.x === x && s.z === z, by = (id) => m.signs.filter((s) => s.id === id)[0];
+    let s = by('m_sb'); if (at(s, -22.75, 30)) Object.assign(s, { x: 0, y: 9.6, z: 42.05, ry: Math.PI, w: 7.5, h: 3.6 });
+    s = by('m_tl'); if (at(s, -2.2, 35.02)) Object.assign(s, { x: 6.3, z: 36.92 });
+    s = by('m_tr'); if (at(s, 2.2, 35.02)) Object.assign(s, { x: 10.7, z: 36.92 });
+    s = by('m_curve'); if (at(s, -15.6, 35)) Object.assign(s, { x: 14.6, z: 38.4, ry: Math.PI * 0.92 });
+    if (by('m_arch') && !by('m_awards')) {
+      const e = D.ev(), used = {}; m.signs.forEach((x) => { used[x.assetId] = 1; });
+      const a = e.assets.filter((x) => x.name === 'Awards ceremony' && !used[x.id])[0];
+      const aw = applyDisplay({ id: 'm_awards', name: 'Awards backdrop', x: 0, y: 0, z: 37.6, ry: Math.PI, assetId: a ? a.id : '' }, 's195'); aw.y = r2(aw.h / 2); m.signs.push(aw);
+      [8.5, 6.4, 4.3, 2.2, -2.2, -4.3, -6.4, -8.5].forEach((x, i) => { const f = applyDisplay({ id: 'm_e' + (i + 1), name: 'End deck frame ' + (i + 1), x, y: 0, z: 34.9, ry: Math.PI, assetId: '' }, 'aframe26'); f.y = r2(f.h / 2); m.signs.push(f); });
+    }
+  }
+  m.v = 4; return true;
 }
 function model() {
   const v = D.venue();
@@ -130,7 +146,7 @@ function buildRoom() {
   // deck, pool, water
   box(46, 0.4, 49, 0, -0.2, 18, M(0xffffff, { map: deckTex() }), false);
   box(25.7, 0.42, 30.7, 0, -0.2, 18, M(0xf5f7fa), false);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(25, 30), new THREE.MeshPhysicalMaterial({ map: waterTex(), color: 0xffffff, roughness: 0.12, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.25, envMapIntensity: 0.5 }));
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(25, 30), new THREE.MeshPhysicalMaterial({ map: waterTex(), color: 0xffffff, roughness: 0.12, metalness: 0, clearcoat: 0.15, clearcoatRoughness: 0.4, envMapIntensity: 0.35 }));
   water.rotation.x = -Math.PI / 2; water.position.set(0, 0.03, 18); water.receiveShadow = true; g.add(water);
   [23.5, 26, 28.5].forEach((z) => { box(17, 0.13, 0.13, -4, 0.07, z, M(0xf0c020, { roughness: 0.6 }), false); box(8, 0.13, 0.13, 8.5, 0.07, z, M(0x111318, { roughness: 0.6 }), false); });
   // walls and roof face inward only, so the room opens up when you look in from outside
@@ -174,8 +190,14 @@ function buildRoom() {
   const mezz = (sd, z0, z1, rows) => { const zl = z1 - z0, zc = (z0 + z1) / 2; box(5.5, 0.3, zl, sd * 20.25, 3.2, zc, M(0x3a4160)); box(0.18, 1.0, zl, sd * 17.5, 3.0, zc, navy); for (let i = 0; i < rows; i++) box(0.85, 0.42, zl - 0.6, sd * (18.4 + i * 0.9), 3.56 + i * 0.42, zc, white); for (let z = z0 + 1; z < z1; z += 6) box(0.3, 3.05, 0.3, sd * 17.7, 1.52, z, M(0xc9ced6)); };
   mezz(-1, 0, 36, 5); mezz(1, -3, 13, 4);
   // scoring tables and drape at the near end
-  [-4.4, 0, 4.4].forEach((x) => box(4.2, 0.76, 0.9, x, 0.38, 35.6, dark));
-  box(30, 2.4, 0.12, 0, 1.2, 38.2, M(0x0e0f14, { roughness: 1 }));
+  [6.3, 10.7].forEach((x) => box(4.2, 0.76, 0.9, x, 0.38, 37.4, dark));
+  box(36, 2.4, 0.12, 0, 1.2, 39.4, M(0x0e0f14, { roughness: 1 }));
+  // awards podium
+  box(1.0, 0.6, 0.9, 0, 0.3, 36.2, dark); box(1.0, 0.42, 0.9, -1.0, 0.21, 36.2, dark); box(1.0, 0.3, 0.9, 1.0, 0.15, 36.2, dark);
+  // scoreboard and the facility's own sponsor boards on the end wall (not USA Diving inventory)
+  box(9.4, 6.4, 0.3, 0, 9.6, 42.3, M(0xf2c318, { roughness: 0.6 }), false); box(8.2, 4.2, 0.32, 0, 9.6, 42.28, M(0x1a1c22, { roughness: 0.5 }), false);
+  [-6.6, 6.6].forEach((x) => box(3.3, 1.5, 0.15, x, 7.3, 42.3, M(0xf7f8fa), false));
+  for (let i = 0; i < 11; i++) box(2.25, 1.3, 0.15, -12.5 + i * 2.5, 5.6, 42.3, M(i === 8 ? 0xf2a23a : i === 9 ? 0xf2d21a : 0xf7f8fa), false);
   return g;
 }
 
@@ -245,7 +267,7 @@ function pick(e) {
 }
 const VIEWS = [
   ['Overview', [-33, 24, 50], [0, 2, 13]], ['Broadcast side', [-19.5, 6.2, 24], [1, 4, -1]], ['Deck level', [0, 1.7, 34], [0, 4.2, 0]],
-  ['1m end', [14, 2.2, 11], [10, 1.5, -2]], ['Left deck', [-9, 1.8, 20], [-14.5, 0.6, 11]], ['Entrance', [9, 2.0, 27], [17.4, 1.3, 33.5]], ['From above', [0, 62, 18.1], [0, 0, 18]]
+  ['1m end', [14, 2.2, 11], [10, 1.5, -2]], ['Left deck', [-9, 1.8, 20], [-14.5, 0.6, 11]], ['Entrance', [9, 2.0, 27], [17.4, 1.3, 33.5]], ['Awards end', [0, 5.5, 14], [0, 3.2, 40]], ['From above', [0, 62, 18.1], [0, 0, 18]]
 ];
 function goView(i) { cam.position.set(...VIEWS[i][1]); controls.target.set(...VIEWS[i][2]); controls.update(); document.querySelectorAll('#m3Views .dk-btn').forEach((b, k) => b.classList.toggle('on', k === i)); draw(); }
 
@@ -357,6 +379,7 @@ function build() {
   scene.add(new THREE.HemisphereLight(0xffffff, 0xd5dbe6, 0.55));
   const sun = new THREE.DirectionalLight(0xffffff, 1.0); sun.position.set(-10, 34, 24); sun.target.position.set(0, 0, 14); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
   Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 34, bottom: -34, near: 1, far: 90 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; scene.add(sun); scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.75); fill.position.set(6, 18, -4); fill.target.position.set(0, 4, 42); scene.add(fill); scene.add(fill.target);
   buildRoom();
   controls = new OrbitControls(cam, R.domElement); controls.maxPolarAngle = Math.PI / 2 - 0.02; controls.minDistance = 3; controls.maxDistance = 110; controls.addEventListener('change', draw);
   wire(); built = true; return true;
