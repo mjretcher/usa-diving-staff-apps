@@ -94,3 +94,13 @@ select.st-Sold { color: var(--brand-blue); font-weight: 700; } select.st-Comped,
 
 body.dk-dragging .dk-main { outline: 3px dashed var(--brand-pool); outline-offset: -6px; border-radius: var(--radius-lg); }
 body.dk-dragging .dk-stage { outline: 3px dashed var(--brand-sky); outline-offset: -8px; }
+.dk-model { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: 640px; }
+.dk-stage3d { padding: 0; background: #dfe5ef; min-height: 600px; }
+.dk-stage3d canvas { width: 100%; height: 100%; border-radius: 0; outline: none; }
+.dk-stage3d .dk-empty { color: var(--ink-3); }
+.dk-views { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.dk-views .dk-btn.on { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.dk-adjust { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.dk-adjust label { flex-direction: column; }
+.dk-adjust input { width: 100%; font-family: var(--font-mono); }
+@media (max-width: 1000px) { .dk-model { grid-template-columns: 1fr; } .dk-stage3d { min-height: 420px; } }

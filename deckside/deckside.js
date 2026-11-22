@@ -5,8 +5,9 @@
 (function () {
   'use strict';
 
-  var LS_KEY = 'deckside_doc_v1';
-  var LS_BASE = 'deckside_base_v1';
+  var LOCAL_ONLY = /[?&]local=1/.test(location.search);
+  var LS_KEY = LOCAL_ONLY ? 'deckside_doc_localtest' : 'deckside_doc_v1';
+  var LS_BASE = LOCAL_ONLY ? 'deckside_base_localtest' : 'deckside_base_v1';
   var STATUSES = ['Open', 'Held', 'Sold', 'Comped', 'Facility'];
   var STATUS_COLOR = { Open: '#059669', Held: '#d97706', Sold: '#171f69', Comped: '#6b7280', Facility: '#6b7280' };
 
@@ -91,6 +92,10 @@
   function photo() { var v = venue(); return v.photos.filter(function (p) { return p.id === ui.photoId; })[0] || null; }
   function zone() { var p = photo(); return p ? p.zones.filter(function (z) { return z.id === ui.zoneId; })[0] || null : null; }
   function assetById(id) { return ev().assets.filter(function (a) { return a.id === id; })[0] || null; }
+  // Sponsor artwork for this event. A zone or 3D sign linked to an asset shares that asset's artwork.
+  function creativeOf(item) { var e = ev(); return e.zoneCreative[item.id] || (item.assetId && e.assetCreative && e.assetCreative[item.assetId]) || null; }
+  function setCreativeFor(item, fileId) { var e = ev(); e.zoneCreative[item.id] = fileId; if (item.assetId) { e.assetCreative = e.assetCreative || {}; e.assetCreative[item.assetId] = fileId; } }
+  function clearCreativeFor(item) { var e = ev(); delete e.zoneCreative[item.id]; if (item.assetId && e.assetCreative) delete e.assetCreative[item.assetId]; }
   function tierOf(a) { return ev().tiers.filter(function (t) { return t.name === a.tier; })[0] || { low: 0, high: 0 }; }
 
   /* ── valuation ───────────────────────────────────────── */
@@ -155,6 +160,7 @@
     try { local = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) {}
     var localBase = localStorage.getItem(LS_BASE) || '';
     try {
+      if (LOCAL_ONLY) throw new Error('local only');
       var r = await NEON.query("SELECT data::text AS d, updated_at::text AS u FROM deckside.workspace WHERE id = 'main'");
       cloud.ready = true;
       if (r.rows.length) {
@@ -253,9 +259,9 @@
   function renderKpis() {
     var t = totals(), e = ev();
     $('kpis').innerHTML =
-      '<div class="dk-kpi"><span>Open physical inventory</span><b>' + money(t.openLow) + ' to ' + money(t.openHigh) + '</b><small>' + t.openN + ' assets still to sell, at tier prices</small></div>' +
-      '<div class="dk-kpi"><span>Sold physical</span><b>' + money(t.sold) + '</b><small>' + t.soldN + ' assets sold. Counts only assets with a price entered.</small></div>' +
-      '<div class="dk-kpi"><span>On hold</span><b>' + money(t.heldLow) + ' to ' + money(t.heldHigh) + '</b><small>' + t.heldN + ' assets held for a prospect</small></div>' +
+      '<div class="dk-kpi"><span>Open physical inventory</span><b>' + money(t.openLow) + ' to ' + money(t.openHigh) + '</b><small>' + pl(t.openN, 'asset') + ' still to sell, at tier prices</small></div>' +
+      '<div class="dk-kpi"><span>Sold physical</span><b>' + money(t.sold) + '</b><small>' + pl(t.soldN, 'asset') + ' sold. The total counts only those with a price entered.</small></div>' +
+      '<div class="dk-kpi"><span>On hold</span><b>' + money(t.heldLow) + ' to ' + money(t.heldHigh) + '</b><small>' + pl(t.heldN, 'asset') + ' held for a prospect</small></div>' +
       '<div class="dk-kpi"><span>Broadcast time</span><b>' + money(t.bcSold) + ' sold</b><small>' + clock(t.bcOpenSec) + ' of ' + clock(t.bcSec) + ' still open, worth ' + money(t.bcOpen) + ' at $' + num(e.broadcast.unitPrice) + ' per :30</small></div>';
   }
 
@@ -476,7 +482,7 @@
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(img, 0, 0, W, H);
     for (var i = 0; i < p.zones.length; i++) {
-      var z = p.zones[i], q = px(z.quad, W, H), cr = await getImg(e.zoneCreative[z.id]);
+      var z = p.zones[i], q = px(z.quad, W, H), cr = await getImg(creativeOf(z));
       if (cr) {
         drawCreative(ctx, img, cr, q, W, H);
         (z.masks || []).forEach(function (m) { if (m.length < 3) return; ctx.save(); quadPath(ctx, px(m, W, H)); ctx.clip(); ctx.drawImage(img, 0, 0, W, H); ctx.restore(); });
@@ -485,7 +491,7 @@
     var s = W / 1000;
     p.zones.forEach(function (z) {
       var q = px(z.quad, W, H), a = assetById(z.assetId), st = a ? a.status : 'Open', col = STATUS_COLOR[st] || '#059669', sel = opts.handles && z.id === ui.zoneId;
-      var hasCr = !!e.zoneCreative[z.id];
+      var hasCr = !!creativeOf(z);
       if (opts.labels || sel) {
         ctx.save(); ctx.lineWidth = (sel ? 3.5 : 2.5) * s; ctx.strokeStyle = col; if (hasCr && !sel) ctx.setLineDash([8 * s, 6 * s]);
         quadPath(ctx, q); ctx.stroke(); ctx.restore();
@@ -597,7 +603,7 @@
         '<p>Click a zone on the photo to edit it.</p>';
       return;
     }
-    var cr = e.zoneCreative[z.id];
+    var cr = creativeOf(z);
     box.innerHTML = '<h3>Zone</h3>' +
       '<label>Name on the photo<input id="zLabel" value="' + esc(z.label || '') + '" placeholder="Uses the asset name if blank"></label>' +
       '<label>Inventory asset<select id="zAsset"><option value="">Not linked</option>' + e.assets.map(function (a) { return '<option value="' + a.id + '"' + (a.id === z.assetId ? ' selected' : '') + '>' + esc(a.name) + ' (' + a.status + ')</option>'; }).join('') + '</select></label>' +
@@ -611,7 +617,7 @@
   }
   async function setCreative(file) {
     var z = zone(); if (!z || !file) return;
-    try { var f = await importImage(file, 1600); ev().zoneCreative[z.id] = f.id; changed(); renderZonePanel(); draw(); }
+    try { var f = await importImage(file, 1600); setCreativeFor(z, f.id); changed(); renderZonePanel(); draw(); }
     catch (e) { toast('That file could not be read as a picture.', 'error'); }
   }
   async function addPhotos(fileList) {
@@ -651,7 +657,7 @@
         e.name = q('#evName').value.trim() || e.name; e.dates = q('#evDates').value.trim(); v.name = q('#evVenue').value.trim() || v.name;
         var nn = q('#evNew').value.trim();
         if (nn) {
-          var copy = JSON.parse(JSON.stringify(e)); copy.id = uid('e'); copy.name = nn; copy.dates = ''; copy.zoneCreative = {};
+          var copy = JSON.parse(JSON.stringify(e)); copy.id = uid('e'); copy.name = nn; copy.dates = ''; copy.zoneCreative = {}; copy.assetCreative = {};
           copy.assets.forEach(function (a) { if (a.status === 'Sold' || a.status === 'Held') { a.status = 'Open'; a.sponsor = ''; a.price = ''; } });
           copy.broadcast.slots.forEach(function (k) { k.status = 'Open'; k.sponsor = ''; k.spot = ''; k.price = ''; });
           if (!q('#evSameVenue').checked) { var nv = { id: uid('v'), name: 'New venue', city: '', photos: [] }; doc.venues.push(nv); copy.venueId = nv.id; }
@@ -665,10 +671,11 @@
   /* ── wiring ──────────────────────────────────────────── */
   function showTab(t) {
     ui.tab = t;
-    ['inventory', 'photos', 'broadcast'].forEach(function (n) { $('tab-' + n).hidden = n !== t; });
+    ['inventory', 'photos', 'model', 'broadcast'].forEach(function (n) { $('tab-' + n).hidden = n !== t; });
     document.querySelectorAll('#tabs [data-tab]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === t); });
     if (t === 'inventory') renderInventory();
     if (t === 'broadcast') renderBroadcast();
+    if (window.DECKSIDE3D) { if (t === 'model') window.DECKSIDE3D.show(); else window.DECKSIDE3D.hide(); }
     if (t === 'photos') { renderPhotoList().then(function () { renderZonePanel(); draw(); }); }
   }
   function renderAll() { renderEventSel(); renderKpis(); showTab(ui.tab); }
@@ -727,6 +734,7 @@
       e.preventDefault(); dragDepth = 0; document.body.classList.remove('dk-dragging');
       var onArt = e.target.closest && e.target.closest('#crDrop'), onCanvas = e.target === $('cv'), pt = onCanvas ? evtPt(e) : null;
       var files = await filesFrom(e.dataTransfer); if (!files.length) return;
+      if (ui.tab === 'model' && window.DECKSIDE3D) { window.DECKSIDE3D.drop(e, files[0]); return; }
       if (ui.tab !== 'photos') showTab('photos');
       var p = photo();
       if (onArt && zone()) { setCreative(files[0]); return; }
@@ -739,6 +747,7 @@
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       var files = (await filesFrom(e.clipboardData)).filter(looksLikePicture); if (!files.length) return;
       e.preventDefault();
+      if (ui.tab === 'model' && window.DECKSIDE3D) { window.DECKSIDE3D.paste(files[0]); return; }
       if (ui.tab !== 'photos') showTab('photos');
       if (zone()) { setCreative(files[0]); toast('Pasted as the artwork for the selected zone.'); }
       else addPhotos(files);
@@ -747,7 +756,7 @@
       var t = e.target, zb = t.closest('[data-zone]');
       if (zb) { ui.zoneId = zb.dataset.zone; renderZonePanel(); draw(); return; }
       var z = zone(); if (!z) return;
-      if (t.id === 'crClear') { delete ev().zoneCreative[z.id]; changed(); renderZonePanel(); draw(); }
+      if (t.id === 'crClear') { clearCreativeFor(z); changed(); renderZonePanel(); draw(); }
       else if (t.id === 'maskAdd') { ui.maskDraft = []; renderZonePanel(); }
       else if (t.id === 'maskDone') { finishMask(); }
       else if (t.id === 'maskCancel') { ui.maskDraft = null; renderZonePanel(); draw(); }
@@ -770,7 +779,7 @@
     if (!cloud.ready) return;
     var ids = {};
     doc.venues.forEach(function (v) { v.photos.forEach(function (p) { ids[p.fileId] = 1; }); });
-    doc.events.forEach(function (e) { Object.keys(e.zoneCreative || {}).forEach(function (z) { ids[e.zoneCreative[z]] = 1; }); });
+    doc.events.forEach(function (e) { ['zoneCreative', 'assetCreative'].forEach(function (k) { Object.keys(e[k] || {}).forEach(function (z) { ids[e[k][z]] = 1; }); }); });
     try {
       var r = await NEON.query('SELECT id FROM deckside.files'), have = {};
       r.rows.forEach(function (x) { have[x.id] = 1; });
@@ -788,7 +797,10 @@
     syncFiles();
     wire();
     renderAll();
+    window.DECKSIDE.isReady = true; document.dispatchEvent(new Event('deckside-ready'));
   }
-  window.DECKSIDE = { _doc: function () { return doc; }, _totals: totals };
+  window.DECKSIDE = { _doc: function () { return doc; }, _totals: totals, ev: ev, venue: venue, assetById: assetById, assetValue: assetValue,
+    changed: changed, getImg: getImg, fileUrl: fileUrl, importImage: importImage, creativeOf: creativeOf, setCreativeFor: setCreativeFor, clearCreativeFor: clearCreativeFor,
+    uid: uid, esc: esc, money: money, toast: toast, STATUSES: STATUSES, STATUS_COLOR: STATUS_COLOR, tab: function () { return ui.tab; }, ready: null };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
