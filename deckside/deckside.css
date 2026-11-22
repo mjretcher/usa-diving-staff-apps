@@ -106,3 +106,6 @@ body.dk-dragging .dk-stage { outline: 3px dashed var(--brand-sky); outline-offse
 @media (max-width: 1000px) { .dk-model { grid-template-columns: 1fr; } .dk-stage3d { min-height: 420px; } }
 .dk .topbar-btn:disabled { opacity: .4; cursor: default; }
 @media (max-width: 1000px) { #redoBtn { display: none; } }
+html:has(body.dk) { scrollbar-gutter: stable; }
+.dk-model .dk-side { overflow-y: auto; min-height: 0; }
+.dk-model { align-items: start; }

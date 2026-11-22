@@ -178,7 +178,7 @@ async function buildSigns() {
 /* ── rendering and picking ────────────────────────────── */
 function inside() { const p = cam.position; return p.y < 13 && Math.abs(p.x) < 23 && p.z > -6.5 && p.z < 42.5; }
 function draw() { if (!visible || needs) return; needs = true; requestAnimationFrame(() => { needs = false; if (!R) return; room.userData.roof.visible = inside(); R.render(scene, cam); }); }
-function resize() { const st = $('m3Stage'), w = st.clientWidth, h = Math.max(420, Math.min(window.innerHeight - 210, 900)); st.style.height = h + 'px'; R.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw(); }
+function resize() { const st = $('m3Stage'), h = Math.max(420, Math.min(window.innerHeight - 210, 900)); st.style.height = h + 'px'; if (window.innerWidth > 1000) $('m3Panel').style.height = (h + st.previousElementSibling.offsetHeight) + 'px'; else $('m3Panel').style.height = ''; const w = st.clientWidth; R.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); draw(); }
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pick(e) {
   const r = R.domElement.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -212,7 +212,7 @@ function renderPanel() {
     '<div class="row" style="margin-top:auto"><button class="dk-btn" id="m3Done">Done</button><button class="dk-btn" id="m3Copy">Copy sign</button><button class="dk-btn danger" id="m3Del">Remove sign</button></div>';
   if (fid) D.fileUrl(fid).then((u) => { const im = $('m3Prev'); if (im && u) im.src = u; });
 }
-function select(id) { selId = id; renderPanel(); buildSigns(); }
+function select(id) { const x = window.scrollX, y = window.scrollY; selId = id; renderPanel(); $('m3Panel').scrollTop = 0; buildSigns(); window.scrollTo(x, y); }
 async function setArt(id, file) {
   const s = signById(id); if (!s || !file) return;
   try { const f = await D.importImage(file, 1600); D.setCreativeFor(s, f.id); D.changed(); selId = id; renderPanel(); buildSigns(); }
