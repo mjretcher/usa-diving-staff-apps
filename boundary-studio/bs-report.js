@@ -221,7 +221,7 @@ function cardHtml(D, A, S, maxOf){
     const v = D.value(A, C.k), tot = D.total(C.k);
     const pct = (S.share && C.k !== 'clubs' && tot > 0) ? `<em>${(100 * v / tot).toFixed(1)}% of all</em>` : '';
     const d = Math.round(v - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n));
-    const even = S.even ? `<em>${d === 0 ? 'Even' : fmt(Math.abs(d)) + (d > 0 ? ' over' : ' under') + ' an even split'}</em>` : '';
+    const even = S.even ? `<em>${d === 0 ? 'Even' : fmt(Math.abs(d)) + (d > 0 ? ' over' : ' under') + ' an equal share'}</em>` : '';
     const w = (S.change && D.base) ? D.was(A, C.k) : null;
     const chg = w == null ? '' : `<em>${v === w ? 'No change' : (v > w ? '+' : '&minus;') + fmt(Math.abs(v - w)) + ' since the start'}</em>`;
     return `<div class="bsr-stat"><b>${fmt(v)}</b><span>${esc(D.label(C.k))}</span>${bar(v, maxOf[C.k], A.color)}${pct}${even}${chg}</div>`;
@@ -240,7 +240,7 @@ function tableData(D, S){
   const cols = [];
   shownCounts(D, S).forEach(C => {
     cols.push({h: D.label(C.k), v: A => D.value(A, C.k), tot: () => D.total(C.k)});
-    if (S.even) cols.push({h: 'Over or under even', signed: true, tot: () => '',
+    if (S.even) cols.push({h: 'Over or under an equal share', signed: true, tot: () => '',
       v: A => Math.round(D.value(A, C.k) - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n))});
     if (S.change && D.base && D.was(D.areas[0], C.k) != null) cols.push({h: 'Change since the start', signed: true, tot: () => '',
       v: A => { const w = D.was(A, C.k); return w == null ? '' : D.value(A, C.k) - w; }});
@@ -306,7 +306,7 @@ function stripHtml(S, levels, typed, hasBase){
   if (S.page === 'areas') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Count</span>${COUNTS.map(C => chip('data-bsr-count', C.k, S.counts.includes(C.k) && !(C.only && !typed), (!typed && C.other) ? C.other : C.label, C.only && !typed)).join('')}</div>
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
-      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}${flag('even', 'Even split')}${hasBase ? flag('change', 'Change since the start') : ''}</div>`;
+      <span class="bsr-lbl gap">Also show</span>${flag('maps', 'Area maps')}${flag('clubNames', 'Club names')}${flag('share', 'Share of total')}${flag('even', 'Over or under an equal share')}${hasBase ? flag('change', 'Change since the start') : ''}</div>`;
   else if (S.page === 'structure') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Break down by</span>${flag('age', 'Age group')}${flag('gender', 'Gender')}${flag('boards', 'Board')}
       <span class="bsr-lbl gap">Also show</span>${flag('routes', 'Who advances')}${flag('athletes', 'Athletes')}${flag('eachMeet', 'Each meet')}
