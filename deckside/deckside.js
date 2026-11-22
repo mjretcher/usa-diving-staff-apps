@@ -150,6 +150,43 @@
   var CLIP = 'deckside-artwork:', clipId = null;
   function selectedItem() { return ui.tab === 'model' ? (window.DECKSIDE3D ? window.DECKSIDE3D.selected() : null) : ui.tab === 'photos' ? zone() : null; }
   function refreshItemViews() { if (ui.tab === 'model' && window.DECKSIDE3D) window.DECKSIDE3D.show(); else if (ui.tab === 'photos') { renderZonePanel(); draw(); } }
+  // Artwork library: every piece of sponsor artwork is kept here once and can be put on any number of signs and zones.
+  function ensureLibrary() {
+    if (!doc.library) doc.library = [];
+    var have = {}; doc.library.forEach(function (l) { have[l.id] = 1; });
+    doc.events.forEach(function (e) {
+      ['assetCreative', 'zoneCreative'].forEach(function (k) { Object.keys(e[k] || {}).forEach(function (key) {
+        var fid = e[k][key]; if (!fid || have[fid]) return; have[fid] = 1;
+        var a = k === 'assetCreative' ? e.assets.filter(function (x) { return x.id === key; })[0] : null;
+        doc.library.push({ id: fid, name: a ? a.name + ' artwork' : 'Artwork ' + (doc.library.length + 1) });
+      }); });
+    });
+  }
+  function libAdd(f) { ensureLibrary(); if (!doc.library.some(function (l) { return l.id === f.id; })) doc.library.push({ id: f.id, name: f.name || 'Artwork' }); }
+  function libUses(fid) { var n = 0, e = ev(), seen = {}; Object.keys(e.zoneCreative || {}).forEach(function (k) { if (e.zoneCreative[k] === fid) { n++; seen[k] = 1; } }); return n; }
+  async function addArtwork(fileList) {
+    var files = Array.prototype.slice.call(fileList), added = 0;
+    for (var i = 0; i < files.length; i++) {
+      if (!looksLikePicture(files[i])) { if (isVideo(files[i])) toast('Videos cannot be added as artwork.', 'warn'); continue; }
+      try { libAdd(await importImage(files[i], 1600)); added++; } catch (e) { toast((files[i].name || 'That file') + ' could not be read as a picture.', 'error'); }
+    }
+    if (added) { changed(); renderLibrary(); }
+  }
+  function renderLibrary() {
+    ensureLibrary();
+    var box = $('libGrid'); if (!box) return;
+    box.innerHTML = doc.library.length ? doc.library.map(function (l) {
+      var n = libUses(l.id);
+      return '<div class="dk-art" data-lib="' + l.id + '"><img alt="" data-artimg="' + l.id + '"><input value="' + esc(l.name) + '" aria-label="Artwork name"><div class="dk-art-foot"><span>' + (n ? 'On ' + pl(n, 'sign') + ' or ' + (n === 1 ? 'zone' : 'zones') + ' for this event' : 'Not placed yet') + '</span><button class="dk-x" data-libdel="' + l.id + '">Remove</button></div></div>';
+    }).join('') : '<p class="dk-hint" style="padding:6px 2px">No artwork yet. Drag logos and sign designs in here, or use Add artwork. Then put any of them on as many signs as you like from the 3D venue or Venue photos tabs.</p>';
+    doc.library.forEach(function (l) { fileUrl(l.id).then(function (u) { var im = box.querySelector('img[data-artimg="' + l.id + '"]'); if (im && u) im.src = u; }); });
+  }
+  function artChoicesHtml(currentFid) {
+    ensureLibrary();
+    var list = doc.library.filter(function (l) { return l.id !== currentFid; }); if (!list.length) return '';
+    setTimeout(function () { list.forEach(function (c) { fileUrl(c.id).then(function (u) { document.querySelectorAll('.dk-reuse img[data-artimg="' + c.id + '"]').forEach(function (im) { if (u) im.src = u; }); }); }); }, 0);
+    return '<label>Artwork library: click one to use it here</label><div class="dk-reuse">' + list.map(function (c) { return '<button type="button" data-art="' + c.id + '" title="Use this artwork here"><img alt="" data-artimg="' + c.id + '"><span>' + esc(c.name) + '</span></button>'; }).join('') + '</div>';
+  }
   function copyArt(item) { var f = item && creativeOf(item); if (!f) return false; clipId = f; try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CLIP + f).catch(function () {}); } catch (e) {} toast('Artwork copied. Click another sign or zone and paste.'); refreshItemViews(); return true; }
   function pasteArt(item, fileId) { var f = fileId || clipId; if (!item || !f) return false; setCreativeFor(item, f); changed(); refreshItemViews(); return true; }
 
@@ -628,6 +665,7 @@
       '<label>Name on the photo<input id="zLabel" value="' + esc(z.label || '') + '" placeholder="Uses the asset name if blank"></label>' +
       '<label>Inventory asset<select id="zAsset"><option value="">Not linked</option>' + e.assets.map(function (a) { return '<option value="' + a.id + '"' + (a.id === z.assetId ? ' selected' : '') + '>' + esc(a.name) + ' (' + a.status + ')</option>'; }).join('') + '</select></label>' +
       '<label>Sponsor artwork for this event<div class="dk-drop" id="crDrop">' + (cr ? '<img id="crPrev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="crInput" accept="image/*" hidden></label>' +
+      artChoicesHtml(cr) +
       '<div class="row">' + (cr ? '<button class="dk-btn small" id="crCopy">Copy artwork</button>' : '') + (clipId && clipId !== cr ? '<button class="dk-btn small" id="crPaste">Paste artwork</button>' : '') + (cr ? '<button class="dk-btn small" id="crClear">Remove artwork</button>' : '') + '</div>' +
       '<label>Things in front of this zone</label><p>Outline a board, railing or person so it stays in front of the artwork. Click around it, then click the first point to finish.</p>' +
       '<div class="row">' + (ui.maskDraft ? '<button class="dk-btn small primary" id="maskDone">Finish outline</button><button class="dk-btn small" id="maskCancel">Cancel</button>' : '<button class="dk-btn small" id="maskAdd">Outline something in front</button>') +
@@ -637,7 +675,7 @@
   }
   async function setCreative(file) {
     var z = zone(); if (!z || !file) return;
-    try { var f = await importImage(file, 1600); setCreativeFor(z, f.id); changed(); renderZonePanel(); draw(); }
+    try { var f = await importImage(file, 1600); libAdd(f); setCreativeFor(z, f.id); changed(); renderZonePanel(); draw(); }
     catch (e) { toast('That file could not be read as a picture.', 'error'); }
   }
   async function addPhotos(fileList) {
@@ -691,9 +729,10 @@
   /* ── wiring ──────────────────────────────────────────── */
   function showTab(t) {
     ui.tab = t;
-    ['inventory', 'photos', 'model', 'broadcast'].forEach(function (n) { $('tab-' + n).hidden = n !== t; });
+    ['inventory', 'photos', 'model', 'artwork', 'broadcast'].forEach(function (n) { $('tab-' + n).hidden = n !== t; });
     document.querySelectorAll('#tabs [data-tab]').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === t); });
     if (t === 'inventory') renderInventory();
+    if (t === 'artwork') renderLibrary();
     if (t === 'broadcast') renderBroadcast();
     if (window.DECKSIDE3D) { if (t === 'model') window.DECKSIDE3D.show(); else window.DECKSIDE3D.hide(); }
     if (t === 'photos') { renderPhotoList().then(function () { renderZonePanel(); draw(); }); }
@@ -754,6 +793,7 @@
       e.preventDefault(); dragDepth = 0; document.body.classList.remove('dk-dragging');
       var onArt = e.target.closest && e.target.closest('#crDrop'), onCanvas = e.target === $('cv'), pt = onCanvas ? evtPt(e) : null;
       var files = await filesFrom(e.dataTransfer); if (!files.length) return;
+      if (ui.tab === 'artwork') { addArtwork(files); return; }
       if (ui.tab === 'model' && window.DECKSIDE3D) { window.DECKSIDE3D.drop(e, files[0]); return; }
       if (ui.tab !== 'photos') showTab('photos');
       var p = photo();
@@ -775,6 +815,18 @@
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       e.preventDefault(); stepHistory(!(k === 'y' || e.shiftKey));
     });
+    $('libInput').addEventListener('change', function (e) { var f = Array.prototype.slice.call(e.target.files); e.target.value = ''; addArtwork(f); });
+    $('libGrid').addEventListener('change', function (e) { var c = e.target.closest('[data-lib]'); if (!c || e.target.tagName !== 'INPUT') return; var l = doc.library.filter(function (x) { return x.id === c.dataset.lib; })[0]; if (l) { l.name = e.target.value.trim() || l.name; changed(); } });
+    $('libGrid').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-libdel]'); if (!b) return; var fid = b.dataset.libdel, n = 0;
+      doc.events.forEach(function (ev2) { ['zoneCreative', 'assetCreative'].forEach(function (k) { Object.keys(ev2[k] || {}).forEach(function (key) { if (ev2[k][key] === fid) n++; }); }); });
+      USAD.modal.confirm({ title: 'Remove this artwork?', body: n ? 'It is in use and will come off every sign and zone it is on. Undo brings it back.' : 'It is not on any sign.', confirmLabel: 'Remove', danger: true }).then(function (ok) {
+        if (!ok) return;
+        doc.library = doc.library.filter(function (x) { return x.id !== fid; });
+        doc.events.forEach(function (ev2) { ['zoneCreative', 'assetCreative'].forEach(function (k) { Object.keys(ev2[k] || {}).forEach(function (key) { if (ev2[k][key] === fid) delete ev2[k][key]; }); }); });
+        changed(); renderLibrary();
+      });
+    });
     $('undoBtn').addEventListener('click', function () { stepHistory(true); });
     $('redoBtn').addEventListener('click', function () { stepHistory(false); });
     histButtons();
@@ -784,6 +836,7 @@
       if (txt.indexOf(CLIP) === 0) { e.preventDefault(); if (!pasteArt(selectedItem(), txt.slice(CLIP.length))) toast('Click a sign or zone first, then paste.'); return; }
       var files = (await filesFrom(e.clipboardData)).filter(looksLikePicture); if (!files.length) return;
       e.preventDefault();
+      if (ui.tab === 'artwork') { addArtwork(files); return; }
       if (ui.tab === 'model' && window.DECKSIDE3D) { window.DECKSIDE3D.paste(files[0]); return; }
       if (ui.tab !== 'photos') showTab('photos');
       if (zone()) { setCreative(files[0]); toast('Pasted as the artwork for the selected zone.'); }
@@ -793,6 +846,7 @@
       var t = e.target, zb = t.closest('[data-zone]');
       if (zb) { ui.zoneId = zb.dataset.zone; renderZonePanel(); draw(); return; }
       var z = zone(); if (!z) return;
+      var ab = t.closest('[data-art]'); if (ab) { pasteArt(z, ab.dataset.art); return; }
       if (t.id === 'crCopy') { copyArt(z); }
       else if (t.id === 'crPaste') { pasteArt(z); }
       else if (t.id === 'crClear') { clearCreativeFor(z); changed(); renderZonePanel(); draw(); }
@@ -818,6 +872,7 @@
     if (!cloud.ready) return;
     var ids = {};
     doc.venues.forEach(function (v) { v.photos.forEach(function (p) { ids[p.fileId] = 1; }); });
+    (doc.library || []).forEach(function (l) { ids[l.id] = 1; });
     doc.events.forEach(function (e) { ['zoneCreative', 'assetCreative'].forEach(function (k) { Object.keys(e[k] || {}).forEach(function (z) { ids[e[k][z]] = 1; }); }); });
     try {
       var r = await NEON.query('SELECT id FROM deckside.files'), have = {};
@@ -833,6 +888,7 @@
   async function init() {
     await idbOpen();
     await loadDoc();
+    ensureLibrary();
     hist.last = JSON.stringify(doc);
     syncFiles();
     wire();
@@ -841,6 +897,6 @@
   }
   window.DECKSIDE = { _doc: function () { return doc; }, _totals: totals, ev: ev, venue: venue, assetById: assetById, assetValue: assetValue,
     changed: changed, getImg: getImg, fileUrl: fileUrl, importImage: importImage, creativeOf: creativeOf, setCreativeFor: setCreativeFor, clearCreativeFor: clearCreativeFor,
-    copyArt: copyArt, pasteArt: pasteArt, clip: function () { return clipId; }, uid: uid, esc: esc, money: money, toast: toast, STATUSES: STATUSES, STATUS_COLOR: STATUS_COLOR, tab: function () { return ui.tab; }, ready: null };
+    copyArt: copyArt, pasteArt: pasteArt, libAdd: libAdd, artChoicesHtml: artChoicesHtml, clip: function () { return clipId; }, uid: uid, esc: esc, money: money, toast: toast, STATUSES: STATUSES, STATUS_COLOR: STATUS_COLOR, tab: function () { return ui.tab; }, ready: null };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

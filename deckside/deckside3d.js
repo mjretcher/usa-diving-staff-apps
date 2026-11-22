@@ -205,6 +205,7 @@ function renderPanel() {
     (a ? '<label>Status<select id="m3Status" class="st-' + a.status + '">' + D.STATUSES.map((x) => '<option' + (x === a.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>' +
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
+    D.artChoicesHtml(fid) +
     '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
     (fid ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button><button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
@@ -215,7 +216,7 @@ function renderPanel() {
 function select(id) { const x = window.scrollX, y = window.scrollY; selId = id; renderPanel(); $('m3Panel').scrollTop = 0; buildSigns(); window.scrollTo(x, y); }
 async function setArt(id, file) {
   const s = signById(id); if (!s || !file) return;
-  try { const f = await D.importImage(file, 1600); D.setCreativeFor(s, f.id); D.changed(); selId = id; renderPanel(); buildSigns(); }
+  try { const f = await D.importImage(file, 1600); D.libAdd(f); D.setCreativeFor(s, f.id); D.changed(); selId = id; renderPanel(); buildSigns(); }
   catch (err) { D.toast('That file could not be read as a picture.', 'error'); }
 }
 
@@ -235,6 +236,7 @@ function wire() {
     const s = signById(selId); if (!s) return;
     if (t.id === 'm3Done') select(null);
     else if (t.id === 'm3Clear') { D.clearCreativeFor(s); D.changed(); renderPanel(); buildSigns(); }
+    else if (t.closest('[data-art]')) D.pasteArt(s, t.closest('[data-art]').dataset.art);
     else if (t.id === 'm3CopyArt') D.copyArt(s);
     else if (t.id === 'm3PasteArt') D.pasteArt(s);
     else if (t.id === 'm3Fit') { D.getImg(D.creativeOf(s)).then((im) => { if (!im) return; s.w = Math.round(s.h * im.naturalWidth / im.naturalHeight * 100) / 100; D.changed(); renderPanel(); buildSigns(); }); }
