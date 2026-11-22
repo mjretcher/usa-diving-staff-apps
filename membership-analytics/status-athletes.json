@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-22T19:50:06Z",
+ "generated": "2026-11-22T19:51:44Z",
  "home_definition": "where most of the club's athletes competed that season",
  "status_list_seasons": [
   2026
@@ -17,13 +17,54 @@
     "status_list_on_file": false,
     "groups": {
      "nd": {
-      "athletes": 0,
-      "entries": 0,
-      "nd_entries": 0,
+      "athletes": 4,
+      "entries": 6,
+      "nd_entries": 4,
       "competing_away": 0,
-      "by_age": {},
-      "by_gender": {},
-      "by_area": {},
+      "by_age": {
+       "B": {
+        "athletes": 2,
+        "away": 0
+       },
+       "C": {
+        "athletes": 1,
+        "away": 0
+       },
+       "D": {
+        "athletes": 1,
+        "away": 0
+       }
+      },
+      "by_gender": {
+       "Boys": {
+        "athletes": 3,
+        "away": 0
+       },
+       "Girls": {
+        "athletes": 1,
+        "away": 0
+       }
+      },
+      "by_area": {
+       "1": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "9": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "12": {
+        "athletes": 2,
+        "competed": 2,
+        "left": 0,
+        "arrived": 0
+       }
+      },
       "flows": []
      }
     }
@@ -33,14 +74,73 @@
     "status_list_on_file": false,
     "groups": {
      "nd": {
-      "athletes": 0,
-      "entries": 0,
-      "nd_entries": 0,
-      "competing_away": 0,
-      "by_age": {},
-      "by_gender": {},
-      "by_area": {},
-      "flows": []
+      "athletes": 9,
+      "entries": 18,
+      "nd_entries": 14,
+      "competing_away": 4,
+      "by_age": {
+       "A": {
+        "athletes": 4,
+        "away": 0
+       },
+       "C": {
+        "athletes": 2,
+        "away": 1
+       },
+       "D": {
+        "athletes": 3,
+        "away": 3
+       }
+      },
+      "by_gender": {
+       "Boys": {
+        "athletes": 5,
+        "away": 2
+       },
+       "Girls": {
+        "athletes": 4,
+        "away": 2
+       }
+      },
+      "by_area": {
+       "1": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "3": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "10": {
+        "athletes": 0,
+        "competed": 4,
+        "left": 0,
+        "arrived": 4
+       },
+       "11": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "12": {
+        "athletes": 6,
+        "competed": 2,
+        "left": 4,
+        "arrived": 0
+       }
+      },
+      "flows": [
+       {
+        "home": "12",
+        "went": "10",
+        "athletes": 4
+       }
+      ]
      }
     }
    },
@@ -51,7 +151,7 @@
      "foreign": {
       "athletes": 14,
       "entries": 31,
-      "nd_entries": 0,
+      "nd_entries": 17,
       "competing_away": 1,
       "by_age": {
        "A": {
@@ -262,13 +362,64 @@
       ]
      },
      "nd": {
-      "athletes": 0,
-      "entries": 0,
-      "nd_entries": 0,
+      "athletes": 7,
+      "entries": 10,
+      "nd_entries": 8,
       "competing_away": 0,
-      "by_age": {},
-      "by_gender": {},
-      "by_area": {},
+      "by_age": {
+       "A": {
+        "athletes": 3,
+        "away": 0
+       },
+       "B": {
+        "athletes": 1,
+        "away": 0
+       },
+       "C": {
+        "athletes": 2,
+        "away": 0
+       },
+       "D": {
+        "athletes": 1,
+        "away": 0
+       }
+      },
+      "by_gender": {
+       "Boys": {
+        "athletes": 3,
+        "away": 0
+       },
+       "Girls": {
+        "athletes": 4,
+        "away": 0
+       }
+      },
+      "by_area": {
+       "2": {
+        "athletes": 2,
+        "competed": 2,
+        "left": 0,
+        "arrived": 0
+       },
+       "3": {
+        "athletes": 2,
+        "competed": 2,
+        "left": 0,
+        "arrived": 0
+       },
+       "6": {
+        "athletes": 2,
+        "competed": 2,
+        "left": 0,
+        "arrived": 0
+       },
+       "11": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       }
+      },
       "flows": []
      }
     }
@@ -280,13 +431,30 @@
     "status_list_on_file": false,
     "groups": {
      "nd": {
-      "athletes": 0,
-      "entries": 0,
-      "nd_entries": 0,
+      "athletes": 1,
+      "entries": 1,
+      "nd_entries": 1,
       "competing_away": 0,
-      "by_age": {},
-      "by_gender": {},
-      "by_area": {},
+      "by_age": {
+       "D": {
+        "athletes": 1,
+        "away": 0
+       }
+      },
+      "by_gender": {
+       "Boys": {
+        "athletes": 1,
+        "away": 0
+       }
+      },
+      "by_area": {
+       "C": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       }
+      },
       "flows": []
      }
     }
@@ -296,14 +464,71 @@
     "status_list_on_file": false,
     "groups": {
      "nd": {
-      "athletes": 0,
-      "entries": 0,
-      "nd_entries": 0,
-      "competing_away": 0,
-      "by_age": {},
-      "by_gender": {},
-      "by_area": {},
-      "flows": []
+      "athletes": 14,
+      "entries": 35,
+      "nd_entries": 30,
+      "competing_away": 3,
+      "by_age": {
+       "A": {
+        "athletes": 2,
+        "away": 0
+       },
+       "B": {
+        "athletes": 4,
+        "away": 1
+       },
+       "C": {
+        "athletes": 3,
+        "away": 2
+       },
+       "D": {
+        "athletes": 5,
+        "away": 0
+       }
+      },
+      "by_gender": {
+       "Boys": {
+        "athletes": 7,
+        "away": 1
+       },
+       "Girls": {
+        "athletes": 7,
+        "away": 2
+       }
+      },
+      "by_area": {
+       "A": {
+        "athletes": 4,
+        "competed": 4,
+        "left": 0,
+        "arrived": 0
+       },
+       "C": {
+        "athletes": 1,
+        "competed": 1,
+        "left": 0,
+        "arrived": 0
+       },
+       "E": {
+        "athletes": 6,
+        "competed": 9,
+        "left": 0,
+        "arrived": 3
+       },
+       "F": {
+        "athletes": 3,
+        "competed": 0,
+        "left": 3,
+        "arrived": 0
+       }
+      },
+      "flows": [
+       {
+        "home": "F",
+        "went": "E",
+        "athletes": 3
+       }
+      ]
      }
     }
    },
@@ -314,7 +539,7 @@
      "foreign": {
       "athletes": 16,
       "entries": 43,
-      "nd_entries": 0,
+      "nd_entries": 40,
       "competing_away": 0,
       "by_age": {
        "A": {
@@ -381,7 +606,7 @@
      "dual": {
       "athletes": 4,
       "entries": 9,
-      "nd_entries": 0,
+      "nd_entries": 1,
       "competing_away": 0,
       "by_age": {
        "A": {
