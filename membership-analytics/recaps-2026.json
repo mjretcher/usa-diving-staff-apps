@@ -726,8 +726,8 @@
    "divemeets": 3948.45,
    "divemeets_check": 3948.45,
    "net": 92236.55,
-   "host": null,
-   "host_pct_of_net": null,
+   "host": 30609.62,
+   "host_pct_of_net": 33.2,
    "settlement": "2026-08-17",
    "coach_late_count": 6,
    "coach_late_total": 300.0,
@@ -806,12 +806,12 @@
    "lateFeeSharePct": 2.8,
    "avgLateFee": 85.71,
    "sheetChangePerEntry": 0.68,
-   "hostPctOfNet": null,
+   "hostPctOfNet": 33.2,
    "recapGross": 96185.0,
    "modelGross": 94625,
    "recapNet": 92236.55,
    "modelNet": 90916,
-   "recapHost": null,
+   "recapHost": 30609.62,
    "modelHost": null,
    "coachLateSharePct": 0.8,
    "avgCoachLateFee": 50.0,
@@ -821,5 +821,5 @@
    "creditCardPct": 0
   }
  },
- "source": "2026 DiveMeets recaps as reconciled by USA Diving finance (aggregates only; host = calculated split, not confirmed QBO posting; Nationals host not reconciled)"
+ "source": "2026 DiveMeets recaps as reconciled by USA Diving finance (aggregates only; host = calculated split, not confirmed QBO posting, except Junior Nationals: $30,609.62 paid to the host per QuickBooks bill HostPayments26 of 2026-09-17, confirmed by Mike Retcher 2026-11-22)"
 }

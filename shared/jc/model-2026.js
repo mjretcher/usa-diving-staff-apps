@@ -193,7 +193,7 @@ export async function compute2026BaselineWithNationals() {
   const reconciled = recaps ? (() => {
     const rows = recaps.perMeet; const sum = (k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
     return { source: recaps.source, paidEntries: sum('paid'), competedEntries: sum('competed'), gross: +sum('gross').toFixed(2), diveMeetsFees: +sum('divemeets').toFixed(2),
-      netToUsaDiving: +sum('net').toFixed(2), hostSplitBooked: +sum('host').toFixed(2), hostUnreconciled: ['Junior Nationals'],
+      netToUsaDiving: +sum('net').toFixed(2), hostSplitBooked: +sum('host').toFixed(2), hostUnreconciled: rows.filter((r) => r.host == null).map((r) => r.name),
       usaDivingKeepsBeforeNationalsHost: +(sum('net') - sum('host')).toFixed(2), byStage: recaps.byStage,
       note: 'Host figures are the calculated split, not confirmed QuickBooks postings; E/W/C host bills also net merch and ticket sales (East $10,851.24, Central $8,030.38, West $9,214.17 actual bills). Zone C/D host share ($60/$40 question) open with finance as of 2026-06-11.' };
   })() : null;

@@ -267,9 +267,16 @@ async function buildColumn(col, ctx) {
         basis: 'Modeled event entries at 2025 published fees ($85 Regionals, $85 Zones, $115 Junior Nationals); DiveMeets $3.80; host $25 per event entry.',
         feesUsed: '2025 published fees',
         reconciledKeeps: m.reconciled ? m.reconciled.usadShare : null,
-        reconciledNote: 'Actual 2025 USA Diving share per the general ledger, after all host payments.' },
+        reconciledNote: 'Actual 2025 USA Diving share per the general ledger, after all host payments.',
+        // What the completed season actually took in and paid out. The money
+        // rows of the report show this; the modeled figures above stay for the
+        // stop tables and the self-checks.
+        actual: m.reconciled ? { entriesBilled: m.reconciled.paidEntries, gross: m.reconciled.gross, diveMeets: m.reconciled.diveMeetsFees,
+          cardFees: m.reconciled.creditCardFees, hosts: m.reconciled.host, keeps: m.reconciled.usadShare, complete: true,
+          note: 'Actual 2025 figures from the finance entry fee workbook that ties to the general ledger: every entry billed, the 4% card fee USA Diving absorbed that year and all host payments.' } : null },
       stops: m.perMeet.map((x) => ({ tier: x.tier, stop: x.stop, eventEntries: x.entries, fee: x.feePerEvent, gross: x.grossEntryIncome,
-        diveMeets: x.diveMeetsPassThrough, hosts: x.toHosts, keeps: x.usaDivingKeeps })),
+        diveMeets: x.diveMeetsPassThrough, hosts: x.toHosts, keeps: x.usaDivingKeeps,
+        actual: x.recap ? { entriesBilled: x.recap.paidEntries, gross: x.recap.gross, hosts: x.recap.host, keeps: x.recap.usadShare, complete: true } : null })),
       rules: m.structure.rules, structure: m.structure, validation: m.validation, warnings: [],
     };
   }
@@ -302,10 +309,17 @@ async function buildColumn(col, ctx) {
         feesUsed: '2026 published fees',
         individualOnly: individualOnly2026(m, tiers),
         reconciledKeeps: m.reconciled ? m.reconciled.usaDivingKeepsBeforeNationalsHost : null,
-        reconciledNote: 'Actual 2026 USA Diving share per the 22 DiveMeets settlement recaps, BEFORE the Junior Nationals host payout (not yet reconciled).' },
+        reconciledNote: 'Actual 2026 USA Diving share per the 22 DiveMeets settlement recaps, BEFORE the Junior Nationals host payout (not yet reconciled).',
+        actual: m.reconciled ? { entriesBilled: m.reconciled.paidEntries, gross: m.reconciled.gross, diveMeets: m.reconciled.diveMeetsFees,
+          cardFees: null, hosts: m.reconciled.hostSplitBooked, keeps: m.reconciled.usaDivingKeepsBeforeNationalsHost,
+          complete: !(m.reconciled.hostUnreconciled || []).length,
+          note: 'Actual 2026 figures from the 22 DiveMeets settlement recaps finance reconciled: every entry billed, including late fees and sheet changes.'
+            + ((m.reconciled.hostUnreconciled || []).length ? ' The Junior Nationals host payment is not reconciled yet, so paid to hosts is understated and USA Diving keeps is overstated by that amount.' : ' All host payments are included.') } : null },
       stops: m.perMeet.slice().sort((a, b) => (a.tier === b.tier ? String(a.stop).localeCompare(String(b.stop), 'en', { numeric: true }) : 0)).map((x) => ({ tier: x.tier, stop: x.stop, eventEntries: x.entries, fee: x.feePerEvent, gross: x.grossEntryIncome,
         diveMeets: x.diveMeetsPassThrough, hosts: x.toHosts, keeps: x.usaDivingKeeps,
-        qualifyingEntries: x.qualifyingEntries, nonQualifyingEntries: x.nonQualifyingEntries })),
+        qualifyingEntries: x.qualifyingEntries, nonQualifyingEntries: x.nonQualifyingEntries,
+        actual: x.recap ? { entriesBilled: x.recap.paidEntries, gross: x.recap.gross, hosts: x.recap.hostSplit,
+          keeps: x.recap.netToUsaDiving - (x.recap.hostSplit || 0), complete: x.recap.hostSplit != null } : null })),
       rules: m.structure.rules, structure: m.structure, warnings: [],
     };
   }
@@ -330,6 +344,7 @@ function individualOnly2026(m, tiers) {
 function hostText(h) {
   if (!h) return 'per the proposal';
   const min = +h.min ? ` (minimum $${(+h.min).toLocaleString('en-US')})` : '';
+  if (h.mode === 'rates2025') { const r = h.rates2025 || {}; return `at the 2025 rates per event entry ($${(+r.Regionals).toFixed(2)} Regionals, $${(+r.Zones).toFixed(2)} Zones, $${(+r.Nationals).toFixed(2)} Junior Nationals)${min}`; }
   if (h.mode === 'per_entry') return `$${+h.perEntry} per event entry${min}`;
   if (h.mode === 'flat') return `$${(+h.flat || 0).toLocaleString('en-US')} per meet${min}`;
   return `${Math.round(100 * (+h.share || 0))}% of what each meet nets after DiveMeets${min}`;

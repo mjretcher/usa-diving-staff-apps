@@ -481,17 +481,35 @@ async function loadActuals(){
       const net = b ? (b.recapNet != null ? b.recapNet : b.net) : null;
       const host = b ? (y === 2026 ? b.recapHost : b.host) : null;
       const usad = b ? (y === 2026 ? (host != null && net != null ? net - host : null) : b.usadShare) : null;
-      out[s.k] = {meets, entries: a ? a.individual : null, athletes: a ? a.athletes : null, gross, net, host, usad};
+      out[s.k] = {meets, entries: a ? a.individual : null, athletes: a ? a.athletes : null, paid: b ? b.paidEntries : null, gross, net, host, usad};
     });
     return out;
   };
-  return {2026: season(r26, a26, 2026), 2025: season(r25, a25, 2025), counted: !!(a26 && a25)};
+  const pend = r26 && r26.byStage && r26.byStage.Nationals && r26.byStage.Nationals.hostPaymentUnconfirmed;
+  return {2026: season(r26, a26, 2026), 2025: season(r25, a25, 2025), counted: !!(a26 && a25),
+          rates: {2026: r26 && r26.byStage, 2025: r25 && r25.byStage}, pending26: pend && pend.amount ? pend : null};
 }
 function needActuals(S, redraw){
   if (!(S.cmp26 || S.cmp25) || ACT || ACT_BUSY || ACT_ERR) return;
   ACT_BUSY = true;
   loadActuals().then(a => { ACT = a; }).catch(e => { ACT_ERR = String(e && e.message || e); console.error('seasons', e); })
     .then(() => { ACT_BUSY = false; if (redraw) redraw(); });
+}
+/* This structure's projected entries priced the way a completed season was
+   billed and paid out (that season's reconciled rates by stage). Summed by
+   stage so it lines up with the season's actuals. */
+function onSeasonTerms(y){
+  const rates = ACT && ACT.rates && ACT.rates[y];
+  if (!rates) return null;
+  const P = pathwayData({recapRates: rates});
+  if (!P) return null;
+  const out = {};
+  P.levels.forEach(l => { const m = out[l.stage] || (out[l.stage] = {meets: 0, entries: 0, paid: 0, gross: 0, host: 0, usad: 0, net: 0, own: false});
+    m.meets += l.stops; m.entries += l.entries; m.paid += sum(l.meets.map(x => x.paid)); m.gross += l.gross; m.host += l.host; m.usad += l.usad; m.net += l.net;
+    if (l.meets.some(x => !x.onSeasonRates)) m.own = true; });
+  // Where the season's own host payment is not reconciled, compare before it on both lines.
+  Object.keys(out).forEach(k => { const a = ACT[y][k]; if (a && a.usad == null && a.net != null){ out[k].usad = null; out[k].host = 0; } });
+  return out;
 }
 function compareHtml(P, S){
   if (!(S.cmp26 || S.cmp25)) return '';
@@ -503,13 +521,18 @@ function compareHtml(P, S){
   P.levels.forEach(l => { const m = mine[l.stage] || (mine[l.stage] = {meets: 0, entries: 0, athletes: null, gross: 0, host: 0, usad: 0});
     m.meets += l.stops; m.entries += l.entries; m.gross += l.gross; m.host += l.host; m.usad += l.usad;
     if (l.divers) m.athletes = (m.athletes || 0) + Math.round(l.divers.n); });
-  const cols = [{k: 'now', label: 'This structure', color: '#171f69', d: mine, est: true}]
-    .concat(S.cmp26 ? [{k: '26', label: '2026 season', color: '#009AC7', d: ACT[2026]}] : [])
-    .concat(S.cmp25 ? [{k: '25', label: '2025 season', color: '#8FC3EA', d: ACT[2025]}] : []);
+  const seasons = [].concat(S.cmp26 ? [{y: 2026, color: '#009AC7', soft: '#7fcce3'}] : [], S.cmp25 ? [{y: 2025, color: '#8FC3EA', soft: '#c7e1f4'}] : []);
+  let cols = [{k: 'now', label: money ? 'This structure, as projected' : 'This structure', color: '#171f69', d: mine, est: true}];
+  seasons.forEach(z => {
+    cols.push({k: 'a' + z.y, label: money ? `${z.y} season, actual` : `${z.y} season`, color: z.color, d: ACT[z.y], actual: true, y: z.y});
+    const t = money ? onSeasonTerms(z.y) : null;
+    if (t) cols.push({k: 't' + z.y, label: `This structure on ${z.y} terms`, color: z.soft, d: t, est: true, terms: true, y: z.y});
+  });
   const val = x => x ? (money ? (x.usad != null ? x.usad : x.net) : x.entries) : null;
-  const totalOf = c => { const t = {meets: 0, entries: 0, athletes: null, gross: 0, host: 0, usad: 0, net: null, part: false};
+  const totalOf = c => { const t = {meets: 0, entries: 0, paid: 0, athletes: null, gross: 0, host: 0, usad: 0, net: null, part: false, own: false};
     STAGES.forEach(s => { const x = c.d[s.k]; if (!x) return;
-      t.meets += x.meets || 0; t.entries += x.entries || 0; t.gross += x.gross || 0; t.host += x.host || 0;
+      t.meets += x.meets || 0; t.entries += x.entries || 0; t.paid += x.paid || 0; t.gross += x.gross || 0; t.host += x.host || 0;
+      if (x.own) t.own = true;
       if (x.usad != null) t.usad += x.usad; else if (x.net != null){ t.usad += x.net; t.part = true; } });
     return t; };
   const rows = STAGES.filter(s => cols.some(c => c.d[s.k])).map(s => ({label: s.label, of: c => c.d[s.k] || null}))
@@ -517,8 +540,13 @@ function compareHtml(P, S){
   const max = r => Math.max(1, ...cols.map(c => val(r.of(c)) || 0));
   const sub = (x, c, r) => {
     if (!x) return 'Not held';
-    if (money) return [x.gross != null ? `Entry income ${usd(x.gross)}` : '', x.host ? `to hosts ${usd(x.host)}` : '',
-                       ((x.usad == null && x.net != null) || x.part) ? 'before the Junior Nationals host payment' : ''].filter(Boolean).join(' &middot; ');
+    if (money){
+      const billed = c.actual ? x.paid : c.terms ? Math.round(x.paid) : null;
+      return [billed ? `${fmt(billed)} entries billed${c.terms ? ', estimated' : ''}` : (c.k === 'now' && x.entries ? `${fmt(Math.round(x.entries))} entries projected` : ''),
+              x.gross != null ? `entry income ${usd(x.gross)}` : '', x.host ? `to hosts ${usd(x.host)}` : '',
+              ((x.usad == null && x.net != null) || x.part) ? 'before the Junior Nationals host payment' : '',
+              (c.terms && x.own && !r.total) ? `no ${c.y} round of this kind, so priced on this structure's own terms` : ''].filter(Boolean).join(' &middot; ');
+    }
     return [x.meets ? `${fmt(x.meets)} ${x.meets === 1 ? 'meet' : 'meets'}` : '',
             (!r.total && x.athletes != null) ? `${fmt(x.athletes)} athletes${c.est ? ', estimated' : ''}` : ''].filter(Boolean).join(' &middot; ');
   };
@@ -526,9 +554,15 @@ function compareHtml(P, S){
     ${cols.map(c => { const x = r.of(c), v = val(x);
       return `<div class="bsr-cmp"><div class="bsr-r wide"><span>${c.label}</span>${bar(v || 0, max(r), c.color)}<b>${v == null ? '&ndash;' : (money ? usd(v) : fmt(v))}</b></div><small>${sub(x, c, r)}</small></div>`; }).join('')}
   </article>`).join('');
-  const note = money
-    ? 'The 2026 and 2025 figures are the totals finance reconciled for every entry billed at those meets; 2026 includes late fees. This structure is projected individual event entries at the entry fee.'
-    : 'The 2026 and 2025 figures are counted from results, individual events only.' + (ACT.counted ? '' : ' Entry and athlete counts for the earlier seasons could not be loaded.');
+  let note;
+  if (money){
+    const pend = S.cmp26 && ACT.pending26;
+    note = 'Actual figures are what finance reconciled for every entry billed at those meets' + (S.cmp26 ? '; 2026 includes late fees' : '') + '. '
+      + `The "on ${seasons.map(z => z.y).join(' terms" and "on ')} terms" ${seasons.length > 1 ? 'lines price' : 'line prices'} this structure's projected entries the way that season was billed and paid out: entries paid for but not competed, the DiveMeets fee and that season's host payments`
+      + (S.cmp26 ? ', with late fees and sheet changes for 2026' : '') + (S.cmp25 ? ', and for 2025 the $85 and $115 entry fees and the 4% card fee USA Diving absorbed' : '')
+      + '. With billing and payout terms the same on both, the gap between a season\'s actual and that line is down to entries: the structure itself, plus synchro and other events outside the qualifying ladder that the season billed and the projection leaves out. The gap between that line and the projection is fees and terms.'
+      + (pend ? ` The 2026 Junior Nationals host payment is not reconciled yet. QuickBooks shows a ${usd(pend.amount)} payment to the host dated ${esc(pend.date)} that finance has not confirmed as the entry fee share; taking it off would leave ${usd(totalOf({d: ACT[2026]}).usad - pend.amount)} for the 2026 season.` : '');
+  } else note = 'The 2026 and 2025 figures are counted from results, individual events only.' + (ACT.counted ? '' : ' Entry and athlete counts for the earlier seasons could not be loaded.');
   return `${title}<div class="bsr-grid steps">${cards}</div><p class="bsr-na" style="margin-top:10px">${note}</p>`;
 }
 
@@ -768,17 +802,27 @@ function choiceOne(S){
 }
 
 /* ---------- Structure and Money ---------- */
-function pathwayData(){
+/* One sentence on how hosts are paid in the projection. */
+function hostNote(h){
+  if (!h) return '';
+  const set = h.stopsSet ? ` ${h.stopsSet === 1 ? 'One meet has' : h.stopsSet + ' meets have'} an agreed figure instead.` : '';
+  const min = h.min ? ` Each host is paid at least ${usd(h.min)}.` : '';
+  if (h.mode === 'rates2025') return `Hosts are paid at the 2025 rates per entry: $${h.rates.Regionals.toFixed(2)} at Regionals, $${h.rates.Zones.toFixed(2)} at Zones and $${h.rates.Nationals.toFixed(2)} at Junior Nationals. Host terms for 2027 are not decided.${min}${set}`;
+  if (h.mode === 'per_entry') return `Hosts are paid $${(+h.per || 0).toFixed(2)} per entry.${min}${set}`;
+  if (h.mode === 'flat') return `Hosts are paid ${usd(+h.flat || 0)} per meet.${min}${set}`;
+  return `Hosts are paid ${Math.round(100 * (+h.share || 0))}% of what each meet takes in after the DiveMeets fee.${min}${set}`;
+}
+function pathwayData(opts){
   const api = B();
   if (!api.reportPathway) return null;
-  const P = api.reportPathway();
+  const P = api.reportPathway(opts);
   if (!P) return null;
   P.levels.forEach(l => {
     l.meets = P.meets.filter(m => m.level === l.L);
     l.entries = sum(l.meets.map(m => m.entries));
     l.cells = {};
     l.meets.forEach(m => m.events.forEach(e => { l.cells[e.cell] = (l.cells[e.cell] || 0) + e.n; }));
-    ['gross', 'levy', 'host', 'usad'].forEach(k => { l[k] = sum(l.meets.map(m => m[k])); });
+    ['gross', 'levy', 'host', 'usad', 'net'].forEach(k => { l[k] = sum(l.meets.map(m => m[k])); });
     l.color = gi => (api.colorAt && api.colorAt(l.L, gi)) || '#171f69';
   });
   P.total = {};
@@ -894,7 +938,7 @@ function pathwayPage(S, levels){
       <div class="bsr-split">${moneyBar(P.total)}<span class="bsr-key"><i style="background:#171f69"></i>USA Diving keeps<i style="background:#009AC7"></i>To hosts<i style="background:#b8c0cc"></i>DiveMeets fee</span></div>
       ${S.layout === 'table' ? pathwayTableHtml(pathwayTable(P, S)) : `<div class="bsr-grid steps">${P.levels.map(l => moneyCard(P, l, S)).join('')}</div>`}
       ${compareHtml(P, S)}`;
-    notes = ['Entry fees only. Membership dues are not included.', 'Event entries are projected for this structure. An entry is one athlete in one event.'];
+    notes = ['Entry fees only. Membership dues are not included.', 'Event entries are projected for this structure. An entry is one athlete in one event.', hostNote(P.hostTerms)].filter(Boolean);
   } else {
     const last = P.levels[P.levels.length - 1];
     totals = `<div class="bsr-total"><b>${fmt(last.entries)}</b><span>Event entries at ${esc(last.name)}</span></div>`

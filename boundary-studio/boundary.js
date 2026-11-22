@@ -132,7 +132,8 @@ const S = {
   fees: null,           // entry fee per level; null means the published ladder
   feesByCell: null,     // per-level fee by age group / platform / non-qualifying, e.g. {0:{A:90,B:90,C:65,D:55,platform:45,nonQualifying:45}}
   hostShare: 0.25,      // share of net entry income going to the host
-  hostMode: 'pct',      // pct | flat | per_entry
+  hostMode: 'rates2025', // rates2025 | pct | flat | per_entry
+  hostSet: false,       // true once someone has chosen host terms for this proposal
   hostFlat: 3000,       // flat fee per meet
   hostPer: 15,          // dollars per entry
   hostMin: 0,           // guaranteed minimum, whichever model is used
@@ -2197,6 +2198,26 @@ function feeForCell(L, cell){
    between. A guaranteed minimum on top of any of them is what actually makes a
    small meet biddable, so it is a separate lever rather than a fourth mode. */
 function meetKey(m){ return m.level + '|' + m.gi; }
+/* What hosts were paid per entry in 2025, by stage (membership-analytics/
+   recaps-2025.json, the entry-fee workbook that ties to the general ledger).
+   The starting point for 2027 until host terms are decided (Mike, 2026-11-22):
+   the 2026 flat split came from Groups C and D not competing at Regionals and
+   is not the model going forward. 2025 had no East / West / Central round, so
+   a stage of that kind uses the Zones rate. */
+const HOST_2025 = {Regionals: 32.50, Zones: 30.00, EWC: 30.00, Nationals: 23.44};
+function host2025Rate(L){ const r = HOST_2025[levelStage(L).stage]; return r != null ? r : HOST_2025.Zones; }
+/* Host terms nobody chose: the old app default (25% of net) and the $25 per
+   entry stand-in the 2027 proposals were saved with. A proposal still holding
+   one of those is priced at the 2025 rates. Its saved copy is not changed, and
+   once someone picks host terms for it (hostSet) those are what it uses. */
+function hostTermsUnset(d){
+  if (!d || d.hostSet) return false;
+  if (+d.hostMin) return false;
+  const m = d.hostMode;
+  return !m || (m === 'pct' && (d.hostShare == null || +d.hostShare === 0.25))
+            || (m === 'per_entry' && +d.hostPer === 25);
+}
+function hostModeOf(d){ return hostTermsUnset(d) ? 'rates2025' : d.hostMode; }
 
 function meetMoney(m){
   const fee = feeFor(m.level);
@@ -2241,7 +2262,7 @@ function meetMoney(m){
   const levy = paidEntries * perEntryCut + otherFees * LEVY_OTHER_FEES_PCT + cardFee;
   const net = gross - levy;
   const mode = (rr && rr.hostPerEntry != null) ? 'recap_per_entry'
-             : (rr && rr.hostPctOfNet != null) ? 'recap_pct' : (S.hostMode || 'pct');
+             : (rr && rr.hostPctOfNet != null) ? 'recap_pct' : (S.hostMode || 'rates2025');
   // A negotiated figure for one meet beats any formula. Hosts are dealt with
   // individually -- a facility with its own board, a city bidding to attract a
   // championship, a small stop that needs underwriting -- and a single rule
@@ -2252,6 +2273,7 @@ function meetMoney(m){
   let host = overridden ? (+ov || 0)
            : mode === 'recap_per_entry' ? paidEntries * rr.hostPerEntry
            : mode === 'recap_pct' ? net * (rr.hostPctOfNet / 100)
+           : mode === 'rates2025' ? m.entries * host2025Rate(m.level)
            : mode === 'flat'      ? (+S.hostFlat || 0)
            : mode === 'per_entry' ? m.entries * (+S.hostPer || 0)
            :                        net * (S.hostShare || 0);
@@ -2869,11 +2891,14 @@ function renderMeetManifest(res){
     <div class="bs-bd-h"><b>Every meet</b>
       <label class="bs-arr">host cut
         <select class="sel bs-mini" id="bsHostMode">
-          <option value="pct"       ${(S.hostMode||'pct')==='pct'?'selected':''}>% of net</option>
+          <option value="rates2025" ${(S.hostMode||'rates2025')==='rates2025'?'selected':''}>2025 rates</option>
+          <option value="pct"       ${S.hostMode==='pct'?'selected':''}>% of net</option>
           <option value="flat"      ${S.hostMode==='flat'?'selected':''}>flat per meet</option>
           <option value="per_entry" ${S.hostMode==='per_entry'?'selected':''}>per entry</option>
         </select>
-        ${(S.hostMode||'pct')==='pct'
+        ${(S.hostMode||'rates2025')==='rates2025'
+          ? `<span class="note">$${HOST_2025.Regionals.toFixed(2)} Regionals, $${HOST_2025.Zones.toFixed(2)} Zones, $${HOST_2025.Nationals.toFixed(2)} Junior Nationals, per entry</span>`
+          : S.hostMode==='pct'
           ? `<input class="bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1"
                value="${Math.round((S.hostShare||0)*100)}">%`
           : S.hostMode==='flat'
@@ -4500,12 +4525,13 @@ function withMap(map, fn){
    seed pool and schedule decisions in force, then put everything back. Used
    by the "as saved" comparison, where each column is a proposal exactly as
    its author left it -- not one thing held still. */
-const SCENARIO_SETTINGS = ['fees','hostMode','hostShare','hostFlat','hostPer','hostMin','hostPer_stop',
+const SCENARIO_SETTINGS = ['fees','hostMode','hostSet','hostShare','hostFlat','hostPer','hostMin','hostPer_stop',
                            'arrival','seedPool','schedPlans','schedRules','tripCost','costEvents','costElastic'];
 function withScenarioSettings(d, fn){
   const snap = {}; SCENARIO_SETTINGS.forEach(k => { snap[k] = S[k]; }); snap._cr = S._cr;
   try {
     SCENARIO_SETTINGS.forEach(k => { if (d[k] !== undefined) S[k] = d[k]; });
+    S.hostSet = !!d.hostSet; S.hostMode = hostModeOf(d);
     if (!S.schedPlans) S.schedPlans = {};
     S._cr = null;
     return fn();
@@ -5838,11 +5864,11 @@ function wirePathway(){
 
   const bind$ = (id, fn) => { const el = document.getElementById(id);
     if (el) el.addEventListener('change', () => { fn(el); S.dirty = true; renderPathway(); }); };
-  bind$('bsHostMode',  el => { S.hostMode = el.value; });
-  bind$('bsHostShare', el => { S.hostShare = Math.max(0, Math.min(100, +el.value||0))/100; });
-  bind$('bsHostFlat',  el => { S.hostFlat = Math.max(0, +el.value||0); });
-  bind$('bsHostPer',   el => { S.hostPer  = Math.max(0, +el.value||0); });
-  bind$('bsHostMin',   el => { S.hostMin  = Math.max(0, +el.value||0); });
+  bind$('bsHostMode', el => { S.hostSet = true; S.hostMode = el.value; });
+  bind$('bsHostShare', el => { S.hostSet = true; S.hostShare = Math.max(0, Math.min(100, +el.value||0))/100; });
+  bind$('bsHostFlat', el => { S.hostSet = true; S.hostFlat = Math.max(0, +el.value||0); });
+  bind$('bsHostPer', el => { S.hostSet = true; S.hostPer  = Math.max(0, +el.value||0); });
+  bind$('bsHostMin', el => { S.hostSet = true; S.hostMin  = Math.max(0, +el.value||0); });
   P.querySelectorAll('button[data-bulklevel]').forEach(el => el.addEventListener('click', e => {
     const level = +e.target.dataset.bulklevel;
     const input = P.querySelector(`input[data-bulklevelin="${level}"]`);
@@ -6672,7 +6698,7 @@ function newScenarioId(){
 function scenarioPayload(){
   const saveLevels = S._off25 ? S._off25.levels : S.levels, saveRouting = S._off25 ? S._off25.routing : S.routing;
   return {regions:S.regions, assign:S.assign, year:S.year, routing:saveRouting,
-    fees:S.fees, feesByCell:S.feesByCell, hostMode:S.hostMode, hostShare:S.hostShare, hostFlat:S.hostFlat,
+    fees:S.fees, feesByCell:S.feesByCell, hostMode:S.hostMode, hostSet:!!S.hostSet, hostShare:S.hostShare, hostFlat:S.hostFlat,
     hostPer:S.hostPer, hostMin:S.hostMin, hostPer_stop:S.hostPer_stop,
     tripCost:S.tripCost, costEvents:S.costEvents, costElastic:S.costElastic,
     stamps:dataStamps(), frozen:S.frozen,
@@ -6852,7 +6878,7 @@ function applyScenarioData(id, row, d){
     S.schedStop = null;
     S.fees = d.fees || null;
     S.feesByCell = d.feesByCell || null;
-    if (d.hostMode)  S.hostMode  = d.hostMode;
+    S.hostSet = !!d.hostSet; S.hostMode = hostModeOf(d);
     if (d.hostShare != null) S.hostShare = d.hostShare;
     if (d.hostFlat  != null) S.hostFlat  = d.hostFlat;
     if (d.hostPer   != null) S.hostPer   = d.hostPer;
@@ -8527,16 +8553,27 @@ window.BoundaryAPI = {
      with the tabs. Null until the pathway has been worked out. */
   pathwayReady: () => !!(QR() && S.flow),
   ensurePathway: () => refreshFlow(),
-  reportPathway: () => {
+  /* opts.recapRates: a completed season's reconciled rates by stage (the
+     byStage block of membership-analytics/recaps-2025.json or recaps-2026.json).
+     With it the same projected entries are priced the way that season was
+     billed and paid out, for a like for like line beside the season's actuals.
+     In force for this call only. */
+  reportPathway: (opts) => {
     if (!QR() || !S.flow) return null;
     syncRouting();
     const res = projectPathway();
     if (!res) return null;
     const RN = QR().ROUND_NAME;
-    const meets = meetManifest(res).map(m => { const $ = meetMoney(m);
-      return {level: m.level, gi: m.gi, name: m.name, entries: m.entries,
-              events: (m.events || []).map(e => ({cell: e.cell, n: e.n})),
-              gross: $.gross, levy: $.levy, host: $.host, usad: $.usad}; });
+    const keepRates = S.recapRates;
+    let meets;
+    try {
+      S.recapRates = (opts && opts.recapRates) || null;
+      meets = meetManifest(res).map(m => { const $ = meetMoney(m);
+        return {level: m.level, gi: m.gi, name: m.name, entries: m.entries,
+                events: (m.events || []).map(e => ({cell: e.cell, n: e.n})),
+                gross: $.gross, levy: $.levy, host: $.host, usad: $.usad,
+                net: $.net, paid: $.paidEntries, onSeasonRates: $.basis !== 'model'}; });
+    } finally { S.recapRates = keepRates; }
     const levels = S.routing.map((lvl, L) => {
       const rounds = QR().roundsOf(lvl);
       let divers = null;
@@ -8557,7 +8594,10 @@ window.BoundaryAPI = {
       return {L, name: tierName(L), stops: groupCountAt(L), rounds: rounds.map(r => ({key: r.key, name: RN[r.key] || r.key})),
               routes, divers, fee: feeFor(L), stage: levelStage(L).stage};
     });
-    return {levels, meets, finalName: S.finalName};
+    return {levels, meets, finalName: S.finalName,
+            hostTerms: {mode: S.hostMode || 'rates2025', rates: HOST_2025, share: S.hostShare, per: S.hostPer,
+                        flat: S.hostFlat, min: +S.hostMin || 0,
+                        stopsSet: S.hostPer_stop ? Object.keys(S.hostPer_stop).length : 0}};
   },
   onReports: () => atlasOn() && S.panelMode === 'report',
   regionZips, groupColor,
@@ -10556,10 +10596,11 @@ function atlasMoneyHtml(res){
   const feeRows = levels.map(L => `<div class="atl-fees"><span style="justify-content:flex-start">${esc(a.tiers[L].name)}</span>
       <span>$<input class="atl-in mono bs-rt-in" type="number" min="0" step="5" data-fee="${L}" value="${feeFor(+L)}"></span>
       <span class="mono c-muted" title="What the hosts at this tier are paid under the model at left">${usd(a.tiers[L].host)}</span></div>`).join('');
-  const mode = S.hostMode || 'pct';
+  const mode = S.hostMode || 'rates2025';
   const hostCtl = `<div class="atl-host"><label>Host cut <select class="atl-sel" id="bsHostMode">
-        <option value="pct" ${mode==='pct'?'selected':''}>% of net</option><option value="flat" ${mode==='flat'?'selected':''}>flat per meet</option><option value="per_entry" ${mode==='per_entry'?'selected':''}>per entry</option></select></label>
-      ${mode==='pct' ? `<label><input class="atl-in mono bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1" value="${Math.round((S.hostShare||0)*100)}">%</label>`
+        <option value="rates2025" ${mode==='rates2025'?'selected':''}>2025 rates</option><option value="pct" ${mode==='pct'?'selected':''}>% of net</option><option value="flat" ${mode==='flat'?'selected':''}>flat per meet</option><option value="per_entry" ${mode==='per_entry'?'selected':''}>per entry</option></select></label>
+      ${mode==='rates2025' ? `<span class="c-muted">$${HOST_2025.Regionals.toFixed(2)} Regionals, $${HOST_2025.Zones.toFixed(2)} Zones, $${HOST_2025.Nationals.toFixed(2)} Junior Nationals, per entry</span>`
+       : mode==='pct' ? `<label><input class="atl-in mono bs-rt-in" id="bsHostShare" type="number" min="0" max="100" step="1" value="${Math.round((S.hostShare||0)*100)}">%</label>`
        : mode==='flat' ? `<label>$<input class="atl-in mono bs-rt-in" id="bsHostFlat" type="number" min="0" step="100" value="${+S.hostFlat||0}"></label>`
        : `<label>$<input class="atl-in mono bs-rt-in" id="bsHostPer" type="number" min="0" step="1" value="${+S.hostPer||0}">/entry</label>`}
       <label>minimum $<input class="atl-in mono bs-rt-in" id="bsHostMin" type="number" min="0" step="100" value="${+S.hostMin||0}"></label></div>`;
