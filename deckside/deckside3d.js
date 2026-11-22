@@ -46,7 +46,7 @@ const DISPLAYS = [
   { key: 'ctmw', name: 'Curved Tension Portable Media Wall', size: '19.5 x 7.5 ft', own: 1, kind: 'wall', w: r2(19.5 * FT), h: r2(7.5 * FT), plan: 'arc', d: 0.9 },
   { key: 's164', name: 'Straight Tension Backdrop, 16.4 ft', size: '16.4 x 7.5 ft', own: 1, kind: 'flat', w: r2(16.4 * FT), h: r2(7.5 * FT), skin: SKIN26 },
   { key: 's195', name: 'Straight Tension Backdrop, 19.5 ft', size: '19.5 x 7.5 ft', own: 1, kind: 'flat', w: r2(19.5 * FT), h: r2(7.5 * FT), skin: SKIN26 },
-  { key: 'sqarch', name: 'Square Fabric Arch Entrance', size: '7.87 ft wide, 7.54 ft tall, 3 ft deep', own: 3, kind: 'arch', w: r2(7.87 * FT), h: r2(7.54 * FT), depth: 0.95, leg: 0.5, head: 0.45 },
+  { key: 'sqarch', name: 'Square Fabric Arch Entrance', size: '7.87 ft wide, 7.54 ft tall, 3 ft deep', own: 3, kind: 'arch', w: r2(7.87 * FT), h: r2(7.54 * FT), depth: 0.95, leg: 0.5, head: 0.45, tunnel: 0.6 },
   { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6, skin: SKIN26 },
   { key: 'popup', name: 'Horizontal Pop-Up Banner', size: '4 x 2.3 ft', own: 5, kind: 'aframe', w: r2(4 * FT), h: r2(2.3 * FT) },
   { key: 'fabric', name: 'Fabric banner print', size: '45 x 7 ft', own: 3, kind: 'flat', w: r2(45 * FT), h: r2(7 * FT) },
@@ -282,6 +282,38 @@ function archTex(s, img, leg, head, headOnly) {
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return { tex: t, bg: new THREE.Color(bg) };
 }
+// The Square Fabric Arch is a 3 ft deep walk-through: a header across the top and a side panel down each side.
+// Its print file is one long strip (leg, header, leg). A strip is cut into those three parts; a logo goes on the
+// header and repeats down the side panels, the way the 2025 skin does.
+function tunnelTex(s, img, head, dp, labelCol) {
+  const k = 300, iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k); return c; };
+  const hc = mk(s.w, head), a = mk(dp, s.h), b = mk(dp, s.h), hg = hc.getContext('2d'), ag = a.getContext('2d'), bgx = b.getContext('2d'); let bg = '#ffffff';
+  const strip = !labelCol && ih / iw > 4;
+  if (labelCol) { bg = '#fbfcfe'; hg.drawImage(img, 0, 0, hc.width, hc.height); [ag, bgx].forEach((g) => { const c = g.canvas, lw = 14; g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height); g.lineWidth = lw; g.strokeStyle = labelCol; g.strokeRect(lw / 2, lw / 2, c.width - lw, c.height - lw); }); }
+  else if (strip) {
+    const f = s.h / (2 * s.h + s.w), legPx = ih * f, midPx = ih - 2 * legPx;
+    ag.drawImage(img, 0, ih - legPx, iw, legPx, 0, 0, a.width, a.height);
+    bgx.save(); bgx.translate(b.width, b.height); bgx.rotate(Math.PI); bgx.drawImage(img, 0, 0, iw, legPx, 0, 0, b.width, b.height); bgx.restore();
+    // the header runs up the strip; turn it upright, keep the logo's shape and crop to the header band
+    hg.fillStyle = '#e4e5e9'; try { const t = document.createElement('canvas'); t.width = t.height = 1; const tg = t.getContext('2d'); tg.drawImage(img, 2, ih / 2, 2, 2, 0, 0, 1, 1); const d = tg.getImageData(0, 0, 1, 1).data; hg.fillStyle = bg = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')'; } catch (e) { /* grey */ }
+    hg.fillRect(0, 0, hc.width, hc.height);
+    const sc = Math.min(hc.width / midPx, hc.height / iw) * 1.0, sc2 = Math.max(sc, hc.width / midPx * 0.86);
+    hg.save(); hg.translate(hc.width / 2, hc.height / 2); hg.rotate(Math.PI / 2); hg.drawImage(img, 0, legPx, iw, midPx, -iw * sc2 / 2, -midPx * sc2 / 2, iw * sc2, midPx * sc2); hg.restore();
+  } else {
+    try { const t = document.createElement('canvas'); t.width = 4; t.height = 1; const tg = t.getContext('2d'), e = Math.max(1, Math.min(6, iw >> 4, ih >> 4));
+      [[0, 0], [iw - e, 0], [0, ih - e], [iw - e, ih - e]].forEach((q, i) => tg.drawImage(img, q[0], q[1], e, e, i, 0, 1, 1));
+      const d = tg.getImageData(0, 0, 4, 1).data, px = [0, 1, 2, 3].map((i) => [d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]]);
+      if (px.every((q) => q[3] > 240 && Math.abs(q[0] - px[0][0]) + Math.abs(q[1] - px[0][1]) + Math.abs(q[2] - px[0][2]) < 36)) bg = 'rgb(' + [0, 1, 2].map((n) => Math.round(px.reduce((m, q) => m + q[n], 0) / 4)).join(',') + ')'; } catch (e) { /* white */ }
+    hg.fillStyle = bg; hg.fillRect(0, 0, hc.width, hc.height);
+    const sc = Math.min(hc.width * 0.8 / iw, hc.height * 0.76 / ih); hg.drawImage(img, (hc.width - iw * sc) / 2, (hc.height - ih * sc) / 2, iw * sc, ih * sc);
+    [ag, bgx].forEach((g) => { const c = g.canvas; g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+      const lw = Math.min(c.width * 0.4, c.width * 0.2 * iw / ih), lh = lw * ih / iw, rowH = Math.max(lh * 1.7, c.width * 0.2), colW = c.width * 0.5;
+      for (let r = 0, y = rowH * 0.5; y < c.height + rowH; r++, y += rowH) for (let x = (r % 2 ? 0 : colW / 2); x < c.width + colW; x += colW) g.drawImage(img, x - lw / 2, y - lh / 2, lw, lh); });
+  }
+  const T = (c) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+  return { head: T(hc), a: T(a), b: T(b), bg: new THREE.Color(bg), strip };
+}
 async function buildSigns() {
   const old = signs; signs = new THREE.Group(); signs.userData.trash = []; scene.add(signs);
   if (old) { scene.remove(old); (old.userData.trash || []).forEach((t) => t.dispose()); old.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); }
@@ -309,6 +341,16 @@ async function buildSigns() {
       const loop = (color, lift) => { const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(sh.edge), new THREE.LineBasicMaterial({ color })); l.scale.setScalar(lift); m.add(l); };
       if (art && showLabels) loop(col, 1.005); if (s.id === selId) loop(0x009ac7, 1.03);
       grp.add(m);
+    } else if (s.kind === 'arch' && (displayOf(s) || {}).tunnel) {
+      const head = Math.min(displayOf(s).tunnel, s.h / 2), dp = s.depth || 0.95, th = 0.05;
+      let lt = null; const tt = art ? tunnelTex(s, art.image, head, dp) : showLabels ? tunnelTex(s, (lt = labelTex({ w: s.w, h: head, label: s.label, name: s.name }, a)).image, head, dp, '#' + col.getHexString()) : null; if (lt) lt.dispose();
+      if (tt) trash.push(tt.head, tt.a, tt.b);
+      const sideMat = tt ? new THREE.MeshStandardMaterial({ color: tt.bg, roughness: 0.9, emissive: tt.bg, emissiveIntensity: 0.3 }) : edge, fm = (t) => t ? faceMat(t) : edge;
+      const pa = tag(new THREE.Mesh(new THREE.BoxGeometry(th, s.h, dp), [fm(tt && tt.a), fm(tt && tt.a), sideMat, sideMat, sideMat, sideMat])); pa.position.x = -(s.w / 2 - th / 2);
+      const pb = tag(new THREE.Mesh(new THREE.BoxGeometry(th, s.h, dp), [fm(tt && tt.b), fm(tt && tt.b), sideMat, sideMat, sideMat, sideMat])); pb.position.x = s.w / 2 - th / 2;
+      grp.add(pa, pb);
+      [dp / 2 - th / 2, -(dp / 2 - th / 2)].forEach((z) => { const hd = tag(new THREE.Mesh(new THREE.BoxGeometry(s.w, head, th), [sideMat, sideMat, sideMat, sideMat, fm(tt && tt.head), fm(tt && tt.head)])); hd.position.set(0, s.h / 2 - head / 2, z); grp.add(hd); });
+      const hitBox = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, dp), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); hitBox.userData.sid = s.id; marks(hitBox, s.w, s.h, dp); grp.add(hitBox);
     } else if (s.kind === 'arch') {
       const leg = Math.min(s.leg || 0.5, s.w / 3), head = Math.min(s.head || 0.45, s.h / 2), dp = s.depth || 0.3, lu = leg / s.w, hv = head / s.h;
       // Artwork is laid out for the arch, not stretched over the opening.
@@ -362,7 +404,7 @@ function renderPanel() {
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
     D.artChoicesHtml(fid) +
-    (s.kind === 'arch' && fid ? '<label>Artwork layout<select id="m3ArchFit">' + [['', 'Automatic'], ['logo', 'Logo on the header and each leg'], ['skin', 'One design across the whole arch']].map((o) => '<option value="' + o[0] + '"' + ((s.archFit || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' : '') +
+    (s.kind === 'arch' && fid && !(disp && disp.tunnel) ? '<label>Artwork layout<select id="m3ArchFit">' + [['', 'Automatic'], ['logo', 'Logo on the header and each leg'], ['skin', 'One design across the whole arch']].map((o) => '<option value="' + o[0] + '"' + ((s.archFit || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' : '') +
     '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
     (fid && !(disp && disp.own != null) ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button>' : '') + (fid ? '<button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div><p id="m3FitNote" hidden></p>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
@@ -371,6 +413,7 @@ function renderPanel() {
   if (fid) D.fileUrl(fid).then((u) => { const im = $('m3Prev'); if (im && u) im.src = u; });
   if (fid) D.getImg(fid).then((im) => {
     const n = $('m3FitNote'); if (!n || !im || selId !== s.id) return;
+    if (s.kind === 'arch' && disp && disp.tunnel) { n.hidden = false; n.textContent = im.naturalHeight / im.naturalWidth > 4 ? 'Read as the Backdrop Source print strip: one side panel, the header, then the other side panel.' : 'Shown on the header and repeated down both side panels, like the 2025 skin. Drop in the Backdrop Source print strip to see it exactly as printed.'; return; }
     if (s.kind === 'arch') { n.hidden = false; n.textContent = archLayout(s, im) === 'skin' ? 'Used as one design across the whole arch. The opening cuts out the middle.' : 'Shown whole on the header and on each leg, on its own background colour. Nothing is stretched or cut by the opening.'; return; }
     const sa = s.w / s.h, ia = im.naturalWidth / im.naturalHeight; if (Math.abs(sa - ia) / sa < 0.04) return;
     n.hidden = false; n.textContent = 'This sign is ' + sa.toFixed(2) + ' to 1 and the artwork is ' + ia.toFixed(2) + ' to 1, so it is ' + (ia > sa ? 'squeezed' : 'stretched') + ' sideways here. For print, design it at ' + (s.w / FT).toFixed(1) + ' x ' + (s.h / FT).toFixed(1) + ' ft.';
