@@ -91,3 +91,6 @@ select.st-Sold { color: var(--brand-blue); font-weight: 700; } select.st-Comped,
   .dk .app-topbar { overflow-x: auto; }
   .dk-evt select { max-width: 110px; } #eventMenuBtn { padding: 0 8px; }
 }
+
+body.dk-dragging .dk-main { outline: 3px dashed var(--brand-pool); outline-offset: -6px; border-radius: var(--radius-lg); }
+body.dk-dragging .dk-stage { outline: 3px dashed var(--brand-sky); outline-offset: -8px; }

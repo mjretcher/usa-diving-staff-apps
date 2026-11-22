@@ -196,9 +196,43 @@
     if (!imgCache[id]) imgCache[id] = fileUrl(id).then(function (d) { return d ? loadImage(d) : null; }).catch(function () { return null; });
     return imgCache[id];
   }
+  var heicLib = null;
+  function loadHeic() {
+    if (!heicLib) heicLib = new Promise(function (res, rej) { var sc = document.createElement('script'); sc.src = 'vendor/heic2any.min.js?v=0.0.4'; sc.onload = function () { res(window.heic2any); }; sc.onerror = rej; document.head.appendChild(sc); });
+    return heicLib;
+  }
+  function isHeic(f) { return /hei[cf]/i.test(f.type || '') || /\.hei[cf]$/i.test(f.name || ''); }
+  function isVideo(f) { return /^video\//.test(f.type || '') || /\.(mov|mp4|m4v)$/i.test(f.name || ''); }
+  function looksLikePicture(f) { return /^image\//.test(f.type || '') || isHeic(f) || (!f.type && !isVideo(f)); }
+  // Opens a picture file. iPhone HEIC photos are converted to JPEG when the browser cannot read them itself.
+  async function decodeFile(file) {
+    var url = URL.createObjectURL(file);
+    try { return await loadImage(url); }
+    catch (e) {
+      if (!isHeic(file) && file.type) throw e;
+      var conv = await loadHeic(), out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      var u2 = URL.createObjectURL(Array.isArray(out) ? out[0] : out);
+      try { return await loadImage(u2); } finally { URL.revokeObjectURL(u2); }
+    } finally { URL.revokeObjectURL(url); }
+  }
+  // Everything a drop or paste can carry: real files, or a picture dragged out of a web page or app as a link.
+  async function filesFrom(dt) {
+    if (!dt) return [];
+    var out = Array.prototype.slice.call(dt.files || []);
+    if (!out.length && dt.items) for (var i = 0; i < dt.items.length; i++) { if (dt.items[i].kind === 'file') { var f = dt.items[i].getAsFile(); if (f) out.push(f); } }
+    if (!out.length && dt.getData) {
+      var src = '', html = dt.getData('text/html') || '', m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (m) src = m[1].replace(/&amp;/g, '&'); else src = (dt.getData('text/uri-list') || '').split(/\r?\n/).filter(function (l) { return l && l[0] !== '#'; })[0] || '';
+      if (src) {
+        try { var r = await fetch(src), b = await r.blob(); if (/^image\//.test(b.type)) out.push(new File([b], (src.split('/').pop() || 'picture').split('?')[0], { type: b.type })); }
+        catch (e) { toast('That picture came as a web link the browser is not allowed to copy. Save it first, or copy and paste it.', 'warn'); }
+      }
+    }
+    return out;
+  }
+
   async function importImage(file, maxEdge) {
-    var url = URL.createObjectURL(file), img;
-    try { img = await loadImage(url); } finally { URL.revokeObjectURL(url); }
+    var img = await decodeFile(file);
     var s = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
     var w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
     var c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -567,7 +601,7 @@
     box.innerHTML = '<h3>Zone</h3>' +
       '<label>Name on the photo<input id="zLabel" value="' + esc(z.label || '') + '" placeholder="Uses the asset name if blank"></label>' +
       '<label>Inventory asset<select id="zAsset"><option value="">Not linked</option>' + e.assets.map(function (a) { return '<option value="' + a.id + '"' + (a.id === z.assetId ? ' selected' : '') + '>' + esc(a.name) + ' (' + a.status + ')</option>'; }).join('') + '</select></label>' +
-      '<label>Sponsor artwork for this event<div class="dk-drop" id="crDrop">' + (cr ? '<img id="crPrev" alt="">Click or drop to replace' : 'Drop a JPEG or PNG here, or click to choose') + '</div><input type="file" id="crInput" accept="image/*" hidden></label>' +
+      '<label>Sponsor artwork for this event<div class="dk-drop" id="crDrop">' + (cr ? '<img id="crPrev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="crInput" accept="image/*" hidden></label>' +
       (cr ? '<div class="row"><button class="dk-btn small" id="crClear">Remove artwork</button></div>' : '') +
       '<label>Things in front of this zone</label><p>Outline a board, railing or person so it stays in front of the artwork. Click around it, then click the first point to finish.</p>' +
       '<div class="row">' + (ui.maskDraft ? '<button class="dk-btn small primary" id="maskDone">Finish outline</button><button class="dk-btn small" id="maskCancel">Cancel</button>' : '<button class="dk-btn small" id="maskAdd">Outline something in front</button>') +
@@ -583,9 +617,10 @@
   async function addPhotos(fileList) {
     var files = Array.prototype.slice.call(fileList), v = venue(), added = 0;
     for (var i = 0; i < files.length; i++) {
-      if (!/^image\//.test(files[i].type)) continue;
+      if (isVideo(files[i])) { toast('Videos cannot be added. Use a still photo or a screenshot from the video.', 'warn'); continue; }
+      if (!looksLikePicture(files[i])) continue;
       try { var f = await importImage(files[i], 2000); v.photos.push({ id: uid('p'), name: f.name, fileId: f.id, w: f.w, h: f.h, zones: [] }); ui.photoId = v.photos[v.photos.length - 1].id; added++; }
-      catch (e) { toast(files[i].name + ' could not be read. iPhone HEIC photos need to be saved as JPEG first.', 'error'); }
+      catch (e) { toast((files[i].name || 'That file') + ' could not be read as a picture.', 'error'); }
     }
     if (added) { ui.zoneId = null; changed(); await renderPhotoList(); renderZonePanel(); draw(); }
   }
@@ -681,26 +716,38 @@
     var cv = $('cv');
     cv.addEventListener('pointerdown', onDown); cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp); cv.addEventListener('pointercancel', onUp);
-    var stage = $('stage');
-    stage.addEventListener('dragover', function (e) { e.preventDefault(); stage.classList.add('drop'); });
-    stage.addEventListener('dragleave', function () { stage.classList.remove('drop'); });
-    stage.addEventListener('drop', function (e) {
-      e.preventDefault(); stage.classList.remove('drop');
-      var files = e.dataTransfer.files; if (!files.length) return;
+    // Drop pictures anywhere on the page (from Messages, Photos, the desktop or a web page), or paste one.
+    var stage = $('stage'), dragDepth = 0;
+    function isFileDrag(e) { var t = e.dataTransfer && e.dataTransfer.types; if (!t) return false; for (var k = 0; k < t.length; k++) if (t[k] === 'Files' || t[k] === 'text/html' || t[k] === 'text/uri-list') return true; return false; }
+    window.addEventListener('dragenter', function (e) { if (!isFileDrag(e)) return; dragDepth++; document.body.classList.add('dk-dragging'); });
+    window.addEventListener('dragleave', function () { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove('dk-dragging'); });
+    window.addEventListener('dragover', function (e) { if (isFileDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+    window.addEventListener('drop', async function (e) {
+      if (!isFileDrag(e)) return;
+      e.preventDefault(); dragDepth = 0; document.body.classList.remove('dk-dragging');
+      var onArt = e.target.closest && e.target.closest('#crDrop'), onCanvas = e.target === $('cv'), pt = onCanvas ? evtPt(e) : null;
+      var files = await filesFrom(e.dataTransfer); if (!files.length) return;
+      if (ui.tab !== 'photos') showTab('photos');
       var p = photo();
-      if (p && $('cv').offsetParent) {
-        var pt = evtPt(e), hit = null;
-        for (var k = p.zones.length - 1; k >= 0; k--) if (inPoly(pt, p.zones[k].quad)) { hit = p.zones[k]; break; }
-        if (hit) { ui.zoneId = hit.id; setCreative(files[0]); return; }
+      if (onArt && zone()) { setCreative(files[0]); return; }
+      if (p && pt) {
+        for (var k = p.zones.length - 1; k >= 0; k--) if (inPoly(pt, p.zones[k].quad)) { ui.zoneId = p.zones[k].id; setCreative(files[0]); return; }
       }
       addPhotos(files);
+    });
+    document.addEventListener('paste', async function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      var files = (await filesFrom(e.clipboardData)).filter(looksLikePicture); if (!files.length) return;
+      e.preventDefault();
+      if (ui.tab !== 'photos') showTab('photos');
+      if (zone()) { setCreative(files[0]); toast('Pasted as the artwork for the selected zone.'); }
+      else addPhotos(files);
     });
     $('zonePanel').addEventListener('click', function (e) {
       var t = e.target, zb = t.closest('[data-zone]');
       if (zb) { ui.zoneId = zb.dataset.zone; renderZonePanel(); draw(); return; }
       var z = zone(); if (!z) return;
-      if (t.closest('#crDrop')) { $('crInput').click(); }
-      else if (t.id === 'crClear') { delete ev().zoneCreative[z.id]; changed(); renderZonePanel(); draw(); }
+      if (t.id === 'crClear') { delete ev().zoneCreative[z.id]; changed(); renderZonePanel(); draw(); }
       else if (t.id === 'maskAdd') { ui.maskDraft = []; renderZonePanel(); }
       else if (t.id === 'maskDone') { finishMask(); }
       else if (t.id === 'maskCancel') { ui.maskDraft = null; renderZonePanel(); draw(); }
@@ -714,8 +761,6 @@
       else if (e.target.id === 'zAsset') { z.assetId = e.target.value; changed(); draw(); }
       else if (e.target.id === 'crInput') { setCreative(e.target.files[0]); }
     });
-    $('zonePanel').addEventListener('dragover', function (e) { var d = e.target.closest('#crDrop'); if (d) { e.preventDefault(); d.classList.add('drop'); } });
-    $('zonePanel').addEventListener('drop', function (e) { var d = e.target.closest('#crDrop'); if (d) { e.preventDefault(); setCreative(e.dataTransfer.files[0]); } });
     window.addEventListener('resize', function () { if (ui.tab === 'photos') draw(); });
     window.addEventListener('beforeunload', function () { if (cloud.timer && cloud.ready && !cloud.conflict) push(); });
   }

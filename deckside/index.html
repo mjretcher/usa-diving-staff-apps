@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/design.css?v=202611220251">
 <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
-<link rel="stylesheet" href="deckside.css?v=202611220251">
+<link rel="stylesheet" href="deckside.css?v=202611221639">
 </head>
 <body class="dk">
 <header class="app-topbar">
@@ -50,8 +50,8 @@
       <aside class="dk-rail">
         <div class="dk-rail-head"><span id="venueName"></span></div>
         <div id="photoList" class="dk-photo-list"></div>
-        <label class="dk-btn primary dk-file">Add photos<input type="file" id="photoInput" accept="image/*" multiple hidden></label>
-        <p class="dk-hint">Photos are stored in the staff database, not on the public site.</p>
+        <label class="dk-btn primary dk-file">Add photos<input type="file" id="photoInput" accept="image/*,.heic,.heif" multiple hidden></label>
+        <p class="dk-hint">Drag pictures straight in from Messages, Photos, your desktop or a web page, or copy one and paste it. iPhone photos are fine. They are stored in the staff database, not on the public site.</p>
       </aside>
       <div class="dk-stage-wrap">
         <div class="dk-stage-bar">
@@ -61,7 +61,7 @@
           <button class="dk-btn" id="exportBtn">Download picture</button>
           <button class="dk-btn danger" id="delPhotoBtn">Remove photo</button>
         </div>
-        <div class="dk-stage" id="stage"><canvas id="cv"></canvas><div class="dk-empty" id="stageEmpty">Add a venue photo to start drawing zones.</div></div>
+        <div class="dk-stage" id="stage"><canvas id="cv"></canvas><div class="dk-empty" id="stageEmpty">Drag a venue photo in from Messages, Photos or your desktop, or paste one.</div></div>
       </div>
       <aside class="dk-side" id="zonePanel"></aside>
     </div>
@@ -84,6 +84,6 @@
 <script src="../shared/neon-client.js?v=202611220251"></script>
 <script src="../shared/usad-toast.js?v=202611220251"></script>
 <script src="../shared/usad-modal.js?v=202611220251"></script>
-<script src="deckside.js?v=202611220251"></script>
+<script src="deckside.js?v=202611221639"></script>
 </body>
 </html>
