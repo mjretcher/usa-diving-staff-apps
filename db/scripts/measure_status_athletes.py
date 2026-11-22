@@ -7,7 +7,8 @@ from. Counts only: no athlete is named in the output.
 For each season (2024 on) and meet (Regionals, Zones) and each group:
   athletes         unique athletes in the group who competed at that meet level
   entries          their event entries (individual events, Groups A-D, 1m/3m/platform)
-  nd_entries       of those, entries the results scored non-displacing (place 127)
+  nd_entries       of those, entries the results scored non-displacing (no numbered
+                   place, or the 127 sentinel)
   competing_away   athletes who competed somewhere other than their club's home
   by_age, by_gender, by_area (based there / competed there / left / arrived), flows
 
@@ -48,7 +49,7 @@ SELECT year, stage,
             ELSE NULLIF(btrim(zone::text), '') END AS where_competed,
        upper(right(btrim(COALESCE(age_group,'')), 1)) AS age_letter,
        upper(left(btrim(COALESCE(gender,'')), 1)) AS gender_letter,
-       btrim(place::text) AS place
+       place::numeric AS place
 FROM core.event_results
 WHERE is_junior_circuit = TRUE AND NOT is_synchro
   AND year >= 2024
@@ -92,7 +93,8 @@ def main():
                                                "gender": None, "entries": 0, "nd": 0})
         d["where"][where] += 1
         d["entries"] += 1
-        if place == "127":
+        # Non-displacing as the pipeline reads it: no numbered place, or the 127 sentinel.
+        if place is None or float(place) == 127:
             d["nd"] += 1
         if age in ("A", "B", "C", "D") and not d["age"]:
             d["age"] = age
