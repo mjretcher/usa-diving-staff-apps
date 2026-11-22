@@ -39,27 +39,33 @@ function defaultSigns() {
 }
 /* ── displays USA Diving owns (Backdrop Source orders, Nov 2025 to Nov 2026) ── */
 const FT = 0.3048, r2 = (n) => Math.round(n * 100) / 100;
+const SKIN26 = 'A new double sided skin was ordered for the 2026 Winter Nationals.';
 const DISPLAYS = [
-  { key: 'glide', name: 'Glide Wave Exhibition Display', size: '16 x 8 ft', own: 1, kind: 'wall', w: r2(16 * FT), h: r2(8 * FT), plan: 'swave', d: 0.45 },
-  { key: 'cwave', name: 'Curved Wave Trade Show Display', size: '15 ft wide, 6 to 7.4 ft tall', own: 1, kind: 'wall', w: r2(15 * FT), h: r2(7.4 * FT), plan: 'arc', d: 0.5, low: 6 / 7.4 },
+  { key: 'glide', name: 'Glide Wave Exhibition Display', size: '16 x 8 ft', own: 1, kind: 'wall', w: r2(16 * FT), h: r2(8 * FT), plan: 'swave', d: 0.45, skin: SKIN26 },
+  { key: 'cwave', name: 'Curved Wave Trade Show Display', size: '15 ft wide, 6 to 7.4 ft tall', own: 1, kind: 'wall', w: r2(15 * FT), h: r2(7.4 * FT), plan: 'arc', d: 0.5, low: 6 / 7.4, skin: SKIN26 },
   { key: 'ctmw', name: 'Curved Tension Portable Media Wall', size: '19.5 x 7.5 ft', own: 1, kind: 'wall', w: r2(19.5 * FT), h: r2(7.5 * FT), plan: 'arc', d: 0.9 },
-  { key: 's164', name: 'Straight Tension Backdrop, 16.4 ft', size: '16.4 x 7.5 ft', own: 1, kind: 'flat', w: r2(16.4 * FT), h: r2(7.5 * FT) },
-  { key: 's195', name: 'Straight Tension Backdrop, 19.5 ft', size: '19.5 x 7.5 ft', own: 1, kind: 'flat', w: r2(19.5 * FT), h: r2(7.5 * FT) },
+  { key: 's164', name: 'Straight Tension Backdrop, 16.4 ft', size: '16.4 x 7.5 ft', own: 1, kind: 'flat', w: r2(16.4 * FT), h: r2(7.5 * FT), skin: SKIN26 },
+  { key: 's195', name: 'Straight Tension Backdrop, 19.5 ft', size: '19.5 x 7.5 ft', own: 1, kind: 'flat', w: r2(19.5 * FT), h: r2(7.5 * FT), skin: SKIN26 },
   { key: 'sqarch', name: 'Square Fabric Arch Entrance', size: '7.87 ft wide, 7.54 ft tall, 3 ft deep', own: 3, kind: 'arch', w: r2(7.87 * FT), h: r2(7.54 * FT), depth: 0.95, leg: 0.5, head: 0.45 },
-  { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6 },
+  { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6, skin: SKIN26 },
   { key: 'popup', name: 'Horizontal Pop-Up Banner', size: '4 x 2.3 ft', own: 5, kind: 'aframe', w: r2(4 * FT), h: r2(2.3 * FT) },
   { key: 'fabric', name: 'Fabric banner print', size: '45 x 7 ft', own: 3, kind: 'flat', w: r2(45 * FT), h: r2(7 * FT) },
-  { key: 'aframe', name: 'Deck A-frame sign', size: 'about 6 x 2.6 ft', own: null, kind: 'aframe', w: 1.9, h: 0.8 },
+  { key: 'aframe26', name: 'Deck A-frame sign, 2026 order', size: '6.56 x 3.28 ft', own: 21, kind: 'aframe', w: 2, h: 1, skin: 'Bought new from BannerBuzz for the 2026 Winter Nationals, frames and fabric graphics.' },
+  { key: 'aframe', name: 'Deck A-frame sign, earlier size', size: 'about 6 x 2.6 ft', own: null, kind: 'aframe', w: 1.9, h: 0.8 },
   { key: 'flat', name: 'Flat sign, any size', size: 'set your own', own: null, kind: 'flat', w: 2, h: 1 }
 ];
 const displayOf = (s) => DISPLAYS.filter((d) => d.key === s.preset)[0] || null;
 function applyDisplay(s, key) { const d = DISPLAYS.filter((x) => x.key === key)[0]; if (!d) return s; s.preset = d.key; s.kind = d.kind; s.w = d.w; s.h = d.h; ['plan', 'd', 'low', 'depth', 'leg', 'head'].forEach((k) => { if (d[k] != null) s[k] = d[k]; else delete s[k]; }); return s; }
 // First placement of the owned displays, read from the 2025 Winter Nationals photos. Only untouched default signs are converted.
 function migrate(m) {
-  if ((m.v || 1) >= 2) return false;
-  const was = { m_bd1: [8.2, 3.0, 'glide', 1.22], m_bd3: [7.6, 2.5, 'cwave', 4.02], m_arch: [3.2, 2.6, 'sqarch', 1.15], m_curve: [3.0, 2.4, 'ctmw', 1.14] };
-  m.signs.forEach((s) => { const w = was[s.id]; if (w && s.kind === 'flat' && s.w === w[0] && s.h === w[1]) { applyDisplay(s, w[2]); s.y = w[3]; } });
-  m.v = 2; return true;
+  const from = m.v || 1; if (from >= 3) return false;
+  if (from < 2) {
+    const was = { m_bd1: [8.2, 3.0, 'glide', 1.22], m_bd3: [7.6, 2.5, 'cwave', 4.02], m_arch: [3.2, 2.6, 'sqarch', 1.15], m_curve: [3.0, 2.4, 'ctmw', 1.14] };
+    m.signs.forEach((s) => { const w = was[s.id]; if (w && s.kind === 'flat' && s.w === w[0] && s.h === w[1]) { applyDisplay(s, w[2]); s.y = w[3]; } });
+  }
+  // The deck A-frames bought for the 2026 Winter Nationals are 6.56 x 3.28 ft. Untouched deck frames take that size.
+  m.signs.forEach((s) => { if (s.kind === 'aframe' && !s.preset && s.w === 1.9 && s.h === 0.8) { const bottom = s.y - s.h / 2; applyDisplay(s, 'aframe26'); s.y = r2(Math.max(0, bottom) + s.h / 2); } });
+  m.v = 3; return true;
 }
 function model() {
   const v = D.venue();
@@ -253,7 +259,7 @@ function renderPanel() {
   }
   const a = D.assetById(s.assetId), fid = D.creativeOf(s), deg = Math.round((s.ry || 0) * 180 / Math.PI);
   const disp = displayOf(s);
-  box.innerHTML = '<h3>Sign</h3>' + (disp && disp.own != null ? '<p><b>' + esc(disp.name) + '</b><br>' + esc(disp.size) + '. USA Diving owns ' + disp.own + '.</p>' : '') +
+  box.innerHTML = '<h3>Sign</h3>' + (disp && disp.own != null ? '<p><b>' + esc(disp.name) + '</b><br>' + esc(disp.size) + '. USA Diving owns ' + disp.own + '.' + (disp.skin ? '<br>' + esc(disp.skin) : '') + '</p>' : '') +
     '<label>Display type<select id="m3Type"><option value="">Keep as it is</option>' + DISPLAYS.map((d) => '<option value="' + d.key + '"' + (d.key === s.preset ? ' selected' : '') + '>' + esc(d.name) + '</option>').join('') + '</select></label>' +
     '<label>Inventory asset<select id="m3Asset"><option value="">Not linked</option>' + e.assets.map((x) => '<option value="' + x.id + '"' + (x.id === s.assetId ? ' selected' : '') + '>' + esc(x.name) + '</option>').join('') + '</select></label>' +
     (a ? '<label>Status<select id="m3Status" class="st-' + a.status + '">' + D.STATUSES.map((x) => '<option' + (x === a.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>' +
