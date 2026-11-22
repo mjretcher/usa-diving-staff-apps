@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/design.css?v=202611220251">
 <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
-<link rel="stylesheet" href="deckside.css?v=202611221905">
+<link rel="stylesheet" href="deckside.css?v=202611221941">
 <script src="../shared/usad-update.js?v=202611221750" data-app="deckside" data-build="dev"></script>
 </head>
 <body class="dk">
@@ -82,7 +82,7 @@
           <select id="m3AddSel" class="dk-addsel"></select>
           <button class="dk-btn" id="m3Export">Download picture</button>
         </div>
-        <div class="dk-stage dk-stage3d" id="m3Stage"><div class="dk-empty" id="m3Msg">Loading the venue model</div></div>
+        <div class="dk-stage dk-stage3d" id="m3Stage"><div class="dk-empty" id="m3Msg">Loading the venue model</div><div class="dk-tools" id="m3Tools" hidden><button class="dk-btn small" data-turn="45" title="Turn left 45 degrees (Q)">Turn left 45°</button><button class="dk-btn small" data-turn="-45" title="Turn right 45 degrees (E)">Turn right 45°</button><button class="dk-btn small" data-square="1" title="Snap to the nearest square angle">Square up</button><button class="dk-btn small" data-turn="5" title="Turn left 5 degrees (Shift-Q)">5° left</button><button class="dk-btn small" data-turn="-5" title="Turn right 5 degrees (Shift-E)">5° right</button><span>Drag to move. Shift-drag to turn freely. Arrow keys nudge.</span></div></div>
       </div>
       <aside class="dk-side" id="m3Panel"></aside>
     </div>
@@ -128,7 +128,7 @@
 <script src="../shared/usad-modal.js?v=202611220251"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 <script src="artwork-pack.js?v=202611221905"></script>
-<script src="deckside.js?v=202611221905"></script>
-<script type="module" src="deckside3d.js?v=202611221924"></script>
+<script src="deckside.js?v=202611221941"></script>
+<script type="module" src="deckside3d.js?v=202611221941"></script>
 </body>
 </html>
