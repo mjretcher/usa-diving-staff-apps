@@ -624,12 +624,12 @@ function choiceOne(S){
   if (S.cAreas && C.areas.length){
     if (S.layout === 'table'){
       const T = choiceTable(C);
-      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}</h2><div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
+      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}<small>${esc(C.year)} ${esc(S.choiceStage)}</small></h2><div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
         <tbody>${T.rows.map(r => `<tr>${r.map((v, i) => i ? `<td class="n">${typeof v === 'number' ? fmt(v) : esc(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}
         <tr class="tot">${T.totals.map((v, i) => i ? `<td class="n">${typeof v === 'number' ? fmt(v) : esc(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
       if (S.cFlows){
         const M = choiceMatrix(C), cell = v => v == null ? '<td class="n off"></td>' : `<td class="n${v ? '' : ' zero'}">${v ? fmt(v) : '0'}</td>`;
-        areas += `<h2 class="bsr-h2">Where they went and where they came from</h2><div class="bsr-tablewrap"><table class="bsr-table bsr-od"><thead><tr>${M.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
+        areas += `<h2 class="bsr-h2">Where they went and where they came from<small>${esc(C.year)} ${esc(S.choiceStage)}</small></h2><div class="bsr-tablewrap"><table class="bsr-table bsr-od"><thead><tr>${M.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
           <tbody>${M.rows.map(r => `<tr><td>${esc(r[0])}</td>${r.slice(1, -1).map(cell).join('')}<td class="n sum">${fmt(r[r.length - 1])}</td></tr>`).join('')}
           <tr class="tot"><td>${esc(M.totals[0])}</td>${M.totals.slice(1).map(v => `<td class="n">${fmt(v)}</td>`).join('')}</tr></tbody></table></div>
           <p class="bsr-na" style="margin-top:8px">Read across for where a ${C.word.toLowerCase()}'s athletes competed, and down for where its arrivals came from.</p>`;
@@ -637,7 +637,7 @@ function choiceOne(S){
     } else {
       const list = (rows, word) => rows.map(t => `<div class="bsr-route"><span>${word} ${esc(t.name)}</span><b>${fmt(t.n)}</b></div>`).join('');
       const side = (cls, n, label, rows, word) => `<div class="bsr-move ${cls}"><div class="bsr-moven"><b>${fmt(n)}</b><span>${label}</span></div>${S.cFlows ? list(rows, word) : ''}</div>`;
-      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}</h2><div class="bsr-grid moves">${C.areas.map(a => `<article class="bsr-card tight" style="--c:${ink}">
+      areas = `<h2 class="bsr-h2">Each ${C.word.toLowerCase()}<small>${esc(C.year)} ${esc(S.choiceStage)}</small></h2><div class="bsr-grid moves">${C.areas.map(a => `<article class="bsr-card tight" style="--c:${ink}">
         <header><h3>${esc(a.name)}</h3><span class="bsr-meets">${fmt(a.athletes)} athletes</span></header>
         <div class="bsr-moves">${side('out', a.left, 'Went out', a.to, 'to')}${side('in', a.arrived, 'Came in', a.from, 'from')}</div>
       </article>`).join('')}</div>`;
@@ -985,6 +985,7 @@ const CSS = `
 .bsr-cols{display:grid;grid-template-columns:1fr 1fr;gap:0 34px}
 .bsr-page + .bsr-page{margin-top:22px}
 .bsr-h2{font-family:'Barlow Condensed',Inter,sans-serif;font-size:26px;font-weight:700;color:var(--ink);margin:28px 0 12px;padding-top:16px;border-top:3px solid var(--ink)}
+.bsr-h2 small{font-family:Inter,system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--soft);margin-left:12px;letter-spacing:0}
 .bsr-cmp{margin:10px 0}.bsr-cmp small{display:block;font-size:11.5px;color:var(--soft);margin-top:2px}
 .bsr-card.tot{background:#f7f8fb}
 @media (max-width:760px){.bsr-cols{grid-template-columns:1fr}}
@@ -1056,6 +1057,11 @@ P .bsr-blk h4{font-size:9.5px;line-height:1.2;margin-bottom:3px}
 P .bsr-blk h4 small{white-space:nowrap}
 P .bsr-r{font-size:10.5px;line-height:1.2;margin:1px 0;gap:6px;grid-template-columns:62px 1fr auto;break-inside:avoid}
 P .bsr-r.wide{grid-template-columns:minmax(70px,38%) 1fr auto}
+P .bsr-r.rate{grid-template-columns:minmax(74px,44%) 1fr 36px 62px;gap:5px;margin:2px 0}
+P .bsr-r.rate small{font-size:9.5px}
+P .bsr-h2 small{font-size:10.5px;margin-left:8px}
+P .bsr-od th{white-space:normal;vertical-align:bottom}
+P .bsr-od th:first-child,P .bsr-od td:first-child{white-space:nowrap}
 P .bsr-r b{min-width:0}
 P .bsr-t{font-size:10.5px;line-height:1.2}
 P .bsr-t th{font-size:9.5px;padding:0 0 2px 5px;text-transform:none;letter-spacing:0;white-space:nowrap}
@@ -1148,7 +1154,7 @@ function fitPages(){
   tables.forEach(t => { t.style.zoom = ''; });
   const widest = () => Math.max(0, ...tables.map(t => t.parentElement.scrollWidth));
   let land = false;
-  if (root && widest() > PAPER_W + 2){ root.classList.add('land'); land = true; }
+  if (root && widest() > PAPER_W / 0.82){ root.classList.add('land'); land = true; }
   const fitTables = () => { const W = land ? WIDE_W : PAPER_W;
     tables.forEach(t => { t.style.zoom = ''; const w = t.parentElement.scrollWidth; if (w > W + 2) t.style.zoom = String(Math.max(0.35, W / w)); }); };
   fitTables();
@@ -1192,7 +1198,7 @@ function printName(){
     if (S.area && !PACKET){ const h = document.querySelector('.bsr .bsr-page h1'); what = (h && h.textContent.trim()) || one(tier); }
     else what = S.area ? `Every ${one(tier)}` : `${api.groupCountAt(S.level)} ${tier}`;
   }
-  const parts = [what, api.scenarioLabel ? api.scenarioLabel() : '', S.page === 'choice' ? '' : String(api.yearLabel()).slice(0, 4)];
+  const parts = S.page === 'choice' ? [what] : [what, api.scenarioLabel ? api.scenarioLabel() : '', String(api.yearLabel()).slice(0, 4)];
   return parts.map(x => String(x || '').replace(/[^A-Za-z0-9 \-]+/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' - ') || 'USA Diving report';
 }
 function printOn(){
