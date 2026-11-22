@@ -47,7 +47,7 @@ const DISPLAYS = [
   { key: 's164', name: 'Straight Tension Backdrop, 16.4 ft', size: '16.4 x 7.5 ft', own: 1, kind: 'flat', w: r2(16.4 * FT), h: r2(7.5 * FT), skin: SKIN26 },
   { key: 's195', name: 'Straight Tension Backdrop, 19.5 ft', size: '19.5 x 7.5 ft', own: 1, kind: 'flat', w: r2(19.5 * FT), h: r2(7.5 * FT), skin: SKIN26 },
   { key: 'sqarch', name: 'Square Fabric Arch Entrance', size: '7.87 ft wide, 7.54 ft tall, 3 ft deep', own: 3, kind: 'arch', w: r2(7.87 * FT), h: r2(7.54 * FT), depth: 0.95, leg: 0.5, head: 0.45, tunnel: 0.6 },
-  { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6, skin: SKIN26 },
+  { key: 'warch', name: 'Welcome Arch Stand', size: '9.7 x 8.8 ft', own: 1, kind: 'arch', w: r2(9.7 * FT), h: r2(8.8 * FT), depth: 0.25, leg: 0.6, head: 0.6, skin: SKIN26, round: [0.33, 0.8] },
   { key: 'popup', name: 'Horizontal Pop-Up Banner', size: '4 x 2.3 ft', own: 5, kind: 'aframe', w: r2(4 * FT), h: r2(2.3 * FT) },
   { key: 'fabric', name: 'Fabric banner print', size: '45 x 7 ft', own: 3, kind: 'flat', w: r2(45 * FT), h: r2(7 * FT) },
   { key: 'aframe26', name: 'Deck A-frame sign, 2026 order', size: '6.56 x 3.28 ft', own: 21, kind: 'aframe', w: 2, h: 1, skin: 'Bought new from BannerBuzz for the 2026 Winter Nationals, frames and fabric graphics.' },
@@ -314,6 +314,32 @@ function tunnelTex(s, img, head, dp, labelCol) {
   const T = (c) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
   return { head: T(hc), a: T(a), b: T(b), bg: new THREE.Color(bg), strip };
 }
+// The Welcome Arch is one flat skin with a round-topped doorway cut out of it. A print file drawn with the doorway
+// left blank is used as it is; anything else goes above the doorway and on each side of it.
+function roundTex(s, img, ow, oh, labelCol) {
+  const k = Math.min(420, 2048 / Math.max(s.w, s.h)), W = Math.round(s.w * k), H = Math.round(s.h * k), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height; let skin = false, bg = '#ffffff';
+  const band = H * (1 - oh) * 0.82, side = W * (1 - ow) / 2;
+  if (labelCol) { g.fillStyle = '#fbfcfe'; g.fillRect(0, 0, W, H); g.drawImage(img, 0, 0, W, band); g.lineWidth = Math.max(8, W * 0.012); g.strokeStyle = labelCol; g.strokeRect(g.lineWidth / 2, g.lineWidth / 2, W - g.lineWidth, H - g.lineWidth); }
+  else {
+    try { const t = document.createElement('canvas'); t.width = t.height = 24; const tg = t.getContext('2d'); tg.drawImage(img, 0, 0, 24, 24); const d = tg.getImageData(0, 0, 24, 24).data; let lo = [255, 255, 255], hi = [0, 0, 0], solid = true;
+      for (let y = 0; y < 24; y++) for (let x = 0; x < 24; x++) { const i = (y * 24 + x) * 4; if (d[i + 3] < 250) solid = false; if (x > 9 && x < 14 && y > 11 && y < 23) for (let n = 0; n < 3; n++) { lo[n] = Math.min(lo[n], d[i + n]); hi[n] = Math.max(hi[n], d[i + n]); } }
+      skin = s.archFit === 'skin' || (s.archFit !== 'logo' && solid && iw / ih > 0.8 && iw / ih < 2 && Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) < 28);
+      if (!skin && d[3] > 240 && Math.abs(d[0] - d[92]) + Math.abs(d[1] - d[93]) + Math.abs(d[2] - d[94]) < 36) bg = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')'; } catch (e) { /* logo on white */ }
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    if (skin) g.drawImage(img, 0, 0, W, H);
+    else { const fit = (x, y, w, h) => { const sc = Math.min(w * 0.8 / iw, h * 0.8 / ih); g.drawImage(img, x + (w - iw * sc) / 2, y + (h - ih * sc) / 2, iw * sc, ih * sc); };
+      fit(0, 0, W, band); fit(0, H * 0.34, side, H * 0.4); fit(W - side, H * 0.34, side, H * 0.4); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return { tex: t, skin };
+}
+function roundArchGeo(w, h, ow, oh) {
+  const r = w * ow / 2, top = -h / 2 + h * oh, sh = new THREE.Shape();
+  sh.moveTo(-w / 2, -h / 2); sh.lineTo(-r, -h / 2); sh.lineTo(-r, top - r); sh.absarc(0, top - r, r, Math.PI, 0, true); sh.lineTo(r, -h / 2); sh.lineTo(w / 2, -h / 2); sh.lineTo(w / 2, h / 2); sh.lineTo(-w / 2, h / 2); sh.closePath();
+  const g = new THREE.ShapeGeometry(sh, 24), pos = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / w + 0.5, pos.getY(i) / h + 0.5);
+  return g;
+}
 async function buildSigns() {
   const old = signs; signs = new THREE.Group(); signs.userData.trash = []; scene.add(signs);
   if (old) { scene.remove(old); (old.userData.trash || []).forEach((t) => t.dispose()); old.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); }); }
@@ -341,6 +367,12 @@ async function buildSigns() {
       const loop = (color, lift) => { const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(sh.edge), new THREE.LineBasicMaterial({ color })); l.scale.setScalar(lift); m.add(l); };
       if (art && showLabels) loop(col, 1.005); if (s.id === selId) loop(0x009ac7, 1.03);
       grp.add(m);
+    } else if (s.kind === 'arch' && (displayOf(s) || {}).round) {
+      const rr = displayOf(s).round; let lt = null;
+      const rt = art ? roundTex(s, art.image, rr[0], rr[1]) : showLabels ? roundTex(s, (lt = labelTex({ w: s.w, h: s.h * (1 - rr[1]) * 0.82, label: s.label, name: s.name }, a)).image, rr[0], rr[1], '#' + col.getHexString()) : null; if (lt) lt.dispose();
+      if (rt) trash.push(rt.tex);
+      [0, Math.PI].forEach((ry) => { const m = tag(new THREE.Mesh(roundArchGeo(s.w, s.h, rr[0], rr[1]), rt ? faceMat(rt.tex) : edge)); m.rotation.y = ry; m.position.z = ry ? -0.03 : 0.03; grp.add(m); });
+      const hitBox = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, 0.1), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })); hitBox.userData.sid = s.id; marks(hitBox, s.w, s.h, 0.1); grp.add(hitBox);
     } else if (s.kind === 'arch' && (displayOf(s) || {}).tunnel) {
       const head = Math.min(displayOf(s).tunnel, s.h / 2), dp = s.depth || 0.95, th = 0.05;
       let lt = null; const tt = art ? tunnelTex(s, art.image, head, dp) : showLabels ? tunnelTex(s, (lt = labelTex({ w: s.w, h: head, label: s.label, name: s.name }, a)).image, head, dp, '#' + col.getHexString()) : null; if (lt) lt.dispose();
@@ -404,7 +436,7 @@ function renderPanel() {
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
     D.artChoicesHtml(fid) +
-    (s.kind === 'arch' && fid && !(disp && disp.tunnel) ? '<label>Artwork layout<select id="m3ArchFit">' + [['', 'Automatic'], ['logo', 'Logo on the header and each leg'], ['skin', 'One design across the whole arch']].map((o) => '<option value="' + o[0] + '"' + ((s.archFit || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' : '') +
+    (s.kind === 'arch' && fid && !(disp && (disp.tunnel || disp.round)) ? '<label>Artwork layout<select id="m3ArchFit">' + [['', 'Automatic'], ['logo', 'Logo on the header and each leg'], ['skin', 'One design across the whole arch']].map((o) => '<option value="' + o[0] + '"' + ((s.archFit || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' : '') +
     '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
     (fid && !(disp && disp.own != null) ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button>' : '') + (fid ? '<button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div><p id="m3FitNote" hidden></p>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
@@ -413,6 +445,7 @@ function renderPanel() {
   if (fid) D.fileUrl(fid).then((u) => { const im = $('m3Prev'); if (im && u) im.src = u; });
   if (fid) D.getImg(fid).then((im) => {
     const n = $('m3FitNote'); if (!n || !im || selId !== s.id) return;
+    if (s.kind === 'arch' && disp && disp.round) { n.hidden = false; n.textContent = 'A print file drawn with the doorway left blank is shown as printed. A logo goes above the doorway and on each side of it.'; return; }
     if (s.kind === 'arch' && disp && disp.tunnel) { n.hidden = false; n.textContent = im.naturalHeight / im.naturalWidth > 4 ? 'Read as the Backdrop Source print strip: one side panel, the header, then the other side panel.' : 'Shown on the header and repeated down both side panels, like the 2025 skin. Drop in the Backdrop Source print strip to see it exactly as printed.'; return; }
     if (s.kind === 'arch') { n.hidden = false; n.textContent = archLayout(s, im) === 'skin' ? 'Used as one design across the whole arch. The opening cuts out the middle.' : 'Shown whole on the header and on each leg, on its own background colour. Nothing is stretched or cut by the opening.'; return; }
     const sa = s.w / s.h, ia = im.naturalWidth / im.naturalHeight; if (Math.abs(sa - ia) / sa < 0.04) return;
