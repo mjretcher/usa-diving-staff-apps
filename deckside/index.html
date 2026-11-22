@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deckside — USA Diving</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/design.css?v=202611220251">
+<link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
+<link rel="stylesheet" href="deckside.css?v=202611220251">
+</head>
+<body class="dk">
+<header class="app-topbar">
+  <a class="topbar-brand" href="../index.html" title="Back to all staff apps">
+    <span class="brand-mark"><svg class="brand-mark-squiggle" viewBox="0 0 18 18"><path d="M2 12c3-6 5 4 8-2s4-4 6-2"/></svg></span>
+    <span class="brand-text"><span class="brand-org">Deckside</span><span class="brand-subtitle">Sponsorship inventory</span></span>
+  </a>
+  <nav class="topbar-nav" id="tabs">
+    <button class="topbar-nav-link active" data-tab="inventory">Inventory</button>
+    <button class="topbar-nav-link" data-tab="photos">Venue photos</button>
+    <button class="topbar-nav-link" data-tab="broadcast">Broadcast</button>
+  </nav>
+  <div class="topbar-actions">
+    <label class="dk-evt"><span>Event</span><select id="eventSel"></select></label>
+    <button class="topbar-btn" id="eventMenuBtn">Event settings</button>
+    <span class="dk-sync" id="syncBadge">Loading</span>
+  </div>
+</header>
+
+<main class="dk-main">
+  <section class="dk-kpis" id="kpis"></section>
+
+  <section class="dk-panel" id="tab-inventory">
+    <div class="dk-head">
+      <h2>Physical assets</h2>
+      <div class="dk-head-actions">
+        <select id="invFilter"><option value="">All statuses</option><option>Open</option><option>Held</option><option>Sold</option><option>Comped</option><option>Facility</option></select>
+        <button class="dk-btn" id="tiersBtn">Edit price tiers</button>
+        <button class="dk-btn" id="csvBtn">Download CSV</button>
+        <button class="dk-btn primary" id="addAssetBtn">Add asset</button>
+      </div>
+    </div>
+    <div class="dk-scroll"><table class="dk-table" id="invTable"></table></div>
+  </section>
+
+  <section class="dk-panel" id="tab-photos" hidden>
+    <div class="dk-photos">
+      <aside class="dk-rail">
+        <div class="dk-rail-head"><span id="venueName"></span></div>
+        <div id="photoList" class="dk-photo-list"></div>
+        <label class="dk-btn primary dk-file">Add photos<input type="file" id="photoInput" accept="image/*" multiple hidden></label>
+        <p class="dk-hint">Photos are stored in the staff database, not on the public site.</p>
+      </aside>
+      <div class="dk-stage-wrap">
+        <div class="dk-stage-bar">
+          <button class="dk-btn primary" id="addZoneBtn">Add zone</button>
+          <label class="dk-check"><input type="checkbox" id="showLabels" checked> Show labels</label>
+          <span class="dk-spacer"></span>
+          <button class="dk-btn" id="exportBtn">Download picture</button>
+          <button class="dk-btn danger" id="delPhotoBtn">Remove photo</button>
+        </div>
+        <div class="dk-stage" id="stage"><canvas id="cv"></canvas><div class="dk-empty" id="stageEmpty">Add a venue photo to start drawing zones.</div></div>
+      </div>
+      <aside class="dk-side" id="zonePanel"></aside>
+    </div>
+  </section>
+
+  <section class="dk-panel" id="tab-broadcast" hidden>
+    <div class="dk-head">
+      <h2>Broadcast commercial time</h2>
+      <div class="dk-head-actions">
+        <button class="dk-btn" id="bcSettingsBtn">Break settings</button>
+        <button class="dk-btn" id="runListBtn">Download run list</button>
+      </div>
+    </div>
+    <div id="bcBody"></div>
+  </section>
+</main>
+
+<script src="../data/config.js?v=202611220251"></script>
+<script src="../shared/usad-error-log.js?v=202611220251"></script>
+<script src="../shared/neon-client.js?v=202611220251"></script>
+<script src="../shared/usad-toast.js?v=202611220251"></script>
+<script src="../shared/usad-modal.js?v=202611220251"></script>
+<script src="deckside.js?v=202611220251"></script>
+</body>
+</html>

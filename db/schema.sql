@@ -609,6 +609,38 @@ INSERT INTO app_meta.config (key, value, description) VALUES
   ('season_calendar_version', '1', 'Season Calendar Planner data schema version')
 ON CONFLICT (key) DO NOTHING;
 
+-- ============================================================
+-- SCHEMA: deckside — sponsorship inventory, venue photo zones and
+-- broadcast commercial time. One shared document (id='main') as
+-- JSONB, plus the venue photos and sponsor artwork it refers to
+-- (stored here as data URLs so they stay off the public site).
+-- ============================================================
+CREATE SCHEMA IF NOT EXISTS deckside;
+
+CREATE TABLE IF NOT EXISTS deckside.workspace (
+    id          TEXT PRIMARY KEY DEFAULT 'main',
+    data        JSONB NOT NULL,
+    updated_by  TEXT,
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS deckside.files (
+    id          TEXT PRIMARY KEY,
+    name        TEXT,
+    data        TEXT NOT NULL,
+    bytes       INTEGER,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'usad_app') THEN
+    GRANT USAGE ON SCHEMA deckside TO usad_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA deckside TO usad_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA deckside
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO usad_app;
+  END IF;
+END $$;
+
 -- ============================================================================
 -- scoresandmore: scraped data from scoresandmore.live (Dive Live / AAU Diving)
 -- Populated by db/scripts/sm_scrape.py via .github/workflows/scoresandmore-scrape.yml.
