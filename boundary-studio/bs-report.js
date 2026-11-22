@@ -21,7 +21,7 @@ const KEY = 'usad.bs.report';
 const DEFAULTS = {page: 'areas', level: 0, layout: 'grid', counts: ['comp', 'coaches', 'clubs'],
                   age: false, gender: false, boards: false, maps: true, clubNames: false, share: false,
                   routes: true, athletes: true, eachMeet: false, even: false, change: false, cmp26: false, cmp25: false,
-                  area: null, choiceStage: 'Regionals', cAge: true, cGender: true, cAreas: true, cFlows: true};
+                  area: null, choiceStage: 'Regionals', choiceYear: null, cAge: true, cGender: true, cAreas: true, cFlows: true};
 let ST = null;
 function state(){
   if (ST) return ST;
@@ -313,6 +313,7 @@ function stripHtml(S, levels, typed, hasBase){
       <span class="bsr-lbl gap">Compare with</span>${flag('cmp26', '2026 season')}${flag('cmp25', '2025 season')}</div>`;
   else if (S.page === 'choice') rows = `
     <div class="bsr-row"><span class="bsr-lbl">Meets</span>${seg('data-bsr-cstage', [['Regionals', 'Regionals'], ['Zones', 'Zones']], S.choiceStage)}
+      ${choiceYears(S).length ? `<span class="bsr-lbl gap">Season</span>${seg('data-bsr-cyear', choiceYears(S).map(y => [y, y]), choiceYear(S))}` : ''}
       <span class="bsr-lbl gap">Show</span>${flag('cAge', 'Age group')}${flag('cGender', 'Gender')}${flag('cAreas', 'Each region')}${flag('cFlows', 'Where they went and came from')}</div>`;
   else rows = `
     <div class="bsr-row"><span class="bsr-lbl">Also show</span>${flag('eachMeet', 'Each meet')}${flag('share', 'Share of total')}
@@ -323,7 +324,7 @@ function stripHtml(S, levels, typed, hasBase){
   return `<div class="bsr-strip">
     <div class="bsr-row">
       <span class="bsr-lbl">Show</span>${seg('data-bsr-page', pages, cur)}
-      <span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>
+      ${S.page === 'choice' ? '' : `<span class="bsr-lbl">Season</span><select class="bsr-sel" id="bsrYear">${years.map(y => `<option value="${y}" ${y === api.year() ? 'selected' : ''}>${esc(api.yearLabel(y))}</option>`).join('')}</select>`}
       <span class="bsr-lbl">Layout</span>${seg('data-bsr-layout', [['grid', 'Grid'], ['table', 'Table']], S.layout)}
       <span class="bsr-grow"></span>
       <button class="bsr-btn" id="bsrFile" title="One file with this page only, to send or post. It opens in any browser and holds nothing else.">Save as a file</button>
@@ -504,16 +505,33 @@ function needChoice(redraw){
     .then(() => { RC_BUSY = false; if (redraw) redraw(); });
 }
 const pct1 = (a, b) => b > 0 ? (100 * a / b).toFixed(1) + '%' : '0%';
+/* This page is a record of seasons already run: each season's results on the
+   regions and zones that season used. It has its own season switch and does
+   not follow the app's season or the proposal on the map. */
+function choiceYears(S){
+  const st = RC && RC.stages && RC.stages[S.choiceStage] || {};
+  return Object.keys(st).filter(y => st[y] && !st[y].error).sort();
+}
+function choiceYear(S){
+  const ys = choiceYears(S);
+  return ys.includes(String(S.choiceYear)) ? String(S.choiceYear) : (ys[ys.length - 1] || '');
+}
+function choiceHead(S, year){
+  const when = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+  return `<header class="bsr-head"><div><h1>Region choice</h1>
+    <p>${year ? esc(year) + ' ' : ''}${esc(S.choiceStage)}${year ? ` &middot; what happened, on the ${esc(year)} circuit` : ''}</p></div>
+    <div class="bsr-when">USA Diving<br>${esc(when)}</div></header>`;
+}
 function choiceData(S){
   if (!RC || !RC.stages) return null;
-  const year = String(B().yearLabel()).slice(0, 4), st = RC.stages[S.choiceStage] || {};
+  const year = choiceYear(S), st = RC.stages[S.choiceStage] || {};
   const p = st[year];
   if (!p || p.error) return {year, missing: true};
   const word = S.choiceStage === 'Zones' ? 'Zone' : 'Region';
   const areas = Object.entries(p.by_area || {}).map(([k, v]) => ({k, name: `${word} ${k}`, athletes: v.athletes, left: v.left, arrived: v.arrived,
     to: (p.flows || []).filter(f => f.home === k).map(f => ({name: `${word} ${f.went}`, n: f.athletes})),
     from: (p.flows || []).filter(f => f.went === k).map(f => ({name: `${word} ${f.home}`, n: f.athletes}))}));
-  const seasons = Object.keys(st).sort().map(y => ({y, athletes: st[y].athletes, away: st[y].competing_away, clubs: st[y].clubs, split: st[y].clubs_split}));
+  const seasons = choiceYears(S).map(y => ({y, athletes: st[y].athletes, away: st[y].competing_away, clubs: st[y].clubs, split: st[y].clubs_split}));
   return {year, p, areas, seasons, word};
 }
 /* Every movement as a grid: one row per home region, one column per region
@@ -534,10 +552,10 @@ function choiceTable(C){
 function choicePage(S, levels){
   const strip = stripHtml(S, levels, true);
   const title = 'Region choice';
-  if (RC_ERR) return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title)}<p class="bsr-na">The region choice figures could not be loaded.</p></div></div>`;
+  if (RC_ERR) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">The region choice figures could not be loaded.</p></div></div>`;
   const C = choiceData(S);
-  if (!C) return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title)}<p class="bsr-na">Loading.</p></div></div>`;
-  if (C.missing) return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title)}<p class="bsr-na">Not measured for ${esc(C.year)}.</p></div></div>`;
+  if (!C) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">Loading.</p></div></div>`;
+  if (C.missing) return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S)}<p class="bsr-na">No ${esc(S.choiceStage)} results to measure.</p></div></div>`;
   const p = C.p, ink = '#171f69';
   const totals = `<div class="bsr-total"><b>${fmt(p.competing_away)}</b><span>Athletes who competed away from their club's home ${C.word.toLowerCase()}</span></div>
     <div class="bsr-total"><b>${pct1(p.competing_away, p.athletes)}</b><span>Of ${fmt(p.athletes)} athletes at ${esc(S.choiceStage)}</span></div>
@@ -574,9 +592,9 @@ function choicePage(S, levels){
     }
   }
   const notes = [`A club's home ${C.word.toLowerCase()} is the one where most of its athletes competed that season. An athlete competed away when they entered a different one.`,
-                 `The ${C.word.toLowerCase()}s are the ones the ${C.year} season was run on, not the map on screen.`,
+                 `These are the ${C.word.toLowerCase()}s the ${C.year} season was run on, not the proposal on the map.`,
                  `Each athlete is counted under their club\u2019s home ${C.word.toLowerCase()}.`];
-  return `<div class="bsr">${strip}<div class="bsr-page">${headHtml(title, esc(S.choiceStage))}
+  return `<div class="bsr">${strip}<div class="bsr-page">${choiceHead(S, C.year)}
     <div class="bsr-totals row">${totals}</div>
     <div class="bsr-grid steps">${cards.join('')}</div>${areas}
     <p class="bsr-foot">${notes.join(' ')}</p></div></div>`;
@@ -752,6 +770,7 @@ function wire(root){
     setTimeout(() => { window.print(); PACKET = false; root.innerHTML = html(); wire(root); }, 150);
   });
   root.querySelectorAll('[data-bsr-cstage]').forEach(b => b.addEventListener('click', () => { S.choiceStage = b.dataset.bsrCstage; again(); }));
+  root.querySelectorAll('[data-bsr-cyear]').forEach(b => b.addEventListener('click', () => { S.choiceYear = b.dataset.bsrCyear; again(); }));
   if (S.page === 'choice') needChoice(() => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
   const fl = root.querySelector('#bsrFile'); if (fl) fl.addEventListener('click', () => saveFile(root));
   if (S.page === 'structure' || S.page === 'money') needActuals(S, () => { if (!B().onReports || B().onReports()){ root.innerHTML = html(); wire(root); } });
