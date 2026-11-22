@@ -10,6 +10,9 @@
   var LS_BASE = LOCAL_ONLY ? 'deckside_base_localtest' : 'deckside_base_v1';
   var STATUSES = ['Open', 'Held', 'Sold', 'Comped', 'Facility'];
   var STATUS_COLOR = { Open: '#059669', Held: '#d97706', Sold: '#171f69', Comped: '#6b7280', Facility: '#6b7280' };
+  // Artwork pack (artwork-pack.js): pictures already filed in the database for everyone.
+  var PACK = window.DECKSIDE_PACK || {};
+  PACK.art = PACK.art || []; PACK.orders = PACK.orders || {}; PACK.sponsors = PACK.sponsors || {}; PACK.place = PACK.place || {};
 
   var doc = null;
   var cloud = { ready: false, base: '', pushing: false, timer: null, conflict: false };
@@ -161,6 +164,49 @@
         doc.library.push({ id: fid, name: a ? a.name + ' artwork' : 'Artwork ' + (doc.library.length + 1) });
       }); });
     });
+    // Pack artwork joins the library once. If someone removes a piece it stays removed.
+    if (!doc.packSeen) doc.packSeen = {};
+    PACK.art.forEach(function (p) {
+      if (p.tag !== 'lib' || doc.packSeen[p.id]) return;
+      doc.packSeen[p.id] = 1;
+      if (!have[p.id]) { have[p.id] = 1; doc.library.push({ id: p.id, name: p.name }); }
+    });
+  }
+  function inLibrary(fid) { return (doc.library || []).some(function (l) { return l.id === fid; }); }
+  // Signage ordered for the event on screen, from the vendor emails.
+  function renderOrders() {
+    var box = $('ordersBody'); if (!box) return;
+    var list = PACK.orders[ev().name] || [];
+    $('ordersWrap').hidden = !list.length;
+    box.innerHTML = list.map(function (o) {
+      return '<div class="dk-order"><h3>' + esc(o.vendor) + ': ' + esc(o.title) + '</h3>' +
+        '<table class="dk-table"><thead><tr><th>Item</th><th>Qty</th><th>Size</th><th>What was ordered</th></tr></thead><tbody>' +
+        o.items.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+        (o.notes || []).map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('') + '<p class="dk-hint">Source: ' + esc(o.source) + '.</p></div>';
+    }).join('');
+  }
+  // Mockups and proofs from earlier orders. They load only when a group is opened.
+  function renderReference() {
+    var box = $('refBody'); if (!box) return;
+    var groups = [], by = {};
+    PACK.art.forEach(function (p) { if (p.tag !== 'ref') return; if (!by[p.group]) { by[p.group] = []; groups.push(p.group); } by[p.group].push(p); });
+    $('refWrap').hidden = !groups.length;
+    box.innerHTML = groups.map(function (g) {
+      return '<details class="dk-ref"><summary>' + esc(g) + ' <span>' + pl(by[g].length, 'picture') + '</span></summary><div class="dk-lib">' + by[g].map(function (p) {
+        return '<div class="dk-art"><img alt="' + esc(p.name) + '" data-refimg="' + p.id + '" title="Click to see it larger"><div class="dk-art-name">' + esc(p.name) + '</div><div class="dk-art-foot"><span>' + (inLibrary(p.id) ? 'In the library' : 'Reference only') + '</span>' + (inLibrary(p.id) ? '' : '<button class="dk-x" data-refadd="' + p.id + '">Add to library</button>') + '</div></div>';
+      }).join('') + '</div></details>';
+    }).join('');
+  }
+  function loadRefImages(details) {
+    details.querySelectorAll('img[data-refimg]').forEach(function (im) { if (im.src) return; fileUrl(im.dataset.refimg).then(function (u) { if (u) im.src = u; else im.alt = 'This picture could not be loaded.'; }); });
+  }
+  // Puts the known artwork on each owned display that has none yet. Undo takes it back.
+  function applyPackArt() {
+    var map = PACK.place[ev().name] || {}, m = venue().model, n = 0, typed = 0;
+    if (!m || !m.signs) { toast('Open the 3D venue tab once so the displays are set up, then try again.'); return; }
+    m.signs.forEach(function (s) { if (!s.preset || !map[s.preset]) return; typed++; if (creativeOf(s) || !inLibrary(map[s.preset])) return; setCreativeFor(s, map[s.preset]); n++; });
+    if (n) { changed(); renderLibrary(); toast('Artwork placed on ' + pl(n, 'display') + '. See it in the 3D venue tab. Undo takes it back.'); }
+    else toast(typed ? 'Every matching display already has artwork.' : 'No sign in the 3D venue is set to one of the owned displays yet. Pick a display type for a sign first.');
   }
   function libAdd(f) { ensureLibrary(); if (!doc.library.some(function (l) { return l.id === f.id; })) doc.library.push({ id: f.id, name: f.name || 'Artwork' }); }
   function libUses(fid) { var n = 0, e = ev(), seen = {}; Object.keys(e.zoneCreative || {}).forEach(function (k) { if (e.zoneCreative[k] === fid) { n++; seen[k] = 1; } }); return n; }
@@ -180,6 +226,8 @@
       return '<div class="dk-art" data-lib="' + l.id + '"><img alt="" data-artimg="' + l.id + '"><input value="' + esc(l.name) + '" aria-label="Artwork name"><div class="dk-art-foot"><span>' + (n ? 'On ' + pl(n, 'sign') + ' or ' + (n === 1 ? 'zone' : 'zones') + ' for this event' : 'Not placed yet') + '</span><button class="dk-x" data-libdel="' + l.id + '">Remove</button></div></div>';
     }).join('') : '<p class="dk-hint" style="padding:6px 2px">No artwork yet. Drag logos and sign designs in here, or use Add artwork. Then put any of them on as many signs as you like from the 3D venue or Venue photos tabs.</p>';
     doc.library.forEach(function (l) { fileUrl(l.id).then(function (u) { var im = box.querySelector('img[data-artimg="' + l.id + '"]'); if (im && u) im.src = u; }); });
+    var ab = $('packApplyBtn'); if (ab) ab.hidden = !PACK.place[ev().name];
+    renderOrders(); renderReference();
   }
   function artChoicesHtml(currentFid) {
     ensureLibrary();
@@ -349,6 +397,7 @@
     var s = {}, e = ev();
     e.assets.forEach(function (a) { if (a.sponsor) s[a.sponsor] = 1; });
     e.broadcast.slots.forEach(function (k) { if (k.sponsor) s[k.sponsor] = 1; });
+    (PACK.sponsors[e.name] || []).forEach(function (n) { s[n] = 1; });
     return Object.keys(s).sort();
   }
   function onInvChange(evt) {
@@ -826,6 +875,19 @@
         doc.events.forEach(function (ev2) { ['zoneCreative', 'assetCreative'].forEach(function (k) { Object.keys(ev2[k] || {}).forEach(function (key) { if (ev2[k][key] === fid) delete ev2[k][key]; }); }); });
         changed(); renderLibrary();
       });
+    });
+    $('packApplyBtn').addEventListener('click', applyPackArt);
+    $('refBody').addEventListener('toggle', function (e) { if (e.target.open) loadRefImages(e.target); }, true);
+    $('refBody').addEventListener('click', function (e) {
+      var add = e.target.closest('[data-refadd]'), im = e.target.closest('img[data-refimg]');
+      if (add) {
+        var p = PACK.art.filter(function (x) { return x.id === add.dataset.refadd; })[0]; if (!p) return;
+        var open = []; $('refBody').querySelectorAll('details').forEach(function (d, i) { if (d.open) open.push(i); });
+        libAdd({ id: p.id, name: p.name + ', ' + p.group.split(',')[0] }); changed(); renderLibrary();
+        $('refBody').querySelectorAll('details').forEach(function (d, i) { if (open.indexOf(i) >= 0) { d.open = true; loadRefImages(d); } });
+      } else if (im && im.src) {
+        USAD.modal.open({ title: im.alt, contentHTML: '<img class="dk-ref-big" alt="" src="' + im.src + '">', buttons: [{ label: 'Close' }] });
+      }
     });
     $('undoBtn').addEventListener('click', function () { stepHistory(true); });
     $('redoBtn').addEventListener('click', function () { stepHistory(false); });

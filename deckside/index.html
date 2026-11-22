@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/design.css?v=202611220251">
 <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
-<link rel="stylesheet" href="deckside.css?v=202611221822">
+<link rel="stylesheet" href="deckside.css?v=202611221905">
 <script src="../shared/usad-update.js?v=202611221750" data-app="deckside" data-build="dev"></script>
 </head>
 <body class="dk">
@@ -92,11 +92,21 @@
     <div class="dk-head">
       <h2>Artwork library</h2>
       <div class="dk-head-actions">
+        <button class="dk-btn" id="packApplyBtn" hidden title="Only displays with no artwork yet are filled. Undo takes it back.">Put this event's artwork on its displays</button>
         <label class="dk-btn primary dk-file">Add artwork<input type="file" id="libInput" accept="image/*,.heic,.heif" multiple hidden></label>
       </div>
     </div>
     <div class="dk-note">Keep every logo and sign design here once. Drag pictures in, or paste them. Any artwork can go on as many signs and zones as you need: open a sign in 3D venue or a zone in Venue photos and click the artwork.</div>
     <div class="dk-lib" id="libGrid"></div>
+    <div id="ordersWrap" hidden>
+      <div class="dk-head"><h2>Signage ordered for this event</h2></div>
+      <div id="ordersBody"></div>
+    </div>
+    <div id="refWrap" hidden>
+      <div class="dk-head"><h2>Mockups and proofs from earlier orders</h2></div>
+      <div class="dk-note">What the printer showed for each display at past events. Open a group to see it. Add any picture to the library to put it on a sign.</div>
+      <div id="refBody"></div>
+    </div>
   </section>
 
   <section class="dk-panel" id="tab-broadcast" hidden>
@@ -117,7 +127,8 @@
 <script src="../shared/usad-toast.js?v=202611220251"></script>
 <script src="../shared/usad-modal.js?v=202611220251"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
-<script src="deckside.js?v=202611221822"></script>
-<script type="module" src="deckside3d.js?v=202611221822"></script>
+<script src="artwork-pack.js?v=202611221905"></script>
+<script src="deckside.js?v=202611221905"></script>
+<script type="module" src="deckside3d.js?v=202611221905"></script>
 </body>
 </html>
