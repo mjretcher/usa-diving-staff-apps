@@ -58,7 +58,7 @@ const displayOf = (s) => DISPLAYS.filter((d) => d.key === s.preset)[0] || null;
 function applyDisplay(s, key) { const d = DISPLAYS.filter((x) => x.key === key)[0]; if (!d) return s; s.preset = d.key; s.kind = d.kind; s.w = d.w; s.h = d.h; ['plan', 'd', 'low', 'depth', 'leg', 'head'].forEach((k) => { if (d[k] != null) s[k] = d[k]; else delete s[k]; }); return s; }
 // First placement of the owned displays, read from the 2025 Winter Nationals photos. Only untouched default signs are converted.
 function migrate(m) {
-  const from = m.v || 1; if (from >= 4) return false;
+  const from = m.v || 1; if (from >= 5) return false;
   if (from < 2) {
     const was = { m_bd1: [8.2, 3.0, 'glide', 1.22], m_bd3: [7.6, 2.5, 'cwave', 4.02], m_arch: [3.2, 2.6, 'sqarch', 1.15], m_curve: [3.0, 2.4, 'ctmw', 1.14] };
     m.signs.forEach((s) => { const w = was[s.id]; if (w && s.kind === 'flat' && s.w === w[0] && s.h === w[1]) { applyDisplay(s, w[2]); s.y = w[3]; } });
@@ -81,7 +81,23 @@ function migrate(m) {
       [8.5, 6.4, 4.3, 2.2, -2.2, -4.3, -6.4, -8.5].forEach((x, i) => { const f = applyDisplay({ id: 'm_e' + (i + 1), name: 'End deck frame ' + (i + 1), x, y: 0, z: 34.9, ry: Math.PI, assetId: '' }, 'aframe26'); f.y = r2(f.h / 2); m.signs.push(f); });
     }
   }
-  m.v = 4; return true;
+  // The eight frames along the awards end get their own inventory rows so they can be priced and sold like the side frames.
+  if (from < 5) {
+    const seen = ['Frost', 'Visit Midland', 'COM Aquatics', 'a pool products sign', 'Colorado Time Systems', 'USA Diving', 'Insignia', 'Visit Midland'], v = D.venue();
+    D._doc().events.filter((e) => e.venueId === v.id).forEach((e) => {
+      const like = e.assets.filter((a) => /^Deck frame sign/.test(a.name))[0], tier = like ? like.tier : e.tiers[e.tiers.length - 1].name;
+      m.signs.forEach((s) => {
+        const k = /^m_e([1-8])$/.exec(s.id); if (!k) return;
+        let a = e.assets.filter((x) => x.id === s.assetId)[0];
+        if (!a) {
+          if (!s.assetId) s.assetId = D.uid('a');
+          a = { id: s.assetId, name: 'End deck frame sign ' + k[1], area: 'Pool deck, awards end', tier, qty: 1, status: 'Open', sponsor: '', price: '', notes: '2025 photo shows ' + seen[k[1] - 1] + ' here' };
+          e.assets.push(a);
+        }
+      });
+    });
+  }
+  m.v = 5; return true;
 }
 function model() {
   const v = D.venue();
