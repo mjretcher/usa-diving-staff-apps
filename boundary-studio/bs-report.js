@@ -1142,10 +1142,31 @@ function unfitPages(){
   document.querySelectorAll('.bsr .bsr-tablewrap > table').forEach(t => { t.style.zoom = ''; });
   document.querySelectorAll('.bsr.land').forEach(el => el.classList.remove('land'));
 }
+/* The browser offers the page title as the file name when saving a PDF. The
+   app's title said nothing about which report it was, and a full stop in it
+   (a map called "Mike v.2 11-12") made the browser read the rest as the file
+   type and leave ".pdf" off. While printing, the title is the report's own
+   name with nothing but letters, numbers, spaces and hyphens. */
+let TITLE_WAS = null;
+function printName(){
+  const api = B(), S = state();
+  let what;
+  if (S.page === 'choice') what = `Region choice ${S.choiceStage} ${choiceYear(S)}`;
+  else if (S.page === 'structure') what = 'Structure';
+  else if (S.page === 'money') what = 'Money';
+  else {
+    const tier = api.tierName(S.level);
+    if (S.area && !PACKET){ const h = document.querySelector('.bsr .bsr-page h1'); what = (h && h.textContent.trim()) || one(tier); }
+    else what = S.area ? `Every ${one(tier)}` : `${api.groupCountAt(S.level)} ${tier}`;
+  }
+  const parts = [what, api.scenarioLabel ? api.scenarioLabel() : '', S.page === 'choice' ? '' : String(api.yearLabel()).slice(0, 4)];
+  return parts.map(x => String(x || '').replace(/[^A-Za-z0-9 \-]+/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' - ') || 'USA Diving report';
+}
 function printOn(){
   const r = document.querySelector('.bsr');
   if (!r || !r.offsetParent || document.getElementById('mr-output')) return;
   document.documentElement.classList.add('bsr-print');
+  try { if (TITLE_WAS == null) TITLE_WAS = document.title; document.title = printName(); } catch(e){ console.error('print name', e); }
   let s = document.getElementById('bsr-pagecss');
   if (!s){ s = document.createElement('style'); s.id = 'bsr-pagecss'; document.head.appendChild(s); }
   s.textContent = PAGE_CSS;
@@ -1154,6 +1175,7 @@ function printOn(){
 }
 function printOff(){
   document.documentElement.classList.remove('bsr-print');
+  if (TITLE_WAS != null){ document.title = TITLE_WAS; TITLE_WAS = null; }
   const s = document.getElementById('bsr-pagecss'); if (s) s.remove();
   unfitPages();
 }
