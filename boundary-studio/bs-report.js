@@ -252,35 +252,54 @@ function tableData(D, S){
   const cols = [];
   shownCounts(D, S).forEach(C => {
     cols.push({h: D.label(C.k), v: A => D.value(A, C.k), tot: () => D.total(C.k)});
-    if (S.even) cols.push({h: 'Over or under an equal share', signed: true, tot: () => '',
+    if (S.even) cols.push({h: 'Over or under an equal share', s: 'Over or under equal', signed: true, tot: () => '',
       v: A => Math.round(D.value(A, C.k) - sum(D.areas.map(X => D.value(X, C.k))) / Math.max(1, D.n))});
-    if (S.change && D.base && D.was(D.areas[0], C.k) != null) cols.push({h: 'Change since the start', signed: true, tot: () => '',
+    if (S.change && D.base && D.was(D.areas[0], C.k) != null) cols.push({h: 'Change since the start', s: 'Change', signed: true, tot: () => '',
       v: A => { const w = D.was(A, C.k); return w == null ? '' : D.value(A, C.k) - w; }});
   });
   if (S.age){
     if (D.cath) AGE.forEach((g, j) => {
       if (S.gender){
-        cols.push({h: `${g.label} boys`,  v: A => D.cath[A.gi][j*3]});
-        cols.push({h: `${g.label} girls`, v: A => D.cath[A.gi][j*3+1]});
-      } else cols.push({h: `Age ${g.label}`, v: A => D.cath[A.gi][j*3] + D.cath[A.gi][j*3+1] + D.cath[A.gi][j*3+2]});
+        cols.push({h: `${g.label} boys`,  sec: 'Competition Athletes by age', g: g.label, s: 'Boys',  v: A => D.cath[A.gi][j*3]});
+        cols.push({h: `${g.label} girls`, sec: 'Competition Athletes by age', g: g.label, s: 'Girls', v: A => D.cath[A.gi][j*3+1]});
+      } else cols.push({h: `Age ${g.label}`, sec: 'Competition Athletes by age', s: g.label, v: A => D.cath[A.gi][j*3] + D.cath[A.gi][j*3+1] + D.cath[A.gi][j*3+2]});
     });
-    else AGE.forEach((g, j) => cols.push({h: `Age ${g.label}`, v: A => A.ages[j]}));
+    else AGE.forEach((g, j) => cols.push({h: `Age ${g.label}`, sec: 'Members by age', s: g.label, v: A => A.ages[j]}));
   } else if (S.gender && D.cath){
     [['Boys', 0], ['Girls', 1], ['Gender not known', 2]].forEach(([h, k]) =>
-      cols.push({h, v: A => sum([0,1,2,3,4].map(j => D.cath[A.gi][j*3 + k]))}));
+      cols.push({h, sec: 'Competition Athletes by gender', v: A => sum([0,1,2,3,4].map(j => D.cath[A.gi][j*3 + k]))}));
   }
   if (S.boards && D.cells) boardRows(S).forEach(r => BOARDS.forEach(b =>
-    cols.push({h: `${r.label === 'All' ? '' : r.label + ' '}${b.label} entries`.trim(), v: A => cellSum(D.cells[A.gi] || {}, r.a, r.g, b.k)})));
+    cols.push({h: `${r.label === 'All' ? '' : r.label + ' '}${b.label} entries`.trim(), sec: 'Event entries by board', g: r.label === 'All' ? '' : r.label, s: r.label === 'All' ? b.label : (b.s || b.label),
+      v: A => cellSum(D.cells[A.gi] || {}, r.a, r.g, b.k)})));
   const rows = D.areas.map(A => [A.name].concat(cols.map(c => c.v(A))));
   const totals = ['Total'].concat(cols.map(c => c.tot ? c.tot() : sum(D.areas.map(A => c.v(A)))));
-  return {head: [B().tierName(D.L)].concat(cols.map(c => c.h)), rows, totals, signed: [false].concat(cols.map(c => !!c.signed))};
+  return {head: [B().tierName(D.L)].concat(cols.map(c => c.h)), rows, totals, signed: [false].concat(cols.map(c => !!c.signed)), cols};
 }
+/* The table layout. One table per subject (the counts, then age groups, then
+   boards), stacked, with a two-line heading where columns pair up, e.g. Boys
+   and Girls under each age group. One table holding every column ran to forty
+   columns and could not be read on screen or fitted on paper. */
 function tableHtml(D, S){
-  const T = tableData(D, S);
-  return `<div class="bsr-tablewrap"><table class="bsr-table"><thead><tr>${T.head.map((h, i) => `<th${i ? ' class="n"' : ''}>${esc(h)}</th>`).join('')}</tr></thead>
-    <tbody>${T.rows.map((r, ri) => `<tr>${r.map((v, i) => i ? `<td class="n">${v === '' ? '' : (T.signed[i] ? (v > 0 ? '+' : v < 0 ? '&minus;' : '') + fmt(Math.abs(v)) : fmt(v))}</td>`
-      : `<td><span class="bsr-badge sm" style="--c:${D.areas[ri].color}">${esc(D.areas[ri].badge)}</span>${esc(v)}</td>`).join('')}</tr>`).join('')}
-    <tr class="tot">${T.totals.map((v, i) => i ? `<td class="n">${v === '' ? '' : fmt(v)}</td>` : `<td>${esc(v)}</td>`).join('')}</tr></tbody></table></div>`;
+  const T = tableData(D, S), secs = [];
+  T.cols.forEach((c, i) => { const t = c.sec || ''; let x = secs.find(z => z.t === t); if (!x) secs.push(x = {t, at: []}); x.at.push(i); });
+  const num = (v, i) => v === '' ? '' : (T.signed[i + 1] ? (v > 0 ? '+' : v < 0 ? '&minus;' : '') + fmt(Math.abs(v)) : fmt(v));
+  return secs.map(sec => {
+    const cs = sec.at.map(i => T.cols[i]), grouped = cs.some(c => c.g);
+    const first = k => grouped && (k === 0 || cs[k].g !== cs[k - 1].g);                 // first column of a pair or trio
+    const cls = k => 'n' + (first(k) ? ' g0' : '');
+    let head;
+    if (grouped){
+      let top = '', k = 0;
+      while (k < cs.length){ let n = 1; while (k + n < cs.length && cs[k + n].g === cs[k].g) n++;
+        top += cs[k].g ? `<th class="grp g0" colspan="${n}">${esc(cs[k].g)}</th>` : cs.slice(k, k + n).map(c => `<th class="n" rowspan="2">${esc(c.s || c.h)}</th>`).join('');
+        k += n; }
+      head = `<tr><th rowspan="2">${esc(T.head[0])}</th>${top}</tr><tr>${cs.map((c, k) => c.g ? `<th class="${cls(k)}">${esc(c.s || c.h)}</th>` : '').join('')}</tr>`;
+    } else head = `<tr><th>${esc(T.head[0])}</th>${cs.map(c => `<th class="n">${esc(c.s || c.h)}</th>`).join('')}</tr>`;
+    return `${sec.t ? `<h4 class="bsr-tcap">${esc(sec.t)}</h4>` : ''}<div class="bsr-tablewrap"><table class="bsr-table${grouped ? ' grouped' : ''}"><thead>${head}</thead>
+      <tbody>${T.rows.map((r, ri) => `<tr><td><span class="bsr-badge sm" style="--c:${D.areas[ri].color}">${esc(D.areas[ri].badge)}</span>${esc(r[0])}</td>${sec.at.map((i, k) => `<td class="${cls(k)}">${num(r[i + 1], i)}</td>`).join('')}</tr>`).join('')}
+      <tr class="tot"><td>${esc(T.totals[0])}</td>${sec.at.map((i, k) => `<td class="${cls(k)}">${T.totals[i + 1] === '' ? '' : fmt(T.totals[i + 1])}</td>`).join('')}</tr></tbody></table></div>`;
+  }).join('');
 }
 function downloadCsv(D, S){
   const T = tableData(D, S);
@@ -890,6 +909,12 @@ const CSS = `
 .bsr-table .n{text-align:right;font-variant-numeric:tabular-nums}
 .bsr-table td.n{font-weight:600;color:var(--ink)}
 .bsr-table tr.tot td{font-weight:800;border-top:2px solid var(--ink);border-bottom:0;color:var(--ink)}
+.bsr-tcap{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);margin:22px 0 2px}
+.bsr-table.grouped th.grp{text-align:center;border-bottom:1px solid var(--line);padding-bottom:4px;color:var(--ink)}
+.bsr-table.grouped thead tr:first-child th{border-bottom-width:1px;border-bottom-color:var(--line)}
+.bsr-table.grouped thead tr:first-child th[rowspan]{border-bottom:2px solid var(--ink)}
+.bsr-table.grouped .g0{border-left:1px solid var(--line)}
+.bsr-table.grouped td,.bsr-table.grouped th{padding-left:7px;padding-right:7px}
 .bsr-totals.row{flex-direction:row;flex-wrap:wrap;gap:14px 44px;margin:4px 0 18px}
 .bsr-grid.steps{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
 .bsr-meets{font-size:12.5px;font-weight:600;color:var(--soft);white-space:nowrap}
@@ -1018,8 +1043,12 @@ P .bsr-clubrow{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items
 P .bsr-clubrow b{font-size:11px;color:#171f69;white-space:nowrap}
 P .bsr-clubrow p{margin:0;font-size:9.5px;line-height:1.4;color:#1c2540}
 P .bsr-foot{font-size:9.5px;margin-top:10px;padding-top:6px;break-inside:avoid}
+P .bsr-tablewrap{overflow:visible;break-inside:avoid}
+P .bsr-tcap{font-size:9.5px;margin:10px 0 0;break-after:avoid}
+P .bsr-table.grouped td,P .bsr-table.grouped th{padding:3px 4px}
 P .bsr-table{font-size:11px}
-P .bsr-table td,P .bsr-table th{padding:5px 6px}
+P .bsr-table td,P .bsr-table th{padding:3px 6px}
+P .bsr-cards .bsr-table .bsr-badge.sm{min-width:17px;height:17px;font-size:9.5px;margin-right:6px;border-width:1.5px}
 P .bsr-table thead{display:table-header-group}
 P .bsr-table tr{break-inside:avoid}
 P .bsr-mini.big{width:100%;height:210px}
@@ -1077,25 +1106,40 @@ function fitOne(el, W, H){
   return true;
 }
 function fitPages(){
+  const root = document.querySelector('.bsr');
+  // A table with many columns (age groups by gender, boards) is wider than an
+  // upright sheet. On screen it scrolls sideways; on paper that cut the right-
+  // hand columns off. The paper turns sideways for it, and if it is still too
+  // wide the table is scaled down until every column is on the sheet.
+  const tables = root ? [...root.querySelectorAll('.bsr-tablewrap > table')] : [];
+  tables.forEach(t => { t.style.zoom = ''; });
+  const widest = () => Math.max(0, ...tables.map(t => t.parentElement.scrollWidth));
+  let land = false;
+  if (root && widest() > PAPER_W + 2){ root.classList.add('land'); land = true; }
+  const fitTables = () => { const W = land ? WIDE_W : PAPER_W;
+    tables.forEach(t => { t.style.zoom = ''; const w = t.parentElement.scrollWidth; if (w > W + 2) t.style.zoom = String(Math.max(0.35, W / w)); }); };
+  fitTables();
   document.querySelectorAll('.bsr .bsr-page').forEach(pg => {
     const main = pg.querySelector(':scope > .bsr-main'), clubs = pg.querySelector(':scope > .bsr-clubsec');
     const lead = main && main.querySelector(':scope > .bsr-lead'), cards = main && main.querySelector(':scope > .bsr-cards');
+    const W = land ? WIDE_W : PAPER_W, H = land ? WIDE_H : PAPER_H;
     pg.classList.remove('split', 'maponly');
-    if (fitOne(pg) || !main) return;
+    if (fitOne(pg, W, H) || !main) return;
     if (clubs){                          // the club lists take a sheet of their own
-      pg.classList.add('split'); fitOne(clubs, PAPER_W, PAPER_H - CLUB_SLACK);
-      if (fitOne(main) || !lead || !cards) return;
+      pg.classList.add('split'); fitOne(clubs, W, H - CLUB_SLACK);
+      if (fitOne(main, W, H) || !lead || !cards) return;
     } else if (!lead || !cards) return;
     // Still too much for one sheet: the paper turns sideways, the map gets the
     // first sheet to itself at full size, and the regions or zones take the next.
     pg.classList.add('maponly');
-    const root = pg.closest('.bsr'); if (root) root.classList.add('land');
+    if (root && !land){ root.classList.add('land'); land = true; fitTables(); }
     fitOne(lead, WIDE_W, WIDE_H); fitOne(cards, WIDE_W, WIDE_H);
     if (clubs) fitOne(clubs, WIDE_W, WIDE_H - CLUB_SLACK);
   });
 }
 function unfitPages(){
   document.querySelectorAll('.bsr .bsr-page, .bsr .bsr-main, .bsr .bsr-lead, .bsr .bsr-cards, .bsr .bsr-clubsec').forEach(el => { el.style.zoom = ''; el.style.width = ''; el.classList.remove('split', 'maponly'); });
+  document.querySelectorAll('.bsr .bsr-tablewrap > table').forEach(t => { t.style.zoom = ''; });
   document.querySelectorAll('.bsr.land').forEach(el => el.classList.remove('land'));
 }
 function printOn(){
