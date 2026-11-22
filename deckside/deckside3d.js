@@ -158,7 +158,7 @@ async function buildSigns() {
     if (mine !== signs) return;
     const st = a ? a.status : 'Open', col = new THREE.Color(D.STATUS_COLOR[st] || '#059669');
     const tex = art || (showLabels ? labelTex(s, a) : null);
-    const face = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 1, envMapIntensity: 0.25 });
+    const face = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 1, envMapIntensity: 0.2, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: tex ? 0.42 : 0.25 });
     const edge = new THREE.MeshStandardMaterial({ color: 0xe6e9ee, roughness: 0.8 });
     const grp = new THREE.Group(); grp.position.set(s.x, s.y, s.z); grp.rotation.y = s.ry || 0; grp.userData.sid = s.id;
     const mkBoard = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, 0.05), [edge, edge, edge, edge, face, edge]); m.castShadow = true; m.receiveShadow = true; m.userData.sid = s.id; m.userData.ownTex = !art && !!tex; return m; };
@@ -205,7 +205,8 @@ function renderPanel() {
     (a ? '<label>Status<select id="m3Status" class="st-' + a.status + '">' + D.STATUSES.map((x) => '<option' + (x === a.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></label>' +
       '<label>Sponsor<input id="m3Sponsor" value="' + esc(a.sponsor) + '"></label><label>Agreed price each<input id="m3Price" inputmode="decimal" value="' + esc(a.price) + '" placeholder="Uses the ' + esc(a.tier) + ' tier"></label>' : '<p>Link this sign to an inventory asset to track its status and price.</p>') +
     '<label>Sponsor artwork for this event<div class="dk-drop" id="m3Drop">' + (fid ? '<img id="m3Prev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="m3File" accept="image/*,.heic,.heif" hidden></label>' +
-    (fid ? '<div class="row"><button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button><button class="dk-btn small" id="m3Clear">Remove artwork</button></div>' : '') +
+    '<div class="row">' + (fid ? '<button class="dk-btn small" id="m3CopyArt">Copy artwork</button>' : '') + (D.clip() && D.clip() !== fid ? '<button class="dk-btn small" id="m3PasteArt">Paste artwork</button>' : '') +
+    (fid ? '<button class="dk-btn small" id="m3Fit">Match sign shape to artwork</button><button class="dk-btn small" id="m3Clear">Remove artwork</button>' : '') + '</div>' +
     '<label>Placement, in metres</label><div class="dk-adjust">' +
     [['x', 'Left / right', s.x], ['z', 'Tower end / near end', s.z], ['y', 'Height off deck', s.y], ['deg', 'Turn, degrees', deg], ['w', 'Width', s.w], ['h', 'Height', s.h]].map((f) => '<label>' + f[1] + '<input data-adj="' + f[0] + '" type="number" step="' + (f[0] === 'deg' ? 5 : 0.1) + '" value="' + (Math.round(f[2] * 100) / 100) + '"></label>').join('') + '</div>' +
     '<div class="row" style="margin-top:auto"><button class="dk-btn" id="m3Done">Done</button><button class="dk-btn" id="m3Copy">Copy sign</button><button class="dk-btn danger" id="m3Del">Remove sign</button></div>';
@@ -234,6 +235,8 @@ function wire() {
     const s = signById(selId); if (!s) return;
     if (t.id === 'm3Done') select(null);
     else if (t.id === 'm3Clear') { D.clearCreativeFor(s); D.changed(); renderPanel(); buildSigns(); }
+    else if (t.id === 'm3CopyArt') D.copyArt(s);
+    else if (t.id === 'm3PasteArt') D.pasteArt(s);
     else if (t.id === 'm3Fit') { D.getImg(D.creativeOf(s)).then((im) => { if (!im) return; s.w = Math.round(s.h * im.naturalWidth / im.naturalHeight * 100) / 100; D.changed(); renderPanel(); buildSigns(); }); }
     else if (t.id === 'm3Copy') { const c = Object.assign({}, s, { id: D.uid('m'), z: s.z + (s.kind === 'aframe' ? s.w + 0.1 : 0), x: s.x + (s.kind === 'aframe' ? 0 : s.w + 0.2), assetId: '' }); model().signs.push(c); D.changed(); select(c.id); }
     else if (t.id === 'm3Del') { const m = model(); m.signs = m.signs.filter((x) => x.id !== s.id); D.changed(); select(null); }
@@ -269,6 +272,7 @@ function build() {
 }
 
 window.DECKSIDE3D = {
+  selected() { return signById(selId); },
   show() { visible = true; if (!built && !build()) return; resize(); if (!this._viewed) { goView(0); this._viewed = true; } if (selId && !signById(selId)) selId = null; renderPanel(); buildSigns(); },
   hide() { visible = false; },
   drop(e, file) { const id = e.target === (R && R.domElement) ? pick(e) : (e.target.closest && e.target.closest('#m3Drop') ? selId : null); if (id) setArt(id, file); else D.toast('Drop the picture onto a sign in the model.'); },

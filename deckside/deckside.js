@@ -131,7 +131,27 @@
 
   /* ── storage: local document ─────────────────────────── */
   function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(doc)); } catch (e) {} }
-  function changed() { saveLocal(); renderKpis(); schedulePush(); }
+  // Undo history: a snapshot of the document before each change.
+  var hist = { undo: [], redo: [], last: null };
+  function histButtons() { var u = $('undoBtn'), r = $('redoBtn'); if (u) u.disabled = !hist.undo.length; if (r) r.disabled = !hist.redo.length; }
+  function changed() {
+    if (hist.last !== null) { hist.undo.push(hist.last); if (hist.undo.length > 100) hist.undo.shift(); }
+    hist.redo = []; hist.last = JSON.stringify(doc); histButtons();
+    saveLocal(); renderKpis(); schedulePush();
+  }
+  function stepHistory(back) {
+    var from = back ? hist.undo : hist.redo, to = back ? hist.redo : hist.undo;
+    if (!from.length) { toast(back ? 'Nothing to undo.' : 'Nothing to redo.'); return; }
+    to.push(hist.last); hist.last = from.pop(); doc = JSON.parse(hist.last);
+    ui.maskDraft = null; ui.drag = null; histButtons();
+    saveLocal(); schedulePush(); var y = window.scrollY; renderAll(); window.scrollTo(0, y);
+  }
+  // Artwork clipboard: copy the artwork on one zone or sign and paste it onto another.
+  var CLIP = 'deckside-artwork:', clipId = null;
+  function selectedItem() { return ui.tab === 'model' ? (window.DECKSIDE3D ? window.DECKSIDE3D.selected() : null) : ui.tab === 'photos' ? zone() : null; }
+  function refreshItemViews() { if (ui.tab === 'model' && window.DECKSIDE3D) window.DECKSIDE3D.show(); else if (ui.tab === 'photos') { renderZonePanel(); draw(); } }
+  function copyArt(item) { var f = item && creativeOf(item); if (!f) return false; clipId = f; try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(CLIP + f).catch(function () {}); } catch (e) {} toast('Artwork copied. Click another sign or zone and paste.'); refreshItemViews(); return true; }
+  function pasteArt(item, fileId) { var f = fileId || clipId; if (!item || !f) return false; setCreativeFor(item, f); changed(); refreshItemViews(); return true; }
 
   /* ── storage: database ───────────────────────────────── */
   function setBadge(text, cls) { var b = $('syncBadge'); b.textContent = text; b.className = 'dk-sync' + (cls ? ' ' + cls : ''); }
@@ -608,7 +628,7 @@
       '<label>Name on the photo<input id="zLabel" value="' + esc(z.label || '') + '" placeholder="Uses the asset name if blank"></label>' +
       '<label>Inventory asset<select id="zAsset"><option value="">Not linked</option>' + e.assets.map(function (a) { return '<option value="' + a.id + '"' + (a.id === z.assetId ? ' selected' : '') + '>' + esc(a.name) + ' (' + a.status + ')</option>'; }).join('') + '</select></label>' +
       '<label>Sponsor artwork for this event<div class="dk-drop" id="crDrop">' + (cr ? '<img id="crPrev" alt="">Click or drop to replace' : 'Drop or paste a picture here, or click to choose') + '</div><input type="file" id="crInput" accept="image/*" hidden></label>' +
-      (cr ? '<div class="row"><button class="dk-btn small" id="crClear">Remove artwork</button></div>' : '') +
+      '<div class="row">' + (cr ? '<button class="dk-btn small" id="crCopy">Copy artwork</button>' : '') + (clipId && clipId !== cr ? '<button class="dk-btn small" id="crPaste">Paste artwork</button>' : '') + (cr ? '<button class="dk-btn small" id="crClear">Remove artwork</button>' : '') + '</div>' +
       '<label>Things in front of this zone</label><p>Outline a board, railing or person so it stays in front of the artwork. Click around it, then click the first point to finish.</p>' +
       '<div class="row">' + (ui.maskDraft ? '<button class="dk-btn small primary" id="maskDone">Finish outline</button><button class="dk-btn small" id="maskCancel">Cancel</button>' : '<button class="dk-btn small" id="maskAdd">Outline something in front</button>') +
       ((z.masks || []).length ? '<button class="dk-btn small" id="maskClear">Clear ' + z.masks.length + ' outline' + (z.masks.length > 1 ? 's' : '') + '</button>' : '') + '</div>' +
@@ -743,8 +763,25 @@
       }
       addPhotos(files);
     });
+    document.addEventListener('copy', function (e) {
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (String(window.getSelection && window.getSelection() || '')) return;
+      var f = selectedItem() && creativeOf(selectedItem()); if (!f) return;
+      e.clipboardData.setData('text/plain', CLIP + f); e.preventDefault(); clipId = f; toast('Artwork copied. Click another sign or zone and paste.'); refreshItemViews();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      var k = e.key.toLowerCase(); if (k !== 'z' && k !== 'y') return;
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      e.preventDefault(); stepHistory(!(k === 'y' || e.shiftKey));
+    });
+    $('undoBtn').addEventListener('click', function () { stepHistory(true); });
+    $('redoBtn').addEventListener('click', function () { stepHistory(false); });
+    histButtons();
     document.addEventListener('paste', async function (e) {
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      var txt = ''; try { txt = e.clipboardData.getData('text/plain') || ''; } catch (err) {}
+      if (txt.indexOf(CLIP) === 0) { e.preventDefault(); if (!pasteArt(selectedItem(), txt.slice(CLIP.length))) toast('Click a sign or zone first, then paste.'); return; }
       var files = (await filesFrom(e.clipboardData)).filter(looksLikePicture); if (!files.length) return;
       e.preventDefault();
       if (ui.tab === 'model' && window.DECKSIDE3D) { window.DECKSIDE3D.paste(files[0]); return; }
@@ -756,7 +793,9 @@
       var t = e.target, zb = t.closest('[data-zone]');
       if (zb) { ui.zoneId = zb.dataset.zone; renderZonePanel(); draw(); return; }
       var z = zone(); if (!z) return;
-      if (t.id === 'crClear') { clearCreativeFor(z); changed(); renderZonePanel(); draw(); }
+      if (t.id === 'crCopy') { copyArt(z); }
+      else if (t.id === 'crPaste') { pasteArt(z); }
+      else if (t.id === 'crClear') { clearCreativeFor(z); changed(); renderZonePanel(); draw(); }
       else if (t.id === 'maskAdd') { ui.maskDraft = []; renderZonePanel(); }
       else if (t.id === 'maskDone') { finishMask(); }
       else if (t.id === 'maskCancel') { ui.maskDraft = null; renderZonePanel(); draw(); }
@@ -794,6 +833,7 @@
   async function init() {
     await idbOpen();
     await loadDoc();
+    hist.last = JSON.stringify(doc);
     syncFiles();
     wire();
     renderAll();
@@ -801,6 +841,6 @@
   }
   window.DECKSIDE = { _doc: function () { return doc; }, _totals: totals, ev: ev, venue: venue, assetById: assetById, assetValue: assetValue,
     changed: changed, getImg: getImg, fileUrl: fileUrl, importImage: importImage, creativeOf: creativeOf, setCreativeFor: setCreativeFor, clearCreativeFor: clearCreativeFor,
-    uid: uid, esc: esc, money: money, toast: toast, STATUSES: STATUSES, STATUS_COLOR: STATUS_COLOR, tab: function () { return ui.tab; }, ready: null };
+    copyArt: copyArt, pasteArt: pasteArt, clip: function () { return clipId; }, uid: uid, esc: esc, money: money, toast: toast, STATUSES: STATUSES, STATUS_COLOR: STATUS_COLOR, tab: function () { return ui.tab; }, ready: null };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

@@ -104,3 +104,5 @@ body.dk-dragging .dk-stage { outline: 3px dashed var(--brand-sky); outline-offse
 .dk-adjust label { flex-direction: column; }
 .dk-adjust input { width: 100%; font-family: var(--font-mono); }
 @media (max-width: 1000px) { .dk-model { grid-template-columns: 1fr; } .dk-stage3d { min-height: 420px; } }
+.dk .topbar-btn:disabled { opacity: .4; cursor: default; }
+@media (max-width: 1000px) { #redoBtn { display: none; } }

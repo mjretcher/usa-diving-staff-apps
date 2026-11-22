@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/design.css?v=202611220251">
 <link rel="stylesheet" href="../shared/usad-overlays.css?v=202611220251">
-<link rel="stylesheet" href="deckside.css?v=202611221705">
+<link rel="stylesheet" href="deckside.css?v=202611221713">
 </head>
 <body class="dk">
 <header class="app-topbar">
@@ -26,6 +26,8 @@
   <div class="topbar-actions">
     <label class="dk-evt"><span>Event</span><select id="eventSel"></select></label>
     <button class="topbar-btn" id="eventMenuBtn">Event settings</button>
+    <button class="topbar-btn" id="undoBtn" title="Undo (Command-Z)">Undo</button>
+    <button class="topbar-btn" id="redoBtn" title="Redo (Shift-Command-Z)">Redo</button>
     <span class="dk-sync" id="syncBadge">Loading</span>
   </div>
 </header>
@@ -102,7 +104,7 @@
 <script src="../shared/usad-toast.js?v=202611220251"></script>
 <script src="../shared/usad-modal.js?v=202611220251"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
-<script src="deckside.js?v=202611221705"></script>
-<script type="module" src="deckside3d.js?v=202611221705"></script>
+<script src="deckside.js?v=202611221713"></script>
+<script type="module" src="deckside3d.js?v=202611221713"></script>
 </body>
 </html>
