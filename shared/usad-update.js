@@ -21,7 +21,9 @@
  *
  * The live id is read from version.json next to this deployment's shared/
  * folder, so a page always compares against the deployment it came from.
- * (/api/version returns the same file on the Vercel host.)
+ * (/api/version returns the same file on the Vercel host, sent no-store. GitHub
+ * Pages has no server side, so there the file is fetched with a fresh query
+ * string each time, which is what keeps it from being cached.)
  *
  * SAVING BEFORE THE RELOAD
  *   USADUpdate.beforeReload(function () { ...; return optionalPromise; });
