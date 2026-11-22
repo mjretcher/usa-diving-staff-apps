@@ -1,0 +1,9 @@
+athlete_status rows: 84 {'HPS+hps': 34, 'YMCA+hps': 1, 'YMCA': 11, 'Foreign': 20, 'DualOther': 6, '-+hps': 1, '-': 11}
+result rows: 15693
+2024 Regionals athletes  1644 | nd 4 ath, 6 entries, 4 ND, 0 away
+2024 Zones     athletes  1174 | nd 1 ath, 1 entries, 1 ND, 0 away
+2025 Regionals athletes  1583 | nd 9 ath, 18 entries, 14 ND, 4 away
+2025 Zones     athletes  1080 | nd 14 ath, 35 entries, 30 ND, 3 away
+2026 Regionals athletes  1236 | foreign 14 ath, 31 entries, 17 ND, 1 away | dual 6 ath, 12 entries, 0 ND, 0 away | hps 10 ath, 21 entries, 0 ND, 1 away | nd 7 ath, 10 entries, 8 ND, 0 away
+2026 Zones     athletes  1063 | foreign 16 ath, 43 entries, 40 ND, 0 away | dual 4 ath, 9 entries, 1 ND, 0 away | hps 7 ath, 16 entries, 0 ND, 0 away | nd 0 ath, 0 entries, 0 ND, 0 away
+wrote /home/runner/work/usa-diving-staff-apps/usa-diving-staff-apps/membership-analytics/status-athletes.json
